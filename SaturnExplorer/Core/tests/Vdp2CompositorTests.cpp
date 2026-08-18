@@ -253,6 +253,19 @@ void PutRotDword(std::vector<uint8_t>& vram, uint32_t wordAddr, uint32_t value)
     PutBE16(vram, (wordAddr + 1) * 2, static_cast<uint16_t>(value));
 }
 
+// An identity rotation parameter set at 'base' (a word address): screen (x,y) maps
+// straight to plane (x,y). Fields are read as (dword >> 6), so values are stored << 6;
+// kx/ky are read as-is in .16.
+void WriteIdentityRotParam(std::vector<uint8_t>& vram, uint32_t base)
+{
+    PutRotDword(vram, base + 0x08, 1024u << 6);   // DYst (per line)
+    PutRotDword(vram, base + 0x0A, 1024u << 6);   // DX   (per dot)
+    PutRotDword(vram, base + 0x0E, 1024u << 6);   // M[0] (A)
+    PutRotDword(vram, base + 0x16, 1024u << 6);   // M[4] (E)
+    PutRotDword(vram, base + 0x26, 0x10000u);     // kx = 1.0
+    PutRotDword(vram, base + 0x28, 0x10000u);     // ky = 1.0
+}
+
 void TestRotationIdentity()
 {
     // RBG0 with an identity rotation (unit matrix, kx=ky=1, per-line/per-dot steps of 1)
@@ -269,21 +282,84 @@ void TestRotationIdentity()
     SetReg(state, 0x0B0, 0x0000);   // RPMD: parameter set A
     SetReg(state, 0x0BE, 0x8000);   // RPTAL: parameter table at word 0x8000
 
-    const uint32_t base = 0x8000;
-    // Fields read as (dword >> 6): store value << 6.  M[0]=M[4]=1.0 (1024 in .10),
-    // DYst=1.0 (per line), DX=1.0 (per dot); everything else 0.
-    PutRotDword(state.vdp2, base + 0x08, 1024u << 6);   // DYst
-    PutRotDword(state.vdp2, base + 0x0A, 1024u << 6);   // DX
-    PutRotDword(state.vdp2, base + 0x0E, 1024u << 6);   // M[0] (A)
-    PutRotDword(state.vdp2, base + 0x16, 1024u << 6);   // M[4] (E)
-    // kx/ky are read as-is: 1.0 in .16.
-    PutRotDword(state.vdp2, base + 0x26, 0x10000u);     // kx
-    PutRotDword(state.vdp2, base + 0x28, 0x10000u);     // ky
+    WriteIdentityRotParam(state.vdp2, 0x8000);
 
     const std::vector<uint8_t> pixels = Render(state, false);
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
             CHECK(IsWhite(pixels, x, y));
+}
+
+
+// RBG0 with both rotation parameter sets in play. Shared setup: identity rotations for A
+// and B, A's plane drawing white character 1 and B's plane drawing red character 2.
+State MakeTwoParamRotState()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0010);   // BGON: RBG0 only
+    SetReg(state, 0x02A, 0x0000);   // CHCTLB: RBG0 16-colour, 8x8 cells
+    SetReg(state, 0x038, 0x8000);   // PNCR: one-word pattern names
+    SetReg(state, 0x03E, 0x0000);   // MPOFR: map offset 0 for both sets
+    SetReg(state, 0x050, 0x0001);   // MPABRA: param-A plane 0 = map number 1
+    SetReg(state, 0x060, 0x0002);   // MPABRB: param-B plane 0 = map number 2
+    SetReg(state, 0x03A, 0x0000);   // PLSZ: 1x1 pages, screen-over = repeat (both sets)
+    SetReg(state, 0x0FC, 0x0001);   // PRIR: RBG0 priority 1
+    SetReg(state, 0x0BE, 0x8000);   // RPTAL: parameter table A at word 0x8000 (B at +0x40)
+    WriteIdentityRotParam(state.vdp2, 0x8000);
+    WriteIdentityRotParam(state.vdp2, 0x8040);
+
+    // Map number 2's pattern-name table names character 2, whose cell is solid index 2.
+    PutBE16(state.vdp2, 0x4000, 0x0002);
+    std::fill(state.vdp2.begin() + 0x40, state.vdp2.begin() + 0x60, 0x22);
+    PutBE16(state.cram, 4, 0x001F);   // index 2 = red
+    return state;
+}
+
+void TestRotationParamWindow()
+{
+    // RPMD 3 picks the rotation parameter set per dot from the rotation parameter window
+    // (WCTLD low byte), which is how a game splits the screen at a horizon. Window 0
+    // covers dots 0-1, so those sample parameter set B (red) and dots 2-3 sample A
+    // (white). The window is geometry rather than masking, so it applies even with
+    // window display switched off.
+    State state = MakeTwoParamRotState();
+    SetReg(state, 0x0B0, 0x0003);   // RPMD: parameter set per rotation parameter window
+    SetReg(state, 0x0C0, 0);        // WPSX0 (halved when not hi-res: dots 0..1)
+    SetReg(state, 0x0C4, 3);        // WPEX0
+    SetReg(state, 0x0C2, 0);        // WPSY0
+    SetReg(state, 0x0C6, 1);        // WPEY0
+    SetReg(state, 0x0D6, 0x0002);   // WCTLD: rotation parameter window = W0, inside
+
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsRed(pixels, 0, y));     // inside the window -> parameter set B
+        CHECK(IsRed(pixels, 1, y));
+        CHECK(IsWhite(pixels, 2, y));   // outside -> parameter set A
+        CHECK(IsWhite(pixels, 3, y));
+    }
+}
+
+void TestRotationCoeffTableOffset()
+{
+    // KTAOF supplies the coefficient table's high address bits (A18-A16), separately per
+    // parameter set. With RPMD 1 (set B only) and KTAOF's B field = 1, B's table starts a
+    // whole 64K-word block in; the coefficient stored there is 1.0, so the identity
+    // rotation stands and B's red plane fills the frame. A transparent coefficient sits
+    // at the un-offset address, so ignoring KTAOF blanks the layer instead.
+    State state = MakeTwoParamRotState();
+    SetReg(state, 0x0B0, 0x0001);   // RPMD: parameter set B
+    SetReg(state, 0x0B4, 0x0100);   // KTCTL: B enables a 32-bit coefficient table, mode 0
+    SetReg(state, 0x0B6, 0x0100);   // KTAOF: B's table offset = 1
+
+    // KAst/DKAst/DKAx are all zero, so every dot reads the one entry at the table base.
+    PutRotDword(state.vdp2, 0x00000, 0x80000000u);   // un-offset entry: transparent
+    PutRotDword(state.vdp2, 0x20000, 0x00010000u);   // KTAOF'd entry: kx = ky = 1.0
+
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));
 }
 
 void TestBitmapNbg0()
@@ -588,6 +664,8 @@ int main()
     TestBackScreen();
     TestColorCalc();
     TestRotationIdentity();
+    TestRotationParamWindow();
+    TestRotationCoeffTableOffset();
     TestBitmapNbg0();
     TestBitmapRgb888();
     TestZoomBitmap();

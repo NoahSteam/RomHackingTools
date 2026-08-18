@@ -27,7 +27,7 @@ enum : uint32_t
     kSCRCTL = 0x09A, kLSTA0 = 0x0A0, kLSTA1 = 0x0A4,
     kWPSX0 = 0x0C0, kWPSY0 = 0x0C2, kWPEX0 = 0x0C4, kWPEY0 = 0x0C6,
     kWPSX1 = 0x0C8, kWPSY1 = 0x0CA, kWPEX1 = 0x0CC, kWPEY1 = 0x0CE,
-    kWCTLA = 0x0D0, kWCTLB = 0x0D2,
+    kWCTLA = 0x0D0, kWCTLB = 0x0D2, kWCTLC = 0x0D4, kWCTLD = 0x0D6,
     kLWTA0U = 0x0D8, kLWTA0L = 0x0DA, kLWTA1U = 0x0DC, kLWTA1L = 0x0DE,
     kSPCTL = 0x0E0,
     kBKTAU = 0x0AC, kBKTAL = 0x0AE,
@@ -260,10 +260,21 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
     return c;
 }
 
+// Window control is packed two layers per register, in this order. The NBG indices line
+// up with the screen numbers, so the NBG callers pass their own index unchanged.
+enum : int
+{
+    kWinLayerNbg0 = 0, kWinLayerNbg1 = 1, kWinLayerNbg2 = 2, kWinLayerNbg3 = 3,
+    kWinLayerRbg0 = 4, kWinLayerSprite = 5, kWinLayerRotParam = 6, kWinLayerColorCalc = 7
+};
+
 WindowConfig ReadWindowConfig(const HardwareSnapshot& s, int n)
 {
-    const uint16_t wctl = Reg(s, n < 2 ? kWCTLA : kWCTLB);
-    const uint8_t control = static_cast<uint8_t>((wctl >> ((n & 1) * 8)) & 0xBF);
+    static const uint32_t kWctl[4] = { kWCTLA, kWCTLB, kWCTLC, kWCTLD };
+    const uint16_t wctl = Reg(s, kWctl[(n >> 1) & 0x3]);
+    // The rotation parameter window has no sprite-window input, so its byte is narrower.
+    const uint8_t mask = (n == kWinLayerRotParam) ? 0x8F : 0xBF;
+    const uint8_t control = static_cast<uint8_t>((wctl >> ((n & 1) * 8)) & mask);
     WindowConfig c {
         control,
         (Reg(s, kTVMD) & 0x0002) != 0,
@@ -751,55 +762,161 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     return c;
 }
 
-// Composite the RBG0 rotation screen. For each screen dot the rotation parameter set is
-// evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
-// coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
-// planes via the same page->pattern->cell walk the NBGs use (or the bitmap image in
-// bitmap mode); RPMD 0/1 (single parameter set) with coefficient tables; screen-over
-// "repeat" wraps, other modes read transparent outside.
-void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
-                bool applyWindows, int width, int height,
-                std::vector<PixColumn>& cols)
+// Word address of one coefficient-table entry. The running offset is .10 fixed point;
+// 32-bit entries occupy two words, so the integer part is doubled for them. CRKTE moves
+// the table out of VDP2 VRAM and into the upper half of colour RAM, which is far smaller.
+uint32_t CoeffAddr(uint32_t offset, bool coeffWord, bool crkte)
+{
+    offset >>= 10;
+    if (!coeffWord) offset <<= 1;
+    return offset & (crkte ? 0x3FFu : 0x3FFFFu);
+}
+
+// One coefficient, normalised to the 32-bit layout: bit 31 = transparent, bits 23-0 = the
+// signed value. The 16-bit format carries the same fields packed into one word.
+uint32_t ReadCoeff(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                   bool crkte, bool coeffWord, uint32_t addr)
+{
+    auto word = [&](uint32_t w) -> uint16_t
+    {
+        if (!crkte) return ReadVdp2Word(vram, w);
+        // Colour RAM holds the table at word 0x400 and up.
+        const size_t byte = (0x400u + (w & 0x3FFu)) * 2;
+        return (byte + 1 < cram.size())
+            ? static_cast<uint16_t>((cram[byte] << 8) | cram[byte + 1]) : uint16_t(0);
+    };
+    if (coeffWord)
+    {
+        const uint16_t t = word(addr);
+        return (static_cast<uint32_t>(SignX(t << 6, 21)) & 0x00FFFFFFu) |
+               (static_cast<uint32_t>(t & 0x8000) << 16);
+    }
+    return (static_cast<uint32_t>(word(addr)) << 16) | word(addr + 1);
+}
+
+// One rotation parameter set (A or B) resolved in full: the parameter table, the RBG0
+// cell/plane configuration it selects (PLSZ, MPOFR and the map registers are per-set),
+// and its coefficient-table settings. RPMD can choose between the two sets per dot, so
+// both are always built.
+struct RotSet
+{
+    RotParam                 rp {};
+    NbgConfig                cfg {};
+    std::array<uint32_t, 16> planeBase {};
+    PlaneGeom                geom {};
+    uint32_t totalW = 0, totalH = 0;
+    uint32_t screenOver = 0;
+    bool     useCoeff = false;
+    bool     coeffWord = false;
+    uint32_t coeffMode = 0;
+
+    // Per-line state, recomputed by BeginRotLine.
+    int64_t  Xsp = 0, Ysp = 0;
+    int32_t  XpBase = 0, Yp = 0, dX = 0, dY = 0;
+    uint32_t KAstLine = 0;
+};
+
+void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
-    const std::vector<uint8_t>& cram = snap.Cram();
-    const se_cram_mode cramMode = snap.CramMode();
-    const uint16_t vrsize = Reg(snap, kVRSIZE);
-    const WindowConfig windowConfig = ReadWindowConfig(snap, 0);  // RBG0 uses WCTLC bits;
-    // approximate with the NBG0 window byte (WCTLA low) — the common single-window case.
 
-    // Rotation parameter table + coefficient control.
     const uint32_t rpta = ((static_cast<uint32_t>(Reg(snap, kRPTAU) & 0x0007) << 16) |
                            Reg(snap, kRPTAL)) & 0x7FFBE;
-    const RotParam rp = FetchRotParam(vram, rpta + (paramB ? 0x40 : 0));
+    s.rp = FetchRotParam(vram, rpta + (paramB ? 0x40 : 0));
+    // KTAOF supplies the coefficient table's high address bits (A18-A16). KAst is .10
+    // fixed point, so the register's 3-bit field lands at bit 26. Without this the two
+    // parameter sets read the same table, which is exactly what a split-screen rotation
+    // (a horizon: one set above, the other below) relies on being different.
+    s.rp.KAst += static_cast<uint32_t>((Reg(snap, kKTAOF) >> (paramB ? 8 : 0)) & 0x7) << 26;
+
     const uint16_t ktctl = Reg(snap, kKTCTL) >> (paramB ? 8 : 0);
-    const bool useCoeff = (ktctl & 0x1) != 0;
-    const bool coeffWord = (ktctl & 0x2) != 0;   // 1 = 16-bit coeff, 0 = 32-bit
-    const uint32_t coeffMode = (ktctl >> 2) & 0x3;
-    const uint32_t screenOver = (Reg(snap, kPLSZ) >> (paramB ? 14 : 10)) & 0x3;
+    s.useCoeff = (ktctl & 0x1) != 0;
+    s.coeffWord = (ktctl & 0x2) != 0;   // 1 = 16-bit coeff, 0 = 32-bit
+    s.coeffMode = (ktctl >> 2) & 0x3;
+    s.screenOver = (Reg(snap, kPLSZ) >> (paramB ? 14 : 10)) & 0x3;
+
+    s.cfg = ReadRbg0Config(snap, paramB);
 
     // Plane geometry: RBG0 tiles a 4x4 grid of 16 planes.
+    const NbgConfig& c = s.cfg;
     const uint32_t planeW = (c.planeSize & 0x1) ? 2 : 1;
     const uint32_t planeH = (c.planeSize & 0x2) ? 2 : 1;
     const uint32_t deca = planeH + planeW - 2;
     const uint32_t multi = planeH * planeW;
     const bool oneWord = (c.patternCtrl & 0x8000) != 0;
     const uint32_t mapBase = paramB ? kMPABRB : kMPABRA;
-    std::array<uint32_t, 16> planeBase {};
     for (int i = 0; i < 16; ++i)
     {
         const uint16_t w = Reg(snap, mapBase + (i / 2) * 2);
         const uint32_t pageReg = (i & 1) ? ((w >> 8) & 0x3F) : (w & 0x3F);
-        planeBase[i] = PlaneBaseFor(c.mapOffset | pageReg, oneWord, c.patternWH, deca, multi);
+        s.planeBase[i] = PlaneBaseFor(c.mapOffset | pageReg, oneWord, c.patternWH, deca, multi);
     }
 
     const uint32_t planePixW = planeW * 512;
     const uint32_t planePixH = planeH * 512;
-    const uint32_t totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
-    const uint32_t totalH = 4 * planePixH;
-    const PlaneGeom geom {
-        planeBase.data(), 4, planeW, planePixW, planePixH,
+    s.totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
+    s.totalH = 4 * planePixH;
+    s.geom = PlaneGeom {
+        s.planeBase.data(), 4, planeW, planePixW, planePixH,
         8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
+}
+
+// Per-line rotation setup (Xst/Yst accumulate DXst/DYst down the screen).
+void BeginRotLine(RotSet& s, int sy)
+{
+    const RotParam& rp = s.rp;
+    const int32_t XstA = rp.Xst + rp.DXst * sy;
+    const int32_t YstA = rp.Yst + rp.DYst * sy;
+    s.Xsp = ((int64_t)rp.M[0] * (XstA - rp.Px * 1024) +
+             (int64_t)rp.M[1] * (YstA - rp.Py * 1024) +
+             (int64_t)rp.M[2] * (rp.Zst - rp.Pz * 1024)) >> 10;
+    s.Ysp = ((int64_t)rp.M[3] * (XstA - rp.Px * 1024) +
+             (int64_t)rp.M[4] * (YstA - rp.Py * 1024) +
+             (int64_t)rp.M[5] * (rp.Zst - rp.Pz * 1024)) >> 10;
+    s.XpBase = rp.M[0] * (rp.Px - rp.Cx) + rp.M[1] * (rp.Py - rp.Cy) +
+               rp.M[2] * (rp.Pz - rp.Cz) + rp.Cx * 1024 + rp.Mx;
+    s.Yp = rp.M[3] * (rp.Px - rp.Cx) + rp.M[4] * (rp.Py - rp.Cy) +
+           rp.M[5] * (rp.Pz - rp.Cz) + rp.Cy * 1024 + rp.My;
+    s.dX = (rp.M[0] * rp.DX + rp.M[1] * rp.DY) >> 10;
+    s.dY = (rp.M[3] * rp.DX + rp.M[4] * rp.DY) >> 10;
+    s.KAstLine = rp.KAst + static_cast<uint32_t>(rp.DKAst) * static_cast<uint32_t>(sy);
+}
+
+// Composite the RBG0 rotation screen. For each screen dot a rotation parameter set is
+// evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
+// coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
+// planes via the same page->pattern->cell walk the NBGs use (or the bitmap image in
+// bitmap mode); screen-over "repeat" wraps, other modes read transparent outside.
+//
+// RPMD picks the set: 0/1 use A/B for the whole screen, 2 switches per dot on the sign
+// bit of A's coefficient, and 3 switches per dot on the rotation parameter window. Modes
+// 2 and 3 are how a game draws a horizon — one set for the sky, the other for the ground
+// — so treating them as "always A" leaves half the screen sampling the wrong table.
+void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
+                int width, int height, std::vector<PixColumn>& cols)
+{
+    const std::vector<uint8_t>& vram = snap.Vdp2Vram();
+    const std::vector<uint8_t>& cram = snap.Cram();
+    const se_cram_mode cramMode = snap.CramMode();
+    const uint16_t vrsize = Reg(snap, kVRSIZE);
+    const bool crkte = (Reg(snap, kRAMCTL) & 0x8000) != 0;
+
+    RotSet sets[2];
+    BuildRotSet(snap, false, sets[0]);
+    BuildRotSet(snap, true, sets[1]);
+
+    // RBG0's own transparent-processing window (WCTLC low byte), and separately the
+    // rotation parameter window (WCTLD low byte) that mode 3 selects the set with. The
+    // latter is geometry, not masking, so it applies even when window display is off.
+    const WindowConfig windowConfig = ReadWindowConfig(snap, kWinLayerRbg0);
+    const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
+
+    auto coeffAt = [&](const RotSet& s, int msx) -> uint32_t
+    {
+        const uint32_t off = s.KAstLine +
+                             static_cast<uint32_t>(s.rp.DKAx) * static_cast<uint32_t>(msx);
+        return ReadCoeff(vram, cram, crkte, s.coeffWord, CoeffAddr(off, s.coeffWord, crkte));
+    };
 
     for (int sy = 0; sy < height; ++sy)
     {
@@ -807,22 +924,15 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             ResolveWindowLine(windowConfig, 0, vram, sy),
             ResolveWindowLine(windowConfig, 1, vram, sy)
         };
-        // Per-line rotation setup (Xst/Yst accumulate DXst/DYst down the screen).
-        const int32_t XstA = rp.Xst + rp.DXst * sy;
-        const int32_t YstA = rp.Yst + rp.DYst * sy;
-        const int64_t Xsp = ((int64_t)rp.M[0] * (XstA - rp.Px * 1024) +
-                             (int64_t)rp.M[1] * (YstA - rp.Py * 1024) +
-                             (int64_t)rp.M[2] * (rp.Zst - rp.Pz * 1024)) >> 10;
-        const int64_t Ysp = ((int64_t)rp.M[3] * (XstA - rp.Px * 1024) +
-                             (int64_t)rp.M[4] * (YstA - rp.Py * 1024) +
-                             (int64_t)rp.M[5] * (rp.Zst - rp.Pz * 1024)) >> 10;
-        const int32_t XpBase = rp.M[0] * (rp.Px - rp.Cx) + rp.M[1] * (rp.Py - rp.Cy) +
-                               rp.M[2] * (rp.Pz - rp.Cz) + rp.Cx * 1024 + rp.Mx;
-        const int32_t Yp = rp.M[3] * (rp.Px - rp.Cx) + rp.M[4] * (rp.Py - rp.Cy) +
-                           rp.M[5] * (rp.Pz - rp.Cz) + rp.Cy * 1024 + rp.My;
-        const int32_t dX = (rp.M[0] * rp.DX + rp.M[1] * rp.DY) >> 10;
-        const int32_t dY = (rp.M[3] * rp.DX + rp.M[4] * rp.DY) >> 10;
-        const uint32_t KAstLine = rp.KAst + static_cast<uint32_t>(rp.DKAst) * sy;
+        const WindowLine rotWindowLines[2] = {
+            ResolveWindowLine(rotWindowConfig, 0, vram, sy),
+            ResolveWindowLine(rotWindowConfig, 1, vram, sy)
+        };
+        BeginRotLine(sets[0], sy);
+        BeginRotLine(sets[1], sy);
+        // In mode 2 set B contributes only the coefficient sampled at the start of the
+        // line; the per-dot walk is done in set A's table alone.
+        const uint32_t baseCoeffB = sets[1].useCoeff ? coeffAt(sets[1], 0) : 0u;
 
         for (int sx = 0; sx < width; ++sx)
         {
@@ -831,27 +941,35 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
                 continue;
             }
             // Horizontal mosaic snaps the sampled dot to its block's left edge.
-            const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
-            int32_t kx = rp.kx, ky = rp.ky, Xp = XpBase;
-            if (useCoeff)
+            const int msx = (sets[0].cfg.mosaicH > 1)
+                ? sx - (sx % static_cast<int>(sets[0].cfg.mosaicH)) : sx;
+
+            // Choose the parameter set for this dot, and with it the coefficient.
+            int ab = (rpmd == 1) ? 1 : 0;
+            uint32_t coeff = 0;
+            bool haveCoeff = false;
+            if (rpmd == 3)
+            {
+                ab = WindowMasksPixel(rotWindowConfig.control, rotWindowLines, sx) ? 1 : 0;
+            }
+            else if (rpmd == 2 && sets[0].useCoeff)
+            {
+                const uint32_t ca = coeffAt(sets[0], msx);
+                ab = static_cast<int>(ca >> 31);
+                coeff = (static_cast<int32_t>(ca) < 0) ? baseCoeffB : ca;
+                haveCoeff = true;
+            }
+            const RotSet& s = sets[ab];
+            const NbgConfig& c = s.cfg;
+
+            int32_t kx = s.rp.kx, ky = s.rp.ky, Xp = s.XpBase;
+            if (s.useCoeff)
             {
                 // One coefficient per dot along the line; it can override kx/ky or Xp.
-                uint32_t coeffOff = (KAstLine + static_cast<uint32_t>(rp.DKAx) * msx) >> 10;
-                if (!coeffWord) coeffOff <<= 1;   // 32-bit entries are two words
-                uint32_t coeff;
-                if (coeffWord)
-                {
-                    const uint16_t t = ReadVdp2Word(vram, coeffOff);
-                    coeff = (static_cast<uint32_t>(SignX(t << 6, 21)) & 0x00FFFFFFu) |
-                            (static_cast<uint32_t>(t & 0x8000) << 16);
-                }
-                else
-                {
-                    coeff = ReadVdp2Dword(vram, coeffOff);
-                }
-                if (static_cast<int32_t>(coeff) < 0) continue;   // coefficient = transparent
-                const int32_t sext = SignX(coeff, 24);
-                switch (coeffMode)
+                const uint32_t k = haveCoeff ? coeff : coeffAt(s, msx);
+                if (static_cast<int32_t>(k) < 0) continue;   // coefficient = transparent
+                const int32_t sext = SignX(k, 24);
+                switch (s.coeffMode)
                 {
                 case 0: kx = ky = sext; break;
                 case 1: kx = sext; break;
@@ -861,22 +979,22 @@ void RenderRbg0(const HardwareSnapshot& snap, const NbgConfig& c, bool paramB,
             }
 
             const int32_t ixs = static_cast<int32_t>(
-                (Xp + static_cast<int32_t>(((int64_t)kx * (int32_t)(Xsp + dX * msx)) >> 16)) >> 10);
+                (Xp + static_cast<int32_t>(((int64_t)kx * (int32_t)(s.Xsp + s.dX * msx)) >> 16)) >> 10);
             const int32_t iys = static_cast<int32_t>(
-                (Yp + static_cast<int32_t>(((int64_t)ky * (int32_t)(Ysp + dY * msx)) >> 16)) >> 10);
+                (s.Yp + static_cast<int32_t>(((int64_t)ky * (int32_t)(s.Ysp + s.dY * msx)) >> 16)) >> 10);
 
             // Screen-over: mode 0 repeats (wrap); other modes read transparent outside.
-            if (screenOver != 0 &&
-                (ixs < 0 || iys < 0 || static_cast<uint32_t>(ixs) >= totalW ||
-                 static_cast<uint32_t>(iys) >= totalH))
+            if (s.screenOver != 0 &&
+                (ixs < 0 || iys < 0 || static_cast<uint32_t>(ixs) >= s.totalW ||
+                 static_cast<uint32_t>(iys) >= s.totalH))
             {
                 continue;
             }
             Rgba col = c.bitmap
                 ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys)
-                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom,
-                                  static_cast<uint32_t>(ixs) & (totalW - 1),
-                                  static_cast<uint32_t>(iys) & (totalH - 1));
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom,
+                                  static_cast<uint32_t>(ixs) & (s.totalW - 1),
+                                  static_cast<uint32_t>(iys) & (s.totalH - 1));
             if (col.a == 0)
             {
                 continue;
@@ -907,7 +1025,6 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
         int index;      // NBG number, or 4 for RBG0
         NbgConfig config;
         bool rbg0 = false;
-        bool paramB = false;
     };
     std::vector<Layer> layers;
     auto consider = [&](const Layer& layer)
@@ -921,14 +1038,14 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
         {
             continue;
         }
-        consider({ n, ReadNbgConfig(snapshot, n), false, false });
+        consider({ n, ReadNbgConfig(snapshot, n), false });
     }
-    // RBG0 (rotation) occupies BGON bit 4; RPMD picks its parameter set (0 = A, 1 = B;
-    // per-dot/window selection isn't modeled yet, so those fall back to A).
+    // RBG0 (rotation) occupies BGON bit 4. RPMD selects the rotation parameter set, which
+    // can vary per dot; RenderRbg0 resolves that itself. Priority and colour calculation
+    // come from RBG0's own registers either way, so set A's config orders the layer.
     if ((bgon & (1u << 4)) && opts.show_layer[SE_LAYER_RBG0])
     {
-        const bool paramB = (Reg(snapshot, kRPMD) & 0x3) == 1;
-        consider({ 4, ReadRbg0Config(snapshot, paramB), true, paramB });
+        consider({ 4, ReadRbg0Config(snapshot, false), true });
     }
 
     // Emit order = back to front: ascending priority; for equal priority the
@@ -945,7 +1062,7 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
     {
         if (layer.rbg0)
         {
-            RenderRbg0(snapshot, layer.config, layer.paramB, opts.show_window != 0,
+            RenderRbg0(snapshot, Reg(snapshot, kRPMD) & 0x3, opts.show_window != 0,
                        width, height, cols);
         }
         else
