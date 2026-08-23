@@ -43,12 +43,21 @@ public:
         {
             return SE_ERR_NO_DATA;
         }
+        RebuildDerived();
+        return SE_OK;
+    }
+
+    // Re-derive everything the renderer/query surface caches from the raw snapshot: the parsed
+    // VDP1 command list, the built scene, display resolution, sprite priorities, VRAM regions.
+    // Called after a fresh capture (BeginFrame) and after an in-place memory edit (WriteVram /
+    // SetVdpNRegister), so a hex edit to VRAM/CRAM/registers shows in the constructed image.
+    void RebuildDerived()
+    {
         Vdp1Parser::Parse(mSnapshot.Vdp1Vram(), mCommands);
         GeometryBuilder::Build(mSnapshot.Vdp1Vram(), mScene);
         ApplyDisplayResolution();
         ResolveSpritePriorities();
         BuildVramRegions();
-        return SE_OK;
     }
 
     // --- Query surface. ---
@@ -355,6 +364,7 @@ public:
     {
         const size_t n = mSnapshot.WriteRegion(kind, offset, src, size);
         if (n == 0) return 0;
+        RebuildDerived();   // so a VRAM/CRAM/framebuffer edit shows in the reconstructed image
         if (mDs.write_main_ram &&
             (kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH))
         {
@@ -368,6 +378,21 @@ public:
             mDs.write_sound_ram(mDs.user, offset, src, n);
         }
         return n;
+    }
+
+    // Overwrite one VDP register (16-bit, by hardware byte offset) in the snapshot and
+    // re-derive so the change shows in the reconstructed image. Returns true if in range.
+    bool SetVdp1Register(uint32_t hwOffset, uint16_t value)
+    {
+        if (!mSnapshot.SetVdp1Reg(hwOffset, value)) return false;
+        RebuildDerived();
+        return true;
+    }
+    bool SetVdp2Register(uint32_t hwOffset, uint16_t value)
+    {
+        if (!mSnapshot.SetVdp2Reg(hwOffset, value)) return false;
+        RebuildDerived();
+        return true;
     }
 
     // The Hex Editor can edit whenever a snapshot is loaded (savestate edits are

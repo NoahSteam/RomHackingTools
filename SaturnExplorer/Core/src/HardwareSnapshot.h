@@ -42,8 +42,9 @@ public:
     const std::vector<uint8_t>& SoundRam() const { return mSoundRam; }
     se_cram_mode CramMode() const { return mCramMode; }
 
-    // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns
-    // the number written (clamped to the buffer). Work RAM only for now.
+    // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns the number
+    // written (clamped to the buffer). Covers every captured region — VDP1/VDP2 VRAM, CRAM,
+    // and the VDP1 framebuffer edits feed straight back into the reconstructed image.
     size_t WriteRegion(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
     {
         std::vector<uint8_t>* dst = nullptr;
@@ -52,6 +53,10 @@ public:
         case SE_VRAM_KIND_WRAM_LOW:  dst = &mWramLow;  break;
         case SE_VRAM_KIND_WRAM_HIGH: dst = &mWramHigh; break;
         case SE_VRAM_KIND_SOUND_RAM: dst = &mSoundRam; break;
+        case SE_VRAM_KIND_VDP1_VRAM: dst = &mVdp1Vram; break;
+        case SE_VRAM_KIND_VDP2_VRAM: dst = &mVdp2Vram; break;
+        case SE_VRAM_KIND_CRAM:      dst = &mCram;      break;
+        case SE_VRAM_KIND_VDP1_FB:   dst = &mVdp1Fb;    break;
         default: return 0;
         }
         if (!src || offset >= dst->size()) return 0;
@@ -59,6 +64,24 @@ public:
         const size_t n = size < avail ? size : avail;
         std::memcpy(dst->data() + offset, src, n);
         return n;
+    }
+
+    // Overwrite one VDP register (16-bit, addressed by its hardware byte offset). Returns true
+    // if the offset is in range. Register edits also feed the reconstruction (resolution,
+    // colour math, etc.). Only within the captured register file — no effect if absent.
+    bool SetVdp1Reg(uint32_t hwOffset, uint16_t value)
+    {
+        const size_t i = hwOffset >> 1;
+        if (i >= mVdp1Regs.size()) return false;
+        mVdp1Regs[i] = value;
+        return true;
+    }
+    bool SetVdp2Reg(uint32_t hwOffset, uint16_t value)
+    {
+        const size_t i = hwOffset >> 1;
+        if (i >= mVdp2Regs.size()) return false;
+        mVdp2Regs[i] = value;
+        return true;
     }
 
     // True if the driver supplied VDP1 / VDP2 registers.

@@ -655,8 +655,67 @@ void TestColorCalc()
 }
 }  // namespace
 
+// A hex edit to VRAM/CRAM/registers must feed straight back into the reconstructed image,
+// WITHOUT a re-capture from the source (se_begin_frame) — that's what lets a paused VDP tweak
+// show. Edit CRAM + a VDP2 register in place and confirm the render changes.
+void TestEditReRenders()
+{
+    State state = MakeNbg3State();
+    se_data_source source = {};
+    source.abi_version = SE_ABI_VERSION;
+    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_VDP2_REGS;
+    source.user = &state;
+    source.read_vdp1_vram = ReadVdp1;
+    source.read_vdp2_vram = ReadVdp2;
+    source.read_cram = ReadCram;
+    source.read_vdp2_reg = ReadVdp2Reg;
+    se_config config = {};
+    config.abi_version = SE_ABI_VERSION;
+    se_context* ctx = se_create(&source, &config);
+    CHECK(ctx != nullptr);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+
+    se_render_opts opts = {};
+    for (int i = 0; i < SE_LAYER_COUNT; ++i) opts.show_layer[i] = 1;
+    opts.show_vdp1_sprites = 1;
+    auto render = [&](std::vector<uint8_t>& out) {
+        se_image img = {};
+        size_t needed = 0;
+        se_render_frame(ctx, &opts, &img, &needed);
+        out.assign(needed, 0);
+        img.pixels = out.data();
+        img.capacity = out.size();
+        se_render_frame(ctx, &opts, &img, &needed);
+    };
+
+    std::vector<uint8_t> before;
+    render(before);
+    // NBG3 draws from CRAM entry 1 (byte offset 2 = 0x7FFF white). Recolour it to red in place
+    // via se_write_vram — no se_begin_frame — and the constructed image must change.
+    const uint8_t red555[2] = { 0x00, 0x1F };   // big-endian 0x001F = red only (RGB555)
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_CRAM, 2, red555, 2) == 2);
+    std::vector<uint8_t> after;
+    render(after);
+    CHECK(before != after);   // the in-place CRAM edit re-rendered
+    bool sawRed = false;      // and some pixel is now the new red
+    for (size_t i = 0; i + 3 < after.size(); i += 4)
+        if (after[i] > 200 && after[i + 1] < 60 && after[i + 2] < 60) { sawRed = true; break; }
+    CHECK(sawRed);
+
+    // A VDP register edit also re-derives: turning NBG3 off (BGON=0) removes the layer.
+    std::vector<uint8_t> withLayer;
+    render(withLayer);
+    CHECK(se_set_vdp2_register(ctx, 0x020, 0x0000) == 1);   // BGON
+    std::vector<uint8_t> noLayer;
+    render(noLayer);
+    CHECK(withLayer != noLayer);
+
+    se_destroy(ctx);
+}
+
 int main()
 {
+    TestEditReRenders();
     TestRectangularWindow();
     TestLineWindow();
     TestVerticalPlaneSize();

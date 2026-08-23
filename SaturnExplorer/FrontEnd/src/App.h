@@ -309,6 +309,7 @@ private:
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
+    int              mStepSettle = 0;         // frames to keep capturing after a step (paused freeze)
     // Live breakpoint-hit state, mirrored to the Assembly panel so it tints the halted row.
     bool             mBpStopActive = false;
     int              mBpStopCpu = 0;

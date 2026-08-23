@@ -40,6 +40,9 @@ namespace
 // UI converts its seconds knob through this. Pre-capture memory estimate uses a
 // typical compressed frame size until a real average is available.
 constexpr int    kFramesPerSecond   = 60;
+// After a frame-step, keep re-capturing the live source for this many UI frames so the stepped
+// frame settles over the socket before the snapshot re-freezes (see the capture gate).
+constexpr int    kStepSettleFrames  = 4;
 constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
 #endif
 
@@ -876,7 +879,15 @@ void App::BuildUI(IPlatform& platform)
     // snapshot once at load, in CreateContextFromSource.)
     if (mbLiveSource && mContext)
     {
-        se_begin_frame(mContext);
+        // Re-snapshot the running emulator each frame — except while paused, so an in-place
+        // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
+        // overwritten by the next capture. A step re-enables capture for a few frames
+        // (mStepSettle) so the newly-stepped frame settles in over the socket and shows.
+        if (!mbPaused || mStepSettle > 0)
+        {
+            se_begin_frame(mContext);
+            if (mStepSettle > 0) --mStepSettle;
+        }
         mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
         // to the emulator, then reflect a breakpoint halt in the UI run state.
@@ -1392,6 +1403,7 @@ void App::DrawTransportBar()
             mbScrubbing = false;
             se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
             mbPaused = true;
+            mStepSettle = kStepSettleFrames;   // re-capture briefly so the stepped frame shows
         }
     }
     ImGui::EndDisabled();
@@ -5387,6 +5399,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::StepFrame:
         se_frame_step(mContext, 1);
         mbPaused = true;
+        mStepSettle = kStepSettleFrames;   // re-capture briefly so the stepped frame shows
         break;
     case TopBarCommandType::DumpMemory:
         DumpMemory(platform);

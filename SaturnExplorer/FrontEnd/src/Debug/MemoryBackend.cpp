@@ -114,12 +114,16 @@ std::vector<MemoryReadResult> ContextBackend::ReadMemoryBatch(
     return out;
 }
 
-// Regions the core can edit: work RAM and (live v13+) SCSP sound RAM. The address must
-// fall entirely inside one and the source must have a loaded snapshot.
+// Every captured region is editable in the snapshot: work RAM, sound RAM, and the VDP1/VDP2
+// VRAM, CRAM, and framebuffer (a VDP edit re-derives the reconstructed image). Work/sound edits
+// also poke a live emulator; VDP edits are snapshot-level (a visual scratchpad). The address
+// must fall entirely inside a region and the source must have a loaded snapshot.
 static bool IsWritableKind(se_vram_kind kind)
 {
     return kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH ||
-           kind == SE_VRAM_KIND_SOUND_RAM;
+           kind == SE_VRAM_KIND_SOUND_RAM || kind == SE_VRAM_KIND_VDP1_VRAM ||
+           kind == SE_VRAM_KIND_VDP2_VRAM || kind == SE_VRAM_KIND_CRAM ||
+           kind == SE_VRAM_KIND_VDP1_FB;
 }
 
 bool ContextBackend::CanWrite(uint32_t address) const
@@ -130,19 +134,49 @@ bool ContextBackend::CanWrite(uint32_t address) const
     for (const Region& reg : kRegions)
         if (IsWritableKind(reg.kind) && a >= reg.base && a < reg.base + reg.size)
             return true;
+    // VDP register windows are served through the register getters/setters, not se_read/write_vram.
+    if (a >= kVdp1RegBase && a < kVdp1RegBase + kVdp1RegSize) return true;
+    if (a >= kVdp2RegBase && a < kVdp2RegBase + kVdp2RegSize) return true;
     return false;
 }
 
 size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
 {
     if (!Connected() || !bytes || size == 0) return 0;
+    se_context* ctx = *mContext;
     const uint32_t a = Canonical(address);
+
+    // VDP register windows: rebuild each 16-bit big-endian register from the byte(s) being
+    // written and push it through the register setter (which re-derives the image).
+    auto writeRegs = [&](uint32_t base, uint32_t regSize, bool vdp1) -> size_t
+    {
+        if (a < base || a + size > base + regSize) return 0;   // must fall entirely in the window
+        size_t done = 0;
+        for (size_t i = 0; i < size; ++i)
+        {
+            const uint32_t off = (a - base) + static_cast<uint32_t>(i);
+            const uint32_t regOff = off & ~1u;
+            const bool hi = (off & 1u) == 0u;   // big-endian: the even byte is the high byte
+            const uint16_t cur = vdp1 ? se_get_vdp1_register(ctx, regOff)
+                                      : se_get_vdp2_register(ctx, regOff);
+            const uint16_t nv = hi ? static_cast<uint16_t>((cur & 0x00FFu) | (bytes[i] << 8))
+                                   : static_cast<uint16_t>((cur & 0xFF00u) | bytes[i]);
+            const int ok = vdp1 ? se_set_vdp1_register(ctx, regOff, nv)
+                                : se_set_vdp2_register(ctx, regOff, nv);
+            if (!ok) break;
+            ++done;
+        }
+        return done;
+    };
+    if (a >= kVdp1RegBase && a < kVdp1RegBase + kVdp1RegSize) return writeRegs(kVdp1RegBase, kVdp1RegSize, true);
+    if (a >= kVdp2RegBase && a < kVdp2RegBase + kVdp2RegSize) return writeRegs(kVdp2RegBase, kVdp2RegSize, false);
+
     for (const Region& reg : kRegions)
     {
         if (a < reg.base || a + size > reg.base + reg.size) continue;
         if (!IsWritableKind(reg.kind))
-            return 0;   // read-only region (VDP VRAM/CRAM/FB)
-        return se_write_vram(*mContext, reg.kind, a - reg.base, bytes, size);
+            return 0;   // (all captured regions are writable now; kept as a guard)
+        return se_write_vram(ctx, reg.kind, a - reg.base, bytes, size);
     }
     return 0;
 }

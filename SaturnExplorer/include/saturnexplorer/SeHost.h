@@ -84,6 +84,13 @@ int         se_has_vdp2_registers(se_context* ctx);
    when the loaded source didn't provide that register file. */
 uint16_t    se_get_vdp1_register(se_context* ctx, uint32_t hw_offset);
 uint16_t    se_get_vdp2_register(se_context* ctx, uint32_t hw_offset);
+
+/* Overwrite one VDP register (16-bit, addressed by its hardware byte offset) in the loaded
+ * snapshot; the reconstructed image re-derives so the edit shows immediately. Returns 1 if the
+ * offset is within the captured register file, 0 otherwise. Snapshot-level edit (a visual
+ * scratchpad) — it does not poke a running emulator. Additive: no ABI struct change. */
+int         se_set_vdp1_register(se_context* ctx, uint32_t hw_offset, uint16_t value);
+int         se_set_vdp2_register(se_context* ctx, uint32_t hw_offset, uint16_t value);
 /* Copy raw bytes from VDP1/VDP2 VRAM or CRAM (Saturn-native big-endian). Returns
    bytes copied (clamped to the region). */
 size_t      se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,

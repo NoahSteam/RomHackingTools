@@ -194,6 +194,16 @@ uint16_t se_get_vdp2_register(se_context* ctx, uint32_t hw_offset)
     return ctx ? Impl(ctx)->Vdp2Register(hw_offset) : 0;
 }
 
+int se_set_vdp1_register(se_context* ctx, uint32_t hw_offset, uint16_t value)
+{
+    return (ctx && Impl(ctx)->SetVdp1Register(hw_offset, value)) ? 1 : 0;
+}
+
+int se_set_vdp2_register(se_context* ctx, uint32_t hw_offset, uint16_t value)
+{
+    return (ctx && Impl(ctx)->SetVdp2Register(hw_offset, value)) ? 1 : 0;
+}
+
 size_t se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                     void* dst, size_t size)
 {
