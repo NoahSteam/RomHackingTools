@@ -358,8 +358,9 @@ public:
     }
 
     // Write raw big-endian bytes into a region. Updates the snapshot (so the edit
-    // shows immediately) and forwards work-RAM writes to the source's
-    // write_main_ram (so a live emulator is poked). Returns bytes written.
+    // shows immediately) and forwards the write to the source so a live emulator is
+    // poked: work RAM -> write_main_ram, sound RAM -> write_sound_ram, VDP1/VDP2 VRAM,
+    // CRAM and the VDP1 framebuffer -> write_vram. Returns bytes written.
     size_t WriteVram(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
     {
         const size_t n = mSnapshot.WriteRegion(kind, offset, src, size);
@@ -376,6 +377,14 @@ public:
         {
             // Sound RAM uses a 0-based offset (not a bus address) — see SeDataSource.h.
             mDs.write_sound_ram(mDs.user, offset, src, n);
+        }
+        else if (mDs.write_vram &&
+                 (kind == SE_VRAM_KIND_VDP1_VRAM || kind == SE_VRAM_KIND_VDP2_VRAM ||
+                  kind == SE_VRAM_KIND_CRAM || kind == SE_VRAM_KIND_VDP1_FB))
+        {
+            // VDP regions take a region-local offset (not a bus address); the driver
+            // maps kind -> bus base. Pokes a live emulator so the edit persists.
+            mDs.write_vram(mDs.user, kind, offset, src, n);
         }
         return n;
     }

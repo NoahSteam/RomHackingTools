@@ -914,6 +914,23 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
     return size;
 }
 
+// VDP memory poke: map the region-local offset to its Saturn bus address and ship it as a
+// WRM (the emulator glue's CheatMemWrite handles any bus region, VRAM/CRAM included). This
+// is how a paused VDP1/VDP2 VRAM, CRAM, or framebuffer edit persists in the running game.
+size_t CbWriteVram(void* u, se_vram_kind kind, uint32_t offset, const void* src, size_t size)
+{
+    uint32_t base;
+    switch (kind)
+    {
+        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; break;
+        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; break;
+        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; break;
+        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; break;
+        default: return 0;   // work/sound RAM go through their own callbacks
+    }
+    return CbWriteMainRam(u, base + offset, src, size);
+}
+
 // Rewind (v16): pack the LST wire payload (frame(4) + edits_len(4) + edits + state) and hand
 // it to the poll thread to ship as one atomic command. The emulator restores + applies the
 // edits + resumes at its frame gate. Returns 0 (success) — best-effort/async like the pokes.
@@ -1074,6 +1091,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     out->write_main_ram = CbWriteMainRam;
     out->read_sound_ram = CbSoundRam;
     out->write_sound_ram = CbWriteSoundRam;
+    out->write_vram     = CbWriteVram;
     out->load_state     = CbLoadState;
     out->read_scsp_slots = CbScspSlots;
     out->read_cd_status = CbCdStatus;

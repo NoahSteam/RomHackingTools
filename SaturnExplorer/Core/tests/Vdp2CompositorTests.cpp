@@ -713,9 +713,56 @@ void TestEditReRenders()
     se_destroy(ctx);
 }
 
+// A VDP-region edit must also be forwarded to the driver's write_vram callback, so a live
+// emulator is poked (not just the local snapshot). Install a capturing callback and confirm the
+// core hands it the same kind / offset / bytes.
+namespace {
+struct VramWriteCapture { int calls; se_vram_kind kind; uint32_t offset; size_t size; uint8_t first; };
+VramWriteCapture gVramCap;
+size_t CaptureWriteVram(void*, se_vram_kind kind, uint32_t offset, const void* src, size_t size)
+{
+    gVramCap.calls++;
+    gVramCap.kind = kind;
+    gVramCap.offset = offset;
+    gVramCap.size = size;
+    gVramCap.first = size ? static_cast<const uint8_t*>(src)[0] : 0;
+    return size;
+}
+}  // namespace
+
+void TestWriteVramForwards()
+{
+    State state = MakeNbg3State();
+    se_data_source source = {};
+    source.abi_version = SE_ABI_VERSION;
+    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_MEM_WRITE;
+    source.user = &state;
+    source.read_vdp1_vram = ReadVdp1;
+    source.read_vdp2_vram = ReadVdp2;
+    source.read_cram = ReadCram;
+    source.write_vram = CaptureWriteVram;
+    se_config config = {};
+    config.abi_version = SE_ABI_VERSION;
+    se_context* ctx = se_create(&source, &config);
+    CHECK(ctx != nullptr);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+
+    gVramCap = {};
+    const uint8_t bytes[2] = { 0xAB, 0xCD };
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, bytes, 2) == 2);
+    CHECK(gVramCap.calls == 1);
+    CHECK(gVramCap.kind == SE_VRAM_KIND_VDP1_VRAM);
+    CHECK(gVramCap.offset == 0x10u);
+    CHECK(gVramCap.size == 2u);
+    CHECK(gVramCap.first == 0xAB);
+
+    se_destroy(ctx);
+}
+
 int main()
 {
     TestEditReRenders();
+    TestWriteVramForwards();
     TestRectangularWindow();
     TestLineWindow();
     TestVerticalPlaneSize();

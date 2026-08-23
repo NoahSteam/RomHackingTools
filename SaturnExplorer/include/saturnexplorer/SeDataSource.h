@@ -45,6 +45,15 @@ typedef struct se_data_source {
     size_t (*read_sound_ram) (void* user, uint32_t offset, void* dst, size_t size);
     size_t (*write_sound_ram)(void* user, uint32_t offset, const void* src, size_t size);
 
+    /* --- Optional: write back to VDP memory (SE_CAP_MEM_WRITE). 'kind' selects the
+           region (SE_VRAM_KIND_VDP1_VRAM / VDP2_VRAM / CRAM / VDP1_FB); 'offset' is
+           0-based within that region; 'src' is Saturn-order bytes (the same convention
+           read_vdp*_vram / read_cram return). Returns bytes written. May be NULL even
+           when SE_CAP_MEM_WRITE is set (a driver may poke work RAM but not VDP); the
+           core then keeps the edit snapshot-local. Powers writing VDP edits back to a
+           live emulator. */
+    size_t (*write_vram)(void* user, se_vram_kind kind, uint32_t offset, const void* src, size_t size);
+
     /* --- Registers. --- */
     uint16_t (*read_vdp1_reg)(void* user, uint32_t reg);
     uint16_t (*read_vdp2_reg)(void* user, uint32_t reg);

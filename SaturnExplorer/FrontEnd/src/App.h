@@ -152,6 +152,16 @@ private:
     void DrainTraceEvents();                // pull fired tracepoint events into the Log
     void DrawWorldView(IPlatform& platform);
     void DrawCommandList();
+    // Inline size/position editing in the Command List: draw an editable integer cell for one
+    // command field and, on commit, re-encode it into the command's CMDSIZE/CMDXA/CMDYA word
+    // and write it back to VDP1 VRAM (which pokes a live emulator). Returns true if it changed.
+    bool EditCommandSize(const se_command& cmd, int row);
+    bool EditCommandPosition(const se_command& cmd, int row);
+    void WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value);
+    // Move a command's whole on-screen shape by (dx, dy). A distorted sprite / polygon /
+    // polyline is defined by four explicit vertices (CMDXA..CMDXD), so all of them shift
+    // together; a normal/scaled sprite shifts only its CMDXA/YA anchor.
+    void TranslateCommandPosition(const se_command& cmd, int dx, int dy);
     void DrawSelectedObject();
     void DrawTextureViewer(IPlatform& platform);
     // Add a write watchpoint over the VDP1 VRAM bytes a command's texture occupies, so the

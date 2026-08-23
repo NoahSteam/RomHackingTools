@@ -3533,6 +3533,10 @@ void App::DrawCommandList()
                 const bool doScroll = mScrollCommandListToSelection;
                 mScrollCommandListToSelection = false;
 
+                // Size/Position cells become editable when the source can take writes (a loaded
+                // snapshot). An edit re-encodes CMDSIZE/CMDXA/CMDYA and pokes VDP1 VRAM.
+                const bool editable = se_can_write(mContext) != 0;
+
                 ImGuiListClipper clipper;
                 clipper.Begin(static_cast<int>(count));
                 if (doScroll && mSelectedCommand >= 0 &&
@@ -3576,17 +3580,27 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));
                         ImGui::TableNextColumn();
-                        const uint32_t texBytes = TextureVramBytes(cmd);
-                        if (texBytes > 0)
+                        if (editable)
                         {
-                            ImGui::Text("%ux%u (%u B)", cmd.width, cmd.height, texBytes);
+                            EditCommandSize(cmd, row);
                         }
                         else
                         {
-                            ImGui::Text("%ux%u", cmd.width, cmd.height);
+                            const uint32_t texBytes = TextureVramBytes(cmd);
+                            if (texBytes > 0)
+                                ImGui::Text("%ux%u (%u B)", cmd.width, cmd.height, texBytes);
+                            else
+                                ImGui::Text("%ux%u", cmd.width, cmd.height);
                         }
                         ImGui::TableNextColumn();
-                        ImGui::Text("(%d, %d)", cmd.x, cmd.y);
+                        if (editable)
+                        {
+                            EditCommandPosition(cmd, row);
+                        }
+                        else
+                        {
+                            ImGui::Text("(%d, %d)", cmd.x, cmd.y);
+                        }
                         ImGui::TableNextColumn();
                         ImGui::TextUnformatted(ColorModeName(cmd.color_mode));
                         ImGui::TableNextColumn();
@@ -3598,6 +3612,131 @@ void App::DrawCommandList()
         }
     }
     ImGui::End();
+}
+
+// VDP1 command-table field offsets (bytes from the table base). See Vdp1Parser::DecodeCommand.
+namespace
+{
+constexpr uint32_t kCmdSizeOffset = 0x0Au;   // CMDSIZE: (charW<<8)|lines
+constexpr uint32_t kCmdXaOffset   = 0x0Cu;   // CMDXA: signed x
+constexpr uint32_t kCmdYaOffset   = 0x0Eu;   // CMDYA: signed y
+
+int Clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+}  // namespace
+
+// Re-encode one 16-bit command word and write it back to VDP1 VRAM. se_write_vram updates the
+// snapshot, re-derives the reconstructed image, and pokes a live emulator (via write_vram).
+void App::WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value)
+{
+    const uint8_t be[2] = { static_cast<uint8_t>(value >> 8),
+                            static_cast<uint8_t>(value & 0xFF) };
+    se_write_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address + fieldOffset,
+                  be, sizeof be);
+}
+
+// Editable "W x H" cell. Width is stored in units of 8 dots (CMDSIZE bits 13:8), height in
+// lines (bits 7:0); both edits preserve the other half of the word.
+bool App::EditCommandSize(const se_command& cmd, int row)
+{
+    ImGui::PushID(row);
+    ImGui::PushID("size");
+    bool changed = false;
+    const float cell = 40.0f;
+
+    int width = static_cast<int>(cmd.width);
+    ImGui::SetNextItemWidth(cell);
+    if (ImGui::InputInt("##w", &width, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
+        ImGui::IsItemDeactivatedAfterEdit())
+    {
+        const uint16_t charW = static_cast<uint16_t>(Clampi(width / 8, 0, 0x3F));
+        WriteCommandWord(cmd, kCmdSizeOffset,
+                         static_cast<uint16_t>((charW << 8) | (cmd.height & 0xFF)));
+        changed = true;
+    }
+    ImGui::SameLine(0.0f, 4.0f);
+    ImGui::TextUnformatted("x");
+    ImGui::SameLine(0.0f, 4.0f);
+
+    int height = static_cast<int>(cmd.height);
+    ImGui::SetNextItemWidth(cell);
+    if (ImGui::InputInt("##h", &height, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
+        ImGui::IsItemDeactivatedAfterEdit())
+    {
+        const uint16_t charW = static_cast<uint16_t>((cmd.width / 8) & 0x3F);
+        WriteCommandWord(cmd, kCmdSizeOffset,
+                         static_cast<uint16_t>((charW << 8) |
+                                               (Clampi(height, 0, 0xFF) & 0xFF)));
+        changed = true;
+    }
+    ImGui::PopID();
+    ImGui::PopID();
+    return changed;
+}
+
+// Move a command's on-screen shape by (dx, dy). Distorted sprites, polygons and polylines
+// are defined by four explicit vertices, so the whole quad translates; a line moves its two
+// endpoints; a normal/scaled sprite moves its single CMDXA/YA anchor. Reads each vertex from
+// VDP1 VRAM, shifts it, and writes it back (each write re-derives + pokes a live emulator).
+void App::TranslateCommandPosition(const se_command& cmd, int dx, int dy)
+{
+    if (dx == 0 && dy == 0) return;
+    static const uint32_t kVx[4] = { 0x0Cu, 0x10u, 0x14u, 0x18u };   // CMDXA..CMDXD
+    static const uint32_t kVy[4] = { 0x0Eu, 0x12u, 0x16u, 0x1Au };   // CMDYA..CMDYD
+    int n;
+    switch (cmd.type)
+    {
+        case SE_CMD_DISTORTED_SPRITE:
+        case SE_CMD_POLYGON:
+        case SE_CMD_POLYLINE: n = 4; break;
+        case SE_CMD_LINE:     n = 2; break;
+        default:              n = 1; break;   // normal/scaled: only vertex A anchors it
+    }
+    auto shift = [&](uint32_t off, int delta)
+    {
+        uint8_t be[2];
+        if (se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address + off, be, 2) != 2)
+            return;
+        const int16_t cur = static_cast<int16_t>((be[0] << 8) | be[1]);
+        WriteCommandWord(cmd, off,
+                         static_cast<uint16_t>(static_cast<int16_t>(Clampi(cur + delta, -32768, 32767))));
+    };
+    for (int i = 0; i < n; ++i)
+    {
+        if (dx != 0) shift(kVx[i], dx);
+        if (dy != 0) shift(kVy[i], dy);
+    }
+}
+
+// Editable "(x, y)" cell. The shown x/y is vertex A (CMDXA/CMDYA); committing moves the whole
+// shape by the delta so a distorted sprite / polygon translates as one (not just its corner).
+bool App::EditCommandPosition(const se_command& cmd, int row)
+{
+    ImGui::PushID(row);
+    ImGui::PushID("pos");
+    bool changed = false;
+    const float cell = 46.0f;
+
+    int x = static_cast<int>(cmd.x);
+    ImGui::SetNextItemWidth(cell);
+    if (ImGui::InputInt("##x", &x, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
+        ImGui::IsItemDeactivatedAfterEdit())
+    {
+        TranslateCommandPosition(cmd, Clampi(x, -32768, 32767) - static_cast<int>(cmd.x), 0);
+        changed = true;
+    }
+    ImGui::SameLine(0.0f, 4.0f);
+
+    int y = static_cast<int>(cmd.y);
+    ImGui::SetNextItemWidth(cell);
+    if (ImGui::InputInt("##y", &y, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
+        ImGui::IsItemDeactivatedAfterEdit())
+    {
+        TranslateCommandPosition(cmd, 0, Clampi(y, -32768, 32767) - static_cast<int>(cmd.y));
+        changed = true;
+    }
+    ImGui::PopID();
+    ImGui::PopID();
+    return changed;
 }
 
 void App::DrawSelectedObject()

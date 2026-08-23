@@ -19,7 +19,7 @@ extern "C" {
 
 /* Bumped on any breaking change to either seam struct. A host/driver compares
  * its compiled-in value against the core's se_abi_version() before use. */
-#define SE_ABI_VERSION 4u
+#define SE_ABI_VERSION 5u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {

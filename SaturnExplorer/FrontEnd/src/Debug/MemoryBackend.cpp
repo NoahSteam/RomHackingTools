@@ -115,9 +115,10 @@ std::vector<MemoryReadResult> ContextBackend::ReadMemoryBatch(
 }
 
 // Every captured region is editable in the snapshot: work RAM, sound RAM, and the VDP1/VDP2
-// VRAM, CRAM, and framebuffer (a VDP edit re-derives the reconstructed image). Work/sound edits
-// also poke a live emulator; VDP edits are snapshot-level (a visual scratchpad). The address
-// must fall entirely inside a region and the source must have a loaded snapshot.
+// VRAM, CRAM, and framebuffer (a VDP edit re-derives the reconstructed image). Every edit also
+// pokes a live emulator when the driver supports it — work/sound RAM through write_main_ram/
+// write_sound_ram, VDP regions through write_vram (a savestate keeps the edit in-memory). The
+// address must fall entirely inside a region and the source must have a loaded snapshot.
 static bool IsWritableKind(se_vram_kind kind)
 {
     return kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH ||
