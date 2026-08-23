@@ -178,6 +178,26 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     const int64_t selLo = (mSelStart >= 0 && mSelEnd >= 0) ? SelLo(mSelStart, mSelEnd) : -1;
     const int64_t selHi = (mSelStart >= 0 && mSelEnd >= 0) ? SelHi(mSelStart, mSelEnd) : -1;
 
+    // Type-to-edit: with a single writable byte selected and the Memory window focused (and no
+    // other text field capturing input), typing a hex digit starts editing that byte — no
+    // double-click needed, like a standard hex editor. The typed digit seeds the edit box.
+    auto isHex = [](unsigned c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                                         (c >= 'A' && c <= 'F'); };
+    if (mEditAddr < 0 && selLo >= 0 && selLo == selHi && backend.CanWrite((uint32_t)selLo) &&
+        ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive())
+    {
+        for (ImWchar ch : ImGui::GetIO().InputQueueCharacters)
+        {
+            if (isHex(ch))
+            {
+                mEditAddr = selLo; mEditFocus = true; mEditSelectAll = false; mEditFlow = true;
+                mEditBuf[0] = (char)ch; mEditBuf[1] = '\0';
+                break;
+            }
+        }
+    }
+    bool editRendered = false;   // did the active edit box get drawn? (else it's scrolled off)
+
     // --- Grid: a frozen-header table, virtually scrolled over the whole region. ---
     const float ch = ImGui::CalcTextSize("F").x;
     // Compact byte columns: 2 hex glyphs + a little slack. Combined with the tightened cell
@@ -303,12 +323,18 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
                     if (mEditAddr == (int64_t)addr)
                     {
+                        editRendered = true;
                         ImGui::SetNextItemWidth(byteW);
                         if (mEditFocus) { ImGui::SetKeyboardFocusHere(); mEditFocus = false; }
-                        const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf),
-                            ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_EnterReturnsTrue |
-                            ImGuiInputTextFlags_AutoSelectAll);
-                        if (enter || ImGui::IsItemDeactivated())
+                        ImGuiInputTextFlags ef = ImGuiInputTextFlags_CharsHexadecimal |
+                                                 ImGuiInputTextFlags_EnterReturnsTrue;
+                        if (mEditSelectAll) ef |= ImGuiInputTextFlags_AutoSelectAll;
+                        const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf), ef);
+                        // Flow typing: once two hex digits are entered, commit without Enter and
+                        // advance to the next byte (standard overwrite-mode hex-editor feel).
+                        const bool full = mEditFlow && std::strlen(mEditBuf) >= 2;
+                        const bool commit = enter || full || ImGui::IsItemDeactivated();
+                        if (commit)
                         {
                             unsigned val = 0;
                             if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
@@ -322,6 +348,17 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                                 }
                             }
                             mEditAddr = -1;
+                            mEditSelectAll = false;
+                            const bool wasFlow = mEditFlow;
+                            mEditFlow = false;
+                            // A deliberate commit (Enter or a filled byte) moves to the next byte
+                            // so you can keep typing down the row; a click-away just stops.
+                            const int64_t next = (int64_t)addr + 1;
+                            if ((enter || (wasFlow && full)) &&
+                                next < (int64_t)(reg.base + reg.size))
+                            {
+                                mSelStart = mSelEnd = next;
+                            }
                         }
                         continue;
                     }
@@ -338,6 +375,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
                         {
                             mEditAddr = (int64_t)addr; mEditFocus = true;
+                            mEditSelectAll = true; mEditFlow = false;   // seed current value, select all
                             std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
                         }
                         else if (ImGui::IsMouseClicked(0))
@@ -480,6 +518,14 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         ImGui::EndTable();
     }
     ImGui::PopStyleVar();   // CellPadding (pushed before BeginTable, balanced regardless of open)
+
+    // If an edit was started on a byte that's scrolled out of view (e.g. flow-typing advanced
+    // past the visible rows), bring it into view so its edit box renders next frame.
+    if (mEditAddr >= 0 && !editRendered)
+    {
+        mScrollAddr = (uint32_t)mEditAddr;
+        mScrollPending = true;
+    }
 
     // --- Selection / value readout ---
     ImGui::Separator();

@@ -80,6 +80,8 @@ private:
     int64_t mEditAddr = -1;            // address being typed over (-1 = none)
     char    mEditBuf[3] = {};
     bool    mEditFocus = false;
+    bool    mEditSelectAll = false;    // select-all on focus (double-click) vs caret-at-end (type)
+    bool    mEditFlow = false;         // edit started by typing: auto-commit at 2 digits + advance
     float   mModifiedFlash = 0.0f;
 
     bool mConnected = false;
