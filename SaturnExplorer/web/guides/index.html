@@ -65,6 +65,20 @@
   footer a { color: var(--vdp2); }
   @media (max-width: 720px) { .cards { grid-template-columns: 1fr; } }
   a:focus-visible { outline: 2px solid var(--vdp2); outline-offset: 3px; }
+
+  .feature-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    text-decoration: none; color: inherit; background: var(--surface);
+    border: 1px solid var(--line); border-left: 4px solid var(--vdp2); border-radius: 16px;
+    padding: 22px 24px; box-shadow: var(--shadow); margin: 0 0 22px;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .feature-banner:hover { transform: translateY(-2px); box-shadow: 0 12px 34px rgba(20,30,40,.14); }
+  .feature-banner .sub { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--vdp2); font-weight: 600; margin-bottom: 6px; }
+  .feature-banner h2 { font-size: 20px; font-weight: 750; margin: 0 0 6px; }
+  .feature-banner p { font-size: 14.5px; color: var(--ink-soft); margin: 0; max-width: 62ch; }
+  .feature-banner .fb-go { font-size: 14px; font-weight: 650; color: var(--vdp2); white-space: nowrap; }
+  @media (max-width: 620px) { .feature-banner { flex-direction: column; align-items: flex-start; } }
 </style>
 </head>
 <body>
@@ -74,6 +88,16 @@
     <p class="lede">Plain-English tours of the Sega Saturn's audio and video chips — how each one
       works, and how the tool lets you see, extract, and trace what it produces. No prior hardware
       knowledge assumed.</p>
+
+    <a class="feature-banner" href="features.html">
+      <div>
+        <div class="sub">Start here</div>
+        <h2>What Saturn Explorer can do</h2>
+        <p>A guided tour of every panel, tool, and workflow — graphics reconstruction, live
+          debugging, audio, disc &amp; asset tracing, recording, and patching.</p>
+      </div>
+      <span class="fb-go">Take the tour →</span>
+    </a>
 
     <div class="cards">
       <a class="card" href="audio.html" style="--c: var(--audio);">

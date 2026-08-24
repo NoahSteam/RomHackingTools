@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Saturn Explorer Features</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Every panel, tool, and workflow in Saturn Explorer — the Sega Saturn debugger and asset explorer.">
+<style>
+  :root {
+    --bg: #e9edf1; --surface: #ffffff; --surface-2: #f4f7f9;
+    --ink: #17212a; --ink-soft: #4c5d6a; --ink-faint: #6b7a86;
+    --line: #d5dde3; --line-strong: #c2ccd4;
+    /* Feature-family accents — mirror the app's own window categories */
+    --c-graphics: #bb2e6a;  /* Graphics  (VDP1) */
+    --c-memory:   #3a5bd0;  /* Memory & Data (VDP2 / primary UI) */
+    --c-debug:    #2f8f5b;  /* Debugger */
+    --c-audio:    #b26a10;  /* Audio (SCSP) */
+    --c-files:    #148a8a;  /* Files & Input / Disc */
+    --c-flow:     #7b52c9;  /* Recording, rewind, patching workflows */
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 8px 24px rgba(20,30,40,.06);
+    --shadow-lift: 0 12px 34px rgba(20,30,40,.14);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+      --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #7c8d99;
+      --line: #26313a; --line-strong: #33414c;
+      --c-graphics: #f272a6; --c-memory: #7c9bf5; --c-debug: #5fc98a;
+      --c-audio: #e8a33d; --c-files: #45c4c4; --c-flow: #a98be6;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+      --shadow-lift: 0 14px 40px rgba(0,0,0,.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1216; --surface: #141b21; --surface-2: #1a232a;
+    --ink: #e7eef3; --ink-soft: #9db0bd; --ink-faint: #7c8d99;
+    --line: #26313a; --line-strong: #33414c;
+    --c-graphics: #f272a6; --c-memory: #7c9bf5; --c-debug: #5fc98a;
+    --c-audio: #e8a33d; --c-files: #45c4c4; --c-flow: #a98be6;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 34px rgba(0,0,0,.4);
+    --shadow-lift: 0 14px 40px rgba(0,0,0,.5);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+    line-height: 1.62; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 56px 24px 80px; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* ---- Hero ---- */
+  .eyebrow {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--ink-soft);
+    margin: 0 0 16px; display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--c-memory); display: inline-block; }
+  h1 {
+    font-size: clamp(32px, 5.4vw, 52px); font-weight: 800; letter-spacing: -.025em;
+    margin: 0 0 16px; text-wrap: balance; line-height: 1.05;
+  }
+  .lede { color: var(--ink-soft); font-size: clamp(17px, 2.2vw, 20px); max-width: 62ch; margin: 0 0 34px; }
+
+  /* ---- At-a-glance meta ---- */
+  .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 0 0 8px; }
+  .meta .cell {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .meta .k {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--c-memory); font-weight: 600; margin: 0 0 7px;
+  }
+  .meta .v { font-size: 14.5px; color: var(--ink); }
+  .meta .v b { font-weight: 650; }
+
+  /* ---- Section scaffolding ---- */
+  section { margin-top: 62px; }
+  .sec-head { margin-bottom: 22px; }
+  .sec-eyebrow {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: .16em;
+    text-transform: uppercase; font-weight: 600; color: var(--c);
+    display: flex; align-items: center; gap: 10px; margin: 0 0 10px;
+  }
+  .sec-eyebrow::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: var(--c); }
+  h2 { font-size: clamp(23px, 3.2vw, 30px); font-weight: 780; letter-spacing: -.02em; margin: 0 0 8px; text-wrap: balance; }
+  .sec-intro { color: var(--ink-soft); font-size: 15.5px; max-width: 68ch; margin: 0; }
+
+  /* ---- Feature cards ---- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: 16px; margin-top: 24px; }
+  .card {
+    position: relative; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px 18px 20px; box-shadow: var(--shadow); overflow: hidden;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--c); }
+  .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: var(--c); }
+  .card h3 { font-size: 16px; font-weight: 700; margin: 4px 0 7px; letter-spacing: -.01em; }
+  .card .tag {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--c); font-weight: 600;
+  }
+  .card p { font-size: 14px; color: var(--ink-soft); margin: 0; }
+  .card p .lit { color: var(--ink); font-weight: 600; }
+
+  /* ---- Window map ---- */
+  .map-frame {
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 14px; margin-top: 26px;
+  }
+  .map-bar {
+    display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 12px;
+  }
+  .map-bar .chip {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--ink-soft);
+    padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap;
+  }
+  .map-bar .chip.live { color: var(--c-memory); border-color: color-mix(in srgb, var(--c-memory) 45%, var(--line)); }
+  .map-bar .status { margin-left: auto; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--c-debug); }
+  .map-grid { display: grid; grid-template-columns: 168px 1fr 220px; grid-auto-rows: minmax(0, auto); gap: 10px; }
+  .zone {
+    border: 1px solid var(--line); border-left: 4px solid var(--c);
+    background: color-mix(in srgb, var(--c) 8%, var(--surface));
+    border-radius: 9px; padding: 11px 12px; min-height: 62px;
+  }
+  .zone .z-cat {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--c); font-weight: 600; margin: 0 0 5px;
+  }
+  .zone .z-list { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
+  .zone .z-list span { color: var(--ink-faint); }
+  .col { display: grid; gap: 10px; align-content: start; }
+  .map-status {
+    margin-top: 10px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px;
+    padding: 8px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--ink-soft);
+    display: flex; flex-wrap: wrap; gap: 6px 16px;
+  }
+  .map-status b { color: var(--ink); font-weight: 600; }
+  .map-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 16px; }
+  .map-legend .lg { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-soft); }
+  .map-legend .sw { width: 12px; height: 12px; border-radius: 3px; background: var(--c); flex: none; }
+  .map-note { font-size: 12.5px; color: var(--ink-faint); margin: 12px 2px 0; font-style: italic; }
+
+  /* ---- Capability matrix ---- */
+  .table-scroll { overflow-x: auto; margin-top: 24px; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; background: var(--surface); font-size: 14px; }
+  thead th {
+    text-align: center; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; letter-spacing: .04em;
+    font-weight: 600; color: var(--ink-soft); padding: 13px 14px; border-bottom: 2px solid var(--line-strong);
+    background: var(--surface-2); position: sticky; top: 0;
+  }
+  thead th:first-child { text-align: left; }
+  tbody th {
+    text-align: left; font-weight: 600; color: var(--ink); padding: 11px 14px;
+    border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  tbody td {
+    text-align: center; padding: 11px 14px; border-bottom: 1px solid var(--line);
+    font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover th, tbody tr:hover td { background: color-mix(in srgb, var(--c-memory) 5%, var(--surface)); }
+  .yes { color: var(--c-debug); font-weight: 700; }
+  .lim { color: var(--c-audio); font-weight: 700; }
+  .no  { color: var(--ink-faint); }
+  .matrix-key { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+  .matrix-key b { font-family: ui-monospace, Menlo, monospace; }
+
+  /* ---- Platforms strip ---- */
+  .plats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+  .plat {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 18px; box-shadow: var(--shadow); border-top: 4px solid var(--c-files);
+  }
+  .plat h3 { font-size: 16px; margin: 0 0 4px; font-weight: 700; }
+  .plat .stack { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--c-files); font-weight: 600; margin-bottom: 9px; }
+  .plat p { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+  .formats { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .fmt { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .fmt .k { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--c-files); font-weight: 600; margin: 0 0 8px; }
+  .fmt ul { margin: 0; padding-left: 18px; }
+  .fmt li { font-size: 13.5px; color: var(--ink-soft); margin: 3px 0; }
+  .fmt li b { color: var(--ink); font-weight: 600; }
+
+  /* ---- Footer ---- */
+  footer { margin-top: 68px; padding-top: 26px; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: 13.5px; }
+  footer a { color: var(--c-memory); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+  footer .links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 12px; }
+
+  a:focus-visible, .card:focus-visible { outline: 2px solid var(--c-memory); outline-offset: 3px; }
+
+  @media (max-width: 860px) {
+    .meta, .plats { grid-template-columns: 1fr; }
+    .map-grid { grid-template-columns: 1fr; }
+    .formats { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card { transition: none; }
+    .card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <p class="eyebrow">Saturn Explorer</p>
+  <h1>Everything Saturn&nbsp;Explorer can do</h1>
+  <p class="lede">A visual reverse-engineering and debugging tool for Sega Saturn games. Point it at a
+    savestate, a memory dump, or a <em>running</em> emulator: it rebuilds — in software — what the
+    console is drawing from raw VRAM, and lets you step through the SH-2 code behind it. This page is a
+    plain-English tour of every panel, tool, and workflow.</p>
+
+  <div class="meta">
+    <div class="cell">
+      <p class="k">What it is</p>
+      <p class="v">A Saturn <b>graphics reconstructor + CPU debugger + asset tracer</b>, built for translators and romhackers taking a game apart.</p>
+    </div>
+    <div class="cell">
+      <p class="k">Inputs it reads</p>
+      <p class="v"><b>Live emulator</b> · Yabause / Mednafen <b>savestates</b> · raw <b>memory dumps</b> · <b>disc images</b> (.iso/.bin/.cue)</p>
+    </div>
+    <div class="cell">
+      <p class="k">Runs on</p>
+      <p class="v"><b>Windows</b> (D3D11) · <b>Linux / macOS</b> (SDL2) · <b>Web</b> (browser, no install)</p>
+    </div>
+  </div>
+
+  <!-- WINDOW MAP -->
+  <section>
+    <div class="sec-head" style="--c: var(--c-memory)">
+      <p class="sec-eyebrow">The window at a glance</p>
+      <h2>One workspace, dockable panels</h2>
+      <p class="sec-intro">A single toolbar drives the session; every panel below is a dockable window you
+        show or hide from the <span class="mono">Windows</span> menu. Panels are grouped by category — the
+        same colors are used throughout this page. (A schematic, not a screenshot.)</p>
+    </div>
+
+    <div class="map-frame" role="img" aria-label="Schematic of the Saturn Explorer window: a top toolbar, a left column, a center column, a right column, a bottom debugger dock, and a status bar.">
+      <div class="map-bar">
+        <span class="chip">Session</span><span class="chip">Layers</span><span class="chip">▶ ⏭</span>
+        <span class="chip">Dump Memory</span><span class="chip">Data Directory</span>
+        <span class="chip live">Patch</span><span class="chip">Windows</span>
+        <span class="chip">Screenshot</span><span class="chip">Settings</span><span class="chip">Help</span>
+        <span class="status">FPS 60 · VDP1: 208 · Live connected</span>
+      </div>
+
+      <div class="map-grid">
+        <!-- left column -->
+        <div class="col">
+          <div class="zone" style="--c: var(--c-graphics)">
+            <p class="z-cat">Graphics</p>
+            <div class="z-list">VRAM Map <span>(VDP1)</span></div>
+          </div>
+          <div class="zone" style="--c: var(--c-files)">
+            <p class="z-cat">Files &amp; Input</p>
+            <div class="z-list">Disc Explorer</div>
+          </div>
+        </div>
+
+        <!-- center column -->
+        <div class="col">
+          <div class="zone" style="--c: var(--c-graphics)">
+            <p class="z-cat">Graphics · center stage</p>
+            <div class="z-list">VDP Output &nbsp;·&nbsp; 3D View <span>— with a frame transport bar</span></div>
+          </div>
+          <div class="zone" style="--c: var(--c-graphics)">
+            <p class="z-cat">Graphics</p>
+            <div class="z-list">VDP1 Command List &nbsp;·&nbsp; Selected Object</div>
+          </div>
+          <div class="zone" style="--c: var(--c-memory)">
+            <p class="z-cat">Memory &amp; Data</p>
+            <div class="z-list">VDP1 Table · VDP2 Table · Color RAM · Registers &nbsp;<span>/</span>&nbsp; Texture &amp; Palette Viewers</div>
+          </div>
+        </div>
+
+        <!-- right column -->
+        <div class="col">
+          <div class="zone" style="--c: var(--c-debug)">
+            <p class="z-cat">Debugger</p>
+            <div class="z-list">SH-2 Assembly · Watch · Breakpoints · Call Stack</div>
+          </div>
+          <div class="zone" style="--c: var(--c-audio)">
+            <p class="z-cat">Audio</p>
+            <div class="z-list">Sound (SCSP) · Sound CPU (68K)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom dock -->
+      <div class="zone" style="--c: var(--c-debug); margin-top: 10px">
+        <p class="z-cat">Debugger dock · bottom tabs</p>
+        <div class="z-list">Memory (Hex) · Tracepoints · RAM Search · Access Log · Log &nbsp;<span>·</span>&nbsp; Controller</div>
+      </div>
+
+      <div class="map-status">
+        <span><b>Connected</b> to Mednafen</span>
+        <span><b>Recording</b> 01:53 &nbsp;(291.6 / 367.5&nbsp;MB)</span>
+        <span><b>Data Dir:</b> …/Panzer Dragoon Saga (USA)</span>
+        <span style="margin-left:auto"><b>Frame 516</b> · Paused</span>
+      </div>
+    </div>
+
+    <div class="map-legend">
+      <span class="lg" style="--c: var(--c-graphics)"><span class="sw"></span> Graphics</span>
+      <span class="lg" style="--c: var(--c-memory)"><span class="sw"></span> Memory &amp; Data</span>
+      <span class="lg" style="--c: var(--c-debug)"><span class="sw"></span> Debugger</span>
+      <span class="lg" style="--c: var(--c-audio)"><span class="sw"></span> Audio</span>
+      <span class="lg" style="--c: var(--c-files)"><span class="sw"></span> Files &amp; Input</span>
+      <span class="lg" style="--c: var(--c-flow)"><span class="sw"></span> Recording · Rewind · Patch</span>
+    </div>
+    <p class="map-note">The status bar reads live: connection, recorder used / available, data directory, and the current frame.</p>
+  </section>
+
+  <!-- GRAPHICS -->
+  <section style="--c: var(--c-graphics)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Graphics inspection</p>
+      <h2>See what the console is drawing</h2>
+      <p class="sec-intro">Saturn Explorer is a software VDP1 + VDP2 — it rebuilds the frame from individual
+        sprite quads and background layers rather than reading back the emulator's framebuffer, so every
+        pixel is traceable to the command that drew it.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Composited frame</span>
+        <h3>VDP Output</h3>
+        <p>The reconstructed 4:3 frame, software-composited from the VDP1 sprites and VDP2 background layers. <span class="lit">Click a pixel</span> to select the command that drew it; overlay bounding boxes and object numbers.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Exploded scene</span>
+        <h3>3D View</h3>
+        <p>An orbit-camera view with every sprite exploded along Z by priority. Drag to orbit, wheel to zoom, click to pick a command — useful for untangling layered scenes.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Draw commands</span>
+        <h3>VDP1 Command List</h3>
+        <p>Every parsed draw command — type, size, position, color mode, texture address. <span class="lit">Size and position are inline-editable</span> and write straight back to VDP1 VRAM.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Field inspector</span>
+        <h3>Selected Object</h3>
+        <p>Every field of the command under the cursor — table / link / texture addresses, size, position, color and draw mode, flip, and the raw CMDCTRL / CMDPMOD words.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Texture</span>
+        <h3>Texture Viewer</h3>
+        <p>Decodes the selected sprite's texture over a checkerboard. <span class="lit">Export to BMP</span> (keeping the game's palette), break on any write to it, or search the game files for it.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Palette</span>
+        <h3>Palette Viewer</h3>
+        <p>The sprite's CLUT / CRAM colors as swatches; hover any entry for its index and raw RGB value.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">VRAM at a glance</span>
+        <h3>VRAM Map</h3>
+        <p>A color-coded map of all 512&nbsp;KiB of VDP1 VRAM — textures, CLUTs, the command table, gouraud tables, free space — with a percent-used readout. Click to select the nearest command.</p>
+      </div>
+      <div class="card" style="--c: var(--c-graphics)">
+        <span class="tag">Layer toggles</span>
+        <h3>Show / hide layers</h3>
+        <p>Flip individual VDP1 overlays (sprites, wireframe, boxes, object numbers) and VDP2 layers — <span class="lit">NBG0–3, RBG0</span>, windows, color calculation, and shadow / highlight — to isolate what you're studying.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- MEMORY -->
+  <section style="--c: var(--c-memory)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Memory &amp; data</p>
+      <h2>Read and edit every region</h2>
+      <p class="sec-intro">All of the console's captured memory — work RAM, sound RAM, VDP1/VDP2 VRAM, Color
+        RAM, the framebuffer, and hardware registers — is browsable and editable. On a live emulator, edits
+        are poked into the running game.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Hex editor</span>
+        <h3>Memory</h3>
+        <p>A region-tabbed hex editor over every captured region. <span class="lit">Type-to-edit</span> — select a byte and just start typing hex. ASCII or Shift-JIS text pane, change highlighting, and GoTo from any other panel.</p>
+      </div>
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Live write-back</span>
+        <h3>Edits reach the game</h3>
+        <p>A write updates the snapshot and — when connected live — pokes the emulator, so the change persists in the running game. On a savestate the edit stays in the in-memory image.</p>
+      </div>
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Raw tables</span>
+        <h3>VDP1 &amp; VDP2 Tables</h3>
+        <p>The raw 15-word VDP1 command table per command, and the decoded VDP2 background config — each NBG's on/off, color depth, priority, and scroll.</p>
+      </div>
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Palette memory</span>
+        <h3>Color RAM &amp; Registers</h3>
+        <p>The full CRAM as a swatch grid (RGB555 / RGB888), plus tabbed VDP1 / VDP2 hardware register tables with name, address, and value.</p>
+      </div>
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Cross-reference</span>
+        <h3>References</h3>
+        <p>Every other sprite that shares the selected texture or palette — click to jump between them.</p>
+      </div>
+      <div class="card" style="--c: var(--c-memory)">
+        <span class="tag">Snapshot</span>
+        <h3>Dump Memory</h3>
+        <p>Save every region plus the registers into one self-describing <span class="mono">.sedump</span> file for offline analysis or sharing.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEBUGGER -->
+  <section style="--c: var(--c-debug)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Live debugging</p>
+      <h2>Step the code, watch it run</h2>
+      <p class="sec-intro">Connected to a running, patched emulator, every panel tracks the live game — the
+        disassembly follows the program counter, breakpoints and tracepoints fire, and you can drive
+        execution frame-by-frame or instruction-by-instruction.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Disassembly</span>
+        <h3>SH-2 Assembly</h3>
+        <p>Live disassembly of the master and slave SH-2, following the PC. Gutter breakpoints, run-to-cursor, <span class="lit">step into / over / out</span>, your own labels and comments, add-operand-to-watch, and create-tracepoint.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Halt on…</span>
+        <h3>Breakpoints</h3>
+        <p>Execution and data (read / write / read-or-write) breakpoints, each shown as a plain-English "breaks when…" sentence, with an optional <span class="lit">guard expression</span> over registers and memory.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Track values</span>
+        <h3>Watch</h3>
+        <p>Track addresses and expressions, refreshed continuously with change tinting. Typed as U8…S32, RGB555 (with a swatch), or Pointer. Break on change straight from a row.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Non-halting logging</span>
+        <h3>Tracepoints</h3>
+        <p>Attach a format string like <span class="mono">"Dialogue&nbsp;ID&nbsp;=&nbsp;{r4}"</span> to an instruction; every time it runs, the value is captured to the Log — <span class="lit">without pausing the game</span>. Autocomplete for register and memory tokens; hit counts.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Backtrace</span>
+        <h3>Call Stack</h3>
+        <p>The per-CPU call chain with confidence levels — it reconstructs a plausible stack even on a static savestate with no emulator. Rename functions and load a symbol map.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Cheat-Engine style</span>
+        <h3>RAM Search</h3>
+        <p>Scan work RAM for a value, then narrow: equal / greater / less, or <span class="lit">increased / decreased / unchanged / changed</span> between scans. Send any hit to the hex editor or watch list.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Who touched this?</span>
+        <h3>Access Log</h3>
+        <p>"Find what accesses this address": a non-halting watchpoint records every instruction that reads or writes it, with hit counts and each accessor's call stack.</p>
+      </div>
+      <div class="card" style="--c: var(--c-debug)">
+        <span class="tag">Event feed</span>
+        <h3>Log &amp; Symbols</h3>
+        <p>A filterable, searchable event log — click an entry to jump to the instruction or address that produced it. An address→name store imports <span class="mono">.map</span> / <span class="mono">.sym</span> symbol files.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUDIO -->
+  <section style="--c: var(--c-audio)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Audio</p>
+      <h2>Trace a sound to its sample</h2>
+      <p class="sec-intro">The SCSP sound chip's 32 voices, the 68000 sound driver, and the raw PCM behind
+        each voice — inspect them, play them back, and export them.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-audio)">
+        <span class="tag">32 voices</span>
+        <h3>Sound (SCSP)</h3>
+        <p>One row per voice: envelope phase and level, sample format, pitch in Hz, total level, pan, loop mode, and start / loop addresses. A start-address cell jumps to that sample in Sound RAM. <span class="lit">Play</span> a voice, or <span class="lit">export it to WAV</span>.</p>
+      </div>
+      <div class="card" style="--c: var(--c-audio)">
+        <span class="tag">68000</span>
+        <h3>Sound CPU (68K)</h3>
+        <p>Disassembles the SCSP sound driver from Sound RAM from any address, with clickable branch targets to follow the code.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FILES & DISC -->
+  <section style="--c: var(--c-files)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Files, disc &amp; input</p>
+      <h2>Back to the disc — and drive the game</h2>
+      <p class="sec-intro">Browse the game's filesystem, resolve what the drive is streaming right now, search
+        the files for an asset's bytes, and control the emulated console with an on-screen pad.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-files)">
+        <span class="tag">ISO 9660</span>
+        <h3>Disc Explorer</h3>
+        <p>Open an <span class="mono">.iso</span> / <span class="mono">.bin</span> / <span class="mono">.cue</span> and browse the filesystem. Resolve any sector or FAD to a file + offset, and — with the CD tap — see <span class="lit">which file the drive is reading right now</span>.</p>
+      </div>
+      <div class="card" style="--c: var(--c-files)">
+        <span class="tag">Asset tracing</span>
+        <h3>Find in game files</h3>
+        <p>Search the extracted game files for a texture's or palette's raw bytes — exact or PRS-compressed — to find where the asset lives on disc.</p>
+      </div>
+      <div class="card" style="--c: var(--c-files)">
+        <span class="tag">Virtual pad</span>
+        <h3>Controller</h3>
+        <p>An on-screen Saturn pad that drives the live game directly, with key bindings, input recording, macros, and a timeline — handy for reaching a repeatable state.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- RECORDING & REWIND -->
+  <section style="--c: var(--c-flow)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Recording &amp; rewind</p>
+      <h2>Scrub backward through time</h2>
+      <p class="sec-intro">Saturn Explorer keeps a rolling, compressed buffer of recent frames. Pause and drag
+        the transport back, and every panel re-renders that past moment — then, on a rewind-capable
+        emulator, resume from there with your edits applied.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Rolling buffer</span>
+        <h3>Frame recording</h3>
+        <p>Recent frames are LZ-compressed into an in-memory ring bounded by a length and a memory ceiling; the status bar shows <span class="lit">used / available</span>. Configure the maximum length in Recording Settings.</p>
+      </div>
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Time travel</span>
+        <h3>Scrub the transport</h3>
+        <p>Pause and drag the slider under VDP Output to step back through recorded frames. Every panel — graphics, memory, sound — reflects the frame you land on.</p>
+      </div>
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Re-simulate</span>
+        <h3>Play from here</h3>
+        <p>On a rewind-capable emulator, pressing Play from a past frame restores its full savestate, applies any edits you made while scrubbed, and re-simulates forward — a true rewind, not just a replay.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATCHING -->
+  <section style="--c: var(--c-flow)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Patching</p>
+      <h2>From a memory edit to a patched disc</h2>
+      <p class="sec-intro">Saturn Explorer learns where a memory value lives in the game's files by content
+        search, remembers those locations in a project, and writes your changes back into the files.</p>
+    </div>
+    <div class="cards">
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Locate</span>
+        <h3>Find in game files</h3>
+        <p>From a hex selection, search the extracted files — widen the match with adjustable <span class="lit">surrounding-byte context</span> until it's unique — and <span class="lit">accept</span> a result into the location library.</p>
+      </div>
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Write it out</span>
+        <h3>Apply changes to disc</h3>
+        <p>Generates and runs a self-contained Python script that writes only your <span class="lit">changed</span> bytes into their mapped files, then reports what changed, what didn't, and what couldn't be read.</p>
+      </div>
+      <div class="card" style="--c: var(--c-flow)">
+        <span class="tag">Persist</span>
+        <h3>Projects</h3>
+        <p>Save the whole library of known locations to a <span class="mono">.seproj</span> project and reopen it later. Unsaved changes prompt a Save / Discard warning when you close the app.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPABILITY MATRIX -->
+  <section style="--c: var(--c-memory)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">What works where</p>
+      <h2>Live vs. savestate vs. web</h2>
+      <p class="sec-intro">The same app adapts to its source. Graphics reconstruction and inspection work
+        everywhere; execution control and rewind need a live, patched emulator (desktop only).</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>Live emulator</th><th>Savestate / dump</th><th>Web build</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>Graphics reconstruction &amp; inspection</th><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td></tr>
+          <tr><th>Hex view — all regions</th><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td></tr>
+          <tr><th>Hex / VDP edits persist to target</th><td class="yes">●</td><td class="lim">◐</td><td class="lim">◐</td></tr>
+          <tr><th>SH-2 &amp; 68K disassembly</th><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td></tr>
+          <tr><th>Breakpoints &amp; stepping</th><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th>Tracepoints (non-halting log)</th><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th>Watch (break-on-change) &amp; RAM Search</th><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th>Call stack reconstruction</th><td class="yes">●</td><td class="lim">◐</td><td class="lim">◐</td></tr>
+          <tr><th>SCSP voice table &amp; playback</th><td class="yes">●</td><td class="lim">◐</td><td class="lim">◐</td></tr>
+          <tr><th>Frame recording &amp; rewind</th><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th>Controller drive</th><td class="yes">●</td><td class="no">—</td><td class="no">—</td></tr>
+          <tr><th>Disc explorer &amp; asset search</th><td class="yes">●</td><td class="yes">●</td><td class="lim">◐</td></tr>
+          <tr><th>Patching (locate &amp; apply)</th><td class="yes">●</td><td class="yes">●</td><td class="no">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="matrix-key">
+      <span><b class="yes">●</b> Full</span>
+      <span><b class="lim">◐</b> Limited — edits stay in memory; some data absent</span>
+      <span><b class="no">—</b> Not available</span>
+    </div>
+  </section>
+
+  <!-- PLATFORMS & FORMATS -->
+  <section style="--c: var(--c-files)">
+    <div class="sec-head">
+      <p class="sec-eyebrow">Inputs &amp; platforms</p>
+      <h2>One codebase, three ways to run</h2>
+    </div>
+    <div class="plats">
+      <div class="plat">
+        <h3>Windows</h3>
+        <p class="stack">Win32 + Direct3D 11</p>
+        <p>The primary target. Full feature set including live mode. A one-command installer also builds a patched emulator for you.</p>
+      </div>
+      <div class="plat">
+        <h3>Linux / macOS</h3>
+        <p class="stack">SDL2 + OpenGL</p>
+        <p>The same features as Windows, live mode included. Build patched Mednafen or Yabause from source, then launch with <span class="mono">--live</span>.</p>
+      </div>
+      <div class="plat">
+        <h3>Web</h3>
+        <p class="stack">SDL2 + WebGL2 · Emscripten</p>
+        <p>Savestate and dump analysis in a browser, no install. Live mode is desktop-only (it needs sockets and threads a browser can't provide).</p>
+      </div>
+    </div>
+
+    <div class="formats">
+      <div class="fmt">
+        <p class="k">Savestates &amp; dumps</p>
+        <ul>
+          <li><b>Yabause family</b> — <span class="mono">.yss</span> (Yabause, Yaba Sanshiro, Kronos)</li>
+          <li><b>Mednafen / Beetle Saturn</b> savestates</li>
+          <li><b>Raw memory dump</b>, or a labeled region-file directory</li>
+        </ul>
+      </div>
+      <div class="fmt">
+        <p class="k">Live &amp; disc</p>
+        <ul>
+          <li><b>Live emulator</b> — a patched Yabause or Mednafen over a local socket</li>
+          <li><b>Disc images</b> — <span class="mono">.iso</span>, <span class="mono">.bin</span> / <span class="mono">.img</span> (2352-byte), with <span class="mono">.cue</span></li>
+          <li><b>Symbols</b> — import a <span class="mono">.map</span> / <span class="mono">.sym</span> address→name file</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="index.html">← All guides</a>
+      <a href="vdp1.html">VDP1 field guide →</a>
+      <a href="vdp2.html">VDP2 field guide →</a>
+      <a href="audio.html">Audio field guide →</a>
+    </div>
+    <p><strong>Saturn Explorer</strong> — a Sega Saturn debugger &amp; asset explorer for translators and romhackers. Built as a portable analysis engine with swappable drivers (savestate, live socket) and a Dear ImGui front-end.</p>
+  </footer>
+
+</div>
+</body>
+</html>

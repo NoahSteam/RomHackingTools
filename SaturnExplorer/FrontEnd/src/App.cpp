@@ -6887,14 +6887,21 @@ void App::DrawVdp1Table()
         {
             const size_t count = se_command_count(mContext);
             ImGui::Text("%zu command tables (15 words each: CMDCTRL - GRDA)", count);
+            // One real column per command-table word, so the hex values line up under their
+            // field names instead of running together in a single string.
+            static const char* kWordNames[15] = {
+                "CMDCTRL", "LINK", "PMOD", "COLR", "SRCA", "SIZE",
+                "XA", "YA", "XB", "YB", "XC", "YC", "XD", "YD", "GRDA"
+            };
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX;
-            if (ImGui::BeginTable("vdp1table", 3, flags))
+            if (ImGui::BeginTable("vdp1table", 2 + 15, flags))
             {
-                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupScrollFreeze(2, 1);   // keep # and Addr pinned while scrolling X
                 ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
                 ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed);
-                ImGui::TableSetupColumn("CMDCTRL LINK PMOD COLR SRCA SIZE  XA YA XB YB XC YC XD YD  GRDA");
+                for (const char* name : kWordNames)
+                    ImGui::TableSetupColumn(name, ImGuiTableColumnFlags_WidthFixed);
                 ImGui::TableHeadersRow();
 
                 // Scroll+surface the selected row once when another panel asks (e.g.
@@ -6921,13 +6928,6 @@ void App::DrawVdp1Table()
                         uint8_t raw[0x20] = {};
                         se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address,
                                      raw, sizeof(raw));
-                        char words[160];
-                        int p = 0;
-                        for (int w = 0; w < 15 && p < static_cast<int>(sizeof(words)) - 6; ++w)
-                        {
-                            const uint16_t v = static_cast<uint16_t>((raw[w * 2] << 8) | raw[w * 2 + 1]);
-                            p += std::snprintf(words + p, sizeof(words) - p, "%04X ", v);
-                        }
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         char rowlabel[32];
@@ -6953,8 +6953,12 @@ void App::DrawVdp1Table()
                         }
                         ImGui::TableNextColumn();
                         ImGui::Text("0x%05X", cmd.table_address);
-                        ImGui::TableNextColumn();
-                        ImGui::TextUnformatted(words);
+                        for (int w = 0; w < 15; ++w)
+                        {
+                            const uint16_t v = static_cast<uint16_t>((raw[w * 2] << 8) | raw[w * 2 + 1]);
+                            ImGui::TableNextColumn();
+                            ImGui::Text("%04X", v);
+                        }
                     }
                 }
                 ImGui::EndTable();
