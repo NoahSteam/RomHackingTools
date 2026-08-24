@@ -26,6 +26,10 @@
 #else
 #include <SDL_opengl.h>   // desktop GL for the native verification build
 #include <sys/wait.h>     // WIFEXITED/WEXITSTATUS to tell "dialog cancelled" from "not installed"
+#include <sys/types.h>    // pid_t
+#include <unistd.h>       // fork/execl/setsid/dup2 for LaunchProcess (killable emulator child)
+#include <signal.h>       // kill() to stop the launched emulator on relaunch
+#include <fcntl.h>        // open() /dev/null for the launched child's stdio
 #endif
 
 namespace sfe
@@ -441,13 +445,45 @@ bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* 
     const std::string dir = (workingDir && *workingDir) ? std::string(workingDir)
                                                         : ParentDir(path);
     // The exe is shell-quoted; `args` is passed through verbatim (it already carries its
-    // own quoting around a "<rom>" path, matching how ShellExecute treats the param
-    // string on Windows), so the child sees the same argv on both platforms. Run
-    // detached (trailing &) from its own directory so an emulator finds its config/saves.
-    std::string cmd = "cd " + ShellQuote(dir) + " && " + ShellQuote(path);
+    // own quoting around a "<rom>" path, matching how ShellExecute treats the param string
+    // on Windows), so the child sees the same argv on both platforms. `exec` so the shell
+    // replaces itself with the emulator — then the forked pid *is* the emulator, and we can
+    // stop it later (TerminateLaunchedProcess) to relaunch a different game.
+    std::string cmd = "cd " + ShellQuote(dir) + " && exec " + ShellQuote(path);
     if (args && *args) { cmd += ' '; cmd += args; }
-    cmd += " >/dev/null 2>&1 &";
-    return ::system(cmd.c_str()) != -1;
+
+    const pid_t pid = ::fork();
+    if (pid < 0) return false;
+    if (pid == 0)
+    {
+        // Child: new session (survives independent of SE, and terminal signals to SE don't
+        // reach it), stdio to /dev/null, then become the emulator via a shell.
+        ::setsid();
+        const int devnull = ::open("/dev/null", O_RDWR);
+        if (devnull >= 0)
+        {
+            ::dup2(devnull, 0); ::dup2(devnull, 1); ::dup2(devnull, 2);
+            if (devnull > 2) ::close(devnull);
+        }
+        ::execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+        ::_exit(127);   // exec failed
+    }
+    mLaunchedPid = pid;   // parent: remember it so a relaunch can stop it first
+    return true;
+}
+
+void WebPlatform::TerminateLaunchedProcess()
+{
+    if (mLaunchedPid <= 0) return;
+    int status = 0;
+    // Reap first without blocking: if the emulator already exited it's a zombie holding the
+    // pid, so this collects it and we skip the kill (never signal a recycled pid).
+    if (::waitpid(mLaunchedPid, &status, WNOHANG) == 0)
+    {
+        ::kill(mLaunchedPid, SIGTERM);        // still running — ask it to quit
+        ::waitpid(mLaunchedPid, &status, 0);  // then reap so we don't leave a zombie
+    }
+    mLaunchedPid = -1;
 }
 #endif  // !__EMSCRIPTEN__
 

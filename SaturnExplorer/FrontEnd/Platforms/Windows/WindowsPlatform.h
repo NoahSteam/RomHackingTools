@@ -41,6 +41,7 @@ public:
     bool RevealPath(const char* path) override;
     bool OpenURL(const char* url) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
+    void TerminateLaunchedProcess() override;
     bool HttpsGet(const std::string& url, const std::string& userAgent,
                   HttpResponse& out) override;
 
@@ -72,6 +73,7 @@ private:
     UINT                    mResizeHeight = 0;
     bool                    mOleInitialized = false;
     bool                    mCloseRequested = false;   // WM_CLOSE seen; awaiting app confirm
+    HANDLE                  mLaunchedProcess = nullptr; // emulator we last launched (for relaunch)
 
     // waveOut audio preview state (the copied PCM must outlive playback, hence a member).
     HWAVEOUT                mWaveOut = nullptr;

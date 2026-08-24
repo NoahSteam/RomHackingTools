@@ -115,6 +115,13 @@ public:
         return false;
     }
 
+    // Stop the emulator most recently started by LaunchProcess, if it is still running.
+    // Used to *relaunch* — start a fresh emulator with a different game rather than leaving
+    // the old one running and stacking a second instance. Only affects a process this app
+    // launched (a user-started emulator is never touched). No-op if none was launched, it
+    // already exited, or the backend has no process control (web/headless).
+    virtual void TerminateLaunchedProcess() {}
+
     // --- HTTPS GET (Seam C, optional). The one network primitive the portable app
     // needs — currently only the update check (UpdateChecker) uses it. Kept minimal and
     // synchronous on purpose: the caller runs it on a worker thread, so each platform only

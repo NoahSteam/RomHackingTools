@@ -6055,6 +6055,23 @@ bool App::LaunchSession(IPlatform& platform)
     }
     const EmulatorSpec* sel = mLauncher.Selected();
     if (!sel) return false;
+
+    // Relaunch: if SE already started an emulator, stop it before launching again so the new
+    // game replaces it instead of leaving the old emulator running beside a second instance.
+    // When that emulator was our live source, drop the (now-dead) connection so the fresh
+    // launch reconnects to the new game.
+    if (mbLaunchedEmulator)
+    {
+        platform.TerminateLaunchedProcess();
+        if (mSource.type == SourceType::Live)
+        {
+            mController.ClearAll();
+            SendInput(0);
+            CloseData();
+        }
+        mbLaunchedEmulator = false;
+    }
+
     std::string args = mLauncher.CurrentArgs();
     // Force the Saturn control pad + SE's own key bindings onto Mednafen at launch, so its
     // input matches SE without anyone touching Mednafen's remap UI. Prepended (not baked
@@ -6075,6 +6092,7 @@ bool App::LaunchSession(IPlatform& platform)
         mOperationError = true;
         return false;
     }
+    mbLaunchedEmulator = true;   // SE owns this emulator process now (for relaunch)
     mLog.Info("Launched " + sel->label +
               (mLauncher.Rom().empty() ? std::string()
                                        : " with " + PathBasename(mLauncher.Rom())));

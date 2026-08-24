@@ -500,6 +500,8 @@ private:
     // in Launch Settings. Owns the recent-ROM list + the set-data-dir coupling.
     Launcher         mLauncher;
     LaunchValidation mLaunchValidation;
+    bool             mbLaunchedEmulator = false;  // SE started the current emulator (so a
+                                                  // relaunch stops it first, then reconnects)
     bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
     bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
     bool             mOpenRecordingSettings = false;

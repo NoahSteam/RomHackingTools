@@ -59,6 +59,7 @@ public:
     bool RevealPath(const char* path) override;
     bool OpenURL(const char* url) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
+    void TerminateLaunchedProcess() override;
 #endif
 
     // HTTPS GET via libcurl on native desktop when SE_HAVE_CURL is defined (macOS/Linux);
@@ -82,6 +83,9 @@ private:
     uint32_t      mAudioDev = 0;         // SDL_AudioDeviceID (0 = none), reopened on spec change
     int           mAudioRate = 0;        // spec of the currently-open device
     int           mAudioChannels = 0;
+#ifndef __EMSCRIPTEN__
+    int           mLaunchedPid = -1;     // pid of the emulator we last launched (-1 = none)
+#endif
 };
 
 }  // namespace sfe

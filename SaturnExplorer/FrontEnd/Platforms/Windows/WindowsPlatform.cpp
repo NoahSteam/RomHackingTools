@@ -421,11 +421,33 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const ch
         if (slash != std::string::npos) derived = p.substr(0, slash);
         workingDir = derived.empty() ? nullptr : derived.c_str();
     }
-    // ShellExecute's 4th arg is the command-line parameter string (NULL if none); the
-    // launched program's CRT parses it, so a quoted "<rom>" survives spaces.
-    const char* params = (args && *args) ? args : nullptr;
-    const HINSTANCE r = ::ShellExecuteA(nullptr, "open", path, params, workingDir, SW_SHOWNORMAL);
-    return reinterpret_cast<INT_PTR>(r) > 32;   // >32 == success per the API
+    // ShellExecuteEx (not plain ShellExecute) so SEE_MASK_NOCLOSEPROCESS hands back the new
+    // process handle — kept so a relaunch can stop the old emulator first. The lpParameters
+    // string is parsed by the launched program's CRT, so a quoted "<rom>" survives spaces.
+    SHELLEXECUTEINFOA sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = "open";
+    sei.lpFile = path;
+    sei.lpParameters = (args && *args) ? args : nullptr;
+    sei.lpDirectory = workingDir;
+    sei.nShow = SW_SHOWNORMAL;
+    if (!::ShellExecuteExA(&sei)) return false;
+    if (mLaunchedProcess) ::CloseHandle(mLaunchedProcess);   // drop the previous handle
+    mLaunchedProcess = sei.hProcess;   // may be NULL if the target reused an existing process
+    return true;
+}
+
+void WindowsPlatform::TerminateLaunchedProcess()
+{
+    if (!mLaunchedProcess) return;
+    // Only terminate if it's still running (don't signal a handle whose process already exited).
+    if (::WaitForSingleObject(mLaunchedProcess, 0) == WAIT_TIMEOUT)
+    {
+        ::TerminateProcess(mLaunchedProcess, 0);
+    }
+    ::CloseHandle(mLaunchedProcess);
+    mLaunchedProcess = nullptr;
 }
 
 bool WindowsPlatform::CreateDeviceD3D()
