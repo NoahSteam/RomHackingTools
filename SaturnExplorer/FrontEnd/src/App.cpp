@@ -204,13 +204,22 @@ const char* DrawModeName(se_draw_mode mode)
     }
 }
 
-// One "Label: value" row in the inspector. When `tips` is on and `desc` is non-empty,
-// hovering the label shows a short explanation of the field.
-void InspectorRow(bool tips, const char* label, const char* desc, const char* fmt, ...)
+// Whether hover help is enabled (Settings > Tooltips). App mirrors mShowTooltips here each
+// frame so the free-function panel helpers don't have to thread a bool through every call.
+bool g_tooltipsEnabled = false;
+
+// Attach a hover explanation to the item just drawn, when tooltips are on. SetItemTooltip
+// already gates on hover (with the standard delay), so this is the whole gesture.
+void HoverHelp(const char* desc)
+{
+    if (g_tooltipsEnabled && desc && *desc) ImGui::SetItemTooltip("%s", desc);
+}
+
+// One "Label: value" row in the inspector; hovering the label explains the field (tooltips on).
+void InspectorRow(const char* label, const char* desc, const char* fmt, ...)
 {
     ImGui::TextDisabled("%s", label);
-    if (tips && desc && *desc && ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", desc);
+    HoverHelp(desc);
     ImGui::SameLine(160.0f);
     va_list args;
     va_start(args, fmt);
@@ -863,6 +872,7 @@ bool App::OpenSavestateBuffer(const uint8_t* data, size_t size)
 
 void App::BuildUI(IPlatform& platform)
 {
+    g_tooltipsEnabled = mShowTooltips;   // let the free-function panel helpers see the setting
     PollSearchWorker();   // reap a finished data-search worker before drawing its results
 #ifdef SE_ENABLE_LIVE
     // Background auto-connect: while no source is loaded, retry about once a second
@@ -3642,7 +3652,23 @@ constexpr uint32_t kCmdSizeOffset = 0x0Au;   // CMDSIZE: (charW<<8)|lines
 constexpr uint32_t kCmdXaOffset   = 0x0Cu;   // CMDXA: signed x
 constexpr uint32_t kCmdYaOffset   = 0x0Eu;   // CMDYA: signed y
 
-int Clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+int Clampi(int v, int lo, int hi) { return std::max(lo, std::min(v, hi)); }   // no std::clamp (C++14)
+
+// One small editable integer cell that commits on Enter or focus-loss. Runs `commit(value)`
+// once on commit and returns true then; otherwise false. Shared by the size/position cells.
+template <typename Commit>
+bool EditCell(const char* id, float width, int initial, Commit&& commit)
+{
+    int v = initial;
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::InputInt(id, &v, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
+        ImGui::IsItemDeactivatedAfterEdit())
+    {
+        commit(v);
+        return true;
+    }
+    return false;
+}
 }  // namespace
 
 // Re-encode one 16-bit command word and write it back to VDP1 VRAM. se_write_vram updates the
@@ -3660,36 +3686,22 @@ void App::WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t
 bool App::EditCommandSize(const se_command& cmd, int row)
 {
     ImGui::PushID(row);
-    ImGui::PushID("size");
     bool changed = false;
     const float cell = 40.0f;
 
-    int width = static_cast<int>(cmd.width);
-    ImGui::SetNextItemWidth(cell);
-    if (ImGui::InputInt("##w", &width, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
-        ImGui::IsItemDeactivatedAfterEdit())
-    {
+    changed |= EditCell("##w", cell, cmd.width, [&](int width) {
         const uint16_t charW = static_cast<uint16_t>(Clampi(width / 8, 0, 0x3F));
         WriteCommandWord(cmd, kCmdSizeOffset,
                          static_cast<uint16_t>((charW << 8) | (cmd.height & 0xFF)));
-        changed = true;
-    }
+    });
     ImGui::SameLine(0.0f, 4.0f);
     ImGui::TextUnformatted("x");
     ImGui::SameLine(0.0f, 4.0f);
-
-    int height = static_cast<int>(cmd.height);
-    ImGui::SetNextItemWidth(cell);
-    if (ImGui::InputInt("##h", &height, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
-        ImGui::IsItemDeactivatedAfterEdit())
-    {
+    changed |= EditCell("##h", cell, cmd.height, [&](int height) {
         const uint16_t charW = static_cast<uint16_t>((cmd.width / 8) & 0x3F);
         WriteCommandWord(cmd, kCmdSizeOffset,
-                         static_cast<uint16_t>((charW << 8) |
-                                               (Clampi(height, 0, 0xFF) & 0xFF)));
-        changed = true;
-    }
-    ImGui::PopID();
+                         static_cast<uint16_t>((charW << 8) | (Clampi(height, 0, 0xFF) & 0xFF)));
+    });
     ImGui::PopID();
     return changed;
 }
@@ -3702,31 +3714,18 @@ bool App::EditCommandSize(const se_command& cmd, int row)
 bool App::EditCommandPosition(const se_command& cmd, int row)
 {
     ImGui::PushID(row);
-    ImGui::PushID("pos");
     bool changed = false;
     const float cell = 46.0f;
 
-    int x = static_cast<int>(cmd.x);
-    ImGui::SetNextItemWidth(cell);
-    if (ImGui::InputInt("##x", &x, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
-        ImGui::IsItemDeactivatedAfterEdit())
-    {
+    changed |= EditCell("##x", cell, cmd.x, [&](int x) {
         WriteCommandWord(cmd, kCmdXaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(x, -32768, 32767))));
-        changed = true;
-    }
+    });
     ImGui::SameLine(0.0f, 4.0f);
-
-    int y = static_cast<int>(cmd.y);
-    ImGui::SetNextItemWidth(cell);
-    if (ImGui::InputInt("##y", &y, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
-        ImGui::IsItemDeactivatedAfterEdit())
-    {
+    changed |= EditCell("##y", cell, cmd.y, [&](int y) {
         WriteCommandWord(cmd, kCmdYaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(y, -32768, 32767))));
-        changed = true;
-    }
-    ImGui::PopID();
+    });
     ImGui::PopID();
     return changed;
 }
@@ -3743,56 +3742,55 @@ void App::DrawSelectedObject()
         }
         else
         {
-            const bool tt = mShowTooltips;
             ImGui::Text("Command #%u  (%s)", cmd.index, CommandTypeName(cmd.type));
             ImGui::Separator();
-            InspectorRow(tt, "Table Address",
+            InspectorRow("Table Address",
                          "Where this command's 15-word table sits in VDP1 VRAM.",
                          "0x%06X", cmd.table_address);
-            InspectorRow(tt, "Link Address",
+            InspectorRow("Link Address",
                          "VRAM address of the next command the VDP1 processes.",
                          "0x%06X", cmd.link_address);
-            InspectorRow(tt, "Texture Address",
+            InspectorRow("Texture Address",
                          "Where this sprite's texture pixels live in VDP1 VRAM.",
                          "0x%06X", cmd.texture_address);
             if (cmd.color_mode == SE_COLOR_LUT_16)
             {
-                InspectorRow(tt, "CLUT Address",
+                InspectorRow("CLUT Address",
                              "Address of this sprite's 16-color lookup table in VRAM.",
                              "0x%06X", cmd.clut_address);
             }
             else
             {
-                InspectorRow(tt, "Palette Bank",
+                InspectorRow("Palette Bank",
                              "Which Color RAM sub-palette (bank) the sprite's pixels index.",
                              "%u", cmd.palette_bank);
             }
-            InspectorRow(tt, "Size", "Sprite width x height in pixels (from CMDSIZE).",
+            InspectorRow("Size", "Sprite width x height in pixels (from CMDSIZE).",
                          "%u x %u", cmd.width, cmd.height);
-            InspectorRow(tt, "Position",
+            InspectorRow("Position",
                          "Screen coordinate of vertex A (CMDXA, CMDYA) — the draw anchor.",
                          "(%d, %d)", cmd.x, cmd.y);
-            InspectorRow(tt, "Color Mode",
+            InspectorRow("Color Mode",
                          "How texture pixels get their color: a CRAM bank, a 16-color LUT, or direct RGB555.",
                          "%s", ColorModeName(cmd.color_mode));
-            InspectorRow(tt, "Draw Mode",
+            InspectorRow("Draw Mode",
                          "Blend/shading applied while drawing: normal, shadow, half-luminance, half-transparent, or mesh.",
                          "%s", DrawModeName(cmd.draw_mode));
-            InspectorRow(tt, "Transparency",
+            InspectorRow("Transparency",
                          "Whether color-code 0 texels are drawn or left transparent.",
                          "%s", cmd.transparency == SE_TRANSP_PER_PIXEL ? "Per Pixel" : "None");
-            InspectorRow(tt, "Gouraud",
+            InspectorRow("Gouraud",
                          "Per-corner color shading blended across the sprite (CMDGRDA).",
                          "%s", cmd.gouraud ? "On" : "Off");
-            InspectorRow(tt, "Color Calc",
+            InspectorRow("Color Calc",
                          "Half-transparency color calculation with the pixel underneath.",
                          "%s", cmd.color_calc ? "On" : "Off");
-            InspectorRow(tt, "Flip", "Horizontal / vertical mirroring of the texture.",
+            InspectorRow("Flip", "Horizontal / vertical mirroring of the texture.",
                          "%s%s%s", cmd.flip_x ? "H " : "", cmd.flip_y ? "V" : "",
                          (!cmd.flip_x && !cmd.flip_y) ? "None" : "");
-            InspectorRow(tt, "CMDCTRL", "Raw control word: command type, jump mode, end bit.",
+            InspectorRow("CMDCTRL", "Raw control word: command type, jump mode, end bit.",
                          "0x%04X", cmd.raw_cmdctrl);
-            InspectorRow(tt, "CMDPMOD", "Raw draw-mode word: color mode, transparency, blend flags.",
+            InspectorRow("CMDPMOD", "Raw draw-mode word: color mode, transparency, blend flags.",
                          "0x%04X", cmd.raw_cmdpmod);
         }
     }
@@ -6714,6 +6712,25 @@ const char* ColorNumName(uint32_t c)
     }
 }
 
+// Comma-join the names of the bits set in [base, base+count) of v, or "(none)". Used by the
+// layer-enable (BGON) and color-calculation (CCCTL) register decoders.
+std::string JoinFlags(uint16_t v, int base, int count, const char* const* names)
+{
+    std::string s;
+    for (int i = 0; i < count; ++i)
+        if (v & (1u << (base + i))) { if (!s.empty()) s += ", "; s += names[i]; }
+    return s.empty() ? std::string("(none)") : s;
+}
+
+// Append a newline-separated "<name> priority: N" line (marking 0 as hidden). For PRINA/B/R.
+void AppendPriority(std::string& s, const char* name, unsigned pr)
+{
+    char b[64];
+    std::snprintf(b, sizeof b, "%s%s priority: %u%s",
+                  s.empty() ? "" : "\n", name, pr, pr ? "" : "  (hidden)");
+    s += b;
+}
+
 // A raw 16-bit-in-nibbles line, always appended so hovering any value shows the bit pattern.
 std::string BitsLine(uint16_t v)
 {
@@ -6758,15 +6775,9 @@ std::string DecodeVdp2RegValue(uint32_t off, uint16_t v)
     }
     case 0x020: {   // BGON
         static const char* names[6] = { "NBG0", "NBG1", "NBG2", "NBG3", "RBG0", "RBG1" };
-        std::string s = "Layers enabled: ";
-        bool any = false;
-        for (int i = 0; i < 6; ++i)
-            if (v & (1u << i)) { if (any) s += ", "; s += names[i]; any = true; }
-        if (!any) s += "(none)";
-        std::string tp;
-        for (int i = 0; i < 5; ++i)
-            if (v & (1u << (8 + i))) { if (!tp.empty()) tp += ", "; tp += names[i]; }
-        if (!tp.empty()) s += "\nTransparent code shown (opaque) on: " + tp;
+        std::string s = "Layers enabled: " + JoinFlags(v, 0, 6, names);
+        if (v & 0x1F00)   // any NnTPON bit (8-12): transparent-code-shown layers
+            s += "\nTransparent code shown (opaque) on: " + JoinFlags(v, 8, 5, names);
         return s;
     }
     case 0x028:     // CHCTLA (NBG0 / NBG1)
@@ -6796,26 +6807,22 @@ std::string DecodeVdp2RegValue(uint32_t off, uint16_t v)
         return b;
     case 0x0EC: {   // CCCTL
         static const char* names[6] = { "NBG0", "NBG1", "NBG2", "NBG3", "RBG0", "sprite" };
-        std::string s = "Color calculation on: ";
-        bool any = false;
-        for (int i = 0; i < 6; ++i)
-            if (v & (1u << i)) { if (any) s += ", "; s += names[i]; any = true; }
-        if (!any) s += "(none)";
+        std::string s = "Color calculation on: " + JoinFlags(v, 0, 6, names);
         s += (v & 0x0100) ? "\nMode: additive blend" : "\nMode: ratio blend";
         return s;
     }
-    case 0x0F8:     // PRINA
-        std::snprintf(b, sizeof b, "NBG0 priority: %u%s\nNBG1 priority: %u%s",
-            v & 0x7, (v & 0x7) ? "" : "  (hidden)", (v >> 8) & 0x7, ((v >> 8) & 0x7) ? "" : "  (hidden)");
-        return b;
-    case 0x0FA:     // PRINB
-        std::snprintf(b, sizeof b, "NBG2 priority: %u%s\nNBG3 priority: %u%s",
-            v & 0x7, (v & 0x7) ? "" : "  (hidden)", (v >> 8) & 0x7, ((v >> 8) & 0x7) ? "" : "  (hidden)");
-        return b;
-    case 0x0FC:     // PRIR
-        std::snprintf(b, sizeof b, "RBG0 priority: %u%s",
-            v & 0x7, (v & 0x7) ? "" : "  (hidden)");
-        return b;
+    case 0x0F8: {   // PRINA
+        std::string s; AppendPriority(s, "NBG0", v & 0x7); AppendPriority(s, "NBG1", (v >> 8) & 0x7);
+        return s;
+    }
+    case 0x0FA: {   // PRINB
+        std::string s; AppendPriority(s, "NBG2", v & 0x7); AppendPriority(s, "NBG3", (v >> 8) & 0x7);
+        return s;
+    }
+    case 0x0FC: {   // PRIR
+        std::string s; AppendPriority(s, "RBG0", v & 0x7);
+        return s;
+    }
     case 0x070: case 0x080: case 0x090: case 0x094:   // SCX* (X scroll, integer part)
         std::snprintf(b, sizeof b, "Horizontal scroll: %u px", v & 0x7FF);
         return b;
@@ -6877,7 +6884,8 @@ std::string DecodeVdp1RegValue(uint32_t off, uint16_t v)
 }
 
 void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
-                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx, bool tips, bool vdp1)
+                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx,
+                  std::string (*decode)(uint32_t, uint16_t))
 {
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_ScrollY;
@@ -6893,18 +6901,17 @@ void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(regs[i].name);
-            if (tips && regs[i].desc && ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", regs[i].desc);
+            HoverHelp(regs[i].desc);   // what the register is for
             ImGui::TableNextColumn();
             ImGui::Text("0x%03X", regs[i].off);
             ImGui::TableNextColumn();
             const uint16_t value = read(ctx, regs[i].off);
             ImGui::Text("0x%04X", value);
             // Value tooltip: what this value currently does (decoded fields), plus the raw bits.
-            if (tips && ImGui::IsItemHovered())
+            // Built only for the hovered row, so the per-value strings never allocate otherwise.
+            if (g_tooltipsEnabled && ImGui::IsItemHovered())
             {
-                std::string decoded = vdp1 ? DecodeVdp1RegValue(regs[i].off, value)
-                                           : DecodeVdp2RegValue(regs[i].off, value);
+                std::string decoded = decode(regs[i].off, value);
                 if (!decoded.empty()) decoded += "\n\n";
                 decoded += BitsLine(value);
                 ImGui::SetTooltip("%s", decoded.c_str());
@@ -6931,7 +6938,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp2regs", kVdp2Regs,
                                  sizeof(kVdp2Regs) / sizeof(kVdp2Regs[0]),
-                                 se_get_vdp2_register, mContext, mShowTooltips, false);
+                                 se_get_vdp2_register, mContext, DecodeVdp2RegValue);
                 }
                 else
                 {
@@ -6945,7 +6952,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp1regs", kVdp1Regs,
                                  sizeof(kVdp1Regs) / sizeof(kVdp1Regs[0]),
-                                 se_get_vdp1_register, mContext, mShowTooltips, true);
+                                 se_get_vdp1_register, mContext, DecodeVdp1RegValue);
                 }
                 else
                 {
@@ -7239,8 +7246,7 @@ void App::DrawVdp1Table()
                 {
                     ImGui::TableSetColumnIndex(col);
                     ImGui::TableHeader(ImGui::TableGetColumnName(col));
-                    if (mShowTooltips && col >= 2 && ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", kWordDesc[col - 2]);
+                    if (col >= 2) HoverHelp(kWordDesc[col - 2]);   // # and Addr have no help
                 }
 
                 // Scroll+surface the selected row once when another panel asks (e.g.
