@@ -6702,8 +6702,182 @@ const RegInfo kVdp1Regs[] = {
     {0x16,"MODR", "Mode / version status."},
 };
 
+const char* ColorNumName(uint32_t c)
+{
+    switch (c)
+    {
+    case 0:  return "16 colors";
+    case 1:  return "256 colors";
+    case 2:  return "2048 colors";
+    case 3:  return "32,768 (RGB555)";
+    default: return "16.7M (RGB888)";
+    }
+}
+
+// A raw 16-bit-in-nibbles line, always appended so hovering any value shows the bit pattern.
+std::string BitsLine(uint16_t v)
+{
+    char s[24];
+    int p = 0;
+    for (int i = 15; i >= 0; --i)
+    {
+        s[p++] = (v >> i) & 1 ? '1' : '0';
+        if (i && (i % 4) == 0) s[p++] = ' ';
+    }
+    s[p] = '\0';
+    return std::string("Bits: ") + s;
+}
+
+// Decode a VDP2 register value into the effect it currently has. Field extraction matches the
+// Core compositor (Vdp2Compositor.cpp / Context.h) so the tooltip agrees with what SE renders.
+// Returns "" for registers without a specific decoder (caller then shows just the bit pattern).
+std::string DecodeVdp2RegValue(uint32_t off, uint16_t v)
+{
+    char b[320];
+    switch (off)
+    {
+    case 0x000: {   // TVMD
+        const uint32_t hres = v & 0x7;
+        int w = (hres & 0x1) ? 352 : 320; if (hres & 0x2) w *= 2;
+        static const int vr[4] = { 224, 240, 256, 256 };
+        int h = vr[(v >> 4) & 0x3];
+        const int lsmd = (v >> 6) & 0x3;
+        const char* il = lsmd == 0 ? "non-interlace" : lsmd == 2 ? "single-density interlace"
+                        : lsmd == 3 ? "double-density interlace" : "(reserved)";
+        std::snprintf(b, sizeof b,
+            "Display: %s\nResolution: %dx%d\nInterlace: %s",
+            (v & 0x8000) ? "ON" : "OFF (blanked)", w, h, il);
+        return b;
+    }
+    case 0x00E: {   // RAMCTL
+        const int crmd = (v >> 12) & 0x3;
+        const char* cm = crmd == 1 ? "RGB555, 2048 colors"
+                       : crmd == 2 ? "RGB888, 1024 colors" : "RGB555, 1024 colors";
+        std::snprintf(b, sizeof b, "Color RAM mode: %s", cm);
+        return b;
+    }
+    case 0x020: {   // BGON
+        static const char* names[6] = { "NBG0", "NBG1", "NBG2", "NBG3", "RBG0", "RBG1" };
+        std::string s = "Layers enabled: ";
+        bool any = false;
+        for (int i = 0; i < 6; ++i)
+            if (v & (1u << i)) { if (any) s += ", "; s += names[i]; any = true; }
+        if (!any) s += "(none)";
+        std::string tp;
+        for (int i = 0; i < 5; ++i)
+            if (v & (1u << (8 + i))) { if (!tp.empty()) tp += ", "; tp += names[i]; }
+        if (!tp.empty()) s += "\nTransparent code shown (opaque) on: " + tp;
+        return s;
+    }
+    case 0x028:     // CHCTLA (NBG0 / NBG1)
+        std::snprintf(b, sizeof b,
+            "NBG0: %s, %s, %s\nNBG1: %s, %s, %s",
+            ColorNumName((v & 0x0070) >> 4), (v & 0x0002) ? "bitmap" : "tiles",
+            (v & 0x0001) ? "2x2-cell chars" : "1x1-cell chars",
+            ColorNumName((v & 0x3000) >> 12), (v & 0x0200) ? "bitmap" : "tiles",
+            (v & 0x0100) ? "2x2-cell chars" : "1x1-cell chars");
+        return b;
+    case 0x02A:     // CHCTLB (NBG2 / NBG3 / RBG0)
+        std::snprintf(b, sizeof b,
+            "NBG2: %s, %s\nNBG3: %s, %s\nRBG0: %s",
+            (v & 0x0002) ? "256 colors" : "16 colors", (v & 0x0001) ? "2x2-cell" : "1x1-cell",
+            (v & 0x0020) ? "256 colors" : "16 colors", (v & 0x0010) ? "2x2-cell" : "1x1-cell",
+            ColorNumName((v & 0x7000) >> 12));
+        return b;
+    case 0x03A: {   // PLSZ
+        static const char* sz[4] = { "1x1 page", "2x1 pages", "(reserved)", "2x2 pages" };
+        std::snprintf(b, sizeof b, "NBG0 plane: %s\nNBG1 plane: %s\nNBG2 plane: %s\nNBG3 plane: %s",
+            sz[v & 3], sz[(v >> 2) & 3], sz[(v >> 4) & 3], sz[(v >> 6) & 3]);
+        return b;
+    }
+    case 0x0E0:     // SPCTL
+        std::snprintf(b, sizeof b, "Sprite type: %u\nSprite color: %s",
+            v & 0xF, (v & 0x0020) ? "RGB (direct)" : "palette");
+        return b;
+    case 0x0EC: {   // CCCTL
+        static const char* names[6] = { "NBG0", "NBG1", "NBG2", "NBG3", "RBG0", "sprite" };
+        std::string s = "Color calculation on: ";
+        bool any = false;
+        for (int i = 0; i < 6; ++i)
+            if (v & (1u << i)) { if (any) s += ", "; s += names[i]; any = true; }
+        if (!any) s += "(none)";
+        s += (v & 0x0100) ? "\nMode: additive blend" : "\nMode: ratio blend";
+        return s;
+    }
+    case 0x0F8:     // PRINA
+        std::snprintf(b, sizeof b, "NBG0 priority: %u%s\nNBG1 priority: %u%s",
+            v & 0x7, (v & 0x7) ? "" : "  (hidden)", (v >> 8) & 0x7, ((v >> 8) & 0x7) ? "" : "  (hidden)");
+        return b;
+    case 0x0FA:     // PRINB
+        std::snprintf(b, sizeof b, "NBG2 priority: %u%s\nNBG3 priority: %u%s",
+            v & 0x7, (v & 0x7) ? "" : "  (hidden)", (v >> 8) & 0x7, ((v >> 8) & 0x7) ? "" : "  (hidden)");
+        return b;
+    case 0x0FC:     // PRIR
+        std::snprintf(b, sizeof b, "RBG0 priority: %u%s",
+            v & 0x7, (v & 0x7) ? "" : "  (hidden)");
+        return b;
+    case 0x070: case 0x080: case 0x090: case 0x094:   // SCX* (X scroll, integer part)
+        std::snprintf(b, sizeof b, "Horizontal scroll: %u px", v & 0x7FF);
+        return b;
+    case 0x074: case 0x084: case 0x092: case 0x096:   // SCY* (Y scroll, integer part)
+        std::snprintf(b, sizeof b, "Vertical scroll: %u px", v & 0x7FF);
+        return b;
+    default:
+        return "";
+    }
+}
+
+// Decode a VDP1 control/status register value. VDP1 draw state lives in the command table;
+// these registers configure the framebuffer + plot engine. Fields per the Sega VDP1 manual.
+std::string DecodeVdp1RegValue(uint32_t off, uint16_t v)
+{
+    char b[320];
+    switch (off)
+    {
+    case 0x00:      // TVMR
+        std::snprintf(b, sizeof b,
+            "Frame buffer: %s\nRotation: %s\nTV standard: %s\nV-Blank erase (VBE): %s",
+            (v & 0x1) ? "8 bits/pixel" : "16 bits/pixel",
+            (v & 0x2) ? "enabled" : "off",
+            (v & 0x4) ? "HDTV (31 kHz)" : "normal TV",
+            (v & 0x8) ? "on" : "off");
+        return b;
+    case 0x02: {    // FBCR
+        static const char* chg[4] = { "automatic (1-cycle)", "manual erase",
+                                      "manual change", "manual erase & change" };
+        std::snprintf(b, sizeof b, "Frame-buffer change: %s", chg[v & 0x3]);
+        return b;
+    }
+    case 0x04: {    // PTMR
+        static const char* ptm[4] = { "idle (no automatic draw)",
+                                      "start on frame change (V-Blank)",
+                                      "start immediately", "(reserved)" };
+        std::snprintf(b, sizeof b, "Plot trigger: %s", ptm[v & 0x3]);
+        return b;
+    }
+    case 0x10:      // EDSR
+        std::snprintf(b, sizeof b,
+            "Current frame draw ended (CEF): %s\nPrevious frame draw ended (BEF): %s",
+            (v & 0x2) ? "yes" : "no", (v & 0x1) ? "yes" : "no");
+        return b;
+    case 0x12:      // LOPR
+        std::snprintf(b, sizeof b, "Last processed command @ 0x%05X in VDP1 VRAM",
+                      static_cast<unsigned>(v) * 8u);
+        return b;
+    case 0x14:      // COPR
+        std::snprintf(b, sizeof b, "Command being processed @ 0x%05X in VDP1 VRAM",
+                      static_cast<unsigned>(v) * 8u);
+        return b;
+    case 0x16:      // MODR
+        std::snprintf(b, sizeof b, "VDP1 version: %u", (v >> 12) & 0xF);
+        return b;
+    default:
+        return "";
+    }
+}
+
 void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
-                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx, bool tips)
+                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx, bool tips, bool vdp1)
 {
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_ScrollY;
@@ -6724,7 +6898,17 @@ void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
             ImGui::TableNextColumn();
             ImGui::Text("0x%03X", regs[i].off);
             ImGui::TableNextColumn();
-            ImGui::Text("0x%04X", read(ctx, regs[i].off));
+            const uint16_t value = read(ctx, regs[i].off);
+            ImGui::Text("0x%04X", value);
+            // Value tooltip: what this value currently does (decoded fields), plus the raw bits.
+            if (tips && ImGui::IsItemHovered())
+            {
+                std::string decoded = vdp1 ? DecodeVdp1RegValue(regs[i].off, value)
+                                           : DecodeVdp2RegValue(regs[i].off, value);
+                if (!decoded.empty()) decoded += "\n\n";
+                decoded += BitsLine(value);
+                ImGui::SetTooltip("%s", decoded.c_str());
+            }
         }
         ImGui::EndTable();
     }
@@ -6747,7 +6931,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp2regs", kVdp2Regs,
                                  sizeof(kVdp2Regs) / sizeof(kVdp2Regs[0]),
-                                 se_get_vdp2_register, mContext, mShowTooltips);
+                                 se_get_vdp2_register, mContext, mShowTooltips, false);
                 }
                 else
                 {
@@ -6761,7 +6945,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp1regs", kVdp1Regs,
                                  sizeof(kVdp1Regs) / sizeof(kVdp1Regs[0]),
-                                 se_get_vdp1_register, mContext, mShowTooltips);
+                                 se_get_vdp1_register, mContext, mShowTooltips, true);
                 }
                 else
                 {
