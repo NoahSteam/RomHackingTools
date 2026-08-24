@@ -3558,8 +3558,14 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         char label[16];
                         std::snprintf(label, sizeof(label), "%d", row);
+                        // When the size/position cells hold edit boxes the row is a full frame
+                        // tall, so size the row-selecting Selectable to match — otherwise its
+                        // highlight only covers one line of text, not the whole row.
+                        const float selH = editable ? ImGui::GetFrameHeight() : 0.0f;
+                        if (editable) ImGui::AlignTextToFramePadding();
                         if (ImGui::Selectable(label, IsSelected(row),
-                                              ImGuiSelectableFlags_SpanAllColumns))
+                                              ImGuiSelectableFlags_SpanAllColumns,
+                                              ImVec2(0.0f, selH)))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
@@ -3578,6 +3584,7 @@ void App::DrawCommandList()
                             ImGui::SetScrollHereY(0.5f);
                         }
                         ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted(CommandTypeName(cmd.type));
                         ImGui::TableNextColumn();
                         if (editable)
@@ -3602,8 +3609,10 @@ void App::DrawCommandList()
                             ImGui::Text("(%d, %d)", cmd.x, cmd.y);
                         }
                         ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
                         ImGui::TextUnformatted(ColorModeName(cmd.color_mode));
                         ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
                         ImGui::Text("%06X", cmd.texture_address);
                     }
                 }
