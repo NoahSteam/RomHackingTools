@@ -204,10 +204,13 @@ const char* DrawModeName(se_draw_mode mode)
     }
 }
 
-// One "Label: value" row in the inspector.
-void InspectorRow(const char* label, const char* fmt, ...)
+// One "Label: value" row in the inspector. When `tips` is on and `desc` is non-empty,
+// hovering the label shows a short explanation of the field.
+void InspectorRow(bool tips, const char* label, const char* desc, const char* fmt, ...)
 {
     ImGui::TextDisabled("%s", label);
+    if (tips && desc && *desc && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", desc);
     ImGui::SameLine(160.0f);
     va_list args;
     va_start(args, fmt);
@@ -319,6 +322,7 @@ void App::LoadSettings()
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
+    mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
@@ -338,6 +342,7 @@ void App::SaveSettings()
     for (const PanelInfo& p : PanelList())
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
+    mSettings.SetBool("ui", "tooltips", mShowTooltips);
     SaveSearchOptions();
     // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
     // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
@@ -3731,31 +3736,57 @@ void App::DrawSelectedObject()
         }
         else
         {
+            const bool tt = mShowTooltips;
             ImGui::Text("Command #%u  (%s)", cmd.index, CommandTypeName(cmd.type));
             ImGui::Separator();
-            InspectorRow("Table Address", "0x%06X", cmd.table_address);
-            InspectorRow("Link Address", "0x%06X", cmd.link_address);
-            InspectorRow("Texture Address", "0x%06X", cmd.texture_address);
+            InspectorRow(tt, "Table Address",
+                         "Where this command's 15-word table sits in VDP1 VRAM.",
+                         "0x%06X", cmd.table_address);
+            InspectorRow(tt, "Link Address",
+                         "VRAM address of the next command the VDP1 processes.",
+                         "0x%06X", cmd.link_address);
+            InspectorRow(tt, "Texture Address",
+                         "Where this sprite's texture pixels live in VDP1 VRAM.",
+                         "0x%06X", cmd.texture_address);
             if (cmd.color_mode == SE_COLOR_LUT_16)
             {
-                InspectorRow("CLUT Address", "0x%06X", cmd.clut_address);
+                InspectorRow(tt, "CLUT Address",
+                             "Address of this sprite's 16-color lookup table in VRAM.",
+                             "0x%06X", cmd.clut_address);
             }
             else
             {
-                InspectorRow("Palette Bank", "%u", cmd.palette_bank);
+                InspectorRow(tt, "Palette Bank",
+                             "Which Color RAM sub-palette (bank) the sprite's pixels index.",
+                             "%u", cmd.palette_bank);
             }
-            InspectorRow("Size", "%u x %u", cmd.width, cmd.height);
-            InspectorRow("Position", "(%d, %d)", cmd.x, cmd.y);
-            InspectorRow("Color Mode", "%s", ColorModeName(cmd.color_mode));
-            InspectorRow("Draw Mode", "%s", DrawModeName(cmd.draw_mode));
-            InspectorRow("Transparency", "%s",
-                         cmd.transparency == SE_TRANSP_PER_PIXEL ? "Per Pixel" : "None");
-            InspectorRow("Gouraud", "%s", cmd.gouraud ? "On" : "Off");
-            InspectorRow("Color Calc", "%s", cmd.color_calc ? "On" : "Off");
-            InspectorRow("Flip", "%s%s%s", cmd.flip_x ? "H " : "", cmd.flip_y ? "V" : "",
+            InspectorRow(tt, "Size", "Sprite width x height in pixels (from CMDSIZE).",
+                         "%u x %u", cmd.width, cmd.height);
+            InspectorRow(tt, "Position",
+                         "Screen coordinate of vertex A (CMDXA, CMDYA) — the draw anchor.",
+                         "(%d, %d)", cmd.x, cmd.y);
+            InspectorRow(tt, "Color Mode",
+                         "How texture pixels get their color: a CRAM bank, a 16-color LUT, or direct RGB555.",
+                         "%s", ColorModeName(cmd.color_mode));
+            InspectorRow(tt, "Draw Mode",
+                         "Blend/shading applied while drawing: normal, shadow, half-luminance, half-transparent, or mesh.",
+                         "%s", DrawModeName(cmd.draw_mode));
+            InspectorRow(tt, "Transparency",
+                         "Whether color-code 0 texels are drawn or left transparent.",
+                         "%s", cmd.transparency == SE_TRANSP_PER_PIXEL ? "Per Pixel" : "None");
+            InspectorRow(tt, "Gouraud",
+                         "Per-corner color shading blended across the sprite (CMDGRDA).",
+                         "%s", cmd.gouraud ? "On" : "Off");
+            InspectorRow(tt, "Color Calc",
+                         "Half-transparency color calculation with the pixel underneath.",
+                         "%s", cmd.color_calc ? "On" : "Off");
+            InspectorRow(tt, "Flip", "Horizontal / vertical mirroring of the texture.",
+                         "%s%s%s", cmd.flip_x ? "H " : "", cmd.flip_y ? "V" : "",
                          (!cmd.flip_x && !cmd.flip_y) ? "None" : "");
-            InspectorRow("CMDCTRL", "0x%04X", cmd.raw_cmdctrl);
-            InspectorRow("CMDPMOD", "0x%04X", cmd.raw_cmdpmod);
+            InspectorRow(tt, "CMDCTRL", "Raw control word: command type, jump mode, end bit.",
+                         "0x%04X", cmd.raw_cmdctrl);
+            InspectorRow(tt, "CMDPMOD", "Raw draw-mode word: color mode, transparency, blend flags.",
+                         "0x%04X", cmd.raw_cmdpmod);
         }
     }
     ImGui::End();
@@ -5215,6 +5246,10 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                     if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                     if (ImGui::MenuItem("Input Settings..."))
                         commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
+                    { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
+                    ImGui::SetItemTooltip("Show a short hover explanation on field, register, and column labels");
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("Help"))
@@ -5245,6 +5280,10 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                 if (ImGui::MenuItem("Input Settings..."))
                     commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                ImGui::Separator();
+                if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
+                { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
+                ImGui::SetItemTooltip("Show a short hover explanation on field, register, and column labels");
                 ImGui::EndPopup();
             }
             ImGui::SameLine();
@@ -6572,38 +6611,92 @@ void App::DrawReferences()
 
 namespace
 {
-struct RegInfo { uint32_t off; const char* name; };
+struct RegInfo { uint32_t off; const char* name; const char* desc; };
 
-// Curated VDP2 registers (hardware byte offset -> name). Covers display, layer
-// enable, character/pattern control, plane/map, scroll, priorities, and color
-// offsets — the fields a background-layer investigation reaches for.
+// Curated VDP2 registers (hardware byte offset -> name + one-line meaning). Covers display,
+// layer enable, character/pattern control, plane/map, scroll, priorities, and color offsets —
+// the fields a background-layer investigation reaches for.
 const RegInfo kVdp2Regs[] = {
-    {0x000,"TVMD"},{0x002,"EXTEN"},{0x004,"TVSTAT"},{0x006,"VRSIZE"},{0x00E,"RAMCTL"},
-    {0x020,"BGON"},{0x028,"CHCTLA"},{0x02A,"CHCTLB"},
-    {0x030,"PNCN0"},{0x032,"PNCN1"},{0x034,"PNCN2"},{0x036,"PNCN3"},{0x03A,"PLSZ"},
-    {0x03C,"MPOFN"},{0x03E,"MPOFR"},
-    {0x040,"MPABN0"},{0x042,"MPCDN0"},{0x044,"MPABN1"},{0x046,"MPCDN1"},
-    {0x048,"MPABN2"},{0x04A,"MPCDN2"},{0x04C,"MPABN3"},{0x04E,"MPCDN3"},
-    {0x070,"SCXIN0"},{0x074,"SCYIN0"},{0x080,"SCXIN1"},{0x084,"SCYIN1"},
-    {0x090,"SCXN2"},{0x092,"SCYN2"},{0x094,"SCXN3"},{0x096,"SCYN3"},
-    {0x0C0,"WPSX0"},{0x0C2,"WPSY0"},{0x0C4,"WPEX0"},{0x0C6,"WPEY0"},
-    {0x0C8,"WPSX1"},{0x0CA,"WPSY1"},{0x0CC,"WPEX1"},{0x0CE,"WPEY1"},
-    {0x0D0,"WCTLA"},{0x0D2,"WCTLB"},{0x0D4,"WCTLC"},{0x0D6,"WCTLD"},
-    {0x0D8,"LWTA0U"},{0x0DA,"LWTA0L"},{0x0DC,"LWTA1U"},{0x0DE,"LWTA1L"},
-    {0x0E0,"SPCTL"},{0x0E4,"CRAOFA"},{0x0E6,"CRAOFB"},{0x0EC,"CCCTL"},
-    {0x0F0,"PRISA"},{0x0F2,"PRISB"},{0x0F4,"PRISC"},{0x0F6,"PRISD"},
-    {0x0F8,"PRINA"},{0x0FA,"PRINB"},{0x0FC,"PRIR"},
-    {0x100,"CCRSA"},{0x108,"CCRNA"},{0x10A,"CCRNB"},
+    {0x000,"TVMD",  "TV mode: display on/off, resolution, interlace."},
+    {0x002,"EXTEN", "External signal enable (ext sync / latch)."},
+    {0x004,"TVSTAT","TV status: field, blank, external-latch flags."},
+    {0x006,"VRSIZE","VRAM size and VDP2 version."},
+    {0x00E,"RAMCTL","VRAM/Color-RAM mode and bank partitioning."},
+    {0x020,"BGON",  "Layer enable: which NBG/RBG backgrounds display."},
+    {0x028,"CHCTLA","Character control for NBG0/NBG1 (colors, cell size, bitmap)."},
+    {0x02A,"CHCTLB","Character control for NBG2/NBG3/RBG0."},
+    {0x030,"PNCN0", "Pattern-name control for NBG0 (word size, flip, palette bits)."},
+    {0x032,"PNCN1", "Pattern-name control for NBG1."},
+    {0x034,"PNCN2", "Pattern-name control for NBG2."},
+    {0x036,"PNCN3", "Pattern-name control for NBG3."},
+    {0x03A,"PLSZ",  "Plane size for each background."},
+    {0x03C,"MPOFN", "Map-address upper bits for NBG0-3."},
+    {0x03E,"MPOFR", "Map-address upper bits for RBG0/RBG1."},
+    {0x040,"MPABN0","NBG0 plane A/B map numbers."},
+    {0x042,"MPCDN0","NBG0 plane C/D map numbers."},
+    {0x044,"MPABN1","NBG1 plane A/B map numbers."},
+    {0x046,"MPCDN1","NBG1 plane C/D map numbers."},
+    {0x048,"MPABN2","NBG2 plane A/B map numbers."},
+    {0x04A,"MPCDN2","NBG2 plane C/D map numbers."},
+    {0x04C,"MPABN3","NBG3 plane A/B map numbers."},
+    {0x04E,"MPCDN3","NBG3 plane C/D map numbers."},
+    {0x070,"SCXIN0","NBG0 horizontal scroll (integer part)."},
+    {0x074,"SCYIN0","NBG0 vertical scroll (integer part)."},
+    {0x080,"SCXIN1","NBG1 horizontal scroll (integer part)."},
+    {0x084,"SCYIN1","NBG1 vertical scroll (integer part)."},
+    {0x090,"SCXN2", "NBG2 horizontal scroll."},
+    {0x092,"SCYN2", "NBG2 vertical scroll."},
+    {0x094,"SCXN3", "NBG3 horizontal scroll."},
+    {0x096,"SCYN3", "NBG3 vertical scroll."},
+    {0x0C0,"WPSX0", "Window 0 start X."},
+    {0x0C2,"WPSY0", "Window 0 start Y."},
+    {0x0C4,"WPEX0", "Window 0 end X."},
+    {0x0C6,"WPEY0", "Window 0 end Y."},
+    {0x0C8,"WPSX1", "Window 1 start X."},
+    {0x0CA,"WPSY1", "Window 1 start Y."},
+    {0x0CC,"WPEX1", "Window 1 end X."},
+    {0x0CE,"WPEY1", "Window 1 end Y."},
+    {0x0D0,"WCTLA", "Window control for NBG0/NBG1."},
+    {0x0D2,"WCTLB", "Window control for NBG2/NBG3."},
+    {0x0D4,"WCTLC", "Window control for RBG0 and sprites."},
+    {0x0D6,"WCTLD", "Window control for rotation-param and color calc."},
+    {0x0D8,"LWTA0U","Line-window table address, window 0 (upper)."},
+    {0x0DA,"LWTA0L","Line-window table address, window 0 (lower)."},
+    {0x0DC,"LWTA1U","Line-window table address, window 1 (upper)."},
+    {0x0DE,"LWTA1L","Line-window table address, window 1 (lower)."},
+    {0x0E0,"SPCTL", "Sprite control: sprite type, palette, priority source."},
+    {0x0E4,"CRAOFA","Color-RAM address offset for NBG0-3."},
+    {0x0E6,"CRAOFB","Color-RAM address offset for RBG0 and sprites."},
+    {0x0EC,"CCCTL", "Color-calculation control: which layers blend."},
+    {0x0F0,"PRISA", "Sprite priority for register pairs 0/1."},
+    {0x0F2,"PRISB", "Sprite priority for register pairs 2/3."},
+    {0x0F4,"PRISC", "Sprite priority for register pairs 4/5."},
+    {0x0F6,"PRISD", "Sprite priority for register pairs 6/7."},
+    {0x0F8,"PRINA", "Priority for NBG0 and NBG1."},
+    {0x0FA,"PRINB", "Priority for NBG2 and NBG3."},
+    {0x0FC,"PRIR",  "Priority for RBG0."},
+    {0x100,"CCRSA", "Color-calc ratio for sprites (0/1)."},
+    {0x108,"CCRNA", "Color-calc ratio for NBG0/NBG1."},
+    {0x10A,"CCRNB", "Color-calc ratio for NBG2/NBG3."},
 };
 
 // VDP1 control/status registers.
 const RegInfo kVdp1Regs[] = {
-    {0x00,"TVMR"},{0x02,"FBCR"},{0x04,"PTMR"},{0x06,"EWDR"},{0x08,"EWLR"},
-    {0x0A,"EWRR"},{0x0C,"ENDR"},{0x10,"EDSR"},{0x12,"LOPR"},{0x14,"COPR"},{0x16,"MODR"},
+    {0x00,"TVMR", "TV mode: VDP1 resolution and bit depth."},
+    {0x02,"FBCR", "Frame-buffer change mode and access."},
+    {0x04,"PTMR", "Plot trigger: when a draw pass starts."},
+    {0x06,"EWDR", "Erase/write data — the framebuffer erase fill color."},
+    {0x08,"EWLR", "Erase/write upper-left coordinate."},
+    {0x0A,"EWRR", "Erase/write lower-right coordinate."},
+    {0x0C,"ENDR", "Force-terminate the current draw."},
+    {0x10,"EDSR", "Draw-end status (current/last pass done)."},
+    {0x12,"LOPR", "Address of the last processed command."},
+    {0x14,"COPR", "Address of the command being processed now."},
+    {0x16,"MODR", "Mode / version status."},
 };
 
 void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
-                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx)
+                  uint16_t (*read)(se_context*, uint32_t), se_context* ctx, bool tips)
 {
     const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                   ImGuiTableFlags_ScrollY;
@@ -6619,6 +6712,8 @@ void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(regs[i].name);
+            if (tips && regs[i].desc && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", regs[i].desc);
             ImGui::TableNextColumn();
             ImGui::Text("0x%03X", regs[i].off);
             ImGui::TableNextColumn();
@@ -6645,7 +6740,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp2regs", kVdp2Regs,
                                  sizeof(kVdp2Regs) / sizeof(kVdp2Regs[0]),
-                                 se_get_vdp2_register, mContext);
+                                 se_get_vdp2_register, mContext, mShowTooltips);
                 }
                 else
                 {
@@ -6659,7 +6754,7 @@ void App::DrawRegisters()
                 {
                     DrawRegTable("vdp1regs", kVdp1Regs,
                                  sizeof(kVdp1Regs) / sizeof(kVdp1Regs[0]),
-                                 se_get_vdp1_register, mContext);
+                                 se_get_vdp1_register, mContext, mShowTooltips);
                 }
                 else
                 {
@@ -6920,6 +7015,23 @@ void App::DrawVdp1Table()
                 "CMDCTRL", "LINK", "PMOD", "COLR", "SRCA", "SIZE",
                 "XA", "YA", "XB", "YB", "XC", "YC", "XD", "YD", "GRDA"
             };
+            static const char* kWordDesc[15] = {
+                "Control word: command type, jump mode, end bit.",
+                "Address of the next command (word address x8).",
+                "Draw mode: color mode, transparency, blend flags.",
+                "Color data: palette bank, or LUT/color address.",
+                "Source (texture) data address (word address x8).",
+                "Character size: width in 8-dot units, height in lines.",
+                "Vertex A X (also the anchor for normal/scaled sprites).",
+                "Vertex A Y.",
+                "Vertex B X (scaled: opposite corner; distorted: corner B).",
+                "Vertex B Y.",
+                "Vertex C X (distorted/polygon corner C).",
+                "Vertex C Y.",
+                "Vertex D X (distorted/polygon corner D).",
+                "Vertex D Y.",
+                "Gouraud shading table address (word address x8).",
+            };
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX;
             if (ImGui::BeginTable("vdp1table", 2 + 15, flags))
@@ -6929,7 +7041,16 @@ void App::DrawVdp1Table()
                 ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed);
                 for (const char* name : kWordNames)
                     ImGui::TableSetupColumn(name, ImGuiTableColumnFlags_WidthFixed);
-                ImGui::TableHeadersRow();
+                // Header row, built by hand so each field name can carry a hover tooltip.
+                ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+                const int cols = 2 + 15;
+                for (int col = 0; col < cols; ++col)
+                {
+                    ImGui::TableSetColumnIndex(col);
+                    ImGui::TableHeader(ImGui::TableGetColumnName(col));
+                    if (mShowTooltips && col >= 2 && ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", kWordDesc[col - 2]);
+                }
 
                 // Scroll+surface the selected row once when another panel asks (e.g.
                 // a double-click in the Command List).

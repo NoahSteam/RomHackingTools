@@ -502,6 +502,8 @@ private:
     LaunchValidation mLaunchValidation;
     bool             mbLaunchedEmulator = false;  // SE started the current emulator (so a
                                                   // relaunch stops it first, then reconnects)
+    bool             mShowTooltips = false;       // hover help on field/register/header labels
+                                                  // (Settings > Tooltips; persisted, default off)
     bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
     bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
     bool             mOpenRecordingSettings = false;
