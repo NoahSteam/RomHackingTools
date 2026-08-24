@@ -3673,42 +3673,11 @@ bool App::EditCommandSize(const se_command& cmd, int row)
     return changed;
 }
 
-// Move a command's on-screen shape by (dx, dy). Distorted sprites, polygons and polylines
-// are defined by four explicit vertices, so the whole quad translates; a line moves its two
-// endpoints; a normal/scaled sprite moves its single CMDXA/YA anchor. Reads each vertex from
-// VDP1 VRAM, shifts it, and writes it back (each write re-derives + pokes a live emulator).
-void App::TranslateCommandPosition(const se_command& cmd, int dx, int dy)
-{
-    if (dx == 0 && dy == 0) return;
-    static const uint32_t kVx[4] = { 0x0Cu, 0x10u, 0x14u, 0x18u };   // CMDXA..CMDXD
-    static const uint32_t kVy[4] = { 0x0Eu, 0x12u, 0x16u, 0x1Au };   // CMDYA..CMDYD
-    int n;
-    switch (cmd.type)
-    {
-        case SE_CMD_DISTORTED_SPRITE:
-        case SE_CMD_POLYGON:
-        case SE_CMD_POLYLINE: n = 4; break;
-        case SE_CMD_LINE:     n = 2; break;
-        default:              n = 1; break;   // normal/scaled: only vertex A anchors it
-    }
-    auto shift = [&](uint32_t off, int delta)
-    {
-        uint8_t be[2];
-        if (se_read_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address + off, be, 2) != 2)
-            return;
-        const int16_t cur = static_cast<int16_t>((be[0] << 8) | be[1]);
-        WriteCommandWord(cmd, off,
-                         static_cast<uint16_t>(static_cast<int16_t>(Clampi(cur + delta, -32768, 32767))));
-    };
-    for (int i = 0; i < n; ++i)
-    {
-        if (dx != 0) shift(kVx[i], dx);
-        if (dy != 0) shift(kVy[i], dy);
-    }
-}
-
-// Editable "(x, y)" cell. The shown x/y is vertex A (CMDXA/CMDYA); committing moves the whole
-// shape by the delta so a distorted sprite / polygon translates as one (not just its corner).
+// Editable "(x, y)" cell. Writes CMDXA/CMDYA literally -- vertex A. For a normal or scaled
+// sprite that is the sprite's draw position, so editing it moves the sprite. For a distorted
+// sprite / polygon / polyline / line it is corner A of the shape: the VDP1 has no single
+// "position" for those (each of the four vertices is independent), so editing it moves only
+// that one corner -- exactly what poking CMDXA/YA does on the hardware.
 bool App::EditCommandPosition(const se_command& cmd, int row)
 {
     ImGui::PushID(row);
@@ -3721,7 +3690,8 @@ bool App::EditCommandPosition(const se_command& cmd, int row)
     if (ImGui::InputInt("##x", &x, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
         ImGui::IsItemDeactivatedAfterEdit())
     {
-        TranslateCommandPosition(cmd, Clampi(x, -32768, 32767) - static_cast<int>(cmd.x), 0);
+        WriteCommandWord(cmd, kCmdXaOffset,
+                         static_cast<uint16_t>(static_cast<int16_t>(Clampi(x, -32768, 32767))));
         changed = true;
     }
     ImGui::SameLine(0.0f, 4.0f);
@@ -3731,7 +3701,8 @@ bool App::EditCommandPosition(const se_command& cmd, int row)
     if (ImGui::InputInt("##y", &y, 0, 0, ImGuiInputTextFlags_EnterReturnsTrue) ||
         ImGui::IsItemDeactivatedAfterEdit())
     {
-        TranslateCommandPosition(cmd, 0, Clampi(y, -32768, 32767) - static_cast<int>(cmd.y));
+        WriteCommandWord(cmd, kCmdYaOffset,
+                         static_cast<uint16_t>(static_cast<int16_t>(Clampi(y, -32768, 32767))));
         changed = true;
     }
     ImGui::PopID();
