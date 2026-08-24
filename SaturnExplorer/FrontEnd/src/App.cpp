@@ -2321,10 +2321,17 @@ void App::DrawRamSearch()
                              mRamSearchValue, sizeof(mRamSearchValue));
     ImGui::EndDisabled();
 
-    // Parse the operand at scan time (decimal, or 0x… hex; sign per the C parser). strtoll
-    // spans the u32 range, so 0xFFFFFFFF parses without overflow.
+    // Parse the operand at scan time: decimal by default, or hex with a 0x prefix. We pick the
+    // base explicitly (10 or 16) rather than strtoll's base 0, because base 0 treats a leading
+    // zero as OCTAL — so "0299" would silently become octal 2, not 299. strtoll spans the u32
+    // range, so 0xFFFFFFFF parses without overflow; it still handles a leading sign and 0x.
     auto operand = [&]() -> int64_t {
-        return usesOperand ? std::strtoll(mRamSearchValue, nullptr, 0) : 0;
+        if (!usesOperand) return 0;
+        const char* p = mRamSearchValue;
+        while (*p == ' ' || *p == '\t') ++p;
+        if (*p == '+' || *p == '-') ++p;
+        const int base = (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) ? 16 : 10;
+        return std::strtoll(mRamSearchValue, nullptr, base);
     };
     auto buildRegions = [&]() {
         std::vector<SearchRegion> regions;
