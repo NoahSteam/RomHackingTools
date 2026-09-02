@@ -406,6 +406,12 @@ private:
     void DoSaveProject(IPlatform& platform);
     void DoOpenProject(IPlatform& platform);
     std::string RelativeToDataDir(const std::string& absPath) const;
+    // Rebuild a bootable disc image from the Data Directory (injecting the original IP.BIN) and,
+    // when 'launch' is set, run it in the configured emulator. Result shown in a modal.
+    void BuildIso(IPlatform& platform, bool launch);
+    void DrawBuildResultModal();
+    std::string        mBuildResultText;      // outcome text for the Build ISO modal
+    bool               mShowBuildResult = false;
 #endif
 
     // Game data directory (a folder of the game's extracted files, or an ISO/disc

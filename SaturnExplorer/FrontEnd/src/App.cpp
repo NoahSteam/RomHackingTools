@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -17,6 +18,8 @@
 #include "Platform/IPlatform.h"
 #include "SaturnRegions.h"
 #include "Theme.h"
+#include "Disc/IsoBuilder.h"      // rebuild a bootable disc image from the Data Directory
+#include "DataSearch.h"           // IsDirectory / PathExists for the ISO build
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
@@ -1128,6 +1131,7 @@ void App::BuildUI(IPlatform& platform)
     DrawLocateResults();          // floating; accept/reject matches into the patch library
     DrawManageLocationsModal();   // modal; list/remove known locations
     DrawPatchResultsModal();      // modal; Apply-changes-to-disc summary
+    DrawBuildResultModal();       // modal; Build ISO summary
     // Window-close veto: when the user first asks to close, either let it proceed or (if there
     // are unsaved patch locations) raise the confirmation prompt exactly once. mClosePromptActive
     // edge-guards it so the modal isn't re-opened every frame while it's up.
@@ -4471,6 +4475,14 @@ void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
             commands.emplace_back(TopBarCommandType::SaveProject);
         if (ImGui::MenuItem("Open project..."))
             commands.emplace_back(TopBarCommandType::OpenProject);
+        ImGui::Separator();
+        const bool haveDir = !mDataDir.empty();
+        if (ImGui::MenuItem("Build ISO", nullptr, false, haveDir))
+            commands.emplace_back(TopBarCommandType::BuildIso);
+        if (ImGui::MenuItem("Build and Launch ISO", nullptr, false, haveDir))
+            commands.emplace_back(TopBarCommandType::BuildAndLaunchIso);
+        if (!haveDir) ImGui::TextDisabled("   (set a Data Directory first)");
+        else ImGui::TextDisabled("   rebuilds from the Data Directory + original IP.BIN");
         ImGui::EndPopup();
     }
 }
@@ -4663,6 +4675,123 @@ void App::DrawClosePromptModal(IPlatform& platform)
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
+}
+
+void App::DrawBuildResultModal()
+{
+    if (mShowBuildResult) { ImGui::OpenPopup("Build ISO"); mShowBuildResult = false; }
+    ImGui::SetNextWindowSize(ImVec2(660, 340), ImGuiCond_FirstUseEver);
+    if (!ImGui::BeginPopupModal("Build ISO", nullptr)) return;
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(mBuildResultText.c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::Separator();
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// Rebuild a bootable Saturn disc image from the Data Directory (the folder whose files the user
+// has been editing), injecting the original 32 KB IP.BIN boot header, and optionally launch it.
+void App::BuildIso(IPlatform& platform, bool launch)
+{
+    auto report = [&](const std::string& msg) { mBuildResultText = msg; mShowBuildResult = true; };
+    if (mDataDir.empty()) { report("Set a Data Directory first — Build ISO packs the files under it."); return; }
+    if (!IsDirectory(mDataDir)) { report("The Data Directory is not a folder:\n" + mDataDir); return; }
+
+    IsoBuildOptions opt;
+    opt.rootDir = mDataDir;
+
+    // Boot header + volume/system id: an IP.BIN file in the Data Directory wins; otherwise pull
+    // the first 32 KB (and the PVD ids) from the original disc image — the open Disc Explorer
+    // image, else the selected ROM.
+    std::string ipSource;
+    const std::string ipPath = mDataDir + "/IP.BIN";
+    if (PathExists(ipPath))
+    {
+        std::ifstream f(ipPath, std::ios::binary);
+        opt.ipBin.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        if (opt.ipBin.size() > 32768) opt.ipBin.resize(32768);
+        ipSource = "IP.BIN in the Data Directory";
+    }
+    else
+    {
+        auto grab = [&](DiscImage& d) -> bool {
+            if (!d.IsOpen()) return false;
+            std::vector<uint8_t> ip(32768, 0);
+            for (uint32_t s = 0; s < 16; ++s)
+                if (!d.ReadSector(s, ip.data() + size_t(s) * 2048)) return false;
+            opt.ipBin = std::move(ip);
+            uint8_t pvd[2048];
+            if (d.ReadSector(16, pvd) && std::memcmp(pvd + 1, "CD001", 5) == 0 && pvd[0] == 1)
+            {
+                auto trim = [&](int off, int w) {
+                    std::string s(reinterpret_cast<char*>(pvd) + off, size_t(w));
+                    while (!s.empty() && (s.back() == ' ' || s.back() == '\0')) s.pop_back();
+                    return s;
+                };
+                const std::string v = trim(40, 32), sy = trim(8, 32);
+                if (!v.empty())  opt.volumeId = v;
+                if (!sy.empty()) opt.systemId = sy;
+            }
+            return true;
+        };
+        if (mDisc.IsOpen() && grab(mDisc))
+            ipSource = "the open disc image (" + PathBasename(mDisc.Path()) + ")";
+        else
+        {
+            DiscImage src;
+            const std::string rom = mLauncher.Rom();
+            if (!rom.empty() && src.Open(rom) && grab(src))
+                ipSource = "the selected ROM (" + PathBasename(rom) + ")";
+        }
+    }
+
+    // Output next to the Data Directory (never inside the tree being packed).
+    const size_t slash = mDataDir.find_last_of("/\\");
+    const std::string parent = slash == std::string::npos ? mDataDir : mDataDir.substr(0, slash);
+    std::string stem = "saturn";
+    if (!mLauncher.Rom().empty())
+    {
+        stem = PathBasename(mLauncher.Rom());
+        const size_t dot = stem.find_last_of('.');
+        if (dot != std::string::npos) stem.resize(dot);
+    }
+    else if (!opt.volumeId.empty()) stem = opt.volumeId;
+    opt.outIso = parent + "/" + stem + "_rebuilt.iso";
+
+    // Skip disc images and project artifacts, but keep the game's own *.BIN files.
+    opt.skipExtensions = { ".iso", ".cue", ".img", ".chd", ".mds", ".mdf", ".seproj", ".sedump" };
+    opt.skipNames = { "se_patch.py", stem + "_rebuilt.iso", stem + "_rebuilt.cue" };
+    if (!mLauncher.Rom().empty()) opt.skipNames.push_back(PathBasename(mLauncher.Rom()));
+
+    const IsoBuildResult res = IsoBuild(opt);
+    if (!res.ok) { report("ISO build failed:\n" + res.error); return; }
+
+    char sz[64];
+    std::snprintf(sz, sizeof sz, "%.1f MB", double(res.imageBytes) / 1048576.0);
+    std::string msg;
+    msg += "Built:  " + res.isoPath + "\n";
+    msg += "Cue:    " + res.cuePath + "\n";
+    msg += "Size:   " + std::string(sz) + "\n";
+    msg += "Files:  " + std::to_string(res.fileCount) + "    Dirs: " + std::to_string(res.dirCount) + "\n";
+    msg += res.ipBinInjected
+             ? "Boot header: injected from " + ipSource + "\n"
+             : "Boot header: NONE FOUND - the disc likely won't boot. Put IP.BIN in the Data\n"
+               "Directory, or select the original game as the ROM (Session > Game), and rebuild.\n";
+    if (res.renamedForIso)
+        msg += std::to_string(res.renamedForIso) + " name(s) were adjusted to fit ISO 8.3.\n";
+
+    mLog.Info("Built ISO: " + res.isoPath + " (" + std::string(sz) + ")");
+
+    if (launch)
+    {
+        mLauncher.SetRom(res.cuePath);   // run the rebuilt disc
+        RefreshLaunchValidation();
+        msg += "\n";
+        msg += LaunchSession(platform) ? "Launching the rebuilt disc in the emulator..."
+                                       : "Build succeeded, but launch failed - " + mLaunchValidation.message;
+    }
+    report(msg);
 }
 #endif  // SE_ENABLE_LIVE
 
@@ -5575,6 +5704,8 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::SaveProject:        DoSaveProject(platform);      break;
     case TopBarCommandType::OpenProject:        DoOpenProject(platform);      break;
     case TopBarCommandType::ManageLocations:    mOpenManageLocations = true;  break;
+    case TopBarCommandType::BuildIso:           BuildIso(platform, false);    break;
+    case TopBarCommandType::BuildAndLaunchIso:  BuildIso(platform, true);     break;
 #endif
     case TopBarCommandType::ToggleWindow:
     case TopBarCommandType::ShowWindow:

@@ -165,6 +165,16 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerIsoFsTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerIsoFsTests COMMAND SaturnExplorerIsoFsTests)
 
+    # ISO builder — round-trips a built image back through the reader (DiscImage + IsoParse).
+    add_executable(SaturnExplorerIsoBuilderTests
+        FrontEnd/tests/IsoBuilderTests.cpp
+        FrontEnd/src/Disc/IsoBuilder.cpp
+        FrontEnd/src/Disc/DiscImage.cpp
+        FrontEnd/src/Disc/IsoFs.cpp
+    )
+    target_include_directories(SaturnExplorerIsoBuilderTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerIsoBuilderTests COMMAND SaturnExplorerIsoBuilderTests)
+
     # Savestate delta codec (XOR + zero-run RLE) — the v16 rewind stream primitives. Header-
     # only; the test just needs the Integration/Common include path.
     add_executable(SaturnExplorerSeStateCodecTests
@@ -302,6 +312,7 @@ if(WIN32)
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
+        FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -370,6 +381,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/M68kDisasm.cpp
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
+        FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -457,6 +469,7 @@ else()
             FrontEnd/src/Debug/M68kDisasm.cpp
             FrontEnd/src/Disc/IsoFs.cpp
             FrontEnd/src/Disc/DiscImage.cpp
+            FrontEnd/src/Disc/IsoBuilder.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
