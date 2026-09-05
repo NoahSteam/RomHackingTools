@@ -10,42 +10,12 @@
 
 #include "Disc/CdSector.h"
 #include "Disc/CueSheet.h"
+#include "Disc/PathUtil.h"
 
 namespace sfe
 {
 namespace
 {
-std::string DirOf(const std::string& path)
-{
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
-}
-std::string BaseName(const std::string& path)
-{
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-// File name without directory or final extension ("a/b/Game.cue" -> "Game").
-std::string Stem(const std::string& path)
-{
-    std::string b = BaseName(path);
-    const size_t dot = b.find_last_of('.');
-    if (dot != std::string::npos) b.resize(dot);
-    return b;
-}
-bool IEndsWith(const std::string& s, const char* suffix)
-{
-    const std::string suf = suffix;
-    if (s.size() < suf.size()) return false;
-    for (size_t i = 0; i < suf.size(); ++i)
-    {
-        char a = s[s.size() - suf.size() + i], b = suf[i];
-        if (a >= 'A' && a <= 'Z') a = char(a - 'A' + 'a');
-        if (b >= 'A' && b <= 'Z') b = char(b - 'A' + 'a');
-        if (a != b) return false;
-    }
-    return true;
-}
 uint64_t FileSize(const std::string& path)
 {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
@@ -96,13 +66,6 @@ bool CopyRange(const std::string& src, uint64_t offset, uint64_t length, const s
     }
     return bool(out);
 }
-
-uint32_t TrackStartFrame(const CueTrack& t)
-{
-    uint32_t f = 0; bool any = false;
-    for (const CueIndex& i : t.indices) if (!any || i.frames < f) { f = i.frames; any = true; }
-    return any ? f : 0;
-}
 }  // namespace
 
 DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
@@ -152,7 +115,7 @@ DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
 
     // --- 3) Parse the source disc's track layout (for audio / extra tracks). ---
     CueSheet sheet;
-    if (IEndsWith(opt.sourceImage, ".cue"))
+    if (IEqualsExt(opt.sourceImage, ".cue"))
     {
         std::ifstream cf(opt.sourceImage, std::ios::binary);
         std::string text((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());

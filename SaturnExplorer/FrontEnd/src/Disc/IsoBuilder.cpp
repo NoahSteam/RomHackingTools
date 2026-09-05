@@ -4,6 +4,8 @@
 #include <cstring>
 #include <fstream>
 
+#include "Disc/PathUtil.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -94,23 +96,6 @@ std::string DirIdentifier(const std::string& name)
 {
     const std::string id = MapDChars(name, 8);
     return id.empty() ? "_" : id;
-}
-
-bool IEqualsExt(const std::string& name, const std::string& ext)
-{
-    if (name.size() < ext.size()) return false;
-    for (size_t i = 0; i < ext.size(); ++i)
-    {
-        char a = name[name.size() - ext.size() + i], b = ext[i];
-        if (a >= 'A' && a <= 'Z') a = char(a - 'A' + 'a');
-        if (b >= 'A' && b <= 'Z') b = char(b - 'A' + 'a');
-        if (a != b) return false;
-    }
-    return true;
-}
-bool IEquals(const std::string& a, const std::string& b)
-{
-    return a.size() == b.size() && IEqualsExt(a, b);
 }
 
 struct File { std::string identifier; std::string diskPath; uint32_t size; uint32_t lba; };
@@ -213,13 +198,6 @@ std::string CuePathFor(const std::string& iso)
     if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
         return iso.substr(0, dot) + ".cue";
     return iso + ".cue";
-}
-// Basename of a path. IsoBuilder stays self-contained rather than depending on Launcher.h's
-// PathBasename (an emulator-launch module), keeping the Disc/ layer free of app dependencies.
-std::string BaseName(const std::string& path)
-{
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? path : path.substr(slash + 1);
 }
 }  // namespace
 

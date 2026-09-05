@@ -4680,9 +4680,9 @@ void App::DrawClosePromptModal(IPlatform& platform)
 
 void App::DrawBuildResultModal()
 {
-    if (mShowBuildResult) { ImGui::OpenPopup("Build ISO"); mShowBuildResult = false; }
+    if (mShowBuildResult) { ImGui::OpenPopup("Build Disc Image"); mShowBuildResult = false; }
     ImGui::SetNextWindowSize(ImVec2(660, 340), ImGuiCond_FirstUseEver);
-    if (!ImGui::BeginPopupModal("Build ISO", nullptr)) return;
+    if (!ImGui::BeginPopupModal("Build Disc Image", nullptr)) return;
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(mBuildResultText.c_str());
     ImGui::PopTextWrapPos();

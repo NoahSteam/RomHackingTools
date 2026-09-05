@@ -12,9 +12,9 @@ namespace
 uint8_t  gEccF[256];
 uint8_t  gEccB[256];
 uint32_t gEdc[256];
-bool     gReady = false;
 
-void InitTables()
+// Fill the GF tables once; the function-local static in EncodeMode1Sector guarantees a single call.
+bool InitTables()
 {
     for (int i = 0; i < 256; ++i)
     {
@@ -25,7 +25,7 @@ void InitTables()
         for (int k = 0; k < 8; ++k) edc = (edc >> 1) ^ ((edc & 1) ? 0xD8018001u : 0);
         gEdc[i] = edc;
     }
-    gReady = true;
+    return true;
 }
 
 uint32_t EdcCompute(const uint8_t* src, size_t size)
@@ -65,7 +65,8 @@ uint8_t Bcd(uint8_t v) { return uint8_t(((v / 10) << 4) | (v % 10)); }
 
 void EncodeMode1Sector(uint32_t lba, const uint8_t* user, uint8_t* out)
 {
-    if (!gReady) InitTables();
+    static const bool ready = InitTables();
+    (void)ready;
     std::memset(out, 0, 2352);
 
     // Sync pattern.

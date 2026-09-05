@@ -67,7 +67,7 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
         // Trim leading whitespace and a trailing CR.
         size_t a = line.find_first_not_of(" \t");
         if (a == std::string::npos) continue;
-        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.back() == '\r') line.pop_back();
         const std::string trimmed = line.substr(a);
         std::istringstream ls(trimmed);
         std::string kw;
@@ -112,26 +112,25 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
     return sheet;
 }
 
+uint32_t TrackStartFrame(const CueTrack& t)
+{
+    uint32_t f = 0; bool any = false;
+    for (const CueIndex& i : t.indices) { if (!any || i.frames < f) { f = i.frames; any = true; } }
+    return any ? f : 0;
+}
+
 std::vector<CueTrackRange> CueTrackRanges(
     const CueSheet& sheet, const std::function<uint64_t(const std::string&)>& fileSize)
 {
     std::vector<CueTrackRange> out(sheet.tracks.size());
-    // The lowest index of a track (INDEX 00 pregap if present, else INDEX 01) is where its data
-    // begins within its FILE.
-    auto startFrame = [](const CueTrack& t) -> uint32_t {
-        uint32_t f = 0; bool any = false;
-        for (const CueIndex& i : t.indices) { if (!any || i.frames < f) { f = i.frames; any = true; } }
-        return any ? f : 0;
-    };
-
     for (size_t i = 0; i < sheet.tracks.size(); ++i)
     {
         const CueTrack& t = sheet.tracks[i];
-        const uint32_t start = startFrame(t);
+        const uint32_t start = TrackStartFrame(t);
         // The track ends where the next track SHARING THE SAME FILE begins, else at end of file.
         uint32_t end = 0; bool haveEnd = false;
         for (size_t j = i + 1; j < sheet.tracks.size(); ++j)
-            if (sheet.tracks[j].file == t.file) { end = startFrame(sheet.tracks[j]); haveEnd = true; break; }
+            if (sheet.tracks[j].file == t.file) { end = TrackStartFrame(sheet.tracks[j]); haveEnd = true; break; }
         if (!haveEnd)
         {
             const uint64_t bytes = fileSize ? fileSize(t.file) : 0;

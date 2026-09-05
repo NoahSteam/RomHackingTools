@@ -2,18 +2,12 @@
 
 #include <cstring>
 
+#include "Disc/PathUtil.h"
+
 namespace sfe
 {
 namespace
 {
-// Directory of a path (everything up to and including the last '/' or '\'), for resolving a
-// .cue's FILE reference relative to the cue.
-std::string DirOf(const std::string& path)
-{
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
-}
-
 std::string Lower(std::string s)
 {
     for (char& c : s) if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');

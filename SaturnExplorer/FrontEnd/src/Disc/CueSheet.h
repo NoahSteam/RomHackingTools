@@ -45,6 +45,10 @@ struct CueSheet
 // a full path. Never throws; on a structural problem returns ok=false with 'error' set.
 CueSheet ParseCueText(const std::string& text, const std::string& baseDir);
 
+// The lowest INDEX frame of a track (INDEX 00 pregap if present, else INDEX 01) — where its data
+// begins within its FILE. 0 if the track has no indices.
+uint32_t TrackStartFrame(const CueTrack& t);
+
 // One track's raw extent in its file.
 struct CueTrackRange
 {
