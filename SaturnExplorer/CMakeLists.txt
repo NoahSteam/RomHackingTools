@@ -179,9 +179,18 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerCdSectorTests
         FrontEnd/tests/CdSectorTests.cpp
         FrontEnd/src/Disc/CdSector.cpp
+        FrontEnd/src/Disc/CueSheet.cpp
     )
     target_include_directories(SaturnExplorerCdSectorTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerCdSectorTests COMMAND SaturnExplorerCdSectorTests)
+
+    # .cue parser + per-track byte ranges.
+    add_executable(SaturnExplorerCueSheetTests
+        FrontEnd/tests/CueSheetTests.cpp
+        FrontEnd/src/Disc/CueSheet.cpp
+    )
+    target_include_directories(SaturnExplorerCueSheetTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerCueSheetTests COMMAND SaturnExplorerCueSheetTests)
 
     # Savestate delta codec (XOR + zero-run RLE) — the v16 rewind stream primitives. Header-
     # only; the test just needs the Integration/Common include path.
@@ -322,6 +331,7 @@ if(WIN32)
         FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Disc/CdSector.cpp
+        FrontEnd/src/Disc/CueSheet.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -392,6 +402,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Disc/CdSector.cpp
+        FrontEnd/src/Disc/CueSheet.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -481,6 +492,7 @@ else()
             FrontEnd/src/Disc/DiscImage.cpp
             FrontEnd/src/Disc/IsoBuilder.cpp
             FrontEnd/src/Disc/CdSector.cpp
+            FrontEnd/src/Disc/CueSheet.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
