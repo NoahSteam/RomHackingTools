@@ -130,6 +130,35 @@ int main()
     Check(Contains(cueText, "INDEX 00 00:00:00") && Contains(cueText, "INDEX 01 00:02:00"),
           "audio track pregap preserved as relative indices");
 
+    // VerifyDataTrackEncoding: re-encoding the rebuilt Track 01 must reproduce it byte-for-byte
+    // (the encoder is deterministic), so a freshly built .cue verifies as a full match.
+    VerifyEncodeResult v = VerifyDataTrackEncoding(cue);
+    Check(v.ok, v.ok ? "verify ran" : v.error.c_str());
+    Check(v.sectorsChecked > 0, "verify checked at least one sector");
+    Check(v.match && v.mismatches == 0, "verify: rebuilt data track matches its own encoding");
+
+    // And it must DETECT corruption: flip one ECC byte in Track 01 and confirm a mismatch is
+    // reported at exactly that sector/offset. (Byte 2076 is the first ECC-P byte.)
+    {
+        std::vector<uint8_t> t1 = ReadBytes(track01);
+        Check(t1.size() >= S, "track 01 has at least one sector");
+        t1[2076] ^= 0xFF;
+        WriteBytes(base + "/corrupt.bin", t1);
+        WriteText(base + "/corrupt.cue",
+            "FILE \"corrupt.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n");
+        VerifyEncodeResult vc = VerifyDataTrackEncoding(base + "/corrupt.cue");
+        Check(vc.ok && !vc.match, "verify detects a corrupted sector");
+        Check(vc.mismatches == 1, "verify counts exactly one mismatched sector");
+        Check(vc.firstMismatchLba == 0 && vc.firstMismatchByte == 2076,
+              "verify pinpoints the corrupted byte");
+    }
+
+    // A MODE1/2048 .iso has no EDC/ECC to check — verify should decline rather than pretend.
+    {
+        VerifyEncodeResult vi = VerifyDataTrackEncoding(base + "/nope.iso");
+        Check(!vi.ok, "verify declines a MODE1/2048 .iso");
+    }
+
     // ISO (data-only) output.
     DiscBuildOptions iso = opt;
     iso.binCue = false;

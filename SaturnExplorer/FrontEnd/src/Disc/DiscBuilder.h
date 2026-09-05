@@ -49,4 +49,22 @@ struct DiscBuildResult
 // Build the disc described by 'opt'. Never throws; on any error returns ok=false with 'error'.
 DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt);
 
+struct VerifyEncodeResult
+{
+    bool        ok = false;          // the check ran to completion (independent of match/mismatch)
+    std::string error;              // set when the check could not run
+    bool        match = false;       // every checked sector re-encoded byte-for-byte identical
+    uint32_t    sectorsChecked = 0;
+    uint32_t    mismatches = 0;
+    uint32_t    firstMismatchLba = 0;
+    int         firstMismatchByte = -1;  // byte offset within the 2352-byte sector, -1 if none
+};
+
+// Independently validate the MODE1/2352 encoder against a real disc: read each raw sector of the
+// source disc's Track 01, re-encode its 2048 user bytes with EncodeMode1Sector, and byte-compare
+// the result (sync + address + EDC + ECC) against the original. A full match proves the encoder
+// reproduces genuine CD-ROM sectors bit-for-bit. 'sourceImage' is a .cue or a bare MODE1/2352 .bin;
+// it must be a raw 2352-byte data track (a MODE1/2048 .iso carries no EDC/ECC to check against).
+VerifyEncodeResult VerifyDataTrackEncoding(const std::string& sourceImage);
+
 }  // namespace sfe

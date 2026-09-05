@@ -412,6 +412,7 @@ private:
     // the original IP.BIN + PVD ids), audio/extra tracks copied from the source disc. Output is
     // BIN/CUE (default) or a data-only ISO; 'launch' then runs it. Result shown in a modal.
     void BuildDisc(IPlatform& platform, bool launch);
+    void VerifyEncoder();                           // independent EDC/ECC self-check vs source disc
     void DrawBuildDiscModal(IPlatform& platform);   // the "Build Disc Image" options dialog
     void DrawBuildResultModal();
     bool               mOpenBuildDiscModal = false;

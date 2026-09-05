@@ -4722,7 +4722,51 @@ void App::DrawBuildDiscModal(IPlatform& platform)
     if (ImGui::Button("Build", ImVec2(110, 0))) { ImGui::CloseCurrentPopup(); BuildDisc(platform, false); }
     ImGui::SameLine();
     if (ImGui::Button("Build & Launch", ImVec2(140, 0))) { ImGui::CloseCurrentPopup(); BuildDisc(platform, true); }
+    ImGui::SameLine();
+    // Independent self-check: re-encode the source disc's data track and diff it against the
+    // original raw sectors, proving the EDC/ECC encoder reproduces genuine CD-ROM sectors.
+    const bool haveSource = !mLauncher.Rom().empty() || mDisc.IsOpen();
+    ImGui::BeginDisabled(!haveSource);
+    if (ImGui::Button("Verify Encoder", ImVec2(130, 0))) { ImGui::CloseCurrentPopup(); VerifyEncoder(); }
+    ImGui::EndDisabled();
+    if (!haveSource && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Open a disc image or select the game ROM first.");
     ImGui::EndPopup();
+}
+
+// Re-encode the source disc's Track 01 and byte-compare against the original raw sectors — a fully
+// independent check that the MODE1/2352 EDC/ECC encoder matches a real CD-ROM. Result in the modal.
+void App::VerifyEncoder()
+{
+    auto report = [&](const std::string& msg) { mBuildResultText = msg; mShowBuildResult = true; };
+    const std::string rom = mLauncher.Rom();
+    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.Path() : std::string());
+    if (source.empty()) { report("No source disc — open a disc image or select the game ROM first."); return; }
+
+    const VerifyEncodeResult v = VerifyDataTrackEncoding(source);
+    if (!v.ok) { report("Verify could not run:\n" + v.error); return; }
+
+    std::string msg = "Encoder verification against " + PathBasename(source) + "\n\n";
+    msg += "Sectors checked: " + std::to_string(v.sectorsChecked) + "\n";
+    if (v.match)
+    {
+        msg += "Result: MATCH — every re-encoded sector is byte-for-byte identical to the\n"
+               "original disc, so the sync / address / EDC / ECC encoder is correct.";
+    }
+    else
+    {
+        msg += "Mismatches:      " + std::to_string(v.mismatches) + "\n";
+        if (v.firstMismatchByte >= 0)
+        {
+            char b[96];
+            std::snprintf(b, sizeof b, "First at LBA %u, byte offset %d within the 2352-byte sector.",
+                          v.firstMismatchLba, v.firstMismatchByte);
+            msg += b;
+        }
+    }
+    mLog.Info("Verified disc encoder against " + PathBasename(source) + ": " +
+              (v.match ? "match" : std::to_string(v.mismatches) + " mismatch(es)"));
+    report(msg);
 }
 
 // Rebuild the disc from the Data Directory: Track 01 from the modified filesystem (with the
