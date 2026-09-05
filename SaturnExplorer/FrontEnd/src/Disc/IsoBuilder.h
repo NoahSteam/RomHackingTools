@@ -28,10 +28,11 @@ struct IsoBuildOptions
     std::string volumeId = "SATURN_GAME";    // PVD volume identifier (<=32 chars)
     std::string systemId = "SEGA SEGASATURN";// PVD system identifier (<=32 chars)
     std::vector<uint8_t> ipBin;              // 32 KB boot header for the system area (empty = zeroed)
-    // File basenames (case-insensitive) to skip — the disc image being built, project files, etc.
-    // Defaults are filled by the App; extension matching is on the caller's list.
-    std::vector<std::string> skipExtensions; // e.g. {".iso", ".cue", ".bin", ".seproj"}
-    std::vector<std::string> skipNames;      // exact basenames, e.g. {"IP.BIN", "se_patch.py"}
+    // The builder already skips disc images and its own project/dump artifacts (but keeps the
+    // game's *.BIN files). These add caller-situational skips on top — the output image's own
+    // names, the selected ROM basename, etc. Both match case-insensitively.
+    std::vector<std::string> skipExtensions; // additional extensions to skip, e.g. {".xyz"}
+    std::vector<std::string> skipNames;      // additional exact basenames to skip
 };
 
 struct IsoBuildResult

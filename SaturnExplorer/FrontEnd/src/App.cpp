@@ -4690,6 +4690,8 @@ void App::DrawBuildResultModal()
     ImGui::EndPopup();
 }
 
+static std::string PathDirectory(const std::string& path);   // defined below
+
 // Rebuild a bootable Saturn disc image from the Data Directory (the folder whose files the user
 // has been editing), injecting the original 32 KB IP.BIN boot header, and optionally launch it.
 void App::BuildIso(IPlatform& platform, bool launch)
@@ -4701,9 +4703,9 @@ void App::BuildIso(IPlatform& platform, bool launch)
     IsoBuildOptions opt;
     opt.rootDir = mDataDir;
 
-    // Boot header + volume/system id: an IP.BIN file in the Data Directory wins; otherwise pull
-    // the first 32 KB (and the PVD ids) from the original disc image — the open Disc Explorer
-    // image, else the selected ROM.
+    // Boot header + volume/system id: an IP.BIN file in the Data Directory wins; otherwise take
+    // the 32 KB system area from the original disc image and reuse the reader's PVD ids — the
+    // open Disc Explorer image, else the selected ROM.
     std::string ipSource;
     const std::string ipPath = mDataDir + "/IP.BIN";
     if (PathExists(ipPath))
@@ -4715,40 +4717,24 @@ void App::BuildIso(IPlatform& platform, bool launch)
     }
     else
     {
-        auto grab = [&](DiscImage& d) -> bool {
-            if (!d.IsOpen()) return false;
-            std::vector<uint8_t> ip(32768, 0);
-            for (uint32_t s = 0; s < 16; ++s)
-                if (!d.ReadSector(s, ip.data() + size_t(s) * 2048)) return false;
-            opt.ipBin = std::move(ip);
-            uint8_t pvd[2048];
-            if (d.ReadSector(16, pvd) && std::memcmp(pvd + 1, "CD001", 5) == 0 && pvd[0] == 1)
+        auto grab = [&](DiscImage& d, const IsoFs& fs) -> bool {
+            if (!d.ReadBootHeader(opt.ipBin)) return false;
+            if (fs.ok)   // carry the original volume / system identifiers
             {
-                auto trim = [&](int off, int w) {
-                    std::string s(reinterpret_cast<char*>(pvd) + off, size_t(w));
-                    while (!s.empty() && (s.back() == ' ' || s.back() == '\0')) s.pop_back();
-                    return s;
-                };
-                const std::string v = trim(40, 32), sy = trim(8, 32);
-                if (!v.empty())  opt.volumeId = v;
-                if (!sy.empty()) opt.systemId = sy;
+                if (!fs.volumeId.empty()) opt.volumeId = fs.volumeId;
+                if (!fs.systemId.empty()) opt.systemId = fs.systemId;
             }
             return true;
         };
-        if (mDisc.IsOpen() && grab(mDisc))
+        const std::string rom = mLauncher.Rom();
+        DiscImage src;
+        if (mDisc.IsOpen() && grab(mDisc, mDiscFs))
             ipSource = "the open disc image (" + PathBasename(mDisc.Path()) + ")";
-        else
-        {
-            DiscImage src;
-            const std::string rom = mLauncher.Rom();
-            if (!rom.empty() && src.Open(rom) && grab(src))
-                ipSource = "the selected ROM (" + PathBasename(rom) + ")";
-        }
+        else if (!rom.empty() && src.Open(rom) && grab(src, IsoParse(src.Reader())))
+            ipSource = "the selected ROM (" + PathBasename(rom) + ")";
     }
 
     // Output next to the Data Directory (never inside the tree being packed).
-    const size_t slash = mDataDir.find_last_of("/\\");
-    const std::string parent = slash == std::string::npos ? mDataDir : mDataDir.substr(0, slash);
     std::string stem = "saturn";
     if (!mLauncher.Rom().empty())
     {
@@ -4757,11 +4743,12 @@ void App::BuildIso(IPlatform& platform, bool launch)
         if (dot != std::string::npos) stem.resize(dot);
     }
     else if (!opt.volumeId.empty()) stem = opt.volumeId;
-    opt.outIso = parent + "/" + stem + "_rebuilt.iso";
+    const std::string parent = PathDirectory(mDataDir);
+    opt.outIso = (parent.empty() ? mDataDir : parent) + "/" + stem + "_rebuilt.iso";
 
-    // Skip disc images and project artifacts, but keep the game's own *.BIN files.
-    opt.skipExtensions = { ".iso", ".cue", ".img", ".chd", ".mds", ".mdf", ".seproj", ".sedump" };
-    opt.skipNames = { "se_patch.py", stem + "_rebuilt.iso", stem + "_rebuilt.cue" };
+    // The builder already skips disc images / project artifacts (and keeps *.BIN); add only the
+    // situational names — this build's own output and the selected ROM (if it sits in the dir).
+    opt.skipNames = { stem + "_rebuilt.iso", stem + "_rebuilt.cue" };
     if (!mLauncher.Rom().empty()) opt.skipNames.push_back(PathBasename(mLauncher.Rom()));
 
     const IsoBuildResult res = IsoBuild(opt);
@@ -4785,11 +4772,11 @@ void App::BuildIso(IPlatform& platform, bool launch)
 
     if (launch)
     {
-        mLauncher.SetRom(res.cuePath);   // run the rebuilt disc
-        RefreshLaunchValidation();
+        // Launch the rebuilt disc without disturbing the user's ROM selection.
         msg += "\n";
-        msg += LaunchSession(platform) ? "Launching the rebuilt disc in the emulator..."
-                                       : "Build succeeded, but launch failed - " + mLaunchValidation.message;
+        msg += LaunchSession(platform, res.cuePath)
+                 ? "Launching the rebuilt disc in the emulator..."
+                 : "Build succeeded, but launch failed - " + mLaunchValidation.message;
     }
     report(msg);
 }
@@ -6216,7 +6203,7 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
 
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
 // the platform, auto-connecting live so the app latches on once the emulator is up.
-bool App::LaunchSession(IPlatform& platform)
+bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
 {
     // Revalidate immediately before the side effect as files may have changed
     // since the cached toolbar state was refreshed.
@@ -6230,6 +6217,7 @@ bool App::LaunchSession(IPlatform& platform)
     }
     const EmulatorSpec* sel = mLauncher.Selected();
     if (!sel) return false;
+    const std::string rom = romOverride.empty() ? mLauncher.Rom() : romOverride;
 
     // Relaunch: if SE already started an emulator, stop it before launching again so the new
     // game replaces it instead of leaving the old emulator running beside a second instance.
@@ -6247,7 +6235,8 @@ bool App::LaunchSession(IPlatform& platform)
         mbLaunchedEmulator = false;
     }
 
-    std::string args = mLauncher.CurrentArgs();
+    std::string args = romOverride.empty() ? mLauncher.CurrentArgs()
+                                            : BuildLaunchArgs(sel->argsTemplate, rom, sel->biosPath);
     // Force the Saturn control pad + SE's own key bindings onto Mednafen at launch, so its
     // input matches SE without anyone touching Mednafen's remap UI. Prepended (not baked
     // into the user-editable args template) and passed as command-line setting overrides,
@@ -6269,13 +6258,12 @@ bool App::LaunchSession(IPlatform& platform)
     }
     mbLaunchedEmulator = true;   // SE owns this emulator process now (for relaunch)
     mLog.Info("Launched " + sel->label +
-              (mLauncher.Rom().empty() ? std::string()
-                                       : " with " + PathBasename(mLauncher.Rom())));
-    // Follow the ROM selection with its containing folder. Data search can then scan
-    // companion files as well as the selected disc image itself.
-    if (mLauncher.SetDataDirOnLaunch() && mDataDir.empty() && !mLauncher.Rom().empty())
+              (rom.empty() ? std::string() : " with " + PathBasename(rom)));
+    // Follow the ROM with its containing folder. Data search can then scan companion files
+    // as well as the disc image itself.
+    if (mLauncher.SetDataDirOnLaunch() && mDataDir.empty() && !rom.empty())
     {
-        mDataDir = PathDirectory(mLauncher.Rom());
+        mDataDir = PathDirectory(rom);
         mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
     if (ShouldAutoConnectAfterLaunch(sel->key, mSource.type) &&

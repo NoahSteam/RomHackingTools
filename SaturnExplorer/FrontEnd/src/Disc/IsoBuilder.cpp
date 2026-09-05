@@ -19,18 +19,19 @@ constexpr uint32_t kSector   = 2048;
 constexpr uint32_t kSysAreaSectors = 16;     // 32 KB Saturn boot header (IP.BIN)
 constexpr uint32_t kPvdLba   = 16;
 
-// --- little-endian / both-endian field writers (ISO 9660 stores many fields both ways) ---
+// --- little-endian / big-endian / both-endian field writers (ISO 9660 stores many both ways) ---
 void Put16(uint8_t* p, uint16_t v) { p[0] = uint8_t(v); p[1] = uint8_t(v >> 8); }
 void Put32(uint8_t* p, uint32_t v)
 {
     p[0] = uint8_t(v); p[1] = uint8_t(v >> 8); p[2] = uint8_t(v >> 16); p[3] = uint8_t(v >> 24);
 }
-void PutBoth16(uint8_t* p, uint16_t v) { Put16(p, v); p[2] = uint8_t(v >> 8); p[3] = uint8_t(v); }
-void PutBoth32(uint8_t* p, uint32_t v)
+void PutBE16(uint8_t* p, uint16_t v) { p[0] = uint8_t(v >> 8); p[1] = uint8_t(v); }
+void PutBE32(uint8_t* p, uint32_t v)
 {
-    Put32(p, v);
-    p[4] = uint8_t(v >> 24); p[5] = uint8_t(v >> 16); p[6] = uint8_t(v >> 8); p[7] = uint8_t(v);
+    p[0] = uint8_t(v >> 24); p[1] = uint8_t(v >> 16); p[2] = uint8_t(v >> 8); p[3] = uint8_t(v);
 }
+void PutBoth16(uint8_t* p, uint16_t v) { Put16(p, v); PutBE16(p + 2, v); }
+void PutBoth32(uint8_t* p, uint32_t v) { Put32(p, v); PutBE32(p + 4, v); }
 
 uint32_t SectorSpan(uint64_t bytes) { return uint32_t((bytes + kSector - 1) / kSector); }
 uint32_t RoundUpSector(uint32_t off) { return (off + kSector - 1) / kSector * kSector; }
@@ -44,6 +45,26 @@ uint32_t DirRecordLen(uint32_t nameLen)
     return len;
 }
 
+// Where each of a directory's records sits and how big the directory extent is. Records never
+// straddle a 2048-byte sector boundary. Computed once (from the record lengths) and reused by
+// both the size/LBA pass and the record-writing pass so the two can't drift.
+struct DirLayout { std::vector<uint32_t> offsets; uint32_t sizeBytes; uint32_t sectors; };
+DirLayout LayoutDir(const std::vector<uint32_t>& recordLens)
+{
+    DirLayout out;
+    out.offsets.reserve(recordLens.size());
+    uint32_t off = 0;
+    for (uint32_t len : recordLens)
+    {
+        if ((off % kSector) + len > kSector) off = RoundUpSector(off);   // don't cross a sector
+        out.offsets.push_back(off);
+        off += len;
+    }
+    out.sizeBytes = std::max<uint32_t>(RoundUpSector(off), kSector);
+    out.sectors = out.sizeBytes / kSector;
+    return out;
+}
+
 // --- ISO 8.3 name mapping. d-characters are A-Z 0-9 and '_'; everything else maps to '_'. ---
 char DChar(char c)
 {
@@ -51,31 +72,28 @@ char DChar(char c)
     const bool ok = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
     return ok ? c : '_';
 }
+std::string MapDChars(const std::string& s, size_t maxLen)
+{
+    std::string out;
+    for (char c : s) { if (out.size() >= maxLen) break; out += DChar(c); }
+    return out;
+}
 
 // Map a file name to a Level-1 identifier "NAME.EXT;1" (8.3, upper-case). IsoParse's CleanName
 // strips the ";1" and a trailing '.', so this round-trips to the original 8.3 name.
 std::string FileIdentifier(const std::string& name)
 {
     const size_t dot = name.find_last_of('.');
-    std::string base = dot == std::string::npos ? name : name.substr(0, dot);
-    std::string ext  = dot == std::string::npos ? std::string() : name.substr(dot + 1);
-    if (base.size() > 8) base.resize(8);
-    if (ext.size() > 3)  ext.resize(3);
-    std::string id;
-    for (char c : base) id += DChar(c);
-    id += '.';
-    for (char c : ext) id += DChar(c);
-    id += ";1";
-    return id;
+    const std::string base = dot == std::string::npos ? name : name.substr(0, dot);
+    const std::string ext  = dot == std::string::npos ? std::string() : name.substr(dot + 1);
+    return MapDChars(base, 8) + '.' + MapDChars(ext, 3) + ";1";
 }
 
 // Map a directory name to a Level-1 identifier (up to 8 d-characters, no extension/version).
 std::string DirIdentifier(const std::string& name)
 {
-    std::string id;
-    for (char c : name) { if (id.size() >= 8) break; id += DChar(c); }
-    if (id.empty()) id = "_";
-    return id;
+    const std::string id = MapDChars(name, 8);
+    return id.empty() ? "_" : id;
 }
 
 bool IEqualsExt(const std::string& name, const std::string& ext)
@@ -109,29 +127,21 @@ struct Dir
     uint32_t    sectors = 0;
 };
 
-#ifdef _WIN32
-bool StatSize(const std::string& path, uint32_t& outSize)
+// Files a disc image should never contain, regardless of caller: other disc images and the
+// tool's own project/dump artifacts. The game's own *.BIN files are deliberately NOT skipped.
+bool IsBuiltinSkip(const std::string& name)
 {
-    WIN32_FILE_ATTRIBUTE_DATA fad;
-    if (!::GetFileAttributesExA(path.c_str(), GetFileExInfoStandard, &fad)) return false;
-    if (fad.nFileSizeHigh != 0) return false;   // > 4 GiB won't fit an ISO extent field
-    outSize = fad.nFileSizeLow;
-    return true;
+    static const char* kExt[] = { ".iso", ".cue", ".img", ".chd", ".mds", ".mdf",
+                                  ".seproj", ".sedump" };
+    for (const char* e : kExt) if (IEqualsExt(name, e)) return true;
+    return IEquals(name, "se_patch.py");   // the Patch feature's generated script
 }
-#else
-bool StatSize(const std::string& path, uint32_t& outSize)
-{
-    struct stat st;
-    if (::stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return false;
-    if (st.st_size > 0xFFFFFFFFll) return false;
-    outSize = uint32_t(st.st_size);
-    return true;
-}
-#endif
 
-// Skip predicate: the output image, disc images, project files, and the caller's skip lists.
+// Skip predicate: the built-in defaults plus the caller's situational lists (the output image's
+// own names, the selected ROM, ...).
 bool ShouldSkip(const std::string& name, const IsoBuildOptions& o)
 {
+    if (IsBuiltinSkip(name)) return true;
     for (const std::string& n : o.skipNames)      if (IEquals(name, n)) return true;
     for (const std::string& e : o.skipExtensions) if (IEqualsExt(name, e)) return true;
     return false;
@@ -153,6 +163,9 @@ void ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
         if (name == "." || name == "..") continue;
         const std::string full = base + "\\" + name;
         const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        // Size is already in the enumeration record; > 4 GiB won't fit an ISO extent field.
+        const bool fileOk = !isDir && fd.nFileSizeHigh == 0;
+        const uint32_t fileSize = fd.nFileSizeLow;
 #else
     DIR* d = ::opendir(base.c_str());
     if (!d) return;
@@ -161,8 +174,10 @@ void ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
         if (name == "." || name == "..") continue;
         const std::string full = base + "/" + name;
         struct stat st;
-        if (::stat(full.c_str(), &st) != 0) continue;
+        if (::stat(full.c_str(), &st) != 0) continue;   // the one metadata query per entry
         const bool isDir = S_ISDIR(st.st_mode);
+        const bool fileOk = S_ISREG(st.st_mode) && st.st_size <= 0xFFFFFFFFll;
+        const uint32_t fileSize = uint32_t(st.st_size);
 #endif
         if (name.empty() || name[0] == '.') continue;   // skip dotfiles
         if (isDir)
@@ -176,15 +191,11 @@ void ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
             dirs[dirIndex].subdirs.push_back(idx);
             ScanDir(dirs, idx, o, fileCount, depth + 1);
         }
-        else if (!ShouldSkip(name, o))
+        else if (fileOk && !ShouldSkip(name, o))
         {
-            uint32_t size = 0;
-            if (StatSize(full, size))
-            {
-                File f; f.identifier = FileIdentifier(name); f.diskPath = full; f.size = size; f.lba = 0;
-                dirs[dirIndex].files.push_back(f);
-                ++fileCount;
-            }
+            File f; f.identifier = FileIdentifier(name); f.diskPath = full; f.size = fileSize; f.lba = 0;
+            dirs[dirIndex].files.push_back(f);
+            ++fileCount;
         }
 #ifdef _WIN32
     } while (::FindNextFileA(h, &fd));
@@ -203,6 +214,8 @@ std::string CuePathFor(const std::string& iso)
         return iso.substr(0, dot) + ".cue";
     return iso + ".cue";
 }
+// Basename of a path. IsoBuilder stays self-contained rather than depending on Launcher.h's
+// PathBasename (an emulator-launch module), keeping the Disc/ layer free of app dependencies.
 std::string BaseName(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
@@ -237,17 +250,28 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     }
     auto dedupe = [&](std::vector<std::string>& ids) {
         for (size_t i = 0; i < ids.size(); ++i)
-            for (size_t j = 0; j < i; ++j)
-                if (IEquals(ids[i], ids[j]))
-                {
-                    // Insert a numeric tag before the ";1" (files) or at the end (dirs).
-                    std::string tag = "_" + std::to_string(int(i));
-                    const size_t semi = ids[i].find(';');
-                    if (semi != std::string::npos) ids[i].insert(semi, tag); else ids[i] += tag;
-                    ++r.renamedForIso;
-                    r.warnings.push_back("Renamed duplicate ISO name to " + ids[i]);
-                    j = size_t(-1);   // recheck against all
-                }
+        {
+            auto collidesEarlier = [&](const std::string& s) {
+                for (size_t j = 0; j < i; ++j) if (IEquals(s, ids[j])) return true;
+                return false;
+            };
+            if (!collidesEarlier(ids[i])) continue;
+            // Rebuild from the original with an increasing "_N" tag (before ";1" for files) until
+            // it no longer matches any earlier identifier.
+            const std::string original = ids[i];
+            const size_t semi = original.find(';');
+            std::string tagged;
+            for (int n = 1; ; ++n)
+            {
+                const std::string tag = "_" + std::to_string(n);
+                tagged = original;
+                if (semi != std::string::npos) tagged.insert(semi, tag); else tagged += tag;
+                if (!collidesEarlier(tagged)) break;
+            }
+            ids[i] = tagged;
+            ++r.renamedForIso;
+            r.warnings.push_back("Renamed duplicate ISO name to " + tagged);
+        }
     };
     for (Dir& d : dirs)
     {
@@ -260,11 +284,12 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         for (size_t i = 0; i < d.subdirs.size(); ++i) dirs[d.subdirs[i]].identifier = dirIds[i];
     }
 
-    // 3) Sort each directory's children (subdirs + files) together by identifier, then compute the
-    //    directory extent size: records for '.', '..', and each child, packed without a record
-    //    crossing a 2048-byte boundary.
+    // 3) Sort each directory's children (subdirs + files) by identifier and lay out its records
+    //    ('.', '..', then the children) via LayoutDir. The layout gives both the extent size (for
+    //    the LBA pass) and each record's offset (reused by the write pass, so they can't drift).
     struct Child { bool isDir; int index; std::string id; };
     std::vector<std::vector<Child>> children(dirs.size());
+    std::vector<DirLayout> layouts(dirs.size());
     for (size_t di = 0; di < dirs.size(); ++di)
     {
         std::vector<Child>& cs = children[di];
@@ -273,15 +298,11 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
             cs.push_back({ false, int(fi), dirs[di].files[fi].identifier });
         std::sort(cs.begin(), cs.end(), [](const Child& a, const Child& b){ return a.id < b.id; });
 
-        uint32_t off = DirRecordLen(1) + DirRecordLen(1);   // '.' and '..'
-        for (const Child& c : cs)
-        {
-            const uint32_t len = DirRecordLen(uint32_t(c.id.size()));
-            if ((off % kSector) + len > kSector) off = RoundUpSector(off);
-            off += len;
-        }
-        dirs[di].sizeBytes = std::max<uint32_t>(RoundUpSector(off), kSector);
-        dirs[di].sectors = dirs[di].sizeBytes / kSector;
+        std::vector<uint32_t> lens = { DirRecordLen(1), DirRecordLen(1) };   // '.' and '..'
+        for (const Child& c : cs) lens.push_back(DirRecordLen(uint32_t(c.id.size())));
+        layouts[di] = LayoutDir(lens);
+        dirs[di].sizeBytes = layouts[di].sizeBytes;
+        dirs[di].sectors = layouts[di].sectors;
     }
 
     // 4) Path table size: one record per directory (both L and M tables are this many bytes).
@@ -333,31 +354,29 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         return len;
     };
 
-    // Directory extents.
+    // Directory extents: each record placed at the offset LayoutDir computed in step 3.
     for (size_t di = 0; di < dirs.size(); ++di)
     {
         const Dir& d = dirs[di];
         uint8_t* base = sec(d.lba);
-        uint32_t off = 0;
+        const std::vector<uint32_t>& offs = layouts[di].offsets;
         const char dot = 0x00, dotdot = 0x01;
-        off += writeRecord(base + off, d.lba, d.sizeBytes, true, &dot, 1);
+        writeRecord(base + offs[0], d.lba, d.sizeBytes, true, &dot, 1);
         const Dir& parent = dirs[d.parent];
-        off += writeRecord(base + off, parent.lba, parent.sizeBytes, true, &dotdot, 1);
-        for (const Child& c : children[di])
+        writeRecord(base + offs[1], parent.lba, parent.sizeBytes, true, &dotdot, 1);
+        for (size_t k = 0; k < children[di].size(); ++k)
         {
-            const uint32_t len = DirRecordLen(uint32_t(c.id.size()));
-            if ((off % kSector) + len > kSector) off = RoundUpSector(off);
+            const Child& c = children[di][k];
+            uint8_t* p = base + offs[2 + k];
             if (c.isDir)
             {
                 const Dir& s = dirs[c.index];
-                off += writeRecord(base + off, s.lba, s.sizeBytes, true,
-                                   c.id.data(), uint32_t(c.id.size()));
+                writeRecord(p, s.lba, s.sizeBytes, true, c.id.data(), uint32_t(c.id.size()));
             }
             else
             {
                 const File& f = d.files[c.index];
-                off += writeRecord(base + off, f.lba, f.size, false,
-                                   c.id.data(), uint32_t(c.id.size()));
+                writeRecord(p, f.lba, f.size, false, c.id.data(), uint32_t(c.id.size()));
             }
         }
     }
@@ -372,17 +391,8 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
             const uint32_t idLen = uint32_t(id.size());
             p[0] = uint8_t(idLen);
             p[1] = 0;                                // extended attr length
-            if (bigEndian)
-            {
-                p[2] = uint8_t(d.lba >> 24); p[3] = uint8_t(d.lba >> 16);
-                p[4] = uint8_t(d.lba >> 8);  p[5] = uint8_t(d.lba);
-                p[6] = uint8_t(d.number >> 8); p[7] = uint8_t(d.number);
-            }
-            else
-            {
-                Put32(p + 2, d.lba);
-                Put16(p + 6, uint16_t(d.number));
-            }
+            if (bigEndian) { PutBE32(p + 2, d.lba); PutBE16(p + 6, uint16_t(d.number)); }
+            else           { Put32(p + 2, d.lba);   Put16(p + 6, uint16_t(d.number)); }
             std::memcpy(p + 8, id.data(), idLen);
             p += 8 + idLen + (idLen & 1);
         }
@@ -409,8 +419,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         PutBoth32(p + 132, pathTableBytes);          // path table size
         Put32(p + 140, lPathLba);                    // type-L path table location (LE)
         // p[144..147] optional L path table = 0
-        p[148] = uint8_t(mPathLba >> 24); p[149] = uint8_t(mPathLba >> 16);
-        p[150] = uint8_t(mPathLba >> 8);  p[151] = uint8_t(mPathLba);   // type-M (BE)
+        PutBE32(p + 148, mPathLba);                  // type-M path table location (BE)
         // p[152..155] optional M path table = 0
         writeRecord(p + 156, dirs[0].lba, dirs[0].sizeBytes, true, "\0", 1);  // root dir record
         field(190, 128, "", ' ');                    // volume set identifier
@@ -439,7 +448,8 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     if (!out) { r.error = "Could not open output image for writing: " + o.outIso; return r; }
     out.write(reinterpret_cast<const char*>(head.data()), std::streamsize(head.size()));
 
-    std::vector<char> buf(kSector);
+    constexpr uint32_t kCopyBuf = 64 * 1024;   // a multiple of the sector size
+    std::vector<char> buf(kCopyBuf);
     for (int di : bfs)
         for (const File& f : dirs[di].files)
         {
@@ -448,11 +458,12 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
             uint32_t remaining = f.size;
             while (remaining > 0)
             {
-                const uint32_t n = std::min<uint32_t>(remaining, kSector);
+                const uint32_t n = std::min<uint32_t>(remaining, kCopyBuf);
                 in.read(buf.data(), n);
                 if (uint32_t(in.gcount()) != n) { r.error = "Short read on " + f.diskPath; return r; }
-                if (n < kSector) std::memset(buf.data() + n, 0, kSector - n);  // pad the last sector
-                out.write(buf.data(), kSector);
+                const uint32_t padded = RoundUpSector(n);   // whole sectors out; pad the tail
+                if (padded > n) std::memset(buf.data() + n, 0, padded - n);
+                out.write(buf.data(), padded);
                 remaining -= n;
             }
         }

@@ -30,6 +30,10 @@ public:
     // Read the 2048-byte user data of logical sector 'lba' into 'out'. False past the end.
     bool ReadSector(uint32_t lba, uint8_t* out);
 
+    // Read the 32 KB system area (the first 16 logical sectors) — the Saturn boot header
+    // (IP.BIN) — into 'out'. Returns false if any of those sectors can't be read.
+    bool ReadBootHeader(std::vector<uint8_t>& out);
+
     // File byte offset of sector 'lba': RawOffset = start of the (2352) sector on disk;
     // UserOffset = start of its 2048-byte user data (== RawOffset for a 2048 image).
     uint64_t RawOffset(uint32_t lba)  const { return uint64_t(lba) * mSectorSize; }

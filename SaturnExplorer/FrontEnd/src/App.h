@@ -176,7 +176,9 @@ private:
     // Directory when none is set yet).
     void DrawSessionMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DrawLaunchSettingsModal(IPlatform& platform);
-    bool LaunchSession(IPlatform& platform);
+    // Start the selected emulator. With a non-empty romOverride, launch THAT disc instead of the
+    // selected ROM without changing the user's selection (used by Build & Launch ISO).
+    bool LaunchSession(IPlatform& platform, const std::string& romOverride = std::string());
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
     // Search the game data directory for an arbitrary byte sequence (the Hex Editor's
     // selection, or the SH-2 Assembly panel's selected instructions). Stashes the needle

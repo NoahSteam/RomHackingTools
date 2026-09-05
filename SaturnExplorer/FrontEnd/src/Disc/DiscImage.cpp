@@ -102,6 +102,14 @@ bool DiscImage::ReadSector(uint32_t lba, uint8_t* out)
     return (bool)mFile;
 }
 
+bool DiscImage::ReadBootHeader(std::vector<uint8_t>& out)
+{
+    out.assign(16 * 2048, 0);
+    for (uint32_t s = 0; s < 16; ++s)
+        if (!ReadSector(s, out.data() + size_t(s) * 2048)) { out.clear(); return false; }
+    return true;
+}
+
 SectorReader DiscImage::Reader()
 {
     return [this](uint32_t lba, uint8_t* out) { return ReadSector(lba, out); };

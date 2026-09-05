@@ -62,12 +62,8 @@ int main()
     opt.outIso = base + "/out.iso";
     opt.volumeId = "TESTVOL";
     opt.systemId = "SEGA SEGASATURN";
-    opt.skipExtensions = { ".iso", ".cue", ".bin", ".img" };  // note: ".bin" != ".BIN"? see below
-    opt.skipNames = { "se_patch.py" };
-    // The skip is case-insensitive, so ".bin" would also drop 0.BIN / EMPTY.BIN — use a form that
-    // only targets disc images here so the game .BIN files survive.
-    opt.skipExtensions = { ".iso", ".cue", ".img", ".chd" };
-
+    // leftover.iso and se_patch.py are dropped by the builder's built-in skip defaults; the
+    // game's own *.BIN files are kept. No caller skip lists needed.
     opt.ipBin.assign(32768, 0);
     for (size_t i = 0; i < opt.ipBin.size(); ++i) opt.ipBin[i] = uint8_t(0x40 + (i & 0x1F));
 
