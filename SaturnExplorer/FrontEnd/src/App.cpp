@@ -4456,6 +4456,11 @@ void App::AcceptLocateMatch(const std::string& rel, uint64_t selOffset)
     mPatchLib.AddOrUpdate(loc);
 }
 
+// Build ISO is disabled in the menu pending a correct LBA-preserving disc-rebuild approach
+// (a naive full rebuild can break games that rely on exact sector layout). Flip to true to
+// re-expose the two menu actions once that approach lands. Keeps the builder + tests intact.
+static constexpr bool kEnableBuildIso = false;
+
 void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
 {
     if (ImGui::Button("Patch")) ImGui::OpenPopup("##patch_menu");
@@ -4475,14 +4480,22 @@ void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
             commands.emplace_back(TopBarCommandType::SaveProject);
         if (ImGui::MenuItem("Open project..."))
             commands.emplace_back(TopBarCommandType::OpenProject);
-        ImGui::Separator();
-        const bool haveDir = !mDataDir.empty();
-        if (ImGui::MenuItem("Build ISO", nullptr, false, haveDir))
-            commands.emplace_back(TopBarCommandType::BuildIso);
-        if (ImGui::MenuItem("Build and Launch ISO", nullptr, false, haveDir))
-            commands.emplace_back(TopBarCommandType::BuildAndLaunchIso);
-        if (!haveDir) ImGui::TextDisabled("   (set a Data Directory first)");
-        else ImGui::TextDisabled("   rebuilds from the Data Directory + original IP.BIN");
+        // Build ISO is intentionally hidden for now. A plain full-filesystem rebuild re-lays
+        // every file at fresh LBAs, which breaks Saturn games that depend on exact file
+        // ordering / sector locations / audio-track layout / hard-coded LBAs. The IsoBuilder,
+        // BuildIso, and their tests stay in the tree; re-expose these once the correct
+        // LBA-preserving approach is settled. See TopBarCommandType::BuildIso.
+        if (kEnableBuildIso)
+        {
+            ImGui::Separator();
+            const bool haveDir = !mDataDir.empty();
+            if (ImGui::MenuItem("Build ISO", nullptr, false, haveDir))
+                commands.emplace_back(TopBarCommandType::BuildIso);
+            if (ImGui::MenuItem("Build and Launch ISO", nullptr, false, haveDir))
+                commands.emplace_back(TopBarCommandType::BuildAndLaunchIso);
+            if (!haveDir) ImGui::TextDisabled("   (set a Data Directory first)");
+            else ImGui::TextDisabled("   rebuilds from the Data Directory + original IP.BIN");
+        }
         ImGui::EndPopup();
     }
 }
