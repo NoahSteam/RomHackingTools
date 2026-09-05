@@ -408,11 +408,15 @@ private:
     void DoSaveProject(IPlatform& platform);
     void DoOpenProject(IPlatform& platform);
     std::string RelativeToDataDir(const std::string& absPath) const;
-    // Rebuild a bootable disc image from the Data Directory (injecting the original IP.BIN) and,
-    // when 'launch' is set, run it in the configured emulator. Result shown in a modal.
-    void BuildIso(IPlatform& platform, bool launch);
+    // Rebuild a disc image from the Data Directory: Track 01 from the modified filesystem (with
+    // the original IP.BIN + PVD ids), audio/extra tracks copied from the source disc. Output is
+    // BIN/CUE (default) or a data-only ISO; 'launch' then runs it. Result shown in a modal.
+    void BuildDisc(IPlatform& platform, bool launch);
+    void DrawBuildDiscModal(IPlatform& platform);   // the "Build Disc Image" options dialog
     void DrawBuildResultModal();
-    std::string        mBuildResultText;      // outcome text for the Build ISO modal
+    bool               mOpenBuildDiscModal = false;
+    int                mBuildFormatBinCue = 1;       // 1 = BIN/CUE (default), 0 = ISO
+    std::string        mBuildResultText;             // outcome text for the result modal
     bool               mShowBuildResult = false;
 #endif
 

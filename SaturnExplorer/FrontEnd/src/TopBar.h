@@ -63,8 +63,7 @@ enum class TopBarCommandType
     OpenProject,
     ManageLocations,
     // Rebuild the game disc image from the Data Directory (desktop only)
-    BuildIso,
-    BuildAndLaunchIso
+    OpenBuildDiscImage
 };
 
 struct TopBarCommand
