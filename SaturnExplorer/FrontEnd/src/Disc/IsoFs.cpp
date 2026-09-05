@@ -59,15 +59,18 @@ IsoFs IsoParse(const SectorReader& read)
     }
     if (!found) { fs.error = "no ISO 9660 primary volume descriptor (not a data disc image?)"; return fs; }
 
-    // System identifier (32 chars at offset 8) and volume identifier (32 d-chars at offset 40),
-    // both trailing-trimmed.
-    auto trimmed = [&](int off) {
-        std::string s(reinterpret_cast<const char*>(pvd + off), 32);
+    // PVD text identifiers, each trailing-trimmed. System (32 @ 8), volume (32 @ 40), and the
+    // 128-char publisher / preparer / application ids (@ 318 / 446 / 574).
+    auto trimmed = [&](int off, int width) {
+        std::string s(reinterpret_cast<const char*>(pvd + off), size_t(width));
         while (!s.empty() && (s.back() == ' ' || s.back() == '\0')) s.pop_back();
         return s;
     };
-    fs.systemId = trimmed(8);
-    fs.volumeId = trimmed(40);
+    fs.systemId      = trimmed(8, 32);
+    fs.volumeId      = trimmed(40, 32);
+    fs.publisherId   = trimmed(318, 128);
+    fs.preparerId    = trimmed(446, 128);
+    fs.applicationId = trimmed(574, 128);
 
     // Root directory record lives at offset 156 of the PVD.
     const uint8_t* root = pvd + 156;

@@ -423,9 +423,9 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         // p[152..155] optional M path table = 0
         writeRecord(p + 156, dirs[0].lba, dirs[0].sizeBytes, true, "\0", 1);  // root dir record
         field(190, 128, "", ' ');                    // volume set identifier
-        field(318, 128, "", ' ');                    // publisher
-        field(446, 128, "", ' ');                    // data preparer
-        field(574, 128, "", ' ');                    // application
+        field(318, 128, o.publisherId, ' ');         // publisher
+        field(446, 128, o.preparerId, ' ');          // data preparer
+        field(574, 128, o.applicationId, ' ');       // application
         field(702, 37, "", ' ');                     // copyright file id
         field(739, 37, "", ' ');                     // abstract file id
         field(776, 37, "", ' ');                     // bibliographic file id

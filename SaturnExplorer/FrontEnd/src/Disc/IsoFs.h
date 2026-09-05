@@ -35,6 +35,9 @@ struct IsoFs
     bool                  ok = false;   // a valid ISO 9660 volume was parsed
     std::string           volumeId;     // PVD volume identifier (trimmed)
     std::string           systemId;     // PVD system identifier (trimmed)
+    std::string           publisherId;  // PVD publisher identifier (trimmed)
+    std::string           preparerId;   // PVD data-preparer identifier (trimmed)
+    std::string           applicationId;// PVD application identifier (trimmed)
     std::string           error;        // reason when !ok
     std::vector<IsoEntry> entries;      // files + directories, directory-first walk order
 

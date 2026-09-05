@@ -27,6 +27,9 @@ struct IsoBuildOptions
     std::string outIso;                      // output .iso path (a sibling .cue is derived)
     std::string volumeId = "SATURN_GAME";    // PVD volume identifier (<=32 chars)
     std::string systemId = "SEGA SEGASATURN";// PVD system identifier (<=32 chars)
+    std::string publisherId;                 // PVD publisher identifier (<=128 chars)
+    std::string preparerId;                  // PVD data-preparer identifier (<=128 chars)
+    std::string applicationId;               // PVD application identifier (<=128 chars)
     std::vector<uint8_t> ipBin;              // 32 KB boot header for the system area (empty = zeroed)
     // The builder already skips disc images and its own project/dump artifacts (but keeps the
     // game's *.BIN files). These add caller-situational skips on top — the output image's own

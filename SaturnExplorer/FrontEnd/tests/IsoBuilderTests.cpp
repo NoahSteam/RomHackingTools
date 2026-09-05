@@ -62,6 +62,9 @@ int main()
     opt.outIso = base + "/out.iso";
     opt.volumeId = "TESTVOL";
     opt.systemId = "SEGA SEGASATURN";
+    opt.publisherId = "SEGA ENTERPRISES";
+    opt.preparerId = "SATURN EXPLORER";
+    opt.applicationId = "TESTAPP";
     // leftover.iso and se_patch.py are dropped by the builder's built-in skip defaults; the
     // game's own *.BIN files are kept. No caller skip lists needed.
     opt.ipBin.assign(32768, 0);
@@ -80,6 +83,10 @@ int main()
     IsoFs fs = IsoParse(img.Reader());
     Check(fs.ok, fs.ok ? "parse ok" : fs.error.c_str());
     Check(fs.volumeId == "TESTVOL", "volume id preserved");
+    Check(fs.systemId == "SEGA SEGASATURN", "system id preserved");
+    Check(fs.publisherId == "SEGA ENTERPRISES", "publisher id preserved");
+    Check(fs.preparerId == "SATURN EXPLORER", "preparer id preserved");
+    Check(fs.applicationId == "TESTAPP", "application id preserved");
 
     const IsoEntry* bin = Find(fs, "/0.BIN");
     const IsoEntry* dat = Find(fs, "/GAME.DAT");

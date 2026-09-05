@@ -4732,10 +4732,13 @@ void App::BuildIso(IPlatform& platform, bool launch)
     {
         auto grab = [&](DiscImage& d, const IsoFs& fs) -> bool {
             if (!d.ReadBootHeader(opt.ipBin)) return false;
-            if (fs.ok)   // carry the original volume / system identifiers
+            if (fs.ok)   // carry the original PVD identifiers verbatim
             {
                 if (!fs.volumeId.empty()) opt.volumeId = fs.volumeId;
                 if (!fs.systemId.empty()) opt.systemId = fs.systemId;
+                opt.publisherId   = fs.publisherId;
+                opt.preparerId    = fs.preparerId;
+                opt.applicationId = fs.applicationId;
             }
             return true;
         };
