@@ -179,7 +179,6 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerCdSectorTests
         FrontEnd/tests/CdSectorTests.cpp
         FrontEnd/src/Disc/CdSector.cpp
-        FrontEnd/src/Disc/CueSheet.cpp
     )
     target_include_directories(SaturnExplorerCdSectorTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerCdSectorTests COMMAND SaturnExplorerCdSectorTests)
@@ -191,6 +190,19 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerCueSheetTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerCueSheetTests COMMAND SaturnExplorerCueSheetTests)
+
+    # Build Disc Image — end-to-end BIN/CUE + ISO, read back through DiscImage + IsoParse.
+    add_executable(SaturnExplorerDiscBuilderTests
+        FrontEnd/tests/DiscBuilderTests.cpp
+        FrontEnd/src/Disc/DiscBuilder.cpp
+        FrontEnd/src/Disc/IsoBuilder.cpp
+        FrontEnd/src/Disc/CdSector.cpp
+        FrontEnd/src/Disc/CueSheet.cpp
+        FrontEnd/src/Disc/DiscImage.cpp
+        FrontEnd/src/Disc/IsoFs.cpp
+    )
+    target_include_directories(SaturnExplorerDiscBuilderTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerDiscBuilderTests COMMAND SaturnExplorerDiscBuilderTests)
 
     # Savestate delta codec (XOR + zero-run RLE) — the v16 rewind stream primitives. Header-
     # only; the test just needs the Integration/Common include path.
@@ -332,6 +344,7 @@ if(WIN32)
         FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Disc/CdSector.cpp
         FrontEnd/src/Disc/CueSheet.cpp
+        FrontEnd/src/Disc/DiscBuilder.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -403,6 +416,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Disc/IsoBuilder.cpp
         FrontEnd/src/Disc/CdSector.cpp
         FrontEnd/src/Disc/CueSheet.cpp
+        FrontEnd/src/Disc/DiscBuilder.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -493,6 +507,7 @@ else()
             FrontEnd/src/Disc/IsoBuilder.cpp
             FrontEnd/src/Disc/CdSector.cpp
             FrontEnd/src/Disc/CueSheet.cpp
+            FrontEnd/src/Disc/DiscBuilder.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
