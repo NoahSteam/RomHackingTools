@@ -175,6 +175,14 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerIsoBuilderTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerIsoBuilderTests COMMAND SaturnExplorerIsoBuilderTests)
 
+    # MODE1/2352 raw-sector encoder (EDC/ECC).
+    add_executable(SaturnExplorerCdSectorTests
+        FrontEnd/tests/CdSectorTests.cpp
+        FrontEnd/src/Disc/CdSector.cpp
+    )
+    target_include_directories(SaturnExplorerCdSectorTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerCdSectorTests COMMAND SaturnExplorerCdSectorTests)
+
     # Savestate delta codec (XOR + zero-run RLE) — the v16 rewind stream primitives. Header-
     # only; the test just needs the Integration/Common include path.
     add_executable(SaturnExplorerSeStateCodecTests
@@ -313,6 +321,7 @@ if(WIN32)
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Disc/IsoBuilder.cpp
+        FrontEnd/src/Disc/CdSector.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
@@ -382,6 +391,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Disc/IsoFs.cpp
         FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Disc/IsoBuilder.cpp
+        FrontEnd/src/Disc/CdSector.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/UpdateChecker.cpp
@@ -470,6 +480,7 @@ else()
             FrontEnd/src/Disc/IsoFs.cpp
             FrontEnd/src/Disc/DiscImage.cpp
             FrontEnd/src/Disc/IsoBuilder.cpp
+            FrontEnd/src/Disc/CdSector.cpp
             FrontEnd/src/Debug/ExecutionActions.cpp
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
