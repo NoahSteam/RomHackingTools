@@ -7,6 +7,9 @@
 #include "Disc/PathUtil.h"
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX   // keep <windows.h> from defining min()/max() macros that clobber std::max
+#endif
 #include <windows.h>
 #else
 #include <dirent.h>

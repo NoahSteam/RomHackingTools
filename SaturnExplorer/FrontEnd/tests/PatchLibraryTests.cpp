@@ -124,6 +124,9 @@ int main()
     }
 
     // --- End-to-end: run the emitted script with real python3 and check the file is patched ---
+    // POSIX-only: this leg drives a POSIX shell (mkdtemp, /tmp, `mkdir -p`, `rm -rf`, `>/dev/null`),
+    // none of which behave under cmd.exe, so skip it on Windows.
+#ifndef _WIN32
     {
         const char* py3 = std::getenv("SE_PYTHON");
         std::string python = py3 ? py3 : "python3";
@@ -175,6 +178,7 @@ int main()
             std::system(rm.c_str());
         }
     }
+#endif  // !_WIN32
 
     if (gFail == 0) std::printf("All PatchLibrary tests passed.\n");
     return gFail == 0 ? 0 : 1;
