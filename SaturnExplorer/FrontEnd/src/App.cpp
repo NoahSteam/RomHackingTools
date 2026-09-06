@@ -3591,8 +3591,16 @@ void App::DrawCommandList()
                         // highlight only covers one line of text, not the whole row.
                         const float selH = editable ? ImGui::GetFrameHeight() : 0.0f;
                         if (editable) ImGui::AlignTextToFramePadding();
-                        if (ImGui::Selectable(label, IsSelected(row),
-                                              ImGuiSelectableFlags_SpanAllColumns,
+                        // AllowOverlap is what makes the size/position edit boxes reachable.
+                        // This Selectable spans the whole row and is submitted before them, so
+                        // without it ImGui's hit test hands every click in the row to the
+                        // Selectable and the later widgets never see the mouse (ItemHoverable
+                        // rejects an item once an earlier one owns HoveredId). Clicking a value
+                        // then read as a row click -- and a second click as a double-click,
+                        // which jumps the Hex Editor and takes the keyboard with it.
+                        ImGuiSelectableFlags selFlags = ImGuiSelectableFlags_SpanAllColumns;
+                        if (editable) selFlags |= ImGuiSelectableFlags_AllowOverlap;
+                        if (ImGui::Selectable(label, IsSelected(row), selFlags,
                                               ImVec2(0.0f, selH)))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
