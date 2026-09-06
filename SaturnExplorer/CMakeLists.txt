@@ -98,6 +98,17 @@ else()
     endif()
 endif()
 
+# Dear ImGui sources. Defined here rather than with the FrontEnd target because the
+# headless panel interaction tests link the same core (no backend, no window).
+set(SE_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/imgui)
+set(SE_IMGUI_CORE
+    ${SE_IMGUI_DIR}/imgui.cpp
+    ${SE_IMGUI_DIR}/imgui_draw.cpp
+    ${SE_IMGUI_DIR}/imgui_tables.cpp
+    ${SE_IMGUI_DIR}/imgui_widgets.cpp
+    ${SE_IMGUI_DIR}/imgui_demo.cpp
+)
+
 if(BUILD_TESTING)
     add_executable(SaturnExplorerVdp2Tests
         Core/tests/Vdp2CompositorTests.cpp
@@ -213,6 +224,17 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerSeStateCodecTests COMMAND SaturnExplorerSeStateCodecTests)
 
+    # Panel interaction — ImGui hit testing driven headlessly (no backend or window).
+    # Guards the row/cell click behaviour the panels depend on; see PanelWidgets.h.
+    add_executable(SaturnExplorerPanelInteractionTests
+        FrontEnd/tests/PanelInteractionTests.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerPanelInteractionTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerPanelInteractionTests
+             COMMAND SaturnExplorerPanelInteractionTests)
+
     # FrameRecorder rewind machinery — attach/reconstruct/truncate/evict of per-frame
     # savestate blocks. Drives Capture() against a trivial context (needs the Core lib), so
     # it also uses threads (the recorder's compression worker).
@@ -291,15 +313,6 @@ endif()
 #                so the frontend can be validated without a browser.
 # The portable App + all panels are shared; only the backend + entry point differ.
 # ---------------------------------------------------------------------------
-set(SE_IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/imgui)
-set(SE_IMGUI_CORE
-    ${SE_IMGUI_DIR}/imgui.cpp
-    ${SE_IMGUI_DIR}/imgui_draw.cpp
-    ${SE_IMGUI_DIR}/imgui_tables.cpp
-    ${SE_IMGUI_DIR}/imgui_widgets.cpp
-    ${SE_IMGUI_DIR}/imgui_demo.cpp
-)
-
 # Bake the git commit into BuildInfo.h at build time so the in-app update check knows
 # exactly which build it is. The custom target re-runs the resolver every build; the
 # resolver only rewrites the header when the SHA changes, so it doesn't force rebuilds.
