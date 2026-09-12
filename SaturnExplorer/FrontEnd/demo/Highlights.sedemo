@@ -1,0 +1,51 @@
+# Saturn Explorer — Highlights reel (~2-3 min). Graphics story; drive from a loaded savestate.
+# Load a savestate BEFORE starting so the app is on an interesting scene. To have the script
+# load it for you, uncomment the `load` line in the "render" beat and set your own path.
+# `select` indices depend on your scene — adjust to a sprite you want to showcase, or just
+# click an object yourself while the beat is showing (manual mode gives you time).
+
+@beat intro hold 7
+  note "This is Saturn Explorer - a visual reverse-engineering tool for Sega Saturn games. It takes the raw contents of video memory and rebuilds, on screen, exactly what the console's VDP chips would draw - and lets you take it apart."
+  solo vdpOutput
+
+@beat render hold 8
+  note "The frame you're looking at isn't a screenshot. The core is a software VDP1 - it walks the draw-command table out of VRAM and rasterizes every sprite itself, then composites the VDP2 background layers underneath, the same way the hardware does."
+  solo vdpOutput
+  # load "states/Battle3.yss"
+
+@beat pick-sprite hold 10
+  note "And because every object is reconstructed from its own command, every object on screen is selectable. Click one - here's its fully decoded Selected Object entry: its position, its four corners, color mode, priority, and the texture and palette it draws with."
+  select 8
+  show selectedObject
+  focus selectedObject
+
+@beat explode-3d hold 10
+  note "Those same sprites can be pushed apart into 3D. Saturn Explorer separates them along depth by priority, then by draw order, so a flat frame explodes into layers you can orbit around - a great way to see how a scene is actually stacked up."
+  solo worldView
+
+@beat peel-layers hold 10
+  note "Layering is just a render option, so we can peel it apart live. Watch - hide the VDP1 sprites, and the VDP2 scroll backgrounds underneath are laid bare. Bring the sprites back and the scene is whole again. No emulator cooperation needed; this works straight off a memory dump."
+  solo vdpOutput
+  layer vdp1 off
+
+@beat layers-back hold 7
+  note "Sprites back on. And the same panel exposes wireframe, bounding boxes, and object numbers - overlays for seeing the geometry instead of the picture."
+  layer vdp1 on
+  layer wireframe on
+  layer bounds on
+
+@beat assets hold 11
+  note "Pick any sprite and you can trace it straight down to its data. The Texture Viewer decodes it onto a transparency checkerboard; the Palette Viewer shows the exact colors it indexes into; and the VRAM Map places its bytes on a proportional map of all of video memory - command table, textures, palettes, and free space, color-coded."
+  layer wireframe off
+  layer bounds off
+  solo textureViewer paletteViewer vramMap
+  select 8
+
+@beat references hold 9
+  note "One more. Every texture and palette is reverse-indexed, so the References panel answers the question a reverse-engineer actually asks: what else in this frame uses this same art? One click and it lists them - and selecting one jumps you right to it."
+  solo references selectedObject
+  select 8
+
+@beat outro hold 7
+  note "Rebuild the frame, take it apart, trace it to its bytes - all from a savestate, before you touch a debugger. That's the graphics half of Saturn Explorer. Next up: watching a game run."
+  solo vdpOutput

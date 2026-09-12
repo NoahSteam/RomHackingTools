@@ -57,7 +57,7 @@ public:
 
     // Run frames with the pointer parked off the widgets, so sizes and positions settle
     // and nothing is hovered. Item rects captured by 'ui' are valid afterwards.
-    void Settle(int frames = 3) { for (int i = 0; i < frames; ++i) Frame(kAway, false); }
+    void Settle(int frames = 3) { for (int i = 0; i < frames; ++i) Frame(Away(), false); }
 
     // Hold the pointer over 'p'. Items using AllowOverlap need the previous frame's
     // hovered id to match before they report hovered, so more than one frame is required.
@@ -71,7 +71,10 @@ public:
     void Press(ImVec2 p) { Frame(p, true); }
 
 private:
-    static constexpr ImVec2 kAway = ImVec2(1270.0f, 710.0f);
+    // A point parked off the widgets under test. A static function rather than a
+    // static constexpr member so it needs no out-of-line definition when odr-used
+    // (required in C++14, the standard this project builds with).
+    static ImVec2 Away() { return ImVec2(1270.0f, 710.0f); }
 
     std::function<void()> mUi;
     ImGuiContext* mContext = nullptr;

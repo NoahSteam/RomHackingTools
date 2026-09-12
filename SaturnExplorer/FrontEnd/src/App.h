@@ -17,6 +17,7 @@
 #include "Settings.h"            // persistent per-user config (INI)
 #include "Launcher.h"            // "Launch Session": emulator + ROM selection
 #include "TopBar.h"              // top-bar view state + side-effect-free commands
+#include "Demo/DemoPlayer.h"     // in-app feature-tour playback (drives panels for recording)
 #include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
@@ -220,6 +221,22 @@ private:
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
     void DrawPlaceholder(const char* title, const char* note);
+
+    // --- Feature-tour Demo Mode: play a .sedemo script that drives the real UI for a screen
+    // recording (narration is read separately; nothing is captioned on screen). DrawDemoMenu
+    // is the toolbar dropdown; UpdateDemo (called once per frame, with the platform for the
+    // file dialog + safe commands) services the hotkeys/requests, ticks the player, and
+    // applies a beat when it becomes current; DrawDemoOverlay is the operator HUD.
+    void DrawDemoMenu();
+    void UpdateDemo(IPlatform& platform);
+    void ApplyDemoBeat(const DemoBeat& beat, IPlatform& platform);
+    void DrawDemoOverlay();
+    void LoadDemoScript(const std::string& path, IPlatform& platform);
+    // Set one panel's visibility by its PanelList key; false if the key is unknown.
+    bool SetPanelVisible(const std::string& key, bool visible);
+    // Toggle a named render layer (vdp1/wireframe/bounds/objnums/nbg0..3/rbg0/window/
+    // colorcalc/shadow) on or off; false if the name is unknown.
+    bool SetRenderLayer(const std::string& name, bool on);
 
     // Rebuild the scrub context over the selected recorded frame (mScrubIndex).
     // Returns true when mScrubContext is valid to render from. No-op off SE_ENABLE_LIVE.
@@ -532,6 +549,20 @@ private:
     std::vector<LaunchEdit> mLaunchEdits;
     int              mLaunchSelectedEdit = 0;
     bool             mLaunchSetDataDirEdit = true;
+
+    // Feature-tour Demo Mode. mDemo sequences the loaded script; the Req flags are set by the
+    // toolbar menu / hotkeys and drained in UpdateDemo (which has the platform handle). The
+    // overlay is an operator HUD — turn it off before a clean take.
+    DemoPlayer       mDemo;
+    bool             mDemoOverlay = true;       // show the operator HUD while playing
+    bool             mDemoShowNote = false;     // HUD also shows the narration note (teleprompter;
+                                                // off by default so a clean take has no captions)
+    bool             mDemoReqToggle = false;    // start/stop requested
+    bool             mDemoReqNext = false;      // advance one beat
+    bool             mDemoReqPrev = false;      // go back one beat
+    bool             mDemoReqLoad = false;      // open a .sedemo via the file dialog
+    std::string      mDemoScriptName;           // basename of the loaded script (for the HUD)
+    std::string      mDemoStatus;               // last load result / error
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices

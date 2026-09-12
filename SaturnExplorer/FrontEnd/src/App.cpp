@@ -1002,6 +1002,9 @@ void App::BuildUI(IPlatform& platform)
     DrawToolbar(topBarCommands);
     for (const TopBarCommand& command : topBarCommands)
         ExecuteTopBarCommand(command, platform);
+    // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
+    // effect this frame. Reads the hotkey/menu requests set during DrawToolbar above.
+    UpdateDemo(platform);
     DrawStatusBar();
 
     // If the transport (bottom of the VDP Output view) selected a past frame, point the
@@ -1146,6 +1149,7 @@ void App::BuildUI(IPlatform& platform)
     DrawClosePromptModal(platform);   // modal; unsaved-changes-on-close warning
 #endif
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
+    DrawDemoOverlay();        // operator HUD; only while a demo is playing
     // contextSwap restores the live context here as it goes out of scope.
 
     // Persist any preference the user changed this frame (panel visibility, data
@@ -5387,6 +5391,10 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
             commands.emplace_back(TopBarCommandType::OpenSettings);
+        // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
+        if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
+        if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
+        else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
     }
     ImGuiViewport* vp = ImGui::GetMainViewport();
     const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
@@ -5434,6 +5442,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
 
         ImGui::SameLine();
         DrawWindowsMenu(commands);
+
+        ImGui::SameLine();
+        DrawDemoMenu();   // feature-tour playback (drives panels for a screen recording)
         const bool compact = ImGui::GetWindowWidth() < 1450.0f;
         if (compact)
         {
@@ -5519,6 +5530,225 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             ImGui::SameLine(infoX);
             ImGui::TextColored(mbLiveSource ? ImVec4(0.31f, 0.78f, 0.47f, 1.0f)
                                             : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), "%s", info);
+        }
+    }
+    ImGui::End();
+}
+
+// ---------------------------------------------------------------------------
+// Feature-tour Demo Mode. A .sedemo script is a sequence of beats that drive the real UI
+// (show/solo/focus panels, select a command, toggle layers) so a feature walkthrough can be
+// screen-recorded hands-light. Narration is read separately from the generated script; the
+// tour draws nothing on screen except an opt-in operator HUD.
+// ---------------------------------------------------------------------------
+
+// Toolbar dropdown. Reads player state directly; actions that need the platform handle (load
+// a script, start/step — which applies a beat) only set a request flag drained by UpdateDemo.
+void App::DrawDemoMenu()
+{
+    if (ImGui::Button("Demo")) ImGui::OpenPopup("##demo_menu");
+    ImGui::SetItemTooltip("Play a scripted feature tour that drives the panels for a recording");
+    if (ImGui::BeginPopup("##demo_menu"))
+    {
+        if (mDemo.Loaded())
+            ImGui::Text("%s  (%d beats)", mDemoScriptName.c_str(), mDemo.Count());
+        else
+            ImGui::TextDisabled("No demo script loaded");
+        ImGui::Separator();
+
+        const bool playing = mDemo.Playing();
+        if (ImGui::MenuItem(playing ? "Stop" : "Play", "F7", false, mDemo.Loaded()))
+            mDemoReqToggle = true;
+        if (ImGui::MenuItem("Next beat", "F8", false, playing)) mDemoReqNext = true;
+        if (ImGui::MenuItem("Previous beat", "Shift+F8", false, playing)) mDemoReqPrev = true;
+
+        bool autoPlay = mDemo.Auto();
+        if (ImGui::MenuItem("Auto-advance (timed)", nullptr, &autoPlay)) mDemo.SetAuto(autoPlay);
+        ImGui::SetItemTooltip("On: advance by each beat's hold time. Off: advance on F8 "
+                              "(best for live narration).");
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Load demo script...")) mDemoReqLoad = true;
+        ImGui::MenuItem("Operator overlay", nullptr, &mDemoOverlay);
+        ImGui::MenuItem("Overlay shows narration", nullptr, &mDemoShowNote);
+        ImGui::SetItemTooltip("Teleprompter — leave off for a clean recording (no on-screen text)");
+        if (!mDemoStatus.empty())
+        {
+            ImGui::Separator();
+            ImGui::TextDisabled("%s", mDemoStatus.c_str());
+        }
+        ImGui::EndPopup();
+    }
+}
+
+bool App::SetPanelVisible(const std::string& key, bool visible)
+{
+    for (const PanelInfo& info : PanelList())
+        if (key == info.key) { mPanels.*(info.flag) = visible; return true; }
+    return false;
+}
+
+bool App::SetRenderLayer(const std::string& name, bool on)
+{
+    const uint8_t v = on ? 1u : 0u;
+    if (name == "vdp1" || name == "sprites")  { mRenderOpts.show_vdp1_sprites = v; return true; }
+    if (name == "wireframe")                   { mRenderOpts.show_wireframe = v; return true; }
+    if (name == "bounds" || name == "bbox")    { mRenderOpts.show_bounding_boxes = v; return true; }
+    if (name == "objnums" || name == "objnum") { mRenderOpts.show_object_numbers = v; return true; }
+    if (name == "nbg0") { mRenderOpts.show_layer[SE_LAYER_NBG0] = v; return true; }
+    if (name == "nbg1") { mRenderOpts.show_layer[SE_LAYER_NBG1] = v; return true; }
+    if (name == "nbg2") { mRenderOpts.show_layer[SE_LAYER_NBG2] = v; return true; }
+    if (name == "nbg3") { mRenderOpts.show_layer[SE_LAYER_NBG3] = v; return true; }
+    if (name == "rbg0") { mRenderOpts.show_layer[SE_LAYER_RBG0] = v; return true; }
+    if (name == "window")    { mRenderOpts.show_window = v; return true; }
+    if (name == "colorcalc") { mRenderOpts.show_color_calculation = v; return true; }
+    if (name == "shadow")    { mRenderOpts.show_shadow_highlight = v; return true; }
+    return false;
+}
+
+void App::LoadDemoScript(const std::string& path, IPlatform& platform)
+{
+    (void)platform;
+    std::ifstream f(path, std::ios::binary);
+    if (!f)
+    {
+        mDemoStatus = "Could not open " + path;
+        mLog.Warn("Demo: " + mDemoStatus);
+        return;
+    }
+    std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    DemoScript script = DemoParseText(text);
+    if (!script.ok)
+    {
+        mDemoStatus = "Parse error: " + script.error;
+        mLog.Warn("Demo: " + mDemoStatus);
+        return;
+    }
+    const int beats = static_cast<int>(script.beats.size());
+    mDemo.Load(std::move(script));
+    const size_t slash = path.find_last_of("/\\");
+    mDemoScriptName = (slash == std::string::npos) ? path : path.substr(slash + 1);
+    mDemoStatus = "Loaded " + std::to_string(beats) + " beats";
+    mLog.Info("Demo: loaded " + mDemoScriptName + " (" + std::to_string(beats) + " beats)");
+}
+
+// Once per frame: drain the menu/hotkey requests, tick the auto timer, and apply the current
+// beat exactly once when it changes.
+void App::UpdateDemo(IPlatform& platform)
+{
+    if (mDemoReqLoad)
+    {
+        mDemoReqLoad = false;
+        std::string path;
+        if (platform.OpenFileDialogFiltered(path, "Demo script (*.sedemo)", "sedemo"))
+            LoadDemoScript(path, platform);
+    }
+    if (mDemoReqToggle)
+    {
+        mDemoReqToggle = false;
+        if (mDemo.Playing()) mDemo.Stop();
+        else                 mDemo.Start();
+    }
+    if (mDemoReqNext) { mDemoReqNext = false; mDemo.Next(); }
+    if (mDemoReqPrev) { mDemoReqPrev = false; mDemo.Prev(); }
+
+    mDemo.Tick(ImGui::GetIO().DeltaTime);
+    if (mDemo.ConsumeDirty())
+        if (const DemoBeat* beat = mDemo.Current())
+            ApplyDemoBeat(*beat, platform);
+}
+
+// Translate one beat's actions into real UI state. The only impure part of the engine.
+void App::ApplyDemoBeat(const DemoBeat& beat, IPlatform& platform)
+{
+    for (const DemoAction& a : beat.actions)
+    {
+        switch (a.verb)
+        {
+        case DemoVerb::Show:
+            if (!a.args.empty()) SetPanelVisible(a.args[0], true);
+            break;
+        case DemoVerb::Hide:
+            if (!a.args.empty()) SetPanelVisible(a.args[0], false);
+            break;
+        case DemoVerb::Solo:
+            // Hide every panel, then reveal exactly the listed ones (and focus the first).
+            for (const PanelInfo& info : PanelList()) mPanels.*(info.flag) = false;
+            for (const std::string& key : a.args) SetPanelVisible(key, true);
+            if (!a.args.empty())
+                for (const PanelInfo& info : PanelList())
+                    if (a.args[0] == info.key) { ImGui::SetWindowFocus(info.label); break; }
+            break;
+        case DemoVerb::Focus:
+            if (!a.args.empty())
+            {
+                SetPanelVisible(a.args[0], true);
+                for (const PanelInfo& info : PanelList())
+                    if (a.args[0] == info.key) { ImGui::SetWindowFocus(info.label); break; }
+            }
+            break;
+        case DemoVerb::Select:
+            if (!a.args.empty() && mbHasData)
+            {
+                SelectCommand(std::atoi(a.args[0].c_str()), false);
+                RevealSelectionInTables();
+            }
+            break;
+        case DemoVerb::Layer:
+            if (a.args.size() >= 2) SetRenderLayer(a.args[0], a.args[1] != "off");
+            else if (a.args.size() == 1) SetRenderLayer(a.args[0], true);
+            break;
+        case DemoVerb::Load:
+            if (!a.args.empty()) OpenSavestate(a.args[0].c_str());
+            break;
+        case DemoVerb::Command:
+            // A deliberately small, safe whitelist — nothing that launches a process or writes
+            // a disc, so an unattended auto-play can't do anything surprising.
+            if (!a.args.empty())
+            {
+                const std::string& c = a.args[0];
+                if (c == "pause" || c == "resume")
+                    ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::TogglePause), platform);
+                else if (c == "step")
+                    ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::StepFrame), platform);
+                else if (c == "screenshot")
+                    ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::TakeScreenshot), platform);
+            }
+            break;
+        case DemoVerb::Unknown:
+            break;   // forward-compatible: a newer script's verb is simply ignored
+        }
+    }
+}
+
+// Small operator HUD, top-left, click-through. Only while a demo is playing; hidden for a
+// clean take via the Demo menu. Shows the narration note only when the operator opts in.
+void App::DrawDemoOverlay()
+{
+    if (!mDemo.Playing() || !mDemoOverlay) return;
+    const DemoBeat* beat = mDemo.Current();
+    if (!beat) return;
+
+    ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + 16.0f, vp->WorkPos.y + 56.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.80f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                                   ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs;
+    if (ImGui::Begin("##demo_overlay", nullptr, flags))
+    {
+        ImGui::TextColored(ImVec4(0.98f, 0.74f, 0.25f, 1.0f), "DEMO  %d/%d  %s",
+                           mDemo.Index() + 1, mDemo.Count(), beat->id.c_str());
+        if (mDemo.Auto())
+            ImGui::Text("auto  %.0f/%.0fs", mDemo.Elapsed(), mDemo.CurrentHold());
+        else
+            ImGui::TextDisabled("manual  -  F8 next  -  F7 stop");
+        if (mDemoShowNote && !beat->note.empty())
+        {
+            ImGui::Separator();
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 460.0f);
+            ImGui::TextUnformatted(beat->note.c_str());
+            ImGui::PopTextWrapPos();
         }
     }
     ImGui::End();

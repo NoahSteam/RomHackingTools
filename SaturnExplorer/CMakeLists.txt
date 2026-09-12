@@ -260,6 +260,15 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerPatchLibraryTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerPatchLibraryTests COMMAND SaturnExplorerPatchLibraryTests)
+
+    # Feature-tour demo engine — the .sedemo parser + the beat sequencer (both pure).
+    add_executable(SaturnExplorerDemoScriptTests
+        FrontEnd/tests/DemoScriptTests.cpp
+        FrontEnd/src/Demo/DemoScript.cpp
+        FrontEnd/src/Demo/DemoPlayer.cpp
+    )
+    target_include_directories(SaturnExplorerDemoScriptTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerDemoScriptTests COMMAND SaturnExplorerDemoScriptTests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -363,6 +372,8 @@ if(WIN32)
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/src/PatchLibrary.cpp
+        FrontEnd/src/Demo/DemoScript.cpp
+        FrontEnd/src/Demo/DemoPlayer.cpp
         FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
@@ -432,6 +443,8 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Disc/DiscBuilder.cpp
         FrontEnd/src/Debug/ExecutionActions.cpp
         FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/Demo/DemoScript.cpp
+        FrontEnd/src/Demo/DemoPlayer.cpp
         FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
@@ -526,6 +539,8 @@ else()
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/src/PatchLibrary.cpp
+            FrontEnd/src/Demo/DemoScript.cpp
+            FrontEnd/src/Demo/DemoPlayer.cpp
             FrontEnd/src/UpdateChecker.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
             FrontEnd/Platforms/Web/WebMain.cpp
