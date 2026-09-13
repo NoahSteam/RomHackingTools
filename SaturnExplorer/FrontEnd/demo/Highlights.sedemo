@@ -27,6 +27,8 @@
   note "Layering is just a render option, so we can peel it apart live. Watch - hide the VDP1 sprites, and the VDP2 scroll backgrounds underneath are laid bare. Bring the sprites back and the scene is whole again. No emulator cooperation needed; this works straight off a memory dump."
   solo vdpOutput
   layer vdp1 off
+  layer wireframe off
+  layer bounds off
 
 @beat layers-back hold 7
   note "Sprites back on. And the same panel exposes wireframe, bounding boxes, and object numbers - overlays for seeing the geometry instead of the picture."

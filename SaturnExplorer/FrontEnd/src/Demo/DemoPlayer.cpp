@@ -33,6 +33,10 @@ void DemoPlayer::Stop()
 void DemoPlayer::Tick(double dt)
 {
     if (!mPlaying || !mAuto || mIndex < 0) return;
+    // Don't start counting down a beat the host hasn't applied yet. Start()/Next() run in the
+    // same frame as this Tick, and dt is the *previous* frame's delta (which can be huge after
+    // a file dialog or a stall) -- without this a beat could be skipped before it ever showed.
+    if (mDirty) return;
     mElapsed += dt;
     if (mElapsed < mScript.beats[mIndex].hold) return;
     if (mIndex + 1 < Count())

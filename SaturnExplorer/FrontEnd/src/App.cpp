@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -303,7 +304,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
 {
     // The last field is the Windows-menu category (submenu) the panel is grouped under.
     static const std::vector<PanelInfo> kList = {
-        {"vramMap",         "VRAM Map",           &Panels::vramMap,         "Graphics"},
+        {"vramMap",         "VRAM Map (VDP1)",    &Panels::vramMap,         "Graphics"},
         {"archiveExplorer", "Archive Explorer",   &Panels::archiveExplorer, "Files & Input"},
         {"searchRom",       "Search ROM / Files", &Panels::searchRom,       "Files & Input"},
         {"vdpOutput",       "VDP Output",         &Panels::vdpOutput,       "Graphics"},
@@ -1153,6 +1154,13 @@ void App::BuildUI(IPlatform& platform)
     DrawClosePromptModal(platform);   // modal; unsaved-changes-on-close warning
 #endif
     DrawTracepointEditor();   // modal; no-op until OpenTracepointEditor requests it
+    // Focus a demo beat's panel now that every panel has been submitted this frame (the
+    // window must exist before ImGui can find it by name).
+    if (!mDemoPendingFocus.empty())
+    {
+        ImGui::SetWindowFocus(mDemoPendingFocus.c_str());
+        mDemoPendingFocus.clear();
+    }
     DrawDemoOverlay();        // operator HUD; only while a demo is playing
     // contextSwap restores the live context here as it goes out of scope.
 
@@ -5650,8 +5658,17 @@ void App::UpdateDemo(IPlatform& platform)
     if (mDemoReqToggle)
     {
         mDemoReqToggle = false;
-        if (mDemo.Playing()) mDemo.Stop();
-        else                 mDemo.Start();
+        if (mDemo.Playing())
+        {
+            mDemo.Stop();
+        }
+        else
+        {
+            // Panel visibility is persisted, so remember it before the tour rearranges it.
+            mDemoSavedPanels = mPanels;
+            mDemoPanelsSaved = true;
+            mDemo.Start();
+        }
     }
     if (mDemoReqNext) { mDemoReqNext = false; mDemo.Next(); }
     if (mDemoReqPrev) { mDemoReqPrev = false; mDemo.Prev(); }
@@ -5660,63 +5677,119 @@ void App::UpdateDemo(IPlatform& platform)
     if (mDemo.ConsumeDirty())
         if (const DemoBeat* beat = mDemo.Current())
             ApplyDemoBeat(*beat, platform);
+
+    // However playback ended -- F7, stepping past the last beat, or an auto run finishing --
+    // put the user's own panel layout back, so a tour never persists its own.
+    if (mDemoPanelsSaved && !mDemo.Playing())
+    {
+        mPanels = mDemoSavedPanels;
+        mDemoPanelsSaved = false;
+    }
 }
 
 // Translate one beat's actions into real UI state. The only impure part of the engine.
 void App::ApplyDemoBeat(const DemoBeat& beat, IPlatform& platform)
 {
+    // A panel a beat reveals has not been submitted to ImGui yet, so focusing it now would
+    // silently miss. Remember the window and focus it at the end of the frame instead.
+    auto focusPanel = [this](const std::string& key)
+    {
+        for (const PanelInfo& info : PanelList())
+            if (key == info.key) { mDemoPendingFocus = info.label; return; }
+    };
+    auto parseOnOff = [](const std::string& v, bool& out)
+    {
+        if (v == "on"  || v == "1" || v == "true"  || v == "yes") { out = true;  return true; }
+        if (v == "off" || v == "0" || v == "false" || v == "no")  { out = false; return true; }
+        return false;
+    };
+    auto warn = [this, &beat](const std::string& msg)
+    {
+        mLog.Warn("Demo beat '" + beat.id + "': " + msg);
+    };
+
     for (const DemoAction& a : beat.actions)
     {
         switch (a.verb)
         {
         case DemoVerb::Show:
-            if (!a.args.empty()) SetPanelVisible(a.args[0], true);
+            if (!a.args.empty() && !SetPanelVisible(a.args[0], true))
+                warn("unknown panel key '" + a.args[0] + "'");
             break;
         case DemoVerb::Hide:
-            if (!a.args.empty()) SetPanelVisible(a.args[0], false);
+            if (!a.args.empty() && !SetPanelVisible(a.args[0], false))
+                warn("unknown panel key '" + a.args[0] + "'");
             break;
         case DemoVerb::Solo:
             // Hide every panel, then reveal exactly the listed ones (and focus the first).
+            // A typo here would otherwise record a blank dockspace, so it is reported.
             for (const PanelInfo& info : PanelList()) mPanels.*(info.flag) = false;
-            for (const std::string& key : a.args) SetPanelVisible(key, true);
-            if (!a.args.empty())
-                for (const PanelInfo& info : PanelList())
-                    if (a.args[0] == info.key) { ImGui::SetWindowFocus(info.label); break; }
+            for (const std::string& key : a.args)
+                if (!SetPanelVisible(key, true)) warn("unknown panel key '" + key + "'");
+            if (!a.args.empty()) focusPanel(a.args[0]);
             break;
         case DemoVerb::Focus:
             if (!a.args.empty())
             {
-                SetPanelVisible(a.args[0], true);
-                for (const PanelInfo& info : PanelList())
-                    if (a.args[0] == info.key) { ImGui::SetWindowFocus(info.label); break; }
+                if (!SetPanelVisible(a.args[0], true)) warn("unknown panel key '" + a.args[0] + "'");
+                else                                   focusPanel(a.args[0]);
             }
             break;
         case DemoVerb::Select:
-            if (!a.args.empty() && mbHasData)
+            if (!a.args.empty())
             {
-                SelectCommand(std::atoi(a.args[0].c_str()), false);
-                RevealSelectionInTables();
+                const std::string& n = a.args[0];
+                if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos)
+                    warn("'select' expects a number, got '" + n + "'");
+                else if (mbHasData)
+                {
+                    SelectCommand(std::atoi(n.c_str()), false);
+                    RevealSelectionInTables();
+                }
             }
             break;
         case DemoVerb::Layer:
-            if (a.args.size() >= 2) SetRenderLayer(a.args[0], a.args[1] != "off");
-            else if (a.args.size() == 1) SetRenderLayer(a.args[0], true);
+            if (!a.args.empty())
+            {
+                bool on = true;
+                if (a.args.size() >= 2 && !parseOnOff(a.args[1], on))
+                    warn("'layer " + a.args[0] + "' expects on/off, got '" + a.args[1] + "'");
+                else if (!SetRenderLayer(a.args[0], on))
+                    warn("unknown layer '" + a.args[0] + "'");
+            }
             break;
         case DemoVerb::Load:
-            if (!a.args.empty()) OpenSavestate(a.args[0].c_str());
+            if (!a.args.empty() && !OpenSavestate(a.args[0].c_str()))
+                warn("could not load '" + a.args[0] + "'");
             break;
         case DemoVerb::Command:
-            // A deliberately small, safe whitelist — nothing that launches a process or writes
-            // a disc, so an unattended auto-play can't do anything surprising.
+            // A deliberately small, safe whitelist -- nothing that launches a process or writes
+            // a disc, so an unattended auto-play can't do anything surprising. Each goes through
+            // the same enablement policy the toolbar uses, so a command that can't run on this
+            // source is skipped rather than leaving the UI in a state it can't get out of (a
+            // failed se_frame_pause would otherwise strand mbPaused = true).
             if (!a.args.empty())
             {
                 const std::string& c = a.args[0];
+                const TopBarViewModel vm = BuildTopBarViewModel();
+                const bool canToggle = TopBarCommandEnabled(TopBarCommandType::TogglePause, vm);
                 if (c == "pause" || c == "resume")
-                    ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::TogglePause), platform);
+                {
+                    const bool want = (c == "pause");
+                    if (mbPaused == want)      { /* already in the requested state */ }
+                    else if (!canToggle)       warn("'" + c + "' needs a source with frame control");
+                    else ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::TogglePause), platform);
+                }
                 else if (c == "step")
-                    ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::StepFrame), platform);
+                {
+                    if (!TopBarCommandEnabled(TopBarCommandType::StepFrame, vm))
+                        warn("'step' needs a source with frame control");
+                    else ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::StepFrame), platform);
+                }
                 else if (c == "screenshot")
                     ExecuteTopBarCommand(TopBarCommand(TopBarCommandType::TakeScreenshot), platform);
+                else
+                    warn("unknown command '" + c + "'");
             }
             break;
         case DemoVerb::Unknown:

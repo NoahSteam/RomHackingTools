@@ -25,6 +25,10 @@ bool Tokenize(const std::string& line, std::vector<std::string>& out)
             if (i >= line.size()) return false;   // no closing quote
             ++i;  // closing quote
         }
+        else if (line[i] == '#')
+        {
+            break;   // '#' at a token boundary starts a comment: ignore the rest of the line
+        }
         else
         {
             while (i < line.size() && line[i] != ' ' && line[i] != '\t') tok.push_back(line[i++]);
@@ -108,10 +112,12 @@ DemoScript DemoParseText(const std::string& text)
         // multiple note lines with a space so a long note can wrap across lines.
         if (tok[0] == "note")
         {
-            if (tok.size() >= 2)
+            // Join every remaining token, so an unquoted note keeps its whole line rather
+            // than being truncated to its first word.
+            for (size_t i = 1; i < tok.size(); ++i)
             {
                 if (!beat.note.empty()) beat.note.push_back(' ');
-                beat.note += tok[1];
+                beat.note += tok[i];
             }
             continue;
         }

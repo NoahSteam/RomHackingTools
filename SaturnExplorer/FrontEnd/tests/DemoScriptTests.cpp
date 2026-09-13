@@ -75,6 +75,26 @@ int main()
         Check(!e3.ok, "non-positive hold is an error");
     }
 
+    // --- Parser: unquoted notes keep the whole line; '#' comments are stripped ---
+    {
+        const std::string text =
+            "@beat b hold 3          # trailing comment after a beat header\n"
+            "  note this note is not quoted and keeps every word\n"
+            "  solo vdpOutput worldView   # hide the rest\n"
+            "  note \"a quoted # hash survives\"\n";
+        DemoScript s = DemoParseText(text);
+        Check(s.ok, s.ok ? "parse ok (comments)" : s.error.c_str());
+        Check(s.beats.size() == 1, "one beat");
+        Check(s.beats[0].hold == 3.0, "hold parses with a trailing comment");
+        Check(s.beats[0].note ==
+                  "this note is not quoted and keeps every word a quoted # hash survives",
+              "unquoted note keeps every word; a quoted '#' survives");
+        Check(s.beats[0].actions.size() == 1, "a trailing comment is not an action");
+        Check(s.beats[0].actions[0].verb == DemoVerb::Solo &&
+              s.beats[0].actions[0].args.size() == 2,
+              "inline comment words do not become panel keys");
+    }
+
     // --- Player: manual advance + one-shot dirty ---
     {
         DemoPlayer p;
@@ -120,6 +140,29 @@ int main()
         Check(p.Index() == 1 && p.ConsumeDirty(), "auto: advanced after hold elapsed");
         p.Tick(3.0);   // past last beat's hold -> stop
         Check(!p.Playing(), "auto: stops after the last beat");
+    }
+
+    // --- Player: auto mode never advances past a beat the host has not applied yet ---
+    {
+        DemoPlayer p;
+        p.LoadText("@beat a hold 1\n@beat b hold 1\n");
+        p.SetAuto(true);
+        p.Start();
+        // dt is the PREVIOUS frame's delta and can be huge (a stall, or the frame a file
+        // dialog closed); it must not consume a beat that was never shown.
+        p.Tick(60.0);
+        Check(p.Index() == 0, "auto: a large delta does not skip the unapplied first beat");
+        Check(p.ConsumeDirty(), "auto: first beat is still pending");
+        p.Tick(60.0);   // applied now, so it may advance
+        Check(p.Index() == 1 && p.ConsumeDirty(), "auto: advances once the beat was applied");
+
+        DemoPlayer one;
+        one.LoadText("@beat only hold 1\n");
+        one.SetAuto(true);
+        one.Start();
+        one.Tick(60.0);
+        Check(one.Playing() && one.ConsumeDirty(),
+              "auto: a single-beat script still gets its beat applied");
     }
 
     if (gFail == 0) std::printf("All Demo engine tests passed.\n");

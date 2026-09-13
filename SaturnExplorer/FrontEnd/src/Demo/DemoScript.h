@@ -10,7 +10,8 @@
 // whole thing is unit-tested headlessly (see FrontEnd/tests/DemoScriptTests.cpp). App owns the
 // one impure step — turning a DemoAction into a real UI mutation (App::ApplyDemoBeat).
 //
-// Text format (blank lines ignored; a line whose first non-space char is '#' is a comment):
+// Text format (blank lines ignored; '#' at a token boundary starts a comment that runs to
+// end of line -- whole-line or trailing. A '#' inside a quoted string is kept):
 //
 //     @beat <id> [hold <seconds>]
 //       note "narration text for this beat"

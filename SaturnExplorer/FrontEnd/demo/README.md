@@ -31,7 +31,8 @@ continuous take isn't required.
 
 ## Script format
 
-Blank lines are ignored; a line whose first non-space character is `#` is a comment.
+Blank lines are ignored. A `#` at a token boundary starts a comment running to end of
+line — whole-line or trailing. A `#` inside a quoted string is kept.
 
 ```
 @beat <id> [hold <seconds>]      # start a beat (hold is the auto-mode dwell; default 6)
@@ -59,6 +60,15 @@ soundCpu, sound, discExplorer`.
 ### Notes
 - `select N` and the exact panel mix depend on your loaded savestate — tweak the indices to
   suit the scene you recorded on.
-- Unknown verbs and layer names are ignored (a newer script still loads on an older build).
+- **Write each beat to stand on its own.** A beat applies only its own actions, so stepping
+  *backwards* (Shift+F8) replays the target beat's actions but does not undo what later beats
+  did. If a beat turns a layer on, have the neighbouring beats state the layer state they want
+  rather than relying on what came before — `solo` is already absolute, so panels are fine.
+- Demo Mode snapshots your panel visibility when it starts and restores it when it stops, so a
+  tour never leaves its own layout behind as your saved preference.
+- An unknown panel key, layer name, or command is reported in the **Log** panel rather than
+  failing silently — check there if a beat doesn't look right.
+- An unknown *verb* is ignored rather than an error, so a script written for a newer build
+  still loads on an older one.
 - `command` is limited to `pause`/`step`/`screenshot` — Demo Mode never launches a process or
   writes a disc, so an unattended auto-play can't do anything surprising.

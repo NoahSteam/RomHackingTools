@@ -563,6 +563,13 @@ private:
     bool             mDemoReqLoad = false;      // open a .sedemo via the file dialog
     std::string      mDemoScriptName;           // basename of the loaded script (for the HUD)
     std::string      mDemoStatus;               // last load result / error
+    // Panel visibility is a persisted preference, so a tour must not leave its own layout
+    // behind: snapshot it when the demo starts and put it back however the demo ends.
+    Panels           mDemoSavedPanels;
+    bool             mDemoPanelsSaved = false;
+    // Window to focus, applied at the end of the frame. A panel a beat just revealed has not
+    // been submitted when the beat is applied, so SetWindowFocus would not find it yet.
+    std::string      mDemoPendingFocus;
 
     int              mSelectedCommand = -1;   // primary selection (detail panels)
     std::vector<int> mSelection;              // all selected command indices
