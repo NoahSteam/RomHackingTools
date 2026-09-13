@@ -40,14 +40,18 @@ namespace sfe
 namespace
 {
 
+// After a frame-step, keep re-capturing the live source for this many UI frames so the stepped
+// frame settles over the socket before the snapshot re-freezes (see the capture gate). Frame
+// control is core ABI (se_frame_step), not part of the live driver, so the step path -- and
+// therefore this constant -- must exist in every build, including the web one that leaves
+// SE_ENABLE_LIVE undefined.
+constexpr int    kStepSettleFrames  = 4;
+
 #ifdef SE_ENABLE_LIVE
 // Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
 // UI converts its seconds knob through this. Pre-capture memory estimate uses a
 // typical compressed frame size until a real average is available.
 constexpr int    kFramesPerSecond   = 60;
-// After a frame-step, keep re-capturing the live source for this many UI frames so the stepped
-// frame settles over the socket before the snapshot re-freezes (see the capture gate).
-constexpr int    kStepSettleFrames  = 4;
 constexpr double kEstBytesPerFrame  = 1.3 * 1024.0 * 1024.0;
 #endif
 
