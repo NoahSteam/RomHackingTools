@@ -217,8 +217,18 @@ void SeExportSetSoundWriteHook(SeWriteSoundByteFn fn)
 #if defined(_WIN32)
 static HANDLE sThread;
 static CRITICAL_SECTION sLock;
-#define SE_LOCK()   EnterCriticalSection(&sLock)
-#define SE_UNLOCK() LeaveCriticalSection(&sLock)
+/* A CRITICAL_SECTION needs runtime InitializeCriticalSection (done in SeExportInit), unlike
+ * the POSIX PTHREAD_MUTEX_INITIALIZER below which is ready at load. But some producers run
+ * mid-frame inside Emulate() -- input-diagnostic logs (smpc.cpp), the shadow call stack,
+ * tracepoints -- and the injected SeExportInit call fires only at the *end-of-frame* hook,
+ * so on frame 1 the lock is entered before it is initialized. Gate entry on sLocksReady:
+ * until init completes the emulator is single-threaded (the server and savestate-worker
+ * threads are created *by* SeExportInit), so the guarded data can be touched safely without
+ * a lock; entering an uninitialized CRITICAL_SECTION would instead fault inside
+ * RtlpEnterCriticalSectionContended. Shared by SE_SLOCK below (both CSes init together). */
+static volatile LONG sLocksReady = 0;
+#define SE_LOCK()   do { if (sLocksReady) EnterCriticalSection(&sLock); } while (0)
+#define SE_UNLOCK() do { if (sLocksReady) LeaveCriticalSection(&sLock); } while (0)
 #else
 static pthread_t sThread;
 static pthread_t sTcpThread;
@@ -256,8 +266,9 @@ static int    (*sLoadState)(const unsigned char* buf, size_t len);
 
 #if defined(_WIN32)
 static CRITICAL_SECTION sStateLock;
-#define SE_SLOCK()   EnterCriticalSection(&sStateLock)
-#define SE_SUNLOCK() LeaveCriticalSection(&sStateLock)
+/* Same pre-init gate as SE_LOCK above (sLocksReady covers both critical sections). */
+#define SE_SLOCK()   do { if (sLocksReady) EnterCriticalSection(&sStateLock); } while (0)
+#define SE_SUNLOCK() do { if (sLocksReady) LeaveCriticalSection(&sStateLock); } while (0)
 static HANDLE sStateWorker;
 #else
 static pthread_mutex_t sStateLock = PTHREAD_MUTEX_INITIALIZER;
@@ -1412,6 +1423,7 @@ int SeExportInit(void)
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);
     InitializeCriticalSection(&sStateLock);
+    sLocksReady = 1;   /* both CSes are now real -- enable locking BEFORE any locking thread starts */
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
     if (!sThread) { sRunning = 0; return -1; }
 #else
@@ -1439,6 +1451,10 @@ void SeExportDeinit(void)
         WaitForSingleObject(sStateWorker, 1000); CloseHandle(sStateWorker); sStateWorker = NULL;
     }
     if (sThread) { WaitForSingleObject(sThread, 1000); CloseHandle(sThread); sThread = NULL; }
+    /* Both locking threads are joined -- single-threaded again -- so stop gating on the
+     * locks and destroy them. Anything that still runs (e.g. SeStateShutdown) touches the
+     * guarded data without a lock, which is safe with no other thread alive. */
+    sLocksReady = 0;
     SeStateShutdown();
     DeleteCriticalSection(&sStateLock);
     DeleteCriticalSection(&sLock);
