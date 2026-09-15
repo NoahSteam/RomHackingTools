@@ -146,6 +146,10 @@ bool WebPlatform::Initialize(const PlatformConfig& config)
 
 void WebPlatform::Shutdown()
 {
+#if defined(SE_NATIVE_MENUBAR)
+    // Restore whatever main menu SDL installed before tearing ImGui/SDL down, while NSApp is alive.
+    mMenuBar.Detach();
+#endif
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
