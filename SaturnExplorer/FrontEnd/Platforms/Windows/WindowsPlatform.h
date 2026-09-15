@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Platform/IPlatform.h"
+#include "Win32MenuBar.h"   // native HMENU menu bar (replaces the ImGui toolbar on Windows)
 
 namespace sfe
 {
@@ -50,6 +51,11 @@ public:
     bool HasAudio() override { return true; }
     bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
 
+    // Native Win32 menu bar (mirrors the ImGui toolbar; see Win32MenuBar). WndProc feeds it
+    // WM_COMMAND / menu-loop messages; App drives it through these two IPlatform hooks.
+    void SyncNativeMenu(const NativeMenuState& state) override { mMenuBar.Sync(state); }
+    void DrainNativeMenu(std::vector<NativeMenuAction>& out) override { mMenuBar.Drain(out); }
+
 private:
     // Release any in-flight waveOut buffer/device. Called internally by PlayAudio (to
     // reset the previous preview) and Shutdown; not part of the IPlatform contract.
@@ -63,6 +69,7 @@ private:
     static LRESULT WINAPI WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
     HWND                    mHwnd = nullptr;
+    Win32MenuBar            mMenuBar;                  // native OS menu bar attached to mHwnd
     WNDCLASSEXW             mWindowClass {};
     ID3D11Device*           mDevice = nullptr;
     ID3D11DeviceContext*    mDeviceContext = nullptr;

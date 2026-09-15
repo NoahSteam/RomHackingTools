@@ -1004,7 +1004,21 @@ void App::BuildUI(IPlatform& platform)
     // viewport; the dockspace fills what's left. They always operate on the live
     // context, so draw them before any scrub swap below.
     std::vector<TopBarCommand> topBarCommands;
+    // Keyboard shortcuts run on every platform, whether or not the ImGui toolbar is drawn, so
+    // hotkeys keep working under the native Win32 menu bar (which replaces that toolbar).
+    const TopBarViewModel topBarState = BuildTopBarViewModel();
+    CollectToolbarShortcuts(topBarCommands, topBarState);
+#ifdef SE_NATIVE_MENUBAR
+    // Windows: drive the native OS menu bar instead of drawing the ImGui toolbar. App still owns
+    // every side effect — menu selections drain into the same TopBarCommand path below.
+    platform.SyncNativeMenu(BuildNativeMenuState(topBarState));
+    std::vector<NativeMenuAction> menuActions;
+    platform.DrainNativeMenu(menuActions);
+    for (const NativeMenuAction& action : menuActions)
+        DispatchNativeMenuAction(action, topBarCommands);
+#else
     DrawToolbar(topBarCommands);
+#endif
     for (const TopBarCommand& command : topBarCommands)
         ExecuteTopBarCommand(command, platform);
     // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
@@ -5383,31 +5397,36 @@ void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
     ImGui::EndPopup();
 }
 
+// Shared keyboard-shortcut prelude. Called every frame on all platforms (whether the visible bar
+// is the ImGui toolbar or the native Win32 menu), so the hotkeys fire even when the ImGui toolbar
+// isn't drawn. Enqueues the same TopBarCommands the toolbar/menu items do.
+void App::CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const TopBarViewModel& state)
+{
+    if (ImGui::GetIO().WantTextInput) return;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
+        TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
+        commands.emplace_back(TopBarCommandType::LoadYabauseState);
+    if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
+        commands.emplace_back(TopBarCommandType::Launch);
+    if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
+        commands.emplace_back(TopBarCommandType::TogglePause);
+    if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
+        commands.emplace_back(TopBarCommandType::StepFrame);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
+        TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
+        commands.emplace_back(TopBarCommandType::DumpMemory);
+    if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
+        commands.emplace_back(TopBarCommandType::OpenSettings);
+    // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
+    if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
+    if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
+    else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
+}
+
 void App::DrawToolbar(std::vector<TopBarCommand>& commands)
 {
     const TopBarViewModel state = BuildTopBarViewModel();
-    if (!ImGui::GetIO().WantTextInput)
-    {
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
-            TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
-            commands.emplace_back(TopBarCommandType::LoadYabauseState);
-        if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
-            commands.emplace_back(TopBarCommandType::Launch);
-        if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
-            commands.emplace_back(TopBarCommandType::TogglePause);
-        if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
-            commands.emplace_back(TopBarCommandType::StepFrame);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
-            TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
-            commands.emplace_back(TopBarCommandType::DumpMemory);
-        if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
-            commands.emplace_back(TopBarCommandType::OpenSettings);
-        // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
-        if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
-        if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
-        else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
-    }
     ImGuiViewport* vp = ImGui::GetMainViewport();
     const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
@@ -6134,6 +6153,187 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::None:
     default:
         break;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Native OS menu-bar bridge (compiled everywhere, used under SE_NATIVE_MENUBAR). These mirror
+// the ImGui toolbar exactly: BuildNativeMenuState is the data the platform renders, and
+// DispatchNativeMenuAction turns a selection back into the same TopBarCommand queue (plus the
+// handful of view-only toggles the toolbar performs inline: layers, tooltips, Demo playback).
+// ---------------------------------------------------------------------------
+NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
+{
+    NativeMenuState m;
+
+    // Session / Run / Data enablement (same policy the toolbar reads).
+    m.launchEnabled = TopBarCommandEnabled(TopBarCommandType::Launch, s);
+    m.loadDumpEnabled = TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, s);
+    m.connectEnabled = TopBarCommandEnabled(TopBarCommandType::ConnectLive, s);
+    m.disconnectEnabled = TopBarCommandEnabled(TopBarCommandType::DisconnectLive, s);
+    m.startRecordingEnabled = TopBarCommandEnabled(TopBarCommandType::StartRecording, s);
+    m.stopRecordingEnabled = TopBarCommandEnabled(TopBarCommandType::StopRecording, s);
+    m.closeSourceEnabled = TopBarCommandEnabled(TopBarCommandType::CloseSource, s);
+    m.paused = s.paused;
+    m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
+    m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
+    m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+
+    // Layers (same order as DrawLayersMenu / NativeMenuLayer).
+    m.layer[NM_LAYER_SPRITES]  = mRenderOpts.show_vdp1_sprites != 0;
+    m.layer[NM_LAYER_WIREFRAME] = mRenderOpts.show_wireframe != 0;
+    m.layer[NM_LAYER_BBOX]     = mRenderOpts.show_bounding_boxes != 0;
+    m.layer[NM_LAYER_OBJNUM]   = mRenderOpts.show_object_numbers != 0;
+    m.layer[NM_LAYER_NBG0]     = mRenderOpts.show_layer[SE_LAYER_NBG0] != 0;
+    m.layer[NM_LAYER_NBG1]     = mRenderOpts.show_layer[SE_LAYER_NBG1] != 0;
+    m.layer[NM_LAYER_NBG2]     = mRenderOpts.show_layer[SE_LAYER_NBG2] != 0;
+    m.layer[NM_LAYER_NBG3]     = mRenderOpts.show_layer[SE_LAYER_NBG3] != 0;
+    m.layer[NM_LAYER_RBG0]     = mRenderOpts.show_layer[SE_LAYER_RBG0] != 0;
+    m.layer[NM_LAYER_WINDOW]   = mRenderOpts.show_window != 0;
+    m.layer[NM_LAYER_COLORCALC] = mRenderOpts.show_color_calculation != 0;
+    m.layer[NM_LAYER_SHADOW]   = mRenderOpts.show_shadow_highlight != 0;
+
+    m.tooltips = mShowTooltips;
+
+    // Patch (the Win32 build always has the live/patch feature compiled in).
+    const size_t patchCount = mPatchLib.Count();
+    m.patchLocations = static_cast<int>(patchCount);
+    m.patchApplyEnabled = patchCount > 0;
+    m.patchManageEnabled = patchCount > 0;
+    m.patchSaveEnabled = patchCount > 0;
+    m.buildDiscEnabled = !mDataDir.empty();
+
+    // Emulator submenu — label carries the "(! not configured)" hint, selection drives the check.
+    const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
+    for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
+    {
+        NativeMenuState::EmulatorItem item;
+        item.label = emulators[i].label;
+        if (emulators[i].exePath.empty() || !PathExists(emulators[i].exePath))
+            item.label += "  (! not configured)";
+        item.selected = (i == mLauncher.SelectedIndex());
+        m.emulators.push_back(std::move(item));
+    }
+
+    // Game / ROM submenu — recent list with a "(! missing)" hint + the current-ROM check.
+    const std::vector<std::string>& recent = mLauncher.Recent();
+    for (size_t i = 0; i < recent.size(); ++i)
+    {
+        NativeMenuState::RecentRomItem item;
+        item.label = PathBasename(recent[i]);
+        if (!PathExists(recent[i])) item.label += "  (! missing)";
+        item.current = (recent[i] == mLauncher.Rom());
+        m.recentRoms.push_back(std::move(item));
+    }
+    m.clearRomEnabled = !mLauncher.Rom().empty();
+    m.revealRomEnabled = !mLauncher.Rom().empty() && PathExists(mLauncher.Rom());
+
+    // Windows submenu — the flat PanelList, so the ToggleWindow index matches ExecuteTopBarCommand.
+    for (const PanelInfo& panel : PanelList())
+    {
+        NativeMenuState::PanelItem item;
+        item.category = panel.category;
+        item.label = panel.label;
+        item.visible = mPanels.*(panel.flag);
+        m.panels.push_back(std::move(item));
+    }
+
+    // Demo submenu.
+    m.demoLoaded = mDemo.Loaded();
+    m.demoPlaying = mDemo.Playing();
+    m.demoAuto = mDemo.Auto();
+    m.demoOverlay = mDemoOverlay;
+    m.demoShowNote = mDemoShowNote;
+
+    // Structural fingerprint: labels + list contents. Enable/check/visibility flags are refreshed
+    // live by the platform, so they are deliberately excluded — only a structural change (a ROM
+    // added, an emulator renamed, a panel list revision) forces the HMENU to be rebuilt.
+    m.structureKey.clear();
+    for (const NativeMenuState::EmulatorItem& e : m.emulators) { m.structureKey += e.label; m.structureKey += '\x1f'; }
+    m.structureKey += '\x1e';
+    for (const NativeMenuState::RecentRomItem& r : m.recentRoms) { m.structureKey += r.label; m.structureKey += '\x1f'; }
+    m.structureKey += '\x1e';
+    for (const NativeMenuState::PanelItem& p : m.panels)
+    { m.structureKey += p.category; m.structureKey += '/'; m.structureKey += p.label; m.structureKey += '\x1f'; }
+
+    return m;
+}
+
+void App::ToggleMenuLayer(int layer)
+{
+    auto flip = [](uint8_t& v) { v = v ? 0u : 1u; };
+    switch (layer)
+    {
+    case NM_LAYER_SPRITES:   flip(mRenderOpts.show_vdp1_sprites); break;
+    case NM_LAYER_WIREFRAME: flip(mRenderOpts.show_wireframe); break;
+    case NM_LAYER_BBOX:      flip(mRenderOpts.show_bounding_boxes); break;
+    case NM_LAYER_OBJNUM:    flip(mRenderOpts.show_object_numbers); break;
+    case NM_LAYER_NBG0:      flip(mRenderOpts.show_layer[SE_LAYER_NBG0]); break;
+    case NM_LAYER_NBG1:      flip(mRenderOpts.show_layer[SE_LAYER_NBG1]); break;
+    case NM_LAYER_NBG2:      flip(mRenderOpts.show_layer[SE_LAYER_NBG2]); break;
+    case NM_LAYER_NBG3:      flip(mRenderOpts.show_layer[SE_LAYER_NBG3]); break;
+    case NM_LAYER_RBG0:      flip(mRenderOpts.show_layer[SE_LAYER_RBG0]); break;
+    case NM_LAYER_WINDOW:    flip(mRenderOpts.show_window); break;
+    case NM_LAYER_COLORCALC: flip(mRenderOpts.show_color_calculation); break;
+    case NM_LAYER_SHADOW:    flip(mRenderOpts.show_shadow_highlight); break;
+    default: break;
+    }
+}
+
+void App::DispatchNativeMenuAction(const NativeMenuAction& a, std::vector<TopBarCommand>& commands)
+{
+    switch (a.command)
+    {
+    // --- Command-backed items: enqueue the exact same TopBarCommand the toolbar emits. ---
+    case MenuCommand::Launch:            commands.emplace_back(TopBarCommandType::Launch); break;
+    case MenuCommand::LoadYabauseState:  commands.emplace_back(TopBarCommandType::LoadYabauseState); break;
+    case MenuCommand::LoadMednafenState: commands.emplace_back(TopBarCommandType::LoadMednafenState); break;
+    case MenuCommand::LoadRawDump:       commands.emplace_back(TopBarCommandType::LoadRawDump); break;
+    case MenuCommand::ConnectLive:       commands.emplace_back(TopBarCommandType::ConnectLive); break;
+    case MenuCommand::DisconnectLive:    commands.emplace_back(TopBarCommandType::DisconnectLive); break;
+    case MenuCommand::StartRecording:    commands.emplace_back(TopBarCommandType::StartRecording); break;
+    case MenuCommand::StopRecording:     commands.emplace_back(TopBarCommandType::StopRecording); break;
+    case MenuCommand::OpenRecordingSettings: commands.emplace_back(TopBarCommandType::OpenRecordingSettings); break;
+    case MenuCommand::CloseSource:       commands.emplace_back(TopBarCommandType::CloseSource); break;
+    case MenuCommand::SelectEmulator:    commands.emplace_back(TopBarCommandType::SelectEmulator, a.index); break;
+    case MenuCommand::SelectRecentRom:   commands.emplace_back(TopBarCommandType::SelectRecentRom, a.index); break;
+    case MenuCommand::BrowseRom:         commands.emplace_back(TopBarCommandType::BrowseRom); break;
+    case MenuCommand::ClearRom:          commands.emplace_back(TopBarCommandType::ClearRom); break;
+    case MenuCommand::RevealRom:         commands.emplace_back(TopBarCommandType::RevealRom); break;
+    case MenuCommand::OpenLaunchSettings: commands.emplace_back(TopBarCommandType::OpenLaunchSettings); break;
+    case MenuCommand::TogglePause:       commands.emplace_back(TopBarCommandType::TogglePause); break;
+    case MenuCommand::StepFrame:         commands.emplace_back(TopBarCommandType::StepFrame); break;
+    case MenuCommand::DumpMemory:        commands.emplace_back(TopBarCommandType::DumpMemory); break;
+    case MenuCommand::SetDataDirectory:  commands.emplace_back(TopBarCommandType::SetDataDirectory); break;
+    case MenuCommand::ApplyChangesToDisc: commands.emplace_back(TopBarCommandType::ApplyChangesToDisc); break;
+    case MenuCommand::ManageLocations:   commands.emplace_back(TopBarCommandType::ManageLocations); break;
+    case MenuCommand::SaveProject:       commands.emplace_back(TopBarCommandType::SaveProject); break;
+    case MenuCommand::OpenProject:       commands.emplace_back(TopBarCommandType::OpenProject); break;
+    case MenuCommand::OpenBuildDiscImage: commands.emplace_back(TopBarCommandType::OpenBuildDiscImage); break;
+    case MenuCommand::ToggleWindow:      commands.emplace_back(TopBarCommandType::ToggleWindow, a.index); break;
+    case MenuCommand::ResetLayout:       commands.emplace_back(TopBarCommandType::ResetLayout); break;
+    case MenuCommand::SaveLayout:        commands.emplace_back(TopBarCommandType::SaveLayout); break;
+    case MenuCommand::TakeScreenshot:    commands.emplace_back(TopBarCommandType::TakeScreenshot); break;
+    case MenuCommand::OpenSettings:      commands.emplace_back(TopBarCommandType::OpenSettings); break;
+    case MenuCommand::ShowInputSettings: commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller")); break;
+    case MenuCommand::OpenHelp:          commands.emplace_back(TopBarCommandType::OpenHelp); break;
+    case MenuCommand::OpenGuides:        commands.emplace_back(TopBarCommandType::OpenGuides); break;
+    case MenuCommand::CheckForUpdates:   commands.emplace_back(TopBarCommandType::CheckForUpdates); break;
+    case MenuCommand::OpenAbout:         commands.emplace_back(TopBarCommandType::OpenAbout); break;
+
+    // --- View-only toggles the ImGui toolbar performs inline (no command queue). ---
+    case MenuCommand::LayerToggle:       ToggleMenuLayer(a.index); break;
+    case MenuCommand::ToggleTooltips:    mShowTooltips = !mShowTooltips; mSettingsDirty = true; break;
+    case MenuCommand::DemoToggle:        mDemoReqToggle = true; break;
+    case MenuCommand::DemoNext:          mDemoReqNext = true; break;
+    case MenuCommand::DemoPrev:          mDemoReqPrev = true; break;
+    case MenuCommand::DemoToggleAuto:    mDemo.SetAuto(!mDemo.Auto()); break;
+    case MenuCommand::DemoLoad:          mDemoReqLoad = true; break;
+    case MenuCommand::DemoToggleOverlay: mDemoOverlay = !mDemoOverlay; break;
+    case MenuCommand::DemoToggleNote:    mDemoShowNote = !mDemoShowNote; break;
+
+    case MenuCommand::None:
+    default: break;
     }
 }
 

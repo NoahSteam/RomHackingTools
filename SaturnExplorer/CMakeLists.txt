@@ -376,6 +376,7 @@ if(WIN32)
         FrontEnd/src/Demo/DemoPlayer.cpp
         FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
+        FrontEnd/Platforms/Windows/Win32MenuBar.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
         FrontEnd/Platforms/Windows/SaturnExplorer.rc
         ${SE_IMGUI_CORE}
@@ -391,6 +392,7 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         SE_ENABLE_LIVE
+        SE_NATIVE_MENUBAR   # use the native Win32 HMENU menu bar instead of the ImGui toolbar
     )
     target_include_directories(SaturnExplorerFrontEnd PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src)
