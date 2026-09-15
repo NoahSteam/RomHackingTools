@@ -159,6 +159,8 @@ struct MacMenuBarImpl
 
     void Sync(const NativeMenuState& state)
     {
+        // AppKit is main-thread only; App drives this from the (main-thread) frame loop.
+        NSAssert([NSThread isMainThread], @"MacMenuBar::Sync must run on the main thread (AppKit)");
         mState = state;
         mHaveState = true;
         // Only the *structure* (labels + list contents) forces a rebuild; enable/check flags are
@@ -179,7 +181,9 @@ struct MacMenuBarImpl
 
     void Detach()
     {
-        if (mSavedMainMenu) [NSApp setMainMenu:mSavedMainMenu];
+        // Idempotent: clearing mSavedMainMenu makes a second call (e.g. the destructor after
+        // WebPlatform::Shutdown already detached) a no-op, so we never touch a torn-down NSApp.
+        if (mSavedMainMenu) { [NSApp setMainMenu:mSavedMainMenu]; mSavedMainMenu = nil; }
         mMainMenu = nil;
         mItems = nil;
         mBuiltKey.clear();
@@ -308,7 +312,16 @@ struct MacMenuBarImpl
             NSMenu* app = AddSub(bar, @"App");   // title ignored by AppKit for the app menu
             AddItem(app, ID_ABOUT, [@"About " stringByAppendingString:appName]);
             AddSep(app);
-            AddItem(app, ID_SETTINGS, @"Settings…");
+            // Standard ⌘, for Settings. Built manually (not via AddItem) for two reasons: it needs a
+            // key-equivalent, and it shares tag ID_SETTINGS with the top-level Settings menu item, so
+            // it must stay out of the tag->item map (mItems, last-writer-wins) — neither is refreshed,
+            // and both route through onMenuItem:. ⌘, is distinct from the ImGui Ctrl+, shortcut, so
+            // there is no double-dispatch.
+            NSMenuItem* prefs = [[NSMenuItem alloc] initWithTitle:@"Settings…"
+                                                           action:@selector(onMenuItem:) keyEquivalent:@","];
+            prefs.target = mTarget;
+            prefs.tag = ID_SETTINGS;
+            [app addItem:prefs];
             AddSep(app);
             // Standard app-menu items handled by AppKit itself (not our command path).
             NSMenuItem* hide = [[NSMenuItem alloc] initWithTitle:[@"Hide " stringByAppendingString:appName]
@@ -555,7 +568,7 @@ struct MacMenuBarImpl
 
 // -------- MacMenuBar facade forwarding --------
 MacMenuBar::MacMenuBar() : mImpl(new MacMenuBarImpl()) {}
-MacMenuBar::~MacMenuBar() { delete mImpl; }
+MacMenuBar::~MacMenuBar() { if (mImpl) mImpl->Detach(); delete mImpl; }
 void MacMenuBar::Sync(const NativeMenuState& state) { mImpl->Sync(state); }
 void MacMenuBar::Drain(std::vector<NativeMenuAction>& out) { mImpl->Drain(out); }
 void MacMenuBar::Detach() { mImpl->Detach(); }
