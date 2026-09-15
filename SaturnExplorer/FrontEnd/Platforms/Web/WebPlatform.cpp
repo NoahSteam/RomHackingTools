@@ -449,7 +449,18 @@ bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* 
     // on Windows), so the child sees the same argv on both platforms. `exec` so the shell
     // replaces itself with the emulator — then the forked pid *is* the emulator, and we can
     // stop it later (TerminateLaunchedProcess) to relaunch a different game.
-    std::string cmd = "cd " + ShellQuote(dir) + " && exec " + ShellQuote(path);
+    // Pin Mednafen's base directory (config, firmware/, saves) to the exe's own folder,
+    // independent of the ambient HOME — the POSIX counterpart of the MEDNAFEN_HOME set in
+    // WindowsPlatform::LaunchProcess. It matters more here: Mednafen's GetBaseDirectory uses
+    // MEDNAFEN_HOME if set, else $HOME/.mednafen (drivers/main.cpp), and HOME is essentially
+    // always set on macOS/Linux — so without this it would ALWAYS root at ~/.mednafen rather
+    // than the patched checkout that holds the Saturn BIOS, and fail to boot the disc.
+    // Exported into the child's environment via the shell (kept in the pre-fork-built cmd so
+    // nothing allocates after fork); ParentDir(path), not dir, so a custom working directory
+    // can't move the base off its firmware. Inert for other emulators, which don't read it.
+    std::string cmd = "cd " + ShellQuote(dir)
+                    + " && export MEDNAFEN_HOME=" + ShellQuote(ParentDir(path))
+                    + " && exec " + ShellQuote(path);
     if (args && *args) { cmd += ' '; cmd += args; }
 
     const pid_t pid = ::fork();

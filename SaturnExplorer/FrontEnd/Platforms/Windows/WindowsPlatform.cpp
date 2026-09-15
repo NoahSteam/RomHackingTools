@@ -421,6 +421,23 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const ch
         if (slash != std::string::npos) derived = p.substr(0, slash);
         workingDir = derived.empty() ? nullptr : derived.c_str();
     }
+    // Pin Mednafen's base directory (config, firmware/, saves) to the exe's own folder so a
+    // launch is deterministic regardless of the ambient environment. Mednafen derives its
+    // base from MEDNAFEN_HOME if set, else HOME + "\.mednafen", else the exe's folder (see
+    // its drivers/main.cpp GetBaseDirectory). When SE is started from a shell that exports
+    // HOME (Git Bash / MSYS2), Mednafen would otherwise root itself at %HOME%\.mednafen — a
+    // different tree from the patched checkout, without the Saturn BIOS — and fail to boot
+    // the disc. Pointing MEDNAFEN_HOME at the exe's folder puts it on the checkout SE
+    // validated (Validate() looks for firmware/ next to the exe, the same place). Derived
+    // from the exe path, not workingDir, so a custom working directory can't move the base
+    // away from its firmware/config. The child inherits this because ShellExecuteEx uses our
+    // environment; it's inert for other emulators, which never read it.
+    {
+        const std::string exePath = path;
+        const size_t slash = exePath.find_last_of("/\\");
+        if (slash != std::string::npos)
+            ::SetEnvironmentVariableA("MEDNAFEN_HOME", exePath.substr(0, slash).c_str());
+    }
     // ShellExecuteEx (not plain ShellExecute) so SEE_MASK_NOCLOSEPROCESS hands back the new
     // process handle — kept so a relaunch can stop the old emulator first. The lpParameters
     // string is parsed by the launched program's CRT, so a quoted "<rom>" survives spaces.
