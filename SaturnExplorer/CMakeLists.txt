@@ -119,12 +119,14 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerTopBarTests
         FrontEnd/tests/TopBarTests.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Prs.cpp
     )
-    target_include_directories(SaturnExplorerTopBarTests PRIVATE FrontEnd/src)
+    target_include_directories(SaturnExplorerTopBarTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     if(WIN32)
         target_compile_definitions(SaturnExplorerTopBarTests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     endif()
@@ -346,6 +348,7 @@ if(WIN32)
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -376,6 +379,7 @@ if(WIN32)
         FrontEnd/src/Demo/DemoPlayer.cpp
         FrontEnd/src/UpdateChecker.cpp
         FrontEnd/Platforms/Windows/WindowsPlatform.cpp
+        FrontEnd/Platforms/Windows/Win32MenuBar.cpp
         FrontEnd/Platforms/Windows/WinMain.cpp
         FrontEnd/Platforms/Windows/SaturnExplorer.rc
         ${SE_IMGUI_CORE}
@@ -391,6 +395,7 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         SE_ENABLE_LIVE
+        SE_NATIVE_MENUBAR   # use the native Win32 HMENU menu bar instead of the ImGui toolbar
     )
     target_include_directories(SaturnExplorerFrontEnd PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src)
@@ -420,6 +425,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -513,6 +519,7 @@ else()
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp
             FrontEnd/src/TopBar.cpp
+            FrontEnd/src/NativeMenu.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp

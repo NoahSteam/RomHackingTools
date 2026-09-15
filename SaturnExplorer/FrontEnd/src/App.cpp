@@ -321,7 +321,7 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"watch",           "Watch",              &Panels::watch,           "Debugger"},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly,        "Debugger"},
         {"hexEditor",       "Memory",             &Panels::hexEditor,       "Memory & Data"},
-        {"controller",      "Controller",         &Panels::controller,      "Files & Input"},
+        {"controller",      kControllerPanel,     &Panels::controller,      "Files & Input"},
         {"log",             "Log",                &Panels::log,             "Files & Input"},
         {"actions",         "Tracepoints",        &Panels::actions,         "Debugger"},
         {"callStack",       "Call Stack",         &Panels::callStack,       "Debugger"},
@@ -1004,7 +1004,21 @@ void App::BuildUI(IPlatform& platform)
     // viewport; the dockspace fills what's left. They always operate on the live
     // context, so draw them before any scrub swap below.
     std::vector<TopBarCommand> topBarCommands;
+    // Keyboard shortcuts run on every platform, whether or not the ImGui toolbar is drawn, so
+    // hotkeys keep working under the native Win32 menu bar (which replaces that toolbar).
+    const TopBarViewModel topBarState = BuildTopBarViewModel();
+    CollectToolbarShortcuts(topBarCommands, topBarState);
+#ifdef SE_NATIVE_MENUBAR
+    // Windows: drive the native OS menu bar instead of drawing the ImGui toolbar. App still owns
+    // every side effect — menu selections drain into the same TopBarCommand path below.
+    platform.SyncNativeMenu(BuildNativeMenuState(topBarState));
+    std::vector<NativeMenuAction> menuActions;
+    platform.DrainNativeMenu(menuActions);
+    for (const NativeMenuAction& action : menuActions)
+        DispatchNativeMenuAction(action, topBarCommands);
+#else
     DrawToolbar(topBarCommands);
+#endif
     for (const TopBarCommand& command : topBarCommands)
         ExecuteTopBarCommand(command, platform);
     // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
@@ -1247,7 +1261,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     // Bottom debugger strip. Watch / Controller / Log tab together on the left; the
     // SH-2 Assembly gets the right half.
     ImGui::DockBuilderDockWindow("Watch", bWatch);
-    ImGui::DockBuilderDockWindow("Controller", bWatch);
+    ImGui::DockBuilderDockWindow(kControllerPanel, bWatch);
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
@@ -3164,7 +3178,7 @@ void App::DrawHexEditor()
 // auxiliary playback and macro tools have also had a chance to update it.
 void App::DrawController(IPlatform& platform)
 {
-    if (ImGui::Begin("Controller", nullptr, ImGuiWindowFlags_MenuBar))
+    if (ImGui::Begin(kControllerPanel, nullptr, ImGuiWindowFlags_MenuBar))
     {
         if (ImGui::BeginMenuBar())
         {
@@ -4483,21 +4497,27 @@ void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
     ImGui::SetItemTooltip("Record where memory edits live in the game files, then patch them");
     if (ImGui::BeginPopup("##patch_menu"))
     {
+        // Item enablement comes from the shared TopBarCommandEnabled policy (same one the native
+        // menu bar reads), not from local patchCount/dataDir checks — one source of truth, no drift.
+        const TopBarViewModel state = BuildTopBarViewModel();
         const size_t n = mPatchLib.Count();
         ImGui::TextDisabled("%zu known location%s%s", n, n == 1 ? "" : "s",
                             mPatchLib.Dirty() ? "  (unsaved *)" : "");
         ImGui::Separator();
-        if (ImGui::MenuItem("Apply changes to disc", nullptr, false, n > 0))
+        if (ImGui::MenuItem("Apply changes to disc", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::ApplyChangesToDisc, state)))
             commands.emplace_back(TopBarCommandType::ApplyChangesToDisc);
-        if (ImGui::MenuItem("Manage locations...", nullptr, false, n > 0))
+        if (ImGui::MenuItem("Manage locations...", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::ManageLocations, state)))
             commands.emplace_back(TopBarCommandType::ManageLocations);
         ImGui::Separator();
-        if (ImGui::MenuItem("Save project...", nullptr, false, n > 0))
+        if (ImGui::MenuItem("Save project...", nullptr, false,
+                            TopBarCommandEnabled(TopBarCommandType::SaveProject, state)))
             commands.emplace_back(TopBarCommandType::SaveProject);
         if (ImGui::MenuItem("Open project..."))
             commands.emplace_back(TopBarCommandType::OpenProject);
         ImGui::Separator();
-        const bool haveDir = !mDataDir.empty();
+        const bool haveDir = TopBarCommandEnabled(TopBarCommandType::OpenBuildDiscImage, state);
         if (ImGui::MenuItem("Build Disc Image...", nullptr, false, haveDir))
             commands.emplace_back(TopBarCommandType::OpenBuildDiscImage);
         ImGui::SetItemTooltip("Rebuild the data track from the Data Directory; copy the original "
@@ -5350,6 +5370,9 @@ TopBarViewModel App::BuildTopBarViewModel() const
     // Auto-connect is a cheap background poll. It must not disable launching or
     // loading a dump while Saturn Explorer waits for an emulator to appear.
     vm.operationBusy = false;
+    // Patch feature enablement inputs — consulted by TopBarCommandEnabled for the Patch items.
+    vm.patchLocationCount = static_cast<int>(mPatchLib.Count());
+    vm.hasDataDir = !mDataDir.empty();
     return vm;
 }
 
@@ -5383,31 +5406,36 @@ void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
     ImGui::EndPopup();
 }
 
+// Shared keyboard-shortcut prelude. Called every frame on all platforms (whether the visible bar
+// is the ImGui toolbar or the native Win32 menu), so the hotkeys fire even when the ImGui toolbar
+// isn't drawn. Enqueues the same TopBarCommands the toolbar/menu items do.
+void App::CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const TopBarViewModel& state)
+{
+    if (ImGui::GetIO().WantTextInput) return;
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
+        TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
+        commands.emplace_back(TopBarCommandType::LoadYabauseState);
+    if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
+        commands.emplace_back(TopBarCommandType::Launch);
+    if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
+        commands.emplace_back(TopBarCommandType::TogglePause);
+    if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
+        commands.emplace_back(TopBarCommandType::StepFrame);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
+        TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
+        commands.emplace_back(TopBarCommandType::DumpMemory);
+    if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
+        commands.emplace_back(TopBarCommandType::OpenSettings);
+    // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
+    if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
+    if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
+    else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
+}
+
 void App::DrawToolbar(std::vector<TopBarCommand>& commands)
 {
     const TopBarViewModel state = BuildTopBarViewModel();
-    if (!ImGui::GetIO().WantTextInput)
-    {
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
-            TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
-            commands.emplace_back(TopBarCommandType::LoadYabauseState);
-        if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
-            commands.emplace_back(TopBarCommandType::Launch);
-        if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
-            commands.emplace_back(TopBarCommandType::TogglePause);
-        if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
-            commands.emplace_back(TopBarCommandType::StepFrame);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
-            TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
-            commands.emplace_back(TopBarCommandType::DumpMemory);
-        if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
-            commands.emplace_back(TopBarCommandType::OpenSettings);
-        // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
-        if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
-        if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
-        else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
-    }
     ImGuiViewport* vp = ImGui::GetMainViewport();
     const float height = ImGui::GetFrameHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f;
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
@@ -5473,7 +5501,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                     if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
                     if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                     if (ImGui::MenuItem("Input Settings..."))
-                        commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                        commands.emplace_back(TopBarCommandType::ShowWindow, std::string(kControllerPanel));
                     ImGui::Separator();
                     if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
                     { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
@@ -5507,7 +5535,7 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
                 if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                 if (ImGui::MenuItem("Input Settings..."))
-                    commands.emplace_back(TopBarCommandType::ShowWindow, std::string("Controller"));
+                    commands.emplace_back(TopBarCommandType::ShowWindow, std::string(kControllerPanel));
                 ImGui::Separator();
                 if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
                 { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
@@ -6137,6 +6165,137 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     }
 }
 
+// ---------------------------------------------------------------------------
+// Native OS menu-bar bridge (compiled everywhere, used under SE_NATIVE_MENUBAR). These mirror
+// the ImGui toolbar exactly: BuildNativeMenuState is the data the platform renders, and
+// DispatchNativeMenuAction turns a selection back into the same TopBarCommand queue (plus the
+// handful of view-only toggles the toolbar performs inline: layers, tooltips, Demo playback).
+// ---------------------------------------------------------------------------
+NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
+{
+    NativeMenuState m;
+
+    // Session / Run / Data enablement (same policy the toolbar reads).
+    m.launchEnabled = TopBarCommandEnabled(TopBarCommandType::Launch, s);
+    m.loadDumpEnabled = TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, s);
+    m.connectEnabled = TopBarCommandEnabled(TopBarCommandType::ConnectLive, s);
+    m.disconnectEnabled = TopBarCommandEnabled(TopBarCommandType::DisconnectLive, s);
+    m.startRecordingEnabled = TopBarCommandEnabled(TopBarCommandType::StartRecording, s);
+    m.stopRecordingEnabled = TopBarCommandEnabled(TopBarCommandType::StopRecording, s);
+    m.closeSourceEnabled = TopBarCommandEnabled(TopBarCommandType::CloseSource, s);
+    m.paused = s.paused;
+    m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
+    m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
+    m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+
+    // Layers (same order as DrawLayersMenu / NativeMenuLayer).
+    m.layer[NM_LAYER_SPRITES]  = mRenderOpts.show_vdp1_sprites != 0;
+    m.layer[NM_LAYER_WIREFRAME] = mRenderOpts.show_wireframe != 0;
+    m.layer[NM_LAYER_BBOX]     = mRenderOpts.show_bounding_boxes != 0;
+    m.layer[NM_LAYER_OBJNUM]   = mRenderOpts.show_object_numbers != 0;
+    m.layer[NM_LAYER_NBG0]     = mRenderOpts.show_layer[SE_LAYER_NBG0] != 0;
+    m.layer[NM_LAYER_NBG1]     = mRenderOpts.show_layer[SE_LAYER_NBG1] != 0;
+    m.layer[NM_LAYER_NBG2]     = mRenderOpts.show_layer[SE_LAYER_NBG2] != 0;
+    m.layer[NM_LAYER_NBG3]     = mRenderOpts.show_layer[SE_LAYER_NBG3] != 0;
+    m.layer[NM_LAYER_RBG0]     = mRenderOpts.show_layer[SE_LAYER_RBG0] != 0;
+    m.layer[NM_LAYER_WINDOW]   = mRenderOpts.show_window != 0;
+    m.layer[NM_LAYER_COLORCALC] = mRenderOpts.show_color_calculation != 0;
+    m.layer[NM_LAYER_SHADOW]   = mRenderOpts.show_shadow_highlight != 0;
+
+    m.tooltips = mShowTooltips;
+
+    // Patch (the Win32 build always has the live/patch feature compiled in). Enablement goes
+    // through the same TopBarCommandEnabled policy the ImGui Patch menu uses, so the two front
+    // ends can't drift; `s` already carries the patch-location count and Data Directory state.
+    m.patchApplyEnabled = TopBarCommandEnabled(TopBarCommandType::ApplyChangesToDisc, s);
+    m.patchManageEnabled = TopBarCommandEnabled(TopBarCommandType::ManageLocations, s);
+    m.patchSaveEnabled = TopBarCommandEnabled(TopBarCommandType::SaveProject, s);
+    m.buildDiscEnabled = TopBarCommandEnabled(TopBarCommandType::OpenBuildDiscImage, s);
+
+    // Emulator submenu — label carries the "(! not configured)" hint, selection drives the check.
+    const std::vector<EmulatorSpec>& emulators = mLauncher.Emulators();
+    for (int i = 0; i < static_cast<int>(emulators.size()); ++i)
+    {
+        NativeMenuState::EmulatorItem item;
+        item.label = emulators[i].label;
+        if (emulators[i].exePath.empty() || !PathExists(emulators[i].exePath))
+            item.label += "  (! not configured)";
+        item.selected = (i == mLauncher.SelectedIndex());
+        m.emulators.push_back(std::move(item));
+    }
+
+    // Game / ROM submenu — recent list with a "(! missing)" hint + the current-ROM check.
+    const std::vector<std::string>& recent = mLauncher.Recent();
+    for (size_t i = 0; i < recent.size(); ++i)
+    {
+        NativeMenuState::RecentRomItem item;
+        item.label = PathBasename(recent[i]);
+        if (!PathExists(recent[i])) item.label += "  (! missing)";
+        item.current = (recent[i] == mLauncher.Rom());
+        m.recentRoms.push_back(std::move(item));
+    }
+    m.clearRomEnabled = !mLauncher.Rom().empty();
+    m.revealRomEnabled = !mLauncher.Rom().empty() && PathExists(mLauncher.Rom());
+
+    // Windows submenu — the flat PanelList, so the ToggleWindow index matches ExecuteTopBarCommand.
+    for (const PanelInfo& panel : PanelList())
+    {
+        NativeMenuState::PanelItem item;
+        item.category = panel.category;
+        item.label = panel.label;
+        item.visible = mPanels.*(panel.flag);
+        m.panels.push_back(std::move(item));
+    }
+
+    // Demo submenu.
+    m.demoLoaded = mDemo.Loaded();
+    m.demoPlaying = mDemo.Playing();
+    m.demoAuto = mDemo.Auto();
+    m.demoOverlay = mDemoOverlay;
+    m.demoShowNote = mDemoShowNote;
+
+    // Structural fingerprint: labels + list contents. Enable/check/visibility flags are refreshed
+    // live by the platform, so they are deliberately excluded — only a structural change (a ROM
+    // added, an emulator renamed, a panel list revision) forces the HMENU to be rebuilt.
+    m.structureKey = BuildNativeMenuStructureKey(m);
+
+    return m;
+}
+
+void App::ToggleMenuLayer(int layer)
+{
+    ToggleRenderLayer(mRenderOpts, layer);   // NM_LAYER_* -> se_render_opts field (NativeMenu.cpp)
+}
+
+void App::DispatchNativeMenuAction(const NativeMenuAction& a, std::vector<TopBarCommand>& commands)
+{
+    // Command-backed items map 1:1 to the TopBarCommand the toolbar emits (NativeMenu.cpp keeps
+    // that table). Anything it doesn't claim is one of the view-only toggles App performs inline.
+    TopBarCommand command;
+    if (NativeMenuActionToCommand(a, command))
+    {
+        commands.push_back(command);
+        return;
+    }
+
+    switch (a.command)
+    {
+    // --- View-only toggles the ImGui toolbar performs inline (no command queue). ---
+    case MenuCommand::LayerToggle:       ToggleMenuLayer(a.index); break;
+    case MenuCommand::ToggleTooltips:    mShowTooltips = !mShowTooltips; mSettingsDirty = true; break;
+    case MenuCommand::DemoToggle:        mDemoReqToggle = true; break;
+    case MenuCommand::DemoNext:          mDemoReqNext = true; break;
+    case MenuCommand::DemoPrev:          mDemoReqPrev = true; break;
+    case MenuCommand::DemoToggleAuto:    mDemo.SetAuto(!mDemo.Auto()); break;
+    case MenuCommand::DemoLoad:          mDemoReqLoad = true; break;
+    case MenuCommand::DemoToggleOverlay: mDemoOverlay = !mDemoOverlay; break;
+    case MenuCommand::DemoToggleNote:    mDemoShowNote = !mDemoShowNote; break;
+
+    case MenuCommand::None:
+    default: break;
+    }
+}
+
 void App::DrawRecordingSettingsModal()
 {
     if (mOpenRecordingSettings)
@@ -6179,9 +6338,9 @@ void App::DrawSettingsModal()
     if (ImGui::Button("Input Settings..."))
     {
         for (const PanelInfo& panel : PanelList())
-            if (std::strcmp(panel.label, "Controller") == 0) mPanels.*(panel.flag) = true;
+            if (std::strcmp(panel.label, kControllerPanel) == 0) mPanels.*(panel.flag) = true;
         mSettingsDirty = true;
-        ImGui::SetWindowFocus("Controller");
+        ImGui::SetWindowFocus(kControllerPanel);
         ImGui::CloseCurrentPopup();
     }
     ImGui::Separator();

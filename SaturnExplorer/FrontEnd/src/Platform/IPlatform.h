@@ -6,8 +6,10 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "imgui.h"  // ImTextureID — ImGui is portable and shared by all platforms.
+#include "NativeMenu.h"  // NativeMenuState / NativeMenuAction (native OS menu bar bridge)
 
 namespace sfe
 {
@@ -159,6 +161,15 @@ public:
         (void)pcm; (void)frames; (void)sampleRate; (void)channels;
         return false;   // no audio output in this build
     }
+
+    // --- Native OS menu bar (optional). A backend with a real window menu (Win32 HMENU)
+    // mirrors the ImGui top toolbar as an OS menu attached to the window: App hands it the
+    // per-frame NativeMenuState (SyncNativeMenu) and drains selections (DrainNativeMenu) back
+    // into the same TopBarCommand path, so every side effect still runs through App. The SDL2
+    // backends have no OS menu-bar API, so they inherit these no-ops and keep the ImGui toolbar.
+    // App only uses these under the compile-time SE_NATIVE_MENUBAR (the Win32 build). ---
+    virtual void SyncNativeMenu(const NativeMenuState& state) { (void)state; }
+    virtual void DrainNativeMenu(std::vector<NativeMenuAction>& out) { (void)out; }
 };
 
 }  // namespace sfe
