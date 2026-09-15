@@ -586,6 +586,19 @@ else()
         # CLI binary. A plain build is dynamically linked against Homebrew/system SDL2 — fine
         # locally; the SE_MACOS_BUNDLE_LIBS path below makes it self-contained + signable.
         if(APPLE)
+            # Native macOS menu bar (parity with the Windows SE_NATIVE_MENUBAR build): the Cocoa
+            # NSMenu renderer replaces the ImGui top toolbar on this desktop build. Linux desktop
+            # keeps the ImGui toolbar (SDL2 there has no OS menu-bar API and SE_NATIVE_MENUBAR is
+            # only defined here). MacMenuBar.mm is Objective-C++ (ARC) and the only Cocoa TU; the
+            # rest of the frontend stays plain C++ behind the MacMenuBar facade.
+            target_sources(SaturnExplorerFrontEnd PRIVATE
+                FrontEnd/Platforms/macOS/MacMenuBar.mm)
+            set_source_files_properties(FrontEnd/Platforms/macOS/MacMenuBar.mm PROPERTIES
+                COMPILE_OPTIONS "-fobjc-arc")
+            target_include_directories(SaturnExplorerFrontEnd PRIVATE FrontEnd/Platforms/macOS)
+            target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_NATIVE_MENUBAR)
+            target_link_libraries(SaturnExplorerFrontEnd PRIVATE "-framework AppKit" "-framework Foundation")
+
             # Dock / Finder icon — the macOS counterpart of the Windows .ico wired via
             # Platforms/Windows/SaturnExplorer.rc. The .icns is generated from that same
             # .ico (see FrontEnd/Platforms/macOS/). Adding it as a target source with a

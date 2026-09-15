@@ -12,6 +12,10 @@
 
 #include "Platform/IPlatform.h"
 
+#if defined(SE_NATIVE_MENUBAR)
+#include "MacMenuBar.h"   // native macOS NSMenu bar (replaces the ImGui toolbar on this desktop build)
+#endif
+
 struct SDL_Window;
 typedef void* SDL_GLContext;
 
@@ -74,6 +78,16 @@ public:
     bool HasAudio() override { return mAudioOk; }
     bool PlayAudio(const int16_t* pcm, size_t frames, int sampleRate, int channels) override;
 
+    // --- Native OS menu bar (macOS only). Mirrors WindowsPlatform's Win32 wiring: App hands the
+    // per-frame NativeMenuState to the Cocoa menu bar and drains selections back into the same
+    // TopBarCommand path. Compiled only under SE_NATIVE_MENUBAR (the macOS desktop build); every
+    // other SDL2 build (Linux desktop, browser) inherits IPlatform's no-op defaults and keeps the
+    // ImGui toolbar. ---
+#if defined(SE_NATIVE_MENUBAR)
+    void SyncNativeMenu(const NativeMenuState& state) override { mMenuBar.Sync(state); }
+    void DrainNativeMenu(std::vector<NativeMenuAction>& out) override { mMenuBar.Drain(out); }
+#endif
+
 private:
     SDL_Window*   mWindow  = nullptr;
     SDL_GLContext mGlContext = nullptr;
@@ -85,6 +99,9 @@ private:
     int           mAudioChannels = 0;
 #ifndef __EMSCRIPTEN__
     int           mLaunchedPid = -1;     // pid of the emulator we last launched (-1 = none)
+#endif
+#if defined(SE_NATIVE_MENUBAR)
+    MacMenuBar    mMenuBar;              // native macOS menu bar attached to [NSApp mainMenu]
 #endif
 };
 
