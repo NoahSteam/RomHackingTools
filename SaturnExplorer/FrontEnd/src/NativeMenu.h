@@ -11,8 +11,18 @@
 #include <string>
 #include <vector>
 
+// se_render_opts is a plain C struct in the global namespace (saturnexplorer/SeTypes.h). Forward-
+// declared here so ToggleRenderLayer can take it by reference without this header pulling in the
+// core types — the definition is only needed in NativeMenu.cpp and the unit test.
+struct se_render_opts;
+
 namespace sfe
 {
+
+// The ImGui window / PanelList label of the controller panel. "Input Settings" (both the ImGui
+// Settings menu and the native menu bar) opens this panel by name, so the name lives in one place
+// instead of being repeated as a raw string a rename could silently miss.
+constexpr char kControllerPanel[] = "Controller";
 
 // VDP layer/overlay toggles, in the order the ImGui "Layers" menu lists them. Carried as
 // the index of a NativeMenuAction whose command is LayerToggle; App maps each to the matching
@@ -136,7 +146,6 @@ struct NativeMenuState
     bool tooltips = false;
 
     // --- Patch (the Win32 build always compiles the live/patch feature) ---
-    int  patchLocations = 0;
     bool patchApplyEnabled = false;
     bool patchManageEnabled = false;
     bool patchSaveEnabled = false;
@@ -167,5 +176,32 @@ struct NativeMenuState
     // (labels/lists changed) vs. only refresh check/enable flags. Filled by App::BuildNativeMenuState.
     std::string structureKey;
 };
+
+// --- Portable menu logic (defined in NativeMenu.cpp; unit-tested on Linux) ------------------
+// These are the pure pieces of App's native-menu bridge, factored out so they can be exercised
+// without a full App. App calls them; runtime behavior is unchanged.
+
+struct TopBarCommand;      // TopBar.h
+
+// The structural fingerprint: labels + dynamic-list contents (emulators, recent ROMs, panels).
+// Enable/check/visibility flags are deliberately excluded — only a structural change forces the
+// platform to rebuild its menu tree. Stable across unchanged state; changes when a list does.
+std::string BuildNativeMenuStructureKey(const NativeMenuState& state);
+
+// Map a menu selection onto the TopBarCommand the toolbar would emit. Returns true and fills
+// `out` for command-backed items (including the indexed SelectEmulator / SelectRecentRom /
+// ToggleWindow); returns false for the view-only toggles App performs inline (layers, tooltips,
+// Demo playback), which carry no command.
+bool NativeMenuActionToCommand(const NativeMenuAction& action, TopBarCommand& out);
+
+// Flip one se_render_opts field selected by a NativeMenuLayer index (the LayerToggle mapping).
+void ToggleRenderLayer(se_render_opts& opts, int layer);
+
+// The category submenus a Windows-menu build should show, in display order: `preferred` first (in
+// that order, kept even if empty), then any category present in `panels` that isn't already listed,
+// in first-seen order. Deriving the tail from the panels means a category PanelList adds or renames
+// still gets a submenu instead of having its panels silently dropped.
+std::vector<std::string> OrderedMenuCategories(const std::vector<NativeMenuState::PanelItem>& panels,
+                                               const std::vector<std::string>& preferred);
 
 }  // namespace sfe

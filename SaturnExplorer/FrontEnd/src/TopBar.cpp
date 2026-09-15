@@ -29,6 +29,15 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
         return state.connected && state.frameControl && state.paused;
     case TopBarCommandType::DumpMemory:
         return state.source != SourceType::None && !state.operationBusy;
+    // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image
+    // needs a Data Directory. Open Project is always available (it is how you get locations). This
+    // is the single source of truth both front ends consult — no per-front-end drift.
+    case TopBarCommandType::ApplyChangesToDisc:
+    case TopBarCommandType::ManageLocations:
+    case TopBarCommandType::SaveProject:
+        return state.patchLocationCount > 0;
+    case TopBarCommandType::OpenBuildDiscImage:
+        return state.hasDataDir;
     case TopBarCommandType::None:
         return false;
     default:

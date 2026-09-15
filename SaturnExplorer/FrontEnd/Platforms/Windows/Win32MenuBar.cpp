@@ -13,8 +13,6 @@ namespace
 {
 enum : UINT
 {
-    ID_NONE = 0,
-
     // Session
     ID_LAUNCH = 0xE100,
     ID_LOAD_YABAUSE,
@@ -84,6 +82,11 @@ constexpr UINT ID_LAYER_BASE = 0xE200;   // + NativeMenuLayer (NM_LAYER_COUNT en
 constexpr UINT ID_EMU_BASE   = 0xE800;   // + emulator index
 constexpr UINT ID_ROM_BASE   = 0xE900;   // + recent-ROM index
 constexpr UINT ID_PANEL_BASE = 0xEA00;   // + PanelList index
+// Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
+// Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
+// sharing id 0 — so even if one were ever un-grayed, its WM_COMMAND can't be mistaken for id 0
+// or collide with a real command. None of these ids is decoded in OnCommand, by design.
+constexpr UINT ID_PLACEHOLDER_BASE = 0xEB00;
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -325,9 +328,9 @@ void AddItem(HMENU menu, UINT id, const wchar_t* text)
 {
     ::AppendMenuW(menu, MF_STRING, id, text);
 }
-void AddDisabled(HMENU menu, const wchar_t* text)          // clickable-looking caption / placeholder
+void AddDisabled(HMENU menu, UINT id, const wchar_t* text)  // grayed caption / placeholder (never dispatched)
 {
-    ::AppendMenuW(menu, MF_STRING | MF_GRAYED, ID_NONE, text);
+    ::AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, id, text);
 }
 void AddSep(HMENU menu)
 {
@@ -344,6 +347,7 @@ void Win32MenuBar::Rebuild()
     if (!mHwnd) return;
 
     HMENU bar = ::CreateMenu();
+    UINT placeholderId = ID_PLACEHOLDER_BASE;   // handed out to each disabled caption/placeholder
 
     // ---- Session ----
     {
@@ -381,7 +385,7 @@ void Win32MenuBar::Rebuild()
         AddItem(game, ID_CHANGE_ROM, L"Change ROM...");
         HMENU recent = ::CreatePopupMenu();
         if (mState.recentRoms.empty())
-            AddDisabled(recent, L"(none)");
+            AddDisabled(recent, placeholderId++, L"(none)");
         for (size_t i = 0; i < mState.recentRoms.size(); ++i)
             AddItem(recent, ID_ROM_BASE + (UINT)i, Widen(mState.recentRoms[i].label).c_str());
         AddSub(game, recent, L"Recent ROMs");
@@ -397,13 +401,13 @@ void Win32MenuBar::Rebuild()
     // ---- Layers ----
     {
         HMENU layers = ::CreatePopupMenu();
-        AddDisabled(layers, L"VDP1 (Sprites)");
+        AddDisabled(layers, placeholderId++, L"VDP1 (Sprites)");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_SPRITES, L"Sprites");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_WIREFRAME, L"Wireframe");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_BBOX, L"Bounding Boxes");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_OBJNUM, L"Object Numbers");
         AddSep(layers);
-        AddDisabled(layers, L"VDP2 (Background)");
+        AddDisabled(layers, placeholderId++, L"VDP2 (Background)");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_NBG0, L"NBG0 (Scroll A)");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_NBG1, L"NBG1 (Scroll B)");
         AddItem(layers, ID_LAYER_BASE + NM_LAYER_NBG2, L"NBG2 (Scroll C)");
@@ -447,14 +451,26 @@ void Win32MenuBar::Rebuild()
     // ---- Windows (panels grouped by category, then layout controls) ----
     {
         HMENU windows = ::CreatePopupMenu();
-        const int nCats = (int)(sizeof(kCategories) / sizeof(kCategories[0]));
-        for (int c = 0; c < nCats; ++c)
+
+        // Category display order (portable, unit-tested helper): the known categories first, in the
+        // fixed order matching App::DrawWindowsMenu, then any category PanelList introduced that
+        // isn't in that list, appended in first-seen order — so a new or renamed category still
+        // surfaces its panels instead of silently dropping them.
+        const size_t nPreferred = sizeof(kCategories) / sizeof(kCategories[0]);
+        const std::vector<std::string> preferred(kCategories, kCategories + nPreferred);
+        const std::vector<std::string> catKeys = OrderedMenuCategories(mState.panels, preferred);
+
+        for (size_t c = 0; c < catKeys.size(); ++c)
         {
             HMENU cat = ::CreatePopupMenu();
             for (size_t i = 0; i < mState.panels.size(); ++i)
-                if (mState.panels[i].category == kCategories[c])
+                if (mState.panels[i].category == catKeys[c])
                     AddItem(cat, ID_PANEL_BASE + (UINT)i, Widen(mState.panels[i].label).c_str());
-            AddSub(windows, cat, kCategoriesW[c]);
+            // Known categories keep their pre-widened caption (with the doubled '&'); an appended
+            // unknown category is widened on the fly. OrderedMenuCategories keeps `preferred` at the
+            // front in order, so index c < nPreferred lines up with kCategoriesW[c].
+            const std::wstring label = (c < nPreferred) ? kCategoriesW[c] : Widen(catKeys[c]);
+            AddSub(windows, cat, label.c_str());
         }
         AddSep(windows);
         AddItem(windows, ID_RESET_LAYOUT, L"Reset Layout");
@@ -481,8 +497,8 @@ void Win32MenuBar::Rebuild()
         HMENU tools = ::CreatePopupMenu();
         AddItem(tools, ID_SCREENSHOT, L"Screenshot\tF12");
         AddSep(tools);
-        AddDisabled(tools, L"Bookmarks");
-        AddDisabled(tools, L"Compare");
+        AddDisabled(tools, placeholderId++, L"Bookmarks");
+        AddDisabled(tools, placeholderId++, L"Compare");
         AddSub(bar, tools, L"&Tools");
     }
 

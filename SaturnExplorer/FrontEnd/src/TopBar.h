@@ -88,6 +88,11 @@ struct TopBarViewModel
     bool launchValid = false;
     bool operationBusy = false;
     std::string launchValidationMessage;
+    // Patch feature (desktop only): the number of recorded patch locations and whether a Data
+    // Directory is set. Both the ImGui Patch menu and the native menu bar read these through
+    // TopBarCommandEnabled so the two front ends share one enablement policy.
+    int  patchLocationCount = 0;
+    bool hasDataDir = false;
 };
 
 // Pure enablement policy matching the specification's state table.

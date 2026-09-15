@@ -119,12 +119,14 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerTopBarTests
         FrontEnd/tests/TopBarTests.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/Prs.cpp
     )
-    target_include_directories(SaturnExplorerTopBarTests PRIVATE FrontEnd/src)
+    target_include_directories(SaturnExplorerTopBarTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     if(WIN32)
         target_compile_definitions(SaturnExplorerTopBarTests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     endif()
@@ -346,6 +348,7 @@ if(WIN32)
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -422,6 +425,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/TopBar.cpp
+        FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/HexEditorPanel.cpp
@@ -515,6 +519,7 @@ else()
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp
             FrontEnd/src/TopBar.cpp
+            FrontEnd/src/NativeMenu.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/HexEditorPanel.cpp
