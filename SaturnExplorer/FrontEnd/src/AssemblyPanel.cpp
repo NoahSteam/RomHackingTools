@@ -257,7 +257,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
     se_sh2_regs regs = {};
     const bool haveRegs = ctx && se_get_sh2_regs(ctx, mCpu, &regs) == SE_OK;
-    const uint32_t pc = regs.pc;
+    // While halted (or holding across a step's resume->re-halt) on this CPU, follow the stable
+    // halt PC rather than the live register PC: the App keeps re-snapshotting during the brief
+    // in-flight window, so regs.pc momentarily reflects the running CPU and makes the view
+    // jitter/jump before settling. mBpStopPc is rock-steady and advances one clean step at a time.
+    const bool halted = mBpStopActive && mCpu == mBpStopCpu;
+    const uint32_t pc = halted ? mBpStopPc : regs.pc;
 
     // --- Header: CPU selector, PC, Follow PC, nav, goto ---
     ImGui::SetNextItemWidth(120.0f);
@@ -319,20 +324,27 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         ImGui::SetItemTooltip("Run to the current frame's return address");
     }
 
-    // --- Window base: follow PC unless browsing; recenter only when PC leaves view ---
+    // --- Window base: follow PC unless browsing ---
     if (mFollowPc)
     {
+        // Rebuild the decode buffer when PC leaves it (a far jump/call, or walking off the end).
         if (!mWindowValid || pc < mWindowBase || pc >= mWindowBase + (uint32_t)kWinInstr * 2)
         {
             mWindowBase = (pc >= 48) ? (pc - 48) & ~1u : 0;   // PC ~1/5 down
-            mScrollToPc = true;
         }
+        // Re-scroll the viewport on every PC change, not just on a buffer rebuild: the decode
+        // window is 128 instructions tall — far taller than the visible rows — so a step or a
+        // near branch can move PC past the bottom of the viewport while still inside the buffer,
+        // and the view would stop following. A steady PC (idle at a halt) leaves scrolling to the
+        // user so they can look around without the view snapping back.
+        if (pc != mLastPc) mScrollToPc = true;
         mWindowValid = true;
     }
     else if (!mWindowValid)
     {
         mWindowBase = pc & ~1u; mWindowValid = true;
     }
+    mLastPc = pc;   // track the followed PC (also the Back-history anchor in Navigate)
 
     // Read the code window. Cache-gated: with Auto Refresh off and the base
     // unchanged, reuse the last bytes so the disassembly holds still (also spares
