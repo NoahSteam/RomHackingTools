@@ -227,7 +227,12 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_WidthFixed, ch * 16.0f + 4.0f);
         ImGui::TableHeadersRow();
 
-        // Scroll a pending target address into view (1-frame latency is fine).
+        // Scroll a pending target address into view. GoTo also switches the region tab
+        // (ImGuiTabItemFlags_SetSelected), but that switch doesn't reach mTab until the
+        // NEXT frame, so on the frame GoTo runs `reg` is still the OLD region and the
+        // address isn't in it. Only consume the request once we've actually scrolled —
+        // otherwise the first navigation just switched the tab and silently dropped the
+        // scroll, and it took a second double-click (with the tab already current) to move.
         if (mScrollPending)
         {
             const uint32_t a = mScrollAddr & 0x07FFFFFFu;
@@ -235,8 +240,9 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             {
                 const uint32_t row = (a - reg.base) / 16u;
                 ImGui::SetScrollY((float)row * rowH);
+                mScrollPending = false;   // scrolled; the "All" tab always matches, so this
+                                          // never stays pending indefinitely
             }
-            mScrollPending = false;
         }
 
         ImGuiListClipper clip;

@@ -47,6 +47,10 @@ namespace
 // therefore this constant -- must exist in every build, including the web one that leaves
 // SE_ENABLE_LIVE undefined.
 constexpr int    kStepSettleFrames  = 4;
+// Safety cap on how long the halted UI is held while a Step is in flight (see
+// mStepAwaitingHalt). A normal step re-halts in a couple of frames; this only bites when a
+// Step Over/Out runs into a long — or non-returning — routine, so it eventually shows running.
+constexpr int    kStepHoldFrames    = 60;
 
 #ifdef SE_ENABLE_LIVE
 // Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
@@ -929,9 +933,23 @@ void App::BuildUI(IPlatform& platform)
         // Mirror the halt state so the Assembly panel can tint the halted row red (a
         // breakpoint hit or a completed instruction step). Level-triggered: it clears
         // itself once the emulator resumes.
-        mBpStopActive = stopped;
-        mBpStopCpu = (int)stopCpu;
-        mBpStopPc = stopPc;
+        //
+        // While a Step is in flight, hold the halted presentation across the resume→re-halt
+        // round trip: without this the emulator reports "running" for the few frames the step
+        // takes, so the red row, enabled step buttons and frozen registers blink off and back
+        // on — the flash. Keep the last real halt PC displayed so the row stays put, then jump
+        // to the new PC in one move when the re-halt actually lands.
+        if (mStepAwaitingHalt)
+        {
+            if (stopped)                    mStepAwaitingHalt = false;   // re-halt landed
+            else if (--mStepHoldFrames <= 0) mStepAwaitingHalt = false;   // step ran long: reveal running
+        }
+        mBpStopActive = stopped || mStepAwaitingHalt;
+        if (stopped)   // only adopt the reported PC on a real stop; otherwise keep the last one
+        {
+            mBpStopCpu = (int)stopCpu;
+            mBpStopPc = stopPc;
+        }
         // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
         // evaluates false (and it isn't the transient step target), resume without surfacing
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
@@ -3320,6 +3338,8 @@ void App::RunToTransient(uint32_t addr)
     mStepBpDirty = true;
     SyncBreakpointsToLive();   // ship the transient breakpoint before resuming
     Continue();
+    mStepAwaitingHalt = true;   // Step Over/Out: hold the halted UI until we hit the target
+    mStepHoldFrames = kStepHoldFrames;
 }
 
 void App::StepInto(int cpu)
@@ -3329,6 +3349,8 @@ void App::StepInto(int cpu)
     se_live_step_insn(&mDataSource, 1);
 #endif
     mbPaused = false;
+    mStepAwaitingHalt = true;   // hold the halted UI until the re-halt lands (no flash)
+    mStepHoldFrames = kStepHoldFrames;
 }
 
 void App::StepOver(int cpu)

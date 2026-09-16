@@ -355,6 +355,12 @@ private:
     bool             mStepBpActive = false;
     uint32_t         mStepBpAddr = 0;
     bool             mStepBpDirty = false;   // forces a breakpoint re-sync when it changes
+    // A Step (Into/Over/Out) resumes the CPU and expects a near-immediate re-halt. Hold the
+    // halted UI presentation (red row, enabled step buttons, frozen regs at the last halt PC)
+    // across that brief resume→re-halt round trip so it doesn't blink off and back on. Capped
+    // by mStepHoldFrames so a step that runs long (or never returns) still reveals "running".
+    bool             mStepAwaitingHalt = false;
+    int              mStepHoldFrames = 0;
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt
