@@ -126,10 +126,12 @@ extern "C" void SsDbgSh2Regs(int cpu, unsigned int o[23]) {
    o[16]=c.GetRegister(SH7095::GSREG_SR,0,0);   o[17]=c.GetRegister(SH7095::GSREG_GBR,0,0);
    o[18]=c.GetRegister(SH7095::GSREG_VBR,0,0);  o[19]=c.GetRegister(SH7095::GSREG_MACH,0,0);
    o[20]=c.GetRegister(SH7095::GSREG_MACL,0,0); o[21]=c.GetRegister(SH7095::GSREG_PR,0,0);
-   /* TODO(mednafen): confirm the PC enumerator the disassembler should track. The
-      SH7095 pipeline exposes GSREG_PC_IF (fetch stage), GSREG_PC_ID (decode), and
-      GSREG_RPC; PC_IF is the usual "next instruction" for a running core. */
-   o[22]=c.GetRegister(SH7095::GSREG_PC_IF,0,0);
+   /* PC: report the DECODE-stage PC (GSREG_PC_ID), not the fetch stage (PC_IF, which is
+      one instruction / 2 bytes ahead). On a debugger halt the ss core reports the stop PC
+      from PC_ID, so reading PC_ID here makes the register-panel PC equal the halted/stepped
+      instruction and the Assembly panel's highlighted row — otherwise the shown PC sits one
+      instruction past where you're actually stopped. */
+   o[22]=c.GetRegister(SH7095::GSREG_PC_ID,0,0);
 }
 extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
    /* Route to Mednafen's own byte bus-write (used by the cheat engine): it does the
@@ -173,6 +175,10 @@ static void SeSsBpHook(uint32 PC, bool bpoint);   /* fwd: SeSyncCpuHook installs
 static int sSeBpActive = 0;      /* >=1 execution breakpoint installed */
 static int sSeTraceActive = 0;   /* >=1 enabled tracepoint armed */
 static int sSeStepActive = 0;    /* an instruction step is in progress */
+/* Set while >=1 data (read/write) watchpoint is installed. scu.inc's DMA_Write reads it to
+   cheap-gate the SCU-DMA watchpoint check (SeSsDmaWatch); C linkage + a global so scu.inc,
+   which is included before debug.inc where DBG lives, can test it without the debugger guts. */
+extern "C" int SeSsMemWatchArmed = 0;
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
@@ -191,12 +197,19 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
    SeMednafenTraceHook((int)DBG.ActiveCPU, (unsigned int)PC);
    /* Instruction step: count this instruction on the stepped CPU; halt when the budget
       is spent (SeExportInsnStepTick returns 1). */
-   int stepHalt = sSeStepActive ? SeExportInsnStepTick((int)DBG.ActiveCPU) : 0;
+   int stepHalt = sSeStepActive ? SeExportInsnStepTick((int)DBG.ActiveCPU, (unsigned int)PC) : 0;
    if (bpoint || stepHalt) {
       if (stepHalt && !bpoint)
          SeExportNotifyStep((int)DBG.ActiveCPU, (unsigned int)PC);
       else
          SeExportNotifyStop((int)DBG.ActiveCPU, (unsigned int)PC);
+      /* Publish a snapshot NOW, from inside the halt, so the client sees the registers and
+         memory AT the breakpoint/step instead of the last completed frame's end state. The
+         normal snapshot only runs at end-of-frame, which a mid-frame halt never reaches, so
+         without this the SH-2 regs / RAM the debugger shows are stale (frozen a frame back)
+         and stepping looks dead even though the PC is advancing. sPaused is already set, so
+         SeExportSnapshot skips the rewind-ring capture (guarded on !sPaused). */
+      SeMednafenFrameHook();
       while (!SeExportGateFrame()) { }
       /* Gate released: set the callback mode for what runs next — continuous iff an
          instruction step (IST) was just requested, else it reverts to the bp/tracepoint
@@ -205,6 +218,39 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
       sSeStepActive = SeExportInsnStepBegin() ? 1 : 0;
       SeSyncCpuHook();
    }
+}
+/* SCU-DMA watchpoint check. Mednafen's ss RW breakpoints only see SH-2 *instruction* effective
+   addresses (CheckRWBreakpoints in DBG_CPUHandler), so data the SCU DMAs into memory — how games
+   normally fill VDP1/VDP2 VRAM — never trips a watchpoint, even though Yabause's bus-level
+   watchpoints do. scu.inc's DMA_Write calls this once per transferred unit (only when
+   SeSsMemWatchArmed, so a DMA with no watchpoint set pays a single branch). On a hit it halts
+   exactly like an SH-2 watchpoint: reuse DBG_CheckWriteBP/ReadBP to range-match, then notify +
+   publish the halted snapshot + spin in the frame gate. A DMA write has no instruction of its
+   own, so we report the master PC (where execution was when the DMA ran) as the halt location. */
+extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
+   /* While a single-step is in progress, don't let a DMA write re-halt: the watched cell is
+      often written as several sub-word DMA writes, and this routine may itself re-run the DMA
+      every frame — either would re-halt before the stepped instruction retires and pin the PC.
+      The watchpoint resumes catching DMA writes as soon as the step completes or the user
+      continues (sSeStepActive is cleared then). */
+   if (sSeStepActive) return;
+   DBG.FoundBPoint = false;
+   if (isWrite) DBG_CheckWriteBP(len, A);
+   else         DBG_CheckReadBP(len, A);
+   if (!DBG.FoundBPoint) return;
+   DBG.FoundBPoint = false;
+   SeExportNotifyStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
+   SeMednafenFrameHook();          /* publish the halted state (regs/RAM at the DMA write) */
+   while (!SeExportGateFrame()) { }
+   /* Hand off to the CPU step machinery if a single-step (IST) was requested from this DMA
+      halt, exactly like SeSsBpHook does after its gate: arm the per-instruction hook so the
+      next retired instruction counts down the step budget and halts. Without this a Step from a
+      DMA-watchpoint halt just resumes (the halt is outside the instruction hook), so it never
+      single-steps and, once the watchpoint stops re-hitting, runs away. The step counter is
+      retire-based (SeExportInsnStepTick keys off PC change), so the CPU being bus-stalled while
+      the DMA drains doesn't eat the budget and the halt PC was seeded by SeExportNotifyStop. */
+   sSeStepActive = SeExportInsnStepBegin() ? 1 : 0;
+   SeSyncCpuHook();
 }
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) {
    (void)cpu;   /* SS PC breakpoints are shared across both SH-2s */
@@ -233,6 +279,7 @@ extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, uns
       if (kind & 0x2u) DBG_AddBreakPoint(BPOINT_WRITE, a, end, true);
    }
    sSeBpActive = 1;
+   SeSsMemWatchArmed = 1;   /* arm the SCU-DMA watchpoint check (see SeSsDmaWatch) */
    SeSyncCpuHook();
 }
 extern "C" void SsDbgClearBps(void) {
@@ -240,6 +287,7 @@ extern "C" void SsDbgClearBps(void) {
    DBG_FlushBreakPoints(BPOINT_READ);
    DBG_FlushBreakPoints(BPOINT_WRITE);
    sSeBpActive = 0;
+   SeSsMemWatchArmed = 0;   /* no data watchpoints left -> DMA writes skip the check */
    SeSyncCpuHook();   /* keeps the continuous hook if tracepoints are still armed */
 }
 /* Arm/disarm per-instruction tracepoint scanning. Called by the glue whenever the
@@ -627,8 +675,12 @@ FWD_DECLS = (
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeExportNotifyStep(int cpu, unsigned int pc);\n"
     "extern \"C\" int  SeExportInsnStepBegin(void);\n"
-    "extern \"C\" int  SeExportInsnStepTick(int cpu);\n"
+    "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
+    # SCU-DMA watchpoint bridge: scu.inc (included before debug.inc, where DBG lives) calls
+    # SeSsDmaWatch — defined at EOF after debug.inc — gated on the SeSsMemWatchArmed flag.
+    "extern \"C\" int  SeSsMemWatchArmed;\n"
+    "extern \"C\" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite);\n"
 )
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
@@ -644,6 +696,18 @@ GATE_HOOK = (
     "   while (!SeExportGateFrame()) { }\n"
 )
 GATE_ANCHOR = r'(\bEmulate\s*\(\s*EmulateSpecStruct\s*\*\s*\w+\s*\)\s*\{\s*\n)'
+
+# SCU-DMA write watchpoint: let a data watchpoint fire on SCU-DMA writes (VDP1/VDP2 VRAM,
+# work RAM...), which bypass the SH-2 instruction pipeline the ss debugger's RW breakpoints
+# watch. Injected in scu.inc's DMA_Write, after the transfer unit is written (A + sizeof(T)
+# are in scope there). Gated on SeSsMemWatchArmed so a DMA with no watchpoint set is untouched.
+SCU_DMA_HOOK = (
+    "#ifdef WANT_DEBUGGER\n"
+    " /* Saturn Explorer: let SCU-DMA writes trip data watchpoints (see SeSsDmaWatch). */\n"
+    " if(SeSsMemWatchArmed) SeSsDmaWatch(A, (unsigned int)sizeof(T), 1);\n"
+    "#endif\n"
+)
+SCU_DMA_ANCHOR = r'(d->CurByteCount -= sizeof\(T\);\s*\n)'
 
 # Window-title mark: append "(SaturnExplorer Enabled. <ver> / Mednafen <rev>)" to the
 # SDL window title so a tapped build is obvious. This lives in the SDL frontend
@@ -769,6 +833,23 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_append(text, SS_ACCESSORS, "SsDbgWramL")
     notes.append(n)
     text, n = apply_append(text, SAVESTATE_ACCESSORS, "SsDbgSaveState")
+    notes.append(n)
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
+def process_scu(src_dir, do_write):
+    """Inject the SCU-DMA write-watchpoint check into scu.inc's DMA_Write. The helper it calls
+    (SeSsDmaWatch) and the SeSsMemWatchArmed gate flag live in ss.cpp's appended accessors;
+    scu.inc is #included into ss.cpp, so they link in the same TU (forward-declared via
+    FWD_DECLS, since scu.inc is included before debug.inc where DBG lives)."""
+    path = os.path.join(src_dir, "scu.inc")
+    if not os.path.isfile(path):
+        return ["scu.inc (DMA watchpoint):", "  MISSING  scu.inc"]
+    notes = ["scu.inc (DMA watchpoint):"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_anchored(text, SCU_DMA_ANCHOR, SCU_DMA_HOOK, "SeSsDmaWatch(A,")
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
@@ -1000,7 +1081,7 @@ def process_build(root, do_write):
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
@@ -1056,6 +1137,7 @@ def main():
         notes += process_append_file(src_dir, fname, block, key, do_write)
     notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
+    notes += process_scu(src_dir, do_write)
     notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
     notes += process_cd(src_dir, do_write)

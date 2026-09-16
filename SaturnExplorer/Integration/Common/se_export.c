@@ -122,10 +122,19 @@ static volatile unsigned int sStopPc;
  * N instructions then halting. sInsnStepPending is set by the server thread and picked
  * up on the CPU thread (SeExportInsnStepBegin) after the halt gate releases; the per-
  * instruction hook then ticks sInsnStepBudget down (SeExportInsnStepTick) and halts at 0.
- * Only the CPU we were halted on (sInsnStepCpu) is counted. ---- */
+ * Only the CPU we were halted on (sInsnStepCpu) is counted.
+ *
+ * The tick counts RETIRED instructions, not per-instruction-hook calls: the hook fires
+ * before each attempted step, but the SH-2 can be bus-stalled (e.g. held off the bus by a
+ * long SCU DMA), where the same PC is presented repeatedly without retiring. So the tick
+ * only decrements the budget when the PC differs from the last-counted one (sStepLastPc,
+ * seeded with the halt PC so the CPU's already-current instruction is the first to count).
+ * This also makes stepping from a DMA-watchpoint halt work: the halt is between
+ * instructions, and the stall while the DMA drains no longer eats the step budget. ---- */
 static volatile int sInsnStepPending;   /* instruction count requested, 0 = none */
 static volatile int sInsnStepBudget;    /* instructions remaining in the active step */
 static volatile unsigned int sInsnStepCpu;
+static volatile unsigned int sStepLastPc[2] = { 0xFFFFFFFFu, 0xFFFFFFFFu }; /* last-counted PC per CPU */
 
 /* ---- Tracepoint events (v8+). The glue calls SeExportQueueTraceEvent() when an
  * installed tracepoint PC is hit (CPU thread); the server thread drains the ring into
@@ -546,15 +555,28 @@ static void SeLogPortDevices(void)
     }
 }
 
-static void SeReleaseInjectedPads(void)
+static void SeOnClientDisconnect(void)
 {
-    /* A client can disappear while a button is held. Never leave that state latched
-     * in the emulator after its pipe/socket closes. */
+    /* A client (Saturn Explorer) can disappear at any time — mid-button-hold, or while the
+     * emulator is paused or halted at a breakpoint. Restore a clean, free-running state so the
+     * game never stays frozen after SE closes:
+     *   - release any held pad (don't leave a button latched in the emulator);
+     *   - drop ALL breakpoints — a leftover execution or data watchpoint would instantly re-halt
+     *     the game on resume, which looks exactly like a freeze (and SE re-syncs its set when it
+     *     reconnects, so nothing is lost);
+     *   - clear the pause/step/stop state so the frame gate stops holding the emulate thread. */
     if (sSetPad)
     {
         sSetPad(0, 0);
         sSetPad(1, 0);
     }
+    if (sClearBps) sClearBps();
+    SE_LOCK();
+    sPaused = 0;
+    sStepBudget = 0;
+    sInsnStepPending = 0;
+    sStopReason = SE_LIVE_STOP_NONE;
+    SE_UNLOCK();
 }
 
 /* ---- Tracepoint-install hook (v8+). apply.py wires this to the emulator's PC-trap
@@ -579,6 +601,7 @@ void SeExportNotifyStop(int cpu, unsigned int pc)
     sStopReason = SE_LIVE_STOP_EXEC_BP;
     sStopCpu = (cpu != 0) ? 1u : 0u;
     sStopPc = pc;
+    sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking so a step from here starts clean */
     sPaused = 1;
     sStepBudget = 0;
 }
@@ -590,6 +613,7 @@ void SeExportNotifyStep(int cpu, unsigned int pc)
     sStopReason = SE_LIVE_STOP_STEP;
     sStopCpu = (cpu != 0) ? 1u : 0u;
     sStopPc = pc;
+    sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking for the next step */
     sPaused = 1;
     sStepBudget = 0;
 }
@@ -608,19 +632,28 @@ int SeExportInsnStepBegin(void)
     return 0;
 }
 
-/* CPU thread, called once per executed instruction while an instruction step is active.
- * Counts only the CPU the step targets; returns 1 when the budget is exhausted (halt
- * here), 0 to keep running. */
-int SeExportInsnStepTick(int cpu)
+/* CPU thread, called from the per-instruction hook BEFORE each attempted step, with the CPU's
+ * current PC. Counts only the CPU the step targets, and only when an instruction actually
+ * RETIRED — i.e. when `pc` differs from the last-counted PC. The hook can fire repeatedly on the
+ * same PC when the SH-2 is bus-stalled (held off the bus by a long SCU DMA); those repeats must
+ * not consume the budget, or the step would "complete" without the CPU ever moving (pinning the
+ * PC at a DMA-watchpoint halt). Returns 1 when the budget is exhausted (halt here), else 0. */
+int SeExportInsnStepTick(int cpu, unsigned int pc)
 {
+    unsigned int c = (cpu != 0) ? 1u : 0u;
     if (sInsnStepBudget <= 0)
     {
         return 0;
     }
-    if (((cpu != 0) ? 1u : 0u) != sInsnStepCpu)
+    if (c != sInsnStepCpu)
     {
         return 0;
     }
+    if (pc == sStepLastPc[c])
+    {
+        return 0;   /* same PC as last count -> not retired yet (bus stall); don't spend budget */
+    }
+    sStepLastPc[c] = pc;
     if (--sInsnStepBudget == 0)
     {
         return 1;
@@ -878,8 +911,11 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     SE_UNLOCK();
     /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
-     * is wired). The worker delta-compresses it and the server ships it lagging. */
-    SeStateCapture(sFrameNo);
+     * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
+     * paused: a snapshot taken from inside a debugger halt (breakpoint/step) is mid-frame — the
+     * emulator's event timing isn't at a frame boundary, so its savestate isn't a clean rewind
+     * point. The rewind timeline simply omits halt frames; running frames still capture. */
+    if (!sPaused) SeStateCapture(sFrameNo);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1319,7 +1355,7 @@ static DWORD WINAPI SeServerThread(LPVOID arg)
         if (pipe == INVALID_HANDLE_VALUE) break;
         BOOL ok = ConnectNamedPipe(pipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
         if (ok) SeServeClient(pipe, snap);
-        SeReleaseInjectedPads();
+        SeOnClientDisconnect();
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
     }
@@ -1348,7 +1384,7 @@ static void* SeServerThread(void* arg)
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeServeClient(cl, snap);
-        SeReleaseInjectedPads();
+        SeOnClientDisconnect();
         close(cl);
     }
     close(srv);
@@ -1383,7 +1419,7 @@ static void* SeTcpServerThread(void* arg)
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
         SeServeClient(cl, snap);
-        SeReleaseInjectedPads();
+        SeOnClientDisconnect();
         close(cl);
     }
     close(srv);

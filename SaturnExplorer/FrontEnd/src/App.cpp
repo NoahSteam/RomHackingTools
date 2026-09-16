@@ -908,7 +908,11 @@ void App::BuildUI(IPlatform& platform)
         // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
         // overwritten by the next capture. A step re-enables capture for a few frames
         // (mStepSettle) so the newly-stepped frame settles in over the socket and shows.
-        if (!mbPaused || mStepSettle > 0)
+        // While halted at a breakpoint/step (mBpStopActive), keep capturing too: the emulator
+        // republishes a fresh snapshot from inside the halt, so this is how the halted CPU's
+        // registers/memory reach the panels and how a step's new state shows. (A bare
+        // frame-pause has mBpStopActive false, so the edit-preview case above is unaffected.)
+        if (!mbPaused || mStepSettle > 0 || mBpStopActive)
         {
             se_begin_frame(mContext);
             if (mStepSettle > 0) --mStepSettle;

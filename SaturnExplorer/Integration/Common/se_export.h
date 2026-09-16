@@ -104,11 +104,14 @@ void SeExportNotifyStop(int cpu, unsigned int pc);
  *  - SeExportInsnStepBegin(): call right after the halt gate releases; returns 1 if an
  *    instruction step (IST verb) was requested, activating its budget — the caller then
  *    arms continuous per-instruction hooking.
- *  - SeExportInsnStepTick(cpu): call once per executed instruction; returns 1 when the
- *    step budget is spent (halt here). Only the stepped CPU is counted. */
+ *  - SeExportInsnStepTick(cpu, pc): call from the per-instruction hook with the CPU's current
+ *    PC; returns 1 when the step budget is spent (halt here). Only the stepped CPU is counted,
+ *    and only retired instructions count (a repeated PC — the SH-2 bus-stalled behind a DMA —
+ *    does not spend budget), so a step from a DMA-watchpoint halt advances one real instruction
+ *    instead of pinning the PC. */
 void SeExportNotifyStep(int cpu, unsigned int pc);
 int  SeExportInsnStepBegin(void);
-int  SeExportInsnStepTick(int cpu);
+int  SeExportInsnStepTick(int cpu, unsigned int pc);
 
 /* Wire the module's work-RAM poke to the emulator's byte writer (v6+), so the Hex
  * Editor can edit a running game: write(address, value) writes one byte. On this
