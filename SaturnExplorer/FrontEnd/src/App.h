@@ -361,6 +361,7 @@ private:
     // by mStepHoldFrames so a step that runs long (or never returns) still reveals "running".
     bool             mStepAwaitingHalt = false;
     int              mStepHoldFrames = 0;
+    uint32_t         mStepFromPc = 0;       // halt PC a step began at; the hold releases on a *new* PC
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt

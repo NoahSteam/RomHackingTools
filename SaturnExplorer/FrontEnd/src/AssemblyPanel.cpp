@@ -273,7 +273,9 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     ImGui::SameLine();
     if (haveRegs) ImGui::Text("PC %08X", pc); else ImGui::TextDisabled("PC --------");
     ImGui::SameLine();
-    ImGui::Checkbox("Follow PC", &mFollowPc);
+    // Re-enabling Follow PC forces a recenter+scroll back to PC (mWindowValid=false), so it
+    // snaps back even when PC hasn't moved since you scrolled away.
+    if (ImGui::Checkbox("Follow PC", &mFollowPc) && mFollowPc) mWindowValid = false;
     ImGui::SameLine();
     ImGui::Checkbox("Auto Refresh", &mAutoRefresh);
     ImGui::SameLine();
@@ -329,17 +331,17 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     // --- Window base: follow PC unless browsing ---
     if (mFollowPc)
     {
-        // Rebuild the decode buffer when PC leaves it (a far jump/call, or walking off the end).
-        if (!mWindowValid || pc < mWindowBase || pc >= mWindowBase + (uint32_t)kWinInstr * 2)
-        {
-            mWindowBase = (pc >= 48) ? (pc - 48) & ~1u : 0;   // PC ~1/5 down
-        }
-        // Re-scroll the viewport on every PC change, not just on a buffer rebuild: the decode
-        // window is 128 instructions tall — far taller than the visible rows — so a step or a
-        // near branch can move PC past the bottom of the viewport while still inside the buffer,
-        // and the view would stop following. A steady PC (idle at a halt) leaves scrolling to the
-        // user so they can look around without the view snapping back.
-        if (pc != mLastPc) mScrollToPc = true;
+        // Rebuild the decode buffer when PC leaves it (a far jump/call, or walking off the end),
+        // or when a recenter was forced (Go to PC / re-enabling Follow PC set mWindowValid=false).
+        const bool rebuilt = !mWindowValid || pc < mWindowBase ||
+                             pc >= mWindowBase + (uint32_t)kWinInstr * 2;
+        if (rebuilt) mWindowBase = (pc >= 48) ? (pc - 48) & ~1u : 0;   // PC ~1/5 down
+        // Scroll on a rebuild (so a forced recenter at a *steady* PC still moves the view — the
+        // "Go to PC" case) and on any PC change: the decode buffer is 128 instructions tall, far
+        // taller than the viewport, so a step or near branch can walk PC past the visible rows
+        // while still inside the buffer and the view would otherwise stop following. A steady PC
+        // that neither moved nor was recentered leaves scrolling to the user.
+        if (rebuilt || pc != mLastPc) mScrollToPc = true;
         mWindowValid = true;
     }
     else if (!mWindowValid)

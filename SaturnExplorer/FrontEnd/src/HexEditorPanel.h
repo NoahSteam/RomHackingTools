@@ -30,10 +30,6 @@ public:
     // region tab containing it and scrolls it into view.
     void GoTo(uint32_t address);
 
-    // Jump to 'address' and highlight a [address, address+length) span (e.g. a call
-    // stack frame's stack range).
-    void Select(uint32_t address, uint32_t length);
-
     // A "find these bytes in the data directory" request raised from the grid's
     // right-click menu (the current byte selection). The App polls this after Draw and
     // runs the data-directory search. Returns true once per request, moving the selected
@@ -66,6 +62,7 @@ private:
     int  mSelectTab = -1;              // request to switch tabs (GoTo / initial), -1 = none
     bool mScrollPending = true;        // scroll mScrollAddr into view next draw
     uint32_t mScrollAddr = 0x06000000; // open on high work RAM, not the unmapped 0 (BIOS)
+    int  mScrollTab = 0;               // region the pending scroll must land in (GoTo's target tab)
 
     int  mEncoding = 0;                // 0 = ASCII, 1 = Shift-JIS (text pane)
     bool mAutoRefresh = true;

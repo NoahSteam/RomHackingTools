@@ -936,16 +936,22 @@ void App::BuildUI(IPlatform& platform)
         //
         // While a Step is in flight, hold the halted presentation across the resume→re-halt
         // round trip: without this the emulator reports "running" for the few frames the step
-        // takes, so the red row, enabled step buttons and frozen registers blink off and back
-        // on — the flash. Keep the last real halt PC displayed so the row stays put, then jump
-        // to the new PC in one move when the re-halt actually lands.
+        // takes, so the red row, frozen registers and Assembly halt-row blink off and back on —
+        // the flash. Release the hold only when the emulator reaches a *new* halt (a PC other
+        // than where the step began), not on bare "stopped": the poll thread keeps echoing the
+        // PRE-step halt at the same PC for a frame or two before the server processes the step
+        // (se_export IST clears the stop only when it runs), and releasing on that stale stop
+        // would drop the hold and let the flash back in. A frame cap covers a step that runs
+        // long (or never returns) so it still reveals "running" eventually.
         if (mStepAwaitingHalt)
         {
-            if (stopped)                    mStepAwaitingHalt = false;   // re-halt landed
-            else if (--mStepHoldFrames <= 0) mStepAwaitingHalt = false;   // step ran long: reveal running
+            if (stopped && stopPc != mStepFromPc) mStepAwaitingHalt = false;   // new halt landed
+            else if (--mStepHoldFrames <= 0)      mStepAwaitingHalt = false;   // ran long: reveal running
         }
         mBpStopActive = stopped || mStepAwaitingHalt;
-        if (stopped)   // only adopt the reported PC on a real stop; otherwise keep the last one
+        // Adopt the reported PC only once we trust it's the current halt; while holding, keep
+        // the last halt PC on screen (a stale pre-step echo carries the same PC anyway).
+        if (stopped && !mStepAwaitingHalt)
         {
             mBpStopCpu = (int)stopCpu;
             mBpStopPc = stopPc;
@@ -1002,6 +1008,8 @@ void App::BuildUI(IPlatform& platform)
     else
     {
         mBpStopActive = false;   // no live breakpoint-halt state off a static source
+        mStepAwaitingHalt = false;   // and drop any in-flight step hold (e.g. emulator disconnected mid-step)
+        mStepHoldFrames = 0;
     }
 
 #ifdef SE_ENABLE_LIVE
@@ -3036,9 +3044,11 @@ void App::DrawCallStack(IPlatform& platform)
             // Selectable spanning the name cell drives select + double-click navigate.
             const std::string name = mFunctionNames.NameOf(fr.functionAddress);
             const bool isSel = (i == selected);
+            // Route the row flags through the shared helper (the panel-interaction tests pin
+            // this); the row has no interactive cells to its right, so no AllowOverlap, but it
+            // navigates on double-click.
             if (ImGui::Selectable(name.c_str(), isSel,
-                                  ImGuiSelectableFlags_SpanAllColumns |
-                                  ImGuiSelectableFlags_AllowDoubleClick))
+                                  RowSelectableFlags(false) | ImGuiSelectableFlags_AllowDoubleClick))
             {
                 mCallStack.Select(mCallStackCpu, i);
                 if (ImGui::IsMouseDoubleClicked(0)) GoToFrame(fr);
@@ -3335,24 +3345,28 @@ void App::Continue()
 
 void App::RunToTransient(uint32_t addr)
 {
+    if (mStepAwaitingHalt) return;   // a step is already resuming the CPU; don't issue another
     // PC breakpoints are shared across both SH-2s, so the transient is CPU-agnostic.
     mStepBpActive = true;
     mStepBpAddr = addr;
     mStepBpDirty = true;
     SyncBreakpointsToLive();   // ship the transient breakpoint before resuming
     Continue();
-    mStepAwaitingHalt = true;   // Step Over/Out: hold the halted UI until we hit the target
+    mStepFromPc = mBpStopPc;     // the hold releases when the halt PC leaves this
+    mStepAwaitingHalt = true;    // Step Over/Out: hold the halted UI until we hit the target
     mStepHoldFrames = kStepHoldFrames;
 }
 
 void App::StepInto(int cpu)
 {
     (void)cpu;   // the server steps whichever CPU the stop latched (the halted CPU)
+    if (mStepAwaitingHalt) return;   // a step is already resuming the CPU; don't issue another
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
     mbPaused = false;
-    mStepAwaitingHalt = true;   // hold the halted UI until the re-halt lands (no flash)
+    mStepFromPc = mBpStopPc;     // the hold releases when the halt PC leaves this
+    mStepAwaitingHalt = true;    // hold the halted UI until the re-halt lands (no flash)
     mStepHoldFrames = kStepHoldFrames;
 }
 
@@ -3362,6 +3376,7 @@ void App::StepOver(int cpu)
     // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
     // degenerates to a single-instruction step. IsSh2CallOpcode matches exactly bsr/bsrf/jsr
     // (not trapa, whose return is PC+2), the same set the glue's SeMdfnTrackFlow uses.
+    if (mStepAwaitingHalt) return;   // a step is already in flight
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     bool isSubCall = false;
@@ -3378,6 +3393,7 @@ void App::StepOver(int cpu)
 
 void App::StepOut(int cpu)
 {
+    if (mStepAwaitingHalt) return;   // a step is already in flight
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     RunToTransient(r.pr);   // run to the current frame's return address

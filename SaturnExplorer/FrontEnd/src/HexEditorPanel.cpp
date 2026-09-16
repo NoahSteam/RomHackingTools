@@ -63,18 +63,12 @@ int HexEditorPanel::RegionForAddr(uint32_t addr)
 void HexEditorPanel::GoTo(uint32_t address)
 {
     mSelectTab = RegionForAddr(address);
+    mScrollTab = mSelectTab;   // the scroll must wait until this region tab is actually active
     mScrollPending = true;
     mScrollAddr = address;
     mSelStart = mSelEnd = (int64_t)address;
     std::snprintf(mAddrBuf, sizeof(mAddrBuf), "%08X", address);
     mFocusRequested = true;
-}
-
-void HexEditorPanel::Select(uint32_t address, uint32_t length)
-{
-    if (length == 0) length = 1;
-    GoTo(address);
-    mSelEnd = (int64_t)address + (int64_t)length - 1;
 }
 
 bool HexEditorPanel::TakeSearchRequest(std::vector<uint8_t>& outBytes, std::string& outLabel)
@@ -227,22 +221,23 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         ImGui::TableSetupColumn("Text", ImGuiTableColumnFlags_WidthFixed, ch * 16.0f + 4.0f);
         ImGui::TableHeadersRow();
 
-        // Scroll a pending target address into view. GoTo also switches the region tab
-        // (ImGuiTabItemFlags_SetSelected), but that switch doesn't reach mTab until the
-        // NEXT frame, so on the frame GoTo runs `reg` is still the OLD region and the
-        // address isn't in it. Only consume the request once we've actually scrolled —
-        // otherwise the first navigation just switched the tab and silently dropped the
-        // scroll, and it took a second double-click (with the tab already current) to move.
-        if (mScrollPending)
+        // Scroll a pending target address into view — but only once the region tab GoTo asked
+        // for (mScrollTab) is actually active. GoTo requests the switch via SetSelected, which
+        // doesn't reach mTab until the next frame; scrolling before then would run against the
+        // OLD tab. Gating on the *target* tab (not merely "the current tab contains the folded
+        // address") matters because the default "All" tab — and any region that also spans the
+        // address — would otherwise match and consume the scroll a frame early, leaving the
+        // real target tab scrolled to the top. mScrollTab always resolves to a tab that
+        // contains the address ("All" as the fallback), so this can't stay pending forever.
+        if (mScrollPending && mTab == mScrollTab)
         {
             const uint32_t a = mScrollAddr & 0x07FFFFFFu;
             if (a >= reg.base && a < reg.base + reg.size)
             {
                 const uint32_t row = (a - reg.base) / 16u;
                 ImGui::SetScrollY((float)row * rowH);
-                mScrollPending = false;   // scrolled; the "All" tab always matches, so this
-                                          // never stays pending indefinitely
             }
+            mScrollPending = false;
         }
 
         ImGuiListClipper clip;
