@@ -2881,14 +2881,13 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
     out.Reconstruct(cpu, regs, mMemBackend);
 }
 
-// Sync the paused-state workspace to a chosen frame: point Assembly at the frame's
-// address and highlight its stack slot in the Hex Editor.
+// Double-clicking a frame navigates the SH-2 Assembly panel to that frame's code — the
+// natural target for "where is this function". (Inspecting the frame's stack bytes is a
+// separate, opt-in action: the "View Stack Memory" / "View in Memory" context items.)
 void App::GoToFrame(const CallStackFrame& fr)
 {
     mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress);
     mPanels.assembly = true;
-    mHexEditor.Select(fr.stackPointer, 16);
-    mPanels.hexEditor = true;
 }
 
 // Call Stack — the per-CPU call chain that led to the halted instruction (see
@@ -3053,6 +3052,10 @@ void App::DrawCallStack(IPlatform& platform)
                 { mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress); mPanels.assembly = true; }
                 if (ImGui::MenuItem("Go to Return Address"))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.returnAddress); mPanels.assembly = true; }
+                // The "Go to ..." items drive the Assembly panel (code); the "View ..." items
+                // drive the Memory panel: this frame's code bytes, and its stack image.
+                if (ImGui::MenuItem("View in Memory"))
+                { mHexEditor.GoTo(fr.functionAddress); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("View Stack Memory"))
                 { mHexEditor.GoTo(fr.stackPointer); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("Add Address to Watch"))

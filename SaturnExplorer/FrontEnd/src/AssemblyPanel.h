@@ -92,6 +92,7 @@ private:
     bool     mWindowValid = false;
     uint32_t mLastPc = 0;
     bool     mScrollToPc = false;      // request a scroll-to-PC next frame
+    bool     mFocusRequested = false;  // bring the window forward after an external GoTo/Navigate
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
     std::vector<Line>    mLines;       // reused decode buffer

@@ -243,12 +243,14 @@ void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
     mFollowPc = false;
     mWindowBase = addr & ~1u;
     mWindowValid = true;
-    mScrollToPc = true;   // reuse the scroll flag to bring the target into view
+    mScrollToPc = true;      // reuse the scroll flag to bring the target into view
+    mFocusRequested = true;  // and bring the panel forward (e.g. a Call Stack "Go to ...")
 }
 
 void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
                          ExecutionActions& actions, WatchPanel& watch, bool live, Request& req)
 {
+    if (mFocusRequested) { ImGui::SetNextWindowFocus(); mFocusRequested = false; }
     if (!ImGui::Begin("SH-2 Assembly"))
     {
         ImGui::End();
