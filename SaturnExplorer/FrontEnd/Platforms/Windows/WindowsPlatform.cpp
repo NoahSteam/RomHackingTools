@@ -74,6 +74,10 @@ bool WindowsPlatform::Initialize(const PlatformConfig& config)
         return false;
     }
 
+    // Attach the native menu bar to the window. It stays empty until App's first
+    // SyncNativeMenu() builds it from the current state.
+    mMenuBar.Attach(mHwnd);
+
     ::ShowWindow(mHwnd, SW_SHOWDEFAULT);
     ::UpdateWindow(mHwnd);
 
@@ -115,6 +119,7 @@ void WindowsPlatform::Shutdown()
     CleanupDeviceD3D();
     if (mHwnd)
     {
+        mMenuBar.Detach();
         ::DestroyWindow(mHwnd);
         mHwnd = nullptr;
     }
@@ -564,8 +569,27 @@ LRESULT WINAPI WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPAR
                            SWP_NOZORDER | SWP_NOACTIVATE);
         }
         return 0;
+    case WM_COMMAND:
+        // Native menu selection (no accelerator table, so lParam==0 and HIWORD==0). Forward it
+        // to the menu bridge; App drains it into the shared TopBarCommand path next frame.
+        if (sInstance && lparam == 0 && HIWORD(wparam) == 0 &&
+            sInstance->mMenuBar.OnCommand(LOWORD(wparam)))
+        {
+            return 0;
+        }
+        break;
+    case WM_INITMENUPOPUP:
+        // A menu is about to open: refresh its enable/check/labels from the latest state.
+        if (sInstance) { sInstance->mMenuBar.OnInitPopup(); return 0; }
+        break;
+    case WM_ENTERMENULOOP:
+        if (sInstance) sInstance->mMenuBar.OnEnterMenuLoop();
+        break;
+    case WM_EXITMENULOOP:
+        if (sInstance) sInstance->mMenuBar.OnExitMenuLoop();
+        break;
     case WM_SYSCOMMAND:
-        if ((wparam & 0xfff0) == SC_KEYMENU)  // disable ALT application menu
+        if ((wparam & 0xfff0) == SC_KEYMENU)  // disable ALT/F10 application-menu activation
         {
             return 0;
         }

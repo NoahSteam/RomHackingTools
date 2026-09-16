@@ -91,6 +91,16 @@ private:
     void RefreshLaunchValidation();
     TopBarViewModel BuildTopBarViewModel() const;
     void ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform);
+    // Keyboard shortcuts shared by both front ends (the ImGui toolbar and the native Win32 menu
+    // bar). Runs every frame regardless of which bar is drawn, so hotkeys work on Windows even
+    // though the ImGui toolbar isn't.
+    void CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const TopBarViewModel& state);
+    // Native OS menu-bar bridge (used only under SE_NATIVE_MENUBAR). BuildNativeMenuState mirrors
+    // the toolbar state for the platform to render; DispatchNativeMenuAction maps a selection onto
+    // the same TopBarCommand queue (or the few view-only toggles the toolbar drives inline).
+    NativeMenuState BuildNativeMenuState(const TopBarViewModel& state) const;
+    void DispatchNativeMenuAction(const NativeMenuAction& action, std::vector<TopBarCommand>& commands);
+    void ToggleMenuLayer(int layer);   // flip one se_render_opts field by NativeMenuLayer index
     void DrawRecordingSettingsModal();
     void DrawSettingsModal();
     void DrawHelpModal();
