@@ -98,6 +98,8 @@ constexpr int ID_LAYER_BASE = 0xE200;   // + NativeMenuLayer (NM_LAYER_COUNT ent
 constexpr int ID_EMU_BASE   = 0xE800;   // + emulator index
 constexpr int ID_ROM_BASE   = 0xE900;   // + recent-ROM index
 constexpr int ID_PANEL_BASE = 0xEA00;   // + PanelList index
+constexpr int ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
+constexpr int ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -215,6 +217,10 @@ struct MacMenuBarImpl
             action = NativeMenuAction(MenuCommand::SelectRecentRom, id - ID_ROM_BASE);
         else if (id >= ID_PANEL_BASE && id < ID_PANEL_BASE + (int)mState.panels.size())
             action = NativeMenuAction(MenuCommand::ToggleWindow, id - ID_PANEL_BASE);
+        else if (id >= ID_SAVESTATE_BASE && id < ID_SAVESTATE_BASE + kNativeStateSlots)
+            action = NativeMenuAction(MenuCommand::SaveState, id - ID_SAVESTATE_BASE);
+        else if (id >= ID_LOADSTATE_BASE && id < ID_LOADSTATE_BASE + kNativeStateSlots)
+            action = NativeMenuAction(MenuCommand::LoadState, id - ID_LOADSTATE_BASE);
         else
         {
             MenuCommand c = MenuCommand::None;
@@ -414,6 +420,14 @@ struct MacMenuBarImpl
             NSMenu* run = AddSub(bar, @"Run");
             AddItem(run, ID_TOGGLE_PAUSE, @"Pause\tF6");   // label swapped to Resume in RefreshState
             AddItem(run, ID_STEP, @"Step One Frame\tF10");
+            [run addItem:[NSMenuItem separatorItem]];
+            NSMenu* save = AddSub(run, @"Save State");
+            NSMenu* load = AddSub(run, @"Load State");
+            for (int i = 0; i < kNativeStateSlots; ++i)
+            {
+                AddItem(save, ID_SAVESTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
+                AddItem(load, ID_LOADSTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
+            }
         }
 
         // ---- Data ----
@@ -536,6 +550,12 @@ struct MacMenuBarImpl
         TitleTag(ID_TOGGLE_PAUSE, s.paused ? @"Resume\tF6" : @"Pause\tF6");
         EnableTag(ID_TOGGLE_PAUSE, s.togglePauseEnabled);
         EnableTag(ID_STEP, s.stepEnabled);
+        // Save needs a state in hand; Load additionally needs that slot to hold one.
+        for (int i = 0; i < kNativeStateSlots; ++i)
+        {
+            EnableTag(ID_SAVESTATE_BASE + i, s.saveStateEnabled);
+            EnableTag(ID_LOADSTATE_BASE + i, s.saveStateEnabled && s.slotOccupied[i]);
+        }
 
         // Data
         EnableTag(ID_DUMP, s.dumpEnabled);

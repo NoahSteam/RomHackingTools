@@ -230,9 +230,38 @@ static void TestMenuCategoryOrder()
     CHECK(empty == preferred);
 }
 
+static void TestSaveStateEnablement()
+{
+    // Save states need a live connection *and* a state actually received -- an emulator
+    // built without rewind support streams none, so canSaveState stays false and the slots
+    // must not look usable.
+    TopBarViewModel state;
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
+
+    state.canSaveState = true;      // a state arrived, but nothing is connected
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
+
+    state.source = SourceType::Live;
+    state.connected = true;
+    state.canSaveState = false;     // connected, but no state yet (or rewind unsupported)
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
+
+    state.canSaveState = true;
+    CHECK(TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+    CHECK(TopBarCommandEnabled(TopBarCommandType::LoadState, state));
+
+    // Unlike Step, save states do not require the emulator to be paused.
+    CHECK(!state.paused);
+    CHECK(TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+}
+
 int main()
 {
     TestEnablementMatrix();
+    TestSaveStateEnablement();
     TestLaunchModel();
     TestPatchEnablement();
     TestNativeMenuStructureKey();

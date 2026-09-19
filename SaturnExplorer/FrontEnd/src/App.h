@@ -35,7 +35,8 @@
 #include "Debug/BreakpointManager.h"
 
 #ifdef SE_ENABLE_LIVE
-#include "FrameRecorder.h"   // rolling capture of live frames (native only)
+#include "FrameRecorder.h"
+#include "SavestateSlots.h" // numbered save states (native only)
 #include "PatchLibrary.h"    // Patch feature: known memory->file locations + patch-script emit
 #endif
 
@@ -186,6 +187,10 @@ private:
     // (resolve exe+args and hand them to the platform; adopt the ROM as the Data
     // Directory when none is set yet).
     void DrawSessionMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
+    // Toolbar "State" menu: save to / load from the numbered slots.
+    void DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
+    void DoSaveState(int slot);
+    void DoLoadState(int slot);
     void DrawLaunchSettingsModal(IPlatform& platform);
     // Start the selected emulator. With a non-empty romOverride, launch THAT disc instead of the
     // selected ROM without changing the user's selection (used by Build & Launch ISO).
@@ -373,6 +378,10 @@ private:
     // Timeline lets the user drag back through captured frames; the selected frame
     // is rebuilt into mScrubContext and the panels render from it for that draw.
     FrameRecorder    mRecorder;
+    // Numbered save states. Tracks the emulator's streamed savestate independently of the
+    // recorder ring, so Save State works without recording being on.
+    SavestateSlots   mStateSlots;
+    std::string      mStateStatus;      // last save/load result, shown in the State menu
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

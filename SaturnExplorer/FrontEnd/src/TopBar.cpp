@@ -27,6 +27,13 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
         return state.connected && state.frameControl;
     case TopBarCommandType::StepFrame:
         return state.connected && state.frameControl && state.paused;
+    // Save needs a state to have arrived (the emulator streams the first one a few seconds
+    // in, and never at all if its rewind support is off); Load only needs a slot on disk,
+    // which is checked per-slot where the menu is built.
+    case TopBarCommandType::SaveState:
+        return state.connected && state.canSaveState;
+    case TopBarCommandType::LoadState:
+        return state.connected && state.canSaveState;
     case TopBarCommandType::DumpMemory:
         return state.source != SourceType::None && !state.operationBusy;
     // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image

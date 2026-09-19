@@ -24,6 +24,10 @@ namespace sfe
 // instead of being repeated as a raw string a rename could silently miss.
 constexpr char kControllerPanel[] = "Controller";
 
+// Save-state slots offered by the native menu bars. Matches SavestateSlots::kSlotCount, but
+// declared here so NativeMenu stays free of the live-only headers.
+constexpr int kNativeStateSlots = 10;
+
 // VDP layer/overlay toggles, in the order the ImGui "Layers" menu lists them. Carried as
 // the index of a NativeMenuAction whose command is LayerToggle; App maps each to the matching
 // se_render_opts field. Kept here (not in the core) because it is purely a menu concern.
@@ -70,6 +74,8 @@ enum class MenuCommand
     // Run
     TogglePause,
     StepFrame,
+    SaveState,            // uses index (slot)
+    LoadState,            // uses index (slot)
     // Data
     DumpMemory,
     SetDataDirectory,
@@ -135,6 +141,9 @@ struct NativeMenuState
     bool paused = false;            // drives the Pause/Resume label + check
     bool togglePauseEnabled = false;
     bool stepEnabled = false;
+    // Save states: usable at all, and which of the numbered slots currently hold one.
+    bool saveStateEnabled = false;
+    bool slotOccupied[kNativeStateSlots] = {};
 
     // --- Data ---
     bool dumpEnabled = false;

@@ -237,6 +237,16 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
 
+    # Save-state slots: keyframe/delta reconstruction + the slot file format.
+    add_executable(SaturnExplorerSavestateSlotsTests
+        FrontEnd/tests/SavestateSlotsTests.cpp
+        FrontEnd/src/SavestateSlots.cpp
+        FrontEnd/src/Settings.cpp
+    )
+    target_include_directories(SaturnExplorerSavestateSlotsTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerSavestateSlotsTests COMMAND SaturnExplorerSavestateSlotsTests)
+
     # FrameRecorder rewind machinery — attach/reconstruct/truncate/evict of per-frame
     # savestate blocks. Drives Capture() against a trivial context (needs the Core lib), so
     # it also uses threads (the recorder's compression worker).
@@ -374,6 +384,7 @@ if(WIN32)
         FrontEnd/src/Debug/CallStack.cpp
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
+        FrontEnd/src/SavestateSlots.cpp
         FrontEnd/src/PatchLibrary.cpp
         FrontEnd/src/Demo/DemoScript.cpp
         FrontEnd/src/Demo/DemoPlayer.cpp
@@ -460,6 +471,7 @@ elseif(EMSCRIPTEN)
     )
     if(SE_WEB_LIVE)
         list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp
+                               FrontEnd/src/SavestateSlots.cpp
                                FrontEnd/src/PatchLibrary.cpp)
     endif()
     add_executable(SaturnExplorerFrontEnd ${SE_WEB_SRC})
@@ -545,6 +557,7 @@ else()
             FrontEnd/src/Debug/CallStack.cpp
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
+            FrontEnd/src/SavestateSlots.cpp
             FrontEnd/src/PatchLibrary.cpp
             FrontEnd/src/Demo/DemoScript.cpp
             FrontEnd/src/Demo/DemoPlayer.cpp

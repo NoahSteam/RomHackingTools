@@ -1545,11 +1545,15 @@ bool App::RefreshScrubContext()
 }
 
 #ifdef SE_ENABLE_LIVE
-// Recorder handed us a savestate block for a frame; attach it to that frame in the ring.
+// The emulator handed us a savestate block for a frame. It goes to the ring for rewind, and
+// to the slot tracker for Save State -- the ring only keeps blocks for frames it captured
+// (so, only while recording), which is not a precondition the save-state slots should have.
 void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
                        uint32_t fullLen, const uint8_t* payload, uint32_t len)
 {
-    static_cast<App*>(user)->mRecorder.AttachStateBlock(frame, kind, base, fullLen, payload, len);
+    App* app = static_cast<App*>(user);
+    app->mRecorder.AttachStateBlock(frame, kind, base, fullLen, payload, len);
+    app->mStateSlots.OnBlock(frame, kind, base, fullLen, payload, len);
 }
 
 // Recorder's scrub write-sink: an edit was made against the scrubbed frame.
@@ -5410,6 +5414,12 @@ TopBarViewModel App::BuildTopBarViewModel() const
 #endif
     vm.paused = mbPaused;
     vm.frameControl = mbHasData && mContext && se_supports_frame_control(mContext);
+#ifdef SE_ENABLE_LIVE
+    // Both halves must be there: a state has actually arrived, and the emulator can take one
+    // back. A build without rewind support streams nothing, so this simply stays false.
+    vm.canSaveState = mStateSlots.HaveState() &&
+                      se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0;
+#endif
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
     // Auto-connect is a cheap background poll. It must not disable launching or
@@ -5508,6 +5518,11 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         if (IconButton("##step", Ico::Step, "Step one frame",
                        !TopBarCommandEnabled(TopBarCommandType::StepFrame, state)))
             commands.emplace_back(TopBarCommandType::StepFrame);
+
+#ifdef SE_ENABLE_LIVE
+        ImGui::SameLine();
+        DrawStateMenu(state, commands);   // save/load the emulator's state to numbered slots
+#endif
 
         ImGui::SameLine();
         ImGui::BeginDisabled(!TopBarCommandEnabled(TopBarCommandType::DumpMemory, state));
@@ -5904,6 +5919,137 @@ void App::DrawDemoOverlay()
     ImGui::End();
 }
 
+#ifdef SE_ENABLE_LIVE
+// "State" — the toolbar's save-state menu: ten numbered slots, each showing the frame it
+// holds and when it was written. Save captures the emulator's own savestate (the one it
+// already streams for rewind); Load hands it back through the same LST path rewind uses.
+void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands)
+{
+    const bool enabled = TopBarCommandEnabled(TopBarCommandType::SaveState, state);
+    if (ImGui::Button("State")) ImGui::OpenPopup("##state_menu");
+    ImGui::SetItemTooltip("%s", enabled
+        ? "Save and load emulator save states"
+        : (state.connected
+            ? "Waiting for the emulator's first save state (a few seconds after connecting)"
+            : "Connect to an emulator to use save states"));
+    if (!ImGui::BeginPopup("##state_menu")) return;
+
+    const std::string& rom = mLauncher.Rom();
+    if (rom.empty())
+    {
+        ImGui::TextDisabled("No game selected.");
+        ImGui::EndPopup();
+        return;
+    }
+    if (!enabled)
+    {
+        ImGui::TextDisabled("%s", state.connected
+            ? "No save state received yet."
+            : "Not connected to an emulator.");
+        ImGui::Separator();
+    }
+
+    // Slot rows. Save is gated on having a state; Load additionally needs that slot to
+    // exist, so an empty slot reads as empty rather than failing when clicked.
+    if (ImGui::BeginMenu("Save State", enabled))
+    {
+        for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
+        {
+            char label[64];
+            const std::string detail = SavestateSlots::SlotLabel(rom, i);
+            std::snprintf(label, sizeof(label), "Slot %d%s", i,
+                          detail.empty() ? "  (empty)" : "");
+            if (ImGui::MenuItem(label))
+                commands.emplace_back(TopBarCommandType::SaveState, i);
+            if (!detail.empty())
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("  %s", detail.c_str());
+            }
+        }
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Load State", enabled))
+    {
+        bool any = false;
+        for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
+        {
+            const std::string detail = SavestateSlots::SlotLabel(rom, i);
+            if (detail.empty()) continue;
+            any = true;
+            char label[64];
+            std::snprintf(label, sizeof(label), "Slot %d", i);
+            if (ImGui::MenuItem(label))
+                commands.emplace_back(TopBarCommandType::LoadState, i);
+            ImGui::SameLine();
+            ImGui::TextDisabled("  %s", detail.c_str());
+        }
+        if (!any) ImGui::TextDisabled("No saved states for this game.");
+        ImGui::EndMenu();
+    }
+
+    if (!mStateStatus.empty())
+    {
+        ImGui::Separator();
+        ImGui::TextDisabled("%s", mStateStatus.c_str());
+    }
+    ImGui::EndPopup();
+}
+
+void App::DoSaveState(int slot)
+{
+    std::string error;
+    if (mStateSlots.SaveToSlot(mLauncher.Rom(), slot, error))
+    {
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "Saved to slot %d.", slot);
+        mStateStatus = msg;
+        mLog.Info(mStateStatus, se_frame_number(mContext));
+    }
+    else
+    {
+        mStateStatus = error;
+        mLog.Error("Save state failed: " + error, se_frame_number(mContext));
+    }
+}
+
+void App::DoLoadState(int slot)
+{
+    se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
+    std::vector<uint8_t> image;
+    uint64_t frame = 0;
+    std::string error;
+    if (!SavestateSlots::LoadFromSlot(mLauncher.Rom(), slot, image, frame, error))
+    {
+        mStateStatus = error;
+        mLog.Error("Load state failed: " + error, se_frame_number(mContext));
+        return;
+    }
+    // No pending edits: a slot is a point in time on its own, not a scrubbed frame the user
+    // has been poking at. Anything recorded after this moment is a future that never
+    // happened now, so the ring and the slot tracker both start over from the next block.
+    const std::vector<uint8_t> edits = BuildEditBlob();
+    if (se_load_state(ctl, frame, image.data(), image.size(), edits.data(), edits.size()) != SE_OK)
+    {
+        mStateStatus = "The emulator refused the save state.";
+        mLog.Error("Load state failed: the emulator refused it.", se_frame_number(mContext));
+        return;
+    }
+    mRecorder.Clear();
+    mStateSlots.Reset();
+    mPendingEdits.clear();
+    mPendingEditsFrame = -1;
+    mbScrubbing = false;
+    mScrubIndex = -1;
+    mbPaused = false;
+    char msg[96];
+    std::snprintf(msg, sizeof(msg), "Loaded slot %d (frame %llu).", slot,
+                  static_cast<unsigned long long>(frame));
+    mStateStatus = msg;
+    mLog.Info(mStateStatus, static_cast<uint32_t>(frame));
+}
+#endif  // SE_ENABLE_LIVE
+
 // "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
 // a popup that shows the current emulator + game, lets the user change either (recent
 // ROMs + Browse), and opens Launch Settings. The primary item launches the current
@@ -6147,6 +6293,10 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::DumpMemory:
         DumpMemory(platform);
         break;
+#ifdef SE_ENABLE_LIVE
+    case TopBarCommandType::SaveState: DoSaveState(command.index); break;
+    case TopBarCommandType::LoadState: DoLoadState(command.index); break;
+#endif
     case TopBarCommandType::SetDataDirectory:
         mOpenDataDirModal = true;
         break;
@@ -6232,6 +6382,11 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
     m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
     m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+#ifdef SE_ENABLE_LIVE
+    m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
+    for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)
+        m.slotOccupied[i] = SavestateSlots::SlotExists(mLauncher.Rom(), i);
+#endif
 
     // Layers (same order as DrawLayersMenu / NativeMenuLayer).
     m.layer[NM_LAYER_SPRITES]  = mRenderOpts.show_vdp1_sprites != 0;

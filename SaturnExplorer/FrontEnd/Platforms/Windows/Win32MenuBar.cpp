@@ -82,6 +82,8 @@ constexpr UINT ID_LAYER_BASE = 0xE200;   // + NativeMenuLayer (NM_LAYER_COUNT en
 constexpr UINT ID_EMU_BASE   = 0xE800;   // + emulator index
 constexpr UINT ID_ROM_BASE   = 0xE900;   // + recent-ROM index
 constexpr UINT ID_PANEL_BASE = 0xEA00;   // + PanelList index
+constexpr UINT ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
+constexpr UINT ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
 // Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
 // Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
 // sharing id 0 — so even if one were ever un-grayed, its WM_COMMAND can't be mistaken for id 0
@@ -172,6 +174,10 @@ bool Win32MenuBar::OnCommand(int id)
         action = NativeMenuAction(MenuCommand::SelectRecentRom, id - (int)ID_ROM_BASE);
     else if (id >= (int)ID_PANEL_BASE && id < (int)ID_PANEL_BASE + (int)mState.panels.size())
         action = NativeMenuAction(MenuCommand::ToggleWindow, id - (int)ID_PANEL_BASE);
+    else if (id >= (int)ID_SAVESTATE_BASE && id < (int)ID_SAVESTATE_BASE + kNativeStateSlots)
+        action = NativeMenuAction(MenuCommand::SaveState, id - (int)ID_SAVESTATE_BASE);
+    else if (id >= (int)ID_LOADSTATE_BASE && id < (int)ID_LOADSTATE_BASE + kNativeStateSlots)
+        action = NativeMenuAction(MenuCommand::LoadState, id - (int)ID_LOADSTATE_BASE);
     else
     {
         MenuCommand c = MenuCommand::None;
@@ -280,6 +286,12 @@ void Win32MenuBar::RefreshState()
     TextById(mMenu, ID_TOGGLE_PAUSE, s.paused ? L"Resume\tF6" : L"Pause\tF6");
     EnableById(mMenu, ID_TOGGLE_PAUSE, s.togglePauseEnabled);
     EnableById(mMenu, ID_STEP, s.stepEnabled);
+    // Save needs a state in hand; Load additionally needs that slot to hold one.
+    for (int i = 0; i < kNativeStateSlots; ++i)
+    {
+        EnableById(mMenu, ID_SAVESTATE_BASE + (UINT)i, s.saveStateEnabled);
+        EnableById(mMenu, ID_LOADSTATE_BASE + (UINT)i, s.saveStateEnabled && s.slotOccupied[i]);
+    }
 
     // Data
     EnableById(mMenu, ID_DUMP, s.dumpEnabled);
@@ -424,6 +436,18 @@ void Win32MenuBar::Rebuild()
         HMENU run = ::CreatePopupMenu();
         AddItem(run, ID_TOGGLE_PAUSE, L"Pause\tF6");   // label swapped to Resume in RefreshState
         AddItem(run, ID_STEP, L"Step One Frame\tF10");
+        ::AppendMenuW(run, MF_SEPARATOR, 0, nullptr);
+        HMENU save = ::CreatePopupMenu();
+        HMENU load = ::CreatePopupMenu();
+        for (int i = 0; i < kNativeStateSlots; ++i)
+        {
+            wchar_t label[16];
+            swprintf(label, 16, L"Slot %d", i);
+            AddItem(save, ID_SAVESTATE_BASE + (UINT)i, label);
+            AddItem(load, ID_LOADSTATE_BASE + (UINT)i, label);
+        }
+        AddSub(run, save, L"Save State");
+        AddSub(run, load, L"Load State");
         AddSub(bar, run, L"&Run");
     }
 

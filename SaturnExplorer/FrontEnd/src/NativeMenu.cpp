@@ -46,6 +46,8 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::OpenLaunchSettings: out = TopBarCommand(TopBarCommandType::OpenLaunchSettings); return true;
     case MenuCommand::TogglePause:       out = TopBarCommand(TopBarCommandType::TogglePause); return true;
     case MenuCommand::StepFrame:         out = TopBarCommand(TopBarCommandType::StepFrame); return true;
+    case MenuCommand::SaveState:         out = TopBarCommand(TopBarCommandType::SaveState, a.index); return true;
+    case MenuCommand::LoadState:         out = TopBarCommand(TopBarCommandType::LoadState, a.index); return true;
     case MenuCommand::DumpMemory:        out = TopBarCommand(TopBarCommandType::DumpMemory); return true;
     case MenuCommand::SetDataDirectory:  out = TopBarCommand(TopBarCommandType::SetDataDirectory); return true;
     case MenuCommand::ApplyChangesToDisc: out = TopBarCommand(TopBarCommandType::ApplyChangesToDisc); return true;
