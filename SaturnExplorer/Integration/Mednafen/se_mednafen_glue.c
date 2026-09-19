@@ -53,6 +53,8 @@ extern int             SsDbgScspSlots(unsigned char* out); /* fill SE_LIVE_SCSP_
 extern int             SsDbgCdStatus(unsigned char* out); /* fill SE_LIVE_CD_BLOCK_LEN bytes; return 1 if available (0 if unwired) */
 extern size_t          SsDbgSaveState(unsigned char* buf, size_t cap); /* full savestate -> buf; return bytes (or size when buf==NULL) */
 extern int             SsDbgLoadState(const unsigned char* buf, size_t len); /* restore full savestate; 0 = ok */
+extern int             SsDbgEmuSlotInfo(unsigned slot, unsigned long long* mtime); /* 1 if the emulator's own slot holds a state */
+extern int             SsDbgEmuLoadSlot(unsigned slot); /* have the emulator load its own slot; 0 = ok */
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
@@ -488,6 +490,7 @@ void SeMednafenFrameHook(void)
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
         SeExportSetSaveStateHook(SeMdfnSaveState);         /* rewind savestate ring (v16) */
         SeExportSetLoadStateHook(SeMdfnLoadState);
+        SeExportSetEmuSlotHooks(SsDbgEmuSlotInfo, SsDbgEmuLoadSlot);  /* Mednafen's own slots (v17) */
         SeExportSetBreakpointHooks(SeMdfnAddExecBp, SeMdfnClearBps);
         SeExportSetMemBreakpointHook(SeMdfnAddMemBp);   /* data (read/write) watchpoints */
         SeExportSetInputHook(SeMdfnSetPad);   /* controller panel -> emulated pad (v7+) */

@@ -100,6 +100,7 @@ constexpr int ID_ROM_BASE   = 0xE900;   // + recent-ROM index
 constexpr int ID_PANEL_BASE = 0xEA00;   // + PanelList index
 constexpr int ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
 constexpr int ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
+constexpr int ID_EMULOAD_BASE   = 0xED00;   // + the emulator's own save-state slot
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -221,6 +222,8 @@ struct MacMenuBarImpl
             action = NativeMenuAction(MenuCommand::SaveState, id - ID_SAVESTATE_BASE);
         else if (id >= ID_LOADSTATE_BASE && id < ID_LOADSTATE_BASE + kNativeStateSlots)
             action = NativeMenuAction(MenuCommand::LoadState, id - ID_LOADSTATE_BASE);
+        else if (id >= ID_EMULOAD_BASE && id < ID_EMULOAD_BASE + kNativeStateSlots)
+            action = NativeMenuAction(MenuCommand::LoadEmulatorState, id - ID_EMULOAD_BASE);
         else
         {
             MenuCommand c = MenuCommand::None;
@@ -423,10 +426,12 @@ struct MacMenuBarImpl
             [run addItem:[NSMenuItem separatorItem]];
             NSMenu* save = AddSub(run, @"Save State");
             NSMenu* load = AddSub(run, @"Load State");
+            NSMenu* emu = AddSub(run, @"Load Emulator State");
             for (int i = 0; i < kNativeStateSlots; ++i)
             {
                 AddItem(save, ID_SAVESTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
                 AddItem(load, ID_LOADSTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
+                AddItem(emu, ID_EMULOAD_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
             }
         }
 
@@ -555,6 +560,7 @@ struct MacMenuBarImpl
         {
             EnableTag(ID_SAVESTATE_BASE + i, s.saveStateEnabled);
             EnableTag(ID_LOADSTATE_BASE + i, s.saveStateEnabled && s.slotOccupied[i]);
+            EnableTag(ID_EMULOAD_BASE + i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
         }
 
         // Data

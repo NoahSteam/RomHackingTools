@@ -76,6 +76,7 @@ enum class MenuCommand
     StepFrame,
     SaveState,            // uses index (slot)
     LoadState,            // uses index (slot)
+    LoadEmulatorState,    // uses index (slot); the emulator's own slots
     // Data
     DumpMemory,
     SetDataDirectory,
@@ -144,6 +145,9 @@ struct NativeMenuState
     // Save states: usable at all, and which of the numbered slots currently hold one.
     bool saveStateEnabled = false;
     bool slotOccupied[kNativeStateSlots] = {};
+    // The emulator's own slots, reported by it (see LiveDriver's se_live_emu_slots).
+    bool emuSlotsOffered = false;
+    bool emuSlotOccupied[kNativeStateSlots] = {};
 
     // --- Data ---
     bool dumpEnabled = false;

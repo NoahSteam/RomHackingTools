@@ -84,6 +84,7 @@ constexpr UINT ID_ROM_BASE   = 0xE900;   // + recent-ROM index
 constexpr UINT ID_PANEL_BASE = 0xEA00;   // + PanelList index
 constexpr UINT ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
 constexpr UINT ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
+constexpr UINT ID_EMULOAD_BASE   = 0xED00;   // + the emulator's own save-state slot
 // Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
 // Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
 // sharing id 0 — so even if one were ever un-grayed, its WM_COMMAND can't be mistaken for id 0
@@ -178,6 +179,8 @@ bool Win32MenuBar::OnCommand(int id)
         action = NativeMenuAction(MenuCommand::SaveState, id - (int)ID_SAVESTATE_BASE);
     else if (id >= (int)ID_LOADSTATE_BASE && id < (int)ID_LOADSTATE_BASE + kNativeStateSlots)
         action = NativeMenuAction(MenuCommand::LoadState, id - (int)ID_LOADSTATE_BASE);
+    else if (id >= (int)ID_EMULOAD_BASE && id < (int)ID_EMULOAD_BASE + kNativeStateSlots)
+        action = NativeMenuAction(MenuCommand::LoadEmulatorState, id - (int)ID_EMULOAD_BASE);
     else
     {
         MenuCommand c = MenuCommand::None;
@@ -291,6 +294,7 @@ void Win32MenuBar::RefreshState()
     {
         EnableById(mMenu, ID_SAVESTATE_BASE + (UINT)i, s.saveStateEnabled);
         EnableById(mMenu, ID_LOADSTATE_BASE + (UINT)i, s.saveStateEnabled && s.slotOccupied[i]);
+        EnableById(mMenu, ID_EMULOAD_BASE + (UINT)i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
     }
 
     // Data
@@ -439,15 +443,18 @@ void Win32MenuBar::Rebuild()
         ::AppendMenuW(run, MF_SEPARATOR, 0, nullptr);
         HMENU save = ::CreatePopupMenu();
         HMENU load = ::CreatePopupMenu();
+        HMENU emu = ::CreatePopupMenu();
         for (int i = 0; i < kNativeStateSlots; ++i)
         {
             wchar_t label[16];
             swprintf(label, 16, L"Slot %d", i);
             AddItem(save, ID_SAVESTATE_BASE + (UINT)i, label);
             AddItem(load, ID_LOADSTATE_BASE + (UINT)i, label);
+            AddItem(emu, ID_EMULOAD_BASE + (UINT)i, label);
         }
         AddSub(run, save, L"Save State");
         AddSub(run, load, L"Load State");
+        AddSub(run, emu, L"Load Emulator State");
         AddSub(bar, run, L"&Run");
     }
 

@@ -528,6 +528,23 @@ void SeExportSetKeyMapHook(SeGetKeyMapFn fn)
     sGetKeyMap = fn;
 }
 
+/* ---- Emulator-native save slots (v17+). The client cannot locate these itself: the path
+ * depends on the emulator's base directory, its state-path setting and a hash of the disc.
+ * So the emulator reports the inventory and performs the load. ---- */
+typedef int (*SeEmuSlotInfoFn)(unsigned int slot, unsigned long long* mtime);
+typedef int (*SeEmuSlotLoadFn)(unsigned int slot);
+static SeEmuSlotInfoFn sEmuSlotInfo;
+static SeEmuSlotLoadFn sEmuSlotLoad;
+/* Latched by the ELS verb, applied by the gate on the emulate thread (0 = none pending,
+ * else slot + 1) so the emulator's own loader never runs underneath a mid-frame CPU. */
+static volatile int sEmuLoadPending;
+
+void SeExportSetEmuSlotHooks(SeEmuSlotInfoFn info, SeEmuSlotLoadFn load)
+{
+    sEmuSlotInfo = info;
+    sEmuSlotLoad = load;
+}
+
 /* ---- Port device-type hook (v12+). apply.py wires this to the emulator's port map so
  * the client can report the emulator's controller configuration. get(port) returns a
  * short human-readable device name ("Digital Control Pad", "3D Control Pad", ...) for
@@ -687,6 +704,28 @@ int SeExportGateFrame(void)
     if (sLoadPending)
     {
         SeStateConsumeLoad();
+    }
+    /* Same for an emulator-native slot load (ELS). The emulator loads it through its own
+     * code, so nothing here knows the resulting frame; drop the savestate pipeline and the
+     * wire ring for the same reason a rewind does, and let the client's history go with it. */
+    if (sEmuLoadPending)
+    {
+        const int slot = sEmuLoadPending - 1;
+        sEmuLoadPending = 0;
+        if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
+        {
+            SE_LOCK();
+            { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+            SE_UNLOCK();
+            SeStateFlushAndRekey();
+            sStopReason = SE_LIVE_STOP_NONE;
+            sStepBudget = 0;
+            sPaused = 0;
+        }
+        else
+        {
+            SeExportLog("load slot: the emulator refused it");
+        }
     }
     if (!sPaused)
     {
@@ -1088,6 +1127,16 @@ static void SeServeClient(int cl, SeFrame* snap)
                 sLoadPending = 1;   /* the gate picks this up on the emulate thread */
             }
         }
+        else if (memcmp(req, SE_LIVE_VERB_EMULOAD, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Load one of the emulator's own save slots (v17). No payload; the gate runs it
+             * on the emulate thread. Pause first so nothing advances underneath the load. */
+            if (sEmuSlotLoad && arg < SE_LIVE_EMU_SLOTS)
+            {
+                SE_LOCK(); sPaused = 1; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+                sEmuLoadPending = (int)arg + 1;
+            }
+        }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
         {
             /* Inject controller state: arg packs port (high 16) + SE_PAD_* mask (low
@@ -1339,6 +1388,26 @@ static void SeServeClient(int cl, SeFrame* snap)
                 free(local[i].payload);
             }
         }
+
+        /* v17 trailing block: the emulator's own save-slot inventory. u32 count (0 when this
+         * build has no hook), then that many {present, mtime} records. */
+        {
+            unsigned char cntb[4];
+            const unsigned int n = sEmuSlotInfo ? SE_LIVE_EMU_SLOTS : 0u;
+            unsigned int i;
+            SeWr32(cntb, n);
+            if (SeSend(cl, cntb, 4) != 0) return;
+            for (i = 0; i < n; ++i)
+            {
+                unsigned char rec[SE_LIVE_EMU_SLOT_LEN];
+                unsigned long long mtime = 0;
+                const int present = sEmuSlotInfo(i, &mtime);
+                rec[0] = present ? 1u : 0u; rec[1] = rec[2] = rec[3] = 0;
+                SeWr32(rec + 4, (unsigned int)(mtime & 0xFFFFFFFFu));
+                SeWr32(rec + 8, (unsigned int)((mtime >> 32) & 0xFFFFFFFFu));
+                if (SeSend(cl, rec, SE_LIVE_EMU_SLOT_LEN) != 0) return;
+            }
+        }
     }
 }
 
@@ -1454,7 +1523,8 @@ int SeExportInit(void)
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
     sStateWorkerStarted = 0; sStateWorkerRun = 0; sStateCap = 0;
     sFreeCount = sRawHead = sRawCount = sOutHead = sOutCount = 0;
-    sLoadPending = 0; sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
+    sLoadPending = 0; sEmuLoadPending = 0;
+    sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
     sRunning = 1;
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);

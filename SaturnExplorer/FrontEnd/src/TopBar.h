@@ -48,6 +48,8 @@ enum class TopBarCommandType
     // Save states (live only). 'index' carries the slot.
     SaveState,
     LoadState,
+    // Load one of the emulator's OWN save slots (it performs the load). 'index' is the slot.
+    LoadEmulatorState,
     DumpMemory,
     SetDataDirectory,
     ToggleWindow,
@@ -93,6 +95,8 @@ struct TopBarViewModel
     // A savestate has been received and the emulator can restore one, so the save-state
     // slots are usable. False when rewind support is missing from the emulator build.
     bool canSaveState = false;
+    // The emulator reports its own numbered save slots, so they can be offered too.
+    bool hasEmulatorStates = false;
     std::string launchValidationMessage;
     // Patch feature (desktop only): the number of recorded patch locations and whether a Data
     // Directory is set. Both the ImGui Patch menu and the native menu bar read these through

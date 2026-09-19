@@ -34,6 +34,10 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
         return state.connected && state.canSaveState;
     case TopBarCommandType::LoadState:
         return state.connected && state.canSaveState;
+    // The emulator's own slots do not depend on a savestate having reached us -- it loads
+    // them itself -- only on its having reported that it has them.
+    case TopBarCommandType::LoadEmulatorState:
+        return state.connected && state.hasEmulatorStates;
     case TopBarCommandType::DumpMemory:
         return state.source != SourceType::None && !state.operationBusy;
     // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image

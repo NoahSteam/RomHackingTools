@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -1026,6 +1027,7 @@ void App::BuildUI(IPlatform& platform)
     if (mbLiveSource)
     {
         se_live_drain_state_blocks(&mDataSource, &App::OnStateBlock, this);
+        RefreshEmulatorSlots();
         mSeekSupported = se_live_server_version(&mDataSource) >= 16u;
     }
 #endif
@@ -5419,6 +5421,7 @@ TopBarViewModel App::BuildTopBarViewModel() const
     // back. A build without rewind support streams nothing, so this simply stays false.
     vm.canSaveState = mStateSlots.HaveState() &&
                       se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0;
+    vm.hasEmulatorStates = mEmuSlotCount > 0;
 #endif
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
@@ -5920,6 +5923,26 @@ void App::DrawDemoOverlay()
 }
 
 #ifdef SE_ENABLE_LIVE
+namespace
+{
+// "2026-09-19 11:24" from a unix timestamp, or "" for 0 (the emulator reported no time).
+std::string FormatUnixTime(uint64_t seconds)
+{
+    if (seconds == 0) return std::string();
+    const std::time_t t = static_cast<std::time_t>(seconds);
+    std::tm tmv{};
+#if defined(_WIN32)
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", tmv.tm_year + 1900,
+                  tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
+    return buf;
+}
+}  // namespace
+
 // "State" — the toolbar's save-state menu: ten numbered slots, each showing the frame it
 // holds and when it was written. Save captures the emulator's own savestate (the one it
 // already streams for rewind); Load hands it back through the same LST path rewind uses.
@@ -5969,8 +5992,11 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
         }
         ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Load State", enabled))
+    // Load offers the emulator's own slots too, so it opens even when Saturn Explorer has
+    // no state of its own to save.
+    if (ImGui::BeginMenu("Load State", enabled || mEmuSlotCount > 0))
     {
+        ImGui::TextDisabled("Saturn Explorer");
         bool any = false;
         for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
         {
@@ -5985,6 +6011,30 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
             ImGui::TextDisabled("  %s", detail.c_str());
         }
         if (!any) ImGui::TextDisabled("No saved states for this game.");
+
+        // The emulator's own slots -- the ones its save-state hotkeys use. Kept in a
+        // separate group because they behave differently: the emulator performs the load,
+        // so Saturn Explorer does not learn the frame and has to drop its recorded history.
+        if (mEmuSlotCount > 0)
+        {
+            ImGui::Separator();
+            ImGui::TextDisabled("Emulator");
+            bool anyEmu = false;
+            for (uint32_t i = 0; i < mEmuSlotCount; ++i)
+            {
+                if (!mEmuSlotPresent[i]) continue;
+                anyEmu = true;
+                char label[64];
+                std::snprintf(label, sizeof(label), "Slot %u", i);
+                if (ImGui::MenuItem(label))
+                    commands.emplace_back(TopBarCommandType::LoadEmulatorState,
+                                          static_cast<int>(i));
+                ImGui::SameLine();
+                ImGui::TextDisabled("  %s", FormatUnixTime(mEmuSlotMtime[i]).c_str());
+            }
+            if (!anyEmu) ImGui::TextDisabled("None saved in the emulator.");
+            ImGui::TextDisabled("Loaded by the emulator; clears recorded history.");
+        }
         ImGui::EndMenu();
     }
 
@@ -6047,6 +6097,32 @@ void App::DoLoadState(int slot)
                   static_cast<unsigned long long>(frame));
     mStateStatus = msg;
     mLog.Info(mStateStatus, static_cast<uint32_t>(frame));
+}
+
+void App::RefreshEmulatorSlots()
+{
+    mEmuSlotCount = se_live_emu_slots(&mDataSource, mEmuSlotPresent, mEmuSlotMtime,
+                                      static_cast<uint32_t>(sizeof(mEmuSlotPresent)));
+}
+
+void App::DoLoadEmulatorState(int slot)
+{
+    // The emulator loads its own slot through its own code, so nothing comes back about
+    // where it lands -- no frame number, unlike a rewind. Everything recorded is therefore
+    // a future that may never have happened: drop it rather than leave a ring that claims
+    // frames the emulator is no longer playing.
+    se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
+    mRecorder.Clear();
+    mStateSlots.Reset();
+    mPendingEdits.clear();
+    mPendingEditsFrame = -1;
+    mbScrubbing = false;
+    mScrubIndex = -1;
+    mbPaused = false;
+    char msg[96];
+    std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
+    mStateStatus = msg;
+    mLog.Info(mStateStatus, se_frame_number(mContext));
 }
 #endif  // SE_ENABLE_LIVE
 
@@ -6296,6 +6372,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
 #ifdef SE_ENABLE_LIVE
     case TopBarCommandType::SaveState: DoSaveState(command.index); break;
     case TopBarCommandType::LoadState: DoLoadState(command.index); break;
+    case TopBarCommandType::LoadEmulatorState: DoLoadEmulatorState(command.index); break;
 #endif
     case TopBarCommandType::SetDataDirectory:
         mOpenDataDirModal = true;
@@ -6386,6 +6463,9 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)
         m.slotOccupied[i] = SavestateSlots::SlotExists(mLauncher.Rom(), i);
+    m.emuSlotsOffered = mEmuSlotCount > 0;
+    for (int i = 0; i < kNativeStateSlots && i < static_cast<int>(mEmuSlotCount); ++i)
+        m.emuSlotOccupied[i] = mEmuSlotPresent[i] != 0;
 #endif
 
     // Layers (same order as DrawLayersMenu / NativeMenuLayer).

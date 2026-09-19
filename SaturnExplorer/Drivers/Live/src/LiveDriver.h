@@ -50,6 +50,17 @@ void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t button
  * No-op if 'ds' isn't a live source. */
 void se_live_set_tracepoints(const se_data_source* ds, const uint8_t* descs, uint32_t count);
 
+/* The emulator's own numbered save slots (v17+) -- the ones its save-state hotkeys use.
+ * se_live_emu_slots fills 'present' (and 'mtime', unix seconds, if non-NULL) for up to 'max'
+ * slots and returns how many it reported; 0 means the emulator does not offer them (an older
+ * server, or a build without the hook), so the caller should not show them at all.
+ * se_live_emu_load_slot asks the emulator to load one through its own code. Nothing comes
+ * back about where it lands: the client cannot know the resulting frame, so it must treat
+ * its recorded history as gone -- unlike a rewind, which carries the frame it restores. */
+uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
+                           uint64_t* mtime, uint32_t max);
+void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
+
 /* A fired tracepoint event drained from the server (v8+): the tracepoint id, the CPU
  * (0 master / 1 slave), the frame it fired on, and the captured SH-2 register file
  * (23 u32 in se_sh2_regs order: r[0..15], pc, pr, sr, gbr, vbr, mach, macl). */

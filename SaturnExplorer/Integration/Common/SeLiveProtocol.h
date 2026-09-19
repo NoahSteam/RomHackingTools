@@ -55,7 +55,9 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      16u   /* +v16 savestate rewind: per-frame savestate delta stream
+#define SE_LIVE_VERSION      17u   /* +v17 emulator-native save slots: the ELS verb + the
+                                  * slot-inventory block below.
+                                  * v16 savestate rewind: per-frame savestate delta stream
                                     * (trailing section) + LST load-state verb */
 /* Command verbs are exactly 4 bytes; a request is a verb + 4-byte LE argument. */
 #define SE_LIVE_REQUEST      "GET\n"   /* back-compat alias for the snapshot verb */
@@ -97,6 +99,12 @@
                                         * from its keyframe+delta ring. The emulator restores +
                                         * patches + adopts frame_no + resumes, all on the emulate
                                         * thread at the frame gate (so pokes can't race the load). */
+#define SE_LIVE_VERB_EMULOAD "ELS\n" /* load an emulator-native save slot (v17+): arg = slot
+                                        * index. Unlike LST this hands no state over -- the
+                                        * emulator loads its OWN numbered slot, the one its
+                                        * save-state hotkeys use, through its own code. So the
+                                        * client cannot know the frame it lands on and must
+                                        * treat its recorded history as gone. No payload. */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -227,6 +235,15 @@
 #define SE_LIVE_STATE_KIND_KEYFRAME 1u
 #define SE_LIVE_STATE_MAX_PER_REPLY 4u  /* cap on blocks drained into one response */
 #define SE_LIVE_STATE_MAX_PAYLOAD (64u * 1024u * 1024u) /* sanity bound on one block's payload */
+
+/* Emulator save-slot inventory (v17+): a trailing section after the v16 savestate section,
+ * version-gated the same way. Lets the client list the emulator's own numbered slots without
+ * having to find them on disk -- their path depends on the emulator's base directory, its
+ * state-path setting and a hash of the disc, none of which the client knows. Layout:
+ *   u32 count   (0 = this build has no emulator-slot hook; else SE_LIVE_EMU_SLOTS)
+ *   then 'count' records: u8 present + u8 pad[3] + u64 mtime (unix seconds, LE; 0 unknown) */
+#define SE_LIVE_EMU_SLOTS     10u
+#define SE_LIVE_EMU_SLOT_LEN  12u
 
 /* Memory-edit blob (v16), carried inside an LST payload and applied by the emulator right
  * after the savestate restore. Layout:

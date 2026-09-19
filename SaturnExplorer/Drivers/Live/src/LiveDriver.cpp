@@ -84,6 +84,16 @@ struct LiveKeyMap
     bool valid = false;
 };
 
+// The emulator's own numbered save slots (v17), as reported each reply. The client cannot
+// find these on disk -- their path depends on the emulator's base directory, its state-path
+// setting and a hash of the disc -- so the emulator reports the inventory instead.
+struct LiveEmuSlots
+{
+    uint8_t  present[SE_LIVE_EMU_SLOTS] = {};
+    uint64_t mtime[SE_LIVE_EMU_SLOTS] = {};
+    bool     valid = false;   // false on a pre-v17 server, or a build with no slot hook
+};
+
 // One received savestate block (v16): a keyframe or a delta-vs-keyframe, frame-tagged. The
 // payload is the opaque, RLE-compressed emulator image (the client never interprets it, only
 // stores it and reconstructs a full image to hand back via LST). Blocks arrive lagging.
@@ -177,6 +187,12 @@ struct LiveState
     std::vector<uint8_t>  loadPayload;
     bool                  loadDirty = false;
     uint32_t              loadFrame = 0;
+    // The emulator's own save-slot inventory (v17), refreshed every reply. Guarded by ctlMtx.
+    uint8_t               emuSlotPresent[SE_LIVE_EMU_SLOTS] = {};
+    uint64_t              emuSlotMtime[SE_LIVE_EMU_SLOTS] = {};
+    bool                  emuSlotsValid = false;
+    // Pending ELS (v17): slot + 1, or 0 for none. Guarded by ctlMtx.
+    int                   emuLoadSlot = 0;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -335,7 +351,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   StopInfo& outStop, std::vector<LiveEvent>& outEvents,
                   LiveCallStacks& outCallStacks, LiveKeyMap& outKeyMap,
                   std::vector<std::string>& outLog,
-                  std::vector<LiveStateBlock>& outStateBlocks)
+                  std::vector<LiveStateBlock>& outStateBlocks, LiveEmuSlots& outEmuSlots)
 {
     if (!SendCommand(c, verb, arg))
     {
@@ -586,6 +602,25 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         }
     }
 
+    // v17: the emulator's own save-slot inventory. Fixed-size records, so a count other
+    // than 0 or SE_LIVE_EMU_SLOTS means the stream is out of step.
+    if (version >= 17u)
+    {
+        uint8_t cntb[4];
+        if (!ConnReadFull(c, cntb, 4)) return false;
+        const uint32_t count = Rd32LE(cntb);
+        if (count != 0u && count != SE_LIVE_EMU_SLOTS) return false;
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            uint8_t rec[SE_LIVE_EMU_SLOT_LEN];
+            if (!ConnReadFull(c, rec, SE_LIVE_EMU_SLOT_LEN)) return false;
+            outEmuSlots.present[i] = rec[0];
+            outEmuSlots.mtime[i] = static_cast<uint64_t>(Rd32LE(rec + 4)) |
+                                   (static_cast<uint64_t>(Rd32LE(rec + 8)) << 32);
+        }
+        outEmuSlots.valid = count != 0u;
+    }
+
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
@@ -659,6 +694,13 @@ void PollLoop(LiveState* st)
                 st->loadDirty = false;
                 shippedLoad = true;
                 loadResyncFrame = st->loadFrame;
+            }
+            else if (st->emuLoadSlot != 0)
+            {
+                // Emulator-native slot load (v17): no payload, the emulator does the work.
+                verb = SE_LIVE_VERB_EMULOAD;
+                arg = st->emuLoadSlot - 1;
+                st->emuLoadSlot = 0;
             }
             else if (st->bkptsDirty)
             {
@@ -736,9 +778,10 @@ void PollLoop(LiveState* st)
         LiveKeyMap keyMap;
         std::vector<std::string> logLines;
         std::vector<LiveStateBlock> stateBlocks;
+        LiveEmuSlots emuSlots;
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
-                          logLines, stateBlocks))
+                          logLines, stateBlocks, emuSlots))
         {
             ConnClose(conn);   // will reconnect next iteration
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -753,6 +796,13 @@ void PollLoop(LiveState* st)
             std::lock_guard<std::mutex> lk(st->kmMtx);
             std::memcpy(st->keyMap, keyMap.k, sizeof(st->keyMap));
             st->keyMapValid = true;
+        }
+        if (emuSlots.valid)
+        {
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            std::memcpy(st->emuSlotPresent, emuSlots.present, sizeof(st->emuSlotPresent));
+            std::memcpy(st->emuSlotMtime, emuSlots.mtime, sizeof(st->emuSlotMtime));
+            st->emuSlotsValid = true;
         }
         {
             std::lock_guard<std::mutex> lk(st->mtx);
@@ -806,7 +856,8 @@ void PollLoop(LiveState* st)
         LiveKeyMap km;
         std::vector<std::string> lg;
         std::vector<LiveStateBlock> sb;
-        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb);  // best-effort
+        LiveEmuSlots es;
+        ReadSnapshot(conn, SE_LIVE_VERB_RESUME, 0, nullptr, 0, tmp, p, fr, sv, si, ev, cs, km, lg, sb, es);  // best-effort
     }
     ConnClose(conn);
 }
@@ -1159,6 +1210,30 @@ extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint
     // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
     const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
     St(ds->user)->inputState.store(packed);
+}
+
+extern "C" uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
+                                     uint64_t* mtime, uint32_t max)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !present || !max) { return 0; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (!st->emuSlotsValid) { return 0; }   // pre-v17 server, or no slot hook in that build
+    uint32_t n = 0;
+    for (; n < max && n < SE_LIVE_EMU_SLOTS; ++n)
+    {
+        present[n] = st->emuSlotPresent[n];
+        if (mtime) mtime[n] = st->emuSlotMtime[n];
+    }
+    return n;
+}
+
+extern "C" void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
+{
+    if (!ds || !ds->user || ds->close != CbClose || slot >= SE_LIVE_EMU_SLOTS) { return; }
+    LiveState* st = St(ds->user);
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
 }
 
 extern "C" void se_live_set_tracepoints(const se_data_source* ds,

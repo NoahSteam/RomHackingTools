@@ -452,6 +452,30 @@ extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) { (void)buf; (v
 extern "C" int    SsDbgLoadState(const unsigned char* buf, size_t len) { (void)buf; (void)len; return -1; }
 #endif"""
 
+# Emulator-native save slots (v17). Lets Saturn Explorer list and load Mednafen's OWN numbered
+# save slots -- the ones F5/F7 use -- which it cannot find itself: the path depends on the base
+# directory, the filesys.path_state setting and an MD5 of the disc. MDFN_MakeFName builds it,
+# and MDFNI_LoadState is given that path explicitly rather than going through MDFNI_SelectState,
+# so loading from Saturn Explorer does not move the slot the user has selected in Mednafen.
+#
+# Unlike SAVESTATE_ACCESSORS there is no stub fallback here: these are ordinary public entry
+# points, and if a fork changes them the result is a compile error, which is the failure mode
+# you want. See README.md, "Rewind", for the one that fails silently.
+EMU_SLOT_ACCESSORS = """\
+/* Saturn Explorer: the emulator's own save slots (v17). */
+#include <mednafen/general.h>
+#include <mednafen/state-driver.h>
+#include <sys/stat.h>
+extern "C" int SsDbgEmuSlotInfo(unsigned slot, unsigned long long* mtime) {
+ try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);
+       struct stat st; if(::stat(p.c_str(), &st) != 0) return 0;
+       if(mtime) *mtime = (unsigned long long)st.st_mtime; return 1;
+ } catch(...) { return 0; } }
+extern "C" int SsDbgEmuLoadSlot(unsigned slot) {
+ try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);
+       return Mednafen::MDFNI_LoadState(p.c_str(), NULL) ? 0 : -1;
+ } catch(...) { return -1; } }"""
+
 SMPC_INPUT_DECL = """\
 /* Saturn Explorer controller injection. `buttons` is the protocol's SE_PAD_* mask;
    the SMPC implementation translates and overlays it on the host gamepad state. */
@@ -837,6 +861,8 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_append(text, SS_ACCESSORS, "SsDbgWramL")
     notes.append(n)
     text, n = apply_append(text, SAVESTATE_ACCESSORS, "SsDbgSaveState")
+    notes.append(n)
+    text, n = apply_append(text, EMU_SLOT_ACCESSORS, "SsDbgEmuSlotInfo")
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)

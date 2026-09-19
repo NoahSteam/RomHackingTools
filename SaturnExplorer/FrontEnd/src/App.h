@@ -191,6 +191,10 @@ private:
     void DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DoSaveState(int slot);
     void DoLoadState(int slot);
+    void DoLoadEmulatorState(int slot);
+    // Refresh the emulator's own save-slot inventory from the live driver. Cheap; polled
+    // each frame so the menu reflects a state saved in the emulator while SE is attached.
+    void RefreshEmulatorSlots();
     void DrawLaunchSettingsModal(IPlatform& platform);
     // Start the selected emulator. With a non-empty romOverride, launch THAT disc instead of the
     // selected ROM without changing the user's selection (used by Build & Launch ISO).
@@ -382,6 +386,11 @@ private:
     // recorder ring, so Save State works without recording being on.
     SavestateSlots   mStateSlots;
     std::string      mStateStatus;      // last save/load result, shown in the State menu
+    // The emulator's own numbered slots, as it reports them (it owns the files; SE cannot
+    // find them on disk). mEmuSlotCount 0 = this emulator does not offer them.
+    uint8_t          mEmuSlotPresent[16] = {};
+    uint64_t         mEmuSlotMtime[16] = {};
+    uint32_t         mEmuSlotCount = 0;
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

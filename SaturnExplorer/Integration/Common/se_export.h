@@ -141,6 +141,17 @@ void SeExportSetSoundWriteHook(void (*write)(unsigned int offset, unsigned char 
 void SeExportSetSaveStateHook(size_t (*save)(unsigned char* buf, size_t cap));
 void SeExportSetLoadStateHook(int (*load)(const unsigned char* buf, size_t len));
 
+/* Wire the emulator's OWN numbered save slots (v17+) -- the ones its save-state hotkeys
+ * use -- so the client can list and load them without knowing where they live on disk.
+ *   info(slot, mtime): 1 if that slot holds a state, else 0; *mtime gets its modification
+ *     time in unix seconds (0 if unknown). Called once per slot while building a reply.
+ *   load(slot): have the emulator load its own slot; return 0 on success. Runs on the
+ *     emulate thread at the frame gate, like the LST restore.
+ * Either may be NULL, in which case the inventory reports no slots and the ELS verb is a
+ * no-op. Call once after SeExportInit. */
+void SeExportSetEmuSlotHooks(int (*info)(unsigned int slot, unsigned long long* mtime),
+                             int (*load)(unsigned int slot));
+
 /* Wire controller input injection (v7+), so the Saturn Explorer controller panel can
  * drive the running game directly. set(port, buttons) receives the emulator-agnostic
  * SE_PAD_* bitmask; the glue latches it and feeds the emulated pad for `port`,
