@@ -160,7 +160,9 @@ struct MacMenuBarImpl
     void Sync(const NativeMenuState& state)
     {
         // AppKit is main-thread only; App drives this from the (main-thread) frame loop.
-        NSAssert([NSThread isMainThread], @"MacMenuBar::Sync must run on the main thread (AppKit)");
+        // NSCAssert, not NSAssert: this is a C++ member function, and NSAssert expands to
+        // reference the self/_cmd that only exist inside an Objective-C method body.
+        NSCAssert([NSThread isMainThread], @"MacMenuBar::Sync must run on the main thread (AppKit)");
         mState = state;
         mHaveState = true;
         // Only the *structure* (labels + list contents) forces a rebuild; enable/check flags are
