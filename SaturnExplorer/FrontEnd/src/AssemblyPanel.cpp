@@ -516,8 +516,17 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             uint32_t ea; WatchType wt;
             if (ResolveMemOperand(ln.ins, regs, ea, wt))
             {
-                auto mr = backend.ReadMemoryBatch({ { ea, 2 } })[0];
-                if (mr.success) ImGui::Text("[%08X] = %02X %02X", ea, mr.bytes[0], mr.bytes[1]);
+                // Read exactly the access width the mnemonic implies (.b/.w/.l -> 1/2/4)
+                // so a mov.l shows a long, a mov.w a short, a mov.b a byte — not a fixed
+                // two-byte dump. SH-2 is big-endian, so assemble the bytes MSB-first.
+                const uint32_t n = WatchTypeSize(wt);
+                auto mr = backend.ReadMemoryBatch({ { ea, n } })[0];
+                if (mr.success)
+                {
+                    uint32_t val = 0;
+                    for (uint32_t i = 0; i < n; ++i) val = (val << 8) | mr.bytes[i];
+                    ImGui::Text("[%08X] = %0*X", ea, (int)(n * 2), val);
+                }
                 else ImGui::Text("[%08X] unavailable", ea);
             }
             ImGui::EndTooltip();
