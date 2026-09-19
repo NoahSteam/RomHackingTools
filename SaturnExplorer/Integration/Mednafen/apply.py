@@ -420,12 +420,12 @@ extern "C" int SsDbgCdStatus(unsigned char* out)
 
 # Full-savestate save/load accessors (v16 rewind), appended at EOF of ss.cpp. se_export's worker
 # thread delta-compresses the saved states off the emulate thread, so these need only produce /
-# consume a full state image. Shipped as a COMPILING STUB (feature dormant) by default: the exact
-# Mednafen savestate-to-memory API (MDFNSS_SaveSM / MDFNSS_LoadSM against a MemoryStream, and
-# whether they live in the global or Mednafen:: namespace) varies by fork and must be confirmed on
-# the actual tree. Build with -DSE_MDFN_REWIND=1 after wiring the real calls (see the block below)
-# to enable rewind; until then SsDbgSaveState returns 0, which leaves the ring empty and the
-# feature off — everything else (protocol, client, UI) already degrades gracefully.
+# consume a full state image. install.py defines SE_MDFN_REWIND=1, so the real MDFNSS path below
+# is what builds; the #else stub is the fallback for a fork whose savestate-to-memory API differs
+# (MDFNSS_SaveSM / MDFNSS_LoadSM / MemoryStream moving namespace, or the MemoryStream constructor
+# changing meaning). With the stub, SsDbgSaveState returns 0, the ring stays empty and rewind /
+# save state silently do nothing — everything else (protocol, client, UI) degrades gracefully.
+# See Integration/Mednafen/README.md, "Rewind", before changing the pinned fork.
 SAVESTATE_ACCESSORS = """\
 /* Saturn Explorer full-savestate save/load (v16 rewind). Dormant by default (stub); build with
    -DSE_MDFN_REWIND=1 to enable the real MDFNSS memory-stream path below. If your fork puts
@@ -441,7 +441,11 @@ extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) {
        if((uint64)cap < sz) return 0; memcpy(buf, ms.map(), (size_t)sz); return (size_t)sz;
  } catch(...) { return 0; } }
 extern "C" int SsDbgLoadState(const unsigned char* buf, size_t len) {
- try { Mednafen::MemoryStream ms(len?len:1, 0); if(len) memcpy(ms.map(), buf, len); ms.rewind();
+ if(!buf || !len) return -1;
+ /* alloc_hint_is_size must be non-zero, or the stream's *size* stays 0 (the hint only
+    reserves capacity) and MDFNSS_LoadSM reads an empty stream. -1 sets the size and skips
+    the zero-fill, which the memcpy below overwrites anyway. */
+ try { Mednafen::MemoryStream ms(len, -1); memcpy(ms.map(), buf, len); ms.rewind();
        Mednafen::MDFNSS_LoadSM(&ms, true); return 0; } catch(...) { return -1; } }
 #else
 extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) { (void)buf; (void)cap; return 0; }

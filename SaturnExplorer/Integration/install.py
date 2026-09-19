@@ -565,6 +565,30 @@ def clone_and_patch(rn, key, spec, dest, rev_override, repo, skip_git=False):
                   description=f"Apply Saturn Explorer integration to {key}") == 0
 
 
+# Enables the real MDFNSS savestate-to-memory path in the patch's SsDbgSaveState /
+# SsDbgLoadState (Integration/Mednafen/apply.py). Without it those are stubs, the savestate
+# ring stays empty, and rewind / save state silently do nothing. See
+# Integration/Mednafen/README.md, "Rewind", for what can break this on a fork update.
+MEDNAFEN_DEFINES = "-DSE_MDFN_REWIND=1"
+
+
+def mednafen_defines_stale(dest):
+    """True when the tree is configured but not with MEDNAFEN_DEFINES.
+
+    `make` tracks source mtimes, not compiler flags, and an incremental build skips
+    ./configure whenever config.status exists — so adding a define here would otherwise
+    have no effect at all on an existing checkout, and the feature it gates would appear
+    to be broken rather than simply not rebuilt."""
+    status = os.path.join(dest, "config.status")
+    if not os.path.isfile(status):
+        return False        # not configured yet; the normal path will configure it
+    try:
+        with open(status, "r", errors="replace") as f:
+            return all(d not in f.read() for d in MEDNAFEN_DEFINES.split())
+    except OSError:
+        return False
+
+
 def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     bash = os.path.join(msys2, "usr", "bin", "bash.exe")
     msdir = win_to_msys(dest)
@@ -597,7 +621,7 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     # so on any NT-based Windows it pops "This special build of Mednafen is intended for
     # use on Windows 98..." and exits before doing anything. Upstream's own Windows build
     # script (mswin/build-mednafen.sh) passes exactly these two defines.
-    cppflags = "-DUNICODE=1 -D_UNICODE=1"
+    cppflags = f"-DUNICODE=1 -D_UNICODE=1 {MEDNAFEN_DEFINES}"
     configure = ("./configure --enable-debugger" +
                  (f" {configure_flags}" if configure_flags else "") +
                  f' CPPFLAGS="{cppflags}"')
@@ -675,6 +699,7 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
     them at runtime via their install names. The binary lands at <dest>/src/mednafen."""
     ncpu = os.cpu_count() or 4
     env = {**os.environ}
+    env["CPPFLAGS"] = (MEDNAFEN_DEFINES + " " + env.get("CPPFLAGS", "")).strip()
     prefix = brew_prefix() if IS_MAC else None
     if prefix:
         # Point configure at Homebrew's headers/libs (SDL2, FLAC) and .pc files. Needed on
@@ -877,7 +902,8 @@ def main():
             # Incremental keeps the checkout and skips ./configure — but if the caller
             # also passed --mednafen-saturn-only, force a reconfigure so the new
             # --disable-* flags actually take effect (they only matter at configure time).
-            reconfigure = (not args.incremental) or bool(cfg_flags)
+            reconfigure = ((not args.incremental) or bool(cfg_flags)
+                           or mednafen_defines_stale(dest))
             if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest,
                                args.mednafen_rev, repo, skip_git=args.incremental):
                 if IS_WIN:

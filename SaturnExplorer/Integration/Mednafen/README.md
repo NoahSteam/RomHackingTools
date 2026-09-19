@@ -400,7 +400,7 @@ own `SDL_SetWindowTitle` in `src/drivers/video.cpp`, using the shared
 `SeExportTitleSuffix()` helper. It's best-effort: a non-SDL / libretro build won't have
 that file, and the patcher skips it gracefully.
 
-## Rewind: resume from a scrubbed-back frame (v16) — opt-in, `-DSE_MDFN_REWIND`
+## Rewind: resume from a scrubbed-back frame (v16) — `-DSE_MDFN_REWIND`
 
 Saturn Explorer's scrub-back can do more than replay recorded pictures: with this wired, you
 can **pause, scrub back to an earlier frame, edit Work RAM, and press Play to have the game
@@ -421,20 +421,46 @@ few frames behind. On Play-from-scrub the client reconstructs frame N's full sta
 with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so **rewind requires
 `--with-pause`** (the gate is where the load is applied).
 
-**Shipped dormant.** The exact Mednafen memory-savestate API — `MDFNSS_SaveSM` / `MDFNSS_LoadSM`
-against a `Mednafen::MemoryStream`, and whether those live in the global or `Mednafen::` namespace
-— varies by fork, so `apply.py` injects `SsDbgSaveState`/`SsDbgLoadState` as a **compiling stub**
-by default (save returns 0 → the ring stays empty → the feature is simply off, and the whole
-protocol/client/UI degrade gracefully). To enable it:
+### ⚠ This depends on Mednafen internals, and fails silently
 
-1. Confirm the `MDFNSS_*` signatures on your checkout (see `src/state.h` / `src/MemoryStream.h`).
-   Adjust the enabled branch in `apply.py`'s `SAVESTATE_ACCESSORS` block if the names/namespace
-   differ.
-2. Build with **`-DSE_MDFN_REWIND=1`** and **`--with-pause`**. For example, add
-   `CPPFLAGS='-DSE_MDFN_REWIND=1'` to `./configure`.
-3. Scrub back, edit Work RAM, press Play — the picture should jump back and re-simulate forward
-   with your edit, and the scrub bar re-fills from that frame. A load-screen scene change should
-   trigger a fresh keyframe; because the diff is off-thread, no frame-rate hitch should appear.
+`install.py` defines `SE_MDFN_REWIND=1` (`MEDNAFEN_DEFINES`), so the real `MDFNSS_*` path is what
+builds against the pinned fork. `apply.py` keeps a `#else` **compiling stub** beside it, because
+the memory-savestate API is not a stable interface and varies by fork: whether `MDFNSS_SaveSM` /
+`MDFNSS_LoadSM` / `MemoryStream` sit in the global or `Mednafen::` namespace, what the
+`MemoryStream` constructor arguments mean, and what the accessors are called.
+
+**The failure is quiet either way, which is the thing to watch for.** If the real branch stops
+compiling you fall back to the stub, `SsDbgSaveState` returns 0, the savestate ring stays empty,
+and rewind and save state simply do nothing — no error, no log line. If it compiles but is
+*subtly* wrong, you get the same silence. That already happened once: the original enabled branch
+built a `MemoryStream(len, 0)`, where the second argument means "the first argument is only a
+capacity hint", so the stream's size stayed 0 and `MDFNSS_LoadSM` read an empty stream. Saving
+worked, loading always failed, and nothing said so. It needs `MemoryStream(len, -1)` — size set,
+zero-fill skipped.
+
+**So after changing `--mednafen-rev`, bumping the fork, or editing `SAVESTATE_ACCESSORS`,
+verify the real path is actually live rather than assuming it:**
+
+```
+nm _emu/mednafen/src/mednafen | grep SsDbgSaveState        # symbol exists either way
+otool -tV _emu/mednafen/src/mednafen | grep -A15 '^_SsDbgSaveState:'   # macOS
+objdump -d _emu/mednafen/src/mednafen | grep -A15 '<SsDbgSaveState>:'  # Linux
+```
+
+A live build calls `MDFNSS_SaveSM`; the stub returns 0 in a few instructions and calls nothing.
+Check `SsDbgLoadState` the same way — it must call `MDFNSS_LoadSM` **and** the two-argument
+`MemoryStream(unsigned long long, int)` constructor. Then confirm end to end: scrub back, edit
+Work RAM, press Play — the picture should jump back and re-simulate forward with the edit in
+effect, and the scrub bar should re-fill from that frame. A scene change should trigger a fresh
+keyframe, and because the diff is off-thread there should be no frame-rate hitch.
+
+Rewind also needs **`--with-pause`** (the load is applied at the frame gate).
+
+One build-system trap: `make` tracks source mtimes, not compiler flags, and `update.sh` skips
+`./configure` entirely when `config.status` exists — so changing `MEDNAFEN_DEFINES` on an
+existing checkout would otherwise have no effect at all, and the feature would look broken rather
+than un-rebuilt. `install.py`'s `mednafen_defines_stale()` detects that and forces a reconfigure.
+Keep it in step if you add another define.
 
 The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
 budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.

@@ -17,6 +17,13 @@ patches. It is untracked on purpose — do not commit it. It is also the best av
 reference for Saturn hardware behaviour when a guide is silent: prefer reading
 `_emu/mednafen/src/ss/*.cpp` over guessing at a register's semantics.
 
+> **Before bumping the Mednafen fork or editing the patch, read
+> [Integration/Mednafen/README.md](Integration/Mednafen/README.md) → "Rewind".** The savestate
+> hooks the rewind and save-state features are built on call Mednafen internals that are not a
+> stable interface, and `apply.py` falls back to a compiling stub when they don't match. Both the
+> fallback and a subtly-wrong binding fail *silently* — no error, no log line, the feature just
+> does nothing. That section says how to verify the real path is live.
+
 ## Build and test
 
 ```
