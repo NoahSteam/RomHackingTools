@@ -459,8 +459,9 @@ Rewind also needs **`--with-pause`** (the load is applied at the frame gate).
 One build-system trap: `make` tracks source mtimes, not compiler flags, and `update.sh` skips
 `./configure` entirely when `config.status` exists — so changing `MEDNAFEN_DEFINES` on an
 existing checkout would otherwise have no effect at all, and the feature would look broken rather
-than un-rebuilt. `install.py`'s `mednafen_defines_stale()` detects that and forces a reconfigure.
-Keep it in step if you add another define.
+than un-rebuilt. `install.py` records the exact configure invocation it used in
+`_emu/mednafen/.se-configure` and forces a reconfigure whenever this run's would differ, so a
+changed define, `--disable-*` set or Homebrew prefix all re-trigger it with nothing to remember.
 
 The tuning constants (keyframe threshold, max keyframe interval, raw-queue depth, client state
 budget) live in `se_export.c` / `FrameRecorder.*` and can be measured/adjusted on-emulator.
