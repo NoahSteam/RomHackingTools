@@ -44,6 +44,13 @@ public:
     // Full path to the relocated ImGui layout file (imgui.ini) within ConfigDir().
     // Keeps all config-dir path assembly (and the OS separator) in this module.
     static std::string LayoutFilePath();
+    // A named subdirectory of ConfigDir() (e.g. "states"). With create=true the directory
+    // and its parents are made. Empty if the config dir is unresolvable. Keeps the
+    // separator and the mkdir in this module rather than in each feature that wants a
+    // folder of its own.
+    static std::string ConfigSubDir(const char* subdir, bool create);
+    // A file inside that subdirectory. Same create semantics; empty if unresolvable.
+    static std::string ConfigSubPath(const char* subdir, const std::string& file, bool create);
 
     void Load();        // read FilePath(); silent no-op if it doesn't exist
     bool Save() const;  // write FilePath(), creating the config dir first

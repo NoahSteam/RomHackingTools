@@ -28,6 +28,21 @@ constexpr char kControllerPanel[] = "Controller";
 // declared here so NativeMenu stays free of the live-only headers.
 constexpr int kNativeStateSlots = 10;
 
+// Menu-item ids for the *indexed* groups: each base owns a contiguous block, and an item's
+// id is base + its index. The fixed (non-indexed) ids stay private to each platform, but
+// these have to agree with NativeMenuDecodeIndexedId below, so they live here rather than
+// being declared twice.
+enum : int
+{
+    kMenuIdLayerBase     = 0xE200,   // + NativeMenuLayer
+    kMenuIdEmulatorBase  = 0xE800,   // + emulator index
+    kMenuIdRecentRomBase = 0xE900,   // + recent-ROM index
+    kMenuIdPanelBase     = 0xEA00,   // + PanelList index
+    kMenuIdSaveStateBase = 0xEB00,   // + save-state slot
+    kMenuIdLoadStateBase = 0xEC00,   // + save-state slot
+    kMenuIdEmuLoadBase   = 0xED00    // + the emulator's own save-state slot
+};
+
 // VDP layer/overlay toggles, in the order the ImGui "Layers" menu lists them. Carried as
 // the index of a NativeMenuAction whose command is LayerToggle; App maps each to the matching
 // se_render_opts field. Kept here (not in the core) because it is purely a menu concern.
@@ -200,6 +215,14 @@ struct TopBarCommand;      // TopBar.h
 // Enable/check/visibility flags are deliberately excluded — only a structural change forces the
 // platform to rebuild its menu tree. Stable across unchanged state; changes when a list does.
 std::string BuildNativeMenuStructureKey(const NativeMenuState& state);
+
+// Decode an indexed menu-item id into its action. Returns false when 'id' belongs to none
+// of the indexed groups, leaving the caller's own switch to handle the fixed ids. The list
+// counts bound each range so a stale id (an item whose list shrank between a click and its
+// delivery) decodes as nothing rather than as a neighbouring group's command. Pure integer
+// logic, so both platform menu bars share it instead of each holding the same chain.
+bool NativeMenuDecodeIndexedId(int id, size_t emulatorCount, size_t recentRomCount,
+                               size_t panelCount, NativeMenuAction& out);
 
 // Map a menu selection onto the TopBarCommand the toolbar would emit. Returns true and fills
 // `out` for command-backed items (including the indexed SelectEmulator / SelectRecentRom /

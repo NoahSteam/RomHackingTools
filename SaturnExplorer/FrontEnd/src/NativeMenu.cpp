@@ -24,6 +24,30 @@ std::string BuildNativeMenuStructureKey(const NativeMenuState& state)
     return key;
 }
 
+bool NativeMenuDecodeIndexedId(int id, size_t emulatorCount, size_t recentRomCount,
+                               size_t panelCount, NativeMenuAction& out)
+{
+    struct Group { int base; int count; MenuCommand command; };
+    const Group groups[] = {
+        { kMenuIdLayerBase,     NM_LAYER_COUNT,            MenuCommand::LayerToggle },
+        { kMenuIdEmulatorBase,  (int)emulatorCount,        MenuCommand::SelectEmulator },
+        { kMenuIdRecentRomBase, (int)recentRomCount,       MenuCommand::SelectRecentRom },
+        { kMenuIdPanelBase,     (int)panelCount,           MenuCommand::ToggleWindow },
+        { kMenuIdSaveStateBase, kNativeStateSlots,         MenuCommand::SaveState },
+        { kMenuIdLoadStateBase, kNativeStateSlots,         MenuCommand::LoadState },
+        { kMenuIdEmuLoadBase,   kNativeStateSlots,         MenuCommand::LoadEmulatorState },
+    };
+    for (const Group& g : groups)
+    {
+        if (id >= g.base && id < g.base + g.count)
+        {
+            out = NativeMenuAction(g.command, id - g.base);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
 {
     switch (a.command)

@@ -46,8 +46,6 @@ public:
     void Frame(ImVec2 mouse, bool down)
     {
         ImGuiIO& io = ImGui::GetIO();
-        io.DisplaySize = ImVec2(1280.0f, 720.0f);
-        io.DeltaTime = 1.0f / 60.0f;
         io.AddMousePosEvent(mouse.x, mouse.y);
         io.AddMouseButtonEvent(0, down);
         ImGui::NewFrame();
@@ -57,11 +55,11 @@ public:
 
     // Run frames with the pointer parked off the widgets, so sizes and positions settle
     // and nothing is hovered. Item rects captured by 'ui' are valid afterwards.
-    void Settle(int frames = 3) { for (int i = 0; i < frames; ++i) Frame(Away(), false); }
+    void Settle() { for (int i = 0; i < kSettleFrames; ++i) Frame(Away(), false); }
 
     // Hold the pointer over 'p'. Items using AllowOverlap need the previous frame's
     // hovered id to match before they report hovered, so more than one frame is required.
-    void Hover(ImVec2 p, int frames = 3) { for (int i = 0; i < frames; ++i) Frame(p, false); }
+    void Hover(ImVec2 p) { for (int i = 0; i < kSettleFrames; ++i) Frame(p, false); }
 
     // A full press + release at 'p'. Assertions about activation want the press frame;
     // Selectable/Button fire on release, so both are driven.
@@ -75,6 +73,10 @@ private:
     // static constexpr member so it needs no out-of-line definition when odr-used
     // (required in C++14, the standard this project builds with).
     static ImVec2 Away() { return ImVec2(1270.0f, 710.0f); }
+
+    // Enough frames for ImGui to settle: AllowOverlap items compare against the previous
+    // frame's hovered id, so a single frame is never enough to establish hover.
+    static const int kSettleFrames = 3;
 
     std::function<void()> mUi;
     ImGuiContext* mContext = nullptr;

@@ -88,7 +88,8 @@ struct Row
 };
 
 // Click the editable cell; report whether it took the click and whether the row stole it.
-void ProbeCell(bool interactiveCells, bool& cellTookClick, bool& rowStoleClick)
+void ProbeCell(bool interactiveCells, bool& cellTookClick, bool& rowStoleClick,
+               bool& cellHovered)
 {
     Row row;
     row.interactiveCells = interactiveCells;
@@ -96,6 +97,7 @@ void ProbeCell(bool interactiveCells, bool& cellTookClick, bool& rowStoleClick)
     harness.Settle();
     const ImVec2 target = row.cellCenter;
     harness.Hover(target);
+    cellHovered = row.cellHovered;
     harness.Press(target);
     cellTookClick = row.cellActive;
     harness.Frame(target, false);       // release
@@ -106,20 +108,24 @@ void TestRowSwallowsCellClickWithoutAllowOverlap()
 {
     // The failure mode itself: with the row treated as having no interactive cells, the
     // span-all-columns Selectable owns the whole row and the edit box never activates.
-    bool cellTookClick = false, rowStoleClick = false;
-    ProbeCell(false, cellTookClick, rowStoleClick);
+    bool cellTookClick = false, rowStoleClick = false, cellHovered = false;
+    ProbeCell(false, cellTookClick, rowStoleClick, cellHovered);
     CHECK(!cellTookClick);
     CHECK(rowStoleClick);
+    // Why this is invisible to a screenshot, or to "does the widget light up?": the cell
+    // still reports as hovered. Only activation differs.
+    CHECK(cellHovered);
 }
 
 void TestInteractiveCellTakesItsOwnClick()
 {
     // With RowSelectableFlags told the row has interactive cells, the click lands on the
     // edit box and the row does not also fire.
-    bool cellTookClick = false, rowStoleClick = false;
-    ProbeCell(true, cellTookClick, rowStoleClick);
+    bool cellTookClick = false, rowStoleClick = false, cellHovered = false;
+    ProbeCell(true, cellTookClick, rowStoleClick, cellHovered);
     CHECK(cellTookClick);
     CHECK(!rowStoleClick);
+    CHECK(cellHovered);
 }
 
 void TestRowStillSelectableBesideItsCells()

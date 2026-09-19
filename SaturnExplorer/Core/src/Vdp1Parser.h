@@ -18,6 +18,14 @@ namespace se
 // geometry builder so their command indices line up.
 std::vector<uint32_t> Vdp1Walk(const std::vector<uint8_t>& vdp1Vram);
 
+// Classify one command table entry from its CMDCTRL word: END (bit 15, the draw-end
+// terminator that ends the list), SKIP (JP >= 4, linked but not drawn), or NORMAL.
+// Only NORMAL is drawn -- both other kinds carry words that are not a primitive, and a
+// terminator in particular reads as a plain textured sprite if you only look at the
+// command code. Shared so the parser, the geometry builder and the inspectors cannot
+// drift on what "drawn" means.
+se_command_status Vdp1ClassifyCommand(uint16_t cmdctrl);
+
 class Vdp1Parser
 {
 public:

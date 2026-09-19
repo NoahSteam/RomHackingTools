@@ -94,13 +94,14 @@ enum : int
 };
 
 // Contiguous ranges for the variable / indexed items (same bases as Win32MenuBar).
-constexpr int ID_LAYER_BASE = 0xE200;   // + NativeMenuLayer (NM_LAYER_COUNT entries)
-constexpr int ID_EMU_BASE   = 0xE800;   // + emulator index
-constexpr int ID_ROM_BASE   = 0xE900;   // + recent-ROM index
-constexpr int ID_PANEL_BASE = 0xEA00;   // + PanelList index
-constexpr int ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
-constexpr int ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
-constexpr int ID_EMULOAD_BASE   = 0xED00;   // + the emulator's own save-state slot
+// The indexed-group bases live in NativeMenu.h, shared with Win32MenuBar and the decoder.
+constexpr int ID_LAYER_BASE     = kMenuIdLayerBase;
+constexpr int ID_EMU_BASE       = kMenuIdEmulatorBase;
+constexpr int ID_ROM_BASE       = kMenuIdRecentRomBase;
+constexpr int ID_PANEL_BASE     = kMenuIdPanelBase;
+constexpr int ID_SAVESTATE_BASE = kMenuIdSaveStateBase;
+constexpr int ID_LOADSTATE_BASE = kMenuIdLoadStateBase;
+constexpr int ID_EMULOAD_BASE   = kMenuIdEmuLoadBase;
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -210,21 +211,8 @@ struct MacMenuBarImpl
     void EnqueueTag(int id)
     {
         NativeMenuAction action;
-        if (id >= ID_LAYER_BASE && id < ID_LAYER_BASE + NM_LAYER_COUNT)
-            action = NativeMenuAction(MenuCommand::LayerToggle, id - ID_LAYER_BASE);
-        else if (id >= ID_EMU_BASE && id < ID_EMU_BASE + (int)mState.emulators.size())
-            action = NativeMenuAction(MenuCommand::SelectEmulator, id - ID_EMU_BASE);
-        else if (id >= ID_ROM_BASE && id < ID_ROM_BASE + (int)mState.recentRoms.size())
-            action = NativeMenuAction(MenuCommand::SelectRecentRom, id - ID_ROM_BASE);
-        else if (id >= ID_PANEL_BASE && id < ID_PANEL_BASE + (int)mState.panels.size())
-            action = NativeMenuAction(MenuCommand::ToggleWindow, id - ID_PANEL_BASE);
-        else if (id >= ID_SAVESTATE_BASE && id < ID_SAVESTATE_BASE + kNativeStateSlots)
-            action = NativeMenuAction(MenuCommand::SaveState, id - ID_SAVESTATE_BASE);
-        else if (id >= ID_LOADSTATE_BASE && id < ID_LOADSTATE_BASE + kNativeStateSlots)
-            action = NativeMenuAction(MenuCommand::LoadState, id - ID_LOADSTATE_BASE);
-        else if (id >= ID_EMULOAD_BASE && id < ID_EMULOAD_BASE + kNativeStateSlots)
-            action = NativeMenuAction(MenuCommand::LoadEmulatorState, id - ID_EMULOAD_BASE);
-        else
+        if (!NativeMenuDecodeIndexedId(id, mState.emulators.size(), mState.recentRoms.size(),
+                                       mState.panels.size(), action))
         {
             MenuCommand c = MenuCommand::None;
             switch (id)

@@ -572,21 +572,39 @@ def clone_and_patch(rn, key, spec, dest, rev_override, repo, skip_git=False):
 MEDNAFEN_DEFINES = "-DSE_MDFN_REWIND=1"
 
 
-def mednafen_defines_stale(dest):
-    """True when the tree is configured but not with MEDNAFEN_DEFINES.
+# Records the exact configure invocation a tree was built with, beside the tree itself.
+MEDNAFEN_STAMP = ".se-configure"
+
+
+def mednafen_stamp_read(dest):
+    try:
+        with open(os.path.join(dest, MEDNAFEN_STAMP), "r", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def mednafen_stamp_write(dest, signature):
+    try:
+        with open(os.path.join(dest, MEDNAFEN_STAMP), "w") as f:
+            f.write(signature)
+    except OSError:
+        pass        # only costs an extra reconfigure next time
+
+
+def mednafen_configure_stale(dest, signature):
+    """True when this tree was configured with a different invocation than `signature`.
 
     `make` tracks source mtimes, not compiler flags, and an incremental build skips
-    ./configure whenever config.status exists — so adding a define here would otherwise
-    have no effect at all on an existing checkout, and the feature it gates would appear
-    to be broken rather than simply not rebuilt."""
-    status = os.path.join(dest, "config.status")
-    if not os.path.isfile(status):
-        return False        # not configured yet; the normal path will configure it
-    try:
-        with open(status, "r", errors="replace") as f:
-            return all(d not in f.read() for d in MEDNAFEN_DEFINES.split())
-    except OSError:
+    ./configure whenever config.status exists — so a changed define, a changed --disable-*
+    set, or a moved Homebrew prefix would otherwise have no effect at all on an existing
+    checkout, and whatever it gates would look broken rather than simply not rebuilt.
+    Comparing the whole invocation means nothing has to be remembered here when a new flag
+    is added. An unconfigured tree is not stale: the normal path configures it."""
+    if not os.path.isfile(os.path.join(dest, "config.status")):
         return False
+    previous = mednafen_stamp_read(dest)
+    return previous is None or previous != signature
 
 
 def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
@@ -625,6 +643,11 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     configure = ("./configure --enable-debugger" +
                  (f" {configure_flags}" if configure_flags else "") +
                  f' CPPFLAGS="{cppflags}"')
+    signature = configure
+    # An existing tree configured with a different invocation must be reconfigured, or the
+    # change silently does nothing (see mednafen_configure_stale).
+    if mednafen_configure_stale(dest, signature):
+        reconfigure = True
     bootstrap = "([ -x ./configure ] || (autoreconf -i || ./autogen.sh))"
     if reconfigure:
         # `make` tracks source timestamps, NOT compiler-flag changes: after a reconfigure
@@ -688,6 +711,8 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     env = {**os.environ, "MSYSTEM": "MINGW64", "CHERE_INVOKING": "1"}
     rc = rn.run([bash, "-lc", f"export PATH=/mingw64/bin:$PATH && {script}"], env=env,
                 description="Compile and package Mednafen")
+    if rc == 0:
+        mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "mednafen.exe")
     return rc == 0, exe
 
@@ -717,6 +742,14 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
     # regardless of the CPU-triplet quirk.
     configure = ("./configure --enable-debugger --enable-ss" +
                  (f" {configure_flags}" if configure_flags else ""))
+    # The Unix path passes flags through the environment rather than the command line, so
+    # the signature has to cover those too or a moved Homebrew prefix would go unnoticed.
+    signature = (configure + "\nCPPFLAGS=" + env.get("CPPFLAGS", "") +
+                 "\nLDFLAGS=" + env.get("LDFLAGS", ""))
+    # An existing tree configured with a different invocation must be reconfigured, or the
+    # change silently does nothing (see mednafen_configure_stale).
+    if mednafen_configure_stale(dest, signature):
+        reconfigure = True
     # A git checkout ships no generated ./configure; bootstrap it first. glibtoolize (from
     # Homebrew's libtool) is what autoreconf calls on macOS.
     bootstrap = "([ -x ./configure ] || autoreconf -i || ./autogen.sh)"
@@ -731,6 +764,8 @@ def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
     script = f"cd '{dest}' && {cfg}make -j{ncpu}"
     rc = rn.run(["/bin/sh", "-c", script], env=env,
                 description="Configure and build Mednafen")
+    if rc == 0:
+        mednafen_stamp_write(dest, signature)
     exe = os.path.join(dest, "src", "mednafen")
     return rc == 0, exe
 
@@ -902,8 +937,9 @@ def main():
             # Incremental keeps the checkout and skips ./configure — but if the caller
             # also passed --mednafen-saturn-only, force a reconfigure so the new
             # --disable-* flags actually take effect (they only matter at configure time).
-            reconfigure = ((not args.incremental) or bool(cfg_flags)
-                           or mednafen_defines_stale(dest))
+            # build_mednafen* additionally forces one whenever the tree was configured with
+            # a different invocation than this run would use.
+            reconfigure = (not args.incremental) or bool(cfg_flags)
             if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest,
                                args.mednafen_rev, repo, skip_git=args.incremental):
                 if IS_WIN:

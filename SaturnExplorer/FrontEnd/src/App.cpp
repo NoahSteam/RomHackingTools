@@ -5923,33 +5923,13 @@ void App::DrawDemoOverlay()
 }
 
 #ifdef SE_ENABLE_LIVE
-namespace
-{
-// "2026-09-19 11:24" from a unix timestamp, or "" for 0 (the emulator reported no time).
-std::string FormatUnixTime(uint64_t seconds)
-{
-    if (seconds == 0) return std::string();
-    const std::time_t t = static_cast<std::time_t>(seconds);
-    std::tm tmv{};
-#if defined(_WIN32)
-    localtime_s(&tmv, &t);
-#else
-    localtime_r(&t, &tmv);
-#endif
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", tmv.tm_year + 1900,
-                  tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
-    return buf;
-}
-}  // namespace
-
 // "State" — the toolbar's save-state menu: ten numbered slots, each showing the frame it
 // holds and when it was written. Save captures the emulator's own savestate (the one it
 // already streams for rewind); Load hands it back through the same LST path rewind uses.
 void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands)
 {
     const bool enabled = TopBarCommandEnabled(TopBarCommandType::SaveState, state);
-    if (ImGui::Button("State")) ImGui::OpenPopup("##state_menu");
+    if (ImGui::Button("State")) { RefreshSlotCache(); ImGui::OpenPopup("##state_menu"); }
     ImGui::SetItemTooltip("%s", enabled
         ? "Save and load emulator save states"
         : (state.connected
@@ -5979,43 +5959,41 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
         for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
         {
             char label[64];
-            const std::string detail = SavestateSlots::SlotLabel(rom, i);
             std::snprintf(label, sizeof(label), "Slot %d%s", i,
-                          detail.empty() ? "  (empty)" : "");
+                          mSlotLabel[i].empty() ? "  (empty)" : "");
             if (ImGui::MenuItem(label))
                 commands.emplace_back(TopBarCommandType::SaveState, i);
-            if (!detail.empty())
+            if (!mSlotLabel[i].empty())
             {
                 ImGui::SameLine();
-                ImGui::TextDisabled("  %s", detail.c_str());
+                ImGui::TextDisabled("  %s", mSlotLabel[i].c_str());
             }
         }
         ImGui::EndMenu();
     }
     // Load offers the emulator's own slots too, so it opens even when Saturn Explorer has
     // no state of its own to save.
-    if (ImGui::BeginMenu("Load State", enabled || mEmuSlotCount > 0))
+    if (ImGui::BeginMenu("Load State", enabled || state.hasEmulatorStates))
     {
         ImGui::TextDisabled("Saturn Explorer");
         bool any = false;
         for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
         {
-            const std::string detail = SavestateSlots::SlotLabel(rom, i);
-            if (detail.empty()) continue;
+            if (mSlotLabel[i].empty()) continue;
             any = true;
             char label[64];
             std::snprintf(label, sizeof(label), "Slot %d", i);
             if (ImGui::MenuItem(label))
                 commands.emplace_back(TopBarCommandType::LoadState, i);
             ImGui::SameLine();
-            ImGui::TextDisabled("  %s", detail.c_str());
+            ImGui::TextDisabled("  %s", mSlotLabel[i].c_str());
         }
         if (!any) ImGui::TextDisabled("No saved states for this game.");
 
         // The emulator's own slots -- the ones its save-state hotkeys use. Kept in a
         // separate group because they behave differently: the emulator performs the load,
         // so Saturn Explorer does not learn the frame and has to drop its recorded history.
-        if (mEmuSlotCount > 0)
+        if (state.hasEmulatorStates)
         {
             ImGui::Separator();
             ImGui::TextDisabled("Emulator");
@@ -6030,7 +6008,7 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
                     commands.emplace_back(TopBarCommandType::LoadEmulatorState,
                                           static_cast<int>(i));
                 ImGui::SameLine();
-                ImGui::TextDisabled("  %s", FormatUnixTime(mEmuSlotMtime[i]).c_str());
+                ImGui::TextDisabled("  %s", FormatLocalTime(mEmuSlotMtime[i]).c_str());
             }
             if (!anyEmu) ImGui::TextDisabled("None saved in the emulator.");
             ImGui::TextDisabled("Loaded by the emulator; clears recorded history.");
@@ -6055,6 +6033,7 @@ void App::DoSaveState(int slot)
         std::snprintf(msg, sizeof(msg), "Saved to slot %d.", slot);
         mStateStatus = msg;
         mLog.Info(mStateStatus, se_frame_number(mContext));
+        RefreshSlotCache();   // the slot just gained (or replaced) a state
     }
     else
     {
@@ -6085,13 +6064,7 @@ void App::DoLoadState(int slot)
         mLog.Error("Load state failed: the emulator refused it.", se_frame_number(mContext));
         return;
     }
-    mRecorder.Clear();
-    mStateSlots.Reset();
-    mPendingEdits.clear();
-    mPendingEditsFrame = -1;
-    mbScrubbing = false;
-    mScrubIndex = -1;
-    mbPaused = false;
+    DropRecordedHistory();
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Loaded slot %d (frame %llu).", slot,
                   static_cast<unsigned long long>(frame));
@@ -6099,10 +6072,38 @@ void App::DoLoadState(int slot)
     mLog.Info(mStateStatus, static_cast<uint32_t>(frame));
 }
 
+// The emulator has jumped to a state we did not record our way to, so everything we held
+// about "where we are" describes a timeline that no longer exists: recorded frames, the
+// savestate keyframe the next delta would be diffed against, and edits staged against a
+// scrubbed frame. The scrub-rewind path deliberately does NOT use this -- it restores a
+// frame that IS in the ring, so it truncates the future instead of dropping the past.
+void App::DropRecordedHistory()
+{
+    mRecorder.Clear();
+    mStateSlots.Reset();
+    mPendingEdits.clear();
+    mPendingEditsFrame = -1;
+    mbScrubbing = false;
+    mScrubIndex = -1;
+    mbPaused = false;
+}
+
+// SE's own slots, read from disk. Only the events that can change them call this: the
+// native menu bar asks for this view model every frame, but a stat() per slot per frame
+// is filesystem traffic nobody reads until a menu actually opens.
+void App::RefreshSlotCache()
+{
+    for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
+    {
+        mSlotOccupied[i] = SavestateSlots::SlotExists(mLauncher.Rom(), i);
+        mSlotLabel[i] = SavestateSlots::SlotLabel(mLauncher.Rom(), i);
+    }
+}
+
 void App::RefreshEmulatorSlots()
 {
     mEmuSlotCount = se_live_emu_slots(&mDataSource, mEmuSlotPresent, mEmuSlotMtime,
-                                      static_cast<uint32_t>(sizeof(mEmuSlotPresent)));
+                                      SE_LIVE_EMU_SLOTS);
 }
 
 void App::DoLoadEmulatorState(int slot)
@@ -6112,13 +6113,7 @@ void App::DoLoadEmulatorState(int slot)
     // a future that may never have happened: drop it rather than leave a ring that claims
     // frames the emulator is no longer playing.
     se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
-    mRecorder.Clear();
-    mStateSlots.Reset();
-    mPendingEdits.clear();
-    mPendingEditsFrame = -1;
-    mbScrubbing = false;
-    mScrubIndex = -1;
-    mbPaused = false;
+    DropRecordedHistory();
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
     mStateStatus = msg;
@@ -6462,8 +6457,8 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
 #ifdef SE_ENABLE_LIVE
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)
-        m.slotOccupied[i] = SavestateSlots::SlotExists(mLauncher.Rom(), i);
-    m.emuSlotsOffered = mEmuSlotCount > 0;
+        m.slotOccupied[i] = mSlotOccupied[i];
+    m.emuSlotsOffered = s.hasEmulatorStates;
     for (int i = 0; i < kNativeStateSlots && i < static_cast<int>(mEmuSlotCount); ++i)
         m.emuSlotOccupied[i] = mEmuSlotPresent[i] != 0;
 #endif
@@ -7504,7 +7499,7 @@ void App::DrawReferenceList(const char* id, const std::vector<se_reference>& ref
             char label[24];
             std::snprintf(label, sizeof(label), "%u", r.command_index);
             const bool selected = IsSelected(static_cast<int>(r.command_index));
-            if (ImGui::Selectable(label, selected, ImGuiSelectableFlags_SpanAllColumns))
+            if (ImGui::Selectable(label, selected, RowSelectableFlags(false)))
             {
                 SelectCommand(static_cast<int>(r.command_index), ImGui::GetIO().KeyShift);
                 RevealSelectionInTables();
@@ -8226,7 +8221,7 @@ void App::DrawVdp1Table()
                         char rowlabel[32];
                         std::snprintf(rowlabel, sizeof(rowlabel), "%d##vt%d", row, row);
                         if (ImGui::Selectable(rowlabel, IsSelected(row),
-                                              ImGuiSelectableFlags_SpanAllColumns))
+                                              RowSelectableFlags(false)))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollCommandListToSelection = true;   // reveal in the Command List

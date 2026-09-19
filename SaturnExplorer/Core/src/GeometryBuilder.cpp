@@ -67,19 +67,17 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const int32_t  yd = ReadBE16S(vram, a + 0x1A);
         const uint16_t grda = ReadBE16(vram, a + 0x1C);   // gouraud table (words)
 
-        const uint16_t jp   = (ctrl >> 12) & 0x7;
         const uint16_t comm = ctrl & 0xF;
-        const bool skip = (jp >= 4);
+        const se_command_status status = Vdp1ClassifyCommand(ctrl);
+        const bool skip = (status == SE_CMDSTAT_SKIP);
 
-        // CMDCTRL bit 15 = END: the draw-end marker that terminates the command list.
-        // Its remaining words are not a primitive, but nothing above rejects it — `jp`
-        // masks bits 12-14 so the end bit is discarded, and `comm` (ctrl & 0xF) reads
-        // 0x0 from a 0x8000 terminator, i.e. exactly a normal textured sprite. Panzer
-        // Dragoon Saga's list ends that way, so the terminator was drawn as a 32x32
-        // sprite whose colour bank happens to be all-zero: an opaque black square in the
-        // middle of the frame. The parser already stops here (and keeps this entry so
-        // the Command List panel can show the terminator), so stop building geometry.
-        if ((ctrl >> 15) & 0x1)
+        // END terminates the list. Its remaining words are not a primitive, but nothing
+        // below would reject it: `comm` (ctrl & 0xF) reads 0x0 from a 0x8000 terminator,
+        // i.e. exactly a normal textured sprite. Panzer Dragoon Saga's list ends that way,
+        // so the terminator was drawn as a 32x32 sprite whose colour bank happens to be
+        // all-zero -- an opaque black square in the middle of the frame. The parser keeps
+        // the entry so the Command List panel can show it; geometry stops here.
+        if (status == SE_CMDSTAT_END)
         {
             break;
         }

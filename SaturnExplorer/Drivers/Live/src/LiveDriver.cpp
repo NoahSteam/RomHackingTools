@@ -327,6 +327,13 @@ uint32_t Rd32LE(const uint8_t* p)
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
+// The wire carries 64-bit values (frame counters, cycle counts, timestamps) as two
+// little-endian words, low half first.
+uint64_t Rd64LE(const uint8_t* p)
+{
+    return static_cast<uint64_t>(Rd32LE(p)) | (static_cast<uint64_t>(Rd32LE(p + 4)) << 32);
+}
+
 // Send one command frame (verb + little-endian arg) to the server.
 bool SendCommand(Conn& c, const char* verb, int32_t arg)
 {
@@ -474,7 +481,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                 f.func     = Rd32LE(fb + 4);
                 f.ret      = Rd32LE(fb + 8);
                 f.sp       = Rd32LE(fb + 12);
-                f.cycle    = (uint64_t)Rd32LE(fb + 16) | ((uint64_t)Rd32LE(fb + 20) << 32);
+                f.cycle    = Rd64LE(fb + 16);
                 f.frameNo  = Rd32LE(fb + 24);
                 outCallStacks.cpu[cpu].push_back(f);
             }
@@ -615,8 +622,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
             uint8_t rec[SE_LIVE_EMU_SLOT_LEN];
             if (!ConnReadFull(c, rec, SE_LIVE_EMU_SLOT_LEN)) return false;
             outEmuSlots.present[i] = rec[0];
-            outEmuSlots.mtime[i] = static_cast<uint64_t>(Rd32LE(rec + 4)) |
-                                   (static_cast<uint64_t>(Rd32LE(rec + 8)) << 32);
+            outEmuSlots.mtime[i] = Rd64LE(rec + 4);
         }
         outEmuSlots.valid = count != 0u;
     }
@@ -624,9 +630,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
-    outFrame = ct >= 12 ? (static_cast<uint64_t>(Rd32LE(ctl.data() + 4)) |
-                           (static_cast<uint64_t>(Rd32LE(ctl.data() + 8)) << 32))
-                        : 0;
+    outFrame = ct >= 12 ? Rd64LE(ctl.data() + 4) : 0;
     outStop = StopInfo{};
     if (ct >= 24)
     {

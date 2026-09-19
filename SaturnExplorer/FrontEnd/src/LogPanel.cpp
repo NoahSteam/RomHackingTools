@@ -7,6 +7,8 @@
 
 #include "imgui.h"
 
+#include "PanelWidgets.h"  // RowSelectableFlags: every span-all row goes through it
+
 namespace sfe
 {
 namespace
@@ -161,7 +163,7 @@ void LogPanel::Draw(Request& req)
             ImGui::PushID(static_cast<int>(e.seq));
             const bool sel = e.seq == mSelected;
             if (ImGui::Selectable(e.time.c_str(), sel,
-                                  ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick))
+                                  RowSelectableFlags(false) | ImGuiSelectableFlags_AllowDoubleClick))
             {
                 mSelected = e.seq;
                 if (e.hasSource && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))

@@ -78,13 +78,14 @@ enum : UINT
 
 // Contiguous ranges for the variable / indexed items. Each base is spaced well past the
 // fixed ids above and past NM_LAYER_COUNT / the plausible list lengths.
-constexpr UINT ID_LAYER_BASE = 0xE200;   // + NativeMenuLayer (NM_LAYER_COUNT entries)
-constexpr UINT ID_EMU_BASE   = 0xE800;   // + emulator index
-constexpr UINT ID_ROM_BASE   = 0xE900;   // + recent-ROM index
-constexpr UINT ID_PANEL_BASE = 0xEA00;   // + PanelList index
-constexpr UINT ID_SAVESTATE_BASE = 0xEB00;   // + save-state slot
-constexpr UINT ID_LOADSTATE_BASE = 0xEC00;   // + save-state slot
-constexpr UINT ID_EMULOAD_BASE   = 0xED00;   // + the emulator's own save-state slot
+// The indexed-group bases live in NativeMenu.h, shared with MacMenuBar and the decoder.
+constexpr UINT ID_LAYER_BASE     = (UINT)kMenuIdLayerBase;
+constexpr UINT ID_EMU_BASE       = (UINT)kMenuIdEmulatorBase;
+constexpr UINT ID_ROM_BASE       = (UINT)kMenuIdRecentRomBase;
+constexpr UINT ID_PANEL_BASE     = (UINT)kMenuIdPanelBase;
+constexpr UINT ID_SAVESTATE_BASE = (UINT)kMenuIdSaveStateBase;
+constexpr UINT ID_LOADSTATE_BASE = (UINT)kMenuIdLoadStateBase;
+constexpr UINT ID_EMULOAD_BASE   = (UINT)kMenuIdEmuLoadBase;
 // Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
 // Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
 // sharing id 0 — so even if one were ever un-grayed, its WM_COMMAND can't be mistaken for id 0
@@ -167,21 +168,8 @@ bool Win32MenuBar::OnCommand(int id)
 {
     NativeMenuAction action;
 
-    if (id >= (int)ID_LAYER_BASE && id < (int)ID_LAYER_BASE + NM_LAYER_COUNT)
-        action = NativeMenuAction(MenuCommand::LayerToggle, id - (int)ID_LAYER_BASE);
-    else if (id >= (int)ID_EMU_BASE && id < (int)ID_EMU_BASE + (int)mState.emulators.size())
-        action = NativeMenuAction(MenuCommand::SelectEmulator, id - (int)ID_EMU_BASE);
-    else if (id >= (int)ID_ROM_BASE && id < (int)ID_ROM_BASE + (int)mState.recentRoms.size())
-        action = NativeMenuAction(MenuCommand::SelectRecentRom, id - (int)ID_ROM_BASE);
-    else if (id >= (int)ID_PANEL_BASE && id < (int)ID_PANEL_BASE + (int)mState.panels.size())
-        action = NativeMenuAction(MenuCommand::ToggleWindow, id - (int)ID_PANEL_BASE);
-    else if (id >= (int)ID_SAVESTATE_BASE && id < (int)ID_SAVESTATE_BASE + kNativeStateSlots)
-        action = NativeMenuAction(MenuCommand::SaveState, id - (int)ID_SAVESTATE_BASE);
-    else if (id >= (int)ID_LOADSTATE_BASE && id < (int)ID_LOADSTATE_BASE + kNativeStateSlots)
-        action = NativeMenuAction(MenuCommand::LoadState, id - (int)ID_LOADSTATE_BASE);
-    else if (id >= (int)ID_EMULOAD_BASE && id < (int)ID_EMULOAD_BASE + kNativeStateSlots)
-        action = NativeMenuAction(MenuCommand::LoadEmulatorState, id - (int)ID_EMULOAD_BASE);
-    else
+    if (!NativeMenuDecodeIndexedId(id, mState.emulators.size(), mState.recentRoms.size(),
+                                   mState.panels.size(), action))
     {
         MenuCommand c = MenuCommand::None;
         switch ((UINT)id)

@@ -6,17 +6,10 @@
 #include <fstream>
 #include <sys/stat.h>
 
+#include "Disc/PathUtil.h"    // BaseName
 #include "SeLiveProtocol.h"   // SE_LIVE_STATE_KIND_*
 #include "SeStateCodec.h"     // XOR + RLE codec (shared with the emulator exporter)
 #include "Settings.h"
-
-#if defined(_WIN32)
-#include <direct.h>
-#define SE_MKDIR(p) _mkdir(p)
-#else
-#include <unistd.h>
-#define SE_MKDIR(p) mkdir(p, 0755)
-#endif
 
 namespace sfe
 {
@@ -48,23 +41,6 @@ uint64_t Get64(const uint8_t* p)
     return x;
 }
 
-char Sep()
-{
-#if defined(_WIN32)
-    return '\\';
-#else
-    return '/';
-#endif
-}
-
-// The part of a path after the last separator; the slot file is named after the game so
-// two games' slots never collide.
-std::string BaseName(const std::string& path)
-{
-    const size_t slash = path.find_last_of("/\\");
-    return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
 // Anything that could confuse a file name, flattened. Keeps the name readable (so the
 // states folder can be browsed by hand) without trusting the ROM's own name.
 std::string SafeName(const std::string& in)
@@ -80,16 +56,23 @@ std::string SafeName(const std::string& in)
     return out.empty() ? std::string("game") : out;
 }
 
-std::string StatesDir(bool create)
-{
-    const std::string cfg = create ? Settings::EnsureConfigDir() : Settings::ConfigDir();
-    if (cfg.empty()) return std::string();
-    const std::string dir = cfg + Sep() + "states";
-    if (create) SE_MKDIR(dir.c_str());   // ignore EEXIST; the open below reports real failures
-    return dir;
-}
-
 }  // namespace
+
+std::string FormatLocalTime(uint64_t unixSeconds)
+{
+    if (unixSeconds == 0) return std::string();
+    const std::time_t t = static_cast<std::time_t>(unixSeconds);
+    std::tm tmv{};
+#if defined(_WIN32)
+    localtime_s(&tmv, &t);
+#else
+    localtime_r(&t, &tmv);
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", tmv.tm_year + 1900,
+                  tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
+    return buf;
+}
 
 void SavestateSlots::Reset()
 {
@@ -97,7 +80,6 @@ void SavestateSlots::Reset()
     mKeyframeFrame = 0;
     mDelta.clear();
     mDeltaFrame = 0;
-    mDeltaFullLen = 0;
 }
 
 void SavestateSlots::OnBlock(uint64_t frame, uint8_t kind, uint64_t baseKeyframe,
@@ -107,13 +89,15 @@ void SavestateSlots::OnBlock(uint64_t frame, uint8_t kind, uint64_t baseKeyframe
 
     if (kind == SE_LIVE_STATE_KIND_KEYFRAME)
     {
-        std::vector<uint8_t> full(fullLen);
-        if (se_state_rle_decode(full.data(), full.size(), payload, len) != fullLen) return;
-        mKeyframe.swap(full);
+        // Decode into a kept buffer: a fresh vector would zero-fill several megabytes on the
+        // frame thread just to overwrite every byte, and keyframes arrive on every scene
+        // change, not only on the forced interval.
+        mScratch.resize(fullLen);
+        if (se_state_rle_decode(mScratch.data(), mScratch.size(), payload, len) != fullLen) return;
+        mKeyframe.swap(mScratch);
         mKeyframeFrame = frame;
         mDelta.clear();            // the newest state is now the keyframe itself
         mDeltaFrame = 0;
-        mDeltaFullLen = 0;
         return;
     }
 
@@ -124,7 +108,6 @@ void SavestateSlots::OnBlock(uint64_t frame, uint8_t kind, uint64_t baseKeyframe
     if (fullLen != mKeyframe.size()) return;
     mDelta.assign(payload, payload + len);
     mDeltaFrame = frame;
-    mDeltaFullLen = fullLen;
 }
 
 bool SavestateSlots::Latest(std::vector<uint8_t>& out, uint64_t& frame) const
@@ -136,14 +119,16 @@ bool SavestateSlots::Latest(std::vector<uint8_t>& out, uint64_t& frame) const
         frame = mKeyframeFrame;
         return true;
     }
-    std::vector<uint8_t> delta(mDeltaFullLen);
+    // The delta is only kept when its full length matches the keyframe's (see OnBlock), so
+    // the keyframe's size is the decode target.
+    std::vector<uint8_t> delta(mKeyframe.size());
     if (se_state_rle_decode(delta.data(), delta.size(), mDelta.data(), mDelta.size()) !=
-        mDeltaFullLen)
+        mKeyframe.size())
     {
         return false;
     }
     out = mKeyframe;
-    for (size_t i = 0; i < out.size(); ++i) out[i] ^= delta[i];
+    se_state_xor(out.data(), out.data(), delta.data(), out.size());
     frame = mDeltaFrame;
     return true;
 }
@@ -151,11 +136,9 @@ bool SavestateSlots::Latest(std::vector<uint8_t>& out, uint64_t& frame) const
 std::string SavestateSlots::SlotPath(const std::string& romPath, int slot)
 {
     if (slot < 0 || slot >= kSlotCount) return std::string();
-    const std::string dir = StatesDir(false);
-    if (dir.empty()) return std::string();
     char suffix[24];
     std::snprintf(suffix, sizeof(suffix), ".slot%d.sestate", slot);
-    return dir + Sep() + SafeName(BaseName(romPath)) + suffix;
+    return Settings::ConfigSubPath("states", SafeName(BaseName(romPath)) + suffix, false);
 }
 
 bool SavestateSlots::SlotExists(const std::string& romPath, int slot)
@@ -181,18 +164,9 @@ std::string SavestateSlots::SlotLabel(const std::string& romPath, int slot)
     if (!in || std::memcmp(hdr, kMagic, sizeof(kMagic)) != 0) return std::string();
 
     const uint64_t frame = Get64(hdr + sizeof(kMagic) + 4);
-    std::tm tmv{};
-    const std::time_t t = st.st_mtime;
-#if defined(_WIN32)
-    localtime_s(&tmv, &t);
-#else
-    localtime_r(&t, &tmv);
-#endif
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "frame %llu  -  %04d-%02d-%02d %02d:%02d",
-                  static_cast<unsigned long long>(frame), tmv.tm_year + 1900, tmv.tm_mon + 1,
-                  tmv.tm_mday, tmv.tm_hour, tmv.tm_min);
-    return buf;
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "frame %llu  -  ", static_cast<unsigned long long>(frame));
+    return buf + FormatLocalTime(static_cast<uint64_t>(st.st_mtime));
 }
 
 bool SavestateSlots::SaveToSlot(const std::string& romPath, int slot, std::string& error) const
@@ -205,13 +179,16 @@ bool SavestateSlots::SaveToSlot(const std::string& romPath, int slot, std::strin
                 "connecting; if this persists, its rewind support may be off.";
         return false;
     }
-    if (StatesDir(true).empty())
+    char suffix[24];
+    std::snprintf(suffix, sizeof(suffix), ".slot%d.sestate", slot);
+    // create=true here (and only here): the states directory is made on first save.
+    const std::string path =
+        Settings::ConfigSubPath("states", SafeName(BaseName(romPath)) + suffix, true);
+    if (path.empty())
     {
         error = "Could not resolve the Saturn Explorer config directory.";
         return false;
     }
-    const std::string path = SlotPath(romPath, slot);
-    if (path.empty()) { error = "Could not build the slot path."; return false; }
 
     std::vector<uint8_t> header;
     header.insert(header.end(), kMagic, kMagic + sizeof(kMagic));

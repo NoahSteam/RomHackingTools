@@ -258,10 +258,36 @@ static void TestSaveStateEnablement()
     CHECK(TopBarCommandEnabled(TopBarCommandType::SaveState, state));
 }
 
+static void TestNativeMenuIdDecoding()
+{
+    // Each indexed group decodes to its command and its index within the group.
+    NativeMenuAction a;
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdSaveStateBase + 3, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::SaveState && a.index == 3);
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdLoadStateBase + 0, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::LoadState && a.index == 0);
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdEmuLoadBase + 9, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::LoadEmulatorState && a.index == 9);
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdLayerBase + NM_LAYER_RBG0, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::LayerToggle && a.index == NM_LAYER_RBG0);
+
+    // The list counts bound the variable-length groups, so an id past the end of a list
+    // decodes as nothing rather than as the next group's command.
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdEmulatorBase + 1, 2, 0, 0, a));
+    CHECK(a.command == MenuCommand::SelectEmulator && a.index == 1);
+    CHECK(!NativeMenuDecodeIndexedId(kMenuIdEmulatorBase + 2, 2, 0, 0, a));
+    CHECK(!NativeMenuDecodeIndexedId(kMenuIdPanelBase, 2, 2, 0, a));
+
+    // A fixed (non-indexed) id is left for the platform's own switch.
+    CHECK(!NativeMenuDecodeIndexedId(0x1000, 4, 4, 4, a));
+    CHECK(!NativeMenuDecodeIndexedId(kMenuIdEmuLoadBase + kNativeStateSlots, 4, 4, 4, a));
+}
+
 int main()
 {
     TestEnablementMatrix();
     TestSaveStateEnablement();
+    TestNativeMenuIdDecoding();
     TestLaunchModel();
     TestPatchEnablement();
     TestNativeMenuStructureKey();

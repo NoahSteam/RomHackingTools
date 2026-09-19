@@ -37,6 +37,7 @@
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"
 #include "SavestateSlots.h" // numbered save states (native only)
+#include "SeLiveProtocol.h"  // SE_LIVE_EMU_SLOTS (the emulator's own slot count)
 #include "PatchLibrary.h"    // Patch feature: known memory->file locations + patch-script emit
 #endif
 
@@ -388,9 +389,18 @@ private:
     std::string      mStateStatus;      // last save/load result, shown in the State menu
     // The emulator's own numbered slots, as it reports them (it owns the files; SE cannot
     // find them on disk). mEmuSlotCount 0 = this emulator does not offer them.
-    uint8_t          mEmuSlotPresent[16] = {};
-    uint64_t         mEmuSlotMtime[16] = {};
+    uint8_t          mEmuSlotPresent[SE_LIVE_EMU_SLOTS] = {};
+    uint64_t         mEmuSlotMtime[SE_LIVE_EMU_SLOTS] = {};
     uint32_t         mEmuSlotCount = 0;
+    // Which of SE's own slots hold a state. Cached rather than stat()ed per frame: the
+    // native menu bar rebuilds this view model every frame but only shows it when a menu
+    // opens, so polling the filesystem at 60 Hz bought nothing. Refreshed on the events
+    // that can change it -- a save, a load, and opening the State menu.
+    bool             mSlotOccupied[SavestateSlots::kSlotCount] = {};
+    // Slot labels, snapshotted when the State menu opens (each one reads a file header).
+    std::string      mSlotLabel[SavestateSlots::kSlotCount];
+    void RefreshSlotCache();
+    void DropRecordedHistory();
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

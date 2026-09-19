@@ -762,28 +762,21 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     return c;
 }
 
-// Word address of one coefficient-table entry. The running offset is .10 fixed point;
-// 32-bit entries occupy two words, so the integer part is doubled for them. CRKTE moves
-// the table out of VDP2 VRAM and into the upper half of colour RAM, which is far smaller.
-uint32_t CoeffAddr(uint32_t offset, bool coeffWord, bool crkte)
-{
-    offset >>= 10;
-    if (!coeffWord) offset <<= 1;
-    return offset & (crkte ? 0x3FFu : 0x3FFFFu);
-}
-
-// One coefficient, normalised to the 32-bit layout: bit 31 = transparent, bits 23-0 = the
-// signed value. The 16-bit format carries the same fields packed into one word.
+// One coefficient, read from the running .10 fixed-point table offset and normalised to the
+// 32-bit layout: bit 31 = transparent, bits 23-0 = the signed value. The 16-bit format packs
+// the same fields into one word, and 32-bit entries occupy two, so the integer part of the
+// offset is doubled for them. CRKTE moves the table out of VDP2 VRAM into the upper half of
+// colour RAM, which is far smaller -- hence the narrower mask.
 uint32_t ReadCoeff(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
-                   bool crkte, bool coeffWord, uint32_t addr)
+                   bool crkte, bool coeffWord, uint32_t offset)
 {
+    const uint32_t addr = ((coeffWord ? (offset >> 10) : ((offset >> 10) << 1)) &
+                           (crkte ? 0x3FFu : 0x3FFFFu));
     auto word = [&](uint32_t w) -> uint16_t
     {
         if (!crkte) return ReadVdp2Word(vram, w);
         // Colour RAM holds the table at word 0x400 and up.
-        const size_t byte = (0x400u + (w & 0x3FFu)) * 2;
-        return (byte + 1 < cram.size())
-            ? static_cast<uint16_t>((cram[byte] << 8) | cram[byte + 1]) : uint16_t(0);
+        return ReadBE16(cram, (0x400u + (w & 0x3FFu)) * 2);
     };
     if (coeffWord)
     {
@@ -901,21 +894,27 @@ void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
     const uint16_t vrsize = Reg(snap, kVRSIZE);
     const bool crkte = (Reg(snap, kRAMCTL) & 0x8000) != 0;
 
+    // RPMD 0/1 use one set for the whole screen; only 2 (coefficient sign) and 3 (rotation
+    // parameter window) choose per dot, and only then is the second set's setup worth doing.
+    const bool perDot = (rpmd >= 2);
+    const int fixedSet = (rpmd == 1) ? 1 : 0;
+
     RotSet sets[2];
-    BuildRotSet(snap, false, sets[0]);
-    BuildRotSet(snap, true, sets[1]);
+    BuildRotSet(snap, fixedSet != 0, sets[fixedSet]);
+    if (perDot) BuildRotSet(snap, true, sets[1]);
 
     // RBG0's own transparent-processing window (WCTLC low byte), and separately the
     // rotation parameter window (WCTLD low byte) that mode 3 selects the set with. The
     // latter is geometry, not masking, so it applies even when window display is off.
     const WindowConfig windowConfig = ReadWindowConfig(snap, kWinLayerRbg0);
     const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
+    const uint32_t mosaicH = sets[fixedSet].cfg.mosaicH;
 
     auto coeffAt = [&](const RotSet& s, int msx) -> uint32_t
     {
         const uint32_t off = s.KAstLine +
                              static_cast<uint32_t>(s.rp.DKAx) * static_cast<uint32_t>(msx);
-        return ReadCoeff(vram, cram, crkte, s.coeffWord, CoeffAddr(off, s.coeffWord, crkte));
+        return ReadCoeff(vram, cram, crkte, s.coeffWord, off);
     };
 
     for (int sy = 0; sy < height; ++sy)
@@ -924,15 +923,18 @@ void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
             ResolveWindowLine(windowConfig, 0, vram, sy),
             ResolveWindowLine(windowConfig, 1, vram, sy)
         };
-        const WindowLine rotWindowLines[2] = {
-            ResolveWindowLine(rotWindowConfig, 0, vram, sy),
-            ResolveWindowLine(rotWindowConfig, 1, vram, sy)
-        };
-        BeginRotLine(sets[0], sy);
-        BeginRotLine(sets[1], sy);
+        WindowLine rotWindowLines[2] = {};
+        if (rpmd == 3)
+        {
+            rotWindowLines[0] = ResolveWindowLine(rotWindowConfig, 0, vram, sy);
+            rotWindowLines[1] = ResolveWindowLine(rotWindowConfig, 1, vram, sy);
+        }
+        BeginRotLine(sets[fixedSet], sy);
+        if (perDot) BeginRotLine(sets[1], sy);
         // In mode 2 set B contributes only the coefficient sampled at the start of the
         // line; the per-dot walk is done in set A's table alone.
-        const uint32_t baseCoeffB = sets[1].useCoeff ? coeffAt(sets[1], 0) : 0u;
+        const uint32_t baseCoeffB =
+            (rpmd == 2 && sets[1].useCoeff) ? coeffAt(sets[1], 0) : 0u;
 
         for (int sx = 0; sx < width; ++sx)
         {
@@ -941,11 +943,10 @@ void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
                 continue;
             }
             // Horizontal mosaic snaps the sampled dot to its block's left edge.
-            const int msx = (sets[0].cfg.mosaicH > 1)
-                ? sx - (sx % static_cast<int>(sets[0].cfg.mosaicH)) : sx;
+            const int msx = (mosaicH > 1) ? sx - (sx % static_cast<int>(mosaicH)) : sx;
 
             // Choose the parameter set for this dot, and with it the coefficient.
-            int ab = (rpmd == 1) ? 1 : 0;
+            int ab = fixedSet;
             uint32_t coeff = 0;
             bool haveCoeff = false;
             if (rpmd == 3)

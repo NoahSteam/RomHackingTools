@@ -98,6 +98,19 @@ std::string Settings::EnsureConfigDir()
     return dir;
 }
 
+std::string Settings::ConfigSubDir(const char* subdir, bool create)
+{
+    const std::string dir = JoinConfig(create ? EnsureConfigDir() : ConfigDir(), subdir);
+    if (create && !dir.empty()) CreateDirs(dir);
+    return dir;
+}
+
+std::string Settings::ConfigSubPath(const char* subdir, const std::string& file, bool create)
+{
+    const std::string dir = ConfigSubDir(subdir, create);
+    return dir.empty() ? std::string() : dir + kSep + file;
+}
+
 std::string Settings::FilePath()
 {
     return JoinConfig(ConfigDir(), "settings.ini");

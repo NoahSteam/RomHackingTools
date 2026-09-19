@@ -18,6 +18,11 @@
 namespace sfe
 {
 
+// "2026-09-19 11:24" from a unix timestamp, or "" for 0. Shared so the two slot lists in
+// the State menu -- Saturn Explorer's and the emulator's -- cannot drift into different
+// date formats, and so the localtime_r/localtime_s shim exists once.
+std::string FormatLocalTime(uint64_t unixSeconds);
+
 class SavestateSlots
 {
 public:
@@ -56,7 +61,7 @@ private:
     uint64_t             mKeyframeFrame = 0;
     std::vector<uint8_t> mDelta;           // RLE payload of the newest delta against it
     uint64_t             mDeltaFrame = 0;
-    uint32_t             mDeltaFullLen = 0;
+    std::vector<uint8_t> mScratch;         // decode buffer, kept so keyframes don't realloc
 };
 
 }  // namespace sfe

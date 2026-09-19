@@ -57,6 +57,18 @@ se_draw_mode DrawMode(uint16_t pmod, uint16_t colorCalc)
     }
 }
 
+}  // namespace
+
+se_command_status Vdp1ClassifyCommand(uint16_t cmdctrl)
+{
+    if ((cmdctrl >> 15) & 0x1) return SE_CMDSTAT_END;
+    if (((cmdctrl >> 12) & 0x7) >= JP_SKIP_NEXT) return SE_CMDSTAT_SKIP;
+    return SE_CMDSTAT_NORMAL;
+}
+
+namespace
+{
+
 // Decode one command table entry at 'address' into 'cmd'.
 void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
                    uint32_t index, se_command& cmd)
@@ -71,8 +83,6 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
     const int16_t  ya   = ReadBE16S(vram, address + 0x0E);
     const uint16_t grda = ReadBE16(vram, address + 0x1C);
 
-    const uint16_t end     = (ctrl >> 15) & 0x1;
-    const uint16_t jp      = (ctrl >> 12) & 0x7;
     const uint16_t comm    = ctrl & 0xF;
     const uint16_t colorMode = (pmod >> 3) & 0x7;
     const uint16_t colorCalc = pmod & 0x7;
@@ -83,18 +93,7 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
     cmd.link_address = static_cast<uint32_t>(link) * 8;
     cmd.type = CommandType(comm);
 
-    if (end)
-    {
-        cmd.status = SE_CMDSTAT_END;
-    }
-    else if (jp >= JP_SKIP_NEXT)
-    {
-        cmd.status = SE_CMDSTAT_SKIP;
-    }
-    else
-    {
-        cmd.status = SE_CMDSTAT_NORMAL;
-    }
+    cmd.status = Vdp1ClassifyCommand(ctrl);
 
     cmd.color_mode = static_cast<se_color_mode>(colorMode);
     cmd.color_calc_mode = static_cast<se_color_calc>(colorCalc);

@@ -404,6 +404,22 @@ static void SeStateApplyEdits(const unsigned char* edits, size_t len)
 /* Consume a pending LST at the gate (emulate thread). Copies the payload under the state
  * lock, then atomically: restore the savestate, apply the edits on top, adopt frame N,
  * invalidate the stale (> N) wire ring, drop the stale savestate pipeline, and resume. */
+/* Everything that must be invalidated once the emulator's state has changed underneath us,
+ * whether from a rewind (LST) or from the emulator loading one of its own slots (ELS). The
+ * pre-restore wire ring would otherwise let a GET serve a frame from the abandoned timeline,
+ * and the savestate pipeline would keep diffing against a keyframe that no longer describes
+ * anything. Kept in one place so a future addition can't land on only one of the two paths. */
+static void SeStateAfterRestore(void)
+{
+    SE_LOCK();
+    { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+    SE_UNLOCK();
+    SeStateFlushAndRekey();
+    sStopReason = SE_LIVE_STOP_NONE;
+    sStepBudget = 0;
+    sPaused = 0;   /* resume: re-simulate forward from wherever we now are */
+}
+
 static void SeStateConsumeLoad(void)
 {
     unsigned char* buf = NULL; size_t len = 0;
@@ -432,15 +448,7 @@ static void SeStateConsumeLoad(void)
         {
             SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
             sFrameNo = frame;
-            /* Invalidate the pre-rewind wire ring so a GET can't serve a stale > N frame; the
-             * next SeExportSnapshot repopulates it starting at N+1. */
-            SE_LOCK();
-            { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
-            SE_UNLOCK();
-            SeStateFlushAndRekey();                  /* drop the stale savestate pipeline */
-            sStopReason = SE_LIVE_STOP_NONE;
-            sStepBudget = 0;
-            sPaused = 0;                              /* resume: re-simulate forward from N */
+            SeStateAfterRestore();
         }
         else { SeExportLog("rewind: load state failed"); }
     }
@@ -714,13 +722,7 @@ int SeExportGateFrame(void)
         sEmuLoadPending = 0;
         if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
         {
-            SE_LOCK();
-            { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
-            SE_UNLOCK();
-            SeStateFlushAndRekey();
-            sStopReason = SE_LIVE_STOP_NONE;
-            sStepBudget = 0;
-            sPaused = 0;
+            SeStateAfterRestore();
         }
         else
         {
