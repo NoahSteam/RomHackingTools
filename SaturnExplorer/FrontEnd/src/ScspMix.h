@@ -55,15 +55,28 @@ int16_t ScspAttenuate(int16_t sample, int vlevel);
 // from, muting it entirely at the extreme. Left is index 0.
 void ScspDirectVolume(uint8_t directLevel, uint8_t directPan, int& outLeft, int& outRight);
 
+// Peak the normalised mix is scaled to: just under full scale, so a preview is always at a
+// usable listening level whatever the game's own mix was doing.
+const int kScspMixTargetPeak = 29500;
+
 // Mix 'n' voices into interleaved stereo at 'outRate'. Returns the frame count written to
-// 'outStereo' (which is resized to frames*2).
+// 'outStereo' (which is resized to frames*2). When 'outPeak' is non-null it receives the
+// mix's peak BEFORE normalisation, on the 32767 scale -- the frame's true level, which the
+// caller can report since normalisation otherwise hides it.
 //
 // Length is the longest voice, so nothing is cut off; a voice that loops is repeated to
 // fill that length rather than clicking off early, which matters because a sustained
 // instrument's loop is often only a few hundred samples. Reverse and alternating loops are
-// played forwards -- a preview distinction not worth the machinery. Voices are summed into
-// 32-bit and clipped once at the end, so a dense frame saturates instead of wrapping.
+// played forwards -- a preview distinction not worth the machinery.
+//
+// The result is peak-normalised. Voice levels (TL) and sends span a huge range -- a voice
+// sitting at -32 dB in the game's mix is perfectly normal -- so a faithful absolute level
+// makes a quiet moment inaudible even though every voice in it is real and individually
+// audible. Normalising preserves what the mix is actually for: the balance between the
+// voices, their panning, and which of them dominates. It also means a dense frame no longer
+// has to clip to fit.
 size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
-                     size_t maxFrames, std::vector<int16_t>& outStereo);
+                     size_t maxFrames, std::vector<int16_t>& outStereo,
+                     int* outPeak = nullptr);
 
 }  // namespace sfe

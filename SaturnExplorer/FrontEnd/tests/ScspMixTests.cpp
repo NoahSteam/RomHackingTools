@@ -247,29 +247,80 @@ void TestSilentVoicesAreSkipped()
     // A fully-released envelope is likewise inaudible.
     ScspMixVoice released = MakeVoice(pcm, 44100);
     released.egLevel = 0x3FF;
-    ScspMixVoices(&released, 1, 44100, 44100 * 4, out);
+    int peak = -1;
+    ScspMixVoices(&released, 1, 44100, 44100 * 4, out, &peak);
     CHECK(out[0] == 0 && out[1] == 0);
+    // Silence must be reported as such, not normalised up from nothing.
+    CHECK(peak == 0);
+    for (size_t i = 0; i < out.size(); ++i)
+        if (out[i] != 0) { ++gFailures; break; }
 }
 
-void TestMixClipsInsteadOfWrapping()
+void TestDenseMixDoesNotWrap()
 {
-    // Many loud centre voices must saturate, not wrap to the opposite sign -- the failure
-    // that turns a dense frame into a burst of noise.
+    // Many loud centre voices sum far past full scale. Normalisation brings them back down,
+    // but the sign must survive: wrapping is what turns a dense frame into a burst of noise.
     std::vector<int16_t> pcm = Const(1000, 32767);
     std::vector<ScspMixVoice> v;
     for (int i = 0; i < 24; ++i) v.push_back(MakeVoice(pcm, 44100));
     std::vector<int16_t> out;
-    const size_t frames = ScspMixVoices(v.data(), v.size(), 44100, 44100 * 4, out);
+    int peak = 0;
+    const size_t frames = ScspMixVoices(v.data(), v.size(), 44100, 44100 * 4, out, &peak);
     CHECK(frames == 1000);
     for (size_t i = 0; i < out.size(); ++i)
         if (out[i] < 0) { std::cerr << "wrapped at " << i << ": " << out[i] << '\n'; ++gFailures; break; }
-    CHECK(out[0] == 32767);
+    CHECK(out[0] == kScspMixTargetPeak);
+    CHECK(peak > 32767);   // the reported level shows it really did overshoot
 
     std::vector<int16_t> neg = Const(1000, -32768);
     std::vector<ScspMixVoice> nv;
     for (int i = 0; i < 24; ++i) nv.push_back(MakeVoice(neg, 44100));
     ScspMixVoices(nv.data(), nv.size(), 44100, 44100 * 4, out);
-    CHECK(out[0] == -32768);
+    CHECK(out[0] == -kScspMixTargetPeak);
+}
+
+void TestQuietMixIsBroughtUpToLevel()
+{
+    // The bug this normalisation fixes: a voice sitting low in the game's mix (a high TL)
+    // is perfectly real and individually audible, but at its true level the preview is
+    // inaudible. Both a loud and a very quiet frame must come out at the same usable level.
+    std::vector<int16_t> pcm = Const(4410, 20000);
+
+    ScspMixVoice loud = MakeVoice(pcm, 44100);
+    loud.totalLevel = 0;
+    std::vector<int16_t> loudOut;
+    int loudPeak = 0;
+    ScspMixVoices(&loud, 1, 44100, 44100 * 4, loudOut, &loudPeak);
+
+    ScspMixVoice quiet = MakeVoice(pcm, 44100);
+    quiet.totalLevel = 96;            // about -36 dB: normal for a voice low in the mix
+    std::vector<int16_t> quietOut;
+    int quietPeak = 0;
+    ScspMixVoices(&quiet, 1, 44100, 44100 * 4, quietOut, &quietPeak);
+
+    // Their true levels differ by a long way...
+    CHECK(quietPeak * 8 < loudPeak);
+    // ...but both previews land on the target, so neither is inaudible.
+    CHECK(loudOut[0] == kScspMixTargetPeak);
+    CHECK(quietOut[0] == kScspMixTargetPeak);
+}
+
+void TestNormalisationKeepsTheBalance()
+{
+    // Normalisation must be one gain over the whole mix, not per voice -- the relative
+    // balance and the panning are the part of the mix worth having.
+    std::vector<int16_t> pcm = Const(4410, 16000);
+    ScspMixVoice v[2] = { MakeVoice(pcm, 44100), MakeVoice(pcm, 44100) };
+    v[0].directPan = 0x10 | 0x0F;   // hard left
+    v[1].directPan = 0x0F;          // hard right
+    v[1].totalLevel = 16;           // and 6 dB down
+
+    std::vector<int16_t> out;
+    ScspMixVoices(v, 2, 44100, 44100 * 4, out);
+    const int l = out[0], r = out[1];
+    CHECK(l == kScspMixTargetPeak);     // the louder side sets the target
+    CHECK(r > 0 && r < l);              // the quieter one stays proportionally quieter
+    CHECK(r * 3 / 2 < l && r * 3 > l);  // roughly half, not flattened to equal
 }
 }  // namespace
 
@@ -285,7 +336,9 @@ int main()
     TestLoopFloorGivesShortLoopsRoom();
     TestPanPlacesVoicesOnTheRightSide();
     TestSilentVoicesAreSkipped();
-    TestMixClipsInsteadOfWrapping();
+    TestDenseMixDoesNotWrap();
+    TestQuietMixIsBroughtUpToLevel();
+    TestNormalisationKeepsTheBalance();
     if (gFailures)
     {
         std::cerr << gFailures << " check(s) failed\n";

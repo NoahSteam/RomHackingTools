@@ -89,9 +89,10 @@ void ScspDirectVolume(uint8_t directLevel, uint8_t directPan, int& outLeft, int&
 }
 
 size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
-                     size_t maxFrames, std::vector<int16_t>& outStereo)
+                     size_t maxFrames, std::vector<int16_t>& outStereo, int* outPeak)
 {
     outStereo.clear();
+    if (outPeak) *outPeak = 0;
     if (!voices || n == 0 || outRate == 0 || maxFrames == 0) return 0;
 
     // How long the mix runs: the longest voice, so nothing is truncated. A looping voice
@@ -133,11 +134,25 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
         }
     }
 
-    outStereo.resize(frames * 2);
+    int32_t peak = 0;
     for (size_t i = 0; i < acc.size(); ++i)
     {
-        const int32_t s = std::max(-32768, std::min(32767, acc[i]));
-        outStereo[i] = static_cast<int16_t>(s);
+        const int32_t a = acc[i] < 0 ? -acc[i] : acc[i];
+        if (a > peak) peak = a;
+    }
+    if (outPeak) *outPeak = static_cast<int>(peak);
+
+    outStereo.resize(frames * 2);
+    if (peak == 0) return frames;   // nothing audible; leave the buffer silent
+
+    // Scale in 64-bit: a dense frame's accumulator can exceed what int32 has room for once
+    // multiplied by the target. The clamp is belt-and-braces -- the scaling cannot exceed
+    // the target by construction, but the output must be int16 regardless.
+    for (size_t i = 0; i < acc.size(); ++i)
+    {
+        const int64_t s = static_cast<int64_t>(acc[i]) * kScspMixTargetPeak / peak;
+        outStereo[i] = static_cast<int16_t>(
+            std::max<int64_t>(-32768, std::min<int64_t>(32767, s)));
     }
     return frames;
 }

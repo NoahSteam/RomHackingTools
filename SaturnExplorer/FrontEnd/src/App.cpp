@@ -8139,12 +8139,25 @@ void App::PlaySoundFrame(IPlatform& platform)
     for (size_t i = 0; i < mix.size(); ++i) mix[i].pcm = pcm[i].data();
 
     std::vector<int16_t> out;
+    int peak = 0;
     const size_t frames = ScspMixVoices(mix.data(), mix.size(), kFrameMixRate,
-                                        kFrameMixMaxFrames, out);
+                                        kFrameMixMaxFrames, out, &peak);
     if (frames == 0) return;
-    platform.PlayAudio(out.data(), frames, kFrameMixRate, 2);
-    mLog.Info("Play Frame: mixed " + std::to_string(mix.size()) + " voice(s), " +
-              std::to_string(frames * 1000u / kFrameMixRate) + " ms.");
+
+    // The mix is normalised, so report the frame's true level separately -- that is what
+    // says whether this was a loud moment or a near-silent one, which the preview itself no
+    // longer tells you.
+    char msg[160];
+    std::snprintf(msg, sizeof msg,
+                  "Play Frame: %zu voice(s), %u ms, level %.1f%% of full scale%s",
+                  mix.size(), static_cast<unsigned>(frames * 1000u / kFrameMixRate),
+                  peak * 100.0 / 32767.0,
+                  peak == 0 ? " (silent: every voice fully attenuated)" : "");
+    mLog.Info(msg);
+    if (peak == 0) return;   // nothing to play; the log says why
+
+    if (!platform.PlayAudio(out.data(), frames, kFrameMixRate, 2))
+        mLog.Warn("Play Frame: the audio device rejected the mix.");
 }
 
 void App::DrawSound(IPlatform& platform)
@@ -8186,7 +8199,8 @@ void App::DrawSound(IPlatform& platform)
         else
             ImGui::SetTooltip(
                 "Play all %d sounding voices together, panned and balanced as the\n"
-                "SCSP would mix them.\n\n"
+                "SCSP would mix them. Normalised to a usable listening level -- the\n"
+                "Log reports the frame's true level.\n\n"
                 "A static reconstruction, not the emulator's output: each voice plays\n"
                 "from the start of its sample with its envelope frozen at this frame,\n"
                 "and the DSP effect path is not modelled.", active);
