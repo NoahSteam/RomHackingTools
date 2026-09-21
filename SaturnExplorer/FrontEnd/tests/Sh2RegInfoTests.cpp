@@ -55,8 +55,8 @@ void TestTableShape()
     }
     // The named indices must line up with the table, or a tooltip would describe the wrong
     // register -- the one bug this table can have that still compiles.
-    CHECK(std::strcmp(t[kSh2RegR0].name, "R0") == 0);
-    CHECK(std::strcmp(t[kSh2RegSp].name, "R15") == 0);
+    CHECK(std::strcmp(t[0].name, "R0") == 0);
+    CHECK(std::strcmp(t[15].name, "R15") == 0);   // R15 is the stack pointer
     CHECK(std::strcmp(t[kSh2RegPc].name, "PC") == 0);
     CHECK(std::strcmp(t[kSh2RegPr].name, "PR") == 0);
     CHECK(std::strcmp(t[kSh2RegSr].name, "SR") == 0);

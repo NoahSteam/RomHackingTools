@@ -53,11 +53,6 @@ public:
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
 
-    // Name of the captured region containing 'address' ("HWRAM", "VDP1 RAM", ...), or
-    // nullptr when it falls outside all of them. Lets other panels label a register or
-    // pointer value without keeping a second copy of the region map.
-    static const char* RegionName(uint32_t address);
-
 private:
     static const std::vector<Region>& Regions();
     // Index of the region containing 'addr' (1..N), or 0 ("All") when none matches.

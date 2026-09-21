@@ -195,29 +195,26 @@ struct ContextRow
     }
 };
 
-void TestRegisterValueContextMenuOpens()
+// Right-click either the value cell or the register-name cell; report whether the context
+// menu came up.
+bool MenuOpensOnValueCell(bool onValueCell)
 {
     ContextRow row;
     ImGuiHarness harness([&] { row.Draw(); });
     harness.Settle();
-    const ImVec2 value = row.valueCenter;
-    harness.Hover(value);
-    harness.RightClick(value);
-    CHECK(row.menuOpen);
+    const ImVec2 target = onValueCell ? row.valueCenter : row.nameCenter;
+    harness.Hover(target);
+    harness.RightClick(target);
+    return row.menuOpen;
 }
 
-void TestRegisterContextMenuIsPerCell()
+void TestRegisterValueContextMenu()
 {
-    // The menu belongs to the value cell, not the row: right-clicking the register name
-    // must not open it. Otherwise "View in Memory" would appear on a cell whose value it
-    // has nothing to do with.
-    ContextRow row;
-    ImGuiHarness harness([&] { row.Draw(); });
-    harness.Settle();
-    const ImVec2 name = row.nameCenter;
-    harness.Hover(name);
-    harness.RightClick(name);
-    CHECK(!row.menuOpen);
+    CHECK(MenuOpensOnValueCell(true));
+    // And it belongs to the value cell, not the row: right-clicking the register name must
+    // not open it, or "View in Memory" would appear on a cell whose value it has nothing to
+    // do with. This half also proves the first is not passing trivially.
+    CHECK(!MenuOpensOnValueCell(false));
 }
 
 // Vertical centring of a Command-List-shaped row. The row Selectable is given an explicit
@@ -245,11 +242,18 @@ struct AlignRow
             ImGui::TableNextRow();
 
             ImGui::TableNextColumn();
-            const float selH = ImGui::GetFrameHeight();
-            if (alignTextToFramePadding) ImGui::AlignTextToFramePadding();
-            else ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
-            ImGui::Selectable("0", false, RowSelectableFlags(true), ImVec2(0.0f, selH));
-            if (!alignTextToFramePadding) ImGui::PopStyleVar();
+            if (alignTextToFramePadding)
+            {
+                // The old, broken shape, spelled out so the test can show it really does
+                // offset the row. Everything else goes through the shared helper.
+                ImGui::AlignTextToFramePadding();
+                ImGui::Selectable("0", false, RowSelectableFlags(true),
+                                  ImVec2(0.0f, ImGui::GetFrameHeight()));
+            }
+            else
+            {
+                RowSelectable("0", false, true);
+            }
 
             ImGui::TableNextColumn();
             ImGui::AlignTextToFramePadding();
@@ -307,8 +311,7 @@ int main()
     TestRowSwallowsCellClickWithoutAllowOverlap();
     TestInteractiveCellTakesItsOwnClick();
     TestRowStillSelectableBesideItsCells();
-    TestRegisterValueContextMenuOpens();
-    TestRegisterContextMenuIsPerCell();
+    TestRegisterValueContextMenu();
     TestCommandRowContentIsVerticallyCentred();
     TestAlignTextToFramePaddingOnRowSelectableOffsetsTheRow();
     if (gFailures != 0)

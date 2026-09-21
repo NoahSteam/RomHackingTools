@@ -30,40 +30,25 @@ int64_t SelHi(int64_t a, int64_t b) { return a > b ? a : b; }
 
 const std::vector<HexEditorPanel::Region>& HexEditorPanel::Regions()
 {
-    // First entry is "All" (the whole 27-bit canonical CPU space); the rest are the
-    // regions the snapshot captures, addressed at their CPU-visible (cached-mirror) bases.
-    // BIOS and the cartridge (CS0-2) are not captured, so they have no tab. Sound RAM is
-    // the SCSP's 512 KiB (0x05A00000 cached mirror of 0x25A00000) when the source supplies
-    // it (live v13+); it is empty otherwise.
-    static const std::vector<Region> kRegions = {
-        { "All",       0x00000000u, 0x08000000u },
-        { "LWRAM",     0x00200000u, kWramSize     },
-        { "HWRAM",     0x06000000u, kWramSize     },
-        { "Sound RAM", 0x05A00000u, kSoundRamSize },
-        { "VDP1 RAM",  0x05C00000u, kVdp1VramSize },
-        { "VDP1 FB",   0x05C80000u, kVdp1FbSize   },
-        { "VDP1 Regs", 0x05D00000u, kVdp1RegBytes },
-        { "VDP2 RAM",  0x05E00000u, kVdp2VramSize },
-        { "VDP2 CRAM", 0x05F00000u, kCramSize     },
-        { "VDP2 Regs", 0x05F80000u, kVdp2RegBytes },
-    };
+    // The captured regions (SaturnRegions.h), behind an "All" tab covering the whole 27-bit
+    // canonical CPU space. "All" is a tab-strip idea rather than a memory-map one, which is
+    // why it is added here and not in the shared table. Sound RAM is the SCSP's 512 KiB and
+    // is only populated when the source supplies it (live v13+); it is empty otherwise.
+    static const std::vector<Region> kRegions = [] {
+        std::vector<Region> v{ { "All", 0x00000000u, 0x08000000u } };
+        size_t count = 0;
+        const SaturnRegion* regions = SaturnRegions(count);
+        for (size_t i = 0; i < count; ++i)
+            v.push_back({ regions[i].name, regions[i].base, regions[i].size });
+        return v;
+    }();
     return kRegions;
 }
 
 int HexEditorPanel::RegionForAddr(uint32_t addr)
 {
-    const std::vector<Region>& regs = Regions();
-    const uint32_t a = addr & 0x07FFFFFFu;   // fold cache/through mirrors like the backend
-    for (int i = 1; i < (int)regs.size(); ++i)
-        if (a >= regs[i].base && a < regs[i].base + regs[i].size)
-            return i;
-    return 0;   // "All"
-}
-
-const char* HexEditorPanel::RegionName(uint32_t address)
-{
-    const int idx = RegionForAddr(address);
-    return idx > 0 ? Regions()[idx].name : nullptr;
+    const int i = SaturnRegionIndex(addr);
+    return i < 0 ? 0 : i + 1;   // 0 is the "All" tab; the shared table starts at 1 here
 }
 
 void HexEditorPanel::GoTo(uint32_t address)

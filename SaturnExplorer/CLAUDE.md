@@ -51,12 +51,23 @@ it. The known trap is a table row whose `Selectable` uses `SpanAllColumns`. It i
 before the cells to its right and ImGui's hit test rejects an item once an earlier one owns
 `HoveredId`, so without `AllowOverlap` the row swallows every click in it — and if the row
 navigates on double-click, it will run off and steal keyboard focus while the user is
-trying to type in a cell. **Any row with an interactive cell must take its flags from
-`RowSelectableFlags` in `FrontEnd/src/PanelWidgets.h`**, which the tests exercise directly.
+trying to type in a cell.
 
-Note the limit of that coverage: the tests pin the flag decision and the resulting hit-test
-behaviour, not the panels' own layout. A new panel that hand-rolls its Selectable flags is
-not protected — route it through the helper.
+A second trap rides along with the first. A row holding edit boxes is a full frame tall, so
+its `Selectable` needs that explicit height or its highlight covers one line instead of the
+row — but pairing that height with `AlignTextToFramePadding` offsets the Selectable's box
+(it is derived from `CursorPos + CurrLineTextBaseOffset`), the row grows to fit, and every
+cell in it then sits above centre.
+
+**A whole-row Selectable must go through `RowSelectable` in
+`FrontEnd/src/PanelWidgets.h`**, which settles all three things together: the overlap flag,
+the frame height, and the label's vertical centring. `RowSelectableFlags` remains for the
+rows that need to OR in extra flags. Text cells *beside* the row Selectable still want
+`AlignTextToFramePadding`; it is only the Selectable itself that must not have it.
+
+Note the limit of that coverage: the tests pin the flag decision, the hit-test behaviour and
+the row's vertical centring, not the panels' own layout. A new panel that hand-rolls its
+Selectable is not protected — route it through the helper.
 
 ## Conventions
 

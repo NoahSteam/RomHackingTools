@@ -21,11 +21,9 @@ struct Sh2RegField
     const char* desc;
 };
 
-// Indices into kSh2Regs / Sh2RegValue for the registers the panel treats specially.
+// Indices into the table / Sh2RegValue for the registers the panel treats specially.
 enum
 {
-    kSh2RegR0   = 0,
-    kSh2RegSp   = 15,   // R15 is the stack pointer
     kSh2RegPc   = 16,
     kSh2RegPr   = 17,
     kSh2RegSr   = 18,

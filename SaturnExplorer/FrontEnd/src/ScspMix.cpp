@@ -18,26 +18,40 @@ int16_t SampleAt(const ScspMixVoice& v, double pos)
     return static_cast<int16_t>(a + (b - a) * frac);
 }
 
-// Where a voice reads from at output frame 'f', or -1 once it has run out. A looping voice
-// wraps back into [LSA, LEA) instead of ending.
-double SourcePos(const ScspMixVoice& v, size_t f, double step)
+// How a voice is read: its resampling step, and where it goes on reaching the end. All of
+// it is fixed per voice, so the mix loop advances a position rather than re-deriving one
+// (and a loop wrap) for every one of its millions of samples.
+struct VoiceCursor
 {
-    double pos = static_cast<double>(f) * step;
-    if (pos < static_cast<double>(v.frames)) return pos;
+    double step = 1.0;       // source samples per output sample
+    double end = 0.0;        // past this the voice has run out
+    double loopEnd = 0.0;    // wrap target, when it loops
+    double loopSpan = 0.0;   // 0 = does not loop: the voice simply stops
 
-    const bool loops = v.loopMode != 0 && v.loopEnd > v.loopStart &&
-                       v.loopStart < v.frames;
-    if (!loops) return -1.0;
+    VoiceCursor(const ScspMixVoice& v, uint32_t outRate)
+    {
+        step = static_cast<double>(v.rate) / static_cast<double>(outRate);
+        end = static_cast<double>(v.frames);
+        // LEA can point past what actually decoded (a sample running off the end of sound
+        // RAM), so the loop is bounded by whichever came first.
+        if (v.loopMode != 0 && v.loopEnd > v.loopStart && v.loopStart < v.frames)
+        {
+            loopEnd = static_cast<double>(std::min<uint32_t>(
+                v.loopEnd, static_cast<uint32_t>(v.frames)));
+            loopSpan = loopEnd - static_cast<double>(v.loopStart);
+        }
+    }
 
-    const double loopEnd = static_cast<double>(std::min<uint32_t>(
-        v.loopEnd, static_cast<uint32_t>(v.frames)));
-    const double loopStart = static_cast<double>(v.loopStart);
-    const double span = loopEnd - loopStart;
-    if (span <= 0.0) return -1.0;
-    // Everything past the first pass through the sample cycles within the loop.
-    const double over = pos - loopStart;
-    return loopStart + (over - span * static_cast<double>(static_cast<long long>(over / span)));
-}
+    // Bring 'pos' back into the loop after it has run past the end, or say the voice is
+    // done. A while, not an if: a voice pitched above its loop length steps over the whole
+    // loop in one output sample.
+    bool Wrap(double& pos) const
+    {
+        if (loopSpan <= 0.0) return false;
+        do { pos -= loopSpan; } while (pos >= loopEnd);
+        return true;
+    }
+};
 }  // namespace
 
 int ScspVLevel(uint16_t egLevel, uint8_t totalLevel)
@@ -83,17 +97,16 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
     // How long the mix runs: the longest voice, so nothing is truncated. A looping voice
     // gets at least a second, otherwise a short sustain loop is a click next to a one-shot.
     size_t frames = 0;
-    bool anyLoops = false;
     for (size_t i = 0; i < n; ++i)
     {
         const ScspMixVoice& v = voices[i];
         if (!v.pcm || v.frames == 0 || v.rate == 0) continue;
         const double secs = static_cast<double>(v.frames) / static_cast<double>(v.rate);
         frames = std::max(frames, static_cast<size_t>(secs * outRate));
-        if (v.loopMode != 0 && v.loopEnd > v.loopStart) anyLoops = true;
+        if (v.loopMode != 0 && v.loopEnd > v.loopStart)
+            frames = std::max(frames, static_cast<size_t>(outRate));
     }
     if (frames == 0) return 0;
-    if (anyLoops) frames = std::max(frames, static_cast<size_t>(outRate));
     frames = std::min(frames, maxFrames);
 
     std::vector<int32_t> acc(frames * 2, 0);
@@ -107,14 +120,16 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
         if (volL == 0 && volR == 0) continue;   // DISDL 0: not sent to the DAC at all
         const int vlevel = ScspVLevel(v.egLevel, v.totalLevel);
 
-        const double step = static_cast<double>(v.rate) / static_cast<double>(outRate);
+        const VoiceCursor cur(v, outRate);
+        double pos = 0.0;
         for (size_t f = 0; f < frames; ++f)
         {
-            const double pos = SourcePos(v, f, step);
-            if (pos < 0.0) break;               // voice finished; the rest stays as mixed
+            // Past the end: loop back, or stop and leave the rest of the mix as it stands.
+            if (pos >= cur.end && !cur.Wrap(pos)) break;
             const int s = ScspAttenuate(SampleAt(v, pos), vlevel);
             acc[f * 2 + 0] += (s * volL) >> 14;   // 1.14 fixed point
             acc[f * 2 + 1] += (s * volR) >> 14;
+            pos += cur.step;
         }
     }
 

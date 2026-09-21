@@ -232,17 +232,6 @@ void HoverHelp(const char* desc)
     if (g_tooltipsEnabled && desc && *desc) ImGui::SetItemTooltip("%s", desc);
 }
 
-// Horizontally centre 'width' worth of content in the current table cell. The Size and
-// Position columns hold a small fixed-width group (two boxes, or "W x H") in a column the
-// user can widen, so left-aligning them strands the values against one edge. Only ever
-// shifts right, so it is a no-op when the column is too narrow to centre in.
-void CenterInCell(float width)
-{
-    const float avail = ImGui::GetContentRegionAvail().x;
-    if (avail > width)
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
-}
-
 // One "Label: value" row in the inspector; hovering the label explains the field (tooltips on).
 void InspectorRow(const char* label, const char* desc, const char* fmt, ...)
 {
@@ -949,8 +938,12 @@ void App::BuildUI(IPlatform& platform)
         // lands, so by the time the stop is acted on the two look identical. Stepping runs
         // through the same resume/re-halt path (StepInto clears mbPaused), so without this
         // every single step would count as a fresh hit.
-        const bool haltFromStep =
-            mStepAwaitingHalt || (mStepBpActive && stopPc == mStepBpAddr);
+        // The transient Step Over / Step Out breakpoint, recognised by address alone: SH-2
+        // PC breakpoints are shared across both CPUs, so which one reported the stop says
+        // nothing about whose breakpoint it is. Captured once here because the code below
+        // both tests it and retires it.
+        const bool atStepBp = mStepBpActive && stopPc == mStepBpAddr;
+        const bool haltFromStep = mStepAwaitingHalt || atStepBp;
         // Mirror the halt state so the Assembly panel can tint the halted row red (a
         // breakpoint hit or a completed instruction step). Level-triggered: it clears
         // itself once the emulator resumes.
@@ -982,8 +975,7 @@ void App::BuildUI(IPlatform& platform)
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
         // CPU's registers, which are exact at this PC. PC breakpoints are shared across both
         // SH-2s, so match on address regardless of the breakpoint's stored CPU.
-        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
-            !(mStepBpActive && stopPc == mStepBpAddr))
+        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP && !atStepBp)
         {
             const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(stopPc);
             if (guarded && !EvalCondition(guarded->condition, static_cast<int>(stopCpu)))
@@ -997,8 +989,7 @@ void App::BuildUI(IPlatform& platform)
         // instruction's PC through the same stop path as an execution BP. When the halt PC
         // carries no execution breakpoint and every active watchpoint is a logging one, treat
         // it as a data-BP hit — record the accessor + its call stack and resume silently.
-        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP &&
-            !(mStepBpActive && stopPc == mStepBpAddr) &&
+        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
             mBreakpoints.IsAccessLogHalt(stopPc))
         {
             RecordAccess(static_cast<int>(stopCpu), stopPc);
@@ -1010,10 +1001,8 @@ void App::BuildUI(IPlatform& platform)
         {
             mbPaused = true;   // halted; panel follows the halted PC
             // A transient step breakpoint (Step Over / Step Out) has done its job once we
-            // halt at it — retire it so it doesn't linger as a stray breakpoint. It is
-            // address-only (SH-2 PC breakpoints are shared across both SH-2s), so match on
-            // PC regardless of which CPU reported the stop.
-            if (mStepBpActive && stopPc == mStepBpAddr)
+            // halt at it — retire it so it doesn't linger as a stray breakpoint.
+            if (atStepBp)
             {
                 mStepBpActive = false;
                 mStepBpDirty = true;   // next SyncBreakpointsToLive drops it from the emulator
@@ -2524,10 +2513,7 @@ void App::DrawRamSearch()
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Watch"))
                     {
-                        char nm[32]; std::snprintf(nm, sizeof(nm), "ram_%08X", h.addr);
-                        char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", h.addr);
-                        mWatchPanel.AddWatch(nm, ex, kTypes[mRamSearchType].wt);
-                        mPanels.watch = true;
+                        AddAddressWatch("ram", h.addr, kTypes[mRamSearchType].wt);
                     }
                     ImGui::PopID();
                 }
@@ -3111,10 +3097,7 @@ void App::DrawCallStack(IPlatform& platform)
                 { mHexEditor.GoTo(fr.stackPointer); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("Add Address to Watch"))
                 {
-                    char nm[32]; std::snprintf(nm, sizeof(nm), "stack_%08X", fr.stackPointer);
-                    char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", fr.stackPointer);
-                    mWatchPanel.AddWatch(nm, ex, WatchType::Pointer);
-                    mPanels.watch = true;
+                    AddAddressWatch("stack", fr.stackPointer, WatchType::Pointer);
                 }
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
                 { mBreakpoints.ToggleExecution(fr.cpu, fr.functionAddress); }
@@ -3703,28 +3686,11 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         char label[16];
                         std::snprintf(label, sizeof(label), "%d", row);
-                        // When the size/position cells hold edit boxes the row is a full frame
-                        // tall, so size the row-selecting Selectable to match — otherwise its
-                        // highlight only covers one line of text, not the whole row.
-                        //
-                        // Deliberately NOT AlignTextToFramePadding here, unlike the text cells
-                        // below. Selectable derives its box from CursorPos + CurrLineTextBaseOffset
-                        // (imgui_widgets.cpp), so the frame-padding offset pushes the whole box
-                        // down and the row grows to fit it: the row ends up taller than its own
-                        // contents and everything in it sits above centre. Centring the label
-                        // inside the box instead puts it on exactly the baseline the framed
-                        // widgets and the AlignTextToFramePadding'd text cells use.
-                        const float selH = editable ? ImGui::GetFrameHeight() : 0.0f;
-                        if (editable)
-                            ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,
-                                                ImVec2(0.0f, 0.5f));
-                        // AllowOverlap (via RowSelectableFlags) is what makes the size and
-                        // position edit boxes reachable at all -- see PanelWidgets.h.
-                        const bool rowPressed = ImGui::Selectable(label, IsSelected(row),
-                                                                  RowSelectableFlags(editable),
-                                                                  ImVec2(0.0f, selH));
-                        if (editable) ImGui::PopStyleVar();
-                        if (rowPressed)
+                        // 'editable' here means framed: the size/position cells hold edit
+                        // boxes. RowSelectable handles what that implies for the row --
+                        // AllowOverlap so those boxes are reachable, the frame height, and
+                        // the label's vertical centring. See PanelWidgets.h.
+                        if (RowSelectable(label, IsSelected(row), editable))
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
@@ -3753,14 +3719,11 @@ void App::DrawCommandList()
                         else
                         {
                             const uint32_t texBytes = TextureVramBytes(cmd);
-                            char sz[48];
                             if (texBytes > 0)
-                                std::snprintf(sz, sizeof sz, "%ux%u (%u B)",
-                                              cmd.width, cmd.height, texBytes);
+                                TextCenteredInCell("%ux%u (%u B)", cmd.width, cmd.height,
+                                                   texBytes);
                             else
-                                std::snprintf(sz, sizeof sz, "%ux%u", cmd.width, cmd.height);
-                            CenterInCell(ImGui::CalcTextSize(sz).x);
-                            ImGui::TextUnformatted(sz);
+                                TextCenteredInCell("%ux%u", cmd.width, cmd.height);
                         }
                         ImGui::TableNextColumn();
                         if (editable)
@@ -3769,10 +3732,7 @@ void App::DrawCommandList()
                         }
                         else
                         {
-                            char ps[32];
-                            std::snprintf(ps, sizeof ps, "(%d, %d)", cmd.x, cmd.y);
-                            CenterInCell(ImGui::CalcTextSize(ps).x);
-                            ImGui::TextUnformatted(ps);
+                            TextCenteredInCell("(%d, %d)", cmd.x, cmd.y);
                         }
                         ImGui::TableNextColumn();
                         if (editable) ImGui::AlignTextToFramePadding();
@@ -7976,12 +7936,7 @@ void App::DrawSh2Registers()
             if (ImGui::MenuItem("Go to in Disassembly"))
             { mAssemblyPanel.GoTo(mRegSh2Cpu, value); mPanels.assembly = true; }
             if (ImGui::MenuItem("Add to Watch"))
-            {
-                char nm[32]; std::snprintf(nm, sizeof(nm), "%s_%08X", table[i].name, value);
-                char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", value);
-                mWatchPanel.AddWatch(nm, ex, WatchType::Pointer);
-                mPanels.watch = true;
-            }
+                AddAddressWatch(table[i].name, value, WatchType::Pointer);
             ImGui::EndPopup();
         }
 
@@ -7990,8 +7945,8 @@ void App::DrawSh2Registers()
         // counter or an index actually is. MACH/MACL are arithmetic results that can hold
         // any bit pattern, so they are never read as pointers however they happen to land.
         ImGui::TableNextColumn();
-        const bool arithmetic = (i == kSh2RegMach || i == kSh2RegMacl);
-        const char* region = arithmetic ? nullptr : HexEditorPanel::RegionName(value);
+        const bool neverPointer = (i == kSh2RegSr || i == kSh2RegMach || i == kSh2RegMacl);
+        const char* region = neverPointer ? nullptr : SaturnRegionName(value);
         if (i == kSh2RegSr)
         {
             ImGui::TextUnformatted(Sh2SrSummary(value).c_str());
@@ -8109,6 +8064,19 @@ void App::ExportSound(IPlatform& platform, int slot)
 
 // Decode a voice's sample and preview it through the platform's audio output (at its natural
 // pitch). No-op when the build has no audio backend.
+// Add a watch on 'addr' named "<prefix>_<addr>" and bring the Watch panel forward. The
+// three places that offer this (RAM search hits, a call-stack frame's stack pointer, an
+// SH-2 register) all want the same expression spelling, so it lives in one place.
+void App::AddAddressWatch(const char* prefix, uint32_t addr, WatchType type)
+{
+    char name[48];
+    std::snprintf(name, sizeof name, "%s_%08X", prefix, addr);
+    char expr[16];
+    std::snprintf(expr, sizeof expr, "%08X", addr);
+    mWatchPanel.AddWatch(name, expr, type);
+    mPanels.watch = true;
+}
+
 void App::PlaySound(IPlatform& platform, int slot)
 {
     std::vector<int16_t> pcm;
@@ -8130,7 +8098,9 @@ void App::PlaySoundFrame(IPlatform& platform)
     const int n = mbHasData ? se_get_scsp_slots(mContext, slots) : 0;
     if (n <= 0) return;
 
-    // The decoded samples have to outlive the mix, since ScspMixVoice only points at them.
+    // ScspMixVoice only points at its samples, so the decoded buffers have to outlive the
+    // mix. They are collected first and the pointers bound afterwards (below), so nothing
+    // depends on the vector never reallocating.
     std::vector<std::vector<int16_t>> pcm;
     std::vector<ScspMixVoice> mix;
     pcm.reserve(static_cast<size_t>(n));
@@ -8148,7 +8118,6 @@ void App::PlaySoundFrame(IPlatform& platform)
 
         pcm.push_back(std::move(samples));
         ScspMixVoice v;
-        v.pcm = pcm.back().data();
         v.frames = pcm.back().size();
         v.rate = rate;
         v.egLevel = s.eg_level;
@@ -8165,6 +8134,9 @@ void App::PlaySoundFrame(IPlatform& platform)
         mLog.Info("Play Frame: nothing audible on this frame.");
         return;
     }
+
+    // pcm is final now, so its buffers will not move again.
+    for (size_t i = 0; i < mix.size(); ++i) mix[i].pcm = pcm[i].data();
 
     std::vector<int16_t> out;
     const size_t frames = ScspMixVoices(mix.data(), mix.size(), kFrameMixRate,

@@ -127,6 +127,7 @@ private:
     void RecordAccess(int cpu, uint32_t pc);// file a data-watchpoint hit into the access log
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
+    void AddAddressWatch(const char* prefix, uint32_t addr, WatchType type);
     void PlaySound(IPlatform& platform, int slot);     // decode voice 'slot' -> preview audio
     void PlaySoundFrame(IPlatform& platform);          // mix every sounding voice -> preview
     // Output format for the frame mix. 44.1 kHz is the SCSP's own base rate, so the
