@@ -13,6 +13,8 @@
 
 #include <iostream>
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"   // ImGuiTable::RowPosY1/2 -- the row rect being asserted on
 #include "ImGuiHarness.h"
 #include "PanelWidgets.h"
 
@@ -218,6 +220,86 @@ void TestRegisterContextMenuIsPerCell()
     CHECK(!row.menuOpen);
 }
 
+// Vertical centring of a Command-List-shaped row. The row Selectable is given an explicit
+// frame height so its highlight covers the whole row; the bug was pairing that with
+// AlignTextToFramePadding, which offsets the Selectable's box by FramePadding.y so the row
+// grows taller than its own contents and everything inside it rides above centre.
+struct AlignRow
+{
+    bool alignTextToFramePadding = false;   // the old, broken pairing
+
+    float rowTop = 0.0f, rowBottom = 0.0f;
+    ImVec2 boxMin {}, boxMax {};            // an InputInt cell: the row's tallest content
+
+    void Draw()
+    {
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(800.0f, 300.0f));
+        ImGui::Begin("CL", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        if (ImGui::BeginTable("commands", 3, ImGuiTableFlags_Borders))
+        {
+            ImGui::TableSetupColumn("#");
+            ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Size");
+            ImGui::TableHeadersRow();
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            const float selH = ImGui::GetFrameHeight();
+            if (alignTextToFramePadding) ImGui::AlignTextToFramePadding();
+            else ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(0.0f, 0.5f));
+            ImGui::Selectable("0", false, RowSelectableFlags(true), ImVec2(0.0f, selH));
+            if (!alignTextToFramePadding) ImGui::PopStyleVar();
+
+            ImGui::TableNextColumn();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("System Clip");
+
+            ImGui::TableNextColumn();
+            int w = 0;
+            ImGui::SetNextItemWidth(40.0f);
+            ImGui::InputInt("##w", &w, 0, 0);
+            boxMin = ImGui::GetItemRectMin();
+            boxMax = ImGui::GetItemRectMax();
+
+            ImGuiTable* t = ImGui::GetCurrentTable();
+            rowTop = t->RowPosY1;
+            rowBottom = t->RowPosY2;
+            ImGui::EndTable();
+        }
+        ImGui::End();
+    }
+
+    float ContentOffsetFromRowCentre() const
+    {
+        return (boxMin.y + boxMax.y) * 0.5f - (rowTop + rowBottom) * 0.5f;
+    }
+};
+
+void TestCommandRowContentIsVerticallyCentred()
+{
+    AlignRow row;
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    const float off = row.ContentOffsetFromRowCentre();
+    CHECK(off > -0.01f && off < 0.01f);
+    // And the row is no taller than the frame it contains (plus cell padding), which is
+    // what going off-centre looked like: a row stretched by the Selectable's offset box.
+    const float pad = ImGui::GetStyle().CellPadding.y * 2.0f;
+    CHECK(row.rowBottom - row.rowTop <= ImGui::GetFrameHeight() + pad + 0.01f);
+}
+
+void TestAlignTextToFramePaddingOnRowSelectableOffsetsTheRow()
+{
+    // The regression itself: pin that the old pairing really does push content off centre,
+    // so this test fails if someone reinstates it.
+    AlignRow row;
+    row.alignTextToFramePadding = true;
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    CHECK(row.ContentOffsetFromRowCentre() < -0.5f);
+}
+
 }  // namespace
 
 int main()
@@ -227,6 +309,8 @@ int main()
     TestRowStillSelectableBesideItsCells();
     TestRegisterValueContextMenuOpens();
     TestRegisterContextMenuIsPerCell();
+    TestCommandRowContentIsVerticallyCentred();
+    TestAlignTextToFramePaddingOnRowSelectableOffsetsTheRow();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " panel interaction check(s) failed\n";

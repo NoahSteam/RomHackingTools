@@ -264,6 +264,15 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerFrameRecorderTests COMMAND SaturnExplorerFrameRecorderTests)
 
+    # SCSP frame mixer — the attenuation/pan laws and the voice summing behind Play Frame.
+    add_executable(SaturnExplorerScspMixTests
+        FrontEnd/tests/ScspMixTests.cpp
+        FrontEnd/src/ScspMix.cpp
+    )
+    target_include_directories(SaturnExplorerScspMixTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerScspMixTests COMMAND SaturnExplorerScspMixTests)
+
     # SH-2 register metadata + the SR flag decode behind the Registers panel's SH-2 tab.
     add_executable(SaturnExplorerSh2RegInfoTests
         FrontEnd/tests/Sh2RegInfoTests.cpp
@@ -480,6 +489,7 @@ elseif(EMSCRIPTEN)
     if(SE_WEB_LIVE)
         list(APPEND SE_WEB_SRC FrontEnd/src/FrameRecorder.cpp FrontEnd/src/FrameLz.cpp
                                FrontEnd/src/SavestateSlots.cpp
+            FrontEnd/src/ScspMix.cpp
                                FrontEnd/src/PatchLibrary.cpp)
     endif()
     add_executable(SaturnExplorerFrontEnd ${SE_WEB_SRC})
@@ -566,6 +576,7 @@ else()
             FrontEnd/src/FrameRecorder.cpp
             FrontEnd/src/FrameLz.cpp
             FrontEnd/src/SavestateSlots.cpp
+            FrontEnd/src/ScspMix.cpp
             FrontEnd/src/PatchLibrary.cpp
             FrontEnd/src/Demo/DemoScript.cpp
             FrontEnd/src/Demo/DemoPlayer.cpp

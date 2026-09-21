@@ -128,6 +128,11 @@ private:
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export
     void ExportSound(IPlatform& platform, int slot);   // decode voice 'slot' -> save .wav
     void PlaySound(IPlatform& platform, int slot);     // decode voice 'slot' -> preview audio
+    void PlaySoundFrame(IPlatform& platform);          // mix every sounding voice -> preview
+    // Output format for the frame mix. 44.1 kHz is the SCSP's own base rate, so the
+    // common case of an unpitched voice resamples 1:1; the cap bounds a preview at 4s.
+    static const uint32_t kFrameMixRate = 44100;
+    static const size_t   kFrameMixMaxFrames = 44100 * 4;
     // Decode a voice's sample from sound RAM into 'out' (16-bit mono); returns frame count,
     // fills 'rate' with the natural playback rate. Shared by Play + Export.
     int  DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate);

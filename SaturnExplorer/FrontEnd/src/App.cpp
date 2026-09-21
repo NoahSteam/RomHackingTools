@@ -28,6 +28,7 @@
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
+#include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
 #include "SeLiveProtocol.h"  // pure protocol constants: SE_LIVE_VERSION, SE_PAD_* masks.
@@ -229,6 +230,17 @@ bool g_tooltipsEnabled = false;
 void HoverHelp(const char* desc)
 {
     if (g_tooltipsEnabled && desc && *desc) ImGui::SetItemTooltip("%s", desc);
+}
+
+// Horizontally centre 'width' worth of content in the current table cell. The Size and
+// Position columns hold a small fixed-width group (two boxes, or "W x H") in a column the
+// user can widen, so left-aligning them strands the values against one edge. Only ever
+// shifts right, so it is a no-op when the column is too narrow to centre in.
+void CenterInCell(float width)
+{
+    const float avail = ImGui::GetContentRegionAvail().x;
+    if (avail > width)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
 }
 
 // One "Label: value" row in the inspector; hovering the label explains the field (tooltips on).
@@ -3694,13 +3706,25 @@ void App::DrawCommandList()
                         // When the size/position cells hold edit boxes the row is a full frame
                         // tall, so size the row-selecting Selectable to match — otherwise its
                         // highlight only covers one line of text, not the whole row.
+                        //
+                        // Deliberately NOT AlignTextToFramePadding here, unlike the text cells
+                        // below. Selectable derives its box from CursorPos + CurrLineTextBaseOffset
+                        // (imgui_widgets.cpp), so the frame-padding offset pushes the whole box
+                        // down and the row grows to fit it: the row ends up taller than its own
+                        // contents and everything in it sits above centre. Centring the label
+                        // inside the box instead puts it on exactly the baseline the framed
+                        // widgets and the AlignTextToFramePadding'd text cells use.
                         const float selH = editable ? ImGui::GetFrameHeight() : 0.0f;
-                        if (editable) ImGui::AlignTextToFramePadding();
+                        if (editable)
+                            ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign,
+                                                ImVec2(0.0f, 0.5f));
                         // AllowOverlap (via RowSelectableFlags) is what makes the size and
                         // position edit boxes reachable at all -- see PanelWidgets.h.
-                        if (ImGui::Selectable(label, IsSelected(row),
-                                              RowSelectableFlags(editable),
-                                              ImVec2(0.0f, selH)))
+                        const bool rowPressed = ImGui::Selectable(label, IsSelected(row),
+                                                                  RowSelectableFlags(editable),
+                                                                  ImVec2(0.0f, selH));
+                        if (editable) ImGui::PopStyleVar();
+                        if (rowPressed)
                         {
                             SelectCommand(row, ImGui::GetIO().KeyShift);
                             mScrollVdp1TableToSelection = true;   // reveal in the VDP1 Table
@@ -3729,10 +3753,14 @@ void App::DrawCommandList()
                         else
                         {
                             const uint32_t texBytes = TextureVramBytes(cmd);
+                            char sz[48];
                             if (texBytes > 0)
-                                ImGui::Text("%ux%u (%u B)", cmd.width, cmd.height, texBytes);
+                                std::snprintf(sz, sizeof sz, "%ux%u (%u B)",
+                                              cmd.width, cmd.height, texBytes);
                             else
-                                ImGui::Text("%ux%u", cmd.width, cmd.height);
+                                std::snprintf(sz, sizeof sz, "%ux%u", cmd.width, cmd.height);
+                            CenterInCell(ImGui::CalcTextSize(sz).x);
+                            ImGui::TextUnformatted(sz);
                         }
                         ImGui::TableNextColumn();
                         if (editable)
@@ -3741,7 +3769,10 @@ void App::DrawCommandList()
                         }
                         else
                         {
-                            ImGui::Text("(%d, %d)", cmd.x, cmd.y);
+                            char ps[32];
+                            std::snprintf(ps, sizeof ps, "(%d, %d)", cmd.x, cmd.y);
+                            CenterInCell(ImGui::CalcTextSize(ps).x);
+                            ImGui::TextUnformatted(ps);
                         }
                         ImGui::TableNextColumn();
                         if (editable) ImGui::AlignTextToFramePadding();
@@ -3801,15 +3832,18 @@ bool App::EditCommandSize(const se_command& cmd, int row)
     ImGui::PushID(row);
     bool changed = false;
     const float cell = 40.0f;
+    const float sep = 4.0f;
+    CenterInCell(cell + sep + ImGui::CalcTextSize("x").x + sep + cell);
 
     changed |= EditCell("##w", cell, cmd.width, [&](int width) {
         const uint16_t charW = static_cast<uint16_t>(Clampi(width / 8, 0, 0x3F));
         WriteCommandWord(cmd, kCmdSizeOffset,
                          static_cast<uint16_t>((charW << 8) | (cmd.height & 0xFF)));
     });
-    ImGui::SameLine(0.0f, 4.0f);
+    ImGui::SameLine(0.0f, sep);
+    ImGui::AlignTextToFramePadding();   // sit the separator on the boxes' baseline
     ImGui::TextUnformatted("x");
-    ImGui::SameLine(0.0f, 4.0f);
+    ImGui::SameLine(0.0f, sep);
     changed |= EditCell("##h", cell, cmd.height, [&](int height) {
         const uint16_t charW = static_cast<uint16_t>((cmd.width / 8) & 0x3F);
         WriteCommandWord(cmd, kCmdSizeOffset,
@@ -3829,12 +3863,14 @@ bool App::EditCommandPosition(const se_command& cmd, int row)
     ImGui::PushID(row);
     bool changed = false;
     const float cell = 46.0f;
+    const float sep = 4.0f;
+    CenterInCell(cell + sep + cell);
 
     changed |= EditCell("##x", cell, cmd.x, [&](int x) {
         WriteCommandWord(cmd, kCmdXaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(x, -32768, 32767))));
     });
-    ImGui::SameLine(0.0f, 4.0f);
+    ImGui::SameLine(0.0f, sep);
     changed |= EditCell("##y", cell, cmd.y, [&](int y) {
         WriteCommandWord(cmd, kCmdYaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(y, -32768, 32767))));
@@ -8084,6 +8120,61 @@ void App::PlaySound(IPlatform& platform, int slot)
     }
 }
 
+// Mix every voice sounding this frame into one stereo preview and play it. The per-voice
+// Play answers "what is this sample"; this answers "what is this moment made of" -- which
+// voices are carrying the music, which are effects, how they sit against each other.
+// Static reconstruction, not the emulator's output: see ScspMix.h.
+void App::PlaySoundFrame(IPlatform& platform)
+{
+    se_scsp_slot slots[SE_SCSP_SLOT_COUNT];
+    const int n = mbHasData ? se_get_scsp_slots(mContext, slots) : 0;
+    if (n <= 0) return;
+
+    // The decoded samples have to outlive the mix, since ScspMixVoice only points at them.
+    std::vector<std::vector<int16_t>> pcm;
+    std::vector<ScspMixVoice> mix;
+    pcm.reserve(static_cast<size_t>(n));
+    mix.reserve(static_cast<size_t>(n));
+
+    for (int i = 0; i < n; ++i)
+    {
+        const se_scsp_slot& s = slots[i];
+        if (!s.active || s.loop_end == 0) continue;
+
+        std::vector<int16_t> samples;
+        uint32_t rate = 44100;
+        const int frames = DecodeSlotSample(i, samples, rate);
+        if (frames <= 0) continue;
+
+        pcm.push_back(std::move(samples));
+        ScspMixVoice v;
+        v.pcm = pcm.back().data();
+        v.frames = pcm.back().size();
+        v.rate = rate;
+        v.egLevel = s.eg_level;
+        v.totalLevel = s.total_level;
+        v.directLevel = s.direct_level;
+        v.directPan = s.direct_pan;
+        v.loopMode = s.loop_mode;
+        v.loopStart = s.loop_start;
+        v.loopEnd = s.loop_end;
+        mix.push_back(v);
+    }
+    if (mix.empty())
+    {
+        mLog.Info("Play Frame: nothing audible on this frame.");
+        return;
+    }
+
+    std::vector<int16_t> out;
+    const size_t frames = ScspMixVoices(mix.data(), mix.size(), kFrameMixRate,
+                                        kFrameMixMaxFrames, out);
+    if (frames == 0) return;
+    platform.PlayAudio(out.data(), frames, kFrameMixRate, 2);
+    mLog.Info("Play Frame: mixed " + std::to_string(mix.size()) + " voice(s), " +
+              std::to_string(frames * 1000u / kFrameMixRate) + " ms.");
+}
+
 void App::DrawSound(IPlatform& platform)
 {
     if (!ImGui::Begin("Sound (SCSP)"))
@@ -8108,6 +8199,26 @@ void App::DrawSound(IPlatform& platform)
     for (int i = 0; i < n; ++i)
         if (slots[i].active) ++active;
     ImGui::Text("%d / %d voices sounding", active, n);
+    ImGui::SameLine();
+    // Sits with the voice count rather than in the table: it acts on the frame as a whole,
+    // not on any one row.
+    ImGui::BeginDisabled(active == 0 || !platform.HasAudio());
+    if (ImGui::SmallButton("Play Frame")) PlaySoundFrame(platform);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered())
+    {
+        if (!platform.HasAudio())
+            ImGui::SetTooltip("Audio output not available in this build");
+        else if (active == 0)
+            ImGui::SetTooltip("No voices are sounding on this frame");
+        else
+            ImGui::SetTooltip(
+                "Play all %d sounding voices together, panned and balanced as the\n"
+                "SCSP would mix them.\n\n"
+                "A static reconstruction, not the emulator's output: each voice plays\n"
+                "from the start of its sample with its envelope frozen at this frame,\n"
+                "and the DSP effect path is not modelled.", active);
+    }
     ImGui::SameLine();
     ImGui::TextDisabled("(each voice is a mono channel; stereo comes from pan)");
     ImGui::Separator();
