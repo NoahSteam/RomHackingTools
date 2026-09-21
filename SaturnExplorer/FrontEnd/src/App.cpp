@@ -931,6 +931,13 @@ void App::BuildUI(IPlatform& platform)
 #ifdef SE_ENABLE_LIVE
         uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
         bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
+        // Is this halt the end of a step rather than a breakpoint being hit? Captured here
+        // because the hold logic below clears mStepAwaitingHalt as soon as the new halt
+        // lands, so by the time the stop is acted on the two look identical. Stepping runs
+        // through the same resume/re-halt path (StepInto clears mbPaused), so without this
+        // every single step would count as a fresh hit.
+        const bool haltFromStep =
+            mStepAwaitingHalt || (mStepBpActive && stopPc == mStepBpAddr);
         // Mirror the halt state so the Assembly panel can tint the halted row red (a
         // breakpoint hit or a completed instruction step). Level-triggered: it clears
         // itself once the emulator resumes.
@@ -1003,6 +1010,16 @@ void App::BuildUI(IPlatform& platform)
             mCallStackCpu = (stopCpu == 1) ? 1 : 0;
             mCallStackDirty = true;
             mFocusCallStack = true;
+            // And the Assembly panel, which is where the halt actually is. Opened if the
+            // user had closed it -- "brought up" is the point, and they asked for this halt
+            // by setting the breakpoint. Only for a real hit: landing a step is not one, and
+            // re-surfacing the panel on every step would yank focus back from whatever the
+            // user clicked between steps.
+            if (!haltFromStep)
+            {
+                mPanels.assembly = true;
+                mAssemblyPanel.Reveal(mCallStackCpu);
+            }
         }
 #endif
     }

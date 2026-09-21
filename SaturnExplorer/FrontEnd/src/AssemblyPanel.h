@@ -64,6 +64,13 @@ public:
     // Jump the view to 'addr' on 'cpu' (the Log panel's "Jump to Assembly").
     void GoTo(int cpu, uint32_t addr);
 
+    // Bring the panel forward on 'cpu' -- its dock tab is selected and, if the halt is on
+    // the other SH-2, the view switches to it (the halted row is only tracked while the
+    // panel's own CPU matches). Deliberately not GoTo: that turns Follow PC off and pushes
+    // a history entry for a jump the user never made, and on a halt the panel is already
+    // following the PC. Used when execution stops so the halted instruction is on screen.
+    void Reveal(int cpu) { mCpu = cpu & 1; mFocusRequested = true; }
+
     // Persist / restore the user comment store (address -> note). Called by the App
     // at startup / shutdown, mirroring WatchPanel session persistence.
     void LoadComments();
