@@ -264,6 +264,14 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerFrameRecorderTests COMMAND SaturnExplorerFrameRecorderTests)
 
+    # SH-2 register metadata + the SR flag decode behind the Registers panel's SH-2 tab.
+    add_executable(SaturnExplorerSh2RegInfoTests
+        FrontEnd/tests/Sh2RegInfoTests.cpp
+    )
+    target_include_directories(SaturnExplorerSh2RegInfoTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerSh2RegInfoTests COMMAND SaturnExplorerSh2RegInfoTests)
+
     # PatchLibrary — known-locations model, project I/O, and Python patch-script emission.
     # The e2e leg runs the emitted script with python3 when available (skips gracefully if not).
     add_executable(SaturnExplorerPatchLibraryTests

@@ -27,6 +27,7 @@
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
+#include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
 #include "SeLiveProtocol.h"  // pure protocol constants: SE_LIVE_VERSION, SE_PAD_* masks.
@@ -1008,6 +1009,7 @@ void App::BuildUI(IPlatform& platform)
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
             // and surface the Call Stack panel.
             mCallStackCpu = (stopCpu == 1) ? 1 : 0;
+            mRegSh2Cpu = mCallStackCpu;
             mCallStackDirty = true;
             mFocusCallStack = true;
             // And the Assembly panel, which is where the halt actually is. Opened if the
@@ -2978,6 +2980,10 @@ void App::DrawCallStack(IPlatform& platform)
     if (ImGui::Combo("##cscpu", &mCallStackCpu, cpuNames, 2)) mCallStackDirty = true;
     ImGui::SameLine();
     if (ImGui::SmallButton("Reconstruct")) mCallStackDirty = true;
+    ImGui::SetItemTooltip(
+        "Rebuild this CPU's call stack by rescanning its registers and stack memory.\n"
+        "The stack is built automatically when execution stops; use this to refresh it\n"
+        "after editing memory or registers, or if the frames below look stale or wrong.");
     ImGui::SameLine();
     if (ImGui::SmallButton("Load Symbols\xe2\x80\xa6"))
     {
@@ -7882,6 +7888,93 @@ void DrawRegTable(const char* id, const RegInfo* regs, size_t count,
 }
 }  // namespace
 
+// The "SH-2" tab of the Registers panel: one CPU's whole register file. Read-only -- the
+// host ABI exposes se_get_sh2_regs but no write path, so unlike the Memory panel there is
+// nothing to type over here. Values are actionable instead: the context menu sends one to
+// the Memory or Assembly panel, which is what you actually want from R15 or an argument
+// register holding a pointer.
+void App::DrawSh2Registers()
+{
+    const char* kCpus[] = { "Master SH-2", "Slave SH-2" };
+    ImGui::SetNextItemWidth(140.0f);
+    ImGui::Combo("##sh2regcpu", &mRegSh2Cpu, kCpus, 2);
+
+    se_sh2_regs regs = {};
+    if (!mContext || se_get_sh2_regs(mContext, mRegSh2Cpu, &regs) != SE_OK)
+    {
+        ImGui::TextDisabled("No registers for this CPU.");
+        return;
+    }
+
+    const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+                                  ImGuiTableFlags_ScrollY;
+    if (!ImGui::BeginTable("sh2regs", 3, flags, ImVec2(0, 0))) return;
+
+    ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupColumn("Reg", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 88.0f);
+    ImGui::TableSetupColumn("Notes");
+    ImGui::TableHeadersRow();
+
+    const Sh2RegField* table = Sh2RegTable();
+    for (int i = 0; i < kSh2RegCount; ++i)
+    {
+        const uint32_t value = Sh2RegValue(regs, i);
+        ImGui::TableNextRow();
+        ImGui::PushID(i);
+
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(table[i].name);
+        HoverHelp(table[i].desc);
+
+        ImGui::TableNextColumn();
+        ImGui::Text("0x%08X", value);
+        // The value cell carries the context menu, so right-clicking the number acts on
+        // that number rather than on whatever the row as a whole would mean. There is no
+        // row Selectable here, so none of the AllowOverlap care the Command List needs
+        // applies (PanelWidgets.h); both facts are pinned in PanelInteractionTests.
+        if (ImGui::BeginPopupContextItem("regmenu"))
+        {
+            if (ImGui::MenuItem("View in Memory"))
+            { mHexEditor.GoTo(value); mPanels.hexEditor = true; }
+            if (ImGui::MenuItem("Go to in Disassembly"))
+            { mAssemblyPanel.GoTo(mRegSh2Cpu, value); mPanels.assembly = true; }
+            if (ImGui::MenuItem("Add to Watch"))
+            {
+                char nm[32]; std::snprintf(nm, sizeof(nm), "%s_%08X", table[i].name, value);
+                char ex[16]; std::snprintf(ex, sizeof(ex), "%08X", value);
+                mWatchPanel.AddWatch(nm, ex, WatchType::Pointer);
+                mPanels.watch = true;
+            }
+            ImGui::EndPopup();
+        }
+
+        // Notes: SR gets its flags; anything landing in captured memory is almost always a
+        // pointer, so name the region; otherwise show the signed value, which is what a
+        // counter or an index actually is. MACH/MACL are arithmetic results that can hold
+        // any bit pattern, so they are never read as pointers however they happen to land.
+        ImGui::TableNextColumn();
+        const bool arithmetic = (i == kSh2RegMach || i == kSh2RegMacl);
+        const char* region = arithmetic ? nullptr : HexEditorPanel::RegionName(value);
+        if (i == kSh2RegSr)
+        {
+            ImGui::TextUnformatted(Sh2SrSummary(value).c_str());
+            if (g_tooltipsEnabled && ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", Sh2SrDetail(value).c_str());
+        }
+        else if (region)
+        {
+            ImGui::TextDisabled("-> %s", region);
+        }
+        else
+        {
+            ImGui::Text("%d", static_cast<int32_t>(value));
+        }
+        ImGui::PopID();
+    }
+    ImGui::EndTable();
+}
+
 void App::DrawRegisters()
 {
     if (ImGui::Begin("Registers"))
@@ -7918,6 +8011,20 @@ void App::DrawRegisters()
                 {
                     ImGui::TextDisabled("This source doesn't provide VDP1 registers");
                     ImGui::TextDisabled("(most VDP1 draw state lives in the command table).");
+                }
+                ImGui::EndTabItem();
+            }
+            // SH-2 sits alongside the VDP register tabs: same panel, same read-only
+            // "what does the hardware hold right now" job, different chip.
+            if (ImGui::BeginTabItem("SH-2"))
+            {
+                if (se_has_sh2_regs(mContext))
+                {
+                    DrawSh2Registers();
+                }
+                else
+                {
+                    ImGui::TextDisabled("This source doesn't provide SH-2 registers.");
                 }
                 ImGui::EndTabItem();
             }

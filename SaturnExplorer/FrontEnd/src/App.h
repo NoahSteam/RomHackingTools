@@ -236,6 +236,7 @@ private:
     void DrawReferences();
     void DrawReferenceList(const char* id, const std::vector<se_reference>& refs);
     void DrawRegisters();
+    void DrawSh2Registers();   // the Registers panel's "SH-2" tab
     void DrawColorRam();
     void DrawVdp1Table();
     void DrawVdp2Table();
@@ -347,6 +348,10 @@ private:
     bool                     mFocusCallStack = false;   // bring the panel forward on a stop
     bool                     mCallStackWasShowable = false;  // edge-detect entering paused/loaded
     int                      mCallStackCpu = 0;
+    // CPU shown by the Registers panel's SH-2 tab. Follows a halt (set alongside
+    // mCallStackCpu) so a breakpoint lands you on the registers that stopped, but stays
+    // independently switchable so you can read the other CPU without disturbing anything.
+    int                      mRegSh2Cpu = 0;
     bool                     mRenameOpen = false;
     uint32_t                 mRenameAddr = 0;
     char                     mRenameBuf[64] = {};

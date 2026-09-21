@@ -142,6 +142,82 @@ void TestRowStillSelectableBesideItsCells()
     CHECK(row.rowClicked);
 }
 
+// A row shaped like the Registers panel's SH-2 tab: plain Text cells, with a context menu
+// hung off the value cell. No Selectable, so no row item can own HoveredId -- but
+// BeginPopupContextItem on a Text item still depends on IsItemHovered, and Text submits
+// with id 0, so "does the menu actually open" is worth pinning rather than assuming.
+struct ContextRow
+{
+    bool  menuOpen = false;     // the popup was visible this frame
+    bool  itemPicked = false;   // an entry inside it was chosen
+    ImVec2 valueCenter {};
+    ImVec2 nameCenter {};
+
+    void Draw()
+    {
+        menuOpen = false;
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(600.0f, 400.0f));
+        ImGui::Begin("Regs", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        if (ImGui::BeginTable("t", 3, ImGuiTableFlags_Borders))
+        {
+            ImGui::TableSetupColumn("Reg");
+            ImGui::TableSetupColumn("Value");
+            ImGui::TableSetupColumn("Notes");
+            ImGui::TableHeadersRow();
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::PushID(0);
+            ImGui::TextUnformatted("R15");
+            const ImVec2 nmin = ImGui::GetItemRectMin(), nmax = ImGui::GetItemRectMax();
+            nameCenter = ImVec2((nmin.x + nmax.x) * 0.5f, (nmin.y + nmax.y) * 0.5f);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("0x%08X", 0x0603F000u);
+            const ImVec2 vmin = ImGui::GetItemRectMin(), vmax = ImGui::GetItemRectMax();
+            valueCenter = ImVec2((vmin.x + vmax.x) * 0.5f, (vmin.y + vmax.y) * 0.5f);
+            if (ImGui::BeginPopupContextItem("regmenu"))
+            {
+                menuOpen = true;
+                if (ImGui::MenuItem("View in Memory")) itemPicked = true;
+                ImGui::EndPopup();
+            }
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted("-> HWRAM");
+            ImGui::PopID();
+            ImGui::EndTable();
+        }
+        ImGui::End();
+    }
+};
+
+void TestRegisterValueContextMenuOpens()
+{
+    ContextRow row;
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    const ImVec2 value = row.valueCenter;
+    harness.Hover(value);
+    harness.RightClick(value);
+    CHECK(row.menuOpen);
+}
+
+void TestRegisterContextMenuIsPerCell()
+{
+    // The menu belongs to the value cell, not the row: right-clicking the register name
+    // must not open it. Otherwise "View in Memory" would appear on a cell whose value it
+    // has nothing to do with.
+    ContextRow row;
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    const ImVec2 name = row.nameCenter;
+    harness.Hover(name);
+    harness.RightClick(name);
+    CHECK(!row.menuOpen);
+}
+
 }  // namespace
 
 int main()
@@ -149,6 +225,8 @@ int main()
     TestRowSwallowsCellClickWithoutAllowOverlap();
     TestInteractiveCellTakesItsOwnClick();
     TestRowStillSelectableBesideItsCells();
+    TestRegisterValueContextMenuOpens();
+    TestRegisterContextMenuIsPerCell();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " panel interaction check(s) failed\n";

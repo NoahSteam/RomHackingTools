@@ -43,11 +43,15 @@ public:
     ImGuiHarness& operator=(const ImGuiHarness&) = delete;
 
     // One frame with the mouse at 'mouse' and the left button in state 'down'.
-    void Frame(ImVec2 mouse, bool down)
+    void Frame(ImVec2 mouse, bool down) { FrameButton(mouse, 0, down); }
+
+    // As Frame, but drives an arbitrary button: 0 left, 1 right, 2 middle. Context menus
+    // (BeginPopupContextItem) open on the right button, so they cannot be driven by Frame.
+    void FrameButton(ImVec2 mouse, int button, bool down)
     {
         ImGuiIO& io = ImGui::GetIO();
         io.AddMousePosEvent(mouse.x, mouse.y);
-        io.AddMouseButtonEvent(0, down);
+        io.AddMouseButtonEvent(button, down);
         ImGui::NewFrame();
         mUi();
         ImGui::Render();
@@ -67,6 +71,15 @@ public:
 
     // Press only, leaving the button held — for asserting what a click activated.
     void Press(ImVec2 p) { Frame(p, true); }
+
+    // A full right-button press + release at 'p'. BeginPopupContextItem opens on release,
+    // and the popup only becomes visible on the frame after, so one settled frame follows.
+    void RightClick(ImVec2 p)
+    {
+        FrameButton(p, 1, true);
+        FrameButton(p, 1, false);
+        FrameButton(p, 1, false);
+    }
 
 private:
     // A point parked off the widgets under test. A static function rather than a

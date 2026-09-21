@@ -60,6 +60,12 @@ int HexEditorPanel::RegionForAddr(uint32_t addr)
     return 0;   // "All"
 }
 
+const char* HexEditorPanel::RegionName(uint32_t address)
+{
+    const int idx = RegionForAddr(address);
+    return idx > 0 ? Regions()[idx].name : nullptr;
+}
+
 void HexEditorPanel::GoTo(uint32_t address)
 {
     mSelectTab = RegionForAddr(address);
