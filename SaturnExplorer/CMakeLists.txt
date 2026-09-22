@@ -116,6 +116,13 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerVdp2Tests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerVdp2Tests COMMAND SaturnExplorerVdp2Tests)
 
+    # 3D View orientation — the exploded world view checked against the 2D composite.
+    add_executable(SaturnExplorerGeometry3DTests
+        Core/tests/Geometry3DTests.cpp
+    )
+    target_link_libraries(SaturnExplorerGeometry3DTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerGeometry3DTests COMMAND SaturnExplorerGeometry3DTests)
+
     add_executable(SaturnExplorerTopBarTests
         FrontEnd/tests/TopBarTests.cpp
         FrontEnd/src/TopBar.cpp
