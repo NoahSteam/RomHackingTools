@@ -553,7 +553,46 @@ struct PlaneGeom
     // with the rest of the geometry rather than recomputed in PatternNameAddress -- which
     // runs once per texel on the composite path and once per cell on the tile-map walk.
     uint32_t planeCellsW, planeCellsH;
+    // Every divisor in that walk is a power of two, because the hardware fields can only
+    // produce one: a pattern is 8 or 16 pixels, a page 32 or 64 cells, a plane 32/64/128
+    // cells across. Carrying the exponents lets the walk shift and mask instead. Filled by
+    // MakeGeom, which is the only way a PlaneGeom should be built.
+    uint32_t cellShift, pageShift, planeCellsWShift, planeCellsHShift;
 };
+
+// log2 of an exact power of two.
+inline uint32_t Log2Exact(uint32_t value)
+{
+    uint32_t bits = 0;
+    while ((1u << bits) < value) ++bits;
+    return bits;
+}
+
+// The only constructor for a PlaneGeom: it derives the cell counts and their exponents so
+// the two callers cannot disagree about them, and so inserting a field cannot silently
+// shift a value into a divisor the way a positional aggregate initialiser could.
+inline PlaneGeom MakeGeom(const uint32_t* planeBase, uint32_t planesPerRow, uint32_t planeW,
+                          uint32_t planePixW, uint32_t planePixH, uint32_t cellWH,
+                          uint32_t pageCells, uint32_t pnBytes, uint32_t cellBytes)
+{
+    PlaneGeom g = {};
+    g.planeBase = planeBase;
+    g.planesPerRow = planesPerRow;
+    g.planeW = planeW;
+    g.planePixW = planePixW;
+    g.planePixH = planePixH;
+    g.cellWH = cellWH;
+    g.pageCells = pageCells;
+    g.pnBytes = pnBytes;
+    g.cellBytes = cellBytes;
+    g.planeCellsW = planePixW / cellWH;
+    g.planeCellsH = planePixH / cellWH;
+    g.cellShift = Log2Exact(cellWH);
+    g.pageShift = Log2Exact(pageCells);
+    g.planeCellsWShift = Log2Exact(g.planeCellsW);
+    g.planeCellsHShift = Log2Exact(g.planeCellsH);
+    return g;
+}
 
 // Sample pixel (inX, inY) inside one character pattern, already flipped, by walking to the
 // 8x8 sub-cell it falls in: a 16x16 pattern is four 8x8 cells, left to right then top to
@@ -575,12 +614,13 @@ Rgba FetchPatternTexel(const std::vector<uint8_t>& vram, const std::vector<uint8
 // stride collides across page columns).
 uint32_t PatternNameAddress(const PlaneGeom& g, uint32_t patX, uint32_t patY)
 {
-    const uint32_t plane = (patY / g.planeCellsH) * g.planesPerRow + (patX / g.planeCellsW);
-    const uint32_t lx = patX % g.planeCellsW;
-    const uint32_t ly = patY % g.planeCellsH;
-    const uint32_t pageIndex = (ly / g.pageCells) * g.planeW + (lx / g.pageCells);
+    const uint32_t plane = (patY >> g.planeCellsHShift) * g.planesPerRow +
+                           (patX >> g.planeCellsWShift);
+    const uint32_t lx = patX & (g.planeCellsW - 1);
+    const uint32_t ly = patY & (g.planeCellsH - 1);
+    const uint32_t pageIndex = (ly >> g.pageShift) * g.planeW + (lx >> g.pageShift);
     const uint32_t patIndex = pageIndex * (g.pageCells * g.pageCells) +
-                              (ly % g.pageCells) * g.pageCells + (lx % g.pageCells);
+                              (ly & (g.pageCells - 1)) * g.pageCells + (lx & (g.pageCells - 1));
     return g.planeBase[plane] + patIndex * g.pnBytes;
 }
 
@@ -592,11 +632,11 @@ Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t
                      const PlaneGeom& g, uint32_t x, uint32_t y)
 {
     const PatternName pn = DecodePatternName(
-        vram, PatternNameAddress(g, x / g.cellWH, y / g.cellWH), c, vrsize);
+        vram, PatternNameAddress(g, x >> g.cellShift, y >> g.cellShift), c, vrsize);
 
     // Pixel within the pattern, then within its 8x8 sub-cell.
-    uint32_t inX = x % g.cellWH;
-    uint32_t inY = y % g.cellWH;
+    uint32_t inX = x & (g.cellWH - 1);
+    uint32_t inY = y & (g.cellWH - 1);
     if (pn.flip & 1) inX = g.cellWH - 1 - inX;
     if (pn.flip & 2) inY = g.cellWH - 1 - inY;
     return FetchPatternTexel(vram, cram, cramMode, c, pn, g.cellBytes, inX, inY);
@@ -619,11 +659,9 @@ void BuildNbgGeom(const NbgConfig& c, std::array<uint32_t, 4>& planeBase, PlaneG
     for (int i = 0; i < 4; ++i)
         planeBase[i] = PlaneBaseFor(c.mapOffset | pageRegs[i], oneWord, c.patternWH, deca, multi);
 
-    const uint32_t cellWH = 8 * c.patternWH;
-    geom = PlaneGeom {
-        planeBase.data(), 2, planeW, planeW * 512, planeH * 512,
-        cellWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum),
-        (planeW * 512) / cellWH, (planeH * 512) / cellWH };
+    geom = MakeGeom(planeBase.data(), 2, planeW, planeW * 512, planeH * 512,
+                    8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u,
+                    CellByteSize(c.colorNum));
 }
 
 // Tile-grid overlay: blend a texel half-and-half with the grid colour and make it opaque,
@@ -903,11 +941,9 @@ void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
     const uint32_t planePixH = planeH * 512;
     s.totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
     s.totalH = 4 * planePixH;
-    const uint32_t cellWH = 8 * c.patternWH;
-    s.geom = PlaneGeom {
-        s.planeBase.data(), 4, planeW, planePixW, planePixH,
-        cellWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum),
-        planePixW / cellWH, planePixH / cellWH };
+    s.geom = MakeGeom(s.planeBase.data(), 4, planeW, planePixW, planePixH,
+                      8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u,
+                      CellByteSize(c.colorNum));
 }
 
 // Per-line rotation setup (Xst/Yst accumulate DXst/DYst down the screen).
@@ -1300,7 +1336,15 @@ void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer,
         {
             const PatternName pn =
                 DecodePatternName(vram, PatternNameAddress(g, x, y), c, vrsize);
-            const uint64_t key = (static_cast<uint64_t>(pn.charBase) << 32) | pn.palette;
+            // Mixed, not just packed. libc++'s std::hash<uint64_t> is the identity, and a
+            // bucket count that is a power of two is indexed by masking off the low bits --
+            // which for a raw (charBase << 32) | palette key discards every bit that
+            // distinguishes one tile from another, collapsing the table into one chain.
+            // Natural growth happens to pick primes so the raw key survives today; this
+            // makes it independent of that. (It is also why reserve() must not be used
+            // here: see TileScratch.)
+            uint64_t key = (static_cast<uint64_t>(pn.charBase) << 32) | pn.palette;
+            key ^= key >> 32;
             uint32_t index = 0;
             const std::unordered_map<uint64_t, uint32_t>::const_iterator it = seen.find(key);
             if (it != seen.end())

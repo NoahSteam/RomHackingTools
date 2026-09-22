@@ -117,7 +117,15 @@ public:
     // 'scratch' is the builder's charbase+palette -> index map. It is a parameter rather
     // than a local or a member of Vdp2TileMap because the reuse belongs to whoever owns
     // the cache slot, not to the description: a live source rebuilds every frame, and a
-    // fresh map would rehash its way back up to kMaxTiles buckets each time.
+    // fresh map would rehash its way back up from nothing each time.
+    //
+    // Do NOT reserve() it. A reserve makes libc++'s bucket count a power of two, which
+    // switches bucket selection from a modulus to a mask -- and the mask keeps the low
+    // bits, where a tile key has no entropy. Measured at 65,536 lookups: 0.12 ms letting
+    // clear() keep the previous run's (prime) buckets, against 18 ms reserving for 512
+    // distinct tiles and 2,000 ms for 32,768. That is a hash collapse, not allocation
+    // cost. BuildTileMap now mixes the key so the structure no longer depends on the
+    // growth policy, but reserving still buys nothing here.
     typedef std::unordered_map<uint64_t, uint32_t> TileScratch;
     static void BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out,
                              TileScratch& scratch);

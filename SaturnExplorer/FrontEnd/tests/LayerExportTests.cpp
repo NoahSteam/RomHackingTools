@@ -106,6 +106,38 @@ State MakeSpriteState()
     return state;
 }
 
+// NBG3 with 2x2-page planes and four distinct plane map numbers, so the scroll map spans
+// the whole 2x2 plane grid: 128 cells per plane edge, 256x256 across the map. Every other
+// fixture here uses a single plane, where patX never reaches planeCellsW and the
+// plane-selection arithmetic in PatternNameAddress is a no-op.
+State MakeMultiPlaneNbg3State()
+{
+    State state(0x200);
+    se_test::WriteSystemClip(state, 32, 8);
+    PutBE16(state.vdp1, 0x20, 0x8000);
+
+    SetReg(state, 0x020, 0x0008);   // BGON: NBG3 on
+    SetReg(state, 0x03A, 0x00C0);   // PLSZ: NBG3 planes are 2x2 pages
+    SetReg(state, 0x036, 0x8000);   // PNCN3: one-word pattern names
+    // Map numbers 0/4/8/12, not 0/1/2/3: a 2x2-page plane spans four pages, so PlaneBaseFor
+    // shifts the number down by two and the low bits are ignored -- consecutive numbers
+    // would alias every plane onto one table. These land the four tables at 0x0000,
+    // 0x8000, 0x10000 and 0x18000.
+    SetReg(state, 0x04C, 0x0400);   // MPABN3: plane A -> map 0,  plane B -> map 4
+    SetReg(state, 0x04E, 0x0C08);   // MPCDN3: plane C -> map 8,  plane D -> map 12
+    SetReg(state, 0x0FA, 0x0100);   // PRINB: NBG3 priority 1
+
+    // One character number per 8 KiB page table (64x64 one-word names), so every page in
+    // VRAM names a different character while staying inside the 10-bit field a one-word
+    // pattern name carries. Uniform within a page, distinct between pages: a cell that
+    // resolves to the wrong page or the wrong plane then reports a different tile.
+    for (uint32_t off = 0; off + 1 < 0x80000; off += 2)
+        PutBE16(state.vdp2, off, static_cast<uint16_t>((off / 8192u) & 0x03FF));
+    for (uint32_t ch = 1; ch < 5; ++ch)
+        PutBE16(state.cram, ch * 2, kCram555[ch - 1]);
+    return state;
+}
+
 se_render_opts AllLayers()
 {
     se_render_opts opts = {};
@@ -325,6 +357,43 @@ void TestRebuildDoesNotLeakPreviousMap()
     CHECK(off.tile_count == 0);
     CHECK(off.truncated == 0);
     CHECK(se_get_vdp2_tile_indices(ctx, SE_LAYER_NBG3, nullptr, 0) == 0);
+    se_destroy(ctx);
+}
+
+// The four plane quadrants must resolve through four different pattern-name tables. This
+// is what pins the plane-selection arithmetic: with a single-plane fixture every cell sits
+// in plane 0, so a wrong plane index or plane-cell mask cannot be observed at all.
+void TestPlaneGridAddressesEachPlaneSeparately()
+{
+    State state = MakeMultiPlaneNbg3State();
+    se_context* ctx = Open(state);
+
+    se_vdp2_tilemap info = {};
+    CHECK(se_get_vdp2_tilemap(ctx, SE_LAYER_NBG3, &info) == SE_OK);
+    CHECK(info.map_width == 256);    // 2 planes x 2 pages x 64 cells
+    CHECK(info.map_height == 256);
+
+    std::vector<uint32_t> indices(static_cast<size_t>(info.map_width) * info.map_height);
+    CHECK(se_get_vdp2_tile_indices(ctx, SE_LAYER_NBG3, indices.data(), indices.size()) ==
+          indices.size());
+
+    // One cell from each plane. 128 is planeCellsW/H, so these are the first cell of each
+    // quadrant -- exactly the coordinates a wrong shift or mask folds onto each other.
+    auto at = [&](uint32_t x, uint32_t y) {
+        return indices[static_cast<size_t>(y) * info.map_width + x];
+    };
+    const uint32_t a = at(0, 0), b = at(128, 0), c = at(0, 128), d = at(128, 128);
+    CHECK(a != b);   // plane A vs plane B: the X half of the plane index
+    CHECK(a != c);   // plane A vs plane C: the Y half
+    CHECK(a != d);
+    CHECK(b != c);
+    CHECK(b != d);
+    CHECK(c != d);
+
+    // Within one plane, the page split must survive too: a page is 64 cells, so these two
+    // sit in different pages of the same plane.
+    CHECK(at(0, 0) != at(64, 0));
+    CHECK(at(0, 0) != at(0, 64));
     se_destroy(ctx);
 }
 
@@ -574,6 +643,7 @@ int main()
     TestIsolatedLayerRender();
     TestTileMapAndTileset();
     TestTileMapShapeMatchesWithoutCounting();
+    TestPlaneGridAddressesEachPlaneSeparately();
     TestDeriveSerialTracksEveryRederive();
     TestRebuildDoesNotLeakPreviousMap();
     TestTileGrid();
