@@ -129,6 +129,36 @@ se_result se_render_3d(se_context* ctx, const se_camera3d* camera,
     return Impl(ctx)->Render3D(*camera, *opts, out, needed);
 }
 
+/* --- Per-layer viewers: a VDP2 scroll screen's tile data --- */
+se_result se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_tilemap* out)
+{
+    if (!ctx || !out || layer < 0 || layer >= SE_LAYER_COUNT)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->GetTileMapInfo(layer, out);
+}
+
+size_t se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
+                                uint32_t* out, size_t max)
+{
+    if (!ctx || !out || layer < 0 || layer >= SE_LAYER_COUNT)
+    {
+        return 0;
+    }
+    return Impl(ctx)->GetTileIndices(layer, out, max);
+}
+
+se_result se_render_vdp2_tileset(se_context* ctx, se_vdp2_layer layer, uint32_t columns,
+                                 se_image* out, size_t* needed)
+{
+    if (!ctx || !out || layer < 0 || layer >= SE_LAYER_COUNT)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->RenderTileset(layer, columns, out, needed);
+}
+
 /* --- Texture & Palette --- */
 se_result se_decode_texture(se_context* ctx, const se_texture_ref* ref,
                             se_image* out, size_t* needed)

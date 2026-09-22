@@ -51,6 +51,12 @@ public:
     static std::string ConfigSubDir(const char* subdir, bool create);
     // A file inside that subdirectory. Same create semantics; empty if unresolvable.
     static std::string ConfigSubPath(const char* subdir, const std::string& file, bool create);
+    // Create 'dir' and any missing parents (accepts either separator). Returns false only
+    // when there is nothing to create. Exposed so features that write somewhere the user
+    // chose — not just under ConfigDir() — share this module's one mkdir.
+    static bool EnsureDirectory(const std::string& dir);
+    // The OS path separator, so callers assembling paths match the ones this module writes.
+    static char PathSeparator();
 
     void Load();        // read FilePath(); silent no-op if it doesn't exist
     bool Save() const;  // write FilePath(), creating the config dir first

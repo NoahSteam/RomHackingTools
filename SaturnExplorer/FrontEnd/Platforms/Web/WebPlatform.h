@@ -56,7 +56,11 @@ public:
 
     // Native desktop only (zenity/kdialog/osascript for the folder picker; the OS
     // file manager for reveal). On the web these keep the base "unsupported" default.
+    // Multi-file exports need a directory. The browser build has only MEMFS, which the
+    // user cannot reach, so it keeps the base "no host filesystem" answer and the feature
+    // reports that instead of writing files nobody can open.
 #ifndef __EMSCRIPTEN__
+    bool HasHostFilesystem() override { return true; }
     bool PickDirectory(std::string& outPath) override;
     bool OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,
                                 const char* extCsv) override;

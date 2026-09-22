@@ -58,6 +58,7 @@ public:
         ApplyDisplayResolution();
         ResolveSpritePriorities();
         BuildVramRegions();
+        for (int i = 0; i < SE_LAYER_COUNT; ++i) mbTileMapValid[i] = false;
     }
 
     // --- Query surface. ---
@@ -114,12 +115,65 @@ public:
             mColumns.assign(n, PixColumn{});
             // Emit every source into the columns, back to front, then resolve the whole
             // buffer to RGBA; untouched columns stay transparent for FillBackdrop.
-            Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
+            // transparent_background leaves both the back screen and the backdrop out, so
+            // what a chosen set of layers covers is all that comes back — that is what the
+            // per-layer viewers render with.
+            if (!opts.transparent_background)
+            {
+                Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
+            }
             Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
             Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
                                         mSnapshot.CramMode(), opts, mColumns);
             ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
-            FillBackdrop();
+            if (!opts.transparent_background)
+            {
+                FillBackdrop();
+            }
+        });
+    }
+
+    // Shape of a scroll screen's tile map (see Vdp2TileMap). Extraction walks the whole
+    // plane grid, so the result is cached until the snapshot is re-derived.
+    se_result GetTileMapInfo(se_vdp2_layer layer, se_vdp2_tilemap* out)
+    {
+        const Vdp2TileMap& map = TileMap(layer);
+        out->active = map.active ? 1 : 0;
+        out->bitmap = map.bitmap ? 1 : 0;
+        out->truncated = map.truncated ? 1 : 0;
+        out->reserved = 0;
+        out->cell_pixels = static_cast<uint16_t>(map.cellPixels);
+        out->color_count = static_cast<uint16_t>(map.colorCount);
+        out->map_width = map.mapWidth;
+        out->map_height = map.mapHeight;
+        out->tile_count = static_cast<uint32_t>(map.tiles.size());
+        return SE_OK;
+    }
+
+    size_t GetTileIndices(se_vdp2_layer layer, uint32_t* out, size_t max)
+    {
+        const Vdp2TileMap& map = TileMap(layer);
+        const size_t n = map.indices.size() < max ? map.indices.size() : max;
+        for (size_t i = 0; i < n; ++i) out[i] = map.indices[i];
+        return n;
+    }
+
+    // Draw the screen's tileset into a grid image 'columns' tiles wide.
+    se_result RenderTileset(se_vdp2_layer layer, uint32_t columns, se_image* out, size_t* needed)
+    {
+        const Vdp2TileMap& map = TileMap(layer);
+        if (map.tiles.empty() || columns == 0)
+        {
+            if (needed) *needed = 0;
+            return SE_ERR_NO_DATA;
+        }
+        uint32_t w = 0;
+        uint32_t h = 0;
+        Vdp2Compositor::TilesetSize(map, columns, w, h);
+        const int layerIndex = static_cast<int>(layer);
+        return FillImage(w, h, out, needed, [&]
+        {
+            Vdp2Compositor::RenderTileset(mSnapshot, layerIndex, map, columns, mRenderBuffer);
         });
     }
 
@@ -501,6 +555,20 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    // A scroll screen's tile map, extracted on first use and held until the next
+    // RebuildDerived. Reading one walks the screen's whole plane grid (up to 512x512
+    // pattern-name entries for RBG0), which is far too much to redo per panel frame.
+    const Vdp2TileMap& TileMap(se_vdp2_layer layer)
+    {
+        const int i = (layer >= 0 && layer < SE_LAYER_COUNT) ? static_cast<int>(layer) : 0;
+        if (!mbTileMapValid[i])
+        {
+            Vdp2Compositor::BuildTileMap(mSnapshot, i, mTileMaps[i]);
+            mbTileMapValid[i] = true;
+        }
+        return mTileMaps[i];
+    }
+
     // Set the frame dimensions from VDP2 TVMD (HRES/VRES), the authoritative display
     // resolution, when VDP2 registers are present. GeometryBuilder only sees VDP1 and
     // defaults to 320x224 (overridden solely by a VDP1 system-clip command), so a pure
@@ -791,6 +859,8 @@ private:
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
+    Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()
+    bool                    mbTileMapValid[SE_LAYER_COUNT] = {};
 };
 
 }  // namespace se

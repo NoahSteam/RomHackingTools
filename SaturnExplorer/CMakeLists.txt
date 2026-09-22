@@ -290,6 +290,36 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerPatchLibraryTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerPatchLibraryTests COMMAND SaturnExplorerPatchLibraryTests)
 
+    # Per-layer viewers: the isolated layer render, the tile map/tileset extraction, and
+    # the export artifacts (tileset BMP, tile-index CSV, per-sprite images). Links the core
+    # against a synthetic VDP2 snapshot -- no renderer, no window.
+    add_executable(SaturnExplorerLayerExportTests
+        FrontEnd/tests/LayerExportTests.cpp
+        FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/BinaryWriter.cpp
+        FrontEnd/src/Settings.cpp
+    )
+    target_include_directories(SaturnExplorerLayerExportTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerLayerExportTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerLayerExportTests COMMAND SaturnExplorerLayerExportTests)
+
+    # Per-layer viewer panels: window registration and the Tile Grid toggle, driven
+    # headlessly through ImGui (no backend or window) -- see FrontEnd/tests/ImGuiHarness.h.
+    add_executable(SaturnExplorerLayerPanelTests
+        FrontEnd/tests/LayerPanelTests.cpp
+        FrontEnd/src/LayerPanels.cpp
+        FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/BinaryWriter.cpp
+        FrontEnd/src/Settings.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerLayerPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerLayerPanelTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerLayerPanelTests COMMAND SaturnExplorerLayerPanelTests)
+
     # Feature-tour demo engine — the .sedemo parser + the beat sequencer (both pure).
     add_executable(SaturnExplorerDemoScriptTests
         FrontEnd/tests/DemoScriptTests.cpp
@@ -381,6 +411,9 @@ if(WIN32)
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/LayerPanels.cpp
+        FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -459,6 +492,9 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
+        FrontEnd/src/LayerPanels.cpp
+        FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -555,6 +591,9 @@ else()
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp
+            FrontEnd/src/LayerPanels.cpp
+            FrontEnd/src/LayerExport.cpp
+            FrontEnd/src/BinaryWriter.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
