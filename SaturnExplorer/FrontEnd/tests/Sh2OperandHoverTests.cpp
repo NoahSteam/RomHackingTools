@@ -306,6 +306,42 @@ void TestAccessWidthAndUnreadableMemory()
     CHECK(Join(Sh2OperandHoverLines(b, 0, r, dead)) == "r4  = 06004000\n[06004000] unavailable\n");
 }
 
+void TestMemOperandIndexDecidesLoadVersusStore()
+{
+    // Which operand holds the '@' is what makes a mov a load or a store. Deciding it from
+    // the first comma in the text instead is right only as long as no non-memory operand
+    // is ever parenthesised: for "@(r0,r4),r1" that first comma is the group's own.
+    CHECK(Sh2MemOperandIndex("@(r0,r4),r1") == 0);      // load
+    CHECK(Sh2MemOperandIndex("r1,@(r0,r4)") == 1);      // store
+    CHECK(Sh2MemOperandIndex("@(0x10,r3),r2") == 0);
+    CHECK(Sh2MemOperandIndex("r0,@(0x12,gbr)") == 1);
+    CHECK(Sh2MemOperandIndex("@r4+,@r5+") == 0);
+    CHECK(Sh2MemOperandIndex("#0x3,@(r0,gbr)") == 1);
+    // No memory operand at all, and nothing to mistake for one.
+    CHECK(Sh2MemOperandIndex("r4,r1") == -1);
+    CHECK(Sh2MemOperandIndex("") == -1);
+
+    // The case that separates the two rules: a '@' sitting after an *inner* comma but
+    // still inside the first operand. Comparing positions ("is the @ left of the first
+    // comma?") calls this operand 1; on operand boundaries it is operand 0. No SH-2 form
+    // reaches it today — '@' always precedes '(' — which is precisely why the old position
+    // test was right by accident. This pins the answer to the boundaries instead.
+    CHECK(Sh2MemOperandIndex("(0x10,@r3),r2") == 0);
+
+    // Against the real disassembler, both directions of the same indexed form.
+    CHECK(Sh2MemOperandIndex(Decode(0x014E, "@(r0,r4),r1").Operands) == 0);
+    CHECK(Sh2MemOperandIndex(Decode(0x0146, "r4,@(r0,r1)").Operands) == 1);
+}
+
+void TestAccessWidthFromMnemonic()
+{
+    CHECK(Sh2AccessWidth("mov.b") == 1);
+    CHECK(Sh2AccessWidth("mov.w") == 2);
+    CHECK(Sh2AccessWidth("mov.l") == 4);
+    CHECK(Sh2AccessWidth("mov") == 4);     // no suffix: the SH-2's natural word
+    CHECK(Sh2AccessWidth("") == 4);
+}
+
 void TestRegMaskMatchesWholeTokens()
 {
     // "r1" must not be found inside "r15", or hovering @(0x4,r15) would claim to show r1.
@@ -328,6 +364,8 @@ int main()
     TestSplitKeepsParenthesisedGroupsWhole();
     TestOperandsWithNothingToResolveShowNoTooltip();
     TestAccessWidthAndUnreadableMemory();
+    TestMemOperandIndexDecidesLoadVersusStore();
+    TestAccessWidthFromMnemonic();
     TestRegMaskMatchesWholeTokens();
     if (gFailures != 0)
     {

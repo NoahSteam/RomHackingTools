@@ -41,6 +41,15 @@ bool Sh2OperandAt(const std::string& operands, int index, Sh2OperandSpan& out);
 // is never found inside "r15".
 uint16_t Sh2OperandRegMask(const std::string& operand);
 
+// Index of the first operand that is a memory access ("@..."), or -1 for an instruction
+// that touches no memory. Which side it lands on is also what tells a mov a load ("@src,rN")
+// from a store ("rN,@dst") — decided on operand boundaries, not on the first comma in the
+// text, which for "@(r0,r4),r1" is the group's own.
+int Sh2MemOperandIndex(const std::string& operands);
+
+// Bytes the mnemonic's .b/.w/.l suffix reads or writes (1/2/4); anything else is a long.
+uint32_t Sh2AccessWidth(const std::string& mnemonic);
+
 // Effective address of a memory operand ("@..."), from the operand text and the live
 // registers. The mnemonic's .b/.w/.l suffix gives the access width (outWidth 1/2/4).
 // False when the operand is not a memory access or is not statically resolvable.
@@ -53,7 +62,10 @@ bool ResolveSh2MemOperand(const std::string& operand, const std::string& mnemoni
 bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
                           uint32_t& outAddr, uint32_t& outWidth);
 
-// Reads 'n' big-endian bytes at 'addr' into 'outValue'; false if the read fails.
+// Reads 'n' (1/2/4) big-endian bytes at 'addr' into 'outValue'; false if the read fails.
+// Deliberately the same contract as IFormatContext::ReadMem (Debug/FormatString.h), so a
+// caller holding one can forward it; a plain callable rather than that interface because
+// this module must not depend on the tracepoint evaluator to read four bytes.
 using Sh2MemReader = std::function<bool(uint32_t addr, uint32_t n, uint32_t& outValue)>;
 
 // The hover-preview lines for operand 'index' of 'ins': the registers it references and,
@@ -65,10 +77,9 @@ std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins
 
 struct Sh2OperandsDrawn
 {
-    int      hovered = -1;        // index of the hovered operand, or -1 for none
-    bool     rightClicked = false;// a token was right-clicked: open the row menu on 'hovered'
-    bool     clicked = false;     // a branch-target link was clicked
-    uint32_t clickTarget = 0;
+    int  hovered = -1;         // index of the hovered operand, or -1 for none
+    bool rightClicked = false; // a token was right-clicked: open the row menu on 'hovered'
+    bool clicked = false;      // the branch-target link was clicked (target: ins.BranchTarget)
 };
 
 // Draw the operand text with per-token syntax colouring, at the current cursor. Every

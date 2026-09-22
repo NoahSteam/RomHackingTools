@@ -6,6 +6,8 @@
 // macl) so an index is meaningful on both sides and Sh2RegValue is a straight lookup.
 #pragma once
 
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -69,6 +71,30 @@ inline const Sh2RegField* Sh2RegTable()
         {"MACL", "Multiply-and-accumulate result, low 32 bits. A plain MUL lands here."},
     };
     return kRegs;
+}
+
+// Index of the register 'name' names, case-insensitively and as a whole word ("r4", "R4",
+// "gbr" all match; "r1" never matches inside "r15"), or -1 for anything else.
+//
+// Name lookup belongs with the table rather than in each caller, which otherwise carries
+// its own copy of the special-register vocabulary — and a register added here would then
+// silently go unrecognised there, with nothing failing to say so.
+inline int Sh2RegIndexFromName(const char* name, size_t len)
+{
+    if (name == nullptr || len == 0) return -1;
+    const Sh2RegField* table = Sh2RegTable();
+    for (int i = 0; i < kSh2RegCount; ++i)
+    {
+        const char* n = table[i].name;   // the table spells them upper case
+        size_t k = 0;
+        while (k < len && n[k] != '\0' && std::toupper((unsigned char)name[k]) == n[k]) ++k;
+        if (k == len && n[k] == '\0') return i;
+    }
+    return -1;
+}
+inline int Sh2RegIndexFromName(const std::string& name)
+{
+    return Sh2RegIndexFromName(name.c_str(), name.size());
 }
 
 // Value of register 'index' (0..kSh2RegCount-1). Out-of-range yields 0.

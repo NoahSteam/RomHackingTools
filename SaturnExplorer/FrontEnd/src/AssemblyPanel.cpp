@@ -23,7 +23,7 @@ constexpr int kWinInstr = 128;   // instructions per disassembled window
 const ImU32 kColAddr  = IM_COL32(150, 150, 160, 255);
 const ImU32 kColBytes = IM_COL32(120, 120, 130, 255);
 const ImU32 kColMnem  = IM_COL32(120, 200, 235, 255);   // cyan-ish
-const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);   // operand colours: Sh2Operands.cpp
+const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);   // the operand palette: Sh2Operands.cpp
 const ImU32 kColPcRow = IM_COL32(60, 90, 60, 110);      // current-PC row tint
 const ImU32 kColBpHitRow = IM_COL32(150, 45, 45, 110);  // faint red: breakpoint-hit row
 
@@ -65,7 +65,7 @@ std::string AsciiTag(uint32_t v)
 // branch intent, immediates, compares, loads/stores, and PC-relative literal-pool
 // resolution — not dataflow. Returns "" when nothing useful can be said.
 std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& regs,
-                       IMemoryBackend& backend)
+                       const Sh2MemReader& readMem)
 {
     if (!ins.IsValid) return "";
     const std::string& m = ins.Mnemonic;
@@ -102,31 +102,27 @@ std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& re
     if (m == "mov" && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
     { char b[32]; std::snprintf(b, sizeof(b), "r%u = r%u", rn, rm); return b; }
 
-    // --- Memory move: load if '@' is the source (left of the comma), else store ---
+    // --- Memory move: a load when the memory operand is the source, else a store ---
     if (m.rfind("mov.", 0) == 0)
     {
-        const char w = m.back();
-        const char* unit = (w == 'b') ? "byte" : (w == 'w') ? "word" : "long";
-        const size_t at = o.find('@');
-        const size_t comma = o.find(',');
-        if (at != std::string::npos && comma != std::string::npos)
+        const uint32_t width = Sh2AccessWidth(m);
+        const char* unit = (width == 1) ? "byte" : (width == 2) ? "word" : "long";
+        // Which *operand* the '@' falls in, not which side of the first comma it is on:
+        // that comma can be the group's own, as in "@(r0,r4),r1".
+        const int memOp = Sh2MemOperandIndex(o);
+        Sh2OperandSpan second;
+        if (memOp >= 0 && Sh2OperandAt(o, 1, second))
         {
-            const bool isLoad = at < comma;   // "@src,rN" vs "rN,@dst"
+            const bool isLoad = memOp == 0;   // "@src,rN" vs "rN,@dst"
             // PC-relative literal pool: the disassembler resolves it to @(0xABS),rN.
-            uint32_t ea; WatchType wt;
+            uint32_t ea; WatchType wt; uint32_t val = 0;
             if (isLoad && o.rfind("@(0x", 0) == 0 && o.find(",r") != std::string::npos &&
-                ResolveMemOperand(ins, -1, regs, ea, wt))
+                ResolveMemOperand(ins, memOp, regs, ea, wt) &&
+                readMem(ea, WatchTypeSize(wt), val))
             {
-                const uint32_t n = WatchTypeSize(wt);
-                auto mr = backend.ReadMemoryBatch({ { ea, n } })[0];
-                if (mr.success)
-                {
-                    uint32_t val = 0;
-                    for (uint32_t i = 0; i < n; ++i) val = (val << 8) | mr.bytes[i];
-                    char b[64]; std::snprintf(b, sizeof(b), "= [%08X] = 0x%X%s", ea, val,
-                                              n == 1 ? AsciiTag(val).c_str() : "");
-                    return b;
-                }
+                char b[64]; std::snprintf(b, sizeof(b), "= [%08X] = 0x%X%s", ea, val,
+                                          wt == WatchType::U8 ? AsciiTag(val).c_str() : "");
+                return b;
             }
             return std::string(isLoad ? "load " : "store ") + unit;
         }
@@ -307,6 +303,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     ImGui::TableSetupColumn("Comment", ImGuiTableColumnFlags_WidthStretch, 0.4f);
     ImGui::TableHeadersRow();
 
+    // One reader for the whole table: the rows' comments and the hover preview both read
+    // memory through it, and building it here rather than per row keeps the lifetime of
+    // the backend reference it captures plainly bounded by this call.
+    const Sh2MemReader readMem = MemReaderFor(backend);
+
     for (const Line& ln : mLines)
     {
         // Location label row for an in-window branch target.
@@ -403,16 +404,14 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // "Add Operand to Watch" on the @r5+ half of "mac.l @r4+,@r5+" watches r5's
         // address and not r4's.
         if (ops.rightClicked) { mCtxOperand = ops.hovered; ImGui::OpenPopup("ctx"); }
-        if (ops.clicked) Navigate(ops.clickTarget, true);
+        if (ops.clicked) Navigate(ln.ins.BranchTarget, true);
 
-        // Register / memory hover preview for the operand under the pointer. The hovered
-        // operand comes from DrawSh2Operands, which checks every token: asking
-        // IsItemHovered() here would only ever see the last item the cell submitted, so
-        // only the final operand showed a preview.
+        // Register / memory hover preview for the operand under the pointer. The index
+        // comes from DrawSh2Operands because only it sees the individual token items.
         if (ops.hovered >= 0)
         {
             const std::vector<std::string> lines =
-                Sh2OperandHoverLines(ln.ins, ops.hovered, regs, MemReaderFor(backend));
+                Sh2OperandHoverLines(ln.ins, ops.hovered, regs, readMem);
             if (!lines.empty())
             {
                 ImGui::BeginTooltip();
@@ -443,7 +442,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             }
             else
             {
-                const std::string autoCmt = ln.readable ? Sh2Comment(ln.ins, regs, backend) : std::string();
+                const std::string autoCmt = ln.readable ? Sh2Comment(ln.ins, regs, readMem) : std::string();
                 const char* txt = hasUser ? it->second.c_str() : autoCmt.c_str();
                 ImGui::PushStyleColor(ImGuiCol_Text, hasUser ? IM_COL32(190, 185, 140, 255) : kColCmt);
                 ImGui::TextUnformatted(txt[0] ? txt : " ");

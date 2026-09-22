@@ -92,6 +92,32 @@ void TestSrDecode()
     CHECK(Sh2SrDetail(0x00000003).find("T  = 1") != std::string::npos);
     CHECK(Sh2SrDetail(0x00000003).find("S  = 1") != std::string::npos);
 }
+
+void TestNameLookup()
+{
+    // Case-insensitive, because the table spells names upper case while the disassembler
+    // and the tracepoint syntax both write them lower case.
+    CHECK(Sh2RegIndexFromName("r0") == 0);
+    CHECK(Sh2RegIndexFromName("R0") == 0);
+    CHECK(Sh2RegIndexFromName("r15") == 15);
+    CHECK(Sh2RegIndexFromName("gbr") == kSh2RegGbr);
+    CHECK(Sh2RegIndexFromName("MACL") == kSh2RegMacl);
+
+    // Whole names only. A prefix must not match a longer register ("mac" is not MACH, and
+    // "r1" is not R15), or a syntax highlighter would colour half a token and a name
+    // parser would resolve the wrong register.
+    CHECK(Sh2RegIndexFromName("mac") == -1);
+    CHECK(Sh2RegIndexFromName("r") == -1);
+    CHECK(Sh2RegIndexFromName("r16") == -1);
+    CHECK(Sh2RegIndexFromName("r1x") == -1);
+    CHECK(Sh2RegIndexFromName("") == -1);
+    CHECK(Sh2RegIndexFromName(nullptr, 4) == -1);
+
+    // Every name in the table resolves back to its own index, so a register added there
+    // is understood by every caller without further edits.
+    for (int i = 0; i < kSh2RegCount; ++i)
+        CHECK(Sh2RegIndexFromName(Sh2RegTable()[i].name) == i);
+}
 }  // namespace
 
 int main()
@@ -99,6 +125,7 @@ int main()
     TestValueMapping();
     TestTableShape();
     TestSrDecode();
+    TestNameLookup();
     if (gFailures)
     {
         std::cerr << gFailures << " check(s) failed\n";
