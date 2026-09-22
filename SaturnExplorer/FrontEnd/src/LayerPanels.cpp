@@ -27,7 +27,7 @@ const char* ExportSummary(LayerId layer)
 se_vdp2_tilemap TileMapOf(const LayerPanelFrame& frame, LayerId layer)
 {
     se_vdp2_tilemap info = {};
-    if (frame.hasData && frame.context && IsVdp2Layer(layer))
+    if (frame.context && IsVdp2Layer(layer))
     {
         se_get_vdp2_tilemap(frame.context, static_cast<se_vdp2_layer>(layer), &info);
     }
@@ -103,7 +103,7 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
                               IPlatform& platform)
 {
     const bool canWrite = platform.HasHostFilesystem();
-    ImGui::BeginDisabled(!frame.hasData || !canWrite);
+    ImGui::BeginDisabled(!frame.context || !canWrite);
     if (ImGui::Button("Export")) RunExport(desc, frame, platform);
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("%s", canWrite
@@ -116,10 +116,10 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
     if (IsVdp2Layer(desc.id))
     {
         ImGui::SameLine();
-        ImGui::BeginDisabled(frame.hasData && info.bitmap);
+        ImGui::BeginDisabled(frame.context && info.bitmap);
         if (ImGui::Checkbox("Tile Grid", &mViews[desc.id].showGrid)) mSettingsDirty = true;
         ImGui::EndDisabled();
-        ImGui::SetItemTooltip("%s", (frame.hasData && info.bitmap)
+        ImGui::SetItemTooltip("%s", (frame.context && info.bitmap)
             ? "This layer is in bitmap mode — it has no character patterns to outline."
             : "Outline this screen's character-pattern boundaries. The grid is drawn from "
               "the same plane coordinates the pixels are sampled at, so it follows scroll, "
@@ -151,8 +151,9 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
             ImGui::SameLine();
             if (ImGui::SmallButton("Reveal") && !platform.RevealPath(root.c_str()))
             {
-                mStatus = "This build cannot open a file manager.";
-                mStatusError = true;
+                View& v = mViews[desc.id];
+                v.status = "This build cannot open a file manager.";
+                v.statusError = true;
             }
         }
     }
@@ -167,12 +168,13 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
                             info.map_width, info.map_height, info.cell_pixels,
                             info.cell_pixels, info.tile_count, colours);
     }
-    if (!mStatus.empty())
+    const View& view = mViews[desc.id];
+    if (!view.status.empty())
     {
-        const ImVec4 tint = mStatusError ? ImVec4(0.90f, 0.45f, 0.40f, 1.0f)
-                                         : ImVec4(0.55f, 0.85f, 0.55f, 1.0f);
+        const ImVec4 tint = view.statusError ? ImVec4(0.90f, 0.45f, 0.40f, 1.0f)
+                                             : ImVec4(0.55f, 0.85f, 0.55f, 1.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, tint);
-        ImGui::TextWrapped("%s", mStatus.c_str());
+        ImGui::TextWrapped("%s", view.status.c_str());
         ImGui::PopStyleColor();
     }
 }
@@ -198,7 +200,7 @@ void LayerPanels::DrawPanel(const LayerPanelDesc& desc, const LayerPanelFrame& f
         ? LayerRenderOpts(*frame.opts, desc.id, view.showGrid)
         : se_render_opts();
     const bool rendered =
-        frame.hasData && frame.context && frame.opts &&
+        frame.context && frame.opts &&
         FetchCoreImage([&](se_image* i, size_t* n)
                        { return se_render_frame(frame.context, &one, i, n); },
                        view.pixels, w, h);
@@ -232,16 +234,16 @@ void LayerPanels::DrawPanel(const LayerPanelDesc& desc, const LayerPanelFrame& f
 void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
                             IPlatform& platform)
 {
-    if (!frame.hasData || !frame.context || !frame.opts)
+    View& view = mViews[desc.id];
+    auto fail = [&view](const std::string& why) { view.status = why; view.statusError = true; };
+    if (!frame.context || !frame.opts)
     {
-        mStatus = "No data is loaded.";
-        mStatusError = true;
+        fail("No data is loaded.");
         return;
     }
     if (!platform.HasHostFilesystem())
     {
-        mStatus = "This build has no filesystem to export to.";
-        mStatusError = true;
+        fail("This build has no filesystem to export to.");
         return;
     }
     const LayerExport built =
@@ -250,16 +252,15 @@ void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& f
     std::string error;
     if (!WriteLayerExport(ExportRoot(), built, dir, error))
     {
-        mStatus = error;
-        mStatusError = true;
+        fail(error);
         return;
     }
     char msg[512];
     std::snprintf(msg, sizeof(msg), "Exported %zu file%s to %s", built.files.size(),
                   built.files.size() == 1 ? "" : "s", dir.c_str());
-    mStatus = msg;
-    if (!built.note.empty()) mStatus += "  (" + built.note + ")";
-    mStatusError = false;
+    view.status = msg;
+    if (!built.note.empty()) view.status += "  (" + built.note + ")";
+    view.statusError = false;
 }
 
 }  // namespace sfe

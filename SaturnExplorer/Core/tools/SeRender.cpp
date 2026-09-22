@@ -130,6 +130,7 @@ bool ReadPpm(const char* path, std::vector<uint8_t>& rgb, uint32_t& w, uint32_t&
 const int kVdp1Layer = SE_LAYER_COUNT;
 const char* const kLayerNames[SE_LAYER_COUNT + 1] = { "nbg0", "nbg1", "nbg2", "nbg3",
                                                       "rbg0", "vdp1" };
+const char* const kLayerNameList = "nbg0 nbg1 nbg2 nbg3 rbg0 vdp1";
 
 // -1 when the name is not one of kLayerNames.
 int LayerFromName(const char* name)
@@ -161,8 +162,8 @@ int main(int argc, char** argv)
             layer = n ? LayerFromName(n) : -1;
             if (layer < 0)
             {
-                std::fprintf(stderr, "se-render: --layer wants one of "
-                                     "nbg0 nbg1 nbg2 nbg3 rbg0 vdp1\n");
+                std::fprintf(stderr, "se-render: --layer wants one of %s\n",
+                             kLayerNameList);
                 return 2;
             }
         }
@@ -180,6 +181,15 @@ int main(int argc, char** argv)
             "usage: se-render <dump.sedump> [--3d] [--out frame.ppm]\n"
             "                 [--layer nbg0|nbg1|nbg2|nbg3|rbg0|vdp1] [--tile-grid]\n"
             "                 [--reference golden.ppm [--diff diff.ppm] [--tolerance N]]\n");
+        return 2;
+    }
+    // --3d draws VDP1 sprite geometry and never consults VDP2, so the 2D-only flags do not
+    // compose with it: Render3D bails out the moment show_vdp1_sprites is clear, which is
+    // exactly what --layer sets on a VDP2 screen. Say so rather than writing a black frame.
+    if (view3d && (layer >= 0 || tileGrid))
+    {
+        std::fprintf(stderr, "se-render: --3d renders the VDP1 sprite geometry; "
+                             "--layer and --tile-grid are 2D-only\n");
         return 2;
     }
 
@@ -215,9 +225,11 @@ int main(int argc, char** argv)
     if (!ctx) { std::fprintf(stderr, "se-render: se_create failed\n"); return 2; }
     se_begin_frame(ctx);
 
-    // One layer alone is the composite with everything else switched off and no backdrop
-    // under it — the same options the per-layer viewer panels pass.
+    // Start from the viewer defaults, not a zeroed struct: a golden is only useful if it
+    // matches what the panel draws, and window clipping / colour calculation / shadow
+    // highlight are all on there.
     se_render_opts opts {};
+    se_default_render_opts(&opts);
     for (int i = 0; i < SE_LAYER_COUNT; ++i)
         opts.show_layer[i] = (layer < 0 || layer == i) ? 1 : 0;
     opts.show_vdp1_sprites = (layer < 0 || layer == kVdp1Layer) ? 1 : 0;
@@ -244,9 +256,8 @@ int main(int argc, char** argv)
         se_destroy(ctx);
         return 2;
     }
-    std::printf("rendered %u x %u (%s%s)\n", img.width, img.height,
-                view3d ? "3D view of " : "",
-                layer < 0 ? "composite" : kLayerNames[layer]);
+    std::printf("rendered %u x %u (%s)\n", img.width, img.height,
+                view3d ? "3D view" : (layer < 0 ? "composite" : kLayerNames[layer]));
     se_destroy(ctx);
 
     if (outPath && !WritePpm(outPath, px.data(), img.width, img.height)) return 2;

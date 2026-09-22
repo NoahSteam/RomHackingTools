@@ -176,11 +176,14 @@ Sh2OperandsDrawn DrawSh2Operands(const DisassembledInstruction& ins)
         ImGui::PushStyleColor(ImGuiCol_Text, col);
         ImGui::TextUnformatted(tok.c_str());
         ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered() && operand >= 0) out.hovered = operand;
+        // One hover query per token: the assembly view submits ~6-8 of these per row across
+        // ~128 rows every frame, and a link token would otherwise ask twice.
+        const bool hovered = ImGui::IsItemHovered();
+        if (hovered && operand >= 0) out.hovered = operand;
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) out.rightClicked = true;
         if (link)
         {
-            if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             if (ImGui::IsItemClicked()) out.clicked = true;
         }
     };

@@ -296,6 +296,29 @@ typedef struct se_render_opts {
     uint8_t show_tile_grid;
 } se_render_opts;
 
+/* Everything on, nothing highlighted -- the options a viewer starts from. A zeroed
+ * se_render_opts is NOT this: it draws no layer, no sprites, and (because
+ * highlight_command 0 means "command 0") highlights the first VDP1 command. Anything that
+ * renders a frame meaning "as the game shows it" starts here, so a golden rendered by
+ * se-render matches what the panel draws instead of quietly differing in window clipping
+ * or colour calculation. static inline, so it adds no symbol and no ABI surface. */
+static inline void se_default_render_opts(se_render_opts* out)
+{
+    int i;
+    if (!out) { return; }
+    for (i = 0; i < SE_LAYER_COUNT; ++i) { out->show_layer[i] = 1; }
+    out->show_vdp1_sprites = 1;
+    out->show_wireframe = 0;
+    out->show_bounding_boxes = 0;
+    out->show_object_numbers = 0;
+    out->show_window = 1;
+    out->show_color_calculation = 1;
+    out->show_shadow_highlight = 1;
+    out->transparent_background = 0;
+    out->show_tile_grid = 0;
+    out->highlight_command = -1;
+}
+
 /* ------------------------------------------------------------------ *
  *  3D world-view camera (host-owned; the core software-renders with it)
  * ------------------------------------------------------------------ */

@@ -39,7 +39,6 @@ const std::vector<LayerPanelDesc>& LayerPanelList();
 struct LayerPanelFrame
 {
     se_context*           context = nullptr;
-    bool                  hasData = false;
     const se_render_opts* opts = nullptr;   // the shared Layers toggles
     uint64_t              frame = 0;        // frame number, used in exported file names
 };
@@ -66,6 +65,11 @@ private:
         int                  height = 0;
         std::vector<uint8_t> pixels;     // RGBA, as uploaded
         bool                 showGrid = false;
+        // Last export result for THIS layer. Per-view, not shared: six panels draw from one
+        // LayerPanels, so a single status line would report NBG0's export under NBG1's
+        // toolbar as well.
+        std::string          status;
+        bool                 statusError = false;
     };
 
     // The folder exports go to: the user's choice if set, else the default — resolved once
@@ -83,8 +87,6 @@ private:
     std::string mExportRoot;          // the user's chosen folder; empty = use the default
     std::string mDefaultRoot;         // cached DefaultExportRoot()
     bool        mDefaultRootResolved = false;
-    std::string mStatus;              // last export result, shown under the toolbar
-    bool        mStatusError = false;
     bool        mSettingsDirty = false;
 };
 

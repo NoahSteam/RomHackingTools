@@ -11,7 +11,6 @@
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "imgui.h"
@@ -250,19 +249,7 @@ void InspectorRow(const char* label, const char* desc, const char* fmt, ...)
 
 void App::Initialize()
 {
-    // Default: show everything, nothing highlighted.
-    mRenderOpts.show_vdp1_sprites = 1;
-    mRenderOpts.show_wireframe = 0;
-    mRenderOpts.show_bounding_boxes = 0;
-    mRenderOpts.show_object_numbers = 0;
-    for (int i = 0; i < SE_LAYER_COUNT; ++i)
-    {
-        mRenderOpts.show_layer[i] = 1;
-    }
-    mRenderOpts.show_window = 1;
-    mRenderOpts.show_color_calculation = 1;
-    mRenderOpts.show_shadow_highlight = 1;
-    mRenderOpts.highlight_command = -1;
+    se_default_render_opts(&mRenderOpts);
 
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
@@ -346,13 +333,15 @@ const std::vector<App::PanelInfo>& App::PanelList()
     // drifted from the window title would silently break the dock layout.
     static const std::vector<PanelInfo> kAll = []
     {
-        static bool Panels::* const kLayerFlags[] = {
-            &Panels::layerVdp1, &Panels::layerNbg0, &Panels::layerNbg1,
-            &Panels::layerNbg2, &Panels::layerNbg3, &Panels::layerRbg0 };
+        // Keyed by LayerId, not by position in LayerPanelList: indexing that table by
+        // position would silently rebind every checkbox if it were ever reordered, and
+        // read past the end if a layer were added.
+        static bool Panels::* const kLayerFlag[kLayerCount] = {
+            &Panels::layerNbg0, &Panels::layerNbg1, &Panels::layerNbg2,
+            &Panels::layerNbg3, &Panels::layerRbg0, &Panels::layerVdp1 };
         std::vector<PanelInfo> all = kList;
-        const std::vector<LayerPanelDesc>& layers = LayerPanelList();
-        for (size_t i = 0; i < layers.size(); ++i)
-            all.push_back({ layers[i].key, layers[i].title, kLayerFlags[i], "Graphics" });
+        for (const LayerPanelDesc& layer : LayerPanelList())
+            all.push_back({ layer.key, layer.title, kLayerFlag[layer.id], "Graphics" });
         return all;
     }();
     return kAll;
@@ -1106,6 +1095,10 @@ void App::BuildUI(IPlatform& platform)
         {
             BuildDefaultLayout(dockId);
         }
+        else
+        {
+            AdoptNewPanels(dockId);   // a saved layout predates windows added since
+        }
     }
     if (mForceRebuildLayout)
     {
@@ -1705,18 +1698,11 @@ struct ContextFormat : sfe::IFormatContext
         if (n == "frame") { o = frame; return true; }
         if (n == "cycle") { o = 0; return true; }         // not exposed yet
         if (!haveRegs) return false;
-        if (n == "pc")   { o = regs.pc;   return true; }
-        if (n == "pr")   { o = regs.pr;   return true; }
-        if (n == "sr")   { o = regs.sr;   return true; }
-        if (n == "gbr")  { o = regs.gbr;  return true; }
-        if (n == "vbr")  { o = regs.vbr;  return true; }
-        if (n == "mach") { o = regs.mach; return true; }
-        if (n == "macl") { o = regs.macl; return true; }
-        if (n.size() >= 2 && n[0] == 'r')
-        {
-            const int i = std::atoi(n.c_str() + 1);
-            if (i >= 0 && i < 16) { o = regs.r[i]; return true; }
-        }
+        // Sh2RegInfo owns the register vocabulary, so a register added there is recognised
+        // here too. It also matches whole names only: the std::atoi this replaced accepted
+        // "r1x" as r1, which made the preview resolve a template FormatValidate rejects.
+        const int i = sfe::Sh2RegIndexFromName(n);
+        if (i >= 0) { o = sfe::Sh2RegValue(regs, i); return true; }
         return false;
     }
     bool ReadMem(uint32_t a, uint32_t sz, uint32_t& o) const override
@@ -3537,11 +3523,26 @@ void App::DrawVdpOutput(IPlatform& platform)
 
 // The per-layer viewer tabs. App owns nothing of theirs beyond the visibility flags —
 // LayerPanels holds the textures, the export folder and the tile-grid toggles.
+// A saved imgui.ini only knows the windows that existed when it was written, and ImGui
+// opens an unknown window floating. For the per-layer viewers that is not just cosmetic:
+// a floating panel renders a full frame every frame, where a docked one is skipped
+// entirely unless its tab is selected — so six of them adrift is six composites per frame
+// on top of VDP Output's. Park anything the layout has never seen in the central node,
+// where BuildDefaultLayout would have put it. Windows the user has since moved have their
+// own settings and are left alone.
+void App::AdoptNewPanels(ImGuiID dockId)
+{
+    const ImGuiDockNode* central = ImGui::DockBuilderGetCentralNode(dockId);
+    if (central == nullptr) return;
+    for (const LayerPanelDesc& layer : LayerPanelList())
+        if (ImGui::FindWindowSettingsByID(ImHashStr(layer.title)) == nullptr)
+            ImGui::DockBuilderDockWindow(layer.title, central->ID);
+}
+
 void App::DrawLayerPanels(IPlatform& platform)
 {
     LayerPanelFrame frame;
     frame.context = mContext;
-    frame.hasData = mbHasData;
     frame.opts = &mRenderOpts;
     frame.frame = mbHasData ? se_frame_number(mContext) : 0;
     bool visible[kLayerCount] = {};

@@ -322,7 +322,7 @@ if(BUILD_TESTING)
         FrontEnd/src/Settings.cpp
     )
     target_include_directories(SaturnExplorerLayerExportTests
-        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        PRIVATE FrontEnd/src Core/tests ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(SaturnExplorerLayerExportTests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerLayerExportTests COMMAND SaturnExplorerLayerExportTests)
 

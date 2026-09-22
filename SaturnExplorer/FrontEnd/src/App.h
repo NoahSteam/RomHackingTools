@@ -112,6 +112,7 @@ private:
     void SaveScreenshot(IPlatform& platform);
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
+    void AdoptNewPanels(ImGuiID dockId);
     void DrawLayerPanels(IPlatform& platform);   // per-layer viewer tabs (VDP1 / NBG / RBG0)
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)

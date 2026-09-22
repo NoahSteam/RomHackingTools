@@ -155,19 +155,23 @@ inline void CenterInCell(float width)
 inline void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
 {
     ImDrawList* dl = ImGui::GetWindowDrawList();
+    const ImVec2 br(topLeft.x + size.x, topLeft.y + size.y);
+    // Flood the dark tone once and stamp only the light squares on top: a quad per cell
+    // either way is about 2,800 for a 480x360 image at cell = 8, and this halves that for
+    // one extra full-rect fill. Every visible panel pays it every frame.
+    dl->AddRectFilled(topLeft, br, IM_COL32(48, 48, 54, 255));
     const int cols = static_cast<int>(size.x / cell) + 1;
     const int rows = static_cast<int>(size.y / cell) + 1;
     for (int r = 0; r < rows; ++r)
     {
-        for (int c = 0; c < cols; ++c)
+        for (int c = (r & 1) ? 0 : 1; c < cols; c += 2)
         {
-            const ImU32 tone = ((r ^ c) & 1) ? IM_COL32(70, 70, 78, 255)
-                                             : IM_COL32(48, 48, 54, 255);
             const ImVec2 a(topLeft.x + c * cell, topLeft.y + r * cell);
             ImVec2 b(a.x + cell, a.y + cell);
-            if (b.x > topLeft.x + size.x) b.x = topLeft.x + size.x;
-            if (b.y > topLeft.y + size.y) b.y = topLeft.y + size.y;
-            dl->AddRectFilled(a, b, tone);
+            if (b.x > br.x) b.x = br.x;
+            if (b.y > br.y) b.y = br.y;
+            if (b.x <= a.x || b.y <= a.y) continue;
+            dl->AddRectFilled(a, b, IM_COL32(70, 70, 78, 255));
         }
     }
 }

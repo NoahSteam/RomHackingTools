@@ -22,6 +22,8 @@
 
 #include "saturnexplorer/SeHost.h"
 
+#include "FakeVdpSource.h"
+
 #include "BinaryWriter.h"
 #include "LayerExport.h"
 
@@ -40,57 +42,32 @@ void Check(bool condition, const char* expression, int line)
 
 #define CHECK(expression) Check(static_cast<bool>(expression), #expression, __LINE__)
 
-// --- Synthetic Saturn state (same shape as Core/tests/Vdp2CompositorTests.cpp) ---
+// --- Synthetic Saturn state, on the shared Core test mock ---
 
-struct State
-{
-    std::vector<uint8_t> vdp1 = std::vector<uint8_t>(0x200);
-    std::vector<uint8_t> vdp2 = std::vector<uint8_t>(512 * 1024);
-    std::vector<uint8_t> cram = std::vector<uint8_t>(4 * 1024);
-    uint16_t regs[0x90] = {};
-};
+using se_test::State;
+using se_test::PutBE16;
+using se_test::SetReg;
 
-void PutBE16(std::vector<uint8_t>& memory, uint32_t address, uint16_t value)
-{
-    memory[address] = static_cast<uint8_t>(value >> 8);
-    memory[address + 1] = static_cast<uint8_t>(value);
-}
-
-size_t Copy(const std::vector<uint8_t>& source, uint32_t offset, void* dst, size_t size)
-{
-    if (offset >= source.size()) return 0;
-    const size_t count = std::min(size, source.size() - offset);
-    std::memcpy(dst, source.data() + offset, count);
-    return count;
-}
-
-size_t ReadVdp1(void* user, uint32_t o, void* d, size_t n) { return Copy(static_cast<State*>(user)->vdp1, o, d, n); }
-size_t ReadVdp2(void* user, uint32_t o, void* d, size_t n) { return Copy(static_cast<State*>(user)->vdp2, o, d, n); }
-size_t ReadCram(void* user, uint32_t o, void* d, size_t n) { return Copy(static_cast<State*>(user)->cram, o, d, n); }
-
-uint16_t ReadVdp2Reg(void* user, uint32_t offset)
-{
-    const State* state = static_cast<State*>(user);
-    return (offset >> 1) < 0x90 ? state->regs[offset >> 1] : 0;
-}
-
-void SetReg(State& state, uint32_t offset, uint16_t value) { state.regs[offset >> 1] = value; }
-
-// The four colours characters 1-4 are painted in, as RGB555 and as RGB.
+// The four cell colours, as CRAM entries and as the RGBA the renderer must produce.
 const uint16_t kCram555[4] = { 0x7FFF, 0x001F, 0x03E0, 0x7C00 };
 const uint8_t  kRgb[4][3]  = { { 255, 255, 255 }, { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 } };
 
-// NBG3 as four solid 8x8 characters (16-colour cells, one-word pattern names) repeating
-// across the map with period 4 in X. All four planes share one page, so the whole 128x128
-// pattern map is that page tiled, and the tile at map cell (x, y) is character 1 + x % 4.
+// se_test::CreateContext deliberately stops short of a snapshot, because a Core test
+// pokes VRAM without one. Every test here renders, so take the snapshot too.
+se_context* Open(State& state)
+{
+    se_context* ctx = se_test::CreateContext(state);
+    CHECK(ctx != nullptr);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    return ctx;
+}
+
 State MakeTiledNbg3State()
 {
-    State state;
+    State state(0x200);   // room for the command table plus the sprite texture
     // A 32x8 VDP1 system clip establishes the composited frame dimensions: four 8x8
     // characters across, one down.
-    PutBE16(state.vdp1, 0x00, 0x0009);
-    PutBE16(state.vdp1, 0x14, 31);
-    PutBE16(state.vdp1, 0x16, 7);
+    se_test::WriteSystemClip(state, 32, 8);
     PutBE16(state.vdp1, 0x20, 0x8000);   // draw-end terminator
 
     SetReg(state, 0x020, 0x0008);   // BGON: NBG3 on
@@ -127,25 +104,6 @@ State MakeSpriteState()
     for (uint32_t i = 0; i < 16; ++i)
         PutBE16(state.vdp1, 0x100 + i * 2, 0xFFFF);
     return state;
-}
-
-se_context* MakeContext(State& state)
-{
-    static se_data_source source;   // the core keeps a copy, but 'user' must outlive it
-    source = se_data_source();
-    source.abi_version = SE_ABI_VERSION;
-    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_VDP2_REGS;
-    source.user = &state;
-    source.read_vdp1_vram = ReadVdp1;
-    source.read_vdp2_vram = ReadVdp2;
-    source.read_cram = ReadCram;
-    source.read_vdp2_reg = ReadVdp2Reg;
-    se_config config = {};
-    config.abi_version = SE_ABI_VERSION;
-    se_context* ctx = se_create(&source, &config);
-    CHECK(ctx != nullptr);
-    CHECK(se_begin_frame(ctx) == SE_OK);
-    return ctx;
 }
 
 se_render_opts AllLayers()
@@ -209,7 +167,7 @@ const ExportFile* FindFile(const LayerExport& ex, const std::string& name)
 void TestIsolatedLayerRender()
 {
     State state = MakeTiledNbg3State();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
 
     uint32_t w = 0;
     uint32_t h = 0;
@@ -236,7 +194,7 @@ void TestIsolatedLayerRender()
 void TestTileMapAndTileset()
 {
     State state = MakeTiledNbg3State();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
 
     se_vdp2_tilemap info = {};
     CHECK(se_get_vdp2_tilemap(ctx, SE_LAYER_NBG3, &info) == SE_OK);
@@ -279,7 +237,7 @@ void TestTileMapAndTileset()
 void TestTileGrid()
 {
     State state = MakeTiledNbg3State();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
 
     uint32_t w = 0;
     uint32_t h = 0;
@@ -319,7 +277,7 @@ void TestBitmapLayerHasNoTileMap()
     SetReg(state, 0x020, 0x0009);   // BGON: NBG0 on
     SetReg(state, 0x028, 0x0002);   // CHCTLA: N0BMEN -- NBG0 in bitmap mode
     SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 priority 1
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
     const se_render_opts opts = AllLayers();
 
     se_vdp2_tilemap info = {};
@@ -356,7 +314,7 @@ void TestTileCsv()
 void TestVdp2Export()
 {
     State state = MakeTiledNbg3State();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
     const se_render_opts opts = AllLayers();
 
     const LayerExport ex = BuildLayerExport(ctx, kLayerNbg3, opts, 7);
@@ -409,7 +367,7 @@ void TestVdp2Export()
 void TestVdp1Export()
 {
     State state = MakeSpriteState();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
     const se_render_opts opts = AllLayers();
 
     CHECK(se_sprite_count(ctx) == 1);
@@ -476,7 +434,7 @@ void TestBmpEncoders()
 void TestWriteExport()
 {
     State state = MakeTiledNbg3State();
-    se_context* ctx = MakeContext(state);
+    se_context* ctx = Open(state);
     const LayerExport ex = BuildLayerExport(ctx, kLayerNbg3, AllLayers(), 7);
 
     std::string dir;

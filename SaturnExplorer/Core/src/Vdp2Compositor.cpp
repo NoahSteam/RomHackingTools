@@ -1151,6 +1151,7 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
         bool rbg0 = false;
     };
     std::vector<Layer> layers;
+    layers.reserve(SE_LAYER_COUNT);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
     auto consider = [&](const Layer& layer)
     {
         if (layer.config.priority == 0) return;    // priority 0 = not displayed

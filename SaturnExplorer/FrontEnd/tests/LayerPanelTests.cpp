@@ -89,7 +89,7 @@ struct Harness
                               frameHeight + style.WindowPadding.y + frameHeight * 0.5f);
 
         LayerPanelFrame frame;
-        frame.hasData = false;   // no core needed: the toolbar draws either way
+        // frame.context stays null: the toolbar draws either way, no core needed.
         static const se_render_opts kOpts = {};
         frame.opts = &kOpts;
         panels.Draw(frame, visible, platform);
