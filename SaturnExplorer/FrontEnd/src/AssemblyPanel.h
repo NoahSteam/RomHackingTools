@@ -121,6 +121,11 @@ private:
     // User comment store (address -> note), overlaid on the auto-generated comment
     // and persisted across sessions. Shared by both CPUs (they share the address map).
     std::unordered_map<uint32_t, std::string> mComments;
+    // Which operand the row context menu was opened on, latched at open time (-1 when it
+    // was opened from a cell other than the operands). The pointer has usually moved off
+    // the operand by the time a menu item is picked, so it cannot be re-read then.
+    int      mCtxOperand = -1;
+
     uint32_t mEditCommentAddr = 0;     // address whose comment cell is being edited
     bool     mEditingComment = false;
     bool     mCommentFocus = false;    // grab keyboard focus on the first edit frame

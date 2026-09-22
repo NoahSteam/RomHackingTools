@@ -1,16 +1,15 @@
 #include "AssemblyPanel.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cfloat>
 #include <cstdio>
-#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
 
 #include "imgui.h"
 
+#include "Sh2Operands.h"
 #include "WatchPanel.h"
 
 namespace sfe
@@ -24,125 +23,34 @@ constexpr int kWinInstr = 128;   // instructions per disassembled window
 const ImU32 kColAddr  = IM_COL32(150, 150, 160, 255);
 const ImU32 kColBytes = IM_COL32(120, 120, 130, 255);
 const ImU32 kColMnem  = IM_COL32(120, 200, 235, 255);   // cyan-ish
-const ImU32 kColReg   = IM_COL32(220, 200, 130, 255);   // amber
-const ImU32 kColImm   = IM_COL32(180, 205, 150, 255);   // green
-const ImU32 kColTarget= IM_COL32(130, 175, 255, 255);   // link blue
-const ImU32 kColPunct = IM_COL32(140, 140, 150, 255);
-const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);
+const ImU32 kColCmt   = IM_COL32(110, 130, 110, 255);   // operand colours: Sh2Operands.cpp
 const ImU32 kColPcRow = IM_COL32(60, 90, 60, 110);      // current-PC row tint
 const ImU32 kColBpHitRow = IM_COL32(150, 45, 45, 110);  // faint red: breakpoint-hit row
-
-bool IsRegToken(const std::string& t)
-{
-    if (t.size() >= 2 && t[0] == 'r' && std::isdigit((unsigned char)t[1])) return true;
-    static const char* kSpecial[] = { "pc", "pr", "sr", "gbr", "vbr", "mach", "macl" };
-    for (const char* s : kSpecial) if (t == s) return true;
-    return false;
-}
-int RegIndex(const std::string& t)   // r0..r15 -> 0..15, else -1
-{
-    if (t.size() < 2 || t[0] != 'r') return -1;
-    int n = 0; for (size_t i = 1; i < t.size(); ++i) { if (!std::isdigit((unsigned char)t[i])) return -1; n = n*10 + (t[i]-'0'); }
-    return (n >= 0 && n < 16) ? n : -1;
-}
 
 // Resolve a memory operand's effective address + a natural watch type, from the
 // disassembled instruction text + current registers. Returns false when the
 // access isn't statically resolvable (e.g. depends on an unmodelled value).
-bool ResolveMemOperand(const DisassembledInstruction& ins, const se_sh2_regs& r,
+// 'operand' picks the operand the pointer was over (-1: the first one that resolves).
+bool ResolveMemOperand(const DisassembledInstruction& ins, int operand, const se_sh2_regs& r,
                        uint32_t& outAddr, WatchType& outType)
 {
-    const std::string& op = ins.Operands;
-    const size_t at = op.find('@');
-    if (at == std::string::npos) return false;
-
-    // Access width from the mnemonic suffix.
-    outType = WatchType::U32;
-    if (ins.Mnemonic.size() >= 2 && ins.Mnemonic[ins.Mnemonic.size()-2] == '.')
-    {
-        const char w = ins.Mnemonic.back();
-        outType = (w == 'b') ? WatchType::U8 : (w == 'w') ? WatchType::U16 : WatchType::U32;
-    }
-
-    const std::string s = op.substr(at + 1);
-    unsigned reg = 0, reg2 = 0, disp = 0;
-    // @(0x........)  — absolute (PC-relative already resolved by the disassembler).
-    if (std::sscanf(s.c_str(), "(0x%x)", &disp) == 1 && s.find(',') == std::string::npos)
-    { outAddr = disp; return true; }
-    // @(0xX,rN) / @(0xX,gbr)
-    if (std::sscanf(s.c_str(), "(0x%x,r%u)", &disp, &reg) == 2 && reg < 16)
-    { outAddr = r.r[reg] + disp; return true; }
-    if (std::strncmp(s.c_str(), "(0x", 3) == 0 && s.find(",gbr)") != std::string::npos &&
-        std::sscanf(s.c_str(), "(0x%x", &disp) == 1)
-    { outAddr = r.gbr + disp; return true; }
-    // @(r0,rN)
-    if (std::sscanf(s.c_str(), "(r0,r%u)", &reg2) == 1 && reg2 < 16)
-    { outAddr = r.r[0] + r.r[reg2]; return true; }
-    // @rN, @rN+, @-rN
-    if (std::sscanf(s.c_str(), "r%u", &reg) == 1 && reg < 16)
-    { outAddr = r.r[reg]; return true; }
-    if (std::sscanf(s.c_str(), "-r%u", &reg) == 1 && reg < 16)
-    { outAddr = r.r[reg] - WatchTypeSize(outType); return true; }
-    return false;
+    uint32_t width = 0;
+    if (!ResolveSh2MemOperand(ins, operand, r, outAddr, width)) return false;
+    outType = (width == 1) ? WatchType::U8 : (width == 2) ? WatchType::U16 : WatchType::U32;
+    return true;
 }
 
-// Render 'operands' with subtle per-token colouring. If a token equals the
-// instruction's branch target it becomes a clickable link; returns the clicked
-// target (or 0 / clicked=false).
-void DrawOperands(const DisassembledInstruction& ins, bool& clicked, uint32_t& clickTarget)
+// Read 'n' big-endian bytes for the operand hover preview. SH-2 is big-endian, so
+// assemble the bytes MSB-first.
+Sh2MemReader MemReaderFor(IMemoryBackend& backend)
 {
-    clicked = false;
-    const std::string& s = ins.Operands;
-    char targetStr[16] = {};
-    if (ins.HasBranchTarget) std::snprintf(targetStr, sizeof(targetStr), "0x%08X", ins.BranchTarget);
-
-    size_t i = 0;
-    bool first = true;
-    auto seg = [&](const std::string& tok, ImU32 col, bool link)
-    {
-        if (!first) ImGui::SameLine(0.0f, 0.0f);
-        first = false;
-        ImGui::PushStyleColor(ImGuiCol_Text, col);
-        ImGui::TextUnformatted(tok.c_str());
-        ImGui::PopStyleColor();
-        // Every token is a separate ImGui item. Attach the row popup to each one so
-        // right-clicking anywhere in a multi-token operand opens the context menu.
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("ctx");
-        if (link)
-        {
-            if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            if (ImGui::IsItemClicked()) { clicked = true; clickTarget = ins.BranchTarget; }
-        }
+    return [&backend](uint32_t addr, uint32_t n, uint32_t& outValue) {
+        auto mr = backend.ReadMemoryBatch({ { addr, n } })[0];
+        if (!mr.success) return false;
+        outValue = 0;
+        for (uint32_t i = 0; i < n; ++i) outValue = (outValue << 8) | mr.bytes[i];
+        return true;
     };
-    while (i < s.size())
-    {
-        const char c = s[i];
-        if (std::isalnum((unsigned char)c) || c == '.' || c == 'x')
-        {
-            size_t j = i;
-            while (j < s.size() && (std::isalnum((unsigned char)s[j]) || s[j] == '.')) ++j;
-            std::string tok = s.substr(i, j - i);
-            i = j;
-            if (ins.HasBranchTarget && tok == targetStr)      seg(tok, kColTarget, true);
-            else if (tok.rfind("0x", 0) == 0)                 seg(tok, kColImm, false);
-            else if (IsRegToken(tok))                         seg(tok, kColReg, false);
-            else                                              seg(tok, kColPunct, false);
-        }
-        else if (c == '#')
-        {
-            // immediate: '#', then the following number token
-            size_t j = i + 1;
-            while (j < s.size() && (std::isalnum((unsigned char)s[j]) || s[j] == '.')) ++j;
-            seg(s.substr(i, j - i), kColImm, false);
-            i = j;
-        }
-        else
-        {
-            seg(std::string(1, c), kColPunct, false);
-            ++i;
-        }
-    }
-    if (first) ImGui::TextUnformatted(" ");   // empty operands: keep the row height
 }
 
 // Printable-ASCII annotation for a value, e.g. 0x66 -> " ('f')".
@@ -207,7 +115,7 @@ std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& re
             // PC-relative literal pool: the disassembler resolves it to @(0xABS),rN.
             uint32_t ea; WatchType wt;
             if (isLoad && o.rfind("@(0x", 0) == 0 && o.find(",r") != std::string::npos &&
-                ResolveMemOperand(ins, regs, ea, wt))
+                ResolveMemOperand(ins, -1, regs, ea, wt))
             {
                 const uint32_t n = WatchTypeSize(wt);
                 auto mr = backend.ReadMemoryBatch({ { ea, n } })[0];
@@ -422,9 +330,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // A context menu belongs to the instruction row, not just its final Comment
         // widget. Open the same popup from every visible cell so right-clicking the
         // gutter, address, opcode, mnemonic, operands, or comment behaves uniformly.
-        const auto openRowContext = []()
+        // Opened from anywhere but the operands, the menu has no operand to aim at, so its
+        // memory actions fall back to the instruction's first one (mCtxOperand = -1).
+        const auto openRowContext = [this]()
         {
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("ctx");
+            if (!ImGui::IsItemClicked(ImGuiMouseButton_Right)) return;
+            mCtxOperand = -1;
+            ImGui::OpenPopup("ctx");
         };
 
         // Gutter: breakpoint dot (click toggles) + PC arrow.
@@ -485,51 +397,28 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         else ImGui::TextDisabled("????");
         openRowContext();
         ImGui::TableSetColumnIndex(4);
-        bool tClicked = false; uint32_t tTarget = 0;
-        if (ln.readable) DrawOperands(ln.ins, tClicked, tTarget);
-        openRowContext();
-        if (tClicked) Navigate(tTarget, true);
+        Sh2OperandsDrawn ops;
+        if (ln.readable) ops = DrawSh2Operands(ln.ins);
+        // Right-clicking an operand aims the menu's memory actions at that operand, so
+        // "Add Operand to Watch" on the @r5+ half of "mac.l @r4+,@r5+" watches r5's
+        // address and not r4's.
+        if (ops.rightClicked) { mCtxOperand = ops.hovered; ImGui::OpenPopup("ctx"); }
+        if (ops.clicked) Navigate(ops.clickTarget, true);
 
-        // Register / memory hover preview on the operands cell.
-        if (ln.readable && ImGui::IsItemHovered() && !ln.ins.Operands.empty())
+        // Register / memory hover preview for the operand under the pointer. The hovered
+        // operand comes from DrawSh2Operands, which checks every token: asking
+        // IsItemHovered() here would only ever see the last item the cell submitted, so
+        // only the final operand showed a preview.
+        if (ops.hovered >= 0)
         {
-            ImGui::BeginTooltip();
-            // Which registers the operands reference. Tokenize the same way DrawOperands
-            // does (alnum/'.' runs) and match whole tokens via RegIndex, so "r1" is never
-            // confused with "r10".."r15".
-            bool shown[16] = {};
-            const std::string& ops = ln.ins.Operands;
-            for (size_t i = 0; i < ops.size();)
+            const std::vector<std::string> lines =
+                Sh2OperandHoverLines(ln.ins, ops.hovered, regs, MemReaderFor(backend));
+            if (!lines.empty())
             {
-                if (std::isalnum((unsigned char)ops[i]) || ops[i] == '.')
-                {
-                    size_t j = i;
-                    while (j < ops.size() && (std::isalnum((unsigned char)ops[j]) || ops[j] == '.')) ++j;
-                    const int rn = RegIndex(ops.substr(i, j - i));
-                    if (rn >= 0) shown[rn] = true;
-                    i = j;
-                }
-                else ++i;
+                ImGui::BeginTooltip();
+                for (const std::string& l : lines) ImGui::TextUnformatted(l.c_str());
+                ImGui::EndTooltip();
             }
-            for (int rn = 0; rn < 16; ++rn)
-                if (shown[rn]) ImGui::Text("r%-2d = %08X", rn, regs.r[rn]);
-            uint32_t ea; WatchType wt;
-            if (ResolveMemOperand(ln.ins, regs, ea, wt))
-            {
-                // Read exactly the access width the mnemonic implies (.b/.w/.l -> 1/2/4)
-                // so a mov.l shows a long, a mov.w a short, a mov.b a byte — not a fixed
-                // two-byte dump. SH-2 is big-endian, so assemble the bytes MSB-first.
-                const uint32_t n = WatchTypeSize(wt);
-                auto mr = backend.ReadMemoryBatch({ { ea, n } })[0];
-                if (mr.success)
-                {
-                    uint32_t val = 0;
-                    for (uint32_t i = 0; i < n; ++i) val = (val << 8) | mr.bytes[i];
-                    ImGui::Text("[%08X] = %0*X", ea, (int)(n * 2), val);
-                }
-                else ImGui::Text("[%08X] unavailable", ea);
-            }
-            ImGui::EndTooltip();
         }
 
         // Comment: user note (bright) overlaid on the auto-generated comment (dim).
@@ -572,7 +461,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (ImGui::BeginPopup("ctx"))
         {
             uint32_t ea; WatchType wt;
-            const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, regs, ea, wt);
+            const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, ea, wt);
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
                 bps.ToggleExecution(mCpu, ln.addr);
             if (ImGui::MenuItem(tp ? "Remove Tracepoint" : "Toggle Tracepoint", nullptr, false, ln.readable))
@@ -612,7 +501,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             ImGui::Separator();
             uint32_t hexEa; WatchType hexWt;
             if (ImGui::MenuItem("View Address in Memory", nullptr, false,
-                                ln.readable && ResolveMemOperand(ln.ins, regs, hexEa, hexWt)))
+                                ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, hexEa, hexWt)))
             { req.viewHex = true; req.hexAddr = hexEa; }
 
             // Find the selected instruction(s)'s code bytes in the game data directory.
