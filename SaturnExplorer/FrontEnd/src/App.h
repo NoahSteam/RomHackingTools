@@ -417,6 +417,10 @@ private:
     // Slot labels, snapshotted when the State menu opens (each one reads a file header).
     std::string      mSlotLabel[SavestateSlots::kSlotCount];
     void RefreshSlotCache();
+    // Notice that the live driver reconnected to a different emulator process and drop
+    // everything derived from the run that ended. See the definition.
+    void AdoptNewEmulatorInstance();
+    uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
     void DropRecordedHistory();
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state

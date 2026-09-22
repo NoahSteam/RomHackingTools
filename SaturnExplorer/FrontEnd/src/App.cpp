@@ -458,6 +458,9 @@ void App::CloseData(bool cancelAutoConnect)
     mScrubIndex = -1;
     mScrubShownIndex = -1;
     mRecorder.Clear();
+    // The next source gets its own driver with its own counter starting at zero, so this
+    // must start over too or its first attach would look like a replacement.
+    mLiveConnGeneration = 0;
 #endif
     // Destroying the context closes the data source. For a live source that also
     // releases any pause the debugger applied — the LiveDriver resumes the emulator
@@ -888,6 +891,7 @@ void App::BuildUI(IPlatform& platform)
     // snapshot once at load, in CreateContextFromSource.)
     if (mbLiveSource && mContext)
     {
+        AdoptNewEmulatorInstance();
         // Re-snapshot the running emulator each frame — except while paused, so an in-place
         // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
         // overwritten by the next capture. A step re-enables capture for a few frames
@@ -6001,6 +6005,51 @@ void App::DoLoadState(int slot)
                   static_cast<unsigned long long>(frame));
     mStateStatus = msg;
     mLog.Info(mStateStatus, static_cast<uint32_t>(frame));
+}
+
+// The driver reconnects on its own, so the emulator on the other end of a live source can
+// be replaced without the context ever being torn down: stop Mednafen, launch another game
+// from the Session menu, and the socket comes back on the same endpoint. Nothing in the
+// protocol identifies the process, so without this the old run's recorded frames stay in
+// the ring and pausing scrubs straight back into the game that is no longer running.
+//
+// Deliberately does not touch mContext or mDataSource. The driver's reconnect is working
+// correctly and re-opening the source would undo it; what is stale is everything SE
+// derived from the run that ended.
+void App::AdoptNewEmulatorInstance()
+{
+#ifdef SE_ENABLE_LIVE
+    const uint32_t generation = se_live_connection_generation(&mDataSource);
+    if (generation == mLiveConnGeneration) { return; }
+    const bool firstAttach = mLiveConnGeneration == 0;
+    mLiveConnGeneration = generation;
+    if (firstAttach) { return; }   // the connection this source was opened for
+
+    DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
+    if (mScrubContext)
+    {
+        se_destroy(mScrubContext);   // holds a decompressed frame of the previous run
+        mScrubContext = nullptr;
+    }
+    mScrubShownIndex = -1;
+    mCallStack.ClearAll();           // a stack through code the new run may not even load
+    mCallStackDirty = true;
+    mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
+    mSelection.clear();
+    mBpStopActive = false;           // no halt is in flight on a process that just started
+    mStepAwaitingHalt = false;
+    mStepHoldFrames = 0;
+    mStepBpActive = false;
+    mStepBpDirty = true;
+    mStepSettle = 0;
+    mbPaused = false;                // a freshly launched emulator is free-running
+    // Breakpoints live in the emulator, and this one has none: force a full re-sync rather
+    // than leave the user's set showing in the gutter while nothing is armed.
+    mLastBpGeneration = mBreakpoints.Generation() - 1;
+    mSeekSupported = se_live_server_version(&mDataSource) >= 16u;
+    mLog.Info("The emulator was replaced — cleared the recorded history from the previous "
+              "session.");
+#endif
 }
 
 // The emulator has jumped to a state we did not record our way to, so everything we held

@@ -408,6 +408,22 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             target_link_libraries(SaturnExplorerLiveDriver PUBLIC ws2_32)
         endif()
     endif()
+
+    # The driver's reconnect counter — how a client notices the emulator on the other end
+    # was replaced. Stands up a loopback listener, so POSIX sockets only; the Windows
+    # driver speaks a named pipe and would need its own harness.
+    if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
+        add_executable(SaturnExplorerLiveReconnectTests
+            FrontEnd/tests/LiveReconnectTests.cpp)
+        target_include_directories(SaturnExplorerLiveReconnectTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveReconnectTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveReconnectTests
+                 COMMAND SaturnExplorerLiveReconnectTests)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
