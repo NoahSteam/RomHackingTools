@@ -69,6 +69,13 @@ Note the limit of that coverage: the tests pin the flag decision, the hit-test b
 the row's vertical centring, not the panels' own layout. A new panel that hand-rolls its
 Selectable is not protected — route it through the helper.
 
+The same file holds the other shared panel mechanics — `HorizontalSplitter`/`SplitTopHeight`
+for a draggable split between two stacked sections (see the Call Stack), and `ComboWidth`
+for sizing a combo from its entries rather than a guessed pixel count. Reach for those
+rather than hand-rolling either; a hand-rolled splitter gets the drag arithmetic subtly
+wrong, and ImGui's `SplitterBehavior` underneath opts into `AllowOverlap`, so a test that
+presses it without a settled hover frame first silently does nothing.
+
 ## Reading emulator state (the Mednafen tap)
 
 `Integration/Mednafen/apply.py` is the source of truth for every emulator-side change;

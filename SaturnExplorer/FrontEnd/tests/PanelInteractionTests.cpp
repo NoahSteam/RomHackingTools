@@ -11,12 +11,17 @@
 // panels are not separable from App, so this covers "the row lets its cells be clicked",
 // not "the Command List renders the right columns".
 
+#include <cstdio>
+#include <cstdlib>
+#include <unistd.h>       // getpid, for the per-process temp config dir
 #include <iostream>
+#include <string>
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_internal.h"   // ImGuiTable::RowPosY1/2 -- the row rect being asserted on
 #include "ImGuiHarness.h"
 #include "PanelWidgets.h"
+#include "Settings.h"         // the split height's persistence, round-tripped through an INI
 
 using namespace sfe;
 
@@ -304,6 +309,282 @@ void TestAlignTextToFramePaddingOnRowSelectableOffsetsTheRow()
     CHECK(row.ContentOffsetFromRowCentre() < -0.5f);
 }
 
+// A panel shaped like the Call Stack's: a scrolling list, a draggable separator, and a
+// detail section that scrolls its own contents. Dragging is a real interaction (press,
+// move, release), so it is driven through the harness rather than by calling the clamp.
+struct SplitPanel
+{
+    float windowHeight = 400.0f;
+    float minTop = 60.0f;
+    float minBottom = 40.0f;
+    int   detailLines = 3;       // raise to overflow the detail section
+
+    float split = 0.0f;          // the persisted value the splitter drags
+    float avail = 0.0f;          // space the two sections and the separator share
+    float topHeight = 0.0f;      // what the top child was actually given
+    float bottomHeight = 0.0f;
+    float detailContentHeight = 0.0f;
+    int   commits = 0;           // times the splitter said "persist this" (once per drag)
+    ImVec2 splitterPoint {};
+    // Extremes of the stored height across every frame drawn. A clamp has to be watched
+    // all the way through a drag, not only at the end: the panel re-defaults a
+    // non-positive split, so an unclamped drag can wrap around and land back in range.
+    float loSplit = 1e9f, hiSplit = -1e9f;
+
+    void ResetExtremes() { loSplit = 1e9f; hiSplit = -1e9f; }
+
+    void Draw()
+    {
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(400.0f, windowHeight));
+        ImGui::Begin("Split", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        avail = ImGui::GetContentRegionAvail().y;
+        // The panel's own sequence: adopt a height only while both minimums fit, clamp for
+        // this frame, and store the clamp back so a drag starts where the boundary is.
+        const bool roomy = avail - SplitterHeight() >= minTop + minBottom;
+        if (split <= 0.0f && roomy) split = avail - 100.0f;
+        topHeight = SplitTopHeight(split, avail, minTop, minBottom);
+        if (roomy) split = topHeight;
+        loSplit = ImMin(loSplit, split);
+        hiSplit = ImMax(hiSplit, split);
+
+        // A height of 0 fills the window, which is what the panel's frame table does when
+        // there is no room to split at all.
+        ImGui::BeginChild("top", ImVec2(0.0f, topHeight));
+        for (int i = 0; i < 20; ++i) ImGui::Text("frame %d", i);
+        ImGui::EndChild();
+
+        if (topHeight > 0.0f)
+        {
+            if (HorizontalSplitter("##sp", split, avail, minTop, minBottom)) ++commits;
+            const ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+            splitterPoint = ImVec2((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+
+            ImGui::BeginChild("bottom");
+            bottomHeight = ImGui::GetWindowHeight();
+            for (int i = 0; i < detailLines; ++i) ImGui::Text("detail %d", i);
+            detailContentHeight = ImGui::GetCurrentWindow()->DC.CursorMaxPos.y -
+                                  ImGui::GetCurrentWindow()->Pos.y;
+            ImGui::EndChild();
+        }
+        ImGui::End();
+    }
+};
+
+// Hover the separator, press it, move the pointer 'dy' pixels a pixel per frame (so a
+// clamp is met on the way rather than jumped over), and release.
+//
+// The hover is not padding: ImGui's SplitterBehavior submits its item with AllowOverlap,
+// and such an item only reports hovered once the *previous* frame's hovered id was already
+// it -- so a press that arrives on the first frame the pointer is there does nothing.
+void DragSplitter(ImGuiHarness& harness, SplitPanel& panel, float dy)
+{
+    const ImVec2 start = panel.splitterPoint;
+    const float step = dy < 0.0f ? -1.0f : 1.0f;
+    harness.Hover(start);
+    harness.Press(start);
+    for (int i = 1; i <= static_cast<int>(dy * step); ++i)
+        harness.Frame(ImVec2(start.x, start.y + i * step), true);
+    harness.Frame(ImVec2(start.x, start.y + dy), false);
+}
+
+void TestSplitterDragMovesTheBoundary()
+{
+    SplitPanel panel;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    const float before = panel.topHeight;
+
+    // A press that moves nothing must not commit: the caller writes its settings file on
+    // a commit, and a click on the separator is not a resize.
+    harness.Hover(panel.splitterPoint);
+    harness.Press(panel.splitterPoint);
+    CHECK(panel.commits == 0);
+    harness.Frame(panel.splitterPoint, false);
+
+    DragSplitter(harness, panel, -40.0f);
+    harness.Settle();
+    CHECK(panel.topHeight < before - 39.0f);
+    CHECK(panel.topHeight > before - 41.0f);
+    // One commit for the whole drag, on release -- not one per moved frame.
+    CHECK(panel.commits == 1);
+    // The detail section gets exactly what the table gave up.
+    CHECK(panel.topHeight + panel.bottomHeight + SplitterHeight() > panel.avail - 1.0f);
+    CHECK(panel.topHeight + panel.bottomHeight + SplitterHeight() < panel.avail + 1.0f);
+}
+
+void TestSplitterClampsAtBothExtremes()
+{
+    SplitPanel panel;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+
+    // Drag well past the top: the list keeps its minimum throughout, and the stored value
+    // stops there too rather than banking travel the user would have to undo coming back.
+    panel.ResetExtremes();
+    DragSplitter(harness, panel, -300.0f);
+    harness.Settle();
+    CHECK(panel.loSplit > panel.minTop - 0.01f);
+    CHECK(panel.topHeight < panel.minTop + 0.01f);
+    // And back down again, which must move the boundary from the very first pixel.
+    DragSplitter(harness, panel, 5.0f);
+    harness.Settle();
+    CHECK(panel.topHeight > panel.minTop + 4.0f);
+
+    // Then well past the bottom: the detail section keeps its own minimum.
+    const float maxTop = panel.avail - SplitterHeight() - panel.minBottom;
+    panel.ResetExtremes();
+    DragSplitter(harness, panel, 300.0f);
+    harness.Settle();
+    CHECK(panel.hiSplit < maxTop + 0.01f);
+    CHECK(panel.topHeight > maxTop - 0.01f);
+    CHECK(panel.bottomHeight > panel.minBottom - 0.01f);
+
+    // Dragging while already against a clamp moves nothing, so it must not commit either.
+    panel.commits = 0;
+    DragSplitter(harness, panel, 20.0f);
+    CHECK(panel.commits == 0);
+}
+
+void TestStoredSplitIsClampedIntoRange()
+{
+    // A height restored from settings was chosen against whatever the panel measured last
+    // run -- a different dock size, a different font, or a hand-edited INI. Both ends have
+    // to be brought back into range before anything is drawn with them.
+    SplitPanel panel;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    const float maxTop = panel.avail - SplitterHeight() - panel.minBottom;
+
+    panel.split = 5.0f;              // taller detail than the panel will allow
+    harness.Settle();
+    CHECK(panel.topHeight > panel.minTop - 0.01f);
+    CHECK(panel.topHeight < panel.minTop + 0.01f);
+
+    panel.split = 10000.0f;          // a height from a much bigger window
+    harness.Settle();
+    CHECK(panel.topHeight > maxTop - 0.01f);
+    CHECK(panel.topHeight < maxTop + 0.01f);
+    CHECK(panel.bottomHeight > panel.minBottom - 0.01f);
+}
+
+void TestPanelTooShortToSplitDrawsNoSeparator()
+{
+    // Shorter than the separator itself: SplitTopHeight returns 0, the caller reads that
+    // as "no split", and the list simply fills what there is. Nothing may be given a
+    // negative height on the way.
+    SplitPanel panel;
+    panel.windowHeight = 30.0f;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    CHECK(panel.avail < SplitterHeight());
+    CHECK(panel.topHeight == 0.0f);
+}
+
+void TestSqueezedPanelDoesNotLatchItsClamp()
+{
+    // A spell docked too short to honour both minimums is drawn at the clamp, but must not
+    // be remembered as the user's choice -- widening the panel again would otherwise leave
+    // the frame list stuck at its minimum forever.
+    SplitPanel panel;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    DragSplitter(harness, panel, -40.0f);
+    harness.Settle();
+    const float chosen = panel.split;
+
+    panel.windowHeight = 90.0f;      // squeezed
+    harness.Settle();
+    CHECK(panel.topHeight < chosen);
+
+    panel.windowHeight = 400.0f;     // and back
+    harness.Settle();
+    CHECK(panel.split > chosen - 0.01f);
+    CHECK(panel.split < chosen + 0.01f);
+}
+
+void TestShortPanelKeepsBothSectionsVisible()
+{
+    // Too short to honour both minimums: neither section may collapse to nothing, or the
+    // Frame Detail (or the frame list) would simply disappear in a squeezed dock.
+    SplitPanel panel;
+    panel.windowHeight = 90.0f;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    CHECK(panel.avail < panel.minTop + panel.minBottom);
+    CHECK(panel.topHeight > 1.0f);
+    CHECK(panel.bottomHeight > 1.0f);
+    CHECK(panel.topHeight + panel.bottomHeight + SplitterHeight() < panel.avail + 1.0f);
+}
+
+void TestTallDetailScrollsInsteadOfGrowing()
+{
+    // Frame #0's detail is taller than a short detail section. It must scroll inside its
+    // own child -- the fixed six-and-a-half-line reservation it replaced overflowed and
+    // put a scrollbar on the whole panel instead.
+    SplitPanel panel;
+    panel.detailLines = 40;
+    ImGuiHarness harness([&] { panel.Draw(); });
+    harness.Settle();
+    CHECK(panel.detailContentHeight > panel.bottomHeight);
+    CHECK(panel.topHeight + panel.bottomHeight + SplitterHeight() < panel.avail + 1.0f);
+}
+
+// Room a combo of width 'w' leaves for its preview text: the frame minus the padding on
+// both sides and the dropdown arrow ImGui draws inside it.
+float ComboTextRoom(float w) { return w - ImGui::GetStyle().FramePadding.x * 2.0f -
+                                      ImGui::GetFrameHeight(); }
+
+void TestComboWidthFitsItsWidestEntry()
+{
+    // The Access Log's span combo, whose widest entry "2 bytes" lost its "s" behind the
+    // dropdown arrow at the 70px the panel used to pass.
+    const char* sizes[] = { "1 byte", "2 bytes", "4 bytes" };
+    float sized = 0.0f, widest = 0.0f;
+    ImGuiHarness harness([&] {
+        ImGui::Begin("Combo", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        int idx = 1;
+        ImGui::SetNextItemWidth(ComboWidth(sizes, 3));
+        ImGui::Combo("##accsize", &idx, sizes, 3);
+        sized = ImGui::GetItemRectSize().x;
+        widest = ImGui::CalcTextSize(sizes[1]).x;
+        ImGui::End();
+    });
+    harness.Settle();
+    CHECK(ComboTextRoom(sized) >= widest);
+    // And the number it replaced really did clip, so this is not passing trivially.
+    CHECK(ComboTextRoom(70.0f) < widest);
+}
+
+void TestSplitHeightRoundTripsThroughSettings()
+{
+    // The dragged split survives a restart: written to the INI and read back as the same
+    // pixel height, including the fractional part a drag leaves behind. Points the config
+    // dir at a private directory for the rest of the process -- so this test runs last,
+    // and its directory carries the pid so concurrent runs cannot collide.
+    const std::string dir = "/tmp/__se_split_settings__" + std::to_string(getpid());
+#ifdef _WIN32
+    _putenv_s("APPDATA", dir.c_str());
+#else
+    ::setenv("XDG_CONFIG_HOME", dir.c_str(), 1);
+#endif
+    std::remove(Settings::FilePath().c_str());
+
+    Settings out;
+    out.SetFloat("callstack", "split", 237.5f);
+    CHECK(out.Save());
+
+    Settings in;
+    in.Load();
+    CHECK(in.GetFloat("callstack", "split", 0.0f) == 237.5f);
+    // An absent key leaves the default, which is what tells the panel to pick its own,
+    // and so does a hand-edited line that isn't a number.
+    CHECK(in.GetFloat("callstack", "nosuchkey", -1.0f) == -1.0f);
+    in.Set("callstack", "split", "wide");
+    CHECK(in.GetFloat("callstack", "split", -1.0f) == -1.0f);
+    std::remove(Settings::FilePath().c_str());
+}
+
 }  // namespace
 
 int main()
@@ -314,6 +595,15 @@ int main()
     TestRegisterValueContextMenu();
     TestCommandRowContentIsVerticallyCentred();
     TestAlignTextToFramePaddingOnRowSelectableOffsetsTheRow();
+    TestSplitterDragMovesTheBoundary();
+    TestSplitterClampsAtBothExtremes();
+    TestShortPanelKeepsBothSectionsVisible();
+    TestSqueezedPanelDoesNotLatchItsClamp();
+    TestTallDetailScrollsInsteadOfGrowing();
+    TestStoredSplitIsClampedIntoRange();
+    TestPanelTooShortToSplitDrawsNoSeparator();
+    TestComboWidthFitsItsWidestEntry();
+    TestSplitHeightRoundTripsThroughSettings();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " panel interaction check(s) failed\n";

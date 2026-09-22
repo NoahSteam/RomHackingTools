@@ -1,12 +1,16 @@
 // PanelWidgets — small shared helpers for the ImGui panels, kept in a header of their own
 // so the interaction tests can exercise the same code the panels run (see
-// FrontEnd/tests/PanelInteractionTests.cpp). Only depends on imgui.h.
+// FrontEnd/tests/PanelInteractionTests.cpp). Depends only on Dear ImGui — including
+// imgui_internal.h, for the splitter behaviour ImGui keeps there.
 #pragma once
 
 #include <cstdarg>
 #include <cstdio>
 
 #include "imgui.h"
+// Deliberately without IMGUI_DEFINE_MATH_OPERATORS: imgui_internal.h rejects that define
+// arriving after imgui.h, which is the order every panel .cpp already includes them in.
+#include "imgui_internal.h"
 
 namespace sfe
 {
@@ -58,6 +62,82 @@ inline bool RowSelectable(const char* label, bool selected, bool framed)
                                            ImVec2(0.0f, height));
     if (framed) ImGui::PopStyleVar();
     return pressed;
+}
+
+// Thickness of the draggable band between two stacked sections: wide enough to grab.
+constexpr float kSplitterThickness = 6.0f;
+
+// What the separator costs the two sections: its own band plus the item spacing above and
+// below it. Leaving the spacing out oversizes the sections by that much, and the bottom
+// one — which fills whatever is left — is the one that loses it.
+inline float SplitterHeight()
+{
+    return kSplitterThickness + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+}
+
+// Height for the top section of a vertical split, clamped so neither section can be
+// dragged away entirely. 'avail' is the space the two sections and the separator share.
+//
+// When the panel is too short to honour both minimums the space is divided in their
+// proportion instead of clamping one away: both sections scroll their own contents, so a
+// squeezed section is still usable, whereas a zero-height one would vanish. Returns 0 when
+// there is no room at all for a split, which the caller reads as "skip the split".
+inline float SplitTopHeight(float stored, float avail, float minTop, float minBottom)
+{
+    const float room = avail - SplitterHeight();
+    // room > 0 and room < minTop + minBottom together mean the sum is positive, so the
+    // proportional branch cannot divide by zero.
+    if (room <= 0.0f) return 0.0f;
+    if (room < minTop + minBottom) return room * (minTop / (minTop + minBottom));
+    if (stored < minTop) return minTop;
+    if (stored > room - minBottom) return room - minBottom;
+    return stored;
+}
+
+// The draggable separator itself, submitted between the two sections. 'height' is the top
+// section's height and follows the pointer every frame of a drag; the return is the
+// *commit* — true once, when a drag that moved something is released. Persisting on that
+// rather than on every moved frame is what keeps a one-second drag from rewriting the
+// settings file sixty times.
+//
+// ImGui's own SplitterBehavior does the dragging: it tracks the grab against the offset
+// the press was made at (not the frame's mouse delta, which would jump the split by the
+// whole travel when a click lands straight on the band), clamps both sections to their
+// minimums, and renders the band in the Separator colours with the resize cursor. It only
+// registers the item, so a Dummy advances the layout past the band.
+inline bool HorizontalSplitter(const char* id, float& height, float avail,
+                               float minTop, float minBottom)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImVec2 pos = window->DC.CursorPos;
+    const ImRect bb(pos, ImVec2(pos.x + ImGui::GetContentRegionAvail().x,
+                                pos.y + kSplitterThickness));
+    float top = height;
+    float bottom = avail - SplitterHeight() - height;
+    ImGui::SplitterBehavior(bb, window->GetID(id), ImGuiAxis_Y, &top, &bottom,
+                            minTop, minBottom, 0.0f);
+    height = top;
+    // Read before the Dummy: that submits an item of its own, and IsItemDeactivated...
+    // reports on whichever item was submitted last.
+    const bool committed = ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::Dummy(ImVec2(0.0f, kSplitterThickness));
+    return committed;
+}
+
+// Width for a combo box holding 'items': its widest entry, the frame padding on both
+// sides, and the arrow button ImGui draws inside the frame (a square of the frame height).
+// A hand-picked number instead clips the last character of the longest entry -- and the
+// widest entry is measured rather than named, so adding one cannot quietly reintroduce
+// that. Pass the same array the Combo gets.
+inline float ComboWidth(const char* const items[], int count)
+{
+    float widest = 0.0f;
+    for (int i = 0; i < count; ++i)
+    {
+        const float w = ImGui::CalcTextSize(items[i]).x;
+        if (w > widest) widest = w;
+    }
+    return widest + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
 }
 
 // Horizontally centre 'width' worth of content in the current table cell, for a column

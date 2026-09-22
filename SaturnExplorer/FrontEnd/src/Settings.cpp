@@ -1,6 +1,7 @@
 #include "Settings.h"
 
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -199,6 +200,23 @@ bool Settings::GetBool(const std::string& section, const std::string& key, bool 
 void Settings::SetBool(const std::string& section, const std::string& key, bool value)
 {
     Set(section, key, value ? "1" : "0");
+}
+
+float Settings::GetFloat(const std::string& section, const std::string& key, float def) const
+{
+    // A missing key, or anything a hand-edited INI holds that isn't purely a number,
+    // leaves the default rather than a 0 — for a size those mean very different things.
+    const std::string s = Trim(Get(section, key));
+    char* end = nullptr;
+    const float v = std::strtof(s.c_str(), &end);
+    return (!s.empty() && end == s.c_str() + s.size()) ? v : def;
+}
+
+void Settings::SetFloat(const std::string& section, const std::string& key, float value)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%.1f", value);
+    Set(section, key, buf);
 }
 
 }  // namespace sfe

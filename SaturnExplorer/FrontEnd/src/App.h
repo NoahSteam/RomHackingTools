@@ -354,6 +354,9 @@ private:
     bool                     mFocusCallStack = false;   // bring the panel forward on a stop
     bool                     mCallStackWasShowable = false;  // edge-detect entering paused/loaded
     int                      mCallStackCpu = 0;
+    // Height of the frame table above the draggable Frame Detail split, in pixels;
+    // persisted. 0 means "not chosen yet" — the panel picks a default on first draw.
+    float                    mCallStackSplit = 0.0f;
     // CPU shown by the Registers panel's SH-2 tab. Follows a halt (set alongside
     // mCallStackCpu) so a breakpoint lands you on the registers that stopped, but stays
     // independently switchable so you can read the other CPU without disturbing anything.
