@@ -137,16 +137,24 @@ public:
     // plane grid, so the result is cached until the snapshot is re-derived.
     se_result GetTileMapInfo(se_vdp2_layer layer, se_vdp2_tilemap* out)
     {
-        const Vdp2TileMap& map = TileMap(layer);
-        out->active = map.active ? 1 : 0;
-        out->bitmap = map.bitmap ? 1 : 0;
-        out->truncated = map.truncated ? 1 : 0;
-        out->reserved = 0;
-        out->cell_pixels = static_cast<uint16_t>(map.cellPixels);
-        out->color_count = static_cast<uint16_t>(map.colorCount);
-        out->map_width = map.mapWidth;
-        out->map_height = map.mapHeight;
-        out->tile_count = static_cast<uint32_t>(map.tiles.size());
+        Describe(TileMap(layer), out);
+        return SE_OK;
+    }
+
+    // The same description without the grid walk. tile_count/truncated are filled only if
+    // the full map happens to be cached already, so a caller that asks every frame never
+    // pays for the walk; see se_get_vdp2_tilemap_shape for what a zero tile_count means.
+    se_result GetTileMapShape(se_vdp2_layer layer, se_vdp2_tilemap* out)
+    {
+        const int i = (layer >= 0 && layer < SE_LAYER_COUNT) ? static_cast<int>(layer) : 0;
+        if (mbTileMapValid[i])
+        {
+            Describe(mTileMaps[i], out);
+            return SE_OK;
+        }
+        Vdp2TileMap shape;
+        Vdp2Compositor::BuildTileMapShape(mSnapshot, i, shape);
+        Describe(shape, out);
         return SE_OK;
     }
 
@@ -555,6 +563,19 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    static void Describe(const Vdp2TileMap& map, se_vdp2_tilemap* out)
+    {
+        out->active = map.active ? 1 : 0;
+        out->bitmap = map.bitmap ? 1 : 0;
+        out->truncated = map.truncated ? 1 : 0;
+        out->reserved = 0;
+        out->cell_pixels = static_cast<uint16_t>(map.cellPixels);
+        out->color_count = static_cast<uint16_t>(map.colorCount);
+        out->map_width = map.mapWidth;
+        out->map_height = map.mapHeight;
+        out->tile_count = static_cast<uint32_t>(map.tiles.size());
+    }
+
     // A scroll screen's tile map, extracted on first use and held until the next
     // RebuildDerived. Reading one walks the screen's whole plane grid (up to 512x512
     // pattern-name entries for RBG0), which is far too much to redo per panel frame.

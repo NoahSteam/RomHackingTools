@@ -30,6 +30,7 @@
 #pragma once
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 #include "saturnexplorer/SeTypes.h"
@@ -63,6 +64,26 @@ struct Vdp2TileMap
     uint32_t mapHeight = 0;      // patterns down
     std::vector<uint32_t> indices;   // mapWidth * mapHeight, row-major, into 'tiles'
     std::vector<Vdp2Tile> tiles;
+
+    // Clear the description but keep the containers' capacity: on a live source every
+    // frame re-derives, so assigning a fresh Vdp2TileMap would free and re-allocate up to
+    // a megabyte of indices each time.
+    void Reset()
+    {
+        active = false;
+        bitmap = false;
+        truncated = false;
+        cellPixels = 8;
+        colorCount = 0;
+        mapWidth = 0;
+        mapHeight = 0;
+        indices.clear();
+        tiles.clear();
+    }
+
+    // Charbase+palette -> tile index, held here only so BuildTileMap can reuse its buckets
+    // across rebuilds. Not part of the description; nothing outside the builder reads it.
+    std::unordered_map<uint64_t, uint32_t> scratch;
 };
 
 class Vdp2Compositor
@@ -96,6 +117,13 @@ public:
     // Vdp2TileMap). Reads the whole plane grid, not just what is on screen, so the
     // export describes the background rather than the current scroll window.
     static void BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out);
+
+    // Only what the VDP2 registers decide: active, bitmap, cellPixels, colorCount and the
+    // map dimensions. Leaves 'indices' and 'tiles' empty, so it costs a register read
+    // rather than a walk of up to 512x512 pattern names -- which is what a panel toolbar
+    // wants when it is only sizing a header line every frame.
+    static void BuildTileMapShape(const HardwareSnapshot& snapshot, int layer,
+                                  Vdp2TileMap& out);
 
     // Pixel size of the image RenderTileset draws for 'map' at 'columns' tiles per row.
     // The single source of the layout, so the buffer the caller sizes and the pixels

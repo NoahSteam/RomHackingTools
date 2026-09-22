@@ -24,12 +24,20 @@ const char* ExportSummary(LayerId layer)
 
 // The tile map behind a VDP2 panel, for the header line and to know whether a tile grid is
 // even meaningful. Zeroed for the sprite layer, which has no scroll map.
+//
+// The shape query every frame, the counting one only when the frame is holding still: the
+// count is the single field that needs the screen's whole plane grid walked, and on a
+// running emulator the core re-derives every frame so the walk would never be reused. See
+// se_get_vdp2_tilemap_shape -- it leaves tile_count zero when it did not count, which an
+// active non-bitmap screen can never legitimately report.
 se_vdp2_tilemap TileMapOf(const LayerPanelFrame& frame, LayerId layer)
 {
     se_vdp2_tilemap info = {};
     if (frame.context && IsVdp2Layer(layer))
     {
-        se_get_vdp2_tilemap(frame.context, static_cast<se_vdp2_layer>(layer), &info);
+        const se_vdp2_layer id = static_cast<se_vdp2_layer>(layer);
+        if (frame.stable) se_get_vdp2_tilemap(frame.context, id, &info);
+        else              se_get_vdp2_tilemap_shape(frame.context, id, &info);
     }
     return info;
 }
@@ -164,9 +172,16 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
         char colours[24] = "direct RGB";
         if (info.color_count)
             std::snprintf(colours, sizeof(colours), "%u colours", info.color_count);
-        ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %u distinct tiles  -  %s",
-                            info.map_width, info.map_height, info.cell_pixels,
-                            info.cell_pixels, info.tile_count, colours);
+        // tile_count is 0 when it was not counted (see TileMapOf), so the clause appears
+        // as soon as the frame holds still rather than showing a misleading zero.
+        if (info.tile_count)
+            ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %u distinct tiles  -  %s",
+                                info.map_width, info.map_height, info.cell_pixels,
+                                info.cell_pixels, info.tile_count, colours);
+        else
+            ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %s",
+                                info.map_width, info.map_height, info.cell_pixels,
+                                info.cell_pixels, colours);
     }
     const View& view = mViews[desc.id];
     if (!view.status.empty())

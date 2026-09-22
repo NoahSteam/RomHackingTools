@@ -234,6 +234,91 @@ void TestTileMapAndTileset()
     se_destroy(ctx);
 }
 
+// The shape query must agree with the counting one on every register-derived field, and
+// must not walk the grid to get there. It reports tile_count only when the full map is
+// already cached, which is what lets a panel toolbar ask every frame on a live source.
+void TestTileMapShapeMatchesWithoutCounting()
+{
+    State state = MakeTiledNbg3State();
+    se_context* ctx = Open(state);
+
+    se_vdp2_tilemap shape = {};
+    CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG3, &shape) == SE_OK);
+    CHECK(shape.active == 1);
+    CHECK(shape.bitmap == 0);
+    CHECK(shape.cell_pixels == 8);
+    CHECK(shape.color_count == 16);
+    CHECK(shape.map_width == 128);
+    CHECK(shape.map_height == 128);
+    // Nothing has counted yet, and an active non-bitmap screen always has at least one
+    // tile — so a zero here is unambiguously "not counted" rather than "no tiles".
+    CHECK(shape.tile_count == 0);
+    CHECK(shape.truncated == 0);
+
+    // Every register-derived field matches what the counting query reports.
+    se_vdp2_tilemap full = {};
+    CHECK(se_get_vdp2_tilemap(ctx, SE_LAYER_NBG3, &full) == SE_OK);
+    CHECK(full.tile_count == 4);
+    CHECK(shape.active == full.active);
+    CHECK(shape.bitmap == full.bitmap);
+    CHECK(shape.cell_pixels == full.cell_pixels);
+    CHECK(shape.color_count == full.color_count);
+    CHECK(shape.map_width == full.map_width);
+    CHECK(shape.map_height == full.map_height);
+
+    // Now that the map is cached, the shape query passes the count through rather than
+    // rebuilding it — this is what makes the header line reappear once a frame holds still.
+    se_vdp2_tilemap warm = {};
+    CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG3, &warm) == SE_OK);
+    CHECK(warm.tile_count == 4);
+
+    // A re-derive drops the cache, so the shape query is back to not counting.
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    se_vdp2_tilemap cold = {};
+    CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG3, &cold) == SE_OK);
+    CHECK(cold.map_width == 128);
+    CHECK(cold.tile_count == 0);
+
+    // A bitmap screen has no tile map at all; both queries must agree on that.
+    se_destroy(ctx);
+    State bmp = MakeTiledNbg3State();
+    SetReg(bmp, 0x020, 0x0009);
+    SetReg(bmp, 0x028, 0x0002);
+    SetReg(bmp, 0x0F8, 0x0001);
+    se_context* bctx = Open(bmp);
+    se_vdp2_tilemap bshape = {};
+    CHECK(se_get_vdp2_tilemap_shape(bctx, SE_LAYER_NBG0, &bshape) == SE_OK);
+    CHECK(bshape.active == 1);
+    CHECK(bshape.bitmap == 1);
+    CHECK(bshape.map_width == 0);
+    se_destroy(bctx);
+}
+
+// Rebuilding into a map that already holds a bigger result must not leave the previous
+// one's tail behind: Reset keeps the containers' capacity, so the fields have to be
+// cleared explicitly.
+void TestRebuildDoesNotLeakPreviousMap()
+{
+    State state = MakeTiledNbg3State();
+    se_context* ctx = Open(state);
+    se_vdp2_tilemap big = {};
+    CHECK(se_get_vdp2_tilemap(ctx, SE_LAYER_NBG3, &big) == SE_OK);
+    CHECK(big.tile_count == 4);
+    CHECK(big.map_width == 128);
+
+    // Turn the screen off and re-derive: the same cache slot must come back empty.
+    CHECK(se_set_vdp2_register(ctx, 0x020, 0x0000) == 1);
+    se_vdp2_tilemap off = {};
+    CHECK(se_get_vdp2_tilemap(ctx, SE_LAYER_NBG3, &off) == SE_OK);
+    CHECK(off.active == 0);
+    CHECK(off.map_width == 0);
+    CHECK(off.map_height == 0);
+    CHECK(off.tile_count == 0);
+    CHECK(off.truncated == 0);
+    CHECK(se_get_vdp2_tile_indices(ctx, SE_LAYER_NBG3, nullptr, 0) == 0);
+    se_destroy(ctx);
+}
+
 void TestTileGrid()
 {
     State state = MakeTiledNbg3State();
@@ -472,6 +557,8 @@ int main()
 {
     TestIsolatedLayerRender();
     TestTileMapAndTileset();
+    TestTileMapShapeMatchesWithoutCounting();
+    TestRebuildDoesNotLeakPreviousMap();
     TestTileGrid();
     TestBitmapLayerHasNoTileMap();
     TestTileCsv();

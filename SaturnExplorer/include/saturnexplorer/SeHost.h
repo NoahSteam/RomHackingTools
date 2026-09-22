@@ -66,8 +66,23 @@ se_result   se_render_3d(se_context* ctx, const se_camera3d* camera,
        itself is just se_render_frame with that one layer enabled and
        se_render_opts::transparent_background set. --- */
 
-/* Shape of a VDP2 scroll screen's tile map (see se_vdp2_tilemap). */
+/* Shape of a VDP2 scroll screen's tile map (see se_vdp2_tilemap), including tile_count.
+   Counting distinct tiles means walking the screen's whole plane grid -- up to 512x512
+   pattern-name decodes for RBG0 -- so the result is cached until the next se_begin_frame
+   or in-place VRAM edit. On a live source that is every frame, so anything drawing every
+   frame wants se_get_vdp2_tilemap_shape instead. */
 se_result   se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_tilemap* out);
+
+/* The same description without the grid walk: active, bitmap, cell_pixels, color_count,
+   map_width and map_height all come from the VDP2 registers alone, so this costs a handful
+   of register reads however large the map is.
+
+   tile_count and truncated are filled only when the full map is already cached, because
+   they are the two fields that require the walk. A zero tile_count therefore means "not
+   counted", not "no tiles": an active non-bitmap screen always has at least one. Call
+   se_get_vdp2_tilemap when the count is actually needed. */
+se_result   se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
+                                      se_vdp2_tilemap* out);
 
 /* The tile map itself: map_width * map_height indices, row-major, each an index into the
    tileset se_render_vdp2_tileset() draws. Writes at most 'max'; returns the number

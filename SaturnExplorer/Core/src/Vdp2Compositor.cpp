@@ -549,6 +549,10 @@ struct PlaneGeom
     uint32_t planeW;             // pages per plane along X (1 or 2)
     uint32_t planePixW, planePixH;
     uint32_t cellWH, pageCells, pnBytes, cellBytes;
+    // planePixW/H divided by cellWH. Fixed for the whole screen walk, so they are resolved
+    // with the rest of the geometry rather than recomputed in PatternNameAddress -- which
+    // runs once per texel on the composite path and once per cell on the tile-map walk.
+    uint32_t planeCellsW, planeCellsH;
 };
 
 // Sample pixel (inX, inY) inside one character pattern, already flipped, by walking to the
@@ -571,11 +575,9 @@ Rgba FetchPatternTexel(const std::vector<uint8_t>& vram, const std::vector<uint8
 // stride collides across page columns).
 uint32_t PatternNameAddress(const PlaneGeom& g, uint32_t patX, uint32_t patY)
 {
-    const uint32_t planeCellsW = g.planePixW / g.cellWH;
-    const uint32_t planeCellsH = g.planePixH / g.cellWH;
-    const uint32_t plane = (patY / planeCellsH) * g.planesPerRow + (patX / planeCellsW);
-    const uint32_t lx = patX % planeCellsW;
-    const uint32_t ly = patY % planeCellsH;
+    const uint32_t plane = (patY / g.planeCellsH) * g.planesPerRow + (patX / g.planeCellsW);
+    const uint32_t lx = patX % g.planeCellsW;
+    const uint32_t ly = patY % g.planeCellsH;
     const uint32_t pageIndex = (ly / g.pageCells) * g.planeW + (lx / g.pageCells);
     const uint32_t patIndex = pageIndex * (g.pageCells * g.pageCells) +
                               (ly % g.pageCells) * g.pageCells + (lx % g.pageCells);
@@ -617,9 +619,11 @@ void BuildNbgGeom(const NbgConfig& c, std::array<uint32_t, 4>& planeBase, PlaneG
     for (int i = 0; i < 4; ++i)
         planeBase[i] = PlaneBaseFor(c.mapOffset | pageRegs[i], oneWord, c.patternWH, deca, multi);
 
+    const uint32_t cellWH = 8 * c.patternWH;
     geom = PlaneGeom {
         planeBase.data(), 2, planeW, planeW * 512, planeH * 512,
-        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
+        cellWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum),
+        (planeW * 512) / cellWH, (planeH * 512) / cellWH };
 }
 
 // Tile-grid overlay: blend a texel half-and-half with the grid colour and make it opaque,
@@ -899,9 +903,11 @@ void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
     const uint32_t planePixH = planeH * 512;
     s.totalW = 4 * planePixW;   // power of two — screen-over "repeat" masks
     s.totalH = 4 * planePixH;
+    const uint32_t cellWH = 8 * c.patternWH;
     s.geom = PlaneGeom {
         s.planeBase.data(), 4, planeW, planePixW, planePixH,
-        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
+        cellWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum),
+        planePixW / cellWH, planePixH / cellWH };
 }
 
 // Per-line rotation setup (Xst/Yst accumulate DXst/DYst down the screen).
@@ -1227,17 +1233,22 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     }
 }
 
-void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out)
+// Everything about a screen's tile map that the registers alone decide. Separated from the
+// grid walk because the walk is the entire cost -- up to 512x512 pattern-name decodes for
+// RBG0 -- while a panel toolbar asks for the shape every frame just to size its header and
+// decide whether a tile grid is meaningful. Returns false when there is no tile map to
+// describe (no VDP2 data, screen off, or a bitmap screen), with 'out' already carrying
+// whatever is known.
+bool BuildTileMapShapeInto(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out,
+                           ResolvedLayer& resolved)
 {
-    out = Vdp2TileMap();
     if (!snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
-        return;
+        return false;
     }
-    ResolvedLayer resolved;
     if (!ResolveLayer(snapshot, layer, resolved))
     {
-        return;
+        return false;
     }
 
     const NbgConfig& c = resolved.cfg;
@@ -1248,17 +1259,42 @@ void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, V
     out.colorCount = PaletteEntryCount(c.colorNum);
     if (!out.active || out.bitmap)
     {
-        return;
+        return false;
     }
 
     // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0.
-    out.mapWidth = g.planesPerRow * (g.planePixW / g.cellWH);
-    out.mapHeight = g.planesPerRow * (g.planePixH / g.cellWH);
+    out.mapWidth = g.planesPerRow * g.planeCellsW;
+    out.mapHeight = g.planesPerRow * g.planeCellsH;
+    return true;
+}
 
+void Vdp2Compositor::BuildTileMapShape(const HardwareSnapshot& snapshot, int layer,
+                                       Vdp2TileMap& out)
+{
+    out.Reset();
+    ResolvedLayer resolved;
+    BuildTileMapShapeInto(snapshot, layer, out, resolved);
+}
+
+void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out)
+{
+    out.Reset();
+    ResolvedLayer resolved;
+    if (!BuildTileMapShapeInto(snapshot, layer, out, resolved))
+    {
+        return;
+    }
+
+    const NbgConfig& c = resolved.cfg;
+    const PlaneGeom& g = resolved.geom;
     const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
     const uint16_t vrsize = Reg(snapshot, kVRSIZE);
     out.indices.resize(static_cast<size_t>(out.mapWidth) * out.mapHeight);
-    std::unordered_map<uint64_t, uint32_t> seen;
+    // Reused across rebuilds with the rest of 'out': a live source re-derives every frame,
+    // and a fresh map would re-allocate up to 1 MB of indices plus rehash its way back up
+    // to kMaxTiles buckets each time.
+    std::unordered_map<uint64_t, uint32_t>& seen = out.scratch;
+    seen.clear();
     for (uint32_t y = 0; y < out.mapHeight; ++y)
     {
         for (uint32_t x = 0; x < out.mapWidth; ++x)

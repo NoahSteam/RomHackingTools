@@ -139,6 +139,16 @@ se_result se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_tile
     return Impl(ctx)->GetTileMapInfo(layer, out);
 }
 
+se_result se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
+                                    se_vdp2_tilemap* out)
+{
+    if (!ctx || !out || layer < 0 || layer >= SE_LAYER_COUNT)
+    {
+        return SE_ERR_INVALID_ARG;
+    }
+    return Impl(ctx)->GetTileMapShape(layer, out);
+}
+
 size_t se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
                                 uint32_t* out, size_t max)
 {
