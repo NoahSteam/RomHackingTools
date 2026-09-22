@@ -350,6 +350,7 @@ void App::LoadSettings()
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
     mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
+    mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
@@ -370,6 +371,7 @@ void App::SaveSettings()
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
+    mSettings.SetFloat("callstack", "split", mCallStackSplit);
     SaveSearchOptions();
     // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
     // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
@@ -2531,12 +2533,14 @@ void App::DrawAccessLog()
     ImGui::SetNextItemWidth(120.0f);
     ImGui::InputTextWithHint("##accaddr", "address (hex)", mAccessAddr, sizeof(mAccessAddr));
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(110.0f);
+    // Size both combos from their entries: 70px clipped the "s" of "2 bytes" against the
+    // dropdown arrow, and a hand-picked number breaks again with another font.
     const char* kinds[] = { "read+write", "read", "write" };
+    ImGui::SetNextItemWidth(ComboWidth(kinds, 3));
     ImGui::Combo("##acckind", &mAccessKind, kinds, 3);
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(70.0f);
     const char* sizes[] = { "1 byte", "2 bytes", "4 bytes" };
+    ImGui::SetNextItemWidth(ComboWidth(sizes, 3));
     ImGui::Combo("##accsize", &mAccessSizeIdx, sizes, 3);
     const uint32_t watchSize = 1u << mAccessSizeIdx;   // 1/2/4
     ImGui::EndDisabled();
@@ -3027,12 +3031,22 @@ void App::DrawCallStack(IPlatform& platform)
 
     const ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH |
                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
-    // Cap the table height so the Frame Detail section below stays visible in a short
-    // docked panel; if there isn't room to spare, let the table fill (outer.y = 0).
+    // The frame table and the Frame Detail section below it share the panel, split at a
+    // boundary the user drags. Frame #0's detail runs to about eight lines, which the old
+    // fixed 6.5-line reservation overflowed; each section now scrolls its own contents.
     const float lh = ImGui::GetTextLineHeightWithSpacing();
-    float outerY = ImGui::GetContentRegionAvail().y - lh * 6.5f;
-    if (outerY < lh * 3.0f) outerY = 0.0f;
-    if (ImGui::BeginTable("callstack", 6, tf, ImVec2(0.0f, outerY)))
+    const float avail = ImGui::GetContentRegionAvail().y;
+    const float minTable = lh * 3.0f;
+    const float minDetail = lh * 2.0f;
+    // Only adopt a height while the panel can honour both minimums: a squeezed dock is
+    // drawn at the clamp but must not latch it as the user's choice, or widening the panel
+    // again would leave the table stuck at three rows.
+    const bool roomy = avail - SplitterHeight() >= minTable + minDetail;
+    // First draw with nothing stored: leave room for a fully expanded frame #0 detail.
+    if (mCallStackSplit <= 0.0f && roomy) mCallStackSplit = avail - lh * 8.0f;
+    const float tableH = SplitTopHeight(mCallStackSplit, avail, minTable, minDetail);
+    if (roomy) mCallStackSplit = tableH;   // drag from where the boundary actually is
+    if (ImGui::BeginTable("callstack", 6, tf, ImVec2(0.0f, tableH)))
     {
         ImGui::TableSetupColumn("",        ImGuiTableColumnFlags_WidthFixed, 22.0f);
         ImGui::TableSetupColumn("#",       ImGuiTableColumnFlags_WidthFixed, 22.0f);
@@ -3133,7 +3147,15 @@ void App::DrawCallStack(IPlatform& platform)
     // and SP are always known; the full register file (and the SH-2 ABI argument
     // registers r4-r7) are recoverable only for frame #0 — the CPU's live registers ARE
     // that frame's. Deeper frames would need per-frame captures (a future extension).
+    // tableH == 0 means the panel is too short to split at all: the table filled it and
+    // there is nothing left to put the detail in.
+    if (tableH > 0.0f)
     {
+        // True once, when the drag is released, so the INI is written per drag not per frame.
+        if (HorizontalSplitter("##csplit", mCallStackSplit, avail, minTable, minDetail))
+            mSettingsDirty = true;
+
+        ImGui::BeginChild("csdetail");
         const int sel = mCallStack.Selected(mCallStackCpu);
         if (sel >= 0 && sel < static_cast<int>(frames.size()))
         {
@@ -3174,6 +3196,7 @@ void App::DrawCallStack(IPlatform& platform)
                 ImGui::TextDisabled("Registers for caller frames need per-frame captures.");
             }
         }
+        ImGui::EndChild();
     }
 
     // Rename Function modal.

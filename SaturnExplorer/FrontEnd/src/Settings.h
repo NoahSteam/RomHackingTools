@@ -61,6 +61,11 @@ public:
     void Set(const std::string& section, const std::string& key, const std::string& value);
     bool GetBool(const std::string& section, const std::string& key, bool def) const;
     void SetBool(const std::string& section, const std::string& key, bool value);
+    // Pixel sizes (a dragged panel split, say). Written to one decimal: an INI a user may
+    // hand-edit shouldn't carry a float's full noise, and a tenth of a pixel is already
+    // finer than anything that can be dragged.
+    float GetFloat(const std::string& section, const std::string& key, float def) const;
+    void SetFloat(const std::string& section, const std::string& key, float value);
 
 private:
     // section -> (key -> value). Sections/keys are stored lowercased so lookups

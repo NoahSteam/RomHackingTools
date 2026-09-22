@@ -169,6 +169,12 @@ the Sakura savestate (imported name + arguments render) and by unit test (reconc
 Full per-frame register capture for caller frames stays out — it would need per-frame
 register snapshots on the wire; the detail panel is honest about what's recoverable.
 
+The frame list and that detail section are split by a separator the user drags
+(`HorizontalSplitter`, `FrontEnd/src/PanelWidgets.h`); each side scrolls its own contents,
+neither can be dragged below a few lines, and the boundary is persisted as
+`[callstack] split` in settings.ini. A dock too short to honour both minimums is drawn at
+the clamp without overwriting the height the user chose.
+
 ## Not doing (yet)
 - Full DWARF-style unwinding — there is no unwind metadata on Saturn.
 - Cross-CPU merged stacks — Master and Slave keep separate stacks.

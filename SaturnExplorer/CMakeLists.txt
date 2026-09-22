@@ -237,6 +237,7 @@ if(BUILD_TESTING)
     # Guards the row/cell click behaviour the panels depend on; see PanelWidgets.h.
     add_executable(SaturnExplorerPanelInteractionTests
         FrontEnd/tests/PanelInteractionTests.cpp
+        FrontEnd/src/Settings.cpp      # the Call Stack split height's persistence
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerPanelInteractionTests
