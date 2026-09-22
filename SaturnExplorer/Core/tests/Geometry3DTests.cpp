@@ -57,6 +57,38 @@ void AddSprite(State& state, uint32_t cmd, uint32_t texture, uint16_t color,
     }
 }
 
+// An untextured polyline (CMDCTRL comm 5) as a w x h box at (x,y): four explicit corners,
+// drawn as edges in CMDCOLR's colour. 2D-only — the 3D view draws no polylines.
+void AddPolyline(State& state, uint32_t cmd, uint16_t color, int x, int y, int w, int h)
+{
+    PutBE16(state.vdp1, cmd + 0x00, 0x0005);                        // CMDCTRL: polyline
+    PutBE16(state.vdp1, cmd + 0x04, 0x0040);                        // CMDPMOD: SPD
+    PutBE16(state.vdp1, cmd + 0x06, color);                         // CMDCOLR: edge colour
+    PutBE16(state.vdp1, cmd + 0x0C, static_cast<uint16_t>(x));      // A
+    PutBE16(state.vdp1, cmd + 0x0E, static_cast<uint16_t>(y));
+    PutBE16(state.vdp1, cmd + 0x10, static_cast<uint16_t>(x + w));  // B
+    PutBE16(state.vdp1, cmd + 0x12, static_cast<uint16_t>(y));
+    PutBE16(state.vdp1, cmd + 0x14, static_cast<uint16_t>(x + w));  // C
+    PutBE16(state.vdp1, cmd + 0x16, static_cast<uint16_t>(y + h));
+    PutBE16(state.vdp1, cmd + 0x18, static_cast<uint16_t>(x));      // D
+    PutBE16(state.vdp1, cmd + 0x1A, static_cast<uint16_t>(y + h));
+}
+
+// An untextured polygon (CMDCTRL comm 4) collapsed to a single point: four explicit
+// corners, all the same. A real one comes of a command whose coordinates have been scaled
+// or animated to nothing; it covers no pixel, so nothing of it is ever drawn.
+void AddCollapsedPolygon(State& state, uint32_t cmd, uint16_t color, int x, int y)
+{
+    PutBE16(state.vdp1, cmd + 0x00, 0x0004);   // CMDCTRL: polygon
+    PutBE16(state.vdp1, cmd + 0x04, 0x0040);   // CMDPMOD: SPD
+    PutBE16(state.vdp1, cmd + 0x06, color);    // CMDCOLR: fill colour
+    for (uint32_t k = 0; k < 4; ++k)           // A, B, C, D all at (x,y)
+    {
+        PutBE16(state.vdp1, cmd + 0x0C + k * 4, static_cast<uint16_t>(x));
+        PutBE16(state.vdp1, cmd + 0x0E + k * 4, static_cast<uint16_t>(y));
+    }
+}
+
 // A frame whose four sprites pin all three axes at once: a red backdrop, a blue square up
 // and to the left, a green square down and to the right, and a white square drawn *over*
 // the blue one. The white square is only visible when the layer stack faces the camera the
@@ -298,6 +330,91 @@ void TestOrbitSense()
     se_destroy(context);
 }
 
+// The 3D view's renderer and its hit test must walk the same primitives. Render3D skips
+// polylines and lines (2D-only primitives), so a hit test that still considered them could
+// select one that was never drawn — the selection jumping to a command with nothing under
+// the cursor. The polyline here sits inside the sprite, which puts it one layer nearer the
+// camera, so an unfiltered hit test would pick it over the sprite every time.
+void TestHitTestSkipsPolylines()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    const int cx = kFrameWidth / 2;
+    const int cy = kFrameHeight / 2;
+    AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
+    AddPolyline(state, 0x40, kGreen, cx - 8, cy - 8, 16, 16);
+    PutBE16(state.vdp1, 0x60, 0x8000);   // draw end
+
+    se_context* context = Open(state);
+    CHECK(se_sprite_count(context) == 2);
+
+    se_sprite_3d sprite = {}, polyline = {};
+    CHECK(se_get_sprite_3d(context, 0, &sprite) == SE_OK);
+    CHECK(se_get_sprite_3d(context, 1, &polyline) == SE_OK);
+    // Overlapping the sprite put the polyline on the next layer up, i.e. nearer the
+    // viewer. Without this the hit test below would pass for the wrong reason.
+    CHECK(polyline.corners[0].z > sprite.corners[0].z);
+
+    // Nothing of the polyline is in the 3D view: no green pixel anywhere, and the sprite
+    // it would have covered is intact.
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(Find(view, 0, 255, 0).count == 0);
+    CHECK(Find(view, 0, 0, 255).count > 100);
+
+    // So a click at the centre selects the sprite that IS drawn there.
+    size_t hit = 0;
+    CHECK(se_hit_test_3d(context, &front, cx, cy, &hit) == SE_OK);
+    CHECK(hit == sprite.command_index);
+    CHECK(hit != polyline.command_index);
+
+    // The 2D view does draw the polyline, and its hit test is untouched by this.
+    size_t hit2d = 0;
+    CHECK(se_hit_test(context, cx, cy, &hit2d) == SE_OK);
+
+    se_destroy(context);
+}
+
+// The other way the two walks can disagree about what is on screen: a quad that has
+// collapsed to a point or a line. RasterTriangle drops a zero-area triangle, so such a
+// primitive draws nothing in the 3D view, but every edge function of it is 0 — so an
+// unguarded inside test reports EVERY point as inside it, and being the nearest layer it
+// then swallows every click in the frame. PointInSprite already guards the 2D path.
+void TestHitTestSkipsCollapsedQuads()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    const int cx = kFrameWidth / 2;
+    const int cy = kFrameHeight / 2;
+    AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
+    AddCollapsedPolygon(state, 0x40, kGreen, cx, cy);
+    PutBE16(state.vdp1, 0x60, 0x8000);   // draw end
+
+    se_context* context = Open(state);
+    CHECK(se_sprite_count(context) == 2);
+
+    se_sprite_3d sprite = {}, collapsed = {};
+    CHECK(se_get_sprite_3d(context, 0, &sprite) == SE_OK);
+    CHECK(se_get_sprite_3d(context, 1, &collapsed) == SE_OK);
+    CHECK(collapsed.corners[0].z > sprite.corners[0].z);   // nearer: it would win a hit
+    CHECK(collapsed.corners[0].x == collapsed.corners[2].x);
+    CHECK(collapsed.corners[0].y == collapsed.corners[2].y);
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(Find(view, 0, 255, 0).count == 0);   // nothing of it is drawn
+    CHECK(Find(view, 0, 0, 255).count > 100);
+
+    // Clicking the sprite selects the sprite, not the invisible primitive in front of it.
+    size_t hit = 0;
+    CHECK(se_hit_test_3d(context, &front, cx, cy, &hit) == SE_OK);
+    CHECK(hit == sprite.command_index);
+    // And a click on empty background hits nothing at all, rather than the collapsed quad.
+    CHECK(se_hit_test_3d(context, &front, 4, 4, &hit) == SE_ERR_NO_DATA);
+
+    se_destroy(context);
+}
+
 }  // namespace
 
 int main()
@@ -306,6 +423,8 @@ int main()
     TestFrontViewMatchesComposite();
     TestObliqueViewKeepsOrder();
     TestOrbitSense();
+    TestHitTestSkipsPolylines();
+    TestHitTestSkipsCollapsedQuads();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " check(s) failed\n";

@@ -433,6 +433,16 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
 
     auto inTri = [&](const RVert& p0, const RVert& p1, const RVert& p2)
     {
+        // Reject a degenerate (zero-area) triangle, for the same reason PointInSprite
+        // does in 2D: its three edge functions are all 0, so the sign test below would
+        // report every point as inside. RasterTriangle drops such a triangle outright,
+        // so a sprite whose projected quad has collapsed to a line or a point draws
+        // nothing in the 3D view — and must not be clickable there either.
+        const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+        if (area > -1e-3f && area < 1e-3f)
+        {
+            return false;
+        }
         const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
         const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
         const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
@@ -444,8 +454,17 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
     bool found = false;
     float bestDepth = 0.0f;
     uint32_t bestCmd = 0;
-    for (const se_sprite_3d& g : scene.sprites3d)
+    for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
+        if (scene.render[i].primKind != 0)
+        {
+            // Render3D skips polyline/line primitives, so nothing of them is on screen
+            // here to click on. Picking one would move the selection with nothing under
+            // the cursor: the two walks have to agree on the primitive set, exactly as
+            // they agree on the projection by both going through Project().
+            continue;
+        }
+        const se_sprite_3d& g = scene.sprites3d[i];
         const RVert v[4] = {
             Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
