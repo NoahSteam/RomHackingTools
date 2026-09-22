@@ -266,14 +266,23 @@ void ExpandQuadInclusive(RVert v[4])
 }
 
 // Orbit-camera projection: rotate world by yaw (Y) then pitch (X), push back by
-// distance, perspective divide. Matches the validated prototype.
+// distance, perspective divide.
+//
+// The world is right-handed and the camera looks back down +Z (see se_sprite_3d and
+// se_camera3d in SeTypes.h), so view depth counts *down* from the camera: distance minus
+// the rotated Z, never plus.
+//
+// Subtracting here rather than negating w.z on the way in is the part worth guarding: both
+// spellings order the layers correctly, but negating the input is algebraically the same as
+// flipping the sign of yaw and pitch, so it would leave the 3D View orbiting backwards
+// under the mouse while everything else looked right.
 RVert Project(const se_vec3& w, const se_camera3d& cam,
               float cosYaw, float sinYaw, float cosPitch, float sinPitch)
 {
     const float x1 = cosYaw * w.x + sinYaw * w.z;
     const float z1 = -sinYaw * w.x + cosYaw * w.z;
     const float y2 = cosPitch * w.y - sinPitch * z1;
-    float z2 = sinPitch * w.y + cosPitch * z1 + cam.distance;
+    float z2 = cam.distance - (sinPitch * w.y + cosPitch * z1);
     if (z2 < 1.0f)
     {
         z2 = 1.0f;

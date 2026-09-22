@@ -4,10 +4,15 @@
 #include <iostream>
 #include <vector>
 
+#include "FakeVdpSource.h"
 #include "saturnexplorer/SeHost.h"
 
 namespace
 {
+using se_test::PutBE16;
+using se_test::SetReg;
+using se_test::State;
+
 int gFailures = 0;
 
 void Check(bool condition, const char* expression, int line)
@@ -19,61 +24,11 @@ void Check(bool condition, const char* expression, int line)
 
 #define CHECK(expression) Check(static_cast<bool>(expression), #expression, __LINE__)
 
-struct State
-{
-    std::vector<uint8_t> vdp1 = std::vector<uint8_t>(0x40);
-    std::vector<uint8_t> vdp2 = std::vector<uint8_t>(512 * 1024);
-    std::vector<uint8_t> cram = std::vector<uint8_t>(4 * 1024);
-    uint16_t regs[0x90] = {};
-};
-
-void PutBE16(std::vector<uint8_t>& memory, uint32_t address, uint16_t value)
-{
-    memory[address] = static_cast<uint8_t>(value >> 8);
-    memory[address + 1] = static_cast<uint8_t>(value);
-}
-
-size_t Copy(const std::vector<uint8_t>& source, uint32_t offset, void* dst, size_t size)
-{
-    if (offset >= source.size()) return 0;
-    const size_t count = std::min(size, source.size() - offset);
-    std::memcpy(dst, source.data() + offset, count);
-    return count;
-}
-
-size_t ReadVdp1(void* user, uint32_t offset, void* dst, size_t size)
-{
-    return Copy(static_cast<State*>(user)->vdp1, offset, dst, size);
-}
-
-size_t ReadVdp2(void* user, uint32_t offset, void* dst, size_t size)
-{
-    return Copy(static_cast<State*>(user)->vdp2, offset, dst, size);
-}
-
-size_t ReadCram(void* user, uint32_t offset, void* dst, size_t size)
-{
-    return Copy(static_cast<State*>(user)->cram, offset, dst, size);
-}
-
-uint16_t ReadVdp2Reg(void* user, uint32_t offset)
-{
-    const State* state = static_cast<State*>(user);
-    return (offset >> 1) < 0x90 ? state->regs[offset >> 1] : 0;
-}
-
-void SetReg(State& state, uint32_t offset, uint16_t value)
-{
-    state.regs[offset >> 1] = value;
-}
-
 State MakeNbg3State()
 {
     State state;
     // A 4x2 VDP1 system clip establishes the composited frame dimensions.
-    PutBE16(state.vdp1, 0x00, 0x0009);
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    se_test::WriteSystemClip(state, 4, 2);
     PutBE16(state.vdp1, 0x20, 0x8000);
 
     // NBG3, 16-color 8x8 cells, one-word pattern names. Plane A's name table
@@ -88,14 +43,11 @@ State MakeNbg3State()
     return state;
 }
 
-// (Re)size the VDP1 VRAM and write the system-clip command that establishes the 4x2
-// composited frame (lower-right corner = 3,1).
-void WriteSystemClip(State& state, uint32_t vdp1Size)
+// (Re)size the VDP1 VRAM and re-establish the 4x2 composited frame.
+void ResizeVdp1(State& state, uint32_t vdp1Size)
 {
     state.vdp1.assign(vdp1Size, 0);
-    PutBE16(state.vdp1, 0x00, 0x0009);
-    PutBE16(state.vdp1, 0x14, 3);
-    PutBE16(state.vdp1, 0x16, 1);
+    se_test::WriteSystemClip(state, 4, 2);
 }
 
 // A 4x2 frame with a single VDP1 normal sprite that fills it: an 8x2 RGB555 white
@@ -105,7 +57,7 @@ State MakeSpriteState(uint16_t pmod)
 {
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the sprite draws
-    WriteSystemClip(state, 0x120);
+    ResizeVdp1(state, 0x120);
     PutBE16(state.vdp1, 0x20, 0x0000);          // CMDCTRL: normal sprite (comm 0), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);          // draw-end terminator (END is its own command)
     PutBE16(state.vdp1, 0x24, pmod);            // CMDPMOD
@@ -120,18 +72,7 @@ State MakeSpriteState(uint16_t pmod)
 
 std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = false)
 {
-    se_data_source source = {};
-    source.abi_version = SE_ABI_VERSION;
-    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM |
-                          SE_CAP_CRAM | SE_CAP_VDP2_REGS;
-    source.user = &state;
-    source.read_vdp1_vram = ReadVdp1;
-    source.read_vdp2_vram = ReadVdp2;
-    source.read_cram = ReadCram;
-    source.read_vdp2_reg = ReadVdp2Reg;
-    se_config config = {};
-    config.abi_version = SE_ABI_VERSION;
-    se_context* context = se_create(&source, &config);
+    se_context* context = se_test::CreateContext(state);
     CHECK(context != nullptr);
     CHECK(se_begin_frame(context) == SE_OK);
 
@@ -504,7 +445,7 @@ void TestDrawEndNotDrawn()
 {
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
-    WriteSystemClip(state, 0x120);       // room for the terminator's leftover texture
+    ResizeVdp1(state, 0x120);       // room for the terminator's leftover texture
     PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
@@ -531,7 +472,7 @@ void TestPolygon()
     // VDP1 untextured polygon (command 4): a solid red quad covering the 4x2 frame.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
-    WriteSystemClip(state, 0x60);
+    ResizeVdp1(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0004);   // CMDCTRL: polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
@@ -550,7 +491,7 @@ void TestLine()
     // VDP1 line (command 6): a red segment from (0,0) to (3,0) along the top row.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x60);
+    ResizeVdp1(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0006);   // CMDCTRL: line (comm 6), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
@@ -570,7 +511,7 @@ void TestUserClip()
     // (draw inside), clipped to the rect x=1..2 by a preceding user-clip command.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x80);
+    ResizeVdp1(state, 0x80);
     PutBE16(state.vdp1, 0x20, 0x0008);   // user clip command (comm 8), JP next
     PutBE16(state.vdp1, 0x2C, 1);        // clip X0 = 1
     PutBE16(state.vdp1, 0x2E, 0);        // clip Y0 = 0
@@ -600,7 +541,7 @@ void TestUserClipDefaultUnbounded()
     // earlier frame. The default rect must be unbounded so the sprite still draws.
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    WriteSystemClip(state, 0x60);
+    ResizeVdp1(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 8
@@ -661,17 +602,7 @@ void TestColorCalc()
 void TestEditReRenders()
 {
     State state = MakeNbg3State();
-    se_data_source source = {};
-    source.abi_version = SE_ABI_VERSION;
-    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_VDP2_REGS;
-    source.user = &state;
-    source.read_vdp1_vram = ReadVdp1;
-    source.read_vdp2_vram = ReadVdp2;
-    source.read_cram = ReadCram;
-    source.read_vdp2_reg = ReadVdp2Reg;
-    se_config config = {};
-    config.abi_version = SE_ABI_VERSION;
-    se_context* ctx = se_create(&source, &config);
+    se_context* ctx = se_test::CreateContext(state);
     CHECK(ctx != nullptr);
     CHECK(se_begin_frame(ctx) == SE_OK);
 
@@ -733,17 +664,10 @@ size_t CaptureWriteVram(void*, se_vram_kind kind, uint32_t offset, const void* s
 void TestWriteVramForwards()
 {
     State state = MakeNbg3State();
-    se_data_source source = {};
-    source.abi_version = SE_ABI_VERSION;
-    source.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM | SE_CAP_MEM_WRITE;
-    source.user = &state;
-    source.read_vdp1_vram = ReadVdp1;
-    source.read_vdp2_vram = ReadVdp2;
-    source.read_cram = ReadCram;
+    se_data_source source = se_test::MakeSource(state);
+    source.capabilities |= SE_CAP_MEM_WRITE;
     source.write_vram = CaptureWriteVram;
-    se_config config = {};
-    config.abi_version = SE_ABI_VERSION;
-    se_context* ctx = se_create(&source, &config);
+    se_context* ctx = se_test::CreateContext(source);
     CHECK(ctx != nullptr);
     CHECK(se_begin_frame(ctx) == SE_OK);
 

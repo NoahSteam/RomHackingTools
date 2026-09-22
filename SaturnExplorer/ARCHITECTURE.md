@@ -282,8 +282,13 @@ For every VDP1 command the core emits the sprite in **two coordinate spaces**:
    "what the Saturn drew" and for selection.
 
 2. **3D world space** — the *same* sprites emitted as world-space geometry (4 corners with
-   X/Y/Z). Overlapping 2D sprites are separated along **Z by priority, then stable draw
-   order** as tiebreak, so the scene "explodes" into layers. The **core owns the geometry;
+   X/Y/Z), **right-handed: X right, Y up, +Z towards the viewer**. `SeTypes.h` is the
+   source of truth for that convention and for the camera's yaw/pitch senses; a host that
+   picks the mirror of either renders plausibly but hit-tests the wrong sprite. Overlapping
+   2D sprites are separated along **Z by priority, then stable draw order** as tiebreak, so
+   the scene "explodes" into layers. Seen head-on the 3D view must reproduce the 2D
+   composite — `Core/tests/Geometry3DTests.cpp` pins that (and the orbit sense) in CI, and
+   `se-render --3d --reference` checks it against a real dump. The **core owns the geometry;
    the driver owns the camera** — it supplies its own view/projection and can orbit, pan, and
    fly through the geometry to inspect how the frame is assembled.
 

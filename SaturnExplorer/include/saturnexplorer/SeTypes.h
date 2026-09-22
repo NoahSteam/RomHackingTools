@@ -216,7 +216,9 @@ typedef struct se_sprite_2d {
 } se_sprite_2d;
 
 /* Same sprite in 3D world space: corners separated along Z by priority + draw
- * order so overlapping layers pull apart. The driver owns the camera. */
+ * order so overlapping layers pull apart. The driver owns the camera.
+ * The world is right-handed — X right, Y up, +Z towards the viewer — so a sprite
+ * drawn later (over the ones below it) has the larger Z and is the nearer one. */
 typedef struct se_sprite_3d {
     uint32_t             command_index;
     uint32_t             object_number;
@@ -269,6 +271,11 @@ typedef struct se_render_opts {
  *  3D world-view camera (host-owned; the core software-renders with it)
  * ------------------------------------------------------------------ */
 
+/* The angles rotate the right-handed world by Ry(yaw) then Rx(pitch); the camera then
+ * sits at +distance along the rotated Z and looks back down it. A host that builds its
+ * own view matrix must use the same senses, or its clicks and se_hit_test_3d() will
+ * disagree with what it drew: yaw > 0 swings the +X side of the scene away from the
+ * viewer, pitch > 0 tips its +Y side towards the viewer. */
 typedef struct se_camera3d {
     float    yaw;             /* radians, orbit around world Y */
     float    pitch;          /* radians, orbit around world X */

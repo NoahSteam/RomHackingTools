@@ -9,6 +9,12 @@
 //   se-render dump.sedump --out frame.ppm
 //   se-render dump.sedump --reference golden.ppm [--diff diff.ppm] [--tolerance N]
 //
+// --3d renders the 3D View's exploded geometry instead, from straight in front and
+// scaled so the Z == 0 layer lands 1:1 on the composite. That makes the composite itself
+// a usable reference for the 3D view: the same sprites must appear on the same side of
+// the frame, with the same one on top. Layers in front of Z == 0 are magnified slightly
+// by the perspective divide, so give --tolerance room when diffing the two directly.
+//
 // Exit status is non-zero when a reference is given and the mismatch count exceeds the
 // tolerance, so it drops straight into a CI check. PPM (binary P6) is used so the tool
 // needs no image-library dependency; the reference frame is produced elsewhere (the
@@ -121,11 +127,13 @@ int main(int argc, char** argv)
     const char* refPath = nullptr;
     const char* diffPath = nullptr;
     int tolerance = 0;   // allowed differing pixels before failing
+    bool view3d = false;
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
         auto next = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : nullptr; };
-        if (a == "--out") outPath = next();
+        if (a == "--3d") view3d = true;
+        else if (a == "--out") outPath = next();
         else if (a == "--reference") refPath = next();
         else if (a == "--diff") diffPath = next();
         else if (a == "--tolerance") { const char* t = next(); tolerance = t ? std::atoi(t) : 0; }
@@ -135,7 +143,7 @@ int main(int argc, char** argv)
     if (!input)
     {
         std::fprintf(stderr,
-            "usage: se-render <dump.sedump> [--out frame.ppm]\n"
+            "usage: se-render <dump.sedump> [--3d] [--out frame.ppm]\n"
             "                 [--reference golden.ppm [--diff diff.ppm] [--tolerance N]]\n");
         return 2;
     }
@@ -177,11 +185,20 @@ int main(int argc, char** argv)
     opts.show_vdp1_sprites = 1;
     se_image img {};
     size_t need = 0;
+    // Size query. This already fills in width/height, which the 3D camera's viewport wants,
+    // so neither path has to composite a frame it is about to throw away.
     se_render_frame(ctx, &opts, &img, &need);
     std::vector<uint8_t> px(need);
     img.pixels = px.data();
     img.capacity = px.size();
-    if (se_render_frame(ctx, &opts, &img, &need) != SE_OK)
+
+    se_camera3d cam {};
+    cam.distance = 600.0f;
+    cam.fov = cam.distance;   // Z == 0 projects 1:1, so the composite is a usable reference
+    cam.viewport_width = img.width;
+    cam.viewport_height = img.height;
+    if ((view3d ? se_render_3d(ctx, &cam, &opts, &img, &need)
+                : se_render_frame(ctx, &opts, &img, &need)) != SE_OK)
     {
         std::fprintf(stderr, "se-render: render failed\n");
         se_destroy(ctx);
