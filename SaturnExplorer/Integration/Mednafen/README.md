@@ -376,9 +376,17 @@ The **Call Stack** panel shows a dependable (● Confirmed) stack when the emula
 control flow. The same per-instruction hook (`SeMednafenTraceHook`, above) also maintains
 a shadow stack: `SeMdfnTrackFlow` reads the opcode at PC (`SsDbgReadOpcode`, injected by
 `apply.py`) and mirrors the SH-2's own calls/returns into se_export —
-`SeExportPushFrame` on `bsr`/`bsrf`/`jsr`, `SeExportPopFrame` on `rts`/`rte`. The server
-serializes each CPU's stack into the v9 reply block; the client marks these frames
+`SeExportPushFrame` on `bsr`/`bsrf`/`jsr`, `SeExportPopFrame` on `rts`,
+`SeExportPushExceptionFrame` on `trapa` and `SeExportPopExceptionFrame` on `rte`. The
+server serializes each CPU's stack into the v9 reply block; the client marks these frames
 Confirmed and prefers them over its heuristic reconstruction.
+
+**Returns are paired with the entry that created the frame** — `rts` unwinds a call, `rte`
+unwinds an exception — so an interrupt handler's `rte` can no longer delete an application
+frame. Before that, a Saturn's VBlank/HBlank/timer/SCSP interrupts drained the recorded
+stack to empty within a frame or two. `se_export.h` documents the rule and the SH-2
+semantics behind it; `Integration/tests/ShadowCallStackTests.c` covers it in-repo by
+driving the tracker over a synthetic instruction stream.
 
 Two things are emulator-specific and **not exercised in-repo** (the wire — se_export
 serialize + LiveDriver read + client merge — is verified end-to-end with the real code):
@@ -388,9 +396,9 @@ serialize + LiveDriver read + client merge — is verified end-to-end with the r
   the equivalent debug reader. A fork that already has the executing opcode in the CPU
   dispatch can pass it to the hook and skip the per-instruction read.
 - The call/return decode assumes standard SH-2 encodings and returns one instruction past
-  the delay slot (PC+4). Interrupt/exception entry is not tracked (only `rte` pops), so an
-  interrupt-heavy path can drift; `SeExportPopFrame` guards against underflow and
-  `SeExportResetCallStack` is available to re-baseline.
+  the delay slot (PC+4; `trapa`, which has no delay slot, returns to PC+2). Asynchronous
+  interrupt entry is still not *visible* — the stack no longer drifts because of it (see
+  above), but a handler's frame is only shown when the entry was a `trapa`.
 
 ## Window-title mark
 

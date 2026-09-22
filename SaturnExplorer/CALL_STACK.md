@@ -149,10 +149,15 @@ tracked separately — it's a stepping feature, not part of the stack itself.)
 **Phase 3 — emulator glue (built; confirmed on a real build).** `SeMdfnTrackFlow` in the
 Mednafen glue reads the opcode at PC each instruction (`SsDbgReadOpcode`, injected by
 apply.py) and mirrors the SH-2's own control flow into se_export's shadow stack —
-push on bsr/bsrf/jsr, pop on rts/rte — folded into the existing per-instruction hook and
-fenced under `SE_MEDNAFEN_WIRED`. Compile-verified both ways; the two emulator-specific
-pieces (the `CheatMemRead` opcode accessor and interrupt/exception tracking) are the
-TODO(mednafen)-confirm items. See Integration/Mednafen/README.md §Call stack.
+push on bsr/bsrf/jsr and on trapa, pop on rts and on rte — folded into the existing
+per-instruction hook and fenced under `SE_MEDNAFEN_WIRED`. Each return unwinds only the
+kind of entry that created the frame, so an interrupt handler's `rte` cannot delete an
+application frame (it used to, and a Saturn's VBlank/HBlank/timer/SCSP interrupts drained
+the stack to empty within a frame or two); `se_export.h` has the SH-2 semantics behind
+that rule and `Integration/tests/ShadowCallStackTests.c` covers it. Asynchronous exception
+*entry* stays invisible to a per-instruction hook, so an interrupt handler has no frame of
+its own unless it was entered by trapa. The remaining emulator-specific piece is the
+`CheatMemRead` opcode accessor. See Integration/Mednafen/README.md §Call stack.
 
 **Phase 4 — depth (done).** Confidence reconciliation (`ReconcileHeuristicTail` grafts a
 best-effort heuristic tail below the deepest recorded frame when shadow recording started

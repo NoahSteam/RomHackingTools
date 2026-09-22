@@ -159,20 +159,29 @@ static char sLogQ[SE_LOGQ_CAP][SE_LIVE_LOG_LINE_LEN];
 static unsigned int sLogHead;   /* index of the oldest pending line */
 static unsigned int sLogCount;  /* number pending (<= SE_LOGQ_CAP) */
 
-/* ---- Shadow call stack (v9+). The glue records calls/returns as they execute
- * (SeExportPushFrame on bsr/jsr..., SeExportPopFrame on rts, SeExportResetCallStack on an
- * exception boundary), building a logical per-CPU stack. The server thread serializes it
- * into each reply's v9 call-stack block. Every frame here is genuinely observed, so the
- * client marks them ● Confirmed. Guarded by SE_LOCK. sCallDepth may exceed the cap; only
- * the innermost SE_LIVE_CALLSTACK_MAX are serialized. ---- */
-#define SE_CALLSTACK_CAP 256
+/* ---- Shadow call stack (v9+). The glue records calls/returns as they execute, building
+ * a logical per-CPU stack that the server thread serializes into each reply's v9
+ * call-stack block. Every frame here is genuinely observed, so the client marks them
+ * ● Confirmed. Guarded by SE_LOCK. Only the innermost SE_LIVE_CALLSTACK_MAX are
+ * serialized.
+ *
+ * Each frame records what created it, because on SH-2 that decides what may remove it:
+ * `rts` returns to PR (written by a bsr/bsrf/jsr) and `rte` returns to the PC the
+ * hardware pushed onto R15 at an exception entry. See se_export.h for why conflating the
+ * two drained the stack on any interrupt-driven program. ---- */
+#define SE_FRAME_CALL       0u   /* pushed by bsr/bsrf/jsr; removed by rts */
+#define SE_FRAME_EXCEPTION  1u   /* pushed at an exception entry; removed by rte */
 typedef struct {
     unsigned int callSite, func, ret, sp;
     unsigned long long cycle;
     unsigned int frameNo;
+    unsigned int kind;           /* SE_FRAME_* — internal, not on the wire */
 } SeCallFrame;
 static SeCallFrame sCallStack[2][SE_CALLSTACK_CAP];
-static unsigned int sCallDepth[2];   /* frames pushed (may saturate at CAP) */
+static unsigned int sCallDepth[2];   /* frames stored (saturates at CAP) */
+/* Frames deeper than we store. Counted rather than dropped so their returns unwind the
+ * counter instead of deleting a stored frame that is still live. */
+static unsigned int sCallOverflow[2];
 
 /* ---- Breakpoint hooks (v5+). se_export stays free of Yabause headers: apply.py
  * wires these to Yabause's SH2 breakpoint API. SeAddExecBp(cpu, addr) installs one
@@ -414,6 +423,12 @@ static void SeStateAfterRestore(void)
     SE_LOCK();
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
     SE_UNLOCK();
+    /* The restored machine has its own, different SH-2 stacks; every frame we recorded
+     * belongs to the timeline we just abandoned, and the returns that would have unwound
+     * them will never execute. Drop them rather than let them sit under whatever the
+     * restored code pushes next. */
+    SeExportResetCallStack(0);
+    SeExportResetCallStack(1);
     SeStateFlushAndRekey();
     sStopReason = SE_LIVE_STOP_NONE;
     sStepBudget = 0;
@@ -877,12 +892,11 @@ void SeExportLog(const char* msg)
 }
 
 /* Shadow call stack (v9+). The glue calls these from the CPU thread as control flow
- * executes. Push on a call (bsr/jsr/...); pop on rts; reset at an exception boundary or
- * a discontinuity. The frame number is stamped here from the module counter. Depth
- * saturates at SE_CALLSTACK_CAP (further pushes are dropped, pops still balance once it
- * unwinds). */
-void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
-                       unsigned int ret, unsigned int sp, unsigned long long cycle)
+ * executes; se_export.h documents the call/exception pairing they enforce. The frame
+ * number is stamped here from the module counter. */
+static void SePushCallFrame(int cpu, unsigned int kind, unsigned int callSite,
+                            unsigned int func, unsigned int ret, unsigned int sp,
+                            unsigned long long cycle)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
@@ -892,16 +906,53 @@ void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
         f->callSite = callSite; f->func = func; f->ret = ret; f->sp = sp;
         f->cycle = cycle;
         f->frameNo = (unsigned int)(sFrameNo & 0xFFFFFFFFu);
+        f->kind = kind;
         ++sCallDepth[c];
     }
+    else ++sCallOverflow[c];
     SE_UNLOCK();
 }
 
+void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
+                       unsigned int ret, unsigned int sp, unsigned long long cycle)
+{
+    SePushCallFrame(cpu, SE_FRAME_CALL, callSite, func, ret, sp, cycle);
+}
+
+void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler,
+                                unsigned int ret, unsigned int sp, unsigned long long cycle)
+{
+    SePushCallFrame(cpu, SE_FRAME_EXCEPTION, site, handler, ret, sp, cycle);
+}
+
+/* rts. Unwinds the overflow first (those frames are the innermost), then a stored frame —
+ * but only a call frame: an rts cannot return across an exception boundary, so meeting an
+ * exception frame means this rts belongs to a call made before recording started. */
 void SeExportPopFrame(int cpu)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
-    if (sCallDepth[c]) --sCallDepth[c];
+    if (sCallOverflow[c]) --sCallOverflow[c];
+    else if (sCallDepth[c] && sCallStack[c][sCallDepth[c] - 1].kind == SE_FRAME_CALL)
+        --sCallDepth[c];
+    SE_UNLOCK();
+}
+
+/* rte, with R15 as the instruction sees it. Unwinds the exception frame this rte returns
+ * from — identified by that R15, which SH-2 rte pops PC and SR from and which therefore
+ * equals the sp recorded at the entry. No match means the exception was one we never
+ * observed (asynchronous interrupts execute no instruction we can hook), and the call
+ * stack must be left exactly as it is. Unlike rts this never touches the overflow count:
+ * a frame we could not store kept no sp to match against. */
+void SeExportPopExceptionFrame(int cpu, unsigned int sp)
+{
+    int c = cpu ? 1 : 0;
+    SE_LOCK();
+    if (sCallDepth[c])
+    {
+        const SeCallFrame* top = &sCallStack[c][sCallDepth[c] - 1];
+        if (top->kind == SE_FRAME_EXCEPTION && top->sp == sp) --sCallDepth[c];
+    }
     SE_UNLOCK();
 }
 
@@ -910,7 +961,32 @@ void SeExportResetCallStack(int cpu)
     int c = cpu ? 1 : 0;
     SE_LOCK();
     sCallDepth[c] = 0;
+    sCallOverflow[c] = 0;
     SE_UNLOCK();
+}
+
+unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out)
+{
+    int c = cpu ? 1 : 0;
+    unsigned int depth, n, i;
+    SE_LOCK();
+    depth = sCallDepth[c];
+    n = (depth > SE_LIVE_CALLSTACK_MAX) ? SE_LIVE_CALLSTACK_MAX : depth;
+    SeWr32(out, n);
+    for (i = 0; i < n; ++i)
+    {
+        const SeCallFrame* f = &sCallStack[c][depth - 1 - i];   /* innermost first */
+        unsigned char* fb = out + 4 + i * SE_LIVE_CALLFRAME_LEN;
+        SeWr32(fb + 0,  f->callSite);
+        SeWr32(fb + 4,  f->func);
+        SeWr32(fb + 8,  f->ret);
+        SeWr32(fb + 12, f->sp);
+        SeWr32(fb + 16, (unsigned int)(f->cycle & 0xFFFFFFFFu));
+        SeWr32(fb + 20, (unsigned int)((f->cycle >> 32) & 0xFFFFFFFFu));
+        SeWr32(fb + 24, f->frameNo);
+    }
+    SE_UNLOCK();
+    return 4u + n * SE_LIVE_CALLFRAME_LEN;
 }
 
 void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
@@ -1251,31 +1327,9 @@ static void SeServeClient(int cl, SeFrame* snap)
             int c;
             for (c = 0; c < 2; ++c)
             {
-                unsigned char cntb[4];
-                unsigned int depth, n, i;
-                SE_LOCK();
-                depth = sCallDepth[c];
-                SE_UNLOCK();
-                n = (depth > SE_LIVE_CALLSTACK_MAX) ? SE_LIVE_CALLSTACK_MAX : depth;
-                SeWr32(cntb, n);
-                if (SeSend(cl, cntb, 4) != 0) return;
-                for (i = 0; i < n; ++i)
-                {
-                    SeCallFrame f;
-                    unsigned char fb[SE_LIVE_CALLFRAME_LEN];
-                    SE_LOCK();
-                    /* Innermost first: index (depth-1) is the current frame. */
-                    f = sCallStack[c][depth - 1 - i];
-                    SE_UNLOCK();
-                    SeWr32(fb + 0,  f.callSite);
-                    SeWr32(fb + 4,  f.func);
-                    SeWr32(fb + 8,  f.ret);
-                    SeWr32(fb + 12, f.sp);
-                    SeWr32(fb + 16, (unsigned int)(f.cycle & 0xFFFFFFFFu));
-                    SeWr32(fb + 20, (unsigned int)((f.cycle >> 32) & 0xFFFFFFFFu));
-                    SeWr32(fb + 24, f.frameNo);
-                    if (SeSend(cl, fb, SE_LIVE_CALLFRAME_LEN) != 0) return;
-                }
+                unsigned char blk[SE_LIVE_CALLSTACK_BLOCK_MAX];
+                const unsigned int len = SeExportSerializeCallStack(c, blk);
+                if (SeSend(cl, blk, len) != 0) return;
             }
         }
 

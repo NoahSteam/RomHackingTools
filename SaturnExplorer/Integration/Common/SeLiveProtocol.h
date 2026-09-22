@@ -135,6 +135,8 @@
  * stackPointer(4) + cycle(8, LE lo then hi) + frameNumber(4), all LE. */
 #define SE_LIVE_CALLFRAME_LEN  28u
 #define SE_LIVE_CALLSTACK_MAX  64u
+/* Largest one CPU's block can be: the count plus a full complement of frames. */
+#define SE_LIVE_CALLSTACK_BLOCK_MAX (4u + SE_LIVE_CALLSTACK_MAX * SE_LIVE_CALLFRAME_LEN)
 
 /* Keyboard-map block (v10+). Appended AFTER the v9 call-stack block, version-gated the
  * same way (a client reads it only when the server reports version >= 10). It reports the
