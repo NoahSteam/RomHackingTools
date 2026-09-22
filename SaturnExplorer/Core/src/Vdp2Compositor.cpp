@@ -1135,6 +1135,43 @@ uint32_t PaletteEntryCount(uint32_t colorNum)
     }
 }
 
+// Everything about a screen's tile map that the registers alone decide, plus the resolved
+// layer the grid walk needs. Separated from that walk because the walk is the entire cost
+// -- up to 512x512 pattern-name decodes for RBG0 -- while a panel toolbar asks for the
+// shape every frame just to size a header line and decide whether a tile grid is
+// meaningful. Resets 'out' first, so both entry points get the same contract: false when
+// there is no tile map to describe (no VDP2 data, screen off, or a bitmap screen), with
+// 'out' carrying whatever is known by then.
+bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out,
+                         ResolvedLayer& resolved)
+{
+    out.Reset();
+    if (!snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
+    {
+        return false;
+    }
+    if (!ResolveLayer(snapshot, layer, resolved))
+    {
+        return false;
+    }
+
+    const NbgConfig& c = resolved.cfg;
+    const PlaneGeom& g = resolved.geom;
+    out.active = c.priority != 0;
+    out.bitmap = c.bitmap;
+    out.cellPixels = g.cellWH;
+    out.colorCount = PaletteEntryCount(c.colorNum);
+    if (!out.active || out.bitmap)
+    {
+        return false;
+    }
+
+    // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0.
+    out.mapWidth = g.planesPerRow * g.planeCellsW;
+    out.mapHeight = g.planesPerRow * g.planeCellsH;
+    return true;
+}
+
 }  // namespace
 
 void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
@@ -1233,54 +1270,19 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     }
 }
 
-// Everything about a screen's tile map that the registers alone decide. Separated from the
-// grid walk because the walk is the entire cost -- up to 512x512 pattern-name decodes for
-// RBG0 -- while a panel toolbar asks for the shape every frame just to size its header and
-// decide whether a tile grid is meaningful. Returns false when there is no tile map to
-// describe (no VDP2 data, screen off, or a bitmap screen), with 'out' already carrying
-// whatever is known.
-bool BuildTileMapShapeInto(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out,
-                           ResolvedLayer& resolved)
-{
-    if (!snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
-    {
-        return false;
-    }
-    if (!ResolveLayer(snapshot, layer, resolved))
-    {
-        return false;
-    }
-
-    const NbgConfig& c = resolved.cfg;
-    const PlaneGeom& g = resolved.geom;
-    out.active = c.priority != 0;
-    out.bitmap = c.bitmap;
-    out.cellPixels = g.cellWH;
-    out.colorCount = PaletteEntryCount(c.colorNum);
-    if (!out.active || out.bitmap)
-    {
-        return false;
-    }
-
-    // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0.
-    out.mapWidth = g.planesPerRow * g.planeCellsW;
-    out.mapHeight = g.planesPerRow * g.planeCellsH;
-    return true;
-}
 
 void Vdp2Compositor::BuildTileMapShape(const HardwareSnapshot& snapshot, int layer,
                                        Vdp2TileMap& out)
 {
-    out.Reset();
-    ResolvedLayer resolved;
-    BuildTileMapShapeInto(snapshot, layer, out, resolved);
+    ResolvedLayer ignored;
+    ResolveTileMapShape(snapshot, layer, out, ignored);
 }
 
-void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out)
+void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer,
+                                  Vdp2TileMap& out, TileScratch& scratch)
 {
-    out.Reset();
     ResolvedLayer resolved;
-    if (!BuildTileMapShapeInto(snapshot, layer, out, resolved))
+    if (!ResolveTileMapShape(snapshot, layer, out, resolved))
     {
         return;
     }
@@ -1290,11 +1292,8 @@ void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, V
     const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
     const uint16_t vrsize = Reg(snapshot, kVRSIZE);
     out.indices.resize(static_cast<size_t>(out.mapWidth) * out.mapHeight);
-    // Reused across rebuilds with the rest of 'out': a live source re-derives every frame,
-    // and a fresh map would re-allocate up to 1 MB of indices plus rehash its way back up
-    // to kMaxTiles buckets each time.
-    std::unordered_map<uint64_t, uint32_t>& seen = out.scratch;
-    seen.clear();
+    Vdp2Compositor::TileScratch& seen = scratch;
+    seen.clear();   // keeps the previous rebuild's buckets; see TileScratch
     for (uint32_t y = 0; y < out.mapHeight; ++y)
     {
         for (uint32_t x = 0; x < out.mapWidth; ++x)

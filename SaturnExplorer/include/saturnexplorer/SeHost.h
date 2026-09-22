@@ -34,6 +34,15 @@ void        se_destroy(se_context* ctx);
  * until the next se_begin_frame. */
 se_result   se_begin_frame(se_context* ctx);
 
+/* A counter bumped every time the context re-derives what it caches from the snapshot --
+   se_begin_frame, but also a scrub seek, se_write_vram and se_set_vdpN_register. Read it
+   on two consecutive passes: an unchanged value means the snapshot has not moved between
+   them, so anything derived from it is still good and an expensive query will be answered
+   from cache. This exists because a client otherwise has to enumerate the paths that
+   re-derive, which means re-deriving them by hand and being silently wrong when one is
+   added. 0 when 'ctx' is null. */
+uint64_t    se_derive_serial(se_context* ctx);
+
 /* --- Command Table Explorer / Interactive Sprite Inspection --- */
 size_t      se_command_count(se_context* ctx);
 se_result   se_get_command (se_context* ctx, size_t index, se_command* out);
@@ -75,12 +84,9 @@ se_result   se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_ti
 
 /* The same description without the grid walk: active, bitmap, cell_pixels, color_count,
    map_width and map_height all come from the VDP2 registers alone, so this costs a handful
-   of register reads however large the map is.
-
-   tile_count and truncated are filled only when the full map is already cached, because
-   they are the two fields that require the walk. A zero tile_count therefore means "not
-   counted", not "no tiles": an active non-bitmap screen always has at least one. Call
-   se_get_vdp2_tilemap when the count is actually needed. */
+   of register reads however large the map is. tile_count and truncated are always 0 --
+   they are the two fields the walk exists to produce. Call se_get_vdp2_tilemap when the
+   count is actually needed. */
 se_result   se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
                                       se_vdp2_tilemap* out);
 

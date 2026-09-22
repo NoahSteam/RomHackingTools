@@ -149,6 +149,11 @@ se_result se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
     return Impl(ctx)->GetTileMapShape(layer, out);
 }
 
+uint64_t se_derive_serial(se_context* ctx)
+{
+    return ctx ? Impl(ctx)->DeriveSerial() : 0;
+}
+
 size_t se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
                                 uint32_t* out, size_t max)
 {

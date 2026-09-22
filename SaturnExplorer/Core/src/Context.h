@@ -59,6 +59,7 @@ public:
         ResolveSpritePriorities();
         BuildVramRegions();
         for (int i = 0; i < SE_LAYER_COUNT; ++i) mbTileMapValid[i] = false;
+        ++mDeriveSerial;
     }
 
     // --- Query surface. ---
@@ -133,30 +134,31 @@ public:
         });
     }
 
-    // Shape of a scroll screen's tile map (see Vdp2TileMap). Extraction walks the whole
-    // plane grid, so the result is cached until the snapshot is re-derived.
+    // A scroll screen's tile map, counted tiles included. Counting walks the whole plane
+    // grid, so the result is cached until the snapshot is re-derived.
     se_result GetTileMapInfo(se_vdp2_layer layer, se_vdp2_tilemap* out)
     {
         Describe(TileMap(layer), out);
         return SE_OK;
     }
 
-    // The same description without the grid walk. tile_count/truncated are filled only if
-    // the full map happens to be cached already, so a caller that asks every frame never
-    // pays for the walk; see se_get_vdp2_tilemap_shape for what a zero tile_count means.
+    // The register-derived description only: no grid walk, so tile_count and truncated
+    // stay 0 whatever the screen holds. Deliberately does not pass a cached count through
+    // -- the caller chose this query, and a field that is sometimes filled would put the
+    // core's cache state into the public struct.
     se_result GetTileMapShape(se_vdp2_layer layer, se_vdp2_tilemap* out)
     {
-        const int i = (layer >= 0 && layer < SE_LAYER_COUNT) ? static_cast<int>(layer) : 0;
-        if (mbTileMapValid[i])
-        {
-            Describe(mTileMaps[i], out);
-            return SE_OK;
-        }
-        Vdp2TileMap shape;
-        Vdp2Compositor::BuildTileMapShape(mSnapshot, i, shape);
-        Describe(shape, out);
+        Vdp2Compositor::BuildTileMapShape(mSnapshot, LayerIndex(layer), mTileMapShape);
+        Describe(mTileMapShape, out);
         return SE_OK;
     }
+
+    // Bumped by every RebuildDerived. A caller that sees the same value on two consecutive
+    // reads knows the snapshot has not moved between them, which is the only honest way to
+    // tell -- a client cannot enumerate the paths that re-derive (a live capture, a scrub
+    // seek, a VRAM poke, a register edit) without re-deriving them by hand and getting it
+    // wrong when one is added.
+    uint64_t DeriveSerial() const { return mDeriveSerial; }
 
     size_t GetTileIndices(se_vdp2_layer layer, uint32_t* out, size_t max)
     {
@@ -563,6 +565,11 @@ public:
     const se_config& Config() const { return mCfg; }
 
 private:
+    static int LayerIndex(se_vdp2_layer layer)
+    {
+        return (layer >= 0 && layer < SE_LAYER_COUNT) ? static_cast<int>(layer) : 0;
+    }
+
     static void Describe(const Vdp2TileMap& map, se_vdp2_tilemap* out)
     {
         out->active = map.active ? 1 : 0;
@@ -581,10 +588,10 @@ private:
     // pattern-name entries for RBG0), which is far too much to redo per panel frame.
     const Vdp2TileMap& TileMap(se_vdp2_layer layer)
     {
-        const int i = (layer >= 0 && layer < SE_LAYER_COUNT) ? static_cast<int>(layer) : 0;
+        const int i = LayerIndex(layer);
         if (!mbTileMapValid[i])
         {
-            Vdp2Compositor::BuildTileMap(mSnapshot, i, mTileMaps[i]);
+            Vdp2Compositor::BuildTileMap(mSnapshot, i, mTileMaps[i], mTileScratch);
             mbTileMapValid[i] = true;
         }
         return mTileMaps[i];
@@ -882,6 +889,12 @@ private:
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()
     bool                    mbTileMapValid[SE_LAYER_COUNT] = {};
+    // One warm bucket set shared by all five slots, and one reused shape result: the cache
+    // owner is what outlives a rebuild, so the scratch belongs here rather than in the
+    // description Vdp2TileMap hands out.
+    Vdp2Compositor::TileScratch mTileScratch;
+    Vdp2TileMap             mTileMapShape;                    // GetTileMapShape's scratch
+    uint64_t                mDeriveSerial = 0;                // see DeriveSerial()
 };
 
 }  // namespace se

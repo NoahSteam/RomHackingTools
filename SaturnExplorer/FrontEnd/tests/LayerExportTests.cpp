@@ -266,32 +266,41 @@ void TestTileMapShapeMatchesWithoutCounting()
     CHECK(shape.map_width == full.map_width);
     CHECK(shape.map_height == full.map_height);
 
-    // Now that the map is cached, the shape query passes the count through rather than
-    // rebuilding it — this is what makes the header line reappear once a frame holds still.
+    // Caching the full map does not change what the shape query reports: it never counts,
+    // so nothing about the core's cache state reaches the public struct.
     se_vdp2_tilemap warm = {};
     CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG3, &warm) == SE_OK);
-    CHECK(warm.tile_count == 4);
-
-    // A re-derive drops the cache, so the shape query is back to not counting.
-    CHECK(se_begin_frame(ctx) == SE_OK);
-    se_vdp2_tilemap cold = {};
-    CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG3, &cold) == SE_OK);
-    CHECK(cold.map_width == 128);
-    CHECK(cold.tile_count == 0);
-
-    // A bitmap screen has no tile map at all; both queries must agree on that.
+    CHECK(warm.tile_count == 0);
+    CHECK(warm.truncated == 0);
+    CHECK(warm.map_width == 128);
     se_destroy(ctx);
-    State bmp = MakeTiledNbg3State();
-    SetReg(bmp, 0x020, 0x0009);
-    SetReg(bmp, 0x028, 0x0002);
-    SetReg(bmp, 0x0F8, 0x0001);
-    se_context* bctx = Open(bmp);
-    se_vdp2_tilemap bshape = {};
-    CHECK(se_get_vdp2_tilemap_shape(bctx, SE_LAYER_NBG0, &bshape) == SE_OK);
-    CHECK(bshape.active == 1);
-    CHECK(bshape.bitmap == 1);
-    CHECK(bshape.map_width == 0);
-    se_destroy(bctx);
+}
+
+// se_derive_serial is how a caller tells whether the snapshot moved, without enumerating
+// the paths that move it. Every one of them must bump it, or a panel keeps paying for a
+// query whose answer is thrown away before anything reads it.
+void TestDeriveSerialTracksEveryRederive()
+{
+    State state = MakeTiledNbg3State();
+    se_context* ctx = Open(state);
+
+    const uint64_t start = se_derive_serial(ctx);
+    CHECK(se_derive_serial(ctx) == start);   // reading it does not move it
+
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    const uint64_t afterCapture = se_derive_serial(ctx);
+    CHECK(afterCapture != start);
+
+    // A register edit re-derives in place, with no new capture.
+    CHECK(se_set_vdp2_register(ctx, 0x0FA, 0x0200) == 1);
+    const uint64_t afterReg = se_derive_serial(ctx);
+    CHECK(afterReg != afterCapture);
+
+    // So does a VRAM poke.
+    const uint8_t byte = 0x12;
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP2_VRAM, 0x2000, &byte, 1) == 1);
+    CHECK(se_derive_serial(ctx) != afterReg);
+    se_destroy(ctx);
 }
 
 // Rebuilding into a map that already holds a bigger result must not leave the previous
@@ -371,6 +380,13 @@ void TestBitmapLayerHasNoTileMap()
     CHECK(info.bitmap == 1);
     CHECK(info.tile_count == 0);
     CHECK(info.map_width == 0);
+
+    // The shape query must reach the same verdict without walking anything.
+    se_vdp2_tilemap shape = {};
+    CHECK(se_get_vdp2_tilemap_shape(ctx, SE_LAYER_NBG0, &shape) == SE_OK);
+    CHECK(shape.active == info.active);
+    CHECK(shape.bitmap == info.bitmap);
+    CHECK(shape.map_width == info.map_width);
 
     // A bitmap screen has no patterns, so asking for the grid changes nothing.
     uint32_t w = 0;
@@ -558,6 +574,7 @@ int main()
     TestIsolatedLayerRender();
     TestTileMapAndTileset();
     TestTileMapShapeMatchesWithoutCounting();
+    TestDeriveSerialTracksEveryRederive();
     TestRebuildDoesNotLeakPreviousMap();
     TestTileGrid();
     TestBitmapLayerHasNoTileMap();

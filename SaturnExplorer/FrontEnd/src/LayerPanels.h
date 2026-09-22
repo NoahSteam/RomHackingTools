@@ -39,13 +39,8 @@ const std::vector<LayerPanelDesc>& LayerPanelList();
 struct LayerPanelFrame
 {
     se_context*           context = nullptr;
-    const se_render_opts* opts = nullptr;
-    // True when the snapshot is holding still (a savestate/dump, or a paused emulator)
-    // rather than being recaptured every frame. Counting a screen's distinct tiles means
-    // walking its whole plane grid, so the panel only asks for that number when it will
-    // survive long enough to read -- while the game runs it would be a blur of digits
-    // costing a 65k-to-262k cell walk per visible panel per frame.
-    bool                  stable = false;   // the shared Layers toggles
+    const se_render_opts* opts = nullptr;   // the shared Layers toggles
+
     uint64_t              frame = 0;        // frame number, used in exported file names
 };
 
@@ -90,6 +85,14 @@ private:
                    IPlatform& platform);
 
     View        mViews[kLayerCount];
+    // se_derive_serial as of the previous Draw. Equal on two consecutive draws means the
+    // snapshot did not move between them, which is when counting a screen's distinct tiles
+    // is both affordable (the walk is cached, not redone) and readable (the number is not
+    // changing under the cursor). Observed rather than predicted: the paths that re-derive
+    // include a live capture, a scrub seek and a VRAM poke, and a panel that tried to
+    // enumerate them would be wrong the next time one is added.
+    uint64_t    mLastSerial = 0;
+    bool        mSnapshotHeld = false;
     std::string mExportRoot;          // the user's chosen folder; empty = use the default
     std::string mDefaultRoot;         // cached DefaultExportRoot()
     bool        mDefaultRootResolved = false;

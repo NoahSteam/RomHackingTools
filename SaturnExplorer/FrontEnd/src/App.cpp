@@ -3544,10 +3544,6 @@ void App::DrawLayerPanels(IPlatform& platform)
     LayerPanelFrame frame;
     frame.context = mContext;
     frame.opts = &mRenderOpts;
-    // The negation of the re-snapshot guard above: a static source captures once at load,
-    // and a live one holds still only while paused with no step settling and no halt
-    // republishing state.
-    frame.stable = !mbLiveSource || (mbPaused && mStepSettle <= 0 && !mBpStopActive);
     frame.frame = mbHasData ? se_frame_number(mContext) : 0;
     bool visible[kLayerCount] = {};
     visible[kLayerVdp1] = mPanels.layerVdp1;

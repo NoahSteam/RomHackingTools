@@ -53,7 +53,10 @@ struct Vdp2Tile
 // A scroll screen's whole plane -> page -> pattern grid, reduced to a tileset plus one
 // index per map cell. This is the layer-panel export's model of the background: the
 // tileset is the art, 'indices' is the map that arranges it.
-struct Vdp2TileMap
+// The half of a tile map the VDP2 registers decide by themselves. Split out so the
+// distinction the builders draw -- registers describe the map, VRAM holds it -- is in the
+// type rather than only in a comment, and so Reset() cannot drift as fields are added.
+struct Vdp2TileMapShape
 {
     bool     active = false;     // BGON enables the screen and its priority is non-zero
     bool     bitmap = false;     // bitmap mode: one linear image, no tiles
@@ -62,28 +65,23 @@ struct Vdp2TileMap
     uint32_t colorCount = 0;     // palette entries a tile indexes; 0 in the RGB modes
     uint32_t mapWidth = 0;       // patterns across
     uint32_t mapHeight = 0;      // patterns down
+};
+
+struct Vdp2TileMap : Vdp2TileMapShape
+{
     std::vector<uint32_t> indices;   // mapWidth * mapHeight, row-major, into 'tiles'
     std::vector<Vdp2Tile> tiles;
 
     // Clear the description but keep the containers' capacity: on a live source every
     // frame re-derives, so assigning a fresh Vdp2TileMap would free and re-allocate up to
-    // a megabyte of indices each time.
+    // a megabyte of indices each time. Assigning the base covers every scalar by
+    // construction, so a field added above needs no edit here.
     void Reset()
     {
-        active = false;
-        bitmap = false;
-        truncated = false;
-        cellPixels = 8;
-        colorCount = 0;
-        mapWidth = 0;
-        mapHeight = 0;
+        static_cast<Vdp2TileMapShape&>(*this) = Vdp2TileMapShape();
         indices.clear();
         tiles.clear();
     }
-
-    // Charbase+palette -> tile index, held here only so BuildTileMap can reuse its buckets
-    // across rebuilds. Not part of the description; nothing outside the builder reads it.
-    std::unordered_map<uint64_t, uint32_t> scratch;
 };
 
 class Vdp2Compositor
@@ -116,7 +114,13 @@ public:
     // Reduce one scroll screen's pattern-name tables to a tileset + index map (see
     // Vdp2TileMap). Reads the whole plane grid, not just what is on screen, so the
     // export describes the background rather than the current scroll window.
-    static void BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out);
+    // 'scratch' is the builder's charbase+palette -> index map. It is a parameter rather
+    // than a local or a member of Vdp2TileMap because the reuse belongs to whoever owns
+    // the cache slot, not to the description: a live source rebuilds every frame, and a
+    // fresh map would rehash its way back up to kMaxTiles buckets each time.
+    typedef std::unordered_map<uint64_t, uint32_t> TileScratch;
+    static void BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out,
+                             TileScratch& scratch);
 
     // Only what the VDP2 registers decide: active, bitmap, cellPixels, colorCount and the
     // map dimensions. Leaves 'indices' and 'tiles' empty, so it costs a register read

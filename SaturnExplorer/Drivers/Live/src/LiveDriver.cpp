@@ -124,6 +124,13 @@ struct LiveState
     std::atomic<uint64_t> frameNumber{0};
     std::atomic<bool>     paused{false};
     std::atomic<uint32_t> serverVersion{0};   // protocol version last seen from server
+    // Bumped every time the poll thread (re)attaches the socket. The thread reconnects on
+    // its own, so a client that only watches for errors never learns the emulator it is
+    // talking to was replaced -- stop Mednafen, launch another game, and the same
+    // se_context keeps streaming as though nothing happened, while everything the client
+    // derived from the old run (recorded frames, call stack, scrub position) is silently
+    // about to be mixed with the new one. Exposed so the client can drop that state.
+    std::atomic<uint32_t> connGeneration{0};
     // Last stop event from the control block (v5+): reason / cpu / pc of a
     // breakpoint hit, so the UI can jump to the halted PC.
     std::atomic<uint32_t> stopReason{0};
@@ -676,6 +683,13 @@ void PollLoop(LiveState* st)
                 std::this_thread::sleep_for(std::chrono::milliseconds(250));
                 continue;
             }
+            // A fresh socket may be a different emulator process on the same endpoint, and
+            // nothing in the protocol distinguishes the two. Restart the gap-free cursor --
+            // an emulator that just booted is on frame 0, and asking it for the frame after
+            // the last one the *previous* instance sent would skip its entire run -- and
+            // publish the generation so the client can discard what it derived from that run.
+            st->lastSeenFrame = 0;
+            st->connGeneration.fetch_add(1);
         }
 
         // Drain any control command posted by the UI thread; otherwise poll. A
@@ -1169,6 +1183,12 @@ extern "C" uint32_t se_live_server_version(const se_data_source* ds)
         return 0;
     }
     return St(ds->user)->serverVersion.load();
+}
+
+extern "C" uint32_t se_live_connection_generation(const se_data_source* ds)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return St(ds->user)->connGeneration.load();
 }
 
 extern "C" uint32_t se_live_drain_state_blocks(const se_data_source* ds,

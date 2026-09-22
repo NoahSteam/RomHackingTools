@@ -24,6 +24,16 @@ se_result se_live_open(const char* endpoint, se_data_source* out);
  * se_live_open. */
 uint32_t se_live_server_version(const se_data_source* ds);
 
+/* How many times the poll thread has attached its socket: 1 after the first connect, then
+ * one more for every reconnect. The thread reconnects on its own when the emulator goes
+ * away and comes back, and the protocol carries nothing identifying the process, so a
+ * client that watches only for errors never learns it is now talking to a different
+ * emulator -- stop one game, launch another on the same endpoint, and the same se_context
+ * keeps streaming. Anything the client derived from the previous run (recorded frames, a
+ * call stack, a scrub position) belongs to a run that has ended: poll this and drop that
+ * state when it changes. 0 if 'ds' is not a live source. */
+uint32_t se_live_connection_generation(const se_data_source* ds);
+
 /* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
  * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32
  * LE; see SeLiveProtocol.h SE_LIVE_BP_*). The poll thread ships them on its next

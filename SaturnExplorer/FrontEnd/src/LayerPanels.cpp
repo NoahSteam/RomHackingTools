@@ -25,19 +25,19 @@ const char* ExportSummary(LayerId layer)
 // The tile map behind a VDP2 panel, for the header line and to know whether a tile grid is
 // even meaningful. Zeroed for the sprite layer, which has no scroll map.
 //
-// The shape query every frame, the counting one only when the frame is holding still: the
-// count is the single field that needs the screen's whole plane grid walked, and on a
-// running emulator the core re-derives every frame so the walk would never be reused. See
-// se_get_vdp2_tilemap_shape -- it leaves tile_count zero when it did not count, which an
-// active non-bitmap screen can never legitimately report.
-se_vdp2_tilemap TileMapOf(const LayerPanelFrame& frame, LayerId layer)
+// The shape query normally, the counting one only while the snapshot is holding still:
+// the count is the single field that needs the screen's whole plane grid walked, and
+// wherever the core re-derives between draws that walk is thrown away before anything
+// reads it. se_get_vdp2_tilemap_shape reports tile_count 0, so 'held' is what decides
+// whether the header line has a count to print.
+se_vdp2_tilemap TileMapOf(const LayerPanelFrame& frame, LayerId layer, bool held)
 {
     se_vdp2_tilemap info = {};
     if (frame.context && IsVdp2Layer(layer))
     {
         const se_vdp2_layer id = static_cast<se_vdp2_layer>(layer);
-        if (frame.stable) se_get_vdp2_tilemap(frame.context, id, &info);
-        else              se_get_vdp2_tilemap_shape(frame.context, id, &info);
+        if (held) se_get_vdp2_tilemap(frame.context, id, &info);
+        else      se_get_vdp2_tilemap_shape(frame.context, id, &info);
     }
     return info;
 }
@@ -100,6 +100,11 @@ bool LayerPanels::ConsumeSettingsDirty()
 void LayerPanels::Draw(const LayerPanelFrame& frame, const bool* visible,
                        IPlatform& platform)
 {
+    // Once per UI frame, before any panel draws, so every panel agrees.
+    const uint64_t serial = frame.context ? se_derive_serial(frame.context) : 0;
+    mSnapshotHeld = frame.context && serial == mLastSerial;
+    mLastSerial = serial;
+
     for (const LayerPanelDesc& desc : LayerPanelList())
     {
         if (visible && !visible[desc.id]) continue;
@@ -120,7 +125,7 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
 
     // A bitmap screen is one linear image with no character patterns, so there is no grid
     // to draw — ask the core rather than assuming which layers are tiled.
-    const se_vdp2_tilemap info = TileMapOf(frame, desc.id);
+    const se_vdp2_tilemap info = TileMapOf(frame, desc.id, mSnapshotHeld);
     if (IsVdp2Layer(desc.id))
     {
         ImGui::SameLine();
@@ -172,16 +177,14 @@ void LayerPanels::DrawToolbar(const LayerPanelDesc& desc, const LayerPanelFrame&
         char colours[24] = "direct RGB";
         if (info.color_count)
             std::snprintf(colours, sizeof(colours), "%u colours", info.color_count);
-        // tile_count is 0 when it was not counted (see TileMapOf), so the clause appears
-        // as soon as the frame holds still rather than showing a misleading zero.
+        // The count is absent rather than zero while the snapshot is moving (see
+        // TileMapOf), so the clause appears as soon as it holds still.
+        char count[40] = "";
         if (info.tile_count)
-            ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %u distinct tiles  -  %s",
-                                info.map_width, info.map_height, info.cell_pixels,
-                                info.cell_pixels, info.tile_count, colours);
-        else
-            ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %s",
-                                info.map_width, info.map_height, info.cell_pixels,
-                                info.cell_pixels, colours);
+            std::snprintf(count, sizeof(count), "%u distinct tiles  -  ", info.tile_count);
+        ImGui::TextDisabled("%ux%u map of %ux%u patterns  -  %s%s",
+                            info.map_width, info.map_height, info.cell_pixels,
+                            info.cell_pixels, count, colours);
     }
     const View& view = mViews[desc.id];
     if (!view.status.empty())
