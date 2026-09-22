@@ -126,12 +126,21 @@ extern "C" void SsDbgSh2Regs(int cpu, unsigned int o[23]) {
    o[16]=c.GetRegister(SH7095::GSREG_SR,0,0);   o[17]=c.GetRegister(SH7095::GSREG_GBR,0,0);
    o[18]=c.GetRegister(SH7095::GSREG_VBR,0,0);  o[19]=c.GetRegister(SH7095::GSREG_MACH,0,0);
    o[20]=c.GetRegister(SH7095::GSREG_MACL,0,0); o[21]=c.GetRegister(SH7095::GSREG_PR,0,0);
-   /* PC: report the DECODE-stage PC (GSREG_PC_ID), not the fetch stage (PC_IF, which is
-      one instruction / 2 bytes ahead). On a debugger halt the ss core reports the stop PC
-      from PC_ID, so reading PC_ID here makes the register-panel PC equal the halted/stepped
-      instruction and the Assembly panel's highlighted row — otherwise the shown PC sits one
-      instruction past where you're actually stopped. */
-   o[22]=c.GetRegister(SH7095::GSREG_PC_ID,0,0);
+   /* PC. The pipeline-stage PCs (PC_ID = decode, PC_IF = fetch) are maintained ONLY by
+      the debug run loop: every write to them in sh7095.inc sits behind `if(DebugMode)`,
+      and DebugMode is the Step<true> template argument that ss.cpp's dispatcher
+      (rltab[..][DBG_NeedCPUHooks()]) selects solely while a breakpoint, tracepoint or CPU
+      hook is installed. With nothing armed the fast loop never touches PC_ID, so it keeps
+      whatever it last held — 0 from reset. Reading it unconditionally therefore reported
+      PC 00000000 for every free-running snapshot, which is what put "sub_000000 /
+      PC 00000000" in the client's Call Stack frame #0 and SH-2 register panel.
+      GSREG_RPC is the raw fetch pointer, maintained in both loops; it runs two
+      instructions (4 bytes) ahead of the decode stage, so PC_ID == RPC - 4. Prefer the
+      authoritative PC_ID while the debug loop is actually running — a breakpoint halt or
+      an instruction step, where being exact matters for the Assembly panel's highlighted
+      row — and derive the PC from RPC otherwise. */
+   o[22] = DBG_NeedCPUHooks() ? c.GetRegister(SH7095::GSREG_PC_ID, 0, 0)
+                              : (c.GetRegister(SH7095::GSREG_RPC, 0, 0) - 4);
 }
 extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
    /* Route to Mednafen's own byte bus-write (used by the cheat engine): it does the

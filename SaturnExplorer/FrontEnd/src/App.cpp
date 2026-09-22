@@ -115,7 +115,7 @@ void IconTri(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool left)
     dl->AddTriangleFilled(ImVec2(c.x - s * r, c.y - r), ImVec2(c.x - s * r, c.y + r),
                           ImVec2(c.x + s * r, c.y), col);
 }
-enum class Ico { Play, Pause, Step, First, Prev, Next, Last };
+enum class Ico { Play, Pause, Step, Prev, Next };
 
 // Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
 // with "##"); the glyph is drawn over the button rect. Returns true when pressed.
@@ -134,12 +134,13 @@ bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
     case Ico::Play:  IconPlay(dl, c, r, col); break;
     case Ico::Pause: IconPause(dl, c, r, col); break;
     case Ico::Step:  IconStep(dl, c, r, col); break;
-    case Ico::Prev:  IconTri(dl, c, r, col, true); break;
-    case Ico::Next:  IconTri(dl, c, r, col, false); break;
-    case Ico::First:
+    // Prev / Next are frame *steps*, so they get the conventional bar-on-the-leading-edge
+    // glyph. A bare triangle is what Play draws, and Play sits directly between them in
+    // the transport bar — three identical shapes there read as three play buttons.
+    case Ico::Prev:
         dl->AddRectFilled(ImVec2(c.x - r * 1.3f, c.y - r), ImVec2(c.x - r * 0.95f, c.y + r), col, 1.0f);
         IconTri(dl, ImVec2(c.x + r * 0.15f, c.y), r, col, true); break;
-    case Ico::Last:
+    case Ico::Next:
         IconTri(dl, ImVec2(c.x - r * 0.15f, c.y), r, col, false);
         dl->AddRectFilled(ImVec2(c.x + r * 0.95f, c.y - r), ImVec2(c.x + r * 1.3f, c.y + r), col, 1.0f); break;
     }
@@ -1358,17 +1359,6 @@ void App::DrawStatusBar()
             {
                 ImGui::TextDisabled("No source loaded - use Source to load a dump or connect live.");
             }
-#ifdef SE_ENABLE_LIVE
-            if (mbRecording)
-            {
-                const int seconds = static_cast<int>(ImGui::GetTime() - mRecordingStartedAt);
-                ImGui::Separator();
-                ImGui::TextColored(ImVec4(0.90f, 0.36f, 0.36f, 1.0f), "Recording %02d:%02d (%.1f / %.1f MB)",
-                                   seconds / 60, seconds % 60,
-                                   static_cast<double>(mRecorder.BytesUsed()) / (1024.0 * 1024.0),
-                                   RecorderCapacityMB());
-            }
-#endif
             ImGui::Separator();
             if (mDataDir.empty()) ImGui::TextDisabled("Data Dir: (not set)");
             else ImGui::Text("Data Dir: %s", mDataDir.c_str());
@@ -3150,7 +3140,11 @@ void App::DrawCallStack(IPlatform& platform)
             const CallStackFrame& fr = frames[sel];
             ImGui::SeparatorText("Frame Detail");
             ImGui::Text("#%d  %s", sel, mFunctionNames.NameOf(fr.functionAddress).c_str());
-            ImGui::Text("PC %08X   Return %08X   SP %08X", fr.functionAddress,
+            // "Func", not "PC": this field is the frame's function *entry point*. Only a
+            // heuristic frame #0 happens to carry the live PC there (the reconstructor has
+            // no way to find the enclosing function, so it uses PC as a stand-in); a
+            // recorded frame carries the real entry, and a caller frame its return target.
+            ImGui::Text("Func %08X   Return %08X   SP %08X", fr.functionAddress,
                         fr.returnAddress, fr.stackPointer);
             if (fr.callSite) ImGui::Text("Call site %08X", fr.callSite);
             if (fr.confidence == FrameConfidence::Confirmed && (fr.cycle || fr.frameNumber))

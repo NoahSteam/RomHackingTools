@@ -69,6 +69,20 @@ Note the limit of that coverage: the tests pin the flag decision, the hit-test b
 the row's vertical centring, not the panels' own layout. A new panel that hand-rolls its
 Selectable is not protected — route it through the helper.
 
+## Reading emulator state (the Mednafen tap)
+
+`Integration/Mednafen/apply.py` is the source of truth for every emulator-side change;
+`_emu/mednafen/` is a generated working copy, so patch `apply.py` and re-run `./update.sh`
+rather than editing the checkout alone.
+
+**Mednafen only maintains part of its SH-2 state in the fast run loop.** `sh7095.inc`
+guards the pipeline-stage PCs behind `if(DebugMode)` — the `Step<true>` template argument
+that `ss.cpp`'s dispatcher (`rltab[..][DBG_NeedCPUHooks()]`) selects *only* while a
+breakpoint, tracepoint or CPU hook is installed. `GSREG_PC_ID` and `GSREG_PC_IF` are
+therefore stale (0 from reset) for every free-running snapshot; `GSREG_RPC` is the raw
+fetch pointer and is always current, two instructions (4 bytes) ahead of the decode stage.
+Before exporting any SH-2 register, check whether `sh7095.inc` writes it unconditionally.
+
 ## Conventions
 
 - Commit directly to `master` and push. No branches or PRs.
