@@ -386,51 +386,113 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
 #endif
 }
 
+/* ---- Shadow call stack (v9) --------------------------------------------------------
+ * Mirror the SH-2's own control flow into se_export's per-CPU stack:
+ *   bsr  disp   1011 dddd dddd dddd   call, target = PC + 4 + sign12(disp)*2
+ *   bsrf Rn     0000 nnnn 0000 0011   call, target = PC + 4 + Rn
+ *   jsr  @Rn    0100 nnnn 0000 1011   call, target = Rn
+ *   rts         0000 0000 0000 1011   return from a call
+ *   trapa #imm  1100 0011 iiii iiii   exception ENTRY, handler = @(VBR + imm*4)
+ *   rte         0000 0000 0010 1011   return from an exception
+ * SH-2 calls place the return one instruction past the delay slot (PC+4); trapa has no
+ * delay slot, so its return is PC+2. Targets we can't resolve are pushed as 0. trapa is
+ * the one exception entry a per-instruction hook can see; asynchronous interrupts are
+ * invisible from here. se_export.h has the why — in particular why an rte must not be
+ * allowed to unwind a call frame.
+ *
+ * Deliberately not tracked: `jmp @Rn` — a tail call after restoring PR — pushes nothing,
+ * and the callee's rts unwinds the original caller's frame, which is the right depth;
+ * `braf Rn`, `bra`, `bt`, `bf` and friends never create or destroy a frame. */
+typedef enum
+{
+    SeFlowNone = 0,
+    SeFlowCallDisp,     /* bsr  disp  */
+    SeFlowCallPcRelReg, /* bsrf Rn    */
+    SeFlowCallReg,      /* jsr  @Rn   */
+    SeFlowReturn,       /* rts        */
+    SeFlowTrap,         /* trapa #imm */
+    SeFlowExcReturn     /* rte        */
+} SeFlowKind;
+
+static SeFlowKind SeMdfnClassifyFlow(unsigned short op)
+{
+    if ((op & 0xF000u) == 0xB000u) return SeFlowCallDisp;
+    if ((op & 0xF0FFu) == 0x0003u) return SeFlowCallPcRelReg;
+    if ((op & 0xF0FFu) == 0x400Bu) return SeFlowCallReg;
+    if ((op & 0xFF00u) == 0xC300u) return SeFlowTrap;
+    if (op == 0x000Bu)             return SeFlowReturn;
+    if (op == 0x002Bu)             return SeFlowExcReturn;
+    return SeFlowNone;
+}
+
+/* Apply one instruction's effect on the shadow stack. Split from SeMdfnTrackFlow — which
+ * reads the opcode and the register file through the injected accessors — so the model
+ * can be driven from a host test with a synthetic instruction stream (see
+ * Integration/tests/ShadowCallStackTests.c). 'op' still carries bsr's displacement;
+ * 'rn' is the source register for bsrf/jsr, 'sp' is R15 as the instruction sees it,
+ * 'handler' the trapa vector's target. */
+static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned short op,
+                            unsigned int rn, unsigned int sp, unsigned int handler)
+{
+    const unsigned int ret = pc + 4;   /* past the delay slot: where a call comes back to */
+    switch (kind)
+    {
+        case SeFlowCallDisp:
+        {
+            int disp = (int)(op & 0x0FFFu);
+            if (disp & 0x0800) disp -= 0x1000;         /* sign-extend 12-bit */
+            SeExportPushFrame(cpu, pc, pc + 4 + (unsigned int)(disp << 1), ret, sp, 0);
+            break;
+        }
+        case SeFlowCallPcRelReg:
+            SeExportPushFrame(cpu, pc, pc + 4 + rn, ret, sp, 0);
+            break;
+        case SeFlowCallReg:
+            SeExportPushFrame(cpu, pc, rn, ret, sp, 0);
+            break;
+        case SeFlowReturn:
+            SeExportPopFrame(cpu);
+            break;
+        case SeFlowTrap:
+            /* The entry pushes SR then PC+2, so the handler — and the rte that ends it —
+             * run with R15 - 8. Record that as the frame's SP so the rte can be matched
+             * to this frame and to no other. */
+            SeExportPushExceptionFrame(cpu, pc, handler, pc + 2, sp - 8, 0);
+            break;
+        case SeFlowExcReturn:
+            SeExportPopExceptionFrame(cpu, sp);
+            break;
+        case SeFlowNone:
+            break;
+    }
+}
+
 #if defined(SE_MEDNAFEN_WIRED)
-/* Shadow call stack (v9): classify the instruction at PC and mirror the SH-2's own
- * call/return into se_export's per-CPU stack. Reads the opcode (SsDbgReadOpcode) every
- * instruction; on a call it reads the register file once to resolve an indirect target
- * and R15. SH-2 calls place the return one instruction past the delay slot (PC+4).
- *   bsr  disp   1011 dddd dddd dddd   target = PC + 4 + sign12(disp)*2
- *   bsrf Rn     0000 nnnn 0000 0011   target = PC + 4 + Rn
- *   jsr  @Rn    0100 nnnn 0000 1011   target = Rn
- *   rts         0000 0000 0000 1011   return  (pop)
- *   rte         0000 0000 0010 1011   return from exception (pop)
- * Targets we can't resolve without extra state are still pushed with target 0. */
+/* Read what the instruction at PC needs and hand it to the tracker. The opcode read is
+ * per-instruction; the register-file read is not — only the handful of opcodes that move
+ * the stack need it, and rts needs nothing at all. */
 static void SeMdfnTrackFlow(int cpu, unsigned int pc)
 {
-    unsigned short op = SsDbgReadOpcode(pc);
-    unsigned int target = 0, ret = pc + 4, sp = 0;
-    int isCall = 0, n;
-    if ((op & 0xF000u) == 0xB000u)                 /* bsr disp */
-    {
-        int disp = (int)(op & 0x0FFFu);
-        if (disp & 0x0800) disp -= 0x1000;         /* sign-extend 12-bit */
-        target = pc + 4 + (unsigned int)(disp << 1);
-        isCall = 1;
-    }
-    else if ((op & 0xF0FFu) == 0x0003u ||          /* bsrf Rn */
-             (op & 0xF0FFu) == 0x400Bu)            /* jsr  @Rn */
+    const unsigned short op = SsDbgReadOpcode(pc);
+    const SeFlowKind kind = SeMdfnClassifyFlow(op);
+    unsigned int rn = 0, sp = 0, handler = 0;
+    if (kind == SeFlowNone) return;     /* the overwhelmingly common case */
+    if (kind != SeFlowReturn)           /* rts needs no register read; everything else does */
     {
         unsigned int raw[23];
         SsDbgSh2Regs(cpu, raw);
-        n = (op >> 8) & 0xF;
         sp = raw[15];
-        target = ((op & 0xF0FFu) == 0x400Bu) ? raw[n]          /* jsr: target = Rn */
-                                             : (pc + 4 + raw[n]); /* bsrf: PC+4+Rn */
-        SeExportPushFrame(cpu, pc, target, ret, sp, 0);
-        return;
+        rn = raw[(op >> 8) & 0xF];   /* the bsrf/jsr source; harmless for the rest */
+        if (kind == SeFlowTrap)
+        {
+            /* TRAPA's handler is the longword at VBR + imm*4. SsDbgReadOpcode is a plain
+             * 16-bit big-endian debug read, so take the vector as two halves. raw[18] is
+             * VBR (SsDbgSh2Regs order: R[16], SR, GBR, VBR, MACH, MACL, PR, PC). */
+            const unsigned int vec = raw[18] + ((unsigned int)(op & 0x00FFu) << 2);
+            handler = ((unsigned int)SsDbgReadOpcode(vec) << 16) | SsDbgReadOpcode(vec + 2);
+        }
     }
-    if (isCall)
-    {
-        unsigned int raw[23];
-        SsDbgSh2Regs(cpu, raw);
-        SeExportPushFrame(cpu, pc, target, ret, raw[15], 0);
-    }
-    else if (op == 0x000Bu || op == 0x002Bu)       /* rts / rte -> pop */
-    {
-        SeExportPopFrame(cpu);
-    }
+    SeMdfnApplyFlow(cpu, kind, pc, op, rn, sp, handler);
 }
 #endif
 
@@ -512,5 +574,6 @@ void SeMednafenSuppressUnusedWarnings(void)
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
     (void)SeMdfnSaveState; (void)SeMdfnLoadState;
+    (void)SeMdfnApplyFlow;   /* reached only through the wired SeMdfnTrackFlow */
 }
 #endif

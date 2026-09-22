@@ -298,6 +298,21 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerDemoScriptTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerDemoScriptTests COMMAND SaturnExplorerDemoScriptTests)
+
+    # Shadow call stack — the emulator-side recording model (the Mednafen glue's flow
+    # tracker driving se_export's per-CPU stack), run against a synthetic instruction
+    # stream. The glue compiles to a stub without SE_MEDNAFEN_WIRED, so this needs no
+    # emulator; the test includes the glue source directly (it has no header) and links
+    # the real se_export. Both are C, hence the extra language.
+    enable_language(C)
+    add_executable(SaturnExplorerShadowCallStackTests
+        Integration/tests/ShadowCallStackTests.c
+        Integration/Common/se_export.c
+    )
+    target_include_directories(SaturnExplorerShadowCallStackTests
+        PRIVATE Integration/Common Integration/Mednafen)
+    target_link_libraries(SaturnExplorerShadowCallStackTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
 endif()
 
 # ---------------------------------------------------------------------------

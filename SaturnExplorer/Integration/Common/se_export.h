@@ -194,17 +194,58 @@ void SeExportLog(const char* msg);
 
 /* Shadow call stack (v9+). The glue records control flow as it executes so the client
  * gets a dependable (● Confirmed) call stack instead of reconstructing one heuristically.
- * Call from the CPU thread: SeExportPushFrame on a call (bsr/jsr/bsrf/jsr-as-call),
- * SeExportPopFrame on the matching rts, SeExportResetCallStack at an exception/rte
- * boundary or any discontinuity. 'callSite' is the calling instruction, 'func' the call
- * target (the frame's function entry), 'ret' the return address, 'sp' R15 at the call,
- * 'cycle' a monotonic cycle stamp (0 if unavailable). cpu is 0 master / 1 slave. The
- * frame number is stamped internally. The server serializes each CPU's stack, innermost
- * first, into the reply's v9 call-stack block. */
+ * Call from the CPU thread. 'callSite' is the calling/trapping instruction, 'func' the
+ * call target (the frame's function entry), 'ret' the return address, 'sp' R15 for the
+ * frame, 'cycle' a monotonic cycle stamp (0 if unavailable). cpu is 0 master / 1 slave.
+ * The frame number is stamped internally.
+ *
+ * A frame is tagged with what created it, and only the matching return may remove it:
+ *
+ *   bsr/bsrf/jsr    -> SeExportPushFrame           rts -> SeExportPopFrame
+ *   exception entry -> SeExportPushExceptionFrame  rte -> SeExportPopExceptionFrame
+ *
+ * That pairing is not bookkeeping pedantry, it is SH-2 semantics: `rts` returns to PR,
+ * which only a call wrote, while `rte` returns to the PC the *hardware* pushed onto R15
+ * when it took the exception. An interrupt executes no call instruction, so nothing is
+ * ever pushed for it; letting its `rte` pop deleted a frame belonging to the interrupted
+ * program, and a Saturn takes many interrupts per emulated frame (VBlank in/out, HBlank,
+ * SCU timers, SCSP), so the stack drained to empty within a frame or two. A handler's own
+ * calls still push and pop normally, so the depth is back to the interrupted program's by
+ * the time the handler returns.
+ *
+ * SeExportPopExceptionFrame takes R15 at the `rte`. SH-2 `rte` pops PC and SR from R15,
+ * so that value equals the 'sp' recorded at the entry it returns from; requiring the
+ * match keeps an exception we never observed (an interrupt taken inside a handler we did
+ * record) from unwinding a frame that is not its own. An `rte` matching nothing therefore
+ * leaves the stack exactly as it is — which is the normal case for a glue that can only
+ * see exception entries that are instructions (`trapa`, whose return address is PC+2 and
+ * whose entry leaves the handler running at R15 - 8) and not asynchronous interrupts.
+ *
+ * Depth saturates at SE_CALLSTACK_CAP. Frames past it are counted rather than stored, so
+ * their returns unwind the counter instead of deleting a stored frame that is still live.
+ * Only `rts` consumes that counter: an overflowed frame kept no kind and no sp, so `rte`
+ * cannot tell whether one is its own and declines to guess.
+ *
+ * SeExportResetCallStack drops a CPU's stack at a discontinuity — anything that replaces
+ * the emulated machine's own stack wholesale, e.g. a savestate restore or a rewind.
+ * Recorded frames describe a timeline that no longer exists after one. */
+#define SE_CALLSTACK_CAP 256u
 void SeExportPushFrame(int cpu, unsigned int callSite, unsigned int func,
                        unsigned int ret, unsigned int sp, unsigned long long cycle);
+void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler,
+                                unsigned int ret, unsigned int sp, unsigned long long cycle);
 void SeExportPopFrame(int cpu);
+void SeExportPopExceptionFrame(int cpu, unsigned int sp);
 void SeExportResetCallStack(int cpu);
+
+/* Serialize one CPU's shadow stack into the v9 wire block: u32 frameCount (capped at
+ * SE_LIVE_CALLSTACK_MAX) then that many SE_LIVE_CALLFRAME_LEN frames, innermost first.
+ * 'out' must hold SE_LIVE_CALLSTACK_BLOCK_MAX bytes; returns the bytes written. The
+ * whole read happens under one lock hold — the CPU thread pushes and pops between
+ * instructions, so a depth sampled and then released would index slots above the live
+ * top and ship frames that had already been popped. Exposed (rather than inlined into
+ * the server loop) so the recording model is testable without an emulator. */
+unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out);
 
 /* Frame gate for pause / single-step. Call once at the top of each emulated
  * frame in Yabause's run loop; returns 1 if the frame should run, 0 if the
