@@ -237,6 +237,20 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
 
+    # SH-2 operand hover — the Assembly panel's operand cell, driven headlessly. Pins that
+    # every operand is its own hover target (see FrontEnd/src/Sh2Operands.h).
+    add_executable(SaturnExplorerSh2OperandHoverTests
+        FrontEnd/tests/Sh2OperandHoverTests.cpp
+        FrontEnd/src/Sh2Operands.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerSh2OperandHoverTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerSh2OperandHoverTests
+             COMMAND SaturnExplorerSh2OperandHoverTests)
+
     # Save-state slots: keyframe/delta reconstruction + the slot file format.
     add_executable(SaturnExplorerSavestateSlotsTests
         FrontEnd/tests/SavestateSlotsTests.cpp
@@ -378,6 +392,7 @@ if(WIN32)
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
@@ -456,6 +471,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
@@ -552,6 +568,7 @@ else()
             FrontEnd/src/NativeMenu.cpp
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
+            FrontEnd/src/Sh2Operands.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp
