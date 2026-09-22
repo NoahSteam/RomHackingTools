@@ -57,13 +57,15 @@ void AddSprite(State& state, uint32_t cmd, uint32_t texture, uint16_t color,
     }
 }
 
-// An untextured polyline (CMDCTRL comm 5) as a w x h box at (x,y): four explicit corners,
-// drawn as edges in CMDCOLR's colour. 2D-only — the 3D view draws no polylines.
-void AddPolyline(State& state, uint32_t cmd, uint16_t color, int x, int y, int w, int h)
+// An untextured quad primitive with four explicit corners, as a w x h box at (x,y).
+// 'comm' is the CMDCTRL command code: 4 = polygon (filled), 5 = polyline (edges only).
+// A zero w and h collapses all four corners onto the one point.
+void AddQuadPrim(State& state, uint32_t cmd, uint16_t comm, uint16_t color,
+                 int x, int y, int w, int h)
 {
-    PutBE16(state.vdp1, cmd + 0x00, 0x0005);                        // CMDCTRL: polyline
+    PutBE16(state.vdp1, cmd + 0x00, comm);                          // CMDCTRL
     PutBE16(state.vdp1, cmd + 0x04, 0x0040);                        // CMDPMOD: SPD
-    PutBE16(state.vdp1, cmd + 0x06, color);                         // CMDCOLR: edge colour
+    PutBE16(state.vdp1, cmd + 0x06, color);                         // CMDCOLR
     PutBE16(state.vdp1, cmd + 0x0C, static_cast<uint16_t>(x));      // A
     PutBE16(state.vdp1, cmd + 0x0E, static_cast<uint16_t>(y));
     PutBE16(state.vdp1, cmd + 0x10, static_cast<uint16_t>(x + w));  // B
@@ -72,21 +74,6 @@ void AddPolyline(State& state, uint32_t cmd, uint16_t color, int x, int y, int w
     PutBE16(state.vdp1, cmd + 0x16, static_cast<uint16_t>(y + h));
     PutBE16(state.vdp1, cmd + 0x18, static_cast<uint16_t>(x));      // D
     PutBE16(state.vdp1, cmd + 0x1A, static_cast<uint16_t>(y + h));
-}
-
-// An untextured polygon (CMDCTRL comm 4) collapsed to a single point: four explicit
-// corners, all the same. A real one comes of a command whose coordinates have been scaled
-// or animated to nothing; it covers no pixel, so nothing of it is ever drawn.
-void AddCollapsedPolygon(State& state, uint32_t cmd, uint16_t color, int x, int y)
-{
-    PutBE16(state.vdp1, cmd + 0x00, 0x0004);   // CMDCTRL: polygon
-    PutBE16(state.vdp1, cmd + 0x04, 0x0040);   // CMDPMOD: SPD
-    PutBE16(state.vdp1, cmd + 0x06, color);    // CMDCOLR: fill colour
-    for (uint32_t k = 0; k < 4; ++k)           // A, B, C, D all at (x,y)
-    {
-        PutBE16(state.vdp1, cmd + 0x0C + k * 4, static_cast<uint16_t>(x));
-        PutBE16(state.vdp1, cmd + 0x0E + k * 4, static_cast<uint16_t>(y));
-    }
 }
 
 // A frame whose four sprites pin all three axes at once: a red backdrop, a blue square up
@@ -342,7 +329,7 @@ void TestHitTestSkipsPolylines()
     const int cx = kFrameWidth / 2;
     const int cy = kFrameHeight / 2;
     AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
-    AddPolyline(state, 0x40, kGreen, cx - 8, cy - 8, 16, 16);
+    AddQuadPrim(state, 0x40, 0x0005, kGreen, cx - 8, cy - 8, 16, 16);   // polyline
     PutBE16(state.vdp1, 0x60, 0x8000);   // draw end
 
     se_context* context = Open(state);
@@ -366,11 +353,12 @@ void TestHitTestSkipsPolylines()
     size_t hit = 0;
     CHECK(se_hit_test_3d(context, &front, cx, cy, &hit) == SE_OK);
     CHECK(hit == sprite.command_index);
-    CHECK(hit != polyline.command_index);
 
-    // The 2D view does draw the polyline, and its hit test is untouched by this.
+    // The 2D view does draw the polyline, and this filter is the 3D walk's alone: the
+    // same click there still lands on the polyline.
     size_t hit2d = 0;
     CHECK(se_hit_test(context, cx, cy, &hit2d) == SE_OK);
+    CHECK(hit2d == polyline.command_index);
 
     se_destroy(context);
 }
@@ -387,7 +375,7 @@ void TestHitTestSkipsCollapsedQuads()
     const int cx = kFrameWidth / 2;
     const int cy = kFrameHeight / 2;
     AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
-    AddCollapsedPolygon(state, 0x40, kGreen, cx, cy);
+    AddQuadPrim(state, 0x40, 0x0004, kGreen, cx, cy, 0, 0);   // polygon, collapsed to a point
     PutBE16(state.vdp1, 0x60, 0x8000);   // draw end
 
     se_context* context = Open(state);
@@ -397,6 +385,8 @@ void TestHitTestSkipsCollapsedQuads()
     CHECK(se_get_sprite_3d(context, 0, &sprite) == SE_OK);
     CHECK(se_get_sprite_3d(context, 1, &collapsed) == SE_OK);
     CHECK(collapsed.corners[0].z > sprite.corners[0].z);   // nearer: it would win a hit
+    // ... and the collapse survived the builder's transform into world space, so the quad
+    // the hit test sees really is the zero-area one this test is about.
     CHECK(collapsed.corners[0].x == collapsed.corners[2].x);
     CHECK(collapsed.corners[0].y == collapsed.corners[2].y);
 

@@ -28,6 +28,49 @@ int ClampInt(int v, int lo, int hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Smallest quad area a click may land in. Deliberately far looser than the 1e-6f
+// RasterTriangle rejects at: that one only has to keep 1/area finite, this one answers
+// "too thin for the user to have aimed at".
+const float kMinPickArea = 1e-3f;
+
+// True if (px,py) falls inside triangle p0,p1,p2 — all three edge functions the same sign
+// (or zero, so a point on an edge counts).
+//
+// A degenerate (zero-area) triangle is rejected outright. Its three edge functions are all
+// 0 for every point, so the sign test would report EVERY point as "inside" — letting a
+// sprite whose screen quad has collapsed to a line or point (off-screen, scaled to nothing
+// or projected edge-on, but still in the list) swallow every click and shadow the real
+// sprite underneath. An invisible sprite must not be clickable.
+//
+// Templated on the vertex so both hit tests share one copy: the 2D path passes the
+// sprite's se_vec2 corners, the 3D path the RVerts it projected. That sharing is the
+// point — the guard above existed only in the 2D copy until the 3D view was found to be
+// picking primitives it never drew.
+template <typename V>
+bool PointInTri(const V& p0, const V& p1, const V& p2, float px, float py)
+{
+    const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+    if (area > -kMinPickArea && area < kMinPickArea)
+    {
+        return false;
+    }
+    const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
+    const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
+    const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
+    const bool hasNeg = (e0 < 0) || (e1 < 0) || (e2 < 0);
+    const bool hasPos = (e0 > 0) || (e1 > 0) || (e2 > 0);
+    return !(hasNeg && hasPos);
+}
+
+// True if (px,py) falls inside the quad A,B,C,D. Split A,B,C + A,C,D, the same split
+// RasterQuad rasterizes, so the picked area matches the drawn one.
+template <typename V>
+bool PointInQuad(const V corners[4], float px, float py)
+{
+    return PointInTri(corners[0], corners[1], corners[2], px, py) ||
+           PointInTri(corners[0], corners[2], corners[3], px, py);
+}
+
 // The per-primitive draw state threaded into the rasterizer: draw-mode effects, an
 // optional solid fill color (null = textured), and an optional user-clip rect.
 struct DrawAttribs
@@ -431,26 +474,6 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
     const float px = static_cast<float>(x);
     const float py = static_cast<float>(y);
 
-    auto inTri = [&](const RVert& p0, const RVert& p1, const RVert& p2)
-    {
-        // Reject a degenerate (zero-area) triangle, for the same reason PointInSprite
-        // does in 2D: its three edge functions are all 0, so the sign test below would
-        // report every point as inside. RasterTriangle drops such a triangle outright,
-        // so a sprite whose projected quad has collapsed to a line or a point draws
-        // nothing in the 3D view — and must not be clickable there either.
-        const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
-        if (area > -1e-3f && area < 1e-3f)
-        {
-            return false;
-        }
-        const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
-        const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
-        const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
-        const bool hasNeg = (e0 < 0) || (e1 < 0) || (e2 < 0);
-        const bool hasPos = (e0 > 0) || (e1 > 0) || (e2 > 0);
-        return !(hasNeg && hasPos);
-    };
-
     bool found = false;
     float bestDepth = 0.0f;
     uint32_t bestCmd = 0;
@@ -458,10 +481,8 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
     {
         if (scene.render[i].primKind != 0)
         {
-            // Render3D skips polyline/line primitives, so nothing of them is on screen
-            // here to click on. Picking one would move the selection with nothing under
-            // the cursor: the two walks have to agree on the primitive set, exactly as
-            // they agree on the projection by both going through Project().
+            // Render3D skips these, so there is nothing of them on screen to click:
+            // picking one would move the selection with nothing under the cursor.
             continue;
         }
         const se_sprite_3d& g = scene.sprites3d[i];
@@ -470,7 +491,7 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
             Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
-        if (!(inTri(v[0], v[1], v[2]) || inTri(v[0], v[2], v[3])))
+        if (!PointInQuad(v, px, py))
         {
             continue;
         }
@@ -492,33 +513,7 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
 
 bool PointInSprite(const se_sprite_2d& sprite, float px, float py)
 {
-    const se_vec2& a = sprite.corners[0];
-    const se_vec2& b = sprite.corners[1];
-    const se_vec2& c = sprite.corners[2];
-    const se_vec2& d = sprite.corners[3];
-
-    auto inTriangle = [&](const se_vec2& p0, const se_vec2& p1, const se_vec2& p2)
-    {
-        // Reject a degenerate (zero-area) triangle. Its three edge functions are
-        // all 0 for every point, so the sign test below would report EVERY point
-        // as "inside" — letting a sprite whose screen quad has collapsed to a line
-        // or point (off-screen/scaled-to-nothing, but still in the list) swallow
-        // every click and shadow the real sprite underneath. An invisible sprite
-        // must not be clickable.
-        const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
-        if (area > -1e-3f && area < 1e-3f)
-        {
-            return false;
-        }
-        const float e0 = Edge(p0.x, p0.y, p1.x, p1.y, px, py);
-        const float e1 = Edge(p1.x, p1.y, p2.x, p2.y, px, py);
-        const float e2 = Edge(p2.x, p2.y, p0.x, p0.y, px, py);
-        const bool hasNeg = (e0 < 0) || (e1 < 0) || (e2 < 0);
-        const bool hasPos = (e0 > 0) || (e1 > 0) || (e2 > 0);
-        return !(hasNeg && hasPos);   // all same sign (or on edge)
-    };
-
-    return inTriangle(a, b, c) || inTriangle(a, c, d);
+    return PointInQuad(sprite.corners, px, py);
 }
 
 }  // namespace se
