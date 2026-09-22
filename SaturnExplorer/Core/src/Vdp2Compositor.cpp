@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <unordered_map>
+#include <utility>
 
 #include "ByteOrder.h"
 #include "Vdp1Color.h"
@@ -549,6 +551,37 @@ struct PlaneGeom
     uint32_t cellWH, pageCells, pnBytes, cellBytes;
 };
 
+// Sample pixel (inX, inY) inside one character pattern, already flipped, by walking to the
+// 8x8 sub-cell it falls in: a 16x16 pattern is four 8x8 cells, left to right then top to
+// bottom. Shared by the screen walk and the tileset renderer so both read a pattern the
+// same way.
+Rgba FetchPatternTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                       se_cram_mode cramMode, const NbgConfig& c, const PatternName& pn,
+                       uint32_t cellBytes, uint32_t inX, uint32_t inY)
+{
+    const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
+    const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
+    return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
+                          static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+}
+
+// Byte address of the pattern-name entry for map cell (patX, patY), counted across the
+// whole plane grid. Pattern-name tables are page-major: address the enclosing plane, then
+// the page within it, then the pattern within the page (a plain patY*pageCells+patX
+// stride collides across page columns).
+uint32_t PatternNameAddress(const PlaneGeom& g, uint32_t patX, uint32_t patY)
+{
+    const uint32_t planeCellsW = g.planePixW / g.cellWH;
+    const uint32_t planeCellsH = g.planePixH / g.cellWH;
+    const uint32_t plane = (patY / planeCellsH) * g.planesPerRow + (patX / planeCellsW);
+    const uint32_t lx = patX % planeCellsW;
+    const uint32_t ly = patY % planeCellsH;
+    const uint32_t pageIndex = (ly / g.pageCells) * g.planeW + (lx / g.pageCells);
+    const uint32_t patIndex = pageIndex * (g.pageCells * g.pageCells) +
+                              (ly % g.pageCells) * g.pageCells + (lx % g.pageCells);
+    return g.planeBase[plane] + patIndex * g.pnBytes;
+}
+
 // Sample one texel from a tiled screen at plane-space (x, y), already wrapped to the
 // screen's total dimensions. This is the shared plane/page/pattern/cell walk used by both
 // the NBG and RBG0 renderers (they differ only in plane-grid width and coordinate source).
@@ -556,67 +589,78 @@ Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t
                      se_cram_mode cramMode, const NbgConfig& c, uint16_t vrsize,
                      const PlaneGeom& g, uint32_t x, uint32_t y)
 {
-    const uint32_t plane = (y / g.planePixH) * g.planesPerRow + (x / g.planePixW);
-    const uint32_t px = x % g.planePixW;
-    const uint32_t py = y % g.planePixH;
-
-    // Pattern-name tables are page-major: address the enclosing page, then the pattern
-    // within it (a plain patY*pageCells+patX stride collides across page columns).
-    const uint32_t patX = px / g.cellWH;
-    const uint32_t patY = py / g.cellWH;
-    const uint32_t pageIndex = (patY / g.pageCells) * g.planeW + (patX / g.pageCells);
-    const uint32_t patIndex = pageIndex * (g.pageCells * g.pageCells) +
-                              (patY % g.pageCells) * g.pageCells + (patX % g.pageCells);
     const PatternName pn = DecodePatternName(
-        vram, g.planeBase[plane] + patIndex * g.pnBytes, c, vrsize);
+        vram, PatternNameAddress(g, x / g.cellWH, y / g.cellWH), c, vrsize);
 
     // Pixel within the pattern, then within its 8x8 sub-cell.
-    uint32_t inX = px % g.cellWH;
-    uint32_t inY = py % g.cellWH;
+    uint32_t inX = x % g.cellWH;
+    uint32_t inY = y % g.cellWH;
     if (pn.flip & 1) inX = g.cellWH - 1 - inX;
     if (pn.flip & 2) inY = g.cellWH - 1 - inY;
-    const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
-    const uint32_t cellBase = (pn.charBase + subCell * g.cellBytes) & 0x7FFFFu;
-    return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                          static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+    return FetchPatternTexel(vram, cram, cramMode, c, pn, g.cellBytes, inX, inY);
 }
 
-// Emit one NBG layer into 'cols' (width*height PixColumns): each opaque cell texel emits
-// a descriptor at the layer's priority, transparent texels emit nothing. Faithful port of
-// the validated plane/page/cell walk.
-void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerIndex,
-                 bool applyWindows, int width, int height,
+// Resolve an NBG's four plane bases (A-D, tiling the screen as a 2x2 grid of planes) and
+// the plane/page/pattern/cell geometry they are walked with. 'planeBase' must outlive the
+// geometry, which points into it.
+void BuildNbgGeom(const NbgConfig& c, std::array<uint32_t, 4>& planeBase, PlaneGeom& geom)
+{
+    // Plane arrangement from the 2-bit plane-size field: 1x1, 2x1, or 2x2 pages.
+    const uint32_t planeW = (c.planeSize & 0x1) ? 2 : 1;
+    const uint32_t planeH = (c.planeSize & 0x2) ? 2 : 1;
+    const uint32_t deca = planeH + planeW - 2;
+    const uint32_t multi = planeH * planeW;
+    const uint32_t pageRegs[4] = {
+        static_cast<uint32_t>(c.mapAB & 0xFF), static_cast<uint32_t>(c.mapAB >> 8),
+        static_cast<uint32_t>(c.mapCD & 0xFF), static_cast<uint32_t>(c.mapCD >> 8) };
+    const bool oneWord = (c.patternCtrl & 0x8000) != 0;
+    for (int i = 0; i < 4; ++i)
+        planeBase[i] = PlaneBaseFor(c.mapOffset | pageRegs[i], oneWord, c.patternWH, deca, multi);
+
+    geom = PlaneGeom {
+        planeBase.data(), 2, planeW, planeW * 512, planeH * 512,
+        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
+}
+
+// Tile-grid overlay: blend a texel half-and-half with the grid colour and make it opaque,
+// so a boundary reads over both the layer's own art and the empty space beside it. Drawn
+// from the plane coordinate the texel was fetched at, which is what makes the grid follow
+// scroll, zoom and RBG0's rotation.
+inline void TintTileGrid(Rgba& c)
+{
+    c.r = static_cast<uint8_t>((c.r + 255) / 2);
+    c.g = static_cast<uint8_t>((c.g + 216) / 2);
+    c.b = static_cast<uint8_t>((c.b + 64) / 2);
+    c.a = 255;
+}
+
+// Whether the plane coordinate (planeX, planeY) sits on a character-pattern boundary.
+// Bitmap screens have no patterns, so they never do.
+inline bool OnTileBoundary(const NbgConfig& c, uint32_t cellWH, uint32_t planeX, uint32_t planeY)
+{
+    return !c.bitmap && (planeX % cellWH == 0 || planeY % cellWH == 0);
+}
+
+// Emit one NBG layer into 'out': each opaque cell texel emits a descriptor at the layer's
+// priority, transparent texels emit nothing. Faithful port of the validated
+// plane/page/cell walk. With a grid output instead, each pixel whose plane coordinate sits
+// on a pattern boundary is marked and no texel is read.
+void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
+                 const NbgConfig& c, int layerIndex, int width, int height,
                  std::vector<PixColumn>& cols)
 {
+    const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
     const uint16_t vrsize = Reg(snap, kVRSIZE);
     const WindowConfig windowConfig = ReadWindowConfig(snap, layerIndex);
 
-    // Plane arrangement from the 2-bit plane-size field: 1x1, 2x1, or 2x2 pages.
-    uint32_t planeW = (c.planeSize & 0x1) ? 2 : 1;
-    uint32_t planeH = (c.planeSize & 0x2) ? 2 : 1;
-    const uint32_t deca = planeH + planeW - 2;
-    const uint32_t multi = planeH * planeW;
-
-    // The four planes (A,B,C,D) that tile the screen as a 2x2 grid of planes.
-    const uint32_t pageRegs[4] = {
-        static_cast<uint32_t>(c.mapAB & 0xFF), static_cast<uint32_t>(c.mapAB >> 8),
-        static_cast<uint32_t>(c.mapCD & 0xFF), static_cast<uint32_t>(c.mapCD >> 8) };
-
-    const bool oneWord = (c.patternCtrl & 0x8000) != 0;
     std::array<uint32_t, 4> planeBase {};
-    for (int i = 0; i < 4; ++i)
-        planeBase[i] = PlaneBaseFor(c.mapOffset | pageRegs[i], oneWord, c.patternWH, deca, multi);
-
-    const uint32_t planePixW = planeW * 512;
-    const uint32_t planePixH = planeH * 512;
-    const uint32_t xMask = 2 * planePixW - 1;
-    const uint32_t yMask = 2 * planePixH - 1;
-    const PlaneGeom geom {
-        planeBase.data(), 2, planeW, planePixW, planePixH,
-        8 * c.patternWH, 64u >> (c.patternWH - 1), oneWord ? 2u : 4u, CellByteSize(c.colorNum) };
+    PlaneGeom geom {};
+    BuildNbgGeom(c, planeBase, geom);
+    const uint32_t xMask = 2 * geom.planePixW - 1;
+    const uint32_t yMask = 2 * geom.planePixH - 1;
 
     for (int sy = 0; sy < height; ++sy)
     {
@@ -674,13 +718,19 @@ void RenderLayer(const HardwareSnapshot& snap, const NbgConfig& c, int layerInde
             // Horizontal mosaic replicates each block's leftmost dot across the block.
             const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
             const int sampleX = static_cast<int>((xcStart + xcinc * msx) >> 8);
+            const uint32_t planeX = static_cast<uint32_t>(sampleX) & xMask;
+            const uint32_t planeY = static_cast<uint32_t>(yCoord) & yMask;
             // Bitmap mode indexes the linear image directly; cell mode walks the plane.
             Rgba col = c.bitmap
                 ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord)
-                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom,
-                                  static_cast<uint32_t>(sampleX) & xMask,
-                                  static_cast<uint32_t>(yCoord) & yMask);
-            if (col.a == 0)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom, planeX, planeY);
+            // A grid line is drawn even where the layer's own texel is transparent —
+            // that is the point of it, showing where the empty tiles are.
+            if (opts.show_tile_grid && OnTileBoundary(c, geom.cellWH, planeX, planeY))
+            {
+                TintTileGrid(col);
+            }
+            else if (col.a == 0)
             {
                 continue;
             }
@@ -885,9 +935,10 @@ void BeginRotLine(RotSet& s, int sy)
 // bit of A's coefficient, and 3 switches per dot on the rotation parameter window. Modes
 // 2 and 3 are how a game draws a horizon — one set for the sky, the other for the ground
 // — so treating them as "always A" leaves half the screen sampling the wrong table.
-void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
+void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd,
                 int width, int height, std::vector<PixColumn>& cols)
 {
+    const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
@@ -991,18 +1042,90 @@ void RenderRbg0(const HardwareSnapshot& snap, uint32_t rpmd, bool applyWindows,
             {
                 continue;
             }
+            const uint32_t planeX = static_cast<uint32_t>(ixs) & (s.totalW - 1);
+            const uint32_t planeY = static_cast<uint32_t>(iys) & (s.totalH - 1);
             Rgba col = c.bitmap
                 ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys)
-                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom,
-                                  static_cast<uint32_t>(ixs) & (s.totalW - 1),
-                                  static_cast<uint32_t>(iys) & (s.totalH - 1));
-            if (col.a == 0)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom, planeX, planeY);
+            if (opts.show_tile_grid && OnTileBoundary(c, s.geom.cellWH, planeX, planeY))
+            {
+                TintTileGrid(col);
+            }
+            else if (col.a == 0)
             {
                 continue;
             }
             ApplyColorOffset(col, c);
             EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c);
         }
+    }
+}
+
+// A scroll screen resolved for offline inspection (tile map / tileset): its cell
+// configuration plus the plane -> page -> pattern geometry, with the plane bases owned
+// rather than borrowed. Copying one would dangle geom.planeBase, so it is filled in place.
+struct ResolvedLayer
+{
+    NbgConfig cfg {};
+    PlaneGeom geom {};
+    std::array<uint32_t, 16> planes {};   // 4 used by an NBG, all 16 by RBG0
+};
+
+// Which rotation parameter set a tile map / tileset describes. Only RPMD 1 uses set B for
+// the whole screen; the per-dot modes (2, 3) can switch tables mid-screen, so one tile map
+// necessarily describes set A, the set those modes start from.
+bool Rbg0UsesParamB(const HardwareSnapshot& s)
+{
+    return (Reg(s, kRPMD) & 0x3) == 1;
+}
+
+// A screen's cell configuration (colour depth, pattern size, palette base, priority).
+// Returns false when BGON does not enable the screen — the same gate EmitLayers applies
+// before drawing anything.
+bool ResolveLayerConfig(const HardwareSnapshot& s, int layer, NbgConfig& out)
+{
+    if (layer < 0 || layer > 4 || !(Reg(s, kBGON) & (1u << layer)))
+    {
+        return false;
+    }
+    out = (layer == 4) ? ReadRbg0Config(s, Rbg0UsesParamB(s)) : ReadNbgConfig(s, layer);
+    return true;
+}
+
+// The same, plus the plane -> page -> pattern geometry the tile-map walk addresses through.
+bool ResolveLayer(const HardwareSnapshot& s, int layer, ResolvedLayer& out)
+{
+    if (!ResolveLayerConfig(s, layer, out.cfg))
+    {
+        return false;
+    }
+    if (layer == 4)
+    {
+        RotSet rot;
+        BuildRotSet(s, Rbg0UsesParamB(s), rot);
+        out.planes = rot.planeBase;
+        out.geom = rot.geom;
+    }
+    else
+    {
+        std::array<uint32_t, 4> nbgPlanes {};
+        BuildNbgGeom(out.cfg, nbgPlanes, out.geom);
+        std::copy(nbgPlanes.begin(), nbgPlanes.end(), out.planes.begin());
+    }
+    out.geom.planeBase = out.planes.data();
+    return true;
+}
+
+// Palette entries a tile's texels index into, by colour-number field. The direct RGB
+// modes carry their colour in the texel, so they report 0.
+uint32_t PaletteEntryCount(uint32_t colorNum)
+{
+    switch (colorNum)
+    {
+    case 0:  return 16;
+    case 1:  return 256;
+    case 2:  return 2048;
+    default: return 0;
     }
 }
 
@@ -1063,13 +1186,11 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
     {
         if (layer.rbg0)
         {
-            RenderRbg0(snapshot, Reg(snapshot, kRPMD) & 0x3, opts.show_window != 0,
-                       width, height, cols);
+            RenderRbg0(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, width, height, cols);
         }
         else
         {
-            RenderLayer(snapshot, layer.config, layer.index, opts.show_window != 0,
-                        width, height, cols);
+            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols);
         }
     }
 }
@@ -1103,6 +1224,130 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
             EmitPix(row[x], col.r, col.g, col.b, 0, false, 0, false);
         }
     }
+}
+
+void Vdp2Compositor::BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out)
+{
+    out = Vdp2TileMap();
+    if (!snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
+    {
+        return;
+    }
+    ResolvedLayer resolved;
+    if (!ResolveLayer(snapshot, layer, resolved))
+    {
+        return;
+    }
+
+    const NbgConfig& c = resolved.cfg;
+    const PlaneGeom& g = resolved.geom;
+    out.active = c.priority != 0;
+    out.bitmap = c.bitmap;
+    out.cellPixels = g.cellWH;
+    out.colorCount = PaletteEntryCount(c.colorNum);
+    if (!out.active || out.bitmap)
+    {
+        return;
+    }
+
+    // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0.
+    out.mapWidth = g.planesPerRow * (g.planePixW / g.cellWH);
+    out.mapHeight = g.planesPerRow * (g.planePixH / g.cellWH);
+
+    const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
+    const uint16_t vrsize = Reg(snapshot, kVRSIZE);
+    out.indices.resize(static_cast<size_t>(out.mapWidth) * out.mapHeight);
+    std::unordered_map<uint64_t, uint32_t> seen;
+    for (uint32_t y = 0; y < out.mapHeight; ++y)
+    {
+        for (uint32_t x = 0; x < out.mapWidth; ++x)
+        {
+            const PatternName pn =
+                DecodePatternName(vram, PatternNameAddress(g, x, y), c, vrsize);
+            const uint64_t key = (static_cast<uint64_t>(pn.charBase) << 32) | pn.palette;
+            uint32_t index = 0;
+            const std::unordered_map<uint64_t, uint32_t>::const_iterator it = seen.find(key);
+            if (it != seen.end())
+            {
+                index = it->second;
+            }
+            else if (out.tiles.size() < kMaxTiles)
+            {
+                index = static_cast<uint32_t>(out.tiles.size());
+                seen.insert(std::make_pair(key, index));
+                Vdp2Tile tile;
+                tile.charBase = pn.charBase;
+                tile.palette = pn.palette;
+                out.tiles.push_back(tile);
+            }
+            else
+            {
+                out.truncated = true;   // beyond the cap; falls back to tile 0
+            }
+            out.indices[static_cast<size_t>(y) * out.mapWidth + x] = index;
+        }
+    }
+}
+
+void Vdp2Compositor::TilesetSize(const Vdp2TileMap& map, uint32_t columns,
+                                 uint32_t& outWidth, uint32_t& outHeight)
+{
+    const uint32_t count = static_cast<uint32_t>(map.tiles.size());
+    if (count == 0 || columns == 0)
+    {
+        outWidth = 0;
+        outHeight = 0;
+        return;
+    }
+    outWidth = columns * map.cellPixels;
+    outHeight = ((count + columns - 1) / columns) * map.cellPixels;
+}
+
+bool Vdp2Compositor::RenderTileset(const HardwareSnapshot& snapshot, int layer,
+                                   const Vdp2TileMap& map, uint32_t columns,
+                                   std::vector<uint8_t>& rgba)
+{
+    rgba.clear();
+    NbgConfig c {};
+    uint32_t outWidth = 0;
+    uint32_t outHeight = 0;
+    TilesetSize(map, columns, outWidth, outHeight);
+    if (outWidth == 0 || !ResolveLayerConfig(snapshot, layer, c))
+    {
+        return false;
+    }
+
+    const uint32_t cell = map.cellPixels;
+    const uint32_t count = static_cast<uint32_t>(map.tiles.size());
+    rgba.assign(static_cast<size_t>(outWidth) * outHeight * 4, 0);
+
+    const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
+    const std::vector<uint8_t>& cram = snapshot.Cram();
+    const se_cram_mode cramMode = snapshot.CramMode();
+    const uint32_t cellBytes = CellByteSize(c.colorNum);
+
+    for (uint32_t t = 0; t < count; ++t)
+    {
+        PatternName pn {};
+        pn.charBase = map.tiles[t].charBase;
+        pn.palette = map.tiles[t].palette;
+        const uint32_t ox = (t % columns) * cell;
+        const uint32_t oy = (t / columns) * cell;
+        for (uint32_t y = 0; y < cell; ++y)
+        {
+            for (uint32_t x = 0; x < cell; ++x)
+            {
+                const Rgba col =
+                    FetchPatternTexel(vram, cram, cramMode, c, pn, cellBytes, x, y);
+                uint8_t* p = &rgba[(static_cast<size_t>(oy + y) * outWidth + ox + x) * 4];
+                p[0] = col.r;
+                p[1] = col.g;
+                p[2] = col.b;
+                p[3] = col.a;
+            }
+        }
+    }
+    return true;
 }
 
 }  // namespace se

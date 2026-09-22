@@ -91,6 +91,25 @@ typedef enum se_vdp2_layer {
     SE_LAYER_COUNT = 5
 } se_vdp2_layer;
 
+/* Shape of one VDP2 scroll screen's tile map: how big the plane->page->pattern grid is
+ * and how many distinct character patterns it draws from. Cell (non-bitmap) screens
+ * only; a bitmap screen is one linear image and has no tiles. */
+typedef struct se_vdp2_tilemap {
+    uint8_t  active;       /* 1 when BGON enables the screen and its priority is non-zero */
+    uint8_t  bitmap;       /* 1 = bitmap mode: no tile map, map_/tile_ fields are 0 */
+    uint8_t  truncated;    /* 1 when distinct tiles hit the extraction cap (see tile_count) */
+    uint8_t  reserved;
+    uint16_t cell_pixels;  /* pattern edge in pixels: 8 or 16 */
+    uint16_t color_count;  /* palette entries a tile indexes (16/256/2048); 0 in RGB modes */
+    uint32_t map_width;    /* patterns across the whole scroll map */
+    uint32_t map_height;   /* patterns down */
+    uint32_t tile_count;   /* distinct patterns in the tileset */
+} se_vdp2_tilemap;
+
+/* Tiles per row in the image se_render_vdp2_tileset() lays out, so a tile index from
+ * se_get_vdp2_tile_indices() maps to (index % COLUMNS, index / COLUMNS). */
+#define SE_VDP2_TILESET_COLUMNS 16u
+
 typedef enum se_cram_mode {
     SE_CRAM_RGB555_1024 = 0,  /* mode 0: RGB 5-bit each, 1024 colors */
     SE_CRAM_RGB555_2048 = 1,  /* mode 1: RGB 5-bit each, 2048 colors */
@@ -265,6 +284,16 @@ typedef struct se_render_opts {
     uint8_t show_shadow_highlight;
     /* selection highlight */
     int32_t highlight_command;   /* command index to outline, or -1 */
+    /* Draw only what the enabled layers cover: no VDP2 back screen below and no fallback
+       backdrop filled in afterwards, so a pixel nothing drew comes back fully transparent
+       (alpha 0). This is what the per-layer viewer panels render with — one layer enabled
+       over a transparency checkerboard — and it works for any subset of layers. */
+    uint8_t transparent_background;
+    /* Overlay each enabled VDP2 scroll screen's character-pattern boundaries. The grid is
+       drawn from the same plane coordinates the texels are fetched at, so it follows
+       scroll, zoom and RBG0's rotation instead of being a fixed lattice. Bitmap screens
+       have no patterns and are unaffected. */
+    uint8_t show_tile_grid;
 } se_render_opts;
 
 /* ------------------------------------------------------------------ *

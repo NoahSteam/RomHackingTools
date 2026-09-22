@@ -24,6 +24,7 @@
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
+#include "LayerPanels.h"       // per-layer viewer tabs (VDP1 / NBG0-3 / RBG0)
 #include "UpdateChecker.h"       // "check GitHub for a newer build" (Seam C: IPlatform::HttpsGet)
 #include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
@@ -111,6 +112,7 @@ private:
     void SaveScreenshot(IPlatform& platform);
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
+    void DrawLayerPanels(IPlatform& platform);   // per-layer viewer tabs (VDP1 / NBG / RBG0)
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)
@@ -552,6 +554,9 @@ private:
         // niche — hidden by default (re-enable from the Windows menu).
         bool vramMap = true, archiveExplorer = false, searchRom = false;
         bool vdpOutput = true, worldView = true;
+        // Per-layer viewers (LayerPanels.h), tabbed beside VDP Output / 3D View.
+        bool layerVdp1 = true, layerNbg0 = true, layerNbg1 = true;
+        bool layerNbg2 = true, layerNbg3 = true, layerRbg0 = true;
         bool vdp1Table = true, vdp2Table = true, colorRam = true;
         bool registers = true, commandList = true;
         bool textureViewer = true, paletteViewer = true, references = false;
@@ -644,6 +649,10 @@ private:
 
     // Scratch buffer for the Color RAM panel, decoded once per frame.
     std::vector<se_palette_entry> mCramColors;
+
+    // Per-layer viewer tabs. Owns its own textures, export folder and grid toggles;
+    // App only hands it the context + render options each frame.
+    LayerPanels          mLayerPanels;
 
     // VDP Output frame texture.
     TextureHandle        mFrameTexture = 0;

@@ -39,9 +39,41 @@
 namespace se
 {
 
+// One distinct character pattern a scroll screen draws from: where its pixels live in
+// VDP2 VRAM and the palette base its indexed texels resolve through. Two map cells that
+// name the same character with different palettes are different tiles, because they are
+// different pictures — flip is a property of the placement, not of the tile.
+struct Vdp2Tile
+{
+    uint32_t charBase;   // byte address of the pattern's first cell in VDP2 VRAM
+    uint32_t palette;    // palette base added to each indexed texel
+};
+
+// A scroll screen's whole plane -> page -> pattern grid, reduced to a tileset plus one
+// index per map cell. This is the layer-panel export's model of the background: the
+// tileset is the art, 'indices' is the map that arranges it.
+struct Vdp2TileMap
+{
+    bool     active = false;     // BGON enables the screen and its priority is non-zero
+    bool     bitmap = false;     // bitmap mode: one linear image, no tiles
+    bool     truncated = false;  // distinct tiles hit kMaxTiles; the excess maps to tile 0
+    uint32_t cellPixels = 8;     // pattern edge in pixels (8 or 16)
+    uint32_t colorCount = 0;     // palette entries a tile indexes; 0 in the RGB modes
+    uint32_t mapWidth = 0;       // patterns across
+    uint32_t mapHeight = 0;      // patterns down
+    std::vector<uint32_t> indices;   // mapWidth * mapHeight, row-major, into 'tiles'
+    std::vector<Vdp2Tile> tiles;
+};
+
 class Vdp2Compositor
 {
 public:
+    // Upper bound on distinct tiles kept per screen. RBG0's 4x4 plane grid can address a
+    // 512x512-pattern map, so a pathological (or garbage) map could otherwise name far
+    // more tiles than any real background has. Comfortably above a whole 512 KiB of 8x8
+    // 4bpp characters (16384), so a real screen is never truncated.
+    static const uint32_t kMaxTiles = 32768;
+
     // Emit every enabled NBG/RBG0 layer into 'cols' (one PixColumn per pixel, sized
     // width*height) at its VDP2 priority. Layers are emitted back-to-front (ascending
     // priority, higher-numbered NBG first on ties) so a same-priority sprite emitted
@@ -59,6 +91,24 @@ public:
     // snapshot lacks VDP2 VRAM/registers; the caller keeps its own fallback backdrop then.
     static void SeedBackScreen(const HardwareSnapshot& snapshot, int width, int height,
                                std::vector<PixColumn>& cols);
+
+    // Reduce one scroll screen's pattern-name tables to a tileset + index map (see
+    // Vdp2TileMap). Reads the whole plane grid, not just what is on screen, so the
+    // export describes the background rather than the current scroll window.
+    static void BuildTileMap(const HardwareSnapshot& snapshot, int layer, Vdp2TileMap& out);
+
+    // Pixel size of the image RenderTileset draws for 'map' at 'columns' tiles per row.
+    // The single source of the layout, so the buffer the caller sizes and the pixels
+    // written into it cannot disagree. Both are 0 when the screen has no tiles.
+    static void TilesetSize(const Vdp2TileMap& map, uint32_t columns,
+                            uint32_t& outWidth, uint32_t& outHeight);
+
+    // Draw a screen's tileset as one RGBA image at TilesetSize's dimensions, in tile-index
+    // order (so index i is at (i % columns, i / columns)). Transparent texels get alpha 0.
+    // Returns false — leaving 'rgba' empty — when the screen has no tiles.
+    static bool RenderTileset(const HardwareSnapshot& snapshot, int layer,
+                              const Vdp2TileMap& map, uint32_t columns,
+                              std::vector<uint8_t>& rgba);
 };
 
 }  // namespace se

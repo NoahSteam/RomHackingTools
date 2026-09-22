@@ -7,7 +7,14 @@
 // rendering changes be validated against a captured reference instead of by eye.
 //
 //   se-render dump.sedump --out frame.ppm
+//   se-render dump.sedump --layer nbg1 [--tile-grid] --out nbg1.ppm
+//   se-render dump.sedump --3d --out view3d.ppm
 //   se-render dump.sedump --reference golden.ppm [--diff diff.ppm] [--tolerance N]
+//
+// --layer renders one layer in isolation (what the per-layer viewer panels show) instead
+// of the composite: that layer alone, with se_render_opts::transparent_background so
+// nothing is drawn under it. PPM has no alpha, so pixels the layer does not cover are
+// written black. --tile-grid adds the character-pattern overlay.
 //
 // --3d renders the 3D View's exploded geometry instead, from straight in front and
 // scaled so the Z == 0 layer lands 1:1 on the composite. That makes the composite itself
@@ -118,6 +125,19 @@ bool ReadPpm(const char* path, std::vector<uint8_t>& rgb, uint32_t& w, uint32_t&
     in.read(reinterpret_cast<char*>(rgb.data()), rgb.size());
     return static_cast<bool>(in);
 }
+
+// Layer names accepted by --layer: se_vdp2_layer order, then the VDP1 sprite layer.
+const int kVdp1Layer = SE_LAYER_COUNT;
+const char* const kLayerNames[SE_LAYER_COUNT + 1] = { "nbg0", "nbg1", "nbg2", "nbg3",
+                                                      "rbg0", "vdp1" };
+
+// -1 when the name is not one of kLayerNames.
+int LayerFromName(const char* name)
+{
+    for (int i = 0; i <= kVdp1Layer; ++i)
+        if (std::strcmp(name, kLayerNames[i]) == 0) return i;
+    return -1;
+}
 }  // namespace
 
 int main(int argc, char** argv)
@@ -128,11 +148,25 @@ int main(int argc, char** argv)
     const char* diffPath = nullptr;
     int tolerance = 0;   // allowed differing pixels before failing
     bool view3d = false;
+    int layer = -1;      // --layer: render one layer alone instead of the composite
+    bool tileGrid = false;
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
         auto next = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : nullptr; };
         if (a == "--3d") view3d = true;
+        else if (a == "--layer")
+        {
+            const char* n = next();
+            layer = n ? LayerFromName(n) : -1;
+            if (layer < 0)
+            {
+                std::fprintf(stderr, "se-render: --layer wants one of "
+                                     "nbg0 nbg1 nbg2 nbg3 rbg0 vdp1\n");
+                return 2;
+            }
+        }
+        else if (a == "--tile-grid") tileGrid = true;
         else if (a == "--out") outPath = next();
         else if (a == "--reference") refPath = next();
         else if (a == "--diff") diffPath = next();
@@ -144,6 +178,7 @@ int main(int argc, char** argv)
     {
         std::fprintf(stderr,
             "usage: se-render <dump.sedump> [--3d] [--out frame.ppm]\n"
+            "                 [--layer nbg0|nbg1|nbg2|nbg3|rbg0|vdp1] [--tile-grid]\n"
             "                 [--reference golden.ppm [--diff diff.ppm] [--tolerance N]]\n");
         return 2;
     }
@@ -180,9 +215,14 @@ int main(int argc, char** argv)
     if (!ctx) { std::fprintf(stderr, "se-render: se_create failed\n"); return 2; }
     se_begin_frame(ctx);
 
+    // One layer alone is the composite with everything else switched off and no backdrop
+    // under it — the same options the per-layer viewer panels pass.
     se_render_opts opts {};
-    for (int i = 0; i < SE_LAYER_COUNT; ++i) opts.show_layer[i] = 1;
-    opts.show_vdp1_sprites = 1;
+    for (int i = 0; i < SE_LAYER_COUNT; ++i)
+        opts.show_layer[i] = (layer < 0 || layer == i) ? 1 : 0;
+    opts.show_vdp1_sprites = (layer < 0 || layer == kVdp1Layer) ? 1 : 0;
+    opts.transparent_background = (layer >= 0) ? 1 : 0;
+    opts.show_tile_grid = tileGrid ? 1 : 0;
     se_image img {};
     size_t need = 0;
     // Size query. This already fills in width/height, which the 3D camera's viewport wants,
@@ -204,7 +244,9 @@ int main(int argc, char** argv)
         se_destroy(ctx);
         return 2;
     }
-    std::printf("rendered %u x %u\n", img.width, img.height);
+    std::printf("rendered %u x %u (%s%s)\n", img.width, img.height,
+                view3d ? "3D view of " : "",
+                layer < 0 ? "composite" : kLayerNames[layer]);
     se_destroy(ctx);
 
     if (outPath && !WritePpm(outPath, px.data(), img.width, img.height)) return 2;

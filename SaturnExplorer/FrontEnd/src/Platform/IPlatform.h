@@ -93,6 +93,13 @@ public:
         return OpenFileDialog(outPath);
     }
 
+    // Whether this build can write to a host filesystem the user can actually reach.
+    // SaveFile covers a single artifact everywhere (the web build turns it into a browser
+    // download), but a multi-file export — the per-layer viewers write a folder of images
+    // plus a CSV — needs a real directory. The browser has none, so it answers false and
+    // the feature says so instead of writing into a filesystem nobody can open.
+    virtual bool HasHostFilesystem() { return false; }
+
     // Open the OS file manager with `path` selected/highlighted (Explorer on
     // Windows, Finder on macOS, the file manager on Linux). Returns false if
     // unsupported or the path doesn't exist.
@@ -171,5 +178,21 @@ public:
     virtual void SyncNativeMenu(const NativeMenuState& state) { (void)state; }
     virtual void DrainNativeMenu(std::vector<NativeMenuAction>& out) { (void)out; }
 };
+
+// Recreate 'tex' when the target size changes, destroying the old one; updates the cached
+// width/height and returns the (possibly new) handle. Every panel that shows a core-decoded
+// image needs this same lifetime rule, so it lives beside the texture bridge it uses.
+inline TextureHandle EnsureTexture(IPlatform& platform, TextureHandle tex, int& curW,
+                                   int& curH, int w, int h)
+{
+    if (w == curW && h == curH && tex != 0)
+    {
+        return tex;
+    }
+    if (tex != 0) platform.DestroyTexture(tex);
+    curW = w;
+    curH = h;
+    return platform.CreateTexture(w, h);
+}
 
 }  // namespace sfe

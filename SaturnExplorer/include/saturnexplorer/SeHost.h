@@ -60,6 +60,28 @@ se_result   se_render_frame(se_context* ctx, const se_render_opts* opts,
 se_result   se_render_3d(se_context* ctx, const se_camera3d* camera,
                          const se_render_opts* opts, se_image* out, size_t* needed);
 
+/* --- Per-layer viewers: a VDP2 scroll screen's tile data ---
+       Together these describe the background a scroll screen draws: a tileset (the art),
+       one index per map cell (the arrangement), and the shape of both. The layer image
+       itself is just se_render_frame with that one layer enabled and
+       se_render_opts::transparent_background set. --- */
+
+/* Shape of a VDP2 scroll screen's tile map (see se_vdp2_tilemap). */
+se_result   se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_tilemap* out);
+
+/* The tile map itself: map_width * map_height indices, row-major, each an index into the
+   tileset se_render_vdp2_tileset() draws. Writes at most 'max'; returns the number
+   written (0 for a bitmap or disabled screen). */
+size_t      se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
+                                     uint32_t* out, size_t max);
+
+/* The screen's distinct character patterns, laid out as a grid 'columns' tiles wide
+   (pass SE_VDP2_TILESET_COLUMNS for the layout the tile indices assume). Transparent
+   texels come back with alpha 0. Same two-call size convention as se_render_frame;
+   returns SE_ERR_NO_DATA when the screen has no tiles. */
+se_result   se_render_vdp2_tileset(se_context* ctx, se_vdp2_layer layer, uint32_t columns,
+                                   se_image* out, size_t* needed);
+
 /* --- Texture & Palette Viewer --- */
 se_result   se_decode_texture(se_context* ctx, const se_texture_ref* ref,
                               se_image* out, size_t* needed);

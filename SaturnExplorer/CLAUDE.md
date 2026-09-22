@@ -38,6 +38,10 @@ headlessly, with `--reference`/`--diff`/`--tolerance` for golden-frame compariso
 `.sedump` reproduces a rendering bug deterministically without running the emulator, so
 reach for it before trying to reproduce anything by playing the game.
 
+`--layer nbg0|nbg1|nbg2|nbg3|rbg0|vdp1` renders one layer in isolation instead of the
+composite — the same image the per-layer viewer panels show — so a background can be
+goldened, or blamed, without the rest of the frame on top of it.
+
 ## Testing ImGui panels
 
 The panels are not separable from `App`, but ImGui's *interaction* layer — layout, hit

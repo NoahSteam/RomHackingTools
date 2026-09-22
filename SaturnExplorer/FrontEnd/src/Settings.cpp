@@ -112,6 +112,17 @@ std::string Settings::ConfigSubPath(const char* subdir, const std::string& file,
     return dir.empty() ? std::string() : dir + kSep + file;
 }
 
+bool Settings::EnsureDirectory(const std::string& dir)
+{
+    if (dir.empty()) return false;
+    return CreateDirs(dir);
+}
+
+char Settings::PathSeparator()
+{
+    return kSep;
+}
+
 std::string Settings::FilePath()
 {
     return JoinConfig(ConfigDir(), "settings.ini");

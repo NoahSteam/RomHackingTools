@@ -24,6 +24,7 @@
 #include "Disc/IsoBuilder.h"      // rebuild the data track's ISO-9660 filesystem
 #include "Disc/DiscBuilder.h"     // Build Disc Image: BIN/CUE (+ audio tracks) or ISO
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
+#include "BinaryWriter.h"         // PushU16/PushU32 + the shared BMP encoders
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
@@ -340,7 +341,21 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"sound",           "Sound (SCSP)",       &Panels::sound,           "Audio"},
         {"discExplorer",    "Disc Explorer",      &Panels::discExplorer,    "Files & Input"},
     };
-    return kList;
+    // The per-layer viewers are one table already (LayerPanelList), so their keys and
+    // labels are taken from it rather than written out a second time here — a label that
+    // drifted from the window title would silently break the dock layout.
+    static const std::vector<PanelInfo> kAll = []
+    {
+        static bool Panels::* const kLayerFlags[] = {
+            &Panels::layerVdp1, &Panels::layerNbg0, &Panels::layerNbg1,
+            &Panels::layerNbg2, &Panels::layerNbg3, &Panels::layerRbg0 };
+        std::vector<PanelInfo> all = kList;
+        const std::vector<LayerPanelDesc>& layers = LayerPanelList();
+        for (size_t i = 0; i < layers.size(); ++i)
+            all.push_back({ layers[i].key, layers[i].title, kLayerFlags[i], "Graphics" });
+        return all;
+    }();
+    return kAll;
 }
 
 void App::LoadSettings()
@@ -349,6 +364,7 @@ void App::LoadSettings()
     for (const PanelInfo& p : PanelList())
         mPanels.*(p.flag) = mSettings.GetBool("panels", p.key, mPanels.*(p.flag));
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
+    mLayerPanels.Load(mSettings);   // export folder + per-layer tile-grid toggles
     mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
     LoadSearchOptions();
@@ -372,6 +388,7 @@ void App::SaveSettings()
     mSettings.Set("data", "dir", mDataDir);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetFloat("callstack", "split", mCallStackSplit);
+    mLayerPanels.Save(mSettings);
     SaveSearchOptions();
     // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
     // and the coupling. Exe paths live under [emulators]; the installer read-modify-writes
@@ -478,20 +495,6 @@ void App::CloseData(bool cancelAutoConnect)
 
 namespace
 {
-// Append a little-endian uint16/uint32 to a byte vector.
-void PushU16(std::vector<uint8_t>& v, uint16_t x)
-{
-    v.push_back(static_cast<uint8_t>(x & 0xFF));
-    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
-}
-void PushU32(std::vector<uint8_t>& v, uint32_t x)
-{
-    v.push_back(static_cast<uint8_t>(x & 0xFF));
-    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
-    v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
-    v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
-}
-
 // Wrap interleaved 16-bit PCM in a canonical 44-byte-header WAV (all fields little-endian,
 // so PushU16/PushU32 apply directly; PCM samples are written LE regardless of host order).
 std::vector<uint8_t> BuildWav(const int16_t* pcm, size_t frames, int sampleRate, int channels)
@@ -682,24 +685,6 @@ void App::RevealSelectionInTables()
 {
     mScrollCommandListToSelection = true;
     mScrollVdp1TableToSelection = true;
-}
-
-// Recreate 'tex' when the target size changes; updates cached w/h. Returns the
-// (possibly new) handle. Shared by the 2D and 3D render panels.
-static TextureHandle EnsureTexture(IPlatform& platform, TextureHandle tex,
-                                   int& curW, int& curH, int w, int h)
-{
-    if (w == curW && h == curH && tex != 0)
-    {
-        return tex;
-    }
-    if (tex != 0)
-    {
-        platform.DestroyTexture(tex);
-    }
-    curW = w;
-    curH = h;
-    return platform.CreateTexture(w, h);
 }
 
 void App::RenderFrameToTexture(IPlatform& platform)
@@ -1142,6 +1127,7 @@ void App::BuildUI(IPlatform& platform)
     // texture/palette/reference row.
     if (mPanels.vdpOutput)       DrawVdpOutput(platform);
     if (mPanels.worldView)       DrawWorldView(platform);
+    DrawLayerPanels(platform);   // the per-layer viewer tabs; each gated by its own flag
     if (mPanels.vdp1Table)       DrawVdp1Table();
     if (mPanels.vdp2Table)       DrawVdp2Table();
     if (mPanels.colorRam)        DrawColorRam();
@@ -1301,6 +1287,8 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     // Center: image stage — only the visual views tab here.
     ImGui::DockBuilderDockWindow("VDP Output", cViews);
     ImGui::DockBuilderDockWindow("3D View", cViews);
+    for (const LayerPanelDesc& layer : LayerPanelList())
+        ImGui::DockBuilderDockWindow(layer.title, cViews);   // one tab per graphics layer
 
     // Right column, top: the select-and-inspect pair. Command List drives Selected Object
     // (and the left Texture/Palette viewers), so they sit together.
@@ -3462,28 +3450,19 @@ void App::DrawVdpOutput(IPlatform& platform)
             // everything look too wide. Horizontal and vertical scales therefore differ,
             // so the sprite overlays and hit-test use separate X/Y factors.
             const ImVec2 avail(vpFullAvail.x, std::max(1.0f, vpFullAvail.y - transportH));
-            const float dar = 4.0f / 3.0f;
-            float fitW = avail.x, fitH = avail.y;
-            if (avail.y > 0.0f && avail.x / avail.y > dar) fitW = avail.y * dar;  // pillarbox
-            else if (avail.y > 0.0f)                       fitH = avail.x / dar;  // letterbox
-            const ImVec2 cur = ImGui::GetCursorScreenPos();
-            const ImVec2 imgPos(cur.x + (avail.x - fitW) * 0.5f, cur.y + (avail.y - fitH) * 0.5f);
-            const float scaleX = (mFrameWidth > 0) ? fitW / mFrameWidth : 1.0f;
-            const float scaleY = (mFrameHeight > 0) ? fitH / mFrameHeight : 1.0f;
+            ImVec2 imgPos;
+            const ImVec2 fit = FitToDisplayAspect(avail, imgPos);
+            const float scaleX = (mFrameWidth > 0) ? fit.x / mFrameWidth : 1.0f;
+            const float scaleY = (mFrameHeight > 0) ? fit.y / mFrameHeight : 1.0f;
             ImGui::SetCursorScreenPos(imgPos);
-            ImGui::Image(mFrameTexture, ImVec2(fitW, fitH));
+            ImGui::Image(mFrameTexture, fit);
 
             ImDrawList* dl = ImGui::GetWindowDrawList();
 
-            // Small resolution readout (top-left of the frame) — the source dimensions
-            // the compositor rendered at, shown at 4:3 display aspect.
-            {
-                char res[48];
-                std::snprintf(res, sizeof(res), "%dx%d", mFrameWidth, mFrameHeight);
-                const ImVec2 tp(imgPos.x + 4.0f, imgPos.y + 3.0f);
-                dl->AddText(ImVec2(tp.x + 1.0f, tp.y + 1.0f), IM_COL32(0, 0, 0, 200), res);
-                dl->AddText(tp, IM_COL32(255, 240, 120, 230), res);
-            }
+            // The source dimensions the compositor rendered at, shown at 4:3 aspect.
+            char res[32];
+            std::snprintf(res, sizeof(res), "%dx%d", mFrameWidth, mFrameHeight);
+            ImageCornerLabel(imgPos, res);
 
             auto toScreen = [&](const se_vec2& c)
             {
@@ -3554,6 +3533,26 @@ void App::DrawVdpOutput(IPlatform& platform)
         }
     }
     ImGui::End();
+}
+
+// The per-layer viewer tabs. App owns nothing of theirs beyond the visibility flags —
+// LayerPanels holds the textures, the export folder and the tile-grid toggles.
+void App::DrawLayerPanels(IPlatform& platform)
+{
+    LayerPanelFrame frame;
+    frame.context = mContext;
+    frame.hasData = mbHasData;
+    frame.opts = &mRenderOpts;
+    frame.frame = mbHasData ? se_frame_number(mContext) : 0;
+    bool visible[kLayerCount] = {};
+    visible[kLayerVdp1] = mPanels.layerVdp1;
+    visible[kLayerNbg0] = mPanels.layerNbg0;
+    visible[kLayerNbg1] = mPanels.layerNbg1;
+    visible[kLayerNbg2] = mPanels.layerNbg2;
+    visible[kLayerNbg3] = mPanels.layerNbg3;
+    visible[kLayerRbg0] = mPanels.layerRbg0;
+    mLayerPanels.Draw(frame, visible, platform);
+    if (mLayerPanels.ConsumeSettingsDirty()) mSettingsDirty = true;
 }
 
 void App::DrawWorldView(IPlatform& platform)
@@ -3936,83 +3935,6 @@ static se_texture_ref TextureRefOf(const se_command& cmd)
     return ref;
 }
 
-// Draw a checkerboard behind an image rect so transparent texels read clearly.
-static void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)
-{
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    const int cols = static_cast<int>(size.x / cell) + 1;
-    const int rows = static_cast<int>(size.y / cell) + 1;
-    for (int r = 0; r < rows; ++r)
-    {
-        for (int c = 0; c < cols; ++c)
-        {
-            const ImU32 tone = ((r ^ c) & 1) ? IM_COL32(70, 70, 78, 255)
-                                             : IM_COL32(48, 48, 54, 255);
-            const ImVec2 a(topLeft.x + c * cell, topLeft.y + r * cell);
-            ImVec2 b(a.x + cell, a.y + cell);
-            if (b.x > topLeft.x + size.x) b.x = topLeft.x + size.x;
-            if (b.y > topLeft.y + size.y) b.y = topLeft.y + size.y;
-            dl->AddRectFilled(a, b, tone);
-        }
-    }
-}
-
-namespace
-{
-// Assemble a Windows BMP. If paletteCount > 0: an 8-bpp indexed BMP with color table
-// 'palBGRA' (paletteCount*4 bytes, B,G,R,0) and 'pixels' = row-major top-down indices.
-// Otherwise: a 24-bpp BMP with 'pixels' = row-major top-down RGBA (4 bytes/pixel).
-// Rows are written bottom-up (BMP convention) and padded to a 4-byte boundary.
-std::vector<uint8_t> BuildBmp(int w, int h, const std::vector<uint8_t>& pixels,
-                              int paletteCount, const uint8_t* palBGRA)
-{
-    const bool indexed = paletteCount > 0;
-    const int bpp = indexed ? 8 : 24;
-    const int rowBytes = indexed ? w : w * 3;
-    const int pad = (4 - (rowBytes & 3)) & 3;
-    const int tableBytes = indexed ? paletteCount * 4 : 0;
-    const uint32_t dataOff = 14 + 40 + static_cast<uint32_t>(tableBytes);
-    const uint32_t imageSize = static_cast<uint32_t>((rowBytes + pad) * h);
-
-    std::vector<uint8_t> bmp;
-    bmp.reserve(dataOff + imageSize);
-    bmp.push_back('B'); bmp.push_back('M');                       // BITMAPFILEHEADER
-    PushU32(bmp, dataOff + imageSize);
-    PushU32(bmp, 0);
-    PushU32(bmp, dataOff);
-    PushU32(bmp, 40);                                            // BITMAPINFOHEADER
-    PushU32(bmp, static_cast<uint32_t>(w));
-    PushU32(bmp, static_cast<uint32_t>(h));
-    PushU16(bmp, 1);
-    PushU16(bmp, static_cast<uint16_t>(bpp));
-    PushU32(bmp, 0);
-    PushU32(bmp, imageSize);
-    PushU32(bmp, 0); PushU32(bmp, 0);
-    PushU32(bmp, indexed ? static_cast<uint32_t>(paletteCount) : 0);
-    PushU32(bmp, 0);
-    if (indexed) bmp.insert(bmp.end(), palBGRA, palBGRA + tableBytes);
-
-    for (int y = h - 1; y >= 0; --y)                             // bottom-up rows
-    {
-        if (indexed)
-        {
-            for (int x = 0; x < w; ++x)
-                bmp.push_back(pixels[static_cast<size_t>(y) * w + x]);
-        }
-        else
-        {
-            for (int x = 0; x < w; ++x)
-            {
-                const uint8_t* p = &pixels[(static_cast<size_t>(y) * w + x) * 4];
-                bmp.push_back(p[2]); bmp.push_back(p[1]); bmp.push_back(p[0]);   // BGR
-            }
-        }
-        for (int i = 0; i < pad; ++i) bmp.push_back(0);
-    }
-    return bmp;
-}
-}  // namespace
-
 bool App::BreakOnTextureWrite(const se_command& cmd)
 {
     const uint32_t bytes = TextureVramBytes(cmd);
@@ -4146,38 +4068,10 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h
     se_palette pal = {};
     if (PaletteOf(cmd, &pal) == SE_OK && pal.count > 0)
     {
-        // Keep the game's own palette: BMP color table (BGRA) + a reverse map from the
-        // decoded RGBA back to its palette index. The core only decodes to RGBA today
-        // (no indexed output), so we reconstruct indices by exact RGBA match. Keying on
-        // RGBA (not just RGB) keeps transparent/opaque duplicates distinct; if a palette
-        // still repeats a colour, the first index wins and a miss falls back to 0.
-        // TODO: a core indexed-decode entry point would make this exact and lossless.
-        std::vector<uint8_t> table(static_cast<size_t>(pal.count) * 4);
-        std::unordered_map<uint32_t, uint8_t> toIndex;
-        toIndex.reserve(pal.count * 2);
-        for (int i = 0; i < pal.count; ++i)
-        {
-            const se_palette_entry& e = pal.entries[i];
-            table[i * 4 + 0] = e.b; table[i * 4 + 1] = e.g;
-            table[i * 4 + 2] = e.r; table[i * 4 + 3] = 0;
-            const uint32_t key = (static_cast<uint32_t>(e.r) << 24) |
-                                 (static_cast<uint32_t>(e.g) << 16) |
-                                 (static_cast<uint32_t>(e.b) << 8) | e.a;
-            toIndex.emplace(key, static_cast<uint8_t>(i));
-        }
-        std::vector<uint8_t> idx(static_cast<size_t>(w) * h);
-        for (size_t i = 0; i < idx.size(); ++i)
-        {
-            const uint8_t* p = &mTexBuffer[i * 4];
-            const uint32_t key = (static_cast<uint32_t>(p[0]) << 24) |
-                                 (static_cast<uint32_t>(p[1]) << 16) |
-                                 (static_cast<uint32_t>(p[2]) << 8) | p[3];
-            const auto it = toIndex.find(key);
-            idx[i] = (it != toIndex.end()) ? it->second : 0;
-        }
+        // Keep the game's own palette so the export can be re-palettised.
         std::snprintf(name, sizeof(name), "texture_%06X_%dx%d_pal%u.bmp",
                       cmd.texture_address, w, h, pal.count);
-        bmp = BuildBmp(w, h, idx, pal.count, table.data());
+        bmp = BuildIndexedBmp(w, h, mTexBuffer, pal);
     }
     else
     {
@@ -6754,28 +6648,7 @@ void App::SaveScreenshot(IPlatform& platform)
         mLog.Error(mOperationStatus);
         return;
     }
-    const size_t pixelBytes = static_cast<size_t>(mFrameWidth) * mFrameHeight * 4u;
-    std::vector<uint8_t> bmp;
-    bmp.reserve(54u + pixelBytes);
-    bmp.push_back('B'); bmp.push_back('M');
-    PushU32(bmp, static_cast<uint32_t>(54u + pixelBytes));
-    PushU32(bmp, 0); PushU32(bmp, 54); PushU32(bmp, 40);
-    PushU32(bmp, static_cast<uint32_t>(mFrameWidth));
-    PushU32(bmp, static_cast<uint32_t>(mFrameHeight));
-    PushU16(bmp, 1); PushU16(bmp, 32); PushU32(bmp, 0);
-    PushU32(bmp, static_cast<uint32_t>(pixelBytes));
-    PushU32(bmp, 2835); PushU32(bmp, 2835); PushU32(bmp, 0); PushU32(bmp, 0);
-    for (int y = mFrameHeight - 1; y >= 0; --y)
-    {
-        const uint8_t* row = mFrameBuffer.data() + static_cast<size_t>(y) * mFrameWidth * 4u;
-        for (int x = 0; x < mFrameWidth; ++x)
-        {
-            bmp.push_back(row[x * 4 + 2]);
-            bmp.push_back(row[x * 4 + 1]);
-            bmp.push_back(row[x * 4 + 0]);
-            bmp.push_back(0xFF);
-        }
-    }
+    const std::vector<uint8_t> bmp = BuildBmpRgba(mFrameWidth, mFrameHeight, mFrameBuffer);
     if (platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()))
     {
         mOperationStatus = "Screenshot saved.";
