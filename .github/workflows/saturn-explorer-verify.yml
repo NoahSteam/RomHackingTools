@@ -1,0 +1,108 @@
+name: Saturn Explorer Functionality Verification
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'SaturnExplorer/**'
+      - '.github/workflows/saturn-explorer-verify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Native build + tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux frontend dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libgl1-mesa-dev libcurl4-openssl-dev xvfb
+
+      - name: Install macOS frontend dependencies
+        if: runner.os == 'macOS'
+        run: brew install sdl2
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      - name: Run CTest
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+      - name: Verify headless renderer exists
+        if: runner.os != 'Windows'
+        shell: bash
+        run: test -x build/bin/se-render
+
+      - name: Linux frontend startup smoke
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set +e
+          timeout 5s xvfb-run -a ./build/bin/SaturnExplorerFrontEnd >frontend-smoke.log 2>&1
+          code=$?
+          cat frontend-smoke.log
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            echo "Frontend exited unexpectedly with code $code"
+            exit "$code"
+          fi
+
+  sanitizer:
+    name: Linux ASan + UBSan tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure sanitizer build
+        env:
+          CXXFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+          CFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+        run: cmake -S . -B build-san -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build-san --parallel
+      - name: Run CTest under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-san --output-on-failure
+
+  web:
+    name: Web viewer build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.61
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build-web --parallel
+      - name: Verify viewer artifacts
+        shell: bash
+        run: |
+          test -f build-web/bin/index.html
+          test -f build-web/bin/index.js
+          test -f build-web/bin/index.wasm
