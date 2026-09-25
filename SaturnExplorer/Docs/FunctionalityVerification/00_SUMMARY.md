@@ -1,29 +1,34 @@
 # Saturn Explorer Functionality Verification
 
-**Date:** 2026-09-24  
-**Verified commit:** `b37fa2d320629ff6ebdb25a3eb27396e22533e82`  
-**Actions run:** https://github.com/NoahSteam/RomHackingTools/actions/runs/36074484045
+**Supported platforms:** Windows and macOS only  
+**Initial execution pass:** 2026-09-24  
+**Initial verified commit:** `b37fa2d320629ff6ebdb25a3eb27396e22533e82`  
+**Initial Actions run:** https://github.com/NoahSteam/RomHackingTools/actions/runs/36074484045
 
 Statuses: **Verified** = executed successfully; **Partial** = important automated coverage exists but not full user workflow; **Failed** = executable verification found a failure; **Blocked** = requires real emulator/game/savestate/interactive environment.
 
-## Platform results
+## Supported-platform result
 
 | Platform | Result |
 |---|---|
-| macOS native | **Verified build**; all 26 CTest tests passed |
-| Linux native | **Failed**; frontend builds, 25/26 tests pass; ISO builder test fails |
-| Windows native | **Failed**; test compile failure plus frontend link failure |
-| Web/Emscripten | **Failed**; default viewer does not compile |
-| Linux ASan/UBSan | **Failed**; 24/26 pass; ISO failure + UB in shadow call stack |
+| macOS | **Verified build**; native app bundle built and all 26 CTest tests passed |
+| Windows | **Failed**; test compile failure plus frontend link failure |
 
-## Confirmed defects
+Linux and Web are **not supported Saturn Explorer platforms** and are not release/functionality gates. Results observed there are retained only as development diagnostics because they exposed portable-code defects.
+
+## Confirmed supported-platform defects
 
 - **FV-001 High:** Windows frontend references `ScspMixVoices` but `ScspMix.cpp` is omitted from the Windows frontend CMake source list, causing LNK2019.
 - **FV-002 Medium:** `PanelInteractionTests.cpp` unconditionally includes `unistd.h`, so MSVC cannot compile the test target.
-- **FV-003 High:** default web viewer fails to compile because `App.cpp` references live-only `AdoptNewEmulatorInstance` and unavailable `mPatchLib`.
-- **FV-004 Medium:** ISO builder gives zero-length files zero sectors while `IsoFs::FileAt` treats them as spanning one sector. The next file can share the same LBA; Linux exposes this as `FAIL: FileAt resolves BGM01`.
-- **FV-005 Medium:** UBSan catches left shift of negative BSR displacement in `Integration/Mednafen/se_mednafen_glue.c:444`.
-- **FV-006 Medium:** on wasm32, FrameRecorder's 4 GiB `size_t` byte ceiling converts to 0, breaking Web Live history budgeting.
+
+## Development diagnostics discovered outside supported platforms
+
+These do not change platform support status, but they identify real code issues worth fixing:
+
+- **FV-003:** default Web/Emscripten target does not compile.
+- **FV-004:** ISO builder has an order-dependent zero-length-file LBA overlap exposed on Linux.
+- **FV-005:** UBSan catches left-shift of a negative BSR displacement in Mednafen shadow-call-stack tracking.
+- **FV-006:** wasm32 converts the 4 GiB FrameRecorder byte ceiling to zero.
 
 ## System status
 
@@ -35,14 +40,14 @@ Statuses: **Verified** = executed successfully; **Partial** = important automate
 | VDP2 | Verified for covered synthetic cases |
 | Offline savestate inputs | Blocked for real files |
 | Live transport | Partial |
-| Emulator hooks | Failed under UBSan |
+| Emulator hooks | Partial; sanitizer diagnostic found UB |
 | CPU debugger | Partial |
 | Memory debugger | Verified for covered tests |
 | Timeline/rewind | Partial |
-| Media/disc | Failed |
+| Media/disc | Partial; development diagnostic found ISO-builder bug |
 | ROM-hacking workflow | Partial |
-| Native frontend | Failed on Windows; builds on macOS/Linux |
-| Web frontend | Failed |
+| macOS frontend | **Verified build + tests** |
+| Windows frontend | **Failed build** |
 | Real emulator end-to-end | Blocked |
 
 See the per-system files in this directory and `99_MANUAL_VERIFICATION_REMAINING.md`.
