@@ -1007,9 +1007,13 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
                 const void* edits, size_t edits_len)
 {
     LiveState* st = St(u);
-    // frame and the two lengths go out as 32-bit wire fields; a silent truncation would ship a
-    // corrupt LST that the server misparses. Refuse out-of-range values instead.
-    if (frame > 0xFFFFFFFFull || edits_len > 0xFFFFFFFFull || state_len > 0xFFFFFFFFull)
+    // These become 32-bit wire fields; a silent truncation would ship a corrupt LST. `frame` is
+    // its own field, but the *whole* payload length (8 + edits + state) is what PollLoop casts to
+    // the int32_t command arg — so the aggregate is the binding limit, not the individual lengths
+    // (two individually-valid sizes can still overflow the sum). Keep it within INT32_MAX so the
+    // arg stays non-negative. A real state+edits payload is a few MB, far below this.
+    const uint64_t payloadLen = 8ull + edits_len + state_len;
+    if (frame > 0xFFFFFFFFull || payloadLen > 0x7FFFFFFFull)
         return -1;
     std::vector<uint8_t> payload;
     payload.reserve(8 + edits_len + state_len);

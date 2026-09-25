@@ -287,12 +287,20 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     }
 
     // 4) Path table size: one record per directory (both L and M tables are this many bytes).
-    uint32_t pathTableBytes = 0;
+    // Accumulate in 64-bit and validate before narrowing: the path-table size is a 32-bit ISO
+    // field, so a wrapped sum here would silently desync every LBA derived from it below.
+    uint64_t pathTableBytes64 = 0;
     for (const Dir& d : dirs)
     {
         const uint32_t idLen = d.identifier.empty() ? 1 : uint32_t(d.identifier.size());
-        pathTableBytes += 8 + idLen + (idLen & 1);
+        pathTableBytes64 += 8 + idLen + (idLen & 1);
     }
+    if (pathTableBytes64 > 0xFFFFFFFFull)
+    {
+        r.error = "Disc image too large (path table exceeds the ISO 32-bit size limit).";
+        return r;
+    }
+    const uint32_t pathTableBytes = static_cast<uint32_t>(pathTableBytes64);
     const uint32_t pathTableSectors = std::max<uint32_t>(SectorSpan(pathTableBytes), 1);
 
     // 5) Assign LBAs: system area, PVD, terminator, L/M path tables, directory extents, file data.

@@ -86,6 +86,9 @@ bool ParseInt(const std::string& tokIn, bool allowBareHex, uint32_t& out)
         else if (c >= 'A' && c <= 'F') d = 10 + c - 'A';
         else return false;
         if (d >= base) return false;
+        // Reject a literal that would overflow uint32_t (e.g. decimal 4294967296) rather than
+        // let it wrap silently — the caller's +/- guard only sees the already-wrapped value.
+        if (v > (UINT32_MAX - static_cast<uint32_t>(d)) / base) return false;
         v = v * base + static_cast<uint32_t>(d);
     }
     out = v;

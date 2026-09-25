@@ -155,6 +155,14 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    add_executable(SaturnExplorerExpressionResolverTests
+        FrontEnd/tests/ExpressionResolverTests.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+    )
+    target_include_directories(SaturnExplorerExpressionResolverTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerExpressionResolverTests COMMAND SaturnExplorerExpressionResolverTests)
+
     add_executable(SaturnExplorerAccessLogTests
         FrontEnd/tests/AccessLogTests.cpp
         FrontEnd/src/Debug/AccessLog.cpp
