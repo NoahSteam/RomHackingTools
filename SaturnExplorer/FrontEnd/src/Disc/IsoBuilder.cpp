@@ -296,6 +296,20 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     const uint32_t pathTableSectors = std::max<uint32_t>(SectorSpan(pathTableBytes), 1);
 
     // 5) Assign LBAs: system area, PVD, terminator, L/M path tables, directory extents, file data.
+    // Guard the running total against 32-bit wrap first: the volume-space size and every extent
+    // LBA below are 32-bit ISO fields (PutBoth32), so a total past 2^32-1 sectors would wrap
+    // silently and yield a corrupt image reported as a success. Sum in 64-bit and fail closed.
+    {
+        uint64_t total = uint64_t(kPvdLba) + 2 + uint64_t(pathTableSectors) * 2;
+        for (int di : bfs) total += dirs[di].sectors;
+        for (int di : bfs)
+            for (const File& f : dirs[di].files) total += SectorSpan(f.size);
+        if (total > 0xFFFFFFFFull)
+        {
+            r.error = "Disc image too large (exceeds the ISO 32-bit sector limit).";
+            return r;
+        }
+    }
     uint32_t lba = kPvdLba + 2;                 // after PVD (16) and terminator (17)
     const uint32_t lPathLba = lba; lba += pathTableSectors;
     const uint32_t mPathLba = lba; lba += pathTableSectors;

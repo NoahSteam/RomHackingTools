@@ -124,7 +124,18 @@ bool SimpleExpressionResolver::Resolve(const std::string& exprIn, uint32_t& outA
         outError = "Invalid offset";
         return false;
     }
-    outAddr = (sign == '+') ? (base + off) : (base - off);
+    // Reject wrap rather than silently landing in an unrelated Saturn region: base+off past
+    // 0xFFFFFFFF, or base-off below 0, is a typo, not an address the user meant.
+    if (sign == '+')
+    {
+        if (off > UINT32_MAX - base) { outError = "Address overflow"; return false; }
+        outAddr = base + off;
+    }
+    else
+    {
+        if (off > base) { outError = "Address underflow"; return false; }
+        outAddr = base - off;
+    }
     return true;
 }
 

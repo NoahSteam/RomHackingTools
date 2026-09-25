@@ -1007,6 +1007,10 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
                 const void* edits, size_t edits_len)
 {
     LiveState* st = St(u);
+    // frame and the two lengths go out as 32-bit wire fields; a silent truncation would ship a
+    // corrupt LST that the server misparses. Refuse out-of-range values instead.
+    if (frame > 0xFFFFFFFFull || edits_len > 0xFFFFFFFFull || state_len > 0xFFFFFFFFull)
+        return -1;
     std::vector<uint8_t> payload;
     payload.reserve(8 + edits_len + state_len);
     auto put32 = [&](uint32_t v) {

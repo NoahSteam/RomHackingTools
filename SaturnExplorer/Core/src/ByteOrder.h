@@ -11,7 +11,9 @@ namespace se
 
 inline uint16_t ReadBE16(const std::vector<uint8_t>& mem, uint32_t off)
 {
-    if (off + 1 >= mem.size())
+    // Order the check so `off` never has 1 added to it: `off + 1` wraps to 0 at
+    // off == UINT32_MAX and would sail past a non-empty vector into an OOB read.
+    if (off >= mem.size() || mem.size() - off < 2)
     {
         return 0;
     }
