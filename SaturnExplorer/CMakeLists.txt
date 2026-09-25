@@ -489,6 +489,7 @@ if(WIN32)
         FrontEnd/src/FrameRecorder.cpp
         FrontEnd/src/FrameLz.cpp
         FrontEnd/src/SavestateSlots.cpp
+        FrontEnd/src/ScspMix.cpp
         FrontEnd/src/PatchLibrary.cpp
         FrontEnd/src/Demo/DemoScript.cpp
         FrontEnd/src/Demo/DemoPlayer.cpp

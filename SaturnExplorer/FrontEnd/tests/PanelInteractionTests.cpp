@@ -13,7 +13,13 @@
 
 #include <cstdio>
 #include <cstdlib>
+#ifdef _WIN32
+#include <process.h>      // _getpid, for the per-process temp config dir
+static inline int se_getpid() { return _getpid(); }
+#else
 #include <unistd.h>       // getpid, for the per-process temp config dir
+static inline int se_getpid() { return getpid(); }
+#endif
 #include <iostream>
 #include <string>
 
@@ -562,7 +568,7 @@ void TestSplitHeightRoundTripsThroughSettings()
     // pixel height, including the fractional part a drag leaves behind. Points the config
     // dir at a private directory for the rest of the process -- so this test runs last,
     // and its directory carries the pid so concurrent runs cannot collide.
-    const std::string dir = "/tmp/__se_split_settings__" + std::to_string(getpid());
+    const std::string dir = "/tmp/__se_split_settings__" + std::to_string(se_getpid());
 #ifdef _WIN32
     _putenv_s("APPDATA", dir.c_str());
 #else
