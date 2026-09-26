@@ -10,12 +10,16 @@
 // don't matter to this machinery) and wait for the worker to publish each frame.
 #include "FrameRecorder.h"
 
+#include "FrameLz.h"
+
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <thread>
 #include <vector>
 
+#include "SaturnRegions.h"    // kVdp1VramSize
 #include "SeLiveProtocol.h"   // SE_LIVE_STATE_KIND_*
 #include "SeStateCodec.h"     // to build synthetic RLE payloads
 
@@ -56,6 +60,32 @@ bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo)
         if (std::chrono::steady_clock::now() > deadline) return false;
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+}
+
+// A pattern the LZ codec can actually compress, so a captured region has a non-trivial blob.
+uint8_t PatternByte(size_t i) { return (uint8_t)((i / 7) * 3 + (i & 0x0F)); }
+
+// A source that really serves VDP1 VRAM, so Capture() stores a non-empty compressed region
+// (the trivial source above leaves every region at rawSize 0, which never decompresses).
+size_t ReadPatternVram(void*, uint32_t offset, void* dst, size_t size)
+{
+    if (offset >= kVdp1VramSize) return 0;
+    const size_t n = std::min<size_t>(size, kVdp1VramSize - offset);
+    uint8_t* out = static_cast<uint8_t*>(dst);
+    for (size_t i = 0; i < n; ++i) out[i] = PatternByte(offset + i);
+    return n;
+}
+
+se_context* MakeVramContext()
+{
+    se_data_source ds{};
+    ds.abi_version = SE_ABI_VERSION;
+    ds.capabilities = SE_CAP_VDP1_VRAM;
+    ds.user = nullptr;
+    ds.read_vdp1_vram = &ReadPatternVram;
+    se_config cfg{};
+    cfg.abi_version = SE_ABI_VERSION;
+    return se_create(&ds, &cfg);
 }
 
 // RLE-encode 'full' into a wire payload the recorder can store + later decode.
@@ -175,6 +205,120 @@ int main()
         std::vector<uint8_t> out;
         Check(!r2.CanReconstruct(1) && !r2.ReconstructState(1, out),
               "delta with evicted keyframe is not reconstructable");
+    }
+
+    // --- A region whose blob does not decode is reported, not silently blanked (REW-02) ---
+    // DecompressRegion is the guard Select leans on, so drive it directly over all three
+    // shapes: a good blob, a corrupt one, and a region this source never had.
+    {
+        std::vector<uint8_t> raw(4096);
+        for (size_t i = 0; i < raw.size(); ++i) raw[i] = PatternByte(i);
+
+        FrameRecorder::Region good;
+        good.rawSize = raw.size();
+        FrameLzCompress(raw.data(), raw.size(), good.lz);
+
+        std::vector<uint8_t> out;
+        Check(FrameRecorder::DecompressRegion(good, out) && out == raw,
+              "a valid region decompresses to its original bytes");
+
+        // Truncating the blob leaves a stream that cannot produce rawSize bytes.
+        FrameRecorder::Region corrupt = good;
+        corrupt.lz.resize(corrupt.lz.size() / 2);
+        out.assign(16, 0xAB);
+        Check(!FrameRecorder::DecompressRegion(corrupt, out),
+              "a truncated region reports failure instead of succeeding with zeros");
+        Check(out.size() == corrupt.rawSize &&
+                  std::all_of(out.begin(), out.end(), [](uint8_t b) { return b == 0; }),
+              "a failed region leaves no earlier frame's bytes behind");
+
+        FrameRecorder::Region absent;   // rawSize 0: this source never had the region
+        Check(FrameRecorder::DecompressRegion(absent, out) && out.empty(),
+              "an absent region is not a corrupt one");
+    }
+
+    // --- Select over a frame with real contents hands back exactly what was captured ---
+    {
+        se_context* vctx = MakeVramContext();
+        Check(vctx != nullptr, "vram context created");
+        se_begin_frame(vctx);   // Capture() reads through the context's latched snapshot
+        FrameRecorder r3;
+        r3.Configure(10);
+        Check(CaptureFrame(r3, vctx, 1), "captured a frame with real VDP1 VRAM");
+        se_data_source ds{};
+        Check(r3.Select(0, &ds), "Select accepts a frame that decompresses");
+        uint8_t got[64] = {};
+        const size_t n = ds.read_vdp1_vram ? ds.read_vdp1_vram(ds.user, 1024, got, sizeof(got)) : 0;
+        bool same = n == sizeof(got);
+        for (size_t i = 0; i < n && same; ++i) same = got[i] == PatternByte(1024 + i);
+        Check(same, "the selected frame reads back the captured bytes");
+        se_destroy(vctx);
+    }
+
+    // --- A corrupt or mis-declared state block is refused at the door (REW-03) ---
+    {
+        FrameRecorder r4;
+        r4.Configure(10);
+        Check(CaptureFrame(r4, ctx, 1), "r4 frame 1");
+        const size_t before = r4.BytesUsed();
+
+        // Truncated payload: its tokens no longer decode to N bytes.
+        std::vector<uint8_t> truncated = encKf;
+        truncated.resize(truncated.size() / 2);
+        r4.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N,
+                            truncated.data(), truncated.size());
+        Check(r4.BytesUsed() == before, "a truncated state block is not stored");
+        Check(!r4.CanReconstruct(0), "a frame with a rejected block is not reconstructable");
+
+        // Intact payload, but the sender's declared full length disagrees with it.
+        r4.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)(N - 1),
+                            encKf.data(), encKf.size());
+        Check(r4.BytesUsed() == before, "a block whose decoded size belies fullLen is not stored");
+        Check(!r4.CanReconstruct(0), "...and leaves the frame unreconstructable");
+
+        // The same block with the right length still attaches, so the check is not refusing
+        // everything.
+        r4.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N,
+                            encKf.data(), encKf.size());
+        Check(r4.BytesUsed() == before + encKf.size(), "a well-formed block still attaches");
+        Check(r4.CanReconstruct(0), "...and the frame becomes reconstructable");
+    }
+
+    // --- A delta can't be XORed onto a keyframe of a different size (REW-03) ---
+    {
+        FrameRecorder r5;
+        r5.Configure(10);
+        Check(CaptureFrame(r5, ctx, 1) && CaptureFrame(r5, ctx, 2), "r5 frames 1,2");
+        // Frame 1 carries a shorter keyframe than frame 2's delta claims to be against.
+        const size_t shortN = N / 2;
+        std::vector<uint8_t> shortKf(shortN);
+        for (size_t i = 0; i < shortN; ++i) shortKf[i] = (uint8_t)(i + 3);
+        const std::vector<uint8_t> encShort = Encode(shortKf);
+        r5.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)shortN,
+                            encShort.data(), encShort.size());
+        r5.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N,
+                            encD2.data(), encD2.size());
+        std::vector<uint8_t> out;
+        Check(!r5.CanReconstruct(1) && !r5.ReconstructState(1, out),
+              "a delta whose keyframe has a different decoded size is not reconstructable");
+    }
+
+    // --- Attaching a block re-runs eviction, so it can't overshoot the budget (REW-01) ---
+    {
+        FrameRecorder r6;
+        r6.Configure(10);
+        Check(CaptureFrame(r6, ctx, 1) && CaptureFrame(r6, ctx, 2) && CaptureFrame(r6, ctx, 3),
+              "r6 frames 1,2,3");
+        // Set the ceiling to what the three frames already occupy: the ring is at its limit,
+        // so the next attachment has to push something out.
+        const size_t settled = r6.BytesUsed();
+        r6.Configure(10, settled);
+        Check(r6.Count() == 3, "all three frames fit at the new ceiling");
+        r6.AttachStateBlock(3, SE_LIVE_STATE_KIND_KEYFRAME, 3, (uint32_t)N,
+                            encKf.data(), encKf.size());
+        Check(r6.Count() < 3, "attaching over the ceiling evicts, rather than waiting for a frame");
+        Check(r6.BytesUsed() <= settled || r6.Count() == 1,
+              "the footprint is back within the ceiling");
     }
 
     se_destroy(ctx);

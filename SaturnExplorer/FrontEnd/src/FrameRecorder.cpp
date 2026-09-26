@@ -35,19 +35,6 @@ void CompressRegion(const std::vector<uint8_t>& raw, FrameRecorder::Region& r,
     FrameLzCompress(raw.data(), raw.size(), r.lz, lz);
 }
 
-void DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
-{
-    out.resize(r.rawSize);
-    if (r.rawSize == 0)
-    {
-        return;
-    }
-    if (!FrameLzDecompress(r.lz.data(), r.lz.size(), out.data(), r.rawSize))
-    {
-        std::memset(out.data(), 0, out.size());   // corrupt blob -> blank, don't crash
-    }
-}
-
 size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t size)
 {
     if (off >= buf.size())
@@ -60,6 +47,25 @@ size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t 
     return n;
 }
 }  // namespace
+
+// Blanking on failure as well as reporting it: the scratch is reused across Select calls, so
+// leaving a half-decoded region would show the previously selected frame's bytes under the
+// current frame's label. The return value is what stops those zeros being presented as memory
+// the emulator really recorded.
+bool FrameRecorder::DecompressRegion(const Region& r, std::vector<uint8_t>& out)
+{
+    out.resize(r.rawSize);
+    if (r.rawSize == 0)
+    {
+        return true;   // region absent from this source, not a corrupt blob
+    }
+    if (!FrameLzDecompress(r.lz.data(), r.lz.size(), out.data(), r.rawSize))
+    {
+        std::memset(out.data(), 0, out.size());
+        return false;
+    }
+    return true;
+}
 
 FrameRecorder::FrameRecorder()
 {
@@ -76,10 +82,11 @@ FrameRecorder::~FrameRecorder()
     }
 }
 
-void FrameRecorder::Configure(size_t maxFrames)
+void FrameRecorder::Configure(size_t maxFrames, uint64_t maxBytes)
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
     mMaxFrames = maxFrames;
+    mMaxBytes = maxBytes;
     Evict();
 }
 
@@ -201,7 +208,8 @@ void FrameRecorder::Evict()
 {
     // Always keep at least the newest frame, even if a single frame exceeds the
     // byte budget — otherwise scrubbing would have nothing to show.
-    while (mFrames.size() > 1 && (mBytes > kMaxBytes || mFrames.size() > mMaxFrames))
+    while (mFrames.size() > 1 &&
+           (static_cast<uint64_t>(mBytes) > mMaxBytes || mFrames.size() > mMaxFrames))
     {
         mBytes -= mFrames.front().bytes;
         mFrames.pop_front();
@@ -252,13 +260,25 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
             return false;
         }
         const Frame& f = mFrames[i];
-        DecompressRegion(f.vdp1Vram, mSelVdp1);
-        DecompressRegion(f.vdp2Vram, mSelVdp2);
-        DecompressRegion(f.cram, mSelCram);
-        DecompressRegion(f.wramLow, mSelWramLow);
-        DecompressRegion(f.wramHigh, mSelWramHigh);
-        DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
-        DecompressRegion(f.soundRam, mSelSoundRam);
+        // Every region is decompressed even once one has failed, so a refused frame leaves no
+        // region still holding the previously selected frame's bytes.
+        const std::pair<const Region*, std::vector<uint8_t>*> regions[] = {
+            { &f.vdp1Vram, &mSelVdp1 },     { &f.vdp2Vram, &mSelVdp2 },
+            { &f.cram,     &mSelCram },     { &f.wramLow,  &mSelWramLow },
+            { &f.wramHigh, &mSelWramHigh }, { &f.vdp1Fb,   &mSelVdp1Fb },
+            { &f.soundRam, &mSelSoundRam } };
+        bool ok = true;
+        for (const std::pair<const Region*, std::vector<uint8_t>*>& r : regions)
+        {
+            if (!DecompressRegion(*r.first, *r.second))
+            {
+                ok = false;
+            }
+        }
+        if (!ok)
+        {
+            return false;
+        }
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
@@ -325,6 +345,14 @@ void FrameRecorder::SetEditSink(void* user, void (*cb)(void*, int, uint32_t, con
 void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
                                      uint32_t fullLen, const uint8_t* payload, size_t len)
 {
+    // Check the payload before storing it: se_state_rle_decoded_size walks the tokens without
+    // allocating, so a truncated or corrupt block is rejected here rather than becoming a frame
+    // that offers itself as a rewind target and only fails when the user picks it. This is what
+    // lets CanReconstruct answer from presence alone.
+    if (!payload || len == 0 || se_state_rle_decoded_size(payload, len) != fullLen)
+    {
+        return;
+    }
     std::lock_guard<std::mutex> lk(mRingMtx);
     // Blocks lag their frame by a few frames, so search from the back (recent frames first).
     for (auto it = mFrames.rbegin(); it != mFrames.rend(); ++it)
@@ -338,6 +366,10 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
         it->hasState = true;
         it->bytes += len;
         mBytes += len;
+        // A savestate block is large and arrives long after its frame was accounted for, so it
+        // can put the ring over budget on its own. Evict here too, not just when the next
+        // compressed frame lands. ('it' does not survive this call.)
+        Evict();
         return;
     }
     // Frame not resident (evicted or never captured): drop the block.
@@ -352,6 +384,27 @@ static bool DecodeStateBlock(const FrameRecorder::Frame& b, std::vector<uint8_t>
     return n == b.stateFullLen;
 }
 
+// The resident keyframe that delta frame 'f' is expressed against, or null if there is none
+// usable. Caller holds mRingMtx.
+//
+// Shared by CanReconstruct and ReconstructState so the two cannot disagree about which frames
+// are resumable — the question and the work have to consider the same candidates. Matching
+// stateFullLen is part of being usable: a keyframe of a different decoded size cannot be the
+// base of this delta, and XORing the two would produce a plausible-looking savestate that is
+// not any state the emulator was ever in.
+const FrameRecorder::Frame* FrameRecorder::FindKeyframe(const Frame& f) const
+{
+    for (const Frame& g : mFrames)
+    {
+        if (g.frameNumber == f.baseKeyframe && g.hasState &&
+            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME && g.stateFullLen == f.stateFullLen)
+        {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
 bool FrameRecorder::ReconstructState(size_t i, std::vector<uint8_t>& out) const
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
@@ -361,10 +414,7 @@ bool FrameRecorder::ReconstructState(size_t i, std::vector<uint8_t>& out) const
     if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME)
         return DecodeStateBlock(f, out);
     // Delta: reconstruct full = keyframe_full XOR delta. Its keyframe must still be resident.
-    const Frame* kf = nullptr;
-    for (const Frame& g : mFrames)
-        if (g.frameNumber == f.baseKeyframe && g.hasState &&
-            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) { kf = &g; break; }
+    const Frame* kf = FindKeyframe(f);
     if (!kf) return false;
     std::vector<uint8_t> base, delta;
     if (!DecodeStateBlock(*kf, base) || !DecodeStateBlock(f, delta)) return false;
@@ -381,10 +431,7 @@ bool FrameRecorder::CanReconstruct(size_t i) const
     const Frame& f = mFrames[i];
     if (!f.hasState) return false;
     if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
-    for (const Frame& g : mFrames)
-        if (g.frameNumber == f.baseKeyframe && g.hasState &&
-            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
-    return false;
+    return FindKeyframe(f) != nullptr;
 }
 
 void FrameRecorder::TruncateAfter(size_t i)
