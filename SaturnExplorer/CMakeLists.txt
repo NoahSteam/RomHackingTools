@@ -301,6 +301,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerFrameRecorderTests PRIVATE
         FrontEnd/src
+        Core/tests                       # FakeVdpSource.h, the shared Seam A mock
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE SaturnExplorerCore)
@@ -435,6 +436,14 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
     # was replaced. Stands up a loopback listener, so POSIX sockets only; the Windows
     # driver speaks a named pipe and would need its own harness.
     if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
+        # The live driver's byte-budgeted queue: pure container, no socket needed.
+        add_executable(SaturnExplorerByteQueueTests
+            FrontEnd/tests/ByteQueueTests.cpp)
+        target_include_directories(SaturnExplorerByteQueueTests PRIVATE
+            Drivers/Live/src)
+        add_test(NAME SaturnExplorerByteQueueTests
+                 COMMAND SaturnExplorerByteQueueTests)
+
         add_executable(SaturnExplorerLiveReconnectTests
             FrontEnd/tests/LiveReconnectTests.cpp)
         target_include_directories(SaturnExplorerLiveReconnectTests PRIVATE

@@ -11,14 +11,14 @@ still open. Keep it updated in the same commit that fixes a finding — otherwis
 answer "how many are left" is to re-derive it from the git log, and two readers will get two
 answers.
 
-41 IDs are filed across the 12 reports. VDP1-01 is not a separate defect (it is ABI-01 seen
-from the VDP1 side, and its fix closed both), so there are 40 distinct findings, of which 15
-are fixed and 25 remain.
+41 IDs are filed across the 12 reports, covering 40 distinct defects: VDP1-01 is ABI-01 seen
+from the VDP1 side, and one fix closed both. The rows below are the closed ones; count them
+rather than trusting a tally written out in prose, which is one more thing to keep in step.
 
 | ID | Fixed in |
 |---|---|
 | ABI-01 | `798567f` |
-| VDP1-01 | `798567f` (same root cause as ABI-01) |
+| VDP1-01 | `798567f` (same fix as ABI-01) |
 | CPU-02 | `798567f` |
 | MEM-01 | `798567f`, follow-up `447a1b7` |
 | LIVE-04 | `798567f`, follow-up `447a1b7` |
@@ -64,8 +64,7 @@ lines and polylines there remains open.
 
 ## Suggested fix order
 
-Steps 1-3 of the original order are done (ABI-01, ROM-01, DISC-01, CPU-02, and REW-01/02/03/04
-with LIVE-03); what is left, in order:
+Steps 1-3 of the original order are done (see the status table); what is left, in order:
 
 1. HOOK-01 — the remaining High. Windows-only, so it needs a Windows machine to exercise.
 2. LIVE-01/LIVE-02 and CPU-01. CPU-01 needs a semantics decision first: either execution

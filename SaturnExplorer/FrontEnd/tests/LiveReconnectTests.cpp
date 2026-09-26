@@ -7,8 +7,8 @@
 // generation is how it notices; these tests pin that it counts attachments rather than,
 // say, connection attempts, because everything SE drops on a replacement hangs off it.
 //
-// Poke backpressure: the poll thread ships one queued memory write per cycle, so a producer
-// that outruns it must be told to wait rather than growing the queue without limit.
+// Poke budget: the poll thread ships one queued memory write per cycle, so a producer that
+// outruns it must be refused rather than growing the queue without limit.
 #include "LiveDriver.h"
 #include "saturnexplorer/SeHost.h"
 
@@ -143,10 +143,8 @@ void TestGenerationIsZeroForANonLiveSource()
     CHECK(se_live_connection_generation(nullptr) == 0u);
 }
 
-// A server that never answers means the poll thread ships nothing, so every poke stays
-// queued -- the producer-outruns-consumer case LIVE-03 is about. The queue must start
-// refusing rather than growing: a write callback returning 0 says "nothing written", which
-// is backpressure the caller already knows how to read.
+// A server that never answers ships nothing, so every poke stays queued -- the
+// producer-outruns-consumer case, with the consumer stopped dead.
 void TestPokeQueueAppliesBackpressure()
 {
     HangUpServer server;

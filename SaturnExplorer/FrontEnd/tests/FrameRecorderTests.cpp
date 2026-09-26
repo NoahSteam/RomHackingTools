@@ -19,6 +19,7 @@
 #include <thread>
 #include <vector>
 
+#include "FakeVdpSource.h"    // se_test::State / CreateContext (shared Seam A mock)
 #include "SaturnRegions.h"    // kVdp1VramSize
 #include "SeLiveProtocol.h"   // SE_LIVE_STATE_KIND_*
 #include "SeStateCodec.h"     // to build synthetic RLE payloads
@@ -64,29 +65,6 @@ bool CaptureFrame(FrameRecorder& r, se_context* ctx, uint64_t frameNo)
 
 // A pattern the LZ codec can actually compress, so a captured region has a non-trivial blob.
 uint8_t PatternByte(size_t i) { return (uint8_t)((i / 7) * 3 + (i & 0x0F)); }
-
-// A source that really serves VDP1 VRAM, so Capture() stores a non-empty compressed region
-// (the trivial source above leaves every region at rawSize 0, which never decompresses).
-size_t ReadPatternVram(void*, uint32_t offset, void* dst, size_t size)
-{
-    if (offset >= kVdp1VramSize) return 0;
-    const size_t n = std::min<size_t>(size, kVdp1VramSize - offset);
-    uint8_t* out = static_cast<uint8_t*>(dst);
-    for (size_t i = 0; i < n; ++i) out[i] = PatternByte(offset + i);
-    return n;
-}
-
-se_context* MakeVramContext()
-{
-    se_data_source ds{};
-    ds.abi_version = SE_ABI_VERSION;
-    ds.capabilities = SE_CAP_VDP1_VRAM;
-    ds.user = nullptr;
-    ds.read_vdp1_vram = &ReadPatternVram;
-    se_config cfg{};
-    cfg.abi_version = SE_ABI_VERSION;
-    return se_create(&ds, &cfg);
-}
 
 // RLE-encode 'full' into a wire payload the recorder can store + later decode.
 std::vector<uint8_t> Encode(const std::vector<uint8_t>& full)
@@ -207,9 +185,10 @@ int main()
               "delta with evicted keyframe is not reconstructable");
     }
 
-    // --- A region whose blob does not decode is reported, not silently blanked (REW-02) ---
-    // DecompressRegion is the guard Select leans on, so drive it directly over all three
-    // shapes: a good blob, a corrupt one, and a region this source never had.
+    // --- A frame that does not fully decode is refused, not blanked and served (REW-02) ---
+    // Nothing can corrupt a blob once the recorder has stored one, so the frame is posed
+    // directly. DecompressFrame is the recorder's only decode entry point, so these cover
+    // both the per-region verdict and what the frame does with it.
     {
         std::vector<uint8_t> raw(4096);
         for (size_t i = 0; i < raw.size(); ++i) raw[i] = PatternByte(i);
@@ -218,47 +197,42 @@ int main()
         good.rawSize = raw.size();
         FrameLzCompress(raw.data(), raw.size(), good.lz);
 
-        std::vector<uint8_t> out;
-        Check(FrameRecorder::DecompressRegion(good, out) && out == raw,
-              "a valid region decompresses to its original bytes");
-
         // Truncating the blob leaves a stream that cannot produce rawSize bytes.
         FrameRecorder::Region corrupt = good;
         corrupt.lz.resize(corrupt.lz.size() / 2);
-        out.assign(16, 0xAB);
-        Check(!FrameRecorder::DecompressRegion(corrupt, out),
-              "a truncated region reports failure instead of succeeding with zeros");
-        Check(out.size() == corrupt.rawSize &&
-                  std::all_of(out.begin(), out.end(), [](uint8_t b) { return b == 0; }),
-              "a failed region leaves no earlier frame's bytes behind");
 
-        FrameRecorder::Region absent;   // rawSize 0: this source never had the region
-        Check(FrameRecorder::DecompressRegion(absent, out) && out.empty(),
-              "an absent region is not a corrupt one");
-
-        // One bad region condemns the whole frame, wherever in the frame it sits, and the
-        // regions after it are still overwritten rather than left holding an earlier frame.
         FrameRecorder::Frame frame;
         frame.vdp1Vram = good;
         frame.cram = good;
-        frame.soundRam = good;
+        frame.soundRam = good;   // wramLow/High, vdp2Vram, vdp1Fb stay absent (rawSize 0)
         FrameRecorder::Scratch scratch;
         Check(FrameRecorder::DecompressFrame(frame, scratch),
               "a frame whose regions all decode is accepted");
         Check(scratch.vdp1 == raw && scratch.cram == raw && scratch.soundRam == raw,
               "...and every region lands in the scratch");
+        Check(scratch.wramLow.empty() && scratch.vdp2.empty(),
+              "an absent region is not a corrupt one");
 
-        frame.cram = corrupt;   // in the middle: the regions after it must still be written
+        // In the middle, so the regions after it prove they are still written.
+        frame.cram = corrupt;
         scratch.soundRam.assign(8, 0xCD);
         Check(!FrameRecorder::DecompressFrame(frame, scratch),
               "a frame with one undecodable region is refused");
+        Check(scratch.cram.size() == corrupt.rawSize &&
+                  std::all_of(scratch.cram.begin(), scratch.cram.end(),
+                              [](uint8_t b) { return b == 0; }),
+              "the failed region leaves no earlier frame's bytes behind");
         Check(scratch.soundRam == raw,
               "a refused frame still overwrites the regions past the bad one");
     }
 
     // --- Select over a frame with real contents hands back exactly what was captured ---
+    // The trivial source above leaves every region at rawSize 0, which never decompresses, so
+    // this one serves real VDP1 VRAM through the shared fixture.
     {
-        se_context* vctx = MakeVramContext();
+        se_test::State st(kVdp1VramSize);
+        for (size_t i = 0; i < st.vdp1.size(); ++i) st.vdp1[i] = PatternByte(i);
+        se_context* vctx = se_test::CreateContext(st);
         Check(vctx != nullptr, "vram context created");
         se_begin_frame(vctx);   // Capture() reads through the context's latched snapshot
         FrameRecorder r3;
@@ -268,9 +242,8 @@ int main()
         Check(r3.Select(0, &ds), "Select accepts a frame that decompresses");
         uint8_t got[64] = {};
         const size_t n = ds.read_vdp1_vram ? ds.read_vdp1_vram(ds.user, 1024, got, sizeof(got)) : 0;
-        bool same = n == sizeof(got);
-        for (size_t i = 0; i < n && same; ++i) same = got[i] == PatternByte(1024 + i);
-        Check(same, "the selected frame reads back the captured bytes");
+        Check(n == sizeof(got) && std::equal(got, got + n, st.vdp1.begin() + 1024),
+              "the selected frame reads back the captured bytes");
         se_destroy(vctx);
     }
 

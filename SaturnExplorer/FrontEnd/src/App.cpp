@@ -1522,10 +1522,8 @@ bool App::RefreshScrubContext()
     se_data_source ds;
     if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
     {
-        // The recorder refused the frame (a region failed to decompress). Say so in the Log and
-        // fall back to live rather than leaving the user to wonder why scrubbing stopped: the
-        // alternative, showing the frame with the bad region zeroed, would be a screen of
-        // memory that never existed.
+        // Select refused the frame. Name it in the Log and fall back to live, rather than
+        // leaving the user to wonder why scrubbing stopped.
         const uint64_t bad = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
         mLog.Error("Rewind: recorded frame " + std::to_string(bad) +
                        " could not be decompressed; returning to the live view",

@@ -67,29 +67,18 @@ public:
         std::vector<uint8_t> vdp1, vdp2, cram, wramLow, wramHigh, vdp1Fb, soundRam;
     };
 
-    // Decompress one region into 'out' (resized to r.rawSize). False means the blob did not
-    // decode, and the caller must not use the frame: 'out' is zeroed on that path so no stale
-    // contents leak, but zeros are not what the emulator recorded and must not be shown as if
-    // they were. A rawSize of 0 is a region this source never had, and succeeds.
-    static bool DecompressRegion(const Region& r, std::vector<uint8_t>& out);
-
-    // Decompress every region of 'f' into 'out'. False if any of them failed -- one bad region
-    // condemns the frame, because a frame is only worth showing if all of it is real. Every
-    // region is attempted even after a failure, so no part of 'out' is left holding whatever
-    // frame was decompressed into it last.
-    //
-    // Both of these are pure and static so the tests can drive them over a hand-built Frame:
-    // the recorder has no seam through which a stored blob can be corrupted, and refusing a
-    // corrupt frame is the behaviour worth pinning.
+    // Decompress every region of 'f' into 'out'; false if any of them did not decode. Every
+    // region is attempted even after a failure, so none is left holding the frame decompressed
+    // into it last. Pure and static: the recorder has no seam through which a stored blob can
+    // be corrupted, so this is where a test can pose a frame that does not decode.
     static bool DecompressFrame(const Frame& f, Scratch& out);
 
-    // The default ring byte ceiling. uint64_t, not size_t: on a 32-bit target (the wasm web
-    // build) 4 GiB truncates to 0 in a size_t and the ceiling would evict everything but the
-    // newest frame. It is a backstop either way -- the frame cap is the effective limit.
+    // The default ring byte ceiling, a backstop behind the frame cap that is the effective
+    // limit. uint64_t, not size_t: on a 32-bit target (the wasm web build) 4 GiB truncates to 0
+    // in a size_t, and a ceiling of 0 evicts everything but the newest frame.
     static const uint64_t kDefaultMaxBytes = 4ull * 1024u * 1024u * 1024u;
 
-    // Cap the ring to at most 'maxFrames' frames, and its total compressed footprint to
-    // 'maxBytes' (the byte ceiling is a backstop against runaway memory).
+    // Cap the ring to at most 'maxFrames' frames and 'maxBytes' of compressed footprint.
     void Configure(size_t maxFrames, uint64_t maxBytes = kDefaultMaxBytes);
 
     // Read the context's current frame (raw) and queue it for background
@@ -103,9 +92,12 @@ public:
 
     // Build a data source over frame i. The decompressed regions live in this
     // recorder's scratch and stay valid until the next Select() call. Returns
-    // false if i is out of range, or if any of the frame's compressed regions failed to
-    // decode — a frame that cannot be fully rebuilt is refused rather than shown with the
-    // undecodable parts zeroed, which would read as memory the emulator really recorded.
+    // false if i is out of range, or if any of the frame's compressed regions failed to decode.
+    //
+    // Refusing such a frame rather than showing it with the undecodable parts zeroed is the
+    // whole contract here: zeros are indistinguishable from memory the emulator really
+    // recorded, so the memory view, RAM search and renderer would all present invented data as
+    // fact. Every other comment about zeroing in this component is in service of this one.
     // The caller creates a context from *out.
     // When an edit sink is set (SetEditSink), the source is writable: edits made
     // against the scrubbed frame are forwarded to the sink as pending pokes.

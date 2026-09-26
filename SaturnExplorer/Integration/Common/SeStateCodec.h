@@ -84,25 +84,23 @@ static inline size_t se_state_rle_encode(unsigned char* dst, size_t cap,
             dst[out++] = 0x01;
             if (!se_state_put_varint(dst, cap, &out, run)) return 0;
             if (run > cap - out) return 0;   /* not out + run: the sum can wrap */
-            {
-                size_t k;
-                for (k = 0; k < run; ++k) dst[out++] = src[start + k];
-            }
+            memcpy(dst + out, src + start, run);
+            out += run;
         }
     }
     return out;
 }
 
-/* Shared walk behind se_state_rle_decode and se_state_rle_decoded_size: decode `src` (n bytes),
- * writing the result to `dst` when it is non-NULL. Returns the decoded length, or 0 on a
- * malformed stream or one whose output would exceed `cap`.
+/* Inverse of se_state_rle_encode. Returns the decoded length (bytes written to dst), or 0 on a
+ * malformed stream or one whose output would exceed `cap`. A NULL `dst` measures instead of
+ * decoding -- see se_state_rle_decoded_size, which is that call.
  *
  * The bounds are written `count > cap - out` rather than `out + count > cap` because `count`
  * comes straight off the wire and can be near SIZE_MAX: the sum wraps, passes the check, and
  * the copy then runs off the end of dst. `out <= cap` and `pos <= n` hold on every iteration,
  * so neither subtraction can underflow. */
-static inline size_t se_state_rle_walk(unsigned char* dst, size_t cap,
-                                       const unsigned char* src, size_t n)
+static inline size_t se_state_rle_decode(unsigned char* dst, size_t cap,
+                                         const unsigned char* src, size_t n)
 {
     size_t out = 0, pos = 0;
     while (pos < n)
@@ -131,20 +129,12 @@ static inline size_t se_state_rle_walk(unsigned char* dst, size_t cap,
     return out;
 }
 
-/* Inverse of se_state_rle_encode. Returns decoded length (bytes written to dst), or 0 on a
- * malformed stream or if the output would exceed `cap`. */
-static inline size_t se_state_rle_decode(unsigned char* dst, size_t cap,
-                                         const unsigned char* src, size_t n)
-{
-    return se_state_rle_walk(dst, cap, src, n);
-}
-
 /* The length se_state_rle_decode would produce, without materializing it (0 if malformed).
  * Lets a receiver check a payload against the full length its sender declared before storing
  * it: one token walk, no allocation, and zero runs are counted rather than written. */
 static inline size_t se_state_rle_decoded_size(const unsigned char* src, size_t n)
 {
-    return se_state_rle_walk(NULL, SIZE_MAX, src, n);
+    return se_state_rle_decode(NULL, SIZE_MAX, src, n);
 }
 
 #ifdef __cplusplus
