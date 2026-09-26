@@ -56,6 +56,13 @@ const IsoEntry* Find(const IsoFs& fs, const std::string& p)
 }
 }  // namespace
 
+// True when 'path' names an existing file.
+bool FileExists(const std::string& path)
+{
+    std::ifstream f(path, std::ios::binary);
+    return static_cast<bool>(f);
+}
+
 int main()
 {
     const std::string base = "discbuild_test_tmp";
@@ -157,6 +164,46 @@ int main()
     {
         VerifyEncodeResult vi = VerifyDataTrackEncoding(base + "/nope.iso");
         Check(!vi.ok, "verify declines a MODE1/2048 .iso");
+    }
+
+    // --- DISC-01: a track that cannot be copied fails the whole build ---
+    // The point of BIN/CUE is that every non-data track survives verbatim. A cue written
+    // without one describes a disc that is quietly missing its audio, so the build must
+    // refuse rather than warn. The source cue here names a file that does not exist, which
+    // is what a moved or renamed source track looks like.
+    {
+        WriteText(base + "/broken.cue",
+            "FILE \"src.bin\" BINARY\n"
+            "  TRACK 01 MODE1/2352\n"
+            "    INDEX 01 00:00:00\n"
+            "FILE \"missing_audio.bin\" BINARY\n"
+            "  TRACK 02 AUDIO\n"
+            "    INDEX 01 00:00:00\n");
+
+        DiscBuildOptions bad = opt;
+        bad.sourceImage = base + "/broken.cue";
+        bad.outPath = base + "/failed.cue";
+        // The scratch directory survives between runs, so clear the outputs this case
+        // asserts the absence of. Without this the check passes or fails on whatever the
+        // previous run happened to leave behind.
+        std::remove((base + "/failed.cue").c_str());
+        std::remove((base + "/failed (Track 01).bin").c_str());
+        const DiscBuildResult rb = BuildDiscImage(bad);
+        Check(!rb.ok, "build fails when a track cannot be copied");
+        Check(!rb.error.empty(), "the failure says which track and why");
+        // Nothing half-written is left behind to be mistaken for a finished image.
+        Check(!FileExists(base + "/failed.cue"), "no cue written for a failed build");
+        Check(!FileExists(base + "/failed (Track 01).bin"), "the data track was cleaned up");
+
+        // The partial build is available, but only by asking for it.
+        DiscBuildOptions partial = bad;
+        partial.allowPartialTracks = true;
+        partial.outPath = base + "/partial.cue";
+        const DiscBuildResult rp = BuildDiscImage(partial);
+        Check(rp.ok, rp.ok ? "partial build succeeds when opted in" : rp.error.c_str());
+        Check(rp.partial, "a partial build says so");
+        Check(!rp.warnings.empty(), "a partial build names the missing track");
+        Check(rp.audioTracksCopied == 0, "the audio track really is absent");
     }
 
     // ISO (data-only) output.

@@ -144,7 +144,22 @@ DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
         const std::string outBin = outDir + stem + " (Track " + Track2(t.number) + ").bin";
         if (rg.length == 0 || !CopyRange(rg.file, rg.offset, rg.length, outBin))
         {
+            // Fail closed. A BIN/CUE build exists to preserve every non-data track
+            // verbatim, so a dropped track is a failed build, not a warning: the cue would
+            // otherwise describe a disc that plays without its music and gives no sign
+            // anything is missing. Delete what was written so a half-built set cannot be
+            // mistaken for a finished image.
+            if (!opt.allowPartialTracks)
+            {
+                r.error = "Could not copy track " + Track2(t.number) + " from " + rg.file +
+                          ". The disc image would be missing it, so nothing was written. "
+                          "Enable partial builds if that is wanted anyway.";
+                for (const std::string& written : r.outputs) std::remove(written.c_str());
+                r.outputs.clear();
+                return r;
+            }
             r.warnings.push_back("Could not copy track " + Track2(t.number) + " from " + rg.file);
+            r.partial = true;
             continue;
         }
         r.outputs.push_back(outBin);

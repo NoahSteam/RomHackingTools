@@ -29,6 +29,12 @@ struct DiscBuildOptions
                                       // bare .bin/.iso (single data track, no audio to copy)
     std::string     outPath;          // output path: the .cue (BIN/CUE) or the .iso (ISO)
     bool            binCue = true;    // true = BIN/CUE (recommended), false = ISO (data only)
+    // A track that cannot be copied from the source normally fails the whole build: the
+    // point of BIN/CUE is that every non-data track survives verbatim, and a cue written
+    // without them describes a disc that is quietly missing its audio while looking fine.
+    // Set this only when a partial image is knowingly wanted; the result then reports the
+    // missing tracks in 'warnings' and sets 'partial'.
+    bool            allowPartialTracks = false;
 };
 
 struct DiscBuildResult
@@ -43,6 +49,7 @@ struct DiscBuildResult
     uint32_t    audioTracksCopied = 0;
     uint64_t    totalBytes = 0;          // sum of the written image files
     bool        ipBinInjected = false;
+    bool        partial = false;      // a track was skipped (only possible with allowPartialTracks)
     std::vector<std::string> warnings;
 };
 
