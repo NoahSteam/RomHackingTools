@@ -167,9 +167,10 @@ int main()
                                   : "literal run with a wrapping count returns 0");
                 // A truncated literal run is malformed however it is read, so measuring rejects
                 // it at either width. A huge *zero* run is not malformed when measuring -- there
-                // is no destination to overflow, so the honest answer is a huge length, which
-                // then fails the declared-length comparison at the call site. Asserting 0 there
-                // would be asserting a bug.
+                // is no destination to overflow, so the honest answer is the length itself, or 0
+                // when that length does not fit a size_t at all. Either way the declared-length
+                // comparison at the call site is what rejects it; asserting 0 unconditionally
+                // here would be asserting a bug.
                 if (tag == 0x01)
                 {
                     Check(se_state_rle_decoded_size(stream.data(), stream.size()) == 0,
