@@ -97,6 +97,11 @@ struct LiveEmuSlots
 // One received savestate block (v16): a keyframe or a delta-vs-keyframe, frame-tagged. The
 // payload is the opaque, RLE-compressed emulator image (the client never interprets it, only
 // stores it and reconstructs a full image to hand back via LST). Blocks arrive lagging.
+// Ceiling on savestate blocks waiting to be drained into the client's FrameRecorder. The
+// recorder's own ring is the real rewind budget; this only has to survive a UI thread that has
+// not drained for a while (a modal dialog, a long load) without the payloads piling up.
+static const size_t kMaxQueuedStateBytes = 64u * 1024u * 1024u;
+
 struct LiveStateBlock
 {
     uint8_t  kind = 0;   // SE_LIVE_STATE_KIND_*
@@ -104,6 +109,43 @@ struct LiveStateBlock
     uint32_t base = 0;   // frame_no of the keyframe a delta is against (== frame for a keyframe)
     uint32_t fullLen = 0;   // decoded full-savestate size
     std::vector<uint8_t> payload;
+};
+
+// Queued memory pokes waiting for the poll thread, which ships one per cycle (~8 ms). A
+// producer that outruns that -- a hex-editor drag, a script writing every frame -- would
+// otherwise grow this without limit, so the queue carries its own byte total and refuses new
+// work past kMaxPokeBytes.
+//
+// Refusing is deliberate. Dropping the oldest entry, as the snapshot-side queues do, would
+// silently discard an edit the user already watched the ABI accept; a write callback that
+// returns 0 instead reports "nothing written" through a channel the caller already handles.
+struct PokeQueue
+{
+    static const size_t kMaxPokeBytes = 8u * 1024u * 1024u;
+
+    std::deque<std::vector<uint8_t>> q;
+    size_t bytes = 0;
+
+    // False if the payload would exceed the budget; the caller must report a short write.
+    bool Push(std::vector<uint8_t>&& payload)
+    {
+        if (payload.size() > kMaxPokeBytes - bytes)
+        {
+            return false;
+        }
+        bytes += payload.size();
+        q.push_back(std::move(payload));
+        return true;
+    }
+
+    // The oldest payload, moved out. Only call with !q.empty().
+    std::vector<uint8_t> Pop()
+    {
+        std::vector<uint8_t> out = std::move(q.front());
+        q.pop_front();
+        bytes -= out.size();
+        return out;
+    }
 };
 
 // Pending control command the UI thread hands to the poll thread (which owns the
@@ -147,9 +189,9 @@ struct LiveState
     bool                  bkptsDirty = false;
     // Pending work-RAM pokes from the Hex Editor. Each entry is a WRM payload:
     // address(u32 LE) + big-endian bytes. The poll thread ships one per cycle.
-    std::vector<std::vector<uint8_t>> writes;
+    PokeQueue             writes;
     // Pending sound-RAM pokes (v13). Each entry is a WRS payload: offset(u32 LE) + bytes.
-    std::vector<std::vector<uint8_t>> soundWrites;
+    PokeQueue             soundWrites;
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
@@ -189,6 +231,7 @@ struct LiveState
     // and stored in the client's FrameRecorder. Bounded. Guarded by stateMtx.
     std::mutex            stateMtx;
     std::deque<LiveStateBlock> stateBlocks;
+    size_t                stateBytes = 0;   // payload bytes currently queued (bounds the deque)
     // Pending LST rewind payload (v16): the whole wire payload (frame + edits_len + edits +
     // state), stashed by CbLoadState for the poll thread to ship one-shot. Guarded by ctlMtx.
     std::vector<uint8_t>  loadPayload;
@@ -734,19 +777,17 @@ void PollLoop(LiveState* st)
                 payload = st->traces;
                 st->tracesDirty = false;
             }
-            else if (!st->writes.empty())
+            else if (!st->writes.q.empty())
             {
                 // Ship one poke: payload = address(4) + bytes; arg = byte count.
-                payload = std::move(st->writes.front());
-                st->writes.erase(st->writes.begin());
+                payload = st->writes.Pop();
                 verb = SE_LIVE_VERB_WRITE;
                 arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
             }
-            else if (!st->soundWrites.empty())
+            else if (!st->soundWrites.q.empty())
             {
                 // Ship one sound-RAM poke: payload = offset(4) + bytes; arg = byte count.
-                payload = std::move(st->soundWrites.front());
-                st->soundWrites.erase(st->soundWrites.begin());
+                payload = st->soundWrites.Pop();
                 verb = SE_LIVE_VERB_WRITESND;
                 arg = static_cast<int32_t>(payload.size() >= 4 ? payload.size() - 4 : 0);
             }
@@ -841,8 +882,20 @@ void PollLoop(LiveState* st)
         if (!stateBlocks.empty())
         {
             std::lock_guard<std::mutex> lk(st->stateMtx);
-            for (LiveStateBlock& b : stateBlocks) st->stateBlocks.push_back(std::move(b));
-            while (st->stateBlocks.size() > 1024) st->stateBlocks.pop_front();   // bound the queue
+            for (LiveStateBlock& b : stateBlocks)
+            {
+                st->stateBytes += b.payload.size();
+                st->stateBlocks.push_back(std::move(b));
+            }
+            // Bound by bytes, not entries: a keyframe is megabytes where a delta is a few
+            // hundred bytes, so an entry count cannot express a memory ceiling. The oldest go
+            // first -- these are a rolling rewind history, and the client drops blocks for
+            // frames it no longer holds anyway.
+            while (st->stateBlocks.size() > 1 && st->stateBytes > kMaxQueuedStateBytes)
+            {
+                st->stateBytes -= st->stateBlocks.front().payload.size();
+                st->stateBlocks.pop_front();
+            }
         }
         st->lastSeenFrame = static_cast<uint32_t>(frame);   // advance the gap-free cursor
         if (shippedLoad)
@@ -949,38 +1002,39 @@ int CbCdStatus(void* u, se_cd_status* out)
     return 1;
 }
 
+// A poke payload: the destination (u32 LE) followed by the raw bytes. WRM reads it as a bus
+// address, WRS as a sound-RAM offset; the framing is the same.
+std::vector<uint8_t> BuildPoke(uint32_t dest, const void* src, size_t size)
+{
+    std::vector<uint8_t> payload;
+    payload.reserve(4 + size);
+    payload.push_back((uint8_t)(dest & 0xFF));
+    payload.push_back((uint8_t)((dest >> 8) & 0xFF));
+    payload.push_back((uint8_t)((dest >> 16) & 0xFF));
+    payload.push_back((uint8_t)((dest >> 24) & 0xFF));
+    const uint8_t* p = static_cast<const uint8_t*>(src);
+    payload.insert(payload.end(), p, p + size);
+    return payload;
+}
+
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
     if (!src || size == 0) return 0;
     LiveState* st = St(u);
-    std::vector<uint8_t> payload;
-    payload.reserve(4 + size);
-    payload.push_back((uint8_t)(address & 0xFF));
-    payload.push_back((uint8_t)((address >> 8) & 0xFF));
-    payload.push_back((uint8_t)((address >> 16) & 0xFF));
-    payload.push_back((uint8_t)((address >> 24) & 0xFF));
-    const uint8_t* p = static_cast<const uint8_t*>(src);
-    payload.insert(payload.end(), p, p + size);
+    std::vector<uint8_t> payload = BuildPoke(address, src, size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    st->writes.push_back(std::move(payload));   // poll thread ships it next cycle
-    return size;
+    // Queue full: report a short write rather than queue unboundedly. The poll thread ships
+    // one payload per cycle, so the caller can retry once it has drained.
+    return st->writes.Push(std::move(payload)) ? size : 0;
 }
 
 size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
 {
     if (!src || size == 0) return 0;
     LiveState* st = St(u);
-    std::vector<uint8_t> payload;   // offset(4 LE) + raw bytes, shipped as WRS
-    payload.reserve(4 + size);
-    payload.push_back((uint8_t)(offset & 0xFF));
-    payload.push_back((uint8_t)((offset >> 8) & 0xFF));
-    payload.push_back((uint8_t)((offset >> 16) & 0xFF));
-    payload.push_back((uint8_t)((offset >> 24) & 0xFF));
-    const uint8_t* p = static_cast<const uint8_t*>(src);
-    payload.insert(payload.end(), p, p + size);
+    std::vector<uint8_t> payload = BuildPoke(offset, src, size);   // shipped as WRS
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    st->soundWrites.push_back(std::move(payload));
-    return size;
+    return st->soundWrites.Push(std::move(payload)) ? size : 0;
 }
 
 // VDP memory poke: map the region-local offset to its Saturn bus address and ship it as a
@@ -1212,6 +1266,7 @@ extern "C" uint32_t se_live_drain_state_blocks(const se_data_source* ds,
     {
         std::lock_guard<std::mutex> lk(st->stateMtx);
         local.swap(st->stateBlocks);
+        st->stateBytes = 0;
     }
     for (const LiveStateBlock& b : local)
     {

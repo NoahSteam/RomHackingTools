@@ -1,7 +1,14 @@
-// The live driver reconnects on its own, so a client can find itself talking to a
+// Live-driver behaviors that need a real socket on the other end, driven against a loopback
+// listener that never speaks the protocol -- which is also the shape of an emulator that has
+// stopped answering.
+//
+// Reconnection: the driver reconnects on its own, so a client can find itself talking to a
 // different emulator process without ever re-opening the source. se_live_connection_-
 // generation is how it notices; these tests pin that it counts attachments rather than,
 // say, connection attempts, because everything SE drops on a replacement hangs off it.
+//
+// Poke backpressure: the poll thread ships one queued memory write per cycle, so a producer
+// that outruns it must be told to wait rather than growing the queue without limit.
 #include "LiveDriver.h"
 #include "saturnexplorer/SeHost.h"
 
@@ -11,6 +18,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -135,12 +143,55 @@ void TestGenerationIsZeroForANonLiveSource()
     CHECK(se_live_connection_generation(nullptr) == 0u);
 }
 
+// A server that never answers means the poll thread ships nothing, so every poke stays
+// queued -- the producer-outruns-consumer case LIVE-03 is about. The queue must start
+// refusing rather than growing: a write callback returning 0 says "nothing written", which
+// is backpressure the caller already knows how to read.
+void TestPokeQueueAppliesBackpressure()
+{
+    HangUpServer server;
+    if (!server.Start())
+    {
+        CHECK(false && "could not bind a loopback listener");
+        return;
+    }
+    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
+    se_data_source ds = {};
+    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    CHECK(ds.write_main_ram != nullptr);
+
+    const std::vector<uint8_t> chunk(64u * 1024u, 0x5A);
+    size_t accepted = 0, refused = 0;
+    // 64 MiB of attempts against an 8 MiB budget: if the queue were unbounded every one
+    // would be accepted and this loop would simply allocate it all.
+    for (int i = 0; i < 1024; ++i)
+    {
+        const size_t wrote = ds.write_main_ram(ds.user, 0x06000000u, chunk.data(), chunk.size());
+        if (wrote == chunk.size()) { ++accepted; }
+        else if (wrote == 0)       { ++refused; break; }
+        else                       { CHECK(false && "a poke was partially accepted"); break; }
+    }
+    CHECK(accepted > 0);            // a fresh queue takes work
+    CHECK(refused == 1);            // and stops taking it well before 64 MiB
+    CHECK(accepted < 1024);
+
+    // Sound-RAM pokes are budgeted separately, so a full work-RAM queue does not block them.
+    if (ds.write_sound_ram)
+    {
+        CHECK(ds.write_sound_ram(ds.user, 0, chunk.data(), chunk.size()) == chunk.size());
+    }
+
+    if (ds.close) ds.close(ds.user);
+    server.Stop();
+}
+
 }  // namespace
 
 int main()
 {
     TestGenerationCountsEveryAttach();
     TestGenerationIsZeroForANonLiveSource();
+    TestPokeQueueAppliesBackpressure();
     if (gFailures)
     {
         std::printf("LiveReconnectTests: %d check(s) failed\n", gFailures);
