@@ -44,8 +44,17 @@ bool PathExists(const std::string& path)
 namespace
 {
 
-void EnumerateFiles(const std::string& dir, std::vector<std::string>& out)
+// How deep the walk will go. A data directory nested past this is not something the
+// search is for, and the cap is a second line of defence behind the symlink rule below:
+// a cycle the link check somehow misses still terminates instead of exhausting the stack.
+const int kMaxSearchDepth = 32;
+
+void EnumerateFiles(const std::string& dir, std::vector<std::string>& out, int depth)
 {
+    if (depth > kMaxSearchDepth)
+    {
+        return;
+    }
 #ifdef _WIN32
     WIN32_FIND_DATAA fd;
     const std::string pattern = dir + "\\*";
@@ -62,9 +71,16 @@ void EnumerateFiles(const std::string& dir, std::vector<std::string>& out)
             continue;
         }
         const std::string full = dir + "\\" + name;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        // Do not descend through a junction or directory symlink: one pointing at an
+        // ancestor is a cycle, and the walk would recurse until the stack ran out.
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) &&
+            !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
         {
-            EnumerateFiles(full, out);
+            EnumerateFiles(full, out, depth + 1);
+        }
+        else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            continue;   // reparse point: skip rather than follow
         }
         else
         {
@@ -86,14 +102,29 @@ void EnumerateFiles(const std::string& dir, std::vector<std::string>& out)
             continue;
         }
         const std::string full = dir + "/" + name;
+        // lstat, not stat: stat resolves the link, so a directory symlink pointing at an
+        // ancestor reports as a directory and the walk recurses into itself forever. On
+        // macOS that is easy to hit by accident -- a data folder holding a convenience
+        // link back to its parent is enough.
         struct stat st;
-        if (::stat(full.c_str(), &st) != 0)
+        if (::lstat(full.c_str(), &st) != 0)
         {
+            continue;
+        }
+        if (S_ISLNK(st.st_mode))
+        {
+            // A link to a regular file is still worth searching; a link to a directory is
+            // the cycle risk, so resolve it only far enough to tell the two apart.
+            struct stat target;
+            if (::stat(full.c_str(), &target) == 0 && S_ISREG(target.st_mode))
+            {
+                out.push_back(full);
+            }
             continue;
         }
         if (S_ISDIR(st.st_mode))
         {
-            EnumerateFiles(full, out);
+            EnumerateFiles(full, out, depth + 1);
         }
         else if (S_ISREG(st.st_mode))
         {
@@ -275,7 +306,7 @@ size_t SearchData(const std::vector<std::string>& roots, const uint8_t* needle, 
     {
         if (IsDirectory(root))
         {
-            EnumerateFiles(root, files);
+            EnumerateFiles(root, files, 0);
         }
         else if (PathExists(root))
         {

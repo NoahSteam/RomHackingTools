@@ -174,6 +174,54 @@ int main()
                 (uint8_t)patched[0] == 0x00 && (uint8_t)patched[8] == 0x00;
             Check(bytesOk, "edited bytes landed at the mapped offset, neighbors untouched");
 
+            // --- The baseline check: a target that no longer matches must be refused ---
+            // Re-running the same script now finds 0xDEADBEEF where it expected zeroes,
+            // which is exactly the shape of running a project against another revision of
+            // the game. It must report a mismatch and leave the bytes alone.
+            {
+                std::ofstream f(target, std::ios::binary | std::ios::in);
+                f.seekp(4);
+                const char marker[4] = {0x11, 0x22, 0x33, 0x44};
+                f.write(marker, sizeof(marker));
+            }
+            Check(std::system((python + " '" + scriptPath + "' >/dev/null 2>&1").c_str()) != 0,
+                  "script fails when the target no longer matches its baseline");
+            const std::string untouched = ReadFile(target);
+            Check(untouched.size() == 16 && (uint8_t)untouched[4] == 0x11 &&
+                      (uint8_t)untouched[7] == 0x44,
+                  "a refused patch leaves the file byte-for-byte alone");
+
+            // --force is the documented escape hatch, and it must actually write.
+            Check(std::system((python + " '" + scriptPath + "' --force >/dev/null 2>&1").c_str()) == 0,
+                  "--force writes over a mismatched baseline");
+            const std::string forced = ReadFile(target);
+            Check(forced.size() == 16 && (uint8_t)forced[4] == 0xDE && (uint8_t)forced[7] == 0xEF,
+                  "--force landed the replacement bytes");
+
+            // --- Containment: a project path climbing out of BASE must be refused ---
+            {
+                PatchLibrary esc;
+                esc.AddOrUpdate(Loc("e", 0x200000, 4, "../escape.bin", 0, {0, 0, 0, 0}));
+                MemStub em; em.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> eoc;
+                const std::string escScript = esc.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return em.Read(a, l, o); },
+                    eoc);
+                const std::string escPath = std::string(dir) + "/se_escape.py";
+                { std::ofstream f(escPath, std::ios::binary); f << escScript; }
+                Check(escScript.find("../escape.bin") != std::string::npos,
+                      "the escaping entry really was emitted into the script");
+                // The would-be victim sits beside the patch dir, where '..' would reach it.
+                const std::string victim = std::string(dir) + "/../escape.bin";
+                { std::ofstream f(victim, std::ios::binary); const char z[8] = {0}; f.write(z, 8); }
+                Check(std::system((python + " '" + escPath + "' >/dev/null 2>&1").c_str()) != 0,
+                      "script refuses a path that escapes the patch directory");
+                const std::string still = ReadFile(victim);
+                Check(still.size() == 8 && (uint8_t)still[0] == 0x00,
+                      "the file outside the patch directory was not written");
+                std::system(("rm -f '" + victim + "'").c_str());
+            }
+
             std::string rm = "rm -rf '" + std::string(dir) + "'";
             std::system(rm.c_str());
         }

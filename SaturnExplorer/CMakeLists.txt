@@ -155,6 +155,20 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    # The data-search directory walk: symlink cycles and the depth cap. Creates real
+    # symlinks, so POSIX only -- the Windows walk uses the reparse-point attribute and
+    # would need its own harness.
+    if(NOT WIN32)
+        add_executable(SaturnExplorerDataSearchWalkTests
+            FrontEnd/tests/DataSearchWalkTests.cpp
+            FrontEnd/src/DataSearch.cpp
+            FrontEnd/src/Prs.cpp)
+        target_include_directories(SaturnExplorerDataSearchWalkTests
+            PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        add_test(NAME SaturnExplorerDataSearchWalkTests
+                 COMMAND SaturnExplorerDataSearchWalkTests)
+    endif()
+
     add_executable(SaturnExplorerExpressionResolverTests
         FrontEnd/tests/ExpressionResolverTests.cpp
         FrontEnd/src/Debug/WatchList.cpp
