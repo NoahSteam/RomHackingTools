@@ -124,6 +124,54 @@ int main()
               "decode truncated literal run returns 0");
     }
 
+    // --- A count near SIZE_MAX must be rejected, not wrapped past the bounds check ---
+    // These are the streams that made `out + count > cap` unsafe: the sum wraps to a small
+    // number, the check passes, and the copy then runs the length of the address space. Counts
+    // come straight off the wire, so nothing upstream bounds them.
+    {
+        unsigned char dst[64];
+        // LEB128 SIZE_MAX: nine 0xFF groups then the top bit.
+        const unsigned char maxCount[10] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                             0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
+        // One literal first, so 'out' is non-zero and the sum can wrap.
+        std::vector<unsigned char> zeroRun;
+        zeroRun.push_back(0x01); zeroRun.push_back(0x01); zeroRun.push_back(0xAA);
+        zeroRun.push_back(0x00);
+        zeroRun.insert(zeroRun.end(), maxCount, maxCount + sizeof(maxCount));
+        Check(se_state_rle_decode(dst, sizeof(dst), zeroRun.data(), zeroRun.size()) == 0,
+              "zero-run with a wrapping count returns 0");
+
+        std::vector<unsigned char> litRun;
+        litRun.push_back(0x01); litRun.push_back(0x01); litRun.push_back(0xAA);
+        litRun.push_back(0x01);
+        litRun.insert(litRun.end(), maxCount, maxCount + sizeof(maxCount));
+        Check(se_state_rle_decode(dst, sizeof(dst), litRun.data(), litRun.size()) == 0,
+              "literal run with a wrapping count returns 0");
+    }
+
+    // --- se_state_rle_decoded_size measures exactly what a decode would produce ---
+    {
+        const size_t n = 4096;
+        std::vector<unsigned char> full(n), enc(n * 2 + 64), dec(n);
+        for (size_t i = 0; i < n; ++i) full[i] = (unsigned char)((i / 3) & 0xFF);
+        for (size_t i = 1000; i < 3000; ++i) full[i] = 0;   // a long zero run to skip
+        const size_t l = se_state_rle_encode(enc.data(), enc.size(), full.data(), n);
+        Check(l > 0, "measure fixture encodes");
+        Check(se_state_rle_decoded_size(enc.data(), l) == n,
+              "decoded_size equals the real decoded length");
+        Check(se_state_rle_decode(dec.data(), dec.size(), enc.data(), l) == n &&
+                  dec == full,
+              "the same stream still decodes correctly");
+
+        // Malformed input measures as 0, the same answer decode gives.
+        const unsigned char badTag2[2] = { 0x03, 0x01 };
+        Check(se_state_rle_decoded_size(badTag2, sizeof(badTag2)) == 0,
+              "decoded_size rejects an unknown tag");
+        const unsigned char truncLit2[2] = { 0x01, 0x09 };   // 9 literals promised, none present
+        Check(se_state_rle_decoded_size(truncLit2, sizeof(truncLit2)) == 0,
+              "decoded_size rejects a truncated literal run");
+    }
+
     if (gFail == 0) std::printf("All SeStateCodec tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }
