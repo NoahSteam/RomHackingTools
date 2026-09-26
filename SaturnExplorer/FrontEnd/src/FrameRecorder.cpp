@@ -35,17 +35,22 @@ void CompressRegion(const std::vector<uint8_t>& raw, FrameRecorder::Region& r,
     FrameLzCompress(raw.data(), raw.size(), r.lz, lz);
 }
 
-void DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
+// Inverse of CompressRegion. False means the blob did not decode; 'out' is zeroed on that path
+// so the reused scratch cannot show the previously selected frame's bytes. A rawSize of 0 is a
+// region this source never had, and succeeds.
+bool DecompressRegion(const FrameRecorder::Region& r, std::vector<uint8_t>& out)
 {
     out.resize(r.rawSize);
     if (r.rawSize == 0)
     {
-        return;
+        return true;
     }
     if (!FrameLzDecompress(r.lz.data(), r.lz.size(), out.data(), r.rawSize))
     {
-        std::memset(out.data(), 0, out.size());   // corrupt blob -> blank, don't crash
+        std::memset(out.data(), 0, out.size());
+        return false;
     }
+    return true;
 }
 
 size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t size)
@@ -60,6 +65,21 @@ size_t CopyOut(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size_t 
     return n;
 }
 }  // namespace
+
+bool FrameRecorder::DecompressFrame(const Frame& f, Scratch& out)
+{
+    // &= rather than &&: every region must be decompressed even after one has failed, or a
+    // refused frame leaves part of the scratch holding the frame before it (see Select).
+    bool ok = true;
+    ok &= DecompressRegion(f.vdp1Vram, out.vdp1);
+    ok &= DecompressRegion(f.vdp2Vram, out.vdp2);
+    ok &= DecompressRegion(f.cram,     out.cram);
+    ok &= DecompressRegion(f.wramLow,  out.wramLow);
+    ok &= DecompressRegion(f.wramHigh, out.wramHigh);
+    ok &= DecompressRegion(f.vdp1Fb,   out.vdp1Fb);
+    ok &= DecompressRegion(f.soundRam, out.soundRam);
+    return ok;
+}
 
 FrameRecorder::FrameRecorder()
 {
@@ -76,10 +96,11 @@ FrameRecorder::~FrameRecorder()
     }
 }
 
-void FrameRecorder::Configure(size_t maxFrames)
+void FrameRecorder::Configure(size_t maxFrames, uint64_t maxBytes)
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
     mMaxFrames = maxFrames;
+    mMaxBytes = maxBytes;
     Evict();
 }
 
@@ -201,7 +222,7 @@ void FrameRecorder::Evict()
 {
     // Always keep at least the newest frame, even if a single frame exceeds the
     // byte budget — otherwise scrubbing would have nothing to show.
-    while (mFrames.size() > 1 && (mBytes > kMaxBytes || mFrames.size() > mMaxFrames))
+    while (mFrames.size() > 1 && (mBytes > mMaxBytes || mFrames.size() > mMaxFrames))
     {
         mBytes -= mFrames.front().bytes;
         mFrames.pop_front();
@@ -252,13 +273,10 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
             return false;
         }
         const Frame& f = mFrames[i];
-        DecompressRegion(f.vdp1Vram, mSelVdp1);
-        DecompressRegion(f.vdp2Vram, mSelVdp2);
-        DecompressRegion(f.cram, mSelCram);
-        DecompressRegion(f.wramLow, mSelWramLow);
-        DecompressRegion(f.wramHigh, mSelWramHigh);
-        DecompressRegion(f.vdp1Fb, mSelVdp1Fb);
-        DecompressRegion(f.soundRam, mSelSoundRam);
+        if (!DecompressFrame(f, mScratch))
+        {
+            return false;
+        }
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
@@ -325,6 +343,14 @@ void FrameRecorder::SetEditSink(void* user, void (*cb)(void*, int, uint32_t, con
 void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
                                      uint32_t fullLen, const uint8_t* payload, size_t len)
 {
+    // Check the payload before storing it: se_state_rle_decoded_size walks the tokens without
+    // allocating, so a truncated or corrupt block is rejected here rather than becoming a frame
+    // that offers itself as a rewind target and only fails when the user picks it. This is what
+    // lets CanReconstruct answer from presence alone.
+    if (!payload || len == 0 || se_state_rle_decoded_size(payload, len) != fullLen)
+    {
+        return;
+    }
     std::lock_guard<std::mutex> lk(mRingMtx);
     // Blocks lag their frame by a few frames, so search from the back (recent frames first).
     for (auto it = mFrames.rbegin(); it != mFrames.rend(); ++it)
@@ -338,6 +364,10 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
         it->hasState = true;
         it->bytes += len;
         mBytes += len;
+        // A savestate block is large and arrives long after its frame was accounted for, so it
+        // can put the ring over budget on its own. Evict here too, not just when the next
+        // compressed frame lands. ('it' does not survive this call.)
+        Evict();
         return;
     }
     // Frame not resident (evicted or never captured): drop the block.
@@ -352,6 +382,27 @@ static bool DecodeStateBlock(const FrameRecorder::Frame& b, std::vector<uint8_t>
     return n == b.stateFullLen;
 }
 
+// The resident keyframe that delta frame 'f' is expressed against, or null if there is none
+// usable. Caller holds mRingMtx.
+//
+// Shared by CanReconstruct and ReconstructState so the two cannot disagree about which frames
+// are resumable — the question and the work have to consider the same candidates. Matching
+// stateFullLen is part of being usable: a keyframe of a different decoded size cannot be the
+// base of this delta, and XORing the two would produce a plausible-looking savestate that is
+// not any state the emulator was ever in.
+const FrameRecorder::Frame* FrameRecorder::FindKeyframe(const Frame& f) const
+{
+    for (const Frame& g : mFrames)
+    {
+        if (g.frameNumber == f.baseKeyframe && g.hasState &&
+            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME && g.stateFullLen == f.stateFullLen)
+        {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
 bool FrameRecorder::ReconstructState(size_t i, std::vector<uint8_t>& out) const
 {
     std::lock_guard<std::mutex> lk(mRingMtx);
@@ -361,10 +412,7 @@ bool FrameRecorder::ReconstructState(size_t i, std::vector<uint8_t>& out) const
     if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME)
         return DecodeStateBlock(f, out);
     // Delta: reconstruct full = keyframe_full XOR delta. Its keyframe must still be resident.
-    const Frame* kf = nullptr;
-    for (const Frame& g : mFrames)
-        if (g.frameNumber == f.baseKeyframe && g.hasState &&
-            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) { kf = &g; break; }
+    const Frame* kf = FindKeyframe(f);
     if (!kf) return false;
     std::vector<uint8_t> base, delta;
     if (!DecodeStateBlock(*kf, base) || !DecodeStateBlock(f, delta)) return false;
@@ -381,10 +429,7 @@ bool FrameRecorder::CanReconstruct(size_t i) const
     const Frame& f = mFrames[i];
     if (!f.hasState) return false;
     if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
-    for (const Frame& g : mFrames)
-        if (g.frameNumber == f.baseKeyframe && g.hasState &&
-            g.stateKind == SE_LIVE_STATE_KIND_KEYFRAME) return true;
-    return false;
+    return FindKeyframe(f) != nullptr;
 }
 
 void FrameRecorder::TruncateAfter(size_t i)
@@ -408,36 +453,36 @@ void FrameRecorder::TruncateAfter(size_t i)
 
 size_t FrameRecorder::CbVdp1(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp1, off, dst, size);
 }
 size_t FrameRecorder::CbVdp2(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp2, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp2, off, dst, size);
 }
 size_t FrameRecorder::CbCram(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelCram, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.cram, off, dst, size);
 }
 size_t FrameRecorder::CbMain(void* u, uint32_t addr, void* dst, size_t size)
 {
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
     if (addr >= 0x06000000u)
     {
-        return CopyOut(r->mSelWramHigh, addr - 0x06000000u, dst, size);
+        return CopyOut(r->mScratch.wramHigh, addr - 0x06000000u, dst, size);
     }
     if (addr >= 0x00200000u)
     {
-        return CopyOut(r->mSelWramLow, addr - 0x00200000u, dst, size);
+        return CopyOut(r->mScratch.wramLow, addr - 0x00200000u, dst, size);
     }
     return 0;
 }
 size_t FrameRecorder::CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1Fb, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp1Fb, off, dst, size);
 }
 size_t FrameRecorder::CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelSoundRam, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.soundRam, off, dst, size);
 }
 uint16_t FrameRecorder::CbVdp1Reg(void* u, uint32_t reg)
 {

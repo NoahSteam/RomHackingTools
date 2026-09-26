@@ -39,6 +39,7 @@ public:
         std::vector<uint8_t> lz;
         size_t               rawSize = 0;
     };
+
     struct Frame
     {
         uint64_t frameNumber = 0;
@@ -60,9 +61,25 @@ public:
         size_t   bytes = 0;               // compressed footprint of this frame (incl. state blob)
     };
 
-    // Cap the ring to at most 'maxFrames' frames. (A fixed internal byte ceiling
-    // also guards against runaway memory; the frame cap is the effective limit.)
-    void Configure(size_t maxFrames);
+    // The decompressed regions of one frame: what the data-source callbacks read from.
+    struct Scratch
+    {
+        std::vector<uint8_t> vdp1, vdp2, cram, wramLow, wramHigh, vdp1Fb, soundRam;
+    };
+
+    // Decompress every region of 'f' into 'out'; false if any of them did not decode. Every
+    // region is attempted even after a failure, so none is left holding the frame decompressed
+    // into it last. Pure and static: the recorder has no seam through which a stored blob can
+    // be corrupted, so this is where a test can pose a frame that does not decode.
+    static bool DecompressFrame(const Frame& f, Scratch& out);
+
+    // The default ring byte ceiling, a backstop behind the frame cap that is the effective
+    // limit. uint64_t, not size_t: on a 32-bit target (the wasm web build) 4 GiB truncates to 0
+    // in a size_t, and a ceiling of 0 evicts everything but the newest frame.
+    static const uint64_t kDefaultMaxBytes = 4ull * 1024u * 1024u * 1024u;
+
+    // Cap the ring to at most 'maxFrames' frames and 'maxBytes' of compressed footprint.
+    void Configure(size_t maxFrames, uint64_t maxBytes = kDefaultMaxBytes);
 
     // Read the context's current frame (raw) and queue it for background
     // compression. Fast: only the region reads happen on the calling (UI) thread.
@@ -75,14 +92,21 @@ public:
 
     // Build a data source over frame i. The decompressed regions live in this
     // recorder's scratch and stay valid until the next Select() call. Returns
-    // false if i is out of range. The caller creates a context from *out.
+    // false if i is out of range, or if any of the frame's compressed regions failed to decode.
+    //
+    // Refusing such a frame rather than showing it with the undecodable parts zeroed is the
+    // whole contract here: zeros are indistinguishable from memory the emulator really
+    // recorded, so the memory view, RAM search and renderer would all present invented data as
+    // fact. Every other comment about zeroing in this component is in service of this one.
+    // The caller creates a context from *out.
     // When an edit sink is set (SetEditSink), the source is writable: edits made
     // against the scrubbed frame are forwarded to the sink as pending pokes.
     bool Select(size_t i, se_data_source* out);
 
     // --- Savestate rewind (v16) ---
     // Attach a received savestate block to the frame it belongs to (matched by number).
-    // Lagging: the frame was captured earlier. No-op if that frame isn't resident.
+    // Lagging: the frame was captured earlier. No-op if that frame isn't resident, or if the
+    // payload does not decode to exactly 'fullLen' bytes (a corrupt block is never stored).
     void AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
                           uint32_t fullLen, const uint8_t* payload, size_t len);
     // Reconstruct the full emulator savestate for frame i into 'out' (keyframe, or keyframe +
@@ -116,6 +140,9 @@ private:
 
     void Worker();
     void Evict();   // caller holds mRingMtx
+    // The resident keyframe a delta frame is based on, or null. Caller holds mRingMtx; shared
+    // by CanReconstruct and ReconstructState so they agree on what is resumable.
+    const Frame* FindKeyframe(const Frame& f) const;
 
     // Highest frame number Capture() has accepted; skips stale/duplicate frames (esp. the
     // transient frame-0 window right after a rewind). UI-thread only.
@@ -127,7 +154,6 @@ private:
     static size_t CbEditMain(void* u, uint32_t address, const void* src, size_t size);
     static size_t CbEditSound(void* u, uint32_t offset, const void* src, size_t size);
 
-    static constexpr size_t kMaxBytes = 4ull * 1024u * 1024u * 1024u;  // 4 GiB ceiling
     static constexpr size_t kMaxQueued = 4;   // staged raw frames before we drop
 
     // Compressed ring (shared: UI reads via Count/Select, worker appends/evicts).
@@ -135,6 +161,7 @@ private:
     std::deque<Frame>  mFrames;
     size_t             mBytes = 0;
     size_t             mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
+    uint64_t           mMaxBytes = kDefaultMaxBytes;
 
     // Raw staging queue (UI pushes, worker pops) + the worker thread.
     std::mutex               mQMtx;
@@ -147,8 +174,7 @@ private:
 
     // Scratch holding the currently-selected decompressed frame (UI thread only;
     // read by the data-source callbacks below). Outlives the created context.
-    std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh, mSelVdp1Fb;
-    std::vector<uint8_t>  mSelSoundRam;
+    Scratch               mScratch;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};
     bool                  mSelHasSh2[2] = { false, false };

@@ -1522,6 +1522,16 @@ bool App::RefreshScrubContext()
     se_data_source ds;
     if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
     {
+        // Select refused the frame. Name it in the Log and fall back to live, rather than
+        // leaving the user to wonder why scrubbing stopped.
+        const uint64_t bad = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
+        mLog.Error("Rewind: recorded frame " + std::to_string(bad) +
+                       " could not be decompressed; returning to the live view",
+                   static_cast<uint32_t>(bad));
+        // The scratch now holds a half-decoded frame, so the "already showing this frame"
+        // shortcut above must not believe it is showing anything: without this, scrubbing back
+        // to the last good index would take that shortcut and skip the Select that reloads it.
+        mScrubShownIndex = -1;
         return false;
     }
     if (!mScrubContext)

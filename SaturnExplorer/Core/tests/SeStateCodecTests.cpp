@@ -16,7 +16,9 @@ void Check(bool ok, const char* what)
     if (!ok) { std::printf("FAIL: %s\n", what); ++gFail; }
 }
 
-// RLE round-trip: encode 'src' then decode and require it comes back identical.
+// RLE round-trip: encode 'src' then decode and require it comes back identical. Also requires
+// se_state_rle_decoded_size to agree with the decode, so every shape tested below pins the
+// measuring path as well -- the two must never disagree about a stream's length.
 bool RleRoundTrips(const std::vector<unsigned char>& src)
 {
     std::vector<unsigned char> enc(src.size() * 2 + 16);
@@ -25,7 +27,8 @@ bool RleRoundTrips(const std::vector<unsigned char>& src)
     if (elen == 0) return false;
     std::vector<unsigned char> dec(src.size());
     const size_t dlen = se_state_rle_decode(dec.data(), dec.size(), enc.data(), elen);
-    return dlen == src.size() && dec == src;
+    if (dlen != src.size() || dec != src) return false;
+    return se_state_rle_decoded_size(enc.data(), elen) == src.size();
 }
 }  // namespace
 
@@ -122,6 +125,59 @@ int main()
         const unsigned char truncLit[2] = { 0x01, 0x05 };   // says 5 literals, none follow
         Check(se_state_rle_decode(dst, sizeof(dst), truncLit, sizeof(truncLit)) == 0,
               "decode truncated literal run returns 0");
+
+        // Measuring rejects the same streams. bigZero is not among them: it overflows a
+        // 64-byte destination, and measuring has none.
+        Check(se_state_rle_decoded_size(badTag, sizeof(badTag)) == 0,
+              "decoded_size rejects an unknown tag");
+        Check(se_state_rle_decoded_size(truncLit, sizeof(truncLit)) == 0,
+              "decoded_size rejects a truncated literal run");
+    }
+
+    // --- A count near SIZE_MAX must be rejected, not wrapped past the bounds check ---
+    // These are the streams that made `out + count > cap` unsafe: the sum wraps to a small
+    // number, the check passes, and the copy then runs the length of the address space. Counts
+    // come straight off the wire, so nothing upstream bounds them.
+    //
+    // Two widths of count, because which one wraps depends on the target. 2^64-1 wraps a
+    // 64-bit size_t but is refused by the varint reader's shift guard on a 32-bit one; 2^32-1
+    // wraps a 32-bit size_t and is merely too large on a 64-bit one. Both must be rejected
+    // everywhere, and between them the wrapping arithmetic is exercised on either width -- the
+    // web build is the 32-bit target that makes this more than hypothetical.
+    {
+        unsigned char dst[64];
+        // LEB128 2^64-1: nine 0xFF groups then the top bit. And 2^32-1: four, then 0x0F.
+        const unsigned char count64[10] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                            0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
+        const unsigned char count32[5] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
+
+        // Each stream opens with one literal, so 'out' is non-zero and the sum can wrap.
+        const unsigned char* counts[2] = { count64, count32 };
+        const size_t lens[2] = { sizeof(count64), sizeof(count32) };
+        for (int c = 0; c < 2; ++c)
+        {
+            for (unsigned char tag = 0x00; tag <= 0x01; ++tag)
+            {
+                std::vector<unsigned char> stream;
+                stream.push_back(0x01); stream.push_back(0x01); stream.push_back(0xAA);
+                stream.push_back(tag);
+                stream.insert(stream.end(), counts[c], counts[c] + lens[c]);
+                Check(se_state_rle_decode(dst, sizeof(dst), stream.data(), stream.size()) == 0,
+                      tag == 0x00 ? "zero-run with a wrapping count returns 0"
+                                  : "literal run with a wrapping count returns 0");
+                // A truncated literal run is malformed however it is read, so measuring rejects
+                // it at either width. A huge *zero* run is not malformed when measuring -- there
+                // is no destination to overflow, so the honest answer is the length itself, or 0
+                // when that length does not fit a size_t at all. Either way the declared-length
+                // comparison at the call site is what rejects it; asserting 0 unconditionally
+                // here would be asserting a bug.
+                if (tag == 0x01)
+                {
+                    Check(se_state_rle_decoded_size(stream.data(), stream.size()) == 0,
+                          "measuring rejects a truncated run with a wrapping count");
+                }
+            }
+        }
     }
 
     if (gFail == 0) std::printf("All SeStateCodec tests passed.\n");
