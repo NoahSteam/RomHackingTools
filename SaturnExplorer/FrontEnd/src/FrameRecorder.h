@@ -40,12 +40,6 @@ public:
         size_t               rawSize = 0;
     };
 
-    // Decompress one region into 'out' (resized to r.rawSize). False means the blob did not
-    // decode, and the caller must not use the frame: 'out' is zeroed on that path so no stale
-    // contents leak, but zeros are not what the emulator recorded and must not be shown as if
-    // they were. A rawSize of 0 is a region this source never had, and succeeds. Pure, so the
-    // tests drive it directly.
-    static bool DecompressRegion(const Region& r, std::vector<uint8_t>& out);
     struct Frame
     {
         uint64_t frameNumber = 0;
@@ -66,6 +60,28 @@ public:
         bool      hasState = false;
         size_t   bytes = 0;               // compressed footprint of this frame (incl. state blob)
     };
+
+    // The decompressed regions of one frame: what the data-source callbacks read from.
+    struct Scratch
+    {
+        std::vector<uint8_t> vdp1, vdp2, cram, wramLow, wramHigh, vdp1Fb, soundRam;
+    };
+
+    // Decompress one region into 'out' (resized to r.rawSize). False means the blob did not
+    // decode, and the caller must not use the frame: 'out' is zeroed on that path so no stale
+    // contents leak, but zeros are not what the emulator recorded and must not be shown as if
+    // they were. A rawSize of 0 is a region this source never had, and succeeds.
+    static bool DecompressRegion(const Region& r, std::vector<uint8_t>& out);
+
+    // Decompress every region of 'f' into 'out'. False if any of them failed -- one bad region
+    // condemns the frame, because a frame is only worth showing if all of it is real. Every
+    // region is attempted even after a failure, so no part of 'out' is left holding whatever
+    // frame was decompressed into it last.
+    //
+    // Both of these are pure and static so the tests can drive them over a hand-built Frame:
+    // the recorder has no seam through which a stored blob can be corrupted, and refusing a
+    // corrupt frame is the behaviour worth pinning.
+    static bool DecompressFrame(const Frame& f, Scratch& out);
 
     // The default ring byte ceiling. uint64_t, not size_t: on a 32-bit target (the wasm web
     // build) 4 GiB truncates to 0 in a size_t and the ceiling would evict everything but the
@@ -166,8 +182,7 @@ private:
 
     // Scratch holding the currently-selected decompressed frame (UI thread only;
     // read by the data-source callbacks below). Outlives the created context.
-    std::vector<uint8_t>  mSelVdp1, mSelVdp2, mSelCram, mSelWramLow, mSelWramHigh, mSelVdp1Fb;
-    std::vector<uint8_t>  mSelSoundRam;
+    Scratch               mScratch;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};
     bool                  mSelHasSh2[2] = { false, false };

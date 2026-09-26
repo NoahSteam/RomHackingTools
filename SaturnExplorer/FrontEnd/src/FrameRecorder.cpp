@@ -67,6 +67,24 @@ bool FrameRecorder::DecompressRegion(const Region& r, std::vector<uint8_t>& out)
     return true;
 }
 
+bool FrameRecorder::DecompressFrame(const Frame& f, Scratch& out)
+{
+    const std::pair<const Region*, std::vector<uint8_t>*> regions[] = {
+        { &f.vdp1Vram, &out.vdp1 },     { &f.vdp2Vram, &out.vdp2 },
+        { &f.cram,     &out.cram },     { &f.wramLow,  &out.wramLow },
+        { &f.wramHigh, &out.wramHigh }, { &f.vdp1Fb,   &out.vdp1Fb },
+        { &f.soundRam, &out.soundRam } };
+    bool ok = true;
+    for (const std::pair<const Region*, std::vector<uint8_t>*>& r : regions)
+    {
+        if (!DecompressRegion(*r.first, *r.second))
+        {
+            ok = false;   // keep going: the rest still has to be overwritten
+        }
+    }
+    return ok;
+}
+
 FrameRecorder::FrameRecorder()
 {
     mWorker = std::thread(&FrameRecorder::Worker, this);
@@ -260,22 +278,7 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
             return false;
         }
         const Frame& f = mFrames[i];
-        // Every region is decompressed even once one has failed, so a refused frame leaves no
-        // region still holding the previously selected frame's bytes.
-        const std::pair<const Region*, std::vector<uint8_t>*> regions[] = {
-            { &f.vdp1Vram, &mSelVdp1 },     { &f.vdp2Vram, &mSelVdp2 },
-            { &f.cram,     &mSelCram },     { &f.wramLow,  &mSelWramLow },
-            { &f.wramHigh, &mSelWramHigh }, { &f.vdp1Fb,   &mSelVdp1Fb },
-            { &f.soundRam, &mSelSoundRam } };
-        bool ok = true;
-        for (const std::pair<const Region*, std::vector<uint8_t>*>& r : regions)
-        {
-            if (!DecompressRegion(*r.first, *r.second))
-            {
-                ok = false;
-            }
-        }
-        if (!ok)
+        if (!DecompressFrame(f, mScratch))
         {
             return false;
         }
@@ -455,36 +458,36 @@ void FrameRecorder::TruncateAfter(size_t i)
 
 size_t FrameRecorder::CbVdp1(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp1, off, dst, size);
 }
 size_t FrameRecorder::CbVdp2(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp2, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp2, off, dst, size);
 }
 size_t FrameRecorder::CbCram(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelCram, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.cram, off, dst, size);
 }
 size_t FrameRecorder::CbMain(void* u, uint32_t addr, void* dst, size_t size)
 {
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
     if (addr >= 0x06000000u)
     {
-        return CopyOut(r->mSelWramHigh, addr - 0x06000000u, dst, size);
+        return CopyOut(r->mScratch.wramHigh, addr - 0x06000000u, dst, size);
     }
     if (addr >= 0x00200000u)
     {
-        return CopyOut(r->mSelWramLow, addr - 0x00200000u, dst, size);
+        return CopyOut(r->mScratch.wramLow, addr - 0x00200000u, dst, size);
     }
     return 0;
 }
 size_t FrameRecorder::CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelVdp1Fb, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.vdp1Fb, off, dst, size);
 }
 size_t FrameRecorder::CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
 {
-    return CopyOut(static_cast<FrameRecorder*>(u)->mSelSoundRam, off, dst, size);
+    return CopyOut(static_cast<FrameRecorder*>(u)->mScratch.soundRam, off, dst, size);
 }
 uint16_t FrameRecorder::CbVdp1Reg(void* u, uint32_t reg)
 {

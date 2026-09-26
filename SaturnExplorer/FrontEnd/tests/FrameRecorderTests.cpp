@@ -235,6 +235,25 @@ int main()
         FrameRecorder::Region absent;   // rawSize 0: this source never had the region
         Check(FrameRecorder::DecompressRegion(absent, out) && out.empty(),
               "an absent region is not a corrupt one");
+
+        // One bad region condemns the whole frame, wherever in the frame it sits, and the
+        // regions after it are still overwritten rather than left holding an earlier frame.
+        FrameRecorder::Frame frame;
+        frame.vdp1Vram = good;
+        frame.cram = good;
+        frame.soundRam = good;
+        FrameRecorder::Scratch scratch;
+        Check(FrameRecorder::DecompressFrame(frame, scratch),
+              "a frame whose regions all decode is accepted");
+        Check(scratch.vdp1 == raw && scratch.cram == raw && scratch.soundRam == raw,
+              "...and every region lands in the scratch");
+
+        frame.cram = corrupt;   // in the middle: the regions after it must still be written
+        scratch.soundRam.assign(8, 0xCD);
+        Check(!FrameRecorder::DecompressFrame(frame, scratch),
+              "a frame with one undecodable region is refused");
+        Check(scratch.soundRam == raw,
+              "a refused frame still overwrites the regions past the bad one");
     }
 
     // --- Select over a frame with real contents hands back exactly what was captured ---
