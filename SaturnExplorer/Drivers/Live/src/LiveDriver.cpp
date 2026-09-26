@@ -1007,6 +1007,18 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
                 const void* edits, size_t edits_len)
 {
     LiveState* st = St(u);
+    // Validate the inputs before building anything. The payload is frame(4) + edits_len(4) +
+    // edits + state, and PollLoop casts its *total* size to the int32_t command arg, so:
+    //  - `frame` is its own 32-bit field;
+    //  - a nonzero length with a null pointer would ship an edits_len (or a claimed total) the
+    //    bytes don't back — the server would then read the state blob as edits;
+    //  - the aggregate (8 + edits + state) must fit INT32_MAX, checked stepwise so the sum can't
+    //    itself wrap for extreme size_t values before the comparison.
+    // A real state+edits payload is a few MB, far below these limits.
+    if (frame > 0xFFFFFFFFull) return -1;
+    if ((edits_len && !edits) || (state_len && !state)) return -1;
+    if (edits_len > 0x7FFFFFFFull - 8) return -1;
+    if (state_len > 0x7FFFFFFFull - 8 - edits_len) return -1;
     std::vector<uint8_t> payload;
     payload.reserve(8 + edits_len + state_len);
     auto put32 = [&](uint32_t v) {

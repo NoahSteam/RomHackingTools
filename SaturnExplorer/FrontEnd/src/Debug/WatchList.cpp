@@ -86,6 +86,9 @@ bool ParseInt(const std::string& tokIn, bool allowBareHex, uint32_t& out)
         else if (c >= 'A' && c <= 'F') d = 10 + c - 'A';
         else return false;
         if (d >= base) return false;
+        // Reject a literal that would overflow uint32_t (e.g. decimal 4294967296) rather than
+        // let it wrap silently — the caller's +/- guard only sees the already-wrapped value.
+        if (v > (UINT32_MAX - static_cast<uint32_t>(d)) / base) return false;
         v = v * base + static_cast<uint32_t>(d);
     }
     out = v;
@@ -124,7 +127,18 @@ bool SimpleExpressionResolver::Resolve(const std::string& exprIn, uint32_t& outA
         outError = "Invalid offset";
         return false;
     }
-    outAddr = (sign == '+') ? (base + off) : (base - off);
+    // Reject wrap rather than silently landing in an unrelated Saturn region: base+off past
+    // 0xFFFFFFFF, or base-off below 0, is a typo, not an address the user meant.
+    if (sign == '+')
+    {
+        if (off > UINT32_MAX - base) { outError = "Address overflow"; return false; }
+        outAddr = base + off;
+    }
+    else
+    {
+        if (off > base) { outError = "Address underflow"; return false; }
+        outAddr = base - off;
+    }
     return true;
 }
 

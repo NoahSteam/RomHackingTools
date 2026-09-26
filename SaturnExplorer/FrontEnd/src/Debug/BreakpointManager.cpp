@@ -141,9 +141,11 @@ bool BreakpointManager::OnlyLoggingWatchpoints() const
 
 bool BreakpointManager::IsAccessLogHalt(uint32_t pc) const
 {
-    // An execution BP at this PC (either SH-2 — they're shared) owns the halt, not a watchpoint.
+    // An *enabled* execution BP at this PC (either SH-2 — they're shared) owns the halt, not a
+    // watchpoint. A disabled one can't have produced the halt, so it must not suppress the
+    // access-log record + auto-resume (matches ConditionalExecutionAt, which also gates on enabled).
     for (const Breakpoint& b : mBps)
-        if (b.kind == BpKind::Execution && b.address == pc) return false;
+        if (b.enabled && b.kind == BpKind::Execution && b.address == pc) return false;
     return OnlyLoggingWatchpoints();
 }
 

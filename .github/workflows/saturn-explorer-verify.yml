@@ -6,6 +6,11 @@ on:
     paths:
       - 'SaturnExplorer/**'
       - '.github/workflows/saturn-explorer-verify.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'SaturnExplorer/**'
+      - '.github/workflows/saturn-explorer-verify.yml'
   workflow_dispatch:
 
 permissions:
