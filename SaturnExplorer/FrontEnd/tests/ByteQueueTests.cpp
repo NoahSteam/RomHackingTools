@@ -53,6 +53,14 @@ void TestPushRespectsTheBudget()
     Q z;
     CHECK(!z.Push(Item(1), 0));
     CHECK(z.Push(Item(0), 0));
+
+    // A queue already past the budget still refuses. PushEvicting ignores the budget, so the
+    // two can be mixed into this state; the bound must not invert into "accept everything"
+    // when the remaining room would go negative.
+    Q over;
+    over.PushEvicting(Item(200));
+    CHECK(!over.Push(Item(1), 100));
+    CHECK(over.bytes == 200);
 }
 
 // Popping gives the bytes back, so a queue that drains can accept work again. Without this the

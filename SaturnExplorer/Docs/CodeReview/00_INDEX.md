@@ -27,11 +27,17 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | ROM-03 | `e9d06a7` |
 | ROM-01 | `e9d06a7` |
 | DISC-01 | `c7e982f` |
-| REW-01 | `e1472d1` |
+| REW-01 | `e1472d1` — bounded; eviction is still not dependency-aware |
 | REW-02 | `e1472d1`, `7ec2676` |
 | REW-03 | `e1472d1` |
-| REW-04 | `91c3925` |
-| LIVE-03 | `91c3925` |
+| REW-04 | `91c3925` — bounded in bytes; drops oldest, not by dependency group |
+| LIVE-03 | `91c3925` — bounded; writes are not coalesced |
+
+Three rows are annotated because the report asked for more than a bound: REW-01 and REW-04
+suggest eviction that understands which frames a delta depends on, and LIVE-03 suggests
+coalescing adjacent writes. What landed is the memory bound, which is what made them Medium.
+Losing a keyframe still orphans its deltas -- `CanReconstruct` reports that honestly, so the
+cost is rewind depth rather than a wrong answer.
 
 VDP1-03 is half-closed: the 3D hit test no longer picks primitives the 3D view does not draw
 (`018878e`), and `ARCHITECTURE.md` now records that the exploded view is quad-only. Rendering

@@ -435,15 +435,19 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
     # The driver's reconnect counter — how a client notices the emulator on the other end
     # was replaced. Stands up a loopback listener, so POSIX sockets only; the Windows
     # driver speaks a named pipe and would need its own harness.
-    if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
-        # The live driver's byte-budgeted queue: pure container, no socket needed.
+    # The driver's byte-budgeted queue. A header-only container, so unlike the socket test
+    # below this builds everywhere -- including MSVC, where the template's ADL size lookup is
+    # the part most worth having a compiler check.
+    if(BUILD_TESTING)
         add_executable(SaturnExplorerByteQueueTests
             FrontEnd/tests/ByteQueueTests.cpp)
         target_include_directories(SaturnExplorerByteQueueTests PRIVATE
             Drivers/Live/src)
         add_test(NAME SaturnExplorerByteQueueTests
                  COMMAND SaturnExplorerByteQueueTests)
+    endif()
 
+    if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
         add_executable(SaturnExplorerLiveReconnectTests
             FrontEnd/tests/LiveReconnectTests.cpp)
         target_include_directories(SaturnExplorerLiveReconnectTests PRIVATE

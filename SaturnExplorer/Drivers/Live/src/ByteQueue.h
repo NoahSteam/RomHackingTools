@@ -39,8 +39,11 @@ struct ByteQueue
     bool Push(T&& item, size_t budget)
     {
         const size_t n = ByteSizeOf(item);
-        // Not 'bytes + n > budget': bytes <= budget always holds, so this cannot wrap.
-        if (n > budget - bytes)
+        // The bytes > budget arm is what makes 'budget - bytes' safe. No caller mixes Push with
+        // TrimTo or varies the budget between calls, so the queue cannot currently be over its
+        // budget on entry -- but a queue whose bound silently inverts into "accept everything"
+        // when it is, is not worth having.
+        if (bytes > budget || n > budget - bytes)
         {
             return false;
         }

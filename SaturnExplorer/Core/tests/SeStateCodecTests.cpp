@@ -138,25 +138,45 @@ int main()
     // These are the streams that made `out + count > cap` unsafe: the sum wraps to a small
     // number, the check passes, and the copy then runs the length of the address space. Counts
     // come straight off the wire, so nothing upstream bounds them.
+    //
+    // Two widths of count, because which one wraps depends on the target. 2^64-1 wraps a
+    // 64-bit size_t but is refused by the varint reader's shift guard on a 32-bit one; 2^32-1
+    // wraps a 32-bit size_t and is merely too large on a 64-bit one. Both must be rejected
+    // everywhere, and between them the wrapping arithmetic is exercised on either width -- the
+    // web build is the 32-bit target that makes this more than hypothetical.
     {
         unsigned char dst[64];
-        // LEB128 SIZE_MAX: nine 0xFF groups then the top bit.
-        const unsigned char maxCount[10] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                                             0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
-        // One literal first, so 'out' is non-zero and the sum can wrap.
-        std::vector<unsigned char> zeroRun;
-        zeroRun.push_back(0x01); zeroRun.push_back(0x01); zeroRun.push_back(0xAA);
-        zeroRun.push_back(0x00);
-        zeroRun.insert(zeroRun.end(), maxCount, maxCount + sizeof(maxCount));
-        Check(se_state_rle_decode(dst, sizeof(dst), zeroRun.data(), zeroRun.size()) == 0,
-              "zero-run with a wrapping count returns 0");
+        // LEB128 2^64-1: nine 0xFF groups then the top bit. And 2^32-1: four, then 0x0F.
+        const unsigned char count64[10] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                            0xFF, 0xFF, 0xFF, 0xFF, 0x01 };
+        const unsigned char count32[5] = { 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
 
-        std::vector<unsigned char> litRun;
-        litRun.push_back(0x01); litRun.push_back(0x01); litRun.push_back(0xAA);
-        litRun.push_back(0x01);
-        litRun.insert(litRun.end(), maxCount, maxCount + sizeof(maxCount));
-        Check(se_state_rle_decode(dst, sizeof(dst), litRun.data(), litRun.size()) == 0,
-              "literal run with a wrapping count returns 0");
+        // Each stream opens with one literal, so 'out' is non-zero and the sum can wrap.
+        const unsigned char* counts[2] = { count64, count32 };
+        const size_t lens[2] = { sizeof(count64), sizeof(count32) };
+        for (int c = 0; c < 2; ++c)
+        {
+            for (unsigned char tag = 0x00; tag <= 0x01; ++tag)
+            {
+                std::vector<unsigned char> stream;
+                stream.push_back(0x01); stream.push_back(0x01); stream.push_back(0xAA);
+                stream.push_back(tag);
+                stream.insert(stream.end(), counts[c], counts[c] + lens[c]);
+                Check(se_state_rle_decode(dst, sizeof(dst), stream.data(), stream.size()) == 0,
+                      tag == 0x00 ? "zero-run with a wrapping count returns 0"
+                                  : "literal run with a wrapping count returns 0");
+                // A truncated literal run is malformed however it is read, so measuring rejects
+                // it at either width. A huge *zero* run is not malformed when measuring -- there
+                // is no destination to overflow, so the honest answer is a huge length, which
+                // then fails the declared-length comparison at the call site. Asserting 0 there
+                // would be asserting a bug.
+                if (tag == 0x01)
+                {
+                    Check(se_state_rle_decoded_size(stream.data(), stream.size()) == 0,
+                          "measuring rejects a truncated run with a wrapping count");
+                }
+            }
+        }
     }
 
     if (gFail == 0) std::printf("All SeStateCodec tests passed.\n");
