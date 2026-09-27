@@ -8,6 +8,10 @@ Master/slave breakpoints at the same PC with different conditions can therefore 
 
 **Fix:** settle semantics. If CPU-specific, use `(stopCpu, stopPc)` consistently. If truly shared, remove CPU from the execution-breakpoint representation.
 
+> **Settled (see 00_INDEX.md):** shared. CPU takes no part in execution-breakpoint matching,
+> conditional-guard lookup, or the step transient; the wire CPU bit is reserved and ignored for
+> execution descriptors, and an installer arms both SH-2s.
+
 ## CPU-02 — Medium — disabled execution BP can suppress access-log auto-resume
 
 `IsAccessLogHalt(pc)` treats any execution breakpoint at the PC as owning the halt without checking `enabled`.

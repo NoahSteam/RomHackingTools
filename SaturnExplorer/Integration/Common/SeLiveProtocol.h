@@ -263,7 +263,12 @@
 
 /* Breakpoint descriptor flag bits (v5+). */
 #define SE_LIVE_BP_KIND_MASK  0x3u   /* 0 exec, 1 read, 2 write, 3 read/write */
-#define SE_LIVE_BP_CPU_SLAVE  0x4u   /* set = slave SH-2, clear = master */
+/* Set = slave SH-2, clear = master. RESERVED and ignored for kind 0 (execution): a PC
+ * breakpoint halts whichever SH-2 reaches the address, so an installer must arm both cores
+ * and must not read this bit. The bit stays in the descriptor rather than being removed,
+ * because dropping a field is a protocol version bump for no gain -- senders leave it clear
+ * for execution breakpoints. It remains meaningful for the memory-watchpoint kinds. */
+#define SE_LIVE_BP_CPU_SLAVE  0x4u
 #define SE_LIVE_BP_ENABLED    0x8u
 
 /* Control-block stop reasons (v5+). */

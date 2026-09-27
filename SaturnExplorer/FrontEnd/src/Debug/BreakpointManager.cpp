@@ -3,12 +3,11 @@
 namespace sfe
 {
 
-Breakpoint* BreakpointManager::Find(int cpu, uint32_t addr, BpKind kind, uint32_t size)
+Breakpoint* BreakpointManager::Find(uint32_t addr, BpKind kind, uint32_t size)
 {
     for (Breakpoint& b : mBps)
     {
-        if (b.kind == kind && b.address == addr && b.size == size &&
-            (kind != BpKind::Execution || b.cpu == cpu))
+        if (b.kind == kind && b.address == addr && b.size == size)
         {
             return &b;
         }
@@ -74,7 +73,7 @@ const Breakpoint* BreakpointManager::ConditionalExecutionAt(uint32_t addr) const
 
 uint64_t BreakpointManager::AddMemory(uint32_t addr, uint32_t size, BpKind rw)
 {
-    if (Breakpoint* existing = Find(0, addr, rw, size))
+    if (Breakpoint* existing = Find(addr, rw, size))
     {
         return existing->id;   // dedup
     }

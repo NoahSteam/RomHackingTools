@@ -91,7 +91,11 @@ private:
     // mixed watchpoints apart). Used by IsAccessLogHalt.
     bool OnlyLoggingWatchpoints() const;
 
-    Breakpoint* Find(int cpu, uint32_t addr, BpKind kind, uint32_t size);
+    // Keyed by address + kind + size, with no cpu arm. It had one that applied only to
+    // Execution, which was the last place an execution breakpoint was matched per-CPU; with
+    // that gone the parameter had no remaining reader, since the memory kinds never consulted
+    // it. A per-CPU watchpoint would reintroduce it here, for those kinds only.
+    Breakpoint* Find(uint32_t addr, BpKind kind, uint32_t size);
     std::vector<Breakpoint> mBps;
     uint64_t mNextId = 1;
     uint64_t mGeneration = 0;

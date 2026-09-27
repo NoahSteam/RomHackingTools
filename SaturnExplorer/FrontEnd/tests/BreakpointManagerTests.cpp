@@ -85,6 +85,27 @@ int main()
               "the duplicate AddMemory call did not bump the generation again");
     }
 
+    // Every Execution entry leaves cpu at 0, whatever route created it. This is the
+    // invariant the wire packer leans on: it tags SE_LIVE_BP_CPU_SLAVE straight from b.cpu,
+    // and that bit is reserved for execution descriptors, so a nonzero cpu here would put a
+    // slave flag on the wire that an installer is required to ignore -- an inconsistency the
+    // emulator side would be right to trip over.
+    {
+        BreakpointManager bps;
+        bps.ToggleExecution(0x2000);
+        bps.ToggleExecution(0x2004);
+        bps.ToggleExecution(0x2004);        // remove
+        bps.ToggleExecution(0x2004);        // and re-add: a fresh entry, still shared
+        const uint64_t memId = bps.AddMemory(0x3000, 4, BpKind::MemReadWrite);
+        bps.SetCondition(memId, "r0 == 1");
+        bool allExecShared = true;
+        for (const Breakpoint& b : bps.All())
+        {
+            if (b.kind == BpKind::Execution && b.cpu != 0) allExecShared = false;
+        }
+        Check(allExecShared, "every execution breakpoint carries cpu 0 (shared across both SH-2s)");
+    }
+
     if (gFail == 0) std::printf("All BreakpointManager tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

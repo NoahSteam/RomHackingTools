@@ -77,10 +77,16 @@ void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cd_status_block);
 
 /* Wire the module's breakpoint installers to Yabause's SH2 breakpoint API (v5+).
- * 'add' installs one execution breakpoint: add(cpu, address) with cpu 0 = master,
- * 1 = slave. 'clear' removes all breakpoints. Both may be NULL (breakpoints then
- * round-trip over the protocol but don't install). Call once after SeExportInit,
- * e.g. SeExportSetBreakpointHooks(SeYabauseAddExecBp, SeYabauseClearBps). */
+ * 'add' installs one execution breakpoint: add(cpu, address). 'clear' removes all
+ * breakpoints. Both may be NULL (breakpoints then round-trip over the protocol but don't
+ * install). Call once after SeExportInit, e.g.
+ * SeExportSetBreakpointHooks(SeYabauseAddExecBp, SeYabauseClearBps).
+ *
+ * 'cpu' is RESERVED: execution breakpoints are shared across both SH-2s, so an installer
+ * must arm BOTH cores and ignore this argument. An emulator whose breakpoint API is
+ * per-core (Yabause's SH2AddCodeBreakpoint takes the core) must therefore call it twice --
+ * honouring 'cpu' there would make a breakpoint master-only, since the client always sends
+ * 0 for an execution breakpoint. The argument is kept so the signature does not change. */
 void SeExportSetBreakpointHooks(void (*add)(int cpu, unsigned int address),
                                 void (*clear)(void));
 
