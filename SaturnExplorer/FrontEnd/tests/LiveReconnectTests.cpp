@@ -10,6 +10,7 @@
 // Poke budget: the poll thread ships one queued memory write per cycle, so a producer that
 // outruns it must be refused rather than growing the queue without limit.
 #include "LiveDriver.h"
+#include "SeLiveProtocol.h"   // descriptor lengths + the per-verb protocol maxima
 #include "saturnexplorer/SeHost.h"
 
 #include <atomic>
@@ -183,6 +184,78 @@ void TestPokeQueueAppliesBackpressure()
     server.Stop();
 }
 
+// The breakpoint/tracepoint entry points take a (pointer, count) pair straight across the C
+// ABI, so neither part can be assumed: a null pointer with a nonzero count is undefined to
+// build a range from, a count near UINT32_MAX overflows the size computation on a 32-bit
+// size_t, and the allocation is otherwise sized by whatever the caller passed. None of these
+// may crash, and a rejected call must leave the previously installed set alone.
+void TestBreakpointApiRejectsBadPairs()
+{
+    HangUpServer server;
+    if (!server.Start())
+    {
+        CHECK(false && "could not bind a loopback listener");
+        return;
+    }
+    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
+    se_data_source ds = {};
+    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+
+    // A well-formed install first, so there is a set to protect.
+    std::vector<uint8_t> good(4u * SE_LIVE_BKPT_DESC_LEN, 0x11);
+    se_live_set_breakpoints(&ds, good.data(), 4);
+
+    // Null with a nonzero count, and a count past the protocol maximum: both refused without
+    // reading the pointer or sizing anything from the count.
+    se_live_set_breakpoints(&ds, nullptr, 8);
+    se_live_set_breakpoints(&ds, good.data(), SE_LIVE_MAX_BKPT_DESCS + 1);
+    se_live_set_breakpoints(&ds, good.data(), 0xFFFFFFFFu);
+    se_live_set_tracepoints(&ds, nullptr, 8);
+    se_live_set_tracepoints(&ds, good.data(), SE_LIVE_MAX_TRACE_DESCS + 1);
+    se_live_set_tracepoints(&ds, good.data(), 0xFFFFFFFFu);
+
+    // Zero descriptors with a null pointer is the legitimate "clear everything" call, not a
+    // malformed pair -- it must still be accepted.
+    se_live_set_breakpoints(&ds, nullptr, 0);
+    se_live_set_tracepoints(&ds, nullptr, 0);
+
+    // Still alive and still usable: the driver did not crash, and a later well-formed install
+    // is still accepted.
+    se_live_set_breakpoints(&ds, good.data(), 2);
+    CHECK(se_live_connection_generation(&ds) >= 0u);
+
+    if (ds.close) ds.close(ds.user);
+    server.Stop();
+}
+
+// LST to a server that does not know the verb desyncs the connection: the server ignores the
+// verb and never consumes the attached payload, so its next reply is read from the middle of
+// our bytes. The hang-up server never completes an exchange, so the negotiated version stays 0
+// -- unknown, which must count as too old. The ABI entry point has to refuse on its own, because
+// the UI's guard is not the only route to it.
+void TestLoadStateRefusedWithoutANegotiatedVersion()
+{
+    HangUpServer server;
+    if (!server.Start())
+    {
+        CHECK(false && "could not bind a loopback listener");
+        return;
+    }
+    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
+    se_data_source ds = {};
+    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    CHECK(se_live_connection_generation(&ds) >= 0u);
+    CHECK(ds.load_state != nullptr);
+
+    const std::vector<uint8_t> state(1024, 0x7E);
+    CHECK(ds.load_state(ds.user, 1234, state.data(), state.size(), nullptr, 0) != 0);
+
+    // Still usable afterwards -- a refusal is not a broken source.
+    CHECK(ds.write_main_ram != nullptr);
+    if (ds.close) ds.close(ds.user);
+    server.Stop();
+}
+
 }  // namespace
 
 int main()
@@ -190,6 +263,8 @@ int main()
     TestGenerationCountsEveryAttach();
     TestGenerationIsZeroForANonLiveSource();
     TestPokeQueueAppliesBackpressure();
+    TestBreakpointApiRejectsBadPairs();
+    TestLoadStateRefusedWithoutANegotiatedVersion();
     if (gFailures)
     {
         std::printf("LiveReconnectTests: %d check(s) failed\n", gFailures);

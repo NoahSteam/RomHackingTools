@@ -1116,8 +1116,12 @@ static void SeServeClient(int cl, SeFrame* snap)
         else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
         {
             /* Read all 'arg' 12-byte descriptors (every one is consumed to keep the
-             * stream aligned) and install the enabled execution breakpoints. */
+             * stream aligned) and install the enabled execution breakpoints. Past the protocol
+             * maximum the descriptors are still consumed but not installed: without the cap a
+             * request claiming 0xFFFFFFFF descriptors had the emulator installing breakpoints
+             * for as long as a client kept feeding it. */
             unsigned int i;
+            const unsigned int keep = arg > SE_LIVE_MAX_BKPT_DESCS ? SE_LIVE_MAX_BKPT_DESCS : arg;
             if (sClearBps) { sClearBps(); }
             for (i = 0; i < arg; ++i)
             {
@@ -1137,7 +1141,7 @@ static void SeServeClient(int cl, SeFrame* snap)
                  * breakpoints (watchpoints) over [address, address+size). The
                  * descriptor was already consumed above, so a disabled one just
                  * skips installation without desyncing the stream. */
-                if (!enabled) continue;
+                if (!enabled || i >= keep) continue;
                 if (kind == 0u)
                 {
                     if (sAddExecBp) sAddExecBp((int)cpu, address);
@@ -1150,7 +1154,9 @@ static void SeServeClient(int cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. */
+            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. Bytes past the
+             * protocol maximum are consumed but not written -- no single legitimate poke
+             * approaches 1 MiB, and the loop is otherwise sized by the request. */
             unsigned char addrb[4];
             unsigned int i, address;
             if (SeRecv(cl, addrb, 4) != 0) return;
@@ -1160,7 +1166,7 @@ static void SeServeClient(int cl, SeFrame* snap)
             {
                 unsigned char v;
                 if (SeRecv(cl, &v, 1) != 0) return;
-                if (sWriteByte) sWriteByte(address + i, v);
+                if (sWriteByte && i < SE_LIVE_MAX_WRITE_BYTES) sWriteByte(address + i, v);
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
@@ -1175,7 +1181,7 @@ static void SeServeClient(int cl, SeFrame* snap)
             {
                 unsigned char v;
                 if (SeRecv(cl, &v, 1) != 0) return;
-                if (sWriteSoundByte) sWriteSoundByte(offset + i, v);
+                if (sWriteSoundByte && i < SE_LIVE_MAX_WRITE_BYTES) sWriteSoundByte(offset + i, v);
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_LOADSTATE, SE_LIVE_VERB_LEN) == 0)
@@ -1183,9 +1189,12 @@ static void SeServeClient(int cl, SeFrame* snap)
             /* Rewind (v16): buffer the whole 'arg'-byte payload (frame + edits_len + edits +
              * state) and latch a pending load. The gate applies it atomically on the emulate
              * thread (restore + edits + resume), so nothing races the async restore. */
+            /* The realloc below is sized from 'arg', so a request claiming 4 GiB used to ask
+             * the emulator for 4 GiB. Past the protocol maximum the payload is drained by the
+             * malformed path further down instead (sLoadCap stays smaller than 'payload'). */
             unsigned int payload = arg;
             SE_SLOCK();
-            if (sLoadCap < payload)
+            if (sLoadCap < payload && payload <= SE_LIVE_STATE_MAX_PAYLOAD)
             {
                 unsigned char* nb = (unsigned char*)realloc(sLoadBuf, payload ? payload : 1u);
                 if (nb) { sLoadBuf = nb; sLoadCap = payload; }
@@ -1225,8 +1234,8 @@ static void SeServeClient(int cl, SeFrame* snap)
         {
             /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
              * hand them to the glue; consume any beyond the cap to stay stream-aligned. */
-            static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * 256];
-            unsigned int keep = arg > 256u ? 256u : arg, i;
+            static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];
+            unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg, i;
             if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
             for (i = keep; i < arg; ++i)
             {

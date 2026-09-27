@@ -730,7 +730,27 @@ void PollLoop(LiveState* st)
         bool shippedLoad = false;
         uint32_t loadResyncFrame = 0;
         {
+            // Version floors for the payload-carrying verbs. A server that does not know a verb
+            // ignores it and does NOT consume the payload, so its next reply is read from the
+            // middle of our bytes and the session desyncs -- see SeLiveProtocol.h. sver is 0
+            // until the first exchange has told us the server's version, and "unknown" has to
+            // count as too old: the alternative is shipping the payload to find out.
+            const uint32_t sver = st->serverVersion.load();
+            const bool canLoadState = sver >= SE_LIVE_MINVER_LOADSTATE;
+            const bool canTrace     = sver >= SE_LIVE_MINVER_TRACE;
+
             std::lock_guard<std::mutex> lk(st->ctlMtx);
+            if (st->loadDirty && !canLoadState)
+            {
+                // Drop it rather than ship it. Holding it pending instead would retry forever
+                // against a server that will never accept it.
+                st->loadPayload.clear();
+                st->loadDirty = false;
+            }
+            if (st->tracesDirty && !canTrace)
+            {
+                st->tracesDirty = false;   // the set stays stored; it just is not shipped
+            }
             if (st->loadDirty)
             {
                 // Rewind (v16) takes top priority: one atomic LST (restore + edits + resume).
@@ -1050,6 +1070,11 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
     //    itself wrap for extreme size_t values before the comparison.
     // A real state+edits payload is a few MB, far below these limits.
     if (frame > 0xFFFFFFFFull) return -1;
+    // Refuse before building anything if the server cannot accept LST. The frontend guards this
+    // too, but the guard cannot live only there: this is a public ABI entry point, and shipping
+    // LST to a pre-v16 server desyncs the connection rather than failing politely. 0 means the
+    // version is not known yet (no exchange has completed), which has to count as "no".
+    if (st->serverVersion.load() < SE_LIVE_MINVER_LOADSTATE) return -1;
     if ((edits_len && !edits) || (state_len && !state)) return -1;
     if (edits_len > 0x7FFFFFFFull - 8) return -1;
     if (state_len > 0x7FFFFFFFull - 8 - edits_len) return -1;
@@ -1260,14 +1285,44 @@ extern "C" void se_live_step_insn(const se_data_source* ds, uint32_t count)
     PostCmd(St(ds->user), Ctl::StepInsn, static_cast<int32_t>(count < 1 ? 1 : count));
 }
 
+// Copy a descriptor blob handed to us across the C ABI. False if the (pointer, count) pair is
+// not one we can act on, in which case 'out' is left as it was.
+//
+// Every part of that pair comes from outside, so none of it can be assumed. The old form built
+// a vector range straight from (descs, descs + count * descLen), which is undefined for a null
+// pointer with a nonzero count, wraps when the product exceeds a 32-bit size_t, and sizes an
+// allocation from a number the caller picked. Checking the count against the protocol maximum
+// first is also what makes the multiply safe: bounded count times a small constant cannot
+// overflow. A rejected call leaves the previously installed set alone rather than clearing it --
+// a malformed request should not silently remove the user's breakpoints.
+static bool CopyDescs(const uint8_t* descs, uint32_t count, uint32_t descLen, uint32_t maxDescs,
+                      std::vector<uint8_t>& out)
+{
+    if (count > maxDescs) { return false; }
+    if (count != 0 && !descs) { return false; }
+    try
+    {
+        out.assign(descs, descs + static_cast<size_t>(count) * descLen);
+    }
+    catch (...)
+    {
+        // The one throwing operation in here. It must not propagate: this runs under an
+        // extern "C" frame, where unwinding past the seam is undefined.
+        return false;
+    }
+    return true;
+}
+
 extern "C" void se_live_set_breakpoints(const se_data_source* ds,
                                         const uint8_t* descs, uint32_t count)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }
     LiveState* st = St(ds->user);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    st->bkpts.assign(descs, descs + static_cast<size_t>(count) * SE_LIVE_BKPT_DESC_LEN);
-    st->bkptsDirty = true;   // poll thread ships it on its next cycle
+    if (CopyDescs(descs, count, SE_LIVE_BKPT_DESC_LEN, SE_LIVE_MAX_BKPT_DESCS, st->bkpts))
+    {
+        st->bkptsDirty = true;   // poll thread ships it on its next cycle
+    }
 }
 
 extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t buttons)
@@ -1308,8 +1363,10 @@ extern "C" void se_live_set_tracepoints(const se_data_source* ds,
     if (!ds || !ds->user || ds->close != CbClose) { return; }
     LiveState* st = St(ds->user);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    st->traces.assign(descs, descs + static_cast<size_t>(count) * SE_LIVE_TRACE_DESC_LEN);
-    st->tracesDirty = true;   // poll thread ships it (TRC) on its next cycle
+    if (CopyDescs(descs, count, SE_LIVE_TRACE_DESC_LEN, SE_LIVE_MAX_TRACE_DESCS, st->traces))
+    {
+        st->tracesDirty = true;   // poll thread ships it (TRC) on its next cycle
+    }
 }
 
 extern "C" uint32_t se_live_poll_events(const se_data_source* ds,
