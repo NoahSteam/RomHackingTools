@@ -10,7 +10,9 @@
  * could catch one and unwinding past it is undefined -- and the C++ frontend
  * installs no handler either, so a throw that escapes is a crash there too.
  * std::bad_alloc is the reachable case, and it needs no bug: a host low on
- * memory, a 64 MiB savestate, a dimension read out of a corrupt register.
+ * memory, a 64 MiB savestate, a dimension read out of a corrupt register. It is
+ * not the only one -- locking a std::mutex throws std::system_error when the OS
+ * refuses, which is why the live driver's pure-copy queries are wrapped too.
  *
  * Guard turns that into the answer the function already has for "cannot supply
  * this": a result code, a zero count, a null handle. Wrap every entry point,
@@ -36,6 +38,21 @@ auto Guard(Fallback onThrow, Body body) -> decltype(body())
     catch (...)
     {
         return onThrow;
+    }
+}
+
+// For the entry points that return nothing. They have no value to carry a failure, so there is
+// nothing to report and nothing a caller could do with it: the request did not happen, which is
+// the same outcome those functions already give when their argument checks reject one.
+template <typename Body>
+void GuardVoid(Body body)
+{
+    try
+    {
+        body();
+    }
+    catch (...)
+    {
     }
 }
 

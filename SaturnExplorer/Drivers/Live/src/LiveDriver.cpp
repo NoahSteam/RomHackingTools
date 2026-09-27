@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <string>
@@ -16,6 +17,7 @@
 #include "ByteQueue.h"
 #include "SaturnStateShared.h"
 #include "SeLiveProtocol.h"
+#include "saturnexplorer/SeGuard.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -1185,6 +1187,11 @@ void CbClose(void* u)
 
 }  // namespace
 
+// Everything below is a seam crossing, so no exception may leave it: see SeGuard.h. Two shapes
+// are reachable here rather than hypothetical -- se_live_open allocates a LiveState and starts a
+// thread, and every other entry point takes a lock, which throws std::system_error when the OS
+// refuses it. The control verbs return nothing, so a failure there means the request did not
+// happen, the same as failing their argument checks.
 extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
 {
     if (!out)
@@ -1193,107 +1200,127 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
     }
     std::memset(out, 0, sizeof(*out));
 
-    const char* ep = endpoint;
-    if (!ep || !ep[0])
+    return se::Guard(SE_ERR_NO_MEMORY, [&]() -> se_result
     {
-#if defined(_WIN32)
-        ep = SE_LIVE_DEFAULT_PIPE_NAME;
-#elif defined(__EMSCRIPTEN__)
-        ep = SE_LIVE_DEFAULT_TCP_ENDPOINT;   // browser: WebSocket->TCP bridge
-#else
-        ep = SE_LIVE_DEFAULT_SOCK_PATH;
-#endif
-    }
+        const char* ep = endpoint;
+        if (!ep || !ep[0])
+        {
+    #if defined(_WIN32)
+            ep = SE_LIVE_DEFAULT_PIPE_NAME;
+    #elif defined(__EMSCRIPTEN__)
+            ep = SE_LIVE_DEFAULT_TCP_ENDPOINT;   // browser: WebSocket->TCP bridge
+    #else
+            ep = SE_LIVE_DEFAULT_SOCK_PATH;
+    #endif
+        }
 
-    // Fail fast if the emulator isn't reachable right now.
-    Conn probe;
-    if (!ConnOpen(probe, ep))
-    {
-        return SE_ERR_IO;
-    }
-    ConnClose(probe);
+        // Fail fast if the emulator isn't reachable right now.
+        Conn probe;
+        if (!ConnOpen(probe, ep))
+        {
+            return SE_ERR_IO;
+        }
+        ConnClose(probe);
 
-    LiveState* st = new (std::nothrow) LiveState();
-    if (!st)
-    {
-        return SE_ERR_NO_DATA;
-    }
-    st->endpoint = ep;
-    st->running.store(true);
-    st->thread = std::thread(PollLoop, st);
+        // CbClose is what knows how to stop the poll thread, so it is also the deleter: if
+        // assigning the endpoint or starting the thread throws, this unwinds through the same
+        // shutdown a normal close takes rather than leaking a LiveState with a thread in it.
+        std::unique_ptr<LiveState, void (*)(LiveState*)> st(
+            new (std::nothrow) LiveState(), [](LiveState* p) { CbClose(p); });
+        if (!st)
+        {
+            return SE_ERR_NO_DATA;
+        }
+        st->endpoint = ep;
+        st->running.store(true);
+        st->thread = std::thread(PollLoop, st.get());
 
-    out->abi_version = SE_ABI_VERSION;
-    // SE_CAP_SOUND_RAM is advertised unconditionally, like the other version-gated caps:
-    // against a pre-v13 server the sound-RAM snapshot stays empty and reads return 0.
-    out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
-                        SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
-                        SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
-                        SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS |
-                        SE_CAP_CD_STATUS | SE_CAP_STATE_REWIND;
-    out->user = st;
-    out->read_vdp1_vram = CbVdp1Vram;
-    out->read_vdp2_vram = CbVdp2Vram;
-    out->read_cram      = CbCram;
-    out->read_main_ram  = CbMainRam;
-    out->write_main_ram = CbWriteMainRam;
-    out->read_sound_ram = CbSoundRam;
-    out->write_sound_ram = CbWriteSoundRam;
-    out->write_vram     = CbWriteVram;
-    out->load_state     = CbLoadState;
-    out->read_scsp_slots = CbScspSlots;
-    out->read_cd_status = CbCdStatus;
-    out->read_vdp1_fb   = CbVdp1Fb;
-    out->read_vdp1_reg  = CbVdp1Reg;
-    out->read_vdp2_reg  = CbVdp2Reg;
-    out->read_sh2_regs  = CbSh2Regs;
-    out->frame_pause    = CbFramePause;
-    out->frame_step     = CbFrameStep;
-    out->frame_number   = CbFrameNumber;
-    out->close          = CbClose;
-    return SE_OK;
+        out->abi_version = SE_ABI_VERSION;
+        // SE_CAP_SOUND_RAM is advertised unconditionally, like the other version-gated caps:
+        // against a pre-v13 server the sound-RAM snapshot stays empty and reads return 0.
+        out->capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP2_VRAM | SE_CAP_CRAM |
+                            SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS | SE_CAP_MAIN_RAM |
+                            SE_CAP_VDP1_FB | SE_CAP_FRAME_STEP | SE_CAP_SH2_REGS |
+                            SE_CAP_MEM_WRITE | SE_CAP_SOUND_RAM | SE_CAP_SCSP_SLOTS |
+                            SE_CAP_CD_STATUS | SE_CAP_STATE_REWIND;
+        out->user = st.get();
+        out->read_vdp1_vram = CbVdp1Vram;
+        out->read_vdp2_vram = CbVdp2Vram;
+        out->read_cram      = CbCram;
+        out->read_main_ram  = CbMainRam;
+        out->write_main_ram = CbWriteMainRam;
+        out->read_sound_ram = CbSoundRam;
+        out->write_sound_ram = CbWriteSoundRam;
+        out->write_vram     = CbWriteVram;
+        out->load_state     = CbLoadState;
+        out->read_scsp_slots = CbScspSlots;
+        out->read_cd_status = CbCdStatus;
+        out->read_vdp1_fb   = CbVdp1Fb;
+        out->read_vdp1_reg  = CbVdp1Reg;
+        out->read_vdp2_reg  = CbVdp2Reg;
+        out->read_sh2_regs  = CbSh2Regs;
+        out->frame_pause    = CbFramePause;
+        out->frame_step     = CbFrameStep;
+        out->frame_number   = CbFrameNumber;
+        out->close          = CbClose;
+        st.release();   // the data source owns it now; se_create calls close on destroy
+        return SE_OK;
+    });
 }
 
 extern "C" uint32_t se_live_server_version(const se_data_source* ds)
 {
-    // Only meaningful for a data source we produced (identified by our close cb).
-    if (!ds || !ds->user || ds->close != CbClose)
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        return 0;
-    }
-    return St(ds->user)->serverVersion.load();
+        // Only meaningful for a data source we produced (identified by our close cb).
+        if (!ds || !ds->user || ds->close != CbClose)
+        {
+            return 0;
+        }
+        return St(ds->user)->serverVersion.load();
+    });
 }
 
 extern "C" uint32_t se_live_connection_generation(const se_data_source* ds)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return 0; }
-    return St(ds->user)->connGeneration.load();
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        return St(ds->user)->connGeneration.load();
+    });
 }
 
 extern "C" uint32_t se_live_drain_state_blocks(const se_data_source* ds,
                                                se_live_state_block_cb cb, void* user)
 {
     if (!ds || !ds->user || ds->close != CbClose || !cb) { return 0; }
-    LiveState* st = St(ds->user);
-    std::deque<LiveStateBlock> local;
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        std::lock_guard<std::mutex> lk(st->stateMtx);
-        st->stateBlocks.Drain(local);
-    }
-    for (const LiveStateBlock& b : local)
-    {
-        cb(user, b.kind, b.frame, b.base, b.fullLen,
-           b.payload.empty() ? nullptr : b.payload.data(),
-           static_cast<uint32_t>(b.payload.size()));
-    }
-    return static_cast<uint32_t>(local.size());
+        LiveState* st = St(ds->user);
+        std::deque<LiveStateBlock> local;
+        {
+            std::lock_guard<std::mutex> lk(st->stateMtx);
+            st->stateBlocks.Drain(local);
+        }
+        for (const LiveStateBlock& b : local)
+        {
+            cb(user, b.kind, b.frame, b.base, b.fullLen,
+               b.payload.empty() ? nullptr : b.payload.data(),
+               static_cast<uint32_t>(b.payload.size()));
+        }
+        return static_cast<uint32_t>(local.size());
+    });
 }
 
 extern "C" void se_live_step_insn(const se_data_source* ds, uint32_t count)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }
-    // Single-step the halted CPU `count` instructions (IST). The poll thread ships it on
-    // its next cycle; the server steps whichever CPU the stop latched.
-    PostCmd(St(ds->user), Ctl::StepInsn, static_cast<int32_t>(count < 1 ? 1 : count));
+    se::GuardVoid([&]
+    {
+        // Single-step the halted CPU `count` instructions (IST). The poll thread ships it on
+        // its next cycle; the server steps whichever CPU the stop latched.
+        PostCmd(St(ds->user), Ctl::StepInsn, static_cast<int32_t>(count < 1 ? 1 : count));
+    });
 }
 
 // Copy a descriptor blob handed to us across the C ABI. False if the (pointer, count) pair is
@@ -1311,158 +1338,182 @@ static bool CopyDescs(const uint8_t* descs, uint32_t count, uint32_t descLen, ui
 {
     if (count > maxDescs) { return false; }
     if (count != 0 && !descs) { return false; }
-    try
+    return se::Guard(false, [&]
     {
         out.assign(descs, descs + static_cast<size_t>(count) * descLen);
-    }
-    catch (...)
-    {
-        // The one throwing operation in here. It must not propagate: this runs under an
-        // extern "C" frame, where unwinding past the seam is undefined.
-        return false;
-    }
-    return true;
+        return true;
+    });
 }
 
 extern "C" void se_live_set_breakpoints(const se_data_source* ds,
                                         const uint8_t* descs, uint32_t count)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (CopyDescs(descs, count, SE_LIVE_BKPT_DESC_LEN, SE_LIVE_MAX_BKPT_DESCS, st->bkpts))
+    se::GuardVoid([&]
     {
-        st->bkptsDirty = true;   // poll thread ships it on its next cycle
-    }
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        if (CopyDescs(descs, count, SE_LIVE_BKPT_DESC_LEN, SE_LIVE_MAX_BKPT_DESCS, st->bkpts))
+        {
+            st->bkptsDirty = true;   // poll thread ships it on its next cycle
+        }
+    });
 }
 
 extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint32_t buttons)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }
-    // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
-    const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
-    St(ds->user)->inputState.store(packed);
+    se::GuardVoid([&]
+    {
+        // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
+        const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
+        St(ds->user)->inputState.store(packed);
+    });
 }
 
 extern "C" uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
                                      uint64_t* mtime, uint32_t max)
 {
     if (!ds || !ds->user || ds->close != CbClose || !present || !max) { return 0; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->emuSlotsValid) { return 0; }   // pre-v17 server, or no slot hook in that build
-    uint32_t n = 0;
-    for (; n < max && n < SE_LIVE_EMU_SLOTS; ++n)
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        present[n] = st->emuSlotPresent[n];
-        if (mtime) mtime[n] = st->emuSlotMtime[n];
-    }
-    return n;
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        if (!st->emuSlotsValid) { return 0; }   // pre-v17 server, or no slot hook in that build
+        uint32_t n = 0;
+        for (; n < max && n < SE_LIVE_EMU_SLOTS; ++n)
+        {
+            present[n] = st->emuSlotPresent[n];
+            if (mtime) mtime[n] = st->emuSlotMtime[n];
+        }
+        return n;
+    });
 }
 
 extern "C" void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
 {
     if (!ds || !ds->user || ds->close != CbClose || slot >= SE_LIVE_EMU_SLOTS) { return; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->ctlMtx);
-    st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
+    se::GuardVoid([&]
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
+    });
 }
 
 extern "C" void se_live_set_tracepoints(const se_data_source* ds,
                                         const uint8_t* descs, uint32_t count)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (CopyDescs(descs, count, SE_LIVE_TRACE_DESC_LEN, SE_LIVE_MAX_TRACE_DESCS, st->traces))
+    se::GuardVoid([&]
     {
-        st->tracesDirty = true;   // poll thread ships it (TRC) on its next cycle
-    }
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        if (CopyDescs(descs, count, SE_LIVE_TRACE_DESC_LEN, SE_LIVE_MAX_TRACE_DESCS, st->traces))
+        {
+            st->tracesDirty = true;   // poll thread ships it (TRC) on its next cycle
+        }
+    });
 }
 
 extern "C" uint32_t se_live_poll_events(const se_data_source* ds,
                                         se_live_event* out, uint32_t max)
 {
     if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->evMtx);
-    uint32_t n = 0;
-    while (n < max && !st->events.empty())
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        const LiveEvent& e = st->events.front();
-        out[n].id = e.id;
-        out[n].cpu = e.cpu;
-        out[n].frame = e.frame;
-        std::memcpy(out[n].regs, e.regs, sizeof(out[n].regs));
-        st->events.pop_front();
-        ++n;
-    }
-    return n;
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->evMtx);
+        uint32_t n = 0;
+        while (n < max && !st->events.empty())
+        {
+            const LiveEvent& e = st->events.front();
+            out[n].id = e.id;
+            out[n].cpu = e.cpu;
+            out[n].frame = e.frame;
+            std::memcpy(out[n].regs, e.regs, sizeof(out[n].regs));
+            st->events.pop_front();
+            ++n;
+        }
+        return n;
+    });
 }
 
 extern "C" uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
                                            se_live_call_frame* out, uint32_t max)
 {
     if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
-    const int c = (cpu == 1) ? 1 : 0;
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->csMtx);
-    const std::vector<LiveCallFrame>& src = st->callStacks.cpu[c];
-    uint32_t n = 0;
-    for (; n < max && n < src.size(); ++n)
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        out[n].call_site = src[n].callSite;
-        out[n].func      = src[n].func;
-        out[n].ret       = src[n].ret;
-        out[n].sp        = src[n].sp;
-        out[n].cycle     = src[n].cycle;
-        out[n].frame_no  = src[n].frameNo;
-    }
-    return n;
+        const int c = (cpu == 1) ? 1 : 0;
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->csMtx);
+        const std::vector<LiveCallFrame>& src = st->callStacks.cpu[c];
+        uint32_t n = 0;
+        for (; n < max && n < src.size(); ++n)
+        {
+            out[n].call_site = src[n].callSite;
+            out[n].func      = src[n].func;
+            out[n].ret       = src[n].ret;
+            out[n].sp        = src[n].sp;
+            out[n].cycle     = src[n].cycle;
+            out[n].frame_no  = src[n].frameNo;
+        }
+        return n;
+    });
 }
 
 extern "C" uint32_t se_live_poll_keymap(const se_data_source* ds, uint32_t port,
                                         int32_t* out, uint32_t max)
 {
     if (!ds || !ds->user || ds->close != CbClose || !out || !max) { return 0; }
-    if (port >= (uint32_t)SE_LIVE_KEYMAP_PORTS) { return 0; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->kmMtx);
-    if (!st->keyMapValid) { return 0; }   // no v10+ block seen yet
-    uint32_t n = 0;
-    for (; n < max && n < (uint32_t)SE_LIVE_KEYMAP_BUTTONS; ++n)
-        out[n] = st->keyMap[port][n];
-    return n;
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        if (port >= (uint32_t)SE_LIVE_KEYMAP_PORTS) { return 0; }
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->kmMtx);
+        if (!st->keyMapValid) { return 0; }   // no v10+ block seen yet
+        uint32_t n = 0;
+        for (; n < max && n < (uint32_t)SE_LIVE_KEYMAP_BUTTONS; ++n)
+            out[n] = st->keyMap[port][n];
+        return n;
+    });
 }
 
 extern "C" uint32_t se_live_poll_log(const se_data_source* ds, char* out,
                                      uint32_t lineLen, uint32_t maxLines)
 {
     if (!ds || !ds->user || ds->close != CbClose || !out || !lineLen || !maxLines) { return 0; }
-    LiveState* st = St(ds->user);
-    std::lock_guard<std::mutex> lk(st->logMtx);
-    uint32_t n = 0;
-    while (n < maxLines && !st->logLines.empty())
+    return se::Guard(0u, [&]() -> uint32_t
     {
-        const std::string& s = st->logLines.front();
-        char* dst = out + (size_t)n * lineLen;
-        uint32_t i = 0;
-        for (; i + 1 < lineLen && i < s.size(); ++i) dst[i] = s[i];
-        dst[i] = 0;
-        st->logLines.pop_front();
-        ++n;
-    }
-    return n;
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->logMtx);
+        uint32_t n = 0;
+        while (n < maxLines && !st->logLines.empty())
+        {
+            const std::string& s = st->logLines.front();
+            char* dst = out + (size_t)n * lineLen;
+            uint32_t i = 0;
+            for (; i + 1 < lineLen && i < s.size(); ++i) dst[i] = s[i];
+            dst[i] = 0;
+            st->logLines.pop_front();
+            ++n;
+        }
+        return n;
+    });
 }
 
 extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,
                                 uint32_t* cpu, uint32_t* pc)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return 0; }
-    LiveState* st = St(ds->user);
-    const uint32_t r = st->stopReason.load();
-    if (reason) { *reason = r; }
-    if (cpu)    { *cpu = st->stopCpu.load(); }
-    if (pc)     { *pc = st->stopPc.load(); }
-    return r != SE_LIVE_STOP_NONE ? 1 : 0;
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        const uint32_t r = st->stopReason.load();
+        if (reason) { *reason = r; }
+        if (cpu)    { *cpu = st->stopCpu.load(); }
+        if (pc)     { *pc = st->stopPc.load(); }
+        return r != SE_LIVE_STOP_NONE ? 1 : 0;
+    });
 }

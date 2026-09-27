@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #endif
 
 #include "SaturnStateShared.h"
+#include "saturnexplorer/SeGuard.h"
 
 namespace
 {
@@ -473,7 +475,7 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
         return SE_ERR_UNSUPPORTED;
     }
 
-    Savestate* state = new (std::nothrow) Savestate();
+    std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
     if (!state)
     {
         return SE_ERR_NO_DATA;
@@ -549,10 +551,9 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
     // and let the core judge usability.
     if (!state->HasAnyRegion())
     {
-        delete state;
         return SE_ERR_NO_DATA;
     }
-    BuildDataSource(state, out);
+    BuildDataSource(state.release(), out);
     return SE_OK;
 }
 
@@ -619,7 +620,7 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     }
     size_t pos = kMdfnHeaderSize + static_cast<size_t>(previewW) * previewH * 3;
 
-    Savestate* state = new (std::nothrow) Savestate();
+    std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
     if (!state)
     {
         return SE_ERR_NO_DATA;
@@ -667,7 +668,6 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
                 // actually refuse.
                 if (!CopyMednafenU16BE(file, off, sz, state->mVdp2Regs, swap))
                 {
-                    delete state;
                     return SE_ERR_UNSUPPORTED;
                 }
             }
@@ -718,10 +718,9 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     // and let the core judge usability.
     if (!state->HasAnyRegion())
     {
-        delete state;
         return SE_ERR_NO_DATA;
     }
-    BuildDataSource(state, out);
+    BuildDataSource(state.release(), out);
     return SE_OK;
 }
 
@@ -812,7 +811,7 @@ se_result ParseFullDumpBuffer(const std::vector<uint8_t>& dump, uint32_t base_ad
     {
         return SE_ERR_IO;
     }
-    Savestate* state = new (std::nothrow) Savestate();
+    std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
     if (!state)
     {
         return SE_ERR_NO_DATA;
@@ -826,15 +825,21 @@ se_result ParseFullDumpBuffer(const std::vector<uint8_t>& dump, uint32_t base_ad
     SliceRegion(dump, base_address, kAddrWramLow,  kSizeWramLow,  state->mWramLow);
     SliceRegion(dump, base_address, kAddrWramHigh, kSizeWramHigh, state->mWramHigh);
 
-    if (state->mVdp1Vram.empty())
+    if (!state->HasAnyRegion())
     {
-        delete state;
         return SE_ERR_NO_DATA;
     }
-    BuildDataSource(state, out);
+    BuildDataSource(state.release(), out);
     return SE_OK;
 }
 }  // namespace
+
+// Opening a state allocates the whole file and every region in it, so std::bad_alloc is the
+// ordinary failure here, not an exotic one -- a 64 MiB state on a memory-tight web build gets
+// there without any bug. It must not cross the seam: see SeGuard.h. The parsers hold their
+// Savestate in a unique_ptr for the same reason, so a throw part-way through filling one frees
+// it instead of leaking it.
+using se::Guard;
 
 extern "C" {
 
@@ -846,34 +851,36 @@ se_result se_savestate_open_region_dir(const char* dir, se_data_source* out)
     }
     std::memset(out, 0, sizeof(*out));
 
-    Savestate* state = new (std::nothrow) Savestate();
-    if (!state)
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
-        return SE_ERR_NO_DATA;
-    }
+        std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
+        if (!state)
+        {
+            return SE_ERR_NO_DATA;
+        }
 
-    std::string base(dir);
-    if (!base.empty() && base.back() != '/' && base.back() != '\\')
-    {
-        base += '/';
-    }
+        std::string base(dir);
+        if (!base.empty() && base.back() != '/' && base.back() != '\\')
+        {
+            base += '/';
+        }
 
-    LoadFile(base + "vdp1_vram.bin", state->mVdp1Vram);
-    LoadFile(base + "vdp2_vram.bin", state->mVdp2Vram);
-    LoadFile(base + "cram.bin",      state->mCram);
-    LoadFile(base + "wram_low.bin",  state->mWramLow);
-    LoadFile(base + "wram_high.bin", state->mWramHigh);
-    LoadFile(base + "vdp1_regs.bin", state->mVdp1Regs);
-    LoadFile(base + "vdp2_regs.bin", state->mVdp2Regs);
+        LoadFile(base + "vdp1_vram.bin", state->mVdp1Vram);
+        LoadFile(base + "vdp2_vram.bin", state->mVdp2Vram);
+        LoadFile(base + "cram.bin",      state->mCram);
+        LoadFile(base + "wram_low.bin",  state->mWramLow);
+        LoadFile(base + "wram_high.bin", state->mWramHigh);
+        LoadFile(base + "vdp1_regs.bin", state->mVdp1Regs);
+        LoadFile(base + "vdp2_regs.bin", state->mVdp2Regs);
 
-    if (state->mVdp1Vram.empty())  // need at least VDP1 VRAM
-    {
-        delete state;
-        return SE_ERR_NO_DATA;
-    }
+        if (!state->HasAnyRegion())   // see ParseYssBuffer: anything at all, not VDP1 specifically
+        {
+            return SE_ERR_NO_DATA;
+        }
 
-    BuildDataSource(state, out);
-    return SE_OK;
+        BuildDataSource(state.release(), out);
+        return SE_OK;
+    });
 }
 
 se_result se_savestate_open_yss(const char* path, se_data_source* out)
@@ -884,12 +891,15 @@ se_result se_savestate_open_yss(const char* path, se_data_source* out)
     }
     std::memset(out, 0, sizeof(*out));
 
-    std::vector<uint8_t> file;
-    if (!LoadFile(path, file))
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
-        return SE_ERR_IO;
-    }
-    return ParseYssBuffer(file, out);
+        std::vector<uint8_t> file;
+        if (!LoadFile(path, file))
+        {
+            return SE_ERR_IO;
+        }
+        return ParseYssBuffer(file, out);
+    });
 }
 
 se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
@@ -900,12 +910,15 @@ se_result se_savestate_open_mednafen(const char* path, se_data_source* out)
     }
     std::memset(out, 0, sizeof(*out));
 
-    std::vector<uint8_t> file;
-    if (!LoadFile(path, file))
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
-        return SE_ERR_IO;
-    }
-    return ParseMednafenBuffer(file, out);
+        std::vector<uint8_t> file;
+        if (!LoadFile(path, file))
+        {
+            return SE_ERR_IO;
+        }
+        return ParseMednafenBuffer(file, out);
+    });
 }
 
 se_result se_savestate_open(const char* path, se_data_source* out)
@@ -920,13 +933,16 @@ se_result se_savestate_open(const char* path, se_data_source* out)
     // same internal buffers, so the core is identical regardless of which emulator
     // wrote the state. Add new families here as their layouts are reverse-engineered
     // (see SavestateDriver.h).
-    std::vector<uint8_t> file;
-    if (!LoadFile(path, file))
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
-        return SE_ERR_IO;
-    }
-    // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...) inside DispatchBuffer.
-    return DispatchBuffer(file, out);
+        std::vector<uint8_t> file;
+        if (!LoadFile(path, file))
+        {
+            return SE_ERR_IO;
+        }
+        // Room for other emulators (Kronos, SSF, Yaba Sanshiro, ...) inside DispatchBuffer.
+        return DispatchBuffer(file, out);
+    });
 }
 
 se_result se_savestate_open_buffer(const uint8_t* data, size_t size, se_data_source* out)
@@ -939,8 +955,11 @@ se_result se_savestate_open_buffer(const uint8_t* data, size_t size, se_data_sou
     // Copy into an owned buffer so the parsers (which retain slices) don't depend
     // on the caller's memory outliving the context. The host may free 'data' as
     // soon as this returns.
-    std::vector<uint8_t> file(data, data + size);
-    return DispatchBuffer(file, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        std::vector<uint8_t> file(data, data + size);
+        return DispatchBuffer(file, out);
+    });
 }
 
 se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
@@ -952,12 +971,15 @@ se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
     }
     std::memset(out, 0, sizeof(*out));
 
-    std::vector<uint8_t> dump;
-    if (!LoadFile(path, dump) || dump.empty())
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
-        return SE_ERR_IO;
-    }
-    return ParseFullDumpBuffer(dump, base_address, out);
+        std::vector<uint8_t> dump;
+        if (!LoadFile(path, dump) || dump.empty())
+        {
+            return SE_ERR_IO;
+        }
+        return ParseFullDumpBuffer(dump, base_address, out);
+    });
 }
 
 se_result se_savestate_open_full_dump_buffer(const uint8_t* data, size_t size,
@@ -968,8 +990,11 @@ se_result se_savestate_open_full_dump_buffer(const uint8_t* data, size_t size,
         return SE_ERR_INVALID_ARG;
     }
     std::memset(out, 0, sizeof(*out));
-    std::vector<uint8_t> dump(data, data + size);
-    return ParseFullDumpBuffer(dump, base_address, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        std::vector<uint8_t> dump(data, data + size);
+        return ParseFullDumpBuffer(dump, base_address, out);
+    });
 }
 
 }  // extern "C"

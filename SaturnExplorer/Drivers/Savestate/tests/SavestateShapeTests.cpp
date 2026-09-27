@@ -146,6 +146,40 @@ void TestOddLengthMednafenU16FieldRefused()
     if (even == SE_OK && eds.close) eds.close(eds.user);
 }
 
+
+// The other two openers were still gated on VDP1 VRAM after SNAP-02 relaxed the savestate
+// parsers, so a source carrying only work RAM -- perfectly good for the hex editor, the
+// debugger and a RAM search -- opened from a .yss but not from a raw dump of the same memory.
+//
+// Work RAM Low sits at 0x00200000, so a dump based there covers WRAM and nothing else: no VDP1
+// VRAM, which is exactly the shape the old rule refused.
+void TestWorkRamOnlyFullDumpOpens()
+{
+    std::vector<uint8_t> dump(64 * 1024, 0x42);
+    se_data_source ds{};
+    const se_result r = se_savestate_open_full_dump_buffer(dump.data(), dump.size(),
+                                                           0x00200000u, &ds);
+    CHECK(r == SE_OK);
+    if (r != SE_OK) return;
+
+    // And the region really is readable, rather than the open having succeeded on an empty state.
+    CHECK((ds.capabilities & SE_CAP_MAIN_RAM) != 0);
+    uint8_t byte = 0;
+    // read_main_ram takes a Saturn bus address, not a region offset.
+    CHECK(ds.read_main_ram && ds.read_main_ram(ds.user, 0x00200000u, &byte, 1) == 1);
+    CHECK(byte == 0x42);
+    if (ds.close) ds.close(ds.user);
+}
+
+// A dump based somewhere that maps no region at all still has to be refused: "anything at all"
+// is not "nothing".
+void TestDumpCoveringNoRegionRefused()
+{
+    std::vector<uint8_t> dump(64 * 1024, 0x42);
+    se_data_source ds{};
+    CHECK(se_savestate_open_full_dump_buffer(dump.data(), dump.size(), 0x01000000u, &ds) != SE_OK);
+}
+
 }  // namespace
 
 int main()
@@ -153,6 +187,8 @@ int main()
     TestVdp2OnlyYssOpens();
     TestEmptyYssRefused();
     TestOddLengthMednafenU16FieldRefused();
+    TestWorkRamOnlyFullDumpOpens();
+    TestDumpCoveringNoRegionRefused();
     if (gFailures)
     {
         std::printf("SavestateShapeTests: %d check(s) failed\n", gFailures);
