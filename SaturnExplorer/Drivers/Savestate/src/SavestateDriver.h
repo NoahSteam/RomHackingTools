@@ -38,8 +38,32 @@ se_result se_savestate_open_full_dump(const char* path, uint32_t base_address,
  * shared byte-for-byte across the lineage (verified identical in Yabause 0.9.x,
  * Yaba Sanshiro, and Kronos), so the VDP2 section is recognized structurally
  * rather than by version number — covering those emulators and any fork that kept
- * the layout. A fork that changed the struct/VRAM size is skipped (VDP1-only)
- * rather than misdecoded. */
+ * the layout.
+ *
+ * Structural recognition is what makes one parser cover the family, and it is also
+ * what a fork can defeat by keeping a section's size while moving fields inside it.
+ * Four things are checked so that case is refused rather than decoded anyway:
+ *
+ *   - the header's endianness byte must say little-endian, which is what every
+ *     multi-byte read here assumes (a big-endian state is refused, not guessed at);
+ *   - section tags must be printable ASCII, so a desynchronized chain stops
+ *     immediately instead of walking arbitrary bytes looking for a tag;
+ *   - a section whose declared size runs past EOF refuses the file, rather than
+ *     reporting whatever decoded before it as a complete state;
+ *   - the VDP1 register prefix and the VDP2 trailing state are bounded, which is
+ *     what distinguishes a fork that grew a struct from one that grew VRAM.
+ *
+ * Beyond shape, a recovered VDP2 register image is checked against bits the
+ * hardware does not define (TVMD's reserved bits, RAMCTL's invalid CRAM mode). A
+ * failure there, or a section size outside those bounds, degrades to VDP1-only
+ * rather than misdecoding — the documented behaviour for a fork whose layout we do
+ * not share.
+ *
+ * Tests: SavestateShapeTests synthesizes each of those cases; YssFixtureTests runs
+ * real Yabause states, because validation tightened with no real file to check it
+ * against is how you start refusing the states that work. No real Mednafen, Yaba
+ * Sanshiro or Kronos state is in the tree yet — those layouts rest on the shared
+ * struct being shared, which is an argument rather than a measurement. */
 se_result se_savestate_open_yss(const char* path, se_data_source* out);
 
 /* Mednafen savestate (MDFNSVST container, Saturn 'ss' module). Parses the VDP1

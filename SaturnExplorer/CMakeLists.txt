@@ -78,6 +78,18 @@ if(BUILD_TESTING)
         PRIVATE SaturnExplorerSavestateDriver)
     add_test(NAME SaturnExplorerSavestateShapeTests
              COMMAND SaturnExplorerSavestateShapeTests)
+
+    # And the same parser against real Yabause states, so the structural validation is checked
+    # against files that exist rather than only against synthesized ones. Skips itself when the
+    # game data is not in the checkout.
+    add_executable(SaturnExplorerYssFixtureTests
+        Drivers/Savestate/tests/YssFixtureTests.cpp)
+    target_link_libraries(SaturnExplorerYssFixtureTests
+        PRIVATE SaturnExplorerSavestateDriver)
+    target_compile_definitions(SaturnExplorerYssFixtureTests PRIVATE
+        SE_YSS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../SakuraTaisen2/Data/SaveFiles/SaveStates/Yabause/OhrimeMiniGame")
+    add_test(NAME SaturnExplorerYssFixtureTests
+             COMMAND SaturnExplorerYssFixtureTests)
 endif()
 
 # The shared normalization helpers: what they do with input that is not the shape the

@@ -307,6 +307,56 @@ constexpr size_t   kYssHeaderSize = 0x14;    // file header before the first sec
 // leading base bytes, so any amount of trailing internal state is ignored.
 constexpr uint32_t kVdp2SectionBase = kVdp2RegSize + kVramSize + kYssCramSize;
 
+// Bounds that separate "the layout we decode" from "a section of the same name in a layout we
+// do not". Both are generous against what real states hold (measured on Yabause 0.9.x: a
+// 52-byte VDP1 register prefix, 4 bytes of VDP2 trailing state), because the case they exist to
+// catch is not a few extra fields -- it is a fork with a larger VRAM, which moves everything by
+// hundreds of kilobytes and would otherwise still satisfy a bare `size >= kVramSize`.
+constexpr uint32_t kYssMaxVdp1RegBytes = 4096;
+constexpr uint32_t kYssMaxVdp2Trailing = 64 * 1024;
+
+// Section tags are four printable ASCII characters. Anything else means the chain has
+// desynchronized, and every offset after it is meaningless.
+bool IsPrintableTag(const uint8_t* tag)
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        if (tag[i] < 0x20 || tag[i] > 0x7E)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Does a recovered VDP2 register image actually look like VDP2 registers?
+//
+// This is the check the structural match cannot make on size alone, and the case OFF-01 names:
+// a fork that keeps the section size but moves fields within it. The register file has bits the
+// hardware does not define, and they read as zero in any real state, so a struct that has moved
+// shows up as a reserved bit set or a mode field holding its one invalid value:
+//
+//   TVMD   (0x000) bit 3 and bits 9-14 are unused.
+//   RAMCTL (0x00E) CRMD (bits 12-13) selects the CRAM mode; 3 is not one of them.
+//
+// Deliberately not checked: TVMD's DISP bit. A state captured with the display blanked has TVMD
+// zero -- the Yabause states in this repo do -- so requiring it would reject real files.
+//
+// A failure degrades to VDP1-only rather than refusing the file, which is the documented
+// behaviour for a fork whose VDP2 layout we do not share (see SavestateDriver.h): the sprites
+// still render, and the backgrounds that would have been composited from a bogus register file
+// are simply absent.
+bool Vdp2RegImageLooksReal(const std::vector<uint8_t>& regs)
+{
+    const uint16_t tvmd = ReadReg16(regs, 0x000);
+    if ((tvmd & 0x7E08u) != 0)
+    {
+        return false;
+    }
+    const uint16_t ramctl = ReadReg16(regs, 0x00E);
+    return ((ramctl >> 12) & 0x3u) != 0x3u;
+}
+
 uint32_t Read32LE(const std::vector<uint8_t>& d, size_t o)
 {
     return static_cast<uint32_t>(d[o]) | (static_cast<uint32_t>(d[o + 1]) << 8) |
@@ -474,6 +524,19 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
     {
         return SE_ERR_UNSUPPORTED;
     }
+    // Byte 3 is the writer's host endianness (0 big, 1 little), and every multi-byte read
+    // below -- section sizes, the register struct, CRAM -- assumes little. A state written on a
+    // big-endian host would parse into plausible-looking nonsense rather than fail, so refuse it
+    // instead of guessing; supporting one means byte-swapping the whole parse, not this one flag.
+    // Anything other than 0 or 1 is not a header in this family's layout at all.
+    if (file[3] > 1)
+    {
+        return SE_ERR_UNSUPPORTED;
+    }
+    if (file[3] == 0)
+    {
+        return SE_ERR_UNSUPPORTED;   // big-endian .yss: recognized, not supported
+    }
 
     std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
     if (!state)
@@ -488,21 +551,41 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
         const uint8_t* tag = &file[pos];
         const uint32_t size = Read32LE(file, pos + 8);
         const size_t data = pos + 12;
+        // Section tags are four printable ASCII characters ("VDP1", "CS2 ", "OTHR"). Once the
+        // chain desynchronizes -- a size field that is not the size, a layout with a different
+        // section header -- what lands here is arbitrary bytes, and continuing would keep
+        // walking a chain of nonsense until some stretch of it happened to match a tag we decode
+        // at an offset that means nothing. That is the misdecode OFF-01 describes, so stop.
+        if (!IsPrintableTag(tag))
+        {
+            return SE_ERR_UNSUPPORTED;
+        }
         if (data + size > file.size())
         {
-            break;  // corrupt / truncated
+            // Truncated: the file was cut short, or these are not really section sizes. Either
+            // way the chain is not trustworthy. This used to keep whatever had decoded before
+            // the bad section, which reports a partial state as a complete one.
+            return SE_ERR_UNSUPPORTED;
         }
 
-        if (std::memcmp(tag, "VDP1", 4) == 0 && size >= kVramSize)
+        if (std::memcmp(tag, "VDP1", 4) == 0 && size >= kVramSize &&
+            size - kVramSize <= kYssMaxVdp1RegBytes)
         {
             // Layout: registers (size - VRAM) then VRAM. Taking the trailing 512 KiB
             // as VRAM is version-agnostic across the Yabause family (Vdp1SaveState
-            // always writes its registers first, then Vdp1Ram).
+            // always writes its registers first, then Vdp1Ram) -- but only while the part
+            // before it really is a register block. A fork with a larger VDP1 VRAM keeps a
+            // section size that still passes `size >= kVramSize`, and the trailing 512 KiB is
+            // then the wrong half of its VRAM. The bound below is what distinguishes the two:
+            // the real prefix is 52 bytes (measured on Yabause 0.9.x states), so a few KiB
+            // leaves room for a fork that grew its register struct while refusing one that
+            // grew VRAM.
             const uint32_t regBytes = size - kVramSize;
             state->mVdp1Vram.assign(file.begin() + data + regBytes,
                                     file.begin() + data + regBytes + kVramSize);
         }
-        else if (std::memcmp(tag, "VDP2", 4) == 0 && size >= kVdp2SectionBase)
+        else if (std::memcmp(tag, "VDP2", 4) == 0 && size >= kVdp2SectionBase &&
+                 size - kVdp2SectionBase <= kYssMaxVdp2Trailing)
         {
             // Structural match for the classic 288-byte Vdp2 struct followed by VRAM
             // then CRAM (see kVdp2SectionBase). Covers Yabause 0.9.x, Yaba Sanshiro,
@@ -510,18 +593,24 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
             // trailing internal state is ignored. Only a fork that changed the struct
             // or VRAM size ahead of CRAM would misdecode — verify such a case with a
             // sample before trusting it.
-            const size_t vramOff = data + kVdp2RegSize;
-            state->mVdp2Vram.assign(file.begin() + vramOff, file.begin() + vramOff + kVramSize);
-            state->mCram.assign(file.begin() + vramOff + kVramSize,
-                                file.begin() + vramOff + kVramSize + kYssCramSize);
-
             // Rebuild the hardware-offset, big-endian register image via the exact
             // struct-offset map (correct through the priority/color-offset registers
-            // the compositor needs), then normalize CRAM byte order using RAMCTL's
-            // CRAM mode.
-            BuildVdp2RegImage(file, data, state->mVdp2Regs);
-            const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
-            NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+            // the compositor needs), then judge it before trusting anything that depends on
+            // it -- the CRAM byte order comes out of RAMCTL, so a register image from a moved
+            // struct would byte-swap the palette at the wrong width as well.
+            std::vector<uint8_t> regs;
+            BuildVdp2RegImage(file, data, regs);
+            if (Vdp2RegImageLooksReal(regs))
+            {
+                const size_t vramOff = data + kVdp2RegSize;
+                state->mVdp2Vram.assign(file.begin() + vramOff,
+                                        file.begin() + vramOff + kVramSize);
+                state->mCram.assign(file.begin() + vramOff + kVramSize,
+                                    file.begin() + vramOff + kVramSize + kYssCramSize);
+                state->mVdp2Regs = regs;
+                const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
+                NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+            }
         }
         else if (std::memcmp(tag, "MSH2", 4) == 0 && size >= 92)
         {
