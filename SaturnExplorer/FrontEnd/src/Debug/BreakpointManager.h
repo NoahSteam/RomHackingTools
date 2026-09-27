@@ -23,7 +23,10 @@ struct Breakpoint
 {
     uint64_t id = 0;
     BpKind   kind = BpKind::Execution;
-    int      cpu = 0;            // 0 master, 1 slave (execution BPs)
+    // 0 master, 1 slave. Meaningful for a future per-CPU memory watchpoint; unused for
+    // Execution (always 0) — a PC breakpoint halts whichever SH-2 reaches it, so there is
+    // nothing for this field to distinguish. See ToggleExecution/ExecutionAt below.
+    int      cpu = 0;
     uint32_t address = 0;
     uint32_t size = 2;           // memory BPs: 1/2/4; execution: instruction (2)
     bool     enabled = true;
@@ -41,11 +44,21 @@ struct Breakpoint
 class BreakpointManager
 {
 public:
-    // Execution BP at 'addr' for 'cpu': add if none present, remove if present.
-    // Returns true if a breakpoint now exists there.
-    bool ToggleExecution(int cpu, uint32_t addr);
-    bool HasExecutionAt(int cpu, uint32_t addr) const;
-    const Breakpoint* ExecutionAt(int cpu, uint32_t addr) const;
+    // Execution BPs are shared across both SH-2s: a PC breakpoint halts whichever CPU
+    // reaches it (the emulator install hook and the wire protocol still carry a 'cpu' field,
+    // but the Mednafen side ignores it for kind==Execution — see SsDbgAddExecBp). So there is
+    // no "master's breakpoint" vs "slave's breakpoint" at the same address; keying these by
+    // address alone is what makes that true instead of just documented. Do NOT add a cpu
+    // parameter back here — that would let the Assembly panel's master and slave views each
+    // toggle their own entry at the same PC, installing two wire descriptors for one address
+    // (harmless to the emulator, which ignores the extra one, but a stale duplicate that
+    // outlives a toggle) and would make the gutter dot only show up in the view that created it.
+    //
+    // Execution BP at 'addr': add if none present, remove if present. Returns true if a
+    // breakpoint now exists there.
+    bool ToggleExecution(uint32_t addr);
+    bool HasExecutionAt(uint32_t addr) const;
+    const Breakpoint* ExecutionAt(uint32_t addr) const;
 
     // First enabled execution BP at 'addr' that carries a guard, ignoring cpu (a PC
     // breakpoint halts whichever SH-2 reaches the address). nullptr if none — the stop
@@ -78,7 +91,11 @@ private:
     // mixed watchpoints apart). Used by IsAccessLogHalt.
     bool OnlyLoggingWatchpoints() const;
 
-    Breakpoint* Find(int cpu, uint32_t addr, BpKind kind, uint32_t size);
+    // Keyed by address + kind + size, with no cpu arm. It had one that applied only to
+    // Execution, which was the last place an execution breakpoint was matched per-CPU; with
+    // that gone the parameter had no remaining reader, since the memory kinds never consulted
+    // it. A per-CPU watchpoint would reintroduce it here, for those kinds only.
+    Breakpoint* Find(uint32_t addr, BpKind kind, uint32_t size);
     std::vector<Breakpoint> mBps;
     uint64_t mNextId = 1;
     uint64_t mGeneration = 0;

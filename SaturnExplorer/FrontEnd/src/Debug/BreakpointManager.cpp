@@ -3,12 +3,11 @@
 namespace sfe
 {
 
-Breakpoint* BreakpointManager::Find(int cpu, uint32_t addr, BpKind kind, uint32_t size)
+Breakpoint* BreakpointManager::Find(uint32_t addr, BpKind kind, uint32_t size)
 {
     for (Breakpoint& b : mBps)
     {
-        if (b.kind == kind && b.address == addr && b.size == size &&
-            (kind != BpKind::Execution || b.cpu == cpu))
+        if (b.kind == kind && b.address == addr && b.size == size)
         {
             return &b;
         }
@@ -16,12 +15,14 @@ Breakpoint* BreakpointManager::Find(int cpu, uint32_t addr, BpKind kind, uint32_
     return nullptr;
 }
 
-bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
+bool BreakpointManager::ToggleExecution(uint32_t addr)
 {
+    // Address alone: execution BPs are shared across both SH-2s (see the header), so a
+    // second toggle at the same PC — from either the master or slave Assembly view — must
+    // remove the one entry that's already there, not add a sibling that only that view sees.
     for (std::size_t i = 0; i < mBps.size(); ++i)
     {
-        if (mBps[i].kind == BpKind::Execution && mBps[i].cpu == cpu &&
-            mBps[i].address == addr)
+        if (mBps[i].kind == BpKind::Execution && mBps[i].address == addr)
         {
             mBps.erase(mBps.begin() + i);
             ++mGeneration;
@@ -31,7 +32,7 @@ bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
     Breakpoint b;
     b.id = mNextId++;
     b.kind = BpKind::Execution;
-    b.cpu = cpu;
+    b.cpu = 0;   // unused for Execution — shared across both SH-2s (see the header)
     b.address = addr;
     b.size = 2;
     b.enabled = true;
@@ -40,23 +41,16 @@ bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
     return true;
 }
 
-bool BreakpointManager::HasExecutionAt(int cpu, uint32_t addr) const
+bool BreakpointManager::HasExecutionAt(uint32_t addr) const
 {
-    for (const Breakpoint& b : mBps)
-    {
-        if (b.kind == BpKind::Execution && b.cpu == cpu && b.address == addr)
-        {
-            return true;
-        }
-    }
-    return false;
+    return ExecutionAt(addr) != nullptr;   // same address-keyed lookup, not a second copy of it
 }
 
-const Breakpoint* BreakpointManager::ExecutionAt(int cpu, uint32_t addr) const
+const Breakpoint* BreakpointManager::ExecutionAt(uint32_t addr) const
 {
     for (const Breakpoint& b : mBps)
     {
-        if (b.kind == BpKind::Execution && b.cpu == cpu && b.address == addr)
+        if (b.kind == BpKind::Execution && b.address == addr)
         {
             return &b;
         }
@@ -79,7 +73,7 @@ const Breakpoint* BreakpointManager::ConditionalExecutionAt(uint32_t addr) const
 
 uint64_t BreakpointManager::AddMemory(uint32_t addr, uint32_t size, BpKind rw)
 {
-    if (Breakpoint* existing = Find(0, addr, rw, size))
+    if (Breakpoint* existing = Find(addr, rw, size))
     {
         return existing->id;   // dedup
     }

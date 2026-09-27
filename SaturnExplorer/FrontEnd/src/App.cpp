@@ -1676,8 +1676,10 @@ void App::DrawAssembly()
     // emulator halts there via the stop event. No-op without frame control.
     if (req.runTo && mbHasData && se_supports_frame_control(mContext))
     {
-        if (!mBreakpoints.HasExecutionAt(mAssemblyPanel.Cpu(), req.runToAddr))
-            mBreakpoints.ToggleExecution(mAssemblyPanel.Cpu(), req.runToAddr);
+        // Execution BPs are shared across both SH-2s, so the target is looked up and set by
+        // address alone — irrespective of which Assembly view (master/slave) issued this.
+        if (!mBreakpoints.HasExecutionAt(req.runToAddr))
+            mBreakpoints.ToggleExecution(req.runToAddr);
         SyncBreakpointsToLive();
         Continue();
     }
@@ -2268,8 +2270,9 @@ void App::DrawBreakpoints()
             // The exact break condition, so the row reads like a sentence.
             if (b.kind == BpKind::Execution)
             {
-                ImGui::Text("PC reaches %08X  \xc2\xb7  %s SH-2",
-                            b.address, b.cpu ? "Slave" : "Master");
+                // No "Master"/"Slave" qualifier: execution BPs are shared across both SH-2s,
+                // so this fires no matter which one reaches the address (b.cpu is unused).
+                ImGui::Text("PC reaches %08X", b.address);
                 // Optional guard: the emulator halts here every time, but the client only
                 // stays stopped when this evaluates true (else it resumes transparently).
                 char cbuf[128];
@@ -2304,7 +2307,9 @@ void App::DrawBreakpoints()
             if (ImGui::SmallButton("Go"))
             {
                 if (b.kind == BpKind::Execution)
-                { mAssemblyPanel.GoTo(b.cpu, b.address); mPanels.assembly = true; }
+                // b.cpu is unused for a shared execution BP; jump in whichever Assembly
+                // view is already open rather than forcing a switch to an arbitrary one.
+                { mAssemblyPanel.GoTo(mAssemblyPanel.Cpu(), b.address); mPanels.assembly = true; }
                 else
                 { mHexEditor.GoTo(b.address); mPanels.hexEditor = true; }
             }
@@ -3091,8 +3096,10 @@ void App::DrawCallStack(IPlatform& platform)
                 {
                     AddAddressWatch("stack", fr.stackPointer, WatchType::Pointer);
                 }
+                // Execution BPs are shared across both SH-2s, so the frame's own cpu plays
+                // no part in where this lands — it would only ever collide by address.
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
-                { mBreakpoints.ToggleExecution(fr.cpu, fr.functionAddress); }
+                { mBreakpoints.ToggleExecution(fr.functionAddress); }
                 if (ImGui::MenuItem("Rename Function..."))
                 {
                     mRenameAddr = fr.functionAddress;
@@ -3342,6 +3349,8 @@ void App::SyncBreakpointsToLive()
             case BpKind::MemWrite:     kind = 2; break;
             case BpKind::MemReadWrite: kind = 3; break;
         }
+        // b.cpu is always 0 for an Execution breakpoint (shared across both SH-2s — see
+        // BreakpointManager.h), so this only ever tags a SLAVE cpu flag for a memory watchpoint.
         putDesc(b.address, b.size, kind, b.cpu, b.enabled);
     }
     uint32_t count = static_cast<uint32_t>(all.size());

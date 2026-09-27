@@ -342,7 +342,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
         // Gutter: breakpoint dot (click toggles) + PC arrow.
         ImGui::TableSetColumnIndex(0);
-        const Breakpoint* bp = bps.ExecutionAt(mCpu, ln.addr);
+        // Address alone: execution BPs are shared across both SH-2s, so the same dot must
+        // show up in both the master and slave views of this address, not just the one
+        // whichever view happened to set it from.
+        const Breakpoint* bp = bps.ExecutionAt(ln.addr);
         const ExecutionAction* tp = actions.LogAt(mCpu, ln.addr);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
@@ -365,7 +368,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // Left-click toggles a breakpoint (the common action); tracepoints toggle from
         // the right-click menu so the two don't fight over the same click.
         if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
-            bps.ToggleExecution(mCpu, ln.addr);
+            bps.ToggleExecution(ln.addr);
         openRowContext();
         if (isPc && mScrollToPc) { ImGui::SetScrollHereY(0.35f); mScrollToPc = false; }
 
@@ -462,7 +465,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             uint32_t ea; WatchType wt;
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, ea, wt);
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
-                bps.ToggleExecution(mCpu, ln.addr);
+                bps.ToggleExecution(ln.addr);
             if (ImGui::MenuItem(tp ? "Remove Tracepoint" : "Toggle Tracepoint", nullptr, false, ln.readable))
                 actions.ToggleLog(mCpu, ln.addr);
             if (ImGui::MenuItem("Create Tracepoint...", nullptr, false, ln.readable))

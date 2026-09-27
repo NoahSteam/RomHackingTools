@@ -116,7 +116,11 @@ static void SeExpBpHit(void *ctx, u32 addr, void *ud) {
     SeExportNotifyStop(ctx == (void *)SSH2 ? 1 : 0, (unsigned int)addr);
 }
 static void SeExpAddExecBp(int cpu, unsigned int addr) {
-    SH2AddCodeBreakpoint(cpu ? SSH2 : MSH2, (u32)addr);
+    /* Both cores: PC breakpoints are shared across both SH-2s, and 'cpu' is reserved
+       (the client always sends 0 for an execution breakpoint). */
+    (void)cpu;
+    SH2AddCodeBreakpoint(MSH2, (u32)addr);
+    SH2AddCodeBreakpoint(SSH2, (u32)addr);
 }
 static void SeExpClearBps(void) {
     SH2ClearCodeBreakpoints(MSH2); SH2ClearCodeBreakpoints(SSH2);

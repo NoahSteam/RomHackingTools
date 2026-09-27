@@ -185,6 +185,14 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerAccessLogTests COMMAND SaturnExplorerAccessLogTests)
 
+    add_executable(SaturnExplorerBreakpointManagerTests
+        FrontEnd/tests/BreakpointManagerTests.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+    )
+    target_include_directories(SaturnExplorerBreakpointManagerTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerBreakpointManagerTests COMMAND SaturnExplorerBreakpointManagerTests)
+
     add_executable(SaturnExplorerFunctionNamesTests
         FrontEnd/tests/FunctionNamesTests.cpp
         FrontEnd/src/Debug/CallStack.cpp

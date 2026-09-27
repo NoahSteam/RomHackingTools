@@ -32,6 +32,14 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | REW-03 | `e1472d1` |
 | REW-04 | `91c3925` — bounded in bytes; drops oldest, not by dependency group |
 | LIVE-03 | `91c3925` — bounded; writes are not coalesced |
+| CPU-01 | `1229b76` (+ #51) — settled as shared, not per-CPU |
+
+CPU-01 asked for the semantics to be settled either way. They are settled as **shared**: a PC
+breakpoint halts whichever SH-2 reaches the address, so CPU takes no part in execution-breakpoint
+matching, conditional-guard lookup, or the Step Over / Step Out transient. The wire descriptor
+keeps its CPU bit rather than forcing a protocol bump, reserved and ignored for execution
+breakpoints; an installer must arm both cores. Memory watchpoints are untouched and may still be
+per-CPU where a backend supports it.
 
 Three rows are annotated because the report asked for more than a bound: REW-01 and REW-04
 suggest eviction that understands which frames a delta depends on, and LIVE-03 suggests
@@ -49,7 +57,6 @@ lines and polylines there remains open.
 |---|---|---|
 | HOOK-01 | **High** | Windows emulator-hook shutdown can leave blocked threads alive after locks/global state are destroyed. |
 | LIVE-01 | **Medium** | Live capabilities are advertised before protocol negotiation. |
-| CPU-01 | **Medium** | Conditional execution-breakpoint lookup ignores halted CPU despite CPU-specific wire descriptors. |
 | VDP1-02 | **Medium** | VDP1 priority is modeled per sprite instead of per pixel, causing mixed-priority composition errors. |
 | ABI-02 | **Medium** | A C++ exception can unwind across an `extern "C"` boundary. |
 
@@ -73,8 +80,7 @@ lines and polylines there remains open.
 Steps 1-3 of the original order are done (see the status table); what is left, in order:
 
 1. HOOK-01 — the remaining High. Windows-only, so it needs a Windows machine to exercise.
-2. LIVE-01/LIVE-02 and CPU-01. CPU-01 needs a semantics decision first: either execution
-   breakpoints are per-CPU throughout, or CPU comes out of their representation.
+2. LIVE-01/LIVE-02.
 3. VDP per-pixel priority accuracy (VDP1-02/VDP2-01, one fix). The largest item here: priority
    has to leave the rasterizer per texel and reach the pixel mixer, so the rasterizer's output
    and the compositor change together. Worth its own change rather than a slot in a batch.
