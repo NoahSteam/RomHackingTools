@@ -68,6 +68,18 @@ target_include_directories(SaturnExplorerDriverCommon
            ${CMAKE_CURRENT_SOURCE_DIR}/include   # se_sh2_regs (SaturnStateShared.h)
 )
 
+# What the savestate parsers do with a container whose shape is not what the format declares,
+# and with one that holds only part of the machine. Synthesizes the .yss and MDFNSVST containers
+# so the tests reach the code a user's file goes through.
+if(BUILD_TESTING)
+    add_executable(SaturnExplorerSavestateShapeTests
+        Drivers/Savestate/tests/SavestateShapeTests.cpp)
+    target_link_libraries(SaturnExplorerSavestateShapeTests
+        PRIVATE SaturnExplorerSavestateDriver)
+    add_test(NAME SaturnExplorerSavestateShapeTests
+             COMMAND SaturnExplorerSavestateShapeTests)
+endif()
+
 # The shared normalization helpers: what they do with input that is not the shape the
 # savestate/live formats promised. Portable, no emulator and no socket needed.
 if(BUILD_TESTING)

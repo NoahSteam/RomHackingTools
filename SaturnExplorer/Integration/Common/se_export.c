@@ -1064,13 +1064,62 @@ static int SeRecv(int fd, void* d, size_t n)
 }
 #endif
 
+/* The connected-client handle, so the helpers below can be written once for both transports. */
+#if defined(_WIN32)
+typedef HANDLE SeConn;
+#else
+typedef int SeConn;
+#endif
+
+/* Consume and discard 'n' bytes, in bulk. Every capped verb needs this to stay stream-aligned
+ * after it stops acting on a payload, and doing it a byte at a time is what made the cap
+ * expensive: SeRecv wraps one recv() syscall, so a per-byte drain costs a syscall per byte --
+ * roughly half a microsecond each, which is ~570 ms for a 1 MiB payload and far worse for a
+ * request that claims more. Draining through a scratch buffer makes it a few dozen syscalls. */
+static int SeDrain(SeConn cl, unsigned int n)
+{
+    unsigned char scratch[16u * 1024u];
+    while (n)
+    {
+        const unsigned int take = n > sizeof(scratch) ? (unsigned int)sizeof(scratch) : n;
+        if (SeRecv(cl, scratch, take) != 0) return -1;
+        n -= take;
+    }
+    return 0;
+}
+
+/* Receive a poke stream -- destination(4 LE) + 'count' bytes -- and apply it through 'hook'.
+ * Shared by WRM and WRS, which differ only in the hook and in whether the destination is a bus
+ * address or a sound-RAM offset. Bytes past 'cap' are drained rather than written.
+ *
+ * The bytes are read in blocks rather than one at a time for the reason SeDrain gives: the old
+ * per-byte loop spent a syscall per byte, so the protocol's own 1 MiB maximum cost the
+ * emulator's server thread over half a second. */
+static int SeRecvPokeStream(SeConn cl, void (*hook)(unsigned int, unsigned char),
+                            unsigned int count, unsigned int cap)
+{
+    unsigned char destb[4];
+    unsigned char block[16u * 1024u];
+    unsigned int dest, done = 0;
+    if (SeRecv(cl, destb, 4) != 0) return -1;
+    dest = (unsigned int)destb[0] | ((unsigned int)destb[1] << 8) |
+           ((unsigned int)destb[2] << 16) | ((unsigned int)destb[3] << 24);
+    const unsigned int keep = count > cap ? cap : count;
+    while (done < keep)
+    {
+        const unsigned int take = (keep - done) > sizeof(block)
+                                      ? (unsigned int)sizeof(block) : (keep - done);
+        unsigned int i;
+        if (SeRecv(cl, block, take) != 0) return -1;
+        if (hook) { for (i = 0; i < take; ++i) hook(dest + done + i, block[i]); }
+        done += take;
+    }
+    return SeDrain(cl, count - keep);   /* past the cap: consumed, not written */
+}
+
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
  * scratch the size of one frame. */
-#if defined(_WIN32)
-static void SeServeClient(HANDLE cl, SeFrame* snap)
-#else
-static void SeServeClient(int cl, SeFrame* snap)
-#endif
+static void SeServeClient(SeConn cl, SeFrame* snap)
 {
     SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (sRunning)
@@ -1123,7 +1172,7 @@ static void SeServeClient(int cl, SeFrame* snap)
             unsigned int i;
             const unsigned int keep = arg > SE_LIVE_MAX_BKPT_DESCS ? SE_LIVE_MAX_BKPT_DESCS : arg;
             if (sClearBps) { sClearBps(); }
-            for (i = 0; i < arg; ++i)
+            for (i = 0; i < keep; ++i)
             {
                 unsigned char d[SE_LIVE_BKPT_DESC_LEN];
                 unsigned int address, size, flags, kind, cpu, enabled;
@@ -1141,7 +1190,7 @@ static void SeServeClient(int cl, SeFrame* snap)
                  * breakpoints (watchpoints) over [address, address+size). The
                  * descriptor was already consumed above, so a disabled one just
                  * skips installation without desyncing the stream. */
-                if (!enabled || i >= keep) continue;
+                if (!enabled) continue;
                 if (kind == 0u)
                 {
                     if (sAddExecBp) sAddExecBp((int)cpu, address);
@@ -1151,60 +1200,41 @@ static void SeServeClient(int cl, SeFrame* snap)
                     sAddMemBp((int)cpu, address, size ? size : 1u, kind);
                 }
             }
+            /* Descriptors past the cap are consumed without being decoded. */
+            if (SeDrain(cl, (arg - keep) * SE_LIVE_BKPT_DESC_LEN) != 0) return;
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. Bytes past the
-             * protocol maximum are consumed but not written -- no single legitimate poke
-             * approaches 1 MiB, and the loop is otherwise sized by the request. */
-            unsigned char addrb[4];
-            unsigned int i, address;
-            if (SeRecv(cl, addrb, 4) != 0) return;
-            address = (unsigned int)addrb[0] | ((unsigned int)addrb[1] << 8) |
-                      ((unsigned int)addrb[2] << 16) | ((unsigned int)addrb[3] << 24);
-            for (i = 0; i < arg; ++i)
-            {
-                unsigned char v;
-                if (SeRecv(cl, &v, 1) != 0) return;
-                if (sWriteByte && i < SE_LIVE_MAX_WRITE_BYTES) sWriteByte(address + i, v);
-            }
+            /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. */
+            if (SeRecvPokeStream(cl, sWriteByte, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
         {
             /* Poke sound RAM (v13+): payload = offset(4 LE) + 'arg' raw bytes. */
-            unsigned char offb[4];
-            unsigned int i, offset;
-            if (SeRecv(cl, offb, 4) != 0) return;
-            offset = (unsigned int)offb[0] | ((unsigned int)offb[1] << 8) |
-                     ((unsigned int)offb[2] << 16) | ((unsigned int)offb[3] << 24);
-            for (i = 0; i < arg; ++i)
-            {
-                unsigned char v;
-                if (SeRecv(cl, &v, 1) != 0) return;
-                if (sWriteSoundByte && i < SE_LIVE_MAX_WRITE_BYTES) sWriteSoundByte(offset + i, v);
-            }
+            if (SeRecvPokeStream(cl, sWriteSoundByte, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
         }
         else if (memcmp(req, SE_LIVE_VERB_LOADSTATE, SE_LIVE_VERB_LEN) == 0)
         {
             /* Rewind (v16): buffer the whole 'arg'-byte payload (frame + edits_len + edits +
              * state) and latch a pending load. The gate applies it atomically on the emulate
              * thread (restore + edits + resume), so nothing races the async restore. */
-            /* The realloc below is sized from 'arg', so a request claiming 4 GiB used to ask
-             * the emulator for 4 GiB. Past the protocol maximum the payload is drained by the
-             * malformed path further down instead (sLoadCap stays smaller than 'payload'). */
+            /* The realloc below is sized from 'arg', so without a bound a request claiming 4 GiB
+             * asks the emulator for 4 GiB. Over the maximum the payload is drained and nothing
+             * is allocated -- said here rather than left to emerge from sLoadCap staying short. */
             unsigned int payload = arg;
+            const int tooLarge = payload > SE_LIVE_STATE_MAX_PAYLOAD;
             SE_SLOCK();
-            if (sLoadCap < payload && payload <= SE_LIVE_STATE_MAX_PAYLOAD)
+            if (sLoadCap < payload && !tooLarge)
             {
                 unsigned char* nb = (unsigned char*)realloc(sLoadBuf, payload ? payload : 1u);
                 if (nb) { sLoadBuf = nb; sLoadCap = payload; }
             }
             SE_SUNLOCK();
-            if (payload < 8u || sLoadCap < payload || sStateCap == 0)
+            if (payload < 8u || tooLarge || sLoadCap < payload || sStateCap == 0)
             {
-                /* Malformed, can't buffer, or feature off: drain to stay stream-aligned. */
-                unsigned int i;
-                for (i = 0; i < payload; ++i) { unsigned char v; if (SeRecv(cl, &v, 1) != 0) return; }
+                /* Malformed, over the maximum, can't buffer, or feature off: drain to stay
+                 * stream-aligned. */
+                if (SeDrain(cl, payload) != 0) return;
             }
             else
             {
@@ -1235,13 +1265,9 @@ static void SeServeClient(int cl, SeFrame* snap)
             /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
              * hand them to the glue; consume any beyond the cap to stay stream-aligned. */
             static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];
-            unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg, i;
+            const unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg;
             if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            for (i = keep; i < arg; ++i)
-            {
-                unsigned char d[SE_LIVE_TRACE_DESC_LEN];
-                if (SeRecv(cl, d, SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            }
+            if (SeDrain(cl, (arg - keep) * SE_LIVE_TRACE_DESC_LEN) != 0) return;
             if (sSetTracepoints) sSetTracepoints(keep, tbuf);
         }
 

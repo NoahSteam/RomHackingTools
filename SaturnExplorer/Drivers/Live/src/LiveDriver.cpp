@@ -110,6 +110,24 @@ struct LiveStateBlock
 // How ByteQueue measures a savestate block (see ByteQueue.h).
 inline size_t ByteSizeOf(const LiveStateBlock& b) { return b.payload.size(); }
 
+// The minimum server version a verb requires, or 0 for the verbs every server has known.
+//
+// One table consulted at the single point a request leaves, rather than a check per verb where
+// the next verb added is the one nobody remembers to gate -- which had already happened: a
+// version floor for WRS was defined and never read, so the one payload verb the scheme existed
+// for was the one it missed.
+static uint32_t MinVerFor(const char* verb)
+{
+    // Compared by content, like the server's own dispatch. Pointer equality would happen to
+    // work while every caller passes the same macro, but it would be resting on the compiler
+    // pooling identical string literals.
+    auto is = [verb](const char* v) { return std::memcmp(verb, v, SE_LIVE_VERB_LEN) == 0; };
+    if (is(SE_LIVE_VERB_LOADSTATE)) return SE_LIVE_MINVER_LOADSTATE;
+    if (is(SE_LIVE_VERB_WRITESND))  return SE_LIVE_MINVER_WRITESND;
+    if (is(SE_LIVE_VERB_TRACE))     return SE_LIVE_MINVER_TRACE;
+    return 0u;
+}
+
 // Every length and address this driver puts on the wire is little-endian u32.
 inline void PushU32LE(std::vector<uint8_t>& out, uint32_t v)
 {
@@ -730,27 +748,7 @@ void PollLoop(LiveState* st)
         bool shippedLoad = false;
         uint32_t loadResyncFrame = 0;
         {
-            // Version floors for the payload-carrying verbs. A server that does not know a verb
-            // ignores it and does NOT consume the payload, so its next reply is read from the
-            // middle of our bytes and the session desyncs -- see SeLiveProtocol.h. sver is 0
-            // until the first exchange has told us the server's version, and "unknown" has to
-            // count as too old: the alternative is shipping the payload to find out.
-            const uint32_t sver = st->serverVersion.load();
-            const bool canLoadState = sver >= SE_LIVE_MINVER_LOADSTATE;
-            const bool canTrace     = sver >= SE_LIVE_MINVER_TRACE;
-
             std::lock_guard<std::mutex> lk(st->ctlMtx);
-            if (st->loadDirty && !canLoadState)
-            {
-                // Drop it rather than ship it. Holding it pending instead would retry forever
-                // against a server that will never accept it.
-                st->loadPayload.clear();
-                st->loadDirty = false;
-            }
-            if (st->tracesDirty && !canTrace)
-            {
-                st->tracesDirty = false;   // the set stays stored; it just is not shipped
-            }
             if (st->loadDirty)
             {
                 // Rewind (v16) takes top priority: one atomic LST (restore + edits + resume).
@@ -844,6 +842,19 @@ void PollLoop(LiveState* st)
         std::vector<std::string> logLines;
         std::vector<LiveStateBlock> stateBlocks;
         LiveEmuSlots emuSlots;
+
+        // One version gate, at the only point a request leaves. A server that does not know a
+        // verb ignores it and never consumes the attached payload, so its next reply is read
+        // from the middle of our bytes and the session desyncs (see SeLiveProtocol.h). Fall back
+        // to a plain GET and drop the payload instead. serverVersion is 0 until the first
+        // exchange has answered, and "unknown" counts as too old -- the alternative is shipping
+        // the payload to find out.
+        if (st->serverVersion.load() < MinVerFor(verb))
+        {
+            verb = SE_LIVE_VERB_GET;
+            arg = 0;
+            payload.clear();
+        }
         if (!ReadSnapshot(conn, verb, arg, payload.data(), payload.size(),
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
                           logLines, stateBlocks, emuSlots))

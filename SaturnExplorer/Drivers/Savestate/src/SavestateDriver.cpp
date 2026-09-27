@@ -34,6 +34,13 @@ constexpr uint32_t kSizeVdp2Regs = 0x200u;
 constexpr uint32_t kSizeWramLow  = 1024u * 1024u;
 constexpr uint32_t kSizeWramHigh = 1024u * 1024u;
 
+// The u16 normalizers refuse an odd length (see CopyMednafenU16BE / Bswap16). Every caller that
+// passes one of these constants therefore cannot be refused, which is why those call sites do
+// not test the result -- stated here so the property is checked rather than assumed.
+static_assert(kSizeVdp2Vram % 2 == 0 && kSizeCram % 2 == 0 && kSizeVdp2Regs % 2 == 0 &&
+                  kSizeWramLow % 2 == 0 && kSizeWramHigh % 2 == 0,
+              "u16-array region sizes must be even");
+
 // The driver's owned state, referenced through se_data_source.user.
 struct Savestate
 {
@@ -46,6 +53,16 @@ struct Savestate
     std::vector<uint8_t> mVdp2Regs;
     se_sh2_regs          mSh2[2] = {};       // [0] master, [1] slave
     bool                 mHasSh2[2] = { false, false };
+
+    // True if the parse found anything worth opening a context over. Derived from the members
+    // rather than tracked by a flag each parser sets, so a region added to this struct counts
+    // without anyone remembering to update a second list.
+    bool HasAnyRegion() const
+    {
+        return !mVdp1Vram.empty() || !mVdp2Vram.empty() || !mCram.empty() ||
+               !mWramLow.empty() || !mWramHigh.empty() || !mVdp1Regs.empty() ||
+               !mVdp2Regs.empty() || mHasSh2[0] || mHasSh2[1];
+    }
 };
 
 // Copy from a region buffer with bounds clamping. Returns bytes copied.
@@ -163,25 +180,30 @@ bool LoadFile(const std::string& path, std::vector<uint8_t>& out)
     {
         return false;
     }
+    // Read straight into the output, growing it a block at a time. Two things this avoids:
+    // a stack scratch buffer -- 64 KiB of it would have been the whole default stack on the
+    // wasm build this comment is about -- and copying every byte twice, once into scratch and
+    // once into 'out'.
+    const size_t kBlock = 64u * 1024u;
     out.clear();
-    uint8_t chunk[64u * 1024u];
+    size_t filled = 0;
     for (;;)
     {
-        const size_t got = std::fread(chunk, 1, sizeof(chunk), file);
-        if (got == 0)
-        {
-            break;
-        }
-        // out.size() <= kMaxSavestateBytes holds here and got is bounded by the chunk, so the
-        // sum cannot wrap even where size_t is 32 bits.
-        if (out.size() + got > kMaxSavestateBytes)
+        if (filled > kMaxSavestateBytes - kBlock)   // no wrap: filled <= cap throughout
         {
             std::fclose(file);
             out.clear();
-            return false;
+            return false;   // the next block could not fit under the cap
         }
-        out.insert(out.end(), chunk, chunk + got);
+        out.resize(filled + kBlock);
+        const size_t got = std::fread(out.data() + filled, 1, kBlock, file);
+        filled += got;
+        if (got < kBlock)
+        {
+            break;   // short read: EOF or an error, sorted out below
+        }
     }
+    out.resize(filled);
     const bool readFailed = std::ferror(file) != 0;
     std::fclose(file);
     if (readFailed)
@@ -297,18 +319,14 @@ void ParseSh2Regs(const std::vector<uint8_t>& d, size_t data, se_sh2_regs& out)
 }
 
 // Copy 'len' bytes from 'src', swapping each 16-bit word to normalize Yabause's
-// host-order work RAM to Saturn big-endian (shared with the live driver). False if the field
-// length is not a whole number of u16s -- the region is left empty rather than half-normalized.
-bool CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
+// host-order work RAM to Saturn big-endian (shared with the live driver). 'len' is always one of
+// the even kSize* constants here, so Bswap16 cannot refuse; the live driver is where that
+// return value matters, because there the length comes off the wire.
+void CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
                  std::vector<uint8_t>& out)
 {
     out.assign(d.begin() + src, d.begin() + src + len);
-    if (!sedrv::Bswap16(out.data(), out.size()))
-    {
-        out.clear();
-        return false;
-    }
-    return true;
+    sedrv::Bswap16(out.data(), out.size());
 }
 
 /* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */
@@ -359,9 +377,21 @@ bool FindMednafenField(const std::vector<uint8_t>& file, size_t dataOff, uint32_
 // big-endian when 'swap' is set (a state written on a little-endian host). This
 // makes VRAM/CRAM/registers match what the core expects (big-endian words, so a
 // texture byte at address A lands where a big-endian read finds it).
-void CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t size,
+// False if 'size' is not a whole number of u16s. The length comes from the field header in the
+// file, so an odd one means the field is not the uint16 array the format declares -- and the
+// round-down loop below would then copy every pair and silently leave the final byte at 0,
+// producing a region that is correct up to that point and wrong after it. That reads as
+// plausible memory: the load succeeds and every 16-bit value from the seam on is garbage with
+// nothing to point at. 'out' is cleared on refusal so a caller that ignores the result cannot
+// serve the half-converted copy either.
+bool CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t size,
                        std::vector<uint8_t>& out, bool swap)
 {
+    if ((size & 1u) != 0)
+    {
+        out.clear();
+        return false;
+    }
     out.resize(size);
     for (uint32_t i = 0; i + 1 < size; i += 2)
     {
@@ -376,6 +406,7 @@ void CopyMednafenU16BE(const std::vector<uint8_t>& file, size_t off, uint32_t si
             out[i + 1] = file[off + i + 1];
         }
     }
+    return true;
 }
 
 // Mednafen stores VDP1's control/status registers as individual named scalar
@@ -449,7 +480,6 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
     }
 
     // Walk the section chain: each section is tag(4) + version(4) + size(4) + data.
-    bool haveVdp1 = false;
     size_t pos = kYssHeaderSize;
     while (pos + 12 <= file.size())
     {
@@ -469,7 +499,6 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
             const uint32_t regBytes = size - kVramSize;
             state->mVdp1Vram.assign(file.begin() + data + regBytes,
                                     file.begin() + data + regBytes + kVramSize);
-            haveVdp1 = true;
         }
         else if (std::memcmp(tag, "VDP2", 4) == 0 && size >= kVdp2SectionBase)
         {
@@ -507,19 +536,18 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
         {
             // OTHR = BupRam(0x10000) + HighWram(1 MiB) + LowWram(1 MiB) + internal
             // state. Work RAM is stored 16-bit byte-swapped; normalize to big-endian.
-            // Both are fixed even sizes, so a refusal here means the file's section layout is
-            // not what it declared -- refuse the state rather than serve a region with an
-            // unswapped byte in the middle of it.
-            if (!CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh) ||
-                !CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow))
-            {
-                return SE_ERR_UNSUPPORTED;
-            }
+            CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh);
+            CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow);
         }
         pos = data + size;
     }
 
-    if (!haveVdp1)
+    // Anything at all, not VDP1 specifically. The core stopped tying validity to VDP1 VRAM
+    // (SNAP-02), but that relaxation was unreachable from a real file while the parsers kept
+    // the old rule here: a VDP2-only state still failed to open, and only a hand-built
+    // se_data_source could reach the new behaviour. A parser's job is to report what it found
+    // and let the core judge usability.
+    if (!state->HasAnyRegion())
     {
         delete state;
         return SE_ERR_NO_DATA;
@@ -598,7 +626,6 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     }
 
     // Walk the section chain: 32-byte zero-padded name + u32 LE data size + data.
-    bool haveVdp1 = false;
     while (pos + kMdfnSectionHdr <= file.size())
     {
         char name[33];
@@ -618,7 +645,6 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
                 sz >= kVramSize)
             {
                 CopyMednafenU16BE(file, off, kVramSize, state->mVdp1Vram, swap);
-                haveVdp1 = true;
             }
             // VDP1 control/status registers live as individual named fields.
             BuildVdp1RegImageFromMednafen(file, secData, secSize, hostBigEndian,
@@ -636,8 +662,14 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
             {
                 // RawRegs is uint16[0x100] indexed by (hw offset >> 1); swapping
                 // to big-endian yields a hardware-offset register image the shared
-                // read_vdp2_reg reads directly.
-                CopyMednafenU16BE(file, off, sz, state->mVdp2Regs, swap);
+                // read_vdp2_reg reads directly. 'sz' is the field header's own length -- the
+                // only length here that the file chooses -- so this is the call that can
+                // actually refuse.
+                if (!CopyMednafenU16BE(file, off, sz, state->mVdp2Regs, swap))
+                {
+                    delete state;
+                    return SE_ERR_UNSUPPORTED;
+                }
             }
             if (FindMednafenField(file, secData, secSize, "CRAM", off, sz) && sz >= kYssCramSize)
             {
@@ -679,7 +711,12 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
         pos = secData + secSize;
     }
 
-    if (!haveVdp1)
+    // Anything at all, not VDP1 specifically. The core stopped tying validity to VDP1 VRAM
+    // (SNAP-02), but that relaxation was unreachable from a real file while the parsers kept
+    // the old rule here: a VDP2-only state still failed to open, and only a hand-built
+    // se_data_source could reach the new behaviour. A parser's job is to report what it found
+    // and let the core judge usability.
+    if (!state->HasAnyRegion())
     {
         delete state;
         return SE_ERR_NO_DATA;

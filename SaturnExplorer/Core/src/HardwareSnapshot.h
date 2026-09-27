@@ -27,8 +27,9 @@ class HardwareSnapshot
 {
 public:
     // Reads whatever the driver's capabilities allow into the buffers below.
-    // Absent capabilities leave the corresponding buffer empty. Returns true if
-    // at least the VDP1 VRAM was captured.
+    // Absent capabilities leave the corresponding buffer empty. Returns true if the source
+    // supplied anything at all -- not VDP1 VRAM specifically, so a VDP2-only or work-RAM-only
+    // source opens. Consumers that need a particular region ask for it themselves.
     bool Capture(const se_data_source& dataSource);
 
     bool Valid() const { return mbValid; }

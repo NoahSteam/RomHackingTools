@@ -34,6 +34,16 @@ size_t ReadAll(size_t (*reader)(void*, uint32_t, void*, size_t), void* user,
 
 bool HardwareSnapshot::Capture(const se_data_source& dataSource)
 {
+    // Valid if the source gave us anything at all, rather than VDP1 VRAM specifically: a
+    // VDP2-only source still has background layers and the tile/palette viewers, and a
+    // work-RAM-only dump has the memory viewer, watches and RAM search. Tying validity to VDP1
+    // made all of that unreachable, because a failed Capture means BeginFrame returns
+    // SE_ERR_NO_DATA and the context never comes up.
+    //
+    // Set below as each region lands, rather than tested as one expression at the end: an
+    // expression has to restate the list of regions this function fills, and a hand-written
+    // copy of that list drifts -- the first attempt at it already omitted the SCSP slots and
+    // CD status captured near the bottom.
     mbValid = false;
     mbHasVdp1Regs = false;
     mbHasVdp2Regs = false;
@@ -53,6 +63,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         size_t got = ReadAll(dataSource.read_vdp1_vram, dataSource.user, 0,
                              mVdp1Vram.data(), mVdp1Vram.size());
         mVdp1Vram.resize(got);
+        mbValid = mbValid || got != 0;
     }
     if (dataSource.capabilities & SE_CAP_VDP2_VRAM)
     {
@@ -60,6 +71,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         size_t got = ReadAll(dataSource.read_vdp2_vram, dataSource.user, 0,
                              mVdp2Vram.data(), mVdp2Vram.size());
         mVdp2Vram.resize(got);
+        mbValid = mbValid || got != 0;
     }
     if (dataSource.capabilities & SE_CAP_CRAM)
     {
@@ -67,6 +79,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         size_t got = ReadAll(dataSource.read_cram, dataSource.user, 0,
                              mCram.data(), mCram.size());
         mCram.resize(got);
+        mbValid = mbValid || got != 0;
     }
     // Work RAM: low @ 0x00200000, high @ 0x06000000 (each 1 MiB). read_main_ram is
     // addressed by bus address, so read from those bases.
@@ -78,6 +91,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mWramHigh.resize(kWramSize);
         mWramHigh.resize(ReadAll(dataSource.read_main_ram, dataSource.user,
                                  kWramHighBase, mWramHigh.data(), mWramHigh.size()));
+        mbValid = mbValid || !mWramLow.empty() || !mWramHigh.empty();
     }
 
     if ((dataSource.capabilities & SE_CAP_VDP1_FB) && dataSource.read_vdp1_fb)
@@ -85,6 +99,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mVdp1Fb.resize(kVdp1FbSize);
         mVdp1Fb.resize(ReadAll(dataSource.read_vdp1_fb, dataSource.user, 0,
                                mVdp1Fb.data(), mVdp1Fb.size()));
+        mbValid = mbValid || !mVdp1Fb.empty();
     }
 
     // SCSP sound RAM (0-based offset within the 512 KiB block).
@@ -93,6 +108,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mSoundRam.resize(kSoundRamSize);
         mSoundRam.resize(ReadAll(dataSource.read_sound_ram, dataSource.user, 0,
                                  mSoundRam.data(), mSoundRam.size()));
+        mbValid = mbValid || !mSoundRam.empty();
     }
 
     // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.
@@ -105,6 +121,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
             mVdp1Regs[hw >> 1] = dataSource.read_vdp1_reg(dataSource.user, hw);
         }
         mbHasVdp1Regs = true;
+        mbValid = true;
     }
 
     // Capture the VDP2 register file (0x000..0x11E) into an immutable copy, so
@@ -119,6 +136,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
             mVdp2Regs[hw >> 1] = dataSource.read_vdp2_reg(dataSource.user, hw);
         }
         mbHasVdp2Regs = true;
+        mbValid = true;
     }
 
     // Capture the SH-2 master/slave register files if the driver supplies them.
@@ -127,6 +145,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         for (int cpu = 0; cpu < 2; ++cpu)
         {
             mbHasSh2[cpu] = dataSource.read_sh2_regs(dataSource.user, cpu, &mSh2[cpu]) != 0;
+            mbValid = mbValid || mbHasSh2[cpu];
         }
     }
 
@@ -139,6 +158,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         if (n < 0) n = 0;
         if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
         mScspSlots.assign(tmp, tmp + n);
+        mbValid = mbValid || !mScspSlots.empty();
     }
 
     // Live CD-block state (live driver only; absent on savestates).
@@ -146,6 +166,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     mCdStatus = se_cd_status{};
     if ((dataSource.capabilities & SE_CAP_CD_STATUS) && dataSource.read_cd_status)
         mHasCdStatus = dataSource.read_cd_status(dataSource.user, &mCdStatus) != 0;
+    if (mHasCdStatus) mbValid = true;
 
     // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
     mCramMode = SE_CRAM_RGB555_1024;
@@ -160,19 +181,6 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         }
     }
 
-    // Valid if the source gave us anything to look at, rather than requiring VDP1 VRAM
-    // specifically. A VDP2-only source has plenty a user can do -- background layers, the
-    // tile and palette viewers -- and a work-RAM-only dump has the memory viewer, watches and
-    // RAM search; tying validity to VDP1 made all of it unreachable, because BeginFrame
-    // returned SE_ERR_NO_DATA and the context never came up at all.
-    //
-    // Every consumer that needs a particular region already asks for it (HasVdp2Regs(),
-    // Vdp1Vram().empty(), TileMap() returning no tiles), so nothing downstream was relying on
-    // VDP1 being what made a snapshot valid -- only on the snapshot existing.
-    mbValid = !mVdp1Vram.empty() || !mVdp2Vram.empty() || !mCram.empty() ||
-              !mWramLow.empty() || !mWramHigh.empty() || !mVdp1Fb.empty() ||
-              !mSoundRam.empty() || mbHasVdp1Regs || mbHasVdp2Regs ||
-              mbHasSh2[0] || mbHasSh2[1];
     return mbValid;
 }
 
