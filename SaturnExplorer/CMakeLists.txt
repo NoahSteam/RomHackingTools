@@ -125,6 +125,19 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerVdp2Tests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerVdp2Tests COMMAND SaturnExplorerVdp2Tests)
 
+    # CRAM index wrapping: exact on the hardware sizes, and still correct on a partially
+    # captured CRAM, where power-of-two masking is not modulo.
+    add_executable(SaturnExplorerCramWrapTests
+        Core/tests/CramWrapTests.cpp
+    )
+    target_link_libraries(SaturnExplorerCramWrapTests PRIVATE SaturnExplorerCore)
+    # Core/src is PRIVATE to the Core library on purpose — the other Core tests go through the
+    # public ABI. This one asserts on a decode helper the ABI has no direct route to, so it
+    # needs the internal header; the include stays on this target rather than widening Core's.
+    target_include_directories(SaturnExplorerCramWrapTests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/src)
+    add_test(NAME SaturnExplorerCramWrapTests COMMAND SaturnExplorerCramWrapTests)
+
     # 3D View orientation — the exploded world view checked against the 2D composite.
     add_executable(SaturnExplorerGeometry3DTests
         Core/tests/Geometry3DTests.cpp

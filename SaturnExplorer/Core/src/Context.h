@@ -318,7 +318,7 @@ public:
             e.a = 255;
             e.raw = (cm == SE_CRAM_RGB888_1024 || words == 0)
                         ? 0
-                        : ReadBE16(cram, (idx & (words - 1)) * 2);
+                        : ReadBE16(cram, CramWrap(idx, words) * 2);
         }
         return SE_OK;
     }

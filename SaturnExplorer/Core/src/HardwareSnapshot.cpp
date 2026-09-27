@@ -160,7 +160,19 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         }
     }
 
-    mbValid = !mVdp1Vram.empty();
+    // Valid if the source gave us anything to look at, rather than requiring VDP1 VRAM
+    // specifically. A VDP2-only source has plenty a user can do -- background layers, the
+    // tile and palette viewers -- and a work-RAM-only dump has the memory viewer, watches and
+    // RAM search; tying validity to VDP1 made all of it unreachable, because BeginFrame
+    // returned SE_ERR_NO_DATA and the context never came up at all.
+    //
+    // Every consumer that needs a particular region already asks for it (HasVdp2Regs(),
+    // Vdp1Vram().empty(), TileMap() returning no tiles), so nothing downstream was relying on
+    // VDP1 being what made a snapshot valid -- only on the snapshot existing.
+    mbValid = !mVdp1Vram.empty() || !mVdp2Vram.empty() || !mCram.empty() ||
+              !mWramLow.empty() || !mWramHigh.empty() || !mVdp1Fb.empty() ||
+              !mSoundRam.empty() || mbHasVdp1Regs || mbHasVdp2Regs ||
+              mbHasSh2[0] || mbHasSh2[1];
     return mbValid;
 }
 

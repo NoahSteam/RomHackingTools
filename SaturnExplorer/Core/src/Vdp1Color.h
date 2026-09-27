@@ -27,8 +27,22 @@ inline Rgba Rgb555ToRgba(uint16_t v)
              static_cast<uint8_t>(((v >> 10) & 0x1F) * 255 / 31), 255 };
 }
 
-// One CRAM color -> RGB. Index is masked to the physical CRAM size, so this
-// works whether the game uses the 1024- or 2048-color RGB555 layout.
+// Wrap a CRAM index into 'words' entries. 'words' must be non-zero.
+//
+// Saturn CRAM holds 1024 or 2048 entries -- both powers of two -- so & (words - 1) is modulo
+// and stays one instruction on the compositor's per-pixel path. A snapshot captured from a
+// source that returned a short CRAM region can be any length, and there the mask is not modulo
+// at all: with 3 words it maps every index onto {0, 2}, so entry 1 is unreachable and the
+// colours are silently wrong (in range, just not the ones asked for). Fall back to a real
+// modulo for those shapes rather than putting a division in the hot path for the shapes that
+// actually occur on hardware.
+inline uint32_t CramWrap(uint32_t index, uint32_t words)
+{
+    return ((words & (words - 1)) == 0) ? (index & (words - 1)) : (index % words);
+}
+
+// One CRAM color -> RGB. Index wraps to the physical CRAM size, so this works whether the game
+// uses the 1024- or 2048-color RGB555 layout, and on a partially captured CRAM.
 inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint32_t index)
 {
     if (mode == SE_CRAM_RGB888_1024)
@@ -38,7 +52,7 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
         {
             return { 0, 0, 0, 255 };
         }
-        const uint32_t off = (index & (words - 1)) * 4;
+        const uint32_t off = CramWrap(index, words) * 4;
         const uint8_t r = (off + 3 < cram.size()) ? cram[off + 1] : 0;
         const uint8_t g = (off + 3 < cram.size()) ? cram[off + 2] : 0;
         const uint8_t b = (off + 3 < cram.size()) ? cram[off + 3] : 0;
@@ -51,7 +65,7 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
     {
         return { 0, 0, 0, 255 };
     }
-    return Rgb555ToRgba(ReadBE16(cram, (index & (words - 1)) * 2));
+    return Rgb555ToRgba(ReadBE16(cram, CramWrap(index, words) * 2));
 }
 
 // Decode one texel (x,y) of a sprite texture. Returns a == 0 for transparent.
