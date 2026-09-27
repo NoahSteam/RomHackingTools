@@ -16,12 +16,14 @@ Breakpoint* BreakpointManager::Find(int cpu, uint32_t addr, BpKind kind, uint32_
     return nullptr;
 }
 
-bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
+bool BreakpointManager::ToggleExecution(uint32_t addr)
 {
+    // Address alone: execution BPs are shared across both SH-2s (see the header), so a
+    // second toggle at the same PC — from either the master or slave Assembly view — must
+    // remove the one entry that's already there, not add a sibling that only that view sees.
     for (std::size_t i = 0; i < mBps.size(); ++i)
     {
-        if (mBps[i].kind == BpKind::Execution && mBps[i].cpu == cpu &&
-            mBps[i].address == addr)
+        if (mBps[i].kind == BpKind::Execution && mBps[i].address == addr)
         {
             mBps.erase(mBps.begin() + i);
             ++mGeneration;
@@ -31,7 +33,7 @@ bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
     Breakpoint b;
     b.id = mNextId++;
     b.kind = BpKind::Execution;
-    b.cpu = cpu;
+    b.cpu = 0;   // unused for Execution — shared across both SH-2s (see the header)
     b.address = addr;
     b.size = 2;
     b.enabled = true;
@@ -40,11 +42,11 @@ bool BreakpointManager::ToggleExecution(int cpu, uint32_t addr)
     return true;
 }
 
-bool BreakpointManager::HasExecutionAt(int cpu, uint32_t addr) const
+bool BreakpointManager::HasExecutionAt(uint32_t addr) const
 {
     for (const Breakpoint& b : mBps)
     {
-        if (b.kind == BpKind::Execution && b.cpu == cpu && b.address == addr)
+        if (b.kind == BpKind::Execution && b.address == addr)
         {
             return true;
         }
@@ -52,11 +54,11 @@ bool BreakpointManager::HasExecutionAt(int cpu, uint32_t addr) const
     return false;
 }
 
-const Breakpoint* BreakpointManager::ExecutionAt(int cpu, uint32_t addr) const
+const Breakpoint* BreakpointManager::ExecutionAt(uint32_t addr) const
 {
     for (const Breakpoint& b : mBps)
     {
-        if (b.kind == BpKind::Execution && b.cpu == cpu && b.address == addr)
+        if (b.kind == BpKind::Execution && b.address == addr)
         {
             return &b;
         }
