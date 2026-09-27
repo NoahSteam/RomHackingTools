@@ -42,16 +42,31 @@ static inline size_t se_state_put_varint(unsigned char* p, size_t cap, size_t* p
         v >>= 7;
     }
 }
+/* Read a LEB128 value into *out. Returns 1 on success, 0 on a truncated or oversized encoding.
+ *
+ * A group's bits are checked against the width still unfilled BEFORE the shift, not after. The
+ * shift itself is what loses them: `(size_t)2 << 63` on a 64-bit size_t is a well-defined 0, so
+ * a final group of 0x02 after nine continuation groups used to drop its high bit and return
+ * success, handing the caller a number the sender never wrote. The old `sh >= width` guard
+ * could not catch it, because it only ran after `sh += 7` and a terminating group returns
+ * first. 32-bit has the same shape at sh == 28 with a final group above 0x0F.
+ *
+ * `room` is at least 1 on every iteration (sh < width holds at the top of the loop), so the
+ * `chunk >> room` test never shifts by the full width. */
 static inline int se_state_get_varint(const unsigned char* p, size_t n, size_t* pos, size_t* out)
 {
+    const int width = (int)(sizeof(size_t) * 8);
     size_t v = 0; int sh = 0;
     while (*pos < n)
     {
         unsigned char b = p[(*pos)++];
-        v |= (size_t)(b & 0x7Fu) << sh;
+        size_t chunk = (size_t)(b & 0x7Fu);
+        const int room = width - sh;
+        if (room < 7 && (chunk >> room) != 0) return 0;   /* would not survive the shift */
+        v |= chunk << sh;
         if (!(b & 0x80u)) { *out = v; return 1; }
         sh += 7;
-        if (sh >= (int)(sizeof(size_t) * 8)) return 0;   /* overflow guard */
+        if (sh >= width) return 0;   /* no room for another group at all */
     }
     return 0;
 }

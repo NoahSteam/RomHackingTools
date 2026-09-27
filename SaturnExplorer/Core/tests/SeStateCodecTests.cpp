@@ -180,6 +180,62 @@ int main()
         }
     }
 
+    // --- A varint's terminal group must fit the width, or be rejected ---
+    // The shift is what loses the bits: (size_t)2 << 63 is a well-defined 0 on a 64-bit
+    // size_t, so a final group whose value exceeds the room left used to be silently truncated
+    // and reported as success -- a count the sender never wrote, accepted as if it had.
+    //
+    // Which stream is *malformed* depends on the width, so the assertions are split by what is
+    // true everywhere. A stream that overflows the narrower width is merely a large, legal
+    // count on the wider one; only the decode (which has a real 64-byte destination) refuses it
+    // at both widths, and for different reasons.
+    {
+        unsigned char dst[64];
+
+        // Nine continuation groups then a terminal 0x02: needs bit 64. Malformed at either
+        // width -- past the width on 64-bit, and out of groups entirely on 32-bit.
+        std::vector<unsigned char> over64;
+        over64.push_back(0x00);                                  // zero-run tag
+        for (int i = 0; i < 9; ++i) over64.push_back(0xFF);
+        over64.push_back(0x02);
+        Check(se_state_rle_decode(dst, sizeof(dst), over64.data(), over64.size()) == 0,
+              "terminal varint group past the 64-bit width is rejected");
+        Check(se_state_rle_decoded_size(over64.data(), over64.size()) == 0,
+              "...and measuring rejects it, at either width");
+
+        // Four continuation groups then a terminal 0x1F: needs bit 32. Malformed on a 32-bit
+        // size_t; on a 64-bit one it is the legal count 0x1FFFFFFFF, which the decode still
+        // refuses because 8.6 billion bytes do not fit dst. Measuring has no destination, so on
+        // 64-bit it correctly answers with the length instead of an error -- not asserted here.
+        std::vector<unsigned char> over32;
+        over32.push_back(0x00);
+        for (int i = 0; i < 4; ++i) over32.push_back(0xFF);
+        over32.push_back(0x1F);
+        Check(se_state_rle_decode(dst, sizeof(dst), over32.data(), over32.size()) == 0,
+              "terminal varint group past the 32-bit width is rejected");
+
+        // The largest value that fits each width still parses, so the check is a width test and
+        // not a blanket refusal of long encodings: 2^32-1 measures to itself on both widths.
+        std::vector<unsigned char> max32;
+        max32.push_back(0x00);
+        for (int i = 0; i < 4; ++i) max32.push_back(0xFF);
+        max32.push_back(0x0F);
+        Check(se_state_rle_decoded_size(max32.data(), max32.size()) == 0xFFFFFFFFu,
+              "the largest count that fits a 32-bit width still parses");
+
+        // A continuation bit where no group can follow: 0x81 fits the one bit left at sh == 63,
+        // so the width check passes and the "no room for another group" arm is what refuses it.
+        std::vector<unsigned char> noRoom;
+        noRoom.push_back(0x00);
+        for (int i = 0; i < 9; ++i) noRoom.push_back(0xFF);
+        noRoom.push_back(0x81);
+        noRoom.push_back(0x01);
+        Check(se_state_rle_decode(dst, sizeof(dst), noRoom.data(), noRoom.size()) == 0,
+              "a varint continuing past the last group the width allows is rejected");
+        Check(se_state_rle_decoded_size(noRoom.data(), noRoom.size()) == 0,
+              "...and measuring rejects that too");
+    }
+
     if (gFail == 0) std::printf("All SeStateCodec tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

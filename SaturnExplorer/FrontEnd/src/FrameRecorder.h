@@ -74,9 +74,15 @@ public:
     static bool DecompressFrame(const Frame& f, Scratch& out);
 
     // The default ring byte ceiling, a backstop behind the frame cap that is the effective
-    // limit. uint64_t, not size_t: on a 32-bit target (the wasm web build) 4 GiB truncates to 0
-    // in a size_t, and a ceiling of 0 evicts everything but the newest frame.
-    static const uint64_t kDefaultMaxBytes = 4ull * 1024u * 1024u * 1024u;
+    // limit.
+    //
+    // uint64_t rather than size_t because 4 GiB truncates to 0 in a 32-bit size_t, and a
+    // ceiling of 0 evicts everything but the newest frame. That alone is not enough to make the
+    // backstop work at both widths, though: mBytes is a size_t, so on a 32-bit target it can
+    // never exceed 4 GiB and a 4 GiB ceiling would simply never fire. Half the address space is
+    // a limit a 32-bit mBytes can actually reach.
+    static const uint64_t kDefaultMaxBytes =
+        sizeof(size_t) >= 8 ? 4ull * 1024u * 1024u * 1024u : 2ull * 1024u * 1024u * 1024u;
 
     // Cap the ring to at most 'maxFrames' frames and 'maxBytes' of compressed footprint.
     void Configure(size_t maxFrames, uint64_t maxBytes = kDefaultMaxBytes);
