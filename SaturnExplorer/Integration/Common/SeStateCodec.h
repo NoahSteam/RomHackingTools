@@ -16,6 +16,8 @@
 #define SATURNEXPLORER_SE_STATE_CODEC_H
 
 #include <stddef.h>
+#include <stdint.h>   /* SIZE_MAX */
+#include <string.h>   /* memcpy/memset */
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,16 +42,31 @@ static inline size_t se_state_put_varint(unsigned char* p, size_t cap, size_t* p
         v >>= 7;
     }
 }
+/* Read a LEB128 value into *out. Returns 1 on success, 0 on a truncated or oversized encoding.
+ *
+ * A group's bits are checked against the width still unfilled BEFORE the shift, not after. The
+ * shift itself is what loses them: `(size_t)2 << 63` on a 64-bit size_t is a well-defined 0, so
+ * a final group of 0x02 after nine continuation groups used to drop its high bit and return
+ * success, handing the caller a number the sender never wrote. The old `sh >= width` guard
+ * could not catch it, because it only ran after `sh += 7` and a terminating group returns
+ * first. 32-bit has the same shape at sh == 28 with a final group above 0x0F.
+ *
+ * `room` is at least 1 on every iteration (sh < width holds at the top of the loop), so the
+ * `chunk >> room` test never shifts by the full width. */
 static inline int se_state_get_varint(const unsigned char* p, size_t n, size_t* pos, size_t* out)
 {
+    const int width = (int)(sizeof(size_t) * 8);
     size_t v = 0; int sh = 0;
     while (*pos < n)
     {
         unsigned char b = p[(*pos)++];
-        v |= (size_t)(b & 0x7Fu) << sh;
+        size_t chunk = (size_t)(b & 0x7Fu);
+        const int room = width - sh;
+        if (room < 7 && (chunk >> room) != 0) return 0;   /* would not survive the shift */
+        v |= chunk << sh;
         if (!(b & 0x80u)) { *out = v; return 1; }
         sh += 7;
-        if (sh >= (int)(sizeof(size_t) * 8)) return 0;   /* overflow guard */
+        if (sh >= width) return 0;   /* no room for another group at all */
     }
     return 0;
 }
@@ -81,18 +98,22 @@ static inline size_t se_state_rle_encode(unsigned char* dst, size_t cap,
             if (out >= cap) return 0;
             dst[out++] = 0x01;
             if (!se_state_put_varint(dst, cap, &out, run)) return 0;
-            if (out + run > cap) return 0;
-            {
-                size_t k;
-                for (k = 0; k < run; ++k) dst[out++] = src[start + k];
-            }
+            if (run > cap - out) return 0;   /* not out + run: the sum can wrap */
+            memcpy(dst + out, src + start, run);
+            out += run;
         }
     }
     return out;
 }
 
-/* Inverse of se_state_rle_encode. Returns decoded length (bytes written to dst), or 0 on a
- * malformed stream or if the output would exceed `cap`. */
+/* Inverse of se_state_rle_encode. Returns the decoded length (bytes written to dst), or 0 on a
+ * malformed stream or one whose output would exceed `cap`. A NULL `dst` measures instead of
+ * decoding -- see se_state_rle_decoded_size, which is that call.
+ *
+ * The bounds are written `count > cap - out` rather than `out + count > cap` because `count`
+ * comes straight off the wire and can be near SIZE_MAX: the sum wraps, passes the check, and
+ * the copy then runs off the end of dst. `out <= cap` and `pos <= n` hold on every iteration,
+ * so neither subtraction can underflow. */
 static inline size_t se_state_rle_decode(unsigned char* dst, size_t cap,
                                          const unsigned char* src, size_t n)
 {
@@ -104,13 +125,16 @@ static inline size_t se_state_rle_decode(unsigned char* dst, size_t cap,
         if (!se_state_get_varint(src, n, &pos, &count)) return 0;
         if (tag == 0x00)
         {
-            if (out + count > cap) return 0;
-            { size_t k; for (k = 0; k < count; ++k) dst[out++] = 0; }
+            if (count > cap - out) return 0;
+            if (dst && count) memset(dst + out, 0, count);
+            out += count;
         }
         else if (tag == 0x01)
         {
-            if (pos + count > n || out + count > cap) return 0;
-            { size_t k; for (k = 0; k < count; ++k) dst[out++] = src[pos++]; }
+            if (count > n - pos || count > cap - out) return 0;
+            if (dst && count) memcpy(dst + out, src + pos, count);
+            out += count;
+            pos += count;
         }
         else
         {
@@ -118,6 +142,14 @@ static inline size_t se_state_rle_decode(unsigned char* dst, size_t cap,
         }
     }
     return out;
+}
+
+/* The length se_state_rle_decode would produce, without materializing it (0 if malformed).
+ * Lets a receiver check a payload against the full length its sender declared before storing
+ * it: one token walk, no allocation, and zero runs are counted rather than written. */
+static inline size_t se_state_rle_decoded_size(const unsigned char* src, size_t n)
+{
+    return se_state_rle_decode(NULL, SIZE_MAX, src, n);
 }
 
 #ifdef __cplusplus

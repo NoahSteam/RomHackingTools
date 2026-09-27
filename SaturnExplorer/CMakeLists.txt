@@ -301,6 +301,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(SaturnExplorerFrameRecorderTests PRIVATE
         FrontEnd/src
+        Core/tests                       # FakeVdpSource.h, the shared Seam A mock
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     target_link_libraries(SaturnExplorerFrameRecorderTests PRIVATE SaturnExplorerCore)
@@ -429,6 +430,18 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         if(WIN32)
             target_link_libraries(SaturnExplorerLiveDriver PUBLIC ws2_32)
         endif()
+    endif()
+
+    # The driver's byte-budgeted queue. A header-only container needing no socket, so unlike
+    # the reconnect test below it builds wherever the driver is configured — MSVC included,
+    # where the template's ADL size lookup is the part most worth having a compiler check.
+    if(BUILD_TESTING)
+        add_executable(SaturnExplorerByteQueueTests
+            FrontEnd/tests/ByteQueueTests.cpp)
+        target_include_directories(SaturnExplorerByteQueueTests PRIVATE
+            Drivers/Live/src)
+        add_test(NAME SaturnExplorerByteQueueTests
+                 COMMAND SaturnExplorerByteQueueTests)
     endif()
 
     # The driver's reconnect counter — how a client notices the emulator on the other end
