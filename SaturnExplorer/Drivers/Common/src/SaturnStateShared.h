@@ -22,7 +22,10 @@ uint16_t ReadReg16(const std::vector<uint8_t>& regs, uint32_t reg);
 // work RAM in host (little-endian) 16-bit order; the core, watches, and the SH-2
 // disassembler expect Saturn-native big-endian. Applied identically by the
 // savestate and live drivers so they can't drift on this fixed Yabause convention.
-void Bswap16(uint8_t* p, size_t len);
+//
+// False if 'len' is odd: the field is then not the u16 array the format claims, and the caller
+// must reject the state rather than load a region with one unswapped byte buried in it.
+bool Bswap16(uint8_t* p, size_t len);
 
 // Parse a Yabause sh2regs_struct — 23 host-order (little-endian) u32 in struct
 // order R[0..15], SR, GBR, VBR, MACH, MACL, PR, PC — at 'p' into se_sh2_regs.

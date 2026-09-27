@@ -82,15 +82,23 @@ void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
     }
 }
 
-void Bswap16(uint8_t* p, size_t len)
+bool Bswap16(uint8_t* p, size_t len)
 {
-    const size_t n = len & ~size_t(1);
-    for (size_t i = 0; i < n; i += 2)
+    // An odd length means the field is not the u16 array the format says it is. Rounding down
+    // and swapping the rest (`len & ~1`) left the final byte unswapped in the middle of
+    // otherwise-normalized memory: the region loads, looks plausible, and every 16-bit read
+    // from that byte onward is wrong, with nothing to point at. Refuse instead.
+    if ((len & 1u) != 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < len; i += 2)
     {
         const uint8_t t = p[i];
         p[i] = p[i + 1];
         p[i + 1] = t;
     }
+    return true;
 }
 
 void ParseSh2Regs(const uint8_t* p, se_sh2_regs& out)

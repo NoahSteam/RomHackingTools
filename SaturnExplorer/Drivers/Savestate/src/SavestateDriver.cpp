@@ -139,7 +139,23 @@ void CbClose(void* user)
     delete static_cast<Savestate*>(user);
 }
 
+// Largest file we will accept as a savestate. A Saturn state is a few megabytes (2 MiB work
+// RAM, VRAM, framebuffers, sound RAM); 64 MiB is far above any real one, and having a limit at
+// all is what keeps a mistyped path at some huge unrelated file from being pulled entirely into
+// memory before anything looks at it.
+const size_t kMaxSavestateBytes = 64u * 1024u * 1024u;
+
 // File helpers.
+//
+// Read to EOF in chunks rather than sizing the file with fseek/ftell first. ftell returns a
+// long, which is 32 bits on Windows, so a file past 2 GiB reported a negative or truncated
+// length there and the load either failed or silently read the wrong amount. Reading until EOF
+// needs no file-offset type at all, so there is nothing left to be the wrong width on any
+// target -- including the 32-bit wasm build.
+//
+// This also stops treating a read error as success: the old form resized to whatever fread
+// returned, so a failure partway through produced a short buffer that then parsed as a
+// truncated-but-valid state.
 bool LoadFile(const std::string& path, std::vector<uint8_t>& out)
 {
     FILE* file = std::fopen(path.c_str(), "rb");
@@ -147,20 +163,32 @@ bool LoadFile(const std::string& path, std::vector<uint8_t>& out)
     {
         return false;
     }
-
-    std::fseek(file, 0, SEEK_END);
-    long length = std::ftell(file);
-    std::fseek(file, 0, SEEK_SET);
-    if (length < 0)
+    out.clear();
+    uint8_t chunk[64u * 1024u];
+    for (;;)
     {
-        std::fclose(file);
+        const size_t got = std::fread(chunk, 1, sizeof(chunk), file);
+        if (got == 0)
+        {
+            break;
+        }
+        // out.size() <= kMaxSavestateBytes holds here and got is bounded by the chunk, so the
+        // sum cannot wrap even where size_t is 32 bits.
+        if (out.size() + got > kMaxSavestateBytes)
+        {
+            std::fclose(file);
+            out.clear();
+            return false;
+        }
+        out.insert(out.end(), chunk, chunk + got);
+    }
+    const bool readFailed = std::ferror(file) != 0;
+    std::fclose(file);
+    if (readFailed)
+    {
+        out.clear();
         return false;
     }
-
-    out.resize(static_cast<size_t>(length));
-    size_t got = length ? std::fread(out.data(), 1, out.size(), file) : 0;
-    std::fclose(file);
-    out.resize(got);
     return true;
 }
 
@@ -269,12 +297,18 @@ void ParseSh2Regs(const std::vector<uint8_t>& d, size_t data, se_sh2_regs& out)
 }
 
 // Copy 'len' bytes from 'src', swapping each 16-bit word to normalize Yabause's
-// host-order work RAM to Saturn big-endian (shared with the live driver).
-void CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
+// host-order work RAM to Saturn big-endian (shared with the live driver). False if the field
+// length is not a whole number of u16s -- the region is left empty rather than half-normalized.
+bool CopyBswap16(const std::vector<uint8_t>& d, size_t src, size_t len,
                  std::vector<uint8_t>& out)
 {
     out.assign(d.begin() + src, d.begin() + src + len);
-    sedrv::Bswap16(out.data(), out.size());
+    if (!sedrv::Bswap16(out.data(), out.size()))
+    {
+        out.clear();
+        return false;
+    }
+    return true;
 }
 
 /* --- Mednafen MDFNSVST (Saturn 'ss' module) savestate --- */
@@ -473,8 +507,14 @@ se_result ParseYssBuffer(const std::vector<uint8_t>& file, se_data_source* out)
         {
             // OTHR = BupRam(0x10000) + HighWram(1 MiB) + LowWram(1 MiB) + internal
             // state. Work RAM is stored 16-bit byte-swapped; normalize to big-endian.
-            CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh);
-            CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow);
+            // Both are fixed even sizes, so a refusal here means the file's section layout is
+            // not what it declared -- refuse the state rather than serve a region with an
+            // unswapped byte in the middle of it.
+            if (!CopyBswap16(file, data + 0x10000, kSizeWramHigh, state->mWramHigh) ||
+                !CopyBswap16(file, data + 0x10000 + kSizeWramHigh, kSizeWramLow, state->mWramLow))
+            {
+                return SE_ERR_UNSUPPORTED;
+            }
         }
         pos = data + size;
     }

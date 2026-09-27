@@ -682,9 +682,14 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
     }
 
     // Work RAM arrives in Yabause host order; normalize to Saturn big-endian so
-    // watches and the SH-2 disassembler read it correctly (same as the savestate).
-    sedrv::Bswap16(snap.wramLow.data(), snap.wramLow.size());
-    sedrv::Bswap16(snap.wramHigh.data(), snap.wramHigh.size());
+    // watches and the SH-2 disassembler read it correctly (same as the savestate). An odd
+    // length is a malformed reply, not a region with a spare byte: fail the snapshot rather
+    // than publish memory that is byte-swapped up to a point and raw after it.
+    if (!sedrv::Bswap16(snap.wramLow.data(), snap.wramLow.size()) ||
+        !sedrv::Bswap16(snap.wramHigh.data(), snap.wramHigh.size()))
+    {
+        return false;
+    }
 
     // VRAM is already big-endian; build the VDP2 register image and use RAMCTL's
     // CRAM mode to normalize CRAM — exactly like the savestate path.

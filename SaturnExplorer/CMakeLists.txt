@@ -68,6 +68,15 @@ target_include_directories(SaturnExplorerDriverCommon
            ${CMAKE_CURRENT_SOURCE_DIR}/include   # se_sh2_regs (SaturnStateShared.h)
 )
 
+# The shared normalization helpers: what they do with input that is not the shape the
+# savestate/live formats promised. Portable, no emulator and no socket needed.
+if(BUILD_TESTING)
+    add_executable(SaturnExplorerStateSharedTests
+        Drivers/Common/tests/StateSharedTests.cpp)
+    target_link_libraries(SaturnExplorerStateSharedTests PRIVATE SaturnExplorerDriverCommon)
+    add_test(NAME SaturnExplorerStateSharedTests COMMAND SaturnExplorerStateSharedTests)
+endif()
+
 # ---------------------------------------------------------------------------
 # Savestate / memory-dump driver — portable static library (Seam A reference).
 # ---------------------------------------------------------------------------
