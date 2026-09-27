@@ -69,6 +69,21 @@ bool IsSh2CallOpcode(uint16_t op)
     return false;
 }
 
+// The called function's entry point, when the call instruction encodes it.
+//
+// `bsr disp12` does: the target is site + 4 + (sign-extended disp << 1), and the site is fixed
+// at returnAddress - 4 because PR holds the address after the delay slot. `jsr @Rn` and
+// `bsrf Rn` do not -- the target came out of a register, and a stack image taken later has no
+// record of what was in it. Guessing there is what CPU-03 is about, so this returns false and
+// the frame carries no function address at all.
+bool DecodeCallTarget(uint16_t op, uint32_t site, uint32_t& target)
+{
+    if ((op & 0xF000u) != 0xB000u) return false;
+    const int32_t disp = static_cast<int32_t>(static_cast<int16_t>((op & 0x0FFFu) << 4)) >> 4;
+    target = site + 4 + static_cast<uint32_t>(disp * 2);
+    return true;
+}
+
 // ---- FunctionNames -------------------------------------------------------------
 
 std::string FunctionNames::NameOf(uint32_t address) const
@@ -134,12 +149,17 @@ static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_re
 
     // Frame #0: the halted instruction. PC is exactly known (● Confirmed); it returns
     // to PR.
+    // PC is exactly where execution stopped, which is not where the function began: without a
+    // recorded call event or a symbol table there is nothing here that says. So frame #0 reports
+    // PC as the address it is at, and claims no entry point.
     CallStackFrame f0;
     f0.cpu = cpu;
-    f0.functionAddress = regs.pc;
+    f0.functionAddress = 0;
+    f0.functionKnown   = false;
     f0.returnAddress   = regs.pr;
     f0.stackPointer    = regs.r[15];
     f0.callSite        = 0;
+    f0.currentAddress  = regs.pc;
     f0.confidence      = FrameConfidence::Confirmed;
     out.push_back(f0);
 
@@ -179,7 +199,7 @@ static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_re
         CallStackFrame fr;
         fr.cpu = cpu;
         fr.returnAddress   = c.ret;
-        fr.functionAddress = c.ret;
+        fr.currentAddress  = c.ret;
         fr.stackPointer    = c.at;
 
         const MemoryReadResult& o = (i < opRes.size()) ? opRes[i] : MemoryReadResult{};
@@ -190,6 +210,9 @@ static std::vector<CallStackFrame> ReconstructHeuristic(int cpu, const se_sh2_re
             {
                 fr.callSite   = c.ret - 4;
                 fr.confidence = FrameConfidence::Probable;
+                // Only a bsr says where the callee starts. For jsr/bsrf the frame keeps its
+                // return address and no function address, which the UI shows as such.
+                fr.functionKnown = DecodeCallTarget(op, fr.callSite, fr.functionAddress);
                 out.push_back(fr);
             }
             // else: code-looking word not preceded by a call -> almost certainly data,

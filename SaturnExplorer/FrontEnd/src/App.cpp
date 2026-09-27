@@ -2604,7 +2604,7 @@ void App::DrawAccessLog()
             for (size_t f = 0; f < r.stack.size(); ++f)
             {
                 const CallStackFrame& fr = r.stack[f];
-                ImGui::Text("  #%zu  %s", f, mFunctionNames.NameOf(fr.functionAddress).c_str());
+                ImGui::Text("  #%zu  %s", f, FrameLabel(fr).c_str());
                 if (fr.returnAddress)
                 {
                     ImGui::SameLine();
@@ -2881,6 +2881,8 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
                 f.cpu             = cpu;
                 f.callSite        = wire[i].call_site;
                 f.functionAddress = wire[i].func;
+                f.functionKnown   = (wire[i].func != 0);   // the emulator recorded the call
+                f.currentAddress  = wire[i].func ? wire[i].func : wire[i].ret;
                 f.returnAddress   = wire[i].ret;
                 f.stackPointer    = wire[i].sp;
                 f.cycle           = wire[i].cycle;
@@ -2904,8 +2906,28 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
 // separate, opt-in action: the "View Stack Memory" / "View in Memory" context items.)
 void App::GoToFrame(const CallStackFrame& fr)
 {
-    mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress);
+    mAssemblyPanel.GoTo(fr.cpu, FrameCodeAddress(fr));
     mPanels.assembly = true;
+}
+
+// Name a frame after its function only when there is a function to name. A stack walk recovers
+// return addresses, which sit inside the caller rather than at its entry, so calling one
+// "sub_06XXXXXX" invents a function that starts mid-body -- and, worse, invites a rename that
+// files a user's label under an address that is not an entry point. Where the entry is unknown
+// the label says where the frame is instead.
+std::string App::FrameLabel(const CallStackFrame& fr) const
+{
+    if (fr.functionKnown) return mFunctionNames.NameOf(fr.functionAddress);
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "at %08X", fr.currentAddress);
+    return buf;
+}
+
+// The address to navigate to, break on, or inspect for a frame: its entry point when known,
+// otherwise the address inside it that is.
+uint32_t App::FrameCodeAddress(const CallStackFrame& fr)
+{
+    return fr.functionKnown ? fr.functionAddress : fr.currentAddress;
 }
 
 // Call Stack — the per-CPU call chain that led to the halted instruction (see
@@ -3066,7 +3088,7 @@ void App::DrawCallStack(IPlatform& platform)
 
             ImGui::TableNextColumn();
             // Selectable spanning the name cell drives select + double-click navigate.
-            const std::string name = mFunctionNames.NameOf(fr.functionAddress);
+            const std::string name = FrameLabel(fr);
             const bool isSel = (i == selected);
             // Route the row flags through the shared helper (the panel-interaction tests pin
             // this); the row has no interactive cells to its right, so no AllowOverlap, but it
@@ -3082,14 +3104,16 @@ void App::DrawCallStack(IPlatform& platform)
                 mCallStack.Select(mCallStackCpu, i);
                 if (ImGui::MenuItem("Go to Call Site", nullptr, false, fr.callSite != 0))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.callSite); mPanels.assembly = true; }
-                if (ImGui::MenuItem("Go to Function"))
+                // Disabled, not silently redirected, when the entry point is unknown: "Go to
+                // Return Address" below is the honest version of that navigation.
+                if (ImGui::MenuItem("Go to Function", nullptr, false, fr.functionKnown))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress); mPanels.assembly = true; }
                 if (ImGui::MenuItem("Go to Return Address"))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.returnAddress); mPanels.assembly = true; }
                 // The "Go to ..." items drive the Assembly panel (code); the "View ..." items
                 // drive the Memory panel: this frame's code bytes, and its stack image.
                 if (ImGui::MenuItem("View in Memory"))
-                { mHexEditor.GoTo(fr.functionAddress); mPanels.hexEditor = true; }
+                { mHexEditor.GoTo(FrameCodeAddress(fr)); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("View Stack Memory"))
                 { mHexEditor.GoTo(fr.stackPointer); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("Add Address to Watch"))
@@ -3099,8 +3123,11 @@ void App::DrawCallStack(IPlatform& platform)
                 // Execution BPs are shared across both SH-2s, so the frame's own cpu plays
                 // no part in where this lands — it would only ever collide by address.
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
-                { mBreakpoints.ToggleExecution(fr.functionAddress); }
-                if (ImGui::MenuItem("Rename Function..."))
+                { mBreakpoints.ToggleExecution(FrameCodeAddress(fr)); }
+                // A rename is stored against an address, so offering it for a frame whose
+                // entry point is unknown would file the name under a mid-function address and
+                // then show it for every other frame that returns near there.
+                if (ImGui::MenuItem("Rename Function...", nullptr, false, fr.functionKnown))
                 {
                     mRenameAddr = fr.functionAddress;
                     std::snprintf(mRenameBuf, sizeof(mRenameBuf), "%s",
@@ -3117,7 +3144,7 @@ void App::DrawCallStack(IPlatform& platform)
                     {
                         const CallStackFrame& g = frames[k];
                         std::snprintf(ln, sizeof(ln), "#%d  %-24s ret=%08X sp=%08X\n", k,
-                                      mFunctionNames.NameOf(g.functionAddress).c_str(),
+                                      FrameLabel(g).c_str(),
                                       g.returnAddress, g.stackPointer);
                         dump += ln;
                     }
@@ -3156,13 +3183,18 @@ void App::DrawCallStack(IPlatform& platform)
         {
             const CallStackFrame& fr = frames[sel];
             ImGui::SeparatorText("Frame Detail");
-            ImGui::Text("#%d  %s", sel, mFunctionNames.NameOf(fr.functionAddress).c_str());
-            // "Func", not "PC": this field is the frame's function *entry point*. Only a
-            // heuristic frame #0 happens to carry the live PC there (the reconstructor has
-            // no way to find the enclosing function, so it uses PC as a stand-in); a
-            // recorded frame carries the real entry, and a caller frame its return target.
-            ImGui::Text("Func %08X   Return %08X   SP %08X", fr.functionAddress,
-                        fr.returnAddress, fr.stackPointer);
+            ImGui::Text("#%d  %s", sel, FrameLabel(fr).c_str());
+            // "Func" is the function's *entry point*, and it is blank when nothing recovered
+            // one: a shadow-stack frame records it and a bsr call site encodes it, but a jsr
+            // through a register does not, and neither does a bare stack walk. "At" is the
+            // address the frame really is at -- the halted PC, or the return address of a
+            // caller -- which is what this field used to be filled with instead.
+            if (fr.functionKnown)
+                ImGui::Text("Func %08X   At %08X   Return %08X   SP %08X", fr.functionAddress,
+                            fr.currentAddress, fr.returnAddress, fr.stackPointer);
+            else
+                ImGui::Text("Func unknown   At %08X   Return %08X   SP %08X", fr.currentAddress,
+                            fr.returnAddress, fr.stackPointer);
             if (fr.callSite) ImGui::Text("Call site %08X", fr.callSite);
             if (fr.confidence == FrameConfidence::Confirmed && (fr.cycle || fr.frameNumber))
                 ImGui::TextDisabled("recorded: cycle %llu, frame %u",

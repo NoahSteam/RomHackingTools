@@ -257,6 +257,17 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
 
+    # What the heuristic call-stack reconstruction claims to know: a bsr encodes the callee's
+    # entry point, a jsr through a register does not, and a return address is not one.
+    add_executable(SaturnExplorerCallStackHeuristicTests
+        FrontEnd/tests/CallStackHeuristicTests.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+    )
+    target_include_directories(SaturnExplorerCallStackHeuristicTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerCallStackHeuristicTests
+             COMMAND SaturnExplorerCallStackHeuristicTests)
+
     add_executable(SaturnExplorerM68kDisasmTests
         FrontEnd/tests/M68kDisasmTests.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp

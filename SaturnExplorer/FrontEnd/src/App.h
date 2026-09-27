@@ -147,6 +147,12 @@ private:
     void BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out);
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);
+    // A call-stack frame's display name, and the code address the UI should act on for it.
+    // Split out because a heuristic frame often has no known function entry (CPU-03) and every
+    // place that used to read functionAddress directly would otherwise name, navigate to, or
+    // set a breakpoint on address zero.
+    std::string FrameLabel(const CallStackFrame& fr) const;
+    static uint32_t FrameCodeAddress(const CallStackFrame& fr);
     void DrawTracepointEditor();            // modal property editor for a tracepoint
     void OpenTracepointEditor(int cpu, uint32_t addr);  // open it for a new/existing TP
     // Format a tracepoint's template against the CURRENT context (registers + memory),
