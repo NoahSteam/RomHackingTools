@@ -360,33 +360,6 @@ typedef struct se_mem_event {
 } se_mem_event;
 
 /* ------------------------------------------------------------------ *
- *  ROM / archive search
- * ------------------------------------------------------------------ */
-
-typedef enum se_search_mode {
-    SE_SEARCH_ROM      = 0,  /* raw ISO scan */
-    SE_SEARCH_FILES    = 1,  /* per-file within the filesystem */
-    SE_SEARCH_LZSS     = 2,  /* LZSS-compressed assets */
-    SE_SEARCH_ARCHIVES = 3,  /* known archive formats */
-    SE_SEARCH_RAW      = 4   /* raw binary pattern */
-} se_search_mode;
-
-typedef struct se_search_query {
-    se_search_mode mode;
-    se_texture_ref target;   /* the asset to trace (texture being searched for) */
-    uint8_t        match_palette; /* also require the CLUT to match */
-} se_search_query;
-
-typedef struct se_search_result {
-    char     archive[64];    /* archive/container name, or empty */
-    char     file[128];      /* file path, e.g. "DISC_1\\DATA\\FACE03.BIN" */
-    uint64_t offset;
-    uint64_t size;
-    char     asset_type[16]; /* "BIN", "TIM", ... */
-    uint8_t  confidence;     /* 0..100 */
-} se_search_result;
-
-/* ------------------------------------------------------------------ *
  *  Reference explorer ("what uses this texture / palette?")
  * ------------------------------------------------------------------ */
 

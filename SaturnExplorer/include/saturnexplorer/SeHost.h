@@ -9,6 +9,21 @@
  * (se_image RGBA). It never makes a graphics API call; the host does all GPU
  * work. Collection getters follow a count() + get(index) pattern; bulk fillers
  * take a caller buffer + max and return how many were written.
+ *
+ * Exceptions: none. Every function here is no-throw, including under memory
+ * pressure -- the host may be C, or JavaScript in the web build, so there is no
+ * frame on the other side of the seam that could catch one, and unwinding past
+ * it is undefined. A failed allocation surfaces as SE_ERR_NO_MEMORY from the
+ * functions that return se_result, and as the same empty answer as "no data"
+ * from those that return a count, a handle, or a flag.
+ *
+ * ROM/archive search and memory-history queries are deliberately absent. They
+ * were declared here through ABI 5 and never implemented behind the seam; the
+ * working implementations are frontend systems (FrontEnd/src/DataSearch.h,
+ * FrontEnd/src/Debug) built on se_read_vram and the disc API, which is where
+ * they belong -- both are interactive, cancellable, and hold their own state
+ * across frames. Restoring them to the seam means designing that lifetime
+ * first, not re-declaring the signatures.
  */
 #ifndef SATURNEXPLORER_SE_HOST_H
 #define SATURNEXPLORER_SE_HOST_H
@@ -157,23 +172,11 @@ size_t      se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
    vs RGB888 dwords). Returns SE_CRAM_RGB555_1024 when no data is loaded. */
 se_cram_mode se_get_cram_mode(se_context* ctx);
 
-/* --- ROM & Archive Search / Asset Trace (async; poll incrementally) --- */
-typedef struct se_search* se_search_handle;
-se_search_handle se_rom_search_begin(se_context* ctx, const se_search_query* q);
-size_t           se_rom_search_poll (se_context* ctx, se_search_handle h,
-                                     se_search_result* out, size_t max);
-int              se_rom_search_done (se_context* ctx, se_search_handle h); /* 1 when finished */
-void             se_rom_search_end  (se_context* ctx, se_search_handle h);
-
 /* --- Reference Explorer --- */
 size_t      se_references_of_texture(se_context* ctx, const se_texture_ref* ref,
                                      se_reference* out, size_t max);
 size_t      se_references_of_palette(se_context* ctx, uint32_t clut_address,
                                      se_reference* out, size_t max);
-
-/* --- Memory History --- */
-size_t      se_history_for(se_context* ctx, uint32_t address,
-                           se_mem_event* out, size_t max);
 
 /* --- System status (status bar) --- */
 se_result   se_get_system_status(se_context* ctx, se_system_status* out);

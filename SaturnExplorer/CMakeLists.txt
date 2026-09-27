@@ -150,6 +150,16 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/src)
     add_test(NAME SaturnExplorerCramWrapTests COMMAND SaturnExplorerCramWrapTests)
 
+    # Seam B's no-throw contract, exercised by replacing operator new so the core's
+    # allocations fail while the harness's own still work.
+    add_executable(SaturnExplorerAbiNoThrowTests
+        Core/tests/AbiNoThrowTests.cpp
+    )
+    target_link_libraries(SaturnExplorerAbiNoThrowTests PRIVATE SaturnExplorerCore)
+    target_include_directories(SaturnExplorerAbiNoThrowTests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/tests)
+    add_test(NAME SaturnExplorerAbiNoThrowTests COMMAND SaturnExplorerAbiNoThrowTests)
+
     # 3D View orientation — the exploded world view checked against the 2D composite.
     add_executable(SaturnExplorerGeometry3DTests
         Core/tests/Geometry3DTests.cpp

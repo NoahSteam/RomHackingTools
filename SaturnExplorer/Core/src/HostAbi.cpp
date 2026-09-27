@@ -5,6 +5,7 @@
 
 #include <new>
 
+#include "saturnexplorer/SeGuard.h"
 #include "saturnexplorer/SeHost.h"
 #include "Context.h"
 
@@ -15,6 +16,13 @@ inline se::Context* Impl(se_context* c)
     return reinterpret_cast<se::Context*>(c);
 }
 }  // namespace
+
+// se::Guard (SeGuard.h) holds the reasoning for the no-throw boundary. What is local to this
+// file is which fallback each entry point uses, and the two that need none: se_abi_version
+// returns a macro, and se_destroy's only operation is a destructor -- ~Context is implicitly
+// noexcept, so a throw inside it calls std::terminate before any handler here could see it, and
+// a try/catch around the delete would be dead code.
+using se::Guard;
 
 extern "C" {
 
@@ -33,7 +41,11 @@ se_context* se_create(const se_data_source* ds, const se_config* cfg)
     {
         return nullptr;
     }
-    return reinterpret_cast<se_context*>(new (std::nothrow) se::Context(*ds, *cfg));
+    // nothrow new covers the allocation; se::Context's constructor can still throw.
+    return Guard(static_cast<se_context*>(nullptr), [&]
+    {
+        return reinterpret_cast<se_context*>(new (std::nothrow) se::Context(*ds, *cfg));
+    });
 }
 
 void se_destroy(se_context* ctx)
@@ -47,13 +59,19 @@ se_result se_begin_frame(se_context* ctx)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->BeginFrame();
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->BeginFrame();
+    });
 }
 
 /* --- Command Table / Sprite Inspection --- */
 size_t se_command_count(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->CommandCount() : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->CommandCount() : 0;
+    });
 }
 
 se_result se_get_command(se_context* ctx, size_t index, se_command* out)
@@ -62,7 +80,10 @@ se_result se_get_command(se_context* ctx, size_t index, se_command* out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetCommand(index, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetCommand(index, out);
+    });
 }
 
 se_result se_hit_test(se_context* ctx, int x, int y, size_t* out_index)
@@ -71,7 +92,10 @@ se_result se_hit_test(se_context* ctx, int x, int y, size_t* out_index)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->HitTest(x, y, out_index);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->HitTest(x, y, out_index);
+    });
 }
 
 se_result se_hit_test_3d(se_context* ctx, const se_camera3d* camera,
@@ -81,13 +105,19 @@ se_result se_hit_test_3d(se_context* ctx, const se_camera3d* camera,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->HitTest3D(*camera, x, y, out_index);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->HitTest3D(*camera, x, y, out_index);
+    });
 }
 
 /* --- VDP1 geometry --- */
 size_t se_sprite_count(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->SpriteCount() : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->SpriteCount() : 0;
+    });
 }
 
 se_result se_get_sprite_2d(se_context* ctx, size_t index, se_sprite_2d* out)
@@ -96,7 +126,10 @@ se_result se_get_sprite_2d(se_context* ctx, size_t index, se_sprite_2d* out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetSprite2d(index, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetSprite2d(index, out);
+    });
 }
 
 se_result se_get_sprite_3d(se_context* ctx, size_t index, se_sprite_3d* out)
@@ -105,7 +138,10 @@ se_result se_get_sprite_3d(se_context* ctx, size_t index, se_sprite_3d* out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetSprite3d(index, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetSprite3d(index, out);
+    });
 }
 
 /* --- Software composite --- */
@@ -116,7 +152,10 @@ se_result se_render_frame(se_context* ctx, const se_render_opts* opts,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->RenderFrame(*opts, out, needed);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->RenderFrame(*opts, out, needed);
+    });
 }
 
 se_result se_render_3d(se_context* ctx, const se_camera3d* camera,
@@ -126,7 +165,10 @@ se_result se_render_3d(se_context* ctx, const se_camera3d* camera,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->Render3D(*camera, *opts, out, needed);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->Render3D(*camera, *opts, out, needed);
+    });
 }
 
 /* --- Per-layer viewers: a VDP2 scroll screen's tile data --- */
@@ -136,7 +178,10 @@ se_result se_get_vdp2_tilemap(se_context* ctx, se_vdp2_layer layer, se_vdp2_tile
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetTileMapInfo(layer, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetTileMapInfo(layer, out);
+    });
 }
 
 se_result se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
@@ -146,12 +191,18 @@ se_result se_get_vdp2_tilemap_shape(se_context* ctx, se_vdp2_layer layer,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetTileMapShape(layer, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetTileMapShape(layer, out);
+    });
 }
 
 uint64_t se_derive_serial(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->DeriveSerial() : 0;
+    return Guard(static_cast<uint64_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->DeriveSerial() : 0;
+    });
 }
 
 size_t se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
@@ -161,7 +212,10 @@ size_t se_get_vdp2_tile_indices(se_context* ctx, se_vdp2_layer layer,
     {
         return 0;
     }
-    return Impl(ctx)->GetTileIndices(layer, out, max);
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return Impl(ctx)->GetTileIndices(layer, out, max);
+    });
 }
 
 se_result se_render_vdp2_tileset(se_context* ctx, se_vdp2_layer layer, uint32_t columns,
@@ -171,7 +225,10 @@ se_result se_render_vdp2_tileset(se_context* ctx, se_vdp2_layer layer, uint32_t 
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->RenderTileset(layer, columns, out, needed);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->RenderTileset(layer, columns, out, needed);
+    });
 }
 
 /* --- Texture & Palette --- */
@@ -182,7 +239,10 @@ se_result se_decode_texture(se_context* ctx, const se_texture_ref* ref,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->DecodeTexture(*ref, out, needed);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->DecodeTexture(*ref, out, needed);
+    });
 }
 
 se_result se_decode_palette(se_context* ctx, uint32_t clut_address, se_palette* out)
@@ -191,7 +251,10 @@ se_result se_decode_palette(se_context* ctx, uint32_t clut_address, se_palette* 
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->DecodePalette(clut_address, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->DecodePalette(clut_address, out);
+    });
 }
 
 se_result se_decode_bank_palette(se_context* ctx, uint16_t color_bank,
@@ -201,13 +264,19 @@ se_result se_decode_bank_palette(se_context* ctx, uint16_t color_bank,
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->DecodeBankPalette(color_bank, color_mode, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->DecodeBankPalette(color_bank, color_mode, out);
+    });
 }
 
 /* --- VRAM map --- */
 size_t se_vram_region_count(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->VramRegionCount() : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->VramRegionCount() : 0;
+    });
 }
 
 se_result se_get_vram_region(se_context* ctx, size_t index, se_vram_region* out)
@@ -216,96 +285,101 @@ se_result se_get_vram_region(se_context* ctx, size_t index, se_vram_region* out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetVramRegion(index, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetVramRegion(index, out);
+    });
 }
 
 int se_has_vdp1_registers(se_context* ctx)
 {
-    return (ctx && Impl(ctx)->HasVdp1Regs()) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->HasVdp1Regs()) ? 1 : 0;
+    });
 }
 
 int se_has_vdp2_registers(se_context* ctx)
 {
-    return (ctx && Impl(ctx)->HasVdp2Regs()) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->HasVdp2Regs()) ? 1 : 0;
+    });
 }
 
 uint16_t se_get_vdp1_register(se_context* ctx, uint32_t hw_offset)
 {
-    return ctx ? Impl(ctx)->Vdp1Register(hw_offset) : 0;
+    return Guard(static_cast<uint16_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->Vdp1Register(hw_offset) : 0;
+    });
 }
 
 uint16_t se_get_vdp2_register(se_context* ctx, uint32_t hw_offset)
 {
-    return ctx ? Impl(ctx)->Vdp2Register(hw_offset) : 0;
+    return Guard(static_cast<uint16_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->Vdp2Register(hw_offset) : 0;
+    });
 }
 
 int se_set_vdp1_register(se_context* ctx, uint32_t hw_offset, uint16_t value)
 {
-    return (ctx && Impl(ctx)->SetVdp1Register(hw_offset, value)) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->SetVdp1Register(hw_offset, value)) ? 1 : 0;
+    });
 }
 
 int se_set_vdp2_register(se_context* ctx, uint32_t hw_offset, uint16_t value)
 {
-    return (ctx && Impl(ctx)->SetVdp2Register(hw_offset, value)) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->SetVdp2Register(hw_offset, value)) ? 1 : 0;
+    });
 }
 
 size_t se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                     void* dst, size_t size)
 {
-    return ctx ? Impl(ctx)->ReadVram(kind, offset, dst, size) : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->ReadVram(kind, offset, dst, size) : 0;
+    });
 }
 
 size_t se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                      const void* src, size_t size)
 {
-    return ctx ? Impl(ctx)->WriteVram(kind, offset, src, size) : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->WriteVram(kind, offset, src, size) : 0;
+    });
 }
 
 int se_can_write(se_context* ctx)
 {
-    return (ctx && Impl(ctx)->CanWrite()) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->CanWrite()) ? 1 : 0;
+    });
 }
 
 size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
                            se_palette_entry* out)
 {
-    return ctx ? Impl(ctx)->ReadCramColors(start, count, out) : 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return ctx ? Impl(ctx)->ReadCramColors(start, count, out) : 0;
+    });
 }
 
 se_cram_mode se_get_cram_mode(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->CramMode() : SE_CRAM_RGB555_1024;
-}
-
-/* --- ROM & Archive Search --- */
-se_search_handle se_rom_search_begin(se_context* ctx, const se_search_query* q)
-{
-    (void)ctx;
-    (void)q;
-    return nullptr;  // no active search in M1
-}
-
-size_t se_rom_search_poll(se_context* ctx, se_search_handle h,
-                          se_search_result* out, size_t max)
-{
-    (void)ctx;
-    (void)h;
-    (void)out;
-    (void)max;
-    return 0;
-}
-
-int se_rom_search_done(se_context* ctx, se_search_handle h)
-{
-    (void)ctx;
-    (void)h;
-    return 1;  // trivially finished
-}
-
-void se_rom_search_end(se_context* ctx, se_search_handle h)
-{
-    (void)ctx;
-    (void)h;
+    return Guard(SE_CRAM_RGB555_1024, [&]
+    {
+        return ctx ? Impl(ctx)->CramMode() : SE_CRAM_RGB555_1024;
+    });
 }
 
 /* --- Reference Explorer --- */
@@ -316,7 +390,10 @@ size_t se_references_of_texture(se_context* ctx, const se_texture_ref* ref,
     {
         return 0;
     }
-    return Impl(ctx)->ReferencesOfTexture(*ref, out, max);
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return Impl(ctx)->ReferencesOfTexture(*ref, out, max);
+    });
 }
 
 size_t se_references_of_palette(se_context* ctx, uint32_t clut_address,
@@ -326,18 +403,10 @@ size_t se_references_of_palette(se_context* ctx, uint32_t clut_address,
     {
         return 0;
     }
-    return Impl(ctx)->ReferencesOfPalette(clut_address, out, max);
-}
-
-/* --- Memory History --- */
-size_t se_history_for(se_context* ctx, uint32_t address,
-                      se_mem_event* out, size_t max)
-{
-    (void)ctx;
-    (void)address;
-    (void)out;
-    (void)max;
-    return 0;
+    return Guard(static_cast<size_t>(0), [&]
+    {
+        return Impl(ctx)->ReferencesOfPalette(clut_address, out, max);
+    });
 }
 
 /* --- System status --- */
@@ -363,7 +432,10 @@ se_result se_get_sh2_regs(se_context* ctx, int cpu, se_sh2_regs* out)
     {
         return SE_ERR_INVALID_ARG;
     }
-    return Impl(ctx)->GetSh2Regs(cpu, out);
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return Impl(ctx)->GetSh2Regs(cpu, out);
+    });
 }
 
 int se_has_sh2_regs(se_context* ctx)
@@ -372,12 +444,18 @@ int se_has_sh2_regs(se_context* ctx)
     {
         return 0;
     }
-    return (Impl(ctx)->HasSh2Regs(0) || Impl(ctx)->HasSh2Regs(1)) ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (Impl(ctx)->HasSh2Regs(0) || Impl(ctx)->HasSh2Regs(1)) ? 1 : 0;
+    });
 }
 
 int se_scsp_slot_count(se_context* ctx)
 {
-    return ctx ? Impl(ctx)->ScspSlotCount() : 0;
+    return Guard(0, [&]
+    {
+        return ctx ? Impl(ctx)->ScspSlotCount() : 0;
+    });
 }
 
 int se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
@@ -386,7 +464,10 @@ int se_get_scsp_slots(se_context* ctx, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
     {
         return 0;
     }
-    return Impl(ctx)->GetScspSlots(out);
+    return Guard(0, [&]
+    {
+        return Impl(ctx)->GetScspSlots(out);
+    });
 }
 
 int se_get_cd_status(se_context* ctx, se_cd_status* out)
@@ -395,7 +476,10 @@ int se_get_cd_status(se_context* ctx, se_cd_status* out)
     {
         return 0;
     }
-    return Impl(ctx)->GetCdStatus(out);
+    return Guard(0, [&]
+    {
+        return Impl(ctx)->GetCdStatus(out);
+    });
 }
 
 int se_decode_scsp_sample(se_context* ctx, int slot, int16_t* out, int max_frames,
@@ -405,7 +489,10 @@ int se_decode_scsp_sample(se_context* ctx, int slot, int16_t* out, int max_frame
     {
         return 0;
     }
-    return Impl(ctx)->DecodeScspSample(slot, out, max_frames, out_sample_rate);
+    return Guard(0, [&]
+    {
+        return Impl(ctx)->DecodeScspSample(slot, out, max_frames, out_sample_rate);
+    });
 }
 
 /* --- Frame control --- */
@@ -416,9 +503,12 @@ int se_supports_frame_control(se_context* ctx)
         return 0;
     }
     const se_data_source& ds = Impl(ctx)->DataSource();
-    return (ds.capabilities & SE_CAP_FRAME_STEP) && ds.frame_pause && ds.frame_step
-               ? 1
-               : 0;
+    return Guard(0, [&]
+    {
+        return (ds.capabilities & SE_CAP_FRAME_STEP) && ds.frame_pause && ds.frame_step
+                   ? 1
+                   : 0;
+    });
 }
 
 se_result se_frame_pause(se_context* ctx)
@@ -432,7 +522,10 @@ se_result se_frame_pause(se_context* ctx)
     {
         return SE_ERR_NO_CAPABILITY;
     }
-    return ds.frame_pause(ds.user) == 0 ? SE_OK : SE_ERR_IO;
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return ds.frame_pause(ds.user) == 0 ? SE_OK : SE_ERR_IO;
+    });
 }
 
 se_result se_frame_resume(se_context* ctx)
@@ -447,7 +540,10 @@ se_result se_frame_resume(se_context* ctx)
         return SE_ERR_NO_CAPABILITY;
     }
     /* By the seam's contract, stepping <= 0 frames means "run free" (resume). */
-    return ds.frame_step(ds.user, 0) == 0 ? SE_OK : SE_ERR_IO;
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return ds.frame_step(ds.user, 0) == 0 ? SE_OK : SE_ERR_IO;
+    });
 }
 
 se_result se_frame_step(se_context* ctx, int32_t frames)
@@ -465,7 +561,10 @@ se_result se_frame_step(se_context* ctx, int32_t frames)
     {
         frames = 1;
     }
-    return ds.frame_step(ds.user, frames) == 0 ? SE_OK : SE_ERR_IO;
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return ds.frame_step(ds.user, frames) == 0 ? SE_OK : SE_ERR_IO;
+    });
 }
 
 uint64_t se_frame_number(se_context* ctx)
@@ -490,7 +589,10 @@ int se_supports_state_rewind(se_context* ctx)
         return 0;
     }
     const se_data_source& ds = Impl(ctx)->DataSource();
-    return (ds.capabilities & SE_CAP_STATE_REWIND) && ds.load_state ? 1 : 0;
+    return Guard(0, [&]
+    {
+        return (ds.capabilities & SE_CAP_STATE_REWIND) && ds.load_state ? 1 : 0;
+    });
 }
 
 se_result se_load_state(se_context* ctx, uint64_t frame,
@@ -506,8 +608,11 @@ se_result se_load_state(se_context* ctx, uint64_t frame,
     {
         return SE_ERR_NO_CAPABILITY;
     }
-    return ds.load_state(ds.user, frame, state, state_len, edits, edits_len) == 0
-               ? SE_OK : SE_ERR_IO;
+    return Guard(SE_ERR_NO_MEMORY, [&]
+    {
+        return ds.load_state(ds.user, frame, state, state_len, edits, edits_len) == 0
+                   ? SE_OK : SE_ERR_IO;
+    });
 }
 
 }  // extern "C"
