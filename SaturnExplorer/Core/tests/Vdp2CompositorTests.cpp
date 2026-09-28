@@ -683,8 +683,59 @@ void TestWriteVramForwards()
     se_destroy(ctx);
 }
 
+// Snapshot validity is not VDP1-centric (SNAP-02). It used to be `!vdp1Vram.empty()`, so a
+// VDP2-only source -- backgrounds, tiles, palettes, all present -- could not open at all:
+// se_begin_frame returned SE_ERR_NO_DATA and nothing downstream ever ran.
+void TestVdp2OnlySourceIsValid()
+{
+    State state;
+    se_test::WriteSystemClip(state, 8, 4);
+    std::fill(state.vdp2.begin(), state.vdp2.end(), uint8_t(0x5A));
+
+    se_data_source source = se_test::MakeSource(state);
+    // Deliberately no VDP1 of any kind, which is the shape a VDP2-only savestate produces.
+    source.capabilities &= ~static_cast<uint32_t>(SE_CAP_VDP1_VRAM | SE_CAP_VDP1_REGS |
+                                                 SE_CAP_VDP1_FB);
+    source.read_vdp1_vram = nullptr;
+    source.read_vdp1_reg = nullptr;
+    source.read_vdp1_fb = nullptr;
+
+    se_context* context = se_test::CreateContext(source);
+    CHECK(context != nullptr);
+    if (!context) return;
+    CHECK(se_begin_frame(context) == SE_OK);   // the whole point: it opens
+    uint8_t probe[16] = {};
+    CHECK(se_read_vram(context, SE_VRAM_KIND_VDP2_VRAM, 0, probe, sizeof(probe)) == sizeof(probe));
+    CHECK(probe[0] == 0x5A);
+    // And a VDP1-shaped query answers "nothing here" rather than failing the context.
+    CHECK(se_sprite_count(context) == 0);
+    se_destroy(context);
+}
+
+// A source that supplies nothing at all is still invalid: the relaxation must not turn
+// "capabilities advertised, every read empty" into a usable context.
+void TestEmptySourceIsStillInvalid()
+{
+    State state;
+    se_data_source source = se_test::MakeSource(state);
+    source.read_vdp1_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp2_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_cram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp1_fb = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp1_reg = nullptr;
+    source.read_vdp2_reg = nullptr;
+
+    se_context* context = se_test::CreateContext(source);
+    CHECK(context != nullptr);
+    if (!context) return;
+    CHECK(se_begin_frame(context) == SE_ERR_NO_DATA);
+    se_destroy(context);
+}
+
 int main()
 {
+    TestVdp2OnlySourceIsValid();
+    TestEmptySourceIsStillInvalid();
     TestEditReRenders();
     TestWriteVramForwards();
     TestRectangularWindow();

@@ -247,6 +247,16 @@ browser tunnel needs your relay.
 - **Transport:** Unix domain socket `/tmp/saturn_explorer.sock` (Linux/macOS) or
   named pipe `\\.\pipe\SaturnExplorer` (Windows); plus a local TCP listener on
   `127.0.0.1:6845` (POSIX) for the web bridge. Local only.
+- **What connecting grants.** The endpoint is a privileged control channel, not a read-only
+  viewer feed: whatever connects can write any bus address, install breakpoints, pause and step
+  the CPUs, inject controller input and restore a savestate, and none of it is authenticated --
+  there is no handshake and no distinction between a viewer and a controller. The transport *is*
+  the access control. The socket and the pipe are reachable only by local users with permission
+  to them; the TCP listener is reachable by every local process, and by whatever can reach a
+  WebSocket bridge if one is run with a wider bind or a permissive origin policy. Treat opening
+  the TCP port as handing over write access to the emulated machine: keep it on loopback, do not
+  forward it, and do not leave it listening on a shared or multi-user host. The full statement is
+  in `Integration/Common/SeLiveProtocol.h` (review finding HOOK-03).
 - **Pause / single-step** need the §2b gate; live viewing works without it.
 - **Disc access** isn't exported yet; an easy follow-on.
 - The snapshot is taken at vblank under a lock and double-buffered, so the client

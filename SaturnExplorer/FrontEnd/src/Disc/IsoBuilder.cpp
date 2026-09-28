@@ -280,7 +280,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         for (int s : d.subdirs) bfs.push_back(s);
     }
     bool dedupeFailed = false;
-    auto dedupe = [&](std::vector<std::string>& ids, bool isFile) {
+    auto dedupe = [&](std::vector<std::string>& ids) {
         for (size_t i = 0; i < ids.size(); ++i)
         {
             auto collidesEarlier = [&](const std::string& s) {
@@ -319,8 +319,8 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         std::vector<std::string> fileIds, dirIds;
         for (const File& f : d.files) fileIds.push_back(f.identifier);
         for (int s : d.subdirs) dirIds.push_back(dirs[s].identifier);
-        dedupe(fileIds, true);
-        dedupe(dirIds, false);
+        dedupe(fileIds);
+        dedupe(dirIds);
         if (dedupeFailed) return r;
         for (size_t i = 0; i < d.files.size(); ++i) d.files[i].identifier = fileIds[i];
         for (size_t i = 0; i < d.subdirs.size(); ++i) dirs[d.subdirs[i]].identifier = dirIds[i];

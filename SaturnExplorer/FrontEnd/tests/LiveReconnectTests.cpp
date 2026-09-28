@@ -106,18 +106,46 @@ bool WaitFor(Fn predicate, int budgetMs = 5000)
     return predicate();
 }
 
-void TestGenerationCountsEveryAttach()
+// Start a listener and attach the live driver to it, closing both however the test leaves.
+//
+// Four tests opened with the same twelve lines of preamble and had to remember two teardown calls
+// on every exit path -- including the early return when the bind fails, which is the path a test
+// author forgets. Ok() is false when the listener could not bind, and the test says so once.
+class LiveFixture
 {
-    HangUpServer server;
-    if (!server.Start())
+public:
+    LiveFixture()
     {
-        CHECK(false && "could not bind a loopback listener");
-        return;
+        if (!mServer.Start()) return;
+        const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(mServer.Port());
+        mOpened = (se_live_open(endpoint.c_str(), &mSource) == SE_OK);
     }
 
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    ~LiveFixture()
+    {
+        if (mOpened && mSource.close) mSource.close(mSource.user);
+        mServer.Stop();
+    }
+
+    LiveFixture(const LiveFixture&) = delete;
+    LiveFixture& operator=(const LiveFixture&) = delete;
+
+    bool             Ok() const { return mOpened; }
+    se_data_source&  Source()   { return mSource; }
+    HangUpServer&    Server()   { return mServer; }
+
+private:
+    HangUpServer    mServer;
+    se_data_source  mSource = {};
+    bool            mOpened = false;
+};
+
+void TestGenerationCountsEveryAttach()
+{
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
 
     // First attach reports 1, not 0 -- a client must be able to tell "connected once" from
     // "never connected", because only the latter means there is nothing to drop.
@@ -129,10 +157,8 @@ void TestGenerationCountsEveryAttach()
     // climbing. This is the case the whole mechanism exists for.
     CHECK(WaitFor([&] { return se_live_connection_generation(&ds) > first; }));
     CHECK(se_live_connection_generation(&ds) > first);
-    CHECK(server.Accepted() >= 2);
+    CHECK(live.Server().Accepted() >= 2);
 
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
 }
 
 void TestGenerationIsZeroForANonLiveSource()
@@ -148,15 +174,10 @@ void TestGenerationIsZeroForANonLiveSource()
 // producer-outruns-consumer case, with the consumer stopped dead.
 void TestPokeQueueAppliesBackpressure()
 {
-    HangUpServer server;
-    if (!server.Start())
-    {
-        CHECK(false && "could not bind a loopback listener");
-        return;
-    }
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
     CHECK(ds.write_main_ram != nullptr);
 
     const std::vector<uint8_t> chunk(64u * 1024u, 0x5A);
@@ -180,8 +201,6 @@ void TestPokeQueueAppliesBackpressure()
         CHECK(ds.write_sound_ram(ds.user, 0, chunk.data(), chunk.size()) == chunk.size());
     }
 
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
 }
 
 // The breakpoint/tracepoint entry points take a (pointer, count) pair straight across the C
@@ -191,15 +210,10 @@ void TestPokeQueueAppliesBackpressure()
 // may crash, and a rejected call must leave the previously installed set alone.
 void TestBreakpointApiRejectsBadPairs()
 {
-    HangUpServer server;
-    if (!server.Start())
-    {
-        CHECK(false && "could not bind a loopback listener");
-        return;
-    }
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
 
     // A well-formed install first, so there is a set to protect.
     std::vector<uint8_t> good(4u * SE_LIVE_BKPT_DESC_LEN, 0x11);
@@ -224,8 +238,6 @@ void TestBreakpointApiRejectsBadPairs()
     se_live_set_breakpoints(&ds, good.data(), 2);
     CHECK(se_live_connection_generation(&ds) >= 0u);
 
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
 }
 
 // LST to a server that does not know the verb desyncs the connection: the server ignores the
@@ -235,15 +247,10 @@ void TestBreakpointApiRejectsBadPairs()
 // the UI's guard is not the only route to it.
 void TestLoadStateRefusedWithoutANegotiatedVersion()
 {
-    HangUpServer server;
-    if (!server.Start())
-    {
-        CHECK(false && "could not bind a loopback listener");
-        return;
-    }
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
     CHECK(se_live_connection_generation(&ds) >= 0u);
     CHECK(ds.load_state != nullptr);
 
@@ -252,8 +259,6 @@ void TestLoadStateRefusedWithoutANegotiatedVersion()
 
     // Still usable afterwards -- a refusal is not a broken source.
     CHECK(ds.write_main_ram != nullptr);
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
 }
 
 }  // namespace

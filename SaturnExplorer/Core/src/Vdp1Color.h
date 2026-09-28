@@ -27,6 +27,16 @@ inline Rgba Rgb555ToRgba(uint16_t v)
              static_cast<uint8_t>(((v >> 10) & 0x1F) * 255 / 31), 255 };
 }
 
+// How many colour entries a CRAM image holds. The entry width comes from the mode -- 4 bytes in
+// RGB888, 2 in the RGB555 layouts -- and the count from the bytes actually captured, which on a
+// partial snapshot is neither 1024 nor 2048. Every caller that indexes CRAM needs this, so it
+// lives once beside CramWrap instead of four copies of the same conditional divide.
+inline uint32_t CramEntryCount(const std::vector<uint8_t>& cram, se_cram_mode mode)
+{
+    const size_t width = (mode == SE_CRAM_RGB888_1024) ? 4u : 2u;
+    return static_cast<uint32_t>(cram.size() / width);
+}
+
 // Wrap a CRAM index into 'words' entries. 'words' must be non-zero.
 //
 // Saturn CRAM holds 1024 or 2048 entries -- both powers of two -- so & (words - 1) is modulo
@@ -47,7 +57,7 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
 {
     if (mode == SE_CRAM_RGB888_1024)
     {
-        const uint32_t words = static_cast<uint32_t>(cram.size() / 4);
+        const uint32_t words = CramEntryCount(cram, mode);
         if (words == 0)
         {
             return { 0, 0, 0, 255 };
@@ -60,7 +70,7 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
     }
 
     // RGB555 (1024 or 2048 colors).
-    const uint32_t words = static_cast<uint32_t>(cram.size() / 2);
+    const uint32_t words = CramEntryCount(cram, mode);
     if (words == 0)
     {
         return { 0, 0, 0, 255 };

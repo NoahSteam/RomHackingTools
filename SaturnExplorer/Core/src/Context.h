@@ -300,9 +300,7 @@ public:
 
         const std::vector<uint8_t>& cram = mSnapshot.Cram();
         const se_cram_mode cm = mSnapshot.CramMode();
-        const uint32_t words = (cm == SE_CRAM_RGB888_1024)
-                                   ? static_cast<uint32_t>(cram.size() / 4)
-                                   : static_cast<uint32_t>(cram.size() / 2);
+        const uint32_t words = CramEntryCount(cram, cm);
 
         out->clut_address = 0;
         out->mode = cm;
@@ -493,9 +491,7 @@ public:
         }
         const std::vector<uint8_t>& cram = mSnapshot.Cram();
         const se_cram_mode cm = mSnapshot.CramMode();
-        const uint32_t entries = (cm == SE_CRAM_RGB888_1024)
-                                     ? static_cast<uint32_t>(cram.size() / 4)
-                                     : static_cast<uint32_t>(cram.size() / 2);
+        const uint32_t entries = CramEntryCount(cram, cm);
         size_t written = 0;
         for (uint16_t i = 0; i < count; ++i)
         {

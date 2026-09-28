@@ -42,6 +42,16 @@ bool FromHex(const std::string& s, std::vector<uint8_t>& out)
     return true;
 }
 
+// Tabs and newlines in a label are replaced rather than refused: the label is cosmetic, and
+// losing the exact whitespace of a generated string is not worth failing an accepted match over.
+std::string SanitizeLabel(const std::string& label)
+{
+    std::string out = label;
+    for (char& c : out)
+        if (c == '\t' || c == '\r' || c == '\n') c = ' ';
+    return out;
+}
+
 // Escape a string for embedding inside a Python double-quoted literal.
 std::string PyStr(const std::string& s)
 {
@@ -70,19 +80,6 @@ bool PatchLocationValid(const PatchLocation& loc, std::string* why)
                     "represent");
     return true;
 }
-
-namespace
-{
-// Tabs and newlines in a label are replaced rather than refused: the label is cosmetic, and
-// losing the exact whitespace of a generated string is not worth failing an accepted match over.
-std::string SanitizeLabel(const std::string& label)
-{
-    std::string out = label;
-    for (char& c : out)
-        if (c == '\t' || c == '\r' || c == '\n') c = ' ';
-    return out;
-}
-}  // namespace
 
 bool PatchLibrary::AddOrUpdate(const PatchLocation& loc_, std::string* error)
 {

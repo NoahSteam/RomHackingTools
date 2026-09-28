@@ -3230,8 +3230,7 @@ void App::DrawCallStack(IPlatform& platform)
             // "Func" is the function's *entry point*, and it is blank when nothing recovered
             // one: a shadow-stack frame records it and a bsr call site encodes it, but a jsr
             // through a register does not, and neither does a bare stack walk. "At" is the
-            // address the frame really is at -- the halted PC, or the return address of a
-            // caller -- which is what this field used to be filled with instead.
+            // address the frame really is at -- the halted PC, or a caller's return address.
             if (fr.functionKnown)
                 ImGui::Text("Func %08X   At %08X   Return %08X   SP %08X", fr.functionAddress,
                             fr.currentAddress, fr.returnAddress, fr.stackPointer);

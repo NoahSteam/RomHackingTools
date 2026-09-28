@@ -1,10 +1,7 @@
 /* The Windows live-tap shutdown path: does SeExportDeinit actually end the server thread?
  *
- * Review finding HOOK-01. The old deinit waited a second, closed the thread handle, and then
- * destroyed both critical sections and freed the frame ring -- but closing a thread handle does
- * not end the thread, and the server is parked in a synchronous call that clearing sRunning does
- * not reach. A thread that woke afterwards entered a deleted critical section and read freed
- * memory, in someone else's emulator, with nothing in the stack pointing at this file.
+ * Review finding HOOK-01. Why clearing sRunning does not reach the server, and what the fix does
+ * about it, is in se_export.c above SeWinWakeServer; this file is the check that it works.
  *
  * Three cases, covering both calls the server can be parked in:
  *   1. no client ever connected -- the server is in ConnectNamedPipe (the ordinary case on exit)

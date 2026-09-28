@@ -172,6 +172,8 @@ if(BUILD_TESTING)
     # Core/src is PRIVATE to the Core library on purpose — the other Core tests go through the
     # public ABI. This one asserts on a decode helper the ABI has no direct route to, so it
     # needs the internal header; the include stays on this target rather than widening Core's.
+    # (Which is also why the snapshot-validity tests that were once here live in
+    # Vdp2CompositorTests: they are ABI-level, and belong on the target that has no such reach.)
     target_include_directories(SaturnExplorerCramWrapTests
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/src)
     add_test(NAME SaturnExplorerCramWrapTests COMMAND SaturnExplorerCramWrapTests)
