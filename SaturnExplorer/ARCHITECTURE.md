@@ -407,7 +407,9 @@ SaturnExplorer/
     src/                               App.{h,cpp} + panels; portable, no OS calls
       DataSearchRunner.{h,cpp}         the data search's worker thread, queueing and routing
       Debug/                           debugger model: breakpoints, call stack, disasm,
-                                       watch list, memory search, expression eval
+                                       watch list, memory search, expression eval,
+                                       StepHaltMachine (run control: the step hold and
+                                       the transient Step Over/Out breakpoint)
       Disc/                            ISO/CUE read + build, CD sectors, disc image
       Demo/                            scripted demo playback
       Platform/IPlatform.h             Seam C: the platform abstraction
