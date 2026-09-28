@@ -920,8 +920,69 @@ void TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt()
         }
 }
 
+// Review 5334449098: the four-layer case, where the contribution below the sprite is itself a
+// colour-calculating VDP2 layer with something under it.
+//
+// Stack: NBG3 (prio 5, cc) > half-transparent sprite (prio 3) > NBG2 (prio 2, cc) > back screen.
+// A column keeps its top two contributions, so the back screen is already evicted by the time the
+// sprite arrives, and the sprite blends against NBG2's own colour rather than NBG2 blended with
+// the back screen.
+//
+// That is the model, not a shortfall of ResolveBelow. Standard VDP2 colour calculation blends the
+// top contribution with the one immediately below it, so a layer's cc-enable does nothing while it
+// is third in the stack -- NBG2 is below the sprite here, so it never blends with the back screen.
+// ResolveColumn has the same property from the other side: it blends the top against the *raw*
+// second, never a resolved one. Blending second-with-third is extended colour calculation
+// (3-layer, roadmap C6), which the mixer does not implement anywhere; giving the sprite path a
+// third retained contribution would make it the only place that did.
+void TestSpriteBetweenTwoColorCalcLayers()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x000C);   // BGON: NBG2 + NBG3
+    SetReg(state, 0x034, 0x8000);   // PNCN2: one-word
+    SetReg(state, 0x048, 0x0002);   // MPABN2: plane A map number 2 -> name table at 0x4000
+    SetReg(state, 0x0FA, 0x0502);   // PRINB: NBG3 priority 5, NBG2 priority 2
+    SetReg(state, 0x0AC, 0x0000);   // back-screen table at VDP2 0x200
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: blue
+    SetReg(state, 0x0EC, 0x000C);   // CCCTL: colour calc on for both NBG2 and NBG3
+    SetReg(state, 0x10A, 0x0F0F);   // CCRNB: ratio 15 for both
+
+    PutBE16(state.vdp2, 0x4000, 0x0002);   // NBG2 plane A -> character 2
+    std::fill(state.vdp2.begin() + 0x40, state.vdp2.begin() + 0x60, 0x33);   // index 3
+    PutBE16(state.cram, 3 * 2, 0x03E0);    // CRAM entry 3: green (NBG2)
+    PutBE16(state.cram, 2 * 2, 0x801F);    // CRAM entry 2: red (sprite)
+
+    // SPCTL type 0; priority number 0 -> PRISA low byte, so every sprite pixel is at priority 3.
+    SetReg(state, 0x0E0, 0x0000);
+    SetReg(state, 0x0F0, 0x0003);
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);                     // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);                     // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040 | 0x0003);   // LUT-16, SPD, half-transparency
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);                  // CMDCOLR: CLUT at 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);                  // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);               // CMDSIZE: 8x2
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);            // CLUT index 1 -> CRAM 2, number 0
+    for (int row = 0; row < 2; ++row)
+        for (int b = 0; b < 4; ++b) state.vdp1[0x100 + row * 4 + b] = 0x11;
+
+    const std::vector<uint8_t> pixels = Render(state, false, true);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            // Sprite red halved against NBG2 green is (127,127,0); NBG3 white then blends 1:1.
+            CHECK(IsColor(pixels, x, y, 191, 191, 127));
+            // What a resolved-second (3-layer) model would give: green blended with the blue back
+            // screen first. Pinned so C6 has to change this test deliberately.
+            CHECK(!IsColor(pixels, x, y, 191, 159, 159));
+        }
+}
+
 int main()
 {
+    TestSpriteBetweenTwoColorCalcLayers();
     TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt();
     TestPrioritySummaryConsidersEveryReachableNumber();
     TestSpritePriorityIsPerPixel();

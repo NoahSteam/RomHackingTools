@@ -112,6 +112,16 @@ inline Rgba ResolveColumn(const PixColumn& col, bool colorCalc)
 // prio <= its own. Returns false when nothing the column still holds is below it: a column keeps
 // only its top two contributions, so a sprite under both is not representable -- and not visible
 // either, which is why dropping the effect there is the right degradation.
+//
+// A sprite landing between the two blends against the second contribution's own colour, even when
+// that layer enables colour calculation and had something under it. That is the model rather than a
+// shortfall: standard colour calculation blends the top contribution with the one immediately below
+// it, so a layer's cc-enable does nothing while it is third in the stack, which is where the second
+// contribution ends up once the sprite goes in above it. ResolveColumn says the same thing from the
+// other side -- it blends the top against the *raw* second, never a resolved one. Blending
+// second-with-third is extended colour calculation (3-layer, roadmap C6), which the mixer does not
+// implement anywhere; retaining a third contribution for the sprite path alone would make it the
+// only place that did.
 inline bool ResolveBelow(const PixColumn& col, uint8_t prio, bool colorCalc, Rgba& out)
 {
     if (!col.valid)
