@@ -66,6 +66,12 @@ struct PRSDecompressor
     char*         mpUncompressedData = nullptr;   // reused/grown across calls; freed in dtor
     unsigned long mUncompressedDataSize = 0;      // valid length after a successful call
     size_t        mCompressedSize = 0;
+    // How many bytes the last call emitted, whether it succeeded or not. A failed decode still
+    // did the work of everything it wrote before the fault -- which is most of the work when
+    // decoding is attempted at every offset in a file, since most of those offsets fail. A caller
+    // budgeting such a scan has to count it (see kPrsMaxFileOutputBytes); mUncompressedDataSize
+    // is 0 on failure and would report that work as free.
+    size_t        mLastOutputBytes = 0;
 
     ~PRSDecompressor();
     // Decode the stream at pInData. The output buffer is retained between calls (only grown

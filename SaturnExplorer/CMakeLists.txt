@@ -211,6 +211,16 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    # The PRS search's bounds (ROM-04): the candidate filter must not drop a real match, and the
+    # per-file work budget must report a scan it cut short.
+    add_executable(SaturnExplorerPrsSearchTests
+        FrontEnd/tests/PrsSearchTests.cpp
+        FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp
+    )
+    target_include_directories(SaturnExplorerPrsSearchTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerPrsSearchTests COMMAND SaturnExplorerPrsSearchTests)
+
     # The data-search directory walk: symlink cycles and the depth cap. Creates real
     # symlinks, so POSIX only -- the Windows walk uses the reparse-point attribute and
     # would need its own harness.

@@ -4326,14 +4326,27 @@ void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
 
             const bool   cancelled = mSearchProgress.cancel.load();
             const size_t skipped = mSearchProgress.filesSkipped.load();
+            // A file whose PRS scan ran out of work budget was searched as far as the budget
+            // allowed and no further, so a match could be sitting at an offset never reached. That
+            // belongs in the summary beside the count, not left for the user to assume away.
+            const size_t partial = mSearchProgress.filesBudgetExhausted.load();
 
-            char sum[384];
+            std::string notes;
+            if (skipped) notes += "\nSome files were skipped (too large for a PRS scan).";
+            if (partial)
+            {
+                notes += "\n" + std::to_string(partial) +
+                         " file(s) were only searched partway: the PRS scan hit its work limit, so "
+                         "a match past that point would have been missed.";
+            }
+
+            char sum[512];
             std::snprintf(sum, sizeof(sum),
                           "%s%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in %s%s.%s",
                           cancelled ? "[Cancelled] " : "", label.c_str(), total, results.size(),
                           files, files == 1 ? "" : "s", mSearchScopeText.c_str(),
                           comp == SearchCompression::Prs ? " as PRS-compressed" : "",
-                          skipped ? "\nSome files were skipped (too large for a PRS scan)." : "");
+                          notes.c_str());
 
             mSearchResults = std::move(results);
             mSearchSummary = sum;
