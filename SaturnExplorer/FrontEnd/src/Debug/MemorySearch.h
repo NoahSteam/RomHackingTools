@@ -34,7 +34,17 @@ enum class SearchCompare
 };
 
 struct SearchRegion { uint32_t base = 0; uint32_t size = 0; };
-struct SearchHit    { uint32_t addr = 0; int64_t value = 0; };   // value = last-seen decode
+
+struct SearchHit
+{
+    uint32_t addr = 0;
+    int64_t  value = 0;   // last-seen decode
+    // False when the most recent scan could not read this address, so it survived the filter
+    // without being tested and 'value' is from an earlier scan. It matters most for exactly the
+    // compare a user reaches for: "unchanged" over a region that failed to read reports every
+    // hit in it as unchanged, when the truth is that nothing looked.
+    bool     verified = true;
+};
 
 class MemorySearch
 {
@@ -58,6 +68,16 @@ public:
     std::size_t                   Count()  const { return mHits.size(); }
     const std::vector<SearchHit>& Hits()   const { return mHits; }
 
+    // Regions the most recent First()/Next() could not read. Non-empty means the scan covered
+    // less memory than the region list says: on a First() those addresses were never candidates,
+    // and on a Next() the hits inside them were carried over untested (see SearchHit::verified).
+    // A caller that reports a hit count without this is reporting a number it cannot stand
+    // behind -- a live emulator that drops a read, or a savestate missing a region, both land
+    // here.
+    const std::vector<SearchRegion>& UnreadRegions()    const { return mUnread; }
+    bool                             LastScanPartial()  const { return !mUnread.empty(); }
+    std::size_t                      UnverifiedCount()  const;
+
     // True on a first scan (relative compares establish a baseline rather than compare).
     static bool IsRelative(SearchCompare cmp);
 
@@ -70,6 +90,7 @@ private:
     WatchType                 mType = WatchType::U32;
     std::vector<SearchRegion> mRegions;
     std::vector<SearchHit>    mHits;
+    std::vector<SearchRegion> mUnread;   // regions the last scan failed to read
 };
 
 }  // namespace sfe

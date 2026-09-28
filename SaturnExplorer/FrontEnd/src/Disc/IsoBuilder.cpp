@@ -101,6 +101,56 @@ std::string DirIdentifier(const std::string& name)
     return id.empty() ? "_" : id;
 }
 
+// Level 1 allows 8 characters of file name and 3 of extension, and 8 for a directory. The
+// identifiers above are built to fit; these say so, so the one place that rewrites an identifier
+// can be checked rather than trusted.
+const size_t kLevel1Base = 8;
+const size_t kLevel1Ext  = 3;
+
+bool FitsLevel1(const std::string& identifier, bool isFile)
+{
+    std::string stem = identifier;
+    if (isFile)
+    {
+        const size_t semi = stem.find(';');
+        if (semi == std::string::npos) return false;
+        stem = stem.substr(0, semi);
+        const size_t dot = stem.find_last_of('.');
+        if (dot == std::string::npos) return false;
+        return dot <= kLevel1Base && stem.size() - dot - 1 <= kLevel1Ext;
+    }
+    return !stem.empty() && stem.size() <= kLevel1Base;
+}
+
+// Re-form an identifier with a collision tag placed *inside* the Level-1 widths.
+//
+// The old form inserted "_N" just before the ";1", which puts it in the extension:
+// ABCDEFGH.BIN;1 became ABCDEFGH.BIN_1;1, a five-character extension, and a directory
+// ABCDEFGH became the ten-character ABCDEFGH_1. Both are outside Level 1, which is what the
+// Saturn's own filesystem code reads -- so the tag has to be paid for out of the base name's
+// eight characters rather than appended past them.
+//
+// Returns false when the tag cannot fit at all (it would leave no base name), which only happens
+// for a tag longer than the field; the caller reports that rather than emitting a bad name.
+bool TagIdentifier(const std::string& identifier, const std::string& tag, std::string& out)
+{
+    if (tag.size() >= kLevel1Base) return false;
+
+    const size_t semi = identifier.find(';');
+    const bool isFile = semi != std::string::npos;
+    const std::string stem = isFile ? identifier.substr(0, semi) : identifier;
+    const size_t dot = isFile ? stem.find_last_of('.') : std::string::npos;
+
+    std::string base = (dot == std::string::npos) ? stem : stem.substr(0, dot);
+    const std::string ext = (dot == std::string::npos) ? std::string() : stem.substr(dot);
+    if (base.size() + tag.size() > kLevel1Base)
+    {
+        base.resize(kLevel1Base - tag.size());
+    }
+    out = base + tag + ext + (isFile ? ";1" : "");
+    return true;
+}
+
 struct File { std::string identifier; std::string diskPath; uint32_t size; uint32_t lba; };
 struct Dir
 {
@@ -229,6 +279,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         d.number = int(i + 1);
         for (int s : d.subdirs) bfs.push_back(s);
     }
+    bool dedupeFailed = false;
     auto dedupe = [&](std::vector<std::string>& ids) {
         for (size_t i = 0; i < ids.size(); ++i)
         {
@@ -237,17 +288,26 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
                 return false;
             };
             if (!collidesEarlier(ids[i])) continue;
-            // Rebuild from the original with an increasing "_N" tag (before ";1" for files) until
-            // it no longer matches any earlier identifier.
+            // Rebuild from the original with an increasing "_N" tag, taken out of the base name
+            // so the result is still a Level-1 identifier, until it no longer matches any
+            // earlier one. The base shrinks as N grows, so distinct names converge on the same
+            // short stem and the loop keeps going -- which is exactly what it is for.
             const std::string original = ids[i];
-            const size_t semi = original.find(';');
             std::string tagged;
-            for (int n = 1; ; ++n)
+            bool tagged_ok = false;
+            for (int n = 1; n <= 9999999; ++n)
             {
-                const std::string tag = "_" + std::to_string(n);
-                tagged = original;
-                if (semi != std::string::npos) tagged.insert(semi, tag); else tagged += tag;
-                if (!collidesEarlier(tagged)) break;
+                if (!TagIdentifier(original, "_" + std::to_string(n), tagged)) break;
+                if (!collidesEarlier(tagged)) { tagged_ok = true; break; }
+            }
+            if (!tagged_ok)
+            {
+                // Seven digits of tag exhausted, which needs more colliding names in one
+                // directory than a Saturn disc can hold. Refusing beats writing a name the
+                // console's filesystem code cannot read.
+                dedupeFailed = true;
+                r.error = "Too many colliding 8.3 names in one directory to rename: " + original;
+                return;
             }
             ids[i] = tagged;
             ++r.renamedForIso;
@@ -261,8 +321,31 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         for (int s : d.subdirs) dirIds.push_back(dirs[s].identifier);
         dedupe(fileIds);
         dedupe(dirIds);
+        if (dedupeFailed) return r;
         for (size_t i = 0; i < d.files.size(); ++i) d.files[i].identifier = fileIds[i];
         for (size_t i = 0; i < d.subdirs.size(); ++i) dirs[d.subdirs[i]].identifier = dirIds[i];
+    }
+
+    // Nothing downstream validates an identifier's width -- the record length is computed from
+    // whatever string it is handed -- so check here, once, that every name the image will carry
+    // is still Level 1. This is the backstop for the bug above: a mapping or renaming change
+    // that starts producing over-long names fails the build instead of producing an image the
+    // Saturn cannot read.
+    for (const Dir& d : dirs)
+    {
+        if (!d.identifier.empty() && !FitsLevel1(d.identifier, false))
+        {
+            r.error = "Directory name is not ISO Level 1: " + d.identifier;
+            return r;
+        }
+        for (const File& f : d.files)
+        {
+            if (!FitsLevel1(f.identifier, true))
+            {
+                r.error = "File name is not ISO Level 1: " + f.identifier;
+                return r;
+            }
+        }
     }
 
     // 3) Sort each directory's children (subdirs + files) by identifier and lay out its records

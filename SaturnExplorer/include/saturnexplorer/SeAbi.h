@@ -18,8 +18,11 @@ extern "C" {
 #endif
 
 /* Bumped on any breaking change to either seam struct. A host/driver compares
- * its compiled-in value against the core's se_abi_version() before use. */
-#define SE_ABI_VERSION 5u
+ * its compiled-in value against the core's se_abi_version() before use.
+ *
+ * 6: dropped the never-implemented se_rom_search_* / se_history_for exports
+ *    (see ARCHITECTURE.md) and added SE_ERR_NO_MEMORY. */
+#define SE_ABI_VERSION 6u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {
@@ -32,7 +35,8 @@ typedef enum se_result {
     SE_ERR_BUFFER_TOO_SMALL = -6, /* caller buffer smaller than *inout size */
     SE_ERR_NO_DATA        = -7,   /* nothing to return (e.g. no frame snapshotted yet) */
     SE_ERR_IO             = -8,   /* underlying read/file error in the driver */
-    SE_ERR_UNSUPPORTED    = -9    /* well-formed request the core can't satisfy */
+    SE_ERR_UNSUPPORTED    = -9,   /* well-formed request the core can't satisfy */
+    SE_ERR_NO_MEMORY      = -10   /* an allocation failed; see "Exceptions" in SeHost.h */
 } se_result;
 
 /* Capabilities a driver advertises in se_data_source.capabilities. The core

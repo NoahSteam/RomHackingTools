@@ -11,6 +11,15 @@
 #include "Prs.h"
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+// Same guard IsoBuilder.cpp carries, and for the same reason: MSVC's <windef.h> defines min() and
+// max() as macros unless this is set, and the expansion turns the std::min below into std::( --
+// "error C2589: '(': illegal token on right side of '::'". Defending the file is better than
+// relying on every target that compiles it to pass -DNOMINMAX, which is how this was missed: the
+// frontend and TopBarTests set it, so a new test target compiling this file was the first thing to
+// find out that it has to.
+#define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <dirent.h>
@@ -257,6 +266,7 @@ void SearchFilePrs(const std::string& path, const uint8_t* needle, size_t len,
 
     PRSDecompressor dec;   // reused across offsets; each Uncompress frees the previous buffer
     const size_t last = data.size() >= 3 ? data.size() - 3 : 0;
+    uint64_t emitted = 0;   // total decompressed bytes produced for this file, against the budget
     for (size_t start = 0; start <= last; ++start)
     {
         // Poll for cancellation and publish progress only occasionally (atomics aren't free).
@@ -272,11 +282,44 @@ void SearchFilePrs(const std::string& path, const uint8_t* needle, size_t len,
             }
         }
 
-        if (!dec.UncompressData(data.data() + start,
-                                static_cast<unsigned int>(data.size() - start)))
+        // A sound rejection for one load, and it lands where the cost is.
+        //
+        // A PRS stream's first control bit (the low bit of the first byte -- FetchBit reads LSB
+        // first) chooses literal or copy. A copy at output position 0 has nothing behind it to
+        // copy from, so the decoder rejects it; the only other way a stream can begin with a
+        // clear bit is the end-of-stream marker, which emits nothing and so cannot contain a
+        // needle. An offset whose first byte is even therefore cannot produce a match.
+        //
+        // Measured, this is worth nothing on incompressible data -- a garbage stream faults after
+        // a few operations whether or not this test runs -- and about 6x on a mostly-zero 2 MiB
+        // file, where offsets decode successfully and run for a long time before failing. That is
+        // the shape of the problem: the offsets this discards are the expensive ones.
+        if ((data[start] & 1u) == 0)
         {
             continue;
         }
+
+        const uint64_t budget = progress ? progress->prsOutputBudget.load(std::memory_order_relaxed)
+                                        : kPrsMaxFileOutputBytes;
+        if (emitted >= budget)
+        {
+            // Out of budget with offsets left to try. Stop and say so, rather than returning the
+            // hits found so far as though the file had been searched to the end.
+            if (progress)
+            {
+                progress->filesBudgetExhausted.fetch_add(1, std::memory_order_relaxed);
+            }
+            return;
+        }
+
+        if (!dec.UncompressData(data.data() + start,
+                                static_cast<unsigned int>(data.size() - start),
+                                kPrsMaxBlockBytes))
+        {
+            emitted += dec.mLastOutputBytes;   // a failed decode still emitted what it emitted
+            continue;
+        }
+        emitted += dec.mLastOutputBytes;
         if (dec.mUncompressedDataSize < len)
         {
             continue;

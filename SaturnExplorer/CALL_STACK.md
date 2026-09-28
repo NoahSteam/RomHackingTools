@@ -21,7 +21,9 @@ struct CallStackFrame
 {
     SaturnCpu Cpu;
     uint32_t  CallSite;            // the bsr/jsr instruction that made the call
-    uint32_t  FunctionAddress;     // entry point of the frame's function (best known)
+    uint32_t  FunctionAddress;     // entry point of the frame's function, when it is known
+    bool      FunctionKnown;       // false unless something actually decoded that entry
+    uint32_t  CurrentAddress;      // an address inside this frame: PC, or a caller's return
     uint32_t  ReturnAddress;       // where this frame returns to (PR / saved-PR)
     uint32_t  StackPointerAtCall;  // R15 at the call
     uint64_t  Cycle;               // when the call happened (shadow stack only)
@@ -31,8 +33,17 @@ struct CallStackFrame
 };
 ```
 
-Frame #0 is the halted instruction itself (its `FunctionAddress` is the function the PC
-is in; `ReturnAddress` = PR). Frames above it are its callers, innermost first.
+Frame #0 is the halted instruction itself (`CurrentAddress` = PC, `ReturnAddress` = PR).
+Frames above it are its callers, innermost first.
+
+`FunctionAddress` is an entry point, and it is only filled in when something recovered one.
+The shadow stack records it. A `bsr disp` at the call site encodes it (site + 4 + disp*2). A
+`jsr @Rn` or `bsrf Rn` does not -- the target was in a register, and a stack image taken later
+has no record of it -- and a bare stack walk does not either. Where it is unknown, the UI shows
+`CurrentAddress` for what it is ("at 06001000") instead of naming the frame `sub_06001000`
+after an address four bytes past a call instruction in the *caller's* body. "Go to Function"
+and "Rename Function" are disabled for such a frame, because a rename is stored against an
+address and would otherwise file the user's label under a mid-function one.
 
 A frame's confidence reflects its source:
 
@@ -69,12 +80,15 @@ and only active on a `--enable-debugger` build.
 With only a memory image + registers (a `.yss`/dump, or a live emulator without the
 call/return hook), we reconstruct:
 
-- Frame #0 from PC (+ PR for its return).
+- Frame #0 from PC (+ PR for its return). No function entry: where the PC is says nothing
+  about where its function began.
 - Walk the stack from R15 upward, read each 32-bit big-endian word, and for any word
   that lands in a plausible code region treat it as a saved return address → a caller
   frame. If the two bytes *before* that target decode as a `bsr`/`jsr` (i.e. the return
   address really is the instruction after a call), mark the frame ◐ Probable; otherwise
   ○ Heuristic. Cap depth and stack span so a garbage SP can't run away.
+- For a `bsr` call site, decode its displacement into the callee's entry point. For a
+  `jsr`/`bsrf`, leave the entry unknown rather than substituting the return address.
 
 Heuristic entries are always labelled as such in the UI — never presented as ground
 truth. This is the **Reconstruct Stack** mode, and it is what makes the panel useful on

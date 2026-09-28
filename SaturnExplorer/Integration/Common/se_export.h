@@ -125,7 +125,12 @@ int  SeExportInsnStepTick(int cpu, unsigned int pc);
  * is only a function-pointer field on SH2_struct, not a callable function. May be
  * NULL (writes are then dropped). Writing byte-by-byte at Saturn addresses preserves
  * big-endian order without a manual swap. Call once after SeExportInit, e.g.
- * SeExportSetMemWriteHook(SeYabauseWriteByte). */
+ * SeExportSetMemWriteHook(SeYabauseWriteByte).
+ *
+ * Wiring this hook is what turns the export channel from a viewer into a write channel: any
+ * client that can connect can then write any bus address the emulator's writer accepts, with no
+ * authentication anywhere in the protocol. Leave it NULL for a read-only tap. See
+ * SeLiveProtocol.h ("What connecting to this endpoint grants") before exposing the TCP port. */
 void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char value));
 
 /* Wire a sound-RAM byte poke (v13+), so the Hex Editor's Sound RAM tab / the music-swap

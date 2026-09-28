@@ -683,8 +683,312 @@ void TestWriteVramForwards()
     se_destroy(ctx);
 }
 
+// Snapshot validity is not VDP1-centric (SNAP-02). It used to be `!vdp1Vram.empty()`, so a
+// VDP2-only source -- backgrounds, tiles, palettes, all present -- could not open at all:
+// se_begin_frame returned SE_ERR_NO_DATA and nothing downstream ever ran.
+void TestVdp2OnlySourceIsValid()
+{
+    State state;
+    se_test::WriteSystemClip(state, 8, 4);
+    std::fill(state.vdp2.begin(), state.vdp2.end(), uint8_t(0x5A));
+
+    se_data_source source = se_test::MakeSource(state);
+    // Deliberately no VDP1 of any kind, which is the shape a VDP2-only savestate produces.
+    source.capabilities &= ~static_cast<uint32_t>(SE_CAP_VDP1_VRAM | SE_CAP_VDP1_REGS |
+                                                 SE_CAP_VDP1_FB);
+    source.read_vdp1_vram = nullptr;
+    source.read_vdp1_reg = nullptr;
+    source.read_vdp1_fb = nullptr;
+
+    se_context* context = se_test::CreateContext(source);
+    CHECK(context != nullptr);
+    if (!context) return;
+    CHECK(se_begin_frame(context) == SE_OK);   // the whole point: it opens
+    uint8_t probe[16] = {};
+    CHECK(se_read_vram(context, SE_VRAM_KIND_VDP2_VRAM, 0, probe, sizeof(probe)) == sizeof(probe));
+    CHECK(probe[0] == 0x5A);
+    // And a VDP1-shaped query answers "nothing here" rather than failing the context.
+    CHECK(se_sprite_count(context) == 0);
+    se_destroy(context);
+}
+
+// A source that supplies nothing at all is still invalid: the relaxation must not turn
+// "capabilities advertised, every read empty" into a usable context.
+void TestEmptySourceIsStillInvalid()
+{
+    State state;
+    se_data_source source = se_test::MakeSource(state);
+    source.read_vdp1_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp2_vram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_cram = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp1_fb = [](void*, uint32_t, void*, size_t) -> size_t { return 0; };
+    source.read_vdp1_reg = nullptr;
+    source.read_vdp2_reg = nullptr;
+
+    se_context* context = se_test::CreateContext(source);
+    CHECK(context != nullptr);
+    if (!context) return;
+    CHECK(se_begin_frame(context) == SE_ERR_NO_DATA);
+    se_destroy(context);
+}
+
+// --- Per-pixel sprite priority (VDP1-02 / VDP2-01) -----------------------------------------
+//
+// A VDP1 sprite pixel selects one of the eight VDP2 sprite-priority slots with a "priority
+// number" encoded in its own framebuffer word, and which bits carry that number depends on the
+// SPCTL sprite type. So one sprite can hold pixels at several priorities, and the hardware
+// interleaves each of them with the VDP2 layers separately.
+//
+// The scene below is the smallest one that tells the two models apart: a 4x2 LUT-16 sprite whose
+// left half uses a CLUT entry with priority number 0 and whose right half uses one with number 1,
+// over an NBG3 layer at a priority between the two. Per-pixel, the left half goes behind the
+// background and the right half in front. Per-command -- taking the front-most priority the
+// sprite can reach, which is what this used to do -- the whole sprite lands in front and the
+// background is hidden where it should show through.
+State MakeMixedPrioritySpriteState()
+{
+    State state = MakeNbg3State();
+
+    // NBG3 at priority 4, filling the frame. MakeNbg3State points its pattern at character 1
+    // and puts white in CRAM entry 1; keep that, and give the sprite its own CRAM entries.
+    SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
+
+    // SPCTL: sprite type 0, SPCLMD off. Type 0 reads the priority number from bits 15-14 of the
+    // pixel word, and for a LUT sprite the word is the CLUT entry -- whose bit 15 is the
+    // "direct RGB" flag. With CRAM-index entries (bit 15 clear) bit 14 alone selects number
+    // 0 or 1, which is exactly the two-priority sprite this test needs.
+    SetReg(state, 0x0E0, 0x0000);
+    // PRISA: priority number 0 -> priority 2 (behind NBG3), number 1 -> priority 6 (in front).
+    SetReg(state, 0x0F0, 0x0602);
+
+    // CRAM entries the CLUT points at: 2 = red, 3 = green.
+    PutBE16(state.cram, 2 * 2, 0x801F);   // red
+    PutBE16(state.cram, 3 * 2, 0x83E0);   // green
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);            // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);            // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040);   // CMDPMOD: LUT-16 colour mode, SPD
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);         // CMDCOLR: CLUT at byte 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);         // CMDSRCA: texture at byte 0x100
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);      // CMDSIZE: 8 wide, 2 tall
+    PutBE16(state.vdp1, 0x2C, 0);                 // CMDXA
+    PutBE16(state.vdp1, 0x2E, 0);                 // CMDYA
+
+    // The CLUT: index 1 -> CRAM entry 2 with priority number 0; index 2 -> CRAM entry 3 with
+    // bit 14 set, i.e. priority number 1.
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);
+    PutBE16(state.vdp1, 0x180 + 2 * 2, 0x4003);
+
+    // 4bpp texture, 8 wide by 2 tall (the smallest CMDSIZE width is 8). The sprite is drawn at
+    // x = 0 and the composited frame is only 4 wide, so screen columns 0-3 show texels 0-3 and
+    // the rest is clipped away -- which is why the priority split is at texel 2 and not at the
+    // middle of the texture. Texels 0-1 take CLUT index 1 (priority number 0), texels 2-3 take
+    // index 2 (number 1); one byte holds two texels.
+    for (int row = 0; row < 2; ++row)
+    {
+        const uint32_t base = 0x100 + static_cast<uint32_t>(row) * 4;   // stride = 8 px / 2
+        state.vdp1[base + 0] = 0x11;   // texels 0,1 -> index 1
+        state.vdp1[base + 1] = 0x22;   // texels 2,3 -> index 2
+        state.vdp1[base + 2] = 0x22;   // clipped off the 4-wide frame
+        state.vdp1[base + 3] = 0x22;
+    }
+    return state;
+}
+
+void TestSpritePriorityIsPerPixel()
+{
+    State state = MakeMixedPrioritySpriteState();
+    const std::vector<uint8_t> pixels = Render(state, false);
+
+    // Columns 0-1: priority 2, so NBG3 (priority 4) covers them. White, and specifically not
+    // the sprite's own red.
+    CHECK(IsColor(pixels, 0, 0, 255, 255, 255));
+    CHECK(IsColor(pixels, 1, 0, 255, 255, 255));
+    CHECK(IsColor(pixels, 0, 1, 255, 255, 255));
+    CHECK(IsColor(pixels, 1, 1, 255, 255, 255));
+
+    // Columns 2-3: priority 6, in front of NBG3. The sprite's green.
+    CHECK(IsColor(pixels, 2, 0, 0, 255, 0));
+    CHECK(IsColor(pixels, 3, 0, 0, 255, 0));
+    CHECK(IsColor(pixels, 2, 1, 0, 255, 0));
+    CHECK(IsColor(pixels, 3, 1, 0, 255, 0));
+}
+
+// The per-command summary se_sprite_2d::priority still reports the front-most priority the
+// sprite's pixels reach, which is what the Command List panel shows. It is no longer what
+// composites the frame -- that is the point above -- so this pins the two apart.
+void TestSpritePrioritySummaryIsTheFrontMost()
+{
+    State state = MakeMixedPrioritySpriteState();
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    CHECK(se_sprite_count(context) == 1);
+    se_sprite_2d sprite = {};
+    CHECK(se_get_sprite_2d(context, 0, &sprite) == SE_OK);
+    CHECK(sprite.priority == 6);
+    se_destroy(context);
+}
+
+// The per-command summary has to consider every priority number the sprite's pixels can select,
+// not a representative word or two. The slots map numbers to priorities in any order, so the
+// front-most priority is not the one the largest number picks.
+//
+// Sprite type 0xA reads the number from bits 7-6, and a 256-colour bank sprite supplies bits 7-0
+// from the texel index -- so all four numbers are reachable. Here number 2 carries priority 7 and
+// the other three carry 1. Probing the bank with a zero index (which is what this used to do)
+// sees only number 0 and reports 1.
+void TestPrioritySummaryConsidersEveryReachableNumber()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // no backgrounds; this test only reads the summary
+    SetReg(state, 0x0E0, 0x000A);   // SPCTL: sprite type A, SPCLMD off
+    SetReg(state, 0x0F0, 0x0101);   // PRISA: number 0 -> 1, number 1 -> 1
+    SetReg(state, 0x0F2, 0x0107);   // PRISB: number 2 -> 7, number 3 -> 1
+
+    ResizeVdp1(state, 0x400);
+    PutBE16(state.vdp1, 0x20, 0x0000);            // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);            // draw end
+    PutBE16(state.vdp1, 0x24, 0x0020 | 0x0040);   // CMDPMOD: 256-colour bank, SPD
+    PutBE16(state.vdp1, 0x26, 0x0200);            // CMDCOLR: colour bank
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);         // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);      // CMDSIZE: 8 wide, 2 tall
+    for (uint32_t i = 0; i < 16; ++i) state.vdp1[0x100 + i] = 0x01;   // 8bpp, index 1 throughout
+
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    CHECK(se_sprite_count(context) == 1);
+    se_sprite_2d sprite = {};
+    CHECK(se_get_sprite_2d(context, 0, &sprite) == SE_OK);
+    CHECK(sprite.priority == 7);
+    se_destroy(context);
+}
+
+// A half-transparent sprite pixel BETWEEN two VDP2 contributions, the higher of which does colour
+// calculation. This is the case the per-pixel priority change made ordinary, and it is where
+// blending against the top of the column instead of against what is under the sprite goes wrong:
+// the sprite would carry the higher layer's colour, and that layer then colour-calculates against
+// the sprite as its second contribution -- blending itself in twice.
+//
+// Layout, bottom to top: back screen (blue, priority 0) < half-transparent red sprite (priority 1)
+// < NBG3 (white, priority 4, colour calc on, ratio 15).
+//
+// Correct: the sprite halves against the BACK SCREEN, so (255,0,0) over (0,0,255) is (127,0,127);
+// NBG3 then blends 16/32 with that, giving (191,127,191).
+// The bug gave the sprite (191,63,127) -- halved against NBG3-over-back-screen -- and a final
+// (223,159,191).
+void TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
+    SetReg(state, 0x0AC, 0x0000);   // BKTAU / BKTAL: back-screen table at VDP2 0x200
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: RGB555 blue
+    SetReg(state, 0x0EC, 0x0008);   // CCCTL: NBG3 colour-calc enable
+    SetReg(state, 0x10A, 0x0F00);   // CCRNB: NBG3 ratio 15
+
+    // SPCTL type 0, SPCLMD off; priority number 0 -> priority 1, so every sprite pixel is at 1.
+    SetReg(state, 0x0E0, 0x0000);
+    SetReg(state, 0x0F0, 0x0001);
+
+    PutBE16(state.cram, 2 * 2, 0x801F);   // CRAM entry 2: red
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);                     // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);                     // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040 | 0x0003);   // LUT-16, SPD, half-transparency
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);                  // CMDCOLR: CLUT at 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);                  // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);               // CMDSIZE: 8x2
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);            // CLUT index 1 -> CRAM 2, number 0
+    for (int row = 0; row < 2; ++row)
+        for (int b = 0; b < 4; ++b) state.vdp1[0x100 + row * 4 + b] = 0x11;
+
+    const std::vector<uint8_t> pixels = Render(state, false, true);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            // NBG3 (prio 4, cc on at ratio 15) over the half-transparent sprite (prio 1) over
+            // the blue back screen (prio 0): NBG3 white blends 1:1 with the sprite's own blend of
+            // red over blue.
+            CHECK(IsColor(pixels, x, y, 191, 127, 191));
+            // The pre-fix answer: the sprite blended against NBG3 -- which is above it -- and
+            // NBG3 then colour-calculated against that, mixing itself in twice.
+            CHECK(!IsColor(pixels, x, y, 223, 159, 191));
+        }
+}
+
+// Review 5334449098: the four-layer case, where the contribution below the sprite is itself a
+// colour-calculating VDP2 layer with something under it.
+//
+// Stack: NBG3 (prio 5, cc) > half-transparent sprite (prio 3) > NBG2 (prio 2, cc) > back screen.
+// A column keeps its top two contributions, so the back screen is already evicted by the time the
+// sprite arrives, and the sprite blends against NBG2's own colour rather than NBG2 blended with
+// the back screen.
+//
+// That is the model, not a shortfall of ResolveBelow. Standard VDP2 colour calculation blends the
+// top contribution with the one immediately below it, so a layer's cc-enable does nothing while it
+// is third in the stack -- NBG2 is below the sprite here, so it never blends with the back screen.
+// ResolveColumn has the same property from the other side: it blends the top against the *raw*
+// second, never a resolved one. Blending second-with-third is extended colour calculation
+// (3-layer, roadmap C6), which the mixer does not implement anywhere; giving the sprite path a
+// third retained contribution would make it the only place that did.
+void TestSpriteBetweenTwoColorCalcLayers()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x000C);   // BGON: NBG2 + NBG3
+    SetReg(state, 0x034, 0x8000);   // PNCN2: one-word
+    SetReg(state, 0x048, 0x0002);   // MPABN2: plane A map number 2 -> name table at 0x4000
+    SetReg(state, 0x0FA, 0x0502);   // PRINB: NBG3 priority 5, NBG2 priority 2
+    SetReg(state, 0x0AC, 0x0000);   // back-screen table at VDP2 0x200
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: blue
+    SetReg(state, 0x0EC, 0x000C);   // CCCTL: colour calc on for both NBG2 and NBG3
+    SetReg(state, 0x10A, 0x0F0F);   // CCRNB: ratio 15 for both
+
+    PutBE16(state.vdp2, 0x4000, 0x0002);   // NBG2 plane A -> character 2
+    std::fill(state.vdp2.begin() + 0x40, state.vdp2.begin() + 0x60, 0x33);   // index 3
+    PutBE16(state.cram, 3 * 2, 0x03E0);    // CRAM entry 3: green (NBG2)
+    PutBE16(state.cram, 2 * 2, 0x801F);    // CRAM entry 2: red (sprite)
+
+    // SPCTL type 0; priority number 0 -> PRISA low byte, so every sprite pixel is at priority 3.
+    SetReg(state, 0x0E0, 0x0000);
+    SetReg(state, 0x0F0, 0x0003);
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);                     // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);                     // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040 | 0x0003);   // LUT-16, SPD, half-transparency
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);                  // CMDCOLR: CLUT at 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);                  // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);               // CMDSIZE: 8x2
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);            // CLUT index 1 -> CRAM 2, number 0
+    for (int row = 0; row < 2; ++row)
+        for (int b = 0; b < 4; ++b) state.vdp1[0x100 + row * 4 + b] = 0x11;
+
+    const std::vector<uint8_t> pixels = Render(state, false, true);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            // Sprite red halved against NBG2 green is (127,127,0); NBG3 white then blends 1:1.
+            CHECK(IsColor(pixels, x, y, 191, 191, 127));
+            // What a resolved-second (3-layer) model would give: green blended with the blue back
+            // screen first. Pinned so C6 has to change this test deliberately.
+            CHECK(!IsColor(pixels, x, y, 191, 159, 159));
+        }
+}
+
 int main()
 {
+    TestSpriteBetweenTwoColorCalcLayers();
+    TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt();
+    TestPrioritySummaryConsidersEveryReachableNumber();
+    TestSpritePriorityIsPerPixel();
+    TestSpritePrioritySummaryIsTheFrontMost();
+    TestVdp2OnlySourceIsValid();
+    TestEmptySourceIsStillInvalid();
     TestEditReRenders();
     TestWriteVramForwards();
     TestRectangularWindow();

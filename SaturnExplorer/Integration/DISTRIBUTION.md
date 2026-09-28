@@ -5,6 +5,26 @@ two practical questions — how to keep the patcher from breaking when upstream 
 and whether you can hand users a prebuilt binary. Short answers below; none of this is
 legal advice.
 
+## What you are shipping, security-wise
+
+Whatever you hand a user -- patch or binary -- the patched emulator listens on a local endpoint
+that is a **privileged control channel**, not a read-only viewer feed. Anything that can connect
+can write any bus address, install breakpoints, pause and step the CPUs, inject controller input
+and restore a savestate, and none of it is authenticated: no handshake, no token, no distinction
+between a viewer and a controller. That is what a debugger needs, and it is also why the
+transport is the only access control there is.
+
+- The Unix socket and the Windows named pipe are reachable only by local users with permission to
+  them, which is the intended arrangement.
+- The **TCP listener** (loopback, port 6845, for the web build's WebSocket bridge) is reachable by
+  every local process and every local user -- and by whatever can reach that bridge, if it is run
+  with a wider bind or a permissive origin policy.
+
+So: keep it on loopback, do not forward or expose it, and do not leave a patched build listening
+on a shared or multi-user host. Say the same to users if you distribute a prebuilt binary, since
+they did not choose to start a server. The full statement lives with the protocol, in
+`Integration/Common/SeLiveProtocol.h` (review finding HOOK-03).
+
 ## Fork and pin your upstream
 
 `apply.py` injects at specific upstream symbols and code sites (`espec->MasterCycles`,

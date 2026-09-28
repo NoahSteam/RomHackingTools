@@ -228,6 +228,69 @@ int main()
     }
 #endif  // !_WIN32
 
+    // --- ROM-05: the project format's own rules, enforced on the way in and out. ---
+    {
+        PatchLibrary lib;
+        std::string why;
+
+        // A tab or newline in the file path re-splits the record on reload: the tab becomes a
+        // field separator, the newline a second line. It cannot be substituted away either --
+        // the path is what the generated script writes to -- so it is refused.
+        Check(!lib.AddOrUpdate(Loc("t", 0x200000, 1, "A\tB.BIN", 0, {0x11}), &why),
+              "a tab in the file path is refused");
+        Check(!why.empty(), "the refusal says why");
+        Check(!lib.AddOrUpdate(Loc("t", 0x200000, 1, "A\nB.BIN", 0, {0x11})),
+              "a newline in the file path is refused");
+        Check(lib.Count() == 0, "a refused location is not stored");
+
+        // The baseline is what the script compares the target against, so a size other than the
+        // record's own length compares the wrong number of bytes.
+        Check(!lib.AddOrUpdate(Loc("s", 0x200000, 4, "A.BIN", 0, {0x11, 0x22})),
+              "a baseline shorter than the length is refused");
+        Check(!lib.AddOrUpdate(Loc("s", 0x200000, 0, "A.BIN", 0, {})),
+              "a zero-length location is refused");
+
+        // A label is cosmetic, so its whitespace is repaired rather than refused -- but it must
+        // still not be able to re-split the line.
+        Check(lib.AddOrUpdate(Loc("has\ta tab\nand a newline", 0x200000, 1, "A.BIN", 0, {0x11})),
+              "a label with separators is accepted");
+        Check(lib.Count() == 1, "and stored");
+        Check(lib.Entries()[0].label == "has a tab and a newline", "with the separators replaced");
+
+        // Round-tripping it therefore gives the label back intact, rather than shifting fields.
+        PatchLibrary back;
+        Check(back.Deserialize(lib.Serialize()), "the sanitized record round-trips");
+        Check(back.Count() == 1 && back.Entries()[0].label == "has a tab and a newline",
+              "the label survives the round-trip");
+        Check(back.Entries()[0].file == "A.BIN", "and so does the file path");
+    }
+    {
+        // Parsing is strict in both directions: a record whose baseline disagrees with its length
+        // fails the load rather than being skipped. A project that loads with locations quietly
+        // missing is worse than one that refuses, because the next save writes the loss back.
+        PatchLibrary lib;
+        std::string why;
+        Check(!lib.Deserialize("SEPATCH 1\n00200000\t4\t0\t1122\tA.BIN\tshort baseline\n", &why),
+              "a baseline that is not <length> bytes fails the parse");
+        Check(!why.empty(), "and says which record");
+        Check(!lib.Deserialize("SEPATCH 1\n00200000\t2\tA.BIN\tmissing fields\n"),
+              "a record with too few fields fails the parse");
+        Check(!lib.Deserialize("SEPATCH 1\n00200000\t2\t0\tnothex\tA.BIN\tx\n"),
+              "a baseline that is not hex fails the parse");
+
+        // The version is part of the header. A later format that adds a field would otherwise be
+        // read here as a record with a stray tab in its label.
+        Check(!lib.Deserialize("SEPATCH 2\n"), "a later format version is refused");
+        Check(!lib.Deserialize("SEPATCHED\n"), "a header that merely starts with SEPATCH is refused");
+        Check(lib.Deserialize("SEPATCH 1\n"), "a header with no records is a valid empty project");
+        Check(lib.Count() == 0, "and loads nothing");
+
+        // A CRLF project file still loads: the header check must not trip over the '\r'.
+        Check(lib.Deserialize("SEPATCH 1\r\n00200000\t2\t0\t1122\tA.BIN\tok\r\n"),
+              "a CRLF project file loads");
+        Check(lib.Count() == 1, "and its record is kept");
+    }
+
     if (gFail == 0) std::printf("All PatchLibrary tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

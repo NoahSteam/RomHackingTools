@@ -18,7 +18,8 @@
 #include "Launcher.h"            // "Launch Session": emulator + ROM selection
 #include "TopBar.h"              // top-bar view state + side-effect-free commands
 #include "Demo/DemoPlayer.h"     // in-app feature-tour playback (drives panels for recording)
-#include "DataSearch.h"          // game-data-directory byte search (DataSearchHit)
+#include "DataSearch.h"                 // game-data-directory byte search (DataSearchHit)
+#include "DataSearchRunner.h"           // its worker thread, queueing and result routing
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
@@ -147,6 +148,12 @@ private:
     void BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out);
     // Sync the workspace to a selected call-stack frame (Assembly + Hex + focus).
     void GoToFrame(const CallStackFrame& fr);
+    // A call-stack frame's display name, and the code address the UI should act on for it.
+    // Split out because a heuristic frame often has no known function entry (CPU-03) and every
+    // place that used to read functionAddress directly would otherwise name, navigate to, or
+    // set a breakpoint on address zero.
+    std::string FrameLabel(const CallStackFrame& fr) const;
+    static uint32_t FrameCodeAddress(const CallStackFrame& fr);
     void DrawTracepointEditor();            // modal property editor for a tracepoint
     void OpenTracepointEditor(int cpu, uint32_t addr);  // open it for a new/existing TP
     // Format a tracepoint's template against the CURRENT context (registers + memory),
@@ -210,6 +217,14 @@ private:
     // selected ROM without changing the user's selection (used by Build & Launch ISO).
     bool LaunchSession(IPlatform& platform, const std::string& romOverride = std::string());
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
+    // Which window a search's results land in. Travels with the request through the runner
+    // (DataSearchRequest::destination) rather than sitting in a flag per search slot.
+    enum SearchDestination
+    {
+        kSearchToTextureResults = 0,   // "Find in game data" -> the Data Search Results window
+        kSearchToLocateResults = 1,    // Patch "Find in game files" -> accept/reject rows
+    };
+
     // Search the game data directory for an arbitrary byte sequence (the Hex Editor's
     // selection, or the SH-2 Assembly panel's selected instructions). Stashes the needle
     // and either runs immediately or opens the "set data directory" modal first. Results
@@ -225,15 +240,16 @@ private:
     // there is no data or the texture has no footprint. Shared by both search entry points.
     bool BuildTextureNeedle(const se_command& cmd, std::vector<uint8_t>& needle,
                             std::string& label);
-    // Launch the pending search (mPendingNeedle) over `roots` with compression `comp` on a
-    // worker thread. A PRS scan can be slow, so it must not block the UI. `scopeText`
-    // describes what is being searched, for the results summary.
-    // 'locate' routes the results to the Patch "Find in game files" window (accept/reject)
-    // instead of the texture-search results window; it travels with the queued search so the
-    // two search kinds compose correctly through the single worker.
+    // Hand the pending search (mPendingNeedle) to mSearchRunner: `roots` is what to scan,
+    // `comp` whether the bytes are raw or inside a PRS block, `scopeText` a description for the
+    // summary, and `destination` which window gets the results (SearchDestination). The runner
+    // owns the thread and the cancel-and-queue behaviour; this only builds the request and
+    // decides what a request with nothing to search means.
     void LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
-                      const std::string& scopeText, bool locate = false);
-    void PollSearchWorker();   // called each frame: joins the finished worker
+                      const std::string& scopeText,
+                      int destination = kSearchToTextureResults);
+    // Called each frame: take a finished search's results from the runner and route them.
+    void PollSearchWorker();
     void LoadSearchOptions();
     void SaveSearchOptions();
     void DrawDataSearchResults(IPlatform& platform);
@@ -514,7 +530,7 @@ private:
     std::vector<uint8_t> mPendingNeedle;              // texture bytes to search for
     std::string          mPendingSearchLabel;         // human label for the search
     bool                 mShowSearchResults = false;
-    std::vector<DataSearchHit> mSearchResults;
+    std::vector<DataSearchHit> mSearchResults;        // reaped from the runner, owned here
     std::string          mSearchSummary;              // "<label>: N match(es) in M file(s)"
 
     // "Search Options..." configuration (persisted): where to search and whether the
@@ -528,27 +544,15 @@ private:
     SearchOptions        mSearchOptions;
     bool                 mOpenSearchOptions = false;  // request to open the modal
 
-    // Async search worker. A PRS scan tries to decompress at every offset of every file, so
-    // it can take a while; it runs off the UI thread with live progress + cancellation.
-    std::thread          mSearchThread;
-    SearchProgress       mSearchProgress;             // worker <-> UI (atomics)
-    std::atomic<bool>    mSearchRunning{false};       // a worker is active
-    std::atomic<bool>    mSearchDone{false};          // worker finished; results ready to reap
-    std::string          mSearchScopeText;            // human description of what was searched
+    // The async search worker: its thread, progress, cancellation and the
+    // cancel-and-queue-the-next behaviour all live in DataSearchRunner.
+    DataSearchRunner     mSearchRunner;
 
-    // "Start a new search while one is running" (Visual-Studio style): instead of dropping
-    // the request, we cancel the active worker and stash the new one here; PollSearchWorker
-    // launches it as soon as the old one is reaped.
-    bool                       mSearchQueued = false;
-    std::vector<std::string>   mQueuedRoots;
-    SearchCompression          mQueuedComp = SearchCompression::None;
-    std::string                mQueuedScope;
-    // Result destination (Patch "Find in game files" vs texture results) for the running,
-    // queued, and pending-until-a-data-dir-is-set searches — so a locate never routes to the
-    // texture window (or vice-versa) when the two kinds interleave through the shared worker.
-    bool                       mSearchIsLocate = false;   // the running/just-finished search
-    bool                       mQueuedIsLocate = false;   // the queued search
-    bool                       mPendingIsLocate = false;  // the needle awaiting a data dir
+    // Which window a search's results belong to. It travels with the request through the runner
+    // (DataSearchRequest::destination), so the running and queued searches can differ without a
+    // second flag to keep in step; only the needle waiting for a data directory to be set needs
+    // one here, because no request exists for it yet.
+    int                        mPendingDestination = kSearchToTextureResults;
 
     // Per-panel visibility, toggled from the toolbar "Windows" menu. All shown by
     // default; a hidden panel simply isn't drawn (its dock tab disappears until

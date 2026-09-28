@@ -42,6 +42,16 @@ bool FromHex(const std::string& s, std::vector<uint8_t>& out)
     return true;
 }
 
+// Tabs and newlines in a label are replaced rather than refused: the label is cosmetic, and
+// losing the exact whitespace of a generated string is not worth failing an accepted match over.
+std::string SanitizeLabel(const std::string& label)
+{
+    std::string out = label;
+    for (char& c : out)
+        if (c == '\t' || c == '\r' || c == '\n') c = ' ';
+    return out;
+}
+
 // Escape a string for embedding inside a Python double-quoted literal.
 std::string PyStr(const std::string& s)
 {
@@ -58,8 +68,24 @@ std::string PyStr(const std::string& s)
 }
 }  // namespace
 
-void PatchLibrary::AddOrUpdate(const PatchLocation& loc)
+bool PatchLocationValid(const PatchLocation& loc, std::string* why)
 {
+    auto fail = [&](const char* m) { if (why) *why = m; return false; };
+    if (loc.length == 0) return fail("patch location has zero length");
+    if (loc.expected.size() != loc.length)
+        return fail("patch baseline is not the same size as the mapped range");
+    if (loc.file.empty()) return fail("patch location has no file");
+    if (loc.file.find_first_of("\t\r\n") != std::string::npos)
+        return fail("patch file path contains a tab or newline, which the project format cannot "
+                    "represent");
+    return true;
+}
+
+bool PatchLibrary::AddOrUpdate(const PatchLocation& loc_, std::string* error)
+{
+    if (!PatchLocationValid(loc_, error)) return false;
+    PatchLocation loc = loc_;
+    loc.label = SanitizeLabel(loc.label);
     for (PatchLocation& e : mEntries)
     {
         if (e.file == loc.file && e.fileOffset == loc.fileOffset)
@@ -68,11 +94,12 @@ void PatchLibrary::AddOrUpdate(const PatchLocation& loc)
             const bool same = e.label == loc.label && e.cpuAddr == loc.cpuAddr &&
                               e.length == loc.length && e.expected == loc.expected;
             if (!same) { e = loc; mDirty = true; }
-            return;
+            return true;
         }
     }
     mEntries.push_back(loc);
     mDirty = true;
+    return true;
 }
 
 void PatchLibrary::RemoveAt(size_t i)
@@ -82,7 +109,9 @@ void PatchLibrary::RemoveAt(size_t i)
     mDirty = true;
 }
 
-// Text format (tab-separated so spaces in file/label are safe; no field may contain a tab):
+// Text format (tab-separated so spaces in file/label are safe). No field may contain a tab or a
+// newline, and the baseline must be exactly <length> bytes -- rules PatchLocationValid enforces
+// on the way in, so Serialize cannot emit a line that Deserialize would re-split differently:
 //   SEPATCH 1
 //   <addrHex>\t<length>\t<offset>\t<expectedHex>\t<file>\t<label>
 std::string PatchLibrary::Serialize() const
@@ -99,13 +128,19 @@ std::string PatchLibrary::Serialize() const
     return os.str();
 }
 
-bool PatchLibrary::Deserialize(const std::string& text)
+bool PatchLibrary::Deserialize(const std::string& text, std::string* error)
 {
+    auto fail = [&](const std::string& m) { if (error) *error = m; return false; };
+
     std::vector<PatchLocation> parsed;
     std::istringstream is(text);
     std::string line;
-    if (!std::getline(is, line)) return false;
-    if (line.rfind("SEPATCH", 0) != 0) return false;   // header required
+    if (!std::getline(is, line)) return fail("project file is empty");
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    // The version is part of the header, not decoration: a future format that adds a field would
+    // otherwise be read by this parser as a record with a stray tab in its label.
+    if (line != "SEPATCH 1") return fail("not a Saturn Explorer patch project (header is \"" +
+                                         line + "\", expected \"SEPATCH 1\")");
 
     while (std::getline(is, line))
     {
@@ -122,16 +157,22 @@ bool PatchLibrary::Deserialize(const std::string& text)
             field[f] = line.substr(start, tab - start);
             start = tab + 1;
         }
-        if (f != 5) continue;            // malformed line: skip
+        if (f != 5) return fail("malformed record (expected 6 tab-separated fields): " + line);
         field[5] = line.substr(start);   // label = remainder
 
         PatchLocation e;
         e.cpuAddr = static_cast<uint32_t>(std::strtoul(field[0].c_str(), nullptr, 16));
         e.length = static_cast<uint32_t>(std::strtoul(field[1].c_str(), nullptr, 10));
         e.fileOffset = static_cast<uint64_t>(std::strtoull(field[2].c_str(), nullptr, 10));
-        if (!FromHex(field[3], e.expected)) continue;
+        if (!FromHex(field[3], e.expected)) return fail("record's baseline is not hex: " + line);
         e.file = field[4];
         e.label = field[5];
+        // The same rule the writer is held to. Chiefly this catches a baseline whose length
+        // disagrees with the record's own length field, which the script would then compare
+        // against the wrong number of bytes -- reporting a mismatch on an untouched file, or
+        // matching on a prefix and writing over more than was captured.
+        std::string why;
+        if (!PatchLocationValid(e, &why)) return fail(why + ": " + line);
         parsed.push_back(std::move(e));
     }
     mEntries = std::move(parsed);
@@ -139,13 +180,17 @@ bool PatchLibrary::Deserialize(const std::string& text)
     return true;
 }
 
-bool PatchLibrary::LoadProject(const std::string& path)
+bool PatchLibrary::LoadProject(const std::string& path, std::string* error)
 {
     std::ifstream f(path, std::ios::binary);
-    if (!f) return false;
+    if (!f)
+    {
+        if (error) *error = "cannot open " + path;
+        return false;
+    }
     std::ostringstream ss;
     ss << f.rdbuf();
-    return Deserialize(ss.str());
+    return Deserialize(ss.str(), error);
 }
 
 std::string PatchLibrary::EmitPython(

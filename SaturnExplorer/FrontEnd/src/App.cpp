@@ -282,11 +282,7 @@ void App::Initialize()
 void App::Shutdown()
 {
     // Stop and join any in-flight data search before tearing down.
-    if (mSearchThread.joinable())
-    {
-        mSearchProgress.cancel.store(true);
-        mSearchThread.join();
-    }
+    mSearchRunner.Stop();
     SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
@@ -2427,9 +2423,23 @@ void App::DrawRamSearch()
         if (mRamSearchHigh) regions.push_back({0x06000000u, kWramSize});
         return regions;
     };
+    // A match count on its own is a number the search cannot stand behind when part of the
+    // range did not read: a region a live emulator dropped, or one this savestate never carried.
+    // Say so in the same breath as the count -- and say how many of the hits are only carried
+    // over from an earlier scan rather than confirmed by this one.
     auto report = [&](std::size_t n) {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+        char buf[160];
+        const std::size_t unread = mRamSearch.UnreadRegions().size();
+        const std::size_t stale = mRamSearch.UnverifiedCount();
+        if (unread == 0)
+            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+        else if (stale == 0)
+            std::snprintf(buf, sizeof(buf), "%zu match%s (partial: %zu region%s unreadable)",
+                          n, n == 1 ? "" : "es", unread, unread == 1 ? "" : "s");
+        else
+            std::snprintf(buf, sizeof(buf),
+                          "%zu match%s (partial: %zu region%s unreadable, %zu unverified)",
+                          n, n == 1 ? "" : "es", unread, unread == 1 ? "" : "s", stale);
         mRamSearchStatus = buf;
     };
 
@@ -2454,7 +2464,27 @@ void App::DrawRamSearch()
     if (!mRamSearchStatus.empty())
     {
         ImGui::SameLine();
-        ImGui::TextUnformatted(mRamSearchStatus.c_str());
+        if (mRamSearch.LastScanPartial())
+        {
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "%s", mRamSearchStatus.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                std::string tip = "These regions could not be read on the last scan:\n";
+                for (const SearchRegion& r : mRamSearch.UnreadRegions())
+                {
+                    char line[64];
+                    std::snprintf(line, sizeof(line), "  %08X - %08X\n", r.base,
+                                  r.base + r.size - 1);
+                    tip += line;
+                }
+                tip += "Hits inside them were kept but not tested, and are marked \"?\".";
+                ImGui::SetTooltip("%s", tip.c_str());
+            }
+        }
+        else
+        {
+            ImGui::TextUnformatted(mRamSearchStatus.c_str());
+        }
     }
 
     // Results. Values are the last-scan snapshot; the table caps how many rows it draws so a
@@ -2492,6 +2522,15 @@ void App::DrawRamSearch()
                     if (sgn) ImGui::Text("%lld", (long long)h.value);
                     else     ImGui::Text("%llu  (0x%llX)", (unsigned long long)h.value,
                                          (unsigned long long)h.value);
+                    // An unverified hit's value is from an earlier scan: this pass could not
+                    // read it, so it was neither confirmed nor filtered out.
+                    if (!h.verified)
+                    {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("?");
+                        ImGui::SetItemTooltip("Not read on the last scan — this value is from "
+                                              "an earlier one and was not tested.");
+                    }
                     ImGui::TableNextColumn();
                     if (ImGui::SmallButton("Hex"))
                     { mHexEditor.GoTo(h.addr); mPanels.hexEditor = true; }
@@ -2604,7 +2643,7 @@ void App::DrawAccessLog()
             for (size_t f = 0; f < r.stack.size(); ++f)
             {
                 const CallStackFrame& fr = r.stack[f];
-                ImGui::Text("  #%zu  %s", f, mFunctionNames.NameOf(fr.functionAddress).c_str());
+                ImGui::Text("  #%zu  %s", f, FrameLabel(fr).c_str());
                 if (fr.returnAddress)
                 {
                     ImGui::SameLine();
@@ -2881,6 +2920,8 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
                 f.cpu             = cpu;
                 f.callSite        = wire[i].call_site;
                 f.functionAddress = wire[i].func;
+                f.functionKnown   = (wire[i].func != 0);   // the emulator recorded the call
+                f.currentAddress  = wire[i].func ? wire[i].func : wire[i].ret;
                 f.returnAddress   = wire[i].ret;
                 f.stackPointer    = wire[i].sp;
                 f.cycle           = wire[i].cycle;
@@ -2904,8 +2945,28 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
 // separate, opt-in action: the "View Stack Memory" / "View in Memory" context items.)
 void App::GoToFrame(const CallStackFrame& fr)
 {
-    mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress);
+    mAssemblyPanel.GoTo(fr.cpu, FrameCodeAddress(fr));
     mPanels.assembly = true;
+}
+
+// Name a frame after its function only when there is a function to name. A stack walk recovers
+// return addresses, which sit inside the caller rather than at its entry, so calling one
+// "sub_06XXXXXX" invents a function that starts mid-body -- and, worse, invites a rename that
+// files a user's label under an address that is not an entry point. Where the entry is unknown
+// the label says where the frame is instead.
+std::string App::FrameLabel(const CallStackFrame& fr) const
+{
+    if (fr.functionKnown) return mFunctionNames.NameOf(fr.functionAddress);
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "at %08X", fr.currentAddress);
+    return buf;
+}
+
+// The address to navigate to, break on, or inspect for a frame: its entry point when known,
+// otherwise the address inside it that is.
+uint32_t App::FrameCodeAddress(const CallStackFrame& fr)
+{
+    return fr.functionKnown ? fr.functionAddress : fr.currentAddress;
 }
 
 // Call Stack — the per-CPU call chain that led to the halted instruction (see
@@ -3066,7 +3127,7 @@ void App::DrawCallStack(IPlatform& platform)
 
             ImGui::TableNextColumn();
             // Selectable spanning the name cell drives select + double-click navigate.
-            const std::string name = mFunctionNames.NameOf(fr.functionAddress);
+            const std::string name = FrameLabel(fr);
             const bool isSel = (i == selected);
             // Route the row flags through the shared helper (the panel-interaction tests pin
             // this); the row has no interactive cells to its right, so no AllowOverlap, but it
@@ -3082,14 +3143,16 @@ void App::DrawCallStack(IPlatform& platform)
                 mCallStack.Select(mCallStackCpu, i);
                 if (ImGui::MenuItem("Go to Call Site", nullptr, false, fr.callSite != 0))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.callSite); mPanels.assembly = true; }
-                if (ImGui::MenuItem("Go to Function"))
+                // Disabled, not silently redirected, when the entry point is unknown: "Go to
+                // Return Address" below is the honest version of that navigation.
+                if (ImGui::MenuItem("Go to Function", nullptr, false, fr.functionKnown))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress); mPanels.assembly = true; }
                 if (ImGui::MenuItem("Go to Return Address"))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.returnAddress); mPanels.assembly = true; }
                 // The "Go to ..." items drive the Assembly panel (code); the "View ..." items
                 // drive the Memory panel: this frame's code bytes, and its stack image.
                 if (ImGui::MenuItem("View in Memory"))
-                { mHexEditor.GoTo(fr.functionAddress); mPanels.hexEditor = true; }
+                { mHexEditor.GoTo(FrameCodeAddress(fr)); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("View Stack Memory"))
                 { mHexEditor.GoTo(fr.stackPointer); mPanels.hexEditor = true; }
                 if (ImGui::MenuItem("Add Address to Watch"))
@@ -3099,8 +3162,11 @@ void App::DrawCallStack(IPlatform& platform)
                 // Execution BPs are shared across both SH-2s, so the frame's own cpu plays
                 // no part in where this lands — it would only ever collide by address.
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
-                { mBreakpoints.ToggleExecution(fr.functionAddress); }
-                if (ImGui::MenuItem("Rename Function..."))
+                { mBreakpoints.ToggleExecution(FrameCodeAddress(fr)); }
+                // A rename is stored against an address, so offering it for a frame whose
+                // entry point is unknown would file the name under a mid-function address and
+                // then show it for every other frame that returns near there.
+                if (ImGui::MenuItem("Rename Function...", nullptr, false, fr.functionKnown))
                 {
                     mRenameAddr = fr.functionAddress;
                     std::snprintf(mRenameBuf, sizeof(mRenameBuf), "%s",
@@ -3117,7 +3183,7 @@ void App::DrawCallStack(IPlatform& platform)
                     {
                         const CallStackFrame& g = frames[k];
                         std::snprintf(ln, sizeof(ln), "#%d  %-24s ret=%08X sp=%08X\n", k,
-                                      mFunctionNames.NameOf(g.functionAddress).c_str(),
+                                      FrameLabel(g).c_str(),
                                       g.returnAddress, g.stackPointer);
                         dump += ln;
                     }
@@ -3156,13 +3222,17 @@ void App::DrawCallStack(IPlatform& platform)
         {
             const CallStackFrame& fr = frames[sel];
             ImGui::SeparatorText("Frame Detail");
-            ImGui::Text("#%d  %s", sel, mFunctionNames.NameOf(fr.functionAddress).c_str());
-            // "Func", not "PC": this field is the frame's function *entry point*. Only a
-            // heuristic frame #0 happens to carry the live PC there (the reconstructor has
-            // no way to find the enclosing function, so it uses PC as a stand-in); a
-            // recorded frame carries the real entry, and a caller frame its return target.
-            ImGui::Text("Func %08X   Return %08X   SP %08X", fr.functionAddress,
-                        fr.returnAddress, fr.stackPointer);
+            ImGui::Text("#%d  %s", sel, FrameLabel(fr).c_str());
+            // "Func" is the function's *entry point*, and it is blank when nothing recovered
+            // one: a shadow-stack frame records it and a bsr call site encodes it, but a jsr
+            // through a register does not, and neither does a bare stack walk. "At" is the
+            // address the frame really is at -- the halted PC, or a caller's return address.
+            if (fr.functionKnown)
+                ImGui::Text("Func %08X   At %08X   Return %08X   SP %08X", fr.functionAddress,
+                            fr.currentAddress, fr.returnAddress, fr.stackPointer);
+            else
+                ImGui::Text("Func unknown   At %08X   Return %08X   SP %08X", fr.currentAddress,
+                            fr.returnAddress, fr.stackPointer);
             if (fr.callSite) ImGui::Text("Call site %08X", fr.callSite);
             if (fr.confidence == FrameConfidence::Confirmed && (fr.cycle || fr.frameNumber))
                 ImGui::TextDisabled("recorded: cycle %llu, frame %u",
@@ -4174,7 +4244,7 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
     }
     mPendingNeedle = std::move(needle);
     mPendingSearchLabel = label;
-    mPendingIsLocate = false;          // a texture/data search -> the texture-results window
+    mPendingDestination = kSearchToTextureResults;
     if (mDataDir.empty())
     {
         mSearchAfterSetDir = true;     // run once the user picks a directory
@@ -4187,143 +4257,106 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
 }
 
 // The quick "Find in game data directory" path (also used by the Hex/Assembly byte
-// searches): search the whole data directory for the raw bytes. mPendingIsLocate carries the
-// result destination through the deferred (no-data-dir-yet) case.
+// searches): search the whole data directory for the raw bytes. mPendingDestination carries the
+// result destination through the deferred (no-data-dir-yet) case, where there is no request yet
+// to carry it.
 void App::RunPendingSearch()
 {
-    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory", mPendingIsLocate);
+    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory",
+                 mPendingDestination);
 }
 
 // Spawn the search on a worker thread and show the results window (which displays live
 // progress while it runs). Roots are files and/or directories; empty entries are dropped.
 void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
-                       const std::string& scopeText, bool locate)
+                       const std::string& scopeText, int destination)
 {
     roots.erase(std::remove_if(roots.begin(), roots.end(),
                                [](const std::string& s) { return s.empty(); }),
                 roots.end());
 
-    if (mSearchRunning.load())
-    {
-        // A search is already running: cancel it and queue this one. PollSearchWorker starts
-        // the queued search the moment the old worker is reaped, so nothing is silently lost.
-        mQueuedRoots = std::move(roots);
-        mQueuedComp = comp;
-        mQueuedScope = scopeText;
-        mQueuedIsLocate = locate;
-        mSearchQueued = true;
-        mSearchProgress.cancel.store(true);
-        mShowSearchResults = true;   // keep the results window up so the swap is visible
-        return;
-    }
-    mSearchIsLocate = locate;   // destination of the search we're about to start
-
+    // Nothing to search for, or nowhere to search: that is a message, not a worker. The runner
+    // would happily start it and report zero hits, which reads as "not found" rather than
+    // "you have not told me where to look". The message goes to the window that asked.
     if (mPendingNeedle.empty() || roots.empty())
     {
-        mSearchResults.clear();
-        mSearchSummary = mPendingNeedle.empty() ? "Nothing to search for."
+        const char* why = mPendingNeedle.empty() ? "Nothing to search for."
                                                 : "No search location set.";
+#ifdef SE_ENABLE_LIVE
+        if (destination == kSearchToLocateResults)
+        {
+            mLocateResults.clear();
+            mLocateRel.clear();
+            mLocateRowAdded.clear();
+            mLocateSummary = why;
+            mShowLocateResults = true;
+            return;
+        }
+#endif
+        mSearchResults.clear();
+        mSearchSummary = why;
         mShowSearchResults = true;
         return;
     }
 
-    if (mSearchThread.joinable())
+    DataSearchRequest request;
+    request.roots = std::move(roots);
+    request.needle = mPendingNeedle;
+    request.compression = comp;
+    request.label = mPendingSearchLabel;
+    request.scopeText = scopeText;
+    request.destination = destination;
+
+    // Raise the destination's window now, so a search started while another runs shows its
+    // progress rather than appearing to do nothing.
+#ifdef SE_ENABLE_LIVE
+    if (destination == kSearchToLocateResults)
     {
-        mSearchThread.join();   // reap a previous (finished) run
+        mShowLocateResults = true;
     }
-    mSearchResults.clear();
-    mSearchProgress.Reset();
-    mSearchScopeText = scopeText;
-    mShowSearchResults = true;
-    mSearchDone.store(false);
-    mSearchRunning.store(true);
-
-    std::vector<uint8_t> needle = mPendingNeedle;   // capture by value for the worker
-    std::string          label = mPendingSearchLabel;
-
-    auto doWork =
-        [this, roots = std::move(roots), needle = std::move(needle), comp, label]() mutable {
-            std::vector<DataSearchHit> results;
-            const size_t files = SearchData(roots, needle.data(), needle.size(), comp, results,
-                                            256, &mSearchProgress);
-            size_t total = 0;
-            for (const DataSearchHit& h : results) total += h.offsets.size();
-
-            const bool   cancelled = mSearchProgress.cancel.load();
-            const size_t skipped = mSearchProgress.filesSkipped.load();
-
-            char sum[384];
-            std::snprintf(sum, sizeof(sum),
-                          "%s%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in %s%s.%s",
-                          cancelled ? "[Cancelled] " : "", label.c_str(), total, results.size(),
-                          files, files == 1 ? "" : "s", mSearchScopeText.c_str(),
-                          comp == SearchCompression::Prs ? " as PRS-compressed" : "",
-                          skipped ? "\nSome files were skipped (too large for a PRS scan)." : "");
-
-            mSearchResults = std::move(results);
-            mSearchSummary = sum;
-            mSearchDone.store(true);   // reaped on the UI thread in PollSearchWorker()
-        };
-
-#ifdef __EMSCRIPTEN__
-    // The browser build has no host filesystem (the search finds nothing) and the base
-    // viewer isn't compiled with pthreads, so never start a std::thread there — run inline.
-    doWork();
-    mSearchRunning.store(false);
-    mSearchDone.store(false);
-#else
-    mSearchThread = std::thread(std::move(doWork));
+    else
 #endif
+    {
+        mShowSearchResults = true;
+    }
+    mSearchRunner.Start(std::move(request));
 }
 
-// Reap a finished worker on the UI thread. join() (after mSearchDone) makes all of the
-// worker's writes to mSearchResults / mSearchSummary visible before we display them.
+// Take a finished search's results from the runner and route them to the window that asked.
+// Called once per frame before anything draws them.
 void App::PollSearchWorker()
 {
-    if (mSearchRunning.load() && mSearchDone.load())
+    DataSearchOutcome outcome;
+    if (!mSearchRunner.Poll(outcome))
     {
-        if (mSearchThread.joinable())
-        {
-            mSearchThread.join();
-        }
-        mSearchRunning.store(false);
-        mSearchDone.store(false);
+        return;
+    }
 
 #ifdef SE_ENABLE_LIVE
-        // A patch-locate search: hand its hits to the locate-results window (accept/reject)
-        // rather than the texture-results window. Precompute the relative path per result file
-        // and the accepted-row flags once, so the per-frame draw doesn't recompute them.
-        if (mSearchIsLocate)
+    // A patch-locate search: its hits go to the locate-results window (accept/reject) rather
+    // than the texture-results window. Precompute the relative path per result file and the
+    // accepted-row flags once, so the per-frame draw doesn't recompute them.
+    if (outcome.destination == kSearchToLocateResults)
+    {
+        mLocateResults = std::move(outcome.hits);
+        mLocateSummary = std::move(outcome.summary);
+        mLocateRel.clear();
+        size_t rows = 0;
+        for (const DataSearchHit& h : mLocateResults)
         {
-            mLocateResults = std::move(mSearchResults);
-            mSearchResults.clear();
-            mLocateSummary = mSearchSummary;
-            mLocateRel.clear();
-            size_t rows = 0;
-            for (const DataSearchHit& h : mLocateResults)
-            {
-                mLocateRel.push_back(RelativeToDataDir(h.path));
-                rows += h.offsets.size();
-            }
-            mLocateRowAdded.assign(rows, 0);
-            mShowLocateResults = true;
-            mShowSearchResults = false;
+            mLocateRel.push_back(RelativeToDataDir(h.path));
+            rows += h.offsets.size();
         }
-#endif
-
-        // If the user asked for another search while this one ran, start it now (the old
-        // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run). The
-        // queued search carries its own result destination.
-        if (mSearchQueued)
-        {
-            mSearchQueued = false;
-            LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope, mQueuedIsLocate);
-        }
+        mLocateRowAdded.assign(rows, 0);
+        mShowLocateResults = true;
+        mShowSearchResults = false;
+        return;
     }
+#endif
+    mSearchResults = std::move(outcome.hits);
+    mSearchSummary = std::move(outcome.summary);
 }
 
-// The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar
-// path, or automatically when a search is requested with no directory set.
 #ifdef SE_ENABLE_LIVE
 // ===========================================================================================
 // Patch feature — locate memory edits in the game files (content search), curate a library of
@@ -4407,7 +4440,7 @@ void App::BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32
 
     mPendingNeedle = std::move(needleRes.bytes);
     mPendingSearchLabel = mLocateLabel;
-    mPendingIsLocate = true;         // route results to the locate window (survives a deferred dir)
+    mPendingDestination = kSearchToLocateResults;   // survives a deferred data-directory prompt
     mShowLocateResults = true;
     mLocateResults.clear();
     mLocateRel.clear();
@@ -4431,12 +4464,12 @@ void App::DrawLocateResults()
     ImGui::SetNextWindowSize(ImVec2(640, 380), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Find in Game Files - Results", &mShowLocateResults))
     {
-        if (mSearchIsLocate && mSearchRunning.load())
+        if (mSearchRunner.Running())
         {
-            const size_t done = mSearchProgress.filesScanned.load();
-            const size_t total = mSearchProgress.filesTotal.load();
+            const size_t done = mSearchRunner.Progress().filesScanned.load();
+            const size_t total = mSearchRunner.Progress().filesTotal.load();
             ImGui::Text("Searching the game data files... (%zu / %zu files)", done, total);
-            if (ImGui::Button("Cancel")) mSearchProgress.cancel.store(true);
+            if (ImGui::Button("Cancel")) mSearchRunner.Cancel();
             ImGui::End();
             return;
         }
@@ -4493,7 +4526,15 @@ void App::AcceptLocateMatch(const std::string& rel, uint64_t selOffset)
     loc.file = rel;
     loc.fileOffset = selOffset;
     loc.expected = mLocateExpected;
-    mPatchLib.AddOrUpdate(loc);
+    // Refused only for a location that could not be patched or saved anyway -- a path holding a
+    // field separator, or a baseline that is not the mapped length. Silently dropping it would
+    // leave the user believing the match was accepted.
+    std::string why;
+    if (!mPatchLib.AddOrUpdate(loc, &why))
+    {
+        mPatchResultText = "Couldn't record that location: " + why;
+        mShowPatchResults = true;
+    }
 }
 
 void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
@@ -4674,14 +4715,18 @@ void App::DoOpenProject(IPlatform& platform)
     if (!platform.OpenFileDialogFiltered(path, "Saturn Explorer project", "seproj") &&
         !platform.OpenFileDialog(path))
         return;   // cancelled
-    if (mPatchLib.LoadProject(path))
+    std::string why;
+    if (mPatchLib.LoadProject(path, &why))
     {
         mPatchResultText = "Loaded " + std::to_string(mPatchLib.Count()) +
                            " location(s) from the project.";
     }
     else
     {
-        mPatchResultText = "Couldn't open that project file.";
+        // Say which record or header the parse stopped on: "couldn't open that project file" for
+        // a file that is one bad line away from loading sends the user looking in the wrong place.
+        mPatchResultText = why.empty() ? "Couldn't open that project file."
+                                       : "Couldn't open that project: " + why;
     }
     mShowPatchResults = true;
 }
@@ -4907,6 +4952,8 @@ void App::BuildDisc(IPlatform& platform, bool launch)
 }
 #endif  // SE_ENABLE_LIVE
 
+// The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar path, or
+// automatically when a search is requested with no directory set.
 void App::DrawDataDirModal(IPlatform& platform)
 {
     static char buf[1024] = {};
@@ -5102,11 +5149,9 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
 // a clickable link that reveals it in the OS file manager (Explorer/Finder/etc.).
 void App::DrawDataSearchResults(IPlatform& platform)
 {
-#ifdef SE_ENABLE_LIVE
-    // A patch-locate search borrows this same worker but shows its own results window (with
-    // accept/reject), so suppress the texture-results window while a locate is active.
-    if (mSearchIsLocate) return;
-#endif
+    // No guard for a locate search here: LaunchSearch raises the window its destination names,
+    // so a locate never turns this one on in the first place. It used to raise this window for
+    // every search and then suppress it from here when a locate was running.
     if (!mShowSearchResults)
     {
         return;
@@ -5114,29 +5159,30 @@ void App::DrawDataSearchResults(IPlatform& platform)
     ImGui::SetNextWindowSize(ImVec2(620, 320), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Data Search Results", &mShowSearchResults))
     {
-        // While the worker runs, show live progress + a Cancel button. mSearchResults /
-        // mSearchSummary belong to the worker until it is reaped, so don't read them here.
-        if (mSearchRunning.load())
+        // While the worker runs, show live progress + a Cancel button. The results themselves
+        // only exist here once the runner has handed them over, so there is nothing to read early.
+        if (mSearchRunner.Running())
         {
-            const size_t done = mSearchProgress.filesScanned.load();
-            const size_t total = mSearchProgress.filesTotal.load();
-            ImGui::Text("Searching %s%s\xe2\x80\xa6", mSearchScopeText.c_str(),
-                        mSearchProgress.filesSkipped.load() ? " (some large files skipped)" : "");
+            const SearchProgress& progress = mSearchRunner.Progress();
+            const size_t done = progress.filesScanned.load();
+            const size_t total = progress.filesTotal.load();
+            ImGui::Text("Searching %s%s\xe2\x80\xa6", mSearchRunner.ScopeText().c_str(),
+                        progress.filesSkipped.load() ? " (some large files skipped)" : "");
             const float frac = total ? static_cast<float>(done) / static_cast<float>(total) : 0.0f;
             char ov[64];
             std::snprintf(ov, sizeof(ov), "%zu / %zu files", done, total);
             ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0), ov);
 
-            const uint64_t curSz = mSearchProgress.curFileSize.load();
+            const uint64_t curSz = progress.curFileSize.load();
             if (curSz)   // within-file position, meaningful for a PRS scan of a big file
             {
-                const uint64_t off = mSearchProgress.curOffset.load();
+                const uint64_t off = progress.curOffset.load();
                 ImGui::ProgressBar(curSz ? static_cast<float>(off) / static_cast<float>(curSz) : 0.0f,
                                    ImVec2(-FLT_MIN, 0), "current file");
             }
             if (ImGui::Button("Cancel"))
             {
-                mSearchProgress.cancel.store(true);
+                mSearchRunner.Cancel();
             }
             ImGui::End();
             return;
@@ -8019,6 +8065,14 @@ void App::ExportSound(IPlatform& platform, int slot)
     char name[32];
     std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
     platform.SaveFile(name, wav.data(), wav.size());
+    // The .wav itself cannot carry the caveat, and the tooltip is gone by the time the file is
+    // in a folder, so the log keeps the record of what was exported.
+    char note[224];
+    std::snprintf(note, sizeof(note),
+                  "Exported voice %d as %s: %d frames at %u Hz. Sound RAM read as PCM; envelope "
+                  "and effects not applied, and not bit-accurate for a noise/zero or SBCTL voice.",
+                  slot, name, frames, rate);
+    mLog.Info(note);
 }
 
 // Decode a voice's sample and preview it through the platform's audio output (at its natural
@@ -8119,6 +8173,17 @@ void App::PlaySoundFrame(IPlatform& platform)
         mLog.Warn("Play Frame: the audio device rejected the mix.");
 }
 
+// What a voice preview or export actually is. Shown on the panel and on both buttons, because
+// "Export .wav" reads as "here is the sound", and for an effect voice it is not (MEDIA-01).
+static const char* const kScspPreviewCaveat =
+    "Reads the voice's bytes from sound RAM as PCM at its current pitch, with the envelope and\n"
+    "the DSP effect path not applied. That is the sample as stored, which is what tone and music\n"
+    "playback uses.\n\n"
+    "It is not bit-accurate for a voice whose source is the noise generator or zero (SSCTL), or\n"
+    "one played through sample-bit inversion (SBCTL) -- for those the hardware does not read\n"
+    "sound RAM the way this does. Both are rare and effect-only, and the slot state the emulator\n"
+    "sends does not include those two fields, so this cannot tell you which voices they are.";
+
 void App::DrawSound(IPlatform& platform)
 {
     if (!ImGui::Begin("Sound (SCSP)"))
@@ -8166,6 +8231,13 @@ void App::DrawSound(IPlatform& platform)
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(each voice is a mono channel; stereo comes from pan)");
+    // Say what the preview is, where the buttons that produce it are. The decode reads the
+    // voice's bytes out of sound RAM as PCM, which is right for tone and music playback and is
+    // not what the hardware does for a voice whose source is the noise generator or zero, or one
+    // playing through SBCTL's sign mangling -- and nothing in the slot state the emulator sends
+    // says which those are, so this cannot flag the individual rows. See MEDIA-01.
+    ImGui::TextDisabled("(i)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", kScspPreviewCaveat);
     ImGui::Separator();
 
     static const char* kPhase[] = { "ATK", "DEC1", "DEC2", "REL" };
@@ -8240,14 +8312,14 @@ void App::DrawSound(IPlatform& platform)
             if (ImGui::SmallButton("Play")) PlaySound(platform, i);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(platform.HasAudio() ? "Preview this voice's sample"
+                ImGui::SetTooltip(platform.HasAudio() ? kScspPreviewCaveat
                                                       : "Audio output not available in this build");
             ImGui::SameLine();
             ImGui::BeginDisabled(!hasSample);
             if (ImGui::SmallButton("Export")) ExportSound(platform, i);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered() && hasSample)
-                ImGui::SetTooltip("Save this voice's sample as a .wav");
+                ImGui::SetTooltip("Save this voice's sample as a .wav.\n\n%s", kScspPreviewCaveat);
             ImGui::PopID();
         }
         ImGui::EndTable();

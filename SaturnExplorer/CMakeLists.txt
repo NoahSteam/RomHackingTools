@@ -68,6 +68,53 @@ target_include_directories(SaturnExplorerDriverCommon
            ${CMAKE_CURRENT_SOURCE_DIR}/include   # se_sh2_regs (SaturnStateShared.h)
 )
 
+# What the savestate parsers do with a container whose shape is not what the format declares,
+# and with one that holds only part of the machine. Synthesizes the .yss and MDFNSVST containers
+# so the tests reach the code a user's file goes through.
+if(BUILD_TESTING)
+    add_executable(SaturnExplorerSavestateShapeTests
+        Drivers/Savestate/tests/SavestateShapeTests.cpp)
+    target_link_libraries(SaturnExplorerSavestateShapeTests
+        PRIVATE SaturnExplorerSavestateDriver)
+    add_test(NAME SaturnExplorerSavestateShapeTests
+             COMMAND SaturnExplorerSavestateShapeTests)
+
+    # And the same parser against real Yabause states, so the structural validation is checked
+    # against files that exist rather than only against synthesized ones. Skips itself when the
+    # game data is not in the checkout.
+    add_executable(SaturnExplorerYssFixtureTests
+        Drivers/Savestate/tests/YssFixtureTests.cpp)
+    target_link_libraries(SaturnExplorerYssFixtureTests
+        PRIVATE SaturnExplorerSavestateDriver)
+    target_compile_definitions(SaturnExplorerYssFixtureTests PRIVATE
+        SE_YSS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../SakuraTaisen2/Data/SaveFiles/SaveStates/Yabause/OhrimeMiniGame")
+    add_test(NAME SaturnExplorerYssFixtureTests
+             COMMAND SaturnExplorerYssFixtureTests)
+endif()
+
+# Does the Windows live tap's shutdown actually end its server thread (HOOK-01)? The threads it
+# has to join are parked in synchronous named-pipe calls, so this needs the real Win32 pipe
+# implementation -- it is built on Windows, and cross-compiles to run under wine from a Linux
+# checkout (the command is in the test's header comment).
+if(BUILD_TESTING AND WIN32)
+    add_executable(SaturnExplorerExportShutdownTests
+        Integration/Common/tests/SeExportShutdownTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportShutdownTests
+        PRIVATE Integration/Common ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerExportShutdownTests
+             COMMAND SaturnExplorerExportShutdownTests)
+endif()
+
+# The shared normalization helpers: what they do with input that is not the shape the
+# savestate/live formats promised. Portable, no emulator and no socket needed.
+if(BUILD_TESTING)
+    add_executable(SaturnExplorerStateSharedTests
+        Drivers/Common/tests/StateSharedTests.cpp)
+    target_link_libraries(SaturnExplorerStateSharedTests PRIVATE SaturnExplorerDriverCommon)
+    add_test(NAME SaturnExplorerStateSharedTests COMMAND SaturnExplorerStateSharedTests)
+endif()
+
 # ---------------------------------------------------------------------------
 # Savestate / memory-dump driver — portable static library (Seam A reference).
 # ---------------------------------------------------------------------------
@@ -116,6 +163,31 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerVdp2Tests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerVdp2Tests COMMAND SaturnExplorerVdp2Tests)
 
+    # CRAM index wrapping: exact on the hardware sizes, and still correct on a partially
+    # captured CRAM, where power-of-two masking is not modulo.
+    add_executable(SaturnExplorerCramWrapTests
+        Core/tests/CramWrapTests.cpp
+    )
+    target_link_libraries(SaturnExplorerCramWrapTests PRIVATE SaturnExplorerCore)
+    # Core/src is PRIVATE to the Core library on purpose — the other Core tests go through the
+    # public ABI. This one asserts on a decode helper the ABI has no direct route to, so it
+    # needs the internal header; the include stays on this target rather than widening Core's.
+    # (Which is also why the snapshot-validity tests that were once here live in
+    # Vdp2CompositorTests: they are ABI-level, and belong on the target that has no such reach.)
+    target_include_directories(SaturnExplorerCramWrapTests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/src)
+    add_test(NAME SaturnExplorerCramWrapTests COMMAND SaturnExplorerCramWrapTests)
+
+    # Seam B's no-throw contract, exercised by replacing operator new so the core's
+    # allocations fail while the harness's own still work.
+    add_executable(SaturnExplorerAbiNoThrowTests
+        Core/tests/AbiNoThrowTests.cpp
+    )
+    target_link_libraries(SaturnExplorerAbiNoThrowTests PRIVATE SaturnExplorerCore)
+    target_include_directories(SaturnExplorerAbiNoThrowTests
+        PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Core/tests)
+    add_test(NAME SaturnExplorerAbiNoThrowTests COMMAND SaturnExplorerAbiNoThrowTests)
+
     # 3D View orientation — the exploded world view checked against the 2D composite.
     add_executable(SaturnExplorerGeometry3DTests
         Core/tests/Geometry3DTests.cpp
@@ -130,6 +202,7 @@ if(BUILD_TESTING)
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
     )
     target_include_directories(SaturnExplorerTopBarTests
@@ -154,6 +227,30 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerMemorySearchTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
+
+    # The PRS search's bounds (ROM-04): the candidate filter must not drop a real match, and the
+    # per-file work budget must report a scan it cut short.
+    # The search worker's lifecycle, which had no test while it was nine members of App:
+    # one worker at a time, cancel-and-queue, result routing, and a clean shutdown.
+    add_executable(SaturnExplorerDataSearchRunnerTests
+        FrontEnd/tests/DataSearchRunnerTests.cpp
+        FrontEnd/src/DataSearchRunner.cpp
+        FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp       # DataSearch's PRS path, which these tests use to be slow
+    )
+    target_include_directories(SaturnExplorerDataSearchRunnerTests PRIVATE FrontEnd/src)
+    find_package(Threads REQUIRED)   # the runner owns a std::thread
+    target_link_libraries(SaturnExplorerDataSearchRunnerTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerDataSearchRunnerTests
+             COMMAND SaturnExplorerDataSearchRunnerTests)
+
+    add_executable(SaturnExplorerPrsSearchTests
+        FrontEnd/tests/PrsSearchTests.cpp
+        FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp
+    )
+    target_include_directories(SaturnExplorerPrsSearchTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerPrsSearchTests COMMAND SaturnExplorerPrsSearchTests)
 
     # The data-search directory walk: symlink cycles and the depth cap. Creates real
     # symlinks, so POSIX only -- the Windows walk uses the reparse-point attribute and
@@ -200,6 +297,17 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerFunctionNamesTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerFunctionNamesTests COMMAND SaturnExplorerFunctionNamesTests)
+
+    # What the heuristic call-stack reconstruction claims to know: a bsr encodes the callee's
+    # entry point, a jsr through a register does not, and a return address is not one.
+    add_executable(SaturnExplorerCallStackHeuristicTests
+        FrontEnd/tests/CallStackHeuristicTests.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+    )
+    target_include_directories(SaturnExplorerCallStackHeuristicTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerCallStackHeuristicTests
+             COMMAND SaturnExplorerCallStackHeuristicTests)
 
     add_executable(SaturnExplorerM68kDisasmTests
         FrontEnd/tests/M68kDisasmTests.cpp
@@ -497,6 +605,7 @@ if(WIN32)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
@@ -580,6 +689,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
@@ -680,6 +790,7 @@ else()
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
             FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
             FrontEnd/src/Prs.cpp
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp

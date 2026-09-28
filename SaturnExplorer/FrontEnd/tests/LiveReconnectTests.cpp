@@ -10,6 +10,7 @@
 // Poke budget: the poll thread ships one queued memory write per cycle, so a producer that
 // outruns it must be refused rather than growing the queue without limit.
 #include "LiveDriver.h"
+#include "SeLiveProtocol.h"   // descriptor lengths + the per-verb protocol maxima
 #include "saturnexplorer/SeHost.h"
 
 #include <atomic>
@@ -105,18 +106,46 @@ bool WaitFor(Fn predicate, int budgetMs = 5000)
     return predicate();
 }
 
-void TestGenerationCountsEveryAttach()
+// Start a listener and attach the live driver to it, closing both however the test leaves.
+//
+// Four tests opened with the same twelve lines of preamble and had to remember two teardown calls
+// on every exit path -- including the early return when the bind fails, which is the path a test
+// author forgets. Ok() is false when the listener could not bind, and the test says so once.
+class LiveFixture
 {
-    HangUpServer server;
-    if (!server.Start())
+public:
+    LiveFixture()
     {
-        CHECK(false && "could not bind a loopback listener");
-        return;
+        if (!mServer.Start()) return;
+        const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(mServer.Port());
+        mOpened = (se_live_open(endpoint.c_str(), &mSource) == SE_OK);
     }
 
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    ~LiveFixture()
+    {
+        if (mOpened && mSource.close) mSource.close(mSource.user);
+        mServer.Stop();
+    }
+
+    LiveFixture(const LiveFixture&) = delete;
+    LiveFixture& operator=(const LiveFixture&) = delete;
+
+    bool             Ok() const { return mOpened; }
+    se_data_source&  Source()   { return mSource; }
+    HangUpServer&    Server()   { return mServer; }
+
+private:
+    HangUpServer    mServer;
+    se_data_source  mSource = {};
+    bool            mOpened = false;
+};
+
+void TestGenerationCountsEveryAttach()
+{
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
 
     // First attach reports 1, not 0 -- a client must be able to tell "connected once" from
     // "never connected", because only the latter means there is nothing to drop.
@@ -128,10 +157,8 @@ void TestGenerationCountsEveryAttach()
     // climbing. This is the case the whole mechanism exists for.
     CHECK(WaitFor([&] { return se_live_connection_generation(&ds) > first; }));
     CHECK(se_live_connection_generation(&ds) > first);
-    CHECK(server.Accepted() >= 2);
+    CHECK(live.Server().Accepted() >= 2);
 
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
 }
 
 void TestGenerationIsZeroForANonLiveSource()
@@ -147,15 +174,10 @@ void TestGenerationIsZeroForANonLiveSource()
 // producer-outruns-consumer case, with the consumer stopped dead.
 void TestPokeQueueAppliesBackpressure()
 {
-    HangUpServer server;
-    if (!server.Start())
-    {
-        CHECK(false && "could not bind a loopback listener");
-        return;
-    }
-    const std::string endpoint = "tcp:127.0.0.1:" + std::to_string(server.Port());
-    se_data_source ds = {};
-    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
     CHECK(ds.write_main_ram != nullptr);
 
     const std::vector<uint8_t> chunk(64u * 1024u, 0x5A);
@@ -179,8 +201,64 @@ void TestPokeQueueAppliesBackpressure()
         CHECK(ds.write_sound_ram(ds.user, 0, chunk.data(), chunk.size()) == chunk.size());
     }
 
-    if (ds.close) ds.close(ds.user);
-    server.Stop();
+}
+
+// The breakpoint/tracepoint entry points take a (pointer, count) pair straight across the C
+// ABI, so neither part can be assumed: a null pointer with a nonzero count is undefined to
+// build a range from, a count near UINT32_MAX overflows the size computation on a 32-bit
+// size_t, and the allocation is otherwise sized by whatever the caller passed. None of these
+// may crash, and a rejected call must leave the previously installed set alone.
+void TestBreakpointApiRejectsBadPairs()
+{
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
+
+    // A well-formed install first, so there is a set to protect.
+    std::vector<uint8_t> good(4u * SE_LIVE_BKPT_DESC_LEN, 0x11);
+    se_live_set_breakpoints(&ds, good.data(), 4);
+
+    // Null with a nonzero count, and a count past the protocol maximum: both refused without
+    // reading the pointer or sizing anything from the count.
+    se_live_set_breakpoints(&ds, nullptr, 8);
+    se_live_set_breakpoints(&ds, good.data(), SE_LIVE_MAX_BKPT_DESCS + 1);
+    se_live_set_breakpoints(&ds, good.data(), 0xFFFFFFFFu);
+    se_live_set_tracepoints(&ds, nullptr, 8);
+    se_live_set_tracepoints(&ds, good.data(), SE_LIVE_MAX_TRACE_DESCS + 1);
+    se_live_set_tracepoints(&ds, good.data(), 0xFFFFFFFFu);
+
+    // Zero descriptors with a null pointer is the legitimate "clear everything" call, not a
+    // malformed pair -- it must still be accepted.
+    se_live_set_breakpoints(&ds, nullptr, 0);
+    se_live_set_tracepoints(&ds, nullptr, 0);
+
+    // Still alive and still usable: the driver did not crash, and a later well-formed install
+    // is still accepted.
+    se_live_set_breakpoints(&ds, good.data(), 2);
+    CHECK(se_live_connection_generation(&ds) >= 0u);
+
+}
+
+// LST to a server that does not know the verb desyncs the connection: the server ignores the
+// verb and never consumes the attached payload, so its next reply is read from the middle of
+// our bytes. The hang-up server never completes an exchange, so the negotiated version stays 0
+// -- unknown, which must count as too old. The ABI entry point has to refuse on its own, because
+// the UI's guard is not the only route to it.
+void TestLoadStateRefusedWithoutANegotiatedVersion()
+{
+    LiveFixture live;
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
+    CHECK(se_live_connection_generation(&ds) >= 0u);
+    CHECK(ds.load_state != nullptr);
+
+    const std::vector<uint8_t> state(1024, 0x7E);
+    CHECK(ds.load_state(ds.user, 1234, state.data(), state.size(), nullptr, 0) != 0);
+
+    // Still usable afterwards -- a refusal is not a broken source.
+    CHECK(ds.write_main_ram != nullptr);
 }
 
 }  // namespace
@@ -190,6 +268,8 @@ int main()
     TestGenerationCountsEveryAttach();
     TestGenerationIsZeroForANonLiveSource();
     TestPokeQueueAppliesBackpressure();
+    TestBreakpointApiRejectsBadPairs();
+    TestLoadStateRefusedWithoutANegotiatedVersion();
     if (gFailures)
     {
         std::printf("LiveReconnectTests: %d check(s) failed\n", gFailures);

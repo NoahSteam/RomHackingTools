@@ -33,6 +33,30 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | REW-04 | `91c3925` — bounded in bytes; drops oldest, not by dependency group |
 | LIVE-03 | `91c3925` — bounded; writes are not coalesced |
 | CPU-01 | `1229b76` (+ #51) — settled as shared, not per-CPU |
+| OFF-02 | `a4f8086` |
+| OFF-03 | `a4f8086`, redone at the real site in `3b888e7` |
+| SNAP-01 | `6c8a46e` |
+| SNAP-02 | `6c8a46e`, parsers in `3b888e7`, last two openers in `2d0b06f` |
+| VDP2-02 | `6c8a46e` |
+| LIVE-01 | `8909094` — payload verbs gated; capabilities still advertised up front |
+| LIVE-02 | `8909094` |
+| HOOK-02 | `8909094` |
+| HOOK-03 | `8909094` |
+| ABI-02 | `571a078` (core), `2d0b06f` (drivers) |
+| ABI-03 | `571a078` — removed at ABI 6, not implemented |
+| OFF-01 | `abc285b` |
+| CPU-03 | `0f536f9` |
+| MEM-02 | `1f1997d` |
+| MEM-03 | `1f1997d` |
+| DISC-02 | `c45376a` |
+| ROM-05 | `a5e76d1` |
+| ROM-04 | `800099a` |
+| MEDIA-01 | `1355a75` — labelled; SSCTL/SBCTL are not carried, so it cannot refuse those voices |
+| VDP1-03 | `859c9ac` |
+| HOOK-01 | `7ee20e7` |
+| UI-02 | `d87d384` |
+| VDP1-02 | this commit |
+| VDP2-01 | this commit (same fix as VDP1-02) |
 
 CPU-01 asked for the semantics to be settled either way. They are settled as **shared**: a PC
 breakpoint halts whichever SH-2 reaches the address, so CPU takes no part in execution-breakpoint
@@ -47,18 +71,74 @@ coalescing adjacent writes. What landed is the memory bound, which is what made 
 Losing a keyframe still orphans its deltas -- `CanReconstruct` reports that honestly, so the
 cost is rewind depth rather than a wrong answer.
 
-VDP1-03 is half-closed: the 3D hit test no longer picks primitives the 3D view does not draw
-(`018878e`), and `ARCHITECTURE.md` now records that the exploded view is quad-only. Rendering
-lines and polylines there remains open.
+VDP1-03 is closed: the 3D view now draws lines and polylines as depth-tested edges, and the hit
+test picks them by distance to those edges rather than by containment -- so a click in the empty
+middle of a polyline selects what is actually drawn there. The earlier half (`018878e`) had the
+hit test agree with a renderer that skipped them.
 
-## Highest-priority findings still open
+## Findings still open
+
+Derive it rather than trusting a number in prose -- the table above has 40 rows, one of which
+(VDP1-01) is a duplicate of ABI-01, so 39 of the 40 distinct defects are closed:
+
+```
+grep -ho '^## [A-Z][A-Z0-9]*-[0-9]*' Docs/CodeReview/*.md | sed 's/^## //' | sort > /tmp/all
+awk '/^\| ID \| Fixed in \|/,/^$/' Docs/CodeReview/00_INDEX.md \
+  | grep -o '^| [A-Z][A-Z0-9]*-[0-9]*' | sed 's/^| //' | sort > /tmp/closed
+comm -13 /tmp/closed /tmp/all
+```
+
+which leaves
 
 | ID | Severity | Finding |
 |---|---|---|
-| HOOK-01 | **High** | Windows emulator-hook shutdown can leave blocked threads alive after locks/global state are destroyed. |
-| LIVE-01 | **Medium** | Live capabilities are advertised before protocol negotiation. |
-| VDP1-02 | **Medium** | VDP1 priority is modeled per sprite instead of per pixel, causing mixed-priority composition errors. |
-| ABI-02 | **Medium** | A C++ exception can unwind across an `extern "C"` boundary. |
+| UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. **Partly addressed** -- see below. |
+
+### UI-01, after a pass at it
+
+One extraction landed, and the rest of the finding needs restating, because its premise has moved
+since the review date.
+
+**Done.** The async data search was nine members and three methods of `App`: a worker thread, its
+progress and cancellation, a cancel-and-queue-the-next rule, and a result destination. It is now
+`FrontEnd/src/DataSearchRunner.{h,cpp}`, with the first tests it has ever had. Two defects went
+with it rather than moving:
+
+- the worker wrote its results into members the UI also read, with a comment in the draw code
+  telling the reader not to read them yet. The worker now writes into its own outcome, which
+  `Poll()` hands over after the join -- there is nothing to read early, instead of a rule about it;
+- which window a search's results belonged to was three parallel bools (running, queued, and
+  pending-until-a-data-directory-is-set) kept in step by hand. It travels with the request.
+
+**Not done, and why.** The report suggests extracting `LiveSession`, `DebugSession`,
+`RewindController`, `PatchProject`, `DiscWorkspace` and `AudioWorkspace`. Every one of those names
+a model that already exists: `Drivers/Live`, `FrontEnd/src/Debug/` (breakpoints, call stack,
+disassembly, watch list, memory search, condition eval), `FrameRecorder` + `SavestateSlots`,
+`PatchLibrary`, `FrontEnd/src/Disc/`, `ScspMix`. Adding six coordinator objects between `App` and
+those would be a layer of indirection that moves no state and owns no invariant.
+
+What is actually left in `App.cpp` is 57 `Draw*` methods -- ImGui panel code, which the project's
+own notes say is not separable from `App` -- plus the glue wiring those models to them. Splitting
+that across translation units by panel group would shrink the file without changing what owns
+what; worth doing, but it is a different change from the one this finding describes, and a
+six-thousand-line move is not reviewable alongside anything else.
+
+**The one genuine candidate left** is the step/halt machine: ten members (`mStepSettle`,
+`mBpStop*`, `mStepBp*`, `mStepAwaitingHalt`, `mStepHoldFrames`, `mStepFromPc`) implementing
+"resume, hold the halted presentation across the round trip, release on a *new* PC, retire the
+transient breakpoint". That is a real state machine with real invariants and no test. It was left
+alone deliberately: its behaviour is only observable against a live emulator, its policy is
+interleaved with conditional-breakpoint evaluation and access logging that would have to come back
+through callbacks, and the comments around it record someone already fighting these exact races
+(the presentation "flash", the stale pre-step stop echo). Extracting it blind, with no way to
+exercise it, is how those races come back.
+
+Three of the closed rows are annotated because what landed is narrower than what the report
+suggested -- LIVE-01 (the payload verbs are version-gated, but capabilities are still advertised
+before negotiation, which would need `se_live_open` to block), MEDIA-01 (the preview says what it
+is, but cannot refuse a noise/zero or SBCTL voice, because the emulator's slot record does not
+carry those two fields), and ABI-03 (removed rather than implemented). REW-01, REW-04 and LIVE-03
+are annotated below for the same reason.
 
 ## Reports
 
@@ -77,12 +157,11 @@ lines and polylines there remains open.
 
 ## Suggested fix order
 
-Steps 1-3 of the original order are done (see the status table); what is left, in order:
+All of the original order is done. What remains is the two items above, in either order --
+they touch disjoint code.
 
-1. HOOK-01 — the remaining High. Windows-only, so it needs a Windows machine to exercise.
-2. LIVE-01/LIVE-02.
-3. VDP per-pixel priority accuracy (VDP1-02/VDP2-01, one fix). The largest item here: priority
-   has to leave the rasterizer per texel and reach the pixel mixer, so the rasterizer's output
-   and the compositor change together. Worth its own change rather than a slot in a batch.
-4. ABI-02/ABI-03 and the remaining snapshot/offline parser hardening.
-5. Lower-severity parser/search/documentation work.
+A note on HOOK-01, the one High that needed a platform nobody here runs: it was verified rather
+than reasoned about, by cross-compiling `Integration/Common/se_export.c` with mingw and running
+`Integration/Common/tests/SeExportShutdownTests.c` under wine. The pre-fix shutdown fails all
+three of its cases; the fix passes them. That route is written down in the test's header comment,
+because "Windows-only, so we cannot check it" is how a High stays open.

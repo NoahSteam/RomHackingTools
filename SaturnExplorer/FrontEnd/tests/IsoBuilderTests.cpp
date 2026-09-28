@@ -125,6 +125,67 @@ int main()
         Check(match, "IP.BIN system area matches");
     }
 
+    // --- DISC-02: collision suffixes must fit inside the Level-1 widths. ---
+    //
+    // Long names that differ past the eighth character collapse to the same 8.3 identifier, which
+    // is exactly when the de-duplicator runs. It used to insert "_N" before the ";1", producing
+    // LONGNAME.BIN_1;1 -- a five-character extension -- and for a directory a ten-character name.
+    // Both are outside Level 1, which is what the Saturn's own filesystem code reads.
+    {
+        const std::string d2 = base + "/disc2";
+        MKDIR(d2.c_str());
+        WriteFile(d2 + "/LONGNAME1.BIN", 'A', 16);
+        WriteFile(d2 + "/LONGNAME2.BIN", 'B', 16);
+        WriteFile(d2 + "/LONGNAME3.BIN", 'C', 16);
+        const std::string sub1 = d2 + "/DIRECTORY_ONE";
+        const std::string sub2 = d2 + "/DIRECTORY_TWO";
+        MKDIR(sub1.c_str());
+        MKDIR(sub2.c_str());
+        WriteFile(sub1 + "/A.BIN", 'D', 16);
+        WriteFile(sub2 + "/B.BIN", 'E', 16);
+
+        IsoBuildOptions o2;
+        o2.rootDir = d2;
+        o2.outIso = base + "/dedupe.iso";
+        const IsoBuildResult r2 = IsoBuild(o2);
+        Check(r2.ok, "dedupe image builds");
+        Check(r2.renamedForIso >= 3, "the colliding names were renamed");
+
+        DiscImage img2;
+        Check(img2.Open(o2.outIso), "open dedupe image");
+        const IsoFs fs2 = IsoParse(img2.Reader());
+
+        // Every identifier the image carries has to satisfy 8.3 (and 8 for a directory). The
+        // reader strips ";1" and any trailing '.', so check the parsed component widths.
+        int files = 0, dirsSeen = 0;
+        for (const IsoEntry& e : fs2.entries)
+        {
+            const size_t slash = e.path.find_last_of('/');
+            const std::string leaf = slash == std::string::npos ? e.path : e.path.substr(slash + 1);
+            const size_t dot = leaf.find_last_of('.');
+            if (e.isDir)
+            {
+                ++dirsSeen;
+                Check(leaf.size() <= 8, ("directory name is 8 or fewer chars: " + leaf).c_str());
+            }
+            else
+            {
+                ++files;
+                const std::string stem = dot == std::string::npos ? leaf : leaf.substr(0, dot);
+                const std::string ext = dot == std::string::npos ? "" : leaf.substr(dot + 1);
+                Check(stem.size() <= 8, ("file stem is 8 or fewer chars: " + leaf).c_str());
+                Check(ext.size() <= 3, ("file extension is 3 or fewer chars: " + leaf).c_str());
+            }
+        }
+        Check(files == 5, "all five files are present after renaming");
+        Check(dirsSeen == 2, "both directories are present after renaming");
+
+        // And the names are still distinct -- the point of the exercise.
+        for (size_t i = 0; i < fs2.entries.size(); ++i)
+            for (size_t j = i + 1; j < fs2.entries.size(); ++j)
+                Check(fs2.entries[i].path != fs2.entries[j].path, "no duplicate paths remain");
+    }
+
     if (gFail == 0) std::printf("All IsoBuilder tests passed.\n");
     return gFail ? 1 : 0;
 }

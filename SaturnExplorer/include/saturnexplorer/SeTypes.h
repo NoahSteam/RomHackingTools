@@ -226,6 +226,12 @@ typedef struct se_sprite_2d {
     uint32_t             object_number;
     se_vec2              corners[4];   /* A,B,C,D screen-space */
     se_vec2              uv[4];        /* texture coordinates */
+    /* The front-most VDP2 priority any of this sprite's pixels reach -- a summary for a command
+       list or a sort, not what composites the frame. Priority is a property of the *pixel*: a
+       sprite pixel selects one of the eight VDP2 sprite-priority slots with a number encoded in
+       its own framebuffer word, so a sprite whose CLUT or colour bank spans several numbers has
+       pixels at several priorities and interleaves with the VDP2 layers at each of them. The
+       renderer resolves that per pixel; this field cannot express it. */
     uint8_t              priority;
     uint8_t              flip_x, flip_y, gouraud;
     se_color_mode        color_mode;
@@ -358,33 +364,6 @@ typedef struct se_mem_event {
     uint32_t channel;       /* DMA channel, or driver-defined tag */
     char     detail[96];    /* e.g. "DATA\\FACE03.BIN (offset 0x1A000)" */
 } se_mem_event;
-
-/* ------------------------------------------------------------------ *
- *  ROM / archive search
- * ------------------------------------------------------------------ */
-
-typedef enum se_search_mode {
-    SE_SEARCH_ROM      = 0,  /* raw ISO scan */
-    SE_SEARCH_FILES    = 1,  /* per-file within the filesystem */
-    SE_SEARCH_LZSS     = 2,  /* LZSS-compressed assets */
-    SE_SEARCH_ARCHIVES = 3,  /* known archive formats */
-    SE_SEARCH_RAW      = 4   /* raw binary pattern */
-} se_search_mode;
-
-typedef struct se_search_query {
-    se_search_mode mode;
-    se_texture_ref target;   /* the asset to trace (texture being searched for) */
-    uint8_t        match_palette; /* also require the CLUT to match */
-} se_search_query;
-
-typedef struct se_search_result {
-    char     archive[64];    /* archive/container name, or empty */
-    char     file[128];      /* file path, e.g. "DISC_1\\DATA\\FACE03.BIN" */
-    uint64_t offset;
-    uint64_t size;
-    char     asset_type[16]; /* "BIN", "TIM", ... */
-    uint8_t  confidence;     /* 0..100 */
-} se_search_result;
 
 /* ------------------------------------------------------------------ *
  *  Reference explorer ("what uses this texture / palette?")

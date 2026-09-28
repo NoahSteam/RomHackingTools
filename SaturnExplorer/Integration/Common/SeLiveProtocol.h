@@ -238,6 +238,31 @@
 #define SE_LIVE_STATE_MAX_PER_REPLY 4u  /* cap on blocks drained into one response */
 #define SE_LIVE_STATE_MAX_PAYLOAD (64u * 1024u * 1024u) /* sanity bound on one block's payload */
 
+/* Per-verb ceilings on the 32-bit command argument.
+ *
+ * The server sizes receive loops and allocations directly from that argument, so every verb
+ * that does needs a maximum: without one, a single request claiming 0xFFFFFFFF descriptors or
+ * payload bytes makes the emulator loop or allocate for it. These are the protocol's limits,
+ * not the client's -- the client's own sends are far below them -- so a request past one is
+ * malformed, and the server caps what it acts on and drains the rest to keep the stream
+ * aligned rather than closing the connection.
+ *
+ * TRACE's 256 was already enforced in the handler; it moves here so all of them read together. */
+/* Minimum server version for each verb that attaches a payload.
+ *
+ * A server older than the verb does not recognize it and falls through to its GET path WITHOUT
+ * consuming the attached bytes, so its next reply is read starting from the middle of our
+ * payload and the session desyncs. The failure is not "the feature quietly does nothing" -- it
+ * is a broken connection -- so a payload verb must be checked against the negotiated version
+ * before it ships, not merely guarded in the UI that usually calls it. */
+#define SE_LIVE_MINVER_TRACE      8u    /* TRC */
+#define SE_LIVE_MINVER_WRITESND  13u    /* WRS */
+#define SE_LIVE_MINVER_LOADSTATE 16u    /* LST */
+
+#define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
+#define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */
+#define SE_LIVE_MAX_WRITE_BYTES  (1024u * 1024u)    /* WRM/WRS: one poke; largest region is 1 MiB */
+
 /* Emulator save-slot inventory (v17+): a trailing section after the v16 savestate section,
  * version-gated the same way. Lets the client list the emulator's own numbered slots without
  * having to find them on disk -- their path depends on the emulator's base directory, its
@@ -290,7 +315,24 @@
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */
 
-/* Default endpoints. The TCP port is used for the web bridge: the browser build
+/* ---- What connecting to this endpoint grants (HOOK-03) ----
+ *
+ * This protocol is a PRIVILEGED LOCAL CONTROL CHANNEL, not a read-only viewer feed. Anything
+ * that can connect can, by design: write any bus address through the emulator's debug/cheat
+ * path (WRM -- work RAM, VRAM, CRAM, the framebuffer), write sound RAM (WRS), install
+ * breakpoints and tracepoints, pause, step and resume the CPUs, inject controller input, and
+ * restore a savestate (LST). That is what a debugger needs, and none of it is authenticated:
+ * there is no handshake, no token, and no distinction between a viewer and a controller.
+ *
+ * So the transport is the only access control there is. The Unix socket and Windows named pipe
+ * are reachable only by local users with filesystem/pipe permission to them. The TCP listener
+ * binds loopback, which means every local process and every local user -- and, if a WebSocket
+ * bridge is run with a wider bind or a permissive origin policy, whatever can reach that
+ * bridge. Treat opening the TCP port as handing over write access to the emulated machine:
+ * keep it on loopback, do not forward or expose it, and do not leave it listening on a shared
+ * or multi-user host.
+ *
+ * Default endpoints. The TCP port is used for the web bridge: the browser build
  * tunnels a normal TCP connect over a WebSocket proxy to this port (the client
  * writes the endpoint as "tcp:host:port"). */
 #define SE_LIVE_DEFAULT_SOCK_PATH "/tmp/saturn_explorer.sock"

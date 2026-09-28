@@ -198,16 +198,21 @@ reproduce current test output before extending it):
   below (`ResolveColumn`) rather than the band buffer. `Context::RenderFrame` builds one
   column buffer — seed → VDP2 layers → sprites → resolve — with no band loop. Verified: the
   NiGHTS press-start golden diffs 0 and every synthetic compositor test stays green.
-  *Still to come (Track C):* per-pixel sprite priority and cc-ratio from the SPCTL
-  sprite-type decode (today one priority per command, sprites don't yet carry cc), and the
-  sprite-window bit + `command_index` in the descriptor.
+  *Still to come (Track C):* the sprite cc-ratio from the SPCTL sprite-type decode (sprites
+  don't yet carry cc), and the sprite-window bit + `command_index` in the descriptor.
 
 *Acceptance:* disabling any debugger layer changes only that source; the rest still mix
 with hardware-correct priority and color.
 
 ### Track C — Cross-layer VDP2 features (unlocked by Track B)
 
-- **C1. Per-pixel sprite priority** — falls out of B2+B3.
+- **C1. Per-pixel sprite priority** — **DONE.** It did fall out of B2+B3: the texel decode now
+  returns the framebuffer word alongside the colour, and the 2D sink asks `SpritePriorityTable`
+  for that word's priority instead of taking the sprite's. `se_sprite_2d::priority` survives as a
+  per-command summary for the panels (the front-most priority a sprite's pixels reach) and no
+  longer composites anything. Measured at 704x512 with a full-frame LUT-16 sprite: no change
+  (15.2-15.8 ms/frame either way), because the added work is a switch on a value already in a
+  register beside a CRAM read.
 - **C2. Sprite window + color-calc window;** proper **RBG0 WCTLC** windows.
 - **C3. Shadow** — normal/transparent shadow + MSB shadow (halve the pixel below).
 - **C4. Line color screen** (LNCLEN/LCTA) insertion into the cc chain.

@@ -79,7 +79,7 @@ void WatchPanel::Refresh(IMemoryBackend& backend, IExpressionResolver& resolver)
     for (size_t k = 0; k < results.size() && k < ids.size(); ++k)
     {
         Row& row = mRows[ids[k]];
-        WatchValue v = FormatWatchValue(types[k], results[k]);
+        WatchValue v = FormatWatchValue(types[k], results[k], &backend);
         if (v.valid)
         {
             if (row.hasLast && v.numeric != row.lastNumeric)
@@ -252,9 +252,20 @@ void WatchPanel::Draw(IMemoryBackend& backend, IExpressionResolver& resolver,
                 ImGui::SameLine();
             }
             ImGui::TextUnformatted(v.text.c_str());
-            if (v.isPointer && v.pointerSuspicious && ImGui::IsItemHovered())
-                ImGui::SetTooltip("Target 0x%08X is outside known Saturn RAM/VRAM ranges.",
-                                  v.pointerTarget);
+            // Two different answers, and they used to be one. "Outside the map" means the
+            // value is probably not a pointer; "not in this source" means it is a fine address
+            // that this savestate or connection simply does not carry, which is not the
+            // pointer's fault and is worth saying plainly rather than leaving the user to
+            // discover it by following the pointer into "Unavailable".
+            if (v.isPointer && ImGui::IsItemHovered())
+            {
+                if (v.pointerSuspicious)
+                    ImGui::SetTooltip("Target 0x%08X is outside known Saturn RAM/VRAM ranges.",
+                                      v.pointerTarget);
+                else if (v.pointerUnavailable)
+                    ImGui::SetTooltip("Target 0x%08X is a valid Saturn address, but this source "
+                                      "does not capture it.", v.pointerTarget);
+            }
         }
 
         // Options (overflow menu).

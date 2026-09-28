@@ -31,7 +31,19 @@ struct CallStackFrame
 {
     int             cpu = 0;                 // 0 master, 1 slave
     uint32_t        callSite = 0;            // the bsr/jsr that made the call (0 if unknown)
-    uint32_t        functionAddress = 0;     // entry point of the frame's function (best known)
+    // Entry point of the frame's function, and whether it is one. A stack walk recovers return
+    // addresses, which are inside the caller, not at its entry -- naming a frame after one
+    // invents a function that starts mid-body. The entry is known only when something actually
+    // decoded it: the shadow stack records it, and a `bsr disp` at the call site encodes it. A
+    // `jsr @Rn` or `bsrf Rn` does not: the target was in a register at call time and the stack
+    // image no longer holds it. Where it is unknown, show returnAddress for what it is -- an
+    // address inside the function -- rather than a sub_XXXXXX that never existed.
+    uint32_t        functionAddress = 0;
+    bool            functionKnown = false;
+    // An address that really is inside this frame's function: the halted PC for frame #0, the
+    // return address for a caller. Always meaningful, which is what lets the UI navigate and
+    // label a frame whose entry point is unknown without having to invent one.
+    uint32_t        currentAddress = 0;
     uint32_t        returnAddress = 0;       // where this frame returns to
     uint32_t        stackPointer = 0;        // R15 at / for this frame
     uint64_t        cycle = 0;               // when the call happened (shadow stack only)
