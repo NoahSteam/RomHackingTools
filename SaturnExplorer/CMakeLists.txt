@@ -202,6 +202,7 @@ if(BUILD_TESTING)
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
     )
     target_include_directories(SaturnExplorerTopBarTests
@@ -229,6 +230,20 @@ if(BUILD_TESTING)
 
     # The PRS search's bounds (ROM-04): the candidate filter must not drop a real match, and the
     # per-file work budget must report a scan it cut short.
+    # The search worker's lifecycle, which had no test while it was nine members of App:
+    # one worker at a time, cancel-and-queue, result routing, and a clean shutdown.
+    add_executable(SaturnExplorerDataSearchRunnerTests
+        FrontEnd/tests/DataSearchRunnerTests.cpp
+        FrontEnd/src/DataSearchRunner.cpp
+        FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/Prs.cpp       # DataSearch's PRS path, which these tests use to be slow
+    )
+    target_include_directories(SaturnExplorerDataSearchRunnerTests PRIVATE FrontEnd/src)
+    find_package(Threads REQUIRED)   # the runner owns a std::thread
+    target_link_libraries(SaturnExplorerDataSearchRunnerTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerDataSearchRunnerTests
+             COMMAND SaturnExplorerDataSearchRunnerTests)
+
     add_executable(SaturnExplorerPrsSearchTests
         FrontEnd/tests/PrsSearchTests.cpp
         FrontEnd/src/DataSearch.cpp
@@ -590,6 +605,7 @@ if(WIN32)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
@@ -673,6 +689,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/App.cpp
         FrontEnd/src/Theme.cpp
         FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
         FrontEnd/src/Settings.cpp
         FrontEnd/src/Launcher.cpp
@@ -773,6 +790,7 @@ else()
             FrontEnd/src/App.cpp
             FrontEnd/src/Theme.cpp
             FrontEnd/src/DataSearch.cpp
+        FrontEnd/src/DataSearchRunner.cpp
             FrontEnd/src/Prs.cpp
             FrontEnd/src/Settings.cpp
             FrontEnd/src/Launcher.cpp

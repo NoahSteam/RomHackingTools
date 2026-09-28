@@ -405,6 +405,7 @@ SaturnExplorer/
     Yabause/                           the same shape for Yabause
   FrontEnd/                          ← the reference app (Dear ImGui)
     src/                               App.{h,cpp} + panels; portable, no OS calls
+      DataSearchRunner.{h,cpp}         the data search's worker thread, queueing and routing
       Debug/                           debugger model: breakpoints, call stack, disasm,
                                        watch list, memory search, expression eval
       Disc/                            ISO/CUE read + build, CD sectors, disc image

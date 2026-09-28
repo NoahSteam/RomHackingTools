@@ -282,11 +282,7 @@ void App::Initialize()
 void App::Shutdown()
 {
     // Stop and join any in-flight data search before tearing down.
-    if (mSearchThread.joinable())
-    {
-        mSearchProgress.cancel.store(true);
-        mSearchThread.join();
-    }
+    mSearchRunner.Stop();
     SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
@@ -4248,7 +4244,7 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
     }
     mPendingNeedle = std::move(needle);
     mPendingSearchLabel = label;
-    mPendingIsLocate = false;          // a texture/data search -> the texture-results window
+    mPendingDestination = kSearchToTextureResults;
     if (mDataDir.empty())
     {
         mSearchAfterSetDir = true;     // run once the user picks a directory
@@ -4261,156 +4257,106 @@ void App::BeginByteSearch(std::vector<uint8_t> needle, const std::string& label)
 }
 
 // The quick "Find in game data directory" path (also used by the Hex/Assembly byte
-// searches): search the whole data directory for the raw bytes. mPendingIsLocate carries the
-// result destination through the deferred (no-data-dir-yet) case.
+// searches): search the whole data directory for the raw bytes. mPendingDestination carries the
+// result destination through the deferred (no-data-dir-yet) case, where there is no request yet
+// to carry it.
 void App::RunPendingSearch()
 {
-    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory", mPendingIsLocate);
+    LaunchSearch({mDataDir}, SearchCompression::None, "the game data directory",
+                 mPendingDestination);
 }
 
 // Spawn the search on a worker thread and show the results window (which displays live
 // progress while it runs). Roots are files and/or directories; empty entries are dropped.
 void App::LaunchSearch(std::vector<std::string> roots, SearchCompression comp,
-                       const std::string& scopeText, bool locate)
+                       const std::string& scopeText, int destination)
 {
     roots.erase(std::remove_if(roots.begin(), roots.end(),
                                [](const std::string& s) { return s.empty(); }),
                 roots.end());
 
-    if (mSearchRunning.load())
-    {
-        // A search is already running: cancel it and queue this one. PollSearchWorker starts
-        // the queued search the moment the old worker is reaped, so nothing is silently lost.
-        mQueuedRoots = std::move(roots);
-        mQueuedComp = comp;
-        mQueuedScope = scopeText;
-        mQueuedIsLocate = locate;
-        mSearchQueued = true;
-        mSearchProgress.cancel.store(true);
-        mShowSearchResults = true;   // keep the results window up so the swap is visible
-        return;
-    }
-    mSearchIsLocate = locate;   // destination of the search we're about to start
-
+    // Nothing to search for, or nowhere to search: that is a message, not a worker. The runner
+    // would happily start it and report zero hits, which reads as "not found" rather than
+    // "you have not told me where to look". The message goes to the window that asked.
     if (mPendingNeedle.empty() || roots.empty())
     {
-        mSearchResults.clear();
-        mSearchSummary = mPendingNeedle.empty() ? "Nothing to search for."
+        const char* why = mPendingNeedle.empty() ? "Nothing to search for."
                                                 : "No search location set.";
+#ifdef SE_ENABLE_LIVE
+        if (destination == kSearchToLocateResults)
+        {
+            mLocateResults.clear();
+            mLocateRel.clear();
+            mLocateRowAdded.clear();
+            mLocateSummary = why;
+            mShowLocateResults = true;
+            return;
+        }
+#endif
+        mSearchResults.clear();
+        mSearchSummary = why;
         mShowSearchResults = true;
         return;
     }
 
-    if (mSearchThread.joinable())
+    DataSearchRequest request;
+    request.roots = std::move(roots);
+    request.needle = mPendingNeedle;
+    request.compression = comp;
+    request.label = mPendingSearchLabel;
+    request.scopeText = scopeText;
+    request.destination = destination;
+
+    // Raise the destination's window now, so a search started while another runs shows its
+    // progress rather than appearing to do nothing.
+#ifdef SE_ENABLE_LIVE
+    if (destination == kSearchToLocateResults)
     {
-        mSearchThread.join();   // reap a previous (finished) run
+        mShowLocateResults = true;
     }
-    mSearchResults.clear();
-    mSearchProgress.Reset();
-    mSearchScopeText = scopeText;
-    mShowSearchResults = true;
-    mSearchDone.store(false);
-    mSearchRunning.store(true);
-
-    std::vector<uint8_t> needle = mPendingNeedle;   // capture by value for the worker
-    std::string          label = mPendingSearchLabel;
-
-    auto doWork =
-        [this, roots = std::move(roots), needle = std::move(needle), comp, label]() mutable {
-            std::vector<DataSearchHit> results;
-            const size_t files = SearchData(roots, needle.data(), needle.size(), comp, results,
-                                            256, &mSearchProgress);
-            size_t total = 0;
-            for (const DataSearchHit& h : results) total += h.offsets.size();
-
-            const bool   cancelled = mSearchProgress.cancel.load();
-            const size_t skipped = mSearchProgress.filesSkipped.load();
-            // A file whose PRS scan ran out of work budget was searched as far as the budget
-            // allowed and no further, so a match could be sitting at an offset never reached. That
-            // belongs in the summary beside the count, not left for the user to assume away.
-            const size_t partial = mSearchProgress.filesBudgetExhausted.load();
-
-            std::string notes;
-            if (skipped) notes += "\nSome files were skipped (too large for a PRS scan).";
-            if (partial)
-            {
-                notes += "\n" + std::to_string(partial) +
-                         " file(s) were only searched partway: the PRS scan hit its work limit, so "
-                         "a match past that point would have been missed.";
-            }
-
-            char sum[512];
-            std::snprintf(sum, sizeof(sum),
-                          "%s%s\n%zu match(es) in %zu file(s)  —  scanned %zu file%s in %s%s.%s",
-                          cancelled ? "[Cancelled] " : "", label.c_str(), total, results.size(),
-                          files, files == 1 ? "" : "s", mSearchScopeText.c_str(),
-                          comp == SearchCompression::Prs ? " as PRS-compressed" : "",
-                          notes.c_str());
-
-            mSearchResults = std::move(results);
-            mSearchSummary = sum;
-            mSearchDone.store(true);   // reaped on the UI thread in PollSearchWorker()
-        };
-
-#ifdef __EMSCRIPTEN__
-    // The browser build has no host filesystem (the search finds nothing) and the base
-    // viewer isn't compiled with pthreads, so never start a std::thread there — run inline.
-    doWork();
-    mSearchRunning.store(false);
-    mSearchDone.store(false);
-#else
-    mSearchThread = std::thread(std::move(doWork));
+    else
 #endif
+    {
+        mShowSearchResults = true;
+    }
+    mSearchRunner.Start(std::move(request));
 }
 
-// Reap a finished worker on the UI thread. join() (after mSearchDone) makes all of the
-// worker's writes to mSearchResults / mSearchSummary visible before we display them.
+// Take a finished search's results from the runner and route them to the window that asked.
+// Called once per frame before anything draws them.
 void App::PollSearchWorker()
 {
-    if (mSearchRunning.load() && mSearchDone.load())
+    DataSearchOutcome outcome;
+    if (!mSearchRunner.Poll(outcome))
     {
-        if (mSearchThread.joinable())
-        {
-            mSearchThread.join();
-        }
-        mSearchRunning.store(false);
-        mSearchDone.store(false);
+        return;
+    }
 
 #ifdef SE_ENABLE_LIVE
-        // A patch-locate search: hand its hits to the locate-results window (accept/reject)
-        // rather than the texture-results window. Precompute the relative path per result file
-        // and the accepted-row flags once, so the per-frame draw doesn't recompute them.
-        if (mSearchIsLocate)
+    // A patch-locate search: its hits go to the locate-results window (accept/reject) rather
+    // than the texture-results window. Precompute the relative path per result file and the
+    // accepted-row flags once, so the per-frame draw doesn't recompute them.
+    if (outcome.destination == kSearchToLocateResults)
+    {
+        mLocateResults = std::move(outcome.hits);
+        mLocateSummary = std::move(outcome.summary);
+        mLocateRel.clear();
+        size_t rows = 0;
+        for (const DataSearchHit& h : mLocateResults)
         {
-            mLocateResults = std::move(mSearchResults);
-            mSearchResults.clear();
-            mLocateSummary = mSearchSummary;
-            mLocateRel.clear();
-            size_t rows = 0;
-            for (const DataSearchHit& h : mLocateResults)
-            {
-                mLocateRel.push_back(RelativeToDataDir(h.path));
-                rows += h.offsets.size();
-            }
-            mLocateRowAdded.assign(rows, 0);
-            mShowLocateResults = true;
-            mShowSearchResults = false;
+            mLocateRel.push_back(RelativeToDataDir(h.path));
+            rows += h.offsets.size();
         }
-#endif
-
-        // If the user asked for another search while this one ran, start it now (the old
-        // worker is fully reaped, so LaunchSearch won't see mSearchRunning and will run). The
-        // queued search carries its own result destination.
-        if (mSearchQueued)
-        {
-            mSearchQueued = false;
-            LaunchSearch(std::move(mQueuedRoots), mQueuedComp, mQueuedScope, mQueuedIsLocate);
-        }
+        mLocateRowAdded.assign(rows, 0);
+        mShowLocateResults = true;
+        mShowSearchResults = false;
+        return;
     }
+#endif
+    mSearchResults = std::move(outcome.hits);
+    mSearchSummary = std::move(outcome.summary);
 }
 
-// The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar
-// path, or automatically when a search is requested with no directory set.
 #ifdef SE_ENABLE_LIVE
 // ===========================================================================================
 // Patch feature — locate memory edits in the game files (content search), curate a library of
@@ -4494,7 +4440,7 @@ void App::BeginLocateSearch(uint32_t addr, uint32_t len, uint32_t before, uint32
 
     mPendingNeedle = std::move(needleRes.bytes);
     mPendingSearchLabel = mLocateLabel;
-    mPendingIsLocate = true;         // route results to the locate window (survives a deferred dir)
+    mPendingDestination = kSearchToLocateResults;   // survives a deferred data-directory prompt
     mShowLocateResults = true;
     mLocateResults.clear();
     mLocateRel.clear();
@@ -4518,12 +4464,12 @@ void App::DrawLocateResults()
     ImGui::SetNextWindowSize(ImVec2(640, 380), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Find in Game Files - Results", &mShowLocateResults))
     {
-        if (mSearchIsLocate && mSearchRunning.load())
+        if (mSearchRunner.Running())
         {
-            const size_t done = mSearchProgress.filesScanned.load();
-            const size_t total = mSearchProgress.filesTotal.load();
+            const size_t done = mSearchRunner.Progress().filesScanned.load();
+            const size_t total = mSearchRunner.Progress().filesTotal.load();
             ImGui::Text("Searching the game data files... (%zu / %zu files)", done, total);
-            if (ImGui::Button("Cancel")) mSearchProgress.cancel.store(true);
+            if (ImGui::Button("Cancel")) mSearchRunner.Cancel();
             ImGui::End();
             return;
         }
@@ -5006,6 +4952,8 @@ void App::BuildDisc(IPlatform& platform, bool launch)
 }
 #endif  // SE_ENABLE_LIVE
 
+// The "Set Game Data Directory" modal. Opened from the toolbar button, the status-bar path, or
+// automatically when a search is requested with no directory set.
 void App::DrawDataDirModal(IPlatform& platform)
 {
     static char buf[1024] = {};
@@ -5201,11 +5149,9 @@ void App::DrawSearchOptionsModal(IPlatform& platform)
 // a clickable link that reveals it in the OS file manager (Explorer/Finder/etc.).
 void App::DrawDataSearchResults(IPlatform& platform)
 {
-#ifdef SE_ENABLE_LIVE
-    // A patch-locate search borrows this same worker but shows its own results window (with
-    // accept/reject), so suppress the texture-results window while a locate is active.
-    if (mSearchIsLocate) return;
-#endif
+    // No guard for a locate search here: LaunchSearch raises the window its destination names,
+    // so a locate never turns this one on in the first place. It used to raise this window for
+    // every search and then suppress it from here when a locate was running.
     if (!mShowSearchResults)
     {
         return;
@@ -5213,29 +5159,30 @@ void App::DrawDataSearchResults(IPlatform& platform)
     ImGui::SetNextWindowSize(ImVec2(620, 320), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Data Search Results", &mShowSearchResults))
     {
-        // While the worker runs, show live progress + a Cancel button. mSearchResults /
-        // mSearchSummary belong to the worker until it is reaped, so don't read them here.
-        if (mSearchRunning.load())
+        // While the worker runs, show live progress + a Cancel button. The results themselves
+        // only exist here once the runner has handed them over, so there is nothing to read early.
+        if (mSearchRunner.Running())
         {
-            const size_t done = mSearchProgress.filesScanned.load();
-            const size_t total = mSearchProgress.filesTotal.load();
-            ImGui::Text("Searching %s%s\xe2\x80\xa6", mSearchScopeText.c_str(),
-                        mSearchProgress.filesSkipped.load() ? " (some large files skipped)" : "");
+            const SearchProgress& progress = mSearchRunner.Progress();
+            const size_t done = progress.filesScanned.load();
+            const size_t total = progress.filesTotal.load();
+            ImGui::Text("Searching %s%s\xe2\x80\xa6", mSearchRunner.ScopeText().c_str(),
+                        progress.filesSkipped.load() ? " (some large files skipped)" : "");
             const float frac = total ? static_cast<float>(done) / static_cast<float>(total) : 0.0f;
             char ov[64];
             std::snprintf(ov, sizeof(ov), "%zu / %zu files", done, total);
             ImGui::ProgressBar(frac, ImVec2(-FLT_MIN, 0), ov);
 
-            const uint64_t curSz = mSearchProgress.curFileSize.load();
+            const uint64_t curSz = progress.curFileSize.load();
             if (curSz)   // within-file position, meaningful for a PRS scan of a big file
             {
-                const uint64_t off = mSearchProgress.curOffset.load();
+                const uint64_t off = progress.curOffset.load();
                 ImGui::ProgressBar(curSz ? static_cast<float>(off) / static_cast<float>(curSz) : 0.0f,
                                    ImVec2(-FLT_MIN, 0), "current file");
             }
             if (ImGui::Button("Cancel"))
             {
-                mSearchProgress.cancel.store(true);
+                mSearchRunner.Cancel();
             }
             ImGui::End();
             return;

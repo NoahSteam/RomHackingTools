@@ -92,10 +92,46 @@ which leaves
 
 | ID | Severity | Finding |
 |---|---|---|
-| UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. |
+| UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. **Partly addressed** -- see below. |
 
-It is taken as its own change rather than as part of a batch: the split is mechanical but touches
-everything.
+### UI-01, after a pass at it
+
+One extraction landed, and the rest of the finding needs restating, because its premise has moved
+since the review date.
+
+**Done.** The async data search was nine members and three methods of `App`: a worker thread, its
+progress and cancellation, a cancel-and-queue-the-next rule, and a result destination. It is now
+`FrontEnd/src/DataSearchRunner.{h,cpp}`, with the first tests it has ever had. Two defects went
+with it rather than moving:
+
+- the worker wrote its results into members the UI also read, with a comment in the draw code
+  telling the reader not to read them yet. The worker now writes into its own outcome, which
+  `Poll()` hands over after the join -- there is nothing to read early, instead of a rule about it;
+- which window a search's results belonged to was three parallel bools (running, queued, and
+  pending-until-a-data-directory-is-set) kept in step by hand. It travels with the request.
+
+**Not done, and why.** The report suggests extracting `LiveSession`, `DebugSession`,
+`RewindController`, `PatchProject`, `DiscWorkspace` and `AudioWorkspace`. Every one of those names
+a model that already exists: `Drivers/Live`, `FrontEnd/src/Debug/` (breakpoints, call stack,
+disassembly, watch list, memory search, condition eval), `FrameRecorder` + `SavestateSlots`,
+`PatchLibrary`, `FrontEnd/src/Disc/`, `ScspMix`. Adding six coordinator objects between `App` and
+those would be a layer of indirection that moves no state and owns no invariant.
+
+What is actually left in `App.cpp` is 57 `Draw*` methods -- ImGui panel code, which the project's
+own notes say is not separable from `App` -- plus the glue wiring those models to them. Splitting
+that across translation units by panel group would shrink the file without changing what owns
+what; worth doing, but it is a different change from the one this finding describes, and a
+six-thousand-line move is not reviewable alongside anything else.
+
+**The one genuine candidate left** is the step/halt machine: ten members (`mStepSettle`,
+`mBpStop*`, `mStepBp*`, `mStepAwaitingHalt`, `mStepHoldFrames`, `mStepFromPc`) implementing
+"resume, hold the halted presentation across the round trip, release on a *new* PC, retire the
+transient breakpoint". That is a real state machine with real invariants and no test. It was left
+alone deliberately: its behaviour is only observable against a live emulator, its policy is
+interleaved with conditional-breakpoint evaluation and access logging that would have to come back
+through callbacks, and the comments around it record someone already fighting these exact races
+(the presentation "flash", the stale pre-step stop echo). Extracting it blind, with no way to
+exercise it, is how those races come back.
 
 Three of the closed rows are annotated because what landed is narrower than what the report
 suggested -- LIVE-01 (the payload verbs are version-gated, but capabilities are still advertised
