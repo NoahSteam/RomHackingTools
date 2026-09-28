@@ -27,6 +27,11 @@ Libs/
 *.png
 !FrontEnd/Assets/SaturnExplorer.png
 
+# Scratch trees the tests build in their working directory. They are named after the test, and a
+# test run from the source dir instead of build/ drops them here -- where a `git add -A` will
+# happily commit them, which is how a disc image and its .cue once got tracked.
+*_test_tmp/
+
 # Runtime state the app writes at exit (per-user, not source)
 assembly_comments.txt
 saturn_explorer_watches.json
