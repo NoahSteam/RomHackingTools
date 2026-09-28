@@ -47,9 +47,10 @@ coalescing adjacent writes. What landed is the memory bound, which is what made 
 Losing a keyframe still orphans its deltas -- `CanReconstruct` reports that honestly, so the
 cost is rewind depth rather than a wrong answer.
 
-VDP1-03 is half-closed: the 3D hit test no longer picks primitives the 3D view does not draw
-(`018878e`), and `ARCHITECTURE.md` now records that the exploded view is quad-only. Rendering
-lines and polylines there remains open.
+VDP1-03 is closed: the 3D view now draws lines and polylines as depth-tested edges, and the hit
+test picks them by distance to those edges rather than by containment -- so a click in the empty
+middle of a polyline selects what is actually drawn there. The earlier half (`018878e`) had the
+hit test agree with a renderer that skipped them.
 
 ## Highest-priority findings still open
 

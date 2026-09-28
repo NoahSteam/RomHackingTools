@@ -411,10 +411,15 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    (`se_render_3d` + `se_camera3d`); the frontend 3D View panel orbits (drag) and zooms (wheel).
    Verified against the battle dump via the public API (mechs depth-sorted with correct
    occlusion). VDP2 backgrounds followed in M4b.
-   > **Scope:** the exploded view draws quad primitives only. Polylines and lines (CMDCTRL
-   > command codes 5 and 6) are 2D-only there, so a command list containing them is not fully
-   > represented in the 3D View -- use the VDP Output panel to see those. The 3D hit test skips
-   > them for the same reason, so clicking never selects a primitive the view did not draw.
+   > **Line primitives:** polylines and lines (CMDCTRL command codes 5 and 6) are drawn in the
+   > exploded view too, as depth-tested edges in their solid colour -- they are part of the VDP1
+   > command list, and a view that dropped them showed nothing where a game drew a wireframe
+   > overlay or a debug cross, with no way to tell that from the game not having drawn it.
+   > Corners are *not* expanded for them (`ExpandQuadInclusive` closes seams between abutting
+   > quad strips; a line has no interior to widen). The 3D hit test picks them by distance to
+   > the edges the renderer draws rather than by containment, since a line has no interior to
+   > contain a click -- and so a click in the empty middle of a polyline selects whatever is
+   > drawn there instead, even though the polyline is nearer the camera.
    > **VDP2 note:** VDP2 control registers (BGON, CHCTL, map/scroll/priority, rotation params)
    > are write-only on hardware, so a RAM dump reads them back as zero — confirmed on both dumps
    > (VRAM 67-75% full, registers empty). VDP2 compositing needs the real register state, best

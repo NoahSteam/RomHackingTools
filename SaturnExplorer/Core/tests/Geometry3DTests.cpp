@@ -182,6 +182,27 @@ struct Blob
     float y = 0.0f;
 };
 
+// The first pixel of a colour, scanning top-down. Find() gives a centroid, which for an
+// outline lies in the middle of the hole -- not on the shape at all -- so a test that wants to
+// click on a line needs a pixel the line really occupies.
+bool FirstPixel(const Image& image, uint8_t r, uint8_t g, uint8_t b, int& outX, int& outY)
+{
+    for (uint32_t y = 0; y < image.height; ++y)
+    {
+        for (uint32_t x = 0; x < image.width; ++x)
+        {
+            const size_t o = (static_cast<size_t>(y) * image.width + x) * 4;
+            if (image.pixels[o] == r && image.pixels[o + 1] == g && image.pixels[o + 2] == b)
+            {
+                outX = static_cast<int>(x);
+                outY = static_cast<int>(y);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 Blob Find(const Image& image, uint8_t r, uint8_t g, uint8_t b)
 {
     Blob blob;
@@ -317,12 +338,17 @@ void TestOrbitSense()
     se_destroy(context);
 }
 
-// The 3D view's renderer and its hit test must walk the same primitives. Render3D skips
-// polylines and lines (2D-only primitives), so a hit test that still considered them could
-// select one that was never drawn — the selection jumping to a command with nothing under
-// the cursor. The polyline here sits inside the sprite, which puts it one layer nearer the
-// camera, so an unfiltered hit test would pick it over the sprite every time.
-void TestHitTestSkipsPolylines()
+// The 3D view's renderer and its hit test must walk the same primitives, and now both include
+// lines and polylines (VDP1-03). They are part of the VDP1 command list, so a view that drops
+// them is not a view of the list: a wireframe overlay or a debug cross drawn with line commands
+// would simply be absent, and nothing distinguishes that from the game not having drawn it.
+//
+// What the two walks have to agree on is subtler than "include them", though. A polyline is an
+// outline with no interior, so the renderer fills nothing inside it -- and the hit test must not
+// claim that empty middle either, or a click on the sprite showing through would select the
+// polyline instead. The polyline here sits inside the sprite and one layer nearer the camera,
+// which is exactly the arrangement that makes such a claim win.
+void TestPolylinesRenderAndPickInTheExplodedView()
 {
     State state(kVdp1Size);
     se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
@@ -338,24 +364,39 @@ void TestHitTestSkipsPolylines()
     se_sprite_3d sprite = {}, polyline = {};
     CHECK(se_get_sprite_3d(context, 0, &sprite) == SE_OK);
     CHECK(se_get_sprite_3d(context, 1, &polyline) == SE_OK);
-    // Overlapping the sprite put the polyline on the next layer up, i.e. nearer the
-    // viewer. Without this the hit test below would pass for the wrong reason.
+    // Overlapping the sprite put the polyline on the next layer up, i.e. nearer the viewer.
+    // Without this the interior check below would pass for the wrong reason.
     CHECK(polyline.corners[0].z > sprite.corners[0].z);
 
-    // Nothing of the polyline is in the 3D view: no green pixel anywhere, and the sprite
-    // it would have covered is intact.
     const se_camera3d front = Camera(0.0f, 0.0f);
     const Image view = Render(context, &front);
-    CHECK(Find(view, 0, 255, 0).count == 0);
+
+    // It is drawn...
+    const Blob green = Find(view, 0, 255, 0);
+    CHECK(green.count > 0);
+    // ...as an outline and not a fill: the sprite behind it still shows through the middle. A
+    // filled 16x16 quad would leave no blue at its centre.
+    const size_t centre = (static_cast<size_t>(green.y) * view.width +
+                           static_cast<size_t>(green.x)) * 4;
+    CHECK(view.pixels[centre + 2] == 255 && view.pixels[centre + 1] == 0);
     CHECK(Find(view, 0, 0, 255).count > 100);
 
-    // So a click at the centre selects the sprite that IS drawn there.
-    size_t hit = 0;
-    CHECK(se_hit_test_3d(context, &front, cx, cy, &hit) == SE_OK);
-    CHECK(hit == sprite.command_index);
+    // A click on a pixel the polyline occupies selects the polyline. A point-in-quad test could
+    // never do this -- a line has no interior -- so this is the proximity test.
+    int lx = 0, ly = 0;
+    CHECK(FirstPixel(view, 0, 255, 0, lx, ly));
+    size_t hitLine = 0;
+    CHECK(se_hit_test_3d(context, &front, lx, ly, &hitLine) == SE_OK);
+    CHECK(hitLine == polyline.command_index);
 
-    // The 2D view does draw the polyline, and this filter is the 3D walk's alone: the
-    // same click there still lands on the polyline.
+    // And a click in the empty middle of the polyline selects the sprite that is actually drawn
+    // there, even though the polyline is nearer the camera.
+    size_t hitSprite = 0;
+    CHECK(se_hit_test_3d(context, &front, static_cast<int>(green.x), static_cast<int>(green.y),
+                         &hitSprite) == SE_OK);
+    CHECK(hitSprite == sprite.command_index);
+
+    // The 2D view is unchanged: the same click still lands on the polyline there.
     size_t hit2d = 0;
     CHECK(se_hit_test(context, cx, cy, &hit2d) == SE_OK);
     CHECK(hit2d == polyline.command_index);
@@ -413,7 +454,7 @@ int main()
     TestFrontViewMatchesComposite();
     TestObliqueViewKeepsOrder();
     TestOrbitSense();
-    TestHitTestSkipsPolylines();
+    TestPolylinesRenderAndPickInTheExplodedView();
     TestHitTestSkipsCollapsedQuads();
     if (gFailures != 0)
     {

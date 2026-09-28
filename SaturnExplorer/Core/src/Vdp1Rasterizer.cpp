@@ -18,6 +18,10 @@ struct RVert
     float x, y, depth;
 };
 
+// How near the cursor has to be to a line primitive's edge to pick it. A quad is picked by
+// containment, but a line is one pixel wide, so exact containment would make it unclickable.
+const float kPickTolerancePx = 3.0f;
+
 float Edge(float ax, float ay, float bx, float by, float px, float py)
 {
     return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
@@ -236,22 +240,33 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
 // Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
 // untextured polyline/line primitives; each pixel goes to 'sink' with a neutral draw-mode
 // (opaque, no blending), the same way a plain textured pixel would.
+//
+// When 'depth' is supplied (the 3D view), the segment is depth-tested and written like a
+// triangle is, interpolating each vertex's projected depth along the run -- otherwise a line
+// behind a quad would draw over it, which reads as the line being in front.
 template <typename Sink>
 void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c,
-              const ClipRect* clip, Sink&& sink)
+              const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
 {
     const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
     const int x1 = static_cast<int>(std::lround(b.x)), y1 = static_cast<int>(std::lround(b.y));
     const int steps = std::max(std::abs(x1 - x0), std::abs(y1 - y0));
     const float sx = steps ? float(x1 - x0) / steps : 0.0f;
     const float sy = steps ? float(y1 - y0) / steps : 0.0f;
-    float fx = x0 + 0.5f, fy = y0 + 0.5f;
-    for (int i = 0; i <= steps; ++i, fx += sx, fy += sy)
+    const float sd = steps ? (b.depth - a.depth) / steps : 0.0f;
+    float fx = x0 + 0.5f, fy = y0 + 0.5f, fd = a.depth;
+    for (int i = 0; i <= steps; ++i, fx += sx, fy += sy, fd += sd)
     {
         const int x = static_cast<int>(fx), y = static_cast<int>(fy);
         if (x < 0 || x >= width || y < 0 || y >= height) continue;
         if (ClipRejects(clip, x, y)) continue;
-        sink(static_cast<size_t>(y) * width + x, c.r, c.g, c.b, DrawFx{});
+        const size_t idx = static_cast<size_t>(y) * width + x;
+        if (depth)
+        {
+            if (fd >= (*depth)[idx]) continue;
+            (*depth)[idx] = fd;
+        }
+        sink(idx, c.r, c.g, c.b, DrawFx{});
     }
 }
 
@@ -259,15 +274,44 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c,
 // a polyline (kind 1).
 template <typename Sink>
 void DrawEdges(int width, int height, const RVert v[4], uint8_t primKind, Rgba c,
-               const ClipRect* clip, Sink&& sink)
+               const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
 {
-    DrawLine(width, height, v[0], v[1], c, clip, sink);
+    DrawLine(width, height, v[0], v[1], c, clip, depth, sink);
     if (primKind == 1)
     {
-        DrawLine(width, height, v[1], v[2], c, clip, sink);
-        DrawLine(width, height, v[2], v[3], c, clip, sink);
-        DrawLine(width, height, v[3], v[0], c, clip, sink);
+        DrawLine(width, height, v[1], v[2], c, clip, depth, sink);
+        DrawLine(width, height, v[2], v[3], c, clip, depth, sink);
+        DrawLine(width, height, v[3], v[0], c, clip, depth, sink);
     }
+}
+
+// Distance in pixels from (px,py) to the segment a-b, for picking a primitive that is one
+// pixel wide: a point-in-quad test cannot pick a line, since a line has no interior.
+float DistanceToSegment(const RVert& a, const RVert& b, float px, float py)
+{
+    const float dx = b.x - a.x, dy = b.y - a.y;
+    const float lenSq = dx * dx + dy * dy;
+    float t = 0.0f;
+    if (lenSq > 1e-6f)
+    {
+        t = ((px - a.x) * dx + (py - a.y) * dy) / lenSq;
+        t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+    }
+    const float qx = a.x + t * dx, qy = a.y + t * dy;
+    return std::sqrt((px - qx) * (px - qx) + (py - qy) * (py - qy));
+}
+
+// Distance to the nearest edge a line primitive actually draws, matching DrawEdges.
+float DistanceToEdges(const RVert v[4], uint8_t primKind, float px, float py)
+{
+    float best = DistanceToSegment(v[0], v[1], px, py);
+    if (primKind == 1)
+    {
+        best = std::min(best, DistanceToSegment(v[1], v[2], px, py));
+        best = std::min(best, DistanceToSegment(v[2], v[3], px, py));
+        best = std::min(best, DistanceToSegment(v[3], v[0], px, py));
+    }
+    return best;
 }
 
 // VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
@@ -405,7 +449,7 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         const ClipRect* clip = r.clip.enable ? &clipScaled : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), clip, sink);
+            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), clip, nullptr, sink);
             continue;
         }
         ExpandQuadInclusive(v);
@@ -438,29 +482,36 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
         const SpriteRender& r = scene.render[i];
-        if (r.primKind != 0)
-        {
-            continue;   // polyline/line primitives are drawn in the 2D output only
-        }
         const se_sprite_3d& s = scene.sprites3d[i];
         RVert v[4] = {
             Project(s.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
+        auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&)
+        {
+            const size_t o = idx * 4;
+            outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
+        };
+        if (r.primKind != 0)
+        {
+            // Lines and polylines are part of the VDP1 list, so the exploded view has to show
+            // them or it is not a view of the list -- a wireframe overlay or a debug cross drawn
+            // with line commands would simply be absent, and the user has no way to tell that
+            // from the game not having drawn it. No corner expansion: that exists to close the
+            // seams between abutting quad strips, and a line has no interior to widen.
+            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), nullptr, &depth,
+                      lineSink);
+            continue;
+        }
         ExpandQuadInclusive(v);
         const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over. The
         // depth test in RasterTriangle has already run by the time the sink sees a pixel.
         const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr };
-        auto sink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&)
-        {
-            const size_t o = idx * 4;
-            outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
-        };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, &depth, r.gouraud, da, sink);
+                   vram, cram, cramMode, width, height, &depth, r.gouraud, da, lineSink);
     }
 }
 
@@ -479,19 +530,25 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
     uint32_t bestCmd = 0;
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
-        if (scene.render[i].primKind != 0)
-        {
-            // Render3D skips these, so there is nothing of them on screen to click:
-            // picking one would move the selection with nothing under the cursor.
-            continue;
-        }
         const se_sprite_3d& g = scene.sprites3d[i];
         const RVert v[4] = {
             Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
-        if (!PointInQuad(v, px, py))
+        const uint8_t primKind = scene.render[i].primKind;
+        if (primKind != 0)
+        {
+            // A line has no interior, so a point-in-quad test can never pick one; it needs a
+            // proximity test against the edges Render3D actually draws. The tolerance is what
+            // makes a one-pixel-wide primitive clickable at all -- picking demands the cursor be
+            // on the line exactly, which no one can do.
+            if (DistanceToEdges(v, primKind, px, py) > kPickTolerancePx)
+            {
+                continue;
+            }
+        }
+        else if (!PointInQuad(v, px, py))
         {
             continue;
         }
