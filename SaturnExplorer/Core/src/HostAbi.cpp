@@ -17,11 +17,20 @@ inline se::Context* Impl(se_context* c)
 }
 }  // namespace
 
-// se::Guard (SeGuard.h) holds the reasoning for the no-throw boundary. What is local to this
-// file is which fallback each entry point uses, and the two that need none: se_abi_version
-// returns a macro, and se_destroy's only operation is a destructor -- ~Context is implicitly
-// noexcept, so a throw inside it calls std::terminate before any handler here could see it, and
-// a try/catch around the delete would be dead code.
+// se::Guard (SeGuard.h) holds the reasoning for the no-throw boundary. What is local to this file
+// is which fallback each entry point uses, and se_abi_version, which returns a macro and needs
+// none.
+//
+// se_destroy is the one whose boundary is somewhere else. ~Context is implicitly noexcept, so a
+// throw out of the driver's close callback calls std::terminate there -- before any handler here
+// could see it -- which is why a try/catch around the delete really would be dead code, and why
+// the guard lives inside the destructor instead (Context.h). Reading that as "so there is nothing
+// to do here" was the mistake; the mechanism was right and the conclusion was not.
+//
+// Note for anyone adding an entry point: what matters is that no callback or core call escapes a
+// Guard, not that the *last* return is wrapped. se_get_system_status and se_frame_number were
+// missed exactly there -- both call a driver callback from inside an `if` and then return a
+// constant, so a sweep that only wrapped the final return left the callback outside.
 using se::Guard;
 
 extern "C" {
@@ -418,11 +427,14 @@ se_result se_get_system_status(se_context* ctx, se_system_status* out)
     }
 
     const se_data_source& ds = Impl(ctx)->DataSource();
-    if ((ds.capabilities & SE_CAP_SYSTEM_STATUS) && ds.get_system_status)
+    if (!(ds.capabilities & SE_CAP_SYSTEM_STATUS) || !ds.get_system_status)
+    {
+        return SE_ERR_NO_CAPABILITY;
+    }
+    return Guard(SE_ERR_NO_MEMORY, [&]
     {
         return ds.get_system_status(ds.user, out) == 0 ? SE_OK : SE_ERR_IO;
-    }
-    return SE_ERR_NO_CAPABILITY;
+    });
 }
 
 /* --- SH-2 registers --- */
@@ -574,11 +586,14 @@ uint64_t se_frame_number(se_context* ctx)
         return 0;
     }
     const se_data_source& ds = Impl(ctx)->DataSource();
-    if ((ds.capabilities & SE_CAP_FRAME_STEP) && ds.frame_number)
+    if (!(ds.capabilities & SE_CAP_FRAME_STEP) || !ds.frame_number)
+    {
+        return 0;
+    }
+    return Guard(static_cast<uint64_t>(0), [&]
     {
         return ds.frame_number(ds.user);
-    }
-    return 0;
+    });
 }
 
 /* --- Rewind / load-state --- */

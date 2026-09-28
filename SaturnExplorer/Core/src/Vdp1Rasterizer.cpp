@@ -120,6 +120,13 @@ uint8_t ApplyGouraud(uint8_t t8, float g5)
 // 'word' is the framebuffer word the texel came from, which is where the sprite's priority bits
 // live -- gouraud shading changes the colour handed over but not the word, because the hardware
 // reads the priority out of the pixel data, not out of the shaded result.
+//
+// 'dropP0P1Edge' excludes pixels lying exactly on the p0->p1 edge. A quad is drawn as two
+// triangles sharing a diagonal, and a pixel centre landing exactly on that diagonal passes
+// both triangles' >= 0 coverage test, so the sink runs twice for it. Writing an opaque texel
+// twice is harmless, but shadow and half-transparency read what is already in the column, so a
+// second visit blends the sprite against itself and leaves a seam along the diagonal. The
+// second triangle drops the shared edge; the first one keeps it, so coverage is unchanged.
 template <typename Sink>
 void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     const se_vec2& t0, const se_vec2& t1, const se_vec2& t2,
@@ -128,7 +135,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     se_cram_mode cramMode, int width, int height,
                     std::vector<float>* depth,
                     bool gourOn, uint16_t g0, uint16_t g1, uint16_t g2,
-                    const DrawAttribs& da, Sink&& sink)
+                    const DrawAttribs& da, bool dropP0P1Edge, Sink&& sink)
 {
     const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
     if (std::fabs(area) < 1e-6f)
@@ -161,6 +168,10 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             if (w0 < 0.0f || w1 < 0.0f || w2 < 0.0f)
             {
                 continue;  // outside this triangle
+            }
+            if (dropP0P1Edge && w2 <= 0.0f)
+            {
+                continue;  // on the shared diagonal; the sibling triangle owns it
             }
 
             const size_t idx = static_cast<size_t>(y) * width + x;
@@ -243,10 +254,10 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
     // Split matches the corner order: triangle 1 = A,B,C; triangle 2 = A,C,D.
     RasterTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], tex, spd,
                    vram, cram, cramMode, width, height, depth,
-                   g.on, g.corner[0], g.corner[1], g.corner[2], da, sink);
+                   g.on, g.corner[0], g.corner[1], g.corner[2], da, false, sink);
     RasterTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], tex, spd,
                    vram, cram, cramMode, width, height, depth,
-                   g.on, g.corner[0], g.corner[2], g.corner[3], da, sink);
+                   g.on, g.corner[0], g.corner[2], g.corner[3], da, true, sink);
 }
 
 // Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
@@ -430,11 +441,15 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         {
             const uint8_t prio = prios.Of(word);
             PixColumn& col = cols[idx];
+            // Shadow and half-transparency blend against what is below THIS pixel's priority, not
+            // against the top of the column -- see ResolveBelow. The VDP2 layers are all in the
+            // column already, including ones this sprite pixel goes behind.
+            Rgba below{};
+            const bool haveBelow = ResolveBelow(col, prio, colorCalc, below);
             if (fx.effect == 1)   // shadow
             {
-                if (col.valid)
+                if (haveBelow)
                 {
-                    const Rgba below = ResolveColumn(col, colorCalc);
                     EmitPix(col, below.r >> 1, below.g >> 1, below.b >> 1, prio,
                             false, 0, false);
                 }
@@ -445,9 +460,8 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
             {
                 cr >>= 1; cg >>= 1; cb >>= 1;
             }
-            else if (fx.effect == 3 && col.valid)   // half-transparency over opaque
+            else if (fx.effect == 3 && haveBelow)   // half-transparency over what is below
             {
-                const Rgba below = ResolveColumn(col, colorCalc);
                 cr = static_cast<uint8_t>((cr + below.r) >> 1);
                 cg = static_cast<uint8_t>((cg + below.g) >> 1);
                 cb = static_cast<uint8_t>((cb + below.b) >> 1);

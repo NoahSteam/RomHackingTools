@@ -8,6 +8,7 @@
 #include <cstring>
 #include <vector>
 
+#include "saturnexplorer/SeGuard.h"
 #include "saturnexplorer/SeHost.h"
 #include "HardwareSnapshot.h"
 #include "Vdp1Parser.h"
@@ -32,7 +33,15 @@ public:
     {
         if (mDs.close)
         {
-            mDs.close(mDs.user);
+            // The driver's close is foreign code on the far side of Seam A, and a destructor is
+            // implicitly noexcept: a throw out of it calls std::terminate *here*, before any
+            // handler in HostAbi.cpp could see it. So the no-throw boundary the seam promises has
+            // to be inside this destructor -- a guard around the `delete` in se_destroy would run
+            // too late to catch anything.
+            //
+            // Not a formality: the live driver's close stops its poll thread and joins it, and
+            // std::thread::join throws std::system_error when the OS refuses the join.
+            se::GuardVoid([this] { mDs.close(mDs.user); });
         }
     }
 

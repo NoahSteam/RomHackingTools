@@ -866,8 +866,63 @@ void TestPrioritySummaryConsidersEveryReachableNumber()
     se_destroy(context);
 }
 
+// A half-transparent sprite pixel BETWEEN two VDP2 contributions, the higher of which does colour
+// calculation. This is the case the per-pixel priority change made ordinary, and it is where
+// blending against the top of the column instead of against what is under the sprite goes wrong:
+// the sprite would carry the higher layer's colour, and that layer then colour-calculates against
+// the sprite as its second contribution -- blending itself in twice.
+//
+// Layout, bottom to top: back screen (blue, priority 0) < half-transparent red sprite (priority 1)
+// < NBG3 (white, priority 4, colour calc on, ratio 15).
+//
+// Correct: the sprite halves against the BACK SCREEN, so (255,0,0) over (0,0,255) is (127,0,127);
+// NBG3 then blends 16/32 with that, giving (191,127,191).
+// The bug gave the sprite (191,63,127) -- halved against NBG3-over-back-screen -- and a final
+// (223,159,191).
+void TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
+    SetReg(state, 0x0AC, 0x0000);   // BKTAU / BKTAL: back-screen table at VDP2 0x200
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: RGB555 blue
+    SetReg(state, 0x0EC, 0x0008);   // CCCTL: NBG3 colour-calc enable
+    SetReg(state, 0x10A, 0x0F00);   // CCRNB: NBG3 ratio 15
+
+    // SPCTL type 0, SPCLMD off; priority number 0 -> priority 1, so every sprite pixel is at 1.
+    SetReg(state, 0x0E0, 0x0000);
+    SetReg(state, 0x0F0, 0x0001);
+
+    PutBE16(state.cram, 2 * 2, 0x801F);   // CRAM entry 2: red
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);                     // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);                     // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040 | 0x0003);   // LUT-16, SPD, half-transparency
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);                  // CMDCOLR: CLUT at 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);                  // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);               // CMDSIZE: 8x2
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);            // CLUT index 1 -> CRAM 2, number 0
+    for (int row = 0; row < 2; ++row)
+        for (int b = 0; b < 4; ++b) state.vdp1[0x100 + row * 4 + b] = 0x11;
+
+    const std::vector<uint8_t> pixels = Render(state, false, true);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            // NBG3 (prio 4, cc on at ratio 15) over the half-transparent sprite (prio 1) over
+            // the blue back screen (prio 0): NBG3 white blends 1:1 with the sprite's own blend of
+            // red over blue.
+            CHECK(IsColor(pixels, x, y, 191, 127, 191));
+            // The pre-fix answer: the sprite blended against NBG3 -- which is above it -- and
+            // NBG3 then colour-calculated against that, mixing itself in twice.
+            CHECK(!IsColor(pixels, x, y, 223, 159, 191));
+        }
+}
+
 int main()
 {
+    TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt();
     TestPrioritySummaryConsidersEveryReachableNumber();
     TestSpritePriorityIsPerPixel();
     TestSpritePrioritySummaryIsTheFrontMost();

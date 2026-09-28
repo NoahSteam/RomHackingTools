@@ -95,6 +95,42 @@ inline Rgba ResolveColumn(const PixColumn& col, bool colorCalc)
     return out;
 }
 
+// Resolve what sits immediately below a contribution about to be inserted at 'prio'.
+//
+// A sprite draw-mode effect (shadow, half-transparency) blends against what is *under* the sprite,
+// and that is not the top of the column. Every VDP2 layer is emitted before any sprite, so the top
+// may be a layer with a HIGHER priority than this sprite pixel -- one the sprite goes behind, not
+// in front of. Blending against it bakes a higher layer into a lower contribution, and if that
+// higher layer then colour-calculates against the sprite as its second contribution, it is blended
+// with itself.
+//
+// This was latent while every pixel of a sprite carried one priority (the front-most its pixels
+// could reach, so a VDP2 layer above it was unusual). Per-pixel priority makes a low-priority
+// sprite pixel ordinary, so it had to be fixed with it.
+//
+// EmitPix lets a later insert win a priority tie, so the sprite sits in front of everything with
+// prio <= its own. Returns false when nothing the column still holds is below it: a column keeps
+// only its top two contributions, so a sprite under both is not representable -- and not visible
+// either, which is why dropping the effect there is the right degradation.
+inline bool ResolveBelow(const PixColumn& col, uint8_t prio, bool colorCalc, Rgba& out)
+{
+    if (!col.valid)
+    {
+        return false;
+    }
+    if (prio >= col.top.prio)   // in front of everything the column holds
+    {
+        out = ResolveColumn(col, colorCalc);
+        return true;
+    }
+    if (prio >= col.second.prio)   // between the two
+    {
+        out = Rgba{ col.second.r, col.second.g, col.second.b, 255 };
+        return true;
+    }
+    return false;
+}
+
 // Resolve a whole column buffer to an opaque RGBA image (4 bytes/pixel, sized count*4).
 // The counterpart to EmitPix: all column read-out policy lives here rather than in the
 // caller. Columns no source touched are left transparent (alpha 0) so the caller's

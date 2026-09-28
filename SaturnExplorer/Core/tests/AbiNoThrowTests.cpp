@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <new>
+#include <stdexcept>
 #include <vector>
 
 #include "FakeVdpSource.h"
@@ -158,10 +159,97 @@ void TestCreateReturnsNullOnAllocationFailure()
     se_destroy(ctx);   // and null is safe to pass back in
 }
 
+// --- A throwing driver callback, which is the other half of the contract ----------------------
+//
+// Allocation failure is not the only way an exception reaches the seam: the driver on the far side
+// of Seam A is foreign C++ code, and its callbacks can throw on their own. The review that caught
+// this was right that testing only operator new left the blanket claim unpinned -- and it found two
+// entry points (se_get_system_status, se_frame_number) that called a callback from inside an `if`
+// and then returned a constant, so a sweep that wrapped only each function's final return left the
+// callback outside the guard.
+
+struct Thrower
+{
+    static int Status(void*, se_system_status*) { throw std::runtime_error("driver"); }
+    static uint64_t FrameNumber(void*) { throw std::runtime_error("driver"); }
+    static int FramePause(void*) { throw std::runtime_error("driver"); }
+    static int FrameStep(void*, int32_t) { throw std::runtime_error("driver"); }
+    static int LoadState(void*, uint64_t, const void*, size_t, const void*, size_t)
+    { throw std::runtime_error("driver"); }
+    static void Close(void*) { throw std::runtime_error("driver"); }
+};
+
+// se_get_system_status and se_frame_number reach their callback before any wrapped return.
+void TestThrowingStatusAndFrameCallbacks()
+{
+    se_test::State state(0x1000);
+    se_test::WriteSystemClip(state, 320, 224);
+    se_data_source source = se_test::MakeSource(state);
+    source.capabilities |= SE_CAP_SYSTEM_STATUS | SE_CAP_FRAME_STEP;
+    source.get_system_status = &Thrower::Status;
+    source.frame_number = &Thrower::FrameNumber;
+    source.frame_pause = &Thrower::FramePause;
+    source.frame_step = &Thrower::FrameStep;
+
+    se_context* ctx = se_test::CreateContext(source);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+
+    se_system_status status = {};
+    CHECK(se_get_system_status(ctx, &status) == SE_ERR_NO_MEMORY);
+    CHECK(se_frame_number(ctx) == 0);
+    CHECK(se_frame_pause(ctx) == SE_ERR_NO_MEMORY);
+    CHECK(se_frame_resume(ctx) == SE_ERR_NO_MEMORY);
+    CHECK(se_frame_step(ctx, 1) == SE_ERR_NO_MEMORY);
+
+    se_destroy(ctx);
+}
+
+// The rewind path, which reaches its callback the same way.
+void TestThrowingLoadStateCallback()
+{
+    se_test::State state(0x1000);
+    se_test::WriteSystemClip(state, 320, 224);
+    se_data_source source = se_test::MakeSource(state);
+    source.capabilities |= SE_CAP_STATE_REWIND;
+    source.load_state = &Thrower::LoadState;
+
+    se_context* ctx = se_test::CreateContext(source);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_supports_state_rewind(ctx) == 1);
+    const uint8_t blob[4] = { 1, 2, 3, 4 };
+    CHECK(se_load_state(ctx, 0, blob, sizeof(blob), nullptr, 0) == SE_ERR_NO_MEMORY);
+    se_destroy(ctx);
+}
+
+// The one that terminates rather than returning if it is unguarded: ~Context calls the driver's
+// close, and a destructor is implicitly noexcept, so a throw out of it aborts the process before
+// any handler in HostAbi.cpp exists to catch it. Reaching the line after se_destroy is the whole
+// assertion -- the live driver's close joins a thread, and std::thread::join throws
+// std::system_error when the OS refuses, so this is a reachable path.
+void TestThrowingCloseCallbackDoesNotTerminate()
+{
+    se_test::State state(0x1000);
+    se_test::WriteSystemClip(state, 320, 224);
+    se_data_source source = se_test::MakeSource(state);
+    source.close = &Thrower::Close;
+
+    se_context* ctx = se_test::CreateContext(source);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    se_destroy(ctx);
+    CHECK(true && "se_destroy returned instead of terminating");
+}
+
 }  // namespace
 
 int main()
 {
+    TestThrowingStatusAndFrameCallbacks();
+    TestThrowingLoadStateCallback();
+    TestThrowingCloseCallbackDoesNotTerminate();
     TestBeginFrameReportsAllocationFailure();
     TestRenderFrameReportsAllocationFailure();
     TestCreateReturnsNullOnAllocationFailure();
