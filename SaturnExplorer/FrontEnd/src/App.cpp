@@ -4568,7 +4568,15 @@ void App::AcceptLocateMatch(const std::string& rel, uint64_t selOffset)
     loc.file = rel;
     loc.fileOffset = selOffset;
     loc.expected = mLocateExpected;
-    mPatchLib.AddOrUpdate(loc);
+    // Refused only for a location that could not be patched or saved anyway -- a path holding a
+    // field separator, or a baseline that is not the mapped length. Silently dropping it would
+    // leave the user believing the match was accepted.
+    std::string why;
+    if (!mPatchLib.AddOrUpdate(loc, &why))
+    {
+        mPatchResultText = "Couldn't record that location: " + why;
+        mShowPatchResults = true;
+    }
 }
 
 void App::DrawPatchMenu(std::vector<TopBarCommand>& commands)
@@ -4749,14 +4757,18 @@ void App::DoOpenProject(IPlatform& platform)
     if (!platform.OpenFileDialogFiltered(path, "Saturn Explorer project", "seproj") &&
         !platform.OpenFileDialog(path))
         return;   // cancelled
-    if (mPatchLib.LoadProject(path))
+    std::string why;
+    if (mPatchLib.LoadProject(path, &why))
     {
         mPatchResultText = "Loaded " + std::to_string(mPatchLib.Count()) +
                            " location(s) from the project.";
     }
     else
     {
-        mPatchResultText = "Couldn't open that project file.";
+        // Say which record or header the parse stopped on: "couldn't open that project file" for
+        // a file that is one bad line away from loading sends the user looking in the wrong place.
+        mPatchResultText = why.empty() ? "Couldn't open that project file."
+                                       : "Couldn't open that project: " + why;
     }
     mShowPatchResults = true;
 }
