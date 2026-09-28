@@ -54,7 +54,9 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | MEDIA-01 | `1355a75` — labelled; SSCTL/SBCTL are not carried, so it cannot refuse those voices |
 | VDP1-03 | `859c9ac` |
 | HOOK-01 | `7ee20e7` |
-| UI-02 | this commit |
+| UI-02 | `d87d384` |
+| VDP1-02 | this commit |
+| VDP2-01 | this commit (same fix as VDP1-02) |
 
 CPU-01 asked for the semantics to be settled either way. They are settled as **shared**: a PC
 breakpoint halts whichever SH-2 reaches the address, so CPU takes no part in execution-breakpoint
@@ -76,8 +78,8 @@ hit test agree with a renderer that skipped them.
 
 ## Findings still open
 
-Derive it rather than trusting a number in prose -- the table above has 38 rows, one of which
-(VDP1-01) is a duplicate of ABI-01, so 37 of the 40 distinct defects are closed:
+Derive it rather than trusting a number in prose -- the table above has 40 rows, one of which
+(VDP1-01) is a duplicate of ABI-01, so 39 of the 40 distinct defects are closed:
 
 ```
 grep -ho '^## [A-Z][A-Z0-9]*-[0-9]*' Docs/CodeReview/*.md | sed 's/^## //' | sort > /tmp/all
@@ -90,12 +92,10 @@ which leaves
 
 | ID | Severity | Finding |
 |---|---|---|
-| VDP1-02 / VDP2-01 | **Medium** | VDP1 priority is modeled per sprite instead of per pixel, causing mixed-priority composition errors. One fix, two reports. |
 | UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. |
 
-Both are being taken as their own changes rather than as part of a batch: the priority work moves
-data out of the rasterizer and through the pixel mixer, so the rasterizer's output and the
-compositor change together, and the `App.cpp` split is mechanical but touches everything.
+It is taken as its own change rather than as part of a batch: the split is mechanical but touches
+everything.
 
 Three of the closed rows are annotated because what landed is narrower than what the report
 suggested -- LIVE-01 (the payload verbs are version-gated, but capabilities are still advertised

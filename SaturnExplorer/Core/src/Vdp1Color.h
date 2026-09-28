@@ -78,13 +78,29 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
     return Rgb555ToRgba(ReadBE16(cram, CramWrap(index, words) * 2));
 }
 
-// Decode one texel (x,y) of a sprite texture. Returns a == 0 for transparent.
+// A decoded texel: its colour, and the 16-bit word the VDP1 would put in the framebuffer for
+// it.
+//
+// That word is what the sprite-priority and colour-calculation bits are defined over: SPCTL
+// picks a bit field out of it per sprite type, and which word it is depends on the colour mode --
+// the composed CRAM index in the bank modes, the CLUT entry in LUT mode, the colour itself in
+// RGB555. The bits differ per texel, which is the whole of finding VDP1-02: one sprite can carry
+// pixels at several priorities, and resolving one priority for the command puts some of them in
+// front of VDP2 layers that should cover them.
+struct Texel
+{
+    Rgba     color;
+    uint16_t word = 0;
+};
+
+// Decode one texel (x,y) of a sprite texture, with the framebuffer word it came from. Returns
+// color.a == 0 for transparent (the word is then meaningless and set to 0).
 // colorBank is CMDCOLR (bank modes); clutAddr is the LUT address (LUT mode).
 // spd == true keeps index 0 opaque (transparent-pixel disable).
-inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
-                        se_cram_mode cramMode, se_color_mode colorMode, uint32_t texAddr,
-                        uint16_t width, int x, int y, uint16_t colorBank,
-                        uint32_t clutAddr, bool spd)
+inline Texel DecodeTexelWord(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                             se_cram_mode cramMode, se_color_mode colorMode, uint32_t texAddr,
+                             uint16_t width, int x, int y, uint16_t colorBank,
+                             uint32_t clutAddr, bool spd)
 {
     switch (colorMode)
     {
@@ -94,8 +110,9 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         const uint32_t off = texAddr + y * stride + x / 2;
         const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
         const uint8_t p = (x & 1) ? (byte & 0x0F) : (byte >> 4);
-        if (p == 0 && !spd) return { 0, 0, 0, 0 };
-        return CramColor(cram, cramMode, (colorBank & 0xFFF0) | p);
+        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
+        const uint16_t word = static_cast<uint16_t>((colorBank & 0xFFF0) | p);
+        return { CramColor(cram, cramMode, word), word };
     }
     case SE_COLOR_LUT_16:
     {
@@ -103,16 +120,16 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         const uint32_t off = texAddr + y * stride + x / 2;
         const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
         const uint8_t p = (x & 1) ? (byte & 0x0F) : (byte >> 4);
-        if (p == 0 && !spd) return { 0, 0, 0, 0 };
+        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
         const uint16_t entry = ReadBE16(vram, clutAddr + p * 2);
         // Saturn color word: MSB (bit 15) set = a direct RGB555 color; MSB clear
         // = a CRAM color-bank index (VDP1 manual §5.x). Games often fill a CLUT
         // with direct RGB colors (all MSB set), so this must not be inverted.
         if (entry & 0x8000)
         {
-            return Rgb555ToRgba(entry);   // direct RGB555
+            return { Rgb555ToRgba(entry), entry };   // direct RGB555
         }
-        return CramColor(cram, cramMode, entry);   // CRAM color-bank index
+        return { CramColor(cram, cramMode, entry), entry };   // CRAM color-bank index
     }
     case SE_COLOR_BANK_64:
     case SE_COLOR_BANK_128:
@@ -125,19 +142,31 @@ inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint
         if (colorMode == SE_COLOR_BANK_64)  { mask = 0x3F; bankMask = 0xFFC0; }
         else if (colorMode == SE_COLOR_BANK_128) { mask = 0x7F; bankMask = 0xFF80; }
         else                                { mask = 0xFF; bankMask = 0xFF00; }
-        if (p == 0 && !spd) return { 0, 0, 0, 0 };
-        return CramColor(cram, cramMode, (colorBank & bankMask) | (p & mask));
+        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
+        const uint16_t word = static_cast<uint16_t>((colorBank & bankMask) | (p & mask));
+        return { CramColor(cram, cramMode, word), word };
     }
     case SE_COLOR_RGB555:
     {
         const uint32_t off = texAddr + (y * width + x) * 2;   // 16 bpp
         const uint16_t v = ReadBE16(vram, off);
-        if (v == 0 && !spd) return { 0, 0, 0, 0 };
-        return Rgb555ToRgba(v);
+        if (v == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
+        return { Rgb555ToRgba(v), v };
     }
     default:
-        return { 0, 0, 0, 0 };
+        return { { 0, 0, 0, 0 }, 0 };
     }
+}
+
+// The colour alone, for the callers that have no use for the framebuffer word (texture export,
+// the palette/texture viewers).
+inline Rgba DecodeTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                        se_cram_mode cramMode, se_color_mode colorMode, uint32_t texAddr,
+                        uint16_t width, int x, int y, uint16_t colorBank,
+                        uint32_t clutAddr, bool spd)
+{
+    return DecodeTexelWord(vram, cram, cramMode, colorMode, texAddr, width, x, y, colorBank,
+                           clutAddr, spd).color;
 }
 
 }  // namespace se

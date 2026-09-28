@@ -226,6 +226,12 @@ typedef struct se_sprite_2d {
     uint32_t             object_number;
     se_vec2              corners[4];   /* A,B,C,D screen-space */
     se_vec2              uv[4];        /* texture coordinates */
+    /* The front-most VDP2 priority any of this sprite's pixels reach -- a summary for a command
+       list or a sort, not what composites the frame. Priority is a property of the *pixel*: a
+       sprite pixel selects one of the eight VDP2 sprite-priority slots with a number encoded in
+       its own framebuffer word, so a sprite whose CLUT or colour bank spans several numbers has
+       pixels at several priorities and interleaves with the VDP2 layers at each of them. The
+       renderer resolves that per pixel; this field cannot express it. */
     uint8_t              priority;
     uint8_t              flip_x, flip_y, gouraud;
     se_color_mode        color_mode;

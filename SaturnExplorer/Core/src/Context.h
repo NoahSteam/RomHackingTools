@@ -125,7 +125,7 @@ public:
             }
             Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
             Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                        mSnapshot.CramMode(), opts, mColumns);
+                                        mSnapshot.CramMode(), mSpritePrios, opts, mColumns);
             ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
             if (!opts.transparent_background)
             {
@@ -763,46 +763,25 @@ private:
         }
     }
 
-    // Priority NUMBER encoded in a 16-bit sprite pixel for SPCTL sprite type
-    // 'type' (VDP1 manual; mirrors Yabause Vdp1GetSpritePixelInfo). A direct-RGB
-    // pixel (MSB set, mixed-color mode) carries no number and uses slot 0.
-    static int SpritePriorityNumber(uint16_t px, int type, bool spclmd)
-    {
-        if (spclmd && (px & 0x8000))
-        {
-            return 0;   // RGB pixel: priority number 0
-        }
-        switch (type)
-        {
-        case 0x0: return (px >> 14) & 0x3;
-        case 0x1: return (px >> 13) & 0x7;
-        case 0x2: return (px >> 14) & 0x1;
-        case 0x3: return (px >> 13) & 0x3;
-        case 0x4: return (px >> 13) & 0x3;
-        case 0x5: case 0x6: case 0x7: return (px >> 12) & 0x7;
-        case 0x8: case 0x9: return (px >> 7) & 0x1;
-        case 0xA:           return (px >> 6) & 0x3;
-        case 0xC: case 0xD: return (px >> 7) & 0x1;
-        case 0xE:           return (px >> 6) & 0x3;
-        default:            return 0;   // types B, F: no priority bits
-        }
-    }
-
-    // Resolve each VDP1 sprite's priority (0..7) from the sprite-priority
-    // registers (PRISA..PRISD indexed by the pixel's priority number) and its
-    // color data. Modeled per command (one priority per sprite) using the
-    // front-most priority its pixels reach — the common case; per-pixel sprite
-    // priority isn't modeled. Sprites default to 0 when VDP2 regs are absent.
+    // Build the sprite-priority table from the VDP2 registers, and give each sprite the
+    // front-most priority its pixels can reach.
+    //
+    // The table is what the rasterizer resolves priority with, per pixel (SpritePriorityTable).
+    // se_sprite_2d::priority is a per-command *summary* for the panels -- "how far forward can
+    // this sprite get" -- and is no longer what composites the frame; a sprite whose pixels span
+    // several priority numbers now interleaves with the VDP2 layers at each of them.
     void ResolveSpritePriorities()
     {
+        mSpritePrios = SpritePriorityTable{};
         if (!mSnapshot.HasVdp2Regs())
         {
             for (se_sprite_2d& s : mScene.sprites) s.priority = 0;
             return;
         }
         const uint16_t spctl = mSnapshot.Vdp2Reg(0x0E0);
-        const int type = spctl & 0xF;
-        const bool spclmd = (spctl & 0x20) != 0;
+        mSpritePrios.type = spctl & 0xF;
+        mSpritePrios.spclmd = (spctl & 0x20) != 0;
+        mSpritePrios.valid = true;
         const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
         const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
         const uint16_t prisc = mSnapshot.Vdp2Reg(0x0F4);
@@ -812,14 +791,16 @@ private:
             static_cast<uint8_t>(prisb & 0x7), static_cast<uint8_t>((prisb >> 8) & 0x7),
             static_cast<uint8_t>(prisc & 0x7), static_cast<uint8_t>((prisc >> 8) & 0x7),
             static_cast<uint8_t>(prisd & 0x7), static_cast<uint8_t>((prisd >> 8) & 0x7) };
+        for (int i = 0; i < 8; ++i) mSpritePrios.slot[i] = pt[i];
+
         const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
         for (se_sprite_2d& s : mScene.sprites)
         {
             int best = 0;
             bool found = false;
-            auto consider = [&](uint16_t px)
+            auto consider = [&](uint16_t word)
             {
-                const int prio = pt[SpritePriorityNumber(px, type, spclmd) & 0x7];
+                const int prio = mSpritePrios.Of(word);
                 if (!found || prio > best) { best = prio; found = true; }
             };
             if (s.texture.color_mode == SE_COLOR_LUT_16)
@@ -835,7 +816,35 @@ private:
             }
             else
             {
-                consider(s.texture.palette_bank);   // color-bank: bits from CMDCOLR
+                // A colour-bank sprite composes its word from CMDCOLR's high bits and the texel's
+                // index, so which priority numbers it can select depends on which of the number's
+                // bits the index supplies. Enumerate exactly those: at most eight combinations,
+                // since the number is three bits at most.
+                //
+                // Probing a representative word or two instead would not do. The slots map
+                // numbers to priorities in any order, so the front-most priority is not the one
+                // the largest number selects -- and the old code probed only the bank with a zero
+                // index, which is one number out of up to eight.
+                const uint16_t bank = s.texture.palette_bank;
+                uint16_t lowMask = 0x000F;
+                if (s.texture.color_mode == SE_COLOR_BANK_64) lowMask = 0x003F;
+                else if (s.texture.color_mode == SE_COLOR_BANK_128) lowMask = 0x007F;
+                else if (s.texture.color_mode == SE_COLOR_BANK_256) lowMask = 0x00FF;
+                const uint16_t high = static_cast<uint16_t>(bank & ~lowMask);
+                const SpritePriorityTable::Field f =
+                    SpritePriorityTable::FieldFor(mSpritePrios.type);
+                const uint16_t freeBits = static_cast<uint16_t>((lowMask >> f.shift) & f.mask);
+                for (uint16_t bits = 0; bits <= f.mask; ++bits)
+                {
+                    if ((bits & ~freeBits) != 0)
+                    {
+                        continue;   // this combination is fixed by the bank, not reachable
+                    }
+                    const uint16_t fixed = static_cast<uint16_t>((high >> f.shift) & f.mask &
+                                                                 ~freeBits);
+                    consider(static_cast<uint16_t>(high | (static_cast<uint16_t>(fixed | bits)
+                                                           << f.shift)));
+                }
             }
             s.priority = static_cast<uint8_t>(found ? best : 0);
         }
@@ -892,6 +901,7 @@ private:
     Vdp1Scene               mScene;
     std::vector<uint8_t>    mRenderBuffer;
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
+    SpritePriorityTable     mSpritePrios;   // rebuilt per frame from the VDP2 sprite regs
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()

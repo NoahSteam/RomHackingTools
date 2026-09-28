@@ -82,6 +82,10 @@ struct DrawAttribs
     DrawFx fx;
     const Rgba* solid = nullptr;
     const ClipRect* clip = nullptr;
+    // For an untextured primitive there is no texel to read a priority out of, so the command's
+    // own colour word (CMDCOLR) stands in -- which is what the hardware writes to the framebuffer
+    // for those pixels.
+    uint16_t solidWord = 0;
 };
 
 // True if user clipping rejects pixel (x,y): mode 0 draws only inside the rect, mode 1
@@ -107,10 +111,15 @@ uint8_t ApplyGouraud(uint8_t t8, float g5)
 
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
-// to 'sink(idx, r, g, b, fx)', which decides how it lands: the 2D path emits a descriptor
-// into its PixColumn (applying draw-mode effects against the column below); the 3D path
-// writes RGBA. Keeping the sink out of here lets both paths share the coverage/UV/gouraud
-// walk without either owning the other's compositing rules.
+// to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path emits a descriptor
+// into its PixColumn at the priority 'word' selects (applying draw-mode effects against the
+// column below); the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
+// both paths share the coverage/UV/gouraud walk without either owning the other's compositing
+// rules.
+//
+// 'word' is the framebuffer word the texel came from, which is where the sprite's priority bits
+// live -- gouraud shading changes the colour handed over but not the word, because the hardware
+// reads the priority out of the pixel data, not out of the shaded result.
 template <typename Sink>
 void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                     const se_vec2& t0, const se_vec2& t1, const se_vec2& t2,
@@ -166,6 +175,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             }
 
             Rgba c;
+            uint16_t word = da.solidWord;
             if (da.solid)
             {
                 c = *da.solid;   // untextured polygon: solid fill, always opaque
@@ -176,9 +186,11 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 const float v = w0 * t0.y + w1 * t1.y + w2 * t2.y;
                 const int tx = ClampInt(static_cast<int>(u), 0, texW - 1);
                 const int ty = ClampInt(static_cast<int>(v), 0, texH - 1);
-                c = DecodeTexel(vram, cram, cramMode, tex.color_mode,
-                                tex.vram_address, texW, tx, ty,
-                                tex.palette_bank, tex.clut_address, spd);
+                const Texel t = DecodeTexelWord(vram, cram, cramMode, tex.color_mode,
+                                                tex.vram_address, texW, tx, ty,
+                                                tex.palette_bank, tex.clut_address, spd);
+                c = t.color;
+                word = t.word;
                 if (c.a == 0)
                 {
                     continue;  // transparent texel
@@ -215,7 +227,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             // Hand the covered pixel to the sink with the sprite's draw-mode; the sink
             // owns how shadow / half-luminance / half-transparency and the final write or
             // descriptor emission are applied.
-            sink(idx, cr, cg, cb, da.fx);
+            sink(idx, cr, cg, cb, da.fx, word);
         }
     }
 }
@@ -245,7 +257,7 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
 // triangle is, interpolating each vertex's projected depth along the run -- otherwise a line
 // behind a quad would draw over it, which reads as the line being in front.
 template <typename Sink>
-void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c,
+void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uint16_t word,
               const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
 {
     const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
@@ -266,22 +278,22 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c,
             if (fd >= (*depth)[idx]) continue;
             (*depth)[idx] = fd;
         }
-        sink(idx, c.r, c.g, c.b, DrawFx{});
+        sink(idx, c.r, c.g, c.b, DrawFx{}, word);
     }
 }
 
 // Draw a line primitive's edges: A-B for a line (kind 2), the full A-B-C-D-A outline for
 // a polyline (kind 1).
 template <typename Sink>
-void DrawEdges(int width, int height, const RVert v[4], uint8_t primKind, Rgba c,
+void DrawEdges(int width, int height, const RVert v[4], uint8_t primKind, Rgba c, uint16_t word,
                const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
 {
-    DrawLine(width, height, v[0], v[1], c, clip, depth, sink);
+    DrawLine(width, height, v[0], v[1], c, word, clip, depth, sink);
     if (primKind == 1)
     {
-        DrawLine(width, height, v[1], v[2], c, clip, depth, sink);
-        DrawLine(width, height, v[2], v[3], c, clip, depth, sink);
-        DrawLine(width, height, v[3], v[0], c, clip, depth, sink);
+        DrawLine(width, height, v[1], v[2], c, word, clip, depth, sink);
+        DrawLine(width, height, v[2], v[3], c, word, clip, depth, sink);
+        DrawLine(width, height, v[3], v[0], c, word, clip, depth, sink);
     }
 }
 
@@ -385,6 +397,7 @@ RVert Project(const se_vec3& w, const se_camera3d& cam,
 
 void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                                  const std::vector<uint8_t>& cram, se_cram_mode cramMode,
+                                 const SpritePriorityTable& prios,
                                  const se_render_opts& opts, std::vector<PixColumn>& cols)
 {
     const int width = scene.screenWidth;
@@ -402,16 +415,20 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
     for (size_t i = 0; i < scene.sprites.size(); ++i)
     {
         const se_sprite_2d& s = scene.sprites[i];
-        const uint8_t prio = s.priority;
-        // Emit one sprite pixel as a descriptor at the sprite's priority. Draw-mode
-        // effects blend against the pixel(s) already below: shadow darkens the resolved
-        // below and hides the sprite's own colour; half-luminance halves the sprite;
+        // Emit one sprite pixel as a descriptor at the priority ITS OWN framebuffer word
+        // selects -- not the sprite's, which is only the front-most any of its pixels reach.
+        // A sprite whose CLUT spans two priority numbers therefore interleaves with the VDP2
+        // layers at both, which is what the hardware does (VDP1-02 / VDP2-01).
+        //
+        // Draw-mode effects blend against the pixel(s) already below: shadow darkens the
+        // resolved below and hides the sprite's own colour; half-luminance halves the sprite;
         // half-transparency averages with the resolved below. With nothing below (an
         // invalid column) shadow/half-transparency degrade to no-op / plain emit, matching
         // the old buffer path's "blend only over an opaque pixel".
-        auto sink = [&cols, colorCalc, prio](size_t idx, uint8_t r, uint8_t g, uint8_t b,
-                                             const DrawFx& fx)
+        auto sink = [&cols, colorCalc, &prios](size_t idx, uint8_t r, uint8_t g, uint8_t b,
+                                               const DrawFx& fx, uint16_t word)
         {
+            const uint8_t prio = prios.Of(word);
             PixColumn& col = cols[idx];
             if (fx.effect == 1)   // shadow
             {
@@ -449,12 +466,13 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         const ClipRect* clip = r.clip.enable ? &clipScaled : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), clip, nullptr, sink);
+            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip, nullptr,
+                      sink);
             continue;
         }
         ExpandQuadInclusive(v);
         const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
-        const DrawAttribs da{ r.fx, r.solid ? &solidCol : nullptr, clip };
+        const DrawAttribs da{ r.fx, r.solid ? &solidCol : nullptr, clip, r.color };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, nullptr, r.gouraud, da, sink);
     }
@@ -488,7 +506,10 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             Project(s.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[2], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(s.corners[3], camera, cosYaw, sinYaw, cosPitch, sinPitch) };
-        auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&)
+        // The exploded view separates sprites along Z by draw order, so a pixel's VDP2 priority
+        // plays no part in it and the framebuffer word is dropped here.
+        auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&,
+                                   uint16_t)
         {
             const size_t o = idx * 4;
             outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
@@ -500,8 +521,8 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             // with line commands would simply be absent, and the user has no way to tell that
             // from the game not having drawn it. No corner expansion: that exists to close the
             // seams between abutting quad strips, and a line has no interior to widen.
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), nullptr, &depth,
-                      lineSink);
+            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, nullptr,
+                      &depth, lineSink);
             continue;
         }
         ExpandQuadInclusive(v);
@@ -509,7 +530,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over. The
         // depth test in RasterTriangle has already run by the time the sink sees a pixel.
-        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr };
+        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr, r.color };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, &depth, r.gouraud, da, lineSink);
     }

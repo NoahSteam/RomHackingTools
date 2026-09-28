@@ -732,8 +732,145 @@ void TestEmptySourceIsStillInvalid()
     se_destroy(context);
 }
 
+// --- Per-pixel sprite priority (VDP1-02 / VDP2-01) -----------------------------------------
+//
+// A VDP1 sprite pixel selects one of the eight VDP2 sprite-priority slots with a "priority
+// number" encoded in its own framebuffer word, and which bits carry that number depends on the
+// SPCTL sprite type. So one sprite can hold pixels at several priorities, and the hardware
+// interleaves each of them with the VDP2 layers separately.
+//
+// The scene below is the smallest one that tells the two models apart: a 4x2 LUT-16 sprite whose
+// left half uses a CLUT entry with priority number 0 and whose right half uses one with number 1,
+// over an NBG3 layer at a priority between the two. Per-pixel, the left half goes behind the
+// background and the right half in front. Per-command -- taking the front-most priority the
+// sprite can reach, which is what this used to do -- the whole sprite lands in front and the
+// background is hidden where it should show through.
+State MakeMixedPrioritySpriteState()
+{
+    State state = MakeNbg3State();
+
+    // NBG3 at priority 4, filling the frame. MakeNbg3State points its pattern at character 1
+    // and puts white in CRAM entry 1; keep that, and give the sprite its own CRAM entries.
+    SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
+
+    // SPCTL: sprite type 0, SPCLMD off. Type 0 reads the priority number from bits 15-14 of the
+    // pixel word, and for a LUT sprite the word is the CLUT entry -- whose bit 15 is the
+    // "direct RGB" flag. With CRAM-index entries (bit 15 clear) bit 14 alone selects number
+    // 0 or 1, which is exactly the two-priority sprite this test needs.
+    SetReg(state, 0x0E0, 0x0000);
+    // PRISA: priority number 0 -> priority 2 (behind NBG3), number 1 -> priority 6 (in front).
+    SetReg(state, 0x0F0, 0x0602);
+
+    // CRAM entries the CLUT points at: 2 = red, 3 = green.
+    PutBE16(state.cram, 2 * 2, 0x801F);   // red
+    PutBE16(state.cram, 3 * 2, 0x83E0);   // green
+
+    ResizeVdp1(state, 0x200);
+    PutBE16(state.vdp1, 0x20, 0x0000);            // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);            // draw end
+    PutBE16(state.vdp1, 0x24, 0x0008 | 0x0040);   // CMDPMOD: LUT-16 colour mode, SPD
+    PutBE16(state.vdp1, 0x26, 0x180 / 8);         // CMDCOLR: CLUT at byte 0x180
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);         // CMDSRCA: texture at byte 0x100
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);      // CMDSIZE: 8 wide, 2 tall
+    PutBE16(state.vdp1, 0x2C, 0);                 // CMDXA
+    PutBE16(state.vdp1, 0x2E, 0);                 // CMDYA
+
+    // The CLUT: index 1 -> CRAM entry 2 with priority number 0; index 2 -> CRAM entry 3 with
+    // bit 14 set, i.e. priority number 1.
+    PutBE16(state.vdp1, 0x180 + 1 * 2, 0x0002);
+    PutBE16(state.vdp1, 0x180 + 2 * 2, 0x4003);
+
+    // 4bpp texture, 8 wide by 2 tall (the smallest CMDSIZE width is 8). The sprite is drawn at
+    // x = 0 and the composited frame is only 4 wide, so screen columns 0-3 show texels 0-3 and
+    // the rest is clipped away -- which is why the priority split is at texel 2 and not at the
+    // middle of the texture. Texels 0-1 take CLUT index 1 (priority number 0), texels 2-3 take
+    // index 2 (number 1); one byte holds two texels.
+    for (int row = 0; row < 2; ++row)
+    {
+        const uint32_t base = 0x100 + static_cast<uint32_t>(row) * 4;   // stride = 8 px / 2
+        state.vdp1[base + 0] = 0x11;   // texels 0,1 -> index 1
+        state.vdp1[base + 1] = 0x22;   // texels 2,3 -> index 2
+        state.vdp1[base + 2] = 0x22;   // clipped off the 4-wide frame
+        state.vdp1[base + 3] = 0x22;
+    }
+    return state;
+}
+
+void TestSpritePriorityIsPerPixel()
+{
+    State state = MakeMixedPrioritySpriteState();
+    const std::vector<uint8_t> pixels = Render(state, false);
+
+    // Columns 0-1: priority 2, so NBG3 (priority 4) covers them. White, and specifically not
+    // the sprite's own red.
+    CHECK(IsColor(pixels, 0, 0, 255, 255, 255));
+    CHECK(IsColor(pixels, 1, 0, 255, 255, 255));
+    CHECK(IsColor(pixels, 0, 1, 255, 255, 255));
+    CHECK(IsColor(pixels, 1, 1, 255, 255, 255));
+
+    // Columns 2-3: priority 6, in front of NBG3. The sprite's green.
+    CHECK(IsColor(pixels, 2, 0, 0, 255, 0));
+    CHECK(IsColor(pixels, 3, 0, 0, 255, 0));
+    CHECK(IsColor(pixels, 2, 1, 0, 255, 0));
+    CHECK(IsColor(pixels, 3, 1, 0, 255, 0));
+}
+
+// The per-command summary se_sprite_2d::priority still reports the front-most priority the
+// sprite's pixels reach, which is what the Command List panel shows. It is no longer what
+// composites the frame -- that is the point above -- so this pins the two apart.
+void TestSpritePrioritySummaryIsTheFrontMost()
+{
+    State state = MakeMixedPrioritySpriteState();
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    CHECK(se_sprite_count(context) == 1);
+    se_sprite_2d sprite = {};
+    CHECK(se_get_sprite_2d(context, 0, &sprite) == SE_OK);
+    CHECK(sprite.priority == 6);
+    se_destroy(context);
+}
+
+// The per-command summary has to consider every priority number the sprite's pixels can select,
+// not a representative word or two. The slots map numbers to priorities in any order, so the
+// front-most priority is not the one the largest number picks.
+//
+// Sprite type 0xA reads the number from bits 7-6, and a 256-colour bank sprite supplies bits 7-0
+// from the texel index -- so all four numbers are reachable. Here number 2 carries priority 7 and
+// the other three carry 1. Probing the bank with a zero index (which is what this used to do)
+// sees only number 0 and reports 1.
+void TestPrioritySummaryConsidersEveryReachableNumber()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // no backgrounds; this test only reads the summary
+    SetReg(state, 0x0E0, 0x000A);   // SPCTL: sprite type A, SPCLMD off
+    SetReg(state, 0x0F0, 0x0101);   // PRISA: number 0 -> 1, number 1 -> 1
+    SetReg(state, 0x0F2, 0x0107);   // PRISB: number 2 -> 7, number 3 -> 1
+
+    ResizeVdp1(state, 0x400);
+    PutBE16(state.vdp1, 0x20, 0x0000);            // CMDCTRL: normal sprite
+    PutBE16(state.vdp1, 0x40, 0x8000);            // draw end
+    PutBE16(state.vdp1, 0x24, 0x0020 | 0x0040);   // CMDPMOD: 256-colour bank, SPD
+    PutBE16(state.vdp1, 0x26, 0x0200);            // CMDCOLR: colour bank
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);         // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 2);      // CMDSIZE: 8 wide, 2 tall
+    for (uint32_t i = 0; i < 16; ++i) state.vdp1[0x100 + i] = 0x01;   // 8bpp, index 1 throughout
+
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    CHECK(se_sprite_count(context) == 1);
+    se_sprite_2d sprite = {};
+    CHECK(se_get_sprite_2d(context, 0, &sprite) == SE_OK);
+    CHECK(sprite.priority == 7);
+    se_destroy(context);
+}
+
 int main()
 {
+    TestPrioritySummaryConsidersEveryReachableNumber();
+    TestSpritePriorityIsPerPixel();
+    TestSpritePrioritySummaryIsTheFrontMost();
     TestVdp2OnlySourceIsValid();
     TestEmptySourceIsStillInvalid();
     TestEditReRenders();

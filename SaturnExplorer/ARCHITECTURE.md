@@ -480,9 +480,11 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > by byte-swapping on load (16-bit for RGB555 modes, 32-bit for RGB888). This was the fix for
    > the pink/blue speckle — a byte-swapped palette turns smooth ramps jumpy — and it corrected
    > the VDP1 sprite colors too.
-   > **Known simplifications (M4b):** VDP1 and NBGs now interleave by priority, but VDP1 priority
-   > is still resolved per command rather than per framebuffer pixel. NBG0-3 normal and line
-   > windows are modeled; sprite/color-calculation windows are not. Still missing: rotation
+   > **Known simplifications (M4b):** VDP1 and NBGs interleave by priority, per framebuffer pixel
+   > -- a sprite whose CLUT or colour bank spans several SPCTL priority numbers interleaves at
+   > each of them, as the hardware does. NBG0-3 normal and line windows are modeled;
+   > sprite/color-calculation windows are not, and sprites do not yet carry a colour-calculation
+   > ratio of their own. Still missing: rotation
    > screens (RBG0/1), bitmap-mode backgrounds, line/vertical-cell scroll, zoom, mosaic, color
    > calculation, and the VDP2 back/line-color screens (empty pixels use a flat backdrop). See
    > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
