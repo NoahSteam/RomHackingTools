@@ -11,6 +11,15 @@
 #include "Prs.h"
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+// Same guard IsoBuilder.cpp carries, and for the same reason: MSVC's <windef.h> defines min() and
+// max() as macros unless this is set, and the expansion turns the std::min below into std::( --
+// "error C2589: '(': illegal token on right side of '::'". Defending the file is better than
+// relying on every target that compiles it to pass -DNOMINMAX, which is how this was missed: the
+// frontend and TopBarTests set it, so a new test target compiling this file was the first thing to
+// find out that it has to.
+#define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <dirent.h>
