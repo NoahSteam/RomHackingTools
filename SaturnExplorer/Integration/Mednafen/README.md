@@ -170,6 +170,14 @@ to `SeExportSnapshot`. Per section:
   accessor to `sound.cpp` that calls it. The member serializes each voice into the fixed
   36-byte LE record in `SeLiveProtocol.h`, reading the raw DISDL/DIPAN/EFSDL/EFPAN from
   `SlotRegs[i][0x0B]` and sign-extending the 4-bit `Octave`.
+
+  The record deliberately does **not** carry `SSCTL` (the voice's sample source: memory PCM,
+  noise, or zero) or `SBCTL` (sample-bit inversion). Play/Export therefore read the voice's
+  bytes out of sound RAM as PCM, which is the sample as stored — right for tone and music
+  playback, and not what the hardware does for a noise/zero source or an SBCTL-mangled voice.
+  Both are rare and effect-only. Adding them needs a protocol version and another two bytes in
+  the record, and until then the panel states the limit on the buttons that produce the sound
+  rather than implying a bit-accurate export (review finding MEDIA-01).
 - **CD-block status (v15)** — the **Disc Explorer**'s live drive readout: the FAD the CD
   drive is reading right now, resolved to a file on the loaded disc image. The drive state
   (`CurPosInfo.fad`/`.status`, `CurPlayStart`/`CurPlayEnd`) is file-static in **`cdb.cpp`**,

@@ -350,10 +350,21 @@ public:
 
     // Decode voice 'slot' from sound RAM into 16-bit signed mono host PCM (SA..SA+LEA),
     // converting 16-bit big-endian / 8-bit PCM. Returns frames written (<= maxFrames).
-    // Assumes a memory PCM source (SSCTL=0) with no sample-bit inversion (SBCTL=0) — the
-    // normal case for tone/music playback; noise/zero sources and SBCTL sign-mangling
-    // (both rare, effect-only) are not reconstructed. The SCSP addresses 16-bit voices by
-    // word (RAM[SA>>1]), so bit 0 of SA is ignored for 16-bit; 8-bit voices are byte-addressed.
+    //
+    // This is the sample as stored, not a reproduction of what the SCSP plays. It assumes a
+    // memory PCM source (SSCTL=0) with no sample-bit inversion (SBCTL=0), which is the normal
+    // case for tone and music playback; a voice whose source is the noise generator or zero, or
+    // one played through SBCTL sign-mangling, does not read sound RAM this way at all, and the
+    // envelope and DSP effect path are not applied either.
+    //
+    // It cannot refuse those cases, because se_scsp_slot does not carry SSCTL or SBCTL: the
+    // emulator's slot block (SE_LIVE_SCSP_SLOT_LEN) does not send them, so adding the check means
+    // a protocol version and a change to the emulator-side hook. Until then the limit is stated
+    // where a user acts on the result -- the Sound panel's Play and Export buttons -- rather than
+    // only here. See MEDIA-01.
+    //
+    // The SCSP addresses 16-bit voices by word (RAM[SA>>1]), so bit 0 of SA is ignored for
+    // 16-bit; 8-bit voices are byte-addressed.
     int DecodeScspSample(int slot, int16_t* out, int maxFrames, uint32_t* outRate) const
     {
         const std::vector<se_scsp_slot>& sl = mSnapshot.ScspSlots();

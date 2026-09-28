@@ -8119,6 +8119,14 @@ void App::ExportSound(IPlatform& platform, int slot)
     char name[32];
     std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
     platform.SaveFile(name, wav.data(), wav.size());
+    // The .wav itself cannot carry the caveat, and the tooltip is gone by the time the file is
+    // in a folder, so the log keeps the record of what was exported.
+    char note[224];
+    std::snprintf(note, sizeof(note),
+                  "Exported voice %d as %s: %d frames at %u Hz. Sound RAM read as PCM; envelope "
+                  "and effects not applied, and not bit-accurate for a noise/zero or SBCTL voice.",
+                  slot, name, frames, rate);
+    mLog.Info(note);
 }
 
 // Decode a voice's sample and preview it through the platform's audio output (at its natural
@@ -8219,6 +8227,17 @@ void App::PlaySoundFrame(IPlatform& platform)
         mLog.Warn("Play Frame: the audio device rejected the mix.");
 }
 
+// What a voice preview or export actually is. Shown on the panel and on both buttons, because
+// "Export .wav" reads as "here is the sound", and for an effect voice it is not (MEDIA-01).
+static const char* const kScspPreviewCaveat =
+    "Reads the voice's bytes from sound RAM as PCM at its current pitch, with the envelope and\n"
+    "the DSP effect path not applied. That is the sample as stored, which is what tone and music\n"
+    "playback uses.\n\n"
+    "It is not bit-accurate for a voice whose source is the noise generator or zero (SSCTL), or\n"
+    "one played through sample-bit inversion (SBCTL) -- for those the hardware does not read\n"
+    "sound RAM the way this does. Both are rare and effect-only, and the slot state the emulator\n"
+    "sends does not include those two fields, so this cannot tell you which voices they are.";
+
 void App::DrawSound(IPlatform& platform)
 {
     if (!ImGui::Begin("Sound (SCSP)"))
@@ -8266,6 +8285,13 @@ void App::DrawSound(IPlatform& platform)
     }
     ImGui::SameLine();
     ImGui::TextDisabled("(each voice is a mono channel; stereo comes from pan)");
+    // Say what the preview is, where the buttons that produce it are. The decode reads the
+    // voice's bytes out of sound RAM as PCM, which is right for tone and music playback and is
+    // not what the hardware does for a voice whose source is the noise generator or zero, or one
+    // playing through SBCTL's sign mangling -- and nothing in the slot state the emulator sends
+    // says which those are, so this cannot flag the individual rows. See MEDIA-01.
+    ImGui::TextDisabled("(i)");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", kScspPreviewCaveat);
     ImGui::Separator();
 
     static const char* kPhase[] = { "ATK", "DEC1", "DEC2", "REL" };
@@ -8340,14 +8366,14 @@ void App::DrawSound(IPlatform& platform)
             if (ImGui::SmallButton("Play")) PlaySound(platform, i);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(platform.HasAudio() ? "Preview this voice's sample"
+                ImGui::SetTooltip(platform.HasAudio() ? kScspPreviewCaveat
                                                       : "Audio output not available in this build");
             ImGui::SameLine();
             ImGui::BeginDisabled(!hasSample);
             if (ImGui::SmallButton("Export")) ExportSound(platform, i);
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered() && hasSample)
-                ImGui::SetTooltip("Save this voice's sample as a .wav");
+                ImGui::SetTooltip("Save this voice's sample as a .wav.\n\n%s", kScspPreviewCaveat);
             ImGui::PopID();
         }
         ImGui::EndTable();
