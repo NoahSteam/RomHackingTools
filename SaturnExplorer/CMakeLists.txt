@@ -92,6 +92,20 @@ if(BUILD_TESTING)
              COMMAND SaturnExplorerYssFixtureTests)
 endif()
 
+# Does the Windows live tap's shutdown actually end its server thread (HOOK-01)? The threads it
+# has to join are parked in synchronous named-pipe calls, so this needs the real Win32 pipe
+# implementation -- it is built on Windows, and cross-compiles to run under wine from a Linux
+# checkout (the command is in the test's header comment).
+if(BUILD_TESTING AND WIN32)
+    add_executable(SaturnExplorerExportShutdownTests
+        Integration/Common/tests/SeExportShutdownTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportShutdownTests
+        PRIVATE Integration/Common ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerExportShutdownTests
+             COMMAND SaturnExplorerExportShutdownTests)
+endif()
+
 # The shared normalization helpers: what they do with input that is not the shape the
 # savestate/live formats promised. Portable, no emulator and no socket needed.
 if(BUILD_TESTING)

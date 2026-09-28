@@ -296,6 +296,10 @@ static pthread_t sStateWorker;
 #endif
 static volatile int sStateWorkerRun;
 static int          sStateWorkerStarted;
+/* Set when a deinit could not join a thread and therefore left its locks and buffers allocated
+ * (see SeExportDeinit). Sticky: a second init would start a new server over the same globals and
+ * hand the surviving thread a ring that two threads now write, so it refuses instead. */
+static int          sShutdownIncomplete;
 
 static size_t         sStateCap;                  /* per-buffer capacity (0 = feature off) */
 static unsigned char* sStatePool[SE_STATE_QUEUE]; /* pooled full-state buffers */
@@ -1503,6 +1507,74 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
 }
 
 #if defined(_WIN32)
+/* --- Shutdown, the Windows half (review finding HOOK-01) ---------------------------------
+ *
+ * The server thread parks in one of two synchronous calls, and clearing sRunning reaches
+ * neither of them:
+ *
+ *   ConnectNamedPipe(pipe, NULL)  waits for a client, with no timeout and no flag that a
+ *                                 second thread can set to end the wait.
+ *   ReadFile/WriteFile            waits on a connected client that may simply have stopped
+ *                                 talking without closing.
+ *
+ * The old deinit waited one second, closed the thread handle and carried on into
+ * DeleteCriticalSection and free() -- but closing a thread handle does not end the thread, so a
+ * server still blocked in either call would wake later into a deleted critical section and a
+ * freed frame ring. On POSIX the same shutdown is correct for a structural reason: closing the
+ * listening socket makes accept() return, so the joins below it are unconditional.
+ *
+ * These two give Windows the same two properties: a way to make the blocking call return, and a
+ * join that is either real or refuses to let the teardown proceed. */
+
+/* Make a blocked server thread return. Connecting to our own pipe as a client and dropping the
+ * connection at once is the analogue of closing the listening socket under accept(): the server
+ * returns from ConnectNamedPipe, finds nothing to read, and re-tests sRunning. If a real client
+ * is attached instead, the thread is inside ReadFile/WriteFile, and CancelSynchronousIo is the
+ * documented way to interrupt a synchronous operation running on another thread -- it returns
+ * ERROR_NOT_FOUND when nothing is pending, which is the ordinary case here and harmless. */
+static void SeWinWakeServer(HANDLE thread)
+{
+    HANDLE poke = CreateFileA(SE_LIVE_DEFAULT_PIPE_NAME, GENERIC_READ | GENERIC_WRITE,
+                              0, NULL, OPEN_EXISTING, 0, NULL);
+    if (poke != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(poke);   /* the server's ConnectNamedPipe completes, then its read fails */
+    }
+    if (thread)
+    {
+        CancelSynchronousIo(thread);
+    }
+}
+
+/* Wait for a thread to actually finish, nudging it between waits when it is the server.
+ * Returns 1 only when the thread really has exited.
+ *
+ * The return value is the whole point. What follows a deinit destroys both critical sections and
+ * frees the frame ring and the state pool, all of which a live thread touches -- so "we waited a
+ * while and gave up" must not be followed by that teardown. */
+static int SeWinJoinThread(HANDLE* thread, int nudge)
+{
+    int attempt;
+    if (!thread || !*thread)
+    {
+        return 1;
+    }
+    for (attempt = 0; attempt < 5; ++attempt)
+    {
+        if (nudge)
+        {
+            SeWinWakeServer(*thread);
+        }
+        if (WaitForSingleObject(*thread, 1000) == WAIT_OBJECT_0)
+        {
+            CloseHandle(*thread);
+            *thread = NULL;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static DWORD WINAPI SeServerThread(LPVOID arg)
 {
     SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
@@ -1598,6 +1670,14 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev)
 
 int SeExportInit(void)
 {
+    if (sShutdownIncomplete)
+    {
+        /* The previous session left a thread running on these globals. Starting a second server
+         * over them would give the survivor a frame ring that two threads write. */
+        fprintf(stderr, "[SaturnExplorer] live tap: not restarting -- a thread from the previous "
+                        "session never exited\n");
+        return -1;
+    }
     {
         int i;
         for (i = 0; i < SE_RING; ++i)
@@ -1643,11 +1723,27 @@ void SeExportDeinit(void)
      * (The server threads are joined just below; ordering is safe either way.) */
     sStateWorkerRun = 0;
 #if defined(_WIN32)
-    if (sStateWorkerStarted && sStateWorker)
     {
-        WaitForSingleObject(sStateWorker, 1000); CloseHandle(sStateWorker); sStateWorker = NULL;
+        /* The state worker only ever sleeps between queue polls, so clearing its flag is enough
+         * and it needs no nudge. The server does (see SeWinWakeServer). */
+        int joined = SeWinJoinThread(&sStateWorker, 0);
+        if (!SeWinJoinThread(&sThread, 1))
+        {
+            joined = 0;
+        }
+        if (!joined)
+        {
+            /* A thread is still inside a call we could not interrupt. Everything past this point
+             * deletes a critical section or frees a buffer that such a thread uses, so the only
+             * safe move is to leave it all allocated: the process is on its way out and the leak
+             * costs nothing, whereas freeing the frame ring under a live server is a crash in
+             * someone else's emulator with nothing in the stack pointing here. */
+            fprintf(stderr, "[SaturnExplorer] live tap: a server thread did not exit; leaving its "
+                            "locks and buffers allocated rather than freeing them underneath it\n");
+            sShutdownIncomplete = 1;
+            return;
+        }
     }
-    if (sThread) { WaitForSingleObject(sThread, 1000); CloseHandle(sThread); sThread = NULL; }
     /* Both locking threads are joined -- single-threaded again -- so stop gating on the
      * locks and destroy them. Anything that still runs (e.g. SeStateShutdown) touches the
      * guarded data without a lock, which is safe with no other thread alive. */
