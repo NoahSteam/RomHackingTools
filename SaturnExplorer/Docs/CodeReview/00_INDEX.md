@@ -57,6 +57,7 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | UI-02 | `d87d384` |
 | VDP1-02 | this commit |
 | VDP2-01 | this commit (same fix as VDP1-02) |
+| UI-01 | `d7af7d4` -- see "UI-01, after a pass at it" below: one extraction, then the step/halt machine; the six coordinator objects the report named were declined, with reasons |
 
 CPU-01 asked for the semantics to be settled either way. They are settled as **shared**: a PC
 breakpoint halts whichever SH-2 reaches the address, so CPU takes no part in execution-breakpoint
@@ -78,8 +79,8 @@ hit test agree with a renderer that skipped them.
 
 ## Findings still open
 
-Derive it rather than trusting a number in prose -- the table above has 40 rows, one of which
-(VDP1-01) is a duplicate of ABI-01, so 39 of the 40 distinct defects are closed:
+Derive it rather than trusting a number in prose -- the table above has 41 rows, one of which
+(VDP1-01) is a duplicate of ABI-01, so all 40 distinct defects are closed:
 
 ```
 grep -ho '^## [A-Z][A-Z0-9]*-[0-9]*' Docs/CodeReview/*.md | sed 's/^## //' | sort > /tmp/all
@@ -88,11 +89,10 @@ awk '/^\| ID \| Fixed in \|/,/^$/' Docs/CodeReview/00_INDEX.md \
 comm -13 /tmp/closed /tmp/all
 ```
 
-which leaves
-
-| ID | Severity | Finding |
-|---|---|---|
-| UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. **Partly addressed** -- see below. |
+which now prints nothing. UI-01 was the last row to land; read the section below for what
+"closed" means for it, because it is the one finding whose *premise* moved under it rather than
+simply being fixed -- six of the objects the report asked for were declined, and the reasons are
+recorded there rather than left for someone to rediscover.
 
 ### UI-01, after a pass at it
 
@@ -123,15 +123,35 @@ that across translation units by panel group would shrink the file without chang
 what; worth doing, but it is a different change from the one this finding describes, and a
 six-thousand-line move is not reviewable alongside anything else.
 
-**The one genuine candidate left** is the step/halt machine: ten members (`mStepSettle`,
+**The one genuine candidate left was** the step/halt machine: ten members (`mStepSettle`,
 `mBpStop*`, `mStepBp*`, `mStepAwaitingHalt`, `mStepHoldFrames`, `mStepFromPc`) implementing
 "resume, hold the halted presentation across the round trip, release on a *new* PC, retire the
-transient breakpoint". That is a real state machine with real invariants and no test. It was left
-alone deliberately: its behaviour is only observable against a live emulator, its policy is
-interleaved with conditional-breakpoint evaluation and access logging that would have to come back
-through callbacks, and the comments around it record someone already fighting these exact races
-(the presentation "flash", the stale pre-step stop echo). Extracting it blind, with no way to
-exercise it, is how those races come back.
+transient breakpoint". A real state machine with real invariants and no test. It was left alone
+deliberately at first: its behaviour is only observable against a live emulator, its policy is
+interleaved with conditional-breakpoint evaluation and access logging, and the comments around it
+record someone already fighting these exact races (the presentation "flash", the stale pre-step
+stop echo). Extracting it *blind* is how those races come back.
+
+It is now `FrontEnd/src/Debug/StepHaltMachine.{h,cpp}`, extracted in the shape that answers that
+objection rather than ignoring it: the machine holds the state and the rules, and **no policy**.
+It resumes nothing, evaluates no condition, logs no access and opens no panel -- `Observe()` takes
+the stop report and reports what the halt is, and `App` decides what to do about it. That is what
+makes it exercisable without an emulator, and it is why the conditional-breakpoint and access-log
+paths did not move.
+
+Thirteen cases cover it, including both named races and the ordering rule that reads like an
+accident otherwise: whether a halt ended a step is captured *before* the hold is released, because
+the release clears that flag on the very frame the new halt lands, after which a completed step and
+a fresh breakpoint hit are indistinguishable. Each rule was mutation-checked -- reverting it fails
+a test -- except the settle counter's underflow guard, whose removal changes nothing a caller can
+observe; that one is marked in the test as a deliberate no-test case rather than a contrived one.
+
+Also deliberately preserved: the two original reset sites had **different scopes**, so they stay
+two methods. `ResetHalt` (a static source, or a live connection lost mid-step) leaves the transient
+breakpoint installed, because it lives in the emulator and the sync path is what removes it;
+`ResetForNewEmulator` clears everything and forces a re-sync, because a process that just started
+holds none of our breakpoints. Collapsing them would have been the kind of tidying that quietly
+changes behaviour.
 
 Three of the closed rows are annotated because what landed is narrower than what the report
 suggested -- LIVE-01 (the payload verbs are version-gated, but capabilities are still advertised

@@ -35,6 +35,7 @@
 #include "Disc/DiscImage.h"       // disc-image reader + ISO 9660 browser (sector -> file)
 #include "Debug/WatchList.h"
 #include "Debug/BreakpointManager.h"
+#include "Debug/StepHaltMachine.h"
 
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"
@@ -387,24 +388,12 @@ private:
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
     bool             mbPaused = false;        // live emulator held paused (frame control)
-    int              mStepSettle = 0;         // frames to keep capturing after a step (paused freeze)
-    // Live breakpoint-hit state, mirrored to the Assembly panel so it tints the halted row.
-    bool             mBpStopActive = false;
-    int              mBpStopCpu = 0;
-    uint32_t         mBpStopPc = 0;
-    // Transient (one-shot) step breakpoint for Step Over / Step Out: a run-to-address the
-    // client installs alongside the user set and removes automatically once hit. Kept out
-    // of BreakpointManager so it never shows in the gutter.
-    bool             mStepBpActive = false;
-    uint32_t         mStepBpAddr = 0;
-    bool             mStepBpDirty = false;   // forces a breakpoint re-sync when it changes
-    // A Step (Into/Over/Out) resumes the CPU and expects a near-immediate re-halt. Hold the
-    // halted UI presentation (red row, enabled step buttons, frozen regs at the last halt PC)
-    // across that brief resume→re-halt round trip so it doesn't blink off and back on. Capped
-    // by mStepHoldFrames so a step that runs long (or never returns) still reveals "running".
-    bool             mStepAwaitingHalt = false;
-    int              mStepHoldFrames = 0;
-    uint32_t         mStepFromPc = 0;       // halt PC a step began at; the hold releases on a *new* PC
+    // Run control: the halt presentation, the transient Step Over/Out breakpoint, the hold that
+    // keeps a halt on screen across a step's resume->re-halt round trip, and the post-step settle
+    // window. Ten members and their invariants, which had no test while they lived here
+    // (Docs/CodeReview -- UI-01); see Debug/StepHaltMachine.h for the races they exist to avoid.
+    // App keeps the policy: only it resumes, evaluates a condition guard, or opens a panel.
+    sfe::StepHaltMachine mStepHalt;
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt

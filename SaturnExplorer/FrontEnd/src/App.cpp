@@ -44,16 +44,6 @@ namespace sfe
 namespace
 {
 
-// After a frame-step, keep re-capturing the live source for this many UI frames so the stepped
-// frame settles over the socket before the snapshot re-freezes (see the capture gate). Frame
-// control is core ABI (se_frame_step), not part of the live driver, so the step path -- and
-// therefore this constant -- must exist in every build, including the web one that leaves
-// SE_ENABLE_LIVE undefined.
-constexpr int    kStepSettleFrames  = 4;
-// Safety cap on how long the halted UI is held while a Step is in flight (see
-// mStepAwaitingHalt). A normal step re-halts in a couple of frames; this only bites when a
-// Step Over/Out runs into a long — or non-returning — routine, so it eventually shows running.
-constexpr int    kStepHoldFrames    = 60;
 
 #ifdef SE_ENABLE_LIVE
 // Saturn runs at ~60 fps; the recorder's window is expressed in frames, so the
@@ -891,15 +881,15 @@ void App::BuildUI(IPlatform& platform)
         // Re-snapshot the running emulator each frame — except while paused, so an in-place
         // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
         // overwritten by the next capture. A step re-enables capture for a few frames
-        // (mStepSettle) so the newly-stepped frame settles in over the socket and shows.
-        // While halted at a breakpoint/step (mBpStopActive), keep capturing too: the emulator
+        // (the settle window) so the newly-stepped frame settles in over the socket and shows.
+        // While halted at a breakpoint/step, keep capturing too: the emulator
         // republishes a fresh snapshot from inside the halt, so this is how the halted CPU's
         // registers/memory reach the panels and how a step's new state shows. (A bare
-        // frame-pause has mBpStopActive false, so the edit-preview case above is unaffected.)
-        if (!mbPaused || mStepSettle > 0 || mBpStopActive)
+        // frame-pause leaves the halt inactive, so the edit-preview case above is unaffected.)
+        if (!mbPaused || mStepHalt.Settling() || mStepHalt.HaltActive())
         {
             se_begin_frame(mContext);
-            if (mStepSettle > 0) --mStepSettle;
+            mStepHalt.ConsumeSettleFrame();
         }
         mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
@@ -908,71 +898,44 @@ void App::BuildUI(IPlatform& platform)
         SyncTracepointsToLive();   // push tracepoint set (v8)
         DrainTraceEvents();        // pull fired tracepoints into the Log
 #ifdef SE_ENABLE_LIVE
-        uint32_t stopReason = 0, stopCpu = 0, stopPc = 0;
-        bool stopped = se_live_get_stop(&mDataSource, &stopReason, &stopCpu, &stopPc);
-        // Is this halt the end of a step rather than a breakpoint being hit? Captured here
-        // because the hold logic below clears mStepAwaitingHalt as soon as the new halt
-        // lands, so by the time the stop is acted on the two look identical. Stepping runs
-        // through the same resume/re-halt path (StepInto clears mbPaused), so without this
-        // every single step would count as a fresh hit.
-        // The transient Step Over / Step Out breakpoint, recognised by address alone: SH-2
-        // PC breakpoints are shared across both CPUs, so which one reported the stop says
-        // nothing about whose breakpoint it is. Captured once here because the code below
-        // both tests it and retires it.
-        const bool atStepBp = mStepBpActive && stopPc == mStepBpAddr;
-        const bool haltFromStep = mStepAwaitingHalt || atStepBp;
-        // Mirror the halt state so the Assembly panel can tint the halted row red (a
-        // breakpoint hit or a completed instruction step). Level-triggered: it clears
-        // itself once the emulator resumes.
-        //
-        // While a Step is in flight, hold the halted presentation across the resume→re-halt
-        // round trip: without this the emulator reports "running" for the few frames the step
-        // takes, so the red row, frozen registers and Assembly halt-row blink off and back on —
-        // the flash. Release the hold only when the emulator reaches a *new* halt (a PC other
-        // than where the step began), not on bare "stopped": the poll thread keeps echoing the
-        // PRE-step halt at the same PC for a frame or two before the server processes the step
-        // (se_export IST clears the stop only when it runs), and releasing on that stale stop
-        // would drop the hold and let the flash back in. A frame cap covers a step that runs
-        // long (or never returns) so it still reveals "running" eventually.
-        if (mStepAwaitingHalt)
-        {
-            if (stopped && stopPc != mStepFromPc) mStepAwaitingHalt = false;   // new halt landed
-            else if (--mStepHoldFrames <= 0)      mStepAwaitingHalt = false;   // ran long: reveal running
-        }
-        mBpStopActive = stopped || mStepAwaitingHalt;
-        // Adopt the reported PC only once we trust it's the current halt; while holding, keep
-        // the last halt PC on screen (a stale pre-step echo carries the same PC anyway).
-        if (stopped && !mStepAwaitingHalt)
-        {
-            mBpStopCpu = (int)stopCpu;
-            mBpStopPc = stopPc;
-        }
+        sfe::StopReport report;
+        report.stopped = se_live_get_stop(&mDataSource, &report.reason, &report.cpu, &report.pc);
+        // Fold the report into the run-control machine, which owns the halt presentation, the step
+        // hold and the transient's identity (Debug/StepHaltMachine.h). What comes back describes
+        // the halt; the policy below -- condition guards, access logging, which panels to bring
+        // up -- stays here, because only App can resume the emulator or evaluate an expression.
+        const sfe::StepOutcome halt = mStepHalt.Observe(report);
+        // 'stopped' stays a local because the policy below clears it to mean "handled, do not
+        // fall into the pause path"; the other three are read straight off the report.
+        bool stopped = report.stopped;
+        const bool atStepBp     = halt.atStepTarget;
+        const bool haltFromStep = halt.fromStep;
         // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
         // evaluates false (and it isn't the transient step target), resume without surfacing
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
         // CPU's registers, which are exact at this PC. PC breakpoints are shared across both
         // SH-2s, so match on address regardless of the breakpoint's stored CPU.
-        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP && !atStepBp)
+        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp)
         {
-            const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(stopPc);
-            if (guarded && !EvalCondition(guarded->condition, static_cast<int>(stopCpu)))
+            const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(report.pc);
+            if (guarded && !EvalCondition(guarded->condition, static_cast<int>(report.cpu)))
             {
                 Continue();      // guard not satisfied — keep running
                 stopped = false; // don't fall into the pause path this frame
-                mBpStopActive = false;
+                mStepHalt.SuppressHalt();
             }
         }
         // "Find what accesses this address": a data watchpoint reports the accessing
         // instruction's PC through the same stop path as an execution BP. When the halt PC
         // carries no execution breakpoint and every active watchpoint is a logging one, treat
         // it as a data-BP hit — record the accessor + its call stack and resume silently.
-        if (stopped && !mbPaused && stopReason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
-            mBreakpoints.IsAccessLogHalt(stopPc))
+        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
+            mBreakpoints.IsAccessLogHalt(report.pc))
         {
-            RecordAccess(static_cast<int>(stopCpu), stopPc);
+            RecordAccess(static_cast<int>(report.cpu), report.pc);
             Continue();
             stopped = false;
-            mBpStopActive = false;
+            mStepHalt.SuppressHalt();
         }
         if (stopped && !mbPaused)
         {
@@ -981,12 +944,11 @@ void App::BuildUI(IPlatform& platform)
             // halt at it — retire it so it doesn't linger as a stray breakpoint.
             if (atStepBp)
             {
-                mStepBpActive = false;
-                mStepBpDirty = true;   // next SyncBreakpointsToLive drops it from the emulator
+                mStepHalt.RetireStepTarget();   // next SyncBreakpointsToLive drops it from the emulator
             }
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
             // and surface the Call Stack panel.
-            mCallStackCpu = (stopCpu == 1) ? 1 : 0;
+            mCallStackCpu = (report.cpu == 1) ? 1 : 0;
             mRegSh2Cpu = mCallStackCpu;
             mCallStackDirty = true;
             mFocusCallStack = true;
@@ -1005,9 +967,9 @@ void App::BuildUI(IPlatform& platform)
     }
     else
     {
-        mBpStopActive = false;   // no live breakpoint-halt state off a static source
-        mStepAwaitingHalt = false;   // and drop any in-flight step hold (e.g. emulator disconnected mid-step)
-        mStepHoldFrames = 0;
+        // No halt state off a static source, and drop any in-flight step hold (e.g. the emulator
+        // disconnected mid-step). The transient stays installed: it lives in the emulator.
+        mStepHalt.ResetHalt();
     }
 
 #ifdef SE_ENABLE_LIVE
@@ -1480,7 +1442,7 @@ void App::DrawTransportBar()
             mbScrubbing = false;
             se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
             mbPaused = true;
-            mStepSettle = kStepSettleFrames;   // re-capture briefly so the stepped frame shows
+            mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
         }
     }
     ImGui::EndDisabled();
@@ -1663,7 +1625,7 @@ void App::DrawWatch(IPlatform& platform)
 void App::DrawAssembly()
 {
     AssemblyPanel::Request req;
-    mAssemblyPanel.SetBreakpointStop(mBpStopActive, mBpStopCpu, mBpStopPc);
+    mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
 
     if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);
@@ -3003,7 +2965,7 @@ void App::DrawCallStack(IPlatform& platform)
         // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
         // the emulator is spinning in its per-instruction gate; a bare frame-pause can't
         // single-step. Step Out only needs frame control (it runs to a return address).
-        ImGui::BeginDisabled(!mBpStopActive);
+        ImGui::BeginDisabled(!mStepHalt.HaltActive());
         if (ImGui::Button("Step Into")) { StepInto(mCallStackCpu); }
         ImGui::SetItemTooltip("Run one SH-2 instruction");
         ImGui::SameLine();
@@ -3390,9 +3352,10 @@ void App::SyncBreakpointsToLive()
 #ifdef SE_ENABLE_LIVE
     if (!mbLiveSource) { return; }
     // Re-sync when the user set changes OR the transient step breakpoint was added/removed.
-    if (mBreakpoints.Generation() == mLastBpGeneration && !mStepBpDirty) { return; }
+    // Taken first: it is a one-shot flag, and it was false in the case this returns on.
+    const bool stepTargetDirty = mStepHalt.TakeStepTargetDirty();
+    if (mBreakpoints.Generation() == mLastBpGeneration && !stepTargetDirty) { return; }
     mLastBpGeneration = mBreakpoints.Generation();
-    mStepBpDirty = false;
 
     const std::vector<Breakpoint>& all = mBreakpoints.All();
     std::vector<uint8_t> descs;
@@ -3424,10 +3387,10 @@ void App::SyncBreakpointsToLive()
         putDesc(b.address, b.size, kind, b.cpu, b.enabled);
     }
     uint32_t count = static_cast<uint32_t>(all.size());
-    if (mStepBpActive)   // append the transient step breakpoint (execution, enabled)
+    if (mStepHalt.StepTargetActive())   // append the transient step breakpoint (execution, enabled)
     {
         // PC breakpoints are shared across both SH-2s, so the transient carries no CPU.
-        putDesc(mStepBpAddr, 0u, 0u, 0, true);
+        putDesc(mStepHalt.StepTargetAddr(), 0u, 0u, 0, true);
         ++count;
     }
     se_live_set_breakpoints(&mDataSource, descs.data(), count);
@@ -3453,29 +3416,23 @@ void App::Continue()
 
 void App::RunToTransient(uint32_t addr)
 {
-    if (mStepAwaitingHalt) return;   // a step is already resuming the CPU; don't issue another
-    // PC breakpoints are shared across both SH-2s, so the transient is CPU-agnostic.
-    mStepBpActive = true;
-    mStepBpAddr = addr;
-    mStepBpDirty = true;
+    if (mStepHalt.StepInFlight()) return;   // a step is already resuming the CPU; don't issue another
+    // PC breakpoints are shared across both SH-2s, so the transient is CPU-agnostic. Arming the
+    // hold here rather than after the resume is safe -- nothing between the two consults it.
+    mStepHalt.BeginRunTo(addr);
     SyncBreakpointsToLive();   // ship the transient breakpoint before resuming
     Continue();
-    mStepFromPc = mBpStopPc;     // the hold releases when the halt PC leaves this
-    mStepAwaitingHalt = true;    // Step Over/Out: hold the halted UI until we hit the target
-    mStepHoldFrames = kStepHoldFrames;
 }
 
 void App::StepInto(int cpu)
 {
     (void)cpu;   // the server steps whichever CPU the stop latched (the halted CPU)
-    if (mStepAwaitingHalt) return;   // a step is already resuming the CPU; don't issue another
+    if (mStepHalt.StepInFlight()) return;   // a step is already resuming the CPU; don't issue another
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
     mbPaused = false;
-    mStepFromPc = mBpStopPc;     // the hold releases when the halt PC leaves this
-    mStepAwaitingHalt = true;    // hold the halted UI until the re-halt lands (no flash)
-    mStepHoldFrames = kStepHoldFrames;
+    mStepHalt.BeginStep();   // hold the halted UI until the re-halt lands
 }
 
 void App::StepOver(int cpu)
@@ -3484,7 +3441,7 @@ void App::StepOver(int cpu)
     // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
     // degenerates to a single-instruction step. IsSh2CallOpcode matches exactly bsr/bsrf/jsr
     // (not trapa, whose return is PC+2), the same set the glue's SeMdfnTrackFlow uses.
-    if (mStepAwaitingHalt) return;   // a step is already in flight
+    if (mStepHalt.StepInFlight()) return;   // a step is already in flight
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     bool isSubCall = false;
@@ -3501,7 +3458,7 @@ void App::StepOver(int cpu)
 
 void App::StepOut(int cpu)
 {
-    if (mStepAwaitingHalt) return;   // a step is already in flight
+    if (mStepHalt.StepInFlight()) return;   // a step is already in flight
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
     RunToTransient(r.pr);   // run to the current frame's return address
@@ -6101,12 +6058,9 @@ void App::AdoptNewEmulatorInstance()
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
     mSelection.clear();
-    mBpStopActive = false;           // no halt is in flight on a process that just started
-    mStepAwaitingHalt = false;
-    mStepHoldFrames = 0;
-    mStepBpActive = false;
-    mStepBpDirty = true;
-    mStepSettle = 0;
+    mStepHalt.ResetForNewEmulator();  // no halt is in flight on a process that just started,
+                                     // and it holds none of our breakpoints
+
     mbPaused = false;                // a freshly launched emulator is free-running
     // Breakpoints live in the emulator, and this one has none: force a full re-sync rather
     // than leave the user's set showing in the gutter while nothing is armed.
@@ -6404,7 +6358,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::StepFrame:
         se_frame_step(mContext, 1);
         mbPaused = true;
-        mStepSettle = kStepSettleFrames;   // re-capture briefly so the stepped frame shows
+        mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
         break;
     case TopBarCommandType::DumpMemory:
         DumpMemory(platform);

@@ -282,6 +282,14 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerAccessLogTests COMMAND SaturnExplorerAccessLogTests)
 
+    add_executable(SaturnExplorerStepHaltMachineTests
+        FrontEnd/tests/StepHaltMachineTests.cpp
+        FrontEnd/src/Debug/StepHaltMachine.cpp
+    )
+    target_include_directories(SaturnExplorerStepHaltMachineTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerStepHaltMachineTests COMMAND SaturnExplorerStepHaltMachineTests)
+
     add_executable(SaturnExplorerBreakpointManagerTests
         FrontEnd/tests/BreakpointManagerTests.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
@@ -624,6 +632,7 @@ if(WIN32)
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/StepHaltMachine.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
@@ -708,6 +717,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
         FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/StepHaltMachine.cpp
         FrontEnd/src/Debug/ShiftJis.cpp
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
@@ -809,6 +819,7 @@ else()
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
             FrontEnd/src/Debug/BreakpointManager.cpp
+            FrontEnd/src/Debug/StepHaltMachine.cpp
             FrontEnd/src/Debug/ShiftJis.cpp
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ConditionEval.cpp
