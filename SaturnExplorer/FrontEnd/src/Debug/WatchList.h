@@ -69,16 +69,32 @@ struct WatchValue
     bool        isPointer = false;
     uint32_t    pointerTarget = 0;
     bool        pointerSuspicious = false;   // outside known Saturn ranges
+    // A pointer target can be a perfectly valid Saturn address and still be nothing this
+    // source can show you: BIOS and the cartridge are never captured, the register windows
+    // below are wider than the captured register images, and a VDP2-only savestate has no
+    // work RAM at all. Calling that "suspicious" blames the data; saying nothing at all
+    // leaves the user to wonder why following the pointer shows Unavailable.
+    bool        pointerUnavailable = false;  // valid address, absent from this source
     // For the change highlight: a signed magnitude and whether up/down is meaningful.
     long long   numeric = 0;
     bool        numericMeaningful = false;
 };
 
-// Interpret 'bytes' (big-endian, WatchTypeSize(type) long) as 'type'.
-WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem);
+// Interpret 'bytes' (big-endian, WatchTypeSize(type) long) as 'type'. 'backend', when given,
+// answers the second question a pointer raises -- not "is this a Saturn address" but "can this
+// source show me what is there" -- and fills WatchValue::pointerUnavailable.
+WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem,
+                            IMemoryBackend* backend = nullptr);
 
-// Is 'addr' inside a plausible Saturn CPU region (for the pointer sanity check)?
+// Is 'addr' inside a plausible Saturn CPU region? This is a question about the hardware memory
+// map only: it says the address exists, not that the loaded source captured it. The two differ
+// by more than an edge case -- BIOS and the cartridge are never captured, and a partial
+// savestate may carry no work RAM -- so a caller that means "readable" must ask the backend.
 bool IsPlausibleSaturnAddress(uint32_t addr);
+
+// Can 'backend' actually serve a byte at 'addr'? The "available in this source" half of the
+// question above. A null backend answers false.
+bool IsReadableAddress(IMemoryBackend* backend, uint32_t addr);
 
 class WatchList
 {

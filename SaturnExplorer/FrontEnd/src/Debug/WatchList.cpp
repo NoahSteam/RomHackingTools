@@ -183,7 +183,14 @@ bool IsPlausibleSaturnAddress(uint32_t addr)
     return false;
 }
 
-WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem)
+bool IsReadableAddress(IMemoryBackend* backend, uint32_t addr)
+{
+    if (!backend || !backend->Connected()) return false;
+    std::vector<MemoryReadResult> res = backend->ReadMemoryBatch({{addr, 1}});
+    return !res.empty() && res[0].success && res[0].bytes.size() == 1;
+}
+
+WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem, IMemoryBackend* backend)
 {
     WatchValue v;
     if (!mem.success)
@@ -237,6 +244,10 @@ WatchValue FormatWatchValue(WatchType type, const MemoryReadResult& mem)
         std::snprintf(buf, sizeof(buf), "-> 0x%08X", raw);
         v.text = buf; v.isPointer = true; v.pointerTarget = raw;
         v.pointerSuspicious = !IsPlausibleSaturnAddress(raw);
+        // Only ask the backend about an address the map already accepts: an implausible one is
+        // reported as implausible, which is the more specific answer of the two.
+        v.pointerUnavailable = !v.pointerSuspicious && backend != nullptr &&
+                               !IsReadableAddress(backend, raw);
         v.numeric = (long long)(uint32_t)raw; v.numericMeaningful = false;
         break;
     }

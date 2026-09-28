@@ -2427,9 +2427,23 @@ void App::DrawRamSearch()
         if (mRamSearchHigh) regions.push_back({0x06000000u, kWramSize});
         return regions;
     };
+    // A match count on its own is a number the search cannot stand behind when part of the
+    // range did not read: a region a live emulator dropped, or one this savestate never carried.
+    // Say so in the same breath as the count -- and say how many of the hits are only carried
+    // over from an earlier scan rather than confirmed by this one.
     auto report = [&](std::size_t n) {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+        char buf[160];
+        const std::size_t unread = mRamSearch.UnreadRegions().size();
+        const std::size_t stale = mRamSearch.UnverifiedCount();
+        if (unread == 0)
+            std::snprintf(buf, sizeof(buf), "%zu match%s", n, n == 1 ? "" : "es");
+        else if (stale == 0)
+            std::snprintf(buf, sizeof(buf), "%zu match%s (partial: %zu region%s unreadable)",
+                          n, n == 1 ? "" : "es", unread, unread == 1 ? "" : "s");
+        else
+            std::snprintf(buf, sizeof(buf),
+                          "%zu match%s (partial: %zu region%s unreadable, %zu unverified)",
+                          n, n == 1 ? "" : "es", unread, unread == 1 ? "" : "s", stale);
         mRamSearchStatus = buf;
     };
 
@@ -2454,7 +2468,27 @@ void App::DrawRamSearch()
     if (!mRamSearchStatus.empty())
     {
         ImGui::SameLine();
-        ImGui::TextUnformatted(mRamSearchStatus.c_str());
+        if (mRamSearch.LastScanPartial())
+        {
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "%s", mRamSearchStatus.c_str());
+            if (ImGui::IsItemHovered())
+            {
+                std::string tip = "These regions could not be read on the last scan:\n";
+                for (const SearchRegion& r : mRamSearch.UnreadRegions())
+                {
+                    char line[64];
+                    std::snprintf(line, sizeof(line), "  %08X - %08X\n", r.base,
+                                  r.base + r.size - 1);
+                    tip += line;
+                }
+                tip += "Hits inside them were kept but not tested, and are marked \"?\".";
+                ImGui::SetTooltip("%s", tip.c_str());
+            }
+        }
+        else
+        {
+            ImGui::TextUnformatted(mRamSearchStatus.c_str());
+        }
     }
 
     // Results. Values are the last-scan snapshot; the table caps how many rows it draws so a
@@ -2492,6 +2526,15 @@ void App::DrawRamSearch()
                     if (sgn) ImGui::Text("%lld", (long long)h.value);
                     else     ImGui::Text("%llu  (0x%llX)", (unsigned long long)h.value,
                                          (unsigned long long)h.value);
+                    // An unverified hit's value is from an earlier scan: this pass could not
+                    // read it, so it was neither confirmed nor filtered out.
+                    if (!h.verified)
+                    {
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("?");
+                        ImGui::SetItemTooltip("Not read on the last scan — this value is from "
+                                              "an earlier one and was not tested.");
+                    }
                     ImGui::TableNextColumn();
                     if (ImGui::SmallButton("Hex"))
                     { mHexEditor.GoTo(h.addr); mPanels.hexEditor = true; }

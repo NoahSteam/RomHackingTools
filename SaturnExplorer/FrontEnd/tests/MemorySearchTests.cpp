@@ -144,6 +144,100 @@ int main()
               "signed S8 < 0 finds negatives only");
     }
 
+    // --- MEM-02: a region that cannot be read is not a region that matched ---
+    //
+    // The mock refuses reads while 'offline' is set, which is how a live emulator dropping a
+    // read or a savestate missing a region looks from here.
+    {
+        // A first scan over two regions where only one reads: the count must not be presented as
+        // if the whole range had been searched.
+        class HalfBackend : public IMemoryBackend
+        {
+        public:
+            bool Connected() const override { return true; }
+            std::vector<MemoryReadResult> ReadMemoryBatch(
+                const std::vector<MemoryReadRequest>& reqs) override
+            {
+                std::vector<MemoryReadResult> out;
+                for (const MemoryReadRequest& q : reqs)
+                {
+                    MemoryReadResult r;
+                    if (q.address >= kBase && q.address + q.size <= kBase + 16)
+                    {
+                        r.success = true;
+                        r.bytes.assign(q.size, 0);   // every dword reads as 0
+                    }
+                    else
+                    {
+                        r.error = "not captured";
+                    }
+                    out.push_back(std::move(r));
+                }
+                return out;
+            }
+        };
+        HalfBackend be;
+        const std::vector<SearchRegion> regions{{kBase, 16}, {0x06000000u, 16}};
+        MemorySearch s;
+        const std::size_t n = s.First(be, regions, WatchType::U32, SearchCompare::Equal, 0);
+        Check(n == 4, "first scan finds the four dwords in the readable region");
+        Check(s.LastScanPartial(), "first scan reports itself partial");
+        Check(s.UnreadRegions().size() == 1 && s.UnreadRegions()[0].base == 0x06000000u,
+              "the unreadable region is named");
+        Check(s.UnverifiedCount() == 0, "no hits came from the unread region, so none are stale");
+    }
+    {
+        // A next scan over a region that has stopped reading. The hits must survive -- dropping
+        // them would discard a narrowing the user built up -- but they must not count as tested.
+        // "Unchanged" is the compare that makes this visible: every untested hit would otherwise
+        // be reported as having been confirmed unchanged.
+        class FlakyBackend : public IMemoryBackend
+        {
+        public:
+            bool offline = false;
+            bool Connected() const override { return true; }
+            std::vector<MemoryReadResult> ReadMemoryBatch(
+                const std::vector<MemoryReadRequest>& reqs) override
+            {
+                std::vector<MemoryReadResult> out;
+                for (const MemoryReadRequest& q : reqs)
+                {
+                    MemoryReadResult r;
+                    if (!offline && q.address >= kBase && q.address + q.size <= kBase + 16)
+                    {
+                        r.success = true;
+                        r.bytes.assign(q.size, 0);
+                    }
+                    else
+                    {
+                        r.error = "dropped";
+                    }
+                    out.push_back(std::move(r));
+                }
+                return out;
+            }
+        };
+        FlakyBackend be;
+        MemorySearch s;
+        const std::size_t n = s.First(be, {{kBase, 16}}, WatchType::U32, SearchCompare::Equal, 0);
+        Check(n == 4 && !s.LastScanPartial(), "baseline scan is complete");
+        for (const SearchHit& h : s.Hits()) Check(h.verified, "baseline hits are verified");
+
+        be.offline = true;
+        const std::size_t n2 = s.Next(be, SearchCompare::Unchanged, 0);
+        Check(n2 == 4, "hits are carried over, not discarded, when the region cannot be read");
+        Check(s.LastScanPartial(), "the next scan reports itself partial");
+        Check(s.UnverifiedCount() == 4, "every carried-over hit is marked unverified");
+
+        // And they clear again once the region comes back, so the mark tracks the last scan
+        // rather than sticking to a hit forever.
+        be.offline = false;
+        const std::size_t n3 = s.Next(be, SearchCompare::Unchanged, 0);
+        Check(n3 == 4, "all four are still unchanged once the region reads again");
+        Check(!s.LastScanPartial() && s.UnverifiedCount() == 0,
+              "the unverified mark clears on a scan that could read");
+    }
+
     if (gFail == 0) std::printf("All MemorySearch tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

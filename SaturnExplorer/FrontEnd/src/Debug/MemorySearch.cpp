@@ -95,6 +95,7 @@ std::size_t MemorySearch::First(IMemoryBackend& backend,
     mType = type;
     mRegions = regions;
     mHits.clear();
+    mUnread.clear();
 
     const int width = (int)WatchTypeSize(type);
     if (width <= 0) return 0;
@@ -102,7 +103,13 @@ std::size_t MemorySearch::First(IMemoryBackend& backend,
     for (const SearchRegion& r : mRegions)
     {
         std::vector<uint8_t> buf;
-        if (!ReadRegion(backend, r, buf)) continue;
+        if (!ReadRegion(backend, r, buf))
+        {
+            // Skipping it silently reports a hit count for a search that never looked at part of
+            // the range the user asked for.
+            mUnread.push_back(r);
+            continue;
+        }
         mHits.reserve(mHits.size() + buf.size() / width);   // exact upper bound for the region
         for (uint32_t off = 0; off + width <= buf.size(); off += width)
         {
@@ -121,20 +128,40 @@ std::size_t MemorySearch::Next(IMemoryBackend& backend, SearchCompare cmp, int64
     const int width = (int)WatchTypeSize(mType);
     std::vector<SearchHit> kept;
     kept.reserve(mHits.size());
+    mUnread.clear();
     for (const SearchRegion& r : mRegions)
     {
         std::vector<uint8_t> buf;
         const bool ok = ReadRegion(backend, r, buf);
+        if (!ok) mUnread.push_back(r);
         for (const SearchHit& h : mHits)
         {
             if (h.addr < r.base || h.addr + width > r.base + r.size) continue;  // other region
-            if (!ok) { kept.push_back(h); continue; }   // unreadable this scan: leave untouched
+            if (!ok)
+            {
+                // Carried over rather than dropped -- a region that failed once (a live
+                // emulator between frames, say) is usually readable on the next pass, and
+                // discarding the hits would throw away a narrowing the user built up. But it
+                // was not tested, so it is not a result: mark it, and let the panel say so.
+                SearchHit stale = h;
+                stale.verified = false;
+                kept.push_back(stale);
+                continue;
+            }
             const int64_t cur = DecodeBigEndian(buf.data() + (h.addr - r.base), mType);
-            if (Match(cmp, cur, h.value, operand)) kept.push_back({h.addr, cur});
+            if (Match(cmp, cur, h.value, operand)) kept.push_back({h.addr, cur, true});
         }
     }
     mHits.swap(kept);
     return mHits.size();
+}
+
+std::size_t MemorySearch::UnverifiedCount() const
+{
+    std::size_t n = 0;
+    for (const SearchHit& h : mHits)
+        if (!h.verified) ++n;
+    return n;
 }
 
 void MemorySearch::Reset()
@@ -142,6 +169,7 @@ void MemorySearch::Reset()
     mActive = false;
     mHits.clear();
     mRegions.clear();
+    mUnread.clear();
 }
 
 }  // namespace sfe
