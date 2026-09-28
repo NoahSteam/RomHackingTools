@@ -79,7 +79,11 @@ bool IsSh2CallOpcode(uint16_t op)
 bool DecodeCallTarget(uint16_t op, uint32_t site, uint32_t& target)
 {
     if ((op & 0xF000u) != 0xB000u) return false;
-    const int32_t disp = static_cast<int32_t>(static_cast<int16_t>((op & 0x0FFFu) << 4)) >> 4;
+    // Sign-extend the 12-bit displacement by arithmetic, not by shifting: the shift-based idiom
+    // for this (cast to int16_t, shift back down) left-shifts and right-shifts values that can be
+    // negative, which is what UBSan caught in the emulator-side call tracking (FV-005).
+    int32_t disp = static_cast<int32_t>(op & 0x0FFFu);
+    if (disp >= 0x0800) disp -= 0x1000;
     target = site + 4 + static_cast<uint32_t>(disp * 2);
     return true;
 }

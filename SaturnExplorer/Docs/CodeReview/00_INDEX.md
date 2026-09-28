@@ -33,6 +33,28 @@ rather than trusting a tally written out in prose, which is one more thing to ke
 | REW-04 | `91c3925` — bounded in bytes; drops oldest, not by dependency group |
 | LIVE-03 | `91c3925` — bounded; writes are not coalesced |
 | CPU-01 | `1229b76` (+ #51) — settled as shared, not per-CPU |
+| OFF-02 | `a4f8086` |
+| OFF-03 | `a4f8086`, redone at the real site in `3b888e7` |
+| SNAP-01 | `6c8a46e` |
+| SNAP-02 | `6c8a46e`, parsers in `3b888e7`, last two openers in `2d0b06f` |
+| VDP2-02 | `6c8a46e` |
+| LIVE-01 | `8909094` — payload verbs gated; capabilities still advertised up front |
+| LIVE-02 | `8909094` |
+| HOOK-02 | `8909094` |
+| HOOK-03 | `8909094` |
+| ABI-02 | `571a078` (core), `2d0b06f` (drivers) |
+| ABI-03 | `571a078` — removed at ABI 6, not implemented |
+| OFF-01 | `abc285b` |
+| CPU-03 | `0f536f9` |
+| MEM-02 | `1f1997d` |
+| MEM-03 | `1f1997d` |
+| DISC-02 | `c45376a` |
+| ROM-05 | `a5e76d1` |
+| ROM-04 | `800099a` |
+| MEDIA-01 | `1355a75` — labelled; SSCTL/SBCTL are not carried, so it cannot refuse those voices |
+| VDP1-03 | `859c9ac` |
+| HOOK-01 | `7ee20e7` |
+| UI-02 | this commit |
 
 CPU-01 asked for the semantics to be settled either way. They are settled as **shared**: a PC
 breakpoint halts whichever SH-2 reaches the address, so CPU takes no part in execution-breakpoint
@@ -52,14 +74,35 @@ test picks them by distance to those edges rather than by containment -- so a cl
 middle of a polyline selects what is actually drawn there. The earlier half (`018878e`) had the
 hit test agree with a renderer that skipped them.
 
-## Highest-priority findings still open
+## Findings still open
+
+Derive it rather than trusting a number in prose -- the table above has 38 rows, one of which
+(VDP1-01) is a duplicate of ABI-01, so 37 of the 40 distinct defects are closed:
+
+```
+grep -ho '^## [A-Z][A-Z0-9]*-[0-9]*' Docs/CodeReview/*.md | sed 's/^## //' | sort > /tmp/all
+awk '/^\| ID \| Fixed in \|/,/^$/' Docs/CodeReview/00_INDEX.md \
+  | grep -o '^| [A-Z][A-Z0-9]*-[0-9]*' | sed 's/^| //' | sort > /tmp/closed
+comm -13 /tmp/closed /tmp/all
+```
+
+which leaves
 
 | ID | Severity | Finding |
 |---|---|---|
-| HOOK-01 | **High** | Windows emulator-hook shutdown can leave blocked threads alive after locks/global state are destroyed. |
-| LIVE-01 | **Medium** | Live capabilities are advertised before protocol negotiation. |
-| VDP1-02 | **Medium** | VDP1 priority is modeled per sprite instead of per pixel, causing mixed-priority composition errors. |
-| ABI-02 | **Medium** | A C++ exception can unwind across an `extern "C"` boundary. |
+| VDP1-02 / VDP2-01 | **Medium** | VDP1 priority is modeled per sprite instead of per pixel, causing mixed-priority composition errors. One fix, two reports. |
+| UI-01 | **Medium** | `App.cpp` has become an oversized lifecycle coordinator. |
+
+Both are being taken as their own changes rather than as part of a batch: the priority work moves
+data out of the rasterizer and through the pixel mixer, so the rasterizer's output and the
+compositor change together, and the `App.cpp` split is mechanical but touches everything.
+
+Three of the closed rows are annotated because what landed is narrower than what the report
+suggested -- LIVE-01 (the payload verbs are version-gated, but capabilities are still advertised
+before negotiation, which would need `se_live_open` to block), MEDIA-01 (the preview says what it
+is, but cannot refuse a noise/zero or SBCTL voice, because the emulator's slot record does not
+carry those two fields), and ABI-03 (removed rather than implemented). REW-01, REW-04 and LIVE-03
+are annotated below for the same reason.
 
 ## Reports
 
@@ -78,12 +121,11 @@ hit test agree with a renderer that skipped them.
 
 ## Suggested fix order
 
-Steps 1-3 of the original order are done (see the status table); what is left, in order:
+All of the original order is done. What remains is the two items above, in either order --
+they touch disjoint code.
 
-1. HOOK-01 — the remaining High. Windows-only, so it needs a Windows machine to exercise.
-2. LIVE-01/LIVE-02.
-3. VDP per-pixel priority accuracy (VDP1-02/VDP2-01, one fix). The largest item here: priority
-   has to leave the rasterizer per texel and reach the pixel mixer, so the rasterizer's output
-   and the compositor change together. Worth its own change rather than a slot in a batch.
-4. ABI-02/ABI-03 and the remaining snapshot/offline parser hardening.
-5. Lower-severity parser/search/documentation work.
+A note on HOOK-01, the one High that needed a platform nobody here runs: it was verified rather
+than reasoned about, by cross-compiling `Integration/Common/se_export.c` with mingw and running
+`Integration/Common/tests/SeExportShutdownTests.c` under wine. The pre-fix shutdown fails all
+three of its cases; the fix passes them. That route is written down in the test's header comment,
+because "Windows-only, so we cannot check it" is how a High stays open.

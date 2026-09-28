@@ -1,17 +1,22 @@
 # Saturn Explorer — Architecture
 
-> Status: **M1 complete.** The two seams exist as headers under
-> `include/saturnexplorer/`, the core static lib implements the C++/C-ABI boundary,
-> the savestate driver is functional, and the `FrontEnd` app (ImGui + a Win32/D3D11
-> platform backend behind the Seam C abstraction) shows the docked layout. **M2 and
-> M2–M4b are done:** the VDP1 command table is parsed (Command List + Selected Object
-> panels), the frame is software-rendered from sprite quads with click-to-select in the
-> VDP Output panel, the 3D world view orbits the exploded geometry, and the VDP2 NBG
-> backgrounds are composited under the sprites — all verified against real Yabause dumps
-> and a `.yss` savestate (a battle scene's field + mech sprites reconstruct
-> pixel-faithfully), plus a Texture/Palette Viewer and a VRAM map (M5). Next is M6
-> (search & trace). This document is the source of truth for the component split, the
-> three interface seams (A data, B host, C platform), and the module breakdown.
+> Status: **M0–M7 done.** Both seams exist as headers under `include/saturnexplorer/`; the core
+> static lib implements the C++/C-ABI boundary and software-renders the frame from VDP1 sprite
+> quads with VDP2 NBG backgrounds composited under them; the savestate driver reads the Yabause
+> family and Mednafen; the live driver talks to a patched emulator over a socket or named pipe
+> (pause/step, breakpoints, watchpoints, tracepoints, input injection, memory writes, SCSP and CD
+> state, savestate rewind); and the frontend runs on Windows, macOS and the web behind the Seam C
+> abstraction. The disc, search and ROM-hacking work planned as M6 landed in the frontend rather
+> than the core — see §6 and §10. All of it is verified against real Yabause dumps and `.yss`
+> savestates; `Docs/FunctionalityVerification/` records what was executed and what still needs a
+> real emulator or game, and `Docs/CodeReview/` the open defects.
+>
+> Supported platforms are **Windows and macOS**. Linux and the web build are development targets,
+> not release gates.
+>
+> This document is the source of truth for the component split, the three interface seams
+> (A data, B host, C platform), and the module breakdown. Where it describes a plan rather than
+> the code, it says so.
 
 ---
 
@@ -65,16 +70,21 @@ to live Saturn state and to the game disc. The core never knows whether that dat
 from an emulator, a savestate/memory dump, or a live devkit capture.
 
 Third parties write drivers. Planned reference drivers:
-- **Savestate/dump driver** — reads a static snapshot. First to build; needs no live target.
-- **Emulator driver** — hooks a running emulator (Yabause/Mednafen/Kronos style). Adds
-  live registers, framebuffer readback, and — where the emulator cooperates — a
-  memory-access event stream.
+- **Savestate/dump driver** (`Drivers/Savestate`) — reads a static snapshot: a Yabause-family
+  `.yss`, a Mednafen/Beetle `MDFNSVST`, a directory of region files, or a raw linear dump.
+- **Live driver** (`Drivers/Live`) — talks to a running emulator patched by `Integration/`,
+  over a Unix socket, a Windows named pipe, or TCP for the web build. Adds live registers,
+  framebuffer readback, execution control, breakpoints and watchpoints, write-back, and
+  savestate rewind.
 
 ### 2.3 Frontend — the host (Seam B consumer)
 
-Consumes the core's **Host API** to render the UI. The reference frontend is a standalone
-**Win32 app using Dear ImGui + D3D11**. It is *also* where the reference driver lives —
-in practice a "platform driver app" ships a driver and a frontend together.
+Consumes the core's **Host API** to render the UI. The reference frontend is a standalone Dear
+ImGui app with one backend per platform behind Seam C: **Win32 + D3D11** on Windows, **SDL2 +
+OpenGL** on macOS (and Linux, as a development target), and **SDL2 + WebGL** for the Emscripten
+build. It is *also* where the drivers ship from — in practice a "platform driver app" ships a
+driver and a frontend together — and where the debugger, disc, search and patch systems live
+(§6, §10).
 
 Because the boundary is a C ABI, someone else's application (e.g. an emulator's own debug
 UI) can embed the core directly instead of using our frontend.
@@ -254,11 +264,23 @@ Internally (C++, not exposed across the seam):
 | `GeometryBuilder` | Turns each VDP1 command into a 4-corner quad in **2D screen space** and **3D world space** (see §7) | Live Visualization, Sprite selection, 3D view |
 | `Vdp1Rasterizer` | Software rasterizes the 2D quads (texture, gouraud, transparency, mesh, flip, draw modes) into the finished frame | Live Visualization |
 | `Vdp2Compositor` | Composites VDP2 layers with the VDP1 output by priority; honors layer/window/shadow toggles | Live Visualization, Layer toggles |
-| `SearchEngine` | Scans disc/archives/compressed assets for a target asset | ROM & Archive Search |
-| `AssetTracer` | Correlates a texture with disc origin + references + history | Asset Trace |
 | `ReferenceIndex` | Reverse index: texture/palette → commands that use it | Reference Explorer |
-| `MemoryHistory` | Ring buffer of `se_mem_event`, indexed by address range | Memory History |
-| `FrameTimeline` | Snapshot bookmarks, frame compare, step control | Frame Timeline |
+
+`Vdp2Parser`, `TextureDecoder`, `PaletteDecoder` and `VramMap` are responsibilities rather than
+files: they live in `Vdp2Compositor`, `Vdp1Color.h` and `Context`. The table is the division of
+labour, not a file list -- §10 has that.
+
+Three modules in earlier drafts of this table were never built in the core, and the features they
+named are frontend systems instead (review finding ABI-03, which removed their Seam B
+declarations):
+
+| Planned | Where it actually lives |
+|---|---|
+| `SearchEngine`, `AssetTracer` | `FrontEnd/src/DataSearch.*` + `Disc/` — an interactive, cancellable search over the disc, holding state across frames |
+| `MemoryHistory` | `FrontEnd/src/Debug/AccessLog.*`, driven by watchpoint hits from the live tap |
+| `FrameTimeline` | `FrontEnd/src/FrameRecorder.*` + the live tap's savestate rewind |
+
+`se_mem_event` remains in Seam A: the driver still pushes memory events through `poll_events`.
 
 ---
 
@@ -323,67 +345,83 @@ affect either seam.
 - The **host** owns the loop. Each displayed frame: `se_begin_frame()` snapshots state,
   then the host issues read-only queries against that snapshot. Snapshots are immutable,
   so panels can be queried in any order without re-reading the target.
-- **Search** is long-running and runs on core-managed worker threads; the host polls
-  results incrementally (`se_rom_search_poll`) and shows a confidence-rated result list.
-- **Memory History** events are pumped from the driver during `se_begin_frame` (or on a
-  driver callback) into the core's ring buffer; the host never touches the event stream directly.
+- The core itself is **single-threaded**: it does its work inside the host's call and owns no
+  threads. Search was to have run on core-managed workers polled through `se_rom_search_poll`;
+  that never happened, and the search that exists runs on a frontend worker thread with its own
+  cancellation (`SearchProgress`). The threads in this project are the frontend's workers, the
+  live driver's poll thread, and the emulator-side tap's server and savestate threads.
+- **Memory events** are pumped from the driver during `se_begin_frame` via `poll_events`. The
+  access log that consumes them is a frontend system (see §6).
 
 ---
 
 ## 9. Versioning & compatibility
 
-- `SE_ABI_VERSION` is a single integer bumped on any breaking change to either seam struct.
+- `SE_ABI_VERSION` is a single integer bumped on any breaking change to either seam. It is at
+  **6**: 6 dropped the never-implemented `se_rom_search_*` / `se_history_for` exports and their
+  query structs, and added `SE_ERR_NO_MEMORY`.
 - Structs are **append-only** within an ABI version; new fields go at the end guarded by a
   new capability bit, so an old driver/host keeps working.
-- The DLL exports a `se_abi_version()` entry point so a host can refuse an incompatible core
-  before calling anything else.
+- The core exports `se_abi_version()` so a host can refuse an incompatible core before calling
+  anything else, and `se_create` refuses a driver or config whose `abi_version` differs. Both
+  are linked statically today; nothing ships as a DLL.
+- Every seam function is **no-throw**, including under memory pressure — the host may be C, or
+  JavaScript in the web build. `SeGuard.h` holds that contract and the reasoning.
 
 ---
 
-## 10. Proposed repository layout
+## 10. Repository layout
+
+What is actually there. (This section described a *proposal* through the first milestones, and
+then went stale in the specific way that matters most: it named files under names they do not
+have -- `hardware_snapshot.cpp`, `savestate_driver.cpp`, `Drivers/Emulator/` -- and a `.vcxproj`
+per target for a build that is CMake. Review finding UI-02.)
 
 ```
 SaturnExplorer/
+  CMakeLists.txt                     ← one build for every target; see BUILD.md
   ARCHITECTURE.md                    ← this file
-  include/saturnexplorer/            ← public headers (the two seams) [DONE]
-    SeAbi.h                         ← versions, result codes, capability bits
-    SeTypes.h                       ← POD structs (se_command, se_image, se_mem_event, …)
-    SeDataSource.h                 ← Seam A
-    SeHost.h                        ← Seam B
-    SaturnExplorer.h                 ← umbrella include
-  Core/                              ← SaturnExplorer core engine (C++ static lib) [DONE]
-    src/
-      Context.h                      ← C++ core behind the opaque se_context*
-      HostAbi.cpp                   ← C-ABI shim for Seam B
-      hardware_snapshot.{h,cpp}      ← pulls state through Seam A per frame
-    SaturnExplorer.vcxproj
-  Drivers/
-    Savestate/                       ← reference driver: region dir + full dump [DONE]
-      src/savestate_driver.{h,cpp}
-      SaturnExplorerSavestateDriver.vcxproj
-    Emulator/                        ← later
-  FrontEnd/                          ← reference app (Dear ImGui) [M1 DONE]
-    FrontEnd.vcxproj                 ← builds SaturnExplorer.exe
-    src/
-      App.{h,cpp}                    ← portable: owns core ctx + driver + panels
-      Platform/IPlatform.h           ← Seam C: the platform abstraction
-    Platforms/
-      Windows/                       ← Win32 + D3D11 implementation of IPlatform
-        WindowsPlatform.{h,cpp}
-        WinMain.cpp                  ← entry point + main loop
-    third_party/imgui/               ← vendored ImGui (docking), core + backends
+  include/saturnexplorer/            ← public headers: the two seams, plain C
+    SeAbi.h                            versions, result codes, capability bits
+    SeTypes.h                          POD structs (se_command, se_image, se_scsp_slot, …)
+    SeDataSource.h                     Seam A (driver → core)
+    SeHost.h                           Seam B (core → host)
+    SeGuard.h                          the no-throw wrapper both seam shims sit behind
+    SaturnExplorer.h                   umbrella include
+  Core/                              ← the engine (C++14 static lib; also builds for wasm)
+    src/                               Context.h, HostAbi.cpp, HardwareSnapshot.{h,cpp},
+                                       Vdp1Parser, GeometryBuilder, Vdp1Rasterizer,
+                                       Vdp2Compositor, PixelMixer.h, Vdp1Color.h, ByteOrder.h
+    tests/                             through the public ABI (plus FakeVdpSource.h, shared)
+    tools/SeRender.cpp                 se-render: composite a .sedump headlessly
+  Drivers/                           ← Seam A implementers
+    Common/src/                        SaturnStateShared: normalization shared by both drivers
+    Savestate/                         .yss / MDFNSVST / region dir / raw dump  [+ tests/]
+    Live/                              the running-emulator driver, over a socket or pipe
+  Integration/                       ← the emulator side of the live tap
+    Common/                            se_export.c (the server, plain C), SeLiveProtocol.h,
+                                       SeStateCodec.h (rewind delta/RLE codec)  [+ tests/]
+    Mednafen/                          apply.py: patches a Mednafen checkout. Read its README
+    Yabause/                           the same shape for Yabause
+  FrontEnd/                          ← the reference app (Dear ImGui)
+    src/                               App.{h,cpp} + panels; portable, no OS calls
+      Debug/                           debugger model: breakpoints, call stack, disasm,
+                                       watch list, memory search, expression eval
+      Disc/                            ISO/CUE read + build, CD sectors, disc image
+      Demo/                            scripted demo playback
+      Platform/IPlatform.h             Seam C: the platform abstraction
+    Platforms/Windows|macOS|Web/       the only code that touches an OS or a GPU API
+    tests/                             panel-interaction + model tests (ImGuiHarness.h)
+    third_party/imgui/                 vendored ImGui (docking), core + backends
+  Docs/                              ← the reviews, verification notes and hardware notes
+  web/                               ← the wasm build's page and guides
 ```
 
-The frontend is itself split so it can be ported (see §13). `Platforms/` holds
-per-OS/GPU backends; only they touch Win32/D3D11. The portable `App` and panels
-depend solely on the core (Seam B), ImGui, and `IPlatform`.
+The frontend is itself split so it can be ported (see §13). `Platforms/` holds the per-OS/GPU
+backends; the portable `App` and panels depend only on the core (Seam B), ImGui and `IPlatform`.
 
-Core modules from §6 (Vdp1Parser, TextureDecoder, SearchEngine, …) attach to the
-`Core/src/` skeleton at their milestones; M1 ships only the context + snapshot +
-C-ABI shim, with every Seam B query present but returning `SE_ERR_UNIMPLEMENTED`.
-
-`imgui` will be **vendored as source** under `Frontend/third_party/` since the repo has no
-package manager; the D3D11 + Win32 ImGui backends ship with it.
+ImGui is **vendored as source** under `FrontEnd/third_party/`, since the repo has no package
+manager; the D3D11, OpenGL and SDL2 backends ship with it.
 
 ---
 
@@ -474,15 +512,30 @@ package manager; the D3D11 + Win32 ImGui backends ship with it.
    hover tooltips (address / size / kind / owning command), and click-to-select. Verified against
    Battle3.yss: 161 VRAM regions, textures decode correctly, and a bank sprite's palette resolves to
    its CRAM colour ramp; the portable App layer compiles against ImGui.
-7. **M6 — Search & trace. [IN PROGRESS]** **Reference Explorer done:** `se_references_of_texture`
-   / `se_references_of_palette` scan the parsed command list for sprites sharing a texture VRAM
-   address or CLUT, returning `se_reference`s (with the same object numbering GeometryBuilder uses);
-   the frontend References panel lists them for the selected sprite, click-to-select. Remaining:
-   disc access (`SE_CAP_DISC`: a disc-image driver + ISO9660 enumeration, wiring the Archive Explorer)
-   and the `SearchEngine` (ROM & Archive Search + Asset Trace) — the latter two need a Saturn disc
-   image to validate against.
-8. **M7 — Live driver.** Emulator driver with event stream (+ optional reference framebuffer);
-   Memory History, Frame Timeline.
+8. **M6 — Search & trace. [DONE, in the frontend]** **Reference Explorer:**
+   `se_references_of_texture` / `se_references_of_palette` scan the parsed command list for sprites
+   sharing a texture VRAM address or CLUT, returning `se_reference`s (with the same object
+   numbering GeometryBuilder uses); the References panel lists them for the selected sprite,
+   click-to-select. **Disc + search:** the ISO9660 reader (`Disc/IsoFs`), CUE/BIN and disc-image
+   handling, and the Disc Explorer landed in the frontend, together with a byte-sequence search
+   over a data directory or an image (`DataSearch`) that also finds a needle inside a
+   PRS-compressed block. None of that went behind Seam B as originally planned: the search is
+   interactive, cancellable and holds state across frames, so it belongs to the host, and the
+   `se_rom_search_*` / `se_history_for` declarations that anticipated it were removed at ABI 6
+   (review finding ABI-03).
+9. **M7 — Live driver. [DONE]** `Drivers/Live` connects to an emulator patched by
+   `Integration/Mednafen/apply.py` (or the Yabause equivalent) over a Unix socket, a Windows named
+   pipe, or TCP for the web build, and speaks the versioned protocol in `SeLiveProtocol.h`. Beyond
+   the per-frame snapshot: pause / frame step / instruction step, execution breakpoints and memory
+   watchpoints, tracepoints, controller injection, writes back to work RAM and sound RAM, decoded
+   SCSP voices, live CD-block state, the emulator's own save slots, and savestate rewind with a
+   keyframe/delta codec (`SeStateCodec.h`). The frontend's debugger, access log, rewind timeline
+   and patch workflow are built on it. Read `Integration/Mednafen/README.md` before touching the
+   emulator side -- a wrong binding there fails silently.
+10. **M8 — ROM hacking workflow. [DONE]** Locate an edited memory range inside the game's data
+   files, record the mapping, and emit a patch script that verifies the on-disc baseline before
+   writing (`PatchLibrary`); rebuild a bootable image from a directory of extracted files
+   (`Disc/IsoBuilder`, preserving the 32 KB IP.BIN boot header) and launch it.
 
 ---
 
@@ -565,5 +618,5 @@ what lets an emulator embed the core under its own renderer.
 - **Call Stack + paused-state workspace:** [`CALL_STACK.md`](CALL_STACK.md) — a per-CPU
   call stack shown when execution stops, from an instrumented shadow stack (● confirmed)
   or a heuristic reconstruction of the stack image (◐ probable / ○ heuristic), with a
-  coordinated breakpoint-hit workspace. Phase 1 (client model + heuristic reconstructor +
-  panel) built; the shadow-stack protocol/glue are later phases.
+  coordinated breakpoint-hit workspace. Built: the client model, the heuristic reconstructor
+  and the panel, plus the shadow stack over the wire (v9) and its Mednafen glue.
