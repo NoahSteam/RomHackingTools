@@ -828,7 +828,11 @@ void PollLoop(LiveState* st)
 
         // A plain GET carries our last-seen frame so the server serves the next unseen one
         // (gap-free). Control verbs keep their own arg and just return the latest snapshot.
-        if (verb == SE_LIVE_VERB_GET)
+        // Compared by content, like MinVerFor and the server's own dispatch: `verb` is a
+        // const char*, so == would compare addresses and only work while the compiler pools
+        // identical literals. If it ever stopped, this would silently send arg 0 on every
+        // GET and the server would re-serve frame 0's successor forever.
+        if (std::memcmp(verb, SE_LIVE_VERB_GET, SE_LIVE_VERB_LEN) == 0)
         {
             arg = static_cast<int32_t>(st->lastSeenFrame);
         }

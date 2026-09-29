@@ -1080,16 +1080,25 @@ typedef int SeConn;
  * expensive: SeRecv wraps one recv() syscall, so a per-byte drain costs a syscall per byte --
  * roughly half a microsecond each, which is ~570 ms for a 1 MiB payload and far worse for a
  * request that claims more. Draining through a scratch buffer makes it a few dozen syscalls. */
-static int SeDrain(SeConn cl, unsigned int n)
+/* Read and discard n bytes through a caller-supplied buffer. Split out so a function that
+   already owns a scratch buffer can lend it rather than adding a second one: SeDrain's own
+   16 KiB inlined into SeRecvPokeStream's 16 KiB put that frame over 32 KiB of stack, which
+   the server thread runs on. */
+static int SeDrainWith(SeConn cl, unsigned int n, unsigned char* buf, unsigned int bufLen)
 {
-    unsigned char scratch[16u * 1024u];
     while (n)
     {
-        const unsigned int take = n > sizeof(scratch) ? (unsigned int)sizeof(scratch) : n;
-        if (SeRecv(cl, scratch, take) != 0) return -1;
+        const unsigned int take = n > bufLen ? bufLen : n;
+        if (SeRecv(cl, buf, take) != 0) return -1;
         n -= take;
     }
     return 0;
+}
+
+static int SeDrain(SeConn cl, unsigned int n)
+{
+    unsigned char scratch[16u * 1024u];
+    return SeDrainWith(cl, n, scratch, (unsigned int)sizeof(scratch));
 }
 
 /* Receive a poke stream -- destination(4 LE) + 'count' bytes -- and apply it through 'hook'.
@@ -1118,7 +1127,8 @@ static int SeRecvPokeStream(SeConn cl, void (*hook)(unsigned int, unsigned char)
         if (hook) { for (i = 0; i < take; ++i) hook(dest + done + i, block[i]); }
         done += take;
     }
-    return SeDrain(cl, count - keep);   /* past the cap: consumed, not written */
+    /* Reuse 'block' rather than letting SeDrain's own buffer inline a second one in. */
+    return SeDrainWith(cl, count - keep, block, (unsigned int)sizeof(block));
 }
 
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
