@@ -594,6 +594,73 @@ void TestColorCalc()
         for (int x = 0; x < 4; ++x)
             CHECK(IsWhite(opaque, x, y));
 }
+
+// Where a bank palette says it lives in CRAM. DecodeBankPalette reported 0, so nothing
+// downstream could tell where a bank palette's bytes were -- the Palette Viewer's jump to the
+// Memory panel needs that address. Re-deriving the masks here would only restate the code, so
+// each case plants a known colour at the offset the palette reports and checks entry 0 came
+// from exactly there.
+void TestBankPaletteReportsItsCramAddress()
+{
+    // RGB555: two bytes an entry, so the fixture's 4 KiB CRAM holds 2048 of them. BANK_16
+    // masks the colour bank down to a 16-entry boundary -- 0x1234 -> 0x1230 -- which is past
+    // the end of 2048 entries and wraps to 0x230. A bank index runs to 0xFF00, so wrapping is
+    // ordinary here rather than a corner case.
+    {
+        State state = MakeNbg3State();
+        const uint32_t expected = 0x230u * 2u;
+        state.cram[expected]     = 0x83;   // green, big-endian RGB555
+        state.cram[expected + 1] = 0xE0;
+        se_context* context = se_test::CreateContext(state);
+        CHECK(context != nullptr);
+        CHECK(se_begin_frame(context) == SE_OK);
+        se_palette pal = {};
+        CHECK(se_decode_bank_palette(context, 0x1234, SE_COLOR_BANK_16, &pal) == SE_OK);
+        CHECK(pal.clut_address == expected);
+        CHECK(pal.count == 16);
+        CHECK(pal.entries[0].g > 200 && pal.entries[0].r < 40 && pal.entries[0].b < 40);
+        se_destroy(context);
+    }
+
+    // Each bank mode masks to its own boundary, so the same colour bank lands somewhere
+    // different depending on how wide the palette is.
+    {
+        State state = MakeNbg3State();
+        se_context* context = se_test::CreateContext(state);
+        CHECK(context != nullptr);
+        CHECK(se_begin_frame(context) == SE_OK);
+        se_palette pal = {};
+        CHECK(se_decode_bank_palette(context, 0x01FFu, SE_COLOR_BANK_16, &pal) == SE_OK);
+        CHECK(pal.clut_address == 0x01F0u * 2u && pal.count == 16);
+        CHECK(se_decode_bank_palette(context, 0x01FFu, SE_COLOR_BANK_64, &pal) == SE_OK);
+        CHECK(pal.clut_address == 0x01C0u * 2u && pal.count == 64);
+        CHECK(se_decode_bank_palette(context, 0x01FFu, SE_COLOR_BANK_128, &pal) == SE_OK);
+        CHECK(pal.clut_address == 0x0180u * 2u && pal.count == 128);
+        CHECK(se_decode_bank_palette(context, 0x01FFu, SE_COLOR_BANK_256, &pal) == SE_OK);
+        CHECK(pal.clut_address == 0x0100u * 2u && pal.count == 256);
+        se_destroy(context);
+    }
+
+    // RGB888 is four bytes an entry, so the same entry index is twice as far in. Taking the
+    // stride from anything but the mode would put this at half the address.
+    {
+        State state = MakeNbg3State();
+        SetReg(state, 0x00E, 0x2000);   // RAMCTL bits 12-13 = 2: RGB888, 1024 colours
+        const uint32_t expected = 0x300u * 4u;
+        state.cram[expected + 1] = 0x33;   // [pad][R][G][B]
+        state.cram[expected + 2] = 0x22;
+        state.cram[expected + 3] = 0x11;
+        se_context* context = se_test::CreateContext(state);
+        CHECK(context != nullptr);
+        CHECK(se_begin_frame(context) == SE_OK);
+        se_palette pal = {};
+        CHECK(se_decode_bank_palette(context, 0x0300u, SE_COLOR_BANK_256, &pal) == SE_OK);
+        CHECK(pal.mode == SE_CRAM_RGB888_1024);
+        CHECK(pal.clut_address == expected);
+        CHECK(pal.entries[0].r == 0x33 && pal.entries[0].g == 0x22 && pal.entries[0].b == 0x11);
+        se_destroy(context);
+    }
+}
 }  // namespace
 
 // A hex edit to VRAM/CRAM/registers must feed straight back into the reconstructed image,
@@ -1012,6 +1079,7 @@ int main()
     TestLine();
     TestUserClip();
     TestUserClipDefaultUnbounded();
+    TestBankPaletteReportsItsCramAddress();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " VDP2 compositor check(s) failed\n";

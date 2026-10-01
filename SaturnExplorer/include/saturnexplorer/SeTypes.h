@@ -168,6 +168,9 @@ typedef struct se_palette_entry {
 } se_palette_entry;
 
 typedef struct se_palette {
+    /* Byte offset of this palette within the memory it was decoded from: VDP1 VRAM for a
+       CLUT (se_decode_palette), CRAM for a bank palette (se_decode_bank_palette). Which
+       one it is follows from the call that filled this in, so the field does not say. */
     uint32_t         clut_address;
     se_cram_mode     mode;
     uint16_t         count;         /* number of valid entries below */

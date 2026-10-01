@@ -24,6 +24,9 @@ constexpr uint32_t kVdp2RegBytes = 0x120;     // VDP2 register file
 // region table is the fuller map; this is the one base the panels reach for directly.
 constexpr uint32_t kVdp1VramBase = 0x05C00000u;
 
+// Same, for VDP2 color RAM: turns a palette's CRAM offset into a hex-editor address.
+constexpr uint32_t kCramBase = 0x05F00000u;
+
 // The captured regions, at their CPU-visible (cached-mirror) bases. BIOS and the cartridge
 // (CS0-2) are not captured, so they are absent. This is the one place a Saturn address is
 // turned into a human name: the Memory panel builds its region tabs from it, and the
@@ -41,7 +44,7 @@ inline const SaturnRegion* SaturnRegions(size_t& count)
         { "VDP1 FB",   0x05C80000u, kVdp1FbSize   },
         { "VDP1 Regs", 0x05D00000u, kVdp1RegBytes },
         { "VDP2 RAM",  0x05E00000u, kVdp2VramSize },
-        { "VDP2 CRAM", 0x05F00000u, kCramSize     },
+        { "VDP2 CRAM", kCramBase,   kCramSize     },
         { "VDP2 Regs", 0x05F80000u, kVdp2RegBytes },
     };
     count = sizeof(kRegions) / sizeof(kRegions[0]);

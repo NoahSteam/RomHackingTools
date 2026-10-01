@@ -7096,9 +7096,10 @@ se_result App::PaletteOf(const se_command& cmd, se_palette* pal)
     return se_decode_bank_palette(mContext, cmd.palette_bank, cmd.color_mode, pal);
 }
 
-// Draw a grid of palette swatches with per-swatch hover (index / raw / RGB).
+// Draw a grid of palette swatches with per-swatch hover (index / raw / RGB), and a
+// double-click that reveals the palette's bytes in the Memory panel.
 // Swatch size adapts so a 256-colour bank still fits.
-void App::DrawPaletteSwatches(const se_palette& pal)
+void App::DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress)
 {
     if (pal.count == 0)
     {
@@ -7136,7 +7137,20 @@ void App::DrawPaletteSwatches(const se_palette& pal)
             ImGui::BeginTooltip();
             ImGui::Text("#%d   raw 0x%04X", idx, e.raw);
             ImGui::Text("RGB  %d, %d, %d", e.r, e.g, e.b);
+            if (baseAddress != 0)
+                ImGui::Text("Double-click to view this palette at 0x%08X in the Memory panel.",
+                            baseAddress);
             ImGui::EndTooltip();
+        }
+
+        // Match the Texture Viewer's double-click navigation. The grid is one item, not one
+        // per swatch, so this targets the palette itself rather than the entry under the
+        // cursor. Show the panel as well as jumping: several older call sites only call
+        // GoTo, and the jump is invisible when the user has closed the Memory window.
+        if (baseAddress != 0 && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            mHexEditor.GoTo(baseAddress);
+            mPanels.hexEditor = true;
         }
     }
 }
@@ -7172,7 +7186,13 @@ void App::DrawPaletteViewer()
 
             if (r == SE_OK)
             {
-                DrawPaletteSwatches(pal);
+                // pal.clut_address is an offset into whichever memory the palette was
+                // decoded from, so the region base depends on the colour mode. GoTo picks
+                // the Memory panel's tab from the resulting bus address on its own.
+                const uint32_t base = (cmd.color_mode == SE_COLOR_LUT_16)
+                                          ? kVdp1VramBase + pal.clut_address
+                                          : kCramBase + pal.clut_address;
+                DrawPaletteSwatches(pal, base);
             }
             else
             {

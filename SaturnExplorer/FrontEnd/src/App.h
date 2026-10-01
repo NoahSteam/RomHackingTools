@@ -257,7 +257,9 @@ private:
     // Resolve a command's palette (CLUT or CRAM bank); SE_ERR_UNSUPPORTED for RGB555.
     se_result PaletteOf(const se_command& cmd, se_palette* pal);
     void DrawPaletteViewer();
-    void DrawPaletteSwatches(const se_palette& pal);
+    // 'baseAddress' is where the palette lives on the Saturn bus, so double-clicking the
+    // grid can reveal it in the Memory panel; 0 means unknown and disables that.
+    void DrawPaletteSwatches(const se_palette& pal, uint32_t baseAddress);
     void DrawVramMap();
     void DrawReferences();
     void DrawReferenceList(const char* id, const std::vector<se_reference>& refs);

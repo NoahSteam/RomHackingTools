@@ -311,7 +311,14 @@ public:
         const se_cram_mode cm = mSnapshot.CramMode();
         const uint32_t words = CramEntryCount(cram, cm);
 
-        out->clut_address = 0;
+        // Where in CRAM this palette starts, wrapped exactly as the loop below wraps every
+        // entry it reads -- so the address reported is the one the colours actually came
+        // from, not a nominal one that walks off the end of a short or partial CRAM. A
+        // bank index is masked to at most 0xFF00, far past the 1024/2048 entries CRAM
+        // really holds, so the wrap is reachable with ordinary data and not just a corner
+        // case. 0 when there is no CRAM to index at all.
+        const uint32_t entryBytes = (cm == SE_CRAM_RGB888_1024) ? 4u : 2u;
+        out->clut_address = (words == 0) ? 0u : CramWrap(base, words) * entryBytes;
         out->mode = cm;
         out->count = count;
         for (uint16_t i = 0; i < count; ++i)
