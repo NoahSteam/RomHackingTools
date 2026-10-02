@@ -106,6 +106,23 @@ if(BUILD_TESTING AND WIN32)
              COMMAND SaturnExplorerExportShutdownTests)
 endif()
 
+# Does the live tap leave the emulator alone while nothing is attached? The per-frame capture
+# (ring copy + a full savestate for rewind) has no reader until Saturn Explorer connects, and it
+# costs real frame rate, so this pins that it does not run. Needs the real unix-socket listener,
+# so it is the POSIX counterpart of the Windows-only shutdown test above.
+if(BUILD_TESTING AND NOT WIN32 AND NOT EMSCRIPTEN)
+    enable_language(C)
+    find_package(Threads REQUIRED)   # se_export runs its listener on a thread
+    add_executable(SaturnExplorerExportAttachTests
+        Integration/Common/tests/SeExportAttachTests.c
+        Integration/Common/se_export.c)
+    target_include_directories(SaturnExplorerExportAttachTests
+        PRIVATE Integration/Common)
+    target_link_libraries(SaturnExplorerExportAttachTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerExportAttachTests
+             COMMAND SaturnExplorerExportAttachTests)
+endif()
+
 # The shared normalization helpers: what they do with input that is not the shape the
 # savestate/live formats promised. Portable, no emulator and no socket needed.
 if(BUILD_TESTING)

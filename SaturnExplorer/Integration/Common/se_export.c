@@ -599,6 +599,19 @@ static void SeLogPortDevices(void)
     }
 }
 
+/* How many clients (Saturn Explorer) are attached. Bumped by the server threads around the
+ * serve loop, read every frame by the emulate thread. With nobody listening the per-frame
+ * capture is pure waste -- several MB of copying into the ring, plus a full savestate
+ * serialization for the rewind pipeline -- so the producer skips all of it while this is 0,
+ * and a patched emulator run on its own costs what an unpatched one costs. A count, not a
+ * flag: on POSIX the local socket and the web-bridge TCP port are served by two threads. */
+static volatile int sClients;
+
+int SeExportHasClient(void)
+{
+    return sClients != 0;
+}
+
 static void SeOnClientDisconnect(void)
 {
     /* A client (Saturn Explorer) can disappear at any time — mid-button-hold, or while the
@@ -999,6 +1012,14 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
                       const void* soundRam, const void* scspSlots, const void* cdStatus)
 {
+    /* Nobody attached: capture nothing. The ring copy and the staged savestate below would
+     * both be thrown away unread, and the savestate is the single most expensive thing the
+     * emulate thread does per frame. Capture resumes on the first frame after a client
+     * attaches; the frame counter simply stands still across the gap. */
+    if (!SeExportHasClient())
+    {
+        return;
+    }
     if (!sRing[0])
     {
         return;
@@ -1131,9 +1152,22 @@ static int SeRecvPokeStream(SeConn cl, void (*hook)(unsigned int, unsigned char)
     return SeDrainWith(cl, count - keep, block, (unsigned int)sizeof(block));
 }
 
+static void SeServeClientLoop(SeConn cl, SeFrame* snap);
+
+/* Count this client in for as long as it is attached. A wrapper around the serve loop, rather
+ * than a bump at each of the three accept sites: the loop returns from a dozen places on any I/O
+ * error, and every one of them has to release the count. Keeping both halves here is what makes
+ * them impossible to leave unpaired. */
+static void SeServeClient(SeConn cl, SeFrame* snap)
+{
+    SE_LOCK(); ++sClients; SE_UNLOCK();
+    SeServeClientLoop(cl, snap);
+    SE_LOCK(); --sClients; SE_UNLOCK();
+}
+
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
  * scratch the size of one frame. */
-static void SeServeClient(SeConn cl, SeFrame* snap)
+static void SeServeClientLoop(SeConn cl, SeFrame* snap)
 {
     SeLogPortDevices();   /* report the emulator's controller config on connect */
     while (sRunning)
@@ -1698,7 +1732,7 @@ int SeExportInit(void)
         }
     }
     sRingWrite = 0;
-    sPaused = 0; sStepBudget = 0; sFrameNo = 0;
+    sPaused = 0; sStepBudget = 0; sFrameNo = 0; sClients = 0;
     sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */

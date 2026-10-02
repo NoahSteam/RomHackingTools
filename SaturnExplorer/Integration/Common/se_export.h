@@ -39,6 +39,13 @@ const char* SeExportTitleSuffix(const char* emu_name, const char* emu_rev);
  * success, non-zero on failure (Yabause keeps running either way). */
 int SeExportInit(void);
 
+/* Non-zero while at least one client (Saturn Explorer) is attached. SeExportSnapshot already
+ * skips everything when nothing is attached; this lets the emulator's frame hook also skip the
+ * work it does to BUILD the arguments (byte-swapping VRAM into big-endian scratch, serializing
+ * SCSP voices) instead of preparing a snapshot that would be dropped. Safe before
+ * SeExportInit -- returns 0. */
+int SeExportHasClient(void);
+
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
  *   sh2regs_struct m, s;

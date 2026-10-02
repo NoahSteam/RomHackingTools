@@ -155,6 +155,10 @@ void SeMednafenSnapshot(void)
     static uint32_t msh2[23], ssh2[23];
 
 #if defined(SE_MEDNAFEN_WIRED)  /* enabled once the injected accessors exist. */
+    /* Nothing attached: return before the byte swaps below. SeExportSnapshot checks this too,
+     * but by then this function has already swapped 1.5 MiB of VRAM into the scratch buffers,
+     * which is most of the cost of preparing a frame. */
+    if (!SeExportHasClient()) return;
     /* Prefer the draw-end latch (the command table as it was actually plotted) over live
      * VRAM, which at this video-frame boundary may already be a half-rebuilt next-frame
      * table. Falls back to live VRAM until the first draw completes. */

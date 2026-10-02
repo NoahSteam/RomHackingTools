@@ -437,6 +437,25 @@ few frames behind. On Play-from-scrub the client reconstructs frame N's full sta
 with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so **rewind requires
 `--with-pause`** (the gate is where the load is applied).
 
+### What it costs, and how to turn it off
+
+A full savestate per frame is the most expensive thing the tap asks of the emulate thread: several
+MB serialized through Mednafen's `SFORMAT` descriptors, plus a multi-MB heap buffer, every frame —
+and the worker then diffs and compresses the same bytes on another core. On a slower host that is
+visible as a lower frame rate, and it is the first thing to suspect when a patched build runs
+slower than an unpatched one after a resync.
+
+Two things bound it:
+
+- **Nothing attached, nothing captured.** `SeExportSnapshot` returns immediately while no client
+  is connected (`SeExportHasClient`), so the whole per-frame capture — ring copy *and* savestate —
+  costs nothing until Saturn Explorer actually attaches. The Mednafen glue checks the same flag
+  before it byte-swaps VRAM into its scratch buffers. `SaturnExplorerExportAttachTests` pins this.
+- **`install.py --no-rewind`** drops `-DSE_MDFN_REWIND=1`, so `SsDbgSaveState` builds as the stub
+  and the ring stays empty. The rewind timeline and Play-from-here are then unavailable;
+  everything else behaves as before. The define is part of the recorded configure signature, so
+  toggling it forces the clean rebuild it needs.
+
 ### ⚠ This depends on Mednafen internals, and fails silently
 
 `install.py` defines `SE_MDFN_REWIND=1` (`MEDNAFEN_DEFINES`), so the real `MDFNSS_*` path is what
