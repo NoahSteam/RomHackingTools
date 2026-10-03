@@ -961,6 +961,19 @@ void App::BuildUI(IPlatform& platform)
             {
                 mPanels.assembly = true;
                 mAssemblyPanel.Reveal(mCallStackCpu);
+                // The halted CPU's register file, on its own tab rather than whichever VDP
+                // tab was last open. Registers docks away from the Assembly/Call Stack
+                // group, so bringing it forward costs nothing else its space.
+                mPanels.registers = true;
+                mFocusRegisters = true;
+                mSelectSh2RegTab = true;
+                // And the breakpoint list, so the set that produced this halt is in view.
+                // It owns a column in the default layout rather than tabbing with Call
+                // Stack, so bringing it forward doesn't hide the BREAKPOINT HIT banner --
+                // the focus request is still worth making for a layout the user has
+                // rearranged into tabs.
+                mPanels.breakpoints = true;
+                mFocusBreakpoints = true;
             }
         }
 #endif
@@ -1127,8 +1140,10 @@ void App::BuildUI(IPlatform& platform)
     SendInput(mController.FinalState());
     if (mPanels.log)             DrawLog();
     if (mPanels.actions)         DrawActions();
-    if (mPanels.callStack)       DrawCallStack(platform);
+    // Breakpoints before Call Stack: both request focus on a halt, and the later submission
+    // wins it -- the Call Stack is the one to land on, since it carries the run control.
     if (mPanels.breakpoints)     DrawBreakpoints();
+    if (mPanels.callStack)       DrawCallStack(platform);
     if (mPanels.ramSearch)       DrawRamSearch();
     if (mPanels.accessLog)       DrawAccessLog();
     if (mPanels.soundCpu)        DrawSoundCpu();
@@ -1224,9 +1239,13 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     const ImGuiID rInspect = ImGui::DockBuilderSplitNode(rightRest, ImGuiDir_Up, 0.40f, nullptr, &rightRest);
     const ImGuiID rData    = rightRest;
 
-    // Bottom strip: Watch | SH-2 Assembly, side by side.
+    // Bottom strip: Watch | SH-2 Assembly | Breakpoints, side by side. Breakpoints gets a
+    // column of its own because a halt brings it and the Call Stack up together: tabbed with
+    // Call Stack, the breakpoint list would cover the BREAKPOINT HIT banner and the run
+    // control that live there. Narrow, since it is a short list.
     ImGuiID bottomRest = bottom;
-    const ImGuiID bWatch = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.5f, nullptr, &bottomRest);
+    const ImGuiID bWatch = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Left, 0.40f, nullptr, &bottomRest);
+    const ImGuiID bBreak = ImGui::DockBuilderSplitNode(bottomRest, ImGuiDir_Right, 0.30f, nullptr, &bottomRest);
     const ImGuiID bAsm   = bottomRest;
 
     // Left inspector. Texture + Palette viewers tab together (Archive/Search/References
@@ -1263,7 +1282,7 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Log", bWatch);
     ImGui::DockBuilderDockWindow("Tracepoints", bWatch);   // tabs with Watch/Log/Controller
     ImGui::DockBuilderDockWindow("Call Stack", bWatch);    // beside Assembly; auto-focus on stop
-    ImGui::DockBuilderDockWindow("Breakpoints", bWatch);   // tabs beside Call Stack
+    ImGui::DockBuilderDockWindow("Breakpoints", bBreak);   // its own column (see the split above)
     ImGui::DockBuilderDockWindow("RAM Search", bWatch);    // debugger tools tab here too
     ImGui::DockBuilderDockWindow("Access Log", bWatch);
     ImGui::DockBuilderDockWindow("Current Input", bWatch);
@@ -2152,10 +2171,14 @@ static const char* BpSizeName(uint32_t sz)
 
 // Visual Studio-style Breakpoints window: every breakpoint (execution + data
 // watchpoints), the exact condition each breaks on, plus enable/disable and delete.
-// Tabs beside Call Stack. Mutating through the BreakpointManager bumps its generation,
-// so the live driver re-syncs the emulator with no extra plumbing.
+// Its own column beside Call Stack and SH-2 Assembly. Mutating through the BreakpointManager
+// bumps its generation, so the live driver re-syncs the emulator with no extra plumbing.
 void App::DrawBreakpoints()
 {
+    // Same one-shot as the Call Stack's: a halt raised this panel, so bring it forward once
+    // (it matters only where the user has docked it into a tab group).
+    if (mFocusBreakpoints) ImGui::SetNextWindowFocus();
+    mFocusBreakpoints = false;
     if (!ImGui::Begin("Breakpoints")) { ImGui::End(); return; }
 
     const std::vector<Breakpoint>& all = mBreakpoints.All();
@@ -7947,6 +7970,10 @@ void App::DrawSh2Registers()
 
 void App::DrawRegisters()
 {
+    // Same one-shot as the Call Stack's: a halt asked for this panel, so bring it to the
+    // front of its tab group once, then let the user move off it freely.
+    if (mFocusRegisters) ImGui::SetNextWindowFocus();
+    mFocusRegisters = false;
     if (ImGui::Begin("Registers"))
     {
         if (!mbHasData)
@@ -7986,7 +8013,12 @@ void App::DrawRegisters()
             }
             // SH-2 sits alongside the VDP register tabs: same panel, same read-only
             // "what does the hardware hold right now" job, different chip.
-            if (ImGui::BeginTabItem("SH-2"))
+            // Consumed whether or not the tab opens, so a halt selects it once and the
+            // user's own tab choice sticks for the rest of the halt.
+            const ImGuiTabItemFlags sh2Flags =
+                mSelectSh2RegTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+            mSelectSh2RegTab = false;
+            if (ImGui::BeginTabItem("SH-2", nullptr, sh2Flags))
             {
                 if (se_has_sh2_regs(mContext))
                 {
