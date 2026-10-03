@@ -17,7 +17,21 @@ namespace sfe
 
 namespace
 {
-constexpr int kWinInstr = 128;   // instructions per disassembled window
+constexpr int kWinInstr = 256;   // instructions per disassembled window
+// Instructions decoded BEFORE the anchor. The window used to start AT the anchor, so there was
+// nothing above it: landing on a function's first instruction -- which is exactly where a Call
+// Stack double-click lands -- left the view pinned to the top of that function with no way to
+// scroll back into the code before it. 96 instructions is 192 bytes of run-up.
+constexpr int kWinLead = 96;
+constexpr uint32_t kWinLeadBytes = (uint32_t)kWinLead * 2;
+
+// Where the decode window starts for a view framed on 'anchor'. Clamped at 0 so an anchor
+// inside the first few bytes of the address space doesn't wrap.
+uint32_t WindowBaseFor(uint32_t anchor)
+{
+    anchor &= ~1u;
+    return (anchor >= kWinLeadBytes) ? (anchor - kWinLeadBytes) : 0u;
+}
 
 // Subtle syntax colours for the dark theme.
 const ImU32 kColAddr  = IM_COL32(150, 150, 160, 255);
@@ -141,13 +155,20 @@ void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
 {
     if (pushHistory && mWindowValid)
     {
-        mBack.push_back(mFollowPc ? mLastPc : mWindowBase);
+        // The anchor, not the window base: the base sits a lead earlier, and Back should
+        // return to where the user was looking rather than 192 bytes above it.
+        mBack.push_back(mFollowPc ? mLastPc : mWindowAnchor);
         mFwd.clear();
     }
     mFollowPc = false;
-    mWindowBase = addr & ~1u;
+    mWindowAnchor = addr & ~1u;
+    mWindowBase = WindowBaseFor(mWindowAnchor);
     mWindowValid = true;
-    mScrollToPc = true;      // reuse the scroll flag to bring the target into view
+    // Put the target on the first visible line. It is what the user asked to see, so it goes
+    // at the top -- with the lead above it available by scrolling up.
+    mScrollPending = true;
+    mScrollAddr = mWindowAnchor;
+    mScrollAlign = 0.0f;
     mFocusRequested = true;  // and bring the panel forward (e.g. a Call Stack "Go to ...")
 }
 
@@ -185,13 +206,25 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     ImGui::SameLine();
     ImGui::BeginDisabled(mBack.empty());
     if (ImGui::ArrowButton("##back", ImGuiDir_Left) && !mBack.empty())
-    { mFwd.push_back(mWindowBase); mWindowBase = mBack.back(); mBack.pop_back(); mFollowPc = false; mScrollToPc = true; }
+    {
+        mFwd.push_back(mWindowAnchor);
+        mWindowAnchor = mBack.back(); mBack.pop_back();
+        mWindowBase = WindowBaseFor(mWindowAnchor);
+        mFollowPc = false;
+        mScrollPending = true; mScrollAddr = mWindowAnchor; mScrollAlign = 0.0f;
+    }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back");
     ImGui::SameLine(0.0f, 2.0f);
     ImGui::BeginDisabled(mFwd.empty());
     if (ImGui::ArrowButton("##fwd", ImGuiDir_Right) && !mFwd.empty())
-    { mBack.push_back(mWindowBase); mWindowBase = mFwd.back(); mFwd.pop_back(); mFollowPc = false; mScrollToPc = true; }
+    {
+        mBack.push_back(mWindowAnchor);
+        mWindowAnchor = mFwd.back(); mFwd.pop_back();
+        mWindowBase = WindowBaseFor(mWindowAnchor);
+        mFollowPc = false;
+        mScrollPending = true; mScrollAddr = mWindowAnchor; mScrollAlign = 0.0f;
+    }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Forward");
     ImGui::SameLine();
@@ -239,18 +272,26 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // or when a recenter was forced (Go to PC / re-enabling Follow PC set mWindowValid=false).
         const bool rebuilt = !mWindowValid || pc < mWindowBase ||
                              pc >= mWindowBase + (uint32_t)kWinInstr * 2;
-        if (rebuilt) mWindowBase = (pc >= 48) ? (pc - 48) & ~1u : 0;   // PC ~1/5 down
+        if (rebuilt) mWindowBase = WindowBaseFor(pc);   // lead of code above the PC
         // Scroll on a rebuild (so a forced recenter at a *steady* PC still moves the view — the
         // "Go to PC" case) and on any PC change: the decode buffer is 128 instructions tall, far
         // taller than the viewport, so a step or near branch can walk PC past the visible rows
         // while still inside the buffer and the view would otherwise stop following. A steady PC
         // that neither moved nor was recentered leaves scrolling to the user.
-        if (rebuilt || pc != mLastPc) mScrollToPc = true;
+        if (rebuilt || pc != mLastPc)
+        {
+            mScrollPending = true;
+            mScrollAddr = pc;
+            mScrollAlign = 0.35f;   // PC a third down, so the next few instructions are visible
+        }
+        mWindowAnchor = pc & ~1u;
         mWindowValid = true;
     }
     else if (!mWindowValid)
     {
-        mWindowBase = pc & ~1u; mWindowValid = true;
+        mWindowAnchor = pc & ~1u;
+        mWindowBase = WindowBaseFor(mWindowAnchor);
+        mWindowValid = true;
     }
     mLastPc = pc;   // track the followed PC (also the Back-history anchor in Navigate)
 
@@ -370,7 +411,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
             bps.ToggleExecution(ln.addr);
         openRowContext();
-        if (isPc && mScrollToPc) { ImGui::SetScrollHereY(0.35f); mScrollToPc = false; }
+        if (mScrollPending && ln.addr == mScrollAddr)
+        {
+            ImGui::SetScrollHereY(mScrollAlign);
+            mScrollPending = false;
+        }
 
         // Address / bytes / mnemonic / operands. The address cell is a Selectable so the
         // user can pick instruction(s) to search for: click selects one, shift-click
@@ -551,6 +596,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
         ImGui::PopID();
     }
+    // A request whose address isn't in the window can never be consumed by a row (every line is
+    // submitted, there is no clipper), so drop it here rather than let it fire on some unrelated
+    // frame once that address happens to be on screen.
+    mScrollPending = false;
+
     ImGui::EndTable();
 
     ImGui::End();

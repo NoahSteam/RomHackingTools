@@ -96,9 +96,18 @@ private:
     uint32_t mBpStopPc = 0;
     bool     mAutoRefresh = true;      // re-read the code window every frame (live)
     uint32_t mWindowBase = 0;          // address of the first disassembled line
+    // The address the view is framed on -- the PC while following, else the last navigation
+    // target. Distinct from mWindowBase, which now sits a lead before it so there is code
+    // above the anchor to scroll back into; this is what the history records.
+    uint32_t mWindowAnchor = 0;
     bool     mWindowValid = false;
     uint32_t mLastPc = 0;
-    bool     mScrollToPc = false;      // request a scroll-to-PC next frame
+    // Pending scroll request, by address rather than "the PC": a navigation target is usually
+    // NOT the PC (a caller's entry point, a branch target), and keying the scroll off the PC row
+    // meant those jumps silently never scrolled -- no row matched, so nothing fired.
+    bool     mScrollPending = false;
+    uint32_t mScrollAddr = 0;
+    float    mScrollAlign = 0.0f;      // 0 = target at the top of the view, 1 = bottom
     bool     mFocusRequested = false;  // bring the window forward after an external GoTo/Navigate
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
