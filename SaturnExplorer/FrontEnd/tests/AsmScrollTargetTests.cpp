@@ -96,7 +96,7 @@ void DrawRows(View& v)
             ImGui::PushID(i);
             ImGui::Text("%08X", addr);
             if (i == 1) v.rowH = ImGui::GetItemRectSize().y + ImGui::GetStyle().CellPadding.y * 2.0f;
-            if (v.pending && addr == v.addr)
+            if (v.pending && v.seq == seqAtRowStart && addr == v.addr)
             {
                 v.targetDrawn = true;
                 ImGui::SetScrollHereY(v.align);
@@ -199,6 +199,39 @@ void TestRequestRaisedDuringRenderingSurvives()
     CHECK(v.scrollY > want - v.rowH);
     CHECK(v.scrollY < want + v.rowH);
 }
+// The case the sequence guard on cleanup alone did not cover: a FORWARD branch whose target is
+// inside the window already on screen. Matching on address alone, the old row carrying that
+// address consumed the brand-new request and scrolled the window being replaced -- so the
+// rebuilt window, where the target sits a lead down rather than wherever it happened to be,
+// had no request left to frame it.
+void TestForwardTargetInsideOldWindowIsNotConsumedEarly()
+{
+    View v;
+    ImGuiHarness h([&] { DrawRows(v); });
+    h.Settle();
+
+    const int targetRow = 150;                               // inside the window on screen
+    v.navOnRow = true;
+    v.navAtRow = 10;                                         // the branch instruction clicked
+    v.navTarget = kBase + (uint32_t)targetRow * kStep;
+    h.Frame(ImVec2(1270.0f, 710.0f), false);                 // exactly one frame
+
+    // Old row 150 must NOT have taken it, even though its address matches.
+    CHECK(v.pending);
+
+    h.Settle();
+    CHECK(!v.pending);
+    CHECK(v.targetDrawn);
+    // Framed against the REBUILT window, where the target is kNavLead rows down -- not against
+    // the old one, where it was row 150.
+    const float want = ContentOffsetOf(kNavLead, v.rowH);
+    CHECK(v.scrollY > want - v.rowH);
+    CHECK(v.scrollY < want + v.rowH);
+    // And demonstrably not the old framing, which these two bracket out.
+    const float wrong = ContentOffsetOf(targetRow, v.rowH);
+    CHECK(wrong > want + v.rowH);          // the two are far enough apart to tell apart
+    CHECK(v.scrollY < wrong - v.rowH);
+}
 }  // namespace
 
 int main()
@@ -207,6 +240,7 @@ int main()
     TestMidAlignmentLeavesRoomBelow();
     TestRequestOutsideTheWindowIsDropped();
     TestRequestRaisedDuringRenderingSurvives();
+    TestForwardTargetInsideOldWindowIsNotConsumedEarly();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;

@@ -431,7 +431,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if (ImGui::InvisibleButton("g", ImVec2(34, h)) && ln.readable)
             bps.ToggleExecution(ln.addr);
         openRowContext();
-        if (mScrollPending && ln.addr == mScrollAddr)
+        // Only a request that was already pending when these rows began. One raised during this
+        // loop names an address in the window the NEXT frame will decode, and these rows are the
+        // old one -- a forward branch whose target happens to lie inside them would otherwise be
+        // matched here and scrolled against the wrong window, consuming the request so the
+        // rebuilt window never got framed at all. Untouchable this frame, in other words:
+        // neither honoured here nor dropped after the loop.
+        if (mScrollPending && mScrollSeq == scrollSeqAtRowStart && ln.addr == mScrollAddr)
         {
             ImGui::SetScrollHereY(mScrollAlign);
             mScrollPending = false;
@@ -616,14 +622,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
 
         ImGui::PopID();
     }
-    // A request whose address isn't in the window can never be consumed by a row (every line is
-    // submitted, there is no clipper), so drop it rather than let it fire on some unrelated
-    // frame once that address happens to be on screen.
-    //
-    // Only one that was already pending when the rows went in, though. Clicking a branch operand
-    // or Follow Branch calls Navigate() DURING this loop, against a window decoded before the
-    // jump -- its target is usually not in these rows, and discarding it here would mean the new
-    // window drew next frame with no framing at all. The sequence counter tells the two apart.
+    // A request that was already pending and still is could not be consumed by any row (every
+    // line is submitted, there is no clipper), so its address is outside the window: drop it
+    // rather than let it fire on some unrelated frame once that address happens to be on screen.
+    // A request raised during the loop is left alone for the same reason the consume above skips
+    // it -- it belongs to the window the next frame will decode.
     if (mScrollPending && mScrollSeq == scrollSeqAtRowStart) mScrollPending = false;
 
     ImGui::EndTable();
