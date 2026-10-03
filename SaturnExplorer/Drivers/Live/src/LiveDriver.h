@@ -71,6 +71,14 @@ uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
                            uint64_t* mtime, uint32_t max);
 void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
 
+/* Turn rewind capture on or off in the emulator (v18+). The emulator saves a FULL state every
+ * frame to feed the rewind timeline, which is the most expensive thing the live tap asks of its
+ * emulate thread -- so when the user has the feature switched off, the right thing is for the
+ * emulator to stop doing it, not for the client to drop the results. Pass the user's setting on
+ * connect and on every change; the poll thread ships it (REW) on its next cycle. Harmlessly
+ * ignored against a pre-v18 server, which always captures. No-op if 'ds' isn't a live source. */
+void se_live_set_rewind_enabled(const se_data_source* ds, int enabled);
+
 /* A fired tracepoint event drained from the server (v8+): the tracepoint id, the CPU
  * (0 master / 1 slave), the frame it fired on, and the captured SH-2 register file
  * (23 u32 in se_sh2_regs order: r[0..15], pc, pr, sr, gbr, vbr, mach, macl). */

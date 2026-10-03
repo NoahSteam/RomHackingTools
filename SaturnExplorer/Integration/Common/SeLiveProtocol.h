@@ -55,7 +55,12 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      17u   /* +v17 emulator-native save slots: the ELS verb + the
+#define SE_LIVE_VERSION      18u   /* +v18 rewind capture is switchable at run time: the REW
+                                  * verb. The per-frame savestate is the most expensive thing
+                                  * the tap asks of the emulate thread, so the client turns it
+                                  * off when the user has the feature disabled instead of the
+                                  * emulator paying for it unconditionally.
+                                  * v17 emulator-native save slots: the ELS verb + the
                                   * slot-inventory block below.
                                   * v16 savestate rewind: per-frame savestate delta stream
                                     * (trailing section) + LST load-state verb */
@@ -105,6 +110,16 @@
                                         * save-state hotkeys use, through its own code. So the
                                         * client cannot know the frame it lands on and must
                                         * treat its recorded history as gone. No payload. */
+#define SE_LIVE_VERB_REWIND  "REW\n" /* enable/disable rewind capture (v18+): arg 1 captures a
+                                        * savestate per frame, arg 0 stops. No payload.
+                                        *
+                                        * The capture is the single most expensive thing the
+                                        * emulate thread does per frame -- a full state through
+                                        * MDFNSS -- so it is not something to pay for while the
+                                        * user has rewind switched off. The server starts each
+                                        * connection with capture ON, so a pre-v18 client that
+                                        * never sends this keeps the old behavior; a v18 client
+                                        * states its setting on connect and on every change. */
 #define SE_LIVE_VERB_LEN     4
 #define SE_LIVE_REQUEST_LEN  8    /* verb(4) + arg(4, little-endian) */
 
@@ -258,6 +273,7 @@
 #define SE_LIVE_MINVER_TRACE      8u    /* TRC */
 #define SE_LIVE_MINVER_WRITESND  13u    /* WRS */
 #define SE_LIVE_MINVER_LOADSTATE 16u    /* LST */
+#define SE_LIVE_MINVER_REWIND    18u    /* REW */
 
 #define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
 #define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */

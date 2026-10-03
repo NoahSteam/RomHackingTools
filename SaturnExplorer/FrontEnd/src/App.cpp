@@ -341,6 +341,7 @@ void App::LoadSettings()
     mDataDir      = mSettings.Get("data", "dir", mDataDir);
     mLayerPanels.Load(mSettings);   // export folder + per-layer tile-grid toggles
     mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
+    mRewindEnabled = mSettings.GetBool("debug", "rewind", true);
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
@@ -362,6 +363,7 @@ void App::SaveSettings()
         mSettings.SetBool("panels", p.key, mPanels.*(p.flag));
     mSettings.Set("data", "dir", mDataDir);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
+    mSettings.SetBool("debug", "rewind", mRewindEnabled);
     mSettings.SetFloat("callstack", "split", mCallStackSplit);
     mLayerPanels.Save(mSettings);
     SaveSearchOptions();
@@ -1000,7 +1002,14 @@ void App::BuildUI(IPlatform& platform)
     {
         se_live_drain_state_blocks(&mDataSource, &App::OnStateBlock, this);
         RefreshEmulatorSlots();
-        mSeekSupported = se_live_server_version(&mDataSource) >= 16u;
+        // Restate the user's setting every frame rather than tracking when to send it: the
+        // driver only queues a message when the value actually changes, and this way a
+        // reconnect (which resets the emulator to capturing) cannot leave the two disagreeing.
+        se_live_set_rewind_enabled(&mDataSource, mRewindEnabled ? 1 : 0);
+        // "Play from here" needs states to rewind to. With capture off there are none, so the
+        // transport must not offer it -- and scrubbed memory stays read-only, since an edit
+        // could not be re-simulated forward.
+        mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
     }
 #endif
 
@@ -6088,7 +6097,7 @@ void App::AdoptNewEmulatorInstance()
     // Breakpoints live in the emulator, and this one has none: force a full re-sync rather
     // than leave the user's set showing in the gutter while nothing is armed.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
-    mSeekSupported = se_live_server_version(&mDataSource) >= 16u;
+    mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
     mLog.Info("The emulator was replaced — cleared the recorded history from the previous "
               "session.");
 #endif
@@ -6640,6 +6649,19 @@ void App::DrawSettingsModal()
         ImGui::SetWindowFocus(kControllerPanel);
         ImGui::CloseCurrentPopup();
     }
+    ImGui::Separator();
+    if (ImGui::Checkbox("Rewind (save a state every frame)", &mRewindEnabled))
+    {
+        mSettingsDirty = true;   // pushed to the emulator by the per-frame live sync
+    }
+    // Unconditional, not gated on the "hover help" preference: this is the only place the
+    // feature is explained, and it is the one setting here with a cost worth stating.
+    ImGui::SetItemTooltip(
+        "Lets you scrub back to an earlier frame, change memory, and press Play to re-run the "
+        "game from there with your change in effect.\n\n"
+        "To do that the emulator has to save its entire state every frame, which costs frame "
+        "rate. Turn this off if the game runs slowly; everything else keeps working, and you "
+        "can still step back through recorded frames to look at them.");
     ImGui::Separator();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
