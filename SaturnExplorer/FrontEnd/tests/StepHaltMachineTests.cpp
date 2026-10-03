@@ -99,7 +99,7 @@ void TestStaleStopAtTheSamePcDoesNotReleaseTheHold()
         CHECK(m.StepInFlight());   // the hold survived
     }
     // The real re-halt, at a new PC, does release it.
-    const StepOutcome s = m.Observe(Halted(0x06001002));
+    m.Observe(Halted(0x06001002));
     CHECK(m.HaltActive());
     CHECK(m.HaltPc() == 0x06001002);
     CHECK(!m.StepInFlight());
@@ -146,7 +146,7 @@ void TestHoldingDoesNotAdoptAReportedPc()
     StepHaltMachine m = HaltedAt(0x06001000, 0);
     m.BeginStep();
     // A stale echo carrying a different CPU must not move the presentation either.
-    const StepOutcome s = m.Observe(Halted(0x06001000, 1));
+    m.Observe(Halted(0x06001000, 1));
     CHECK(m.HaltActive());
     CHECK(m.HaltCpu() == 0);
     CHECK(m.HaltPc() == 0x06001000);
@@ -208,7 +208,7 @@ void TestStepInFlightBlocksAnotherStep()
 void TestSuppressedHaltIsNotPresented()
 {
     StepHaltMachine m;
-    const StepOutcome s = m.Observe(Halted(0x06001000, 0, 1 /* exec BP */));
+    m.Observe(Halted(0x06001000, 0, 1 /* exec BP */));
     CHECK(m.HaltActive());
     m.SuppressHalt();
     CHECK(!m.HaltActive());   // retracted at once, before any reader sees it

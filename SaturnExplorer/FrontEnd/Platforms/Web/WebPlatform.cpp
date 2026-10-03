@@ -278,10 +278,14 @@ std::string ParentDir(const std::string& path)
 
 // Wrap an AppleScript chooser expression in the standard "try / POSIX path of (...) / end try"
 // form, so a user-cancel returns cleanly (exit 0, empty output) instead of a scripting error.
+// Only the __APPLE__ chooser lists below call it, so guard it the same way or a Linux desktop
+// build compiles a function it can never reach.
+#if defined(__APPLE__)
 std::string Osascript(const std::string& expr)
 {
     return "osascript -e 'try' -e 'POSIX path of (" + expr + ")' -e 'end try' 2>/dev/null";
 }
+#endif
 
 // SDL has no native file dialog, so the desktop dialogs shell out to the OS chooser (macOS
 // osascript, Linux zenity/kdialog). RunChooser tries each command until one yields a path, and

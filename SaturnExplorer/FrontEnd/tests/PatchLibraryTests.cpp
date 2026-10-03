@@ -20,6 +20,10 @@ namespace
 int gFail = 0;
 void Check(bool ok, const char* what) { if (!ok) { std::printf("FAIL: %s\n", what); ++gFail; } }
 
+// Run a shell command whose failure is not a test failure (scratch-file cleanup). std::system is
+// warn_unused_result, and a (void) cast does not silence that on gcc, so swallow it explicitly.
+void BestEffort(const std::string& cmd) { if (std::system(cmd.c_str()) != 0) { /* cleanup only */ } }
+
 PatchLocation Loc(const char* label, uint32_t addr, uint32_t len, const char* file,
                   uint64_t off, std::vector<uint8_t> expected)
 {
@@ -144,7 +148,7 @@ int main()
             Check(dir != nullptr, "made scratch data dir");
             const std::string sub = std::string(dir) + "/SOUND";
             std::string mk = "mkdir -p '" + sub + "'";
-            std::system(mk.c_str());
+            Check(std::system(mk.c_str()) == 0, "made the scratch SOUND subfolder");
             const std::string target = sub + "/BGM01.PCM";
             {
                 std::ofstream f(target, std::ios::binary);
@@ -219,11 +223,10 @@ int main()
                 const std::string still = ReadFile(victim);
                 Check(still.size() == 8 && (uint8_t)still[0] == 0x00,
                       "the file outside the patch directory was not written");
-                std::system(("rm -f '" + victim + "'").c_str());
+                BestEffort("rm -f '" + victim + "'");
             }
 
-            std::string rm = "rm -rf '" + std::string(dir) + "'";
-            std::system(rm.c_str());
+            BestEffort("rm -rf '" + std::string(dir) + "'");
         }
     }
 #endif  // !_WIN32

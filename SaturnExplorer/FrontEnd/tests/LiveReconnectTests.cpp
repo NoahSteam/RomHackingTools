@@ -236,8 +236,7 @@ void TestBreakpointApiRejectsBadPairs()
     // Still alive and still usable: the driver did not crash, and a later well-formed install
     // is still accepted.
     se_live_set_breakpoints(&ds, good.data(), 2);
-    CHECK(se_live_connection_generation(&ds) >= 0u);
-
+    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
 }
 
 // LST to a server that does not know the verb desyncs the connection: the server ignores the
@@ -251,7 +250,7 @@ void TestLoadStateRefusedWithoutANegotiatedVersion()
     CHECK(live.Ok());
     if (!live.Ok()) return;
     se_data_source& ds = live.Source();
-    CHECK(se_live_connection_generation(&ds) >= 0u);
+    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
     CHECK(ds.load_state != nullptr);
 
     const std::vector<uint8_t> state(1024, 0x7E);

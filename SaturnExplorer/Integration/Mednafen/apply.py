@@ -187,7 +187,7 @@ static int sSeStepActive = 0;    /* an instruction step is in progress */
 /* Set while >=1 data (read/write) watchpoint is installed. scu.inc's DMA_Write reads it to
    cheap-gate the SCU-DMA watchpoint check (SeSsDmaWatch); C linkage + a global so scu.inc,
    which is included before debug.inc where DBG lives, can test it without the debugger guts. */
-extern "C" int SeSsMemWatchArmed = 0;
+extern "C" { int SeSsMemWatchArmed = 0; }
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
@@ -446,8 +446,11 @@ SAVESTATE_ACCESSORS = """\
 #include <mednafen/MemoryStream.h>
 extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) {
  try { Mednafen::MemoryStream ms; Mednafen::MDFNSS_SaveSM(&ms, true);   /* data_only: no preview */
-       uint64 sz = ms.size(); if(!buf) return (size_t)sz;
-       if((uint64)cap < sz) return 0; memcpy(buf, ms.map(), (size_t)sz); return (size_t)sz;
+       uint64 sz = ms.size();
+       if(!buf) return (size_t)sz;
+       if((uint64)cap < sz) return 0;
+       memcpy(buf, ms.map(), (size_t)sz);
+       return (size_t)sz;
  } catch(...) { return 0; } }
 extern "C" int SsDbgLoadState(const unsigned char* buf, size_t len) {
  if(!buf || !len) return -1;
@@ -477,8 +480,10 @@ EMU_SLOT_ACCESSORS = """\
 #include <sys/stat.h>
 extern "C" int SsDbgEmuSlotInfo(unsigned slot, unsigned long long* mtime) {
  try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);
-       struct stat st; if(::stat(p.c_str(), &st) != 0) return 0;
-       if(mtime) *mtime = (unsigned long long)st.st_mtime; return 1;
+       struct stat st;
+       if(::stat(p.c_str(), &st) != 0) return 0;
+       if(mtime) *mtime = (unsigned long long)st.st_mtime;
+       return 1;
  } catch(...) { return 0; } }
 extern "C" int SsDbgEmuLoadSlot(unsigned slot) {
  try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);

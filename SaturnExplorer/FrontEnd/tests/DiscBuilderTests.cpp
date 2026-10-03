@@ -52,7 +52,11 @@ std::vector<uint8_t> ReadBytes(const std::string& path)
 bool Contains(const std::string& hay, const std::string& needle) { return hay.find(needle) != std::string::npos; }
 const IsoEntry* Find(const IsoFs& fs, const std::string& p)
 {
-    for (const IsoEntry& e : fs.entries) if (e.path == p) return &e; return nullptr;
+    for (const IsoEntry& e : fs.entries)
+    {
+        if (e.path == p) return &e;
+    }
+    return nullptr;
 }
 }  // namespace
 

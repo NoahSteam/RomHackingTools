@@ -462,7 +462,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // Row context menu.
         if (ImGui::BeginPopup("ctx"))
         {
-            uint32_t ea; WatchType wt;
+            // Initialized because ResolveMemOperand leaves them untouched when it fails:
+            // only the hasMem-gated menu item below reads them, which the compiler can't see.
+            uint32_t ea = 0;
+            WatchType wt = WatchType::U32;
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, ea, wt);
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
                 bps.ToggleExecution(ln.addr);
