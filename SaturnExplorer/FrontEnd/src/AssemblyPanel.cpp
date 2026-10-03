@@ -1,5 +1,7 @@
 #include "AssemblyPanel.h"
 
+#include "AsmCodeWindow.h"
+
 #include <algorithm>
 #include <cfloat>
 #include <cstdio>
@@ -23,14 +25,12 @@ constexpr int kWinInstr = 256;   // instructions per disassembled window
 // Stack double-click lands -- left the view pinned to the top of that function with no way to
 // scroll back into the code before it. 96 instructions is 192 bytes of run-up.
 constexpr int kWinLead = 96;
-constexpr uint32_t kWinLeadBytes = (uint32_t)kWinLead * 2;
 
-// Where the decode window starts for a view framed on 'anchor'. Clamped at 0 so an anchor
-// inside the first few bytes of the address space doesn't wrap.
-uint32_t WindowBaseFor(uint32_t anchor)
+// The decode window for a view framed on 'anchor' -- lead included, trimmed to the region the
+// anchor is in. See AsmCodeWindow.h for why the trim matters.
+AsmCodeWindow WindowFor(uint32_t anchor)
 {
-    anchor &= ~1u;
-    return (anchor >= kWinLeadBytes) ? (anchor - kWinLeadBytes) : 0u;
+    return AsmWindowFor(anchor, kWinInstr, kWinLead);
 }
 
 // Subtle syntax colours for the dark theme.
@@ -162,13 +162,15 @@ void AssemblyPanel::Navigate(uint32_t addr, bool pushHistory)
     }
     mFollowPc = false;
     mWindowAnchor = addr & ~1u;
-    mWindowBase = WindowBaseFor(mWindowAnchor);
+    {
+        const AsmCodeWindow w = WindowFor(mWindowAnchor);
+        mWindowBase = w.base;
+        mWindowInstr = w.instructions;
+    }
     mWindowValid = true;
     // Put the target on the first visible line. It is what the user asked to see, so it goes
     // at the top -- with the lead above it available by scrolling up.
-    mScrollPending = true;
-    mScrollAddr = mWindowAnchor;
-    mScrollAlign = 0.0f;
+    RequestScroll(mWindowAnchor, 0.0f);
     mFocusRequested = true;  // and bring the panel forward (e.g. a Call Stack "Go to ...")
 }
 
@@ -209,9 +211,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     {
         mFwd.push_back(mWindowAnchor);
         mWindowAnchor = mBack.back(); mBack.pop_back();
-        mWindowBase = WindowBaseFor(mWindowAnchor);
+        {
+            const AsmCodeWindow w = WindowFor(mWindowAnchor);
+            mWindowBase = w.base;
+            mWindowInstr = w.instructions;
+        }
         mFollowPc = false;
-        mScrollPending = true; mScrollAddr = mWindowAnchor; mScrollAlign = 0.0f;
+        RequestScroll(mWindowAnchor, 0.0f);
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Back");
@@ -221,9 +227,13 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     {
         mBack.push_back(mWindowAnchor);
         mWindowAnchor = mFwd.back(); mFwd.pop_back();
-        mWindowBase = WindowBaseFor(mWindowAnchor);
+        {
+            const AsmCodeWindow w = WindowFor(mWindowAnchor);
+            mWindowBase = w.base;
+            mWindowInstr = w.instructions;
+        }
         mFollowPc = false;
-        mScrollPending = true; mScrollAddr = mWindowAnchor; mScrollAlign = 0.0f;
+        RequestScroll(mWindowAnchor, 0.0f);
     }
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Forward");
@@ -271,26 +281,29 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         // Rebuild the decode buffer when PC leaves it (a far jump/call, or walking off the end),
         // or when a recenter was forced (Go to PC / re-enabling Follow PC set mWindowValid=false).
         const bool rebuilt = !mWindowValid || pc < mWindowBase ||
-                             pc >= mWindowBase + (uint32_t)kWinInstr * 2;
-        if (rebuilt) mWindowBase = WindowBaseFor(pc);   // lead of code above the PC
+                             pc >= mWindowBase + (uint32_t)mWindowInstr * 2;
+        if (rebuilt)
+        {
+            const AsmCodeWindow w = WindowFor(pc);   // lead of code above the PC
+            mWindowBase = w.base;
+            mWindowInstr = w.instructions;
+        }
         // Scroll on a rebuild (so a forced recenter at a *steady* PC still moves the view — the
         // "Go to PC" case) and on any PC change: the decode buffer is 128 instructions tall, far
         // taller than the viewport, so a step or near branch can walk PC past the visible rows
         // while still inside the buffer and the view would otherwise stop following. A steady PC
         // that neither moved nor was recentered leaves scrolling to the user.
-        if (rebuilt || pc != mLastPc)
-        {
-            mScrollPending = true;
-            mScrollAddr = pc;
-            mScrollAlign = 0.35f;   // PC a third down, so the next few instructions are visible
-        }
+        // PC a third down, so the next few instructions are visible.
+        if (rebuilt || pc != mLastPc) RequestScroll(pc, 0.35f);
         mWindowAnchor = pc & ~1u;
         mWindowValid = true;
     }
     else if (!mWindowValid)
     {
         mWindowAnchor = pc & ~1u;
-        mWindowBase = WindowBaseFor(mWindowAnchor);
+        const AsmCodeWindow w = WindowFor(mWindowAnchor);
+        mWindowBase = w.base;
+        mWindowInstr = w.instructions;
         mWindowValid = true;
     }
     mLastPc = pc;   // track the followed PC (also the Back-history anchor in Navigate)
@@ -298,8 +311,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     // Read the code window. Cache-gated: with Auto Refresh off and the base
     // unchanged, reuse the last bytes so the disassembly holds still (also spares
     // the re-read on a paused/savestate source, where the code can't change).
-    const uint32_t winLen = (uint32_t)kWinInstr * 2;
-    if (mAutoRefresh || !mHaveWindowBytes || mWindowBytesBase != mWindowBase)
+    const uint32_t winLen = (uint32_t)mWindowInstr * 2;
+    // The length is part of the cache key as well as the base: a window trimmed by its region
+    // can keep its base while changing size, and reusing the old bytes would decode past them.
+    if (mAutoRefresh || !mHaveWindowBytes || mWindowBytesBase != mWindowBase ||
+        mWindowBytes.size() != winLen)
     {
         auto results = backend.ReadMemoryBatch({ { mWindowBase, winLen } });
         mWindowBytes = results[0].success ? results[0].bytes : std::vector<uint8_t>();
@@ -308,7 +324,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     }
     const std::vector<uint8_t>& code = mWindowBytes;
     mLines.clear();
-    for (int k = 0; k < kWinInstr; ++k)
+    for (int k = 0; k < mWindowInstr; ++k)
     {
         Line ln; ln.addr = mWindowBase + (uint32_t)k * 2;
         if ((size_t)(k * 2 + 1) < code.size())
@@ -349,6 +365,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     // the backend reference it captures plainly bounded by this call.
     const Sh2MemReader readMem = MemReaderFor(backend);
 
+    // Snapshot before any row is submitted: a Navigate() raised by a click inside the loop
+    // below bumps mScrollSeq, which is how the stale-request drop after the loop knows not to
+    // throw away a request meant for a window that has not been decoded yet.
+    const unsigned scrollSeqAtRowStart = mScrollSeq;
     for (const Line& ln : mLines)
     {
         // Location label row for an in-window branch target.
@@ -597,9 +617,14 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         ImGui::PopID();
     }
     // A request whose address isn't in the window can never be consumed by a row (every line is
-    // submitted, there is no clipper), so drop it here rather than let it fire on some unrelated
+    // submitted, there is no clipper), so drop it rather than let it fire on some unrelated
     // frame once that address happens to be on screen.
-    mScrollPending = false;
+    //
+    // Only one that was already pending when the rows went in, though. Clicking a branch operand
+    // or Follow Branch calls Navigate() DURING this loop, against a window decoded before the
+    // jump -- its target is usually not in these rows, and discarding it here would mean the new
+    // window drew next frame with no framing at all. The sequence counter tells the two apart.
+    if (mScrollPending && mScrollSeq == scrollSeqAtRowStart) mScrollPending = false;
 
     ImGui::EndTable();
 
