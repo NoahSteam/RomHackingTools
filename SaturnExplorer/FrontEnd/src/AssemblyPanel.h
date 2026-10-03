@@ -96,9 +96,36 @@ private:
     uint32_t mBpStopPc = 0;
     bool     mAutoRefresh = true;      // re-read the code window every frame (live)
     uint32_t mWindowBase = 0;          // address of the first disassembled line
+    // The address the view is framed on -- the PC while following, else the last navigation
+    // target. Distinct from mWindowBase, which now sits a lead before it so there is code
+    // above the anchor to scroll back into; this is what the history records.
+    uint32_t mWindowAnchor = 0;
+    // Instructions actually decoded. Not always kWinInstr: the window is trimmed to what the
+    // anchor's region can serve, since the panel reads it in one request that would otherwise
+    // be rejected whole.
+    int      mWindowInstr = 0;
     bool     mWindowValid = false;
     uint32_t mLastPc = 0;
-    bool     mScrollToPc = false;      // request a scroll-to-PC next frame
+    // Pending scroll request, by address rather than "the PC": a navigation target is usually
+    // NOT the PC (a caller's entry point, a branch target), and keying the scroll off the PC row
+    // meant those jumps silently never scrolled -- no row matched, so nothing fired.
+    bool     mScrollPending = false;
+    uint32_t mScrollAddr = 0;
+    float    mScrollAlign = 0.0f;      // 0 = target at the top of the view, 1 = bottom
+    // Bumped by every request. Rendering compares it against the value it started with, so a
+    // request raised DURING rendering -- Navigate() from a branch-operand click or Follow
+    // Branch, which targets a window this frame has not decoded -- is not mistaken for a stale
+    // one and discarded before it can ever be honoured.
+    unsigned mScrollSeq = 0;
+
+    // Set the pending scroll request. One place, so the sequence counter cannot be forgotten.
+    void RequestScroll(uint32_t addr, float align)
+    {
+        mScrollPending = true;
+        mScrollAddr = addr;
+        mScrollAlign = align;
+        ++mScrollSeq;
+    }
     bool     mFocusRequested = false;  // bring the window forward after an external GoTo/Navigate
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};

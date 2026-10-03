@@ -419,6 +419,29 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
 
+    # The Assembly panel's decode window, including its lead-in: it must stay inside the region
+    # it is in, at both ends, or the single whole-window read is rejected and every line of a
+    # perfectly readable window shows "????". Header-only, so nothing to link.
+    add_executable(SaturnExplorerAsmCodeWindowTests
+        FrontEnd/tests/AsmCodeWindowTests.cpp
+    )
+    target_include_directories(SaturnExplorerAsmCodeWindowTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerAsmCodeWindowTests
+             COMMAND SaturnExplorerAsmCodeWindowTests)
+
+    # The Assembly panel's scroll rule, driven headlessly: a jump to an address that is not the
+    # PC (a Call Stack frame, a branch target, Back) has to scroll, and land the target on the
+    # first visible line. Keyed off the PC row, those jumps never moved the view at all.
+    add_executable(SaturnExplorerAsmScrollTargetTests
+        FrontEnd/tests/AsmScrollTargetTests.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerAsmScrollTargetTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerAsmScrollTargetTests
+             COMMAND SaturnExplorerAsmScrollTargetTests)
+
     # SH-2 operand hover — the Assembly panel's operand cell, driven headlessly. Pins that
     # every operand is its own hover target (see FrontEnd/src/Sh2Operands.h).
     add_executable(SaturnExplorerSh2OperandHoverTests
