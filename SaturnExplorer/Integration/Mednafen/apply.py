@@ -445,7 +445,22 @@ SAVESTATE_ACCESSORS = """\
 #include <mednafen/state.h>
 #include <mednafen/MemoryStream.h>
 extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) {
- try { Mednafen::MemoryStream ms; Mednafen::MDFNSS_SaveSM(&ms, true);   /* data_only: no preview */
+ /* One stream, reused for the life of the process. A fresh MemoryStream starts with no buffer
+    and grows to the full state size through repeated realloc() (grow_if_necessary ->
+    round_up_pow2), then frees the lot -- and this runs EVERY frame while a client is attached,
+    so the rewind ring was paying a multi-MB allocate-grow-free cycle per frame. truncate(0)
+    only assigns data_buffer_size; it leaves data_buffer_alloced alone, so after the first save
+    the allocation is already large enough and grow_if_necessary never reallocs again.
+    Reused safely because only the emulate thread calls this (se_export's SeStateCapture), and
+    C++11 guarantees the static is initialized once. */
+ try { /* Inside the try: the default constructor reallocs 64 bytes and throws MDFN_Error on
+          failure, and this is an extern "C" entry point called from se_export.c -- letting that
+          escape would unwind through a C frame. A function-local static still keeps its buffer
+          between calls from here, and a throw here just leaves it uninitialized for a retry. */
+       static Mednafen::MemoryStream ms;
+       ms.truncate(0);                 /* keep the allocation, drop the contents */
+       ms.seek(0, SEEK_SET);
+       Mednafen::MDFNSS_SaveSM(&ms, true);   /* data_only: no preview */
        uint64 sz = ms.size();
        if(!buf) return (size_t)sz;
        if((uint64)cap < sz) return 0;

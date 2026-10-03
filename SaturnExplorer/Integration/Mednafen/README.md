@@ -440,12 +440,20 @@ with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so *
 ### What it costs, and how to turn it off
 
 A full savestate per frame is the most expensive thing the tap asks of the emulate thread: several
-MB serialized through Mednafen's `SFORMAT` descriptors, plus a multi-MB heap buffer, every frame —
-and the worker then diffs and compresses the same bytes on another core. On a slower host that is
-visible as a lower frame rate, and it is the first thing to suspect when a patched build runs
-slower than an unpatched one after a resync.
+MB serialized through Mednafen's `SFORMAT` descriptors every frame — and the worker then diffs and
+compresses the same bytes on another core. On a slower host that is visible as a lower frame rate,
+and it is the first thing to suspect when a patched build runs slower than an unpatched one after
+a resync.
 
-Two things bound it:
+Three things bound it:
+
+- **The save buffer is reused.** `SsDbgSaveState` keeps one `MemoryStream` for the life of the
+  process and `truncate(0)`s it per frame. That only assigns `data_buffer_size`, leaving
+  `data_buffer_alloced` intact, so `grow_if_necessary` stops reallocating after the first save.
+  Constructing a fresh stream each frame instead grew it from nothing to the full state size
+  through repeated `realloc` and then freed it — a multi-MB allocate-grow-free cycle per frame,
+  which is far more expensive on Windows (large blocks go to `VirtualAlloc`/`VirtualFree`) than
+  on macOS, and is the likeliest reason the same build felt fine there.
 
 - **Nothing attached, nothing captured.** `SeExportSnapshot` returns immediately while no client
   is connected (`SeExportHasClient`), so the whole per-frame capture — ring copy *and* savestate —
