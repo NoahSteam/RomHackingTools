@@ -374,9 +374,6 @@ private:
     FunctionNames            mFunctionNames;
     bool                     mCallStackDirty = true;
     bool                     mFocusCallStack = false;   // bring the panel forward on a stop
-    bool                     mFocusRegisters = false;   // ditto, for the SH-2 register file
-    bool                     mSelectSh2RegTab = false;  // and select its SH-2 tab, not a VDP one
-    bool                     mFocusBreakpoints = false; // ditto, for the breakpoint list
     bool                     mCallStackWasShowable = false;  // edge-detect entering paused/loaded
     int                      mCallStackCpu = 0;
     // Height of the frame table above the draggable Frame Detail split, in pixels;
