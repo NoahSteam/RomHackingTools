@@ -58,6 +58,36 @@ public:
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
 // app's current context (live snapshot, or a paused scrub frame) without re-wiring.
+// Read a whole region through 'backend' into 'out'. Chunked, because a single read is capped
+// (ContextBackend::ReadOne caps a request at 64 KiB) -- but the whole region lands in one
+// buffer, so a caller scanning for a byte sequence still finds a match that straddles a chunk
+// boundary. Returns false and clears 'out' if any chunk fails, so a partially read region is
+// never mistaken for a complete one: "nothing found here" and "nothing was looked at" are
+// different answers and callers have to be able to tell them apart.
+// Inline so a caller needs only this header and the IMemoryBackend interface -- the pure
+// scanners and their unit tests then link neither MemoryBackend.cpp nor the core behind it.
+inline bool ReadRegionBytes(IMemoryBackend& backend, uint32_t base, uint32_t size,
+                            std::vector<uint8_t>& out)
+{
+    out.clear();
+    if (size == 0) return false;
+    const uint32_t kChunk = 0x10000;   // ReadOne caps a single request at 64 KiB
+    out.reserve(size);
+    for (uint32_t off = 0; off < size; off += kChunk)
+    {
+        const uint32_t n = (size - off < kChunk) ? (size - off) : kChunk;
+        std::vector<MemoryReadRequest> req{ { base + off, n } };
+        std::vector<MemoryReadResult> res = backend.ReadMemoryBatch(req);
+        if (res.empty() || !res[0].success || res[0].bytes.size() != n)
+        {
+            out.clear();
+            return false;
+        }
+        out.insert(out.end(), res[0].bytes.begin(), res[0].bytes.end());
+    }
+    return true;
+}
+
 class ContextBackend : public IMemoryBackend
 {
 public:

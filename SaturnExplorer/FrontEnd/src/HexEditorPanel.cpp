@@ -6,6 +6,9 @@
 
 #include "imgui.h"
 
+#include <string>
+
+#include "Debug/BytePatternSearch.h"
 #include "Debug/ShiftJis.h"
 #include "SaturnRegions.h"
 
@@ -87,6 +90,67 @@ bool HexEditorPanel::TakeLocateRequest(LocateRequest& out)
     return true;
 }
 
+const char* HexEditorPanel::RegionName(uint32_t addr)
+{
+    const int i = RegionForAddr(addr);
+    // 0 is the "All" tab, which here means the address fell outside every captured region.
+    return (i > 0) ? Regions()[(size_t)i].name : "?";
+}
+
+bool HexEditorPanel::CopySelection(IMemoryBackend& backend, int64_t lo, int64_t hi)
+{
+    if (lo < 0 || hi < lo) return false;
+    const uint32_t len = (uint32_t)(hi - lo + 1);
+    std::vector<uint8_t> bytes;
+    if (!ReadRegionBytes(backend, (uint32_t)lo, len, bytes)) return false;
+
+    std::string text;
+    text.reserve(bytes.size() * 3);
+    for (size_t i = 0; i < bytes.size(); ++i)
+    {
+        char hex[4];
+        std::snprintf(hex, sizeof(hex), "%02X", bytes[i]);
+        if (i) text.push_back(' ');
+        text += hex;
+    }
+    ImGui::SetClipboardText(text.c_str());
+    return true;
+}
+
+void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int64_t hi)
+{
+    mFindHits.clear();
+    mFindUnreadBase.clear();
+    mFindTruncated = false;
+    mFindOrigin = (uint32_t)lo;
+    mFindLength = (uint32_t)(hi - lo + 1);
+    mFindOpen = true;   // raised even when nothing matches: that is the answer
+
+    std::vector<uint8_t> pattern;
+    if (!ReadRegionBytes(backend, (uint32_t)lo, mFindLength, pattern)) return;
+
+    // The RAM regions only. The register files are in the tab strip because they are worth
+    // looking at, but they are not memory a byte sequence meaningfully "appears in", and
+    // including them would put noise at the top of the list.
+    std::vector<SearchRegion> regions;
+    size_t count = 0;
+    const SaturnRegion* all = SaturnRegions(count);
+    for (size_t i = 0; i < count; ++i)
+    {
+        if (std::strstr(all[i].name, "Regs")) continue;
+        regions.push_back({ all[i].base, all[i].size });
+    }
+
+    const BytePatternSearchResult res =
+        FindBytePattern(backend, regions, pattern, kMaxFindHits);
+    mFindTruncated = res.truncated;
+    for (const SearchRegion& r : res.unread) mFindUnreadBase.push_back(r.base);
+    // Drop the selection itself: the question is where ELSE these bytes are. An overlapping
+    // match a byte or two away is a different occurrence and stays.
+    for (uint32_t addr : res.addresses)
+        if (addr != mFindOrigin) mFindHits.push_back(addr);
+}
+
 void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 {
     (void)live;
@@ -162,6 +226,16 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
     const int64_t selLo = (mSelStart >= 0 && mSelEnd >= 0) ? SelLo(mSelStart, mSelEnd) : -1;
     const int64_t selHi = (mSelStart >= 0 && mSelEnd >= 0) ? SelHi(mSelStart, mSelEnd) : -1;
+
+    // Ctrl+C copies the selection. Gated on this window having focus so it does not steal the
+    // shortcut app-wide, and skipped while a byte is being typed over -- the edit box owns
+    // Ctrl+C then, for the text in it.
+    if (selLo >= 0 && mEditAddr < 0 &&
+        ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C))
+    {
+        CopySelection(backend, selLo, selHi);
+    }
 
     // Type-to-edit: with a single writable byte selected and the Memory window focused (and no
     // other text field capturing input), typing a hex digit starts editing that byte — no
@@ -473,6 +547,18 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             const int64_t cnt = (selLo >= 0) ? (selHi - selLo + 1) : 0;
             if (cnt > 0 && cnt <= 0x1000)
             {
+                {
+                    char copyItem[64];
+                    std::snprintf(copyItem, sizeof(copyItem), "Copy %lld byte%s",
+                                  (long long)cnt, cnt == 1 ? "" : "s");
+                    if (ImGui::MenuItem(copyItem, "Ctrl+C")) CopySelection(backend, selLo, selHi);
+
+                    char findItem[80];
+                    std::snprintf(findItem, sizeof(findItem), "Find these %lld byte%s in RAM...",
+                                  (long long)cnt, cnt == 1 ? "" : "s");
+                    if (ImGui::MenuItem(findItem)) FindSelectionInRam(backend, selLo, selHi);
+                    ImGui::Separator();
+                }
                 char item[80];
                 std::snprintf(item, sizeof(item), "Find %lld selected byte%s in data directory",
                               (long long)cnt, cnt == 1 ? "" : "s");
@@ -557,7 +643,65 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         ImGui::TextDisabled("Click a byte to select; drag to extend; double-click a writable byte to edit.");
     }
 
+    DrawFindResultsPopup();
+
     ImGui::End();
+}
+
+// The "find these bytes in RAM" results. Opened from the grid's right-click menu, including
+// when there were no matches: the question was asked, so it gets an answer rather than a UI
+// that appears to have done nothing.
+void HexEditorPanel::DrawFindResultsPopup()
+{
+    static const char* kTitle = "Find in RAM";
+    if (mFindOpen)
+    {
+        ImGui::OpenPopup(kTitle);
+        mFindOpen = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(320.0f, 300.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_None)) return;
+
+    ImGui::Text("%u byte%s from 0x%08X", mFindLength, mFindLength == 1 ? "" : "s", mFindOrigin);
+    ImGui::Separator();
+
+    if (mFindHits.empty())
+    {
+        ImGui::TextUnformatted("No matches found");
+    }
+    else
+    {
+        ImGui::Text("%zu other location%s -- double-click to go there:",
+                    mFindHits.size(), mFindHits.size() == 1 ? "" : "s");
+        // Leave room for the notes + button below, whatever the list length.
+        const float footer = ImGui::GetFrameHeightWithSpacing() * 3.0f;
+        if (ImGui::BeginChild("hits", ImVec2(0.0f, -footer), ImGuiChildFlags_None))
+        {
+            for (uint32_t addr : mFindHits)
+            {
+                char label[64];
+                std::snprintf(label, sizeof(label), "0x%08X  (%s)", addr,
+                              RegionName(addr));
+                ImGui::Selectable(label);
+                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+                {
+                    GoTo(addr);
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    // Both of these would otherwise make the list above look like the whole truth.
+    if (mFindTruncated)
+        ImGui::TextDisabled("Stopped at %zu matches; there are more.", kMaxFindHits);
+    if (!mFindUnreadBase.empty())
+        ImGui::TextDisabled("%zu region(s) could not be read and were not searched.",
+                            mFindUnreadBase.size());
+
+    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
 }
 
 }  // namespace sfe

@@ -53,10 +53,21 @@ public:
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
 
+    // Cap on "find these bytes in RAM" results. A one- or two-byte selection can occur tens of
+    // thousands of times across 3 MB of RAM, and a list that long is neither useful nor cheap
+    // to build; the popup says when it was reached so the number shown is never passed off as
+    // the total.
+    static const std::size_t kMaxFindHits = 500;
+
 private:
     static const std::vector<Region>& Regions();
     // Index of the region containing 'addr' (1..N), or 0 ("All") when none matches.
     static int RegionForAddr(uint32_t addr);
+    // Human name of the region containing 'addr' ("HWRAM", ...), or "?" when unmapped.
+    static const char* RegionName(uint32_t addr);
+
+    // The "find these bytes in RAM" results popup (see FindSelectionInRam).
+    void DrawFindResultsPopup();
 
     int  mTab = 0;                     // active region index (0 = All)
     int  mSelectTab = -1;              // request to switch tabs (GoTo / initial), -1 = none
@@ -100,6 +111,24 @@ private:
     // Pending "locate selection in game files for patching" request (see TakeLocateRequest).
     bool               mLocateRequested = false;
     LocateRequest      mLocateRequest;
+
+    // Copy the selected bytes to the clipboard as space-separated uppercase hex (the spelling
+    // that pastes back into this app's search boxes and into other hex tools). False when the
+    // read failed, so the caller can avoid clobbering the clipboard with nothing.
+    bool CopySelection(IMemoryBackend& backend, int64_t lo, int64_t hi);
+
+    // "Find the selected bytes elsewhere in RAM": scan the RAM regions and stage the results
+    // for the popup. Fills mFind* and raises mFindOpen, including when nothing matched -- an
+    // empty popup is the answer to the question, not a reason to show nothing.
+    void FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int64_t hi);
+
+    // Results of the last "find in RAM" (see FindSelectionInRam).
+    bool                  mFindOpen = false;       // open the popup on the next draw
+    std::vector<uint32_t> mFindHits;
+    std::vector<uint32_t> mFindUnreadBase;         // regions that could not be read at all
+    uint32_t              mFindOrigin = 0;         // where the selection itself lives
+    uint32_t              mFindLength = 0;         // pattern length, for the popup text
+    bool                  mFindTruncated = false;
 };
 
 }  // namespace sfe

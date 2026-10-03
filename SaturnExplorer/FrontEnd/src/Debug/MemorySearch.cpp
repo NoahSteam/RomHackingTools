@@ -68,23 +68,7 @@ bool MemorySearch::Match(SearchCompare cmp, int64_t cur, int64_t prev, int64_t o
 bool MemorySearch::ReadRegion(IMemoryBackend& backend, const SearchRegion& r,
                               std::vector<uint8_t>& out)
 {
-    out.clear();
-    if (r.size == 0) return false;
-    constexpr uint32_t kChunk = 0x10000;   // ReadOne caps a single request at 64 KiB
-    out.reserve(r.size);
-    for (uint32_t off = 0; off < r.size; off += kChunk)
-    {
-        const uint32_t n = (r.size - off < kChunk) ? (r.size - off) : kChunk;
-        std::vector<MemoryReadRequest> req{{r.base + off, n}};
-        auto res = backend.ReadMemoryBatch(req);
-        if (res.empty() || !res[0].success || res[0].bytes.size() != n)
-        {
-            out.clear();
-            return false;
-        }
-        out.insert(out.end(), res[0].bytes.begin(), res[0].bytes.end());
-    }
-    return true;
+    return ReadRegionBytes(backend, r.base, r.size, out);
 }
 
 std::size_t MemorySearch::First(IMemoryBackend& backend,
