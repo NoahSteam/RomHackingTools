@@ -127,6 +127,7 @@ static uint32_t MinVerFor(const char* verb)
     if (is(SE_LIVE_VERB_LOADSTATE)) return SE_LIVE_MINVER_LOADSTATE;
     if (is(SE_LIVE_VERB_WRITESND))  return SE_LIVE_MINVER_WRITESND;
     if (is(SE_LIVE_VERB_TRACE))     return SE_LIVE_MINVER_TRACE;
+    if (is(SE_LIVE_VERB_REWIND))    return SE_LIVE_MINVER_REWIND;
     return 0u;
 }
 
@@ -244,6 +245,11 @@ struct LiveState
     bool                  emuSlotsValid = false;
     // Pending ELS (v17): slot + 1, or 0 for none. Guarded by ctlMtx.
     int                   emuLoadSlot = 0;
+    // Rewind capture (v18). 'rewindDirty' means the server has not been told the current value:
+    // set by the setter, and again on a reconnect, since a fresh server starts with capture on.
+    // Guarded by ctlMtx.
+    bool                  rewindWanted = true;
+    bool                  rewindDirty = false;
 };
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
@@ -739,6 +745,14 @@ void PollLoop(LiveState* st)
             // publish the generation so the client can discard what it derived from that run.
             st->lastSeenFrame = 0;
             st->connGeneration.fetch_add(1);
+            // A fresh server starts with rewind capture ON (so a pre-v18 client keeps the old
+            // behavior), so an "off" setting has to be restated or this emulator would spend a
+            // full savestate per frame on a feature the user switched off. Unconditional: the
+            // value we want is the value this connection has not been told.
+            {
+                std::lock_guard<std::mutex> lk(st->ctlMtx);
+                st->rewindDirty = true;
+            }
         }
 
         // Drain any control command posted by the UI thread; otherwise poll. A
@@ -768,6 +782,14 @@ void PollLoop(LiveState* st)
                 verb = SE_LIVE_VERB_EMULOAD;
                 arg = st->emuLoadSlot - 1;
                 st->emuLoadSlot = 0;
+            }
+            else if (st->rewindDirty)
+            {
+                // Before the breakpoint/tracepoint syncs: this one decides whether the emulator
+                // spends a full savestate on every frame, so it should take effect promptly.
+                verb = SE_LIVE_VERB_REWIND;
+                arg = st->rewindWanted ? 1 : 0;
+                st->rewindDirty = false;
             }
             else if (st->bkptsDirty)
             {
@@ -1402,6 +1424,20 @@ extern "C" void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
         LiveState* st = St(ds->user);
         std::lock_guard<std::mutex> lk(st->ctlMtx);
         st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
+    });
+}
+
+extern "C" void se_live_set_rewind_enabled(const se_data_source* ds, int enabled)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return; }
+    se::GuardVoid([&]
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        const bool want = (enabled != 0);
+        // Only on a change -- but note this never CLEARS rewindDirty, so a setter call carrying
+        // the value already in flight cannot swallow the resend the reconnect path queued.
+        if (want != st->rewindWanted) { st->rewindWanted = want; st->rewindDirty = true; }
     });
 }
 

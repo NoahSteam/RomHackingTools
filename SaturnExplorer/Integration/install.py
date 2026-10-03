@@ -570,10 +570,10 @@ def clone_and_patch(rn, key, spec, dest, rev_override, repo, skip_git=False):
 # ring stays empty, and rewind / save state silently do nothing. See
 # Integration/Mednafen/README.md, "Rewind", for what can break this on a fork update.
 #
-# Rewind is not free: it saves a FULL emulator state every frame on the emulate thread (several
-# MB of serialization, plus the worker's diff), which costs real frame rate on a slower host.
-# --no-rewind drops the define to build the fast emulator without the rewind timeline; it is
-# part of the configure signature, so toggling it forces the rebuild it needs.
+# Always defined: rewind is a built-in feature, switched on and off by the user in Saturn
+# Explorer's Settings (which tells the emulator over the live protocol, REW/v18, so a disabled
+# rewind costs nothing per frame). There is deliberately no build flag for it -- a feature that
+# can be missing from a binary is one every bug report has to establish the presence of first.
 MEDNAFEN_DEFINES = "-DSE_MDFN_REWIND=1"
 
 
@@ -612,8 +612,7 @@ def mednafen_configure_stale(dest, signature):
     return previous is None or previous != signature
 
 
-def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True,
-                   defines=MEDNAFEN_DEFINES):
+def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True):
     bash = os.path.join(msys2, "usr", "bin", "bash.exe")
     msdir = win_to_msys(dest)
     ncpu = os.cpu_count() or 4
@@ -645,7 +644,7 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True,
     # so on any NT-based Windows it pops "This special build of Mednafen is intended for
     # use on Windows 98..." and exits before doing anything. Upstream's own Windows build
     # script (mswin/build-mednafen.sh) passes exactly these two defines.
-    cppflags = ("-DUNICODE=1 -D_UNICODE=1 " + defines).strip()
+    cppflags = ("-DUNICODE=1 -D_UNICODE=1 " + MEDNAFEN_DEFINES).strip()
     configure = ("./configure --enable-debugger" +
                  (f" {configure_flags}" if configure_flags else "") +
                  f' CPPFLAGS="{cppflags}"')
@@ -723,15 +722,14 @@ def build_mednafen(rn, msys2, dest, configure_flags="", reconfigure=True,
     return rc == 0, exe
 
 
-def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True,
-                        defines=MEDNAFEN_DEFINES):
+def build_mednafen_unix(rn, dest, configure_flags="", reconfigure=True):
     """Native Mednafen build on macOS/Linux: plain autotools, no MSYS2/MinGW. None of the
     Windows-specific handling (UNICODE defines, mingw_app_type aliasing, static libstdc++,
     DLL bundling) applies — clang links the system/Homebrew dylibs directly, and macOS finds
     them at runtime via their install names. The binary lands at <dest>/src/mednafen."""
     ncpu = os.cpu_count() or 4
     env = {**os.environ}
-    env["CPPFLAGS"] = (defines + " " + env.get("CPPFLAGS", "")).strip()
+    env["CPPFLAGS"] = (MEDNAFEN_DEFINES + " " + env.get("CPPFLAGS", "")).strip()
     prefix = brew_prefix() if IS_MAC else None
     if prefix:
         # Point configure at Homebrew's headers/libs (SDL2, FLAC) and .pc files. Needed on
@@ -864,11 +862,6 @@ def main():
                          "the idempotent content-aware patch, and rebuild only what changed "
                          "(skips prerequisite package installs and skips ./configure when the "
                          "tree is already configured). Use after editing the Integration/ folder.")
-    ap.add_argument("--no-rewind", action="store_true",
-                    help="build the emulator without the rewind savestate ring. Rewind saves a "
-                         "full emulator state every frame, which costs frame rate on a slower "
-                         "host; without it the rewind timeline and 'Play from here' are "
-                         "unavailable and everything else works as before.")
     ap.add_argument("--msys2", help="path to an existing MSYS2 install (e.g. C:\\msys64)")
     ap.add_argument("--qt-path", help="Qt install dir for the Yabause build (CMAKE_PREFIX_PATH)")
     ap.add_argument("--generator", default="Visual Studio 17 2022",
@@ -954,13 +947,12 @@ def main():
             reconfigure = (not args.incremental) or bool(cfg_flags)
             if clone_and_patch(rn, "mednafen", EMULATORS["mednafen"], dest,
                                args.mednafen_rev, repo, skip_git=args.incremental):
-                defines = "" if args.no_rewind else MEDNAFEN_DEFINES
                 if IS_WIN:
                     m_ok, m_exe = build_mednafen(rn, msys2, dest, cfg_flags,
-                                                 reconfigure=reconfigure, defines=defines)
+                                                 reconfigure=reconfigure)
                 else:
                     m_ok, m_exe = build_mednafen_unix(rn, dest, cfg_flags,
-                                                      reconfigure=reconfigure, defines=defines)
+                                                      reconfigure=reconfigure)
             else:
                 m_ok, m_exe = False, None
             if m_ok:

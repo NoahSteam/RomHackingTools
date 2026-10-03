@@ -93,6 +93,50 @@ static int Connect(void)
     return -1;
 }
 
+/* Send one 8-byte command frame (verb + LE arg), then swallow whatever the server replies with.
+ * The reply is a whole snapshot -- megabytes -- and the server writes it synchronously, so a
+ * test that does not drain would wedge the server in send() and never see its next command
+ * handled. Draining on a time budget avoids having to parse the section lengths. */
+static int SendVerbAndDrain(int fd, const char* verb, unsigned int arg)
+{
+    unsigned char req[8];
+    int i;
+    memcpy(req, verb, 4);
+    req[4] = (unsigned char)(arg & 0xFF);
+    req[5] = (unsigned char)((arg >> 8) & 0xFF);
+    req[6] = (unsigned char)((arg >> 16) & 0xFF);
+    req[7] = (unsigned char)((arg >> 24) & 0xFF);
+    if (send(fd, req, sizeof req, 0) != (ssize_t)sizeof req) return 0;
+
+    for (i = 0; i < 200; ++i)   /* <= ~1s of quiet before giving up on more */
+    {
+        unsigned char sink[65536];
+        const ssize_t n = recv(fd, sink, sizeof sink, MSG_DONTWAIT);
+        if (n > 0) { i = 0; continue; }          /* still arriving: restart the idle count */
+        if (n == 0) return 0;                    /* server closed */
+        Sleep5ms();
+    }
+    return 1;
+}
+
+/* The REW verb (v18): the emulator must stop saving a state per frame when the client says the
+ * user has rewind switched off, and start again when it is switched back on. This is the whole
+ * point of the verb -- the capture is the most expensive thing on the emulate thread.
+ * 'fd' is an already-attached client. */
+static void TestRewindVerbGatesCapture(int fd)
+{
+    CHECK(SendVerbAndDrain(fd, SE_LIVE_VERB_REWIND, 0u));
+    gCaptures = 0;
+    Frame(); Frame(); Frame();
+    CHECK(gCaptures == 0);          /* switched off: nothing captured even though attached */
+
+    CHECK(SendVerbAndDrain(fd, SE_LIVE_VERB_REWIND, 1u));
+    gCaptures = 0;
+    Frame(); Frame(); Frame();
+    CHECK(gCaptures > 0);           /* and back on again */
+
+}
+
 int main(void)
 {
     int fd, before;
@@ -120,6 +164,8 @@ int main(void)
     gCaptures = 0;
     Frame(); Frame(); Frame();
     CHECK(gCaptures > 0);
+
+    TestRewindVerbGatesCapture(fd);
 
     close(fd);
     CHECK(WaitForClient(0));
