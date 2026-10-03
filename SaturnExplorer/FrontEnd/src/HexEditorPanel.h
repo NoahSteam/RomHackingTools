@@ -129,6 +129,9 @@ private:
     uint32_t              mFindOrigin = 0;         // where the selection itself lives
     uint32_t              mFindLength = 0;         // pattern length, for the popup text
     bool                  mFindTruncated = false;
+    // Why no search happened, when that is the reason the hit list is empty. Kept apart from
+    // "searched and found nothing" because the popup must not report one as the other.
+    std::string           mFindError;
 };
 
 }  // namespace sfe

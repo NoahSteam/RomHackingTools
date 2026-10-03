@@ -122,12 +122,24 @@ void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int
     mFindHits.clear();
     mFindUnreadBase.clear();
     mFindTruncated = false;
+    mFindError.clear();
     mFindOrigin = (uint32_t)lo;
     mFindLength = (uint32_t)(hi - lo + 1);
     mFindOpen = true;   // raised even when nothing matches: that is the answer
 
     std::vector<uint8_t> pattern;
-    if (!ReadRegionBytes(backend, (uint32_t)lo, mFindLength, pattern)) return;
+    if (!ReadRegionBytes(backend, (uint32_t)lo, mFindLength, pattern))
+    {
+        // The selection itself could not be read -- e.g. an address reached through Go that
+        // lands outside every captured region. There is no pattern, so nothing was searched,
+        // and saying "no matches" here would answer a question that was never asked.
+        char err[128];
+        std::snprintf(err, sizeof(err),
+                      "Could not read the selected bytes at 0x%08X, so nothing was searched.",
+                      mFindOrigin);
+        mFindError = err;
+        return;
+    }
 
     // The RAM regions only. The register files are in the tab strip because they are worth
     // looking at, but they are not memory a byte sequence meaningfully "appears in", and
@@ -665,7 +677,13 @@ void HexEditorPanel::DrawFindResultsPopup()
     ImGui::Text("%u byte%s from 0x%08X", mFindLength, mFindLength == 1 ? "" : "s", mFindOrigin);
     ImGui::Separator();
 
-    if (mFindHits.empty())
+    if (!mFindError.empty())
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.95f, 0.55f, 0.45f, 1.0f));
+        ImGui::TextWrapped("%s", mFindError.c_str());
+        ImGui::PopStyleColor();
+    }
+    else if (mFindHits.empty())
     {
         ImGui::TextUnformatted("No matches found");
     }

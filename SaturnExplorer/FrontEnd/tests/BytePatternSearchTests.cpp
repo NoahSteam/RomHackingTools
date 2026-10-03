@@ -4,6 +4,7 @@
 // region that fails to read, and the hit cap.
 #include "Debug/BytePatternSearch.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -164,6 +165,58 @@ void TestEmptyPatternFindsNothing()
     CHECK(res.unread.empty());
 }
 
+// A long pattern whose prefix repeats is the case that killed the naive matcher: re-comparing
+// almost the whole pattern at almost every address. 8 MiB of AA with a 4 KiB pattern of
+// 4095 x AA + BB is ~34 billion byte comparisons naively (measured at 1.83 s per MiB, so ~15 s
+// here) and ~8 million with KMP, so the bound below separates the two by more than two orders
+// of magnitude -- it cannot fail for a linear matcher on a loaded machine, and cannot pass for
+// a quadratic one. The correctness half matters just as much: the resume-on-match has to still
+// find the one real occurrence.
+void TestRepeatedPrefixPatternIsLinear()
+{
+    const std::size_t kSize = 8u * 1024u * 1024u;
+    MockBackend be(kSize, 0x10);
+    for (std::size_t i = 0; i < kSize; ++i) be.a[i] = 0xAA;
+
+    std::vector<uint8_t> pat(4096, 0xAA);
+    pat.back() = 0xBB;
+    // One real match, late enough that the scan cannot short-circuit its way to it.
+    const std::size_t at = kSize - 8192;
+    Put(be.a, at, pat);
+
+    const std::vector<SearchRegion> regions = { { kA, (uint32_t)kSize } };
+    const auto t0 = std::chrono::steady_clock::now();
+    const BytePatternSearchResult res = FindBytePattern(be, regions, pat, 0);
+    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+
+    CHECK(res.addresses.size() == 1);
+    if (!res.addresses.empty()) CHECK(res.addresses[0] == kA + (uint32_t)at);
+    CHECK(!res.truncated);
+    if (secs >= 5.0)
+    {
+        std::printf("FAIL %s:%d: scan took %.2fs -- the matcher is not linear\n",
+                    __FILE__, __LINE__, secs);
+        ++gFailures;
+    }
+}
+
+// Overlapping matches through the KMP resume, on a pattern whose prefix is also its suffix:
+// ABA across ABABA is two occurrences, and getting the resume length wrong loses the second.
+void TestOverlapThroughPrefixSuffixResume()
+{
+    MockBackend be(0x30000, 0x1000);
+    Put(be.a, 0x50, { 0xAB, 0xCD, 0xAB, 0xCD, 0xAB });
+    const std::vector<uint8_t> pat = { 0xAB, 0xCD, 0xAB };
+
+    const BytePatternSearchResult res = FindBytePattern(be, BothRegions(), pat, 0);
+    CHECK(res.addresses.size() == 2);
+    if (res.addresses.size() == 2)
+    {
+        CHECK(res.addresses[0] == kA + 0x50);
+        CHECK(res.addresses[1] == kA + 0x52);
+    }
+}
+
 // A pattern longer than the region is simply absent -- it must not be reported as an unread
 // region, because the read was never the problem.
 void TestPatternLongerThanRegion()
@@ -185,6 +238,8 @@ int main()
     TestHitCapTruncates();
     TestEmptyPatternFindsNothing();
     TestPatternLongerThanRegion();
+    TestOverlapThroughPrefixSuffixResume();
+    TestRepeatedPrefixPatternIsLinear();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;
