@@ -309,6 +309,9 @@ private:
     // Debugger panels (emulator-agnostic: they read through the backend interface,
     // which is served here from the current se_context — live snapshot or scrub).
     ContextBackend           mMemBackend{&mContext};
+    int                      mRestoreOutstanding = 0;   // load requests the emulator has not yet resolved
+    uint32_t                 mRestoreBaseDone = 0, mRestoreBaseFailed = 0;   // counters when the first was sent
+    float                    mRestoreWaitSeconds = 0.0f;
     float                    mEditHoldSeconds = 0.0f;   // writes refused until this runs out (VoidEditTarget)
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
@@ -440,7 +443,13 @@ private:
     // still hold the old context. 'holdSeconds' keeps them refused longer for an asynchronous
     // restore: the emulator acknowledges nothing, so a poke sent before it lands is lost or
     // lands on the restored state.
-    void VoidEditTarget(float holdSeconds = 0.0f);
+    void VoidEditTarget();
+    // A state load was just accepted by the driver (rewind "Play from here", a SE slot, an
+    // emulator slot). The emulator applies it later and says so in the control block (protocol
+    // v19), so edits stay refused until the counters show it applied *and* a capture newer than
+    // that has landed -- never merely because time passed. Failure and silence are reported.
+    void BeginRestoreWait();
+    void ResolveRestoreWait(uint32_t done, uint32_t failed);
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

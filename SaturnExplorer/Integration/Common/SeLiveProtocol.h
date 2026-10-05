@@ -55,7 +55,10 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      18u   /* +v18 rewind capture is switchable at run time: the REW
+#define SE_LIVE_VERSION      19u   /* +v19 restore outcomes in the control block (restore_done /
+                                  * restore_failed), so a client can tell when a load it asked
+                                  * for (LST/ELS) has actually been applied.
+                                  * v18 rewind capture is switchable at run time: the REW
                                   * verb. The per-frame savestate is the most expensive thing
                                   * the tap asks of the emulate thread, so the client turns it
                                   * off when the user has the feature disabled instead of the
@@ -327,7 +330,13 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     24u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each) */
+#define SE_LIVE_CONTROL_LEN     32u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+                                           * + (v19) restore_done(u32) + restore_failed(u32). Every
+                                           * accepted LST/ELS ends in exactly one: done counts once
+                                           * the first frame of the restored timeline is in the
+                                           * reply stream (so the reply that reports it carries
+                                           * post-restore data), failed when the load was refused
+                                           * or could not be applied. Monotonic per emulator run. */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */
 

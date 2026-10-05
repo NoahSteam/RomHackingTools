@@ -661,6 +661,22 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveReconnectTests
                  COMMAND SaturnExplorerLiveReconnectTests)
+
+        # The restore-completion signal, end to end: the real exporter against the real driver
+        # over the default unix socket, so it shares that socket (and a lock) with the attach test.
+        add_executable(SaturnExplorerLiveRestoreSignalTests
+            FrontEnd/tests/LiveRestoreSignalTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveRestoreSignalTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveRestoreSignalTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveRestoreSignalTests
+                 COMMAND SaturnExplorerLiveRestoreSignalTests)
+        set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerExportAttachTests
+                             PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
 endif()
 

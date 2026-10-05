@@ -34,6 +34,14 @@ uint32_t se_live_server_version(const se_data_source* ds);
  * state when it changes. 0 if 'ds' is not a live source. */
 uint32_t se_live_connection_generation(const se_data_source* ds);
 
+/* How many state loads (rewind LST, emulator slot ELS) the emulator has applied and refused
+ * since this run started (v19+). Every load request ends in exactly one of the two, and "done"
+ * is counted only once the first frame of the restored timeline is in the reply stream, so a
+ * client that reads these and THEN captures holds a snapshot at least as new as the counts.
+ * Returns 1 and fills both when known; 0 for a pre-v19 server, no snapshot yet, or a source
+ * that is not live -- the caller then has no completion signal and must say so. */
+int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed);
+
 /* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
  * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32
  * LE; see SeLiveProtocol.h SE_LIVE_BP_*). The poll thread ships them on its next
