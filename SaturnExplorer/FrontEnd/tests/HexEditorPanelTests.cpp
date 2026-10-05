@@ -192,6 +192,32 @@ void DoubleClickEditsEachByteSeparately()
     CHECK(f.backend.ram[6] == 0x00);
 }
 
+void TypingStopsAtTheRegionEnd()
+{
+    Fixture f;
+    const uint32_t last = kBase + kSize - 1;
+    f.panel.GoTo(last);
+    f.h.Settle();
+    f.h.Click(f.Cell((int)((last - kBase) / 16), 15));
+    CHECK(f.panel.SelectionStart() == (int64_t)last);
+    f.Type("ABCD", false);
+    CHECK(f.backend.ram[kSize - 1] == 0xAB);   // not overwritten by the CD that had nowhere to go
+    CHECK(f.backend.ram[kSize - 2] == 0x00);
+}
+
+void DoubleClickOnAPendingDigitOpensTheEditor()
+{
+    Fixture f;
+    f.h.Click(f.Cell(0, 0));
+    f.Type("A", true);
+    f.DoubleClick(f.Cell(0, 0));
+    CHECK(f.panel.IsEditing());
+    f.Type("BC", true);
+    f.Key(ImGuiKey_Enter);
+    CHECK(f.backend.ram[0] == 0xBC);   // replaced, not "AB" then "0C" across two bytes
+    CHECK(f.backend.ram[1] == 0x00);
+}
+
 void EscapeAbandonsAPendingDigit()
 {
     Fixture f;
@@ -284,6 +310,8 @@ int main()
     TypingWritesTheDigitsTyped(false);
     DoubleClickEditsEachByteSeparately();
     EscapeAbandonsAPendingDigit();
+    TypingStopsAtTheRegionEnd();
+    DoubleClickOnAPendingDigitOpensTheEditor();
     GridGeometryMatchesTheRules();
     RowsAreOneHeight(false);
     RowsAreOneHeight(true);

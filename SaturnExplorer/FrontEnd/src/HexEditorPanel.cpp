@@ -334,10 +334,44 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             {
                 writeByte((uint32_t)mEditAddr, (hexVal((unsigned char)mEditBuf[0]) << 4) | hexVal(ch));
                 mEditFlow = false; mEditAddr = -1;
-                if (sel + 1 < (int64_t)regionEnd) { sel += 1; mSelStart = mSelEnd = sel; }
+                // Nowhere to advance to: stop here rather than let the rest of the queue
+                // start over on (and overwrite) this same last byte.
+                if (sel + 1 >= (int64_t)regionEnd) break;
+                sel += 1; mSelStart = mSelEnd = sel;
             }
         }
     }
+    // Click / double-click / drag on a byte cell. Shared by the plain and the pending-digit
+    // renderings, so a double-click on a cell holding a typed digit still opens the editor.
+    auto cellMouse = [&](uint32_t addr, uint8_t v, bool cellHovered)
+    {
+        if (cellHovered)
+        {
+            if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
+            {
+                mEditAddr = (int64_t)addr; mEditFocus = true;
+                mEditFlow = false;   // seed the current value; AutoSelectAll replaces it
+                std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
+            }
+            else if (ImGui::IsMouseClicked(0))
+            {
+                if (mEditFlow) { mEditFlow = false; mEditAddr = -1; }   // abandon a pending digit
+                if (ImGui::GetIO().KeyShift && mSelStart >= 0)
+                {
+                    // Extend the range from the existing anchor (mSelStart) to the clicked
+                    // byte; selLo/selHi take the min/max, so clicking before the anchor
+                    // shrinks the tail back to the clicked byte.
+                    mSelEnd = (int64_t)addr; mSelecting = false;
+                }
+                else
+                {
+                    mSelStart = mSelEnd = (int64_t)addr; mSelecting = true;
+                }
+            }
+        }
+        if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = (int64_t)addr;
+    };
+
     bool editRendered = false;   // did the active edit box get drawn? (else it's scrolled off)
 
     // --- Grid: a frozen-header table, virtually scrolled over the whole region. ---
@@ -484,6 +518,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                             ImGui::PushStyleColor(ImGuiCol_Text, kColChanged);
                             ImGui::TextUnformatted(pending);
                             ImGui::PopStyleColor();
+                            cellMouse(addr, v, cellHovered);
                             continue;
                         }
                         // Double-click edit. A distinct ID per address, so moving the edit from
@@ -521,31 +556,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                     ImGui::TextUnformatted(b);
                     ImGui::PopStyleColor();
 
-                    if (cellHovered)
-                    {
-                        if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
-                        {
-                            mEditAddr = (int64_t)addr; mEditFocus = true;
-                            mEditFlow = false;   // seed the current value; AutoSelectAll replaces it
-                            std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
-                        }
-                        else if (ImGui::IsMouseClicked(0))
-                        {
-                            if (mEditFlow) { mEditFlow = false; mEditAddr = -1; }   // abandon a pending digit
-                            if (ImGui::GetIO().KeyShift && mSelStart >= 0)
-                            {
-                                // Extend the range from the existing anchor (mSelStart) to
-                                // the clicked byte; selLo/selHi take the min/max, so clicking
-                                // before the anchor shrinks the tail back to the clicked byte.
-                                mSelEnd = (int64_t)addr; mSelecting = false;
-                            }
-                            else
-                            {
-                                mSelStart = mSelEnd = (int64_t)addr; mSelecting = true;
-                            }
-                        }
-                    }
-                    if (mSelecting && ImGui::IsMouseDown(0) && cellHovered) mSelEnd = (int64_t)addr;
+                    cellMouse(addr, v, cellHovered);
                 }
 
                 // Text pane (ASCII, or Shift-JIS: double-byte kanji/kana + half katakana).
