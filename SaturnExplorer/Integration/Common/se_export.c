@@ -273,6 +273,12 @@ static unsigned int SeRd32(const unsigned char* p)
            ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);
 }
 
+/* Whether to capture at all (the REW verb, v18). Starts ON so a pre-v18 client that never
+ * sends REW keeps the old behavior; a v18 client states the user's setting on connect. Reset to
+ * ON when a client leaves, so the next one starts from the same baseline rather than inheriting
+ * a setting it never chose. Written by the server thread, read by the emulate thread. */
+static volatile int sRewindWanted = 1;
+
 static size_t (*sSaveState)(unsigned char* buf, size_t cap);
 static int    (*sLoadState)(const unsigned char* buf, size_t len);
 
@@ -343,8 +349,10 @@ static DWORD WINAPI SeStateWorkerThread(LPVOID arg);
 static void* SeStateWorkerThread(void* arg);
 #endif
 
-/* Drop all queued/finished state and open a new generation. Called on the emulate thread
- * right after a successful load — the pre-load pipeline is now stale. */
+/* Drop all queued/finished state and open a new generation. Two callers, on two threads, both
+ * for the same reason -- the staged pipeline no longer describes anything the client wants:
+ * the emulate thread right after a successful load, and the server thread when the client
+ * switches rewind off (REW). Everything it touches is under the state lock, so either is safe. */
 static void SeStateFlushAndRekey(void)
 {
     int i;
@@ -628,6 +636,7 @@ static void SeOnClientDisconnect(void)
         sSetPad(1, 0);
     }
     if (sClearBps) sClearBps();
+    sRewindWanted = 1;   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
     sPaused = 0;
     sStepBudget = 0;
@@ -1056,8 +1065,10 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
      * paused: a snapshot taken from inside a debugger halt (breakpoint/step) is mid-frame — the
      * emulator's event timing isn't at a frame boundary, so its savestate isn't a clean rewind
-     * point. The rewind timeline simply omits halt frames; running frames still capture. */
-    if (!sPaused) SeStateCapture(sFrameNo);
+     * point. The rewind timeline simply omits halt frames; running frames still capture.
+     * Also skipped entirely while the client has rewind switched off (REW, v18): the full
+     * savestate is the most expensive thing on this thread and nothing would read it. */
+    if (!sPaused && sRewindWanted) SeStateCapture(sFrameNo);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1196,6 +1207,20 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             sStepBudget += (arg > 0) ? (int)arg : 1;
             sStopReason = SE_LIVE_STOP_NONE;
             SE_UNLOCK();
+        }
+        else if (memcmp(req, SE_LIVE_VERB_REWIND, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Switching capture off drops whatever is already staged: those frames belong to a
+             * timeline the client is no longer keeping, and holding them would pin the pool for
+             * as long as the feature stayed off. Re-keying also means the first frame after it
+             * is switched back on is a keyframe, which it has to be -- there is a gap behind it
+             * and nothing to diff against. */
+            const int want = (arg != 0) ? 1 : 0;
+            if (want != sRewindWanted)
+            {
+                sRewindWanted = want;
+                SeStateFlushAndRekey();
+            }
         }
         else if (memcmp(req, SE_LIVE_VERB_ISTEP, SE_LIVE_VERB_LEN) == 0)
         {
@@ -1732,7 +1757,7 @@ int SeExportInit(void)
         }
     }
     sRingWrite = 0;
-    sPaused = 0; sStepBudget = 0; sFrameNo = 0; sClients = 0;
+    sPaused = 0; sStepBudget = 0; sFrameNo = 0; sClients = 0; sRewindWanted = 1;
     sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */

@@ -459,10 +459,11 @@ Three things bound it:
   is connected (`SeExportHasClient`), so the whole per-frame capture — ring copy *and* savestate —
   costs nothing until Saturn Explorer actually attaches. The Mednafen glue checks the same flag
   before it byte-swaps VRAM into its scratch buffers. `SaturnExplorerExportAttachTests` pins this.
-- **`install.py --no-rewind`** drops `-DSE_MDFN_REWIND=1`, so `SsDbgSaveState` builds as the stub
-  and the ring stays empty. The rewind timeline and Play-from-here are then unavailable;
-  everything else behaves as before. The define is part of the recorded configure signature, so
-  toggling it forces the clean rebuild it needs.
+- **The user's Settings switch.** Rewind is always built in -- there is no build flag for it --
+  and Saturn Explorer's Settings dialog turns it on and off. The client sends the setting to the
+  emulator with the `REW` verb (v18) on connect and on every change, so a disabled rewind costs
+  nothing per frame rather than being captured and discarded. The server starts each connection
+  capturing, so a pre-v18 client keeps the old always-on behavior.
 
 ### ⚠ This depends on Mednafen internals, and fails silently
 
