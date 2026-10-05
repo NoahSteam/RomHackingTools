@@ -247,6 +247,54 @@ int main()
         se_destroy(vctx);
     }
 
+    // --- Edits to VDP memory on a scrubbed frame are recorded for replay, not just displayed ---
+    // Work and sound RAM were forwarded to the edit sink; VDP1/VDP2 VRAM, CRAM and the
+    // framebuffer were not, so such an edit showed on the frame and was gone once Play rewound.
+    {
+        struct Rec { int isSound; uint32_t addr; std::vector<uint8_t> bytes; };
+        static std::vector<Rec> sink;
+        sink.clear();
+        se_test::State st(kVdp1VramSize);
+        se_context* vctx = se_test::CreateContext(st);
+        se_begin_frame(vctx);
+        FrameRecorder r5;
+        r5.Configure(10);
+        r5.SetEditSink(nullptr, [](void*, int isSound, uint32_t addr, const uint8_t* b, size_t n)
+                       { sink.push_back({isSound, addr, std::vector<uint8_t>(b, b + n)}); });
+        Check(CaptureFrame(r5, vctx, 1), "captured a frame to edit");
+        se_data_source ds{};
+        Check(r5.Select(0, &ds), "selected the frame to edit");
+        se_config cfg;
+        cfg.abi_version = SE_ABI_VERSION;
+        cfg.reserved = 0;
+        se_context* scrub = se_create(&ds, &cfg);
+        Check(scrub != nullptr, "scrub context created");
+        if (scrub)
+        {
+            se_begin_frame(scrub);
+            const uint8_t ab[2] = { 0xAB, 0xCD };
+            struct { se_vram_kind kind; uint32_t off; uint32_t bus; } cases[] = {
+                { SE_VRAM_KIND_VDP1_VRAM, 0x10, 0x05C00010u },
+                { SE_VRAM_KIND_VDP1_FB,   0x20, 0x05C80020u },
+                { SE_VRAM_KIND_VDP2_VRAM, 0x30, 0x05E00030u },
+                { SE_VRAM_KIND_CRAM,      0x40, 0x05F00040u },
+            };
+            for (const auto& c : cases)
+            {
+                sink.clear();
+                Check(se_write_vram(scrub, c.kind, c.off, ab, 2) == 2, "the VDP edit is accepted");
+                Check(sink.size() == 1 && sink[0].isSound == 0 && sink[0].addr == c.bus &&
+                          sink[0].bytes == std::vector<uint8_t>({ 0xAB, 0xCD }),
+                      "the VDP edit reaches the replay sink at its bus address");
+                uint8_t back[2] = {};
+                se_read_vram(scrub, c.kind, c.off, back, 2);
+                Check(back[0] == 0xAB && back[1] == 0xCD, "and the displayed frame shows it");
+            }
+            se_destroy(scrub);
+        }
+        se_destroy(vctx);
+    }
+
     // --- A corrupt or mis-declared state block is refused at the door (REW-03) ---
     {
         FrameRecorder r4;

@@ -459,6 +459,7 @@ void App::CloseData(bool cancelAutoConnect)
         se_destroy(mContext);
         mContext = nullptr;
     }
+    mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
@@ -1533,6 +1534,7 @@ bool App::RefreshScrubContext()
     }
     se_begin_frame(mScrubContext);
     mScrubShownIndex = mScrubIndex;
+    mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
     return true;
 #else
     return false;
@@ -3762,7 +3764,7 @@ void App::DrawCommandList()
 
                 // Size/Position cells become editable when the source can take writes (a loaded
                 // snapshot). An edit re-encodes CMDSIZE/CMDXA/CMDYA and pokes VDP1 VRAM.
-                const bool editable = se_can_write(mContext) != 0;
+                const bool editable = mMemBackend.CanWrite(kVdp1VramBase);
 
                 ImGuiListClipper clipper;
                 clipper.Begin(static_cast<int>(count));
@@ -3813,7 +3815,7 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         if (editable)
                         {
-                            EditCommandSize(cmd, row);
+                            EditCommandSize(cmd);
                         }
                         else
                         {
@@ -3827,7 +3829,7 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         if (editable)
                         {
-                            EditCommandPosition(cmd, row);
+                            EditCommandPosition(cmd);
                         }
                         else
                         {
@@ -3874,21 +3876,41 @@ bool EditCell(const char* id, float width, int initial, Commit&& commit)
 }
 }  // namespace
 
-// Re-encode one 16-bit command word and write it back to VDP1 VRAM. se_write_vram updates the
-// snapshot, re-derives the reconstructed image, and pokes a live emulator (via write_vram).
+// Re-encode one 16-bit command word and write it back to VDP1 VRAM. It goes through the Memory
+// backend like any other edit, so the read-only policy and the accepted-byte count apply here
+// too: the snapshot, the reconstructed image and a live emulator are updated only for what the
+// source took, and a refusal is said so instead of leaving the cell showing a value that never
+// landed.
 void App::WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value)
 {
     const uint8_t be[2] = { static_cast<uint8_t>(value >> 8),
                             static_cast<uint8_t>(value & 0xFF) };
-    se_write_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address + fieldOffset,
-                  be, sizeof be);
+    const uint32_t address = kVdp1VramBase + cmd.table_address + fieldOffset;
+    if (mMemBackend.WriteMemory(address, be, sizeof be) != sizeof be)
+    {
+        char msg[96];
+        std::snprintf(msg, sizeof msg, "Edit of VDP1 command at %06X was not written.",
+                      cmd.table_address);
+        mLog.Warn(msg);
+    }
+}
+
+// An edit box is identified by the command it edits and the source that command came from, not
+// by the row it happens to be drawn in. ImGui keeps an edit going across frames by ID, and the
+// commit writes to whichever command the box is drawn for *now*: with the row as the ID, a live
+// list that shifted under a half-typed value would commit it to a different command.
+void App::PushCommandEditId(const se_command& cmd)
+{
+    const uint64_t source = mMemBackend.SourceId();
+    ImGui::PushID(static_cast<int>(cmd.table_address));
+    ImGui::PushID(static_cast<int>(source ^ (source >> 32)));
 }
 
 // Editable "W x H" cell. Width is stored in units of 8 dots (CMDSIZE bits 13:8), height in
 // lines (bits 7:0); both edits preserve the other half of the word.
-bool App::EditCommandSize(const se_command& cmd, int row)
+bool App::EditCommandSize(const se_command& cmd)
 {
-    ImGui::PushID(row);
+    PushCommandEditId(cmd);
     bool changed = false;
     const float cell = 40.0f;
     const float sep = 4.0f;
@@ -3909,6 +3931,7 @@ bool App::EditCommandSize(const se_command& cmd, int row)
                          static_cast<uint16_t>((charW << 8) | (Clampi(height, 0, 0xFF) & 0xFF)));
     });
     ImGui::PopID();
+    ImGui::PopID();
     return changed;
 }
 
@@ -3917,9 +3940,9 @@ bool App::EditCommandSize(const se_command& cmd, int row)
 // sprite / polygon / polyline / line it is corner A of the shape: the VDP1 has no single
 // "position" for those (each of the four vertices is independent), so editing it moves only
 // that one corner -- exactly what poking CMDXA/YA does on the hardware.
-bool App::EditCommandPosition(const se_command& cmd, int row)
+bool App::EditCommandPosition(const se_command& cmd)
 {
-    ImGui::PushID(row);
+    PushCommandEditId(cmd);
     bool changed = false;
     const float cell = 46.0f;
     const float sep = 4.0f;
@@ -3934,6 +3957,7 @@ bool App::EditCommandPosition(const se_command& cmd, int row)
         WriteCommandWord(cmd, kCmdYaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(y, -32768, 32767))));
     });
+    ImGui::PopID();
     ImGui::PopID();
     return changed;
 }
@@ -6085,6 +6109,7 @@ void App::AdoptNewEmulatorInstance()
         mScrubContext = nullptr;
     }
     mScrubShownIndex = -1;
+    mMemBackend.NoteSourceChanged();
     mCallStack.ClearAll();           // a stack through code the new run may not even load
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list

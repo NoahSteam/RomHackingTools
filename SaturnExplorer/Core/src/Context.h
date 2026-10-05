@@ -446,26 +446,32 @@ public:
         return n;
     }
 
-    // Write raw big-endian bytes into a region. Updates the snapshot (so the edit
-    // shows immediately) and forwards the write to the source so a live emulator is
-    // poked: work RAM -> write_main_ram, sound RAM -> write_sound_ram, VDP1/VDP2 VRAM,
-    // CRAM and the VDP1 framebuffer -> write_vram. Returns bytes written.
+    // Write raw big-endian bytes into a region. The source is asked first -- work RAM ->
+    // write_main_ram, sound RAM -> write_sound_ram, VDP1/VDP2 VRAM, CRAM and the VDP1
+    // framebuffer -> write_vram -- and the snapshot takes only the bytes it accepted, so the
+    // view never shows an edit the emulator refused. A source with no sink for the region
+    // (a savestate) keeps the edit snapshot-local and takes all of it. Returns the bytes
+    // accepted; for a live source that means handed to the emulator's poke queue, not yet
+    // applied by it.
     size_t WriteVram(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
     {
-        const size_t n = mSnapshot.WriteRegion(kind, offset, src, size);
+        size_t n = mSnapshot.RegionRoom(kind, offset);
+        if (!src || size == 0) return 0;
+        if (size < n) n = size;
         if (n == 0) return 0;
-        RebuildDerived();   // so a VRAM/CRAM/framebuffer edit shows in the reconstructed image
+
+        size_t accepted = n;
         if (mDs.write_main_ram &&
             (kind == SE_VRAM_KIND_WRAM_LOW || kind == SE_VRAM_KIND_WRAM_HIGH))
         {
             const uint32_t base = (kind == SE_VRAM_KIND_WRAM_HIGH) ? kWramHighBase
                                                                    : kWramLowBase;
-            mDs.write_main_ram(mDs.user, base + offset, src, n);
+            accepted = mDs.write_main_ram(mDs.user, base + offset, src, n);
         }
         else if (mDs.write_sound_ram && kind == SE_VRAM_KIND_SOUND_RAM)
         {
             // Sound RAM uses a 0-based offset (not a bus address) — see SeDataSource.h.
-            mDs.write_sound_ram(mDs.user, offset, src, n);
+            accepted = mDs.write_sound_ram(mDs.user, offset, src, n);
         }
         else if (mDs.write_vram &&
                  (kind == SE_VRAM_KIND_VDP1_VRAM || kind == SE_VRAM_KIND_VDP2_VRAM ||
@@ -473,9 +479,15 @@ public:
         {
             // VDP regions take a region-local offset (not a bus address); the driver
             // maps kind -> bus base. Pokes a live emulator so the edit persists.
-            mDs.write_vram(mDs.user, kind, offset, src, n);
+            accepted = mDs.write_vram(mDs.user, kind, offset, src, n);
         }
-        return n;
+        if (accepted > n) accepted = n;   // a sink cannot have taken more than it was given
+        if (accepted == 0) return 0;
+
+        const size_t stored = mSnapshot.WriteRegion(kind, offset, src, accepted);
+        if (stored == 0) return 0;
+        RebuildDerived();   // so a VRAM/CRAM/framebuffer edit shows in the reconstructed image
+        return stored;
     }
 
     // Overwrite one VDP register (16-bit, by hardware byte offset) in the snapshot and

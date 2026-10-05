@@ -127,6 +127,14 @@ static bool IsWritableKind(se_vram_kind kind)
            kind == SE_VRAM_KIND_VDP1_FB;
 }
 
+uint64_t ContextBackend::SourceId() const
+{
+    if (!Connected()) return 0;
+    // Pointer and generation folded together: either one moving is a different source.
+    return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(*mContext)) * 0x9E3779B97F4A7C15ull +
+           mGeneration + 1u;
+}
+
 bool ContextBackend::CanWrite(uint32_t address) const
 {
     if (mForceReadOnly) return false;
@@ -144,6 +152,9 @@ bool ContextBackend::CanWrite(uint32_t address) const
 size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
 {
     if (!Connected() || !bytes || size == 0) return 0;
+    // The same policy CanWrite offers edits under, enforced where the write happens: an edit
+    // already in flight when the backend turned read-only must not slip through.
+    if (mForceReadOnly || !se_can_write(*mContext)) return 0;
     se_context* ctx = *mContext;
     const uint32_t a = Canonical(address);
 

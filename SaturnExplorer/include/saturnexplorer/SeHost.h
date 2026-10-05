@@ -153,11 +153,12 @@ int         se_set_vdp2_register(se_context* ctx, uint32_t hw_offset, uint16_t v
    bytes copied (clamped to the region). */
 size_t      se_read_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                          void* dst, size_t size);
-/* Write raw Saturn big-endian bytes into a memory region (currently work RAM
-   only). Updates the current snapshot so the change is visible immediately, and
-   forwards to the source's write_main_ram when present (SE_CAP_MEM_WRITE) so a
-   live emulator is poked; on a savestate the edit is in-memory only. Returns the
-   number of bytes written (0 if the region is not writable). */
+/* Write raw Saturn big-endian bytes into a memory region. The source's write callback for
+   the region (write_main_ram / write_sound_ram / write_vram, SE_CAP_MEM_WRITE) is asked first
+   and the current snapshot takes only the bytes it accepted, so the view never shows an edit
+   the source refused; a region the source has no callback for (a savestate) keeps the whole
+   edit in-memory only. Returns the number of bytes accepted -- for a live source that means
+   queued for the emulator, not yet applied -- and 0 if nothing was written. */
 size_t      se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
                           const void* src, size_t size);
 /* 1 when the current source has memory the Hex Editor can edit (a loaded

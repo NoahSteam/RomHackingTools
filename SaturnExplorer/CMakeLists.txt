@@ -436,6 +436,17 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # ContextBackend over a real core context: read-only enforced at write time, driver refusals
+    # surfaced as unwritten bytes, and SourceId moving with the data behind an address.
+    add_executable(SaturnExplorerMemoryBackendTests
+        FrontEnd/tests/MemoryBackendTests.cpp
+        FrontEnd/src/Debug/MemoryBackend.cpp
+    )
+    target_include_directories(SaturnExplorerMemoryBackendTests PRIVATE
+        FrontEnd/src Core/tests ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerMemoryBackendTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerMemoryBackendTests COMMAND SaturnExplorerMemoryBackendTests)
+
     # The Assembly panel's decode window, including its lead-in: it must stay inside the region
     # it is in, at both ends, or the single whole-window read is rejected and every line of a
     # perfectly readable window shows "????". Header-only, so nothing to link.

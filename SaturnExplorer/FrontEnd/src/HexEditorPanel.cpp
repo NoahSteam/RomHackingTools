@@ -190,6 +190,17 @@ void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int
         if (addr != mFindOrigin) mFindHits.push_back(addr);
 }
 
+void HexEditorPanel::CancelEdit()
+{
+    mEditAddr = -1;
+    mEditFlow = false;
+    mEditFocus = false;
+    mEditBuf[0] = mEditBuf[1] = '\0';
+    mSelecting = false;
+    mPrevByte.clear();
+    mChangeAge.clear();
+}
+
 void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 {
     (void)live;
@@ -224,6 +235,16 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     ImGui::Checkbox("Auto Refresh", &mAutoRefresh);
     ImGui::SameLine();
     ImGui::Checkbox("Highlight Changes", &mHighlightChanges);
+
+    // An edit begun against one source must not carry on against its replacement: the digit
+    // typed so far (or the open box) belongs to an address in the old data, and the byte cache
+    // would paint the old values as "changes" in the new.
+    const uint64_t sourceId = backend.Connected() ? backend.SourceId() : 0;
+    if (sourceId != mSourceId)
+    {
+        CancelEdit();
+        mSourceId = sourceId;
+    }
 
     mConnected = backend.Connected();
     if (!mConnected)

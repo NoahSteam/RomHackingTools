@@ -750,6 +750,49 @@ void TestWriteVramForwards()
     se_destroy(ctx);
 }
 
+// The edit is reported, and shown, only for the bytes the driver accepted. It used to update the
+// snapshot first and ignore the driver's answer, so a refused write read back as stored.
+namespace {
+size_t gAccept = 0;
+size_t AcceptSome(void*, se_vram_kind, uint32_t, const void*, size_t size)
+{
+    return gAccept < size ? gAccept : size;
+}
+}  // namespace
+
+void TestWriteVramReportsWhatTheDriverTook()
+{
+    State state = MakeNbg3State();
+    se_data_source source = se_test::MakeSource(state);
+    source.capabilities |= SE_CAP_MEM_WRITE;
+    source.write_vram = AcceptSome;
+    se_context* ctx = se_test::CreateContext(source);
+    CHECK(ctx != nullptr);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+
+    uint8_t before[2] = {};
+    se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, before, 2);
+    const uint8_t bytes[2] = { uint8_t(before[0] ^ 0xFF), uint8_t(before[1] ^ 0xFF) };
+
+    gAccept = 0;   // rejected
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, bytes, 2) == 0);
+    uint8_t got[2] = {};
+    se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, got, 2);
+    CHECK(got[0] == before[0] && got[1] == before[1]);   // the view still shows the old bytes
+
+    gAccept = 1;   // partial
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, bytes, 2) == 1);
+    se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, got, 2);
+    CHECK(got[0] == bytes[0] && got[1] == before[1]);    // only the accepted byte landed
+
+    gAccept = 2;   // all of it
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, bytes, 2) == 2);
+    se_read_vram(ctx, SE_VRAM_KIND_VDP1_VRAM, 0x10, got, 2);
+    CHECK(got[0] == bytes[0] && got[1] == bytes[1]);
+
+    se_destroy(ctx);
+}
+
 // Snapshot validity is not VDP1-centric (SNAP-02). It used to be `!vdp1Vram.empty()`, so a
 // VDP2-only source -- backgrounds, tiles, palettes, all present -- could not open at all:
 // se_begin_frame returned SE_ERR_NO_DATA and nothing downstream ever ran.
@@ -1058,6 +1101,7 @@ int main()
     TestEmptySourceIsStillInvalid();
     TestEditReRenders();
     TestWriteVramForwards();
+    TestWriteVramReportsWhatTheDriverTook();
     TestRectangularWindow();
     TestLineWindow();
     TestVerticalPlaneSize();

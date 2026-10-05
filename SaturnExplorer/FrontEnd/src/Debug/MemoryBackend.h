@@ -47,6 +47,11 @@ public:
     virtual std::vector<MemoryReadResult> ReadMemoryBatch(
         const std::vector<MemoryReadRequest>& requests) = 0;
 
+    // Identifies what the backend is currently serving. It changes whenever the bytes behind an
+    // address become different data -- another source, another scrubbed frame -- so a panel
+    // holding an edit in flight can tell that the edit's target is gone. 0 when not connected.
+    virtual uint64_t SourceId() const { return 0; }
+
     // True when memory at 'address' can be edited (a writable region is loaded).
     virtual bool CanWrite(uint32_t address) const { (void)address; return false; }
 
@@ -96,12 +101,18 @@ public:
     bool Connected() const override { return mContext && *mContext; }
     std::vector<MemoryReadResult> ReadMemoryBatch(
         const std::vector<MemoryReadRequest>& requests) override;
+    uint64_t SourceId() const override;
     bool CanWrite(uint32_t address) const override;
     size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
 
     // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
     // frame on a server that can't rewind, so edits that would go nowhere are disabled).
     void SetReadOnly(bool readOnly) { mForceReadOnly = readOnly; }
+
+    // Call when the data behind the context changes without the context pointer changing
+    // (a different scrubbed frame loaded in place, or a destroyed context's address reused), so
+    // SourceId() moves and a panel drops its in-flight edit.
+    void NoteSourceChanged() { ++mGeneration; }
 
     // Map a CPU-visible Saturn address (mirror bits normalized) to a captured
     // region and read 'size' bytes. Public so hover/operand previews can reuse it.
@@ -110,6 +121,7 @@ public:
 private:
     se_context** mContext = nullptr;
     bool         mForceReadOnly = false;
+    uint64_t     mGeneration = 0;
 };
 
 }  // namespace sfe
