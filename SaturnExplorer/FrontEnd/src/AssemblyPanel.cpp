@@ -451,8 +451,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             const bool rowSel = mHasSel && ln.addr >= mSelLoAddr && ln.addr <= mSelHiAddr;
             char al[16]; std::snprintf(al, sizeof(al), "%08X", ln.addr);
             ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
-            if (ImGui::Selectable(al, rowSel, ImGuiSelectableFlags_None))
+            if (ImGui::Selectable(al, rowSel, ImGuiSelectableFlags_AllowDoubleClick))
             {
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                { req.viewHex = true; req.hexAddr = ln.addr; }
                 if (ImGui::GetIO().KeyShift && mHasSel)
                 {
                     mSelLoAddr = std::min(mSelAnchorAddr, ln.addr);
@@ -575,10 +577,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             if (ImGui::MenuItem("Clear Comment", nullptr, false, mComments.count(ln.addr) != 0))
             { mComments.erase(ln.addr); SaveComments(); }
             ImGui::Separator();
-            uint32_t hexEa; WatchType hexWt;
-            if (ImGui::MenuItem("View Address in Memory", nullptr, false,
-                                ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, hexEa, hexWt)))
-            { req.viewHex = true; req.hexAddr = hexEa; }
+            // Aims at the memory operand when the instruction has one, else at the
+            // instruction's own address, so the item is available on every row.
+            if (ImGui::MenuItem("View Address in Memory"))
+            { req.viewHex = true; req.hexAddr = hasMem ? ea : ln.addr; }
 
             // Find the selected instruction(s)'s code bytes in the game data directory.
             // If this row is inside the current multi-selection, search the whole range;
