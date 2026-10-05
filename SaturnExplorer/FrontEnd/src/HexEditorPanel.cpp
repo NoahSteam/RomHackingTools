@@ -1,6 +1,7 @@
 #include "HexEditorPanel.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -26,6 +27,15 @@ const ImU32 kColText    = IM_COL32(180, 195, 170, 255);
 const ImU32 kColJp      = IM_COL32(130, 190, 210, 255);   // double-byte (Shift-JIS) marker
 const ImU32 kColSelBg   = IM_COL32(70, 110, 90, 150);     // selection tint
 const ImU32 kColHoverBg = IM_COL32(80, 90, 110, 90);      // hovered-cell tint (no per-byte widget)
+const ImU32 kColEditBg  = IM_COL32(120, 95, 40, 170);     // byte with a typed first digit pending
+
+// Grid geometry. The byte column is sized from the edit box so the box always fits it:
+// column content = edit box + a small gap, edit box = two digits + its own padding + room for
+// the caret. (TableSetupColumn's width is the content width; the cell padding is added outside.)
+constexpr float kCellPadX  = 2.0f;
+constexpr float kEditPadX  = 1.0f;
+constexpr float kCaretRoom = 2.0f;
+constexpr float kByteGap   = 2.0f;
 
 int64_t SelLo(int64_t a, int64_t b) { return a < b ? a : b; }
 int64_t SelHi(int64_t a, int64_t b) { return a > b ? a : b; }
@@ -52,6 +62,23 @@ int HexEditorPanel::RegionForAddr(uint32_t addr)
 {
     const int i = SaturnRegionIndex(addr);
     return i < 0 ? 0 : i + 1;   // 0 is the "All" tab; the shared table starts at 1 here
+}
+
+HexEditorPanel::GridMetrics HexEditorPanel::Metrics()
+{
+    // The widest hex digit sets the byte width, not "F": proportional digits A-D are wider than
+    // F and 0-9, and a column sized from F clips the edit box on exactly those values.
+    float digitW = 0.0f;
+    for (const char* d = "0123456789ABCDEF"; *d; ++d)
+        digitW = std::max(digitW, ImGui::CalcTextSize(d, d + 1).x);
+    GridMetrics m;
+    m.editPadX = kEditPadX;
+    m.editW = digitW * 2.0f + kEditPadX * 2.0f + kCaretRoom;
+    m.byteW = m.editW + kByteGap;
+    // One row height for the clipper, the scroll-to-address maths and the edit box: text plus
+    // the table's own vertical padding. The edit box must not make its row taller than this.
+    m.rowH = ImGui::GetTextLineHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
+    return m;
 }
 
 void HexEditorPanel::GoTo(uint32_t address)
@@ -249,21 +276,65 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         CopySelection(backend, selLo, selHi);
     }
 
-    // Type-to-edit: with a single writable byte selected and the Memory window focused (and no
-    // other text field capturing input), typing a hex digit starts editing that byte — no
-    // double-click needed, like a standard hex editor. The typed digit seeds the edit box.
+    // Commit one byte through the backend and record it for the change highlight.
+    auto writeByte = [&](uint32_t addr, unsigned value)
+    {
+        const uint8_t byte = (uint8_t)(value & 0xFF);
+        if (backend.WriteMemory(addr, &byte, 1) != 1) return;
+        mPrevByte[addr] = byte;
+        mChangeAge[addr] = 1.0f;
+        mModifiedFlash = 1.5f;
+    };
+    auto hexVal = [](unsigned c) -> unsigned
+    {
+        return c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10;
+    };
     auto isHex = [](unsigned c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
                                          (c >= 'A' && c <= 'F'); };
-    if (mEditAddr < 0 && selLo >= 0 && selLo == selHi && backend.CanWrite((uint32_t)selLo) &&
+    const uint32_t regionEnd = reg.base + reg.size;
+
+    // Type-to-edit: with a single writable byte selected and the Memory window focused (and no
+    // text field capturing input), hex digits are entered straight into the byte, like a
+    // standard hex editor -- the first digit is held pending, the second completes the byte and
+    // moves to the next. This deliberately does not go through an InputText: seeding one with
+    // the typed digit raced its own select-all-on-focus and re-read the queued character, which
+    // dropped a digit and repeated the previous byte.
+    if (mEditFlow && !(selLo >= 0 && selLo == selHi && selLo == mEditAddr))
+    {
+        mEditFlow = false;   // the selection moved off the byte being typed: drop the pending digit
+        mEditAddr = -1;
+    }
+    if (selLo >= 0 && selLo == selHi && (mEditFlow || mEditAddr < 0) &&
         ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive())
     {
+        int64_t sel = selLo;
+        if (mEditFlow)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_Backspace))
+            {
+                mEditFlow = false; mEditAddr = -1;
+            }
+            else if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
+            {
+                writeByte((uint32_t)mEditAddr, hexVal((unsigned char)mEditBuf[0]));   // lone digit
+                mEditFlow = false; mEditAddr = -1;
+                if (sel + 1 < (int64_t)regionEnd) mSelStart = mSelEnd = sel + 1;
+            }
+        }
         for (ImWchar ch : ImGui::GetIO().InputQueueCharacters)
         {
-            if (isHex(ch))
+            if (!isHex(ch)) continue;
+            if (!mEditFlow)
             {
-                mEditAddr = selLo; mEditFocus = true; mEditSelectAll = false; mEditFlow = true;
+                if (!backend.CanWrite((uint32_t)sel)) break;
+                mEditAddr = sel; mEditFlow = true;
                 mEditBuf[0] = (char)ch; mEditBuf[1] = '\0';
-                break;
+            }
+            else
+            {
+                writeByte((uint32_t)mEditAddr, (hexVal((unsigned char)mEditBuf[0]) << 4) | hexVal(ch));
+                mEditFlow = false; mEditAddr = -1;
+                if (sel + 1 < (int64_t)regionEnd) { sel += 1; mSelStart = mSelEnd = sel; }
             }
         }
     }
@@ -271,11 +342,10 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
 
     // --- Grid: a frozen-header table, virtually scrolled over the whole region. ---
     const float ch = ImGui::CalcTextSize("F").x;
-    // Compact byte columns: 2 hex glyphs + a little slack. Combined with the tightened cell
-    // padding below this gives ~one-space gap between bytes (like the old Work RAM view),
-    // instead of the wide default-padded columns.
-    const float byteW = ch * 2.0f + 4.0f;
-    const float rowH = ImGui::GetTextLineHeightWithSpacing();
+    const GridMetrics gm = Metrics();
+    const float editW = gm.editW, byteW = gm.byteW, rowH = gm.rowH;
+    const float cellPadY = ImGui::GetStyle().CellPadding.y;
+    const float lineH = ImGui::GetTextLineHeight();
     const uint32_t totalRows = (reg.size + 15u) / 16u;
 
     ImGuiTableFlags tflags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
@@ -284,11 +354,14 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     // Read the visible rows fresh when Auto Refresh is on (or the cache is empty); when
     // off, freeze the view by rendering the last-seen bytes from mPrevByte.
     const bool doRead = mAutoRefresh || mPrevByte.empty();
-    // Halve the horizontal cell padding so the hex grid packs tightly.
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(2.0f, ImGui::GetStyle().CellPadding.y));
+    // Tight horizontal cell padding so the hex grid packs closely.
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(kCellPadX, cellPadY));
     if (ImGui::BeginTable("mem", 18, tflags, outer))
     {
         ImGui::TableSetupScrollFreeze(1, 1);   // freeze the address column + header row
+        // Cells are hit-tested geometrically, so also require the grid itself to be the hovered
+        // window: a window stacked over this one must not receive the click underneath it.
+        const bool gridHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
         ImGui::TableSetupColumn("Addr", ImGuiTableColumnFlags_WidthFixed, ch * 8.0f + 4.0f);
         for (int c = 0; c < 16; ++c)
         {
@@ -394,49 +467,49 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                     // ScrollX/ScrollY table with a frozen column scroll-jitter ("vibrate")
                     // while dragging. A pure rect test needs none of that.
                     const ImVec2 cur = ImGui::GetCursorScreenPos();
-                    const bool cellHovered = ImGui::IsMouseHoveringRect(
-                        cur, ImVec2(cur.x + byteW, cur.y + ImGui::GetTextLineHeight()));
+                    const bool cellHovered = gridHovered && ImGui::IsMouseHoveringRect(
+                        ImVec2(cur.x - kCellPadX, cur.y - cellPadY),
+                        ImVec2(cur.x + editW + kCellPadX, cur.y + lineH + cellPadY));
                     if (cellHovered && !selected)
                         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColHoverBg);
 
                     if (mEditAddr == (int64_t)addr)
                     {
                         editRendered = true;
-                        ImGui::SetNextItemWidth(byteW);
+                        if (mEditFlow)
+                        {
+                            // First digit typed, second pending: shown in the cell itself.
+                            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, kColEditBg);
+                            char pending[3] = { (char)std::toupper((unsigned char)mEditBuf[0]), '_', '\0' };
+                            ImGui::PushStyleColor(ImGuiCol_Text, kColChanged);
+                            ImGui::TextUnformatted(pending);
+                            ImGui::PopStyleColor();
+                            continue;
+                        }
+                        // Double-click edit. A distinct ID per address, so moving the edit from
+                        // one byte to another starts a fresh InputText state instead of inheriting
+                        // the last byte's buffer; the zero vertical padding keeps the row at rowH.
+                        ImGui::PushID((int)addr);
+                        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(kEditPadX, 0.0f));
+                        ImGui::SetNextItemWidth(editW);
                         if (mEditFocus) { ImGui::SetKeyboardFocusHere(); mEditFocus = false; }
-                        ImGuiInputTextFlags ef = ImGuiInputTextFlags_CharsHexadecimal |
-                                                 ImGuiInputTextFlags_EnterReturnsTrue;
-                        if (mEditSelectAll) ef |= ImGuiInputTextFlags_AutoSelectAll;
-                        const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf), ef);
-                        // Flow typing: once two hex digits are entered, commit without Enter and
-                        // advance to the next byte (standard overwrite-mode hex-editor feel).
-                        const bool full = mEditFlow && std::strlen(mEditBuf) >= 2;
-                        const bool commit = enter || full || ImGui::IsItemDeactivated();
-                        if (commit)
+                        const bool enter = ImGui::InputText("##edit", mEditBuf, sizeof(mEditBuf),
+                                                            ImGuiInputTextFlags_CharsHexadecimal |
+                                                            ImGuiInputTextFlags_EnterReturnsTrue |
+                                                            ImGuiInputTextFlags_AutoSelectAll);
+                        const bool deactivated = ImGui::IsItemDeactivated();
+                        ImGui::PopStyleVar();
+                        ImGui::PopID();
+                        if (enter || deactivated)
                         {
                             unsigned val = 0;
                             if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
-                            {
-                                const uint8_t byte = (uint8_t)(val & 0xFF);
-                                if (backend.WriteMemory(addr, &byte, 1) == 1)
-                                {
-                                    mPrevByte[addr] = byte;
-                                    mChangeAge[addr] = 1.0f;
-                                    mModifiedFlash = 1.5f;
-                                }
-                            }
+                                writeByte(addr, val);
                             mEditAddr = -1;
-                            mEditSelectAll = false;
-                            const bool wasFlow = mEditFlow;
-                            mEditFlow = false;
-                            // A deliberate commit (Enter or a filled byte) moves to the next byte
-                            // so you can keep typing down the row; a click-away just stops.
+                            // Enter moves to the next byte so you can keep going down the row; a
+                            // click-away just stops.
                             const int64_t next = (int64_t)addr + 1;
-                            if ((enter || (wasFlow && full)) &&
-                                next < (int64_t)(reg.base + reg.size))
-                            {
-                                mSelStart = mSelEnd = next;
-                            }
+                            if (enter && next < (int64_t)regionEnd) mSelStart = mSelEnd = next;
                         }
                         continue;
                     }
@@ -453,11 +526,12 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         if (backend.CanWrite(addr) && ImGui::IsMouseDoubleClicked(0))
                         {
                             mEditAddr = (int64_t)addr; mEditFocus = true;
-                            mEditSelectAll = true; mEditFlow = false;   // seed current value, select all
+                            mEditFlow = false;   // seed the current value; AutoSelectAll replaces it
                             std::snprintf(mEditBuf, sizeof(mEditBuf), "%02X", v);
                         }
                         else if (ImGui::IsMouseClicked(0))
                         {
+                            if (mEditFlow) { mEditFlow = false; mEditAddr = -1; }   // abandon a pending digit
                             if (ImGui::GetIO().KeyShift && mSelStart >= 0)
                             {
                                 // Extend the range from the existing anchor (mSelStart) to

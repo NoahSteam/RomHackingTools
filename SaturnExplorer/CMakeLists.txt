@@ -419,6 +419,23 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerPanelInteractionTests
              COMMAND SaturnExplorerPanelInteractionTests)
 
+    # The Memory panel -- the real panel under the app's real theme and font, against a mock
+    # backend: typed digits, edit-box fit, row-height/scroll agreement, and click gating.
+    add_executable(SaturnExplorerHexEditorPanelTests
+        FrontEnd/tests/HexEditorPanelTests.cpp
+        FrontEnd/src/HexEditorPanel.cpp
+        FrontEnd/src/Theme.cpp
+        FrontEnd/src/Debug/BytePatternSearch.cpp
+        FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/WatchList.cpp      # WatchTypeSize, used by MemorySearch
+        FrontEnd/src/Debug/ShiftJis.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerHexEditorPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerHexEditorPanelTests
+             COMMAND SaturnExplorerHexEditorPanelTests)
+
     # The Assembly panel's decode window, including its lead-in: it must stay inside the region
     # it is in, at both ends, or the single whole-window read is rejected and every line of a
     # perfectly readable window shows "????". Header-only, so nothing to link.

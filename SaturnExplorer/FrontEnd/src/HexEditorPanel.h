@@ -50,6 +50,15 @@ public:
     struct LocateRequest { uint32_t address = 0; uint32_t length = 0; };
     bool TakeLocateRequest(LocateRequest& out);
 
+    // The grid's layout rule, from the current font and style: byte column width, the width of
+    // the edit box that fills it, that box's horizontal padding, and the one row height every
+    // row (editing or not) has. Public so tests can hold the real table to it.
+    struct GridMetrics { float byteW = 0.0f; float editW = 0.0f; float editPadX = 0.0f; float rowH = 0.0f; };
+    static GridMetrics Metrics();
+
+    int64_t SelectionStart() const { return mSelStart; }   // -1 when nothing is selected
+    bool    IsEditing() const { return mEditAddr >= 0; }
+
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
 
@@ -88,8 +97,7 @@ private:
     int64_t mEditAddr = -1;            // address being typed over (-1 = none)
     char    mEditBuf[3] = {};
     bool    mEditFocus = false;
-    bool    mEditSelectAll = false;    // select-all on focus (double-click) vs caret-at-end (type)
-    bool    mEditFlow = false;         // edit started by typing: auto-commit at 2 digits + advance
+    bool    mEditFlow = false;         // typed-digit entry: mEditBuf[0] is the pending first digit
     float   mModifiedFlash = 0.0f;
 
     bool mConnected = false;
