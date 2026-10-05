@@ -4758,9 +4758,9 @@ void App::DrawClosePromptModal(IPlatform& platform)
 
 void App::DrawBuildResultModal()
 {
-    if (mShowBuildResult) { ImGui::OpenPopup("Build Disc Image"); mShowBuildResult = false; }
+    if (mShowBuildResult) { ImGui::OpenPopup("Build Disc Image###BuildResults"); mShowBuildResult = false; }
     ImGui::SetNextWindowSize(ImVec2(660, 340), ImGuiCond_FirstUseEver);
-    if (!ImGui::BeginPopupModal("Build Disc Image", nullptr)) return;
+    if (!ImGui::BeginPopupModal("Build Disc Image###BuildResults", nullptr)) return;
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(mBuildResultText.c_str());
     ImGui::PopTextWrapPos();
@@ -4775,11 +4775,11 @@ static std::string PathDirectory(const std::string& path);   // defined below
 // Launch. The actual work is App::BuildDisc.
 void App::DrawBuildDiscModal(IPlatform& platform)
 {
-    if (mOpenBuildDiscModal) { ImGui::OpenPopup("Build Disc Image"); mOpenBuildDiscModal = false; }
+    if (mOpenBuildDiscModal) { ImGui::OpenPopup("Build Disc Image###BuildOptions"); mOpenBuildDiscModal = false; }
     const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(520, 0), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal("Build Disc Image", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+    if (!ImGui::BeginPopupModal("Build Disc Image###BuildOptions", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     ImGui::TextDisabled("Rebuilds the data track from the Data Directory. The original audio "
                         "tracks, track layout and boot info are preserved.");
@@ -5458,26 +5458,25 @@ void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
 // isn't drawn. Enqueues the same TopBarCommands the toolbar/menu items do.
 void App::CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const TopBarViewModel& state)
 {
-    if (ImGui::GetIO().WantTextInput) return;
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
+    if (AppShortcut(ImGuiMod_Ctrl | ImGuiKey_O) &&
         TopBarCommandEnabled(TopBarCommandType::LoadYabauseState, state))
         commands.emplace_back(TopBarCommandType::LoadYabauseState);
-    if (ImGui::Shortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
+    if (AppShortcut(ImGuiKey_F5) && TopBarCommandEnabled(TopBarCommandType::Launch, state))
         commands.emplace_back(TopBarCommandType::Launch);
-    if (ImGui::Shortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
+    if (AppShortcut(ImGuiKey_F6) && TopBarCommandEnabled(TopBarCommandType::TogglePause, state))
         commands.emplace_back(TopBarCommandType::TogglePause);
-    if (ImGui::Shortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
+    if (AppShortcut(ImGuiKey_F10) && TopBarCommandEnabled(TopBarCommandType::StepFrame, state))
         commands.emplace_back(TopBarCommandType::StepFrame);
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
+    if (AppShortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D) &&
         TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
         commands.emplace_back(TopBarCommandType::DumpMemory);
-    if (ImGui::Shortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
+    if (AppShortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
+    if (AppShortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
         commands.emplace_back(TopBarCommandType::OpenSettings);
     // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
-    if (ImGui::Shortcut(ImGuiKey_F7)) mDemoReqToggle = true;
-    if (ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
-    else if (ImGui::Shortcut(ImGuiKey_F8)) mDemoReqNext = true;
+    if (AppShortcut(ImGuiKey_F7)) mDemoReqToggle = true;
+    if (AppShortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
+    else if (AppShortcut(ImGuiKey_F8)) mDemoReqNext = true;
 }
 
 void App::DrawToolbar(std::vector<TopBarCommand>& commands)

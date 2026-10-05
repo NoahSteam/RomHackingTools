@@ -15,6 +15,21 @@
 namespace sfe
 {
 
+// An app-wide keyboard shortcut: fires whichever panel has focus.
+//
+// ImGui::Shortcut defaults to focused-window routing, which only matches when the window the
+// call is made from is in the focus chain. App-level shortcuts are polled outside every panel
+// window, so under the default they stop working the moment any panel (the Memory grid, say)
+// takes focus. Global routing lifts that; a focused panel that registers the same chord
+// itself still wins. Suppressed while a text field is capturing input or a modal dialog is
+// open, so typing and dialogs are never hijacked.
+inline bool AppShortcut(ImGuiKeyChord chord)
+{
+    if (ImGui::GetIO().WantTextInput) return false;
+    if (ImGui::GetTopMostAndVisiblePopupModal()) return false;
+    return ImGui::Shortcut(chord, ImGuiInputFlags_RouteGlobal);
+}
+
 // Flags for the Selectable that makes a whole table row clickable.
 //
 // A row Selectable uses SpanAllColumns, so its hit box covers the entire row, and it is

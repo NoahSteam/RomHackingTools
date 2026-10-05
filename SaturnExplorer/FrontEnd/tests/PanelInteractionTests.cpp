@@ -593,6 +593,70 @@ void TestSplitHeightRoundTripsThroughSettings()
 
 }  // namespace
 
+
+// --- App-wide shortcuts ------------------------------------------------------------------
+//
+// The toolbar hotkeys are polled outside every panel window. With ImGui's default routing a
+// shortcut only matches when the window making the call is in the focus chain, so F6 (pause)
+// died the moment any panel -- the Memory grid, in practice -- had focus.
+
+// Presses F6 once with a panel focused, polling the shortcut the way the app does (after the
+// panel window has ended). 'poll' is the call under test.
+template <typename Poll>
+bool F6FiresWithPanelFocused(Poll poll, bool withTextField = false, bool withModal = false)
+{
+    char text[16] = "";
+    bool open = withModal;
+    bool fired = false;
+    ImVec2 target(40.0f, 60.0f);   // where to click to focus the panel
+    ImGuiHarness h([&]() {
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_Always);
+        ImGui::Begin("Panel");
+        if (withTextField)
+        {
+            ImGui::SetNextItemWidth(200.0f);
+            ImGui::InputText("##t", text, sizeof(text));
+            target = (ImGui::GetItemRectMin() + ImGui::GetItemRectMax()) * 0.5f;
+        }
+        else ImGui::TextUnformatted("grid");
+        ImGui::End();
+        if (open) { ImGui::OpenPopup("Dialog"); open = false; }
+        if (ImGui::BeginPopupModal("Dialog")) ImGui::EndPopup();
+        if (poll(ImGuiKey_F6)) fired = true;
+    });
+    h.Settle();
+    h.Click(target);   // focus the panel (and, with a text field, activate it)
+    h.Settle();
+    fired = false;
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_F6, true);
+    h.Frame(ImVec2(1270.0f, 710.0f), false);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_F6, false);
+    h.Frame(ImVec2(1270.0f, 710.0f), false);
+    return fired;
+}
+
+void TestAppShortcutFiresWhilePanelHasFocus()
+{
+    CHECK(F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }));
+}
+
+void TestDefaultShortcutRoutingMissesPanelFocus()
+{
+    // Why AppShortcut exists: the stock call, made from outside the panel, never fires.
+    CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return ImGui::Shortcut(k); }));
+}
+
+void TestAppShortcutYieldsToTextInput()
+{
+    CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, true));
+}
+
+void TestAppShortcutYieldsToModalDialog()
+{
+    CHECK(!F6FiresWithPanelFocused([](ImGuiKeyChord k) { return AppShortcut(k); }, false, true));
+}
+
 int main()
 {
     TestRowSwallowsCellClickWithoutAllowOverlap();
@@ -610,6 +674,10 @@ int main()
     TestPanelTooShortToSplitDrawsNoSeparator();
     TestComboWidthFitsItsWidestEntry();
     TestSplitHeightRoundTripsThroughSettings();
+    TestAppShortcutFiresWhilePanelHasFocus();
+    TestDefaultShortcutRoutingMissesPanelFocus();
+    TestAppShortcutYieldsToTextInput();
+    TestAppShortcutYieldsToModalDialog();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " panel interaction check(s) failed\n";
