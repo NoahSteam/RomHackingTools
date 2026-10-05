@@ -309,6 +309,7 @@ private:
     // Debugger panels (emulator-agnostic: they read through the backend interface,
     // which is served here from the current se_context — live snapshot or scrub).
     ContextBackend           mMemBackend{&mContext};
+    float                    mEditHoldSeconds = 0.0f;   // writes refused until this runs out (VoidEditTarget)
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
     BreakpointManager        mBreakpoints;
@@ -433,6 +434,13 @@ private:
     void AdoptNewEmulatorInstance();
     uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
     void DropRecordedHistory();
+    // The thing the data panels are editing is about to change underneath them (the transport
+    // picked another frame, a slot is being restored). Voids every in-flight edit now and
+    // refuses writes for the rest of this frame, because the panels drawn after this point
+    // still hold the old context. 'holdSeconds' keeps them refused longer for an asynchronous
+    // restore: the emulator acknowledges nothing, so a poke sent before it lands is lost or
+    // lands on the restored state.
+    void VoidEditTarget(float holdSeconds = 0.0f);
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

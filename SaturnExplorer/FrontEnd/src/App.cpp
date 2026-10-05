@@ -460,6 +460,7 @@ void App::CloseData(bool cancelAutoConnect)
         mContext = nullptr;
     }
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
+    mEditHoldSeconds = 0.0f;
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
@@ -1058,7 +1059,8 @@ void App::BuildUI(IPlatform& platform)
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
-    mMemBackend.SetReadOnly(mbScrubbing && !mSeekSupported);
+    mEditHoldSeconds = std::max(0.0f, mEditHoldSeconds - ImGui::GetIO().DeltaTime);
+    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mEditHoldSeconds > 0.0f);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 
@@ -1387,6 +1389,7 @@ void App::DrawTransportBar()
         mbScrubbing = true;
         if (mScrubIndex < 0 || mScrubIndex >= n) { mScrubIndex = n - 1; }
         if (mScrubIndex > 0) { --mScrubIndex; }
+        VoidEditTarget();
     }
     ImGui::SameLine();
 
@@ -1424,6 +1427,7 @@ void App::DrawTransportBar()
             }
             mbScrubbing = false;
             mbPaused = false;
+            VoidEditTarget(rewound ? 0.25f : 0.0f);   // a rewind is restored asynchronously
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
@@ -1448,6 +1452,7 @@ void App::DrawTransportBar()
         {
             mbScrubbing = true;
             mScrubIndex = idx;
+            VoidEditTarget();
         }
     }
     else
@@ -1465,10 +1470,12 @@ void App::DrawTransportBar()
         if (mbScrubbing && mScrubIndex < n - 1)
         {
             ++mScrubIndex;
+            VoidEditTarget();
         }
         else
         {
             mbScrubbing = false;
+            VoidEditTarget();
             se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
             mbPaused = true;
             mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
@@ -1561,7 +1568,11 @@ void App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* byt
 
 void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
-    mPendingEditsFrame = mScrubIndex;   // these edits belong to the frame now shown
+    // Tag with the frame the written-to context actually displays, not where the slider points:
+    // a transport action earlier in this same frame may already have moved mScrubIndex while the
+    // panels still draw (and commit to) the old frame. Tagged with the new index, that edit
+    // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
+    mPendingEditsFrame = mScrubShownIndex;
     // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
     for (size_t i = 0; i < len; ++i)
     {
@@ -6141,6 +6152,16 @@ void App::DropRecordedHistory()
     mbScrubbing = false;
     mScrubIndex = -1;
     mbPaused = false;
+    // Both slot loads and the emulator-replaced path land here. The restore is asynchronous, so
+    // hold writes for a settle window (a few emulator frames) as well as voiding what is typed.
+    VoidEditTarget(0.25f);
+}
+
+void App::VoidEditTarget(float holdSeconds)
+{
+    mMemBackend.NoteSourceChanged();   // Memory panel / command boxes drop what they hold
+    mMemBackend.SetReadOnly(true);     // and nothing commits to the context still on screen
+    mEditHoldSeconds = std::max(mEditHoldSeconds, holdSeconds);
 }
 
 // SE's own slots, read from disk. Only the events that can change them call this: the
