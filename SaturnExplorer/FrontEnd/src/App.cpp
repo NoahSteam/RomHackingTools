@@ -1677,7 +1677,7 @@ void App::DrawAssembly()
     if (req.stepOver) StepOver(mAssemblyPanel.Cpu());
     if (req.stepOut)  StepOut(mAssemblyPanel.Cpu());
 
-    if (req.viewHex) mHexEditor.GoTo(req.hexAddr);   // "View Address in Hex Editor"
+    if (req.viewHex) { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }   // "View Address in Memory"
     if (req.findInData) BeginByteSearch(std::move(req.findBytes), req.findLabel);
 }
 
