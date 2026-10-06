@@ -832,7 +832,7 @@ bool App::AttachLiveSource(se_data_source& dataSource, const char* endpoint)
 // request made while one is running is ignored (the auto-connect timer simply asks again).
 void App::StartLiveOpen(const char* endpoint, bool reportFailure)
 {
-    if (mLiveOpen) { return; }
+    if (mLiveOpen.job) { return; }
 #if defined(__EMSCRIPTEN__)
     // No threads in the browser build; its socket calls are proxied and do not block the page.
     if (!OpenLive(endpoint) && reportFailure)
@@ -842,17 +842,19 @@ void App::StartLiveOpen(const char* endpoint, bool reportFailure)
         mLog.Error(mOperationStatus);
     }
 #else
-    auto job = std::make_unique<LiveOpenJob>();
+    auto job = std::make_shared<LiveOpenJob>();
     job->endpoint = endpoint ? endpoint : "";
     job->reportFailure = reportFailure;
-    LiveOpenJob* raw = job.get();
     try
     {
-        job->thread = std::thread([raw] {
-            raw->result = se_live_open(raw->endpoint.empty() ? nullptr : raw->endpoint.c_str(),
-                                       &raw->source);
-            raw->done.store(true);
-        });
+        // Detached: the attempt may be inside a name lookup that cannot be cancelled, and the
+        // worker owns what it needs through the shared_ptr (see LiveOpenJob).
+        std::thread([job] {
+            se_data_source source = {};
+            const se_result r = se_live_open(job->endpoint.empty() ? nullptr : job->endpoint.c_str(),
+                                             &source);
+            job->Finish(r, source);
+        }).detach();
     }
     catch (const std::system_error&)
     {
@@ -863,25 +865,31 @@ void App::StartLiveOpen(const char* endpoint, bool reportFailure)
         mOperationStatus = "Connecting to the live emulator...";
         mOperationError = false;
     }
-    mLiveOpen = std::move(job);
+    mLiveOpen.job = std::move(job);
 #endif
 }
 
 // Collect a finished connection attempt, if any. Cheap when none is running.
 void App::PollLiveOpen()
 {
-    if (!mLiveOpen || !mLiveOpen->done.load()) { return; }
-    std::unique_ptr<LiveOpenJob> job = std::move(mLiveOpen);
-    job->thread.join();
+    if (!mLiveOpen.job || !mLiveOpen.job->done.load()) { return; }
+    std::shared_ptr<LiveOpenJob> job = std::move(mLiveOpen.job);
+    mLiveOpen.job.reset();
+    se_result result = SE_ERR_IO;
+    se_data_source source = {};
+    if (!job->Take(result, source)) { return; }
     bool attached = false;
-    if (job->result == SE_OK)
+    if (result == SE_OK)
     {
         // Something else may have claimed the source while we were connecting (the user opened
-        // a file): don't displace it, and let the job's destructor close the unused connection.
+        // a file): don't displace it, and close the unused connection.
         if (!mbHasData && !mContext)
         {
-            attached = AttachLiveSource(job->source, job->endpoint.empty() ? nullptr : job->endpoint.c_str());
-            job->result = SE_ERR_IO;   // adopted (or closed by AttachLiveSource): nothing left to close
+            attached = AttachLiveSource(source, job->endpoint.empty() ? nullptr : job->endpoint.c_str());
+        }
+        else if (source.close)
+        {
+            source.close(source.user);
         }
     }
     if (!attached && job->reportFailure)
@@ -6367,7 +6375,14 @@ void App::DoLoadEmulatorState(int slot)
     // a future that may never have happened: drop it rather than leave a ring that claims
     // frames the emulator is no longer playing.
     const RestoreBaseline before = SampleRestoreBaseline();
-    se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
+    if (se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot)) != 0)
+    {
+        // Refused (no emulator attached, a stale session, or another load still queued): nothing
+        // was asked of the emulator, so there is no outcome to wait for and nothing to drop.
+        mStateStatus = "The emulator slot load was not sent.";
+        mLog.Error(mStateStatus, se_frame_number(mContext));
+        return;
+    }
     DropRecordedHistory();
     BeginRestoreWait(before);
     char msg[96];

@@ -27,6 +27,7 @@
 #include <thread>
 #include <vector>
 
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -559,6 +560,119 @@ void TestPeerHangUpDuringSendDoesNotKillTheProcess()
     CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 2u; }, 8000));
 }
 
+
+// The window the queue-clearing does not cover: the UI captures the OLD emulator's frame, the
+// connection is replaced, and only then does the UI commit an edit made against what it was
+// showing. At that point the new session is attached and 'connected' is true again, so the edit
+// would be accepted and applied to a machine it was never about. Edits are checked against the
+// session of the display the editing thread last captured.
+void TestEditFromTheOldDisplayIsRefused()
+{
+    std::atomic<bool> release{false};
+    LiveFixture live([&](int fd, int index)
+    {
+        if (index == 0) { Reply r; r.fill = 0xAA; AnswerOnce(fd, r); return; }   // answer once, hang up
+        while (!release.load()) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        Reply r; r.fill = 0xBB; r.frame = 50;
+        AnswerOnce(fd, r);
+        // The replacement keeps answering so it stays attached.
+        Request req;
+        while (fakelive::ReadRequest(fd, req))
+        {
+            const std::vector<uint8_t> bytes = fakelive::Build(r);
+            if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+        }
+    });
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
+
+    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) == 1u; }));
+    // The UI captures the old emulator's frame.
+    ds.begin_capture(ds.user);
+    uint8_t shown = 0;
+    CHECK(ds.read_vdp1_vram(ds.user, 0, &shown, 1) == 1 && shown == 0xAA);
+    ds.end_capture(ds.user);
+
+    // The old emulator goes away and the replacement answers -- all before the UI recaptures.
+    release = true;
+    CHECK(WaitFor([&] { return se_live_connection_generation(&ds) == 2u; }));
+    CHECK(WaitFor([&] { return live.Connections() >= 2; }));
+
+    // An edit made against the old display, committed now: refused, in every form.
+    const uint8_t byte = 0x42;
+    const std::vector<uint8_t> state(256, 0x7E);
+    CHECK(ds.write_main_ram(ds.user, 0x06000000u, &byte, 1) == 0);
+    CHECK(ds.write_sound_ram(ds.user, 0, &byte, 1) == 0);
+    CHECK(ds.write_vram(ds.user, SE_VRAM_KIND_VDP1_VRAM, 0, &byte, 1) == 0);
+    CHECK(ds.frame_pause(ds.user) != 0);
+    CHECK(ds.frame_step(ds.user, 1) != 0);
+    CHECK(ds.load_state(ds.user, 1, state.data(), state.size(), nullptr, 0) != 0);
+    CHECK(se_live_emu_load_slot(&ds, 1) != 0);
+
+    // Once the UI has captured the new session's first frame, edits are accepted again.
+    ds.begin_capture(ds.user);
+    CHECK(ds.read_vdp1_vram(ds.user, 0, &shown, 1) == 1 && shown == 0xBB);
+    ds.end_capture(ds.user);
+    CHECK(ds.write_main_ram(ds.user, 0x06000000u, &byte, 1) == 1);
+    CHECK(se_live_emu_load_slot(&ds, 1) == 0);
+    CHECK(se_live_emu_load_slot(&ds, 2) != 0);   // one load at a time: a second would replace the first unsent
+}
+
+// A host-name lookup has no timeout and cannot be interrupted, so it must never be what a thread
+// of ours is parked in: opening gives up after a bound, and closing does not wait for a lookup
+// the reconnect thread is in the middle of.
+std::atomic<int>  gResolveCalls{0};
+std::atomic<int>  gResolveAllowed{0};      // how many calls resolve normally before the rest stall
+std::atomic<bool> gResolveRelease{false};
+extern "C" int TestResolver(const char* host, const char* port, const addrinfo* hints, addrinfo** res)
+{
+    const int n = gResolveCalls.fetch_add(1);
+    if (n < gResolveAllowed.load()) return ::getaddrinfo("127.0.0.1", port, hints, res);
+    while (!gResolveRelease.load()) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    (void)host;
+    return EAI_FAIL;
+}
+
+void TestOpenDoesNotWaitOnAStalledLookup()
+{
+    gResolveCalls = 0; gResolveAllowed = 0; gResolveRelease = false;
+    se_live_test_set_resolver(TestResolver);
+    se_data_source ds = {};
+    const auto t0 = std::chrono::steady_clock::now();
+    const se_result r = se_live_open("tcp:stalls.invalid:6845", &ds);
+    const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0);
+    CHECK(r != SE_OK);
+    CHECK(took < std::chrono::milliseconds(6000));   // bounded (the lookup itself never returns)
+    CHECK(gResolveCalls.load() == 1);
+    gResolveRelease = true;                          // let the abandoned lookup finish
+    se_live_test_set_resolver(nullptr);
+    if (r == SE_OK && ds.close) ds.close(ds.user);
+}
+
+void TestCloseDoesNotWaitOnAStalledLookup()
+{
+    gResolveCalls = 0; gResolveAllowed = 2; gResolveRelease = false;   // probe + first attach resolve
+    se_live_test_set_resolver(TestResolver);
+    fakelive::Server server([](int fd, int index) { if (index > 0) AnswerOnce(fd, Reply()); });
+    CHECK(server.Start());
+    const std::string endpoint = "tcp:stalls.invalid:" + server.Endpoint().substr(server.Endpoint().rfind(':') + 1);
+    se_data_source ds = {};
+    CHECK(se_live_open(endpoint.c_str(), &ds) == SE_OK);
+    // The first connection answers once and hangs up; the reconnect then stalls in the lookup.
+    CHECK(WaitFor([&] { return gResolveCalls.load() >= 3; }));
+    const auto t0 = std::chrono::steady_clock::now();
+    if (ds.close) ds.close(ds.user);
+    const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - t0);
+    CHECK(took < std::chrono::milliseconds(2000));
+    gResolveRelease = true;
+    se_live_test_set_resolver(nullptr);
+    server.Stop();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));   // the abandoned lookup finishes
+}
+
 }  // namespace
 
 int main()
@@ -575,6 +689,9 @@ int main()
     TestFrameNumberIsTheCapturedFrame();
     TestCloseDoesNotWaitForASilentEmulator();
     TestPeerHangUpDuringSendDoesNotKillTheProcess();
+    TestEditFromTheOldDisplayIsRefused();
+    TestOpenDoesNotWaitOnAStalledLookup();
+    TestCloseDoesNotWaitOnAStalledLookup();
     if (gFailures)
     {
         std::printf("LiveReconnectTests: %d check(s) failed\n", gFailures);

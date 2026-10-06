@@ -130,6 +130,9 @@ static volatile int sStepInflight;
 #define SeAtStore(p, v)   __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define SeAtAdd(p, v)     ((void)__atomic_fetch_add((p), (v), __ATOMIC_SEQ_CST))
 #define SeAtCas(p, e, d)  __atomic_compare_exchange_n((p), (e), (d), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#define SeAtXchg(p, v)    __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define SeAtLoad64(p)     __atomic_load_n((p), __ATOMIC_SEQ_CST)
+#define SeAtStore64(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #elif defined(_WIN32)
 #define SeAtLoad(p)       ((int)_InterlockedCompareExchange((volatile long*)(p), 0, 0))
 #define SeAtStore(p, v)   ((void)_InterlockedExchange((volatile long*)(p), (long)(v)))
@@ -142,6 +145,9 @@ static int SeAtCasWin(volatile int* p, int* e, int d)
     return 0;
 }
 #define SeAtCas(p, e, d)  SeAtCasWin((p), (e), (d))
+#define SeAtXchg(p, v)    ((int)_InterlockedExchange((volatile long*)(p), (long)(v)))
+#define SeAtLoad64(p)     ((unsigned long long)_InterlockedCompareExchange64((volatile __int64*)(p), 0, 0))
+#define SeAtStore64(p, v) ((void)_InterlockedExchange64((volatile __int64*)(p), (__int64)(v)))
 #else
 #error "se_export.c needs atomic operations: GCC/Clang builtins or the Windows Interlocked API"
 #endif
@@ -192,9 +198,32 @@ static volatile unsigned long long sFrameNo;
  * breakpoint, Yabause's breakpoint callback calls SeExportNotifyStop(); the next
  * snapshot's control block reports it so the debugger can jump to the halted PC.
  * A resume / run / step clears it. ---- */
-static volatile unsigned int sStopReason;   /* SE_LIVE_STOP_* */
-static volatile unsigned int sStopCpu;      /* 0 master, 1 slave */
-static volatile unsigned int sStopPc;
+/* The three fields describe ONE stop, written by the CPU thread (a breakpoint hit) and by the
+ * server thread (a resume clears it) and read by the server thread when it builds a reply. As
+ * three separate variables a reader could pair one stop's reason with another's PC, so they are
+ * packed into a single word that is only ever loaded and stored whole:
+ * reason << 33 | cpu << 32 | pc. */
+static volatile unsigned long long sStopWord;   /* reason: SE_LIVE_STOP_*, cpu: 0 master / 1 slave */
+#define SE_STOP_PACK(reason, cpu, pc) \
+    (((unsigned long long)(reason) << 33) | ((unsigned long long)((cpu) ? 1u : 0u) << 32) | \
+     (unsigned long long)(unsigned int)(pc))
+#define SE_STOP_REASON(w) ((unsigned int)((w) >> 33))
+#define SE_STOP_CPU(w)    ((unsigned int)(((w) >> 32) & 1u))
+#define SE_STOP_PC(w)     ((unsigned int)((w) & 0xFFFFFFFFu))
+
+/* Latch a stop (CPU thread). */
+static void SeStopSet(unsigned int reason, int cpu, unsigned int pc)
+{
+    SeAtStore64(&sStopWord, SE_STOP_PACK(reason, cpu, pc));
+}
+
+/* Clear the stop reason, keeping which CPU and PC it was on (an instruction step reads the CPU
+ * after the clear is requested). */
+static void SeStopClear(void)
+{
+    const unsigned long long w = SeAtLoad64(&sStopWord);
+    SeAtStore64(&sStopWord, SE_STOP_PACK(SE_LIVE_STOP_NONE, SE_STOP_CPU(w), SE_STOP_PC(w)));
+}
 
 /* ---- Restore outcomes (v19). A load (LST/ELS) is applied later, on the emulate thread, and
  * the request's own reply says nothing about it. These let the client tell "finished" from
@@ -222,7 +251,7 @@ static int          sRestoreAckPending;   /* restored; waiting for the first pos
  * instructions, and the stall while the DMA drains no longer eats the step budget. ---- */
 static volatile int sInsnStepPending;   /* instruction count requested, 0 = none */
 static volatile int sInsnStepBudget;    /* instructions remaining in the active step */
-static volatile unsigned int sInsnStepCpu;
+static volatile int sInsnStepCpu;
 static volatile unsigned int sStepLastPc[2] = { 0xFFFFFFFFu, 0xFFFFFFFFu }; /* last-counted PC per CPU */
 
 /* ---- Tracepoint events (v8+). The glue calls SeExportQueueTraceEvent() when an
@@ -433,11 +462,17 @@ static unsigned long long sKeyFrame;
 static unsigned int       sSinceKeyframe;
 static unsigned char*     sXorScratch; /* worker XOR scratch (state-sized) */
 
-/* Load mailbox: server thread (LST) fills sLoadBuf with the whole payload (frame + edits_len
- * + edits + state); the emulate thread consumes it at the gate. */
-static unsigned char*     sLoadBuf; static size_t sLoadCap; static size_t sLoadLen;
+/* Load mailbox. The server thread (LST) receives the whole payload (frame + edits_len + edits +
+ * state) into a buffer of its own and then PUBLISHES it here; the emulate thread takes it at the
+ * gate. The buffer, its length and the pending flag are one piece of state and change together,
+ * under the state lock -- the server never receives into the mailbox itself, because the emulate
+ * thread may be reading it. (It used to: a second LST arriving before the gate had consumed the
+ * first reallocated the buffer under the reader and overwrote it mid-copy.) sLoadPending is only
+ * ever stored under the lock; the gate reads it unlocked as a cheap "anything to do?" hint and
+ * re-checks under the lock before taking the payload. Ownership of the buffer moves to whoever
+ * takes it. */
+static unsigned char*     sLoadBuf; static size_t sLoadLen;
 static volatile int       sLoadPending;
-static unsigned char*     sGateLoadBuf; static size_t sGateLoadCap; /* emulate-thread copy */
 
 /* Worker thread body (defined after SeGateSleep). */
 #if defined(_WIN32)
@@ -547,50 +582,54 @@ static void SeStateAfterRestore(void)
     SeExportResetCallStack(0);
     SeExportResetCallStack(1);
     SeStateFlushAndRekey();
-    sStopReason = SE_LIVE_STOP_NONE;
+    SeStopClear();
     SeCancelSteps();
     SeAtStore(&sPaused, 0);   /* resume: re-simulate forward from wherever we now are */
+}
+
+/* Apply the payload taken from the mailbox. 'buf' is heap memory owned by the caller. */
+static void SeStateApplyLoad(const unsigned char* buf, size_t len)
+{
+    unsigned long long frame;
+    unsigned int edits_len;
+    const unsigned char* state; size_t state_len;
+    if (len < 8 || !sLoadState) { SeRestoreFailed(); return; }
+    frame = SeRd32(buf);
+    edits_len = SeRd32(buf + 4);
+    if ((size_t)8 + edits_len > len) { SeRestoreFailed(); return; }   /* malformed */
+    state = buf + 8 + edits_len;
+    state_len = len - 8 - (size_t)edits_len;
+    if (sLoadState(state, state_len) == 0)
+    {
+        SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
+        sFrameNo = frame;
+        SeStateAfterRestore();
+    }
+    else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
 }
 
 static void SeStateConsumeLoad(void)
 {
     unsigned char* buf = NULL; size_t len = 0;
-    if (!sLoadPending) return;
+    if (!SeAtLoad(&sLoadPending)) return;
     SE_SLOCK();
-    if (sLoadPending)
+    if (SeAtLoad(&sLoadPending))
     {
-        if (sGateLoadCap < sLoadLen)
-        {
-            unsigned char* nb = (unsigned char*)realloc(sGateLoadBuf, sLoadLen);
-            if (nb) { sGateLoadBuf = nb; sGateLoadCap = sLoadLen; }
-        }
-        if (sGateLoadCap >= sLoadLen) { memcpy(sGateLoadBuf, sLoadBuf, sLoadLen); buf = sGateLoadBuf; len = sLoadLen; }
-        sLoadPending = 0;
+        buf = sLoadBuf; len = sLoadLen;      /* take ownership: the mailbox is empty again */
+        sLoadBuf = NULL; sLoadLen = 0;
+        SeAtStore(&sLoadPending, 0);
     }
     SE_SUNLOCK();
-    if (!buf || len < 8 || !sLoadState) { SeRestoreFailed(); return; }
-    {
-        unsigned long long frame = SeRd32(buf);
-        unsigned int edits_len = SeRd32(buf + 4);
-        const unsigned char* state; size_t state_len;
-        if ((size_t)8 + edits_len > len) { SeRestoreFailed(); return; }   /* malformed */
-        state = buf + 8 + edits_len;
-        state_len = len - 8 - (size_t)edits_len;
-        if (sLoadState(state, state_len) == 0)
-        {
-            SeStateApplyEdits(buf + 8, edits_len);   /* patch RAM on top of the restore */
-            sFrameNo = frame;
-            SeStateAfterRestore();
-        }
-        else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
-    }
+    if (!buf) return;
+    SeStateApplyLoad(buf, len);
+    free(buf);
 }
 
 /* Allocate the buffer pool and start the worker, once, when a non-NULL save hook is set. */
 static void SeStateStartWorker(void)
 {
     size_t probe, cap; int i;
-    if (sStateWorkerStarted || !sSaveState || !sRunning) return;
+    if (sStateWorkerStarted || !sSaveState || !SeAtLoad(&sRunning)) return;
     probe = sSaveState(NULL, 0);                 /* required savestate size (probe) */
     if (probe == 0) return;                      /* can't size: feature stays off */
     cap = probe + probe / 4u + 4096u;            /* margin for per-frame size variance */
@@ -606,15 +645,15 @@ static void SeStateStartWorker(void)
     sFreeCount = SE_STATE_QUEUE;
     sRawHead = sRawCount = sOutHead = sOutCount = 0;
     sKeyLen = 0; sSinceKeyframe = 0; sStateGen = 1; sKeyGen = 0;
-    sStateCap = cap;
-    sStateWorkerRun = 1;
+    SE_SLOCK(); sStateCap = cap; SE_SUNLOCK();   /* the server thread reads it under this lock (LST) */
+    SeAtStore(&sStateWorkerRun, 1);
 #if defined(_WIN32)
     sStateWorker = CreateThread(NULL, 0, SeStateWorkerThread, NULL, 0, NULL);
     sStateWorkerStarted = (sStateWorker != NULL);
 #else
     sStateWorkerStarted = (pthread_create(&sStateWorker, NULL, SeStateWorkerThread, NULL) == 0);
 #endif
-    if (!sStateWorkerStarted) { sStateWorkerRun = 0; sStateCap = 0; }
+    if (!sStateWorkerStarted) { SeAtStore(&sStateWorkerRun, 0); SE_SLOCK(); sStateCap = 0; SE_SUNLOCK(); }
 }
 
 void SeExportSetSaveStateHook(size_t (*save)(unsigned char* buf, size_t cap))
@@ -637,9 +676,8 @@ static void SeStateShutdown(void)
     sOutHead = sOutCount = 0; sRawHead = sRawCount = 0; sFreeCount = 0;
     free(sKeyFull);     sKeyFull = NULL;
     free(sXorScratch);  sXorScratch = NULL;
-    free(sLoadBuf);     sLoadBuf = NULL; sLoadCap = 0; sLoadLen = 0;
-    free(sGateLoadBuf); sGateLoadBuf = NULL; sGateLoadCap = 0;
-    sStateCap = 0; sStateWorkerStarted = 0; sLoadPending = 0;
+    free(sLoadBuf);     sLoadBuf = NULL; sLoadLen = 0;
+    sStateCap = 0; sStateWorkerStarted = 0; SeAtStore(&sLoadPending, 0);
 }
 
 /* ---- Controller-input hook (v7+). apply.py wires this to the emulator's pad state
@@ -722,7 +760,7 @@ static volatile int sClients;
 
 int SeExportHasClient(void)
 {
-    return sClients != 0;
+    return SeAtLoad(&sClients) != 0;
 }
 
 static void SeOnClientDisconnect(void)
@@ -741,12 +779,12 @@ static void SeOnClientDisconnect(void)
         sSetPad(1, 0);
     }
     if (sClearBps) sClearBps();
-    sRewindWanted = 1;   /* the next client states its own setting; don't inherit this one's */
+    SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
     SeAtStore(&sPaused, 0);
     SeCancelSteps();
-    sInsnStepPending = 0;
-    sStopReason = SE_LIVE_STOP_NONE;
+    SeAtStore(&sInsnStepPending, 0);
+    SeStopClear();
     SE_UNLOCK();
 }
 
@@ -769,9 +807,7 @@ void SeExportSetTracepointHook(SeSetTracepointsFn fn)
  * not take the frame lock. */
 void SeExportNotifyStop(int cpu, unsigned int pc)
 {
-    sStopReason = SE_LIVE_STOP_EXEC_BP;
-    sStopCpu = (cpu != 0) ? 1u : 0u;
-    sStopPc = pc;
+    SeStopSet(SE_LIVE_STOP_EXEC_BP, cpu, pc);
     sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking so a step from here starts clean */
     SeAtStore(&sPaused, 1);
     SeCancelSteps();
@@ -781,9 +817,7 @@ void SeExportNotifyStop(int cpu, unsigned int pc)
  * instruction step (IST) rather than a user breakpoint. Same CPU-thread contract. */
 void SeExportNotifyStep(int cpu, unsigned int pc)
 {
-    sStopReason = SE_LIVE_STOP_STEP;
-    sStopCpu = (cpu != 0) ? 1u : 0u;
-    sStopPc = pc;
+    SeStopSet(SE_LIVE_STOP_STEP, cpu, pc);
     sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking for the next step */
     SeAtStore(&sPaused, 1);
     SeCancelSteps();
@@ -794,10 +828,12 @@ void SeExportNotifyStep(int cpu, unsigned int pc)
  * the caller arms continuous per-instruction hooking. Returns 0 when no step is pending. */
 int SeExportInsnStepBegin(void)
 {
-    if (sInsnStepPending > 0)
+    /* Taken with an exchange so a request that lands as the CPU thread consumes the previous one
+     * is either seen now or left for the next call, never zeroed unseen. */
+    const int n = SeAtXchg(&sInsnStepPending, 0);
+    if (n > 0)
     {
-        sInsnStepBudget = sInsnStepPending;
-        sInsnStepPending = 0;
+        sInsnStepBudget = n;
         return 1;
     }
     return 0;
@@ -816,7 +852,7 @@ int SeExportInsnStepTick(int cpu, unsigned int pc)
     {
         return 0;
     }
-    if (c != sInsnStepCpu)
+    if (c != (unsigned int)SeAtLoad(&sInsnStepCpu))
     {
         return 0;
     }
@@ -855,25 +891,27 @@ int SeExportGateFrame(void)
 {
     /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
      * before honoring the pause: a load always leaves the emulator paused on frame N. */
-    if (sLoadPending)
+    if (SeAtLoad(&sLoadPending))
     {
         SeStateConsumeLoad();
     }
     /* Same for an emulator-native slot load (ELS). The emulator loads it through its own
      * code, so nothing here knows the resulting frame; drop the savestate pipeline and the
      * wire ring for the same reason a rewind does, and let the client's history go with it. */
-    if (sEmuLoadPending)
     {
-        const int slot = sEmuLoadPending - 1;
-        sEmuLoadPending = 0;
-        if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
+        const int pendingSlot = SeAtXchg(&sEmuLoadPending, 0);   /* take it, so a new one is never lost */
+        const int slot = pendingSlot - 1;
+        if (pendingSlot != 0)
         {
-            SeStateAfterRestore();
-        }
-        else
-        {
-            SeExportLog("load slot: the emulator refused it");
-            SeRestoreFailed();
+            if (sEmuSlotLoad && sEmuSlotLoad((unsigned int)slot) == 0)
+            {
+                SeStateAfterRestore();
+            }
+            else
+            {
+                SeExportLog("load slot: the emulator refused it");
+                SeRestoreFailed();
+            }
         }
     }
     if (!SeAtLoad(&sPaused))
@@ -893,7 +931,7 @@ int SeExportGateFrame(void)
  * thread, so the per-frame diff never causes a frame-rate hitch. */
 static void SeStateWorkerBody(void)
 {
-    while (sStateWorkerRun)
+    while (SeAtLoad(&sStateWorkerRun))
     {
         SeRawItem item; int have = 0; unsigned curGen = 0;
         unsigned char* full; size_t fullLen;
@@ -1176,7 +1214,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * point. The rewind timeline simply omits halt frames; running frames still capture.
      * Also skipped entirely while the client has rewind switched off (REW, v18): the full
      * savestate is the most expensive thing on this thread and nothing would read it. */
-    if (!SeAtLoad(&sPaused) && sRewindWanted) SeStateCapture(sFrameNo);
+    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted)) SeStateCapture(sFrameNo);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1310,9 +1348,9 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap);
  * them impossible to leave unpaired. */
 static void SeServeClient(SeConn cl, SeFrame* snap)
 {
-    SE_LOCK(); ++sClients; SE_UNLOCK();
+    SeAtAdd(&sClients, 1);
     SeServeClientLoop(cl, snap);
-    SE_LOCK(); --sClients; SE_UNLOCK();
+    SeAtAdd(&sClients, -1);
 }
 
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
@@ -1320,7 +1358,7 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
 static void SeServeClientLoop(SeConn cl, SeFrame* snap)
 {
     SeLogPortDevices();   /* report the emulator's controller config on connect */
-    while (sRunning)
+    while (SeAtLoad(&sRunning))
     {
         unsigned char req[SE_LIVE_REQUEST_LEN];
         unsigned int arg;
@@ -1337,14 +1375,14 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_RESUME, SE_LIVE_VERB_LEN) == 0)
         {
-            SE_LOCK(); SeAtStore(&sPaused, 0); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+            SE_LOCK(); SeAtStore(&sPaused, 0); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_STEP, SE_LIVE_VERB_LEN) == 0)
         {
             SE_LOCK();
             SeAtStore(&sPaused, 1);
             SeGrantSteps((arg > 0) ? (int)arg : 1);
-            sStopReason = SE_LIVE_STOP_NONE;
+            SeStopClear();
             SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_REWIND, SE_LIVE_VERB_LEN) == 0)
@@ -1355,9 +1393,9 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * is switched back on is a keyframe, which it has to be -- there is a gap behind it
              * and nothing to diff against. */
             const int want = (arg != 0) ? 1 : 0;
-            if (want != sRewindWanted)
+            if (want != SeAtLoad(&sRewindWanted))
             {
-                sRewindWanted = want;
+                SeAtStore(&sRewindWanted, want);
                 SeStateFlushAndRekey();
             }
         }
@@ -1367,11 +1405,14 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * and let it run `arg` instructions on the halted CPU before halting again.
              * The per-instruction hook picks up sInsnStepPending once the gate releases. */
             SE_LOCK();
-            sInsnStepPending = (arg > 0) ? (int)arg : 1;
-            sInsnStepCpu = sStopCpu;
+            /* CPU first, then the request, then the release: the CPU thread is parked in the halt
+             * gate until sPaused clears, then reads the request and then the CPU, so each store is
+             * visible before the next one lets it proceed. */
+            SeAtStore(&sInsnStepCpu, (int)SE_STOP_CPU(SeAtLoad64(&sStopWord)));
+            SeAtStore(&sInsnStepPending, (arg > 0) ? (int)arg : 1);
             SeAtStore(&sPaused, 0);
             SeCancelSteps();
-            sStopReason = SE_LIVE_STOP_NONE;
+            SeStopClear();
             SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
@@ -1427,22 +1468,21 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_LOADSTATE, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Rewind (v16): buffer the whole 'arg'-byte payload (frame + edits_len + edits +
-             * state) and latch a pending load. The gate applies it atomically on the emulate
-             * thread (restore + edits + resume), so nothing races the async restore. */
-            /* The realloc below is sized from 'arg', so without a bound a request claiming 4 GiB
-             * asks the emulator for 4 GiB. Over the maximum the payload is drained and nothing
-             * is allocated -- said here rather than left to emerge from sLoadCap staying short. */
+            /* Rewind (v16): receive the whole 'arg'-byte payload (frame + edits_len + edits +
+             * state) into a buffer of its own, then publish it to the load mailbox. The gate
+             * applies it atomically on the emulate thread (restore + edits + resume), so nothing
+             * races the async restore.
+             *
+             * The buffer is sized from 'arg', so without a bound a request claiming 4 GiB asks the
+             * emulator for 4 GiB. Over the maximum the payload is drained and nothing is
+             * allocated. */
             unsigned int payload = arg;
             const int tooLarge = payload > SE_LIVE_STATE_MAX_PAYLOAD;
-            SE_SLOCK();
-            if (sLoadCap < payload && !tooLarge)
-            {
-                unsigned char* nb = (unsigned char*)realloc(sLoadBuf, payload ? payload : 1u);
-                if (nb) { sLoadBuf = nb; sLoadCap = payload; }
-            }
-            SE_SUNLOCK();
-            if (payload < 8u || tooLarge || sLoadCap < payload || sStateCap == 0)
+            unsigned char* staging = NULL;
+            size_t cap;
+            SE_SLOCK(); cap = sStateCap; SE_SUNLOCK();
+            if (payload >= 8u && !tooLarge && cap != 0) staging = (unsigned char*)malloc(payload);
+            if (!staging)
             {
                 /* Malformed, over the maximum, can't buffer, or feature off: drain to stay
                  * stream-aligned. The client is told the load did not happen. */
@@ -1451,10 +1491,19 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             }
             else
             {
-                if (SeRecv(cl, sLoadBuf, payload) != 0) return;
-                SE_SLOCK(); sLoadLen = payload; SE_SUNLOCK();
-                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
-                sLoadPending = 1;   /* the gate picks this up on the emulate thread */
+                unsigned char* replaced; int superseded;
+                if (SeRecv(cl, staging, payload) != 0) { free(staging); return; }
+                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
+                SE_SLOCK();
+                superseded = SeAtLoad(&sLoadPending);   /* an earlier load the gate never reached */
+                replaced = sLoadBuf;
+                sLoadBuf = staging; sLoadLen = payload;
+                SeAtStore(&sLoadPending, 1);   /* the gate picks this up on the emulate thread */
+                SE_SUNLOCK();
+                free(replaced);
+                /* Every accepted load ends in exactly one counter. The one just replaced will
+                 * never be applied, so it ends here, as refused. */
+                if (superseded) SeRestoreFailed();
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_EMULOAD, SE_LIVE_VERB_LEN) == 0)
@@ -1463,8 +1512,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * on the emulate thread. Pause first so nothing advances underneath the load. */
             if (sEmuSlotLoad && arg < SE_LIVE_EMU_SLOTS)
             {
-                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
-                sEmuLoadPending = (int)arg + 1;
+                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
+                /* A slot load the gate has not reached yet is replaced, and ends as refused: every
+                 * accepted load ends in exactly one counter. */
+                if (SeAtXchg(&sEmuLoadPending, (int)arg + 1) != 0) SeRestoreFailed();
             }
             else
             {
@@ -1518,9 +1569,12 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl, (unsigned int)(SeAtLoad(&sPaused) ? 1 : 0));
         SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
-        SeWr32(ctl + 12, sStopReason);
-        SeWr32(ctl + 16, sStopCpu);
-        SeWr32(ctl + 20, sStopPc);
+        {
+            const unsigned long long stop = SeAtLoad64(&sStopWord);   /* one stop, read whole */
+            SeWr32(ctl + 12, SE_STOP_REASON(stop));
+            SeWr32(ctl + 16, SE_STOP_CPU(stop));
+            SeWr32(ctl + 20, SE_STOP_PC(stop));
+        }
         SeWr32(ctl + 24, sRestoreDone);
         SeWr32(ctl + 28, sRestoreFailed);
         SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
@@ -1796,7 +1850,7 @@ static DWORD WINAPI SeServerThread(LPVOID arg)
 {
     SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
     (void)arg;
-    while (sRunning && snap)
+    while (SeAtLoad(&sRunning) && snap)
     {
         HANDLE pipe = CreateNamedPipeA(SE_LIVE_DEFAULT_PIPE_NAME, PIPE_ACCESS_DUPLEX,
                                        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
@@ -1818,7 +1872,7 @@ static void SeRegisterClient(int which, int fd)
 {
     pthread_mutex_lock(&sConnLock);
     sActiveFd[which] = fd;
-    if (!sRunning) shutdown(fd, SHUT_RDWR);
+    if (!SeAtLoad(&sRunning)) shutdown(fd, SHUT_RDWR);
     pthread_mutex_unlock(&sConnLock);
 }
 static void SeUnregisterClient(int which)
@@ -1855,7 +1909,7 @@ static void* SeServerThread(void* arg)
         close(srv); free(snap); return NULL;
     }
     sListenFd = srv;
-    while (sRunning)
+    while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
@@ -1893,7 +1947,7 @@ static void* SeTcpServerThread(void* arg)
         close(srv); free(snap); return NULL;
     }
     sTcpListenFd = srv;
-    while (sRunning)
+    while (SeAtLoad(&sRunning))
     {
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
@@ -1938,23 +1992,23 @@ int SeExportInit(void)
         }
     }
     sRingWrite = 0;
-    SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; sClients = 0; sRewindWanted = 1;
-    sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
+    SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; SeAtStore(&sClients, 0); SeAtStore(&sRewindWanted, 1);
+    SeAtStore64(&sStopWord, 0);
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
-    sStateWorkerStarted = 0; sStateWorkerRun = 0; sStateCap = 0;
+    sStateWorkerStarted = 0; SeAtStore(&sStateWorkerRun, 0); sStateCap = 0;
     sFreeCount = sRawHead = sRawCount = sOutHead = sOutCount = 0;
-    sLoadPending = 0; sEmuLoadPending = 0;
+    SeAtStore(&sLoadPending, 0); SeAtStore(&sEmuLoadPending, 0);
     sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
-    sRunning = 1;
+    SeAtStore(&sRunning, 1);
 #if defined(_WIN32)
     InitializeCriticalSection(&sLock);
     InitializeCriticalSection(&sStateLock);
     sLocksReady = 1;   /* both CSes are now real -- enable locking BEFORE any locking thread starts */
     sThread = CreateThread(NULL, 0, SeServerThread, NULL, 0, NULL);
-    if (!sThread) { sRunning = 0; return -1; }
+    if (!sThread) { SeAtStore(&sRunning, 0); return -1; }
 #else
-    if (pthread_create(&sThread, NULL, SeServerThread, NULL) != 0) { sRunning = 0; return -1; }
+    if (pthread_create(&sThread, NULL, SeServerThread, NULL) != 0) { SeAtStore(&sRunning, 0); return -1; }
     /* Best-effort TCP listener for the web bridge; failure doesn't block the
      * local socket, which is the primary path for native clients. */
     sTcpThreadStarted = (pthread_create(&sTcpThread, NULL, SeTcpServerThread, NULL) == 0);
@@ -1968,10 +2022,10 @@ int SeExportInit(void)
 
 void SeExportDeinit(void)
 {
-    sRunning = 0;
+    SeAtStore(&sRunning, 0);
     /* Stop the savestate worker first so nothing touches the state queues while we free them.
      * (The server threads are joined just below; ordering is safe either way.) */
-    sStateWorkerRun = 0;
+    SeAtStore(&sStateWorkerRun, 0);
 #if defined(_WIN32)
     {
         /* The state worker only ever sleeps between queue polls, so clearing its flag is enough

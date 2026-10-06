@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -407,24 +408,57 @@ private:
     // App keeps the policy: only it resumes, evaluates a condition guard, or opens a panel.
     sfe::StepHaltMachine mStepHalt;
 #ifdef SE_ENABLE_LIVE
-    // A connection attempt running off the UI thread (see StartLiveOpen).
+    // A connection attempt running off the UI thread (see StartLiveOpen). Shared with its worker
+    // and never joined: the attempt can sit in a name lookup the application cannot interrupt, so
+    // closing the app (or abandoning the attempt) must not wait for it. Whoever finishes second
+    // deals with the connection -- the worker closes it if the app has already walked away, the
+    // app takes it if the worker got there first.
     struct LiveOpenJob
     {
-        std::thread        thread;
         std::atomic<bool>  done{false};
+        std::mutex         m;
+        bool               abandoned = false;   // the app is gone / no longer wants the result
+        bool               taken = false;       // the app has claimed the connection
         se_result          result = SE_ERR_IO;
         se_data_source     source = {};
         std::string        endpoint;
         bool               reportFailure = false;   // a user asked for this; say so if it fails
 
-        ~LiveOpenJob()
+        // Worker: record the outcome. If the app already abandoned the attempt, nobody will adopt
+        // the connection, so close it here.
+        void Finish(se_result r, const se_data_source& s)
         {
-            if (thread.joinable()) { thread.join(); }
-            // Opened but never adopted (the app is closing, or the source changed meanwhile).
-            if (result == SE_OK && source.close) { source.close(source.user); }
+            std::lock_guard<std::mutex> lk(m);
+            result = r;
+            source = s;
+            if (abandoned && r == SE_OK && source.close) { source.close(source.user); }
+            done.store(true);
+        }
+        // App: claim the finished connection (once).
+        bool Take(se_result& r, se_data_source& s)
+        {
+            std::lock_guard<std::mutex> lk(m);
+            if (!done.load() || taken) { return false; }
+            taken = true;
+            r = result;
+            s = source;
+            return true;
+        }
+        // App: stop caring. A connection that has already finished and was not claimed is closed.
+        void Abandon()
+        {
+            std::lock_guard<std::mutex> lk(m);
+            abandoned = true;
+            if (done.load() && !taken && result == SE_OK && source.close) { source.close(source.user); }
+            taken = true;
         }
     };
-    std::unique_ptr<LiveOpenJob> mLiveOpen;
+    struct LiveOpenHandle
+    {
+        std::shared_ptr<LiveOpenJob> job;
+        ~LiveOpenHandle() { if (job) { job->Abandon(); } }
+    };
+    LiveOpenHandle mLiveOpen;
     bool AttachLiveSource(se_data_source& dataSource, const char* endpoint);
     void StartLiveOpen(const char* endpoint, bool reportFailure);
     void PollLiveOpen();

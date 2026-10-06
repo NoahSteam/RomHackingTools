@@ -12,6 +12,11 @@
 extern "C" {
 #endif
 
+/* Edits are aimed at the session the calling thread last captured. Writes, loads, steps and
+ * slot loads made after the connection has been replaced -- but before the thread has captured
+ * the new emulator's first snapshot -- are refused (0 bytes / nonzero), because they were made
+ * against a display of a machine that is no longer there. */
+
 /* Open a live connection. 'endpoint' is the local socket path (POSIX) or named
  * pipe (Windows); pass NULL for the platform default (SE_LIVE_DEFAULT_*). On
  * success returns SE_OK and fills '*out' (whose 'close' stops the poll thread on
@@ -86,10 +91,14 @@ void se_live_set_tracepoints(const se_data_source* ds, const uint8_t* descs, uin
  * server, or a build without the hook), so the caller should not show them at all.
  * se_live_emu_load_slot asks the emulator to load one through its own code. Nothing comes
  * back about where it lands: the client cannot know the resulting frame, so it must treat
- * its recorded history as gone -- unlike a rewind, which carries the frame it restores. */
+ * its recorded history as gone -- unlike a rewind, which carries the frame it restores.
+ * Returns 0 when the request was queued and nonzero when it was refused -- no emulator
+ * attached, aimed at a previous session (the caller's last capture is of an emulator that has
+ * since been replaced), another load still waiting to be sent, or not a live source. A caller
+ * that waits for the load's outcome must only do so on 0. */
 uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
                            uint64_t* mtime, uint32_t max);
-void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
+int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
 
 /* Turn rewind capture on or off in the emulator (v18+). The emulator saves a FULL state every
  * frame to feed the rewind timeline, which is the most expensive thing the live tap asks of its
@@ -168,6 +177,13 @@ uint32_t se_live_drain_state_blocks(const se_data_source* ds,
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */
 int se_live_get_stop(const se_data_source* ds, uint32_t* reason, uint32_t* cpu,
                      uint32_t* pc);
+
+/* Testing only: replace the host-name resolver used for "tcp:host:port" endpoints (NULL
+ * restores getaddrinfo). Lets a test make a lookup stall without needing a stalling DNS server.
+ * POSIX only; a no-op elsewhere. */
+struct addrinfo;
+void se_live_test_set_resolver(int (*fn)(const char* host, const char* port,
+                                         const struct addrinfo* hints, struct addrinfo** res));
 
 #ifdef __cplusplus
 }

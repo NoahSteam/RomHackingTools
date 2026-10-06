@@ -5,12 +5,14 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -80,6 +82,7 @@ struct LiveSnapshot
     // Everything below describes the SAME frame as the memory above and is published with it, so
     // a capture pinned to this snapshot reports a frame number, run state, stop and call stack
     // that belong to the VRAM it read -- rather than whatever the emulator reached since.
+    uint32_t             generation = 0;     // the connection generation this frame belongs to
     uint64_t             frame = 0;          // frame number of the frame served
     bool                 paused = false;
     StopInfo             stop;
@@ -325,6 +328,27 @@ SnapshotPtr DisplayedSnapshot(LiveState* st)
     return Newest(st);
 }
 
+// Whether a request made on this thread is aimed at the emulator the thread was last shown.
+//
+// Mutations (writes, loads, steps) carry no session of their own, so what an edit was made
+// AGAINST is whatever the editing thread last captured. If the connection has been replaced since
+// -- the old emulator went away and a new one answered on the same endpoint -- an edit still
+// holding the old display would otherwise be accepted and applied to a machine it was never
+// about: the new session is attached and 'connected' is true again, so that check alone passes.
+// Refused until the thread captures the new session's first snapshot. A thread that has not
+// captured anything has no session to be stale against.
+//
+// Called with ctlMtx held, where it is ordered against the connection ending (which clears the
+// queues under the same lock) and against 'connected' being set again.
+bool EditTargetIsCurrent(const LiveState* st)
+{
+    const ThreadPin* pin = nullptr;
+    if (gPinned.id == st->id && gPinned.depth > 0)  { pin = &gPinned; }
+    else if (gLastCaptured.id == st->id)            { pin = &gLastCaptured; }
+    if (!pin || !pin->snap) { return true; }
+    return pin->snap->generation == st->connGeneration.load();
+}
+
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ----
  *
  * Every wait here is bounded and cancellable. The poll thread is the only thing that talks to
@@ -336,6 +360,7 @@ SnapshotPtr DisplayedSnapshot(LiveState* st)
 const int kIoSliceMs = 100;          // how often a wait re-checks the stop flag
 const int kIdleTimeoutMs = 10000;    // no progress for this long: the emulator is not answering
 const int kConnectTimeoutMs = 2000;  // bound on establishing a connection
+const int kResolveTimeoutMs = 3000;  // bound on a host-name lookup
 
 struct Conn
 {
@@ -418,6 +443,80 @@ bool ConnectBounded(int fd, const sockaddr* addr, socklen_t len,
     return err == 0;
 }
 
+using ResolveFn = int (*)(const char*, const char*, const addrinfo*, addrinfo**);
+std::atomic<ResolveFn> gResolve{ &::getaddrinfo };   // replaced only by tests (see LiveDriver.h)
+
+// One host-name lookup, run on a thread of its own so that waiting for it can be bounded and
+// cancelled. getaddrinfo() has no timeout and cannot be interrupted; a resolver that stalls would
+// otherwise hold whoever called it -- the poll thread (which CbClose joins) or the thread opening
+// the source -- for as long as the network cares to take. The thread is detached and owns the job
+// through a shared_ptr, so abandoning the wait is safe: it finishes in its own time, frees its own
+// result, and nothing waits on it.
+struct ResolveJob
+{
+    std::mutex              m;
+    std::condition_variable cv;
+    bool                    done = false;
+    int                     rc = 0;
+    addrinfo*               res = nullptr;
+    addrinfo                hints;
+    std::string             host, port;
+    ResolveFn               fn = nullptr;
+    ~ResolveJob() { if (res) { ::freeaddrinfo(res); } }
+};
+
+// Resolve host:port. Numeric addresses (the usual 127.0.0.1) are parsed inline, which never
+// blocks and needs no thread. Anything else is looked up on a worker and waited for up to
+// 'timeoutMs', returning early if 'running' goes false. Null on failure, timeout or cancellation.
+std::shared_ptr<ResolveJob> ResolveBounded(const std::string& host, const std::string& port,
+                                           const std::atomic<bool>* running, int timeoutMs)
+{
+    auto job = std::make_shared<ResolveJob>();
+    job->host = host;
+    job->port = port;
+    std::memset(&job->hints, 0, sizeof(job->hints));
+    job->hints.ai_family = AF_UNSPEC;
+    job->hints.ai_socktype = SOCK_STREAM;
+
+    addrinfo numeric = job->hints;
+    numeric.ai_flags = AI_NUMERICHOST;
+    if (::getaddrinfo(host.c_str(), port.c_str(), &numeric, &job->res) == 0 && job->res)
+    {
+        job->done = true;
+        return job;
+    }
+    job->res = nullptr;
+
+    job->fn = gResolve.load();
+    try
+    {
+        std::thread([job] {
+            addrinfo* r = nullptr;
+            const int rc = job->fn(job->host.c_str(), job->port.c_str(), &job->hints, &r);
+            {
+                std::lock_guard<std::mutex> lk(job->m);
+                job->rc = rc;
+                job->res = r;
+                job->done = true;
+            }
+            job->cv.notify_all();
+        }).detach();
+    }
+    catch (const std::system_error&)
+    {
+        return nullptr;
+    }
+
+    std::unique_lock<std::mutex> lk(job->m);
+    for (int waited = 0; waited < timeoutMs; waited += 50)
+    {
+        if (job->cv.wait_for(lk, std::chrono::milliseconds(50), [&] { return job->done; })) { break; }
+        if (running && !running->load()) { return nullptr; }
+    }
+    if (!job->done || job->rc != 0 || !job->res) { return nullptr; }
+    return job;
+}
+
 // Connect a POSIX TCP socket to "tcp:host:port". This is the path the Emscripten
 // build takes (its sockets are proxied to a WebSocket bridge), and the one the
 // native test harness uses; Windows native uses the named pipe instead.
@@ -429,13 +528,9 @@ bool ConnOpenTcp(Conn& c, const char* endpoint, int timeoutMs)
     std::string host(rest, static_cast<size_t>(colon - rest));
     const char* port = colon + 1;
 
-    addrinfo hints;
-    std::memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    addrinfo* res = nullptr;
-    if (::getaddrinfo(host.c_str(), port, &hints, &res) != 0 || !res) { return false; }
-    for (addrinfo* ai = res; ai; ai = ai->ai_next)
+    std::shared_ptr<ResolveJob> job = ResolveBounded(host, port, c.running, kResolveTimeoutMs);
+    if (!job) { return false; }
+    for (addrinfo* ai = job->res; ai; ai = ai->ai_next)
     {
         int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (fd < 0) { continue; }
@@ -443,7 +538,6 @@ bool ConnOpenTcp(Conn& c, const char* endpoint, int timeoutMs)
         if (ConnectBounded(fd, ai->ai_addr, ai->ai_addrlen, c.running, timeoutMs)) { c.fd = fd; break; }
         ::close(fd);
     }
-    ::freeaddrinfo(res);
     return c.fd >= 0;
 }
 #elif defined(__EMSCRIPTEN__)
@@ -1204,6 +1298,7 @@ void PollLoop(LiveState* st)
             continue;
         }
         snap.paused = paused;
+        snap.generation = st->connGeneration.load() + (handshaken ? 0u : 1u);   // the one this publish carries
         snap.frame = frame;
         snap.stop = stop;
         snap.callStacks = std::move(callStacks);
@@ -1450,7 +1545,7 @@ size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
     LiveState* st = St(u);
     std::vector<uint8_t> payload = BuildPoke(address, src, size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected) return 0;
+    if (!st->connected || !EditTargetIsCurrent(st)) return 0;
     return st->writes.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1460,7 +1555,7 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
     LiveState* st = St(u);
     std::vector<uint8_t> payload = BuildPoke(offset, src, size);   // shipped as WRS
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected) return 0;
+    if (!st->connected || !EditTargetIsCurrent(st)) return 0;
     return st->soundWrites.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1520,7 +1615,11 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
         payload.insert(payload.end(), s, s + state_len);
     }
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected) return -1;   // no emulator to restore: don't hold it for the next one
+    // No emulator to restore (don't hold it for the next one), a load made against the previous
+    // session, or one already waiting to be shipped. A second would replace the first before it
+    // left, and the first was reported as accepted -- the client would then wait for an outcome
+    // that can never arrive.
+    if (!st->connected || !EditTargetIsCurrent(st) || st->loadDirty) return -1;
     st->loadPayload = std::move(payload);
     st->loadFrame = static_cast<uint32_t>(frame);
     st->loadDirty = true;
@@ -1553,7 +1652,8 @@ uint16_t CbVdp2Reg(void* u, uint32_t reg)
 bool PostCmd(LiveState* st, Ctl cmd, int32_t frames)
 {
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected) { return false; }   // nothing to pause or step; don't queue it for the next one
+    // Nothing to pause or step, or aimed at the previous session: don't queue it for this one.
+    if (!st->connected || !EditTargetIsCurrent(st)) { return false; }
 
     // Track whether the emulator is currently held by us: pause/step halt it,
     // resume releases it. The poll thread uses this to resume on close.
@@ -1857,14 +1957,17 @@ extern "C" uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present
     });
 }
 
-extern "C" void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
+extern "C" int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
 {
-    if (!ds || !ds->user || ds->close != CbClose || slot >= SE_LIVE_EMU_SLOTS) { return; }
-    se::GuardVoid([&]
+    if (!ds || !ds->user || ds->close != CbClose || slot >= SE_LIVE_EMU_SLOTS) { return -1; }
+    return se::Guard(-1, [&]() -> int
     {
         LiveState* st = St(ds->user);
         std::lock_guard<std::mutex> lk(st->ctlMtx);
+        // Same refusals as a rewind load, for the same reasons (see CbLoadState).
+        if (!st->connected || !EditTargetIsCurrent(st) || st->emuLoadSlot != 0) { return -1; }
         st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
+        return 0;
     });
 }
 
@@ -2002,3 +2105,11 @@ extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,
         return stop.reason != SE_LIVE_STOP_NONE ? 1 : 0;
     });
 }
+
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+extern "C" void se_live_test_set_resolver(int (*fn)(const char*, const char*, const struct addrinfo*,
+                                                     struct addrinfo**))
+{
+    gResolve.store(fn ? fn : &::getaddrinfo);
+}
+#endif

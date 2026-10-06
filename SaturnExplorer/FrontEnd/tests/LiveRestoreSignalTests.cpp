@@ -11,6 +11,11 @@
 #include <thread>
 #include <vector>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 extern "C" {
 #include "se_export.h"
 }
@@ -74,6 +79,70 @@ bool Until(Pred pred, const se_data_source& ds)
     }
     return false;
 }
+
+// A second client, over the exporter's TCP port (the local socket is taken by the driver), that
+// sends raw requests and discards every reply. It lets a test put two loads in front of the gate
+// before the emulate thread has run, which the driver itself will not do.
+class RawClient
+{
+public:
+    bool Connect()
+    {
+        for (int i = 0; i < 400; ++i)
+        {
+            mFd = ::socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a = {};
+            a.sin_family = AF_INET;
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            a.sin_port = htons(SE_LIVE_DEFAULT_TCP_PORT);
+            if (mFd >= 0 && ::connect(mFd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0)
+            {
+                mDrain = std::thread([this] {
+                    char sink[65536];
+                    while (::recv(mFd, sink, sizeof(sink), 0) > 0) { }
+                });
+                return true;
+            }
+            if (mFd >= 0) { ::close(mFd); mFd = -1; }
+            Sleep(5);
+        }
+        return false;
+    }
+    ~RawClient()
+    {
+        if (mFd >= 0) ::shutdown(mFd, SHUT_RDWR);
+        if (mDrain.joinable()) mDrain.join();
+        if (mFd >= 0) ::close(mFd);
+    }
+    void Send(const void* d, size_t n)
+    {
+        const uint8_t* p = static_cast<const uint8_t*>(d);
+        while (n)
+        {
+            const ssize_t w = ::send(mFd, p, n, MSG_NOSIGNAL);
+            if (w <= 0) return;
+            p += w; n -= static_cast<size_t>(w);
+        }
+    }
+    void Request(const char* verb, uint32_t arg, const std::vector<uint8_t>& payload = {})
+    {
+        uint8_t h[8] = { uint8_t(verb[0]), uint8_t(verb[1]), uint8_t(verb[2]), uint8_t(verb[3]),
+                         uint8_t(arg), uint8_t(arg >> 8), uint8_t(arg >> 16), uint8_t(arg >> 24) };
+        Send(h, sizeof(h));
+        if (!payload.empty()) Send(payload.data(), payload.size());
+    }
+private:
+    int         mFd = -1;
+    std::thread mDrain;
+};
+
+// LST payload: frame(4) + edits_len(4) + edits + state.
+std::vector<uint8_t> LoadPayload(uint32_t frame)
+{
+    std::vector<uint8_t> p(8 + 64, 0x5A);
+    for (int i = 0; i < 4; ++i) { p[i] = uint8_t(frame >> (8 * i)); p[4 + i] = 0; }
+    return p;
+}
 }  // namespace
 
 int main()
@@ -129,6 +198,37 @@ int main()
     se_live_emu_load_slot(&ds, 3);
     Check(Until([&](const Counters& x) { return x.failed == base.failed + 2; }, ds),
           "a refused slot load shows up as failed");
+
+    // Two loads in front of the gate before it has run. The second replaces the first, which will
+    // now never be applied -- and "every accepted load ends in exactly one counter" means it ends
+    // as refused, not that it vanishes and leaves the client waiting for an outcome that cannot
+    // come. (The emulate thread is not ticked until both have arrived.)
+    {
+        RawClient raw;
+        Check(raw.Connect(), "raw client attached over TCP");
+        const Counters b0 = Read(ds);
+        gLoadResult = 0;
+        raw.Request(SE_LIVE_VERB_LOADSTATE, 72, LoadPayload(11));
+        raw.Request(SE_LIVE_VERB_LOADSTATE, 72, LoadPayload(12));
+        bool refused = false;
+        for (int i = 0; i < 400 && !refused; ++i) { refused = Read(ds).failed == b0.failed + 1; if (!refused) Sleep(5); }
+        Check(refused, "the replaced rewind load is reported as refused");
+        Check(Read(ds).done == b0.done, "and nothing has been applied yet");
+        Check(Until([&](const Counters& x) { return x.done == b0.done + 1; }, ds),
+              "the surviving load is applied once the gate runs");
+        Check(Read(ds).failed == b0.failed + 1, "exactly one outcome each: one refused, one applied");
+
+        // Same for the emulator's own slots.
+        const Counters b1 = Read(ds);
+        raw.Request(SE_LIVE_VERB_EMULOAD, 1);
+        raw.Request(SE_LIVE_VERB_EMULOAD, 2);
+        refused = false;
+        for (int i = 0; i < 400 && !refused; ++i) { refused = Read(ds).failed == b1.failed + 1; if (!refused) Sleep(5); }
+        Check(refused, "the replaced slot load is reported as refused");
+        Check(Until([&](const Counters& x) { return x.done == b1.done + 1; }, ds),
+              "the surviving slot load is applied");
+        Check(Read(ds).failed == b1.failed + 1, "one refused, one applied");
+    }
 
     se_destroy(ctx);
     SeExportDeinit();
