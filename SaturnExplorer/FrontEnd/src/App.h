@@ -272,6 +272,7 @@ private:
     void DrawVdp1Table();
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
+    void PlayFromScrubbedFrame(se_context* ctl);   // restore the scrubbed frame, drop what followed
     void DrawPlaceholder(const char* title, const char* note);
 
     // --- Feature-tour Demo Mode: play a .sedemo script that drives the real UI for a screen

@@ -107,7 +107,7 @@ void IconTri(ImDrawList* dl, ImVec2 c, float r, ImU32 col, bool left)
     dl->AddTriangleFilled(ImVec2(c.x - s * r, c.y - r), ImVec2(c.x - s * r, c.y + r),
                           ImVec2(c.x + s * r, c.y), col);
 }
-enum class Ico { Play, Pause, Step, Prev, Next };
+enum class Ico { Play, Pause, Step, Prev, Next, PlayHere };
 
 // Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
 // with "##"); the glyph is drawn over the button rect. Returns true when pressed.
@@ -135,6 +135,11 @@ bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
     case Ico::Next:
         IconTri(dl, ImVec2(c.x - r * 0.15f, c.y), r, col, false);
         dl->AddRectFilled(ImVec2(c.x + r * 0.95f, c.y - r), ImVec2(c.x + r * 1.3f, c.y + r), col, 1.0f); break;
+    // Play-from-here is Play anchored to a point: a marker bar, then the play triangle. It is
+    // the mirror of Next (triangle, then bar), so the two cannot be mistaken for each other.
+    case Ico::PlayHere:
+        dl->AddRectFilled(ImVec2(c.x - r * 1.3f, c.y - r), ImVec2(c.x - r * 0.95f, c.y + r), col, 1.0f);
+        IconTri(dl, ImVec2(c.x + r * 0.15f, c.y), r, col, false); break;
     }
     if (disabled) ImGui::EndDisabled();
     if (tip && !disabled) ImGui::SetItemTooltip("%s", tip);
@@ -1128,7 +1133,13 @@ void App::BuildUI(IPlatform& platform)
     // running. Gated on the run state (not the emulator's frame counter) so the
     // ring fills regardless of how — or whether — the counter advances; paused and
     // history-scrubbing states never capture, so the buffer holds only real play.
-    if (mbRecording && mbLiveSource && mContext && !mbPaused && !mbScrubbing)
+    // Not while a state load is outstanding either: the emulator applies it later, so until it
+    // does mContext still shows the frame the user left (say 100) and capturing it would put
+    // that frame back in the ring right after "Play from here" cut it away -- and its number
+    // would make the recorder refuse the real 41, 42, ... as stale. A load that never
+    // resolves must not leave recording off for good, so a timed-out wait lets it resume.
+    const bool restorePending = mRestoreOutstanding > 0 && !mRestoreTimedOut;
+    if (mbRecording && mbLiveSource && mContext && !mbPaused && !mbScrubbing && !restorePending)
     {
         mRecorder.Capture(mContext, se_frame_number(mContext));
     }
@@ -1544,42 +1555,14 @@ void App::DrawTransportBar()
     // [ play / pause ]
     if (mbPaused)
     {
+        // Plain Play continues from the present frame and leaves the recorded timeline alone;
+        // going back to a scrubbed frame is the separate "Play from here" button beside it.
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
-            bool rewound = false;
-            RestoreBaseline pendingBaseline;
-            // Rewind "Play from here": if scrubbed to a resumable past frame on a rewind-capable
-            // server, restore that frame's full savestate, apply the edits made while scrubbed,
-            // and re-simulate forward from it — discarding the (now-stale) recorded future.
-            if (mbScrubbing && mSeekSupported && mScrubIndex >= 0 &&
-                se_supports_state_rewind(ctl) &&
-                mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex)))
-            {
-                std::vector<uint8_t> state;
-                if (mRecorder.ReconstructState(static_cast<size_t>(mScrubIndex), state))
-                {
-                    const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
-                    const std::vector<uint8_t> edits = BuildEditBlob();
-                    const RestoreBaseline before = SampleRestoreBaseline();
-                    if (se_load_state(ctl, frameNo, state.data(), state.size(),
-                                      edits.data(), edits.size()) == SE_OK)
-                    {
-                        mRecorder.TruncateAfter(static_cast<size_t>(mScrubIndex));
-                        mPendingEdits.clear();
-                        mPendingEditsFrame = -1;
-                        rewound = true;
-                        pendingBaseline = before;
-                    }
-                }
-            }
-            if (!rewound)
-            {
-                se_frame_resume(ctl);   // no rewind: continue from the present frame
-            }
+            se_frame_resume(ctl);
             mbScrubbing = false;
             mbPaused = false;
             VoidEditTarget();
-            if (rewound) BeginRestoreWait(pendingBaseline);   // the emulator applies it asynchronously
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
@@ -1588,6 +1571,20 @@ void App::DrawTransportBar()
         mbPaused = true;
     }
     ImGui::SameLine();
+
+    // [ play from here ] — only offered when rewind is on, since without it there are no saved
+    // states to go back to. Lit while a past frame is selected and its state can be rebuilt.
+    if (mSeekSupported)
+    {
+        const bool canPlayHere = mbPaused && mbScrubbing && mScrubIndex >= 0 && mScrubIndex < n &&
+                                 se_supports_state_rewind(ctl) &&
+                                 mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex));
+        if (IconButton("##tp_playhere", Ico::PlayHere,
+                       "Play from here: restore this frame and resume, discarding the frames after it",
+                       !canPlayHere))
+            PlayFromScrubbedFrame(ctl);
+        ImGui::SameLine();
+    }
 
     // [ scrub bar ] — fills the middle, leaving room for the next-frame button.
     const float nextW  = ImGui::GetFrameHeight() + style.ItemSpacing.x * 2.0f;
@@ -1634,6 +1631,59 @@ void App::DrawTransportBar()
         }
     }
     ImGui::EndDisabled();
+#endif
+}
+
+// "Play from here": load the scrubbed frame's full savestate into the emulator, replay the
+// edits made while scrubbed on top of it, and resume -- a Load State whose source is the rewind
+// buffer. The frames after it are discarded because they describe a future that is no longer
+// going to happen; keeping them would let the scrubber show a timeline the game left.
+void App::PlayFromScrubbedFrame(se_context* ctl)
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbScrubbing || !mSeekSupported || mScrubIndex < 0 ||
+        static_cast<size_t>(mScrubIndex) >= mRecorder.Count() ||
+        !se_supports_state_rewind(ctl) ||
+        !mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex)))
+        return;
+
+    const size_t index = static_cast<size_t>(mScrubIndex);
+    const uint64_t frameNo = mRecorder.FrameNumber(index);
+    std::vector<uint8_t> state;
+    if (!mRecorder.ReconstructState(index, state))
+    {
+        mStateStatus = "Could not rebuild the savestate for that frame.";
+        mLog.Error("Play from here failed: " + mStateStatus, static_cast<uint32_t>(frameNo));
+        return;
+    }
+
+    const std::vector<uint8_t> edits = BuildEditBlob();
+    // Sampled before the request goes out: the emulator can finish it before the call returns.
+    const RestoreBaseline before = SampleRestoreBaseline();
+    if (se_load_state(ctl, frameNo, state.data(), state.size(),
+                      edits.data(), edits.size()) != SE_OK)
+    {
+        // Stay paused on the scrubbed frame so the user can retry instead of losing their place.
+        mStateStatus = "The emulator refused the save state.";
+        mLog.Error("Play from here failed: the emulator refused it.", static_cast<uint32_t>(frameNo));
+        return;
+    }
+
+    mRecorder.TruncateAfter(index);
+    mPendingEdits.clear();
+    mPendingEditsFrame = -1;
+    mbScrubbing = false;
+    mbPaused = false;
+    VoidEditTarget();
+    BeginRestoreWait(before);   // the emulator applies it asynchronously
+
+    char msg[96];
+    std::snprintf(msg, sizeof(msg), "Playing from frame %llu.",
+                  static_cast<unsigned long long>(frameNo));
+    mStateStatus = msg;
+    mLog.Info(mStateStatus, static_cast<uint32_t>(frameNo));
+#else
+    (void)ctl;
 #endif
 }
 

@@ -361,6 +361,25 @@ int main()
               "the footprint is back within the ceiling");
     }
 
+    // --- "Play from here": record 100 frames, resume at the 40th, and 41..100 are gone ---
+    {
+        FrameRecorder r7;
+        r7.Configure(200);
+        bool filled = true;
+        for (uint64_t fn = 1; fn <= 100 && filled; ++fn) filled = CaptureFrame(r7, ctx, fn);
+        Check(filled && r7.Count() == 100, "r7 recorded 100 frames");
+
+        r7.TruncateAfter(39);   // scrub position 40 is index 39 (frame numbers start at 1)
+        Check(r7.Count() == 40, "r7 keeps exactly the 40 frames up to the resume point");
+        Check(r7.FrameNumber(39) == 40, "r7's newest frame is the one resumed from");
+
+        // Recording must carry on from the resume point, not wait for the game to pass the old
+        // frame 100 again. (Keeping a stale 100 out is the caller's job -- see the restore gate
+        // on Capture() in App -- because the recorder cannot tell it from a genuine frame 100.)
+        Check(CaptureFrame(r7, ctx, 41), "r7 records frame 41 after resuming");
+        Check(r7.Count() == 41 && r7.FrameNumber(40) == 41, "the new frame 41 follows frame 40");
+    }
+
     se_destroy(ctx);
     if (gFail == 0) std::printf("All FrameRecorder tests passed.\n");
     return gFail == 0 ? 0 : 1;
