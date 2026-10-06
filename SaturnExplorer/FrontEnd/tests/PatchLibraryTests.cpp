@@ -263,6 +263,34 @@ int main()
                 BestEffort("rm -f '" + victim + "'");
             }
 
+            // --- Containment through a symlink: normpath alone would let 'link.bin' reach out ---
+            {
+                const std::string outsideDir = std::string(dir) + "_outside";
+                BestEffort("mkdir -p '" + outsideDir + "' '" + std::string(dir) + "/inner'");
+                const std::string victim = outsideDir + "/victim.bin";
+                { std::ofstream f(victim, std::ios::binary); const char z[8] = {0}; f.write(z, 8); }
+                BestEffort("ln -s '" + victim + "' '" + std::string(dir) + "/link.bin'");
+                BestEffort("ln -s '" + outsideDir + "' '" + std::string(dir) + "/dirlink'");
+                PatchLibrary lk;
+                lk.AddOrUpdate(Loc("l", 0x200000, 4, "link.bin", 0, {0, 0, 0, 0}));
+                lk.AddOrUpdate(Loc("d", 0x200010, 4, "dirlink/victim.bin", 0, {0, 0, 0, 0}));
+                MemStub lm;
+                lm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                lm.mem.push_back({0x200010, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> loc;
+                const std::string lkScript = lk.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return lm.Read(a, l, o); },
+                    loc);
+                const std::string lkPath = std::string(dir) + "/se_link.py";
+                { std::ofstream f(lkPath, std::ios::binary); f << lkScript; }
+                Check(std::system((python + " '" + lkPath + "' --force >/dev/null 2>&1").c_str()) != 0,
+                      "script refuses a symlink that leads outside the patch directory");
+                const std::string after = ReadFile(victim);
+                Check(after.size() == 8 && (uint8_t)after[0] == 0x00,
+                      "the file behind the symlink was not written");
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
             BestEffort("rm -rf '" + std::string(dir) + "'");
         }
     }

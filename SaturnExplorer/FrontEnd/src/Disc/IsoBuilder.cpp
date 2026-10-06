@@ -279,6 +279,13 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         d.number = int(i + 1);
         for (int s : d.subdirs) bfs.push_back(s);
     }
+    // A path-table entry names its parent in 16 bits, so more directories than that cannot be
+    // referenced and would wrap to the wrong parent.
+    if (bfs.size() > 0xFFFFu)
+    {
+        r.error = "Too many directories for an ISO 9660 path table (limit 65535).";
+        return r;
+    }
     bool dedupeFailed = false;
     auto dedupe = [&](std::vector<std::string>& ids) {
         for (size_t i = 0; i < ids.size(); ++i)
@@ -477,8 +484,10 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
             const uint32_t idLen = uint32_t(id.size());
             p[0] = uint8_t(idLen);
             p[1] = 0;                                // extended attr length
-            if (bigEndian) { PutBE32(p + 2, d.lba); PutBE16(p + 6, uint16_t(d.number)); }
-            else           { Put32(p + 2, d.lba);   Put16(p + 6, uint16_t(d.number)); }
+            // Parent directory number (root names itself, 1), not this directory's own number.
+            const uint16_t parentNo = uint16_t(dirs[d.parent].number);
+            if (bigEndian) { PutBE32(p + 2, d.lba); PutBE16(p + 6, parentNo); }
+            else           { Put32(p + 2, d.lba);   Put16(p + 6, parentNo); }
             std::memcpy(p + 8, id.data(), idLen);
             p += 8 + idLen + (idLen & 1);
         }

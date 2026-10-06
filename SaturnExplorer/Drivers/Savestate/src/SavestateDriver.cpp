@@ -1,6 +1,8 @@
 #include "SavestateDriver.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <new>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -723,9 +725,11 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
         name[32] = '\0';
         const uint32_t secSize = Read32LE(file, pos + 32);
         const size_t secData = pos + kMdfnSectionHdr;
-        if (secData + secSize > file.size())
+        if (secSize > file.size() - secData)
         {
-            break;  // truncated
+            // A section whose header promises more than the file holds is a damaged state;
+            // accepting the regions parsed so far would load a partial machine as if whole.
+            return SE_ERR_UNSUPPORTED;
         }
 
         if (std::strcmp(name, "VDP1") == 0)
@@ -824,8 +828,17 @@ bool IsGzip(const std::vector<uint8_t>& buf)
 // without zlib — gzipped states are then reported as unsupported rather than
 // misparsed).
 #if defined(SE_HAVE_ZLIB)
+// Ceilings for an imported gzip state. Real Mednafen states are a few MiB compressed and
+// tens of MiB inflated; anything past these is a decompression bomb or not a state at all.
+constexpr size_t kMaxGzipInput  = 128u * 1024u * 1024u;
+constexpr size_t kMaxGzipOutput = 256u * 1024u * 1024u;
+
 bool Gunzip(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
 {
+    if (in.size() > kMaxGzipInput)
+    {
+        return false;
+    }
     z_stream zs;
     std::memset(&zs, 0, sizeof(zs));
     if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK)   // 16 => decode a gzip header
@@ -834,26 +847,46 @@ bool Gunzip(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
     }
     zs.next_in = const_cast<Bytef*>(in.data());
     zs.avail_in = static_cast<uInt>(in.size());
-    out.assign(in.size() * 4 + 4096, 0);   // states inflate ~3x; grow if needed
-    int ret;
-    do
+    bool ok = false;
+    try
     {
-        if (zs.total_out == out.size())
+        // States inflate ~3x; start there (bounded) and double up to the ceiling.
+        out.assign(std::min<size_t>(in.size() * 4 + 4096, kMaxGzipOutput), 0);
+        for (;;)
         {
-            out.resize(out.size() * 2);
+            if (zs.total_out == out.size())
+            {
+                if (out.size() >= kMaxGzipOutput)
+                {
+                    break;   // would exceed the ceiling
+                }
+                out.resize(std::min<size_t>(out.size() * 2, kMaxGzipOutput));
+            }
+            zs.next_out = out.data() + zs.total_out;
+            zs.avail_out = static_cast<uInt>(out.size() - zs.total_out);
+            const int ret = inflate(&zs, Z_NO_FLUSH);
+            if (ret == Z_STREAM_END)
+            {
+                out.resize(zs.total_out);
+                ok = true;
+                break;
+            }
+            if (ret != Z_OK)
+            {
+                break;
+            }
         }
-        zs.next_out = out.data() + zs.total_out;
-        zs.avail_out = static_cast<uInt>(out.size() - zs.total_out);
-        ret = inflate(&zs, Z_NO_FLUSH);
-        if (ret != Z_OK && ret != Z_STREAM_END)
-        {
-            inflateEnd(&zs);
-            return false;
-        }
-    } while (ret != Z_STREAM_END);
-    out.resize(zs.total_out);
+    }
+    catch (const std::bad_alloc&)
+    {
+        ok = false;
+    }
     inflateEnd(&zs);
-    return true;
+    if (!ok)
+    {
+        out.clear();
+    }
+    return ok;
 }
 #else
 bool Gunzip(const std::vector<uint8_t>&, std::vector<uint8_t>&) { return false; }

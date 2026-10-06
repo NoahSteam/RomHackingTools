@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -184,6 +185,44 @@ int main()
         for (size_t i = 0; i < fs2.entries.size(); ++i)
             for (size_t j = i + 1; j < fs2.entries.size(); ++j)
                 Check(fs2.entries[i].path != fs2.entries[j].path, "no duplicate paths remain");
+    }
+
+    // Path tables name each directory's PARENT, not the directory itself. A root-level SUB
+    // directory has parent 1 (root); a directory inside it has parent 2.
+    {
+        const std::string pbase = "isobuild_ptable_tmp";
+        MKDIR(pbase.c_str());
+        MKDIR((pbase + "/disc").c_str());
+        MKDIR((pbase + "/disc/SUB").c_str());
+        MKDIR((pbase + "/disc/SUB/INNER").c_str());
+        WriteFile(pbase + "/disc/SUB/INNER/X.BIN", 'Z', 10);
+        IsoBuildOptions po;
+        po.rootDir = pbase + "/disc";
+        po.outIso = pbase + "/out.iso";
+        po.ipBin.assign(32768, 0);
+        const IsoBuildResult pr = IsoBuild(po);
+        Check(pr.ok, pr.ok ? "path-table build ok" : pr.error.c_str());
+        std::ifstream f(po.outIso, std::ios::binary);
+        std::vector<uint8_t> img((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        auto le32 = [&](size_t o) { return uint32_t(img[o]) | uint32_t(img[o+1]) << 8 | uint32_t(img[o+2]) << 16 | uint32_t(img[o+3]) << 24; };
+        auto le16 = [&](size_t o) { return uint32_t(img[o]) | uint32_t(img[o+1]) << 8; };
+        const size_t pvd = size_t(16) * 2048;
+        const uint32_t lPath = le32(pvd + 140);
+        Check(img.size() > pvd + 2048 && lPath != 0, "PVD names an L path table");
+        if (img.size() > pvd + 2048 && lPath != 0)
+        {
+            size_t p = size_t(lPath) * 2048;
+            uint32_t parents[3] = { 0, 0, 0 };
+            for (int i = 0; i < 3; ++i)
+            {
+                const uint32_t idLen = img[p];
+                parents[i] = le16(p + 6);
+                p += 8 + idLen + (idLen & 1);
+            }
+            Check(parents[0] == 1, "root's parent is itself (1)");
+            Check(parents[1] == 1, "SUB's parent is root (1), not its own number");
+            Check(parents[2] == 2, "INNER's parent is SUB (2)");
+        }
     }
 
     if (gFail == 0) std::printf("All IsoBuilder tests passed.\n");

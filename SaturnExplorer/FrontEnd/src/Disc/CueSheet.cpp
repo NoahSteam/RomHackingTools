@@ -39,11 +39,38 @@ std::string CueFileName(const std::string& line)
 }
 }  // namespace
 
+bool ParseMsf(const std::string& msf, uint32_t& frames)
+{
+    uint32_t field[3] = { 0, 0, 0 };
+    size_t pos = 0;
+    for (int i = 0; i < 3; ++i)
+    {
+        const size_t start = pos;
+        uint32_t v = 0;
+        while (pos < msf.size() && msf[pos] >= '0' && msf[pos] <= '9')
+        {
+            v = v * 10 + uint32_t(msf[pos] - '0');
+            if (v > 9999) return false;   // also keeps the accumulator far from overflow
+            ++pos;
+        }
+        if (pos == start) return false;   // empty, signed or non-numeric field
+        field[i] = v;
+        if (i < 2)
+        {
+            if (pos >= msf.size() || msf[pos] != ':') return false;
+            ++pos;
+        }
+    }
+    if (pos != msf.size()) return false;
+    if (field[1] >= 60 || field[2] >= 75) return false;
+    frames = (field[0] * 60 + field[1]) * 75 + field[2];
+    return true;
+}
+
 uint32_t MsfToFrames(const std::string& msf)
 {
-    int mm = 0, ss = 0, ff = 0;
-    if (std::sscanf(msf.c_str(), "%d:%d:%d", &mm, &ss, &ff) != 3) return 0;
-    return uint32_t(((mm * 60) + ss) * 75 + ff);
+    uint32_t frames = 0;
+    return ParseMsf(msf, frames) ? frames : 0;
 }
 
 std::string FramesToMsf(uint32_t frames)
@@ -94,14 +121,24 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
             CueIndex idx;
             std::string msf;
             ls >> idx.number >> msf;
-            idx.frames = MsfToFrames(msf);
+            if (!ParseMsf(msf, idx.frames))
+            {
+                sheet.error = "invalid INDEX timestamp: " + msf;
+                return sheet;
+            }
             sheet.tracks.back().indices.push_back(idx);
         }
         else if (KW == "PREGAP" && !sheet.tracks.empty())
         {
             std::string msf;
             ls >> msf;
-            sheet.tracks.back().pregapFrames = int(MsfToFrames(msf));
+            uint32_t gap = 0;
+            if (!ParseMsf(msf, gap))
+            {
+                sheet.error = "invalid PREGAP timestamp: " + msf;
+                return sheet;
+            }
+            sheet.tracks.back().pregapFrames = int(gap);
         }
     }
 

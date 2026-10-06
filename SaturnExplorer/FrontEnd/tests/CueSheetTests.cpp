@@ -21,6 +21,24 @@ int main()
     Check(MsfToFrames("00:02:00") == 150, "00:02:00 = 150 frames");
     Check(MsfToFrames("05:00:00") == 22500, "05:00:00 = 22500 frames");
     Check(FramesToMsf(150) == "00:02:00", "150 -> 00:02:00");
+
+    // Checked parsing: overflowing, signed, out-of-range and malformed stamps are errors.
+    {
+        uint32_t f = 123;
+        Check(ParseMsf("00:02:00", f) && f == 150, "ParseMsf accepts a normal stamp");
+        Check(!ParseMsf("2147483647:00:00", f), "huge minutes rejected (was signed overflow)");
+        Check(!ParseMsf("99999999999:00:00", f), "absurd minutes rejected");
+        Check(!ParseMsf("-1:00:00", f), "negative field rejected");
+        Check(!ParseMsf("00:60:00", f), "seconds >= 60 rejected");
+        Check(!ParseMsf("00:00:75", f), "frames >= 75 rejected");
+        Check(!ParseMsf("00:00", f), "two fields rejected");
+        Check(!ParseMsf("00:00:00:00", f), "four fields rejected");
+        Check(!ParseMsf("00:0a:00", f), "non-numeric field rejected");
+        Check(!ParseMsf("", f), "empty stamp rejected");
+        CueSheet bad = ParseCueText("FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n"
+                                    "  INDEX 01 2147483647:00:00\n", "");
+        Check(!bad.ok && !bad.error.empty(), "a cue with an overflowing INDEX fails to parse");
+    }
     Check(FramesToMsf(22650) == "05:02:00", "22650 -> 05:02:00");
 
     // --- Single-BIN cue: data track + two audio tracks. ---
