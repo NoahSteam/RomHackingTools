@@ -17,6 +17,7 @@
 
 #include "LayerExport.h"        // LayerId + the export artifacts
 #include "Platform/IPlatform.h"
+#include "RenderKey.h"
 
 namespace sfe
 {
@@ -65,6 +66,7 @@ private:
         int                  width = 0;
         int                  height = 0;
         std::vector<uint8_t> pixels;     // RGBA, as uploaded
+        RenderKey            key;        // what 'pixels' and the texture were drawn from
         bool                 showGrid = false;
         // Last export result for THIS layer. Per-view, not shared: six panels draw from one
         // LayerPanels, so a single status line would report NBG0's export under NBG1's

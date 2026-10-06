@@ -6,7 +6,9 @@
 // (it only holds CallStackFrame values), so it is unit-testable.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -28,6 +30,20 @@ struct AccessRecord
 class AccessLog
 {
 public:
+    // A busy address on a long run reaches thousands of distinct accessors, each carrying a
+    // stack, and nothing ever trimmed it -- the log is the one structure here that grows with
+    // how long the game runs. So it has a budget: a row cap, and a cap on the frames kept per
+    // row. Together they bound it near 8 MB whatever the run. A hit from an instruction already
+    // in the log always merges (count and latest stack keep updating); only a NEW accessor past
+    // the cap is turned away, and counted in Dropped() so the panel can say the list is
+    // incomplete rather than quietly looking complete.
+    static constexpr std::size_t kDefaultMaxRows = 4096;
+    static constexpr std::size_t kDefaultMaxStackFrames = 32;
+
+    explicit AccessLog(std::size_t maxRows = kDefaultMaxRows,
+                       std::size_t maxStackFrames = kDefaultMaxStackFrames)
+        : mMaxRows(maxRows), mMaxStackFrames(maxStackFrames) {}
+
     // Record one hit from instruction 'pc' on 'cpu' ('insn' = its disassembly, decoded by the
     // caller). Merges into the existing row for that (cpu, pc) — bumping its count and
     // replacing its stack with the latest — or appends a new row (kept in first-seen order).
@@ -35,6 +51,9 @@ public:
                 std::vector<CallStackFrame> stack);
 
     void        Clear();
+    // Hits from instructions that were not in the log and found it full.
+    std::size_t Dropped() const { return mDropped; }
+    bool        Full()    const { return mRecords.size() >= mMaxRows; }
     bool        Empty() const { return mRecords.empty(); }
     std::size_t Size()  const { return mRecords.size(); }
     const std::vector<AccessRecord>& Records() const { return mRecords; }
@@ -43,6 +62,9 @@ private:
     // 'cpu' is already normalized to 0/1 by the caller (Record).
     static uint64_t Key(uint32_t pc, int cpu) { return (uint64_t(cpu) << 32) | pc; }
 
+    std::size_t                          mMaxRows;
+    std::size_t                          mMaxStackFrames;
+    std::size_t                          mDropped = 0;
     std::vector<AccessRecord>            mRecords;   // first-seen order
     std::unordered_map<uint64_t, std::size_t> mIndex;  // (cpu,pc) -> index into mRecords
 };

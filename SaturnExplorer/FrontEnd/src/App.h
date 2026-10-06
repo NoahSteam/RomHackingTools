@@ -32,7 +32,9 @@
 #include "Debug/ExecutionActions.h"  // tracepoints / execution-action store
 #include "Debug/CallStack.h"      // per-CPU call stack (paused-state workspace)
 #include "Debug/MemoryBackend.h"
+#include "RenderKey.h"
 #include "Debug/MemorySearch.h"   // Cheat-Engine-style live RAM value scanner
+#include "Debug/MemorySearchRunner.h"   // ...and the worker that keeps its scans off the UI thread
 #include "Debug/AccessLog.h"      // "find what accesses this address" record
 #include "Disc/DiscImage.h"       // disc-image reader + ISO 9660 browser (sector -> file)
 #include "Debug/WatchList.h"
@@ -332,6 +334,7 @@ private:
 
     // RAM Search (Cheat-Engine-style value scanner) — engine + its panel's UI state.
     MemorySearch     mRamSearch;
+    MemorySearchRunner mRamSearchRunner;
     void ResetSessionDebugState();   // RAM search, access log, tracepoint sync + counts (any build)
     int              mRamSearchType = 2;      // index into the panel's type list (default u16)
     int              mRamSearchCmp = 0;       // index into the panel's compare list (default =)
@@ -343,6 +346,7 @@ private:
     // "Find what accesses this address" — the access log + its panel's controls.
     AccessLog        mAccessLog;
     uint64_t         mAccessWatchId = 0;        // id of the active logging watchpoint (0 = none)
+    int              mAccessSelected = -1;      // row whose call stack the panel shows
     uint32_t         mAccessWatchAddr = 0;      // address it watches (for the header)
     char             mAccessAddr[16] = "";      // address entry (hex)
     int              mAccessKind = 0;           // 0 read+write, 1 read, 2 write
@@ -762,6 +766,7 @@ private:
     int                  mFrameWidth = 0;
     int                  mFrameHeight = 0;
     std::vector<uint8_t> mFrameBuffer;
+    RenderKey            mFrameKey;   // what mFrameBuffer was drawn from
 
     // 3D View texture + orbit camera.
     TextureHandle        m3dTexture = 0;

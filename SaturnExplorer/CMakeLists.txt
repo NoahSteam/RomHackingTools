@@ -256,6 +256,20 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    # The worker that keeps a RAM scan off the UI thread: same results as the synchronous scan,
+    # one scan at a time, and the sparse narrowing pass reads only the pages the hits are in.
+    add_executable(SaturnExplorerMemorySearchRunnerTests
+        FrontEnd/tests/MemorySearchRunnerTests.cpp
+        FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/MemorySearchRunner.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+    )
+    target_include_directories(SaturnExplorerMemorySearchRunnerTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    find_package(Threads REQUIRED)
+    target_link_libraries(SaturnExplorerMemorySearchRunnerTests PRIVATE Threads::Threads)
+    add_test(NAME SaturnExplorerMemorySearchRunnerTests COMMAND SaturnExplorerMemorySearchRunnerTests)
+
     # The PRS search's bounds (ROM-04): the candidate filter must not drop a real match, and the
     # per-file work budget must report a scan it cut short.
     # The search worker's lifecycle, which had no test while it was nine members of App:
@@ -774,6 +788,7 @@ if(WIN32)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
@@ -860,6 +875,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
         FrontEnd/src/Debug/M68kDisasm.cpp
@@ -963,6 +979,7 @@ else()
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ConditionEval.cpp
             FrontEnd/src/Debug/MemorySearch.cpp
+            FrontEnd/src/Debug/MemorySearchRunner.cpp
             FrontEnd/src/Debug/BytePatternSearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp
             FrontEnd/src/Debug/M68kDisasm.cpp

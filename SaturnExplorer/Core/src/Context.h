@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -943,7 +944,15 @@ private:
     // description Vdp2TileMap hands out.
     Vdp2Compositor::TileScratch mTileScratch;
     Vdp2TileMap             mTileMapShape;                    // GetTileMapShape's scratch
-    uint64_t                mDeriveSerial = 0;                // see DeriveSerial()
+    // Starts in a range of its own per context, so a serial identifies a state of THIS context
+    // and no other: a caller keying a cache on it is not fooled by a new context that happens
+    // to be allocated where a destroyed one was.
+    uint64_t                mDeriveSerial = NextSerialRange();   // see DeriveSerial()
+    static uint64_t NextSerialRange()
+    {
+        static std::atomic<uint64_t> next{0};
+        return (++next) << 32;
+    }
 };
 
 }  // namespace se

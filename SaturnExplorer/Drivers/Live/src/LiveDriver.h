@@ -69,6 +69,14 @@ int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* fa
  * which gave up on a step the emulator was still working on. */
 int se_live_capture_pending(const se_data_source* ds);
 
+/* Whether capturing now would show exactly what this thread last captured: 1 when the newest
+ * published snapshot has the same content (every byte, the frame, the stop, the call stacks) as
+ * the one the calling thread's display was taken from, 0 when it differs, when the thread has not
+ * captured yet, or for a source that is not live. A halted emulator republishes the same state
+ * every poll, so without this a client re-copies several MB per UI frame to display nothing new.
+ * Only a 1 is a promise; treat 0 as "capture". */
+int se_live_capture_unchanged(const se_data_source* ds);
+
 /* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
  * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32
  * LE; see SeLiveProtocol.h SE_LIVE_BP_*). The poll thread ships them on its next
