@@ -21,8 +21,10 @@ extern "C" {
  * its compiled-in value against the core's se_abi_version() before use.
  *
  * 6: dropped the never-implemented se_rom_search_* / se_history_for exports
- *    (see ARCHITECTURE.md) and added SE_ERR_NO_MEMORY. */
-#define SE_ABI_VERSION 6u
+ *    (see ARCHITECTURE.md) and added SE_ERR_NO_MEMORY.
+ * 7: se_data_source gained begin_capture / end_capture, which bracket one snapshot so a driver
+ *    whose state changes underneath the core can serve every region from the same instant. */
+#define SE_ABI_VERSION 7u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {

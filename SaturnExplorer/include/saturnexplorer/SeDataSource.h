@@ -112,6 +112,17 @@ typedef struct se_data_source {
     /* --- Optional lifecycle: the core calls this on se_destroy so the driver
            can release its resources. May be NULL. --- */
     void (*close)(void* user);
+
+    /* --- Optional: bracket one capture. A snapshot is assembled from many callbacks (every
+           memory region, every register, the SH-2 files, the frame number), and a driver whose
+           state advances on another thread -- the live emulator tap -- would otherwise answer
+           each from whatever was newest at that call: VDP1 VRAM from one frame, registers from
+           the next. The core calls begin_capture before the first read of a snapshot and
+           end_capture after the last (always paired, on the same thread); between them the
+           driver must answer every read, and frame_number, from ONE immutable state. Both
+           may be NULL (sources that cannot change mid-capture, e.g. a savestate). --- */
+    void (*begin_capture)(void* user);
+    void (*end_capture)(void* user);
 } se_data_source;
 
 #ifdef __cplusplus

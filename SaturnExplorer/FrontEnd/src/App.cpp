@@ -10,7 +10,9 @@
 #include <ctime>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "imgui.h"
@@ -460,8 +462,8 @@ void App::CloseData(bool cancelAutoConnect)
         mContext = nullptr;
     }
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
-    mEditHoldSeconds = 0.0f;
     mRestoreOutstanding = 0;
+    mRestoreTimedOut = mRestoreUnconfirmable = false;
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
@@ -783,8 +785,21 @@ bool App::OpenLive(const char* endpoint)
     {
         return false;
     }
+    return AttachLiveSource(dataSource, endpoint);
+#else
+    (void)endpoint;
+    return false;
+#endif
+}
+
+#ifdef SE_ENABLE_LIVE
+// Everything after the driver has connected: build the context around it and make it the
+// current source. Takes ownership of 'dataSource': CreateContextFromSource closes it when it
+// cannot build a context, and the context owns it otherwise.
+bool App::AttachLiveSource(se_data_source& dataSource, const char* endpoint)
+{
     se_context* context = nullptr;
-    if (!CreateContextFromSource(dataSource, &context))
+    if (!CreateContextFromSource(dataSource, &context))   // closes the source itself on failure
     {
         return false;
     }
@@ -808,11 +823,83 @@ bool App::OpenLive(const char* endpoint)
     // session) installs into this emulator instance.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
     return true;
+}
+
+// Establishing a connection can take a while -- a TCP endpoint whose host drops SYNs waits out
+// the driver's connect timeout, and a name lookup has no bound of its own -- and the UI thread
+// is the one drawing, so it never does that itself: the attempt runs on a worker (see
+// LiveOpenJob in App.h) and the result is collected on a later frame. One attempt at a time; a
+// request made while one is running is ignored (the auto-connect timer simply asks again).
+void App::StartLiveOpen(const char* endpoint, bool reportFailure)
+{
+    if (mLiveOpen.job) { return; }
+#if defined(__EMSCRIPTEN__)
+    // No threads in the browser build; its socket calls are proxied and do not block the page.
+    if (!OpenLive(endpoint) && reportFailure)
+    {
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+    }
 #else
-    (void)endpoint;
-    return false;
+    auto job = std::make_shared<LiveOpenJob>();
+    job->endpoint = endpoint ? endpoint : "";
+    job->reportFailure = reportFailure;
+    try
+    {
+        // Detached: the attempt may be inside a name lookup that cannot be cancelled, and the
+        // worker owns what it needs through the shared_ptr (see LiveOpenJob).
+        std::thread([job] {
+            se_data_source source = {};
+            const se_result r = se_live_open(job->endpoint.empty() ? nullptr : job->endpoint.c_str(),
+                                             &source);
+            job->Finish(r, source);
+        }).detach();
+    }
+    catch (const std::system_error&)
+    {
+        return;   // could not start a thread: try again later
+    }
+    if (reportFailure)
+    {
+        mOperationStatus = "Connecting to the live emulator...";
+        mOperationError = false;
+    }
+    mLiveOpen.job = std::move(job);
 #endif
 }
+
+// Collect a finished connection attempt, if any. Cheap when none is running.
+void App::PollLiveOpen()
+{
+    if (!mLiveOpen.job || !mLiveOpen.job->done.load()) { return; }
+    std::shared_ptr<LiveOpenJob> job = std::move(mLiveOpen.job);
+    mLiveOpen.job.reset();
+    se_result result = SE_ERR_IO;
+    se_data_source source = {};
+    if (!job->Take(result, source)) { return; }
+    bool attached = false;
+    if (result == SE_OK)
+    {
+        // Something else may have claimed the source while we were connecting (the user opened
+        // a file): don't displace it, and close the unused connection.
+        if (!mbHasData && !mContext)
+        {
+            attached = AttachLiveSource(source, job->endpoint.empty() ? nullptr : job->endpoint.c_str());
+        }
+        else if (source.close)
+        {
+            source.close(source.user);
+        }
+    }
+    if (!attached && job->reportFailure)
+    {
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+    }
+}
+#endif
 
 void App::EnableLiveAutoConnect(const char* endpoint)
 {
@@ -865,14 +952,16 @@ void App::BuildUI(IPlatform& platform)
 #ifdef SE_ENABLE_LIVE
     // Background auto-connect: while no source is loaded, retry about once a second
     // so Saturn Explorer latches onto an emulator even when it starts much later.
-    // se_live_open fails fast when no server is listening, so a failed poll is cheap.
+    // The attempt itself runs on a worker thread (StartLiveOpen), so a host that is slow to
+    // refuse cannot stall the frame; a failed poll costs a thread start, not a hitch.
+    PollLiveOpen();
     if (mbAutoConnectLive && !mbHasData && !mContext)
     {
         mLiveRetrySeconds += ImGui::GetIO().DeltaTime;
         if (mLiveRetrySeconds >= 1.0f)
         {
             mLiveRetrySeconds = 0.0f;
-            OpenLive(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str());
+            StartLiveOpen(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str(), false);
         }
     }
 #endif
@@ -882,7 +971,7 @@ void App::BuildUI(IPlatform& platform)
     // snapshot once at load, in CreateContextFromSource.)
     if (mbLiveSource && mContext)
     {
-        AdoptNewEmulatorInstance();
+        // (Session adoption happens AFTER the capture below, keyed to the capture's own session.)
         // Re-snapshot the running emulator each frame — except while paused, so an in-place
         // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
         // overwritten by the next capture. A step re-enables capture for a few frames
@@ -900,7 +989,27 @@ void App::BuildUI(IPlatform& platform)
 #else
         const bool restoreWaiting = false;
 #endif
-        if (!mbPaused || mStepHalt.Settling() || mStepHalt.HaltActive() || restoreWaiting)
+        // Whether a paused display still has frames to catch up on after a step. A fixed number
+        // of UI frames is a guess: if the step takes longer than that to reach the emulator, run
+        // and arrive, every capture in the window reads the pre-step snapshot, capture then
+        // stops, and the stepped frame never shows. A server that can say (v20+) is asked
+        // instead; the settle window is the fallback for one that cannot.
+        bool followingStep = mStepHalt.Settling();
+#ifdef SE_ENABLE_LIVE
+        {
+            const int catchUp = se_live_capture_pending(&mDataSource);
+            if (catchUp >= 0) followingStep = catchUp == 1;
+        }
+#endif
+        // The display is of an older session than the connection's: capture whatever else is going
+        // on, so the new emulator's first frame is what is adopted (and edits become possible)
+        // rather than leaving a paused display of a machine that is gone.
+        bool sessionBehind = false;
+#ifdef SE_ENABLE_LIVE
+        sessionBehind = se_live_captured_generation(&mDataSource) !=
+                        se_live_connection_generation(&mDataSource);
+#endif
+        if (!mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting || sessionBehind)
         {
 #ifdef SE_ENABLE_LIVE
             // Read the counters BEFORE capturing: the driver only moves forward, so what the
@@ -910,10 +1019,16 @@ void App::BuildUI(IPlatform& platform)
 #endif
             se_begin_frame(mContext);
             mStepHalt.ConsumeSettleFrame();
-#ifdef SE_ENABLE_LIVE
-            if (restoreSignal) ResolveRestoreWait(restoreDone, restoreFailed);
-#endif
         }
+#ifdef SE_ENABLE_LIVE
+        // Reconcile per-session state with the session that was just captured, before anything is
+        // drawn or any edit is committed against it: a pending Memory edit begun against the old
+        // emulator is voided here, in the same frame the new one's first snapshot appears.
+        AdoptNewEmulatorInstance();
+        // The restore counters were read before the capture, from the session then current. If
+        // adoption just reset the wait (a different emulator), they mean nothing here.
+        if (restoreSignal && mRestoreOutstanding > 0) ResolveRestoreWait(restoreDone, restoreFailed);
+#endif
         mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
         // to the emulator, then reflect a breakpoint halt in the UI run state.
@@ -1078,23 +1193,22 @@ void App::BuildUI(IPlatform& platform)
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
-    mEditHoldSeconds = std::max(0.0f, mEditHoldSeconds - ImGui::GetIO().DeltaTime);
-    if (mRestoreOutstanding > 0)
+    if (mRestoreOutstanding > 0 && !mRestoreTimedOut)
     {
-        // The emulator answers a load through the capture stream; if it never does (connection
-        // lost, server that cannot apply it, a refused request that was not counted), say so and
-        // stop refusing edits rather than lock the panels for good.
+        // The emulator answers a load through the capture stream. Silence is reported, once, but
+        // does NOT end the wait: it may still apply the load, and writes made before it does are
+        // lost or land on the restored state. Editing returns when the load resolves, another
+        // load resolves it, or the connection is replaced or closed.
         mRestoreWaitSeconds += ImGui::GetIO().DeltaTime;
         if (mRestoreWaitSeconds > 10.0f)
         {
-            mRestoreOutstanding = 0;
-            mMemBackend.NoteSourceChanged();
-            mLog.Error("The emulator did not confirm the state load within 10 s. What is shown "
-                       "may not be the loaded state; editing is available again.");
+            mRestoreTimedOut = true;
+            mLog.Error("The emulator has not confirmed the state load after 10 s. Editing stays "
+                       "off until it does; reconnecting or loading a state again clears it.");
         }
     }
-    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mEditHoldSeconds > 0.0f ||
-                            mRestoreOutstanding > 0);
+    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mRestoreOutstanding > 0 ||
+                            mRestoreUnconfirmable);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 
@@ -1433,6 +1547,7 @@ void App::DrawTransportBar()
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             bool rewound = false;
+            RestoreBaseline pendingBaseline;
             // Rewind "Play from here": if scrubbed to a resumable past frame on a rewind-capable
             // server, restore that frame's full savestate, apply the edits made while scrubbed,
             // and re-simulate forward from it — discarding the (now-stale) recorded future.
@@ -1445,6 +1560,7 @@ void App::DrawTransportBar()
                 {
                     const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
                     const std::vector<uint8_t> edits = BuildEditBlob();
+                    const RestoreBaseline before = SampleRestoreBaseline();
                     if (se_load_state(ctl, frameNo, state.data(), state.size(),
                                       edits.data(), edits.size()) == SE_OK)
                     {
@@ -1452,6 +1568,7 @@ void App::DrawTransportBar()
                         mPendingEdits.clear();
                         mPendingEditsFrame = -1;
                         rewound = true;
+                        pendingBaseline = before;
                     }
                 }
             }
@@ -1462,7 +1579,7 @@ void App::DrawTransportBar()
             mbScrubbing = false;
             mbPaused = false;
             VoidEditTarget();
-            if (rewound) BeginRestoreWait();   // the emulator applies the rewind asynchronously
+            if (rewound) BeginRestoreWait(pendingBaseline);   // the emulator applies it asynchronously
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
@@ -6117,6 +6234,7 @@ void App::DoLoadState(int slot)
     // restored state -- the staged pokes belong to a different frame's rewind. Anything
     // recorded after this moment is a future that never happened now, so the ring and the slot
     // tracker both start over from the next block.
+    const RestoreBaseline before = SampleRestoreBaseline();
     if (se_load_state(ctl, frame, image.data(), image.size(), nullptr, 0) != SE_OK)
     {
         mStateStatus = "The emulator refused the save state.";
@@ -6124,7 +6242,7 @@ void App::DoLoadState(int slot)
         return;
     }
     DropRecordedHistory();
-    BeginRestoreWait();
+    BeginRestoreWait(before);
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Loaded slot %d (frame %llu).", slot,
                   static_cast<unsigned long long>(frame));
@@ -6144,7 +6262,12 @@ void App::DoLoadState(int slot)
 void App::AdoptNewEmulatorInstance()
 {
 #ifdef SE_ENABLE_LIVE
-    const uint32_t generation = se_live_connection_generation(&mDataSource);
+    // The session of the DISPLAY, i.e. of the last capture -- not the connection's current one.
+    // The two differ while a reconnect has completed and this thread has not yet captured the
+    // new emulator; adopting by the connection's number could run before the capture it has to
+    // match, leaving a frame in which the data on screen is from a session the pending edits and
+    // history were not reset for. Called after the capture, so what is adopted is what is shown.
+    const uint32_t generation = se_live_captured_generation(&mDataSource);
     if (generation == mLiveConnGeneration) { return; }
     const bool firstAttach = mLiveConnGeneration == 0;
     mLiveConnGeneration = generation;
@@ -6152,7 +6275,7 @@ void App::AdoptNewEmulatorInstance()
 
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
     mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
-    mEditHoldSeconds = 0.0f;
+    mRestoreTimedOut = mRestoreUnconfirmable = false;   // a new process: the load is moot
     if (mScrubContext)
     {
         se_destroy(mScrubContext);   // holds a decompressed frame of the previous run
@@ -6200,27 +6323,34 @@ void App::VoidEditTarget()
     mMemBackend.SetReadOnly(true);     // and nothing commits to the context still on screen
 }
 
-void App::BeginRestoreWait()
+App::RestoreBaseline App::SampleRestoreBaseline() const
 {
-    uint32_t done = 0, failed = 0;
-    const bool signal = se_live_restore_state(&mDataSource, &done, &failed) != 0;
-    if (!signal)
+    RestoreBaseline b;
+    b.signal = se_live_restore_state(&mDataSource, &b.done, &b.failed) != 0;
+    return b;
+}
+
+void App::BeginRestoreWait(const RestoreBaseline& before)
+{
+    VoidEditTarget();
+    if (!before.signal)
     {
-        // A pre-v19 emulator reports nothing back. A timed hold is all that is left, and it is
-        // only a guess -- said in the Log so it is not mistaken for confirmation.
-        mEditHoldSeconds = std::max(mEditHoldSeconds, 1.0f);
-        mLog.Warn("This emulator build cannot confirm a state load; editing is held for 1 s "
-                  "and the loaded state is not verified.");
+        // An emulator older than protocol v19 reports nothing back, so there is no way to know
+        // when (or whether) the load lands. Guessing from elapsed time would let an edit hit the
+        // old data, so editing stays off until the connection is replaced -- said plainly.
+        mRestoreUnconfirmable = true;
+        mLog.Warn("This emulator build cannot confirm a state load, so editing is turned off "
+                  "until it is restarted with a current build or the connection is re-established.");
         return;
     }
     if (mRestoreOutstanding == 0)
     {
-        mRestoreBaseDone = done;
-        mRestoreBaseFailed = failed;
+        mRestoreBaseDone = before.done;
+        mRestoreBaseFailed = before.failed;
         mRestoreWaitSeconds = 0.0f;
+        mRestoreTimedOut = false;
     }
     ++mRestoreOutstanding;
-    VoidEditTarget();
 }
 
 void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
@@ -6231,6 +6361,11 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
     if (refused)
         mLog.Error("The emulator could not apply the state load; its state is unchanged.");
     mRestoreOutstanding = 0;
+    if (mRestoreTimedOut)
+    {
+        mRestoreTimedOut = false;
+        mLog.Info("The emulator has now confirmed the state load; editing is available again.");
+    }
     mMemBackend.NoteSourceChanged();   // edits begun against the pre-load data are void
 }
 
@@ -6258,9 +6393,17 @@ void App::DoLoadEmulatorState(int slot)
     // where it lands -- no frame number, unlike a rewind. Everything recorded is therefore
     // a future that may never have happened: drop it rather than leave a ring that claims
     // frames the emulator is no longer playing.
-    se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
+    const RestoreBaseline before = SampleRestoreBaseline();
+    if (se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot)) != 0)
+    {
+        // Refused (no emulator attached, a stale session, or another load still queued): nothing
+        // was asked of the emulator, so there is no outcome to wait for and nothing to drop.
+        mStateStatus = "The emulator slot load was not sent.";
+        mLog.Error(mStateStatus, se_frame_number(mContext));
+        return;
+    }
     DropRecordedHistory();
-    BeginRestoreWait();
+    BeginRestoreWait(before);
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
     mStateStatus = msg;
@@ -6419,12 +6562,13 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         }
         break;
     case TopBarCommandType::ConnectLive:
-        if (!OpenLive(nullptr))
-        {
-            mOperationStatus = "No compatible live emulator endpoint was found.";
-            mOperationError = true;
-            mLog.Error(mOperationStatus);
-        }
+#ifdef SE_ENABLE_LIVE
+        StartLiveOpen(nullptr, true);   // collected by PollLiveOpen on a later frame
+#else
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+#endif
         break;
     case TopBarCommandType::DisconnectLive:
         mController.ClearAll();

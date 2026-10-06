@@ -12,6 +12,11 @@
 extern "C" {
 #endif
 
+/* Edits are aimed at the session the calling thread last captured. Writes, loads, steps and
+ * slot loads made after the connection has been replaced -- but before the thread has captured
+ * the new emulator's first snapshot -- are refused (0 bytes / nonzero), because they were made
+ * against a display of a machine that is no longer there. */
+
 /* Open a live connection. 'endpoint' is the local socket path (POSIX) or named
  * pipe (Windows); pass NULL for the platform default (SE_LIVE_DEFAULT_*). On
  * success returns SE_OK and fills '*out' (whose 'close' stops the poll thread on
@@ -24,8 +29,11 @@ se_result se_live_open(const char* endpoint, se_data_source* out);
  * se_live_open. */
 uint32_t se_live_server_version(const se_data_source* ds);
 
-/* How many times the poll thread has attached its socket: 1 after the first connect, then
- * one more for every reconnect. The thread reconnects on its own when the emulator goes
+/* How many times the poll thread has attached to an emulator: 1 once the first snapshot has
+ * arrived, then one more for every reconnect that gets one. The number advances together with
+ * the first snapshot of the new connection (not at connect time), so a client that sees it
+ * change captures the NEW emulator's data and never the previous one's; edits and loads queued
+ * for a connection that ended are discarded rather than carried to the next. The thread reconnects on its own when the emulator goes
  * away and comes back, and the protocol carries nothing identifying the process, so a
  * client that watches only for errors never learns it is now talking to a different
  * emulator -- stop one game, launch another on the same endpoint, and the same se_context
@@ -34,6 +42,16 @@ uint32_t se_live_server_version(const se_data_source* ds);
  * state when it changes. 0 if 'ds' is not a live source. */
 uint32_t se_live_connection_generation(const se_data_source* ds);
 
+/* The connection generation of the snapshot the CALLING THREAD last captured -- the session the
+ * display it is drawing belongs to -- or 0 before its first capture. Differs from
+ * se_live_connection_generation while the connection has been replaced and the thread has not yet
+ * captured the new emulator. A client that reconciles per-session state (pending edits, recorded
+ * history) must key it to THIS number, read after its capture: the connection generation can
+ * advance between a check and the capture that follows it, so reconciling against it leaves a
+ * window in which the display belongs to a session the client has not adopted. Edits are
+ * accepted only while this equals the connection generation. */
+uint32_t se_live_captured_generation(const se_data_source* ds);
+
 /* How many state loads (rewind LST, emulator slot ELS) the emulator has applied and refused
  * since this run started (v19+). Every load request ends in exactly one of the two, and "done"
  * is counted only once the first frame of the restored timeline is in the reply stream, so a
@@ -41,6 +59,15 @@ uint32_t se_live_connection_generation(const se_data_source* ds);
  * Returns 1 and fills both when known; 0 for a pre-v19 server, no snapshot yet, or a source
  * that is not live -- the caller then has no completion signal and must say so. */
 int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed);
+
+/* Whether the display of a PAUSED live source still has frames to catch up on (v20+): a frame
+ * step that has been posted but not yet answered, granted by the emulator but not yet
+ * published, published but not yet fetched, or fetched but not yet captured. Returns 1 when a
+ * capture would show something new, 0 when the display is at the end of the stream, and -1 when
+ * the server cannot say (pre-v20, no snapshot yet, not a live source) -- the caller then falls
+ * back to capturing for a fixed number of frames. Replaces counting UI frames after a step,
+ * which gave up on a step the emulator was still working on. */
+int se_live_capture_pending(const se_data_source* ds);
 
 /* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
  * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32
@@ -74,10 +101,14 @@ void se_live_set_tracepoints(const se_data_source* ds, const uint8_t* descs, uin
  * server, or a build without the hook), so the caller should not show them at all.
  * se_live_emu_load_slot asks the emulator to load one through its own code. Nothing comes
  * back about where it lands: the client cannot know the resulting frame, so it must treat
- * its recorded history as gone -- unlike a rewind, which carries the frame it restores. */
+ * its recorded history as gone -- unlike a rewind, which carries the frame it restores.
+ * Returns 0 when the request was queued and nonzero when it was refused -- no emulator
+ * attached, aimed at a previous session (the caller's last capture is of an emulator that has
+ * since been replaced), another load still waiting to be sent, or not a live source. A caller
+ * that waits for the load's outcome must only do so on 0. */
 uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
                            uint64_t* mtime, uint32_t max);
-void se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
+int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
 
 /* Turn rewind capture on or off in the emulator (v18+). The emulator saves a FULL state every
  * frame to feed the rewind timeline, which is the most expensive thing the live tap asks of its
@@ -156,6 +187,13 @@ uint32_t se_live_drain_state_blocks(const se_data_source* ds,
  * Returns 1 if the emulator is halted on a breakpoint, 0 otherwise (or not live). */
 int se_live_get_stop(const se_data_source* ds, uint32_t* reason, uint32_t* cpu,
                      uint32_t* pc);
+
+/* Testing only: replace the host-name resolver used for "tcp:host:port" endpoints (NULL
+ * restores getaddrinfo). Lets a test make a lookup stall without needing a stalling DNS server.
+ * POSIX only; a no-op elsewhere. */
+struct addrinfo;
+void se_live_test_set_resolver(int (*fn)(const char* host, const char* port,
+                                         const struct addrinfo* hints, struct addrinfo** res));
 
 #ifdef __cplusplus
 }

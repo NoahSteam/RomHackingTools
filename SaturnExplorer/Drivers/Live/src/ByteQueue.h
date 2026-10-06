@@ -71,6 +71,13 @@ struct ByteQueue
         }
     }
 
+    // Drop everything.
+    void Clear()
+    {
+        q.clear();
+        bytes = 0;
+    }
+
     // The oldest entry, moved out. Only call on a non-empty queue.
     T Pop()
     {

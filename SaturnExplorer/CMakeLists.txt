@@ -675,7 +675,22 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
+
+        # The exporter against hostile/slow peers, and frame-step accounting, over the same
+        # default socket.
+        add_executable(SaturnExplorerLiveExporterRobustnessTests
+            FrontEnd/tests/LiveExporterRobustnessTests.cpp
+            Integration/Common/se_export.c)
+        target_include_directories(SaturnExplorerLiveExporterRobustnessTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveExporterRobustnessTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLiveExporterRobustnessTests
+                 COMMAND SaturnExplorerLiveExporterRobustnessTests)
         set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerExportAttachTests
+                             SaturnExplorerLiveExporterRobustnessTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
 endif()
