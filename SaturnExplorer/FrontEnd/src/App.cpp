@@ -111,7 +111,8 @@ enum class Ico { Play, Pause, Step, Prev, Next, PlayHere };
 
 // Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
 // with "##"); the glyph is drawn over the button rect. Returns true when pressed.
-bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
+bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false,
+                const char* disabledTip = nullptr)
 {
     const float h = ImGui::GetFrameHeight();
     if (disabled) ImGui::BeginDisabled();
@@ -143,6 +144,11 @@ bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
     }
     if (disabled) ImGui::EndDisabled();
     if (tip && !disabled) ImGui::SetItemTooltip("%s", tip);
+    // A disabled button is the one that most needs explaining, and ImGui hides a disabled
+    // item's hover unless it is asked not to.
+    else if (disabledTip &&
+             ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("%s", disabledTip);
     return pressed;
 }
 
@@ -1573,15 +1579,41 @@ void App::DrawTransportBar()
     ImGui::SameLine();
 
     // [ play from here ] — only offered when rewind is on, since without it there are no saved
-    // states to go back to. Lit while a past frame is selected and its state can be rebuilt.
+    // states to go back to. It acts on the frame the scrub bar shows selected: the one being
+    // scrubbed, or the newest when nothing has been scrubbed yet (which is where the bar rests).
     if (mSeekSupported)
     {
-        const bool canPlayHere = mbPaused && mbScrubbing && mScrubIndex >= 0 && mScrubIndex < n &&
-                                 se_supports_state_rewind(ctl) &&
-                                 mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex));
-        if (IconButton("##tp_playhere", Ico::PlayHere,
-                       "Play from here: restore this frame and resume, discarding the frames after it",
-                       !canPlayHere))
+        const int target = PlayFromHereTarget();
+        const bool canPlayHere = target >= 0 && se_supports_state_rewind(ctl) &&
+                                 mRecorder.CanReconstruct(static_cast<size_t>(target));
+
+        char enabledTip[256] = "";
+        const char* disabledTip = nullptr;
+        if (canPlayHere)
+        {
+            std::snprintf(enabledTip, sizeof(enabledTip),
+                          "Play From Here\nRestore the game to frame #%llu and resume from it.\n"
+                          "The %d recorded frame(s) after it are discarded.",
+                          static_cast<unsigned long long>(mRecorder.FrameNumber(static_cast<size_t>(target))),
+                          n - 1 - target);
+        }
+        else if (!mbPaused)
+            disabledTip = "Play From Here (unavailable)\nPause the game first, then pick a recorded frame "
+                          "with the scrub bar.\nThis restores the game to that frame and resumes from it, "
+                          "discarding the recorded frames after it.";
+        else if (n == 0)
+            disabledTip = "Play From Here (unavailable)\nNothing has been recorded yet. Let the game run "
+                          "with Rewind enabled, then pause and pick a frame.\nThis restores the game to "
+                          "that frame and resumes from it, discarding the recorded frames after it.";
+        else if (!se_supports_state_rewind(ctl))
+            disabledTip = "Play From Here (unavailable)\nThe connected emulator can't load savestates.";
+        else
+            disabledTip = "Play From Here (unavailable)\nThis frame has no savestate to restore. States "
+                          "arrive a moment after each frame, and the oldest are dropped as the buffer "
+                          "fills.\nPick another frame with the scrub bar.";
+
+        if (IconButton("##tp_playhere", Ico::PlayHere, canPlayHere ? enabledTip : nullptr,
+                       !canPlayHere, disabledTip))
             PlayFromScrubbedFrame(ctl);
         ImGui::SameLine();
     }
@@ -1634,20 +1666,30 @@ void App::DrawTransportBar()
 #endif
 }
 
-// "Play from here": load the scrubbed frame's full savestate into the emulator, replay the
+// The recorded frame "Play from here" acts on: the one being scrubbed, else the newest, which is
+// where the scrub bar rests. -1 when not paused on recorded frames. Panels draw the live frame
+// until the user scrubs, so a stale mScrubIndex from an earlier scrub is deliberately ignored.
+int App::PlayFromHereTarget() const
+{
+    const int n = static_cast<int>(mRecorder.Count());
+    if (!mbPaused || n == 0) return -1;
+    if (!mbScrubbing) return n - 1;
+    return (mScrubIndex >= 0 && mScrubIndex < n) ? mScrubIndex : -1;
+}
+
+// "Play from here": load the selected frame's full savestate into the emulator, replay the
 // edits made while scrubbed on top of it, and resume -- a Load State whose source is the rewind
 // buffer. The frames after it are discarded because they describe a future that is no longer
 // going to happen; keeping them would let the scrubber show a timeline the game left.
 void App::PlayFromScrubbedFrame(se_context* ctl)
 {
 #ifdef SE_ENABLE_LIVE
-    if (!mbScrubbing || !mSeekSupported || mScrubIndex < 0 ||
-        static_cast<size_t>(mScrubIndex) >= mRecorder.Count() ||
-        !se_supports_state_rewind(ctl) ||
-        !mRecorder.CanReconstruct(static_cast<size_t>(mScrubIndex)))
+    const int target = PlayFromHereTarget();
+    if (!mSeekSupported || target < 0 || !se_supports_state_rewind(ctl) ||
+        !mRecorder.CanReconstruct(static_cast<size_t>(target)))
         return;
 
-    const size_t index = static_cast<size_t>(mScrubIndex);
+    const size_t index = static_cast<size_t>(target);
     const uint64_t frameNo = mRecorder.FrameNumber(index);
     std::vector<uint8_t> state;
     if (!mRecorder.ReconstructState(index, state))
