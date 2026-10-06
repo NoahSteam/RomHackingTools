@@ -144,6 +144,7 @@ private:
     std::vector<uint8_t> mWindowBytes;
     uint32_t             mWindowBytesBase = 0;
     bool                 mHaveWindowBytes = false;
+    uint64_t             mWindowBytesSource = 0;   // backend.SourceId() the bytes were read from
 
     // User comment store (address -> note), overlaid on the auto-generated comment
     // and persisted across sessions. Shared by both CPUs (they share the address map).

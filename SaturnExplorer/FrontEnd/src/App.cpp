@@ -435,6 +435,19 @@ void App::SaveSearchOptions()
     mSettings.Set("search", "paths", joined);
 }
 
+// What a debugging session accumulates that means nothing against another game: RAM-search hits
+// and their comparison baseline, access-log rows (keyed by PC, so a new game's hit would merge
+// into the old row), and tracepoint hit counts. Retained tracepoints are re-sent to whatever
+// emulator attaches next, so the sync generation is forced stale too.
+void App::ResetSessionDebugState()
+{
+    mRamSearch.Reset();
+    mRamSearchStatus.clear();
+    mAccessLog.Clear();
+    mLastTpGeneration = mActions.Generation() - 1;
+    mActions.ResetCounts();
+}
+
 void App::CloseData(bool cancelAutoConnect)
 {
     if (mbLiveSource && mContext)
@@ -459,6 +472,8 @@ void App::CloseData(bool cancelAutoConnect)
     mScrubIndex = -1;
     mScrubShownIndex = -1;
     mRecorder.Clear();
+    mStateSlots.Reset();         // its cached savestate is the previous game's
+    DiscardPendingEdits();
     // The next source gets its own driver with its own counter starting at zero, so this
     // must start over too or its first attach would look like a replacement.
     mLiveConnGeneration = 0;
@@ -483,6 +498,7 @@ void App::CloseData(bool cancelAutoConnect)
     mCallStackDirty = true;
     mSelectedCommand = -1;
     mSelection.clear();
+    ResetSessionDebugState();
     // The frame texture is freed lazily (on next size change) or with the
     // platform's device at shutdown; mark it stale so a new dump recreates it.
     mFrameWidth = 0;
@@ -1254,6 +1270,14 @@ void App::BuildUI(IPlatform& platform)
                             mRestoreUnconfirmable);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
+#ifdef SE_ENABLE_LIVE
+    {
+        // A stack built for one frame is not the stack of another: rebuild on every change of
+        // the scrubbed frame, and on entering or leaving the scrub.
+        const int viewKey = (mScrubContext && view == mScrubContext) ? mScrubShownIndex : -1;
+        if (viewKey != mCallStackViewKey) { mCallStackViewKey = viewKey; mCallStackDirty = true; }
+    }
+#endif
 
     if (mbHasData)
     {
@@ -1592,6 +1616,7 @@ void App::DrawTransportBar()
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             se_frame_resume(ctl);
+            DiscardPendingEdits();   // the frame they were staged on is being left behind
             mbScrubbing = false;
             mbPaused = false;
             VoidEditTarget();
@@ -1725,6 +1750,9 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
         return;
     }
 
+    // Staged edits replay only onto the frame they were made against. Ordinary Play, another
+    // scrub or a new session leaves them behind, and they must not ride onto this target.
+    if (!mPendingEdits.empty() && mPendingEditsFrameNo != frameNo) { DiscardPendingEdits(); }
     const std::vector<uint8_t> edits = BuildEditBlob();
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
@@ -1738,8 +1766,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
     }
 
     mRecorder.TruncateAfter(index);
-    mPendingEdits.clear();
-    mPendingEditsFrame = -1;
+    DiscardPendingEdits();
     mbScrubbing = false;
     mbPaused = false;
     VoidEditTarget();
@@ -1843,6 +1870,10 @@ void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, si
     // panels still draw (and commit to) the old frame. Tagged with the new index, that edit
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
     mPendingEditsFrame = mScrubShownIndex;
+    if (mScrubShownIndex >= 0 && static_cast<size_t>(mScrubShownIndex) < mRecorder.Count())
+    {
+        mPendingEditsFrameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubShownIndex));
+    }
     // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
     for (size_t i = 0; i < len; ++i)
     {
@@ -3207,7 +3238,10 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
 #ifdef SE_ENABLE_LIVE
     // Prefer the emulator's recorded shadow stack (● Confirmed) when the live source
     // supplies one (v9+); fall back to the heuristic reconstruction otherwise.
-    if (mbLiveSource)
+    // Not while the panels show a scrubbed frame: the emulator's stack is the present one, and
+    // pairing it with that frame's registers and memory would label it Confirmed for the wrong time.
+    const bool viewingScrub = mScrubContext && mContext == mScrubContext;
+    if (mbLiveSource && !viewingScrub)
     {
         se_live_call_frame wire[SE_LIVE_CALLSTACK_MAX];
         const uint32_t n = se_live_poll_callstack(&mDataSource, cpu, wire, SE_LIVE_CALLSTACK_MAX);
@@ -3759,6 +3793,9 @@ void App::Continue()
     if (mbHasData && se_supports_frame_control(mContext))
     {
         se_frame_resume(mContext);
+#ifdef SE_ENABLE_LIVE
+        DiscardPendingEdits();
+#endif
         mbPaused = false;
     }
 }
@@ -6473,8 +6510,8 @@ void App::AdoptNewEmulatorInstance()
     // Breakpoints live in the emulator, and this one has none: force a full re-sync rather
     // than leave the user's set showing in the gutter while nothing is armed.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
-    mLastTpGeneration = mActions.Generation() - 1;   // likewise its tracepoints...
-    mActions.ResetCounts();                          // ...and its counts, which start from nothing
+    ResetSessionDebugState();        // its tracepoints are not installed, its counts start at
+                                     // nothing, and the old game's search/access rows are void
     mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
     mLog.Info("The emulator was replaced — cleared the recorded history from the previous "
               "session.");
@@ -6486,12 +6523,19 @@ void App::AdoptNewEmulatorInstance()
 // savestate keyframe the next delta would be diffed against, and edits staged against a
 // scrubbed frame. The scrub-rewind path deliberately does NOT use this -- it restores a
 // frame that IS in the ring, so it truncates the future instead of dropping the past.
+void App::DiscardPendingEdits()
+{
+    mPendingEdits.clear();
+    mPendingEditsFrame = -1;
+    mPendingEditsFrameNo = 0;
+}
+
 void App::DropRecordedHistory()
 {
     mRecorder.Clear();
     mStateSlots.Reset();
-    mPendingEdits.clear();
-    mPendingEditsFrame = -1;
+    DiscardPendingEdits();
+    mCallStackDirty = true;   // the registers it was built from are about to be replaced
     mbScrubbing = false;
     mScrubIndex = -1;
     mbPaused = false;
@@ -6514,6 +6558,7 @@ App::RestoreBaseline App::SampleRestoreBaseline() const
 void App::BeginRestoreWait(const RestoreBaseline& before)
 {
     VoidEditTarget();
+    mCallStackDirty = true;   // a state is being loaded; whatever was built is the old game's
     if (!before.signal)
     {
         // An emulator older than protocol v19 reports nothing back, so there is no way to know
@@ -6548,6 +6593,7 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
         mLog.Info("The emulator has now confirmed the state load; editing is available again.");
     }
     mMemBackend.NoteSourceChanged();   // edits begun against the pre-load data are void
+    mCallStackDirty = true;            // the stack was built for the state that was replaced
 }
 
 // SE's own slots, read from disk. Only the events that can change them call this: the
@@ -6825,7 +6871,14 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mOpenSettings = true;
         break;
     case TopBarCommandType::TogglePause:
-        if (mbPaused) { se_frame_resume(mContext); mbPaused = false; }
+        if (mbPaused)
+        {
+            se_frame_resume(mContext);
+#ifdef SE_ENABLE_LIVE
+            DiscardPendingEdits();
+#endif
+            mbPaused = false;
+        }
         else { se_frame_pause(mContext); mbPaused = true; }
         break;
     case TopBarCommandType::StepFrame:
