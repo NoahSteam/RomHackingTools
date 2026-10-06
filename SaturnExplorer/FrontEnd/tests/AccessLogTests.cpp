@@ -36,6 +36,16 @@ int main()
     Check(!log.Records()[0].stack.empty() &&
           log.Records()[0].stack[0].functionAddress == 0xBBBB, "latest stack kept");
 
+    // The decoded instruction follows the latest hit: another game's code at the same PC must
+    // not keep the old mnemonic beside the new count and stack.
+    log.Record(0x06001000, 0, 13, "add r1,r2", Stack(0xBBBB));
+    Check(log.Records()[0].insn == "add r1,r2", "merge refreshes the instruction");
+    log.Record(0x06001000, 0, 14, "", Stack(0xBBBB));
+    Check(log.Records()[0].insn == "add r1,r2", "an undecodable hit keeps the last instruction");
+    log.Clear();
+    log.Record(0x06001000, 0, 10, "mov.l r0,@r4", Stack(0xAAAA));
+    log.Record(0x06001000, 0, 12, "mov.l r0,@r4", Stack(0xBBBB));
+
     // A different instruction is a separate row; first-seen order preserved.
     log.Record(0x06002000, 0, 13, "mov.w r1,@r5", Stack(0xCCCC));
     Check(log.Size() == 2, "different pc adds a row");

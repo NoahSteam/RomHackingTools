@@ -15,6 +15,7 @@ void AccessLog::Record(uint32_t pc, int cpu, uint32_t frame, std::string insn,
         ++r.count;
         r.lastFrame = frame;
         r.stack = std::move(stack);
+        if (!insn.empty()) { r.insn = std::move(insn); }   // the code at this PC may have changed
         return;
     }
     AccessRecord r;

@@ -538,6 +538,11 @@ private:
     struct PendingPoke { bool isSound = false; uint32_t addr = 0; std::vector<uint8_t> bytes; };
     std::vector<PendingPoke> mPendingEdits;
     int              mPendingEditsFrame = -1;  // scrub index the edits belong to (cleared on change)
+    uint64_t         mPendingEditsFrameNo = 0; // recorder frame number of that frame: the identity a
+                                               // replay checks, since indexes shift as the ring evicts
+    void ResetSessionDebugState();             // RAM search, access log, tracepoint sync + counts
+    void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
+    int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
     void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
     // Build the SE_LIVE_EDIT_* blob from mPendingEdits (for the LST rewind payload).

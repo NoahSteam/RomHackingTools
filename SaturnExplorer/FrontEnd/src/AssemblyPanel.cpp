@@ -324,12 +324,16 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     const uint32_t winLen = (uint32_t)mWindowInstr * 2;
     // The length is part of the cache key as well as the base: a window trimmed by its region
     // can keep its base while changing size, and reusing the old bytes would decode past them.
+    // ...and so is the source: the bytes of a replaced emulator, a reloaded state or another
+    // scrubbed frame are not the code at the same address now, even with Auto Refresh off.
+    const uint64_t sourceId = backend.SourceId();
     if (mAutoRefresh || !mHaveWindowBytes || mWindowBytesBase != mWindowBase ||
-        mWindowBytes.size() != winLen)
+        mWindowBytes.size() != winLen || mWindowBytesSource != sourceId)
     {
         auto results = backend.ReadMemoryBatch({ { mWindowBase, winLen } });
         mWindowBytes = results[0].success ? results[0].bytes : std::vector<uint8_t>();
         mWindowBytesBase = mWindowBase;
+        mWindowBytesSource = sourceId;
         mHaveWindowBytes = true;
     }
     const std::vector<uint8_t>& code = mWindowBytes;
