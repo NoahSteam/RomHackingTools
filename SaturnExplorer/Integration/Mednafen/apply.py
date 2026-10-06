@@ -177,9 +177,16 @@ extern "C" unsigned short SsDbgReadOpcode(unsigned int addr) {
    run-loop dispatcher (rltab[...][DBG_NeedCPUHooks()]) switches to the per-instruction
    DBG_CPUHandler path on its own. The single callback SeSsBpHook serves BOTH features:
    it runs SeMednafenTraceHook every call (tracepoints + the v9 shadow call stack), then
-   halts if the SS debugger flagged a PC breakpoint at this instruction. During the
-   callback DBG_CPUHandler guarantees which == DBG.ActiveCPU, so DBG.ActiveCPU is the
-   executing CPU. */
+   halts if the SS debugger flagged a PC breakpoint at this instruction.
+
+   BOTH SH-2s. Stock DBG_CPUHandler returns at its first line when which != DBG.ActiveCPU --
+   the debugger UI's "current CPU", the master unless something changed it, and nothing in
+   this integration does -- so the slave's breakpoints, tracepoints and call tracking never ran.
+   process_debug patches DBG_CPUHandler to run the whole handler for the CPU that is executing
+   whenever SeSsBothCpus is set (our callback is installed), by making that CPU the "active" one
+   for the duration of the call (SeSsActiveCpuScope) and putting it in SeSsExecCpu. So the
+   callback knows which CPU it is looking at from SeSsExecCpu, not from DBG.ActiveCPU, and
+   user breakpoints stay shared: a PC breakpoint halts whichever core reaches it. */
 static void SeSsBpHook(uint32 PC, bool bpoint);   /* fwd: SeSyncCpuHook installs it */
 static int sSeBpActive = 0;      /* >=1 execution breakpoint installed */
 static int sSeTraceActive = 0;   /* >=1 enabled tracepoint armed */
@@ -188,30 +195,42 @@ static int sSeStepActive = 0;    /* an instruction step is in progress */
    cheap-gate the SCU-DMA watchpoint check (SeSsDmaWatch); C linkage + a global so scu.inc,
    which is included before debug.inc where DBG lives, can test it without the debugger guts. */
 extern "C" { int SeSsMemWatchArmed = 0; }
+/* SeSsBothCpus: run the debugger handler for whichever SH-2 is executing (see above).
+   SeSsExecCpu: the CPU DBG_CPUHandler is currently running for (0 master / 1 slave). */
+extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
 /* Install/remove the per-instruction callback to match what is armed: continuous (every
    instruction) when tracepoints OR an instruction step are active so the hook sees every
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
    breakpoints exist; removed entirely when none is active so the fast run loop returns.
    Continuous still passes bpoint=true on breakpoint PCs, so it is a superset. */
 static void SeSyncCpuHook(void) {
-   if (sSeBpActive || sSeTraceActive || sSeStepActive)
+   const int on = sSeBpActive || sSeTraceActive || sSeStepActive;
+   SeSsBothCpus = on;
+   if (on)
       DBG_SetCPUCallback(SeSsBpHook, (sSeTraceActive || sSeStepActive) != 0);
    else
       DBG_SetCPUCallback(0, false);
 }
 static void SeSsBpHook(uint32 PC, bool bpoint) {
+   /* The CPU this call is about -- passed explicitly (see the note above), never read back from
+      DBG.ActiveCPU. */
+   const int cpu = SeSsExecCpu;
    /* Per-instruction (continuous mode): drive tracepoints + the shadow call stack. This
       runs BEFORE the halt gate, so a tracepoint on the very PC a breakpoint also halts on
       still fires as the PC is reached. */
-   SeMednafenTraceHook((int)DBG.ActiveCPU, (unsigned int)PC);
+   SeMednafenTraceHook(cpu, (unsigned int)PC);
    /* Instruction step: count this instruction on the stepped CPU; halt when the budget
-      is spent (SeExportInsnStepTick returns 1). */
-   int stepHalt = sSeStepActive ? SeExportInsnStepTick((int)DBG.ActiveCPU, (unsigned int)PC) : 0;
+      is spent (SeExportInsnStepTick returns 1). The tick needs to know whether a repeat of the
+      same PC is the branch-to-self retiring or the SH-2 stalled on the bus; only the glue can
+      decode the instruction to tell. */
+   int stepHalt = sSeStepActive
+      ? SeExportInsnStepTick(cpu, (unsigned int)PC, SeMednafenSelfBranchTaken(cpu, (unsigned int)PC))
+      : 0;
    if (bpoint || stepHalt) {
       if (stepHalt && !bpoint)
-         SeExportNotifyStep((int)DBG.ActiveCPU, (unsigned int)PC);
+         SeExportNotifyStep(cpu, (unsigned int)PC);
       else
-         SeExportNotifyStop((int)DBG.ActiveCPU, (unsigned int)PC);
+         SeExportNotifyStop(cpu, (unsigned int)PC);
       /* Publish a snapshot NOW, from inside the halt, so the client sees the registers and
          memory AT the breakpoint/step instead of the last completed frame's end state. The
          normal snapshot only runs at end-of-frame, which a mid-frame halt never reaches, so
@@ -248,7 +267,8 @@ extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
    else         DBG_CheckReadBP(len, A);
    if (!DBG.FoundBPoint) return;
    DBG.FoundBPoint = false;
-   SeExportNotifyStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
+   /* A halt between instructions: the instruction at this PC has not run (NotifyDmaStop). */
+   SeExportNotifyDmaStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
    SeMednafenFrameHook();          /* publish the halted state (regs/RAM at the DMA write) */
    while (!SeExportGateFrame()) { }
    /* Hand off to the CPU step machinery if a single-step (IST) was requested from this DMA
@@ -256,8 +276,9 @@ extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
       next retired instruction counts down the step budget and halts. Without this a Step from a
       DMA-watchpoint halt just resumes (the halt is outside the instruction hook), so it never
       single-steps and, once the watchpoint stops re-hitting, runs away. The step counter is
-      retire-based (SeExportInsnStepTick keys off PC change), so the CPU being bus-stalled while
-      the DMA drains doesn't eat the budget and the halt PC was seeded by SeExportNotifyStop. */
+      retire-based (see SeExportInsnStepTick), so the CPU being bus-stalled while the DMA drains
+      doesn't eat the budget, and the halt PC was seeded by SeExportNotifyDmaStop as an
+      instruction that has not run yet. */
    sSeStepActive = SeExportInsnStepBegin() ? 1 : 0;
    SeSyncCpuHook();
 }
@@ -310,6 +331,7 @@ extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)ad
 extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind) { (void)cpu; (void)addr; (void)size; (void)kind; }
 extern "C" void SsDbgClearBps(void) {}
 extern "C" void SsDbgSetTraceActive(int active) { (void)active; }
+extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
 #endif
 }"""
 
@@ -732,13 +754,49 @@ FWD_DECLS = (
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeExportNotifyStep(int cpu, unsigned int pc);\n"
     "extern \"C\" int  SeExportInsnStepBegin(void);\n"
-    "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc);\n"
+    "extern \"C\" void SeExportNotifyDmaStop(int cpu, unsigned int pc);\n"
+    "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken);\n"
     "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
+    "extern \"C\" int  SeMednafenSelfBranchTaken(int cpu, unsigned int pc);\n"
+    # debug.inc (patched, see process_debug) runs DBG_CPUHandler for the executing CPU while these say so.
+    "extern \"C\" int  SeSsBothCpus;\n"
+    "extern \"C\" int  SeSsExecCpu;\n"
     # SCU-DMA watchpoint bridge: scu.inc (included before debug.inc, where DBG lives) calls
     # SeSsDmaWatch — defined at EOF after debug.inc — gated on the SeSsMemWatchArmed flag.
     "extern \"C\" int  SeSsMemWatchArmed;\n"
     "extern \"C\" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite);\n"
 )
+
+# ---- The slave SH-2 under the debugger. ss/debug.inc's DBG_CPUHandler(which, ...) returns at its first
+#      line when `which != DBG.ActiveCPU`, and ActiveCPU is the debugger UI's "current CPU" -- the master
+#      unless that UI changed it, which nothing in this integration does. So with a breakpoint,
+#      tracepoint or step armed, only the master ever reached our callback. This makes the handler run
+#      for whichever CPU is executing while SeSsBothCpus is set (SeSyncCpuHook sets it exactly while our
+#      callback is installed): the CPU becomes the "active" one for the duration of the call -- so
+#      everything the handler does downstream of that line sees the invariant it was written under,
+#      which == ActiveCPU -- and the previous value is restored on every exit path by a scope guard.
+#      The guard is inserted at the TOP of the function, ahead of the stock filter, which is left
+#      untouched (so --revert only has to remove our block). The helper is a template because the
+#      type of DBG.ActiveCPU is the fork's to choose. ----
+DEBUG_SCOPE_HELPER = """\
+/* Saturn Explorer: make the executing SH-2 the debugger's "active" one for one DBG_CPUHandler call
+   (see Integration/Mednafen/apply.py, "The slave SH-2 under the debugger"). */
+extern "C" int SeSsBothCpus;
+extern "C" int SeSsExecCpu;
+template<typename T> struct SeSsActiveCpuScope {
+   T& ref; T saved;
+   SeSsActiveCpuScope(T& active, unsigned int which) : ref(active), saved(active) {
+      SeSsExecCpu = (int)which;
+      if(SeSsBothCpus) ref = (T)which;
+   }
+   ~SeSsActiveCpuScope() { ref = saved; }
+};"""
+DEBUG_SCOPE_USE = (
+    "  /* Saturn Explorer: run this handler for the executing SH-2, not only the debugger's active one. */\n"
+    "  SeSsActiveCpuScope<decltype(DBG.ActiveCPU)> se_active_cpu(DBG.ActiveCPU, (unsigned int)which);\n"
+)
+DEBUG_HANDLER_ANCHOR = r'(\bDBG_CPUHandler\s*\([^)]*\)\s*(?:noexcept\s*)?\{[ \t]*\n)'
+DEBUG_FILE = "debug.inc"
 
 # Per-frame snapshot call, injected after the frame's cycle count is finalized.
 FRAME_HOOK = (
@@ -909,6 +967,26 @@ def process_scu(src_dir, do_write):
     notes = ["scu.inc (DMA watchpoint):"]
     text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
     text, n = apply_anchored(text, SCU_DMA_ANCHOR, SCU_DMA_HOOK, "SeSsDmaWatch(A,")
+    notes.append(n)
+    if do_write and text != original:
+        open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
+    return notes
+
+
+def process_debug(src_dir, do_write):
+    """Let the debugger's per-instruction handler run for the slave SH-2 as well as the master (see
+    DEBUG_SCOPE_HELPER). Anchored on the DEFINITION of DBG_CPUHandler -- the signature through its opening
+    brace -- not on the filter line inside it, whose exact spelling is the fork's. A miss is reported
+    loudly: without this patch breakpoints, tracepoints and the shadow call stack silently cover only
+    the master."""
+    path = os.path.join(src_dir, DEBUG_FILE)
+    if not os.path.isfile(path):
+        return ["debug.inc (slave SH-2 handler):", "  MISSING  debug.inc"]
+    notes = ["debug.inc (slave SH-2 handler):"]
+    text = original = open(path, encoding="utf-8", errors="surrogateescape").read()
+    text, n = apply_prepend(text, DEBUG_SCOPE_HELPER, "SeSsActiveCpuScope {")
+    notes.append(n)
+    text, n = apply_anchored(text, DEBUG_HANDLER_ANCHOR, DEBUG_SCOPE_USE, "SeSsActiveCpuScope<decltype")
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)
@@ -1140,7 +1218,7 @@ def process_build(root, do_write):
 def revert(src_dir, root):
     fence_re = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END) + r"\n?", re.DOTALL)
     edited = [os.path.join(src_dir, f) for f in
-              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
+              ("vdp1.cpp", "vdp2.cpp", "ss.cpp", "scu.inc", "debug.inc", "sound.cpp", "scsp.h", "cdb.cpp", "smpc.cpp", "smpc.h")]
     edited.append(os.path.join(root, TITLE_FILE))   # window-title mark (SDL frontend)
     edited.append(os.path.join(root, INPUT_FILE))   # keyboard-map hook (SDL frontend)
     for path in edited:
@@ -1197,6 +1275,7 @@ def main():
     notes += process_smpc(src_dir, do_write)
     notes += process_ss(src_dir, do_write, with_pause)
     notes += process_scu(src_dir, do_write)
+    notes += process_debug(src_dir, do_write)
     notes += process_vdp1_drawend(src_dir, do_write)
     notes += process_sound(src_dir, do_write)
     notes += process_cd(src_dir, do_write)

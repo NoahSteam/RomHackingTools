@@ -168,15 +168,20 @@ private:
     void SyncBreakpointsToLive();           // push the breakpoint set to the emulator
     // Instruction stepping (from the paused/breakpoint-hit workspace). StepInto runs one
     // SH-2 instruction; StepOver runs a called subroutine to completion (else one instr);
-    // StepOut runs to the current frame's return address (PR). cpu = the halted CPU; each
-    // reads that CPU's registers itself, so callers just pass the CPU.
+    // StepOut runs to the current frame's return address, taken from the recorded call frame (PR
+    // is not it once the function has made a call of its own). All three apply to the CPU that
+    // HALTED, whatever 'cpu' a panel passes: the instruction step runs the CPU the stop latched, and
+    // a transient breakpoint is completed only by that CPU. The panels disable the buttons while
+    // they show the other one.
     void StepInto(int cpu);
     void StepOver(int cpu);
     void StepOut(int cpu);
+    int  SteppedCpu() const;
     // Install the transient step breakpoint at 'addr' and resume — the shared "run to a
-    // computed address, then halt" used by StepOver/StepOut. CPU-agnostic (SH-2 PC
-    // breakpoints are shared across both cores).
-    void RunToTransient(uint32_t addr);
+    // computed address, then halt" used by StepOver/StepOut. The breakpoint itself is shared across
+    // both SH-2 cores (that is how the emulator holds it); the step completes only when 'cpu' reaches
+    // it.
+    void RunToTransient(uint32_t addr, int cpu);
     // Resume the halted emulator (shared by the toolbar, both run-control strips, Run to
     // Here, and the step helpers). No-op without live frame control.
     void Continue();

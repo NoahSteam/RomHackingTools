@@ -57,7 +57,22 @@ struct ExecutionAction
     ActionEffects effects;
 
     uint64_t     hits = 0;           // times it has fired (updated as events arrive)
+    uint64_t     seen = 0;           // executions whose condition held, counted here (see EmulatorAppliesRepeat)
 };
+
+// Who applies a tracepoint's repeat policy (Once / Every N) to its executions.
+//
+// The emulator can, and should: a tracepoint on hot code with "every 1000th" would otherwise queue a
+// thousand events to be thrown away, and the queue drops what it cannot hold. But it can apply the
+// policy only to what it can see, which is EXECUTIONS -- it cannot evaluate a condition -- so a
+// tracepoint with a condition is counted here, over the executions whose condition held. And an
+// emulator older than protocol v21 applies nothing, so everything is counted here for it. Either way
+// exactly one side counts, which is what keeps "every 3rd" from becoming "every 9th".
+constexpr uint32_t kEmulatorAppliesRepeatSince = 21;
+inline bool EmulatorAppliesRepeat(const ExecutionAction& a, uint32_t serverVersion)
+{
+    return serverVersion >= kEmulatorAppliesRepeatSince && a.condition.empty();
+}
 
 class ExecutionActions
 {
@@ -68,7 +83,9 @@ public:
     bool HasLogAt(int cpu, uint32_t addr) const;
     const ExecutionAction* LogAt(int cpu, uint32_t addr) const;
 
-    // Add an action and return its id (used by "Create Tracepoint…" from the editor).
+    // Add an action and return its id (used by "Create Tracepoint…" from the editor). The repeat
+    // count is clamped to what the wire carries; effects that nothing implements yet are dropped
+    // (see ImplementedEffects).
     uint64_t Add(const ExecutionAction& a);
     // Replace the mutable fields of an existing action (from the editor's OK).
     void Update(const ExecutionAction& a);
@@ -79,7 +96,15 @@ public:
     void SetEnabled(uint64_t id, bool enabled);
     void Remove(uint64_t id);
     void Clear();
-    void RecordHit(uint64_t id);     // ++hits (and disable if repeat==Once)
+    // A tracepoint fired and its condition (if any) held: decide whether the user's repeat policy
+    // lets it act. Returns false for an action that is gone or disabled -- events already in flight
+    // when a Once fired, or the user switched it off -- which must not be acted on. Counts the hit; a
+    // fire-once action disables itself HERE and bumps the generation, so the emulator is sent the
+    // disable instead of carrying on firing it. 'emulatorApplies' is EmulatorAppliesRepeat for it.
+    bool AcceptHit(uint64_t id, bool emulatorApplies);
+    // A different emulator: its counts start from nothing, so ours do too. (A re-sent set to the SAME
+    // emulator does not restart a tracepoint that did not change, so nothing here is reset by one.)
+    void ResetCounts();
 
     const std::vector<ExecutionAction>& All() const { return mActions; }
     size_t Count() const { return mActions.size(); }

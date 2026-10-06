@@ -114,17 +114,27 @@ void SeExportNotifyStop(int cpu, unsigned int pc);
 /* Instruction stepping (v12+). The emulator's per-instruction debug hook drives these:
  *  - SeExportNotifyStep(cpu, pc): latch a stop as SE_LIVE_STOP_STEP (a completed step),
  *    the step analog of SeExportNotifyStop.
+ *  - SeExportNotifyDmaStop(cpu, pc): a halt that did NOT come from the per-instruction hook --
+ *    an SCU-DMA watchpoint, which stops between instructions. 'pc' is the instruction the CPU is
+ *    about to execute, which has not run yet (so its first presentation after a step is not a
+ *    retirement, unlike the hook's own halts, where the instruction at the halt PC runs next).
  *  - SeExportInsnStepBegin(): call right after the halt gate releases; returns 1 if an
- *    instruction step (IST verb) was requested, activating its budget — the caller then
+ *    instruction step (IST verb) was requested, activating its budget -- the caller then
  *    arms continuous per-instruction hooking.
- *  - SeExportInsnStepTick(cpu, pc): call from the per-instruction hook with the CPU's current
- *    PC; returns 1 when the step budget is spent (halt here). Only the stepped CPU is counted,
- *    and only retired instructions count (a repeated PC — the SH-2 bus-stalled behind a DMA —
- *    does not spend budget), so a step from a DMA-watchpoint halt advances one real instruction
- *    instead of pinning the PC. */
+ *  - SeExportInsnStepTick(cpu, pc, selfBranchTaken): call from the per-instruction hook with the
+ *    CPU's current PC; returns 1 when the step budget is spent (halt here). Only the stepped CPU
+ *    is counted, and only retired instructions count: a repeated PC (the SH-2 bus-stalled behind
+ *    a DMA) does not spend budget, so a step from a DMA-watchpoint halt advances one real
+ *    instruction instead of pinning the PC. A PC alone cannot say whether an instruction
+ *    retired when it branches to itself, so the caller -- which can decode it -- passes
+ *    selfBranchTaken = 1 when the instruction at 'pc' is a branch that will be taken back to
+ *    'pc'; a repeated PC then is a retirement. Pass 0 when unknown.
+ * Every halt also ends the step that was in progress and advances the stop sequence number
+ * (control block +40), which is how a client tells a new halt from the one it already has. */
 void SeExportNotifyStep(int cpu, unsigned int pc);
+void SeExportNotifyDmaStop(int cpu, unsigned int pc);
 int  SeExportInsnStepBegin(void);
-int  SeExportInsnStepTick(int cpu, unsigned int pc);
+int  SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken);
 
 /* Wire the module's work-RAM poke to the emulator's byte writer (v6+), so the Hex
  * Editor can edit a running game: write(address, value) writes one byte. On this

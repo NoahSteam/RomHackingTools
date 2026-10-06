@@ -355,7 +355,18 @@ static const char* SeMdfnPortDeviceName(unsigned int port)
 typedef struct { unsigned int id, cpu, address, flags; } SeMdfnTp;
 static SeMdfnTp   sTps[SE_MDFN_TP_MAX];
 static unsigned int sTpCount;
-
+/* The CPU thread's working copy of the installed set, with each tracepoint's repeat state (v21): the
+ * executions seen and whether a fire-once one has spent itself. The installer (server thread) writes
+ * sTps and bumps sTpInstall; the CPU thread notices, rebuilds this copy and is the only writer of it,
+ * so the per-instruction scan never reads a set that is being replaced under it. A tracepoint that
+ * comes through a re-install unchanged (same id, CPU, address and flags) keeps its counts: editing
+ * the log format of one tracepoint, or a fire-once one elsewhere spending itself, must not restart
+ * the "every 1000th" of another. */
+typedef struct { unsigned int id, cpu, address, flags, hits; unsigned char spent; } SeMdfnTpState;
+static SeMdfnTpState sTpState[SE_MDFN_TP_MAX];
+static unsigned int sTpStateCount;
+static volatile unsigned int sTpInstall;
+static unsigned int sTpSeenInstall;
 static unsigned int SeRd32LE(const unsigned char* p)
 {
     return (unsigned int)p[0] | ((unsigned int)p[1] << 8) |
@@ -377,6 +388,7 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
         sTps[i].flags   = SeRd32LE(d + 12);
     }
     sTpCount = count;
+    ++sTpInstall;   /* a new set: the CPU thread restarts every tracepoint's count */
 #if defined(SE_MEDNAFEN_WIRED)
     /* Arm/disarm the per-instruction SS debugger callback: it only needs to run every
      * instruction while at least one tracepoint is enabled. Without this the trace hook
@@ -388,6 +400,63 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
         SsDbgSetTraceActive(anyEnabled);
     }
 #endif
+}
+
+/* Whether this execution of tracepoint 'i' fires, under the repeat policy the client installed it
+ * with (SE_LIVE_TP_* in SeLiveProtocol.h). Applied where the instruction runs, so a tracepoint on
+ * hot code with "every 1000th" does not queue a thousand events to be thrown away.
+ *   GUARDED: the client has a condition we cannot evaluate; forward every execution and let it
+ *            count the ones whose condition held.
+ *   ONCE:    fire on the first execution, then never again until the client sends it enabled again
+ *            (which changes its flags, and so restarts it).
+ *   every-N: fire on the Nth, 2Nth, ... execution.
+ * 'hits' counts executions seen, whether or not they fire. */
+static int SeMdfnTpFires(unsigned int i)
+{
+    SeMdfnTpState* t = &sTpState[i];
+    unsigned int every;
+    if (!(t->flags & SE_LIVE_TP_ENABLED)) return 0;
+    if (t->flags & SE_LIVE_TP_GUARDED) return 1;
+    if (t->spent) return 0;
+    ++t->hits;
+    if (t->flags & SE_LIVE_TP_ONCE)
+    {
+        t->spent = 1;
+        return 1;
+    }
+    every = t->flags >> SE_LIVE_TP_EVERY_SHIFT;
+    if (every > 1u) return (t->hits % every) == 0u;
+    return 1;
+}
+
+/* Called by the per-instruction hook before it scans: if a new set has been installed, rebuild the
+ * working copy from it, carrying over the state of every tracepoint that did not change. */
+static void SeMdfnTpSync(void)
+{
+    SeMdfnTpState next[SE_MDFN_TP_MAX];
+    unsigned int n, i, j;
+    const unsigned int now = sTpInstall;
+    if (now == sTpSeenInstall) return;
+    n = sTpCount > SE_MDFN_TP_MAX ? SE_MDFN_TP_MAX : sTpCount;
+    for (i = 0; i < n; ++i)
+    {
+        next[i].id = sTps[i].id;           next[i].cpu = sTps[i].cpu;
+        next[i].address = sTps[i].address; next[i].flags = sTps[i].flags;
+        next[i].hits = 0;                  next[i].spent = 0;
+        for (j = 0; j < sTpStateCount; ++j)
+        {
+            if (sTpState[j].id == next[i].id && sTpState[j].cpu == next[i].cpu &&
+                sTpState[j].address == next[i].address && sTpState[j].flags == next[i].flags)
+            {
+                next[i].hits = sTpState[j].hits;
+                next[i].spent = sTpState[j].spent;
+                break;
+            }
+        }
+    }
+    for (i = 0; i < n; ++i) sTpState[i] = next[i];
+    sTpStateCount = n;
+    sTpSeenInstall = now;
 }
 
 /* ---- Shadow call stack (v9) --------------------------------------------------------
@@ -500,6 +569,39 @@ static void SeMdfnTrackFlow(int cpu, unsigned int pc)
 }
 #endif
 
+/* Is 'op' (the instruction at 'pc') a branch that, with status register 'sr', will be TAKEN back to
+ * 'pc' itself? Only the non-delayed conditional branches can do this and still retire with the PC
+ * unchanged -- a delayed branch runs its delay slot first, which moves the PC:
+ *   bt  disp   1000 1001 dddd dddd   branch if T=1, target = pc + 4 + sign8(disp)*2
+ *   bf  disp   1000 1011 dddd dddd   branch if T=0
+ * so disp = -2 (0xFE) lands on the branch. The instruction-step counter needs this because a
+ * repeated PC is otherwise indistinguishable from a bus-stalled instruction that has not run. */
+static int SeMdfnIsTakenSelfBranch(unsigned short op, unsigned int sr)
+{
+    if ((op & 0x00FFu) != 0x00FEu) return 0;
+    if ((op & 0xFF00u) == 0x8900u) return (sr & 1u) != 0;   /* bt: taken when T is set   */
+    if ((op & 0xFF00u) == 0x8B00u) return (sr & 1u) == 0;   /* bf: taken when T is clear */
+    return 0;
+}
+
+/* The same question for the instruction about to run on 'cpu' at 'pc' (the per-instruction hook
+ * asks it only while an instruction step is in progress, so the opcode read is not per-instruction
+ * in general). */
+int SeMednafenSelfBranchTaken(int cpu, unsigned int pc)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    const unsigned short op = SsDbgReadOpcode(pc);
+    unsigned int raw[23];
+    if ((op & 0x00FFu) != 0x00FEu || ((op & 0xFF00u) != 0x8900u && (op & 0xFF00u) != 0x8B00u))
+        return 0;   /* the common case: nothing else to read */
+    SsDbgSh2Regs(cpu, raw);
+    return SeMdfnIsTakenSelfBranch(op, raw[16]);   /* raw[16] = SR */
+#else
+    (void)cpu; (void)pc;
+    return 0;
+#endif
+}
+
 /* Per-instruction hook (apply.py injects a call: SeMednafenTraceHook(cpu, PC) from the
  * SS CPU dispatch / DBG_CPUHook). Does two per-instruction jobs: (1) if PC matches an
  * enabled tracepoint on this CPU, capture the registers and queue an event (no halt);
@@ -510,10 +612,11 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
 {
 #if defined(SE_MEDNAFEN_WIRED)
     unsigned int i;
-    for (i = 0; i < sTpCount; ++i)
+    SeMdfnTpSync();
+    for (i = 0; i < sTpStateCount; ++i)
     {
-        if ((sTps[i].flags & SE_LIVE_TP_ENABLED) && (int)sTps[i].cpu == cpu &&
-            sTps[i].address == pc)
+        if ((sTpState[i].flags & SE_LIVE_TP_ENABLED) && (int)sTpState[i].cpu == cpu &&
+            sTpState[i].address == pc && SeMdfnTpFires(i))
         {
             unsigned int raw[23], regs[23];
             int k;
@@ -526,7 +629,7 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
             regs[20] = raw[18];  /* vbr  */
             regs[21] = raw[19];  /* mach */
             regs[22] = raw[20];  /* macl */
-            SeExportQueueTraceEvent(sTps[i].id, (unsigned int)cpu, regs);
+            SeExportQueueTraceEvent(sTpState[i].id, (unsigned int)cpu, regs);
         }
     }
     SeMdfnTrackFlow(cpu, pc);   /* v9 shadow call stack */

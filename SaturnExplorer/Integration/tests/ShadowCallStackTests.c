@@ -271,6 +271,130 @@ static void TestOverflowDoesNotEatStoredFrames(void)
     CHECK(At(0).callSite == CALLSITE_AT(SE_CALLSTACK_CAP - 2u));
 }
 
+/* ---- tracepoint repeat policy (v21) --------------------------------------------------- */
+
+/* Install up to two tracepoints at consecutive addresses, as the server's TRC verb would, and let
+ * the CPU side pick the new set up (what its first per-instruction call after an install does). */
+static void InstallTps(unsigned int n, const unsigned int* ids, const unsigned int* flags)
+{
+    unsigned char d[2 * SE_LIVE_TRACE_DESC_LEN];
+    unsigned int i;
+    int k;
+    for (i = 0; i < n; ++i)
+    {
+        const unsigned int words[4] = { ids[i], 0u, 0x06001000u + 2u * i, flags[i] };
+        for (k = 0; k < 4; ++k)
+        {
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 0] = (unsigned char)(words[k]);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 1] = (unsigned char)(words[k] >> 8);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 2] = (unsigned char)(words[k] >> 16);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 3] = (unsigned char)(words[k] >> 24);
+        }
+    }
+    SeMdfnSetTracepoints(n, d);
+    SeMdfnTpSync();
+}
+
+static void InstallTp(unsigned int id, unsigned int flags) { InstallTps(1, &id, &flags); }
+
+/* How many of 'n' executions of tracepoint 'idx' fire, and on which of them. */
+static unsigned int FiresAt(unsigned int idx, unsigned int n, unsigned int* which, unsigned int whichCap)
+{
+    unsigned int i, fired = 0;
+    for (i = 1; i <= n; ++i)
+    {
+        if (SeMdfnTpFires(idx))
+        {
+            if (fired < whichCap) which[fired] = i;
+            ++fired;
+        }
+    }
+    return fired;
+}
+static unsigned int Fires(unsigned int n, unsigned int* which, unsigned int whichCap)
+{
+    return FiresAt(0, n, which, whichCap);
+}
+
+static void TestTracepointRepeatPolicy(void)
+{
+    unsigned int w[8] = { 0 };
+
+    InstallTp(1, SE_LIVE_TP_ENABLED);
+    CHECK(Fires(10, w, 8) == 10);                      /* every time */
+
+    InstallTp(2, SE_LIVE_TP_ENABLED | SE_LIVE_TP_ONCE);
+    CHECK(Fires(10, w, 8) == 1 && w[0] == 1);          /* once: the first execution, then never */
+
+    InstallTp(3, SE_LIVE_TP_ENABLED | (3u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(10, w, 8) == 3 && w[0] == 3 && w[1] == 6 && w[2] == 9);   /* every 3rd */
+
+    InstallTp(4, SE_LIVE_TP_ENABLED | (1u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(5, w, 8) == 5);                        /* every 1st is every time */
+
+    /* A client-side condition: the emulator cannot count, so every execution is forwarded even
+     * when a repeat policy is also set -- the client counts the ones whose condition held. */
+    InstallTp(5, SE_LIVE_TP_ENABLED | SE_LIVE_TP_GUARDED | SE_LIVE_TP_ONCE);
+    CHECK(Fires(10, w, 8) == 10);
+    InstallTp(6, SE_LIVE_TP_ENABLED | SE_LIVE_TP_GUARDED | (4u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(10, w, 8) == 10);
+
+    InstallTp(7, 0);                                   /* disabled never fires */
+    CHECK(Fires(10, w, 8) == 0);
+}
+
+/* A re-install must not restart a tracepoint that did not change. The set is sent whole whenever
+ * anything about any tracepoint changes, and a fire-once one elsewhere spending itself changes it. */
+static void TestReinstallKeepsUnchangedCounts(void)
+{
+    unsigned int w[8] = { 0 };
+    const unsigned int every3 = SE_LIVE_TP_ENABLED | (3u << SE_LIVE_TP_EVERY_SHIFT);
+    const unsigned int once   = SE_LIVE_TP_ENABLED | SE_LIVE_TP_ONCE;
+    unsigned int ids[2], flags[2];
+
+    ids[0] = 10; flags[0] = every3;
+    ids[1] = 11; flags[1] = once;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 2, w, 8) == 0);                   /* two of the three executions that fire it */
+    CHECK(FiresAt(1, 1, w, 8) == 1);                   /* the fire-once one fires... */
+
+    /* ...and the client, hearing of it, sends the set again with that one disabled. */
+    flags[1] = 0;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 1, w, 8) == 1 && w[0] == 1);      /* the third execution still fires: count kept */
+    CHECK(FiresAt(1, 5, w, 8) == 0);                   /* the disabled one stays quiet */
+
+    /* The same set, sent again, changes nothing. */
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 3, w, 8) == 1 && w[0] == 3);      /* 4th, 5th, 6th: the 6th fires */
+
+    /* Re-enabling the fire-once one changes its flags, so it is armed afresh. */
+    flags[1] = once;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(1, 3, w, 8) == 1 && w[0] == 1);
+
+    /* Changing the policy of the every-3rd one restarts it. */
+    flags[0] = SE_LIVE_TP_ENABLED | (2u << SE_LIVE_TP_EVERY_SHIFT);
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 3, w, 8) == 1 && w[0] == 2);
+}
+
+/* ---- a branch to itself ---------------------------------------------------------------- */
+
+static void TestSelfBranchDetection(void)
+{
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 1u) == 1);  /* bt .   with T set    */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 0u) == 0);  /* bt .   with T clear: falls through */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8BFEu, 0u) == 1);  /* bf .   with T clear  */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8BFEu, 1u) == 0);  /* bf .   with T set: falls through   */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 0xFFFFFFFEu) == 0);   /* only SR.T matters */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FDu, 1u) == 0);  /* bt to the previous word: a real move */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FFu, 1u) == 0);  /* bt to the next word */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8DFEu, 1u) == 0);  /* bt/s . -- delayed: its slot moves the PC */
+    CHECK(SeMdfnIsTakenSelfBranch(0xAFFEu, 1u) == 0);  /* bra .  -- delayed too */
+    CHECK(SeMdfnIsTakenSelfBranch(OP_RTS, 1u) == 0);
+}
+
 int main(void)
 {
     TestCallFormsAndSerialization();
@@ -284,6 +408,9 @@ int main(void)
     TestTailCallAndBranchAreNotCalls();
     TestPerCpuStacks();
     TestOverflowDoesNotEatStoredFrames();
+    TestTracepointRepeatPolicy();
+    TestReinstallKeepsUnchangedCounts();
+    TestSelfBranchDetection();
     if (gFailures)
     {
         fprintf(stderr, "%d check(s) failed\n", gFailures);

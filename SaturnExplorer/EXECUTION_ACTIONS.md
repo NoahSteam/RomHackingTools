@@ -98,6 +98,22 @@ time / Once / Every N + N) · **Condition** (an expression) · **Actions** check
 Run Script). "Actions" here is the per-tracepoint realization of the general
 Execution-Actions model.
 
+**Only Write to Log is implemented.** The other five are shown greyed out — nothing acts on them,
+so a tracepoint cannot claim them (the store drops them), rather than ticking a box that does
+nothing. Pausing the emulator at a tracepoint is a halt like a breakpoint's, and would need the
+emulator to stop and say why.
+
+**Repeat.** *Once* fires on the first execution **whose condition held**, then switches the
+tracepoint off *and tells the emulator* (the set is re-sent with it disabled); events already in
+flight for it are discarded. *Every N* fires on the Nth, 2Nth, … such execution. Exactly one side
+counts: for an unconditional tracepoint on a v21+ emulator the **emulator** applies the policy where
+the instruction runs (flags `SE_LIVE_TP_ONCE` / `SE_LIVE_TP_EVERY_SHIFT`), so a hot tracepoint with
+"every 1000th" does not queue a thousand events to be thrown away; a tracepoint with a **condition**
+(which only the client can evaluate) is sent `SE_LIVE_TP_GUARDED`, the emulator forwards every
+execution, and the client counts the ones whose condition held. An older emulator ignores the flags,
+and the client counts for it. Counts survive a re-sent set for every tracepoint that did not change,
+and start over for a new emulator.
+
 ### Format mini-syntax (not a scripting language)
 Literal text with `{…}` substitutions:
 
@@ -153,7 +169,8 @@ execution is future work, staged like the tracepoint glue was.
   expressions later (reuse the Watch resolver + a small RPN)?
 - **Event volume / backpressure:** a hot tracepoint (fires every frame, or in a tight
   loop) could flood the events section. Cap per-poll event count emulator-side and report
-  a "N events dropped" marker; the Repeat=EveryN policy is the user-facing throttle.
+  a "N events dropped" marker; the Repeat=EveryN policy is the user-facing throttle (applied
+  emulator-side for unconditional tracepoints on a v21+ server, so it also keeps the queue clear).
 - **`{*r4:string}` length + encoding:** cap length; Shift-JIS vs ASCII (the ShiftJis
   helper already exists for the Assembly/Watch views).
 - **Persistence:** execution actions belong in the per-session settings (the Settings INI

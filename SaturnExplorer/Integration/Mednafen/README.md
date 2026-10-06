@@ -228,8 +228,8 @@ there). `SsDbgAddExecBp` calls the `ss/debug.inc` debugger:
 return true, so ss.cpp's per-frame run-loop dispatcher
 (`rltab[…][DBG_NeedCPUHooks()]`) switches to the per-instruction `DBG_CPUHandler`
 path on its own — **no explicit debug-mode toggle needed**. On a hit the injected
-hook reports the halted PC and the CPU that hit it (`DBG.ActiveCPU`) via
-`SeExportNotifyStop`, then blocks on `SeExportGateFrame` right at the instruction
+hook reports the halted PC and the CPU that hit it (`SeSsExecCpu`, see "Both SH-2s"
+below) via `SeExportNotifyStop`, then blocks on `SeExportGateFrame` right at the instruction
 until Saturn Explorer resumes — an **instruction-exact halt**, like the Yabause tap.
 (Blocking mid-frame freezes Mednafen's frame pump while halted, so audio underruns
 for the duration — the same trade as the frame-gate caveat below, expected while
@@ -242,6 +242,39 @@ Build Mednafen with `./configure --enable-debugger` for breakpoints to fire; wit
 it the breakpoint set still round-trips over the wire but doesn't halt. (SS PC
 breakpoints are shared across both SH-2s, so a breakpoint fires for whichever core
 reaches the address; the hit report still names the exact CPU.)
+
+### Both SH-2s (`debug.inc`)
+
+Stock `DBG_CPUHandler(which, …)` **returns at its first line when `which != DBG.ActiveCPU`**.
+`ActiveCPU` is the debugger UI's "current CPU" — the master unless that UI changed it, which
+nothing in this integration does — so with a breakpoint, tracepoint or step armed only the
+master ever reached our callback: slave breakpoints and tracepoints never fired, and the shadow
+call stack never saw a slave call. `apply.py` (`process_debug`) inserts a scope guard at the top
+of `DBG_CPUHandler`'s *definition* (anchored on the signature through its opening brace, not on
+the filter line, whose spelling is the fork's) that, while `SeSsBothCpus` is set — exactly while
+our callback is installed — makes the executing core the "active" one for the call and records it
+in `SeSsExecCpu`, restoring the previous value on every exit path. Everything downstream of the
+filter then sees the invariant it was written under (`which == ActiveCPU`), and `SeSsBpHook` takes
+the CPU from `SeSsExecCpu`, never from `DBG.ActiveCPU`. User breakpoints stay shared. The stock
+filter line is left alone, so `--revert` only has to remove our block.
+
+The patch is verified here against a mock `debug.inc` (it applies, is idempotent, reverts to the
+original byte for byte, and the guarded handler runs for both cores) — **not** against the real
+file. If your fork spells the definition differently, `apply.py` reports `ANCHOR MISS` for
+`SeSsActiveCpuScope<decltype`; add the one line it prints by hand. Without it, slave
+breakpoints silently do nothing.
+
+### Stepping
+
+`IST` (instruction step) runs the CPU that halted. The per-instruction hook counts **retired**
+instructions, not hook calls: the SH-2 can be held off the bus by a long SCU DMA, presenting the
+same PC repeatedly without retiring. A repeated PC therefore spends no budget — except for a taken
+branch **to itself** (`bt .` / `bf .`, displacement −2), which retires and leaves the PC where it
+was; the glue decodes the instruction (`SeMednafenSelfBranchTaken`) and says so. An SCU-DMA
+watchpoint halts *between* instructions (`SeExportNotifyDmaStop`): the instruction at the halt PC has
+not run, so its first presentation after a step is not a retirement. One case remains that a PC and
+an opcode cannot settle — a taken self-branch that is *also* stalled on the bus; it would need a
+retire counter from the CPU core.
 
 ### Data breakpoints / watchpoints (read/write)
 
@@ -361,7 +394,7 @@ per-instruction check lives in `SeMednafenTraceHook(cpu, PC)` (both already in t
 
 The **per-instruction call is wired automatically** through the same SS debugger callback
 the execution-breakpoint hook uses. `apply.py` makes the injected `SeSsBpHook` call
-`SeMednafenTraceHook((int)DBG.ActiveCPU, PC)` on every invocation (before the breakpoint
+`SeMednafenTraceHook(SeSsExecCpu, PC)` on every invocation (before the breakpoint
 halt gate, so a tracepoint on the very PC a breakpoint also stops on still fires as the PC
 is reached). To make that callback run *every* instruction — not just when the debugger
 finds a PC breakpoint — the glue calls the injected `SsDbgSetTraceActive(1)` from
@@ -370,6 +403,13 @@ the callback in **continuous** mode (`DBG_SetCPUCallback(SeSsBpHook, true)`), wh
 makes `DBG_NeedCPUHooks()` true so the SS run loop switches to the per-instruction
 dispatcher on its own. Emptying the tracepoint set (and having no breakpoints) removes the
 callback again, returning the emulator to full speed.
+
+**Repeat policy (v21).** The descriptor's flags word carries *once* / *every N* / *guarded* bits.
+The glue applies them where the instruction runs (`SeMdfnTpFires`): an unconditional tracepoint
+fires on its first execution (*once*) or every Nth, so a hot tracepoint does not queue events to be
+thrown away; a *guarded* one (the client has a condition we cannot evaluate) forwards every
+execution. Counts are kept by the CPU thread and carried across a re-sent set for every tracepoint
+whose descriptor did not change.
 
 This only works under a `--enable-debugger` (`WANT_DEBUGGER`) build, exactly like
 execution breakpoints; without it, `SsDbgSetTraceActive` compiles to a no-op and

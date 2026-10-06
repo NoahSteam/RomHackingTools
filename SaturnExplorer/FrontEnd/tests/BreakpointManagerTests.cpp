@@ -38,6 +38,18 @@ int main()
         Check(bps.ExecutionAt(0x1000) == nullptr, "ExecutionAt no longer finds it");
     }
 
+    // A halt is explained by the user's breakpoints only if one is ARMED there: a disabled entry is in
+    // the list but installs nothing in the emulator.
+    {
+        BreakpointManager bps;
+        bps.ToggleExecution(0x1800);
+        Check(bps.HasEnabledExecutionAt(0x1800), "an enabled BP is armed");
+        bps.SetEnabled(bps.ExecutionAt(0x1800)->id, false);
+        Check(bps.HasExecutionAt(0x1800), "a disabled BP still exists");
+        Check(!bps.HasEnabledExecutionAt(0x1800), "but is not armed");
+        Check(!bps.HasEnabledExecutionAt(0x1802), "nothing is armed elsewhere");
+    }
+
     // A PC breakpoint fires "on whichever CPU reaches it" — ConditionalExecutionAt and
     // IsAccessLogHalt (used by the stop handler) must see a BP set once, address-only, with
     // no notion of which CPU it was "for".

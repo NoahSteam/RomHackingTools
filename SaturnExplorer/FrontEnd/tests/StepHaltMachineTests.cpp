@@ -40,6 +40,15 @@ StopReport Halted(uint32_t pc, uint32_t cpu = 0, uint32_t reason = 0)
     return r;
 }
 
+// A halt from an emulator that numbers its halts (v21+).
+StopReport Numbered(uint32_t seq, uint32_t pc, uint32_t cpu = 0)
+{
+    StopReport r = Halted(pc, cpu);
+    r.hasSeq = true;
+    r.seq    = seq;
+    return r;
+}
+
 StopReport Running()
 {
     return StopReport{};
@@ -152,23 +161,25 @@ void TestHoldingDoesNotAdoptAReportedPc()
     CHECK(m.HaltPc() == 0x06001000);
 }
 
-// Step Over / Step Out install a transient breakpoint. It is recognised by address alone (PC
-// breakpoints are shared across both SH-2s), reported so the caller can skip the condition guard,
-// and retired once the caller surfaces the halt.
+// Step Over / Step Out install a transient breakpoint. It completes the step when the STEPPING CPU
+// reaches it -- PC breakpoints are shared across both SH-2s, so the emulator stops whichever core
+// gets there first and only the CPU recorded with the step can say it was the step arriving. It is
+// reported so the caller can skip the condition guard, and retired once the caller surfaces the halt.
 void TestRunToTargetIsRecognisedAndRetired()
 {
-    StepHaltMachine m = HaltedAt(0x06001000);
-    m.BeginRunTo(0x06002000);
+    StepHaltMachine m = HaltedAt(0x06001000, 1);
+    m.BeginRunTo(0x06002000, 1);
     CHECK(m.StepTargetActive());
     CHECK(m.StepTargetAddr() == 0x06002000);
+    CHECK(m.StepTargetCpu() == 1);
     CHECK(m.TakeStepTargetDirty());    // installing it needs a breakpoint re-sync
     CHECK(!m.TakeStepTargetDirty());   // and the flag is one-shot
 
-    // Reported by the other CPU: still our target, because the address is what identifies it.
     const StepOutcome s = m.Observe(Halted(0x06002000, 1));
     CHECK(m.HaltActive());
     CHECK(s.atStepTarget);
     CHECK(s.fromStep);
+    CHECK(!s.strayTarget);
 
     m.RetireStepTarget();
     CHECK(!m.StepTargetActive());
@@ -177,6 +188,107 @@ void TestRunToTargetIsRecognisedAndRetired()
     // Once retired, a later halt at that same address is an ordinary halt.
     const StepOutcome later = m.Observe(Halted(0x06002000));
     CHECK(!later.atStepTarget);
+    CHECK(!later.strayTarget);
+}
+
+// The other core walking over the transient is NOT the step arriving. It is reported as a stray
+// target for the caller to resume from, the step stays in flight, and nothing is presented as the
+// new halt. Reproduces the failure: matched by address alone, a slave halt at the address completed
+// a master Step Over.
+void TestTheOtherCpuReachingTheTargetIsNotTheStep()
+{
+    StepHaltMachine m = HaltedAt(0x06001000, 0);
+    m.BeginRunTo(0x06002000, 0);
+    (void)m.TakeStepTargetDirty();
+
+    const StepOutcome stray = m.Observe(Numbered(7, 0x06002000, 1));
+    CHECK(!stray.atStepTarget);
+    CHECK(stray.strayTarget);
+    CHECK(m.StepInFlight());            // the step is still waiting for ITS CPU
+    CHECK(m.StepTargetActive());        // and its transient is still installed
+    CHECK(m.HaltCpu() == 0);            // the slave's halt was not adopted
+    CHECK(m.HaltPc() == 0x06001000);
+
+    // The same stray halt re-reported while the resume crosses the socket is an echo, not a second
+    // stray to resume from.
+    const StepOutcome echo = m.Observe(Numbered(7, 0x06002000, 1));
+    CHECK(!echo.strayTarget && !echo.atStepTarget);
+    CHECK(m.StepInFlight());
+
+    // The master arrives: that is the step.
+    const StepOutcome done = m.Observe(Numbered(8, 0x06002000, 0));
+    CHECK(done.atStepTarget);
+    CHECK(done.fromStep);
+    CHECK(!done.strayTarget);
+    CHECK(!m.StepInFlight());
+    CHECK(m.HaltCpu() == 0 && m.HaltPc() == 0x06002000);
+}
+
+// A user breakpoint at the same address explains the other core's halt: it is a real hit, so it is
+// presented, and the step it interrupted is over -- its transient goes with it.
+void TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu()
+{
+    StepHaltMachine m = HaltedAt(0x06001000, 0);
+    m.BeginRunTo(0x06002000, 0);
+    (void)m.TakeStepTargetDirty();
+
+    StopReport r = Numbered(5, 0x06002000, 1);
+    r.userBreakpoint = true;
+    const StepOutcome s = m.Observe(r);
+    CHECK(!s.strayTarget);
+    CHECK(!s.atStepTarget);
+    CHECK(m.HaltActive() && m.HaltCpu() == 1 && m.HaltPc() == 0x06002000);
+    CHECK(!m.StepInFlight());
+    CHECK(!m.StepTargetActive());       // the step that wanted it did not finish
+    CHECK(m.TakeStepTargetDirty());     // so the emulator is told to drop it
+}
+
+// A different halt before the target -- a breakpoint inside the call being stepped over -- ends the
+// step, and the transient it installed must not survive to stop the next Continue at the return
+// site as a ghost step.
+void TestAHaltElsewhereRetiresTheTransient()
+{
+    StepHaltMachine m = HaltedAt(0x06001000, 0);
+    m.BeginRunTo(0x06002000, 0);
+    (void)m.TakeStepTargetDirty();
+
+    const StepOutcome s = m.Observe(Numbered(9, 0x06003000, 0));   // a user breakpoint in the callee
+    CHECK(!s.atStepTarget && !s.strayTarget);
+    CHECK(!m.StepInFlight());
+    CHECK(m.HaltPc() == 0x06003000);
+    CHECK(!m.StepTargetActive());
+    CHECK(m.TakeStepTargetDirty());
+
+    // The same halt reported again is not "another" halt and does nothing further.
+    (void)m.Observe(Numbered(9, 0x06003000, 0));
+    CHECK(!m.TakeStepTargetDirty());
+}
+
+// Stop identity. A step that lands on the PC it started from (a taken branch to itself) is a
+// different halt at the same address; only the emulator's sequence number can say so. Reproduces the
+// failure: comparing PCs treated the landing as the pre-step echo, held the presentation for the
+// whole cap, and revealed "running" over a halted emulator.
+void TestAStepThatLandsOnTheSamePcIsANewHaltBySequence()
+{
+    StepHaltMachine m;
+    m.Observe(Numbered(4, 0x06001000));
+    m.BeginStep();
+
+    const StepOutcome echo = m.Observe(Numbered(4, 0x06001000));   // the pre-step stop, again
+    CHECK(m.StepInFlight());
+    CHECK(echo.fromStep);
+
+    const StepOutcome landed = m.Observe(Numbered(5, 0x06001000));   // the step: same address
+    CHECK(!m.StepInFlight());
+    CHECK(landed.fromStep);
+    CHECK(m.HaltActive() && m.HaltPc() == 0x06001000);
+
+    // Without numbers it cannot be told, and the PC is all there is to compare (the old rule).
+    StepHaltMachine old;
+    old.Observe(Halted(0x06001000));
+    old.BeginStep();
+    old.Observe(Halted(0x06001000));
+    CHECK(old.StepInFlight());
 }
 
 // A halt at the transient's address counts as the target even before the hold releases, which is
@@ -184,7 +296,7 @@ void TestRunToTargetIsRecognisedAndRetired()
 void TestReachingTheTargetImmediatelyIsStillAStep()
 {
     StepHaltMachine m = HaltedAt(0x06001000);
-    m.BeginRunTo(0x06002000);
+    m.BeginRunTo(0x06002000, 0);
     const StepOutcome s = m.Observe(Halted(0x06002000));
     CHECK(s.atStepTarget);
     CHECK(s.fromStep);
@@ -222,7 +334,7 @@ void TestSuppressedHaltIsNotPresented()
 void TestResetHaltDropsTheStepButKeepsTheTransient()
 {
     StepHaltMachine m = HaltedAt(0x06001000);
-    m.BeginRunTo(0x06002000);
+    m.BeginRunTo(0x06002000, 0);
     (void)m.TakeStepTargetDirty();
 
     m.ResetHalt();
@@ -237,7 +349,7 @@ void TestResetHaltDropsTheStepButKeepsTheTransient()
 void TestResetForNewEmulatorClearsEverythingAndForcesASync()
 {
     StepHaltMachine m = HaltedAt(0x06001000);
-    m.BeginRunTo(0x06002000);
+    m.BeginRunTo(0x06002000, 0);
     m.BeginSettle();
     (void)m.TakeStepTargetDirty();
 
@@ -287,6 +399,10 @@ int main()
     TestALongRunningStepEventuallyRevealsRunning();
     TestHoldingDoesNotAdoptAReportedPc();
     TestRunToTargetIsRecognisedAndRetired();
+    TestTheOtherCpuReachingTheTargetIsNotTheStep();
+    TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu();
+    TestAHaltElsewhereRetiresTheTransient();
+    TestAStepThatLandsOnTheSamePcIsANewHaltBySequence();
     TestReachingTheTargetImmediatelyIsStillAStep();
     TestStepInFlightBlocksAnotherStep();
     TestSuppressedHaltIsNotPresented();

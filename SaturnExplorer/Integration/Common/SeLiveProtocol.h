@@ -55,7 +55,14 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      20u   /* +v20 step completion in the control block (latest_frame /
+#define SE_LIVE_VERSION      21u   /* +v21 stop sequence number (control block +40): every
+                                  * published halt takes the next number, so a client can tell
+                                  * a NEW halt from a re-report of the one it already has --
+                                  * which comparing PCs cannot, because a step can land on the
+                                  * address it started from. Tracepoint descriptors also gain
+                                  * repeat policy (SE_LIVE_TP_ONCE / SE_LIVE_TP_GUARDED / every-N
+                                  * in the flags word) applied on the emulator side.
+                                  * v20 step completion in the control block (latest_frame /
                                   * step_pending), so a client holding the display on a paused
                                   * emulator can tell when a frame step has actually been run
                                   * and published, instead of capturing for a guessed number
@@ -135,6 +142,17 @@
  * flags bit0 = enabled (matches SE_LIVE_TP_ENABLED). */
 #define SE_LIVE_TRACE_DESC_LEN 16
 #define SE_LIVE_TP_ENABLED     0x1u
+/* v21 repeat policy, applied where the instruction executes so a hot tracepoint does not flood
+ * the event queue with hits the user asked not to see. A descriptor with the GUARDED bit has a
+ * condition the EMULATOR cannot evaluate, so it forwards every execution and leaves the policy to
+ * the client (which counts only the executions whose condition held). Without it, the emulator
+ * counts executions of the address: ONCE fires on the first and then disables itself; a repeat
+ * count N > 1 (flags >> SE_LIVE_TP_EVERY_SHIFT) fires on every Nth. A server older than v21
+ * ignores these bits and forwards every execution. */
+#define SE_LIVE_TP_ONCE        0x4u
+#define SE_LIVE_TP_GUARDED     0x8u
+#define SE_LIVE_TP_EVERY_SHIFT 8u
+#define SE_LIVE_TP_EVERY_MAX   0xFFFFFFu
 
 /* Tracepoint events block (v8+). Appended AFTER the 10 snapshot sections + control +
  * SH-2 sections, as a version-gated trailing block so the 48-byte header and the
@@ -335,7 +353,7 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     40u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+#define SE_LIVE_CONTROL_LEN     44u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
                                            * + (v19) restore_done(u32) + restore_failed(u32). Every
                                            * accepted LST/ELS ends in exactly one: done counts once
                                            * the first frame of the restored timeline is in the
@@ -347,7 +365,11 @@
                                            * step_pending(u32 @+36): frames a STP granted that have
                                            * not been published yet. A client that has caught up
                                            * (served frame == latest_frame) with step_pending == 0
-                                           * is looking at the end of the step. */
+                                           * is looking at the end of the step.
+                                           * (v21) stop_seq(u32 @+40): the sequence number of the
+                                           * stop in {reason,cpu,pc}; it advances with every halt
+                                           * the emulator publishes and is not reset by a resume
+                                           * (28 bits, wrapping). 0 = no halt yet. */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */
 

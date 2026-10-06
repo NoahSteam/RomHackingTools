@@ -184,8 +184,79 @@ void TestFrameZeroDoesNotClaimAnEntryPoint()
 
 }  // namespace
 
+// ---- Step Out ----------------------------------------------------------------------------------
+// PR holds the return address only until the function makes a call of its own. The target has to
+// come from the recorded frame, and say so when there is none.
+
+sfe::CallStackFrame ConfirmedFrame(uint32_t ret, uint32_t sp)
+{
+    sfe::CallStackFrame f;
+    f.confidence = sfe::FrameConfidence::Confirmed;
+    f.returnAddress = ret;
+    f.stackPointer = sp;
+    return f;
+}
+
+se_sh2_regs RegsAt(uint32_t pc, uint32_t pr, uint32_t r15)
+{
+    se_sh2_regs r{};
+    r.pc = pc;
+    r.pr = pr;
+    r.r[15] = r15;
+    return r;
+}
+
+void TestStepOutUsesTheRecordedFrameNotPr()
+{
+    // In a non-leaf function after a nested call returned: PR now holds the nested call's return
+    // address, which is INSIDE this function (even the current PC); the real return was recorded.
+    const uint32_t ret = 0x06001010u, sp = 0x06080000u;
+    const std::vector<sfe::CallStackFrame> frames = { ConfirmedFrame(ret, sp) };
+    const se_sh2_regs regs = RegsAt(/*pc*/ 0x06002040u, /*pr*/ 0x06002040u, /*r15*/ 0x0607FFE0u);
+
+    const sfe::StepOutTarget t = sfe::ChooseStepOutTarget(frames, regs);
+    CHECK(t.ok);
+    CHECK(t.returnAddress == ret);          // not PR (== the current PC here)
+}
+
+void TestStepOutRefusesWhatItCannotRecover()
+{
+    const se_sh2_regs regs = RegsAt(0x06002040u, 0x06001010u, 0x0607FFE0u);
+
+    // Nothing recorded for this CPU.
+    CHECK(!sfe::ChooseStepOutTarget({}, regs).ok);
+
+    // A heuristic frame #0 returns to PR by construction: exactly the guess this must not make.
+    sfe::CallStackFrame heur;
+    heur.confidence = sfe::FrameConfidence::Probable;
+    heur.returnAddress = regs.pr;
+    heur.stackPointer = 0x06080000u;
+    const sfe::StepOutTarget h = sfe::ChooseStepOutTarget({ heur }, regs);
+    CHECK(!h.ok);
+    CHECK(h.why[0] != '\0');               // and it says why
+
+    // A recorded return that is the current instruction would halt at once.
+    CHECK(!sfe::ChooseStepOutTarget({ ConfirmedFrame(regs.pc, 0x06080000u) }, regs).ok);
+    // Not code.
+    CHECK(!sfe::ChooseStepOutTarget({ ConfirmedFrame(0x00000010u, 0x06080000u) }, regs).ok);
+    CHECK(!sfe::ChooseStepOutTarget({ ConfirmedFrame(0x06001011u, 0x06080000u) }, regs).ok);   // odd
+    // R15 above the stack the call was made at: the callee runs BELOW it, so this recording is
+    // not of this frame.
+    const se_sh2_regs high = RegsAt(0x06002040u, 0x06001010u, 0x06081000u);
+    CHECK(!sfe::ChooseStepOutTarget({ ConfirmedFrame(0x06001010u, 0x06080000u) }, high).ok);
+    // A call's delay slot can pop (`jsr @r1 / add #4,r15`), putting the callee a few bytes ABOVE the
+    // recorded stack. That is still this frame.
+    const se_sh2_regs popped = RegsAt(0x06002040u, 0x06001010u, 0x06080008u);
+    CHECK(sfe::ChooseStepOutTarget({ ConfirmedFrame(0x06001010u, 0x06080000u) }, popped).ok);
+    // At the same depth (a leaf that never pushed) is fine.
+    const se_sh2_regs same = RegsAt(0x06002040u, 0x06001010u, 0x06080000u);
+    CHECK(sfe::ChooseStepOutTarget({ ConfirmedFrame(0x06001010u, 0x06080000u) }, same).ok);
+}
+
 int main()
 {
+    TestStepOutUsesTheRecordedFrameNotPr();
+    TestStepOutRefusesWhatItCannotRecover();
     TestBsrCallSiteYieldsRealEntryPoint();
     TestBsrBackwardsDisplacement();
     TestJsrLeavesEntryPointUnknown();
