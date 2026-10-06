@@ -435,6 +435,19 @@ void App::SaveSearchOptions()
     mSettings.Set("search", "paths", joined);
 }
 
+// What a debugging session accumulates that means nothing against another game: RAM-search hits
+// and their comparison baseline, access-log rows (keyed by PC, so a new game's hit would merge
+// into the old row), and tracepoint hit counts. Retained tracepoints are re-sent to whatever
+// emulator attaches next, so the sync generation is forced stale too.
+void App::ResetSessionDebugState()
+{
+    mRamSearch.Reset();
+    mRamSearchStatus.clear();
+    mAccessLog.Clear();
+    mLastTpGeneration = mActions.Generation() - 1;
+    mActions.ResetCounts();
+}
+
 void App::CloseData(bool cancelAutoConnect)
 {
     if (mbLiveSource && mContext)
@@ -3780,7 +3793,9 @@ void App::Continue()
     if (mbHasData && se_supports_frame_control(mContext))
     {
         se_frame_resume(mContext);
+#ifdef SE_ENABLE_LIVE
         DiscardPendingEdits();
+#endif
         mbPaused = false;
     }
 }
@@ -6508,19 +6523,6 @@ void App::AdoptNewEmulatorInstance()
 // savestate keyframe the next delta would be diffed against, and edits staged against a
 // scrubbed frame. The scrub-rewind path deliberately does NOT use this -- it restores a
 // frame that IS in the ring, so it truncates the future instead of dropping the past.
-// What a debugging session accumulates that means nothing against another game: RAM-search hits
-// and their comparison baseline, access-log rows (keyed by PC, so a new game's hit would merge
-// into the old row), and tracepoint hit counts. Retained tracepoints are re-sent to whatever
-// emulator attaches next, so the sync generation is forced stale too.
-void App::ResetSessionDebugState()
-{
-    mRamSearch.Reset();
-    mRamSearchStatus.clear();
-    mAccessLog.Clear();
-    mLastTpGeneration = mActions.Generation() - 1;
-    mActions.ResetCounts();
-}
-
 void App::DiscardPendingEdits()
 {
     mPendingEdits.clear();
@@ -6533,6 +6535,7 @@ void App::DropRecordedHistory()
     mRecorder.Clear();
     mStateSlots.Reset();
     DiscardPendingEdits();
+    mCallStackDirty = true;   // the registers it was built from are about to be replaced
     mbScrubbing = false;
     mScrubIndex = -1;
     mbPaused = false;
@@ -6555,6 +6558,7 @@ App::RestoreBaseline App::SampleRestoreBaseline() const
 void App::BeginRestoreWait(const RestoreBaseline& before)
 {
     VoidEditTarget();
+    mCallStackDirty = true;   // a state is being loaded; whatever was built is the old game's
     if (!before.signal)
     {
         // An emulator older than protocol v19 reports nothing back, so there is no way to know
@@ -6589,6 +6593,7 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
         mLog.Info("The emulator has now confirmed the state load; editing is available again.");
     }
     mMemBackend.NoteSourceChanged();   // edits begun against the pre-load data are void
+    mCallStackDirty = true;            // the stack was built for the state that was replaced
 }
 
 // SE's own slots, read from disk. Only the events that can change them call this: the
@@ -6866,7 +6871,14 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mOpenSettings = true;
         break;
     case TopBarCommandType::TogglePause:
-        if (mbPaused) { se_frame_resume(mContext); DiscardPendingEdits(); mbPaused = false; }
+        if (mbPaused)
+        {
+            se_frame_resume(mContext);
+#ifdef SE_ENABLE_LIVE
+            DiscardPendingEdits();
+#endif
+            mbPaused = false;
+        }
         else { se_frame_pause(mContext); mbPaused = true; }
         break;
     case TopBarCommandType::StepFrame:

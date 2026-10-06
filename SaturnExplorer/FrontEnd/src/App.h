@@ -332,6 +332,7 @@ private:
 
     // RAM Search (Cheat-Engine-style value scanner) — engine + its panel's UI state.
     MemorySearch     mRamSearch;
+    void ResetSessionDebugState();   // RAM search, access log, tracepoint sync + counts (any build)
     int              mRamSearchType = 2;      // index into the panel's type list (default u16)
     int              mRamSearchCmp = 0;       // index into the panel's compare list (default =)
     char             mRamSearchValue[32] = "";// operand entry (decimal, or 0x… hex)
@@ -540,7 +541,6 @@ private:
     int              mPendingEditsFrame = -1;  // scrub index the edits belong to (cleared on change)
     uint64_t         mPendingEditsFrameNo = 0; // recorder frame number of that frame: the identity a
                                                // replay checks, since indexes shift as the ring evicts
-    void ResetSessionDebugState();             // RAM search, access log, tracepoint sync + counts
     void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
