@@ -346,6 +346,66 @@ int main()
                 BestEffort("rm -rf '" + outsideDir + "'");
             }
 
+            // --- The no-dirfd fallback (what Windows runs) ---------------------------------
+            // Forced on here. It opens the name, then judges the opened handle's own final
+            // path (a /proc readlink stands in for GetFinalPathNameByHandleW). A parent swapped
+            // for a symlink immediately before the open is caught after it, and the file is
+            // closed unwritten; an unswapped run still patches normally.
+            for (int swapIt = 0; swapIt < 2; ++swapIt)
+            {
+                const std::string fbDir = std::string(dir) + (swapIt ? "/fb_swap" : "/fb_plain");
+                const std::string outsideDir = fbDir + "_outside";
+                BestEffort("mkdir -p '" + fbDir + "/sub' '" + outsideDir + "'");
+                { std::ofstream f(fbDir + "/sub/t.bin", std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                { std::ofstream f(outsideDir + "/t.bin", std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                PatchLibrary fl;
+                fl.AddOrUpdate(Loc("f", 0x200000, 4, "sub/t.bin", 0, {0, 0, 0, 0}));
+                MemStub fm;
+                fm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> foc;
+                const std::string fScript = fl.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return fm.Read(a, l, o); },
+                    foc);
+                { std::ofstream f(fbDir + "/se_patch.py", std::ios::binary); f << fScript; }
+                const std::string fbDriver =
+                    "import importlib.util, os, sys\n"
+                    "script, outside, swap = sys.argv[1], sys.argv[2], sys.argv[3] == '1'\n"
+                    "spec = importlib.util.spec_from_file_location('sepatch', script)\n"
+                    "m = importlib.util.module_from_spec(spec)\n"
+                    "spec.loader.exec_module(m)\n"
+                    "m.HAVE_DIRFD = False\n"
+                    "m.final_path = lambda fd: os.readlink('/proc/self/fd/%d' % fd)\n"
+                    "real_open = os.open\n"
+                    "def swapped(path, *a, **k):\n"
+                    "    base = os.path.dirname(os.path.abspath(script))\n"
+                    "    if swap and path.endswith('t.bin') and os.path.isdir(os.path.join(base, 'sub')) \\\n"
+                    "            and not os.path.islink(os.path.join(base, 'sub')):\n"
+                    "        os.rename(os.path.join(base, 'sub'), os.path.join(base, 'sub_moved'))\n"
+                    "        os.symlink(outside, os.path.join(base, 'sub'))\n"
+                    "    return real_open(path, *a, **k)\n"
+                    "os.open = swapped\n"
+                    "sys.argv = [script]\n"
+                    "sys.exit(m.main())\n";
+                const std::string fbPath = std::string(dir) + "/fb_driver.py";
+                { std::ofstream f(fbPath, std::ios::binary); f << fbDriver; }
+                const int rc = std::system((python + " '" + fbPath + "' '" + fbDir + "/se_patch.py' '" +
+                                            outsideDir + "' " + (swapIt ? "1" : "0") + " >/dev/null 2>&1").c_str());
+                const std::string v = ReadFile(outsideDir + "/t.bin");
+                Check(v.size() == 4 && (uint8_t)v[0] == 0x00,
+                      "the fallback never writes the file outside the patch directory");
+                if (swapIt)
+                {
+                    Check(rc != 0, "a directory swapped in before the open is reported as a failure");
+                }
+                else
+                {
+                    const std::string in = ReadFile(fbDir + "/sub/t.bin");
+                    Check(rc == 0 && in.size() == 4 && (uint8_t)in[0] == 0xAA,
+                          "the fallback still patches a normal file");
+                }
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
             BestEffort("rm -rf '" + std::string(dir) + "'");
         }
     }
