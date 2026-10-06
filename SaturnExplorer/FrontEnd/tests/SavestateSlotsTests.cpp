@@ -1,7 +1,9 @@
 // SavestateSlots: block tracking (keyframe + delta reconstruction) and the slot file format.
 // Covers the logic behind Save State without needing an emulator or a window.
 
+#include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -167,6 +169,30 @@ void TestSlotFileRoundTrip()
     std::string missing;
     CHECK(!SavestateSlots::LoadFromSlot(rom, 4, none, noFrame, missing));
     CHECK(!missing.empty());
+
+    // A header declaring ~4 GiB over a body of a few bytes is refused before any allocation.
+    {
+        const std::string path = SavestateSlots::SlotPath(rom, 5);
+        CHECK(!path.empty());
+        std::vector<uint8_t> bad;
+        const char magic[8] = { 'S', 'E', 'S', 'T', 'A', 'T', 'E', '1' };
+        bad.insert(bad.end(), magic, magic + 8);
+        for (int i = 0; i < 4; ++i) bad.push_back(i == 0 ? 1 : 0);   // version 1
+        for (int i = 0; i < 8; ++i) bad.push_back(0);                // frame
+        for (int i = 0; i < 4; ++i) bad.push_back(0xFF);             // length 0xFFFFFFFF
+        bad.push_back(0x11);
+        {
+            std::ofstream f(path, std::ios::binary | std::ios::trunc);
+            f.write(reinterpret_cast<const char*>(bad.data()), std::streamsize(bad.size()));
+        }
+        std::vector<uint8_t> out;
+        uint64_t fr = 0;
+        std::string why;
+        CHECK(!SavestateSlots::LoadFromSlot(rom, 5, out, fr, why));
+        CHECK(!why.empty());
+        CHECK(out.empty());
+        std::remove(path.c_str());
+    }
 
     std::remove(path.c_str());
 }

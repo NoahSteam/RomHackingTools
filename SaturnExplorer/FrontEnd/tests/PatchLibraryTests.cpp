@@ -263,6 +263,149 @@ int main()
                 BestEffort("rm -f '" + victim + "'");
             }
 
+            // --- Containment through a symlink: normpath alone would let 'link.bin' reach out ---
+            {
+                const std::string outsideDir = std::string(dir) + "_outside";
+                BestEffort("mkdir -p '" + outsideDir + "' '" + std::string(dir) + "/inner'");
+                const std::string victim = outsideDir + "/victim.bin";
+                { std::ofstream f(victim, std::ios::binary); const char z[8] = {0}; f.write(z, 8); }
+                BestEffort("ln -s '" + victim + "' '" + std::string(dir) + "/link.bin'");
+                BestEffort("ln -s '" + outsideDir + "' '" + std::string(dir) + "/dirlink'");
+                PatchLibrary lk;
+                lk.AddOrUpdate(Loc("l", 0x200000, 4, "link.bin", 0, {0, 0, 0, 0}));
+                lk.AddOrUpdate(Loc("d", 0x200010, 4, "dirlink/victim.bin", 0, {0, 0, 0, 0}));
+                MemStub lm;
+                lm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                lm.mem.push_back({0x200010, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> loc;
+                const std::string lkScript = lk.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return lm.Read(a, l, o); },
+                    loc);
+                const std::string lkPath = std::string(dir) + "/se_link.py";
+                { std::ofstream f(lkPath, std::ios::binary); f << lkScript; }
+                Check(std::system((python + " '" + lkPath + "' --force >/dev/null 2>&1").c_str()) != 0,
+                      "script refuses a symlink that leads outside the patch directory");
+                const std::string after = ReadFile(victim);
+                Check(after.size() == 8 && (uint8_t)after[0] == 0x00,
+                      "the file behind the symlink was not written");
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
+            // --- Replacement between the check and the write -----------------------------
+            // The script judges a patch, then writes it. If the checked parent directory is
+            // swapped for a symlink in between, a script that reopens the pathname writes
+            // outside the patch directory. The handle opened for the check must be the one
+            // that is written, so the swap has no effect on where the bytes go.
+            {
+                const std::string raceDir = std::string(dir) + "/race";
+                const std::string outsideDir = std::string(dir) + "_race_outside";
+                BestEffort("mkdir -p '" + raceDir + "/sub' '" + outsideDir + "'");
+                const std::string inside = raceDir + "/sub/t.bin";
+                const std::string victim = outsideDir + "/t.bin";
+                { std::ofstream f(inside, std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                { std::ofstream f(victim, std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+
+                PatchLibrary rl;
+                rl.AddOrUpdate(Loc("r", 0x200000, 4, "sub/t.bin", 0, {0, 0, 0, 0}));
+                MemStub rm;
+                rm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> roc;
+                const std::string rScript = rl.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return rm.Read(a, l, o); },
+                    roc);
+                { std::ofstream f(raceDir + "/se_patch.py", std::ios::binary); f << rScript; }
+
+                // Driver: load the script as a module, and make its write step swap the checked
+                // directory for a symlink to the outside first.
+                const std::string driver =
+                    "import importlib.util, os, sys\n"
+                    "spec = importlib.util.spec_from_file_location('sepatch', sys.argv[1])\n"
+                    "m = importlib.util.module_from_spec(spec)\n"
+                    "spec.loader.exec_module(m)\n"
+                    "real = m.write_at\n"
+                    "script, outside = sys.argv[1], sys.argv[2]\n"
+                    "def swapped(fd, off, data):\n"
+                    "    base = os.path.dirname(os.path.abspath(script))\n"
+                    "    os.rename(os.path.join(base, 'sub'), os.path.join(base, 'sub_moved'))\n"
+                    "    os.symlink(outside, os.path.join(base, 'sub'))\n"
+                    "    real(fd, off, data)\n"
+                    "m.write_at = swapped\n"
+                    "sys.argv = [script]\n"
+                    "sys.exit(m.main())\n";
+                const std::string driverPath = std::string(dir) + "/race_driver.py";
+                { std::ofstream f(driverPath, std::ios::binary); f << driver; }
+                Check(std::system((python + " '" + driverPath + "' '" + raceDir + "/se_patch.py' '" +
+                                   outsideDir + "' >/dev/null 2>&1").c_str()) == 0,
+                      "the swapped-directory run still completes");
+                const std::string v = ReadFile(victim);
+                Check(v.size() == 4 && (uint8_t)v[0] == 0x00,
+                      "a directory swapped in after the check does not redirect the write");
+                const std::string moved = ReadFile(raceDir + "/sub_moved/t.bin");
+                Check(moved.size() == 4 && (uint8_t)moved[0] == 0xAA,
+                      "the write went to the file that was checked");
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
+            // --- The no-dirfd fallback (what Windows runs) ---------------------------------
+            // Forced on here. It opens the name, then judges the opened handle's own final
+            // path (a /proc readlink stands in for GetFinalPathNameByHandleW). A parent swapped
+            // for a symlink immediately before the open is caught after it, and the file is
+            // closed unwritten; an unswapped run still patches normally.
+            for (int swapIt = 0; swapIt < 2; ++swapIt)
+            {
+                const std::string fbDir = std::string(dir) + (swapIt ? "/fb_swap" : "/fb_plain");
+                const std::string outsideDir = fbDir + "_outside";
+                BestEffort("mkdir -p '" + fbDir + "/sub' '" + outsideDir + "'");
+                { std::ofstream f(fbDir + "/sub/t.bin", std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                { std::ofstream f(outsideDir + "/t.bin", std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                PatchLibrary fl;
+                fl.AddOrUpdate(Loc("f", 0x200000, 4, "sub/t.bin", 0, {0, 0, 0, 0}));
+                MemStub fm;
+                fm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> foc;
+                const std::string fScript = fl.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return fm.Read(a, l, o); },
+                    foc);
+                { std::ofstream f(fbDir + "/se_patch.py", std::ios::binary); f << fScript; }
+                const std::string fbDriver =
+                    "import importlib.util, os, sys\n"
+                    "script, outside, swap = sys.argv[1], sys.argv[2], sys.argv[3] == '1'\n"
+                    "spec = importlib.util.spec_from_file_location('sepatch', script)\n"
+                    "m = importlib.util.module_from_spec(spec)\n"
+                    "spec.loader.exec_module(m)\n"
+                    "m.HAVE_DIRFD = False\n"
+                    "m.final_path = lambda fd: os.readlink('/proc/self/fd/%d' % fd)\n"
+                    "real_open = os.open\n"
+                    "def swapped(path, *a, **k):\n"
+                    "    base = os.path.dirname(os.path.abspath(script))\n"
+                    "    if swap and path.endswith('t.bin') and os.path.isdir(os.path.join(base, 'sub')) \\\n"
+                    "            and not os.path.islink(os.path.join(base, 'sub')):\n"
+                    "        os.rename(os.path.join(base, 'sub'), os.path.join(base, 'sub_moved'))\n"
+                    "        os.symlink(outside, os.path.join(base, 'sub'))\n"
+                    "    return real_open(path, *a, **k)\n"
+                    "os.open = swapped\n"
+                    "sys.argv = [script]\n"
+                    "sys.exit(m.main())\n";
+                const std::string fbPath = std::string(dir) + "/fb_driver.py";
+                { std::ofstream f(fbPath, std::ios::binary); f << fbDriver; }
+                const int rc = std::system((python + " '" + fbPath + "' '" + fbDir + "/se_patch.py' '" +
+                                            outsideDir + "' " + (swapIt ? "1" : "0") + " >/dev/null 2>&1").c_str());
+                const std::string v = ReadFile(outsideDir + "/t.bin");
+                Check(v.size() == 4 && (uint8_t)v[0] == 0x00,
+                      "the fallback never writes the file outside the patch directory");
+                if (swapIt)
+                {
+                    Check(rc != 0, "a directory swapped in before the open is reported as a failure");
+                }
+                else
+                {
+                    const std::string in = ReadFile(fbDir + "/sub/t.bin");
+                    Check(rc == 0 && in.size() == 4 && (uint8_t)in[0] == 0xAA,
+                          "the fallback still patches a normal file");
+                }
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
             BestEffort("rm -rf '" + std::string(dir) + "'");
         }
     }

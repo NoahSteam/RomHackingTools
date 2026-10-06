@@ -1,6 +1,7 @@
 #include "SavestateSlots.h"
 
 #include <cstdio>
+#include <new>
 #include <cstring>
 #include <ctime>
 #include <fstream>
@@ -20,6 +21,9 @@ namespace
 const char  kMagic[8] = { 'S', 'E', 'S', 'T', 'A', 'T', 'E', '1' };
 const uint32_t kVersion = 1;
 const size_t kHeaderLen = sizeof(kMagic) + 4 + 8 + 4;
+// Same ceiling the live protocol puts on a state image. A slot header declaring more than
+// this is corrupt, not a state worth allocating for.
+const uint32_t kMaxStateBytes = 64u * 1024u * 1024u;
 
 void Put32(std::vector<uint8_t>& v, uint32_t x)
 {
@@ -243,9 +247,30 @@ bool SavestateSlots::LoadFromSlot(const std::string& romPath, int slot,
     frame = Get64(hdr + sizeof(kMagic) + 4);
     const uint32_t len = Get32(hdr + sizeof(kMagic) + 12);
     if (len == 0) { error = "Save state is empty."; return false; }
-    state.resize(len);
+    // Check the declared length against what the file really holds before allocating, so a
+    // 24-byte file claiming 4 GiB is rejected instead of taking the allocation with it.
+    in.seekg(0, std::ios::end);
+    const std::streamoff fileLen = in.tellg();
+    if (!in || fileLen < static_cast<std::streamoff>(kHeaderLen) ||
+        static_cast<uint64_t>(fileLen - static_cast<std::streamoff>(kHeaderLen)) < len)
+    {
+        error = "Save state is truncated.";
+        return false;
+    }
+    if (len > kMaxStateBytes) { error = "Save state is larger than the supported maximum."; return false; }
+    in.seekg(static_cast<std::streamoff>(kHeaderLen), std::ios::beg);
+    try
+    {
+        state.resize(len);
+    }
+    catch (const std::bad_alloc&)
+    {
+        state.clear();
+        error = "Not enough memory to load the save state.";
+        return false;
+    }
     in.read(reinterpret_cast<char*>(state.data()), len);
-    if (static_cast<uint32_t>(in.gcount()) != len)
+    if (!in || static_cast<uint32_t>(in.gcount()) != len)
     {
         error = "Save state is truncated.";
         return false;

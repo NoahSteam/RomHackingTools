@@ -156,6 +156,68 @@ void TestOddLengthMednafenU16FieldRefused()
 }
 
 
+// A section whose header promises more bytes than the file holds is a damaged state. It used
+// to stop the walk and accept whatever had been recovered before it, so a VDP2-only prefix of
+// a cut-off file loaded as if it were the whole machine.
+void TestTruncatedMednafenSectionRefused()
+{
+    std::vector<uint8_t> vdp2sec;
+    AddMdfnField(vdp2sec, "RawRegs", std::vector<uint8_t>(0x200, 0x5A));
+    std::vector<uint8_t> file = MdfnHeader();
+    AddMdfnSection(file, "VDP2", vdp2sec);
+    se_data_source whole{};
+    const se_result ok = se_savestate_open_buffer(file.data(), file.size(), &whole);
+    CHECK(ok == SE_OK);
+    if (ok == SE_OK && whole.close) whole.close(whole.user);
+
+    // Append a MAIN header declaring 1000 bytes, then only 10 of them.
+    const size_t at = file.size();
+    file.resize(at + 32, 0);
+    std::memcpy(&file[at], "MAIN", 4);
+    Put32LE(file, 1000);
+    file.insert(file.end(), 10, 0);
+    se_data_source ds{};
+    CHECK(se_savestate_open_buffer(file.data(), file.size(), &ds) != SE_OK);
+}
+
+// Two more ways a cut-off file used to open: a section header left incomplete at the end, and a
+// field inside a complete section whose declared payload runs past that section (read as "no
+// such field" while earlier regions kept the open alive).
+void TestMalformedMednafenStructureRefused()
+{
+    std::vector<uint8_t> vdp2sec;
+    AddMdfnField(vdp2sec, "RawRegs", std::vector<uint8_t>(0x200, 0x5A));
+
+    // (a) valid VDP2, then 10 bytes: not enough for a 36-byte section header.
+    std::vector<uint8_t> a = MdfnHeader();
+    AddMdfnSection(a, "VDP2", vdp2sec);
+    a.insert(a.end(), 10, 0);
+    se_data_source ads{};
+    CHECK(se_savestate_open_buffer(a.data(), a.size(), &ads) != SE_OK);
+
+    // (b) valid VDP2, then a MAIN section whose only field claims far more than the section.
+    std::vector<uint8_t> mainsec;
+    mainsec.push_back(8);
+    mainsec.insert(mainsec.end(), "WorkRAML", "WorkRAML" + 8);
+    Put32LE(mainsec, 0x100000);                  // declared payload, but nothing follows
+    std::vector<uint8_t> b = MdfnHeader();
+    AddMdfnSection(b, "VDP2", vdp2sec);
+    AddMdfnSection(b, "MAIN", mainsec);
+    se_data_source bds{};
+    CHECK(se_savestate_open_buffer(b.data(), b.size(), &bds) != SE_OK);
+
+    // (c) the same field with a payload the section really holds is accepted.
+    std::vector<uint8_t> okmain;
+    AddMdfnField(okmain, "Other", std::vector<uint8_t>(16, 1));
+    std::vector<uint8_t> c = MdfnHeader();
+    AddMdfnSection(c, "VDP2", vdp2sec);
+    AddMdfnSection(c, "MAIN", okmain);
+    se_data_source cds{};
+    const se_result cr = se_savestate_open_buffer(c.data(), c.size(), &cds);
+    CHECK(cr == SE_OK);
+    if (cr == SE_OK && cds.close) cds.close(cds.user);
+}
+
 // The other two openers were still gated on VDP1 VRAM after SNAP-02 relaxed the savestate
 // parsers, so a source carrying only work RAM -- perfectly good for the hex editor, the
 // debugger and a RAM search -- opened from a .yss but not from a raw dump of the same memory.
@@ -313,6 +375,8 @@ int main()
     TestVdp2OnlyYssOpens();
     TestEmptyYssRefused();
     TestOddLengthMednafenU16FieldRefused();
+    TestTruncatedMednafenSectionRefused();
+    TestMalformedMednafenStructureRefused();
     TestWorkRamOnlyFullDumpOpens();
     TestDumpCoveringNoRegionRefused();
     TestBigEndianYssRefused();

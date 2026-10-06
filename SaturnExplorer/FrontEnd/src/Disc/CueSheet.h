@@ -14,6 +14,10 @@ namespace sfe
 {
 
 // "MM:SS:FF" (75 frames/second) <-> absolute frame (= sector) count.
+// ParseMsf is the checked form: exactly three colon-separated unsigned decimal fields with
+// SS < 60 and FF < 75 (MM <= 9999), so no field can overflow or wrap. MsfToFrames returns 0
+// for input ParseMsf rejects; use ParseMsf where a bad timestamp must be an error.
+bool ParseMsf(const std::string& msf, uint32_t& frames);
 uint32_t MsfToFrames(const std::string& msf);
 std::string FramesToMsf(uint32_t frames);
 

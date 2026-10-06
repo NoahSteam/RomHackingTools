@@ -1,6 +1,8 @@
 #include "SavestateDriver.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <new>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -396,20 +398,23 @@ constexpr size_t kMdfnSectionHdr   = 36;    // 32-byte name + u32 size
 bool FindMednafenField(const std::vector<uint8_t>& file, size_t dataOff, uint32_t dataSize,
                        const char* name, size_t& outOff, uint32_t& outSize)
 {
+    // Every bound is a subtraction from what remains, so no declared length can wrap the check.
+    // A malformed chain simply stops the search here; ValidateMednafenFields() is what tells
+    // "absent" from "malformed", and runs over every section before any field is looked up.
     const size_t nameLen = std::strlen(name);
     size_t p = dataOff;
     const size_t end = dataOff + dataSize;
-    while (p + 5 <= end)
+    while (end - p >= 5)
     {
         const uint8_t fieldNameLen = file[p];
-        const size_t sizePos = p + 1 + fieldNameLen;
-        if (sizePos + 4 > end)
+        if (end - p < size_t(1) + fieldNameLen + 4)
         {
             break;
         }
+        const size_t sizePos = p + 1 + fieldNameLen;
         const uint32_t fieldSize = Read32LE(file, sizePos);
         const size_t payload = sizePos + 4;
-        if (payload + fieldSize > end)
+        if (fieldSize > end - payload)
         {
             break;
         }
@@ -423,6 +428,38 @@ bool FindMednafenField(const std::vector<uint8_t>& file, size_t dataOff, uint32_
         p = payload + fieldSize;
     }
     return false;
+}
+
+// True if the section's field chain is well formed: every field header and payload fits inside
+// the section and the chain ends exactly at its end. A field the section simply lacks is fine
+// (callers treat that as absent); one that is cut short or overruns the section means the
+// state is damaged, and FindMednafenField would otherwise read it as "not there" and let a
+// partly recovered state open.
+bool ValidateMednafenFields(const std::vector<uint8_t>& file, size_t dataOff, uint32_t dataSize)
+{
+    size_t p = dataOff;
+    const size_t end = dataOff + dataSize;
+    while (p != end)
+    {
+        if (end - p < 5)
+        {
+            return false;
+        }
+        const size_t nameLen = file[p];
+        if (end - p < size_t(1) + nameLen + 4)
+        {
+            return false;
+        }
+        const size_t sizePos = p + 1 + nameLen;
+        const uint32_t fieldSize = Read32LE(file, sizePos);
+        const size_t payload = sizePos + 4;
+        if (fieldSize > end - payload)
+        {
+            return false;
+        }
+        p = payload + fieldSize;
+    }
+    return true;
 }
 
 // Copy a uint16 array field, byte-swapping little-endian words to Saturn-native
@@ -708,6 +745,10 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
         return SE_ERR_UNSUPPORTED;   // implausible dims => wrong header layout
     }
     size_t pos = kMdfnHeaderSize + static_cast<size_t>(previewW) * previewH * 3;
+    if (pos > file.size())
+    {
+        return SE_ERR_UNSUPPORTED;   // the preview alone runs past the end of the file
+    }
 
     std::unique_ptr<Savestate> state(new (std::nothrow) Savestate());
     if (!state)
@@ -716,16 +757,32 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
     }
 
     // Walk the section chain: 32-byte zero-padded name + u32 LE data size + data.
-    while (pos + kMdfnSectionHdr <= file.size())
+    while (pos != file.size())
     {
+        if (file.size() - pos < kMdfnSectionHdr)
+        {
+            // Bytes left over that cannot hold a section header: the chain was cut mid-header.
+            return SE_ERR_UNSUPPORTED;
+        }
         char name[33];
         std::memcpy(name, &file[pos], 32);
         name[32] = '\0';
         const uint32_t secSize = Read32LE(file, pos + 32);
         const size_t secData = pos + kMdfnSectionHdr;
-        if (secData + secSize > file.size())
+        if (secSize > file.size() - secData)
         {
-            break;  // truncated
+            // A section whose header promises more than the file holds is a damaged state;
+            // accepting the regions parsed so far would load a partial machine as if whole.
+            return SE_ERR_UNSUPPORTED;
+        }
+        // The sections read below are all field chains; refuse the state if any is malformed
+        // rather than letting a bad field read as an absent one.
+        if ((std::strcmp(name, "VDP1") == 0 || std::strcmp(name, "VDP2") == 0 ||
+             std::strcmp(name, "MAIN") == 0 || std::strcmp(name, "SH2-M") == 0 ||
+             std::strcmp(name, "SH2-S") == 0) &&
+            !ValidateMednafenFields(file, secData, secSize))
+        {
+            return SE_ERR_UNSUPPORTED;
         }
 
         if (std::strcmp(name, "VDP1") == 0)
@@ -824,8 +881,17 @@ bool IsGzip(const std::vector<uint8_t>& buf)
 // without zlib — gzipped states are then reported as unsupported rather than
 // misparsed).
 #if defined(SE_HAVE_ZLIB)
+// Ceilings for an imported gzip state. Real Mednafen states are a few MiB compressed and
+// tens of MiB inflated; anything past these is a decompression bomb or not a state at all.
+constexpr size_t kMaxGzipInput  = 128u * 1024u * 1024u;
+constexpr size_t kMaxGzipOutput = 256u * 1024u * 1024u;
+
 bool Gunzip(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
 {
+    if (in.size() > kMaxGzipInput)
+    {
+        return false;
+    }
     z_stream zs;
     std::memset(&zs, 0, sizeof(zs));
     if (inflateInit2(&zs, 16 + MAX_WBITS) != Z_OK)   // 16 => decode a gzip header
@@ -834,26 +900,46 @@ bool Gunzip(const std::vector<uint8_t>& in, std::vector<uint8_t>& out)
     }
     zs.next_in = const_cast<Bytef*>(in.data());
     zs.avail_in = static_cast<uInt>(in.size());
-    out.assign(in.size() * 4 + 4096, 0);   // states inflate ~3x; grow if needed
-    int ret;
-    do
+    bool ok = false;
+    try
     {
-        if (zs.total_out == out.size())
+        // States inflate ~3x; start there (bounded) and double up to the ceiling.
+        out.assign(std::min<size_t>(in.size() * 4 + 4096, kMaxGzipOutput), 0);
+        for (;;)
         {
-            out.resize(out.size() * 2);
+            if (zs.total_out == out.size())
+            {
+                if (out.size() >= kMaxGzipOutput)
+                {
+                    break;   // would exceed the ceiling
+                }
+                out.resize(std::min<size_t>(out.size() * 2, kMaxGzipOutput));
+            }
+            zs.next_out = out.data() + zs.total_out;
+            zs.avail_out = static_cast<uInt>(out.size() - zs.total_out);
+            const int ret = inflate(&zs, Z_NO_FLUSH);
+            if (ret == Z_STREAM_END)
+            {
+                out.resize(zs.total_out);
+                ok = true;
+                break;
+            }
+            if (ret != Z_OK)
+            {
+                break;
+            }
         }
-        zs.next_out = out.data() + zs.total_out;
-        zs.avail_out = static_cast<uInt>(out.size() - zs.total_out);
-        ret = inflate(&zs, Z_NO_FLUSH);
-        if (ret != Z_OK && ret != Z_STREAM_END)
-        {
-            inflateEnd(&zs);
-            return false;
-        }
-    } while (ret != Z_STREAM_END);
-    out.resize(zs.total_out);
+    }
+    catch (const std::bad_alloc&)
+    {
+        ok = false;
+    }
     inflateEnd(&zs);
-    return true;
+    if (!ok)
+    {
+        out.clear();
+    }
+    return ok;
 }
 #else
 bool Gunzip(const std::vector<uint8_t>&, std::vector<uint8_t>&) { return false; }

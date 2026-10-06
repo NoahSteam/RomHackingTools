@@ -72,6 +72,37 @@ DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
 {
     DiscBuildResult r;
 
+    // --- 0) Read the source disc's track layout first. A CUE the caller named that cannot be
+    //        read or parsed is an error: continuing would build a data-only disc that looks
+    //        successful while silently dropping every audio track the CUE described. ---
+    CueSheet sheet;
+    if (opt.binCue && IEqualsExt(opt.sourceImage, ".cue"))
+    {
+        std::ifstream cf(opt.sourceImage, std::ios::binary);
+        if (!cf)
+        {
+            r.error = "Could not read the source CUE: " + opt.sourceImage;
+            return r;
+        }
+        std::string text((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+        sheet = ParseCueText(text, DirOf(opt.sourceImage));
+        if (!sheet.ok)
+        {
+            r.error = "The source CUE could not be parsed (" + sheet.error + "): " + opt.sourceImage;
+            return r;
+        }
+        // The rebuilt data track is always MODE1/2352 sectors. A MODE2 first track would be
+        // written with MODE1 sectors under a MODE2 label, so refuse rather than mislabel it.
+        const CueTrack& first = sheet.tracks[0];
+        if (first.isData && first.typeStr.size() >= 5 &&
+            (first.typeStr[4] == '2'))
+        {
+            r.error = "The source disc's data track is " + first.typeStr +
+                      ", which this builder cannot re-encode (it writes MODE1 sectors).";
+            return r;
+        }
+    }
+
     // --- 1) Build the data track's ISO-9660 filesystem (MODE1/2048). ---
     IsoBuildOptions iso = opt.iso;
     const std::string outDir = DirOf(opt.outPath);
@@ -114,21 +145,11 @@ DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
     r.totalBytes += FileSize(track01);
 
     // --- 3) Parse the source disc's track layout (for audio / extra tracks). ---
-    CueSheet sheet;
-    if (IEqualsExt(opt.sourceImage, ".cue"))
-    {
-        std::ifstream cf(opt.sourceImage, std::ios::binary);
-        std::string text((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
-        sheet = ParseCueText(text, DirOf(opt.sourceImage));
-    }
     const std::vector<CueTrackRange> ranges =
         sheet.ok ? CueTrackRanges(sheet, FileSize) : std::vector<CueTrackRange>();
 
-    // Track-01 type: keep the source's if it was a raw data track, else default to MODE1/2352.
-    std::string t1type = "MODE1/2352";
-    if (sheet.ok && !sheet.tracks.empty() && sheet.tracks[0].isData &&
-        sheet.tracks[0].sectorSize == 2352)
-        t1type = sheet.tracks[0].typeStr;
+    // Track-01 is always what IsoToRawBin wrote.
+    const std::string t1type = "MODE1/2352";   // what IsoToRawBin writes; MODE2 was refused above
 
     std::ostringstream cue;
     cue << "FILE \"" << BaseName(track01) << "\" BINARY\n"

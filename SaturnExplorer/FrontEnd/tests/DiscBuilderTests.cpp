@@ -210,6 +210,37 @@ int main()
         Check(rp.audioTracksCopied == 0, "the audio track really is absent");
     }
 
+    // A source CUE that cannot be read or parsed must fail the build before anything is written,
+    // not degrade into a data-only disc that reports success.
+    {
+        DiscBuildOptions o = opt;
+        WriteText(base + "/garbage.cue", "this is not a cue sheet\n");
+        o.sourceImage = base + "/garbage.cue";
+        o.outPath = base + "/garbage_out.cue";
+        const DiscBuildResult rg = BuildDiscImage(o);
+        Check(!rg.ok && !rg.error.empty(), "an unparseable source cue fails the build");
+        Check(!FileExists(base + "/garbage_out.cue") && !FileExists(base + "/garbage_out (Track 01).bin"),
+              "nothing is written for an unparseable cue");
+
+        o.sourceImage = base + "/does_not_exist.cue";
+        const DiscBuildResult rm = BuildDiscImage(o);
+        Check(!rm.ok, "a missing source cue fails the build");
+
+        WriteText(base + "/overflow.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 2147483647:00:00\n");
+        o.sourceImage = base + "/overflow.cue";
+        Check(!BuildDiscImage(o).ok, "a cue with an overflowing timestamp fails the build");
+
+        // MODE2 sources would be mislabelled (the encoder writes MODE1 sectors).
+        WriteText(base + "/mode2.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n");
+        o.sourceImage = base + "/mode2.cue";
+        o.outPath = base + "/mode2_out.cue";
+        const DiscBuildResult r2 = BuildDiscImage(o);
+        Check(!r2.ok, "a MODE2 data track is refused");
+        Check(!FileExists(base + "/mode2_out.cue"), "no cue is written for a refused MODE2 source");
+    }
+
     // ISO (data-only) output.
     DiscBuildOptions iso = opt;
     iso.binCue = false;
