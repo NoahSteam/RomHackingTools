@@ -118,6 +118,17 @@ static volatile unsigned int sStopReason;   /* SE_LIVE_STOP_* */
 static volatile unsigned int sStopCpu;      /* 0 master, 1 slave */
 static volatile unsigned int sStopPc;
 
+/* ---- Restore outcomes (v19). A load (LST/ELS) is applied later, on the emulate thread, and
+ * the request's own reply says nothing about it. These let the client tell "finished" from
+ * "not yet" instead of guessing from elapsed time. Every accepted load request ends in exactly
+ * one of the two counters: sRestoreDone once the first frame of the restored timeline has been
+ * published to the ring (so a reply that reports it also carries post-restore data), or
+ * sRestoreFailed when the load was refused or could not be applied. Both are guarded by
+ * SE_LOCK and only ever increase. ---- */
+static unsigned int sRestoreDone;
+static unsigned int sRestoreFailed;
+static int          sRestoreAckPending;   /* restored; waiting for the first post-restore frame */
+
 /* ---- Instruction-step state (v12+). The "IST" verb requests running the halted CPU
  * N instructions then halting. sInsnStepPending is set by the server thread and picked
  * up on the CPU thread (SeExportInsnStepBegin) after the halt gate releases; the per-
@@ -430,10 +441,18 @@ static void SeStateApplyEdits(const unsigned char* edits, size_t len)
  * pre-restore wire ring would otherwise let a GET serve a frame from the abandoned timeline,
  * and the savestate pipeline would keep diffing against a keyframe that no longer describes
  * anything. Kept in one place so a future addition can't land on only one of the two paths. */
+static void SeRestoreFailed(void)
+{
+    SE_LOCK();
+    ++sRestoreFailed;
+    SE_UNLOCK();
+}
+
 static void SeStateAfterRestore(void)
 {
     SE_LOCK();
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
+    sRestoreAckPending = 1;   /* counted done when the next frame lands in the emptied ring */
     SE_UNLOCK();
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
@@ -463,12 +482,12 @@ static void SeStateConsumeLoad(void)
         sLoadPending = 0;
     }
     SE_SUNLOCK();
-    if (!buf || len < 8 || !sLoadState) return;
+    if (!buf || len < 8 || !sLoadState) { SeRestoreFailed(); return; }
     {
         unsigned long long frame = SeRd32(buf);
         unsigned int edits_len = SeRd32(buf + 4);
         const unsigned char* state; size_t state_len;
-        if ((size_t)8 + edits_len > len) return;   /* malformed */
+        if ((size_t)8 + edits_len > len) { SeRestoreFailed(); return; }   /* malformed */
         state = buf + 8 + edits_len;
         state_len = len - 8 - (size_t)edits_len;
         if (sLoadState(state, state_len) == 0)
@@ -477,7 +496,7 @@ static void SeStateConsumeLoad(void)
             sFrameNo = frame;
             SeStateAfterRestore();
         }
-        else { SeExportLog("rewind: load state failed"); }
+        else { SeExportLog("rewind: load state failed"); SeRestoreFailed(); }
     }
 }
 
@@ -768,6 +787,7 @@ int SeExportGateFrame(void)
         else
         {
             SeExportLog("load slot: the emulator refused it");
+            SeRestoreFailed();
         }
     }
     if (!sPaused)
@@ -1060,6 +1080,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     dst->valid = 1;
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
+    if (sRestoreAckPending) { sRestoreAckPending = 0; ++sRestoreDone; }   /* first post-restore frame */
     SE_UNLOCK();
     /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
      * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
@@ -1306,7 +1327,8 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             if (payload < 8u || tooLarge || sLoadCap < payload || sStateCap == 0)
             {
                 /* Malformed, over the maximum, can't buffer, or feature off: drain to stay
-                 * stream-aligned. */
+                 * stream-aligned. The client is told the load did not happen. */
+                SeRestoreFailed();
                 if (SeDrain(cl, payload) != 0) return;
             }
             else
@@ -1325,6 +1347,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             {
                 SE_LOCK(); sPaused = 1; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
                 sEmuLoadPending = (int)arg + 1;
+            }
+            else
+            {
+                SeRestoreFailed();   /* no slot hook in this build, or no such slot */
             }
         }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
@@ -1377,6 +1403,8 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 12, sStopReason);
         SeWr32(ctl + 16, sStopCpu);
         SeWr32(ctl + 20, sStopPc);
+        SeWr32(ctl + 24, sRestoreDone);
+        SeWr32(ctl + 28, sRestoreFailed);
         SE_UNLOCK();
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];

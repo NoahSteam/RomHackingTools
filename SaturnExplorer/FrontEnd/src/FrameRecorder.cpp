@@ -307,13 +307,15 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     out->read_sh2_regs  = CbSh2Regs;
     out->read_scsp_slots = CbScspSlots;
     // When an edit sink is set (rewind supported), make the scrub source writable: edits to
-    // Work/Sound RAM update the visible snapshot (Context::WriteVram) and are forwarded to the
-    // App as pending pokes, to be replayed on top of the restored state when Play rewinds here.
+    // Work/Sound RAM and VDP memory update the visible snapshot (Context::WriteVram) and are
+    // forwarded to the App as pending pokes, to be replayed on top of the restored state when
+    // Play rewinds here.
     if (mEditCb)
     {
         out->capabilities |= SE_CAP_MEM_WRITE;
         out->write_main_ram  = CbEditMain;
         out->write_sound_ram = CbEditSound;
+        out->write_vram      = CbEditVram;
     }
     // No close callback: the scratch is owned by this recorder, not the context.
     return true;
@@ -331,6 +333,27 @@ size_t FrameRecorder::CbEditSound(void* u, uint32_t offset, const void* src, siz
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
     if (r->mEditCb && src && size)
         r->mEditCb(r->mEditUser, 1, offset, static_cast<const uint8_t*>(src), size);
+    return size;
+}
+
+// VDP memory rides the work-RAM edit type: the emulator applies a replayed edit with its bus
+// write, which reaches VRAM, CRAM and the framebuffer the same way a live poke does. Without
+// this the edit changed the displayed frame and nothing else, so it vanished when Play rewound.
+size_t FrameRecorder::CbEditVram(void* u, se_vram_kind kind, uint32_t offset, const void* src,
+                                 size_t size)
+{
+    FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    uint32_t base;
+    switch (kind)
+    {
+        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; break;
+        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; break;
+        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; break;
+        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; break;
+        default: return 0;
+    }
+    if (r->mEditCb && src && size)
+        r->mEditCb(r->mEditUser, 0, base + offset, static_cast<const uint8_t*>(src), size);
     return size;
 }
 

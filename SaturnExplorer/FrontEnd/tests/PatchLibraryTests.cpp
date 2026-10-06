@@ -202,6 +202,43 @@ int main()
             Check(forced.size() == 16 && (uint8_t)forced[4] == 0xDE && (uint8_t)forced[7] == 0xEF,
                   "--force landed the replacement bytes");
 
+            // --- Overlapping patches are judged against the original file, not each other ---
+            // Offsets 0-1 -> AA BB and 1-2 -> BB CC agree on byte 1, so together they make
+            // AA BB CC. Checking each patch just before its own write instead makes the second
+            // one see the first one's BB where it expects 00, refuse, and leave AA BB 00.
+            {
+                const std::string ov = std::string(dir) + "/OVERLAP.BIN";
+                auto reset = [&] { std::ofstream f(ov, std::ios::binary); const char z[3] = {0, 0, 0}; f.write(z, 3); };
+                auto runOverlap = [&](uint8_t secondMiddle, const char* name, int expectExit)
+                {
+                    reset();
+                    PatchLibrary olib;
+                    olib.AddOrUpdate(Loc("a", 0x200000, 2, "OVERLAP.BIN", 0, {0, 0}));
+                    olib.AddOrUpdate(Loc("b", 0x200100, 2, "OVERLAP.BIN", 1, {0, 0}));
+                    MemStub om;
+                    om.mem.push_back({0x200000, {0xAA, 0xBB}});
+                    om.mem.push_back({0x200100, {secondMiddle, 0xCC}});
+                    std::vector<PatchOutcome> ooc;
+                    const std::string osrc = olib.EmitPython(
+                        [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return om.Read(a, l, o); }, ooc);
+                    const std::string opath = std::string(dir) + "/se_overlap.py";
+                    { std::ofstream f(opath, std::ios::binary); f << osrc; }
+                    const int rc = std::system((python + " '" + opath + "' >/dev/null 2>&1").c_str());
+                    Check((rc == 0) == (expectExit == 0), name);
+                };
+                runOverlap(0xBB, "compatible overlapping patches apply cleanly", 0);
+                const std::string both = ReadFile(ov);
+                Check(both.size() == 3 && (uint8_t)both[0] == 0xAA && (uint8_t)both[1] == 0xBB &&
+                          (uint8_t)both[2] == 0xCC,
+                      "compatible overlapping patches produce the fully patched file");
+
+                runOverlap(0xEE, "conflicting overlapping patches are refused", 1);
+                const std::string none = ReadFile(ov);
+                Check(none.size() == 3 && (uint8_t)none[0] == 0 && (uint8_t)none[1] == 0 &&
+                          (uint8_t)none[2] == 0,
+                      "a conflicting overlap writes nothing at all");
+            }
+
             // --- Containment: a project path climbing out of BASE must be refused ---
             {
                 PatchLibrary esc;

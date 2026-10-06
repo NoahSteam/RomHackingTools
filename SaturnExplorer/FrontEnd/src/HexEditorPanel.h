@@ -56,6 +56,11 @@ public:
     struct GridMetrics { float byteW = 0.0f; float editW = 0.0f; float editPadX = 0.0f; float rowH = 0.0f; };
     static GridMetrics Metrics();
 
+    // Abandon a half-typed byte or open edit box and forget the cached bytes. The panel does this
+    // itself when the backend reports a different source (see IMemoryBackend::SourceId); the App
+    // calls it directly when it replaces the thing the panel is editing.
+    void CancelEdit();
+
     int64_t SelectionStart() const { return mSelStart; }   // -1 when nothing is selected
     bool    IsEditing() const { return mEditAddr >= 0; }
 
@@ -101,6 +106,7 @@ private:
     float   mModifiedFlash = 0.0f;
 
     bool mConnected = false;
+    uint64_t mSourceId = 0;            // backend source the edit state and byte cache belong to
 
     // Change highlighting across scrolling: the previous value and the fade timer per
     // address touched. Bounded (cleared when it grows large or the tab changes).

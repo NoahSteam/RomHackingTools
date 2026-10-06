@@ -50,6 +50,12 @@ struct LiveSnapshot
     bool                 hasCdStatus = false;
     se_sh2_regs          sh2[2] = {};        // [0] master, [1] slave (v5+)
     bool                 hasSh2[2] = { false, false };
+    // Restore outcomes from the control block (v19+): how many LST/ELS loads the emulator has
+    // applied / refused. Travel with the snapshot so a client that reads them and then captures
+    // knows the capture is at least that new.
+    uint32_t             restoreDone = 0;
+    uint32_t             restoreFailed = 0;
+    bool                 hasRestoreInfo = false;
     bool                 valid = false;
 };
 
@@ -686,6 +692,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
 
     // Control block: paused (u32 LE) + frame (u64 LE), then (v5+) stop reason/cpu/pc.
     // Absent fields default to 0 on older servers.
+    if (ct >= 32)
+    {
+        snap.restoreDone = Rd32LE(ctl.data() + 24);
+        snap.restoreFailed = Rd32LE(ctl.data() + 28);
+        snap.hasRestoreInfo = true;
+    }
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
     outFrame = ct >= 12 ? Rd64LE(ctl.data() + 4) : 0;
     outStop = StopInfo{};
@@ -1313,6 +1325,20 @@ extern "C" uint32_t se_live_connection_generation(const se_data_source* ds)
     return se::Guard(0u, [&]() -> uint32_t
     {
         return St(ds->user)->connGeneration.load();
+    });
+}
+
+extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed)
+{
+    if (!ds || !ds->user || ds->close != CbClose || !done || !failed) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->mtx);
+        if (!st->front.valid || !st->front.hasRestoreInfo) { return 0; }   // pre-v19 server
+        *done = st->front.restoreDone;
+        *failed = st->front.restoreFailed;
+        return 1;
     });
 }
 

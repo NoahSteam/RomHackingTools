@@ -43,7 +43,9 @@ class MockBackend : public IMemoryBackend
 public:
     std::vector<uint8_t> ram = std::vector<uint8_t>(kSize, 0);
 
+    uint64_t id = 1;
     bool Connected() const override { return true; }
+    uint64_t SourceId() const override { return id; }
     bool CanWrite(uint32_t a) const override { return InRange(a, 1); }
 
     std::vector<MemoryReadResult> ReadMemoryBatch(const std::vector<MemoryReadRequest>& rs) override
@@ -229,6 +231,32 @@ void EscapeAbandonsAPendingDigit()
     CHECK(f.backend.ram[0] == 0xBC);
 }
 
+// A digit typed against one source must not complete a byte in its replacement.
+void ReplacingTheSourceAbandonsAPendingDigit()
+{
+    Fixture f;
+    f.h.Click(f.Cell(0, 0));
+    f.Type("A", true);
+    f.backend.id = 2;                 // the data behind the panel was swapped
+    f.h.Settle();
+    f.Type("B", true);
+    CHECK(f.backend.ram[0] == 0x00);  // not "AB": the A belonged to the old source
+    f.Type("C", true);
+    CHECK(f.backend.ram[0] == 0xBC);  // typing carries on normally in the new one
+}
+
+// Same for an open edit box.
+void ReplacingTheSourceClosesTheEditor()
+{
+    Fixture f;
+    f.h.Click(f.Cell(0, 0));
+    f.DoubleClick(f.Cell(0, 0));
+    CHECK(f.panel.IsEditing());
+    f.backend.id = 2;
+    f.h.Settle();
+    CHECK(!f.panel.IsEditing());
+}
+
 void GridGeometryMatchesTheRules()
 {
     Fixture f;
@@ -312,6 +340,8 @@ int main()
     EscapeAbandonsAPendingDigit();
     TypingStopsAtTheRegionEnd();
     DoubleClickOnAPendingDigitOpensTheEditor();
+    ReplacingTheSourceAbandonsAPendingDigit();
+    ReplacingTheSourceClosesTheEditor();
     GridGeometryMatchesTheRules();
     RowsAreOneHeight(false);
     RowsAreOneHeight(true);

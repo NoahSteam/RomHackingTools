@@ -459,6 +459,9 @@ void App::CloseData(bool cancelAutoConnect)
         se_destroy(mContext);
         mContext = nullptr;
     }
+    mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
+    mEditHoldSeconds = 0.0f;
+    mRestoreOutstanding = 0;
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
@@ -888,10 +891,28 @@ void App::BuildUI(IPlatform& platform)
         // republishes a fresh snapshot from inside the halt, so this is how the halted CPU's
         // registers/memory reach the panels and how a step's new state shows. (A bare
         // frame-pause leaves the halt inactive, so the edit-preview case above is unaffected.)
-        if (!mbPaused || mStepHalt.Settling() || mStepHalt.HaltActive())
+        // Also while a state load is unresolved: its completion shows up in the capture stream,
+        // so pausing must not stop the very captures that would end the wait.
+        bool restoreSignal = false;
+        uint32_t restoreDone = 0, restoreFailed = 0;
+#ifdef SE_ENABLE_LIVE
+        const bool restoreWaiting = mRestoreOutstanding > 0;
+#else
+        const bool restoreWaiting = false;
+#endif
+        if (!mbPaused || mStepHalt.Settling() || mStepHalt.HaltActive() || restoreWaiting)
         {
+#ifdef SE_ENABLE_LIVE
+            // Read the counters BEFORE capturing: the driver only moves forward, so what the
+            // capture then holds is at least as new as what was read.
+            if (restoreWaiting)
+                restoreSignal = se_live_restore_state(&mDataSource, &restoreDone, &restoreFailed) != 0;
+#endif
             se_begin_frame(mContext);
             mStepHalt.ConsumeSettleFrame();
+#ifdef SE_ENABLE_LIVE
+            if (restoreSignal) ResolveRestoreWait(restoreDone, restoreFailed);
+#endif
         }
         mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
@@ -1057,7 +1078,23 @@ void App::BuildUI(IPlatform& platform)
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
-    mMemBackend.SetReadOnly(mbScrubbing && !mSeekSupported);
+    mEditHoldSeconds = std::max(0.0f, mEditHoldSeconds - ImGui::GetIO().DeltaTime);
+    if (mRestoreOutstanding > 0)
+    {
+        // The emulator answers a load through the capture stream; if it never does (connection
+        // lost, server that cannot apply it, a refused request that was not counted), say so and
+        // stop refusing edits rather than lock the panels for good.
+        mRestoreWaitSeconds += ImGui::GetIO().DeltaTime;
+        if (mRestoreWaitSeconds > 10.0f)
+        {
+            mRestoreOutstanding = 0;
+            mMemBackend.NoteSourceChanged();
+            mLog.Error("The emulator did not confirm the state load within 10 s. What is shown "
+                       "may not be the loaded state; editing is available again.");
+        }
+    }
+    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mEditHoldSeconds > 0.0f ||
+                            mRestoreOutstanding > 0);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 
@@ -1386,6 +1423,7 @@ void App::DrawTransportBar()
         mbScrubbing = true;
         if (mScrubIndex < 0 || mScrubIndex >= n) { mScrubIndex = n - 1; }
         if (mScrubIndex > 0) { --mScrubIndex; }
+        VoidEditTarget();
     }
     ImGui::SameLine();
 
@@ -1423,6 +1461,8 @@ void App::DrawTransportBar()
             }
             mbScrubbing = false;
             mbPaused = false;
+            VoidEditTarget();
+            if (rewound) BeginRestoreWait();   // the emulator applies the rewind asynchronously
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
@@ -1447,6 +1487,7 @@ void App::DrawTransportBar()
         {
             mbScrubbing = true;
             mScrubIndex = idx;
+            VoidEditTarget();
         }
     }
     else
@@ -1464,10 +1505,12 @@ void App::DrawTransportBar()
         if (mbScrubbing && mScrubIndex < n - 1)
         {
             ++mScrubIndex;
+            VoidEditTarget();
         }
         else
         {
             mbScrubbing = false;
+            VoidEditTarget();
             se_frame_step(ctl, 1);   // advance one frame; leaves the emulator paused
             mbPaused = true;
             mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
@@ -1533,6 +1576,7 @@ bool App::RefreshScrubContext()
     }
     se_begin_frame(mScrubContext);
     mScrubShownIndex = mScrubIndex;
+    mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
     return true;
 #else
     return false;
@@ -1559,7 +1603,11 @@ void App::OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* byt
 
 void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len)
 {
-    mPendingEditsFrame = mScrubIndex;   // these edits belong to the frame now shown
+    // Tag with the frame the written-to context actually displays, not where the slider points:
+    // a transport action earlier in this same frame may already have moved mScrubIndex while the
+    // panels still draw (and commit to) the old frame. Tagged with the new index, that edit
+    // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
+    mPendingEditsFrame = mScrubShownIndex;
     // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
     for (size_t i = 0; i < len; ++i)
     {
@@ -3762,7 +3810,7 @@ void App::DrawCommandList()
 
                 // Size/Position cells become editable when the source can take writes (a loaded
                 // snapshot). An edit re-encodes CMDSIZE/CMDXA/CMDYA and pokes VDP1 VRAM.
-                const bool editable = se_can_write(mContext) != 0;
+                const bool editable = mMemBackend.CanWrite(kVdp1VramBase);
 
                 ImGuiListClipper clipper;
                 clipper.Begin(static_cast<int>(count));
@@ -3813,7 +3861,7 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         if (editable)
                         {
-                            EditCommandSize(cmd, row);
+                            EditCommandSize(cmd);
                         }
                         else
                         {
@@ -3827,7 +3875,7 @@ void App::DrawCommandList()
                         ImGui::TableNextColumn();
                         if (editable)
                         {
-                            EditCommandPosition(cmd, row);
+                            EditCommandPosition(cmd);
                         }
                         else
                         {
@@ -3874,21 +3922,41 @@ bool EditCell(const char* id, float width, int initial, Commit&& commit)
 }
 }  // namespace
 
-// Re-encode one 16-bit command word and write it back to VDP1 VRAM. se_write_vram updates the
-// snapshot, re-derives the reconstructed image, and pokes a live emulator (via write_vram).
+// Re-encode one 16-bit command word and write it back to VDP1 VRAM. It goes through the Memory
+// backend like any other edit, so the read-only policy and the accepted-byte count apply here
+// too: the snapshot, the reconstructed image and a live emulator are updated only for what the
+// source took, and a refusal is said so instead of leaving the cell showing a value that never
+// landed.
 void App::WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value)
 {
     const uint8_t be[2] = { static_cast<uint8_t>(value >> 8),
                             static_cast<uint8_t>(value & 0xFF) };
-    se_write_vram(mContext, SE_VRAM_KIND_VDP1_VRAM, cmd.table_address + fieldOffset,
-                  be, sizeof be);
+    const uint32_t address = kVdp1VramBase + cmd.table_address + fieldOffset;
+    if (mMemBackend.WriteMemory(address, be, sizeof be) != sizeof be)
+    {
+        char msg[96];
+        std::snprintf(msg, sizeof msg, "Edit of VDP1 command at %06X was not written.",
+                      cmd.table_address);
+        mLog.Warn(msg);
+    }
+}
+
+// An edit box is identified by the command it edits and the source that command came from, not
+// by the row it happens to be drawn in. ImGui keeps an edit going across frames by ID, and the
+// commit writes to whichever command the box is drawn for *now*: with the row as the ID, a live
+// list that shifted under a half-typed value would commit it to a different command.
+void App::PushCommandEditId(const se_command& cmd)
+{
+    const uint64_t source = mMemBackend.SourceId();
+    ImGui::PushID(static_cast<int>(cmd.table_address));
+    ImGui::PushID(static_cast<int>(source ^ (source >> 32)));
 }
 
 // Editable "W x H" cell. Width is stored in units of 8 dots (CMDSIZE bits 13:8), height in
 // lines (bits 7:0); both edits preserve the other half of the word.
-bool App::EditCommandSize(const se_command& cmd, int row)
+bool App::EditCommandSize(const se_command& cmd)
 {
-    ImGui::PushID(row);
+    PushCommandEditId(cmd);
     bool changed = false;
     const float cell = 40.0f;
     const float sep = 4.0f;
@@ -3909,6 +3977,7 @@ bool App::EditCommandSize(const se_command& cmd, int row)
                          static_cast<uint16_t>((charW << 8) | (Clampi(height, 0, 0xFF) & 0xFF)));
     });
     ImGui::PopID();
+    ImGui::PopID();
     return changed;
 }
 
@@ -3917,9 +3986,9 @@ bool App::EditCommandSize(const se_command& cmd, int row)
 // sprite / polygon / polyline / line it is corner A of the shape: the VDP1 has no single
 // "position" for those (each of the four vertices is independent), so editing it moves only
 // that one corner -- exactly what poking CMDXA/YA does on the hardware.
-bool App::EditCommandPosition(const se_command& cmd, int row)
+bool App::EditCommandPosition(const se_command& cmd)
 {
-    ImGui::PushID(row);
+    PushCommandEditId(cmd);
     bool changed = false;
     const float cell = 46.0f;
     const float sep = 4.0f;
@@ -3934,6 +4003,7 @@ bool App::EditCommandPosition(const se_command& cmd, int row)
         WriteCommandWord(cmd, kCmdYaOffset,
                          static_cast<uint16_t>(static_cast<int16_t>(Clampi(y, -32768, 32767))));
     });
+    ImGui::PopID();
     ImGui::PopID();
     return changed;
 }
@@ -6042,17 +6112,19 @@ void App::DoLoadState(int slot)
         mLog.Error("Load state failed: " + error, se_frame_number(mContext));
         return;
     }
-    // No pending edits: a slot is a point in time on its own, not a scrubbed frame the user
-    // has been poking at. Anything recorded after this moment is a future that never
-    // happened now, so the ring and the slot tracker both start over from the next block.
-    const std::vector<uint8_t> edits = BuildEditBlob();
-    if (se_load_state(ctl, frame, image.data(), image.size(), edits.data(), edits.size()) != SE_OK)
+    // No edits ride along: a slot is a point in time on its own, not a scrubbed frame the user
+    // has been poking at, and the emulator applies whatever blob it is given on top of the
+    // restored state -- the staged pokes belong to a different frame's rewind. Anything
+    // recorded after this moment is a future that never happened now, so the ring and the slot
+    // tracker both start over from the next block.
+    if (se_load_state(ctl, frame, image.data(), image.size(), nullptr, 0) != SE_OK)
     {
         mStateStatus = "The emulator refused the save state.";
         mLog.Error("Load state failed: the emulator refused it.", se_frame_number(mContext));
         return;
     }
     DropRecordedHistory();
+    BeginRestoreWait();
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Loaded slot %d (frame %llu).", slot,
                   static_cast<unsigned long long>(frame));
@@ -6079,12 +6151,15 @@ void App::AdoptNewEmulatorInstance()
     if (firstAttach) { return; }   // the connection this source was opened for
 
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
+    mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
+    mEditHoldSeconds = 0.0f;
     if (mScrubContext)
     {
         se_destroy(mScrubContext);   // holds a decompressed frame of the previous run
         mScrubContext = nullptr;
     }
     mScrubShownIndex = -1;
+    mMemBackend.NoteSourceChanged();
     mCallStack.ClearAll();           // a stack through code the new run may not even load
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
@@ -6116,6 +6191,47 @@ void App::DropRecordedHistory()
     mbScrubbing = false;
     mScrubIndex = -1;
     mbPaused = false;
+    VoidEditTarget();
+}
+
+void App::VoidEditTarget()
+{
+    mMemBackend.NoteSourceChanged();   // Memory panel / command boxes drop what they hold
+    mMemBackend.SetReadOnly(true);     // and nothing commits to the context still on screen
+}
+
+void App::BeginRestoreWait()
+{
+    uint32_t done = 0, failed = 0;
+    const bool signal = se_live_restore_state(&mDataSource, &done, &failed) != 0;
+    if (!signal)
+    {
+        // A pre-v19 emulator reports nothing back. A timed hold is all that is left, and it is
+        // only a guess -- said in the Log so it is not mistaken for confirmation.
+        mEditHoldSeconds = std::max(mEditHoldSeconds, 1.0f);
+        mLog.Warn("This emulator build cannot confirm a state load; editing is held for 1 s "
+                  "and the loaded state is not verified.");
+        return;
+    }
+    if (mRestoreOutstanding == 0)
+    {
+        mRestoreBaseDone = done;
+        mRestoreBaseFailed = failed;
+        mRestoreWaitSeconds = 0.0f;
+    }
+    ++mRestoreOutstanding;
+    VoidEditTarget();
+}
+
+void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
+{
+    const uint32_t applied = done - mRestoreBaseDone;
+    const uint32_t refused = failed - mRestoreBaseFailed;
+    if (applied + refused < static_cast<uint32_t>(mRestoreOutstanding)) return;   // still pending
+    if (refused)
+        mLog.Error("The emulator could not apply the state load; its state is unchanged.");
+    mRestoreOutstanding = 0;
+    mMemBackend.NoteSourceChanged();   // edits begun against the pre-load data are void
 }
 
 // SE's own slots, read from disk. Only the events that can change them call this: the
@@ -6144,6 +6260,7 @@ void App::DoLoadEmulatorState(int slot)
     // frames the emulator is no longer playing.
     se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
     DropRecordedHistory();
+    BeginRestoreWait();
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
     mStateStatus = msg;

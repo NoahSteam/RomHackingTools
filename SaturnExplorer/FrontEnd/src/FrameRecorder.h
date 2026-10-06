@@ -159,6 +159,7 @@ private:
     void (*mEditCb)(void*, int, uint32_t, const uint8_t*, size_t) = nullptr;
     static size_t CbEditMain(void* u, uint32_t address, const void* src, size_t size);
     static size_t CbEditSound(void* u, uint32_t offset, const void* src, size_t size);
+    static size_t CbEditVram(void* u, se_vram_kind kind, uint32_t offset, const void* src, size_t size);
 
     static constexpr size_t kMaxQueued = 4;   // staged raw frames before we drop
 

@@ -43,24 +43,21 @@ public:
     const std::vector<uint8_t>& SoundRam() const { return mSoundRam; }
     se_cram_mode CramMode() const { return mCramMode; }
 
+    // Bytes of a region's captured buffer from 'offset' to its end (0 for an unknown kind or an
+    // offset past the end): the most a write there can store.
+    size_t RegionRoom(se_vram_kind kind, uint32_t offset) const
+    {
+        const std::vector<uint8_t>* r = const_cast<HardwareSnapshot*>(this)->Region(kind);
+        return (r && offset < r->size()) ? r->size() - offset : 0;
+    }
+
     // Overwrite bytes in a region's captured buffer (Hex Editor edits). Returns the number
     // written (clamped to the buffer). Covers every captured region — VDP1/VDP2 VRAM, CRAM,
     // and the VDP1 framebuffer edits feed straight back into the reconstructed image.
     size_t WriteRegion(se_vram_kind kind, uint32_t offset, const void* src, size_t size)
     {
-        std::vector<uint8_t>* dst = nullptr;
-        switch (kind)
-        {
-        case SE_VRAM_KIND_WRAM_LOW:  dst = &mWramLow;  break;
-        case SE_VRAM_KIND_WRAM_HIGH: dst = &mWramHigh; break;
-        case SE_VRAM_KIND_SOUND_RAM: dst = &mSoundRam; break;
-        case SE_VRAM_KIND_VDP1_VRAM: dst = &mVdp1Vram; break;
-        case SE_VRAM_KIND_VDP2_VRAM: dst = &mVdp2Vram; break;
-        case SE_VRAM_KIND_CRAM:      dst = &mCram;      break;
-        case SE_VRAM_KIND_VDP1_FB:   dst = &mVdp1Fb;    break;
-        default: return 0;
-        }
-        if (!src || offset >= dst->size()) return 0;
+        std::vector<uint8_t>* dst = Region(kind);
+        if (!dst || !src || offset >= dst->size()) return 0;
         const size_t avail = dst->size() - offset;
         const size_t n = size < avail ? size : avail;
         std::memcpy(dst->data() + offset, src, n);
@@ -114,6 +111,21 @@ public:
     }
 
 private:
+    std::vector<uint8_t>* Region(se_vram_kind kind)
+    {
+        switch (kind)
+        {
+        case SE_VRAM_KIND_WRAM_LOW:  return &mWramLow;
+        case SE_VRAM_KIND_WRAM_HIGH: return &mWramHigh;
+        case SE_VRAM_KIND_SOUND_RAM: return &mSoundRam;
+        case SE_VRAM_KIND_VDP1_VRAM: return &mVdp1Vram;
+        case SE_VRAM_KIND_VDP2_VRAM: return &mVdp2Vram;
+        case SE_VRAM_KIND_CRAM:      return &mCram;
+        case SE_VRAM_KIND_VDP1_FB:   return &mVdp1Fb;
+        default:                     return nullptr;
+        }
+    }
+
     std::vector<uint8_t>  mVdp1Vram;
     std::vector<uint8_t>  mVdp2Vram;
     std::vector<uint8_t>  mCram;
