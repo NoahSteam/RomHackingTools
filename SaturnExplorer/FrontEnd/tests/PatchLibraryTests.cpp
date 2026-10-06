@@ -291,6 +291,61 @@ int main()
                 BestEffort("rm -rf '" + outsideDir + "'");
             }
 
+            // --- Replacement between the check and the write -----------------------------
+            // The script judges a patch, then writes it. If the checked parent directory is
+            // swapped for a symlink in between, a script that reopens the pathname writes
+            // outside the patch directory. The handle opened for the check must be the one
+            // that is written, so the swap has no effect on where the bytes go.
+            {
+                const std::string raceDir = std::string(dir) + "/race";
+                const std::string outsideDir = std::string(dir) + "_race_outside";
+                BestEffort("mkdir -p '" + raceDir + "/sub' '" + outsideDir + "'");
+                const std::string inside = raceDir + "/sub/t.bin";
+                const std::string victim = outsideDir + "/t.bin";
+                { std::ofstream f(inside, std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+                { std::ofstream f(victim, std::ios::binary); const char z[4] = {0}; f.write(z, 4); }
+
+                PatchLibrary rl;
+                rl.AddOrUpdate(Loc("r", 0x200000, 4, "sub/t.bin", 0, {0, 0, 0, 0}));
+                MemStub rm;
+                rm.mem.push_back({0x200000, {0xAA, 0xBB, 0xCC, 0xDD}});
+                std::vector<PatchOutcome> roc;
+                const std::string rScript = rl.EmitPython(
+                    [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return rm.Read(a, l, o); },
+                    roc);
+                { std::ofstream f(raceDir + "/se_patch.py", std::ios::binary); f << rScript; }
+
+                // Driver: load the script as a module, and make its write step swap the checked
+                // directory for a symlink to the outside first.
+                const std::string driver =
+                    "import importlib.util, os, sys\n"
+                    "spec = importlib.util.spec_from_file_location('sepatch', sys.argv[1])\n"
+                    "m = importlib.util.module_from_spec(spec)\n"
+                    "spec.loader.exec_module(m)\n"
+                    "real = m.write_at\n"
+                    "script, outside = sys.argv[1], sys.argv[2]\n"
+                    "def swapped(fd, off, data):\n"
+                    "    base = os.path.dirname(os.path.abspath(script))\n"
+                    "    os.rename(os.path.join(base, 'sub'), os.path.join(base, 'sub_moved'))\n"
+                    "    os.symlink(outside, os.path.join(base, 'sub'))\n"
+                    "    real(fd, off, data)\n"
+                    "m.write_at = swapped\n"
+                    "sys.argv = [script]\n"
+                    "sys.exit(m.main())\n";
+                const std::string driverPath = std::string(dir) + "/race_driver.py";
+                { std::ofstream f(driverPath, std::ios::binary); f << driver; }
+                Check(std::system((python + " '" + driverPath + "' '" + raceDir + "/se_patch.py' '" +
+                                   outsideDir + "' >/dev/null 2>&1").c_str()) == 0,
+                      "the swapped-directory run still completes");
+                const std::string v = ReadFile(victim);
+                Check(v.size() == 4 && (uint8_t)v[0] == 0x00,
+                      "a directory swapped in after the check does not redirect the write");
+                const std::string moved = ReadFile(raceDir + "/sub_moved/t.bin");
+                Check(moved.size() == 4 && (uint8_t)moved[0] == 0xAA,
+                      "the write went to the file that was checked");
+                BestEffort("rm -rf '" + outsideDir + "'");
+            }
+
             BestEffort("rm -rf '" + std::string(dir) + "'");
         }
     }
