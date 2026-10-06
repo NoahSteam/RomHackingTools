@@ -158,6 +158,9 @@ void SeMednafenSnapshot(void)
     /* Nothing attached: return before the byte swaps below. SeExportSnapshot checks this too,
      * but by then this function has already swapped 1.5 MiB of VRAM into the scratch buffers,
      * which is most of the cost of preparing a frame. */
+    /* Even with nobody attached: the breakpoints of a client that just left are dropped on this
+     * thread, here, and they must go before one of them halts a game nobody can resume. */
+    SeExportApplyInstalls();
     if (!SeExportHasClient()) return;
     /* Prefer the draw-end latch (the command table as it was actually plotted) over live
      * VRAM, which at this video-frame boundary may already be a half-rebuilt next-frame
@@ -352,43 +355,51 @@ static const char* SeMdfnPortDeviceName(unsigned int port)
  * tracepoint is armed (see README "Tracepoints"; needs --enable-debugger, exactly like
  * execution breakpoints). */
 #define SE_MDFN_TP_MAX 64
-typedef struct { unsigned int id, cpu, address, flags; } SeMdfnTp;
-static SeMdfnTp   sTps[SE_MDFN_TP_MAX];
-static unsigned int sTpCount;
-/* The CPU thread's working copy of the installed set, with each tracepoint's repeat state (v21): the
- * executions seen and whether a fire-once one has spent itself. The installer (server thread) writes
- * sTps and bumps sTpInstall; the CPU thread notices, rebuilds this copy and is the only writer of it,
- * so the per-instruction scan never reads a set that is being replaced under it. A tracepoint that
- * comes through a re-install unchanged (same id, CPU, address and flags) keeps its counts: editing
- * the log format of one tracepoint, or a fire-once one elsewhere spending itself, must not restart
- * the "every 1000th" of another. */
+/* The installed set, with each tracepoint's repeat state (v21): the executions seen and whether a
+ * fire-once one has spent itself. EMULATE-THREAD ONLY. SeMdfnSetTracepoints is run by the exporter on
+ * the emulate thread (it publishes a set into a mailbox and the emulate thread takes it at its next
+ * gate or frame), and the per-instruction scan is on the same thread, so nothing here is shared and
+ * nothing needs a lock -- the scan can never see a set that is half replaced. A tracepoint that comes
+ * through a re-install unchanged (same id, CPU, address and flags) keeps its counts: editing the log
+ * format of one tracepoint, or a fire-once one elsewhere spending itself, must not restart the
+ * "every 1000th" of another. */
 typedef struct { unsigned int id, cpu, address, flags, hits; unsigned char spent; } SeMdfnTpState;
 static SeMdfnTpState sTpState[SE_MDFN_TP_MAX];
 static unsigned int sTpStateCount;
-static volatile unsigned int sTpInstall;
-static unsigned int sTpSeenInstall;
 static unsigned int SeRd32LE(const unsigned char* p)
 {
     return (unsigned int)p[0] | ((unsigned int)p[1] << 8) |
            ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);
 }
 
-/* SeExportSetTracepointHook target: copy the installed descriptors so the per-insn
- * hook can match PCs. Cheap linear set (tracepoints are few). */
+/* SeExportSetTracepointHook target: replace the working set. Runs on the emulate thread. */
 static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
 {
-    unsigned int i;
+    SeMdfnTpState next[SE_MDFN_TP_MAX];
+    unsigned int i, j;
     if (count > SE_MDFN_TP_MAX) count = SE_MDFN_TP_MAX;
     for (i = 0; i < count; ++i)
     {
         const unsigned char* d = descs + i * SE_LIVE_TRACE_DESC_LEN;
-        sTps[i].id      = SeRd32LE(d);
-        sTps[i].cpu     = SeRd32LE(d + 4);
-        sTps[i].address = SeRd32LE(d + 8);
-        sTps[i].flags   = SeRd32LE(d + 12);
+        next[i].id      = SeRd32LE(d);
+        next[i].cpu     = SeRd32LE(d + 4);
+        next[i].address = SeRd32LE(d + 8);
+        next[i].flags   = SeRd32LE(d + 12);
+        next[i].hits    = 0;
+        next[i].spent   = 0;
+        for (j = 0; j < sTpStateCount; ++j)
+        {
+            if (sTpState[j].id == next[i].id && sTpState[j].cpu == next[i].cpu &&
+                sTpState[j].address == next[i].address && sTpState[j].flags == next[i].flags)
+            {
+                next[i].hits  = sTpState[j].hits;
+                next[i].spent = sTpState[j].spent;
+                break;
+            }
+        }
     }
-    sTpCount = count;
-    ++sTpInstall;   /* a new set: the CPU thread restarts every tracepoint's count */
+    for (i = 0; i < count; ++i) sTpState[i] = next[i];
+    sTpStateCount = count;
 #if defined(SE_MEDNAFEN_WIRED)
     /* Arm/disarm the per-instruction SS debugger callback: it only needs to run every
      * instruction while at least one tracepoint is enabled. Without this the trace hook
@@ -396,7 +407,7 @@ static void SeMdfnSetTracepoints(unsigned int count, const unsigned char* descs)
     {
         int anyEnabled = 0;
         for (i = 0; i < count; ++i)
-            if (sTps[i].flags & SE_LIVE_TP_ENABLED) { anyEnabled = 1; break; }
+            if (sTpState[i].flags & SE_LIVE_TP_ENABLED) { anyEnabled = 1; break; }
         SsDbgSetTraceActive(anyEnabled);
     }
 #endif
@@ -427,36 +438,6 @@ static int SeMdfnTpFires(unsigned int i)
     every = t->flags >> SE_LIVE_TP_EVERY_SHIFT;
     if (every > 1u) return (t->hits % every) == 0u;
     return 1;
-}
-
-/* Called by the per-instruction hook before it scans: if a new set has been installed, rebuild the
- * working copy from it, carrying over the state of every tracepoint that did not change. */
-static void SeMdfnTpSync(void)
-{
-    SeMdfnTpState next[SE_MDFN_TP_MAX];
-    unsigned int n, i, j;
-    const unsigned int now = sTpInstall;
-    if (now == sTpSeenInstall) return;
-    n = sTpCount > SE_MDFN_TP_MAX ? SE_MDFN_TP_MAX : sTpCount;
-    for (i = 0; i < n; ++i)
-    {
-        next[i].id = sTps[i].id;           next[i].cpu = sTps[i].cpu;
-        next[i].address = sTps[i].address; next[i].flags = sTps[i].flags;
-        next[i].hits = 0;                  next[i].spent = 0;
-        for (j = 0; j < sTpStateCount; ++j)
-        {
-            if (sTpState[j].id == next[i].id && sTpState[j].cpu == next[i].cpu &&
-                sTpState[j].address == next[i].address && sTpState[j].flags == next[i].flags)
-            {
-                next[i].hits = sTpState[j].hits;
-                next[i].spent = sTpState[j].spent;
-                break;
-            }
-        }
-    }
-    for (i = 0; i < n; ++i) sTpState[i] = next[i];
-    sTpStateCount = n;
-    sTpSeenInstall = now;
 }
 
 /* ---- Shadow call stack (v9) --------------------------------------------------------
@@ -540,15 +521,86 @@ static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned 
     }
 }
 
+/* Control flow takes effect when it COMPLETES, not when it is first seen. The per-instruction hook
+ * runs BEFORE the instruction does, and on the SH-2 a call, `rts` and `rte` have a delay slot: the
+ * transfer happens after the slot has run. Applying a flow instruction at its own hook therefore
+ * drew the wrong stack for as long as the instruction was in flight -- a breakpoint on B's `rts`
+ * found B already gone from the recorded stack although it was still executing (Step Out then
+ * targeted B's caller's return), and a breakpoint on a `bsr` found its callee already pushed.
+ *
+ * So a flow instruction is held pending, per CPU, and applied at the first hook AFTER its slot:
+ *   stage 1  seen; waiting for the delay slot (a repeat of the flow instruction's own PC, which a
+ *            bus-stalled CPU presents again, changes nothing)
+ *   stage 2  the slot is about to run (its repeats are ignored too); the next other PC is the
+ *            transfer's target, and the flow is applied there -- before that hook's own halt, so a
+ *            breakpoint at the target sees the completed stack
+ * `trapa` has no delay slot, so it goes straight to stage 2. A PC that is neither the slot nor a repeat
+ * means the hook was not called for an instruction in between (a breakpoint-only run does not call it
+ * every instruction): the transfer has long since happened, so it is applied then. The state is dropped
+ * when the call stacks are reset (a savestate load replaced the timeline it belonged to). */
+typedef struct
+{
+    int          stage;          /* 0 nothing pending, 1 waiting for the slot, 2 waiting for the target */
+    unsigned int flowPc;         /* the flow instruction */
+    unsigned int waitPc;         /* stage 1: the slot; stage 2: the PC whose repeats are ignored */
+    SeFlowKind   kind;
+    unsigned short op;
+    unsigned int rn, sp, handler;
+    unsigned int epoch;          /* SeExportCallStackEpoch when it was seen */
+} SeMdfnFlowPending;
+static SeMdfnFlowPending sFlowPending[2];
+
+/* One hook presentation of 'pc' on 'cpu': advance whatever is pending. Returns 1 when this
+ * presentation is part of a pending flow instruction (its own repeat, or its delay slot), so the
+ * caller must not treat it as a new instruction to classify. */
+static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
+{
+    SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
+    if (p->stage == 0) return 0;
+    if (p->epoch != SeExportCallStackEpoch())
+    {
+        p->stage = 0;   /* the stacks were reset under it: it belongs to a timeline that is gone */
+        return 0;
+    }
+    if (p->stage == 1)
+    {
+        if (pc == p->flowPc) return 1;                          /* the instruction again (bus stall) */
+        if (pc == p->waitPc) { p->stage = 2; return 1; }        /* its delay slot, about to run */
+    }
+    else if (pc == p->waitPc)
+    {
+        return 1;                                               /* the slot again (bus stall) */
+    }
+    /* The transfer has completed: this PC is where it landed (or a later one, if the hook missed it). */
+    SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+    p->stage = 0;
+    return 0;
+}
+
+/* A flow instruction at 'pc' has been presented: hold it until it completes. */
+static void SeMdfnFlowDefer(int cpu, unsigned int pc, SeFlowKind kind, unsigned short op,
+                            unsigned int rn, unsigned int sp, unsigned int handler)
+{
+    SeMdfnFlowPending* p = &sFlowPending[cpu ? 1 : 0];
+    p->kind = kind; p->op = op; p->rn = rn; p->sp = sp; p->handler = handler;
+    p->flowPc = pc;
+    p->epoch = SeExportCallStackEpoch();
+    if (kind == SeFlowTrap) { p->stage = 2; p->waitPc = pc; }   /* no delay slot */
+    else                    { p->stage = 1; p->waitPc = pc + 2; }
+}
+
 #if defined(SE_MEDNAFEN_WIRED)
-/* Read what the instruction at PC needs and hand it to the tracker. The opcode read is
- * per-instruction; the register-file read is not — only the handful of opcodes that move
+/* Read what the instruction at PC needs and hold it as pending flow. The opcode read is
+ * per-instruction; the register-file read is not -- only the handful of opcodes that move
  * the stack need it, and rts needs nothing at all. */
 static void SeMdfnTrackFlow(int cpu, unsigned int pc)
 {
-    const unsigned short op = SsDbgReadOpcode(pc);
-    const SeFlowKind kind = SeMdfnClassifyFlow(op);
+    unsigned short op;
+    SeFlowKind kind;
     unsigned int rn = 0, sp = 0, handler = 0;
+    if (SeMdfnFlowAdvance(cpu, pc)) return;   /* a pending flow instruction's repeat or delay slot */
+    op = SsDbgReadOpcode(pc);
+    kind = SeMdfnClassifyFlow(op);
     if (kind == SeFlowNone) return;     /* the overwhelmingly common case */
     if (kind != SeFlowReturn)           /* rts needs no register read; everything else does */
     {
@@ -565,7 +617,7 @@ static void SeMdfnTrackFlow(int cpu, unsigned int pc)
             handler = ((unsigned int)SsDbgReadOpcode(vec) << 16) | SsDbgReadOpcode(vec + 2);
         }
     }
-    SeMdfnApplyFlow(cpu, kind, pc, op, rn, sp, handler);
+    SeMdfnFlowDefer(cpu, pc, kind, op, rn, sp, handler);
 }
 #endif
 
@@ -612,7 +664,6 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
 {
 #if defined(SE_MEDNAFEN_WIRED)
     unsigned int i;
-    SeMdfnTpSync();
     for (i = 0; i < sTpStateCount; ++i)
     {
         if ((sTpState[i].flags & SE_LIVE_TP_ENABLED) && (int)sTpState[i].cpu == cpu &&

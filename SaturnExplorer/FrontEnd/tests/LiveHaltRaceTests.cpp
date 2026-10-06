@@ -103,12 +103,15 @@ public:
     bool Connect() { mFd = ConnectRaw(); return mFd >= 0; }
     ~Client() { if (mFd >= 0) ::close(mFd); }
 
-    Ctl Exchange(const char* verb, uint32_t arg)
+    Ctl Exchange(const char* verb, uint32_t arg, const std::vector<uint8_t>& payload = {})
     {
         Ctl c;
         const uint8_t req[8] = { uint8_t(verb[0]), uint8_t(verb[1]), uint8_t(verb[2]), uint8_t(verb[3]),
                                  uint8_t(arg), uint8_t(arg >> 8), uint8_t(arg >> 16), uint8_t(arg >> 24) };
         if (::send(mFd, req, sizeof(req), MSG_NOSIGNAL) != static_cast<ssize_t>(sizeof(req))) return c;
+        if (!payload.empty() &&
+            ::send(mFd, payload.data(), payload.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(payload.size()))
+            return c;
         uint8_t hdr[SE_LIVE_HEADER_LEN];
         if (!RecvAll(mFd, hdr, sizeof(hdr)) || Rd32(hdr + 4) != SE_LIVE_VERSION) return c;
         // v1 v2 cram vdp2struct vdp1regs wramLow wramHigh fb, then the control block.
@@ -325,17 +328,150 @@ void TestAHaltOnTheOtherCpuEndsTheStep(Client& cl)
           "the master's step does not carry on after the slave's halt");
     cl.Exchange(SE_LIVE_VERB_RESUME, 0);
 }
+// ---- debug-hook installs --------------------------------------------------------------------
+// The BKP and TRC verbs arrive on a server thread, but what they install is read by the emulate
+// thread on every instruction. The exporter therefore publishes each set whole and the EMULATE thread
+// runs the install hooks: on any other thread a descriptor's id could be paired with another's CPU
+// and address (the CPU scanning half of one set and half of the next), or the per-instruction
+// callback armed against a table being replaced. The fakes below are the install hooks; every call
+// checks which thread it is on and that the set it was handed is one set.
+std::atomic<bool>     gEmuKnown{false};
+std::thread::id       gEmuThread;
+std::atomic<int>      gOffThread{0};      // hook calls made on a thread other than the emulate thread
+std::atomic<int>      gTpCalls{0}, gBadTpSets{0}, gBpSets{0}, gBadBpSets{0};
+std::atomic<uint32_t> gLastTpBase{0xFFFFFFFFu}, gLastBpBase{0xFFFFFFFFu};
+
+void NoteThread()
+{
+    if (!gEmuKnown.load() || std::this_thread::get_id() != gEmuThread) ++gOffThread;
+}
+
+// Set K has descriptors id = K*16 + i, with cpu = id & 1 and address = 0x06000000 + id*4: each field
+// is derivable from the id, so a descriptor mixed from two sets cannot be mistaken for whole.
+void FakeSetTracepoints(unsigned int count, const unsigned char* d)
+{
+    NoteThread();
+    ++gTpCalls;
+    bool ok = count >= 1 && count <= 16;
+    uint32_t base = 0;
+    for (unsigned int i = 0; i < count; ++i)
+    {
+        const unsigned char* p = d + i * SE_LIVE_TRACE_DESC_LEN;
+        const uint32_t id = Rd32(p), cpu = Rd32(p + 4), addr = Rd32(p + 8), flags = Rd32(p + 12);
+        if (i == 0) base = id & ~15u;
+        if ((id & ~15u) != base || (id & 15u) != i || cpu != (id & 1u) ||
+            addr != 0x06000000u + id * 4u || flags != SE_LIVE_TP_ENABLED)
+            ok = false;
+    }
+    if (!ok) ++gBadTpSets;
+    gLastTpBase = base;
+}
+
+std::vector<uint32_t> gBpAdds;
+void FakeClearBps()
+{
+    NoteThread();
+    // The previous set is complete: consecutive ids from one base.
+    bool ok = true;
+    uint32_t base = gBpAdds.empty() ? 0 : ((gBpAdds[0] - 0x06000000u) / 2u) & ~15u;
+    for (size_t i = 0; i < gBpAdds.size(); ++i)
+    {
+        const uint32_t id = (gBpAdds[i] - 0x06000000u) / 2u;
+        if ((id & ~15u) != base || (id & 15u) != i) ok = false;
+    }
+    if (!gBpAdds.empty()) { ++gBpSets; if (!ok) ++gBadBpSets; gLastBpBase = base; }
+    gBpAdds.clear();
+}
+void FakeAddExecBp(int, unsigned int address) { NoteThread(); gBpAdds.push_back(address); }
+void FakeAddMemBp(int, unsigned int, unsigned int, unsigned int) { NoteThread(); }
+
+std::vector<uint8_t> TpSet(uint32_t k, unsigned int count)
+{
+    std::vector<uint8_t> v;
+    auto put = [&](uint32_t w) { for (int b = 0; b < 4; ++b) v.push_back(uint8_t(w >> (8 * b))); };
+    for (unsigned int i = 0; i < count; ++i)
+    {
+        const uint32_t id = k * 16u + i;
+        put(id); put(id & 1u); put(0x06000000u + id * 4u); put(SE_LIVE_TP_ENABLED);
+    }
+    return v;
+}
+
+std::vector<uint8_t> BpSet(uint32_t k, unsigned int count)
+{
+    std::vector<uint8_t> v;
+    auto put = [&](uint32_t w) { for (int b = 0; b < 4; ++b) v.push_back(uint8_t(w >> (8 * b))); };
+    for (unsigned int i = 0; i < count; ++i)
+    {
+        const uint32_t id = k * 16u + i;
+        put(0x06000000u + id * 2u); put(0); put(SE_LIVE_BP_ENABLED);   // an execution breakpoint
+    }
+    return v;
+}
+
+void TestInstallsAreAppliedWholeOnTheEmulateThread(Client& cl)
+{
+    std::atomic<bool> stop{false};
+    std::thread emu([&] {
+        gEmuThread = std::this_thread::get_id();
+        gEmuKnown = true;
+        while (!stop.load())
+        {
+            SeExportGateFrame();   // the frame gate: where the emulate thread picks installs up
+            std::this_thread::yield();
+        }
+    });
+    while (!gEmuKnown.load()) Sleep(1);
+
+    cl.Exchange(SE_LIVE_VERB_RESUME, 0);
+    for (uint32_t k = 1; k <= 400; ++k)
+    {
+        const unsigned int n = 1 + (k % 16);
+        cl.Exchange(SE_LIVE_VERB_TRACE, n, TpSet(k, n));
+        cl.Exchange(SE_LIVE_VERB_BKPTS, n, BpSet(k, n));
+    }
+    // The last set sent is the one that ends up installed.
+    for (int i = 0; i < 400 && (gLastTpBase.load() != 400u * 16u || gLastBpBase.load() == 0xFFFFFFFFu); ++i) Sleep(5);
+    Sleep(50);
+    stop = true;
+    emu.join();
+
+    Check(gOffThread.load() == 0, "every install hook ran on the emulate thread");
+    Check(gTpCalls.load() > 0, "tracepoint sets were installed");
+    Check(gBadTpSets.load() == 0, "no tracepoint set was ever half of two");
+    Check(gBpSets.load() > 0, "breakpoint sets were installed");
+    Check(gBadBpSets.load() == 0, "no breakpoint set was ever half of two");
+    Check(gLastTpBase.load() == 400u * 16u, "and the last tracepoint set sent is the one installed");
+}
+
+// A client that leaves takes its breakpoints with it, but the drop happens on the emulate thread, at
+// its next gate or frame -- so a hit can land first, and a halt with nobody to release it would freeze
+// the game for good. The gate lets go of a hold nobody is there to end.
+void TestAHaltWithNoClientIsReleased()
+{
+    SeExportNotifyStop(0, 0x06009000u);
+    Check(SeExportGateFrame() == 1, "a halt with nobody attached does not hold the emulate thread");
+    Check(SeExportGateFrame() == 1, "and stays released");
+}
 }  // namespace
 
 int main()
 {
     if (SeExportInit() != 0) { std::cerr << "SeExportInit failed\n"; return 1; }
+    SeExportSetBreakpointHooks(FakeAddExecBp, FakeClearBps);
+    SeExportSetMemBreakpointHook(FakeAddMemBp);
+    SeExportSetTracepointHook(FakeSetTracepoints);
+    {
     Client cl;
     if (!cl.Connect()) { std::cerr << "could not connect\n"; SeExportDeinit(); return 1; }
     TestStopSequence(cl);
     TestInstructionStepCountsRetirement(cl);
     TestAHaltOnTheOtherCpuEndsTheStep(cl);
     TestAnImmediateStopSurvivesTheRelease(cl);
+    TestInstallsAreAppliedWholeOnTheEmulateThread(cl);
+    }   // the client leaves
+    Sleep(200);
+    TestAHaltWithNoClientIsReleased();
     SeExportDeinit();
     if (gFailures) { std::cerr << gFailures << " check(s) failed\n"; return 1; }
     std::cout << "LiveHaltRaceTests passed\n";

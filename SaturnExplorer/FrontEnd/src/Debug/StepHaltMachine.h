@@ -58,6 +58,9 @@ struct StepOutcome
     // happened, so the caller resumes without presenting it; the step stays in flight. One report per
     // such halt.
     bool     strayTarget = false;
+    // A re-report of a halt the caller already declined (SuppressHalt). Drop it: it is not a halt to
+    // present and not one to resume from again.
+    bool     declinedEcho = false;
 };
 
 class StepHaltMachine
@@ -69,9 +72,14 @@ public:
     // the result: it advances the hold's frame cap.
     StepOutcome Observe(const StopReport& report);
 
-    // The caller resumed instead of surfacing this halt -- a condition guard that did not hold, or
-    // an access-log watchpoint. The halt is not presented, so drop it.
+    // The caller resumed instead of surfacing this halt -- a condition guard that did not hold, an
+    // access-log watchpoint, a stray step target. The halt is not presented, so drop it, and remember
+    // which one it was so that its re-reports (outcome.declinedEcho) are recognised.
     void SuppressHalt();
+
+    // The caller is surfacing this halt. 'atStepTarget' is the outcome's flag. If a step's transient
+    // is installed and this halt is not its arrival, the step is over: the transient is retired.
+    void HaltPresented(bool atStepTarget);
 
     // The current halt, for the callers that read it outside a poll: the capture gate (which runs
     // before Observe, so it sees last frame's answer, as it always did), the Assembly panel mirror
@@ -153,8 +161,10 @@ private:
     uint32_t mHaltPc         = 0;
     bool     mHaltHasSeq     = false;   // the halt showing was numbered by the emulator...
     uint32_t mHaltSeq        = 0;       // ...with this number
-    bool     mStrayHasSeq    = false;   // the last stray target was numbered...
-    uint32_t mStraySeq       = 0;       // ...with this one (so its echo is not reported again)
+    bool     mObsHasSeq      = false;   // the halt Observe last looked at was numbered...
+    uint32_t mObsSeq         = 0;       // ...with this
+    bool     mDeclinedHasSeq = false;   // the halt the caller last declined (SuppressHalt)...
+    uint32_t mDeclinedSeq    = 0;       // ...had this number
     bool     mStepBpActive   = false;   // transient Step Over / Out breakpoint installed
     uint32_t mStepBpAddr     = 0;
     int      mStepBpCpu      = 0;       // the CPU whose arrival at mStepBpAddr completes the step

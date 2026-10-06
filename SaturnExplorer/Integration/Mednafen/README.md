@@ -264,6 +264,34 @@ file. If your fork spells the definition differently, `apply.py` reports `ANCHOR
 `SeSsActiveCpuScope<decltype`; add the one line it prints by hand. Without it, slave
 breakpoints silently do nothing.
 
+### Installs run on the emulate thread
+
+Breakpoint, watchpoint and tracepoint sets arrive on a server thread, but what they install —
+the debugger's breakpoint lists, the per-instruction callback and its arming, the glue's tracepoint
+table — is read by the emulate thread on every instruction. Rewriting it from the server thread
+let the CPU scan half of one tracepoint set and half of the next (a descriptor's id paired with
+another's CPU and address). `se_export.c` therefore only **publishes** each set whole into a
+mailbox under its state lock; the emulate thread takes it at its next frame gate, frame snapshot or
+halt-gate spin (`SeApplyPendingInstalls`) and runs the install hooks itself, so the glue's tables are
+single-threaded. The glue calls `SeExportApplyInstalls()` even on frames with nothing attached, so a
+client that leaves has its breakpoints dropped promptly; and a halt that nobody is attached to
+release is let go by the gate, so a hit that lands before the drop cannot freeze the game.
+
+### Shadow call stack timing
+
+The per-instruction hook runs **before** the instruction does, and on the SH-2 a call, `rts` and
+`rte` have a delay slot — the transfer happens after the slot runs. Applying them at their own hook
+drew the wrong stack for as long as they were in flight: a breakpoint on B's `rts` found B already
+popped (so Step Out targeted B's caller's return), and a breakpoint on a `bsr` found its callee
+already pushed. The glue now holds a flow instruction pending per CPU and applies it at the first hook
+after its delay slot (`SeMdfnFlowAdvance` / `SeMdfnFlowDefer`): a repeat of the instruction or its
+slot (the bus-stalled CPU presents the same PC again) changes nothing; `trapa`, with no slot,
+completes at the next instruction; a flow whose slot the hook never saw (a breakpoint-only run does
+not call it every instruction) is applied at the next PC; and a savestate load drops whatever was in
+flight. Note the recording only happens while the callback is continuous — a tracepoint armed or an
+instruction step in progress — so in a breakpoint-only session there are no recorded frames and Step
+Out says so.
+
 ### Stepping
 
 `IST` (instruction step) runs the CPU that halted. The per-instruction hook counts **retired**

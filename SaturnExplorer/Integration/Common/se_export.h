@@ -46,6 +46,13 @@ int SeExportInit(void);
  * SeExportInit -- returns 0. */
 int SeExportHasClient(void);
 
+/* Install what the server thread has published -- breakpoints, watchpoints, tracepoints -- by
+ * running the install hooks on the CALLING thread, which must be the emulate thread: the only one
+ * that reads what they change. SeExportGateFrame and SeExportSnapshot do this themselves; a glue
+ * that returns before reaching either on frames where nothing is attached (so that a client leaving
+ * has its breakpoints dropped promptly) calls this first. Cheap when nothing is pending. */
+void SeExportApplyInstalls(void);
+
 /* Copy the current Saturn memory into the export double-buffer. Call once per
  * frame, e.g. at the end of Vdp2VBlankOUT(), passing Yabause's globals:
  *   sh2regs_struct m, s;
@@ -265,6 +272,11 @@ void SeExportPushExceptionFrame(int cpu, unsigned int site, unsigned int handler
 void SeExportPopFrame(int cpu);
 void SeExportPopExceptionFrame(int cpu, unsigned int sp);
 void SeExportResetCallStack(int cpu);
+
+/* A number that changes every time a stack is reset. A glue that keeps control flow in flight
+ * between two instructions (a call or return waiting out its delay slot) compares it to drop what
+ * it was holding when the timeline it belonged to has been replaced. */
+unsigned int SeExportCallStackEpoch(void);
 
 /* Serialize one CPU's shadow stack into the v9 wire block: u32 frameCount (capped at
  * SE_LIVE_CALLSTACK_MAX) then that many SE_LIVE_CALLFRAME_LEN frames, innermost first.

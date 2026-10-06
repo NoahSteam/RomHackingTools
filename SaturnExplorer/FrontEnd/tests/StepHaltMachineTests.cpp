@@ -209,11 +209,18 @@ void TestTheOtherCpuReachingTheTargetIsNotTheStep()
     CHECK(m.HaltCpu() == 0);            // the slave's halt was not adopted
     CHECK(m.HaltPc() == 0x06001000);
 
-    // The same stray halt re-reported while the resume crosses the socket is an echo, not a second
-    // stray to resume from.
-    const StepOutcome echo = m.Observe(Numbered(7, 0x06002000, 1));
-    CHECK(!echo.strayTarget && !echo.atStepTarget);
-    CHECK(m.StepInFlight());
+    // The caller resumes and declines the halt. The same halt re-reported while that resume crosses
+    // the socket is an echo: not a second stray to resume from, and above all not a halt to present --
+    // the caller (App) treats any report that is not an echo as a stop and would pause on it.
+    m.SuppressHalt();
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        const StepOutcome echo = m.Observe(Numbered(7, 0x06002000, 1));
+        CHECK(echo.declinedEcho);
+        CHECK(!echo.strayTarget && !echo.atStepTarget);
+        CHECK(m.StepInFlight());
+        CHECK(m.HaltCpu() == 0 && m.HaltPc() == 0x06001000);   // still not adopted
+    }
 
     // The master arrives: that is the step.
     const StepOutcome done = m.Observe(Numbered(8, 0x06002000, 0));
@@ -239,6 +246,8 @@ void TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu()
     CHECK(!s.atStepTarget);
     CHECK(m.HaltActive() && m.HaltCpu() == 1 && m.HaltPc() == 0x06002000);
     CHECK(!m.StepInFlight());
+    CHECK(m.StepTargetActive());        // Observe alone does not cancel the step: the caller decides
+    m.HaltPresented(s.atStepTarget);    // ...and it has now decided to show this halt
     CHECK(!m.StepTargetActive());       // the step that wanted it did not finish
     CHECK(m.TakeStepTargetDirty());     // so the emulator is told to drop it
 }
@@ -256,12 +265,55 @@ void TestAHaltElsewhereRetiresTheTransient()
     CHECK(!s.atStepTarget && !s.strayTarget);
     CHECK(!m.StepInFlight());
     CHECK(m.HaltPc() == 0x06003000);
+    m.HaltPresented(s.atStepTarget);    // the caller shows it
     CHECK(!m.StepTargetActive());
     CHECK(m.TakeStepTargetDirty());
 
-    // The same halt reported again is not "another" halt and does nothing further.
+    // The same halt reported again does nothing further.
     (void)m.Observe(Numbered(9, 0x06003000, 0));
     CHECK(!m.TakeStepTargetDirty());
+}
+
+// A halt the caller RESUMES from -- a conditional breakpoint whose guard does not hold, a logging
+// watchpoint -- must not cost the step its destination. Reproduces the failure: the transient was
+// retired when the halt was observed, before the guard was evaluated, so the step ran past the
+// address it was going to.
+void TestAResumedHaltDoesNotCancelTheStep()
+{
+    StepHaltMachine m = HaltedAt(0x06001000, 0);
+    m.BeginRunTo(0x06002000, 0);
+    (void)m.TakeStepTargetDirty();
+
+    const StepOutcome s = m.Observe(Numbered(9, 0x06003000, 0));   // a conditional BP in the callee
+    CHECK(!s.atStepTarget);
+    m.SuppressHalt();                  // its guard did not hold: the caller resumes
+    CHECK(m.StepTargetActive());       // the destination is still installed
+    CHECK(!m.TakeStepTargetDirty());   // and the emulator is not told otherwise
+
+    // The echo of that halt is dropped, and the step carries on to its target.
+    CHECK(m.Observe(Numbered(9, 0x06003000, 0)).declinedEcho);
+    (void)m.Observe(StopReport{});
+    const StepOutcome arrived = m.Observe(Numbered(10, 0x06002000, 0));
+    CHECK(arrived.atStepTarget && arrived.fromStep);
+}
+
+// A declined halt is dropped once, whichever way it was declined, and a LATER halt -- even at the same
+// PC -- is a different halt that is presented.
+void TestADeclinedHaltIsDroppedOnceAndALaterOneIsNot()
+{
+    StepHaltMachine m;
+    m.Observe(Numbered(5, 0x06004000, 0));
+    CHECK(m.HaltActive());
+    m.SuppressHalt();                                   // guard false: resumed
+    CHECK(!m.HaltActive());
+
+    const StepOutcome echo = m.Observe(Numbered(5, 0x06004000, 0));
+    CHECK(echo.declinedEcho);
+    CHECK(!m.HaltActive());                             // nothing to present
+
+    const StepOutcome again = m.Observe(Numbered(6, 0x06004000, 0));   // the loop hits it again
+    CHECK(!again.declinedEcho);
+    CHECK(m.HaltActive() && m.HaltPc() == 0x06004000);
 }
 
 // Stop identity. A step that lands on the PC it started from (a taken branch to itself) is a
@@ -402,6 +454,8 @@ int main()
     TestTheOtherCpuReachingTheTargetIsNotTheStep();
     TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu();
     TestAHaltElsewhereRetiresTheTransient();
+    TestAResumedHaltDoesNotCancelTheStep();
+    TestADeclinedHaltIsDroppedOnceAndALaterOneIsNot();
     TestAStepThatLandsOnTheSamePcIsANewHaltBySequence();
     TestReachingTheTargetImmediatelyIsStillAStep();
     TestStepInFlightBlocksAnotherStep();

@@ -32,9 +32,30 @@ static void Check(int condition, const char* expression, int line)
 #define OP_JSR(n)     ((unsigned short)(0x400Bu | ((n) << 8)))
 #define OP_TRAPA(i)   ((unsigned short)(0xC300u | ((i) & 0xFFu)))
 
+#define OP_NOP        0x0009u
+
+/* One presentation of the per-instruction hook, as the emulator makes it: BEFORE the instruction
+ * runs. Mirrors SeMdfnTrackFlow minus the register reads. */
+static void Present(int cpu, unsigned int pc, unsigned short op, unsigned int rn, unsigned int sp,
+                    unsigned int handler)
+{
+    SeFlowKind kind;
+    if (SeMdfnFlowAdvance(cpu, pc)) return;
+    kind = SeMdfnClassifyFlow(op);
+    if (kind != SeFlowNone) SeMdfnFlowDefer(cpu, pc, kind, op, rn, sp, handler);
+}
+
+#define LANDING 0x0E000000u   /* wherever execution lands next: no relation to the flow instruction */
+
+/* A flow instruction that has COMPLETED: presented, its delay slot presented (the instruction
+ * after it, a nop; trapa has none), and then the first instruction of wherever it went. The
+ * recorded stack is only up to date once that last presentation has been made, which is the point
+ * of deferring it -- the tests that care about the in-between states use Present directly. */
 static void Step(int cpu, unsigned int pc, unsigned short op, unsigned int rn, unsigned int sp)
 {
-    SeMdfnApplyFlow(cpu, SeMdfnClassifyFlow(op), pc, op, rn, sp, 0);
+    Present(cpu, pc, op, rn, sp, 0);
+    if (SeMdfnClassifyFlow(op) != SeFlowTrap) Present(cpu, pc + 2, OP_NOP, 0, sp, 0);
+    Present(cpu, LANDING, OP_NOP, 0, sp, 0);
 }
 
 /* An interrupt taken at R15 = 'sp'. Entry is invisible to the hook — the hardware pushes
@@ -271,6 +292,125 @@ static void TestOverflowDoesNotEatStoredFrames(void)
     CHECK(At(0).callSite == CALLSITE_AT(SE_CALLSTACK_CAP - 2u));
 }
 
+/* ---- flow completes when it completes -------------------------------------------------- */
+
+static unsigned int TopRet(int cpu)
+{
+    unsigned int n = Snapshot(cpu);
+    Frame f;
+    if (n == 0) return 0;
+    f = At(0);
+    return f.ret;
+}
+
+/* Reproduces the failure: main calls A, A calls B, and the hook halts at B's `rts`. The hook runs
+ * before the instruction does and `rts` has a delay slot, so B is still executing -- but applying the
+ * pop at the `rts` hook had already removed it from the recorded stack, and Step Out then ran to A's
+ * return into main instead of B's return into A. */
+static void TestAReturnIsNotAppliedBeforeItCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A  (returns to 0x06001004) */
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);        /* A calls B     (returns to 0x06002004) */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);                          /* innermost: B, returning into A */
+
+    Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);         /* the hook for B's rts: a breakpoint here */
+    CHECK(Snapshot(0) == 2u);                                 /* B has not returned: it is still there */
+    CHECK(TopRet(0) == 0x06002004u);                          /* so Step Out would target A, not main */
+
+    Present(0, 0x06003012, OP_NOP, 0, 0x060FFEE0, 0);         /* its delay slot, about to run */
+    CHECK(Snapshot(0) == 2u);                                 /* still B's: a halt on the slot is in B */
+    CHECK(TopRet(0) == 0x06002004u);
+
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return has landed in A */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);                          /* now the innermost frame is A's */
+}
+
+/* ...and a call does not push its callee until it has been entered: a breakpoint on the `bsr` itself,
+ * or on its delay slot, is still in the caller. */
+static void TestACallIsNotAppliedBeforeItCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A */
+    CHECK(Snapshot(0) == 1u);
+
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* A is about to call B: breakpoint on the bsr */
+    CHECK(Snapshot(0) == 1u);                                 /* B has not been entered */
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);         /* ...nor in the delay slot */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);
+
+    Present(0, 0x06002204, OP_NOP, 0, 0x060FFEEC, 0);         /* B's first instruction (bsr target) */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);
+}
+
+/* A bus-stalled CPU presents the same instruction again and again; none of those may complete the
+ * flow early or apply it twice. */
+static void TestStalledPresentationsDoNotCompleteOrRepeatTheFlow(void)
+{
+    int i;
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);
+    for (i = 0; i < 50; ++i) Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);   /* stalled on the rts */
+    CHECK(Snapshot(0) == 2u);
+    for (i = 0; i < 50; ++i) Present(0, 0x06003012, OP_NOP, 0, 0x060FFEE0, 0);   /* stalled on the slot */
+    CHECK(Snapshot(0) == 2u);
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);                                 /* popped once, not 51 times */
+}
+
+/* `trapa` has no delay slot: it enters its handler at once, so it completes at the next instruction. */
+static void TestTrapaCompletesAtTheNextInstruction(void)
+{
+    SeExportResetCallStack(0);
+    Present(0, 0x06001100, OP_TRAPA(0x20), 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 0u);                                 /* the trap has not taken effect yet */
+    Present(0, 0x06000700, OP_NOP, 0, 0x060FFEE8, 0);         /* the handler's first instruction */
+    CHECK(Snapshot(0) == 1u);
+}
+
+/* The hook is not called for every instruction in a breakpoint-only run, so the slot may never be
+ * presented: the transfer is applied at whatever PC is next. */
+static void TestAMissedSlotStillCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Present(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00, 0);
+    CHECK(Snapshot(0) == 0u);
+    Present(0, 0x06005000, OP_NOP, 0, 0x060FFEF0, 0);          /* an unrelated, later PC */
+    CHECK(Snapshot(0) == 1u);
+}
+
+/* A savestate load replaces the machine: a flow instruction that was in flight on the old timeline
+ * must not be applied to the new one. */
+static void TestAResetDropsWhatWasInFlight(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);   /* in flight */
+    SeExportResetCallStack(0);                                 /* the restore */
+    Present(0, 0x06009000, OP_NOP, 0, 0x060FFF00, 0);
+    CHECK(Snapshot(0) == 0u);                                  /* nothing from the old timeline */
+}
+
+/* The two CPUs' flows are independent. */
+static void TestPendingFlowIsPerCpu(void)
+{
+    SeExportResetCallStack(0);
+    SeExportResetCallStack(1);
+    Present(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00, 0);   /* master mid-call */
+    Present(1, 0x06002000, OP_NOP, 0, 0x060EFF00, 0);          /* the slave runs on meanwhile */
+    Present(1, 0x06002002, OP_NOP, 0, 0x060EFF00, 0);
+    CHECK(Snapshot(0) == 0u);                                  /* nothing completed the master's call */
+    Present(0, 0x06001002, OP_NOP, 0, 0x060FFF00, 0);
+    Present(0, 0x06001204, OP_NOP, 0, 0x060FFEFC, 0);
+    CHECK(Snapshot(0) == 1u);
+    CHECK(Snapshot(1) == 0u);
+}
+
 /* ---- tracepoint repeat policy (v21) --------------------------------------------------- */
 
 /* Install up to two tracepoints at consecutive addresses, as the server's TRC verb would, and let
@@ -292,7 +432,6 @@ static void InstallTps(unsigned int n, const unsigned int* ids, const unsigned i
         }
     }
     SeMdfnSetTracepoints(n, d);
-    SeMdfnTpSync();
 }
 
 static void InstallTp(unsigned int id, unsigned int flags) { InstallTps(1, &id, &flags); }
@@ -408,6 +547,13 @@ int main(void)
     TestTailCallAndBranchAreNotCalls();
     TestPerCpuStacks();
     TestOverflowDoesNotEatStoredFrames();
+    TestAReturnIsNotAppliedBeforeItCompletes();
+    TestACallIsNotAppliedBeforeItCompletes();
+    TestStalledPresentationsDoNotCompleteOrRepeatTheFlow();
+    TestTrapaCompletesAtTheNextInstruction();
+    TestAMissedSlotStillCompletes();
+    TestAResetDropsWhatWasInFlight();
+    TestPendingFlowIsPerCpu();
     TestTracepointRepeatPolicy();
     TestReinstallKeepsUnchangedCounts();
     TestSelfBranchDetection();

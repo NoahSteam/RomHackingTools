@@ -1059,6 +1059,9 @@ void App::BuildUI(IPlatform& platform)
         // The transient step breakpoint is a PC breakpoint, and those stop whichever SH-2 gets there
         // first. The other core reaching it is not the step finishing: resume, and the step carries
         // on.
+        // A re-report of a halt already declined is dropped without a second resume: the resume that
+        // followed the first is what is crossing the socket.
+        if (halt.declinedEcho) { stopped = false; }
         if (halt.strayTarget && !mbPaused)
         {
             Continue();
@@ -1097,9 +1100,15 @@ void App::BuildUI(IPlatform& platform)
             mbPaused = true;   // halted; panel follows the halted PC
             // A transient step breakpoint (Step Over / Step Out) has done its job once we
             // halt at it — retire it so it doesn't linger as a stray breakpoint.
+            // ...and a halt shown anywhere else ends a step that has not finished: its transient goes
+            // too (decided here, not in Observe, because the guards above may have resumed instead).
             if (atStepBp)
             {
                 mStepHalt.RetireStepTarget();   // next SyncBreakpointsToLive drops it from the emulator
+            }
+            else
+            {
+                mStepHalt.HaltPresented(false);
             }
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
             // and surface the Call Stack panel.

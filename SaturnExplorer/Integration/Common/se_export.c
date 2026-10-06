@@ -809,6 +809,8 @@ int SeExportHasClient(void)
     return SeAtLoad(&sClients) != 0;
 }
 
+static void SePublishBreakpoints(const unsigned char* descs, unsigned int count);   /* below */
+
 static void SeOnClientDisconnect(void)
 {
     /* A client (Saturn Explorer) can disappear at any time — mid-button-hold, or while the
@@ -824,7 +826,7 @@ static void SeOnClientDisconnect(void)
         sSetPad(0, 0);
         sSetPad(1, 0);
     }
-    if (sClearBps) sClearBps();
+    SePublishBreakpoints(NULL, 0);   /* the emulate thread drops them at its next gate or frame */
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
     SeCancelSteps();
@@ -845,6 +847,94 @@ static SeSetTracepointsFn sSetTracepoints;
 void SeExportSetTracepointHook(SeSetTracepointsFn fn)
 {
     sSetTracepoints = fn;
+}
+
+/* ---- Debug-hook installs (breakpoints, watchpoints, tracepoints), applied on the EMULATE thread.
+ * The BKP and TRC verbs arrive on a server thread, but what they install is state the emulate thread
+ * reads on every instruction: the debugger's breakpoint lists, the per-instruction callback and its
+ * arming, the glue's tracepoint table. Rewriting any of it from the server thread while the CPU is
+ * scanning it hands the CPU half of one set and half of the next (a descriptor's id paired with
+ * another's CPU and address), or a callback armed against a table that is being replaced. So the
+ * server thread only PUBLISHES a complete set into a mailbox, under the state lock; the emulate
+ * thread takes it at the next frame gate or frame snapshot -- and the halt gate, which spins on that
+ * thread while a breakpoint holds it -- and runs the install hooks itself. A set that has not been
+ * taken when the next arrives is replaced: only the latest matters. ---- */
+static unsigned char sBpBox[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
+static unsigned int  sBpBoxCount;
+static volatile int  sBpPending;
+static unsigned char sTpBox[SE_LIVE_MAX_TRACE_DESCS * SE_LIVE_TRACE_DESC_LEN];
+static unsigned int  sTpBoxCount;
+static volatile int  sTpPending;
+/* Emulate-thread scratch the taken set is copied into, so no lock is held while the hooks run. */
+static unsigned char sBpApply[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
+static unsigned char sTpApply[SE_LIVE_MAX_TRACE_DESCS * SE_LIVE_TRACE_DESC_LEN];
+
+/* Server thread: publish the set of 'count' breakpoint descriptors (count <= the protocol maximum). */
+static void SePublishBreakpoints(const unsigned char* descs, unsigned int count)
+{
+    SE_SLOCK();
+    if (count) memcpy(sBpBox, descs, (size_t)count * SE_LIVE_BKPT_DESC_LEN);
+    sBpBoxCount = count;
+    SeAtStore(&sBpPending, 1);
+    SE_SUNLOCK();
+}
+
+/* Server thread: publish the set of 'count' tracepoint descriptors. */
+static void SePublishTracepoints(const unsigned char* descs, unsigned int count)
+{
+    SE_SLOCK();
+    if (count) memcpy(sTpBox, descs, (size_t)count * SE_LIVE_TRACE_DESC_LEN);
+    sTpBoxCount = count;
+    SeAtStore(&sTpPending, 1);
+    SE_SUNLOCK();
+}
+
+void SeExportApplyInstalls(void);   /* public name, defined below */
+
+/* EMULATE thread: take whatever has been published and install it. Cheap when nothing has (one
+ * atomic load per call). */
+static void SeApplyPendingInstalls(void)
+{
+    if (SeAtLoad(&sBpPending))
+    {
+        unsigned int n, i;
+        SE_SLOCK();
+        n = sBpBoxCount;
+        if (n) memcpy(sBpApply, sBpBox, (size_t)n * SE_LIVE_BKPT_DESC_LEN);
+        SeAtStore(&sBpPending, 0);   /* inside the lock: a set published after this copy sets it again */
+        SE_SUNLOCK();
+        if (sClearBps) sClearBps();
+        for (i = 0; i < n; ++i)
+        {
+            const unsigned char* d = sBpApply + (size_t)i * SE_LIVE_BKPT_DESC_LEN;
+            const unsigned int address = SeRd32(d);
+            const unsigned int size    = SeRd32(d + 4);
+            const unsigned int flags   = SeRd32(d + 8);
+            const unsigned int kind    = flags & SE_LIVE_BP_KIND_MASK;
+            const unsigned int cpu     = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
+            /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data breakpoints
+             * (watchpoints) over [address, address+size). A disabled one installs nothing. */
+            if (!(flags & SE_LIVE_BP_ENABLED)) continue;
+            if (kind == 0u)
+            {
+                if (sAddExecBp) sAddExecBp((int)cpu, address);
+            }
+            else if (sAddMemBp)
+            {
+                sAddMemBp((int)cpu, address, size ? size : 1u, kind);
+            }
+        }
+    }
+    if (SeAtLoad(&sTpPending))
+    {
+        unsigned int n;
+        SE_SLOCK();
+        n = sTpBoxCount;
+        if (n) memcpy(sTpApply, sTpBox, (size_t)n * SE_LIVE_TRACE_DESC_LEN);
+        SeAtStore(&sTpPending, 0);
+        SE_SUNLOCK();
+        if (sSetTracepoints) sSetTracepoints(n, sTpApply);
+    }
 }
 
 /* Common to every halt: the step that was in progress is over (a breakpoint on the OTHER CPU can
@@ -940,6 +1030,11 @@ int SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken)
     return 0;
 }
 
+void SeExportApplyInstalls(void)
+{
+    SeApplyPendingInstalls();
+}
+
 /* Short self-contained sleep so the gate can spin-wait without a Yabause-
  * specific sleep primitive and without pegging a CPU core while paused. */
 static void SeGateSleep(void)
@@ -966,6 +1061,10 @@ static void SeGateSleep(void)
  * Safe to call even before SeExportInit (returns 1). */
 int SeExportGateFrame(void)
 {
+    /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
+     * emulate thread, because it is the only one that reads them. This is also reached from the halt
+     * gate, so an edit made while a breakpoint holds the CPU still lands. */
+    SeApplyPendingInstalls();
     /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
      * before honoring the pause: a load always leaves the emulator paused on frame N. */
     if (SeAtLoad(&sLoadPending))
@@ -993,6 +1092,17 @@ int SeExportGateFrame(void)
     }
     if (!SeAtLoad(&sPaused))
     {
+        return 1;
+    }
+    /* Held, but nobody is attached to release it. A client that left takes its breakpoints with it
+     * (they are dropped on the emulate thread, at the next gate or frame, so a hit can land first),
+     * and a halt at one of them would otherwise freeze the game for good. */
+    if (!SeExportHasClient())
+    {
+        SeCancelSteps();
+        SeAtStore(&sInsnStepPending, 0);
+        SeStopClear();
+        SeAtStore(&sPaused, 0);
         return 1;
     }
     if (SeTakeStepFrame())
@@ -1202,13 +1312,21 @@ void SeExportPopExceptionFrame(int cpu, unsigned int sp)
     SE_UNLOCK();
 }
 
+static volatile unsigned int sCallStackEpoch;
+
 void SeExportResetCallStack(int cpu)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
     sCallDepth[c] = 0;
     sCallOverflow[c] = 0;
+    SeAtAdd((volatile int*)&sCallStackEpoch, 1);
     SE_UNLOCK();
+}
+
+unsigned int SeExportCallStackEpoch(void)
+{
+    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch);
 }
 
 unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out)
@@ -1241,6 +1359,8 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
                       const void* soundRam, const void* scspSlots, const void* cdStatus)
 {
+    SeApplyPendingInstalls();   /* the emulate thread's frame boundary; see the mailbox */
+
     /* Nobody attached: capture nothing. The ring copy and the staged savestate below would
      * both be thrown away unread, and the savestate is the single most expensive thing the
      * emulate thread does per frame. Capture resumes on the first frame after a client
@@ -1508,37 +1628,14 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * maximum the descriptors are still consumed but not installed: without the cap a
              * request claiming 0xFFFFFFFF descriptors had the emulator installing breakpoints
              * for as long as a client kept feeding it. */
-            unsigned int i;
+            /* Every descriptor is received before anything is installed, and installing is not done
+             * here at all: the set is published whole and the emulate thread installs it (see the
+             * mailbox above). The buffer is the thread's own, not a static: two server threads can be
+             * serving at once. */
+            unsigned char descs[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
             const unsigned int keep = arg > SE_LIVE_MAX_BKPT_DESCS ? SE_LIVE_MAX_BKPT_DESCS : arg;
-            if (sClearBps) { sClearBps(); }
-            for (i = 0; i < keep; ++i)
-            {
-                unsigned char d[SE_LIVE_BKPT_DESC_LEN];
-                unsigned int address, size, flags, kind, cpu, enabled;
-                if (SeRecv(cl, d, SE_LIVE_BKPT_DESC_LEN) != 0) return;
-                address = (unsigned int)d[0] | ((unsigned int)d[1] << 8) |
-                          ((unsigned int)d[2] << 16) | ((unsigned int)d[3] << 24);
-                size = (unsigned int)d[4] | ((unsigned int)d[5] << 8) |
-                       ((unsigned int)d[6] << 16) | ((unsigned int)d[7] << 24);
-                flags = (unsigned int)d[8] | ((unsigned int)d[9] << 8) |
-                        ((unsigned int)d[10] << 16) | ((unsigned int)d[11] << 24);
-                kind = flags & SE_LIVE_BP_KIND_MASK;
-                cpu = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
-                enabled = (flags & SE_LIVE_BP_ENABLED) ? 1u : 0u;
-                /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data
-                 * breakpoints (watchpoints) over [address, address+size). The
-                 * descriptor was already consumed above, so a disabled one just
-                 * skips installation without desyncing the stream. */
-                if (!enabled) continue;
-                if (kind == 0u)
-                {
-                    if (sAddExecBp) sAddExecBp((int)cpu, address);
-                }
-                else if (sAddMemBp)
-                {
-                    sAddMemBp((int)cpu, address, size ? size : 1u, kind);
-                }
-            }
+            if (keep && SeRecv(cl, descs, keep * SE_LIVE_BKPT_DESC_LEN) != 0) return;
+            SePublishBreakpoints(descs, keep);
             /* Descriptors past the cap are consumed without being decoded. */
             if (SeDrain(cl, (arg - keep) * SE_LIVE_BKPT_DESC_LEN) != 0) return;
         }
@@ -1617,12 +1714,12 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         else if (memcmp(req, SE_LIVE_VERB_TRACE, SE_LIVE_VERB_LEN) == 0)
         {
             /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
-             * hand them to the glue; consume any beyond the cap to stay stream-aligned. */
-            static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];
+             * publish them for the emulate thread; consume any beyond the cap to stay stream-aligned. */
+            unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];   /* not static: two server threads */
             const unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg;
             if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
             if (SeDrain(cl, (arg - keep) * SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            if (sSetTracepoints) sSetTracepoints(keep, tbuf);
+            SePublishTracepoints(tbuf, keep);   /* installed by the emulate thread */
         }
 
         /* Which ring frame to serve: a GET carries the client's last-seen frame (arg) and
