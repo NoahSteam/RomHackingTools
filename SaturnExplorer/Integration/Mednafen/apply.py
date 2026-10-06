@@ -242,8 +242,8 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
          without this the SH-2 regs / RAM the debugger shows are stale (frozen a frame back)
          and stepping looks dead even though the PC is advancing. sPaused is already set, so
          SeExportSnapshot skips the rewind-ring capture (guarded on !sPaused). */
+      sSeHalted = 1;   /* before the snapshot: it applies queued installs, whose SeSyncCpuHook must see a halt */
       SeMednafenFrameHook();
-      sSeHalted = 1;
       while (!SeExportGateFrame()) { }
       sSeHalted = 0;
       /* Gate released: set the callback mode for what runs next — continuous iff an
@@ -276,8 +276,8 @@ extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
    DBG.FoundBPoint = false;
    /* A halt between instructions: the instruction at this PC has not run (NotifyDmaStop). */
    SeExportNotifyDmaStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
+   sSeHalted = 1;   /* before the snapshot: it applies queued installs, whose SeSyncCpuHook must see a halt */
    SeMednafenFrameHook();          /* publish the halted state (regs/RAM at the DMA write) */
-   sSeHalted = 1;
    while (!SeExportGateFrame()) { }
    sSeHalted = 0;
    /* Hand off to the CPU step machinery if a single-step (IST) was requested from this DMA

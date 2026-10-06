@@ -599,6 +599,12 @@ if(BUILD_TESTING)
         PRIVATE Integration/Common Integration/Mednafen)
     target_link_libraries(SaturnExplorerShadowCallStackTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME SaturnExplorerMednafenHaltOrdering
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------

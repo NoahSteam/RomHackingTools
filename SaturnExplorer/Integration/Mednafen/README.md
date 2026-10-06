@@ -304,7 +304,7 @@ it holds, because the presentations that would complete it will not come: a held
 applied (it is certain to happen), a held call or `trapa` is dropped (its callee may have run and
 returned unseen, and applying it at the next breakpoint would record it as still running). The cost: a
 breakpoint inside a callee entered during an unwatched run finds no frame for it. Edits made while
-halted (a breakpoint set changed) do not count as a release, so a Step Into from a halt on a `bsr`
+halted (a breakpoint set changed, applied while the halted snapshot is published) do not count as a release, so a Step Into from a halt on a `bsr`
 still keeps the call.
 
 ### Stepping
