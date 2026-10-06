@@ -373,8 +373,9 @@ static void TestTrapaCompletesAtTheNextInstruction(void)
     CHECK(Snapshot(0) == 1u);
 }
 
-/* The hook is not called for every instruction in a breakpoint-only run, so the slot may never be
- * presented: the transfer is applied at whatever PC is next. */
+/* With every instruction presented, a PC that is neither the slot nor a repeat is where the transfer
+ * landed after something invisible ran in between (an interrupt is taken before the target): the
+ * transfer completes there. */
 static void TestAMissedSlotStillCompletes(void)
 {
     SeExportResetCallStack(0);
@@ -382,6 +383,68 @@ static void TestAMissedSlotStillCompletes(void)
     CHECK(Snapshot(0) == 0u);
     Present(0, 0x06005000, OP_NOP, 0, 0x060FFEF0, 0);          /* an unrelated, later PC */
     CHECK(Snapshot(0) == 1u);
+}
+
+/* A run that is not watched. Step Over from a breakpoint on A's `bsr` runs with no per-instruction
+ * callback until the return address is reached, so B ran and returned without being presented. The
+ * held call must not be applied at that return breakpoint: it would record B as running while the CPU
+ * is back in A (Step Out then used B's stale return address). */
+static void TestAnUnwatchedRunDropsAHeldCall(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A */
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* breakpoint on A's bsr to B */
+    SeMednafenHookMode(0);                                    /* Step Over: nothing is presented now */
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return breakpoint, back in A */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);                          /* A is the innermost frame, not B */
+
+    /* Same when the halt was in the delay slot. */
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);
+    SeMednafenHookMode(0);
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);
+
+    /* ...and a trap, which also runs its handler unseen. */
+    SeExportResetCallStack(0);
+    Present(0, 0x06001100, OP_TRAPA(0x20), 0, 0x060FFEF0, 0);
+    SeMednafenHookMode(0);
+    Present(0, 0x06001102, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 0u);
+}
+
+/* A held return is certain to complete once the CPU runs on, so it is applied when the run stops being
+ * watched -- dropping it would leave the frame it ends on the stack. Applied once, not again later. */
+static void TestAnUnwatchedRunStillCompletesAHeldReturn(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);
+    CHECK(Snapshot(0) == 2u);
+    Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);         /* breakpoint on B's rts, then Step Out */
+    CHECK(Snapshot(0) == 2u);
+    SeMednafenHookMode(0);
+    CHECK(Snapshot(0) == 1u);                                 /* B is gone: it is returning */
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return breakpoint, in A */
+    Present(0, 0x06002006, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);
+}
+
+/* A watched run (continuing into a step, or tracepoints armed) keeps what is held. */
+static void TestAWatchedRunKeepsAHeldCall(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* halted on A's bsr, then Step Into */
+    SeMednafenHookMode(1);
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);
+    Present(0, 0x06002204, OP_NOP, 0, 0x060FFEEC, 0);         /* B's first instruction */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);
 }
 
 /* A savestate load replaces the machine: a flow instruction that was in flight on the old timeline
@@ -553,6 +616,9 @@ int main(void)
     TestTrapaCompletesAtTheNextInstruction();
     TestAMissedSlotStillCompletes();
     TestAResetDropsWhatWasInFlight();
+    TestAnUnwatchedRunDropsAHeldCall();
+    TestAnUnwatchedRunStillCompletesAHeldReturn();
+    TestAWatchedRunKeepsAHeldCall();
     TestPendingFlowIsPerCpu();
     TestTracepointRepeatPolicy();
     TestReinstallKeepsUnchangedCounts();

@@ -277,6 +277,12 @@ single-threaded. The glue calls `SeExportApplyInstalls()` even on frames with no
 client that leaves has its breakpoints dropped promptly; and a halt that nobody is attached to
 release is let go by the gate, so a hit that lands before the drop cannot freeze the game.
 
+A resume is ordered after the installs sent before it: the server thread publishes a set, then
+clears the pause. The gate checks the mailbox first and the pause second, so a resume landing between
+the two used to release the CPU with its temporary breakpoint (Step Over's return address) still
+pending. The gate now looks at the mailbox again once it has seen the CPU released (every way out of
+it: RUN, STP, IST, no client), before returning to the emulator.
+
 ### Shadow call stack timing
 
 The per-instruction hook runs **before** the instruction does, and on the SH-2 a call, `rts` and
@@ -286,11 +292,20 @@ popped (so Step Out targeted B's caller's return), and a breakpoint on a `bsr` f
 already pushed. The glue now holds a flow instruction pending per CPU and applies it at the first hook
 after its delay slot (`SeMdfnFlowAdvance` / `SeMdfnFlowDefer`): a repeat of the instruction or its
 slot (the bus-stalled CPU presents the same PC again) changes nothing; `trapa`, with no slot,
-completes at the next instruction; a flow whose slot the hook never saw (a breakpoint-only run does
-not call it every instruction) is applied at the next PC; and a savestate load drops whatever was in
-flight. Note the recording only happens while the callback is continuous — a tracepoint armed or an
+completes at the next instruction; a flow whose slot the hook never saw while every instruction is
+presented (an interrupt ran first) is applied at the next PC; and a savestate load drops whatever was
+in flight. Note the recording only happens while the callback is continuous — a tracepoint armed or an
 instruction step in progress — so in a breakpoint-only session there are no recorded frames and Step
 Out says so.
+
+When the CPU is released into a run that is **not** watched (Step Over / Step Out / Continue with no
+tracepoint armed), the glue is told (`SeMednafenHookMode(0)`, from `SeSyncCpuHook`) and settles what
+it holds, because the presentations that would complete it will not come: a held `rts`/`rte` is
+applied (it is certain to happen), a held call or `trapa` is dropped (its callee may have run and
+returned unseen, and applying it at the next breakpoint would record it as still running). The cost: a
+breakpoint inside a callee entered during an unwatched run finds no frame for it. Edits made while
+halted (a breakpoint set changed) do not count as a release, so a Step Into from a halt on a `bsr`
+still keeps the call.
 
 ### Stepping
 

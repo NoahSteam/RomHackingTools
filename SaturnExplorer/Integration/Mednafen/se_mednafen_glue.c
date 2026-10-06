@@ -535,9 +535,10 @@ static void SeMdfnApplyFlow(int cpu, SeFlowKind kind, unsigned int pc, unsigned 
  *            transfer's target, and the flow is applied there -- before that hook's own halt, so a
  *            breakpoint at the target sees the completed stack
  * `trapa` has no delay slot, so it goes straight to stage 2. A PC that is neither the slot nor a repeat
- * means the hook was not called for an instruction in between (a breakpoint-only run does not call it
- * every instruction): the transfer has long since happened, so it is applied then. The state is dropped
- * when the call stacks are reset (a savestate load replaced the timeline it belonged to). */
+ * is where the transfer landed after something invisible ran in between (an interrupt is taken before
+ * the target executes), so it completes there. That only holds while every instruction is presented:
+ * see SeMednafenHookMode for a run that is not watched. The state is dropped when the call stacks are
+ * reset (a savestate load replaced the timeline it belonged to). */
 typedef struct
 {
     int          stage;          /* 0 nothing pending, 1 waiting for the slot, 2 waiting for the target */
@@ -575,6 +576,33 @@ static int SeMdfnFlowAdvance(int cpu, unsigned int pc)
     SeMdfnApplyFlow(cpu, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
     p->stage = 0;
     return 0;
+}
+
+/* The emulator tells the glue what the per-instruction callback does from here on: 'continuous' when
+ * every instruction will be presented (a tracepoint is armed or an instruction step is running), else
+ * it is called only at a breakpoint's PC. A held flow instruction is completed by the presentations
+ * that FOLLOW it, so when those stop coming its completion can no longer be observed, and applying it
+ * at whatever breakpoint is reached next draws the wrong stack -- a call stepped over has long since
+ * returned by then, and would be recorded as still running.
+ *   a call or trap  entered and left again, or still running, with nothing to say which: dropped, and
+ *                   the stack stays as it was. A breakpoint inside the callee finds no frame for it,
+ *                   which is the cost of not watching it run.
+ *   rts / rte       certain to complete once the CPU runs on, so it is applied now: otherwise the frame
+ *                   it ends stays on the stack for good.
+ * Called whenever the callback is (re)selected for a CPU that is about to run; not for a change made
+ * while it is halted, which is no change at all. */
+void SeMednafenHookMode(int continuous)
+{
+    int c;
+    if (continuous) return;
+    for (c = 0; c < 2; ++c)
+    {
+        SeMdfnFlowPending* p = &sFlowPending[c];
+        if (p->stage != 0 && p->epoch == SeExportCallStackEpoch() &&
+            (p->kind == SeFlowReturn || p->kind == SeFlowExcReturn))
+            SeMdfnApplyFlow(c, p->kind, p->flowPc, p->op, p->rn, p->sp, p->handler);
+        p->stage = 0;
+    }
 }
 
 /* A flow instruction at 'pc' has been presented: hold it until it completes. */

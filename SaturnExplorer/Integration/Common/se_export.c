@@ -1035,6 +1035,12 @@ void SeExportApplyInstalls(void)
     SeApplyPendingInstalls();
 }
 
+#if defined(SE_EXPORT_SPIN_GATE)
+/* Test builds only: called inside the frame gate between its install check and its pause check, the
+ * window a resume from the server thread can land in. A test uses it to place one there. */
+void (*SeExportTestGateHook)(void);
+#endif
+
 /* Short self-contained sleep so the gate can spin-wait without a Yabause-
  * specific sleep primitive and without pegging a CPU core while paused. */
 static void SeGateSleep(void)
@@ -1059,7 +1065,7 @@ static void SeGateSleep(void)
  * without its own sleep and without busy-pegging a core. The export server
  * thread keeps running, so a resume/step from Saturn Explorer releases the loop.
  * Safe to call even before SeExportInit (returns 1). */
-int SeExportGateFrame(void)
+static int SeGateDecide(void)
 {
     /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
      * emulate thread, because it is the only one that reads them. This is also reached from the halt
@@ -1090,6 +1096,9 @@ int SeExportGateFrame(void)
             }
         }
     }
+#if defined(SE_EXPORT_SPIN_GATE)
+    if (SeExportTestGateHook) SeExportTestGateHook();   /* the window a resume can land in; see below */
+#endif
     if (!SeAtLoad(&sPaused))
     {
         return 1;
@@ -1111,6 +1120,19 @@ int SeExportGateFrame(void)
     }
     SeGateSleep();
     return 0;
+}
+
+int SeExportGateFrame(void)
+{
+    const int run = SeGateDecide();
+    /* A release is ordered after the installs that preceded it: the server thread publishes a
+     * breakpoint set BEFORE it clears the pause (RUN, STP, IST), so a CPU that has just seen the
+     * pause lifted -- by the loads above -- must look at the mailbox AGAIN. The install check at the
+     * top of the gate ran before the pause check, and a resume landing between the two released the
+     * CPU with its temporary breakpoint (Step Over, Run to Cursor) still unapplied, which a short
+     * subroutine can run straight past. */
+    if (run) SeApplyPendingInstalls();
+    return run;
 }
 
 /* Savestate worker thread: pop raw full states, diff against the current keyframe (or emit

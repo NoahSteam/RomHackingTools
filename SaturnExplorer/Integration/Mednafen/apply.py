@@ -203,9 +203,14 @@ extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
    PC; non-continuous (fires only when the debugger finds a PC breakpoint) when only
    breakpoints exist; removed entirely when none is active so the fast run loop returns.
    Continuous still passes bpoint=true on breakpoint PCs, so it is a superset. */
+/* Set while a halt holds the CPUs (the gate spin below): the mode is then being edited, not entered. */
+static int sSeHalted = 0;
 static void SeSyncCpuHook(void) {
    const int on = sSeBpActive || sSeTraceActive || sSeStepActive;
    SeSsBothCpus = on;
+   /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
+      without presenting them, it must be told (it is not told of an edit made while halted). */
+   if (!sSeHalted) SeMednafenHookMode((sSeTraceActive || sSeStepActive) != 0);
    if (on)
       DBG_SetCPUCallback(SeSsBpHook, (sSeTraceActive || sSeStepActive) != 0);
    else
@@ -238,7 +243,9 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
          and stepping looks dead even though the PC is advancing. sPaused is already set, so
          SeExportSnapshot skips the rewind-ring capture (guarded on !sPaused). */
       SeMednafenFrameHook();
+      sSeHalted = 1;
       while (!SeExportGateFrame()) { }
+      sSeHalted = 0;
       /* Gate released: set the callback mode for what runs next — continuous iff an
          instruction step (IST) was just requested, else it reverts to the bp/tracepoint
          arming. The mode during the spin above is inert (no instructions execute), so a
@@ -270,7 +277,9 @@ extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
    /* A halt between instructions: the instruction at this PC has not run (NotifyDmaStop). */
    SeExportNotifyDmaStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
    SeMednafenFrameHook();          /* publish the halted state (regs/RAM at the DMA write) */
+   sSeHalted = 1;
    while (!SeExportGateFrame()) { }
+   sSeHalted = 0;
    /* Hand off to the CPU step machinery if a single-step (IST) was requested from this DMA
       halt, exactly like SeSsBpHook does after its gate: arm the per-instruction hook so the
       next retired instruction counts down the step budget and halts. Without this a Step from a
@@ -757,6 +766,7 @@ FWD_DECLS = (
     "extern \"C\" void SeExportNotifyDmaStop(int cpu, unsigned int pc);\n"
     "extern \"C\" int  SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken);\n"
     "extern \"C\" void SeMednafenTraceHook(int cpu, unsigned int pc);\n"
+    "extern \"C\" void SeMednafenHookMode(int continuous);\n"
     "extern \"C\" int  SeMednafenSelfBranchTaken(int cpu, unsigned int pc);\n"
     # debug.inc (patched, see process_debug) runs DBG_CPUHandler for the executing CPU while these say so.
     "extern \"C\" int  SeSsBothCpus;\n"

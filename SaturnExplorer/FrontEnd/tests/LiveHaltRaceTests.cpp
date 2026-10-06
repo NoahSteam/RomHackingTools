@@ -27,6 +27,7 @@
 
 extern "C" {
 #include "se_export.h"
+extern void (*SeExportTestGateHook)(void);   // se_export.c, SE_EXPORT_SPIN_GATE builds only
 }
 #include "SeLiveProtocol.h"
 
@@ -444,6 +445,41 @@ void TestInstallsAreAppliedWholeOnTheEmulateThread(Client& cl)
     Check(gLastTpBase.load() == 400u * 16u, "and the last tracepoint set sent is the one installed");
 }
 
+// A resume must not outrun the installs sent before it. The temporary breakpoint of a Step Over is
+// published, then RUN releases the CPU; if the release lands after the gate looked at the mailbox but
+// before it looked at the pause, the CPU ran on with the breakpoint still unapplied. The hook places
+// exactly that resume in the window.
+Client* gRaceClient = nullptr;
+bool    gRaceFired = false;
+void ResumeInTheWindow()
+{
+    if (gRaceFired) return;
+    gRaceFired = true;
+    gRaceClient->Exchange(SE_LIVE_VERB_BKPTS, 1, BpSet(7000, 1));
+    gRaceClient->Exchange(SE_LIVE_VERB_RESUME, 0);
+}
+
+void TestAResumeAppliesTheInstallsBeforeIt(Client& cl)
+{
+    gEmuThread = std::this_thread::get_id();
+    gEmuKnown = true;
+    SeExportGateFrame();                       // settle whatever the earlier tests left pending
+    gBpAdds.clear();
+    SeExportNotifyStop(0, 0x06000100u);        // halted at a breakpoint
+    gRaceClient = &cl;
+    SeExportTestGateHook = ResumeInTheWindow;
+    // The hook publishes the temporary breakpoint and resumes while the gate is mid-decision.
+    const int released = SeExportGateFrame();
+    SeExportTestGateHook = nullptr;
+    Check(gRaceFired, "the resume was placed inside the gate");
+    Check(released == 1, "the CPU was released");
+    bool installed = false;
+    for (size_t i = 0; i < gBpAdds.size(); ++i)
+        if (gBpAdds[i] == 0x06000000u + 7000u * 16u * 2u) installed = true;
+    Check(installed, "the breakpoint sent before the resume is installed when the CPU is released");
+    gEmuKnown = false;
+}
+
 // A client that leaves takes its breakpoints with it, but the drop happens on the emulate thread, at
 // its next gate or frame -- so a hit can land first, and a halt with nobody to release it would freeze
 // the game for good. The gate lets go of a hold nobody is there to end.
@@ -469,6 +505,7 @@ int main()
     TestAHaltOnTheOtherCpuEndsTheStep(cl);
     TestAnImmediateStopSurvivesTheRelease(cl);
     TestInstallsAreAppliedWholeOnTheEmulateThread(cl);
+    TestAResumeAppliesTheInstallsBeforeIt(cl);
     }   // the client leaves
     Sleep(200);
     TestAHaltWithNoClientIsReleased();
