@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -405,6 +406,29 @@ private:
     // (Docs/CodeReview -- UI-01); see Debug/StepHaltMachine.h for the races they exist to avoid.
     // App keeps the policy: only it resumes, evaluates a condition guard, or opens a panel.
     sfe::StepHaltMachine mStepHalt;
+#ifdef SE_ENABLE_LIVE
+    // A connection attempt running off the UI thread (see StartLiveOpen).
+    struct LiveOpenJob
+    {
+        std::thread        thread;
+        std::atomic<bool>  done{false};
+        se_result          result = SE_ERR_IO;
+        se_data_source     source = {};
+        std::string        endpoint;
+        bool               reportFailure = false;   // a user asked for this; say so if it fails
+
+        ~LiveOpenJob()
+        {
+            if (thread.joinable()) { thread.join(); }
+            // Opened but never adopted (the app is closing, or the source changed meanwhile).
+            if (result == SE_OK && source.close) { source.close(source.user); }
+        }
+    };
+    std::unique_ptr<LiveOpenJob> mLiveOpen;
+    bool AttachLiveSource(se_data_source& dataSource, const char* endpoint);
+    void StartLiveOpen(const char* endpoint, bool reportFailure);
+    void PollLiveOpen();
+#endif
     bool             mbAutoConnectLive = false; // poll while no dump/live source is active
     std::string      mLiveEndpoint;           // endpoint for auto-connect (empty = default)
     float            mLiveRetrySeconds = 0.0f; // time since the last connect attempt

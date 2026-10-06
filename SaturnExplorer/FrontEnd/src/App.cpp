@@ -10,7 +10,9 @@
 #include <ctime>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include "imgui.h"
@@ -783,8 +785,21 @@ bool App::OpenLive(const char* endpoint)
     {
         return false;
     }
+    return AttachLiveSource(dataSource, endpoint);
+#else
+    (void)endpoint;
+    return false;
+#endif
+}
+
+#ifdef SE_ENABLE_LIVE
+// Everything after the driver has connected: build the context around it and make it the
+// current source. Takes ownership of 'dataSource': CreateContextFromSource closes it when it
+// cannot build a context, and the context owns it otherwise.
+bool App::AttachLiveSource(se_data_source& dataSource, const char* endpoint)
+{
     se_context* context = nullptr;
-    if (!CreateContextFromSource(dataSource, &context))
+    if (!CreateContextFromSource(dataSource, &context))   // closes the source itself on failure
     {
         return false;
     }
@@ -808,11 +823,75 @@ bool App::OpenLive(const char* endpoint)
     // session) installs into this emulator instance.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
     return true;
+}
+
+// Establishing a connection can take a while -- a TCP endpoint whose host drops SYNs waits out
+// the driver's connect timeout, and a name lookup has no bound of its own -- and the UI thread
+// is the one drawing, so it never does that itself: the attempt runs on a worker (see
+// LiveOpenJob in App.h) and the result is collected on a later frame. One attempt at a time; a
+// request made while one is running is ignored (the auto-connect timer simply asks again).
+void App::StartLiveOpen(const char* endpoint, bool reportFailure)
+{
+    if (mLiveOpen) { return; }
+#if defined(__EMSCRIPTEN__)
+    // No threads in the browser build; its socket calls are proxied and do not block the page.
+    if (!OpenLive(endpoint) && reportFailure)
+    {
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+    }
 #else
-    (void)endpoint;
-    return false;
+    auto job = std::make_unique<LiveOpenJob>();
+    job->endpoint = endpoint ? endpoint : "";
+    job->reportFailure = reportFailure;
+    LiveOpenJob* raw = job.get();
+    try
+    {
+        job->thread = std::thread([raw] {
+            raw->result = se_live_open(raw->endpoint.empty() ? nullptr : raw->endpoint.c_str(),
+                                       &raw->source);
+            raw->done.store(true);
+        });
+    }
+    catch (const std::system_error&)
+    {
+        return;   // could not start a thread: try again later
+    }
+    if (reportFailure)
+    {
+        mOperationStatus = "Connecting to the live emulator...";
+        mOperationError = false;
+    }
+    mLiveOpen = std::move(job);
 #endif
 }
+
+// Collect a finished connection attempt, if any. Cheap when none is running.
+void App::PollLiveOpen()
+{
+    if (!mLiveOpen || !mLiveOpen->done.load()) { return; }
+    std::unique_ptr<LiveOpenJob> job = std::move(mLiveOpen);
+    job->thread.join();
+    bool attached = false;
+    if (job->result == SE_OK)
+    {
+        // Something else may have claimed the source while we were connecting (the user opened
+        // a file): don't displace it, and let the job's destructor close the unused connection.
+        if (!mbHasData && !mContext)
+        {
+            attached = AttachLiveSource(job->source, job->endpoint.empty() ? nullptr : job->endpoint.c_str());
+            job->result = SE_ERR_IO;   // adopted (or closed by AttachLiveSource): nothing left to close
+        }
+    }
+    if (!attached && job->reportFailure)
+    {
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+    }
+}
+#endif
 
 void App::EnableLiveAutoConnect(const char* endpoint)
 {
@@ -865,14 +944,16 @@ void App::BuildUI(IPlatform& platform)
 #ifdef SE_ENABLE_LIVE
     // Background auto-connect: while no source is loaded, retry about once a second
     // so Saturn Explorer latches onto an emulator even when it starts much later.
-    // se_live_open fails fast when no server is listening, so a failed poll is cheap.
+    // The attempt itself runs on a worker thread (StartLiveOpen), so a host that is slow to
+    // refuse cannot stall the frame; a failed poll costs a thread start, not a hitch.
+    PollLiveOpen();
     if (mbAutoConnectLive && !mbHasData && !mContext)
     {
         mLiveRetrySeconds += ImGui::GetIO().DeltaTime;
         if (mLiveRetrySeconds >= 1.0f)
         {
             mLiveRetrySeconds = 0.0f;
-            OpenLive(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str());
+            StartLiveOpen(mLiveEndpoint.empty() ? nullptr : mLiveEndpoint.c_str(), false);
         }
     }
 #endif
@@ -900,7 +981,19 @@ void App::BuildUI(IPlatform& platform)
 #else
         const bool restoreWaiting = false;
 #endif
-        if (!mbPaused || mStepHalt.Settling() || mStepHalt.HaltActive() || restoreWaiting)
+        // Whether a paused display still has frames to catch up on after a step. A fixed number
+        // of UI frames is a guess: if the step takes longer than that to reach the emulator, run
+        // and arrive, every capture in the window reads the pre-step snapshot, capture then
+        // stops, and the stepped frame never shows. A server that can say (v20+) is asked
+        // instead; the settle window is the fallback for one that cannot.
+        bool followingStep = mStepHalt.Settling();
+#ifdef SE_ENABLE_LIVE
+        {
+            const int catchUp = se_live_capture_pending(&mDataSource);
+            if (catchUp >= 0) followingStep = catchUp == 1;
+        }
+#endif
+        if (!mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting)
         {
 #ifdef SE_ENABLE_LIVE
             // Read the counters BEFORE capturing: the driver only moves forward, so what the
@@ -6435,12 +6528,13 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         }
         break;
     case TopBarCommandType::ConnectLive:
-        if (!OpenLive(nullptr))
-        {
-            mOperationStatus = "No compatible live emulator endpoint was found.";
-            mOperationError = true;
-            mLog.Error(mOperationStatus);
-        }
+#ifdef SE_ENABLE_LIVE
+        StartLiveOpen(nullptr, true);   // collected by PollLiveOpen on a later frame
+#else
+        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+#endif
         break;
     case TopBarCommandType::DisconnectLive:
         mController.ClearAll();

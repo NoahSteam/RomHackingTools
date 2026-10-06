@@ -30,10 +30,43 @@ size_t ReadAll(size_t (*reader)(void*, uint32_t, void*, size_t), void* user,
     return done;
 }
 
+// Brackets one capture with the driver's begin_capture/end_capture, so that an early return or
+// an exception out of a callback cannot leave the driver holding a pinned snapshot.
+class CaptureScope
+{
+public:
+    explicit CaptureScope(const se_data_source& ds)
+        : mUser(ds.user)
+        , mEnd(ds.begin_capture && ds.end_capture ? ds.end_capture : nullptr)
+    {
+        if (mEnd) { ds.begin_capture(ds.user); }
+    }
+    ~CaptureScope() { if (mEnd) { mEnd(mUser); } }
+    CaptureScope(const CaptureScope&) = delete;
+    CaptureScope& operator=(const CaptureScope&) = delete;
+
+private:
+    void*  mUser;
+    void (*mEnd)(void*);
+};
+
 }  // namespace
 
 bool HardwareSnapshot::Capture(const se_data_source& dataSource)
 {
+    // Everything below reads from one pinned state when the driver supports it (see
+    // begin_capture in SeDataSource.h): without this, a live source answers each callback from
+    // whatever frame is newest at that call, and the snapshot can hold VDP1 VRAM from one frame
+    // beside VDP2 VRAM and registers from the next -- a state the machine was never in.
+    CaptureScope scope(dataSource);
+    mbHasFrame = false;
+    if (dataSource.begin_capture && dataSource.end_capture &&
+        (dataSource.capabilities & SE_CAP_FRAME_STEP) && dataSource.frame_number)
+    {
+        mFrame = dataSource.frame_number(dataSource.user);
+        mbHasFrame = true;
+    }
+
     // Valid if the source gave us anything at all, rather than VDP1 VRAM specifically: a
     // VDP2-only source still has background layers and the tile/palette viewers, and a
     // work-RAM-only dump has the memory viewer, watches and RAM search. Tying validity to VDP1

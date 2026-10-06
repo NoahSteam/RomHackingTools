@@ -34,6 +34,17 @@ public:
 
     bool Valid() const { return mbValid; }
 
+    // The frame number the driver reported WITH this capture (inside begin_capture/end_capture),
+    // for a driver that brackets its captures; false for one that does not, whose frame number
+    // is only ever read live. Lets the host tag a captured snapshot with the frame it came from
+    // rather than whatever frame the source has reached by the time it asks.
+    bool CapturedFrame(uint64_t* out) const
+    {
+        if (!mbHasFrame) return false;
+        *out = mFrame;
+        return true;
+    }
+
     const std::vector<uint8_t>& Vdp1Vram() const { return mVdp1Vram; }
     const std::vector<uint8_t>& Vdp2Vram() const { return mVdp2Vram; }
     const std::vector<uint8_t>& Cram() const { return mCram; }
@@ -144,6 +155,8 @@ private:
     bool mbHasVdp2Regs = false;
     bool mbHasSh2[2] = { false, false };
     bool mbValid = false;
+    bool mbHasFrame = false;
+    uint64_t mFrame = 0;
 };
 
 }  // namespace se

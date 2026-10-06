@@ -22,8 +22,11 @@
 #if defined(_WIN32)
 #include <windows.h>
 #else
+#include <cerrno>
 #include <cstdlib>
+#include <fcntl.h>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -31,6 +34,24 @@
 
 namespace
 {
+
+// One recorded shadow-stack frame (v9+); mirrors se_live_call_frame on the wire.
+struct LiveCallFrame
+{
+    uint32_t callSite = 0, func = 0, ret = 0, sp = 0;
+    uint64_t cycle = 0;
+    uint32_t frameNo = 0;
+};
+
+// The per-CPU shadow call stacks from one snapshot (master, slave). A snapshot value,
+// not a queue: each poll replaces it.
+struct LiveCallStacks
+{
+    std::vector<LiveCallFrame> cpu[2];
+};
+
+// Why the emulator last stopped (control block, v5+): reason / cpu / pc of a breakpoint hit.
+struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
 
 /* ---- One decoded, core-ready frame. All buffers are Saturn-native big-endian
        and register images are hardware-offset (directly usable by the core). ---- */
@@ -56,8 +77,22 @@ struct LiveSnapshot
     uint32_t             restoreDone = 0;
     uint32_t             restoreFailed = 0;
     bool                 hasRestoreInfo = false;
+    // Everything below describes the SAME frame as the memory above and is published with it, so
+    // a capture pinned to this snapshot reports a frame number, run state, stop and call stack
+    // that belong to the VRAM it read -- rather than whatever the emulator reached since.
+    uint64_t             frame = 0;          // frame number of the frame served
+    bool                 paused = false;
+    StopInfo             stop;
+    LiveCallStacks       callStacks;         // v9+; empty on an older server
+    // Step completion (v20+): the newest frame in the server's ring (which a gap-free GET can
+    // be behind), and the frames a STP granted that have not been published yet.
+    uint32_t             latestFrame = 0;
+    uint32_t             stepPending = 0;
+    bool                 hasStepInfo = false;
     bool                 valid = false;
 };
+
+using SnapshotPtr = std::shared_ptr<const LiveSnapshot>;
 
 // A fired tracepoint event (v8+): its id, the CPU, the frame it fired on, and the
 // captured SH-2 register file (se_sh2_regs order). The client formats the message.
@@ -67,21 +102,6 @@ struct LiveEvent
     uint32_t cpu = 0;
     uint32_t frame = 0;
     uint32_t regs[SE_LIVE_EVENT_REGS] = {};
-};
-
-// One recorded shadow-stack frame (v9+); mirrors se_live_call_frame on the wire.
-struct LiveCallFrame
-{
-    uint32_t callSite = 0, func = 0, ret = 0, sp = 0;
-    uint64_t cycle = 0;
-    uint32_t frameNo = 0;
-};
-
-// The per-CPU shadow call stacks from one snapshot (master, slave). A snapshot value,
-// not a queue: each poll replaces it.
-struct LiveCallStacks
-{
-    std::vector<LiveCallFrame> cpu[2];
 };
 
 // The emulator's live host keyboard bindings from one snapshot (v10+): per port, the
@@ -162,35 +182,48 @@ static const size_t kMaxQueuedStateBytes = 64u * 1024u * 1024u;
 // cycle (~8 ms). Steps accumulate so rapid presses aren't lost.
 enum class Ctl { None, Pause, Resume, Step, StepInsn };
 
+std::atomic<uint64_t> gNextStateId{1};
+
 struct LiveState
 {
+    // Distinguishes this instance in the thread-local pins below. Not the address: a destroyed
+    // instance's address can be handed to the next one, which would then inherit a stale pin.
+    const uint64_t    id = gNextStateId.fetch_add(1);
     std::string       endpoint;
     std::thread       thread;
     std::atomic<bool> running{false};
-    std::mutex        mtx;           // guards 'front'
-    LiveSnapshot      front;
+    // The newest published snapshot, immutable once published. Readers copy the pointer under
+    // 'mtx' and read from the copy, so a poll that replaces it mid-read cannot change what an
+    // in-progress capture sees (see begin_capture in SeDataSource.h).
+    std::mutex        mtx;
+    SnapshotPtr       front;
 
-    // Frame control (SE_CAP_FRAME_STEP). Updated from each snapshot's control
-    // block; the callbacks post a command for the poll thread to send.
-    std::atomic<uint64_t> frameNumber{0};
-    std::atomic<bool>     paused{false};
-    std::atomic<uint32_t> serverVersion{0};   // protocol version last seen from server
-    // Bumped every time the poll thread (re)attaches the socket. The thread reconnects on
-    // its own, so a client that only watches for errors never learns the emulator it is
-    // talking to was replaced -- stop Mednafen, launch another game, and the same
+    std::atomic<uint32_t> serverVersion{0};   // protocol version of the CURRENT connection (0 = unknown)
+    // Bumped when the poll thread publishes the first snapshot of a (re)attached connection --
+    // together with that snapshot, under 'mtx', so a client that sees the new number is
+    // guaranteed to capture the new emulator's data and never the previous one's. The thread
+    // reconnects on its own, so a client that only watches for errors never learns the emulator
+    // it is talking to was replaced -- stop Mednafen, launch another game, and the same
     // se_context keeps streaming as though nothing happened, while everything the client
     // derived from the old run (recorded frames, call stack, scrub position) is silently
     // about to be mixed with the new one. Exposed so the client can drop that state.
     std::atomic<uint32_t> connGeneration{0};
-    // Last stop event from the control block (v5+): reason / cpu / pc of a
-    // breakpoint hit, so the UI can jump to the halted PC.
-    std::atomic<uint32_t> stopReason{0};
-    std::atomic<uint32_t> stopCpu{0};
-    std::atomic<uint32_t> stopPc{0};
-    std::mutex            ctlMtx;    // guards pending / stepFrames / bkpts
+    std::mutex            ctlMtx;    // guards pending / stepFrames / bkpts and every queue below
+    // True while the current connection has completed its first exchange. Mutations (writes,
+    // loads, steps) are only accepted -- and only ever shipped -- while it is set, and each
+    // connection ends by discarding everything queued for it: work the user issued against one
+    // emulator must not execute against the next one that happens to answer on the endpoint.
+    // Guarded by ctlMtx.
+    bool                  connected = false;
     Ctl                   pending = Ctl::None;
     int32_t               stepFrames = 0;
     int32_t               stepInsns = 0;    // instruction-step count for Ctl::StepInsn (IST)
+    // Frame steps posted by the UI and steps the server has answered. Unequal means a step is
+    // still on its way to the emulator (or its reply has not come back), which a capture-pending
+    // check has to count: until the reply the snapshot says nothing about the step yet.
+    // Guarded by ctlMtx.
+    uint32_t              stepsPosted = 0;
+    uint32_t              stepsAnswered = 0;
     // Pending breakpoint-set sync: when the UI changes breakpoints it bumps
     // 'bkptsDirty' and stashes the descriptor blob; the poll thread ships it with
     // a BKP command on its next cycle. Each descriptor is SE_LIVE_BKPT_DESC_LEN.
@@ -223,9 +256,6 @@ struct LiveState
     // se_live_poll_events. Bounded so a flood can't grow unbounded. Guarded by evMtx.
     std::mutex            evMtx;
     std::deque<LiveEvent> events;
-    // Latest shadow call stacks (v9+), replaced each snapshot. Guarded by csMtx.
-    std::mutex            csMtx;
-    LiveCallStacks        callStacks;
     // Latest host keyboard bindings (v10+): per port, the USB-HID scancode bound to each
     // Saturn pad button (ascending SE_PAD_* order), -1 where unbound. Replaced each
     // snapshot so it tracks the emulator's live config. Guarded by kmMtx.
@@ -258,27 +288,140 @@ struct LiveState
     bool                  rewindDirty = false;
 };
 
-/* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ---- */
+// The snapshot a capture on this thread is pinned to (between begin_capture and end_capture),
+// and the last one such a capture used. Thread-local because the pin belongs to the one thread
+// running the capture; every other thread, and every read outside a capture, sees the newest.
+// 'id' says which driver instance the entry belongs to, so two live sources never share a pin.
+struct ThreadPin
+{
+    uint64_t    id = 0;
+    SnapshotPtr snap;
+    int         depth = 0;
+};
+thread_local ThreadPin gPinned;
+thread_local ThreadPin gLastCaptured;
+
+SnapshotPtr Newest(LiveState* st)
+{
+    std::lock_guard<std::mutex> lk(st->mtx);
+    return st->front;
+}
+
+// The snapshot a read should be served from: the pinned one inside a capture (even when that
+// is "nothing yet" -- a snapshot published mid-capture must not leak into it), else the newest.
+SnapshotPtr CurrentSnapshot(LiveState* st)
+{
+    if (gPinned.id == st->id && gPinned.depth > 0) { return gPinned.snap; }
+    return Newest(st);
+}
+
+// The snapshot the host's display was last captured from on this thread, falling back to the
+// newest when it has not captured yet. What per-frame state (stop, call stack) must be read
+// from so that it matches the frame on screen.
+SnapshotPtr DisplayedSnapshot(LiveState* st)
+{
+    if (gPinned.id == st->id && gPinned.depth > 0) { return gPinned.snap; }
+    if (gLastCaptured.id == st->id && gLastCaptured.snap) { return gLastCaptured.snap; }
+    return Newest(st);
+}
+
+/* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ----
+ *
+ * Every wait here is bounded and cancellable. The poll thread is the only thing that talks to
+ * the emulator, and CbClose joins it -- from the UI thread, on disconnect and on application
+ * exit. A blocking read on an emulator that keeps the connection open but has stopped answering
+ * (suspended in a debugger, hung, or simply wedged) would therefore freeze the UI, and the same
+ * wait is what would keep a hung connection from ever being replaced. So I/O proceeds in short
+ * slices that re-check the stop flag, and gives up after 'idleMs' without progress. */
+const int kIoSliceMs = 100;          // how often a wait re-checks the stop flag
+const int kIdleTimeoutMs = 10000;    // no progress for this long: the emulator is not answering
+const int kConnectTimeoutMs = 2000;  // bound on establishing a connection
+
 struct Conn
 {
 #if defined(_WIN32)
     HANDLE h = INVALID_HANDLE_VALUE;
+    HANDLE ev = nullptr;     // completion event for overlapped I/O
     bool ok() const { return h != INVALID_HANDLE_VALUE; }
 #else
     int fd = -1;
     bool ok() const { return fd >= 0; }
 #endif
+    // When set and false, any I/O on this connection gives up. Null = not cancellable (the
+    // final best-effort resume on close, which runs after 'running' has already been cleared).
+    const std::atomic<bool>* running = nullptr;
+    int idleMs = kIdleTimeoutMs;
+
+    bool Aborted() const { return running && !running->load(); }
 };
 
 // True for a TCP endpoint written as "tcp:host:port" (used for the web bridge,
 // where the browser tunnels a normal TCP connect over a WebSocket proxy).
 bool IsTcpEndpoint(const char* ep) { return ep && std::strncmp(ep, "tcp:", 4) == 0; }
 
-#if !defined(_WIN32)
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+// A peer that closes mid-send makes send() raise SIGPIPE, whose default action ends the whole
+// process. Linux suppresses it per call (MSG_NOSIGNAL); macOS/BSD have no such flag and do it
+// per socket (SO_NOSIGPIPE). Either way a dead peer becomes an ordinary send() error that sends
+// the poll thread down its reconnect path instead of taking SaturnExplorer with it.
+#if defined(MSG_NOSIGNAL)
+const int kSendFlags = MSG_NOSIGNAL;
+#else
+const int kSendFlags = 0;
+#endif
+
+void ConfigureSocket(int fd)
+{
+#if defined(SO_NOSIGPIPE)
+    int on = 1;
+    ::setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+#endif
+    const int flags = ::fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) { ::fcntl(fd, F_SETFL, flags | O_NONBLOCK); }
+}
+
+// Wait until 'fd' is ready for 'events'. 1 = ready, 0 = gave up (stop requested or no progress
+// for 'idleMs'), -1 = the descriptor is bad. A hang-up or error is reported as "ready": the
+// send/recv that follows is what reports it, with the real errno.
+int WaitFd(int fd, short events, const std::atomic<bool>* running, int idleMs)
+{
+    int waited = 0;
+    for (;;)
+    {
+        if (running && !running->load()) { return 0; }
+        pollfd p;
+        p.fd = fd;
+        p.events = events;
+        p.revents = 0;
+        const int r = ::poll(&p, 1, kIoSliceMs);
+        if (r > 0) { return (p.revents & POLLNVAL) ? -1 : 1; }
+        if (r < 0)
+        {
+            if (errno == EINTR) { continue; }
+            return -1;
+        }
+        waited += kIoSliceMs;
+        if (waited >= idleMs) { return 0; }
+    }
+}
+
+// Connect 'fd' (already non-blocking) with a bound on how long it may take.
+bool ConnectBounded(int fd, const sockaddr* addr, socklen_t len,
+                    const std::atomic<bool>* running, int timeoutMs)
+{
+    if (::connect(fd, addr, len) == 0) { return true; }
+    if (errno != EINPROGRESS) { return false; }   // includes EAGAIN: a full local backlog
+    if (WaitFd(fd, POLLOUT, running, timeoutMs) != 1) { return false; }
+    int err = 0;
+    socklen_t elen = sizeof(err);
+    if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &elen) != 0) { return false; }
+    return err == 0;
+}
+
 // Connect a POSIX TCP socket to "tcp:host:port". This is the path the Emscripten
 // build takes (its sockets are proxied to a WebSocket bridge), and the one the
 // native test harness uses; Windows native uses the named pipe instead.
-bool ConnOpenTcp(Conn& c, const char* endpoint)
+bool ConnOpenTcp(Conn& c, const char* endpoint, int timeoutMs)
 {
     const char* rest = endpoint + 4;                 // skip "tcp:"
     const char* colon = std::strrchr(rest, ':');
@@ -286,6 +429,33 @@ bool ConnOpenTcp(Conn& c, const char* endpoint)
     std::string host(rest, static_cast<size_t>(colon - rest));
     const char* port = colon + 1;
 
+    addrinfo hints;
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* res = nullptr;
+    if (::getaddrinfo(host.c_str(), port, &hints, &res) != 0 || !res) { return false; }
+    for (addrinfo* ai = res; ai; ai = ai->ai_next)
+    {
+        int fd = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd < 0) { continue; }
+        ConfigureSocket(fd);
+        if (ConnectBounded(fd, ai->ai_addr, ai->ai_addrlen, c.running, timeoutMs)) { c.fd = fd; break; }
+        ::close(fd);
+    }
+    ::freeaddrinfo(res);
+    return c.fd >= 0;
+}
+#elif defined(__EMSCRIPTEN__)
+// The browser build keeps the plain blocking calls: its sockets are proxied to a WebSocket
+// bridge, and it has no poll()-driven stop path to exercise (the tab owns the page's lifetime).
+bool ConnOpenTcp(Conn& c, const char* endpoint, int)
+{
+    const char* rest = endpoint + 4;
+    const char* colon = std::strrchr(rest, ':');
+    if (!colon || colon == rest) { return false; }
+    std::string host(rest, static_cast<size_t>(colon - rest));
+    const char* port = colon + 1;
     addrinfo hints;
     std::memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -304,28 +474,46 @@ bool ConnOpenTcp(Conn& c, const char* endpoint)
 }
 #endif
 
-bool ConnOpen(Conn& c, const char* endpoint)
+bool ConnOpen(Conn& c, const char* endpoint, const std::atomic<bool>* running = nullptr,
+              int timeoutMs = kConnectTimeoutMs)
 {
+    c.running = running;
+    c.idleMs = kIdleTimeoutMs;
 #if defined(_WIN32)
-    // Windows native: local named pipe. (TCP for the web bridge is POSIX-side.)
+    (void)timeoutMs;
+    // Windows native: local named pipe. (TCP for the web bridge is POSIX-side.) Opened for
+    // overlapped I/O so a read or write can be abandoned (see WinIo) -- a synchronous ReadFile
+    // on a pipe whose server stopped answering cannot be interrupted from another thread.
     c.h = CreateFileA(endpoint, GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                      OPEN_EXISTING, 0, nullptr);
-    return c.h != INVALID_HANDLE_VALUE;
+                      OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
+    if (c.h == INVALID_HANDLE_VALUE) { return false; }
+    c.ev = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+    if (!c.ev)
+    {
+        CloseHandle(c.h);
+        c.h = INVALID_HANDLE_VALUE;
+        return false;
+    }
+    return true;
 #else
     if (IsTcpEndpoint(endpoint))
     {
-        return ConnOpenTcp(c, endpoint);
+        return ConnOpenTcp(c, endpoint, timeoutMs);
     }
+#if defined(__EMSCRIPTEN__)
+    return false;
+#else
     c.fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (c.fd < 0)
     {
         return false;
     }
+    ConfigureSocket(c.fd);
     sockaddr_un addr;
     std::memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
     std::strncpy(addr.sun_path, endpoint, sizeof(addr.sun_path) - 1);
-    if (::connect(c.fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0)
+    if (!ConnectBounded(c.fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr), running, timeoutMs))
     {
         ::close(c.fd);
         c.fd = -1;
@@ -333,16 +521,53 @@ bool ConnOpen(Conn& c, const char* endpoint)
     }
     return true;
 #endif
+#endif
 }
 
 void ConnClose(Conn& c)
 {
 #if defined(_WIN32)
     if (c.h != INVALID_HANDLE_VALUE) { CloseHandle(c.h); c.h = INVALID_HANDLE_VALUE; }
+    if (c.ev) { CloseHandle(c.ev); c.ev = nullptr; }
 #else
     if (c.fd >= 0) { ::close(c.fd); c.fd = -1; }
 #endif
 }
+
+#if defined(_WIN32)
+// One overlapped read or write of up to 'len' bytes. Waits in slices so a stop request or an
+// idle timeout can cancel it; CancelIoEx + a final GetOverlappedResult(wait) is what makes the
+// buffer safe to release afterwards (the kernel may still be writing to it until then).
+bool WinIo(Conn& c, bool write, void* buf, DWORD len, DWORD& got)
+{
+    OVERLAPPED ov;
+    std::memset(&ov, 0, sizeof(ov));
+    ov.hEvent = c.ev;
+    ResetEvent(c.ev);
+    got = 0;
+    const BOOL started = write ? WriteFile(c.h, buf, len, nullptr, &ov)
+                               : ReadFile(c.h, buf, len, nullptr, &ov);
+    if (!started)
+    {
+        if (GetLastError() != ERROR_IO_PENDING) { return false; }
+        int waited = 0;
+        for (;;)
+        {
+            if (WaitForSingleObject(c.ev, kIoSliceMs) == WAIT_OBJECT_0) { break; }
+            waited += kIoSliceMs;
+            if (c.Aborted() || waited >= c.idleMs)
+            {
+                CancelIoEx(c.h, &ov);
+                DWORD ignored = 0;
+                GetOverlappedResult(c.h, &ov, &ignored, TRUE);
+                return false;
+            }
+        }
+    }
+    if (!GetOverlappedResult(c.h, &ov, &got, FALSE)) { return false; }
+    return got != 0;
+}
+#endif
 
 bool ConnWrite(Conn& c, const void* data, size_t size)
 {
@@ -352,11 +577,22 @@ bool ConnWrite(Conn& c, const void* data, size_t size)
     {
 #if defined(_WIN32)
         DWORD n = 0;
-        if (!WriteFile(c.h, p + done, static_cast<DWORD>(size - done), &n, nullptr) || n == 0)
+        if (!WinIo(c, true, const_cast<uint8_t*>(p + done), static_cast<DWORD>(size - done), n))
             return false;
-#else
+#elif defined(__EMSCRIPTEN__)
         ssize_t n = ::send(c.fd, p + done, size - done, 0);
         if (n <= 0)
+            return false;
+#else
+        ssize_t n = ::send(c.fd, p + done, size - done, kSendFlags);
+        if (n < 0)
+        {
+            if (errno == EINTR) { continue; }
+            if (errno != EAGAIN && errno != EWOULDBLOCK) { return false; }
+            if (WaitFd(c.fd, POLLOUT, c.running, c.idleMs) != 1) { return false; }
+            continue;
+        }
+        if (n == 0)
             return false;
 #endif
         done += static_cast<size_t>(n);
@@ -372,11 +608,22 @@ bool ConnReadFull(Conn& c, void* data, size_t size)
     {
 #if defined(_WIN32)
         DWORD n = 0;
-        if (!ReadFile(c.h, p + done, static_cast<DWORD>(size - done), &n, nullptr) || n == 0)
+        if (!WinIo(c, false, p + done, static_cast<DWORD>(size - done), n))
+            return false;
+#elif defined(__EMSCRIPTEN__)
+        ssize_t n = ::recv(c.fd, p + done, size - done, 0);
+        if (n <= 0)
             return false;
 #else
         ssize_t n = ::recv(c.fd, p + done, size - done, 0);
-        if (n <= 0)
+        if (n < 0)
+        {
+            if (errno == EINTR) { continue; }
+            if (errno != EAGAIN && errno != EWOULDBLOCK) { return false; }
+            if (WaitFd(c.fd, POLLIN, c.running, c.idleMs) != 1) { return false; }
+            continue;
+        }
+        if (n == 0)
             return false;
 #endif
         done += static_cast<size_t>(n);
@@ -413,8 +660,6 @@ bool SendCommand(Conn& c, const char* verb, int32_t arg)
 // Issue 'verb' (arg) and read the snapshot the server replies with into 'snap'
 // (converted to core-ready form). Also returns the run state via outPaused /
 // outFrame. Returns false on any protocol/socket error.
-struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
-
 bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
                   const uint8_t* extra, size_t extraLen, LiveSnapshot& snap,
                   bool& outPaused, uint64_t& outFrame, uint32_t& outVersion,
@@ -698,6 +943,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         snap.restoreFailed = Rd32LE(ctl.data() + 28);
         snap.hasRestoreInfo = true;
     }
+    if (ct >= 40)
+    {
+        snap.latestFrame = Rd32LE(ctl.data() + 32);
+        snap.stepPending = Rd32LE(ctl.data() + 36);
+        snap.hasStepInfo = true;
+    }
     outPaused = ct >= 4 && Rd32LE(ctl.data()) != 0;
     outFrame = ct >= 12 ? Rd64LE(ctl.data() + 4) : 0;
     outStop = StopInfo{};
@@ -738,33 +989,71 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
     return true;
 }
 
+// Sleep up to 'ms', but wake promptly when the driver is asked to stop, so a reconnect backoff
+// never holds up CbClose's join.
+void SleepWhileRunning(LiveState* st, int ms)
+{
+    for (int waited = 0; waited < ms && st->running.load(); waited += 10)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+// Discard everything that was queued for a connection that has just ended. Run when a read or
+// write on it fails, under the same lock the producers take, so that once 'connected' is clear
+// the callbacks refuse new work instead of queueing it for whichever emulator answers next.
+//
+// What this protects against: the emulator exits with writes, a savestate load or step commands
+// still queued; another game is launched on the same endpoint; the poll thread reconnects and
+// would, without this, run the old session's pokes and restore against a machine the user never
+// pointed them at -- and could do it before learning what protocol version that machine speaks.
+void ForgetConnection(LiveState* st)
+{
+    {
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        st->connected = false;
+        st->writes.Clear();
+        st->soundWrites.Clear();
+        st->loadPayload.clear();
+        st->loadDirty = false;
+        st->emuLoadSlot = 0;
+        st->pending = Ctl::None;
+        st->stepFrames = 0;
+        st->stepInsns = 0;
+        st->stepsAnswered = st->stepsPosted;
+        st->lastInputSent = 0;
+        st->emuSlotsValid = false;
+    }
+    st->pausedByUs.store(false);   // the exporter releases a pause when a client leaves
+    // Unknown until the next connection answers: every version-gated verb refuses meanwhile.
+    st->serverVersion.store(0);
+}
+
 void PollLoop(LiveState* st)
 {
     Conn conn;
+    // True once this connection has completed its first exchange. Until then the only thing
+    // sent is a plain GET: the emulator on the other end may not be the one the cached protocol
+    // version and queued work were meant for, and a GET is the one request every version
+    // answers, so it is what establishes the version before anything that mutates is shipped.
+    bool handshaken = false;
     while (st->running.load())
     {
         if (!conn.ok())
         {
-            if (!ConnOpen(conn, st->endpoint.c_str()))
+            if (!ConnOpen(conn, st->endpoint.c_str(), &st->running))
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                SleepWhileRunning(st, 250);
                 continue;
             }
             // A fresh socket may be a different emulator process on the same endpoint, and
             // nothing in the protocol distinguishes the two. Restart the gap-free cursor --
             // an emulator that just booted is on frame 0, and asking it for the frame after
-            // the last one the *previous* instance sent would skip its entire run -- and
-            // publish the generation so the client can discard what it derived from that run.
+            // the last one the *previous* instance sent would skip its entire run. The
+            // generation is NOT published here: it goes out with the first snapshot of this
+            // connection, so a client that sees the new number never captures the old data.
             st->lastSeenFrame = 0;
-            st->connGeneration.fetch_add(1);
-            // A fresh server starts with rewind capture ON (so a pre-v18 client keeps the old
-            // behavior), so an "off" setting has to be restated or this emulator would spend a
-            // full savestate per frame on a feature the user switched off. Unconditional: the
-            // value we want is the value this connection has not been told.
-            {
-                std::lock_guard<std::mutex> lk(st->ctlMtx);
-                st->rewindDirty = true;
-            }
+            handshaken = false;
         }
 
         // Drain any control command posted by the UI thread; otherwise poll. A
@@ -774,7 +1063,10 @@ void PollLoop(LiveState* st)
         int32_t arg = 0;
         std::vector<uint8_t> payload;
         bool shippedLoad = false;
+        bool shippedStep = false;
+        uint32_t shippedStepSeq = 0;
         uint32_t loadResyncFrame = 0;
+        if (handshaken)
         {
             std::lock_guard<std::mutex> lk(st->ctlMtx);
             if (st->loadDirty)
@@ -837,7 +1129,12 @@ void PollLoop(LiveState* st)
                 {
                     case Ctl::Pause:  verb = SE_LIVE_VERB_PAUSE;  break;
                     case Ctl::Resume: verb = SE_LIVE_VERB_RESUME; break;
-                    case Ctl::Step:   verb = SE_LIVE_VERB_STEP; arg = st->stepFrames; break;
+                    case Ctl::Step:
+                        verb = SE_LIVE_VERB_STEP;
+                        arg = st->stepFrames;
+                        shippedStep = true;
+                        shippedStepSeq = st->stepsPosted;   // covers every post folded into this one
+                        break;
                     case Ctl::StepInsn: verb = SE_LIVE_VERB_ISTEP; arg = st->stepInsns; break;
                     default: break;
                 }
@@ -871,7 +1168,8 @@ void PollLoop(LiveState* st)
             arg = static_cast<int32_t>(st->lastSeenFrame);
         }
 
-        LiveSnapshot snap;
+        auto fresh = std::make_shared<LiveSnapshot>();
+        LiveSnapshot& snap = *fresh;
         bool paused = false;
         uint64_t frame = 0;
         uint32_t sver = 0;
@@ -899,13 +1197,33 @@ void PollLoop(LiveState* st)
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
                           logLines, stateBlocks, emuSlots))
         {
+            // Whatever was queued belonged to this connection, and it is gone.
+            ForgetConnection(st);
             ConnClose(conn);   // will reconnect next iteration
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            SleepWhileRunning(st, 100);
             continue;
         }
+        snap.paused = paused;
+        snap.frame = frame;
+        snap.stop = stop;
+        snap.callStacks = std::move(callStacks);
+
+        const bool firstOnConnection = !handshaken;
+        if (firstOnConnection)
         {
-            std::lock_guard<std::mutex> lk(st->csMtx);
-            st->callStacks = std::move(callStacks);
+            handshaken = true;
+            // Everything still queued for the consumer was produced by the PREVIOUS connection's
+            // emulator. The client resets its history when it sees the new generation and would
+            // otherwise drain these straight back into it.
+            {
+                std::lock_guard<std::mutex> lk(st->evMtx);
+                st->events.clear();
+            }
+            {
+                std::lock_guard<std::mutex> lk(st->stateMtx);
+                st->stateBlocks.Clear();
+            }
+            st->serverVersion.store(sver);   // known before 'connected' lets any version-gated verb out
         }
         if (keyMap.valid)
         {
@@ -913,16 +1231,41 @@ void PollLoop(LiveState* st)
             std::memcpy(st->keyMap, keyMap.k, sizeof(st->keyMap));
             st->keyMapValid = true;
         }
-        if (emuSlots.valid)
         {
             std::lock_guard<std::mutex> lk(st->ctlMtx);
-            std::memcpy(st->emuSlotPresent, emuSlots.present, sizeof(st->emuSlotPresent));
-            std::memcpy(st->emuSlotMtime, emuSlots.mtime, sizeof(st->emuSlotMtime));
-            st->emuSlotsValid = true;
+            if (emuSlots.valid)
+            {
+                std::memcpy(st->emuSlotPresent, emuSlots.present, sizeof(st->emuSlotPresent));
+                std::memcpy(st->emuSlotMtime, emuSlots.mtime, sizeof(st->emuSlotMtime));
+                st->emuSlotsValid = true;
+            }
         }
         {
+            // Snapshot and generation together: a reader that sees the new generation is
+            // guaranteed (it takes this lock to read the snapshot) to capture the new data.
             std::lock_guard<std::mutex> lk(st->mtx);
-            st->front = std::move(snap);
+            st->front = fresh;
+            if (firstOnConnection) { st->connGeneration.fetch_add(1); }
+        }
+        if (shippedStep)
+        {
+            // After the snapshot is visible: this reply carries the step's effect (granted
+            // frames, or their completion), so "answered" must never be observable before it.
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            st->stepsAnswered = shippedStepSeq;
+        }
+        if (firstOnConnection)
+        {
+            // Only now may callbacks queue work: after the client can see this emulator's
+            // generation, so an edit it issues from here on is one it made knowing which
+            // emulator it is talking to.
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            // A fresh server starts with rewind capture ON (so a pre-v18 client keeps the old
+            // behavior), so an "off" setting has to be restated or this emulator would spend a
+            // full savestate per frame on a feature the user switched off. Unconditional: the
+            // value we want is the value this connection has not been told.
+            st->rewindDirty = true;
+            st->connected = true;
         }
         if (!events.empty())
         {
@@ -953,19 +1296,17 @@ void PollLoop(LiveState* st)
             // frame this LST returned and resync the cursor to N so we fetch N+1 onward.
             st->lastSeenFrame = loadResyncFrame;
         }
-        st->paused.store(paused);
-        st->frameNumber.store(frame);
-        st->serverVersion.store(sver);
-        st->stopReason.store(stop.reason);
-        st->stopCpu.store(stop.cpu);
-        st->stopPc.store(stop.pc);
-        std::this_thread::sleep_for(std::chrono::milliseconds(8));   // ~120 Hz cap
+        SleepWhileRunning(st, 8);   // ~120 Hz cap
     }
     // Closing: if we left the emulator paused/stepped, release it before dropping
     // the connection so Yabause never stays frozen after the debugger disconnects.
-    // Done here on the poll thread (after running went false) so it's race-free.
-    if (conn.ok() && st->pausedByUs.load())
+    // Done here on the poll thread (after running went false) so it's race-free. Bounded and
+    // not cancellable by 'running' (which is already clear): a short idle limit instead, because
+    // an emulator that has stopped answering must not be able to hold up shutdown.
+    if (conn.ok() && handshaken && st->pausedByUs.load())
     {
+        conn.running = nullptr;
+        conn.idleMs = 500;
         LiveSnapshot tmp;
         bool p = false;
         uint64_t fr = 0;
@@ -997,58 +1338,88 @@ size_t CopyRegion(const std::vector<uint8_t>& buf, uint32_t off, void* dst, size
 /* ---- se_data_source callbacks ---- */
 LiveState* St(void* user) { return static_cast<LiveState*>(user); }
 
+// Every read is served from ONE immutable snapshot (the capture's pinned one, else the newest),
+// copied out of the pointer rather than under a lock held for the memcpy: the poll thread can
+// publish a new frame at any moment, and a reader that re-locked per call could stitch a
+// region from one frame onto registers from the next.
 size_t CbVdp1Vram(void* u, uint32_t off, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return CopyRegion(st->front.vdp1Vram, off, dst, size);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? CopyRegion(s->vdp1Vram, off, dst, size) : 0;
 }
 size_t CbVdp2Vram(void* u, uint32_t off, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return CopyRegion(st->front.vdp2Vram, off, dst, size);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? CopyRegion(s->vdp2Vram, off, dst, size) : 0;
 }
 size_t CbCram(void* u, uint32_t off, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return CopyRegion(st->front.cram, off, dst, size);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? CopyRegion(s->cram, off, dst, size) : 0;
 }
 size_t CbMainRam(void* u, uint32_t address, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    if (!s) { return 0; }
     if (address >= 0x06000000u)
     {
-        return CopyRegion(st->front.wramHigh, address - 0x06000000u, dst, size);
+        return CopyRegion(s->wramHigh, address - 0x06000000u, dst, size);
     }
     if (address >= 0x00200000u)
     {
-        return CopyRegion(st->front.wramLow, address - 0x00200000u, dst, size);
+        return CopyRegion(s->wramLow, address - 0x00200000u, dst, size);
     }
     return 0;
 }
 size_t CbVdp1Fb(void* u, uint32_t off, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return CopyRegion(st->front.vdp1Fb, off, dst, size);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? CopyRegion(s->vdp1Fb, off, dst, size) : 0;
 }
 size_t CbSoundRam(void* u, uint32_t off, void* dst, size_t size)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return CopyRegion(st->front.soundRam, off, dst, size);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? CopyRegion(s->soundRam, off, dst, size) : 0;
 }
 int CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT])
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    int n = static_cast<int>(st->front.scspSlots.size());
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    if (!s) { return 0; }
+    int n = static_cast<int>(s->scspSlots.size());
     if (n > SE_SCSP_SLOT_COUNT) n = SE_SCSP_SLOT_COUNT;
-    for (int i = 0; i < n; ++i) out[i] = st->front.scspSlots[i];
+    for (int i = 0; i < n; ++i) out[i] = s->scspSlots[i];
     return n;
 }
 int CbCdStatus(void* u, se_cd_status* out)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    if (!st->front.hasCdStatus) return 0;
-    *out = st->front.cdStatus;
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    if (!s || !s->hasCdStatus) return 0;
+    *out = s->cdStatus;
     return 1;
+}
+
+// Bracket one capture: pin the newest snapshot for every read this thread makes until
+// end_capture. Nested pairs share the outermost pin.
+void CbBeginCapture(void* u)
+{
+    LiveState* st = St(u);
+    if (gPinned.id == st->id && gPinned.depth > 0) { ++gPinned.depth; return; }
+    gPinned.snap = Newest(st);
+    gPinned.id = st->id;
+    gPinned.depth = 1;
+}
+
+void CbEndCapture(void* u)
+{
+    LiveState* st = St(u);
+    if (gPinned.id != st->id || gPinned.depth == 0) { return; }
+    if (--gPinned.depth > 0) { return; }
+    // What the display now shows -- the base the capture-pending check compares against, and
+    // what stop info and the call stack are read from.
+    gLastCaptured.id = st->id;
+    gLastCaptured.snap = std::move(gPinned.snap);
+    gPinned.snap.reset();
+    gPinned.id = 0;
 }
 
 // A poke payload: the destination (u32 LE) followed by the raw bytes. WRM reads it as a bus
@@ -1070,12 +1441,16 @@ std::vector<uint8_t> BuildPoke(uint32_t dest, const void* src, size_t size)
 // all takes a producer far beyond any real one (the poll thread ships ~125 pokes/s, so 8 MiB of
 // single-byte edits would take hours to queue), so this is a backstop on memory, not a path the
 // UI is expected to travel.
+//
+// So does a write while no emulator is attached: there is nothing to apply it to, and queueing
+// it would apply it to whichever one answers next (see ForgetConnection).
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
     if (!src || size == 0) return 0;
     LiveState* st = St(u);
     std::vector<uint8_t> payload = BuildPoke(address, src, size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (!st->connected) return 0;
     return st->writes.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1085,6 +1460,7 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
     LiveState* st = St(u);
     std::vector<uint8_t> payload = BuildPoke(offset, src, size);   // shipped as WRS
     std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (!st->connected) return 0;
     return st->soundWrites.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1144,6 +1520,7 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
         payload.insert(payload.end(), s, s + state_len);
     }
     std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (!st->connected) return -1;   // no emulator to restore: don't hold it for the next one
     st->loadPayload = std::move(payload);
     st->loadFrame = static_cast<uint32_t>(frame);
     st->loadDirty = true;
@@ -1154,33 +1531,36 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
 int CbSh2Regs(void* u, int cpu, se_sh2_regs* out)
 {
     if (cpu < 0 || cpu > 1 || !out) { return 0; }
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    if (!st->front.hasSh2[cpu]) { return 0; }   // server predates v5 / no data yet
-    *out = st->front.sh2[cpu];
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    if (!s || !s->hasSh2[cpu]) { return 0; }   // server predates v5 / no data yet
+    *out = s->sh2[cpu];
     return 1;
 }
 
 uint16_t CbVdp1Reg(void* u, uint32_t reg)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return sedrv::ReadReg16(st->front.vdp1Regs, reg);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? sedrv::ReadReg16(s->vdp1Regs, reg) : 0;
 }
 uint16_t CbVdp2Reg(void* u, uint32_t reg)
 {
-    LiveState* st = St(u); std::lock_guard<std::mutex> lk(st->mtx);
-    return sedrv::ReadReg16(st->front.vdp2Regs, reg);
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? sedrv::ReadReg16(s->vdp2Regs, reg) : 0;
 }
 
 // ---- Frame control. The UI thread posts a command; the poll thread sends it
 //      over the shared connection on its next cycle (see PollLoop). ----
-void PostCmd(LiveState* st, Ctl cmd, int32_t frames)
+bool PostCmd(LiveState* st, Ctl cmd, int32_t frames)
 {
+    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (!st->connected) { return false; }   // nothing to pause or step; don't queue it for the next one
+
     // Track whether the emulator is currently held by us: pause/step halt it,
     // resume releases it. The poll thread uses this to resume on close.
     if (cmd == Ctl::Pause || cmd == Ctl::Step || cmd == Ctl::StepInsn) { st->pausedByUs.store(true); }
     else if (cmd == Ctl::Resume)                                       { st->pausedByUs.store(false); }
 
-    std::lock_guard<std::mutex> lk(st->ctlMtx);
+    if (cmd == Ctl::Step) { ++st->stepsPosted; }
     if (cmd == Ctl::Step && st->pending == Ctl::Step)
     {
         st->stepFrames += frames;   // accumulate rapid presses
@@ -1195,23 +1575,24 @@ void PostCmd(LiveState* st, Ctl cmd, int32_t frames)
         st->stepFrames = (cmd == Ctl::Step) ? frames : 0;
         st->stepInsns  = (cmd == Ctl::StepInsn) ? frames : 0;
     }
+    return true;
 }
 
 int CbFramePause(void* u)
 {
-    PostCmd(St(u), Ctl::Pause, 0);
-    return 0;
+    return PostCmd(St(u), Ctl::Pause, 0) ? 0 : -1;
 }
 int CbFrameStep(void* u, int32_t frames)
 {
     // By the seam's contract, frames <= 0 means "resume" (run free).
-    if (frames <= 0) { PostCmd(St(u), Ctl::Resume, 0); }
-    else             { PostCmd(St(u), Ctl::Step, frames); }
-    return 0;
+    if (frames <= 0) { return PostCmd(St(u), Ctl::Resume, 0) ? 0 : -1; }
+    return PostCmd(St(u), Ctl::Step, frames) ? 0 : -1;
 }
+// The frame the (pinned) snapshot is of -- not the newest the emulator has reached.
 uint64_t CbFrameNumber(void* u)
 {
-    return St(u)->frameNumber.load();
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    return s ? s->frame : 0;
 }
 
 void CbClose(void* u)
@@ -1219,7 +1600,12 @@ void CbClose(void* u)
     LiveState* st = St(u);
     if (!st) { return; }
     st->running.store(false);
+    // Bounded: every wait in the poll thread re-checks 'running' within ~100 ms, and the final
+    // resume is capped at a short idle limit, so an emulator that has stopped answering cannot
+    // hold this up.
     if (st->thread.joinable()) { st->thread.join(); }
+    if (gPinned.id == st->id) { gPinned = ThreadPin(); }
+    if (gLastCaptured.id == st->id) { gLastCaptured = ThreadPin(); }   // this thread's; don't pin 2.7 MB past the source
     delete st;
 }
 
@@ -1291,6 +1677,8 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
         out->write_sound_ram = CbWriteSoundRam;
         out->write_vram     = CbWriteVram;
         out->load_state     = CbLoadState;
+        out->begin_capture  = CbBeginCapture;
+        out->end_capture    = CbEndCapture;
         out->read_scsp_slots = CbScspSlots;
         out->read_cd_status = CbCdStatus;
         out->read_vdp1_fb   = CbVdp1Fb;
@@ -1333,12 +1721,39 @@ extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, u
     if (!ds || !ds->user || ds->close != CbClose || !done || !failed) { return 0; }
     return se::Guard(0, [&]() -> int
     {
-        LiveState* st = St(ds->user);
-        std::lock_guard<std::mutex> lk(st->mtx);
-        if (!st->front.valid || !st->front.hasRestoreInfo) { return 0; }   // pre-v19 server
-        *done = st->front.restoreDone;
-        *failed = st->front.restoreFailed;
+        // The NEWEST snapshot, not the pinned/displayed one: the caller reads this before
+        // starting a capture and relies on the capture being at least as new as what it read.
+        SnapshotPtr snap = Newest(St(ds->user));
+        if (!snap || !snap->valid || !snap->hasRestoreInfo) { return 0; }   // pre-v19 server
+        *done = snap->restoreDone;
+        *failed = snap->restoreFailed;
         return 1;
+    });
+}
+
+extern "C" int se_live_capture_pending(const se_data_source* ds)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return -1; }
+    return se::Guard(-1, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        bool queuedStep;
+        {
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            queuedStep = st->stepsPosted != st->stepsAnswered;
+        }
+        SnapshotPtr newest = Newest(st);
+        if (!newest || !newest->valid || !newest->hasStepInfo) { return -1; }   // pre-v20: can't say
+        // A step the emulator has not yet been told about, or has been told about and not yet
+        // published: the display must keep following the stream.
+        if (queuedStep || newest->stepPending > 0) { return 1; }
+        // Published but not yet shown: the server's ring holds frames newer than the one this
+        // reply served (a gap-free GET lags), or the newest snapshot is a different frame from
+        // the one the display was captured from.
+        if (static_cast<uint32_t>(newest->frame) != newest->latestFrame) { return 1; }
+        SnapshotPtr shown = DisplayedSnapshot(st);
+        if (!shown || shown->frame != newest->frame) { return 1; }
+        return 0;
     });
 }
 
@@ -1512,9 +1927,11 @@ extern "C" uint32_t se_live_poll_callstack(const se_data_source* ds, int cpu,
     return se::Guard(0u, [&]() -> uint32_t
     {
         const int c = (cpu == 1) ? 1 : 0;
-        LiveState* st = St(ds->user);
-        std::lock_guard<std::mutex> lk(st->csMtx);
-        const std::vector<LiveCallFrame>& src = st->callStacks.cpu[c];
+        // The stack that belongs to the frame the display shows, not the newest the poll thread
+        // has since replaced it with.
+        SnapshotPtr snap = DisplayedSnapshot(St(ds->user));
+        if (!snap) { return 0; }
+        const std::vector<LiveCallFrame>& src = snap->callStacks.cpu[c];
         uint32_t n = 0;
         for (; n < max && n < src.size(); ++n)
         {
@@ -1575,11 +1992,13 @@ extern "C" int se_live_get_stop(const se_data_source* ds, uint32_t* reason,
     if (!ds || !ds->user || ds->close != CbClose) { return 0; }
     return se::Guard(0, [&]() -> int
     {
-        LiveState* st = St(ds->user);
-        const uint32_t r = st->stopReason.load();
-        if (reason) { *reason = r; }
-        if (cpu)    { *cpu = st->stopCpu.load(); }
-        if (pc)     { *pc = st->stopPc.load(); }
-        return r != SE_LIVE_STOP_NONE ? 1 : 0;
+        // Paired with the displayed frame: a stop reported for a later frame than the one on
+        // screen would point the disassembly at a PC the shown registers never held.
+        SnapshotPtr snap = DisplayedSnapshot(St(ds->user));
+        const StopInfo stop = snap ? snap->stop : StopInfo{};
+        if (reason) { *reason = stop.reason; }
+        if (cpu)    { *cpu = stop.cpu; }
+        if (pc)     { *pc = stop.pc; }
+        return stop.reason != SE_LIVE_STOP_NONE ? 1 : 0;
     });
 }

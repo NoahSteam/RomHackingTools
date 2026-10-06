@@ -55,7 +55,12 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      19u   /* +v19 restore outcomes in the control block (restore_done /
+#define SE_LIVE_VERSION      20u   /* +v20 step completion in the control block (latest_frame /
+                                  * step_pending), so a client holding the display on a paused
+                                  * emulator can tell when a frame step has actually been run
+                                  * and published, instead of capturing for a guessed number
+                                  * of UI frames.
+                                  * v19 restore outcomes in the control block (restore_done /
                                   * restore_failed), so a client can tell when a load it asked
                                   * for (LST/ELS) has actually been applied.
                                   * v18 rewind capture is switchable at run time: the REW
@@ -330,13 +335,19 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     32u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+#define SE_LIVE_CONTROL_LEN     40u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
                                            * + (v19) restore_done(u32) + restore_failed(u32). Every
                                            * accepted LST/ELS ends in exactly one: done counts once
                                            * the first frame of the restored timeline is in the
                                            * reply stream (so the reply that reports it carries
                                            * post-restore data), failed when the load was refused
-                                           * or could not be applied. Monotonic per emulator run. */
+                                           * or could not be applied. Monotonic per emulator run.
+                                           * (v20) latest_frame(u32 @+32): the newest frame in the
+                                           * server's ring, which a gap-free GET may be behind;
+                                           * step_pending(u32 @+36): frames a STP granted that have
+                                           * not been published yet. A client that has caught up
+                                           * (served frame == latest_frame) with step_pending == 0
+                                           * is looking at the end of the step. */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */
 

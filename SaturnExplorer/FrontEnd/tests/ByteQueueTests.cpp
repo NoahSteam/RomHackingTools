@@ -130,6 +130,19 @@ void TestDrainResetsTheTotal()
     CHECK(q.Push(Item(100), 100));          // the whole budget is available again
 }
 
+// Clear drops everything and returns the whole budget -- what a connection that ended does to the
+// work queued for it.
+void TestClearEmptiesAndResetsTheTotal()
+{
+    Q q;
+    CHECK(q.Push(Item(40), 100));
+    CHECK(q.Push(Item(20), 100));
+    q.Clear();
+    CHECK(q.Empty());
+    CHECK(q.bytes == 0);
+    CHECK(q.Push(Item(100), 100));
+}
+
 }  // namespace
 
 int main()
@@ -138,6 +151,7 @@ int main()
     TestPopReturnsTheBudget();
     TestTrimToDropsOldest();
     TestDrainResetsTheTotal();
+    TestClearEmptiesAndResetsTheTotal();
     if (gFailures)
     {
         std::printf("ByteQueueTests: %d check(s) failed\n", gFailures);

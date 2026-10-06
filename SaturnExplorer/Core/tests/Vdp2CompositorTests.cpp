@@ -112,6 +112,63 @@ bool IsRed(const std::vector<uint8_t>& pixels, int x, int y)
     return IsColor(pixels, x, y, 255, 0, 0);
 }
 
+// A source that brackets its captures is read between begin_capture and end_capture -- every
+// callback of the capture, and the frame number, inside the pair -- and the frame number the
+// host sees afterwards is the one captured, not whatever the source has since reached.
+namespace {
+struct BracketState
+{
+    int  begins = 0, ends = 0;
+    int  depth = 0;
+    bool readOutsidePair = false;
+    uint64_t liveFrame = 10;   // what the source is "now" -- moves on after each capture
+};
+BracketState* gBracket = nullptr;
+void Note() { if (gBracket->depth == 0) gBracket->readOutsidePair = true; }
+}  // namespace
+
+void TestCaptureIsBracketedAndFrameNumberIsTheCapturedOne()
+{
+    State state = MakeNbg3State();
+    se_data_source source = se_test::MakeSource(state);
+    BracketState bracket;
+    gBracket = &bracket;
+    static State* sInner = nullptr;
+    sInner = &state;
+    source.capabilities |= SE_CAP_FRAME_STEP;
+    source.user = &state;
+    source.begin_capture = [](void*) { ++gBracket->begins; ++gBracket->depth; };
+    source.end_capture   = [](void*) { ++gBracket->ends; --gBracket->depth; };
+    source.read_vdp1_vram = [](void*, uint32_t o, void* d, size_t n)
+    {
+        Note();
+        const std::vector<uint8_t>& v = sInner->vdp1;
+        if (o >= v.size()) return size_t(0);
+        const size_t c = std::min(n, v.size() - o);
+        std::memcpy(d, v.data() + o, c);
+        return c;
+    };
+    source.frame_number = [](void*) -> uint64_t { Note(); return gBracket->liveFrame; };
+    source.frame_step = [](void*, int32_t) { return 0; };
+    source.frame_pause = [](void*) { return 0; };
+    se_context* ctx = se_test::CreateContext(source);
+    CHECK(ctx != nullptr);
+
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    CHECK(bracket.begins == 1 && bracket.ends == 1 && bracket.depth == 0);   // one pair per capture
+    CHECK(!bracket.readOutsidePair);
+    bracket.readOutsidePair = false;
+    CHECK(se_frame_number(ctx) == 10);
+
+    bracket.liveFrame = 99;                       // the source moves on...
+    CHECK(se_frame_number(ctx) == 10);            // ...the captured snapshot has not
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    CHECK(se_frame_number(ctx) == 99);
+    CHECK(bracket.begins == 2 && bracket.ends == 2);
+    se_destroy(ctx);
+    gBracket = nullptr;
+}
+
 void TestRectangularWindow()
 {
     State state = MakeNbg3State();
@@ -1102,6 +1159,7 @@ int main()
     TestEditReRenders();
     TestWriteVramForwards();
     TestWriteVramReportsWhatTheDriverTook();
+    TestCaptureIsBracketedAndFrameNumberIsTheCapturedOne();
     TestRectangularWindow();
     TestLineWindow();
     TestVerticalPlaneSize();

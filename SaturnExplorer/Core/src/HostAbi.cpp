@@ -592,6 +592,14 @@ uint64_t se_frame_number(se_context* ctx)
     }
     return Guard(static_cast<uint64_t>(0), [&]
     {
+        // A source that brackets its captures reports the frame the CAPTURE came from. Asking it
+        // live would return the newest frame, which a running emulator has usually moved past by
+        // the time the host tags the snapshot it just took.
+        uint64_t captured = 0;
+        if (Impl(ctx)->CapturedFrame(&captured))
+        {
+            return captured;
+        }
         return ds.frame_number(ds.user);
     });
 }

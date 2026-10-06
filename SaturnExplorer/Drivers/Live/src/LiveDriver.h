@@ -24,8 +24,11 @@ se_result se_live_open(const char* endpoint, se_data_source* out);
  * se_live_open. */
 uint32_t se_live_server_version(const se_data_source* ds);
 
-/* How many times the poll thread has attached its socket: 1 after the first connect, then
- * one more for every reconnect. The thread reconnects on its own when the emulator goes
+/* How many times the poll thread has attached to an emulator: 1 once the first snapshot has
+ * arrived, then one more for every reconnect that gets one. The number advances together with
+ * the first snapshot of the new connection (not at connect time), so a client that sees it
+ * change captures the NEW emulator's data and never the previous one's; edits and loads queued
+ * for a connection that ended are discarded rather than carried to the next. The thread reconnects on its own when the emulator goes
  * away and comes back, and the protocol carries nothing identifying the process, so a
  * client that watches only for errors never learns it is now talking to a different
  * emulator -- stop one game, launch another on the same endpoint, and the same se_context
@@ -41,6 +44,15 @@ uint32_t se_live_connection_generation(const se_data_source* ds);
  * Returns 1 and fills both when known; 0 for a pre-v19 server, no snapshot yet, or a source
  * that is not live -- the caller then has no completion signal and must say so. */
 int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed);
+
+/* Whether the display of a PAUSED live source still has frames to catch up on (v20+): a frame
+ * step that has been posted but not yet answered, granted by the emulator but not yet
+ * published, published but not yet fetched, or fetched but not yet captured. Returns 1 when a
+ * capture would show something new, 0 when the display is at the end of the stream, and -1 when
+ * the server cannot say (pre-v20, no snapshot yet, not a live source) -- the caller then falls
+ * back to capturing for a fixed number of frames. Replaces counting UI frames after a step,
+ * which gave up on a step the emulator was still working on. */
+int se_live_capture_pending(const se_data_source* ds);
 
 /* Push the whole execution/memory breakpoint set to the emulator (v5+). 'descs'
  * points at 'count' 12-byte descriptors (address u32 LE + size u32 LE + flags u32

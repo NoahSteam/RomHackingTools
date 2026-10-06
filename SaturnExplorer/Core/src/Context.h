@@ -56,6 +56,10 @@ public:
         return SE_OK;
     }
 
+    // The frame number reported with the last capture; false when the source does not bracket
+    // its captures (see HardwareSnapshot::CapturedFrame).
+    bool CapturedFrame(uint64_t* out) const { return mSnapshot.CapturedFrame(out); }
+
     // Re-derive everything the renderer/query surface caches from the raw snapshot: the parsed
     // VDP1 command list, the built scene, display resolution, sprite priorities, VRAM regions.
     // Called after a fresh capture (BeginFrame) and after an in-place memory edit (WriteVram /

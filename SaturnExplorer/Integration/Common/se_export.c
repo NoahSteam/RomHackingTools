@@ -25,8 +25,12 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#if !defined(__GNUC__) && !defined(__clang__)
+#include <intrin.h>   /* _Interlocked* for the MSVC branch of the atomics below */
+#endif
 #else
 #include <pthread.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -108,6 +112,80 @@ static volatile int sRunning;
  * emulated frames (bumped by SeExportSnapshot, i.e. once per completed frame). */
 static volatile int sPaused;
 static volatile int sStepBudget;
+/* Frame-step completion (v20). sStepOutstanding is the frames a STP granted that have not been
+ * published yet; sStepInflight marks that the frame now running was granted by the budget (as
+ * opposed to one that began free-running before the STP landed), so only a granted frame
+ * retires an outstanding step. Together they let the client tell "the step has been run and
+ * published" from "it is still on its way", instead of counting UI frames. */
+static volatile int sStepOutstanding;
+static volatile int sStepInflight;
+
+/* The pause/step state is shared by three threads: the server thread (verbs), the emulate thread
+ * (the frame gate) and the CPU hook (breakpoint stops). A plain volatile int is neither atomic
+ * across a read-modify-write nor ordered, and the old unlocked decrement in the gate could
+ * overwrite a concurrent STP's increment and lose a requested step. Every access goes through
+ * these instead. */
+#if defined(__GNUC__) || defined(__clang__)
+#define SeAtLoad(p)       __atomic_load_n((p), __ATOMIC_SEQ_CST)
+#define SeAtStore(p, v)   __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
+#define SeAtAdd(p, v)     ((void)__atomic_fetch_add((p), (v), __ATOMIC_SEQ_CST))
+#define SeAtCas(p, e, d)  __atomic_compare_exchange_n((p), (e), (d), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+#elif defined(_WIN32)
+#define SeAtLoad(p)       ((int)_InterlockedCompareExchange((volatile long*)(p), 0, 0))
+#define SeAtStore(p, v)   ((void)_InterlockedExchange((volatile long*)(p), (long)(v)))
+#define SeAtAdd(p, v)     ((void)_InterlockedExchangeAdd((volatile long*)(p), (long)(v)))
+static int SeAtCasWin(volatile int* p, int* e, int d)
+{
+    long prev = _InterlockedCompareExchange((volatile long*)p, (long)d, (long)*e);
+    if (prev == (long)*e) return 1;
+    *e = (int)prev;
+    return 0;
+}
+#define SeAtCas(p, e, d)  SeAtCasWin((p), (e), (d))
+#else
+#error "se_export.c needs atomic operations: GCC/Clang builtins or the Windows Interlocked API"
+#endif
+
+/* Drop whatever step budget is left: a resume, a pause, a breakpoint stop or a restore all
+ * make the remaining requested frames moot, and the client must not wait for them. */
+static void SeCancelSteps(void)
+{
+    SeAtStore(&sStepBudget, 0);
+    SeAtStore(&sStepOutstanding, 0);
+    SeAtStore(&sStepInflight, 0);
+}
+
+/* A STP verb: grant 'n' more frames. Outstanding first, so a reader never sees budget without
+ * the matching pending count. */
+static void SeGrantSteps(int n)
+{
+    SeAtAdd(&sStepOutstanding, n);
+    SeAtAdd(&sStepBudget, n);
+}
+
+/* Emulate thread, at the frame gate: take one frame of budget, if any. */
+static int SeTakeStepFrame(void)
+{
+    int b = SeAtLoad(&sStepBudget);
+    while (b > 0)
+    {
+        SeAtStore(&sStepInflight, 1);   /* before the decrement, so pending never reads 0 mid-grant */
+        if (SeAtCas(&sStepBudget, &b, b - 1)) return 1;
+    }
+    SeAtStore(&sStepInflight, 0);   /* the budget was cancelled under us: nothing was granted */
+    return 0;
+}
+
+/* A frame has just been published: if it was a granted step, retire it. */
+static void SeStepFramePublished(void)
+{
+    if (SeAtLoad(&sStepInflight))
+    {
+        int o = SeAtLoad(&sStepOutstanding);
+        SeAtStore(&sStepInflight, 0);
+        while (o > 0 && !SeAtCas(&sStepOutstanding, &o, o - 1)) { }
+    }
+}
 static volatile unsigned long long sFrameNo;
 
 /* ---- Stop-event state (v5+). When the emulator halts on an execution
@@ -265,6 +343,14 @@ static int sTcpThreadStarted = 0;
 static pthread_mutex_t sLock = PTHREAD_MUTEX_INITIALIZER;
 static int sListenFd = -1;
 static int sTcpListenFd = -1;
+/* The accepted client of each listener (-1 = none), so shutdown can interrupt a server thread
+ * that is parked in recv()/send() on a client that has gone quiet. Closing the listening socket
+ * only wakes accept(); a thread already serving a client never sees it, and the join in
+ * SeExportDeinit would wait on that client forever. Guarded by sConnLock; the owning server
+ * thread clears its slot under the lock BEFORE closing the fd, so shutdown() can never be
+ * called on a descriptor number that has already been reused. */
+static int sActiveFd[2] = { -1, -1 };   /* [0] local socket, [1] TCP */
+static pthread_mutex_t sConnLock = PTHREAD_MUTEX_INITIALIZER;
 #define SE_LOCK()   pthread_mutex_lock(&sLock)
 #define SE_UNLOCK() pthread_mutex_unlock(&sLock)
 #endif
@@ -462,8 +548,8 @@ static void SeStateAfterRestore(void)
     SeExportResetCallStack(1);
     SeStateFlushAndRekey();
     sStopReason = SE_LIVE_STOP_NONE;
-    sStepBudget = 0;
-    sPaused = 0;   /* resume: re-simulate forward from wherever we now are */
+    SeCancelSteps();
+    SeAtStore(&sPaused, 0);   /* resume: re-simulate forward from wherever we now are */
 }
 
 static void SeStateConsumeLoad(void)
@@ -657,8 +743,8 @@ static void SeOnClientDisconnect(void)
     if (sClearBps) sClearBps();
     sRewindWanted = 1;   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
-    sPaused = 0;
-    sStepBudget = 0;
+    SeAtStore(&sPaused, 0);
+    SeCancelSteps();
     sInsnStepPending = 0;
     sStopReason = SE_LIVE_STOP_NONE;
     SE_UNLOCK();
@@ -679,7 +765,7 @@ void SeExportSetTracepointHook(SeSetTracepointsFn fn)
 
 /* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
  * execution breakpoint: latch the stop and hold the emulator paused. Plain
- * volatile writes (like sPaused elsewhere) — this runs in the CPU thread and must
+ * atomic stores (like sPaused elsewhere) — this runs in the CPU thread and must
  * not take the frame lock. */
 void SeExportNotifyStop(int cpu, unsigned int pc)
 {
@@ -687,8 +773,8 @@ void SeExportNotifyStop(int cpu, unsigned int pc)
     sStopCpu = (cpu != 0) ? 1u : 0u;
     sStopPc = pc;
     sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking so a step from here starts clean */
-    sPaused = 1;
-    sStepBudget = 0;
+    SeAtStore(&sPaused, 1);
+    SeCancelSteps();
 }
 
 /* Like SeExportNotifyStop, but latches SE_LIVE_STOP_STEP — the halt that ends an
@@ -699,8 +785,8 @@ void SeExportNotifyStep(int cpu, unsigned int pc)
     sStopCpu = (cpu != 0) ? 1u : 0u;
     sStopPc = pc;
     sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking for the next step */
-    sPaused = 1;
-    sStepBudget = 0;
+    SeAtStore(&sPaused, 1);
+    SeCancelSteps();
 }
 
 /* CPU thread, called from the per-instruction hook right after the halt gate releases:
@@ -790,13 +876,12 @@ int SeExportGateFrame(void)
             SeRestoreFailed();
         }
     }
-    if (!sPaused)
+    if (!SeAtLoad(&sPaused))
     {
         return 1;
     }
-    if (sStepBudget > 0)
+    if (SeTakeStepFrame())
     {
-        --sStepBudget;
         return 1;
     }
     SeGateSleep();
@@ -1081,6 +1166,8 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreAckPending = 0; ++sRestoreDone; }   /* first post-restore frame */
+    SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
+                               * reports the step as retired also holds its frame */
     SE_UNLOCK();
     /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
      * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
@@ -1089,7 +1176,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * point. The rewind timeline simply omits halt frames; running frames still capture.
      * Also skipped entirely while the client has rewind switched off (REW, v18): the full
      * savestate is the most expensive thing on this thread and nothing would read it. */
-    if (!sPaused && sRewindWanted) SeStateCapture(sFrameNo);
+    if (!SeAtLoad(&sPaused) && sRewindWanted) SeStateCapture(sFrameNo);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1107,16 +1194,47 @@ static int SeRecv(HANDLE h, void* d, size_t n)
     return 0;
 }
 #else
+/* A peer that closes mid-reply makes send() raise SIGPIPE, whose default action ends the whole
+ * process -- the emulator, not just this connection. Linux suppresses it per call with
+ * MSG_NOSIGNAL; the BSDs/macOS have no such flag and do it per socket (SO_NOSIGPIPE, set where a
+ * connection is accepted -- see SeQuietSocket). Either way a dead peer becomes an ordinary
+ * send() error, which every caller already treats as "drop this client". */
+#if defined(MSG_NOSIGNAL)
+#define SE_SEND_FLAGS MSG_NOSIGNAL
+#else
+#define SE_SEND_FLAGS 0
+#endif
+static void SeQuietSocket(int fd)
+{
+#if defined(SO_NOSIGPIPE)
+    int on = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on));
+#else
+    (void)fd;
+#endif
+}
 static int SeSend(int fd, const void* d, size_t n)
 {
     const unsigned char* p = (const unsigned char*)d;
-    while (n) { ssize_t w = send(fd, p, n, 0); if (w <= 0) return -1; p += w; n -= (size_t)w; }
+    while (n)
+    {
+        ssize_t w = send(fd, p, n, SE_SEND_FLAGS);
+        if (w < 0 && errno == EINTR) continue;
+        if (w <= 0) return -1;
+        p += w; n -= (size_t)w;
+    }
     return 0;
 }
 static int SeRecv(int fd, void* d, size_t n)
 {
     unsigned char* p = (unsigned char*)d;
-    while (n) { ssize_t r = recv(fd, p, n, 0); if (r <= 0) return -1; p += r; n -= (size_t)r; }
+    while (n)
+    {
+        ssize_t r = recv(fd, p, n, 0);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) return -1;
+        p += r; n -= (size_t)r;
+    }
     return 0;
 }
 #endif
@@ -1215,17 +1333,17 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
          * stepping clears any latched breakpoint stop. */
         if (memcmp(req, SE_LIVE_VERB_PAUSE, SE_LIVE_VERB_LEN) == 0)
         {
-            SE_LOCK(); sPaused = 1; sStepBudget = 0; SE_UNLOCK();
+            SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_RESUME, SE_LIVE_VERB_LEN) == 0)
         {
-            SE_LOCK(); sPaused = 0; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+            SE_LOCK(); SeAtStore(&sPaused, 0); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_STEP, SE_LIVE_VERB_LEN) == 0)
         {
             SE_LOCK();
-            sPaused = 1;
-            sStepBudget += (arg > 0) ? (int)arg : 1;
+            SeAtStore(&sPaused, 1);
+            SeGrantSteps((arg > 0) ? (int)arg : 1);
             sStopReason = SE_LIVE_STOP_NONE;
             SE_UNLOCK();
         }
@@ -1251,8 +1369,8 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             SE_LOCK();
             sInsnStepPending = (arg > 0) ? (int)arg : 1;
             sInsnStepCpu = sStopCpu;
-            sPaused = 0;
-            sStepBudget = 0;
+            SeAtStore(&sPaused, 0);
+            SeCancelSteps();
             sStopReason = SE_LIVE_STOP_NONE;
             SE_UNLOCK();
         }
@@ -1335,7 +1453,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             {
                 if (SeRecv(cl, sLoadBuf, payload) != 0) return;
                 SE_SLOCK(); sLoadLen = payload; SE_SUNLOCK();
-                SE_LOCK(); sPaused = 1; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
                 sLoadPending = 1;   /* the gate picks this up on the emulate thread */
             }
         }
@@ -1345,7 +1463,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * on the emulate thread. Pause first so nothing advances underneath the load. */
             if (sEmuSlotLoad && arg < SE_LIVE_EMU_SLOTS)
             {
-                SE_LOCK(); sPaused = 1; sStepBudget = 0; sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
+                SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); sStopReason = SE_LIVE_STOP_NONE; SE_UNLOCK();
                 sEmuLoadPending = (int)arg + 1;
             }
             else
@@ -1397,7 +1515,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             memcpy(snap, sRing[slot], sizeof(SeFrame));
             served = sRingFrame[slot];
         }
-        SeWr32(ctl, (unsigned int)(sPaused ? 1 : 0));
+        SeWr32(ctl, (unsigned int)(SeAtLoad(&sPaused) ? 1 : 0));
         SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
         SeWr32(ctl + 12, sStopReason);
@@ -1405,6 +1523,8 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 20, sStopPc);
         SeWr32(ctl + 24, sRestoreDone);
         SeWr32(ctl + 28, sRestoreFailed);
+        SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
+        SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
         SE_UNLOCK();
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];
@@ -1692,6 +1812,33 @@ static DWORD WINAPI SeServerThread(LPVOID arg)
     return 0;
 }
 #else
+/* Record the client a server thread is serving. If shutdown began between accept() and here
+ * (sRunning already clear), nobody will interrupt this client, so interrupt it now. */
+static void SeRegisterClient(int which, int fd)
+{
+    pthread_mutex_lock(&sConnLock);
+    sActiveFd[which] = fd;
+    if (!sRunning) shutdown(fd, SHUT_RDWR);
+    pthread_mutex_unlock(&sConnLock);
+}
+static void SeUnregisterClient(int which)
+{
+    pthread_mutex_lock(&sConnLock);
+    sActiveFd[which] = -1;
+    pthread_mutex_unlock(&sConnLock);
+}
+/* Wake any server thread blocked on a client socket (shutdown makes its recv/send return). */
+static void SeInterruptClients(void)
+{
+    int i;
+    pthread_mutex_lock(&sConnLock);
+    for (i = 0; i < 2; ++i)
+    {
+        if (sActiveFd[i] >= 0) shutdown(sActiveFd[i], SHUT_RDWR);
+    }
+    pthread_mutex_unlock(&sConnLock);
+}
+
 static void* SeServerThread(void* arg)
 {
     SeFrame* snap = (SeFrame*)malloc(sizeof(SeFrame));
@@ -1712,8 +1859,11 @@ static void* SeServerThread(void* arg)
     {
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
+        SeQuietSocket(cl);
+        SeRegisterClient(0, cl);
         SeServeClient(cl, snap);
         SeOnClientDisconnect();
+        SeUnregisterClient(0);
         close(cl);
     }
     close(srv);
@@ -1747,8 +1897,11 @@ static void* SeTcpServerThread(void* arg)
     {
         int cl = accept(srv, NULL, NULL);
         if (cl < 0) break;   /* closed on deinit */
+        SeQuietSocket(cl);
+        SeRegisterClient(1, cl);
         SeServeClient(cl, snap);
         SeOnClientDisconnect();
+        SeUnregisterClient(1);
         close(cl);
     }
     close(srv);
@@ -1785,7 +1938,7 @@ int SeExportInit(void)
         }
     }
     sRingWrite = 0;
-    sPaused = 0; sStepBudget = 0; sFrameNo = 0; sClients = 0; sRewindWanted = 1;
+    SeAtStore(&sPaused, 0); SeCancelSteps(); sFrameNo = 0; sClients = 0; sRewindWanted = 1;
     sStopReason = SE_LIVE_STOP_NONE; sStopCpu = 0; sStopPc = 0;
     /* Savestate rewind (v16): the worker + buffer pool are created lazily when a save hook is
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
@@ -1852,6 +2005,7 @@ void SeExportDeinit(void)
     if (sStateWorkerStarted) { pthread_join(sStateWorker, NULL); }
     if (sListenFd >= 0) { shutdown(sListenFd, SHUT_RDWR); close(sListenFd); sListenFd = -1; }
     if (sTcpListenFd >= 0) { shutdown(sTcpListenFd, SHUT_RDWR); close(sTcpListenFd); sTcpListenFd = -1; }
+    SeInterruptClients();   /* a client that stopped answering would otherwise pin the joins below */
     pthread_join(sThread, NULL);
     if (sTcpThreadStarted) { pthread_join(sTcpThread, NULL); sTcpThreadStarted = 0; }
     SeStateShutdown();
