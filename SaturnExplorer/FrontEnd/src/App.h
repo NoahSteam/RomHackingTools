@@ -312,7 +312,8 @@ private:
     int                      mRestoreOutstanding = 0;   // load requests the emulator has not yet resolved
     uint32_t                 mRestoreBaseDone = 0, mRestoreBaseFailed = 0;   // counters when the first was sent
     float                    mRestoreWaitSeconds = 0.0f;
-    float                    mEditHoldSeconds = 0.0f;   // writes refused until this runs out (VoidEditTarget)
+    bool                     mRestoreTimedOut = false;      // reported once; edits stay refused
+    bool                     mRestoreUnconfirmable = false; // a load went to an emulator that cannot confirm it
     SimpleExpressionResolver mExprResolver;
     WatchPanel               mWatchPanel;
     BreakpointManager        mBreakpoints;
@@ -440,15 +441,22 @@ private:
     // The thing the data panels are editing is about to change underneath them (the transport
     // picked another frame, a slot is being restored). Voids every in-flight edit now and
     // refuses writes for the rest of this frame, because the panels drawn after this point
-    // still hold the old context. 'holdSeconds' keeps them refused longer for an asynchronous
-    // restore: the emulator acknowledges nothing, so a poke sent before it lands is lost or
-    // lands on the restored state.
+    // still hold the old context.
     void VoidEditTarget();
-    // A state load was just accepted by the driver (rewind "Play from here", a SE slot, an
-    // emulator slot). The emulator applies it later and says so in the control block (protocol
-    // v19), so edits stay refused until the counters show it applied *and* a capture newer than
-    // that has landed -- never merely because time passed. Failure and silence are reported.
-    void BeginRestoreWait();
+    // State loads (rewind "Play from here", a SE slot, an emulator slot) are applied by the
+    // emulator later, and it says so in the control block (protocol v19). Edits stay refused
+    // until the counters show the load applied *and* a capture newer than that has landed --
+    // never because time passed. Silence is reported but does not unlock: the emulator may still
+    // apply the load, and a poke before it does is lost or lands on the restored state. What
+    // does unlock is a state the app knows: the load resolving, another load resolving it, or
+    // the connection being replaced or closed.
+    //
+    // The baseline must be sampled BEFORE the request is submitted: the emulator and the poll
+    // thread can finish it before the submitting call returns, and a baseline taken after would
+    // count that completion as already seen and wait for one that never comes.
+    struct RestoreBaseline { bool signal = false; uint32_t done = 0, failed = 0; };
+    RestoreBaseline SampleRestoreBaseline() const;
+    void BeginRestoreWait(const RestoreBaseline& before);
     void ResolveRestoreWait(uint32_t done, uint32_t failed);
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state

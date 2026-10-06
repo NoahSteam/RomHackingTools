@@ -460,8 +460,8 @@ void App::CloseData(bool cancelAutoConnect)
         mContext = nullptr;
     }
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
-    mEditHoldSeconds = 0.0f;
     mRestoreOutstanding = 0;
+    mRestoreTimedOut = mRestoreUnconfirmable = false;
     mbHasData = false;
     mbLiveSource = false;
     mbPaused = false;
@@ -1078,23 +1078,22 @@ void App::BuildUI(IPlatform& platform)
     }
     // Editing a scrubbed frame is durable only when the server can rewind (the edits replay on
     // Play). Without rewind, make the Memory panel read-only so no-op edits aren't offered.
-    mEditHoldSeconds = std::max(0.0f, mEditHoldSeconds - ImGui::GetIO().DeltaTime);
-    if (mRestoreOutstanding > 0)
+    if (mRestoreOutstanding > 0 && !mRestoreTimedOut)
     {
-        // The emulator answers a load through the capture stream; if it never does (connection
-        // lost, server that cannot apply it, a refused request that was not counted), say so and
-        // stop refusing edits rather than lock the panels for good.
+        // The emulator answers a load through the capture stream. Silence is reported, once, but
+        // does NOT end the wait: it may still apply the load, and writes made before it does are
+        // lost or land on the restored state. Editing returns when the load resolves, another
+        // load resolves it, or the connection is replaced or closed.
         mRestoreWaitSeconds += ImGui::GetIO().DeltaTime;
         if (mRestoreWaitSeconds > 10.0f)
         {
-            mRestoreOutstanding = 0;
-            mMemBackend.NoteSourceChanged();
-            mLog.Error("The emulator did not confirm the state load within 10 s. What is shown "
-                       "may not be the loaded state; editing is available again.");
+            mRestoreTimedOut = true;
+            mLog.Error("The emulator has not confirmed the state load after 10 s. Editing stays "
+                       "off until it does; reconnecting or loading a state again clears it.");
         }
     }
-    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mEditHoldSeconds > 0.0f ||
-                            mRestoreOutstanding > 0);
+    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mRestoreOutstanding > 0 ||
+                            mRestoreUnconfirmable);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 
@@ -1433,6 +1432,7 @@ void App::DrawTransportBar()
         if (IconButton("##tp_play", Ico::Play, "Play"))
         {
             bool rewound = false;
+            RestoreBaseline pendingBaseline;
             // Rewind "Play from here": if scrubbed to a resumable past frame on a rewind-capable
             // server, restore that frame's full savestate, apply the edits made while scrubbed,
             // and re-simulate forward from it — discarding the (now-stale) recorded future.
@@ -1445,6 +1445,7 @@ void App::DrawTransportBar()
                 {
                     const uint64_t frameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex));
                     const std::vector<uint8_t> edits = BuildEditBlob();
+                    const RestoreBaseline before = SampleRestoreBaseline();
                     if (se_load_state(ctl, frameNo, state.data(), state.size(),
                                       edits.data(), edits.size()) == SE_OK)
                     {
@@ -1452,6 +1453,7 @@ void App::DrawTransportBar()
                         mPendingEdits.clear();
                         mPendingEditsFrame = -1;
                         rewound = true;
+                        pendingBaseline = before;
                     }
                 }
             }
@@ -1462,7 +1464,7 @@ void App::DrawTransportBar()
             mbScrubbing = false;
             mbPaused = false;
             VoidEditTarget();
-            if (rewound) BeginRestoreWait();   // the emulator applies the rewind asynchronously
+            if (rewound) BeginRestoreWait(pendingBaseline);   // the emulator applies it asynchronously
         }
     }
     else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
@@ -6117,6 +6119,7 @@ void App::DoLoadState(int slot)
     // restored state -- the staged pokes belong to a different frame's rewind. Anything
     // recorded after this moment is a future that never happened now, so the ring and the slot
     // tracker both start over from the next block.
+    const RestoreBaseline before = SampleRestoreBaseline();
     if (se_load_state(ctl, frame, image.data(), image.size(), nullptr, 0) != SE_OK)
     {
         mStateStatus = "The emulator refused the save state.";
@@ -6124,7 +6127,7 @@ void App::DoLoadState(int slot)
         return;
     }
     DropRecordedHistory();
-    BeginRestoreWait();
+    BeginRestoreWait(before);
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Loaded slot %d (frame %llu).", slot,
                   static_cast<unsigned long long>(frame));
@@ -6152,7 +6155,7 @@ void App::AdoptNewEmulatorInstance()
 
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
     mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
-    mEditHoldSeconds = 0.0f;
+    mRestoreTimedOut = mRestoreUnconfirmable = false;   // a new process: the load is moot
     if (mScrubContext)
     {
         se_destroy(mScrubContext);   // holds a decompressed frame of the previous run
@@ -6200,27 +6203,34 @@ void App::VoidEditTarget()
     mMemBackend.SetReadOnly(true);     // and nothing commits to the context still on screen
 }
 
-void App::BeginRestoreWait()
+App::RestoreBaseline App::SampleRestoreBaseline() const
 {
-    uint32_t done = 0, failed = 0;
-    const bool signal = se_live_restore_state(&mDataSource, &done, &failed) != 0;
-    if (!signal)
+    RestoreBaseline b;
+    b.signal = se_live_restore_state(&mDataSource, &b.done, &b.failed) != 0;
+    return b;
+}
+
+void App::BeginRestoreWait(const RestoreBaseline& before)
+{
+    VoidEditTarget();
+    if (!before.signal)
     {
-        // A pre-v19 emulator reports nothing back. A timed hold is all that is left, and it is
-        // only a guess -- said in the Log so it is not mistaken for confirmation.
-        mEditHoldSeconds = std::max(mEditHoldSeconds, 1.0f);
-        mLog.Warn("This emulator build cannot confirm a state load; editing is held for 1 s "
-                  "and the loaded state is not verified.");
+        // An emulator older than protocol v19 reports nothing back, so there is no way to know
+        // when (or whether) the load lands. Guessing from elapsed time would let an edit hit the
+        // old data, so editing stays off until the connection is replaced -- said plainly.
+        mRestoreUnconfirmable = true;
+        mLog.Warn("This emulator build cannot confirm a state load, so editing is turned off "
+                  "until it is restarted with a current build or the connection is re-established.");
         return;
     }
     if (mRestoreOutstanding == 0)
     {
-        mRestoreBaseDone = done;
-        mRestoreBaseFailed = failed;
+        mRestoreBaseDone = before.done;
+        mRestoreBaseFailed = before.failed;
         mRestoreWaitSeconds = 0.0f;
+        mRestoreTimedOut = false;
     }
     ++mRestoreOutstanding;
-    VoidEditTarget();
 }
 
 void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
@@ -6231,6 +6241,11 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
     if (refused)
         mLog.Error("The emulator could not apply the state load; its state is unchanged.");
     mRestoreOutstanding = 0;
+    if (mRestoreTimedOut)
+    {
+        mRestoreTimedOut = false;
+        mLog.Info("The emulator has now confirmed the state load; editing is available again.");
+    }
     mMemBackend.NoteSourceChanged();   // edits begun against the pre-load data are void
 }
 
@@ -6258,9 +6273,10 @@ void App::DoLoadEmulatorState(int slot)
     // where it lands -- no frame number, unlike a rewind. Everything recorded is therefore
     // a future that may never have happened: drop it rather than leave a ring that claims
     // frames the emulator is no longer playing.
+    const RestoreBaseline before = SampleRestoreBaseline();
     se_live_emu_load_slot(&mDataSource, static_cast<uint32_t>(slot));
     DropRecordedHistory();
-    BeginRestoreWait();
+    BeginRestoreWait(before);
     char msg[96];
     std::snprintf(msg, sizeof(msg), "Asked the emulator to load its slot %d.", slot);
     mStateStatus = msg;
