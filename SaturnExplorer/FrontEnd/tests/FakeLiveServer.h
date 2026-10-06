@@ -32,6 +32,10 @@ struct Reply
     uint64_t frame = 1;          // the frame being served (control block)
     uint32_t latestFrame = 0;    // ring head; 0 = same as 'frame'
     uint32_t stepPending = 0;
+    uint32_t stopReason = 0;     // SE_LIVE_STOP_*
+    uint32_t stopCpu = 0;
+    uint32_t stopPc = 0;
+    uint32_t stopSeq = 0;        // v21
     uint32_t paused = 0;
     uint32_t restoreDone = 0;
     uint32_t restoreFailed = 0;
@@ -51,7 +55,7 @@ inline std::vector<uint8_t> Build(const Reply& r)
     o.push_back(SE_LIVE_MAGIC0); o.push_back(SE_LIVE_MAGIC1);
     o.push_back(SE_LIVE_MAGIC2); o.push_back(SE_LIVE_MAGIC3);
     Put32(o, r.version);
-    const uint32_t ct = r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u);
+    const uint32_t ct = r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
     const uint32_t vs = SE_LIVE_VDP2_STRUCT_LEN;
     const uint32_t vr = SE_LIVE_VDP1_REGS_LEN;
     // Section lengths: v1 v2 cram vdp2struct vdp1regs wramLow wramHigh [fb] ctl [sh2]
@@ -68,13 +72,14 @@ inline std::vector<uint8_t> Build(const Reply& r)
     Put32(o, r.paused);
     Put32(o, static_cast<uint32_t>(r.frame & 0xFFFFFFFFu));
     Put32(o, static_cast<uint32_t>(r.frame >> 32));
-    Put32(o, 0); Put32(o, 0); Put32(o, 0);                       // stop reason / cpu / pc
+    Put32(o, r.stopReason); Put32(o, r.stopCpu); Put32(o, r.stopPc);
     if (ct >= 32) { Put32(o, r.restoreDone); Put32(o, r.restoreFailed); }
     if (ct >= 40)
     {
         Put32(o, r.latestFrame ? r.latestFrame : static_cast<uint32_t>(r.frame));
         Put32(o, r.stepPending);
     }
+    if (ct >= 44) Put32(o, r.stopSeq);
     if (r.version >= 8)
     {
         Put32(o, r.events);

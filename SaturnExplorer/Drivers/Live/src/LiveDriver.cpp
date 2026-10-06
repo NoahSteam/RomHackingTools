@@ -53,7 +53,9 @@ struct LiveCallStacks
 };
 
 // Why the emulator last stopped (control block, v5+): reason / cpu / pc of a breakpoint hit.
-struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; };
+// 'seq' (v21+) numbers the halt, so a re-report of a stop already seen is told from a new halt at
+// the same PC; 'hasSeq' says the server supplied one.
+struct StopInfo { uint32_t reason = 0; uint32_t cpu = 0; uint32_t pc = 0; uint32_t seq = 0; bool hasSeq = false; };
 
 /* ---- One decoded, core-ready frame. All buffers are Saturn-native big-endian
        and register images are hardware-offset (directly usable by the core). ---- */
@@ -1051,6 +1053,11 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outStop.reason = Rd32LE(ctl.data() + 12);
         outStop.cpu    = Rd32LE(ctl.data() + 16);
         outStop.pc     = Rd32LE(ctl.data() + 20);
+    }
+    if (ct >= 44)
+    {
+        outStop.seq    = Rd32LE(ctl.data() + 40);
+        outStop.hasSeq = true;
     }
 
     // SH-2 state (v5+): master then slave, each a 92-byte sh2regs_struct.
@@ -2102,6 +2109,18 @@ extern "C" uint32_t se_live_poll_log(const se_data_source* ds, char* out,
             ++n;
         }
         return n;
+    });
+}
+
+extern "C" int se_live_get_stop_seq(const se_data_source* ds, uint32_t* seq)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        SnapshotPtr snap = DisplayedSnapshot(St(ds->user));
+        const StopInfo stop = snap ? snap->stop : StopInfo{};
+        if (seq) { *seq = stop.seq; }
+        return stop.hasSeq ? 1 : 0;
     });
 }
 

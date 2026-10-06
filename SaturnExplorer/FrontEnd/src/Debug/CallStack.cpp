@@ -279,4 +279,45 @@ void CallStack::Select(int cpu, int frame)
     if (frame >= 0 && frame < static_cast<int>(mFrames[idx].size())) mSelected[idx] = frame;
 }
 
+StepOutTarget ChooseStepOutTarget(const std::vector<CallStackFrame>& frames, const se_sh2_regs& regs)
+{
+    StepOutTarget t;
+    if (frames.empty())
+    {
+        t.why = "there is no call stack for this CPU";
+        return t;
+    }
+    const CallStackFrame& f = frames.front();   // innermost: the frame the CPU is executing in
+    if (f.confidence != FrameConfidence::Confirmed)
+    {
+        t.why = "no recorded call covers this frame, and PR is overwritten by any call the function "
+                "makes, so its return address cannot be told from the stack alone";
+        return t;
+    }
+    if (!IsPlausibleCodeAddress(f.returnAddress))
+    {
+        t.why = "the recorded return address is not in code";
+        return t;
+    }
+    if (f.returnAddress == regs.pc)
+    {
+        t.why = "the recorded return address is the current instruction";
+        return t;
+    }
+    // The callee runs below the stack the call was made at, give or take its delay slot: the slot of
+    // a bsr/jsr runs before the callee does and may push or pop, so the callee's R15 is not exactly
+    // bounded by the recorded one. The slack is for that; a recording of some other stack is far
+    // outside it.
+    constexpr uint32_t kDelaySlotSlack = 0x40;
+    if (f.stackPointer != 0 && regs.r[15] > f.stackPointer + kDelaySlotSlack)
+    {
+        t.why = "the stack pointer is above the stack the recorded call was made at "
+                "(the recording does not match this frame)";
+        return t;
+    }
+    t.ok            = true;
+    t.returnAddress = f.returnAddress;
+    return t;
+}
+
 }  // namespace sfe

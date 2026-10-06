@@ -310,6 +310,14 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerAccessLogTests COMMAND SaturnExplorerAccessLogTests)
 
+    add_executable(SaturnExplorerExecutionActionsTests
+        FrontEnd/tests/ExecutionActionsTests.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
+    )
+    target_include_directories(SaturnExplorerExecutionActionsTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerExecutionActionsTests COMMAND SaturnExplorerExecutionActionsTests)
+
     add_executable(SaturnExplorerStepHaltMachineTests
         FrontEnd/tests/StepHaltMachineTests.cpp
         FrontEnd/src/Debug/StepHaltMachine.cpp
@@ -591,6 +599,12 @@ if(BUILD_TESTING)
         PRIVATE Integration/Common Integration/Mednafen)
     target_link_libraries(SaturnExplorerShadowCallStackTests PRIVATE Threads::Threads)
     add_test(NAME SaturnExplorerShadowCallStackTests COMMAND SaturnExplorerShadowCallStackTests)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(NAME SaturnExplorerMednafenHaltOrdering
+                 COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
+                         ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -689,8 +703,21 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLiveExporterRobustnessTests
                  COMMAND SaturnExplorerLiveExporterRobustnessTests)
+        # The halt handshake (lost stops, stop sequence, instruction-step retirement). Built with the
+        # halt gate spinning so the emulate thread is at the gate the instant the server releases it:
+        # the race under test is a few hundred nanoseconds wide, and the production 2 ms sleep
+        # makes it effectively unreachable.
+        add_executable(SaturnExplorerLiveHaltRaceTests
+            FrontEnd/tests/LiveHaltRaceTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLiveHaltRaceTests PRIVATE SE_EXPORT_SPIN_GATE=1)
+        target_include_directories(SaturnExplorerLiveHaltRaceTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLiveHaltRaceTests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerLiveHaltRaceTests COMMAND SaturnExplorerLiveHaltRaceTests)
         set_tests_properties(SaturnExplorerLiveRestoreSignalTests SaturnExplorerExportAttachTests
-                             SaturnExplorerLiveExporterRobustnessTests
+                             SaturnExplorerLiveExporterRobustnessTests SaturnExplorerLiveHaltRaceTests
                              PROPERTIES RESOURCE_LOCK live_tap_socket)
     endif()
 endif()

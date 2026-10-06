@@ -32,9 +32,30 @@ static void Check(int condition, const char* expression, int line)
 #define OP_JSR(n)     ((unsigned short)(0x400Bu | ((n) << 8)))
 #define OP_TRAPA(i)   ((unsigned short)(0xC300u | ((i) & 0xFFu)))
 
+#define OP_NOP        0x0009u
+
+/* One presentation of the per-instruction hook, as the emulator makes it: BEFORE the instruction
+ * runs. Mirrors SeMdfnTrackFlow minus the register reads. */
+static void Present(int cpu, unsigned int pc, unsigned short op, unsigned int rn, unsigned int sp,
+                    unsigned int handler)
+{
+    SeFlowKind kind;
+    if (SeMdfnFlowAdvance(cpu, pc)) return;
+    kind = SeMdfnClassifyFlow(op);
+    if (kind != SeFlowNone) SeMdfnFlowDefer(cpu, pc, kind, op, rn, sp, handler);
+}
+
+#define LANDING 0x0E000000u   /* wherever execution lands next: no relation to the flow instruction */
+
+/* A flow instruction that has COMPLETED: presented, its delay slot presented (the instruction
+ * after it, a nop; trapa has none), and then the first instruction of wherever it went. The
+ * recorded stack is only up to date once that last presentation has been made, which is the point
+ * of deferring it -- the tests that care about the in-between states use Present directly. */
 static void Step(int cpu, unsigned int pc, unsigned short op, unsigned int rn, unsigned int sp)
 {
-    SeMdfnApplyFlow(cpu, SeMdfnClassifyFlow(op), pc, op, rn, sp, 0);
+    Present(cpu, pc, op, rn, sp, 0);
+    if (SeMdfnClassifyFlow(op) != SeFlowTrap) Present(cpu, pc + 2, OP_NOP, 0, sp, 0);
+    Present(cpu, LANDING, OP_NOP, 0, sp, 0);
 }
 
 /* An interrupt taken at R15 = 'sp'. Entry is invisible to the hook — the hardware pushes
@@ -271,6 +292,311 @@ static void TestOverflowDoesNotEatStoredFrames(void)
     CHECK(At(0).callSite == CALLSITE_AT(SE_CALLSTACK_CAP - 2u));
 }
 
+/* ---- flow completes when it completes -------------------------------------------------- */
+
+static unsigned int TopRet(int cpu)
+{
+    unsigned int n = Snapshot(cpu);
+    Frame f;
+    if (n == 0) return 0;
+    f = At(0);
+    return f.ret;
+}
+
+/* Reproduces the failure: main calls A, A calls B, and the hook halts at B's `rts`. The hook runs
+ * before the instruction does and `rts` has a delay slot, so B is still executing -- but applying the
+ * pop at the `rts` hook had already removed it from the recorded stack, and Step Out then ran to A's
+ * return into main instead of B's return into A. */
+static void TestAReturnIsNotAppliedBeforeItCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A  (returns to 0x06001004) */
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);        /* A calls B     (returns to 0x06002004) */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);                          /* innermost: B, returning into A */
+
+    Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);         /* the hook for B's rts: a breakpoint here */
+    CHECK(Snapshot(0) == 2u);                                 /* B has not returned: it is still there */
+    CHECK(TopRet(0) == 0x06002004u);                          /* so Step Out would target A, not main */
+
+    Present(0, 0x06003012, OP_NOP, 0, 0x060FFEE0, 0);         /* its delay slot, about to run */
+    CHECK(Snapshot(0) == 2u);                                 /* still B's: a halt on the slot is in B */
+    CHECK(TopRet(0) == 0x06002004u);
+
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return has landed in A */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);                          /* now the innermost frame is A's */
+}
+
+/* ...and a call does not push its callee until it has been entered: a breakpoint on the `bsr` itself,
+ * or on its delay slot, is still in the caller. */
+static void TestACallIsNotAppliedBeforeItCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A */
+    CHECK(Snapshot(0) == 1u);
+
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* A is about to call B: breakpoint on the bsr */
+    CHECK(Snapshot(0) == 1u);                                 /* B has not been entered */
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);         /* ...nor in the delay slot */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);
+
+    Present(0, 0x06002204, OP_NOP, 0, 0x060FFEEC, 0);         /* B's first instruction (bsr target) */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);
+}
+
+/* A bus-stalled CPU presents the same instruction again and again; none of those may complete the
+ * flow early or apply it twice. */
+static void TestStalledPresentationsDoNotCompleteOrRepeatTheFlow(void)
+{
+    int i;
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);
+    for (i = 0; i < 50; ++i) Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);   /* stalled on the rts */
+    CHECK(Snapshot(0) == 2u);
+    for (i = 0; i < 50; ++i) Present(0, 0x06003012, OP_NOP, 0, 0x060FFEE0, 0);   /* stalled on the slot */
+    CHECK(Snapshot(0) == 2u);
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);                                 /* popped once, not 51 times */
+}
+
+/* `trapa` has no delay slot: it enters its handler at once, so it completes at the next instruction. */
+static void TestTrapaCompletesAtTheNextInstruction(void)
+{
+    SeExportResetCallStack(0);
+    Present(0, 0x06001100, OP_TRAPA(0x20), 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 0u);                                 /* the trap has not taken effect yet */
+    Present(0, 0x06000700, OP_NOP, 0, 0x060FFEE8, 0);         /* the handler's first instruction */
+    CHECK(Snapshot(0) == 1u);
+}
+
+/* With every instruction presented, a PC that is neither the slot nor a repeat is where the transfer
+ * landed after something invisible ran in between (an interrupt is taken before the target): the
+ * transfer completes there. */
+static void TestAMissedSlotStillCompletes(void)
+{
+    SeExportResetCallStack(0);
+    Present(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00, 0);
+    CHECK(Snapshot(0) == 0u);
+    Present(0, 0x06005000, OP_NOP, 0, 0x060FFEF0, 0);          /* an unrelated, later PC */
+    CHECK(Snapshot(0) == 1u);
+}
+
+/* A run that is not watched. Step Over from a breakpoint on A's `bsr` runs with no per-instruction
+ * callback until the return address is reached, so B ran and returned without being presented. The
+ * held call must not be applied at that return breakpoint: it would record B as running while the CPU
+ * is back in A (Step Out then used B's stale return address). */
+static void TestAnUnwatchedRunDropsAHeldCall(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);        /* main calls A */
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* breakpoint on A's bsr to B */
+    SeMednafenHookMode(0);                                    /* Step Over: nothing is presented now */
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return breakpoint, back in A */
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);                          /* A is the innermost frame, not B */
+
+    /* Same when the halt was in the delay slot. */
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);
+    SeMednafenHookMode(0);
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);
+
+    /* ...and a trap, which also runs its handler unseen. */
+    SeExportResetCallStack(0);
+    Present(0, 0x06001100, OP_TRAPA(0x20), 0, 0x060FFEF0, 0);
+    SeMednafenHookMode(0);
+    Present(0, 0x06001102, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 0u);
+}
+
+/* A held return is certain to complete once the CPU runs on, so it is applied when the run stops being
+ * watched -- dropping it would leave the frame it ends on the stack. Applied once, not again later. */
+static void TestAnUnwatchedRunStillCompletesAHeldReturn(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Step(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0);
+    CHECK(Snapshot(0) == 2u);
+    Present(0, 0x06003010, OP_RTS, 0, 0x060FFEE0, 0);         /* breakpoint on B's rts, then Step Out */
+    CHECK(Snapshot(0) == 2u);
+    SeMednafenHookMode(0);
+    CHECK(Snapshot(0) == 1u);                                 /* B is gone: it is returning */
+    Present(0, 0x06002004, OP_NOP, 0, 0x060FFEF0, 0);         /* the return breakpoint, in A */
+    Present(0, 0x06002006, OP_NOP, 0, 0x060FFEF0, 0);
+    CHECK(Snapshot(0) == 1u);
+    CHECK(TopRet(0) == 0x06001004u);
+}
+
+/* A watched run (continuing into a step, or tracepoints armed) keeps what is held. */
+static void TestAWatchedRunKeepsAHeldCall(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);  /* halted on A's bsr, then Step Into */
+    SeMednafenHookMode(1);
+    Present(0, 0x06002002, OP_NOP, 0, 0x060FFEF0, 0);
+    Present(0, 0x06002204, OP_NOP, 0, 0x060FFEEC, 0);         /* B's first instruction */
+    CHECK(Snapshot(0) == 2u);
+    CHECK(TopRet(0) == 0x06002004u);
+}
+
+/* A savestate load replaces the machine: a flow instruction that was in flight on the old timeline
+ * must not be applied to the new one. */
+static void TestAResetDropsWhatWasInFlight(void)
+{
+    SeExportResetCallStack(0);
+    Step(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00);
+    Present(0, 0x06002000, OP_BSR(0x100), 0, 0x060FFEF0, 0);   /* in flight */
+    SeExportResetCallStack(0);                                 /* the restore */
+    Present(0, 0x06009000, OP_NOP, 0, 0x060FFF00, 0);
+    CHECK(Snapshot(0) == 0u);                                  /* nothing from the old timeline */
+}
+
+/* The two CPUs' flows are independent. */
+static void TestPendingFlowIsPerCpu(void)
+{
+    SeExportResetCallStack(0);
+    SeExportResetCallStack(1);
+    Present(0, 0x06001000, OP_BSR(0x100), 0, 0x060FFF00, 0);   /* master mid-call */
+    Present(1, 0x06002000, OP_NOP, 0, 0x060EFF00, 0);          /* the slave runs on meanwhile */
+    Present(1, 0x06002002, OP_NOP, 0, 0x060EFF00, 0);
+    CHECK(Snapshot(0) == 0u);                                  /* nothing completed the master's call */
+    Present(0, 0x06001002, OP_NOP, 0, 0x060FFF00, 0);
+    Present(0, 0x06001204, OP_NOP, 0, 0x060FFEFC, 0);
+    CHECK(Snapshot(0) == 1u);
+    CHECK(Snapshot(1) == 0u);
+}
+
+/* ---- tracepoint repeat policy (v21) --------------------------------------------------- */
+
+/* Install up to two tracepoints at consecutive addresses, as the server's TRC verb would, and let
+ * the CPU side pick the new set up (what its first per-instruction call after an install does). */
+static void InstallTps(unsigned int n, const unsigned int* ids, const unsigned int* flags)
+{
+    unsigned char d[2 * SE_LIVE_TRACE_DESC_LEN];
+    unsigned int i;
+    int k;
+    for (i = 0; i < n; ++i)
+    {
+        const unsigned int words[4] = { ids[i], 0u, 0x06001000u + 2u * i, flags[i] };
+        for (k = 0; k < 4; ++k)
+        {
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 0] = (unsigned char)(words[k]);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 1] = (unsigned char)(words[k] >> 8);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 2] = (unsigned char)(words[k] >> 16);
+            d[i * SE_LIVE_TRACE_DESC_LEN + k * 4 + 3] = (unsigned char)(words[k] >> 24);
+        }
+    }
+    SeMdfnSetTracepoints(n, d);
+}
+
+static void InstallTp(unsigned int id, unsigned int flags) { InstallTps(1, &id, &flags); }
+
+/* How many of 'n' executions of tracepoint 'idx' fire, and on which of them. */
+static unsigned int FiresAt(unsigned int idx, unsigned int n, unsigned int* which, unsigned int whichCap)
+{
+    unsigned int i, fired = 0;
+    for (i = 1; i <= n; ++i)
+    {
+        if (SeMdfnTpFires(idx))
+        {
+            if (fired < whichCap) which[fired] = i;
+            ++fired;
+        }
+    }
+    return fired;
+}
+static unsigned int Fires(unsigned int n, unsigned int* which, unsigned int whichCap)
+{
+    return FiresAt(0, n, which, whichCap);
+}
+
+static void TestTracepointRepeatPolicy(void)
+{
+    unsigned int w[8] = { 0 };
+
+    InstallTp(1, SE_LIVE_TP_ENABLED);
+    CHECK(Fires(10, w, 8) == 10);                      /* every time */
+
+    InstallTp(2, SE_LIVE_TP_ENABLED | SE_LIVE_TP_ONCE);
+    CHECK(Fires(10, w, 8) == 1 && w[0] == 1);          /* once: the first execution, then never */
+
+    InstallTp(3, SE_LIVE_TP_ENABLED | (3u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(10, w, 8) == 3 && w[0] == 3 && w[1] == 6 && w[2] == 9);   /* every 3rd */
+
+    InstallTp(4, SE_LIVE_TP_ENABLED | (1u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(5, w, 8) == 5);                        /* every 1st is every time */
+
+    /* A client-side condition: the emulator cannot count, so every execution is forwarded even
+     * when a repeat policy is also set -- the client counts the ones whose condition held. */
+    InstallTp(5, SE_LIVE_TP_ENABLED | SE_LIVE_TP_GUARDED | SE_LIVE_TP_ONCE);
+    CHECK(Fires(10, w, 8) == 10);
+    InstallTp(6, SE_LIVE_TP_ENABLED | SE_LIVE_TP_GUARDED | (4u << SE_LIVE_TP_EVERY_SHIFT));
+    CHECK(Fires(10, w, 8) == 10);
+
+    InstallTp(7, 0);                                   /* disabled never fires */
+    CHECK(Fires(10, w, 8) == 0);
+}
+
+/* A re-install must not restart a tracepoint that did not change. The set is sent whole whenever
+ * anything about any tracepoint changes, and a fire-once one elsewhere spending itself changes it. */
+static void TestReinstallKeepsUnchangedCounts(void)
+{
+    unsigned int w[8] = { 0 };
+    const unsigned int every3 = SE_LIVE_TP_ENABLED | (3u << SE_LIVE_TP_EVERY_SHIFT);
+    const unsigned int once   = SE_LIVE_TP_ENABLED | SE_LIVE_TP_ONCE;
+    unsigned int ids[2], flags[2];
+
+    ids[0] = 10; flags[0] = every3;
+    ids[1] = 11; flags[1] = once;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 2, w, 8) == 0);                   /* two of the three executions that fire it */
+    CHECK(FiresAt(1, 1, w, 8) == 1);                   /* the fire-once one fires... */
+
+    /* ...and the client, hearing of it, sends the set again with that one disabled. */
+    flags[1] = 0;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 1, w, 8) == 1 && w[0] == 1);      /* the third execution still fires: count kept */
+    CHECK(FiresAt(1, 5, w, 8) == 0);                   /* the disabled one stays quiet */
+
+    /* The same set, sent again, changes nothing. */
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 3, w, 8) == 1 && w[0] == 3);      /* 4th, 5th, 6th: the 6th fires */
+
+    /* Re-enabling the fire-once one changes its flags, so it is armed afresh. */
+    flags[1] = once;
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(1, 3, w, 8) == 1 && w[0] == 1);
+
+    /* Changing the policy of the every-3rd one restarts it. */
+    flags[0] = SE_LIVE_TP_ENABLED | (2u << SE_LIVE_TP_EVERY_SHIFT);
+    InstallTps(2, ids, flags);
+    CHECK(FiresAt(0, 3, w, 8) == 1 && w[0] == 2);
+}
+
+/* ---- a branch to itself ---------------------------------------------------------------- */
+
+static void TestSelfBranchDetection(void)
+{
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 1u) == 1);  /* bt .   with T set    */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 0u) == 0);  /* bt .   with T clear: falls through */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8BFEu, 0u) == 1);  /* bf .   with T clear  */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8BFEu, 1u) == 0);  /* bf .   with T set: falls through   */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FEu, 0xFFFFFFFEu) == 0);   /* only SR.T matters */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FDu, 1u) == 0);  /* bt to the previous word: a real move */
+    CHECK(SeMdfnIsTakenSelfBranch(0x89FFu, 1u) == 0);  /* bt to the next word */
+    CHECK(SeMdfnIsTakenSelfBranch(0x8DFEu, 1u) == 0);  /* bt/s . -- delayed: its slot moves the PC */
+    CHECK(SeMdfnIsTakenSelfBranch(0xAFFEu, 1u) == 0);  /* bra .  -- delayed too */
+    CHECK(SeMdfnIsTakenSelfBranch(OP_RTS, 1u) == 0);
+}
+
 int main(void)
 {
     TestCallFormsAndSerialization();
@@ -284,6 +610,19 @@ int main(void)
     TestTailCallAndBranchAreNotCalls();
     TestPerCpuStacks();
     TestOverflowDoesNotEatStoredFrames();
+    TestAReturnIsNotAppliedBeforeItCompletes();
+    TestACallIsNotAppliedBeforeItCompletes();
+    TestStalledPresentationsDoNotCompleteOrRepeatTheFlow();
+    TestTrapaCompletesAtTheNextInstruction();
+    TestAMissedSlotStillCompletes();
+    TestAResetDropsWhatWasInFlight();
+    TestAnUnwatchedRunDropsAHeldCall();
+    TestAnUnwatchedRunStillCompletesAHeldReturn();
+    TestAWatchedRunKeepsAHeldCall();
+    TestPendingFlowIsPerCpu();
+    TestTracepointRepeatPolicy();
+    TestReinstallKeepsUnchangedCounts();
+    TestSelfBranchDetection();
     if (gFailures)
     {
         fprintf(stderr, "%d check(s) failed\n", gFailures);

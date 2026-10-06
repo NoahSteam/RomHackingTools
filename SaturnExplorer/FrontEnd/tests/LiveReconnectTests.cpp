@@ -499,6 +499,53 @@ void TestFrameNumberIsTheCapturedFrame()
     live.Source() = se_data_source{};
 }
 
+// The stop's sequence number rides with the stop, from the same displayed frame, so a client can
+// tell a NEW halt from a re-report of the one it has -- including a second halt at the same PC. A
+// server older than v21 numbers nothing, and the driver says so rather than inventing a zero.
+void TestStopCarriesItsSequenceNumber()
+{
+    for (const uint32_t version : { SE_LIVE_VERSION, 20u })
+    {
+        LiveFixture live([version](int fd, int)
+        {
+            Request r;
+            while (fakelive::ReadRequest(fd, r))
+            {
+                Reply rep;
+                rep.version    = version;
+                rep.frame      = 10;
+                rep.paused     = 1;
+                rep.stopReason = SE_LIVE_STOP_EXEC_BP;
+                rep.stopCpu    = 1;
+                rep.stopPc     = 0x06001234;
+                rep.stopSeq    = 7;
+                const std::vector<uint8_t> bytes = fakelive::Build(rep);
+                if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+            }
+        });
+        CHECK(live.Ok());
+        if (!live.Ok()) return;
+        se_data_source& ds = live.Source();
+        CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
+        se_config cfg;
+        cfg.abi_version = SE_ABI_VERSION;
+        cfg.reserved = 0;
+        se_context* ctx = se_create(&ds, &cfg);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+
+        uint32_t reason = 0, cpu = 0, pc = 0, seq = 99;
+        CHECK(se_live_get_stop(&ds, &reason, &cpu, &pc) == 1);
+        CHECK(reason == SE_LIVE_STOP_EXEC_BP && cpu == 1 && pc == 0x06001234);
+        const int hasSeq = se_live_get_stop_seq(&ds, &seq);
+        if (version >= 21u) { CHECK(hasSeq == 1); CHECK(seq == 7); }
+        else                { CHECK(hasSeq == 0); }
+        se_destroy(ctx);
+        live.Source() = se_data_source{};
+    }
+}
+
 // An emulator that keeps the connection open but stops answering must not hold up disconnect,
 // and the final best-effort "resume" must not wait for a reply that will never come.
 void TestCloseDoesNotWaitForASilentEmulator()
@@ -694,6 +741,7 @@ int main()
     TestGenerationArrivesWithTheSnapshot();
     TestCaptureIsPinnedToOneSnapshot();
     TestFrameNumberIsTheCapturedFrame();
+    TestStopCarriesItsSequenceNumber();
     TestCloseDoesNotWaitForASilentEmulator();
     TestPeerHangUpDuringSendDoesNotKillTheProcess();
     TestEditFromTheOldDisplayIsRefused();

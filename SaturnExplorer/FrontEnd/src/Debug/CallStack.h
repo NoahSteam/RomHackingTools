@@ -111,6 +111,27 @@ private:
     int                         mSelected[2] = {0, 0};
 };
 
+// Where Step Out should run to, from the halted CPU's call stack, or why it cannot say.
+//
+// PR is NOT the answer. It holds the return address only until the function makes a call of its
+// own: the first bsr/jsr overwrites it, and the function's own return address then lives where its
+// prologue saved it (on the stack) until the epilogue loads it back. A Step Out that runs to PR
+// after a nested call returned targets an address inside the function it is in -- often the very
+// instruction it is on, where it halts at once. What does know is a frame the emulator RECORDED
+// when the call was made: its return address and the stack depth the call was made at. So this
+// answers only from a confirmed innermost frame, and checks it against the registers: the return
+// must be a plausible code address other than the PC, and the CPU's R15 must not be above the stack
+// the call was made at (the callee runs below it -- give or take a delay slot's push or pop, which
+// is why the comparison has slack). Anything else -- no shadow stack covering this frame, a stale
+// one -- is "cannot recover", with the reason, rather than a guess that looks like an answer.
+struct StepOutTarget
+{
+    bool        ok = false;
+    uint32_t    returnAddress = 0;   // where the innermost frame returns to
+    const char* why = "";            // when !ok: what is missing, for the user
+};
+StepOutTarget ChooseStepOutTarget(const std::vector<CallStackFrame>& frames, const se_sh2_regs& regs);
+
 // True when 'addr' points into a region SH-2 code plausibly lives in (HWRAM / LWRAM /
 // boot ROM), even-aligned. Exposed for the reconstructor + tests.
 bool IsPlausibleCodeAddress(uint32_t addr);

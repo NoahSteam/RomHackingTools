@@ -59,6 +59,10 @@ public:
     bool ToggleExecution(uint32_t addr);
     bool HasExecutionAt(uint32_t addr) const;
     const Breakpoint* ExecutionAt(uint32_t addr) const;
+    // An execution breakpoint at 'addr' that is ARMED in the emulator (enabled), as opposed to one that
+    // merely exists in the list. A halt at a PC is explained by the user's breakpoints only if one of
+    // these is there; a disabled entry installs nothing.
+    bool HasEnabledExecutionAt(uint32_t addr) const;
 
     // First enabled execution BP at 'addr' that carries a guard, ignoring cpu (a PC
     // breakpoint halts whichever SH-2 reaches the address). nullptr if none — the stop

@@ -136,8 +136,27 @@ and everything synchronizes: Assembly → current instruction; Call Stack → fr
 Registers → stopped CPU; Log → the breakpoint event; Hex Editor → the accessed memory;
 Selected Object → the corresponding VDP object when applicable.
 
-(Instruction-granular Step Into/Over need an instruction-step protocol verb — see phases;
-Step Out = run to frame #0's return address via a temp breakpoint, achievable today.)
+Stepping applies to the CPU that **halted**. Step Into is the emulator's instruction step on
+that CPU; Step Over and Step Out run to a transient breakpoint, which the emulator holds on
+*both* SH-2s (PC breakpoints are shared) but which only completes the step when the stepping CPU
+reaches it — the other core walking over it is resumed from silently. The step buttons are
+disabled while the panel shows the other CPU. (A recursive function's inner returns reach the same
+address first; the transient cannot tell them from the one being stepped — a stack-depth test was
+tried and dropped, because a call's delay slot may push or pop and the real return would be rejected.)
+
+**Step Out does not run to PR.** PR holds the function's return address only until the function
+makes a call of its own — the first `bsr`/`jsr` overwrites it, and the real return address is
+then wherever the prologue saved it, until the epilogue loads it back. After a nested call has
+returned, PR points *inside the current function* (often at the current instruction), so running
+to it halts at once. The target is the **recorded call frame's** return address (● Confirmed —
+the shadow stack saw the call), checked against the registers: a plausible code address other than
+the PC, with R15 not far above the stack the call was made at. Where no recorded frame covers the
+current function (the call predates the recording, or the stack is a heuristic one) Step Out is
+disabled and says why, rather than guessing from PR.
+
+A halt carries a **sequence number** (control block `stop_seq`, protocol v21): the UI tells a new
+halt from a re-report of the one it already shows by number, not by PC — a step that lands on the
+address it started from (a taken branch to itself) is a different halt at the same PC.
 
 ---
 

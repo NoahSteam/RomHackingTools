@@ -25,6 +25,16 @@ struct StopReport
     uint32_t reason  = 0;       // SE_LIVE_STOP_* (the machine only passes this through)
     uint32_t cpu     = 0;       // which SH-2 latched the stop
     uint32_t pc      = 0;       // the halt PC
+    // Stop identity (v21+): the emulator numbers every halt it publishes. Two reports with the same
+    // number are the same halt, different numbers are different halts -- even at the same PC, which
+    // comparing PCs cannot say (a step over a branch to itself lands where it started). Absent
+    // (hasSeq false) from an older emulator, and then the machine falls back to comparing PCs.
+    bool     hasSeq  = false;
+    uint32_t seq     = 0;
+    // The halt address carries a user execution breakpoint. PC breakpoints are shared across both
+    // SH-2s, so the transient step target (installed as one) stops whichever CPU reaches it first;
+    // a stop that the user's own breakpoint explains is a real halt whoever reached it.
+    bool     userBreakpoint = false;
 };
 
 // What just happened this frame, as opposed to what is now true.
@@ -43,6 +53,14 @@ struct StepOutcome
     // the caller both tests this (to skip the condition guard and the access log, which the
     // transient is not subject to) and acts on it (retiring the transient).
     bool     atStepTarget = false;
+    // The halt is at the transient's ADDRESS but is not the step arriving: the other SH-2 reached it
+    // (the transient is a PC breakpoint, and those are shared). Nothing the user asked for has
+    // happened, so the caller resumes without presenting it; the step stays in flight. One report per
+    // such halt.
+    bool     strayTarget = false;
+    // A re-report of a halt the caller already declined (SuppressHalt). Drop it: it is not a halt to
+    // present and not one to resume from again.
+    bool     declinedEcho = false;
 };
 
 class StepHaltMachine
@@ -54,9 +72,14 @@ public:
     // the result: it advances the hold's frame cap.
     StepOutcome Observe(const StopReport& report);
 
-    // The caller resumed instead of surfacing this halt -- a condition guard that did not hold, or
-    // an access-log watchpoint. The halt is not presented, so drop it.
+    // The caller resumed instead of surfacing this halt -- a condition guard that did not hold, an
+    // access-log watchpoint, a stray step target. The halt is not presented, so drop it, and remember
+    // which one it was so that its re-reports (outcome.declinedEcho) are recognised.
     void SuppressHalt();
+
+    // The caller is surfacing this halt. 'atStepTarget' is the outcome's flag. If a step's transient
+    // is installed and this halt is not its arrival, the step is over: the transient is retired.
+    void HaltPresented(bool atStepTarget);
 
     // The current halt, for the callers that read it outside a poll: the capture gate (which runs
     // before Observe, so it sees last frame's answer, as it always did), the Assembly panel mirror
@@ -76,19 +99,25 @@ public:
     bool StepInFlight() const { return mAwaitingHalt; }
 
     // A single-instruction step (Step Into): no transient breakpoint, just a resume and a hold.
-    // The hold releases on a halt PC other than the one showing now, which is where the step
-    // begins -- the machine already knows it, so a caller has no chance to pass it wrong.
+    // The hold releases on a NEW halt -- a different sequence number from the one showing now (or,
+    // from an emulator that numbers nothing, a different PC) -- which is where the step begins; the
+    // machine already knows it, so a caller has no chance to pass it wrong.
     void BeginStep();
 
     // A run-to-address step (Step Over across a call, Step Out, Run to Here): installs the
-    // transient breakpoint as well as holding. PC breakpoints are shared across both SH-2s, so
-    // the transient is CPU-agnostic.
-    void BeginRunTo(uint32_t addr);
+    // transient breakpoint as well as holding. PC breakpoints are shared across both SH-2s, so the
+    // EMULATOR cannot scope the transient to a CPU -- the machine does: the step completes only when
+    // 'cpu' reaches 'addr', and the other CPU reaching it is reported as a stray target to resume
+    // from. (There is deliberately no check of the stack depth on arrival: a call's delay slot may
+    // push or pop, so R15 after the return is not reliably R15 before the call, and a depth test
+    // that rejects the real return would leave the step running for ever.)
+    void BeginRunTo(uint32_t addr, int cpu);
 
     // --- Breakpoint sync ---
 
     bool     StepTargetActive() const { return mStepBpActive; }
     uint32_t StepTargetAddr()   const { return mStepBpAddr; }
+    int      StepTargetCpu()    const { return mStepBpCpu; }
     // True when the transient changed since the last sync, so the caller must re-ship the set
     // even if the user's breakpoints did not change. Clears the flag.
     bool     TakeStepTargetDirty();
@@ -122,12 +151,23 @@ public:
     void ResetForNewEmulator();
 
 private:
+    // Is this report a halt the machine has not shown yet? By sequence number when the emulator
+    // supplies one; by PC against the halt being shown otherwise.
+    bool IsNewStop(const StopReport& r) const;
+
     int      mSettleFrames   = 0;       // frames to keep capturing after a step
     bool     mHaltActive     = false;   // presentation state, mirrored to the Assembly panel
     int      mHaltCpu        = 0;
     uint32_t mHaltPc         = 0;
+    bool     mHaltHasSeq     = false;   // the halt showing was numbered by the emulator...
+    uint32_t mHaltSeq        = 0;       // ...with this number
+    bool     mObsHasSeq      = false;   // the halt Observe last looked at was numbered...
+    uint32_t mObsSeq         = 0;       // ...with this
+    bool     mDeclinedHasSeq = false;   // the halt the caller last declined (SuppressHalt)...
+    uint32_t mDeclinedSeq    = 0;       // ...had this number
     bool     mStepBpActive   = false;   // transient Step Over / Out breakpoint installed
     uint32_t mStepBpAddr     = 0;
+    int      mStepBpCpu      = 0;       // the CPU whose arrival at mStepBpAddr completes the step
     bool     mStepBpDirty    = false;
     bool     mAwaitingHalt   = false;   // a step is in flight; hold the halted presentation
     int      mHoldFrames     = 0;       // safety cap on that hold

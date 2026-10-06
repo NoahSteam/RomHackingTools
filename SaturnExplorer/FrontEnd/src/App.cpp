@@ -1049,6 +1049,14 @@ void App::BuildUI(IPlatform& platform)
 #ifdef SE_ENABLE_LIVE
         sfe::StopReport report;
         report.stopped = se_live_get_stop(&mDataSource, &report.reason, &report.cpu, &report.pc);
+        if (report.stopped)
+        {
+            // Identity (which halt this is, not just where) and whether the user's own breakpoints
+            // explain the address: what the machine needs to tell a step arriving from the other
+            // core reaching the same PC, and a new halt at the PC the last one was at.
+            report.hasSeq = se_live_get_stop_seq(&mDataSource, &report.seq) != 0;
+            report.userBreakpoint = mBreakpoints.HasEnabledExecutionAt(report.pc);
+        }
         // Fold the report into the run-control machine, which owns the halt presentation, the step
         // hold and the transient's identity (Debug/StepHaltMachine.h). What comes back describes
         // the halt; the policy below -- condition guards, access logging, which panels to bring
@@ -1059,6 +1067,18 @@ void App::BuildUI(IPlatform& platform)
         bool stopped = report.stopped;
         const bool atStepBp     = halt.atStepTarget;
         const bool haltFromStep = halt.fromStep;
+        // The transient step breakpoint is a PC breakpoint, and those stop whichever SH-2 gets there
+        // first. The other core reaching it is not the step finishing: resume, and the step carries
+        // on.
+        // A re-report of a halt already declined is dropped without a second resume: the resume that
+        // followed the first is what is crossing the socket.
+        if (halt.declinedEcho) { stopped = false; }
+        if (halt.strayTarget && !mbPaused)
+        {
+            Continue();
+            stopped = false;
+            mStepHalt.SuppressHalt();
+        }
         // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
         // evaluates false (and it isn't the transient step target), resume without surfacing
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
@@ -1091,9 +1111,15 @@ void App::BuildUI(IPlatform& platform)
             mbPaused = true;   // halted; panel follows the halted PC
             // A transient step breakpoint (Step Over / Step Out) has done its job once we
             // halt at it — retire it so it doesn't linger as a stray breakpoint.
+            // ...and a halt shown anywhere else ends a step that has not finished: its transient goes
+            // too (decided here, not in Observe, because the guards above may have resumed instead).
             if (atStepBp)
             {
                 mStepHalt.RetireStepTarget();   // next SyncBreakpointsToLive drops it from the emulator
+            }
+            else
+            {
+                mStepHalt.HaltPresented(false);
             }
             // Bring up the paused-state workspace: rebuild the halted CPU's call stack
             // and surface the Call Stack panel.
@@ -2065,7 +2091,16 @@ void App::SyncTracepointsToLive()
         w32(static_cast<uint32_t>(a.id));
         w32(static_cast<uint32_t>(a.cpu));
         w32(a.address);
-        w32(a.enabled ? SE_LIVE_TP_ENABLED : 0u);
+        // The repeat policy rides in the flags word (SE_LIVE_TP_* in SeLiveProtocol.h): the
+        // emulator applies it where the instruction runs, unless there is a condition -- which only
+        // we can evaluate -- in which case it forwards every execution and we count the ones whose
+        // condition held. An emulator older than v21 ignores these bits, and AcceptHit counts for it.
+        uint32_t flags = a.enabled ? SE_LIVE_TP_ENABLED : 0u;
+        if (!a.condition.empty())                                  flags |= SE_LIVE_TP_GUARDED;
+        else if (a.repeat == RepeatMode::Once)                     flags |= SE_LIVE_TP_ONCE;
+        else if (a.repeat == RepeatMode::EveryN && a.repeatN > 1)
+            flags |= static_cast<uint32_t>(a.repeatN) << SE_LIVE_TP_EVERY_SHIFT;
+        w32(flags);
         ++count;
     }
     se_live_set_tracepoints(&mDataSource, descs.data(), count);
@@ -2096,6 +2131,7 @@ void App::DrainTraceEvents()
 #ifdef SE_ENABLE_LIVE
     if (!mbLiveSource) { return; }
     se_live_event evs[64];
+    const uint32_t serverVersion = se_live_server_version(&mDataSource);
     for (;;)
     {
         const uint32_t n = se_live_poll_events(&mDataSource, evs, 64);
@@ -2103,9 +2139,9 @@ void App::DrainTraceEvents()
         {
             const se_live_event& e = evs[i];
             const ExecutionAction* a = mActions.Get(e.id);
-            if (!a) continue;
-            mActions.RecordHit(e.id);
-            if (!a->effects.writeToLog) continue;
+            // Gone, or switched off -- including a fire-once one that has already fired, whose later
+            // events were in flight before the emulator heard it had been disabled.
+            if (!a || !a->enabled) continue;
 
             ContextFormat fc;
             fc.ctx = mContext;
@@ -2121,6 +2157,11 @@ void App::DrainTraceEvents()
             // Guard (Phase 3): a tracepoint with a condition only logs when it holds. The
             // registers are exact for this hit; memory derefs read the current snapshot.
             if (!a->condition.empty() && !ConditionEval(a->condition, fc)) continue;
+
+            // The repeat policy (Once / Every N), over the executions that got this far. Applied by
+            // the emulator for an unconditional tracepoint on a v21+ server, here otherwise.
+            if (!mActions.AcceptHit(e.id, EmulatorAppliesRepeat(*a, serverVersion))) continue;
+            if (!a->effects.writeToLog) continue;
 
             const std::string msg = FormatEvaluate(a->format, fc);
             std::vector<std::pair<std::string, std::string>> detail;
@@ -2261,11 +2302,20 @@ void App::DrawTracepointEditor()
 
     ImGui::SeparatorText("Actions");
     ImGui::Checkbox("Write to Log", &mTpEdit.effects.writeToLog);
-    ImGui::Checkbox("Pause Emulator", &mTpEdit.effects.pauseEmulator);
-    ImGui::Checkbox("Capture Screenshot", &mTpEdit.effects.screenshot);
-    ImGui::Checkbox("Save Memory Snapshot", &mTpEdit.effects.memSnapshot);
-    ImGui::Checkbox("Play Sound", &mTpEdit.effects.playSound);
-    ImGui::Checkbox("Run Script", &mTpEdit.effects.runScript);
+    // Offered, greyed out, rather than hidden: the list is the roadmap. Nothing acts on these yet --
+    // a tracepoint never pauses the emulator, takes a screenshot or runs a script -- so they cannot
+    // be ticked, and the store drops them (ExecutionActions::Add/Update) in case an old file did.
+    {
+        bool unavailable = false;
+        ImGui::BeginDisabled();
+        ImGui::Checkbox("Pause Emulator", &unavailable);
+        ImGui::Checkbox("Capture Screenshot", &unavailable);
+        ImGui::Checkbox("Save Memory Snapshot", &unavailable);
+        ImGui::Checkbox("Play Sound", &unavailable);
+        ImGui::Checkbox("Run Script", &unavailable);
+        ImGui::EndDisabled();
+        ImGui::TextDisabled("Only logging is implemented; the other actions are not available yet.");
+    }
 
     ImGui::Separator();
     // Test Fire: format against the current state and push a Log entry now, so the whole
@@ -3254,7 +3304,10 @@ void App::DrawCallStack(IPlatform& platform)
         // Step Into / Over need an instruction-level halt (a breakpoint or prior step) so
         // the emulator is spinning in its per-instruction gate; a bare frame-pause can't
         // single-step. Step Out only needs frame control (it runs to a return address).
-        ImGui::BeginDisabled(!mStepHalt.HaltActive());
+        // Stepping applies to the CPU that halted. Showing the other one's stack does not change
+        // that, so the buttons wait until the view is of the CPU they would step.
+        const bool viewingHalted = mCallStackCpu == mStepHalt.HaltCpu();
+        ImGui::BeginDisabled(!mStepHalt.HaltActive() || !viewingHalted);
         if (ImGui::Button("Step Into")) { StepInto(mCallStackCpu); }
         ImGui::SetItemTooltip("Run one SH-2 instruction");
         ImGui::SameLine();
@@ -3262,9 +3315,16 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::SetItemTooltip("Run one instruction; over a call, run the subroutine to its return");
         ImGui::EndDisabled();
         ImGui::SameLine();
-        ImGui::BeginDisabled(!canStep || !haveR);
+        // Enabled only when the recorded call frame says where this function returns to. (The tooltip
+        // names that address; PR is not it once the function has called anything.)
+        const StepOutTarget outTarget = (haveR && viewingHalted)
+            ? ChooseStepOutTarget(mCallStack.Frames(mCallStackCpu), r) : StepOutTarget{};
+        ImGui::BeginDisabled(!canStep || !haveR || !viewingHalted || !outTarget.ok);
         if (ImGui::Button("Step Out")) { StepOut(mCallStackCpu); }
-        ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", r.pr);
+        if (outTarget.ok)
+            ImGui::SetItemTooltip("Run to the current frame's return address (%08X)", outTarget.returnAddress);
+        else
+            ImGui::SetItemTooltip("%s", viewingHalted ? outTarget.why : "Stepping applies to the CPU that halted");
         ImGui::EndDisabled();
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -3703,19 +3763,30 @@ void App::Continue()
     }
 }
 
-void App::RunToTransient(uint32_t addr)
+// The SH-2 a step applies to: the one that halted. The server's instruction step runs whichever CPU
+// the stop latched, and a transient step breakpoint is completed only by the CPU recorded with it
+// (StepHaltMachine), so the CPU shown in the panel the button was clicked in -- which can be the
+// other one -- does not choose. The panels disable their step buttons while showing the other CPU,
+// so this is only ever asked about the one the user is looking at.
+int App::SteppedCpu() const
+{
+    return mStepHalt.HaltCpu() == 1 ? 1 : 0;
+}
+
+void App::RunToTransient(uint32_t addr, int cpu)
 {
     if (mStepHalt.StepInFlight()) return;   // a step is already resuming the CPU; don't issue another
-    // PC breakpoints are shared across both SH-2s, so the transient is CPU-agnostic. Arming the
-    // hold here rather than after the resume is safe -- nothing between the two consults it.
-    mStepHalt.BeginRunTo(addr);
+    // PC breakpoints are shared across both SH-2s, so the emulator stops whichever core reaches the
+    // transient first; the machine records which one the step is waiting for. Arming the hold here
+    // rather than after the resume is safe -- nothing between the two consults it.
+    mStepHalt.BeginRunTo(addr, cpu);
     SyncBreakpointsToLive();   // ship the transient breakpoint before resuming
     Continue();
 }
 
 void App::StepInto(int cpu)
 {
-    (void)cpu;   // the server steps whichever CPU the stop latched (the halted CPU)
+    (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already resuming the CPU; don't issue another
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
@@ -3730,9 +3801,11 @@ void App::StepOver(int cpu)
     // the SH-2 delay slot — the address the call pushes to PR); otherwise Step Over
     // degenerates to a single-instruction step. IsSh2CallOpcode matches exactly bsr/bsrf/jsr
     // (not trapa, whose return is PC+2), the same set the glue's SeMdfnTrackFlow uses.
+    (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
+    const int stepped = SteppedCpu();
     se_sh2_regs r{};
-    if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
+    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
     bool isSubCall = false;
     std::vector<MemoryReadRequest> reqs{ { r.pc, 2 } };
     std::vector<MemoryReadResult> res = mMemBackend.ReadMemoryBatch(reqs);
@@ -3741,16 +3814,30 @@ void App::StepOver(int cpu)
         const uint16_t op = static_cast<uint16_t>((res[0].bytes[0] << 8) | res[0].bytes[1]);
         isSubCall = IsSh2CallOpcode(op);
     }
-    if (isSubCall) { RunToTransient(r.pc + 4); }
-    else           { StepInto(cpu); }
+    if (isSubCall) { RunToTransient(r.pc + 4, stepped); }
+    else           { StepInto(stepped); }
 }
 
 void App::StepOut(int cpu)
 {
+    (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
+    const int stepped = SteppedCpu();
     se_sh2_regs r{};
-    if (!mbHasData || se_get_sh2_regs(mContext, cpu, &r) != SE_OK) { return; }
-    RunToTransient(r.pr);   // run to the current frame's return address
+    if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
+    // PR is not the frame's return address once the function has made a call of its own, so the
+    // target comes from the recorded call frame (ChooseStepOutTarget says why that is the only
+    // answer it trusts). Built fresh: the Call Stack panel's copy follows a different CPU.
+    CallStack stack;
+    BuildCallStack(stepped, r, stack);
+    const StepOutTarget target = ChooseStepOutTarget(stack.Frames(stepped), r);
+    if (!target.ok)
+    {
+        mLog.Warn(std::string("Step Out: cannot tell where this function returns to \xe2\x80\x94 ") +
+                  target.why + ". Use Step Over, or Run to Here at the return address.");
+        return;
+    }
+    RunToTransient(target.returnAddress, stepped);
 }
 
 void App::DrawVdpOutput(IPlatform& platform)
@@ -6386,6 +6473,8 @@ void App::AdoptNewEmulatorInstance()
     // Breakpoints live in the emulator, and this one has none: force a full re-sync rather
     // than leave the user's set showing in the gutter while nothing is armed.
     mLastBpGeneration = mBreakpoints.Generation() - 1;
+    mLastTpGeneration = mActions.Generation() - 1;   // likewise its tracepoints...
+    mActions.ResetCounts();                          // ...and its counts, which start from nothing
     mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
     mLog.Info("The emulator was replaced — cleared the recorded history from the previous "
               "session.");

@@ -133,6 +133,7 @@ static volatile int sStepInflight;
 #define SeAtXchg(p, v)    __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
 #define SeAtLoad64(p)     __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define SeAtStore64(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
+#define SeAtCas64(p, e, d) __atomic_compare_exchange_n((p), (e), (d), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #elif defined(_WIN32)
 #define SeAtLoad(p)       ((int)_InterlockedCompareExchange((volatile long*)(p), 0, 0))
 #define SeAtStore(p, v)   ((void)_InterlockedExchange((volatile long*)(p), (long)(v)))
@@ -148,6 +149,15 @@ static int SeAtCasWin(volatile int* p, int* e, int d)
 #define SeAtXchg(p, v)    ((int)_InterlockedExchange((volatile long*)(p), (long)(v)))
 #define SeAtLoad64(p)     ((unsigned long long)_InterlockedCompareExchange64((volatile __int64*)(p), 0, 0))
 #define SeAtStore64(p, v) ((void)_InterlockedExchange64((volatile __int64*)(p), (__int64)(v)))
+static int SeAtCas64Win(volatile unsigned long long* p, unsigned long long* e, unsigned long long d)
+{
+    const unsigned long long prev = (unsigned long long)_InterlockedCompareExchange64(
+        (volatile __int64*)p, (__int64)d, (__int64)*e);
+    if (prev == *e) return 1;
+    *e = prev;
+    return 0;
+}
+#define SeAtCas64(p, e, d) SeAtCas64Win((p), (e), (d))
 #else
 #error "se_export.c needs atomic operations: GCC/Clang builtins or the Windows Interlocked API"
 #endif
@@ -198,31 +208,54 @@ static volatile unsigned long long sFrameNo;
  * breakpoint, Yabause's breakpoint callback calls SeExportNotifyStop(); the next
  * snapshot's control block reports it so the debugger can jump to the halted PC.
  * A resume / run / step clears it. ---- */
-/* The three fields describe ONE stop, written by the CPU thread (a breakpoint hit) and by the
- * server thread (a resume clears it) and read by the server thread when it builds a reply. As
- * three separate variables a reader could pair one stop's reason with another's PC, so they are
- * packed into a single word that is only ever loaded and stored whole:
- * reason << 33 | cpu << 32 | pc. */
+/* The fields describe ONE stop, written by the CPU thread (a breakpoint hit) and by the server
+ * thread (a resume clears it) and read by the server thread when it builds a reply. As separate
+ * variables a reader could pair one stop's reason with another's PC, so they are packed into a
+ * single word that is only ever loaded and stored whole:
+ *   seq << 36 | reason << 33 | cpu << 32 | pc
+ * 'seq' counts the stops that have been published, and survives a clear. It is what lets a client
+ * tell a NEW halt from a re-report of the one it already has: comparing PCs cannot, because a
+ * step that lands on the PC it started from (a taken branch to itself) is a different halt at the
+ * same address. 28 bits, wrapping; 0 means no stop has been published yet. */
 static volatile unsigned long long sStopWord;   /* reason: SE_LIVE_STOP_*, cpu: 0 master / 1 slave */
-#define SE_STOP_PACK(reason, cpu, pc) \
-    (((unsigned long long)(reason) << 33) | ((unsigned long long)((cpu) ? 1u : 0u) << 32) | \
+#define SE_STOP_SEQ_MASK 0x0FFFFFFFu
+#define SE_STOP_PACK(reason, cpu, pc, seq) \
+    (((unsigned long long)((seq) & SE_STOP_SEQ_MASK) << 36) | \
+     ((unsigned long long)((reason) & 7u) << 33) | \
+     ((unsigned long long)((cpu) ? 1u : 0u) << 32) | \
      (unsigned long long)(unsigned int)(pc))
-#define SE_STOP_REASON(w) ((unsigned int)((w) >> 33))
+#define SE_STOP_REASON(w) ((unsigned int)(((w) >> 33) & 7u))
 #define SE_STOP_CPU(w)    ((unsigned int)(((w) >> 32) & 1u))
 #define SE_STOP_PC(w)     ((unsigned int)((w) & 0xFFFFFFFFu))
+#define SE_STOP_SEQ(w)    ((unsigned int)(((w) >> 36) & SE_STOP_SEQ_MASK))
 
-/* Latch a stop (CPU thread). */
+/* Latch a stop (CPU thread). The only writer of a NEW stop, so the sequence number it takes is
+ * not contended; a clear from the server thread is a compare-and-swap (below), so it can neither
+ * lose this write nor resurrect an older word over it. */
 static void SeStopSet(unsigned int reason, int cpu, unsigned int pc)
 {
-    SeAtStore64(&sStopWord, SE_STOP_PACK(reason, cpu, pc));
+    unsigned long long w = SeAtLoad64(&sStopWord);
+    for (;;)
+    {
+        const unsigned long long next = SE_STOP_PACK(reason, cpu, pc, SE_STOP_SEQ(w) + 1u);
+        if (SeAtCas64(&sStopWord, &w, next)) return;
+    }
 }
 
 /* Clear the stop reason, keeping which CPU and PC it was on (an instruction step reads the CPU
- * after the clear is requested). */
+ * after the clear is requested) and the sequence number (the next stop continues from it). A
+ * compare-and-swap loop: a plain load-modify-store here could overwrite a stop the CPU thread
+ * published in between, leaving the NEW stop's reason erased under its own sequence number. */
 static void SeStopClear(void)
 {
-    const unsigned long long w = SeAtLoad64(&sStopWord);
-    SeAtStore64(&sStopWord, SE_STOP_PACK(SE_LIVE_STOP_NONE, SE_STOP_CPU(w), SE_STOP_PC(w)));
+    unsigned long long w = SeAtLoad64(&sStopWord);
+    for (;;)
+    {
+        if (SE_STOP_REASON(w) == SE_LIVE_STOP_NONE) return;
+        if (SeAtCas64(&sStopWord, &w,
+                      SE_STOP_PACK(SE_LIVE_STOP_NONE, SE_STOP_CPU(w), SE_STOP_PC(w), SE_STOP_SEQ(w))))
+            return;
+    }
 }
 
 /* ---- Restore outcomes (v19). A load (LST/ELS) is applied later, on the emulate thread, and
@@ -246,17 +279,26 @@ static unsigned int sRestoreAckPending;
  * instruction hook then ticks sInsnStepBudget down (SeExportInsnStepTick) and halts at 0.
  * Only the CPU we were halted on (sInsnStepCpu) is counted.
  *
- * The tick counts RETIRED instructions, not per-instruction-hook calls: the hook fires
- * before each attempted step, but the SH-2 can be bus-stalled (e.g. held off the bus by a
- * long SCU DMA), where the same PC is presented repeatedly without retiring. So the tick
- * only decrements the budget when the PC differs from the last-counted one (sStepLastPc,
- * seeded with the halt PC so the CPU's already-current instruction is the first to count).
- * This also makes stepping from a DMA-watchpoint halt work: the halt is between
- * instructions, and the stall while the DMA drains no longer eats the step budget. ---- */
+ * What counts is a RETIRED instruction, not a per-instruction-hook call: the hook fires
+ * before each attempted step, and the SH-2 can be bus-stalled (e.g. held off the bus by a
+ * long SCU DMA), where the same PC is presented repeatedly without retiring. The tick
+ * therefore does not spend budget on a presentation of the PC it last counted -- with two
+ * explicit exceptions that a PC comparison alone gets wrong:
+ *
+ *  - A taken branch TO ITSELF (bt/bf/bra with a displacement that lands back on the branch)
+ *    retires an instruction and leaves the PC where it was, so for that instruction a repeated
+ *    PC IS a retirement. The caller, which can decode the instruction, says so
+ *    (selfBranchTaken). Without it a one-instruction step over such a loop never completes.
+ *  - The halt hook runs BEFORE the instruction at the halt PC executes, so after resuming from
+ *    it the instruction has been run and a presentation of the same PC is its successor. The
+ *    exception is a halt that did not come from the hook -- an SCU-DMA watchpoint, which stops
+ *    between instructions: there the instruction at the halt PC is still pending, and its first
+ *    presentation is not a retirement (sStepPendingFirst). ---- */
 static volatile int sInsnStepPending;   /* instruction count requested, 0 = none */
 static volatile int sInsnStepBudget;    /* instructions remaining in the active step */
 static volatile int sInsnStepCpu;
 static volatile unsigned int sStepLastPc[2] = { 0xFFFFFFFFu, 0xFFFFFFFFu }; /* last-counted PC per CPU */
+static volatile int sStepPendingFirst[2];   /* the instruction at sStepLastPc has not run yet */
 
 /* ---- Tracepoint events (v8+). The glue calls SeExportQueueTraceEvent() when an
  * installed tracepoint PC is hit (CPU thread); the server thread drains the ring into
@@ -767,6 +809,8 @@ int SeExportHasClient(void)
     return SeAtLoad(&sClients) != 0;
 }
 
+static void SePublishBreakpoints(const unsigned char* descs, unsigned int count);   /* below */
+
 static void SeOnClientDisconnect(void)
 {
     /* A client (Saturn Explorer) can disappear at any time — mid-button-hold, or while the
@@ -782,13 +826,13 @@ static void SeOnClientDisconnect(void)
         sSetPad(0, 0);
         sSetPad(1, 0);
     }
-    if (sClearBps) sClearBps();
+    SePublishBreakpoints(NULL, 0);   /* the emulate thread drops them at its next gate or frame */
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
-    SeAtStore(&sPaused, 0);
     SeCancelSteps();
     SeAtStore(&sInsnStepPending, 0);
     SeStopClear();
+    SeAtStore(&sPaused, 0);   /* last: nothing the CPU publishes after the release is then erased */
     SE_UNLOCK();
 }
 
@@ -805,26 +849,132 @@ void SeExportSetTracepointHook(SeSetTracepointsFn fn)
     sSetTracepoints = fn;
 }
 
-/* Called from Yabause's breakpoint callback when the master/slave SH-2 hits an
- * execution breakpoint: latch the stop and hold the emulator paused. Plain
- * atomic stores (like sPaused elsewhere) — this runs in the CPU thread and must
- * not take the frame lock. */
-void SeExportNotifyStop(int cpu, unsigned int pc)
+/* ---- Debug-hook installs (breakpoints, watchpoints, tracepoints), applied on the EMULATE thread.
+ * The BKP and TRC verbs arrive on a server thread, but what they install is state the emulate thread
+ * reads on every instruction: the debugger's breakpoint lists, the per-instruction callback and its
+ * arming, the glue's tracepoint table. Rewriting any of it from the server thread while the CPU is
+ * scanning it hands the CPU half of one set and half of the next (a descriptor's id paired with
+ * another's CPU and address), or a callback armed against a table that is being replaced. So the
+ * server thread only PUBLISHES a complete set into a mailbox, under the state lock; the emulate
+ * thread takes it at the next frame gate or frame snapshot -- and the halt gate, which spins on that
+ * thread while a breakpoint holds it -- and runs the install hooks itself. A set that has not been
+ * taken when the next arrives is replaced: only the latest matters. ---- */
+static unsigned char sBpBox[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
+static unsigned int  sBpBoxCount;
+static volatile int  sBpPending;
+static unsigned char sTpBox[SE_LIVE_MAX_TRACE_DESCS * SE_LIVE_TRACE_DESC_LEN];
+static unsigned int  sTpBoxCount;
+static volatile int  sTpPending;
+/* Emulate-thread scratch the taken set is copied into, so no lock is held while the hooks run. */
+static unsigned char sBpApply[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
+static unsigned char sTpApply[SE_LIVE_MAX_TRACE_DESCS * SE_LIVE_TRACE_DESC_LEN];
+
+/* Server thread: publish the set of 'count' breakpoint descriptors (count <= the protocol maximum). */
+static void SePublishBreakpoints(const unsigned char* descs, unsigned int count)
 {
-    SeStopSet(SE_LIVE_STOP_EXEC_BP, cpu, pc);
-    sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking so a step from here starts clean */
+    SE_SLOCK();
+    if (count) memcpy(sBpBox, descs, (size_t)count * SE_LIVE_BKPT_DESC_LEN);
+    sBpBoxCount = count;
+    SeAtStore(&sBpPending, 1);
+    SE_SUNLOCK();
+}
+
+/* Server thread: publish the set of 'count' tracepoint descriptors. */
+static void SePublishTracepoints(const unsigned char* descs, unsigned int count)
+{
+    SE_SLOCK();
+    if (count) memcpy(sTpBox, descs, (size_t)count * SE_LIVE_TRACE_DESC_LEN);
+    sTpBoxCount = count;
+    SeAtStore(&sTpPending, 1);
+    SE_SUNLOCK();
+}
+
+void SeExportApplyInstalls(void);   /* public name, defined below */
+
+/* EMULATE thread: take whatever has been published and install it. Cheap when nothing has (one
+ * atomic load per call). */
+static void SeApplyPendingInstalls(void)
+{
+    if (SeAtLoad(&sBpPending))
+    {
+        unsigned int n, i;
+        SE_SLOCK();
+        n = sBpBoxCount;
+        if (n) memcpy(sBpApply, sBpBox, (size_t)n * SE_LIVE_BKPT_DESC_LEN);
+        SeAtStore(&sBpPending, 0);   /* inside the lock: a set published after this copy sets it again */
+        SE_SUNLOCK();
+        if (sClearBps) sClearBps();
+        for (i = 0; i < n; ++i)
+        {
+            const unsigned char* d = sBpApply + (size_t)i * SE_LIVE_BKPT_DESC_LEN;
+            const unsigned int address = SeRd32(d);
+            const unsigned int size    = SeRd32(d + 4);
+            const unsigned int flags   = SeRd32(d + 8);
+            const unsigned int kind    = flags & SE_LIVE_BP_KIND_MASK;
+            const unsigned int cpu     = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
+            /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data breakpoints
+             * (watchpoints) over [address, address+size). A disabled one installs nothing. */
+            if (!(flags & SE_LIVE_BP_ENABLED)) continue;
+            if (kind == 0u)
+            {
+                if (sAddExecBp) sAddExecBp((int)cpu, address);
+            }
+            else if (sAddMemBp)
+            {
+                sAddMemBp((int)cpu, address, size ? size : 1u, kind);
+            }
+        }
+    }
+    if (SeAtLoad(&sTpPending))
+    {
+        unsigned int n;
+        SE_SLOCK();
+        n = sTpBoxCount;
+        if (n) memcpy(sTpApply, sTpBox, (size_t)n * SE_LIVE_TRACE_DESC_LEN);
+        SeAtStore(&sTpPending, 0);
+        SE_SUNLOCK();
+        if (sSetTracepoints) sSetTracepoints(n, sTpApply);
+    }
+}
+
+/* Common to every halt: the step that was in progress is over (a breakpoint on the OTHER CPU can
+ * interrupt a step of this one, and its leftover budget must not survive into the next resume),
+ * and the retire tracking restarts from the halt PC. 'pendingFirst' says the instruction at 'pc'
+ * has not executed (a halt between instructions, not in the hook that precedes one). */
+static void SeHaltCommon(int cpu, unsigned int pc, int pendingFirst)
+{
+    const unsigned int c = (cpu != 0) ? 1u : 0u;
+    sInsnStepBudget = 0;
+    sStepLastPc[c] = pc;
+    sStepPendingFirst[c] = pendingFirst;
     SeAtStore(&sPaused, 1);
     SeCancelSteps();
 }
 
-/* Like SeExportNotifyStop, but latches SE_LIVE_STOP_STEP — the halt that ends an
+/* Called from the emulator's per-instruction callback when the master/slave SH-2 hits an
+ * execution breakpoint: latch the stop and hold the emulator paused. Plain atomic stores (like
+ * sPaused elsewhere) -- this runs in the CPU thread and must not take the frame lock. The stop is
+ * published BEFORE sPaused is raised, so a client that sees the pause also sees the reason. */
+void SeExportNotifyStop(int cpu, unsigned int pc)
+{
+    SeStopSet(SE_LIVE_STOP_EXEC_BP, cpu, pc);
+    SeHaltCommon(cpu, pc, 0);
+}
+
+/* Like SeExportNotifyStop, but latches SE_LIVE_STOP_STEP -- the halt that ends an
  * instruction step (IST) rather than a user breakpoint. Same CPU-thread contract. */
 void SeExportNotifyStep(int cpu, unsigned int pc)
 {
     SeStopSet(SE_LIVE_STOP_STEP, cpu, pc);
-    sStepLastPc[(cpu != 0) ? 1u : 0u] = pc;   /* seed retire-tracking for the next step */
-    SeAtStore(&sPaused, 1);
-    SeCancelSteps();
+    SeHaltCommon(cpu, pc, 0);
+}
+
+/* A halt that did not come from the per-instruction hook: an SCU-DMA watchpoint. 'pc' is the
+ * instruction the CPU is about to execute, and has not executed. */
+void SeExportNotifyDmaStop(int cpu, unsigned int pc)
+{
+    SeStopSet(SE_LIVE_STOP_EXEC_BP, cpu, pc);
+    SeHaltCommon(cpu, pc, 1);
 }
 
 /* CPU thread, called from the per-instruction hook right after the halt gate releases:
@@ -845,11 +995,10 @@ int SeExportInsnStepBegin(void)
 
 /* CPU thread, called from the per-instruction hook BEFORE each attempted step, with the CPU's
  * current PC. Counts only the CPU the step targets, and only when an instruction actually
- * RETIRED — i.e. when `pc` differs from the last-counted PC. The hook can fire repeatedly on the
- * same PC when the SH-2 is bus-stalled (held off the bus by a long SCU DMA); those repeats must
- * not consume the budget, or the step would "complete" without the CPU ever moving (pinning the
- * PC at a DMA-watchpoint halt). Returns 1 when the budget is exhausted (halt here), else 0. */
-int SeExportInsnStepTick(int cpu, unsigned int pc)
+ * RETIRED (see the block above for what that means and the two cases where the PC alone cannot
+ * say). 'selfBranchTaken' is nonzero when the instruction at 'pc' is a branch that will be taken
+ * back to 'pc'. Returns 1 when the budget is exhausted (halt here), else 0. */
+int SeExportInsnStepTick(int cpu, unsigned int pc, int selfBranchTaken)
 {
     unsigned int c = (cpu != 0) ? 1u : 0u;
     if (sInsnStepBudget <= 0)
@@ -862,8 +1011,17 @@ int SeExportInsnStepTick(int cpu, unsigned int pc)
     }
     if (pc == sStepLastPc[c])
     {
-        return 0;   /* same PC as last count -> not retired yet (bus stall); don't spend budget */
+        if (sStepPendingFirst[c])
+        {
+            sStepPendingFirst[c] = 0;   /* the pending instruction presenting itself: not a retirement */
+            return 0;
+        }
+        if (!selfBranchTaken)
+        {
+            return 0;   /* same PC as last count -> not retired yet (bus stall); don't spend budget */
+        }
     }
+    sStepPendingFirst[c] = 0;
     sStepLastPc[c] = pc;
     if (--sInsnStepBudget == 0)
     {
@@ -872,11 +1030,27 @@ int SeExportInsnStepTick(int cpu, unsigned int pc)
     return 0;
 }
 
+void SeExportApplyInstalls(void)
+{
+    SeApplyPendingInstalls();
+}
+
+#if defined(SE_EXPORT_SPIN_GATE)
+/* Test builds only: called inside the frame gate between its install check and its pause check, the
+ * window a resume from the server thread can land in. A test uses it to place one there. */
+void (*SeExportTestGateHook)(void);
+#endif
+
 /* Short self-contained sleep so the gate can spin-wait without a Yabause-
  * specific sleep primitive and without pegging a CPU core while paused. */
 static void SeGateSleep(void)
 {
-#if defined(_WIN32)
+#if defined(SE_EXPORT_SPIN_GATE)
+    /* Test builds only: poll the pause flag flat out. The 2 ms sleep below makes the CPU notice a
+     * release up to 2 ms late, which hides every race that lives in the few hundred nanoseconds
+     * after the server thread releases it; a stress test needs the CPU to be there at once. */
+    return;
+#elif defined(_WIN32)
     Sleep(2);
 #else
     usleep(2000);
@@ -891,8 +1065,12 @@ static void SeGateSleep(void)
  * without its own sleep and without busy-pegging a core. The export server
  * thread keeps running, so a resume/step from Saturn Explorer releases the loop.
  * Safe to call even before SeExportInit (returns 1). */
-int SeExportGateFrame(void)
+static int SeGateDecide(void)
 {
+    /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
+     * emulate thread, because it is the only one that reads them. This is also reached from the halt
+     * gate, so an edit made while a breakpoint holds the CPU still lands. */
+    SeApplyPendingInstalls();
     /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
      * before honoring the pause: a load always leaves the emulator paused on frame N. */
     if (SeAtLoad(&sLoadPending))
@@ -918,8 +1096,22 @@ int SeExportGateFrame(void)
             }
         }
     }
+#if defined(SE_EXPORT_SPIN_GATE)
+    if (SeExportTestGateHook) SeExportTestGateHook();   /* the window a resume can land in; see below */
+#endif
     if (!SeAtLoad(&sPaused))
     {
+        return 1;
+    }
+    /* Held, but nobody is attached to release it. A client that left takes its breakpoints with it
+     * (they are dropped on the emulate thread, at the next gate or frame, so a hit can land first),
+     * and a halt at one of them would otherwise freeze the game for good. */
+    if (!SeExportHasClient())
+    {
+        SeCancelSteps();
+        SeAtStore(&sInsnStepPending, 0);
+        SeStopClear();
+        SeAtStore(&sPaused, 0);
         return 1;
     }
     if (SeTakeStepFrame())
@@ -928,6 +1120,19 @@ int SeExportGateFrame(void)
     }
     SeGateSleep();
     return 0;
+}
+
+int SeExportGateFrame(void)
+{
+    const int run = SeGateDecide();
+    /* A release is ordered after the installs that preceded it: the server thread publishes a
+     * breakpoint set BEFORE it clears the pause (RUN, STP, IST), so a CPU that has just seen the
+     * pause lifted -- by the loads above -- must look at the mailbox AGAIN. The install check at the
+     * top of the gate ran before the pause check, and a resume landing between the two released the
+     * CPU with its temporary breakpoint (Step Over, Run to Cursor) still unapplied, which a short
+     * subroutine can run straight past. */
+    if (run) SeApplyPendingInstalls();
+    return run;
 }
 
 /* Savestate worker thread: pop raw full states, diff against the current keyframe (or emit
@@ -1129,13 +1334,21 @@ void SeExportPopExceptionFrame(int cpu, unsigned int sp)
     SE_UNLOCK();
 }
 
+static volatile unsigned int sCallStackEpoch;
+
 void SeExportResetCallStack(int cpu)
 {
     int c = cpu ? 1 : 0;
     SE_LOCK();
     sCallDepth[c] = 0;
     sCallOverflow[c] = 0;
+    SeAtAdd((volatile int*)&sCallStackEpoch, 1);
     SE_UNLOCK();
+}
+
+unsigned int SeExportCallStackEpoch(void)
+{
+    return (unsigned int)SeAtLoad((volatile int*)&sCallStackEpoch);
 }
 
 unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out)
@@ -1168,6 +1381,8 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
                       const void* vdp1fb, const void* msh2, const void* ssh2,
                       const void* soundRam, const void* scspSlots, const void* cdStatus)
 {
+    SeApplyPendingInstalls();   /* the emulate thread's frame boundary; see the mailbox */
+
     /* Nobody attached: capture nothing. The ring copy and the staged savestate below would
      * both be thrown away unread, and the savestate is the single most expensive thing the
      * emulate thread does per frame. Capture resumes on the first frame after a client
@@ -1379,14 +1594,21 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_RESUME, SE_LIVE_VERB_LEN) == 0)
         {
-            SE_LOCK(); SeAtStore(&sPaused, 0); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
+            /* The old stop is cleared BEFORE the CPU is released. The other order let a CPU that
+             * re-halted straight away (a breakpoint on the next instruction, a loop that hits the
+             * same one again) publish its new stop in the gap and have it erased by the clear that
+             * followed: the emulator sat paused with no reason, and the client never saw the halt
+             * it was waiting for. Cleared first, nothing can be published until the release,
+             * because the CPU is parked in its halt gate until then. */
+            SE_LOCK(); SeStopClear(); SeCancelSteps(); SeAtStore(&sPaused, 0); SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_STEP, SE_LIVE_VERB_LEN) == 0)
         {
+            /* Same order: clear, then grant. The granted frame can hit a breakpoint. */
             SE_LOCK();
+            SeStopClear();
             SeAtStore(&sPaused, 1);
             SeGrantSteps((arg > 0) ? (int)arg : 1);
-            SeStopClear();
             SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_REWIND, SE_LIVE_VERB_LEN) == 0)
@@ -1409,14 +1631,16 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * and let it run `arg` instructions on the halted CPU before halting again.
              * The per-instruction hook picks up sInsnStepPending once the gate releases. */
             SE_LOCK();
-            /* CPU first, then the request, then the release: the CPU thread is parked in the halt
-             * gate until sPaused clears, then reads the request and then the CPU, so each store is
-             * visible before the next one lets it proceed. */
+            /* CPU first, then the request, then the old stop is cleared, and only then the release:
+             * the CPU thread is parked in the halt gate until sPaused clears, then reads the request
+             * and then the CPU, so each store is visible before the next one lets it proceed. The
+             * clear has to precede the release -- a step that lands on its first instruction halts
+             * again at once, and that new stop must not be erased by this verb's own clear. */
             SeAtStore(&sInsnStepCpu, (int)SE_STOP_CPU(SeAtLoad64(&sStopWord)));
             SeAtStore(&sInsnStepPending, (arg > 0) ? (int)arg : 1);
-            SeAtStore(&sPaused, 0);
             SeCancelSteps();
             SeStopClear();
+            SeAtStore(&sPaused, 0);
             SE_UNLOCK();
         }
         else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
@@ -1426,37 +1650,14 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
              * maximum the descriptors are still consumed but not installed: without the cap a
              * request claiming 0xFFFFFFFF descriptors had the emulator installing breakpoints
              * for as long as a client kept feeding it. */
-            unsigned int i;
+            /* Every descriptor is received before anything is installed, and installing is not done
+             * here at all: the set is published whole and the emulate thread installs it (see the
+             * mailbox above). The buffer is the thread's own, not a static: two server threads can be
+             * serving at once. */
+            unsigned char descs[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
             const unsigned int keep = arg > SE_LIVE_MAX_BKPT_DESCS ? SE_LIVE_MAX_BKPT_DESCS : arg;
-            if (sClearBps) { sClearBps(); }
-            for (i = 0; i < keep; ++i)
-            {
-                unsigned char d[SE_LIVE_BKPT_DESC_LEN];
-                unsigned int address, size, flags, kind, cpu, enabled;
-                if (SeRecv(cl, d, SE_LIVE_BKPT_DESC_LEN) != 0) return;
-                address = (unsigned int)d[0] | ((unsigned int)d[1] << 8) |
-                          ((unsigned int)d[2] << 16) | ((unsigned int)d[3] << 24);
-                size = (unsigned int)d[4] | ((unsigned int)d[5] << 8) |
-                       ((unsigned int)d[6] << 16) | ((unsigned int)d[7] << 24);
-                flags = (unsigned int)d[8] | ((unsigned int)d[9] << 8) |
-                        ((unsigned int)d[10] << 16) | ((unsigned int)d[11] << 24);
-                kind = flags & SE_LIVE_BP_KIND_MASK;
-                cpu = (flags & SE_LIVE_BP_CPU_SLAVE) ? 1u : 0u;
-                enabled = (flags & SE_LIVE_BP_ENABLED) ? 1u : 0u;
-                /* kind 0 = execution (PC); 1/2/3 = read/write/read-write data
-                 * breakpoints (watchpoints) over [address, address+size). The
-                 * descriptor was already consumed above, so a disabled one just
-                 * skips installation without desyncing the stream. */
-                if (!enabled) continue;
-                if (kind == 0u)
-                {
-                    if (sAddExecBp) sAddExecBp((int)cpu, address);
-                }
-                else if (sAddMemBp)
-                {
-                    sAddMemBp((int)cpu, address, size ? size : 1u, kind);
-                }
-            }
+            if (keep && SeRecv(cl, descs, keep * SE_LIVE_BKPT_DESC_LEN) != 0) return;
+            SePublishBreakpoints(descs, keep);
             /* Descriptors past the cap are consumed without being decoded. */
             if (SeDrain(cl, (arg - keep) * SE_LIVE_BKPT_DESC_LEN) != 0) return;
         }
@@ -1535,12 +1736,12 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         else if (memcmp(req, SE_LIVE_VERB_TRACE, SE_LIVE_VERB_LEN) == 0)
         {
             /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
-             * hand them to the glue; consume any beyond the cap to stay stream-aligned. */
-            static unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];
+             * publish them for the emulate thread; consume any beyond the cap to stay stream-aligned. */
+            unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];   /* not static: two server threads */
             const unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg;
             if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
             if (SeDrain(cl, (arg - keep) * SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            if (sSetTracepoints) sSetTracepoints(keep, tbuf);
+            SePublishTracepoints(tbuf, keep);   /* installed by the emulate thread */
         }
 
         /* Which ring frame to serve: a GET carries the client's last-seen frame (arg) and
@@ -1583,6 +1784,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 28, sRestoreFailed);
         SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
         SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
+        SeWr32(ctl + 40, SE_STOP_SEQ(SeAtLoad64(&sStopWord)));
         SE_UNLOCK();
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];

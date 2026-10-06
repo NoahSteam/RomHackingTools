@@ -265,6 +265,10 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     {
         if (ImGui::Button("Continue"))  req.continueRun = true;
         ImGui::SameLine();
+        // Stepping applies to the CPU that halted, so while this panel shows the other one the step
+        // buttons wait: a click would otherwise move a CPU the user is not looking at.
+        const bool viewingHalted = mCpu == mBpStopCpu;
+        ImGui::BeginDisabled(!viewingHalted);
         if (ImGui::Button("Step Into"))  req.stepInto = true;
         ImGui::SetItemTooltip("Run one SH-2 instruction");
         ImGui::SameLine();
@@ -273,6 +277,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         ImGui::SameLine();
         if (ImGui::Button("Step Out"))   req.stepOut = true;
         ImGui::SetItemTooltip("Run to the current frame's return address");
+        ImGui::EndDisabled();
+        if (!viewingHalted)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(halted on the %s SH-2)", mBpStopCpu ? "slave" : "master");
+        }
     }
 
     // --- Window base: follow PC unless browsing ---

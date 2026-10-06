@@ -188,6 +188,15 @@ uint32_t se_live_drain_state_blocks(const se_data_source* ds,
 int se_live_get_stop(const se_data_source* ds, uint32_t* reason, uint32_t* cpu,
                      uint32_t* pc);
 
+/* The sequence number (v21+) of the stop se_live_get_stop reports, from the same displayed frame.
+ * Every halt the emulator publishes takes the next number and a resume does not reset it, so two
+ * reports with the same number are the same halt and different numbers are different halts --
+ * even at the same PC, which a step over a branch to itself produces. Fills '*seq' and returns 1
+ * when the server supplies one; 0 for a pre-v21 server (the caller must fall back to comparing
+ * PCs) or a source that is not live. The number is meaningful only while the connection
+ * generation is unchanged. */
+int se_live_get_stop_seq(const se_data_source* ds, uint32_t* seq);
+
 /* Testing only: replace the host-name resolver used for "tcp:host:port" endpoints (NULL
  * restores getaddrinfo). Lets a test make a lookup stall without needing a stalling DNS server.
  * POSIX only; a no-op elsewhere. */
