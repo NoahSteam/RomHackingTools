@@ -10,6 +10,11 @@
  * listener to attach to, which is also the transport the macOS/Linux builds use.
  */
 #define _POSIX_C_SOURCE 200809L   /* nanosleep, under a strict -std=c99 */
+#if defined(__APPLE__)
+/* Darwin hides everything outside the named standard once _POSIX_C_SOURCE is set, MSG_DONTWAIT
+ * included; glibc exposes it regardless, so only macOS needs to ask. */
+#define _DARWIN_C_SOURCE 1
+#endif
 
 #include <pthread.h>
 #include <stdio.h>
