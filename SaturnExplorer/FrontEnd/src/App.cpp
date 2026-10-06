@@ -971,7 +971,7 @@ void App::BuildUI(IPlatform& platform)
     // snapshot once at load, in CreateContextFromSource.)
     if (mbLiveSource && mContext)
     {
-        AdoptNewEmulatorInstance();
+        // (Session adoption happens AFTER the capture below, keyed to the capture's own session.)
         // Re-snapshot the running emulator each frame — except while paused, so an in-place
         // memory edit (e.g. tweaking VDP VRAM/CRAM to preview a change) isn't immediately
         // overwritten by the next capture. A step re-enables capture for a few frames
@@ -1001,7 +1001,15 @@ void App::BuildUI(IPlatform& platform)
             if (catchUp >= 0) followingStep = catchUp == 1;
         }
 #endif
-        if (!mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting)
+        // The display is of an older session than the connection's: capture whatever else is going
+        // on, so the new emulator's first frame is what is adopted (and edits become possible)
+        // rather than leaving a paused display of a machine that is gone.
+        bool sessionBehind = false;
+#ifdef SE_ENABLE_LIVE
+        sessionBehind = se_live_captured_generation(&mDataSource) !=
+                        se_live_connection_generation(&mDataSource);
+#endif
+        if (!mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting || sessionBehind)
         {
 #ifdef SE_ENABLE_LIVE
             // Read the counters BEFORE capturing: the driver only moves forward, so what the
@@ -1011,10 +1019,16 @@ void App::BuildUI(IPlatform& platform)
 #endif
             se_begin_frame(mContext);
             mStepHalt.ConsumeSettleFrame();
-#ifdef SE_ENABLE_LIVE
-            if (restoreSignal) ResolveRestoreWait(restoreDone, restoreFailed);
-#endif
         }
+#ifdef SE_ENABLE_LIVE
+        // Reconcile per-session state with the session that was just captured, before anything is
+        // drawn or any edit is committed against it: a pending Memory edit begun against the old
+        // emulator is voided here, in the same frame the new one's first snapshot appears.
+        AdoptNewEmulatorInstance();
+        // The restore counters were read before the capture, from the session then current. If
+        // adoption just reset the wait (a different emulator), they mean nothing here.
+        if (restoreSignal && mRestoreOutstanding > 0) ResolveRestoreWait(restoreDone, restoreFailed);
+#endif
         mControllerFrame = se_frame_number(mContext);
         // Propagate any breakpoint changes (Assembly gutter, Watch "Break on...")
         // to the emulator, then reflect a breakpoint halt in the UI run state.
@@ -6248,7 +6262,12 @@ void App::DoLoadState(int slot)
 void App::AdoptNewEmulatorInstance()
 {
 #ifdef SE_ENABLE_LIVE
-    const uint32_t generation = se_live_connection_generation(&mDataSource);
+    // The session of the DISPLAY, i.e. of the last capture -- not the connection's current one.
+    // The two differ while a reconnect has completed and this thread has not yet captured the
+    // new emulator; adopting by the connection's number could run before the capture it has to
+    // match, leaving a frame in which the data on screen is from a session the pending edits and
+    // history were not reset for. Called after the capture, so what is adopted is what is shown.
+    const uint32_t generation = se_live_captured_generation(&mDataSource);
     if (generation == mLiveConnGeneration) { return; }
     const bool firstAttach = mLiveConnGeneration == 0;
     mLiveConnGeneration = generation;

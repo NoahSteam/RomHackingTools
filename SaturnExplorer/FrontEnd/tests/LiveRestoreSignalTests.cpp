@@ -230,6 +230,25 @@ int main()
         Check(Read(ds).failed == b1.failed + 1, "one refused, one applied");
     }
 
+    // A rewind load and a slot load use separate mailboxes, so one gate call runs both. Each is an
+    // accepted request and must be counted done: a flag instead of a count made the next frame
+    // report one completion for two applied restores, and a client waiting for two never got
+    // its second.
+    {
+        RawClient raw;
+        Check(raw.Connect(), "raw client attached for the two-mailbox case");
+        const Counters b = Read(ds);
+        gLoadResult = 0;
+        raw.Request(SE_LIVE_VERB_LOADSTATE, 72, LoadPayload(21));
+        raw.Request(SE_LIVE_VERB_EMULOAD, 1);
+        Sleep(400);   // both are in their mailboxes; the emulate thread has not run
+        Check(Read(ds).done == b.done && Read(ds).failed == b.failed, "nothing applied before the gate runs");
+        EmulatorTick();   // one gate call applies both, then publishes one frame
+        Check(Until([&](const Counters& x) { return x.done == b.done + 2; }, ds),
+              "two applied restores are two completions");
+        Check(Read(ds).failed == b.failed, "and neither is counted as refused");
+    }
+
     se_destroy(ctx);
     SeExportDeinit();
     if (gFailures) { std::cerr << gFailures << " check(s) failed\n"; return 1; }

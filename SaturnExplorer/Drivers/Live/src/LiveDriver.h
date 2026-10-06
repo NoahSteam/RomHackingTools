@@ -42,6 +42,16 @@ uint32_t se_live_server_version(const se_data_source* ds);
  * state when it changes. 0 if 'ds' is not a live source. */
 uint32_t se_live_connection_generation(const se_data_source* ds);
 
+/* The connection generation of the snapshot the CALLING THREAD last captured -- the session the
+ * display it is drawing belongs to -- or 0 before its first capture. Differs from
+ * se_live_connection_generation while the connection has been replaced and the thread has not yet
+ * captured the new emulator. A client that reconciles per-session state (pending edits, recorded
+ * history) must key it to THIS number, read after its capture: the connection generation can
+ * advance between a check and the capture that follows it, so reconciling against it leaves a
+ * window in which the display belongs to a session the client has not adopted. Edits are
+ * accepted only while this equals the connection generation. */
+uint32_t se_live_captured_generation(const se_data_source* ds);
+
 /* How many state loads (rewind LST, emulator slot ELS) the emulator has applied and refused
  * since this run started (v19+). Every load request ends in exactly one of the two, and "done"
  * is counted only once the first frame of the restored timeline is in the reply stream, so a

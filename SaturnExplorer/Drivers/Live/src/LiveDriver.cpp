@@ -1816,6 +1816,22 @@ extern "C" uint32_t se_live_connection_generation(const se_data_source* ds)
     });
 }
 
+extern "C" uint32_t se_live_captured_generation(const se_data_source* ds)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0u, [&]() -> uint32_t
+    {
+        LiveState* st = St(ds->user);
+        // The session of what the calling thread last captured (0 before its first capture).
+        if (gPinned.id == st->id && gPinned.depth > 0)
+        {
+            return gPinned.snap ? gPinned.snap->generation : 0u;
+        }
+        if (gLastCaptured.id == st->id && gLastCaptured.snap) { return gLastCaptured.snap->generation; }
+        return 0u;
+    });
+}
+
 extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed)
 {
     if (!ds || !ds->user || ds->close != CbClose || !done || !failed) { return 0; }

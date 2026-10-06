@@ -234,7 +234,11 @@ static void SeStopClear(void)
  * SE_LOCK and only ever increase. ---- */
 static unsigned int sRestoreDone;
 static unsigned int sRestoreFailed;
-static int          sRestoreAckPending;   /* restored; waiting for the first post-restore frame */
+/* Restores applied whose "done" has not been counted yet. A COUNT, not a flag: a rewind load and an
+ * emulator-slot load use separate mailboxes, so both can run in one gate call, and a flag would
+ * collapse the two into a single completion -- the client, which waits for one outcome per accepted
+ * request, would then wait for the second forever. */
+static unsigned int sRestoreAckPending;
 
 /* ---- Instruction-step state (v12+). The "IST" verb requests running the halted CPU
  * N instructions then halting. sInsnStepPending is set by the server thread and picked
@@ -573,7 +577,7 @@ static void SeStateAfterRestore(void)
 {
     SE_LOCK();
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
-    sRestoreAckPending = 1;   /* counted done when the next frame lands in the emptied ring */
+    ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
     SE_UNLOCK();
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
@@ -1203,7 +1207,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     dst->valid = 1;
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
-    if (sRestoreAckPending) { sRestoreAckPending = 0; ++sRestoreDone; }   /* first post-restore frame */
+    if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
     SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
                                * reports the step as retired also holds its frame */
     SE_UNLOCK();

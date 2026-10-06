@@ -594,9 +594,14 @@ void TestEditFromTheOldDisplayIsRefused()
     CHECK(ds.read_vdp1_vram(ds.user, 0, &shown, 1) == 1 && shown == 0xAA);
     ds.end_capture(ds.user);
 
+    CHECK(se_live_captured_generation(&ds) == 1u);   // the display is of session 1
+
     // The old emulator goes away and the replacement answers -- all before the UI recaptures.
     release = true;
     CHECK(WaitFor([&] { return se_live_connection_generation(&ds) == 2u; }));
+    // The display is still of session 1 until the thread captures again: this is the number a
+    // client must reconcile its per-session state against, not the connection's.
+    CHECK(se_live_captured_generation(&ds) == 1u);
     CHECK(WaitFor([&] { return live.Connections() >= 2; }));
 
     // An edit made against the old display, committed now: refused, in every form.
@@ -613,7 +618,9 @@ void TestEditFromTheOldDisplayIsRefused()
     // Once the UI has captured the new session's first frame, edits are accepted again.
     ds.begin_capture(ds.user);
     CHECK(ds.read_vdp1_vram(ds.user, 0, &shown, 1) == 1 && shown == 0xBB);
+    CHECK(se_live_captured_generation(&ds) == 2u);   // pinned: already the new session inside the capture
     ds.end_capture(ds.user);
+    CHECK(se_live_captured_generation(&ds) == 2u);
     CHECK(ds.write_main_ram(ds.user, 0x06000000u, &byte, 1) == 1);
     CHECK(se_live_emu_load_slot(&ds, 1) == 0);
     CHECK(se_live_emu_load_slot(&ds, 2) != 0);   // one load at a time: a second would replace the first unsent
