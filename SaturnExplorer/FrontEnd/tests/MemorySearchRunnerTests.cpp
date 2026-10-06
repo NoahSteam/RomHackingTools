@@ -116,6 +116,37 @@ int main()
               "the page after the boundary was read too");
     }
 
+    // The threadless (browser) mode: no worker, the scan advances a slice per Poll(), so it takes
+    // many frames rather than finishing inside one, and reaches the same answer.
+    {
+        CountingBackend be;
+        for (uint32_t i = 0; i < kSize; i += 4096) be.mMem[i + 3] = uint8_t(i / 4096);
+        MemorySearch sync, stepped;
+        MemorySearchRunner run(MemorySearchRunner::Mode::Incremental, 0.0);   // one chunk per Poll
+
+        sync.First(be, regions, WatchType::U8, SearchCompare::Unknown, 0);
+        Check(run.StartFirst(stepped, be, regions, WatchType::U8, SearchCompare::Unknown, 0),
+              "incremental first scan starts");
+        Check(run.Running() && stepped.Count() == 0, "nothing is scanned by Start itself");
+        int polls = 1;
+        while (!run.Poll(stepped) && polls < 100000) ++polls;
+        Check(polls > 10, "a large scan spans many frames, not one");
+        Check(!run.Running() && stepped.Count() == sync.Count(), "same candidates as the sync scan");
+
+        be.mMem[0x1003] = 7; be.mMem[0x20000] = 9;
+        const std::size_t a = sync.Next(be, SearchCompare::Changed, 0);
+        Check(run.StartNext(stepped, be, SearchCompare::Changed, 0), "incremental next starts");
+        polls = 1;
+        while (!run.Poll(stepped) && polls < 100000) ++polls;
+        Check(polls > 10, "the narrowing pass over a million hits is sliced too");
+        Check(a == 2 && stepped.Count() == 2 && stepped.Hits()[0].addr == kBase + 0x1003 &&
+              stepped.Hits()[1].addr == kBase + 0x20000, "same survivors as the sync scan");
+        Check(!run.StartFirst(stepped, be, regions, WatchType::U8, SearchCompare::Unknown, 0) ||
+              run.Running(), "a scan can start again after one finishes");
+        run.Stop();
+        Check(!run.Running(), "Stop abandons a scan in progress");
+    }
+
     if (gFail == 0) std::printf("All MemorySearchRunner tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

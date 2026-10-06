@@ -116,6 +116,7 @@ private:
     void DrawAboutModal();
     void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
     void SaveScreenshot(IPlatform& platform);
+    bool mScreenshotRequested = false;   // taken once the displayed context is selected
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);

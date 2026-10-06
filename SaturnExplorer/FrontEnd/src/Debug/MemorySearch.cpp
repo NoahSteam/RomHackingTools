@@ -1,6 +1,7 @@
 #include "Debug/MemorySearch.h"
 
 #include <algorithm>
+#include <cstdint>
 
 namespace sfe
 {
@@ -203,48 +204,68 @@ SearchSnapshot MemorySearch::CaptureNext(IMemoryBackend& backend) const
     return snap;
 }
 
-SearchScan MemorySearch::ScanFirst(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
-                                   int64_t operand)
+bool MemorySearch::ScanFirstStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                                 int64_t operand, SearchScanCursor& cur, SearchScan& out,
+                                 std::size_t maxItems)
 {
-    SearchScan out;
     const int width = (int)WatchTypeSize(type);
-    if (width <= 0) return out;
+    if (width <= 0) return true;
     const bool baseline = IsRelative(cmp);   // no previous scan yet: just record everything
-    for (const SearchSnapshot::Region& reg : snap.regions)
+    std::size_t budget = maxItems;
+    while (cur.region < snap.regions.size())
     {
-        if (reg.failed)
+        const SearchSnapshot::Region& reg = snap.regions[cur.region];
+        if (!cur.entered)
         {
-            // Skipping it silently reports a hit count for a search that never looked at part of
-            // the range the user asked for.
-            out.unread.push_back(reg.r);
-            continue;
+            cur.entered = true;
+            cur.off = 0;
+            if (reg.failed)
+            {
+                // Skipping it silently reports a hit count for a search that never looked at
+                // part of the range the user asked for.
+                out.unread.push_back(reg.r);
+                ++cur.region;
+                cur.entered = false;
+                continue;
+            }
+            out.hits.reserve(out.hits.size() + reg.data.size() / width);   // exact upper bound
         }
-        out.hits.reserve(out.hits.size() + reg.data.size() / width);   // exact upper bound
-        for (uint32_t off = 0; off + width <= reg.data.size(); off += width)
+        while (cur.off + width <= reg.data.size())
         {
-            const int64_t cur = DecodeBigEndian(reg.data.data() + off, type);
-            if (baseline || Match(cmp, cur, cur, operand))
-                out.hits.push_back({reg.r.base + off, cur});
+            if (budget == 0) return false;
+            --budget;
+            const int64_t v = DecodeBigEndian(reg.data.data() + cur.off, type);
+            if (baseline || Match(cmp, v, v, operand))
+                out.hits.push_back({reg.r.base + cur.off, v});
+            cur.off += width;
         }
+        ++cur.region;
+        cur.entered = false;
     }
-    return out;
+    return true;
 }
 
-SearchScan MemorySearch::ScanNext(const SearchSnapshot& snap, WatchType type,
-                                  std::vector<SearchHit> previous, SearchCompare cmp,
-                                  int64_t operand)
+bool MemorySearch::ScanNextStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                                int64_t operand, SearchScanCursor& cur,
+                                std::vector<SearchHit>& previous, SearchScan& out,
+                                std::size_t maxItems)
 {
-    SearchScan out;
     const uint32_t width = (uint32_t)WatchTypeSize(type);
-    for (const SearchSnapshot::Region& reg : snap.regions)
-        if (reg.failed) out.unread.push_back(reg.r);
+    if (!cur.entered)
+    {
+        cur.entered = true;
+        for (const SearchSnapshot::Region& reg : snap.regions)
+            if (reg.failed) out.unread.push_back(reg.r);
+    }
 
     // Filter in place: the survivors are compacted into the front of the vector the caller gave
     // us, so a narrowing pass over a couple of million candidates allocates nothing.
-    std::size_t kept = 0;
-    for (std::size_t i = 0; i < previous.size(); ++i)
+    std::size_t budget = maxItems;
+    for (; cur.index < previous.size(); ++cur.index)
     {
-        const SearchHit& h = previous[i];
+        if (budget == 0) return false;
+        --budget;
+        const SearchHit& h = previous[cur.index];
         const SearchSnapshot::Region* reg = nullptr;
         for (const SearchSnapshot::Region& cand : snap.regions)
         {
@@ -267,14 +288,33 @@ SearchScan MemorySearch::ScanNext(const SearchSnapshot& snap, WatchType type,
             // is not a result: mark it, and let the panel say so.
             SearchHit stale = h;
             stale.verified = false;
-            previous[kept++] = stale;
+            previous[cur.kept++] = stale;
             continue;
         }
-        const int64_t cur = DecodeBigEndian(reg->data.data() + off, type);
-        if (Match(cmp, cur, h.value, operand)) previous[kept++] = {h.addr, cur, true};
+        const int64_t v = DecodeBigEndian(reg->data.data() + off, type);
+        if (Match(cmp, v, h.value, operand)) previous[cur.kept++] = {h.addr, v, true};
     }
-    previous.resize(kept);
+    previous.resize(cur.kept);
     out.hits = std::move(previous);
+    return true;
+}
+
+SearchScan MemorySearch::ScanFirst(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                                   int64_t operand)
+{
+    SearchScan out;
+    SearchScanCursor cur;
+    ScanFirstStep(snap, type, cmp, operand, cur, out, SIZE_MAX);
+    return out;
+}
+
+SearchScan MemorySearch::ScanNext(const SearchSnapshot& snap, WatchType type,
+                                  std::vector<SearchHit> previous, SearchCompare cmp,
+                                  int64_t operand)
+{
+    SearchScan out;
+    SearchScanCursor cur;
+    ScanNextStep(snap, type, cmp, operand, cur, previous, out, SIZE_MAX);
     return out;
 }
 

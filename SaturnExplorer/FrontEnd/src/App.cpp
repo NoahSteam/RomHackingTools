@@ -1306,6 +1306,12 @@ void App::BuildUI(IPlatform& platform)
     }
 #endif
 
+    if (mScreenshotRequested)
+    {
+        mScreenshotRequested = false;
+        SaveScreenshot(platform);   // mContext is the context on screen (scrubbed frame or live)
+    }
+
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
         0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
@@ -6997,7 +7003,9 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         }
         break;
     case TopBarCommandType::TakeScreenshot:
-        SaveScreenshot(platform);
+        // Top-bar commands run before the scrub context is selected as the view, and a
+        // screenshot is of the view. Taken later in the frame, once mContext is the displayed one.
+        mScreenshotRequested = true;
         break;
     case TopBarCommandType::OpenHelp:
         mOpenHelp = true;

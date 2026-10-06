@@ -11,6 +11,7 @@
 // region aligned to the value width (the standard "fast scan").
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -65,6 +66,16 @@ struct SearchHit
     bool     verified = true;
 };
 
+// Where a stepped scan stopped, so the next call resumes there (see ScanFirstStep).
+struct SearchScanCursor
+{
+    std::size_t region = 0;     // First: the region being walked
+    uint32_t    off = 0;        //        and the byte offset in it
+    std::size_t index = 0;      // Next: the hit being tested
+    std::size_t kept = 0;       //        and how many survivors are compacted so far
+    bool        entered = false;
+};
+
 struct SearchScan   // what a scan produced; Complete() installs it
 {
     std::vector<SearchHit>    hits;
@@ -106,6 +117,17 @@ public:
     static SearchScan ScanNext(const SearchSnapshot& snap, WatchType type,
                                std::vector<SearchHit> previous, SearchCompare cmp,
                                int64_t operand);
+    // The same two scans in slices, for a build with no threads to run them on: each call does
+    // at most 'maxItems' candidates and returns false until the scan is finished, then true with
+    // 'out' filled in (for ScanNextStep, 'previous' is consumed). The caller keeps the cursor and
+    // the output between calls, and paces the slices to leave the UI its frame.
+    static bool ScanFirstStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                              int64_t operand, SearchScanCursor& cursor, SearchScan& out,
+                              std::size_t maxItems);
+    static bool ScanNextStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                             int64_t operand, SearchScanCursor& cursor,
+                             std::vector<SearchHit>& previous, SearchScan& out,
+                             std::size_t maxItems);
     void Complete(SearchScan&& scan);
 
     void Reset();
