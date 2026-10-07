@@ -1100,6 +1100,7 @@ void App::BuildUI(IPlatform& platform)
             // core reaching the same PC, and a new halt at the PC the last one was at.
             report.hasSeq = se_live_get_stop_seq(&mDataSource, &report.seq) != 0;
             report.userBreakpoint = mBreakpoints.HasEnabledExecutionAt(report.pc);
+            report.dmaWatch = report.reason == SE_LIVE_STOP_DMA_WATCH;
         }
         // Fold the report into the run-control machine, which owns the halt presentation, the step
         // hold and the transient's identity (Debug/StepHaltMachine.h). What comes back describes
@@ -1127,7 +1128,7 @@ void App::BuildUI(IPlatform& platform)
         // (which has not run, and whose execution breakpoint, if any, has not been reached): any
         // armed watchpoint may be the one. A logging one is recorded; the halt stands only if a
         // break-on-access one is armed.
-        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_DMA_WATCH && !atStepBp)
+        if (stopped && !mbPaused && report.dmaWatch)
         {
             const BreakpointManager::WatchCauses w = mBreakpoints.WatchCausesFor(
                 [](uint32_t, uint32_t, bool, bool) { return true; });
