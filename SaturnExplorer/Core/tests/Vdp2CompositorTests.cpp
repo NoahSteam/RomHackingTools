@@ -1993,6 +1993,176 @@ void TestRbg0CoefficientLineColor()
     CHECK(IsColor(RenderCc(state), 1, 0, 127, 127, 127));
 }
 
+// RBG1 takes NBG0's place, so the NBG0 tile map describes the rotation screen: a 4x4 grid of planes
+// (256 patterns across at one 64x64 page per plane) instead of the NBG's 2x2 (128), laid out by
+// rotation set B. With R1ON clear the same layer is the plain NBG0.
+void TestRbg1TileMapDescribesTheRotationScreen()
+{
+    State state = MakeRbg1State();
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    se_vdp2_tilemap info = {};
+    CHECK(se_get_vdp2_tilemap(context, SE_LAYER_NBG0, &info) == SE_OK);
+    CHECK(info.active == 1 && info.bitmap == 0);
+    CHECK(info.cell_pixels == 8);
+    CHECK(info.map_width == 256 && info.map_height == 256);
+    CHECK(info.tile_count >= 2);   // the blank pattern and set B's plane 0 character
+    se_destroy(context);
+
+    // The same registers with R1ON clear: NBG0 itself, a 2x2 plane grid.
+    State nbg = MakeRbg1State();
+    SetReg(nbg, 0x020, 0x0001);
+    se_context* nbgContext = se_test::CreateContext(nbg);
+    CHECK(se_begin_frame(nbgContext) == SE_OK);
+    se_vdp2_tilemap nbgInfo = {};
+    CHECK(se_get_vdp2_tilemap(nbgContext, SE_LAYER_NBG0, &nbgInfo) == SE_OK);
+    CHECK(nbgInfo.map_width == 128);
+    se_destroy(nbgContext);
+}
+
+// ---- Exclusive monitor modes -------------------------------------------------------------------
+
+// HRESO bit 2 selects the exclusive monitor modes: 480 lines, non-interlaced, and VRESO / LSMD are
+// ignored. VDP1 still draws its usual lines and each is shown twice, so a polygon on VDP1 row 0
+// fills display rows 0 and 1.
+void TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled()
+{
+    for (uint16_t tvmd : { uint16_t(0x0004), uint16_t(0x00F4) })   // the second sets VRESO and LSMD too
+    {
+        State state = MakeBlueBackState(4, 240);   // VDP1's 240 lines
+        SetReg(state, 0x000, tvmd);
+        PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 0);   // VDP1 row 0 only
+        PutBE16(state.vdp1, 0x40, 0x8000);
+        const std::vector<uint8_t> pixels = RenderWith(state, 4, 480, [](se_render_opts&) {});
+        CHECK(IsColorAt(pixels, 4, 1, 0, 255, 0, 0));
+        CHECK(IsColorAt(pixels, 4, 1, 1, 255, 0, 0));
+        CHECK(IsColorAt(pixels, 4, 1, 2, 0, 0, 255));
+    }
+}
+
+// RBG1 cannot be displayed in the exclusive monitor modes (and it still holds NBG0's slot).
+void TestRbg1IsNotDrawnInTheExclusiveMonitorModes()
+{
+    State state = MakeRbg1State();
+    SetReg(state, 0x000, 0x0004);
+    const std::vector<uint8_t> pixels = RenderWith(state, 4, 480, [](se_render_opts&) {});
+    CHECK(!IsColorAt(pixels, 4, 1, 0, 255, 0, 0));
+}
+
+// ---- Special priority and special colour calculation functions ---------------------------------
+
+// NBG3 (white) at priority register 3 under a green sprite at priority 2, over a blue back screen.
+State MakeSpecialPriorityState()
+{
+    State state = MakeNbg3State();
+    SetBlueBackScreen(state);
+    SetReg(state, 0x0FA, 0x0300);   // PRINB: NBG3 priority 3
+    SetReg(state, 0x0F0, 0x0102);   // PRISA: sprite priority number 0 -> priority 2
+    ResizeVdp1(state, 0x400);
+    PutPolygon(state, 0x20, 0x83E0, 0, 0, 0, 3, 1);   // green RGB sprite over the frame
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    return state;
+}
+
+// The special priority function replaces the priority number's LSB. Per screen (mode 0) NBG3 keeps
+// its register's 3 and covers the sprite; per character (mode 1) the pattern name's special priority
+// bit is the LSB, so a character without it sits at 2 -- tied with the sprite, which wins -- and one
+// with it stays at 3.
+void TestSpecialPriorityPerCharacter()
+{
+    State state = MakeSpecialPriorityState();
+    CHECK(IsColor(Render(state, false), 1, 0, 255, 255, 255));        // mode 0: NBG3 (3) over sprite (2)
+    SetReg(state, 0x0EA, 0x0040);                                      // SFPRMD: NBG3 mode 1
+    SetReg(state, 0x036, 0x8000);                                      // PNCN3: special priority bit 0
+    CHECK(IsColor(Render(state, false), 1, 0, 0, 255, 0));            // priority 2: the sprite wins
+    SetReg(state, 0x036, 0x8200);                                      // special priority bit 1
+    CHECK(IsColor(Render(state, false), 1, 0, 255, 255, 255));        // priority 3: NBG3 again
+}
+
+// A character whose priority comes out as 0 is not displayed -- even from a layer whose register is 0,
+// which the special priority function can lift to 1.
+void TestSpecialPriorityCanLiftAnIdleLayer()
+{
+    State state = MakeNbg3State();
+    SetBlueBackScreen(state);
+    SetReg(state, 0x0FA, 0x0000);   // PRINB: NBG3 priority 0: normally not displayed
+    SetReg(state, 0x0EA, 0x0040);   // NBG3 mode 1
+    SetReg(state, 0x036, 0x8200);   // special priority bit set: priority 1
+    CHECK(IsWhite(Render(state, false), 1, 0));
+    SetReg(state, 0x036, 0x8000);   // bit clear: priority 0, not displayed
+    CHECK(IsColor(Render(state, false), 1, 0, 0, 0, 255));
+}
+
+// Mode 2 picks the dots: with the character's special priority bit set, only dots whose colour code is
+// selected in the special function code get LSB 1. NBG3 alternates dot codes 1 (white) and 2 (red);
+// code 2 is selected, so the red dots stay at 3 above the sprite and the white ones drop to 2.
+void TestSpecialPriorityPerDot()
+{
+    State state = MakeSpecialPriorityState();
+    std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x12);
+    PutBE16(state.cram, 4, 0x001F);   // dot code 2 = red
+    SetReg(state, 0x0EA, 0x0080);     // SFPRMD: NBG3 mode 2
+    SetReg(state, 0x036, 0x8200);     // special priority bit set
+    SetReg(state, 0x026, 0x0002);     // SFCODE A: dot colour codes 2 and 3
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 0, 0, 0, 255, 0));     // code 1: priority 2, the sprite wins
+    CHECK(IsColor(pixels, 1, 0, 255, 0, 0));     // code 2: priority 3, NBG3
+    // SFSEL picks code B instead, which selects nothing here: every dot drops to 2.
+    SetReg(state, 0x024, 0x0008);
+    CHECK(IsColor(Render(state, false), 1, 0, 0, 255, 0));
+}
+
+// The special colour calculation function replaces the screen's colour-calculation enable. Per
+// character (mode 1) it is the pattern name's special colour calculation bit; white at 16:16 over
+// the blue back screen is (127,127,255) with the bit set and solid white without it.
+void TestSpecialColorCalculationPerCharacter()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x0EE, 0x0040);   // SFCCMD: NBG3 mode 1
+    SetReg(state, 0x036, 0x8100);   // special colour calculation bit set
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 127, 255));
+    SetReg(state, 0x036, 0x8000);
+    CHECK(IsWhite(RenderCc(state), 1, 0));
+}
+
+// Mode 3 follows the colour RAM entry's MSB (the screen is palette format here).
+void TestSpecialColorCalculationFollowsTheColorDataMsb()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x0EE, 0x00C0);   // SFCCMD: NBG3 mode 3
+    PutBE16(state.cram, 2, 0xFFFF);   // palette entry 1: white with its MSB set
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 127, 255));
+    PutBE16(state.cram, 2, 0x7FFF);   // MSB clear
+    CHECK(IsWhite(RenderCc(state), 1, 0));
+}
+
+// Mode 2 combines both: only dots of a selected colour code in a character whose bit is set colour-
+// calculate. Dot code 1 (white) stays solid; dot code 2 (red) blends with blue to (127,0,127).
+void TestSpecialColorCalculationPerDot()
+{
+    State state = MakeCcState();
+    std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x12);
+    PutBE16(state.cram, 4, 0x001F);
+    SetReg(state, 0x0EE, 0x0080);   // SFCCMD: NBG3 mode 2
+    SetReg(state, 0x036, 0x8100);   // special colour calculation bit set
+    SetReg(state, 0x026, 0x0002);   // SFCODE A: dot colour codes 2 and 3
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    CHECK(IsWhite(pixels, 0, 0));
+    CHECK(IsColor(pixels, 1, 0, 127, 0, 127));
+}
+
+// Screens at the same priority stack in the hardware's fixed order, whatever order they were drawn
+// in: NBG0 over NBG3. NBG0's bitmap row 1 is red and NBG3 is white, both at priority 1.
+void TestEqualPriorityScreensStackInTheirFixedOrder()
+{
+    State state = MakeBitmapRowsState();
+    SetReg(state, 0x020, 0x0009);   // BGON: NBG0 + NBG3
+    CHECK(IsRed(Render(state, false), 1, 1));
+    SetReg(state, 0x0FA, 0x0200);   // NBG3 priority 2: now it is on top
+    CHECK(IsWhite(Render(state, false), 1, 1));
+}
+
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
@@ -2058,6 +2228,16 @@ int main()
     TestRbg1DrawsRotationSetBThroughNbg0Registers();
     TestRbg1WithRbg0SuppressesTheOtherNbgs();
     TestRbg0CoefficientLineColor();
+    TestRbg1TileMapDescribesTheRotationScreen();
+    TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled();
+    TestRbg1IsNotDrawnInTheExclusiveMonitorModes();
+    TestEqualPriorityScreensStackInTheirFixedOrder();
+    TestSpecialPriorityPerCharacter();
+    TestSpecialPriorityCanLiftAnIdleLayer();
+    TestSpecialPriorityPerDot();
+    TestSpecialColorCalculationPerCharacter();
+    TestSpecialColorCalculationFollowsTheColorDataMsb();
+    TestSpecialColorCalculationPerDot();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

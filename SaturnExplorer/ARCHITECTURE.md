@@ -499,10 +499,15 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > SDCTL / TPSDSL) are modeled, as are gradation calculation (BOKEN: the second image becomes a
    > 1:1:2 horizontal blur of the designated screen), RBG0's coefficient-table line colour bits,
    > vertical cell scroll for NBG0/NBG1 and RBG1 (NBG0's registers, rotation set B, one coefficient
-   > per line; it takes NBG0's place and, with RBG0 also on, NBG1-3 are not drawn). Still missing:
-   > special priority / colour-calculation functions (SFPRMD, SFCCMD), per-line zoom-limit timing of
-   > vertical cell scroll, the exclusive-monitor modes, and tile-map export for RBG1. See
-   > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
+   > per line; it takes NBG0's place and, with RBG0 also on, NBG1-3 are not drawn; its tile map is
+   > the NBG0 layer's), the special priority and special colour calculation functions (SFPRMD /
+   > SFCCMD / SFSEL+SFCODE: the priority LSB and the colour-calculation enable per screen, per
+   > character or per dot, or by the colour data's MSB; every contribution carries its screen rank so
+   > equal priorities stack in the hardware's fixed order), and the exclusive monitor modes (HRESO
+   > bit 2: 480 non-interlaced lines, VDP1 lines shown twice, RBG1 not displayed, no extended
+   > calculation or gradation). Still missing: per-line zoom-limit timing of vertical cell scroll and
+   > RGB888 restrictions in the exclusive modes. See `Docs/RenderingAccuracyRoadmap.md` for the
+   > ordered completion plan.
    > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
    > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
    > out through `SpritePriorityTable::Resolve`, which decodes each packed word as VDP2 does (SPCTL

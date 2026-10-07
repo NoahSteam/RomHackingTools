@@ -659,7 +659,8 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     // VDP1 space here and only the read-out below maps to the display. (Scaling the coordinates
     // instead put the right edge of an inclusive clip, or of a sprite, one doubled column short.)
     const int fbWidth = (scene.vdp1Width > 0) ? scene.vdp1Width : width;
-    std::vector<FbPixel> fb(static_cast<size_t>(fbWidth) * height);
+    const int fbHeight = (scene.vdp1Height > 0) ? scene.vdp1Height : height;   // 2x in exclusive monitor modes
+    std::vector<FbPixel> fb(static_cast<size_t>(fbWidth) * fbHeight);
 
     // Commands draw into the framebuffer strictly in list order, and a later pixel replaces an
     // earlier one however the two rank in VDP2 priority: that is decided afterwards, on the
@@ -717,7 +718,7 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
         const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(fbWidth, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip,
+            DrawEdges(fbWidth, fbHeight, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip,
                       nullptr, sink);
             continue;
         }
@@ -736,7 +737,7 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
             da.endCode = &endCode;
         }
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, fbWidth, height, nullptr, r.gouraud, da, sink);
+                   vram, cram, cramMode, fbWidth, fbHeight, nullptr, r.gouraud, da, sink);
     }
 
     // Read the finished framebuffer out as VDP2 sees it: each pixel resolved through the sprite type
@@ -753,9 +754,10 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     bool haveLast = false;
     for (int y = 0; y < height; ++y)
     {
+        const int row = FramebufferColumn(y, fbHeight, height);
         for (int x = 0; x < width; ++x)
         {
-            const FbPixel& p = fb[static_cast<size_t>(y) * fbWidth + column[static_cast<size_t>(x)]];
+            const FbPixel& p = fb[static_cast<size_t>(row) * fbWidth + column[static_cast<size_t>(x)]];
             if (!p.written)
             {
                 continue;

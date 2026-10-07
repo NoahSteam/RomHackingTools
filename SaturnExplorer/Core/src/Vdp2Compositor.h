@@ -18,8 +18,8 @@
 // (with second-image ratio, line colour insertion and the extended form), colour offset applied
 // after colour calculation, horizontal mosaic, the real back screen, the sprite layer's own
 // colour calculation, sprite shadows, gradation calculation, vertical cell scroll, and RBG1
-// (NBG0's slot, rotation set B). Vertical mosaic and the special priority/colour-calculation
-// functions are not modeled yet.
+// (NBG0's slot, rotation set B), the special priority and colour-calculation functions, and the
+// exclusive monitor modes. Vertical mosaic is not modeled yet.
 #pragma once
 
 #include <cstdint>

@@ -60,6 +60,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
+    out.vdp1Height = 0;
 
     const std::vector<uint32_t> addresses = Vdp1Walk(vram);
 

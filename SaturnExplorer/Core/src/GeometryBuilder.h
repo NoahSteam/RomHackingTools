@@ -69,6 +69,9 @@ struct Vdp1Scene
     // display (screenWidth) is 2x this — VDP1 draws at half width and is doubled at
     // scan-out — so the rasterizer scales sprite X by screenWidth / vdp1Width.
     int vdp1Width = 320;
+    // The same for the vertical axis, which only differs in the exclusive monitor modes: VDP1 draws
+    // 240 lines and each is shown twice on the 480-line screen. 0 = the same as screenHeight.
+    int vdp1Height = 0;
 };
 
 class GeometryBuilder

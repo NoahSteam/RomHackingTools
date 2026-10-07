@@ -36,6 +36,16 @@ enum : uint16_t
     kGradation    = 256   // the screen is the one CCCTL's gradation calculation is set up for
 };
 
+// How the hardware ranks screens that share a priority number, lowest first: the back screen, then
+// NBG3, NBG2, NBG1, NBG0 (or RBG1), RBG0, and the sprites on top. With per-pixel priorities (the
+// special priority function) the order sources are emitted in no longer settles ties, so the rank
+// travels with each contribution.
+enum : uint8_t
+{
+    kRankBack = 0, kRankNbg3 = 1, kRankNbg2 = 2, kRankNbg1 = 3, kRankNbg0 = 4, kRankRbg0 = 5,
+    kRankSprite = 6
+};
+
 // One source's contribution at a pixel. prio 0 = the back screen / no contribution;
 // NBG/RBG/sprite layers use priority 1..7.
 struct PixDesc
@@ -44,6 +54,7 @@ struct PixDesc
     uint8_t prio = 0;
     bool    ccEn = false, ccAdd = false;        // this layer's colour-calc parameters
     uint8_t ccRatio = 0;
+    uint8_t rank = 0;                           // kRank*: breaks ties between equal priorities
     uint16_t flags = 0;                         // k* flags above
     bool    live = false;                       // a source emitted this (the slot is not empty)
 };
@@ -110,22 +121,28 @@ inline void BlendCC(uint8_t* dst, uint8_t r, uint8_t g, uint8_t b, uint32_t rati
     }
 }
 
-// Insert a contribution, keeping the four highest-priority entries. `prio >=` on ties so a
-// later insert wins -- reproducing the old back-to-front overwrite order when sources are
-// emitted in draw order (back screen, then NBGs sorted low-priority/high-index first,
-// then sprites).
+// Insert a contribution, keeping the four highest-priority entries. Equal priorities are ranked by
+// kRank*, and on an equal rank the later insert wins.
+// True if a contribution at (prio, rank) sits above 'd': a higher priority, or on a tie a higher
+// rank (and an empty slot is always beaten).
+inline bool Beats(uint8_t prio, uint8_t rank, const PixDesc& d)
+{
+    return !d.live || prio > d.prio || (prio == d.prio && rank >= d.rank);
+}
+
 inline void EmitPix(PixColumn& col, uint8_t r, uint8_t g, uint8_t b, uint8_t prio,
-                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint16_t flags = 0)
+                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint16_t flags, uint8_t rank)
 {
     PixDesc d;
     d.r = r; d.g = g; d.b = b; d.prio = prio;
     d.ccEn = ccEn; d.ccRatio = ccRatio; d.ccAdd = ccAdd;
     d.flags = flags;
+    d.rank = rank;
     d.live = true;
     PixDesc* slot[4] = { &col.top, &col.second, &col.third, &col.fourth };
     for (int i = 0; i < 4; ++i)
     {
-        if (prio >= slot[i]->prio || !slot[i]->live)
+        if (Beats(prio, rank, *slot[i]))
         {
             for (int j = 3; j > i; --j)
             {
@@ -143,9 +160,9 @@ inline void EmitPix(PixColumn& col, uint8_t r, uint8_t g, uint8_t b, uint8_t pri
 // it is dropped instead of being inserted.
 inline void EmitShadowMarker(PixColumn& col, uint8_t prio)
 {
-    if (prio >= col.top.prio || !col.top.live)
+    if (Beats(prio, kRankSprite, col.top))
     {
-        EmitPix(col, 0, 0, 0, prio, false, 0, false, kShadowMarker);
+        EmitPix(col, 0, 0, 0, prio, false, 0, false, kShadowMarker, kRankSprite);
     }
 }
 

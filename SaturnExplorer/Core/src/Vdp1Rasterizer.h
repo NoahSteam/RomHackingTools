@@ -17,9 +17,10 @@ namespace se
 class Vdp1Rasterizer
 {
 public:
-    // The VDP1 framebuffer column a display column reads: VDP1 draws at its own width, which in a
-    // hi-res mode is half the display's, and every column is doubled at scan-out. The hit test maps
-    // clicks back with the same step.
+    // The VDP1 framebuffer column (or row) a display column (or row) reads: VDP1 draws at its own
+    // size, which in a hi-res mode is half the display's width and in an exclusive monitor mode half
+    // its height, and every column or row is doubled at scan-out. The hit test maps clicks back with
+    // the same step.
     static int FramebufferColumn(int x, int fbWidth, int displayWidth)
     {
         return static_cast<int>(static_cast<int64_t>(x) * fbWidth / displayWidth);
