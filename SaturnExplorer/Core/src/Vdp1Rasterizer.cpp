@@ -77,15 +77,67 @@ bool PointInQuad(const V corners[4], float px, float py)
 
 // The per-primitive draw state threaded into the rasterizer: draw-mode effects, an
 // optional solid fill color (null = textured), and an optional user-clip rect.
+struct EndCodeRows;
+
 struct DrawAttribs
 {
     DrawFx fx;
     const Rgba* solid = nullptr;
     const ClipRect* clip = nullptr;
+    EndCodeRows* endCode = nullptr;   // textured with the end code enabled; else null
     // For an untextured primitive there is no texel to read a priority out of, so the command's
     // own colour word (CMDCOLR) stands in -- which is what the hardware writes to the framebuffer
     // for those pixels.
     uint16_t solidWord = 0;
+};
+
+// End-code handling for one textured primitive (CMDPMOD ECD clear).
+//
+// An end-code texel is never drawn, and the hardware stops reading a texture line at the second
+// end code in a row, so every texel after it in that line is transparent too. The rasterizer
+// samples texels at random, so the stop position of each line is found by scanning it once, in the
+// order the hardware reads it -- right to left when the sprite is flipped horizontally -- and
+// cached for the primitive's other pixels.
+struct EndCodeRows
+{
+    const std::vector<uint8_t>* vram = nullptr;
+    se_color_mode mode = SE_COLOR_BANK_16;
+    uint32_t addr = 0;
+    uint16_t width = 0, height = 0;
+    bool flipX = false;
+    std::vector<int32_t> stop;   // per row: read-order index of the terminating end code, -1 unscanned
+
+    bool Blocks(int x, int y)
+    {
+        uint16_t raw = 0;
+        if (!RawTexel(*vram, mode, addr, width, x, y, raw))
+        {
+            return false;
+        }
+        const uint16_t ec = EndCodeValue(mode);
+        if (raw == ec)
+        {
+            return true;
+        }
+        int32_t& s = stop[static_cast<size_t>(y)];
+        if (s < 0)
+        {
+            s = width;   // no terminator
+            int run = 0;
+            for (int k = 0; k < width; ++k)
+            {
+                uint16_t v = 0;
+                RawTexel(*vram, mode, addr, width, flipX ? width - 1 - k : k, y, v);
+                run = (v == ec) ? run + 1 : 0;
+                if (run == 2)
+                {
+                    s = k;
+                    break;
+                }
+            }
+        }
+        return (flipX ? width - 1 - x : x) >= s;
+    }
 };
 
 // True if user clipping rejects pixel (x,y): mode 0 draws only inside the rect, mode 1
@@ -111,7 +163,7 @@ uint8_t ApplyGouraud(uint8_t t8, float g5)
 
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
-// to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path emits a descriptor
+// to 'sink(idx, r, g, b, fx, word, direct)', which decides how it lands: the 2D path emits a descriptor
 // into its PixColumn at the priority 'word' selects (applying draw-mode effects against the
 // column below); the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
 // both paths share the coverage/UV/gouraud walk without either owning the other's compositing
@@ -187,6 +239,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
 
             Rgba c;
             uint16_t word = da.solidWord;
+            bool direct = true;   // an untextured fill is a colour, not a palette code
             if (da.solid)
             {
                 c = *da.solid;   // untextured polygon: solid fill, always opaque
@@ -202,9 +255,14 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                                                 tex.palette_bank, tex.clut_address, spd);
                 c = t.color;
                 word = t.word;
+                direct = t.direct;
                 if (c.a == 0)
                 {
                     continue;  // transparent texel
+                }
+                if (da.endCode && da.endCode->Blocks(tx, ty))
+                {
+                    continue;  // end code, or past the one that ended this texture line
                 }
             }
 
@@ -238,7 +296,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             // Hand the covered pixel to the sink with the sprite's draw-mode; the sink
             // owns how shadow / half-luminance / half-transparency and the final write or
             // descriptor emission are applied.
-            sink(idx, cr, cg, cb, da.fx, word);
+            sink(idx, cr, cg, cb, da.fx, word, direct);
         }
     }
 }
@@ -289,7 +347,7 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
             if (fd >= (*depth)[idx]) continue;
             (*depth)[idx] = fd;
         }
-        sink(idx, c.r, c.g, c.b, DrawFx{}, word);
+        sink(idx, c.r, c.g, c.b, DrawFx{}, word, true);
     }
 }
 
@@ -337,42 +395,60 @@ float DistanceToEdges(const RVert v[4], uint8_t primKind, float px, float py)
     return best;
 }
 
-// VDP1 sprite corners are *inclusive* pixel coordinates: a sprite spanning
-// screen columns xa..xc covers xc-xa+1 pixels, and the game builds a mech from
-// many small strips laid edge-to-edge (strip N ends at row R, strip N+1 starts
-// at R+1). A center-sampling rasterizer treats each quad's span as half-open and
-// draws one pixel fewer per axis, so a 1px seam opens at every strip boundary and
-// the backdrop shows through. Nudge each corner outward along the quad's own two
-// edges by half a pixel: the far edge's pixel centers then land on the boundary
-// (drawn, since coverage includes edges) and neighbouring strips overlap by a
-// pixel instead of leaving a gap. UVs are unchanged, so the half-pixel of extra
-// coverage just repeats the clamped edge texel.
+// VDP1 sprite corners are *inclusive* pixel indices: a primitive spanning columns xa..xc covers
+// xc-xa+1 pixels, and the game builds a mech from many small strips laid edge-to-edge (strip N
+// ends at row R, strip N+1 starts at R+1). The rasterizer samples at pixel centres, so a corner
+// index is the pixel's centre, (i + 0.5) in continuous coordinates, and the quad it describes
+// reaches half a pixel beyond it: shift each corner onto its pixel's centre, then nudge it outward
+// along the quad's own two edges by half a pixel. The edges then fall on pixel boundaries -- columns
+// 10..17 span [10,18) and cover exactly eight centres -- and strips laid edge-to-edge neither
+// overlap nor leave a seam. UVs are unchanged, so the texture still maps one texel per pixel.
 void ExpandQuadInclusive(RVert v[4])
 {
-    // Half-pixel outward unit vector along an edge, or (0,0) for a degenerate
-    // edge (e.g. a 1px-thin sprite). Computed from the ORIGINAL corners so the
-    // four corner nudges below are independent of each other — otherwise a
-    // rotated/distorted quad would skew, since a later edge would read a corner
-    // an earlier one already moved.
-    auto unitHalf = [](const RVert& from, const RVert& to, float& nx, float& ny)
+    // Half-pixel outward vector along an edge, or (0,0) for a degenerate edge. Computed from the
+    // ORIGINAL corners so the four corner nudges below are independent of each other -- otherwise
+    // a rotated/distorted quad would skew, since a later edge would read a corner an earlier one
+    // already moved.
+    struct Half { float x, y; bool zero() const { return x == 0.0f && y == 0.0f; } };
+    auto unitHalf = [](const RVert& from, const RVert& to) -> Half
     {
         const float dx = to.x - from.x;
         const float dy = to.y - from.y;
         const float len = std::sqrt(dx * dx + dy * dy);
-        if (len < 1e-3f) { nx = 0.0f; ny = 0.0f; return; }
-        nx = dx / len * 0.5f;
-        ny = dy / len * 0.5f;
+        if (len < 1e-3f) return { 0.0f, 0.0f };
+        return { dx / len * 0.5f, dy / len * 0.5f };
     };
-    float abx, aby, adx, ady, bcx, bcy, dcx, dcy;
-    unitHalf(v[0], v[1], abx, aby);   // A->B (top)
-    unitHalf(v[0], v[3], adx, ady);   // A->D (left)
-    unitHalf(v[1], v[2], bcx, bcy);   // B->C (right)
-    unitHalf(v[3], v[2], dcx, dcy);   // D->C (bottom)
+    Half ab = unitHalf(v[0], v[1]);   // A->B (top)
+    Half dc = unitHalf(v[3], v[2]);   // D->C (bottom)
+    Half ad = unitHalf(v[0], v[3]);   // A->D (left)
+    Half bc = unitHalf(v[1], v[2]);   // B->C (right)
 
-    v[0].x += -abx - adx; v[0].y += -aby - ady;   // A: back along AB and AD
-    v[1].x += abx - bcx;  v[1].y += aby - bcy;    // B: forward AB, back BC
-    v[2].x += dcx + bcx;  v[2].y += dcy + bcy;    // C: forward DC and BC
-    v[3].x += adx - dcx;  v[3].y += ady - dcy;    // D: forward AD, back DC
+    // A one-pixel-thin or -narrow primitive has a pair of coincident corners, and so no direction
+    // to widen along. Borrow the opposite edge's, or else the perpendicular of the other axis, so
+    // an 8x1 sprite still grows to a full pixel of height instead of collapsing to nothing.
+    if (ab.zero() && dc.zero())
+    {
+        const Half src = ad.zero() ? bc : ad;
+        ab = dc = src.zero() ? Half{ 0.5f, 0.0f } : Half{ src.y, -src.x };
+    }
+    else if (ab.zero()) ab = dc;
+    else if (dc.zero()) dc = ab;
+    if (ad.zero() && bc.zero())
+    {
+        ad = bc = Half{ -ab.y, ab.x };
+    }
+    else if (ad.zero()) ad = bc;
+    else if (bc.zero()) bc = ad;
+
+    for (int k = 0; k < 4; ++k)
+    {
+        v[k].x += 0.5f;   // index -> pixel centre
+        v[k].y += 0.5f;
+    }
+    v[0].x += -ab.x - ad.x; v[0].y += -ab.y - ad.y;   // A: back along AB and AD
+    v[1].x += ab.x - bc.x;  v[1].y += ab.y - bc.y;    // B: forward AB, back BC
+    v[2].x += dc.x + bc.x;  v[2].y += dc.y + bc.y;    // C: forward DC and BC
+    v[3].x += ad.x - dc.x;  v[3].y += ad.y - dc.y;    // D: forward AD, back DC
 }
 
 // Orbit-camera projection: rotate world by yaw (Y) then pitch (X), push back by
@@ -406,6 +482,38 @@ RVert Project(const se_vec3& w, const se_camera3d& cam,
 
 }  // namespace
 
+namespace
+{
+
+// One pixel of the VDP1 framebuffer. 'direct' is the framebuffer word's MSB: the pixel holds an
+// RGB colour, as opposed to a palette code that VDP2 looks up later.
+struct FbPixel
+{
+    Rgba     color{ 0, 0, 0, 0 };
+    uint16_t word = 0;
+    bool     written = false;
+    bool     direct = false;
+};
+
+// VDP1 colour arithmetic runs on the framebuffer's 5-bit channels, so halving and averaging
+// truncate there. Doing it on the expanded 8-bit values keeps a bit the hardware drops: red and
+// blue averaged are (15,0,15) -- shown as (123,0,123) -- not (127,0,127).
+int To5(uint8_t c8) { return (static_cast<int>(c8) * 31 + 127) / 255; }
+uint8_t From5(int c5) { return static_cast<uint8_t>(c5 * 255 / 31); }
+
+Rgba Halve5(const Rgba& c)
+{
+    return { From5(To5(c.r) >> 1), From5(To5(c.g) >> 1), From5(To5(c.b) >> 1), 255 };
+}
+
+Rgba Average5(const Rgba& a, const Rgba& b)
+{
+    return { From5((To5(a.r) + To5(b.r)) >> 1), From5((To5(a.g) + To5(b.g)) >> 1),
+             From5((To5(a.b) + To5(b.b)) >> 1), 255 };
+}
+
+}  // namespace
+
 void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                                  const std::vector<uint8_t>& cram, se_cram_mode cramMode,
                                  const SpritePriorityTable& prios,
@@ -413,82 +521,108 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
-    const bool colorCalc = opts.show_color_calculation != 0;
-    // In hi-res modes VDP1 draws at half the display width and is doubled at scan-out, so
-    // scale sprite/clip X from the VDP1 coordinate space to the display. 1.0 otherwise.
-    const float xScale = (scene.vdp1Width > 0)
-                             ? static_cast<float>(width) / scene.vdp1Width : 1.0f;
-    if (!opts.show_vdp1_sprites)
+    if (!opts.show_vdp1_sprites || width <= 0 || height <= 0)
     {
         return;
     }
+    // VDP1 draws into its own framebuffer, at its own width. In hi-res modes that is half the
+    // display width and every column is doubled at scan-out, so sprite and clip coordinates stay in
+    // VDP1 space here and only the read-out below maps to the display. (Scaling the coordinates
+    // instead put the right edge of an inclusive clip, or of a sprite, one doubled column short.)
+    const int fbWidth = (scene.vdp1Width > 0) ? scene.vdp1Width : width;
+    std::vector<FbPixel> fb(static_cast<size_t>(fbWidth) * height);
 
     for (size_t i = 0; i < scene.sprites.size(); ++i)
     {
         const se_sprite_2d& s = scene.sprites[i];
-        // Emit one sprite pixel as a descriptor at the priority ITS OWN framebuffer word
-        // selects -- not the sprite's, which is only the front-most any of its pixels reach.
-        // A sprite whose CLUT spans two priority numbers therefore interleaves with the VDP2
-        // layers at both, which is what the hardware does (VDP1-02 / VDP2-01).
+        // Commands draw into the framebuffer strictly in list order, and a later pixel replaces an
+        // earlier one however the two rank in VDP2 priority: that is decided afterwards, on the
+        // pixel that survived. Draw-mode effects read the framebuffer pixel under them, never the
+        // VDP2 layers -- VDP2 only sees the finished framebuffer.
         //
-        // Draw-mode effects blend against the pixel(s) already below: shadow darkens the
-        // resolved below and hides the sprite's own colour; half-luminance halves the sprite;
-        // half-transparency averages with the resolved below. With nothing below (an
-        // invalid column) shadow/half-transparency degrade to no-op / plain emit, matching
-        // the old buffer path's "blend only over an opaque pixel".
-        auto sink = [&cols, colorCalc, &prios](size_t idx, uint8_t r, uint8_t g, uint8_t b,
-                                               const DrawFx& fx, uint16_t word)
+        //  - shadow halves the destination if it holds a colour, and otherwise does nothing;
+        //  - half-luminance halves the sprite's own colour;
+        //  - half-transparency averages with the destination if it holds a colour, and otherwise
+        //    just replaces it.
+        auto sink = [&fb](size_t idx, uint8_t r, uint8_t g, uint8_t b, const DrawFx& fx,
+                          uint16_t word, bool direct)
         {
-            const uint8_t prio = prios.Of(word);
-            PixColumn& col = cols[idx];
-            // Shadow and half-transparency blend against what is below THIS pixel's priority, not
-            // against the top of the column -- see ResolveBelow. The VDP2 layers are all in the
-            // column already, including ones this sprite pixel goes behind.
-            Rgba below{};
-            const bool haveBelow = ResolveBelow(col, prio, colorCalc, below);
+            FbPixel& d = fb[idx];
+            Rgba src{ r, g, b, 255 };
             if (fx.effect == 1)   // shadow
             {
-                if (haveBelow)
+                if (d.written && d.direct)
                 {
-                    EmitPix(col, below.r >> 1, below.g >> 1, below.b >> 1, prio,
-                            false, 0, false);
+                    d.color = Halve5(d.color);
                 }
                 return;
             }
-            uint8_t cr = r, cg = g, cb = b;
             if (fx.effect == 2)   // half-luminance
             {
-                cr >>= 1; cg >>= 1; cb >>= 1;
+                src = Halve5(src);
             }
-            else if (fx.effect == 3 && haveBelow)   // half-transparency over what is below
+            else if (fx.effect == 3 && d.written && d.direct)   // half-transparency
             {
-                cr = static_cast<uint8_t>((cr + below.r) >> 1);
-                cg = static_cast<uint8_t>((cg + below.g) >> 1);
-                cb = static_cast<uint8_t>((cb + below.b) >> 1);
+                src = Average5(src, d.color);
             }
-            EmitPix(col, cr, cg, cb, prio, false, 0, false);
+            d.color = src;
+            d.word = word;
+            d.written = true;
+            d.direct = direct;
         };
 
-        RVert v[4] = { { s.corners[0].x * xScale, s.corners[0].y, 0.0f },
-                       { s.corners[1].x * xScale, s.corners[1].y, 0.0f },
-                       { s.corners[2].x * xScale, s.corners[2].y, 0.0f },
-                       { s.corners[3].x * xScale, s.corners[3].y, 0.0f } };
+        const se_vec2* c = s.corners;
+        RVert v[4] = { { c[0].x, c[0].y, 0.0f }, { c[1].x, c[1].y, 0.0f },
+                       { c[2].x, c[2].y, 0.0f }, { c[3].x, c[3].y, 0.0f } };
         const SpriteRender& r = scene.render[i];
-        ClipRect clipScaled = r.clip;   // user-clip rect is in VDP1 space; scale its X too
-        clipScaled.x0 = static_cast<int32_t>(r.clip.x0 * xScale);
-        clipScaled.x1 = static_cast<int32_t>(r.clip.x1 * xScale);
-        const ClipRect* clip = r.clip.enable ? &clipScaled : nullptr;
+        const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip, nullptr,
-                      sink);
+            DrawEdges(fbWidth, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip,
+                      nullptr, sink);
             continue;
         }
         ExpandQuadInclusive(v);
         const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
-        const DrawAttribs da{ r.fx, r.solid ? &solidCol : nullptr, clip, r.color };
+        DrawAttribs da{ r.fx, r.solid ? &solidCol : nullptr, clip, nullptr, r.color };
+        EndCodeRows endCode;
+        if (!r.solid && r.endCodeEnabled)
+        {
+            endCode.vram = &vram;
+            endCode.mode = s.texture.color_mode;
+            endCode.addr = s.texture.vram_address;
+            endCode.width = s.texture.width;
+            endCode.height = s.texture.height;
+            endCode.flipX = s.flip_x != 0;
+            endCode.stop.assign(s.texture.height, -1);
+            da.endCode = &endCode;
+        }
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
-                   vram, cram, cramMode, width, height, nullptr, r.gouraud, da, sink);
+                   vram, cram, cramMode, fbWidth, height, nullptr, r.gouraud, da, sink);
+    }
+
+    // Scan the finished framebuffer out to the mixer, each pixel at the VDP2 priority its own word
+    // selects (a sprite whose CLUT spans several priority numbers interleaves with the VDP2 layers
+    // at each). Priority 0 means "not displayed" once the VDP2 registers say what 0 maps to.
+    // Sprites emit after the VDP2 layers, so they win a priority tie.
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            const int fx = static_cast<int>(static_cast<int64_t>(x) * fbWidth / width);
+            const FbPixel& p = fb[static_cast<size_t>(y) * fbWidth + fx];
+            if (!p.written)
+            {
+                continue;
+            }
+            const uint8_t prio = prios.Of(p.word);
+            if (prios.valid && prio == 0)
+            {
+                continue;
+            }
+            EmitPix(cols[static_cast<size_t>(y) * width + x], p.color.r, p.color.g, p.color.b,
+                    prio, false, 0, false);
+        }
     }
 }
 
@@ -523,7 +657,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // The exploded view separates sprites along Z by draw order, so a pixel's VDP2 priority
         // plays no part in it and the framebuffer word is dropped here.
         auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&,
-                                   uint16_t)
+                                   uint16_t, bool)
         {
             const size_t o = idx * 4;
             outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
@@ -544,7 +678,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over. The
         // depth test in RasterTriangle has already run by the time the sink sees a pixel.
-        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr, r.color };
+        const DrawAttribs da{ DrawFx{}, r.solid ? &solidCol : nullptr, nullptr, nullptr, r.color };
         RasterQuad(v, s.uv, s.texture, s.transparency == SE_TRANSP_NONE,
                    vram, cram, cramMode, width, height, &depth, r.gouraud, da, lineSink);
     }

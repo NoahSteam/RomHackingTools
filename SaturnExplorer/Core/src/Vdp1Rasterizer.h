@@ -84,13 +84,13 @@ struct SpritePriorityTable
 class Vdp1Rasterizer
 {
 public:
-    // Emit the scene's VDP1 sprites into 'cols' (one PixColumn per pixel, sized
-    // width*height), each pixel at the priority its own framebuffer word selects
-    // (SpritePriorityTable). Sprites are processed in command
-    // order; each pixel emits a descriptor, so a sprite sits in front of a same-priority
-    // NBG (which was emitted earlier). Draw-mode effects (shadow / half-luminance /
-    // half-transparency) blend against the column already below, resolving it the same
-    // way the final frame does (opts.show_color_calculation). Honors show_vdp1_sprites.
+    // Draw the scene's VDP1 commands into a VDP1 framebuffer in command order (later pixels
+    // replace earlier ones; shadow / half-luminance / half-transparency act on the framebuffer
+    // pixel, in 5-bit channels), then scan it out into 'cols' (one PixColumn per display pixel,
+    // sized width*height), each pixel at the VDP2 priority its own framebuffer word selects
+    // (SpritePriorityTable). Priority 0 pixels are not displayed. Sprites emit after the VDP2
+    // layers, so a sprite sits in front of a same-priority NBG. VDP2 colour calculation on the
+    // sprite layer is not implemented. Honors show_vdp1_sprites.
     static void EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                             const std::vector<uint8_t>& cram, se_cram_mode cramMode,
                             const SpritePriorityTable& prios,

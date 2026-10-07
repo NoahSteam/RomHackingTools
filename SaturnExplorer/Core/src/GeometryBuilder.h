@@ -51,6 +51,8 @@ struct SpriteRender
     bool        solid = false;      // untextured polygon/line: fill/edges with 'color'
     uint16_t    color = 0;          // RGB555 fill color, valid when 'solid'
     uint8_t     primKind = 0;       // 0 = filled quad, 1 = polyline (4 edges), 2 = line A-B
+    bool        endCodeEnabled = false;   // textured: an end-code texel is transparent, and a
+                                          // second one in a row ends the texture line
 };
 
 struct Vdp1Scene

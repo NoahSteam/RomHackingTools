@@ -18,6 +18,7 @@
 namespace
 {
 using se_test::PutBE16;
+using se_test::SetReg;
 using se_test::State;
 
 int gFailures = 0;
@@ -80,10 +81,18 @@ void AddQuadPrim(State& state, uint32_t cmd, uint16_t comm, uint16_t color,
 // and to the left, a green square down and to the right, and a white square drawn *over*
 // the blue one. The white square is only visible when the layer stack faces the camera the
 // right way round, and blue vs green only land correctly when X is not mirrored.
+// A sprite pixel whose priority number maps to priority 0 is not displayed, so a fixture that
+// composites its sprites has to give them somewhere to go: every number maps to priority 1.
+void SpritesInFront(State& state)
+{
+    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
+}
+
 State MakeScene()
 {
     State state(kVdp1Size);
     se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
 
     const uint32_t backdrop = 0x1000;
     const uint32_t patch = backdrop + kFrameWidth * kFrameHeight * 2;
@@ -103,6 +112,7 @@ State MakeParallaxScene()
 {
     State state(kVdp1Size);
     se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
 
     const uint32_t backdrop = 0x1000;
     const uint32_t marker = backdrop + kFrameWidth * kFrameHeight * 2;
@@ -352,6 +362,7 @@ void TestPolylinesRenderAndPickInTheExplodedView()
 {
     State state(kVdp1Size);
     se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
     const int cx = kFrameWidth / 2;
     const int cy = kFrameHeight / 2;
     AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
@@ -406,13 +417,14 @@ void TestPolylinesRenderAndPickInTheExplodedView()
 
 // The other way the two walks can disagree about what is on screen: a quad that has
 // collapsed to a point or a line. RasterTriangle drops a zero-area triangle, so such a
-// primitive draws nothing in the 3D view, but every edge function of it is 0 — so an
+// primitive has no area to hit, but every edge function of it is 0 — so an
 // unguarded inside test reports EVERY point as inside it, and being the nearest layer it
 // then swallows every click in the frame. PointInSprite already guards the 2D path.
 void TestHitTestSkipsCollapsedQuads()
 {
     State state(kVdp1Size);
     se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
     const int cx = kFrameWidth / 2;
     const int cy = kFrameHeight / 2;
     AddSprite(state, 0x20, 0x1000, kBlue, cx - 16, cy - 16, 32, 32);
@@ -433,7 +445,9 @@ void TestHitTestSkipsCollapsedQuads()
 
     const se_camera3d front = Camera(0.0f, 0.0f);
     const Image view = Render(context, &front);
-    CHECK(Find(view, 0, 255, 0).count == 0);   // nothing of it is drawn
+    // Inclusive corners make a collapsed polygon a single pixel (that is what the hardware draws), so
+    // at most a speck of it is visible -- far too small to be what a click is aimed at.
+    CHECK(Find(view, 0, 255, 0).count <= 4);
     CHECK(Find(view, 0, 0, 255).count > 100);
 
     // Clicking the sprite selects the sprite, not the invisible primitive in front of it.

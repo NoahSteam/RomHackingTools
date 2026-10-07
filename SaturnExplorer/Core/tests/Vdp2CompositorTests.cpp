@@ -37,6 +37,9 @@ State MakeNbg3State()
     SetReg(state, 0x036, 0x8000);  // PNCN3: one-word
     SetReg(state, 0x04C, 0x0001);  // MPABN3: plane A map number 1
     SetReg(state, 0x0FA, 0x0100);  // PRINB: NBG3 priority 1
+    // PRISA..PRISD: every sprite priority number maps to priority 1. A sprite pixel whose number
+    // maps to priority 0 is not displayed, so a fixture that draws one has to say where it goes.
+    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
     PutBE16(state.vdp2, 0x2000, 0x0001);
     std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x11);
     PutBE16(state.cram, 2, 0x7FFF);
@@ -470,12 +473,13 @@ void TestMosaic()
 void TestSpriteHalfLuminance()
 {
     // CMDPMOD: RGB555 (0x28) + SPD (0x40) + color-calc 2 (half-luminance). A white
-    // sprite is drawn at half luminance -> (127,127,127) everywhere it covers.
+    // sprite is drawn at half luminance. VDP1 halves the 5-bit channels (31 -> 15), so the
+    // result is (123,123,123), not the (127,127,127) that halving the expanded byte gives.
     State state = MakeSpriteState(0x0028 | 0x0040 | 0x0002);
     const std::vector<uint8_t> pixels = Render(state, false);
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
-            CHECK(IsColor(pixels, x, y, 127, 127, 127));
+            CHECK(IsColor(pixels, x, y, 123, 123, 123));
 }
 
 void TestSpriteMesh()
@@ -1033,20 +1037,17 @@ void TestPrioritySummaryConsidersEveryReachableNumber()
     se_destroy(context);
 }
 
-// A half-transparent sprite pixel BETWEEN two VDP2 contributions, the higher of which does colour
-// calculation. This is the case the per-pixel priority change made ordinary, and it is where
-// blending against the top of the column instead of against what is under the sprite goes wrong:
-// the sprite would carry the higher layer's colour, and that layer then colour-calculates against
-// the sprite as its second contribution -- blending itself in twice.
+// VDP1 half-transparency averages a pixel with the VDP1 FRAMEBUFFER pixel under it, never with a
+// VDP2 layer: VDP2 only ever sees the finished framebuffer. A half-transparent sprite drawn over
+// untouched framebuffer therefore comes out as itself, and the VDP2 layers above it colour-
+// calculate against that.
 //
 // Layout, bottom to top: back screen (blue, priority 0) < half-transparent red sprite (priority 1)
 // < NBG3 (white, priority 4, colour calc on, ratio 15).
 //
-// Correct: the sprite halves against the BACK SCREEN, so (255,0,0) over (0,0,255) is (127,0,127);
-// NBG3 then blends 16/32 with that, giving (191,127,191).
-// The bug gave the sprite (191,63,127) -- halved against NBG3-over-back-screen -- and a final
-// (223,159,191).
-void TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt()
+// Correct: the sprite is plain red; NBG3 then blends 16/32 with it, giving (255,127,127).
+// The old behaviour averaged the sprite with the back screen first, giving (191,127,191).
+void TestHalfTransparentSpriteDoesNotBlendWithVdp2()
 {
     State state = MakeNbg3State();
     SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
@@ -1077,31 +1078,18 @@ void TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt()
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
         {
-            // NBG3 (prio 4, cc on at ratio 15) over the half-transparent sprite (prio 1) over
-            // the blue back screen (prio 0): NBG3 white blends 1:1 with the sprite's own blend of
-            // red over blue.
-            CHECK(IsColor(pixels, x, y, 191, 127, 191));
-            // The pre-fix answer: the sprite blended against NBG3 -- which is above it -- and
-            // NBG3 then colour-calculated against that, mixing itself in twice.
-            CHECK(!IsColor(pixels, x, y, 223, 159, 191));
+            CHECK(IsColor(pixels, x, y, 255, 127, 127));
+            CHECK(!IsColor(pixels, x, y, 191, 127, 191));
         }
 }
 
-// Review 5334449098: the four-layer case, where the contribution below the sprite is itself a
-// colour-calculating VDP2 layer with something under it.
+// Review 5334449098: the four-layer case, a sprite between two colour-calculating VDP2 layers.
 //
-// Stack: NBG3 (prio 5, cc) > half-transparent sprite (prio 3) > NBG2 (prio 2, cc) > back screen.
-// A column keeps its top two contributions, so the back screen is already evicted by the time the
-// sprite arrives, and the sprite blends against NBG2's own colour rather than NBG2 blended with
-// the back screen.
-//
-// That is the model, not a shortfall of ResolveBelow. Standard VDP2 colour calculation blends the
-// top contribution with the one immediately below it, so a layer's cc-enable does nothing while it
-// is third in the stack -- NBG2 is below the sprite here, so it never blends with the back screen.
-// ResolveColumn has the same property from the other side: it blends the top against the *raw*
-// second, never a resolved one. Blending second-with-third is extended colour calculation
-// (3-layer, roadmap C6), which the mixer does not implement anywhere; giving the sprite path a
-// third retained contribution would make it the only place that did.
+// Stack: NBG3 (prio 5, cc) > sprite (prio 3) > NBG2 (prio 2, cc) > back screen.
+// A column keeps its top two contributions, so NBG3 blends with the sprite directly under it and
+// NBG2 -- third in the stack -- takes no part, whatever its own cc-enable says. Blending
+// second-with-third is extended colour calculation (3-layer, roadmap C6), which the mixer does
+// not implement.
 void TestSpriteBetweenTwoColorCalcLayers()
 {
     State state = MakeNbg3State();
@@ -1139,18 +1127,268 @@ void TestSpriteBetweenTwoColorCalcLayers()
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
         {
-            // Sprite red halved against NBG2 green is (127,127,0); NBG3 white then blends 1:1.
-            CHECK(IsColor(pixels, x, y, 191, 191, 127));
-            // What a resolved-second (3-layer) model would give: green blended with the blue back
-            // screen first. Pinned so C6 has to change this test deliberately.
-            CHECK(!IsColor(pixels, x, y, 191, 159, 159));
+            // NBG3 white blends 1:1 with the red sprite directly beneath it.
+            CHECK(IsColor(pixels, x, y, 255, 127, 127));
+            // Nothing of NBG2 (green) or the back screen (blue) shows through.
+            CHECK(!IsColor(pixels, x, y, 191, 191, 127));
         }
+}
+
+// ---- VDP1 framebuffer semantics ---------------------------------------------------------------
+//
+// Review round S. VDP1 draws its commands into a framebuffer in list order; VDP2 only ever sees
+// the finished framebuffer. These fixtures use frames of their own size, so they render through
+// RenderSized rather than the 4x2 Render above.
+
+std::vector<uint8_t> RenderSized(State& state, int width, int height)
+{
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    se_render_opts options = {};
+    for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
+    options.show_vdp1_sprites = 1;
+    se_image image = {};
+    size_t needed = 0;
+    CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
+    std::vector<uint8_t> pixels(needed);
+    image.pixels = pixels.data();
+    image.capacity = pixels.size();
+    CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
+    CHECK(image.width == static_cast<uint32_t>(width));
+    CHECK(image.height == static_cast<uint32_t>(height));
+    se_destroy(context);
+    return pixels;
+}
+
+bool IsColorAt(const std::vector<uint8_t>& pixels, int width, int x, int y,
+               uint8_t r, uint8_t g, uint8_t b)
+{
+    const size_t o = static_cast<size_t>(y * width + x) * 4;
+    return pixels[o] == r && pixels[o + 1] == g && pixels[o + 2] == b;
+}
+
+// A frame with no VDP2 layers over a blue back screen, 'width' x 'height'.
+State MakeBlueBackState(int width, int height)
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0000);   // BGON off
+    SetReg(state, 0x0AC, 0x0000);   // back-screen table at VDP2 0x200
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue
+    ResizeVdp1(state, 0x400);
+    se_test::WriteSystemClip(state, width, height);
+    return state;
+}
+
+// A polygon over the inclusive pixel box (x0,y0)-(x1,y1) at command address 'cmd'.
+void PutPolygon(State& state, uint32_t cmd, uint16_t color, uint16_t pmod,
+                int x0, int y0, int x1, int y1)
+{
+    PutBE16(state.vdp1, cmd + 0x00, 0x0004);
+    PutBE16(state.vdp1, cmd + 0x04, pmod);
+    PutBE16(state.vdp1, cmd + 0x06, color);
+    PutBE16(state.vdp1, cmd + 0x0C, static_cast<uint16_t>(x0));
+    PutBE16(state.vdp1, cmd + 0x0E, static_cast<uint16_t>(y0));
+    PutBE16(state.vdp1, cmd + 0x10, static_cast<uint16_t>(x1));
+    PutBE16(state.vdp1, cmd + 0x12, static_cast<uint16_t>(y0));
+    PutBE16(state.vdp1, cmd + 0x14, static_cast<uint16_t>(x1));
+    PutBE16(state.vdp1, cmd + 0x16, static_cast<uint16_t>(y1));
+    PutBE16(state.vdp1, cmd + 0x18, static_cast<uint16_t>(x0));
+    PutBE16(state.vdp1, cmd + 0x1A, static_cast<uint16_t>(y1));
+}
+
+// VDP1 resolves overlap in command order, before VDP2 priority has any say. A later pixel replaces
+// an earlier one however the two rank: the red polygon's priority number maps to 7 and the blue
+// one's to 1, and blue still wins because it was drawn last.
+void TestLaterVdp1CommandReplacesEarlierRegardlessOfPriority()
+{
+    State state = MakeBlueBackState(4, 2);
+    SetReg(state, 0x0F2, 0x0107);   // PRISB: number 2 -> priority 7, number 3 -> priority 1
+    PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 1);   // red: number 2 (bits 15-14 = 10)
+    PutPolygon(state, 0x40, 0xFC00, 0, 0, 0, 3, 1);   // blue: number 3 (bits 15-14 = 11)
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 0, 0, 255));
+}
+
+// A sprite pixel whose priority maps to 0 is not displayed.
+void TestSpritePriorityZeroIsSuppressed()
+{
+    State state = MakeBlueBackState(4, 2);
+    SetReg(state, 0x0F2, 0x0100);   // PRISB: number 2 -> priority 0
+    PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 1);   // red, number 2
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 0, 0, 255));
+}
+
+// A normal sprite is 'width' x 'height' pixels. Its corners are inclusive pixel indices, so the far
+// corner is at x + width - 1; using x + width drew an extra row and column.
+void TestNormalSpriteCoversExactlyItsSize()
+{
+    State state = MakeBlueBackState(16, 4);
+    PutBE16(state.vdp1, 0x20, 0x0000);                 // normal sprite
+    PutBE16(state.vdp1, 0x24, 0x0028 | 0x0040);        // RGB555 + SPD
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);              // CMDSRCA
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 1);           // 8 x 1
+    PutBE16(state.vdp1, 0x2C, 2);                      // at (2,1)
+    PutBE16(state.vdp1, 0x2E, 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    for (uint32_t i = 0; i < 8; ++i) PutBE16(state.vdp1, 0x100 + i * 2, 0x801F);
+    const std::vector<uint8_t> pixels = RenderSized(state, 16, 4);
+    int red = 0;
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 16; ++x)
+        {
+            const bool isRed = IsColorAt(pixels, 16, x, y, 255, 0, 0);
+            red += isRed ? 1 : 0;
+            CHECK(isRed == (y == 1 && x >= 2 && x <= 9));
+        }
+    CHECK(red == 8);
+}
+
+// Half-transparency averages with the VDP1 framebuffer pixel under it, and only when that holds a
+// colour. Untouched framebuffer does not, so the polygon replaces it -- the VDP2 layer behind (blue)
+// takes no part.
+void TestHalfTransparencyIgnoresVdp2Background()
+{
+    State state = MakeNbg3State();   // NBG3 white, priority 1
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);
+    ResizeVdp1(state, 0x60);
+    PutPolygon(state, 0x20, 0x801F, 0x0003, 0, 0, 3, 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 255, 0, 0));
+}
+
+// VDP1 colour arithmetic is on the framebuffer's 5-bit channels: red (31,0,0) averaged with blue
+// (0,0,31) is (15,0,15), which displays as (123,0,123) -- not (127,0,127).
+void TestHalfTransparencyAveragesFiveBitChannels()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0x801F, 0x0000, 0, 0, 3, 1);   // opaque red
+    PutPolygon(state, 0x40, 0xFC00, 0x0003, 0, 0, 3, 1);   // half-transparent blue over it
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 123, 0, 123));
+}
+
+// Shadow halves the framebuffer pixel under it (in 5-bit channels); over untouched framebuffer it
+// draws nothing.
+void TestShadowHalvesTheFramebufferPixel()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0xFFFF, 0x0000, 0, 0, 1, 1);   // white in columns 0-1
+    PutPolygon(state, 0x40, 0x801F, 0x0001, 0, 0, 3, 1);   // shadow across all four
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsColorAt(pixels, 4, 0, y, 123, 123, 123));
+        CHECK(IsColorAt(pixels, 4, 1, y, 123, 123, 123));
+        CHECK(IsColorAt(pixels, 4, 2, y, 0, 0, 255));   // nothing under it: blue back screen
+        CHECK(IsColorAt(pixels, 4, 3, y, 0, 0, 255));
+    }
+}
+
+// An 8x1 texture whose pixels are the nibbles of 'bytes', drawn at (0,0) of an 8x2
+// frame with the colour-bank 16 mode. Palette entry 1 is red, entry 15 is green; 'pmod' picks the
+// end-code setting.
+std::vector<uint8_t> RenderEndCodeRow(const uint8_t bytes[4], uint16_t pmod)
+{
+    State state = MakeBlueBackState(8, 2);
+    PutBE16(state.vdp1, 0x20, 0x0000);
+    PutBE16(state.vdp1, 0x24, pmod);
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    for (int i = 0; i < 4; ++i) state.vdp1[0x100 + i] = bytes[i];
+    PutBE16(state.cram, 1 * 2, 0x801F);
+    PutBE16(state.cram, 15 * 2, 0x83E0);
+    return RenderSized(state, 8, 2);
+}
+
+// With the end code enabled (CMDPMOD bit 7 clear) an end-code texel is not drawn, and a second one
+// in a row ends the texture line: F,F,1,1,... draws nothing at all.
+void TestEndCodeTerminatesTheTextureRow()
+{
+    const uint8_t row[4] = { 0xFF, 0x11, 0x11, 0x11 };   // F F 1 1 1 1 1 1
+    const std::vector<uint8_t> pixels = RenderEndCodeRow(row, 0x0000);
+    for (int x = 0; x < 8; ++x) CHECK(IsColorAt(pixels, 8, x, 0, 0, 0, 255));
+
+    // End code disabled (bit 7 set): F is an ordinary colour (green), the 1s are red.
+    const std::vector<uint8_t> disabled = RenderEndCodeRow(row, 0x0080);
+    CHECK(IsColorAt(disabled, 8, 0, 0, 0, 255, 0));
+    CHECK(IsColorAt(disabled, 8, 1, 0, 0, 255, 0));
+    for (int x = 2; x < 8; ++x) CHECK(IsColorAt(disabled, 8, x, 0, 255, 0, 0));
+}
+
+// A lone end code is just transparent: the row carries on.
+void TestLoneEndCodeIsOnlyTransparent()
+{
+    const uint8_t row[4] = { 0xF1, 0x11, 0x11, 0x11 };   // F 1 1 1 1 1 1 1
+    const std::vector<uint8_t> pixels = RenderEndCodeRow(row, 0x0000);
+    CHECK(IsColorAt(pixels, 8, 0, 0, 0, 0, 255));
+    for (int x = 1; x < 8; ++x) CHECK(IsColorAt(pixels, 8, x, 0, 255, 0, 0));
+}
+
+// A command with JP >= 4 is linked through but not executed, so it must not move the local origin
+// either: the polygon after a skipped "local coordinate X=20" stays at X=0.
+void TestSkippedStateCommandsChangeNothing()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutBE16(state.vdp1, 0x20, 0x400A);   // local coordinate, JP = skip-next
+    PutBE16(state.vdp1, 0x2C, 20);
+    PutBE16(state.vdp1, 0x2E, 0);
+    PutPolygon(state, 0x40, 0x801F, 0, 0, 0, 3, 1);
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> skipped = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(skipped, 4, x, y, 255, 0, 0));
+
+    // The same command executed does move it off the frame.
+    PutBE16(state.vdp1, 0x20, 0x000A);
+    const std::vector<uint8_t> moved = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(moved, 4, x, y, 0, 0, 255));
+}
+
+// In a hi-res mode VDP1 draws at half the display width and every column is doubled at scan-out.
+// A user clip of X = 1..1 therefore covers display columns 2 and 3.
+void TestHiResUserClipCoversBothDoubledColumns()
+{
+    State state = MakeBlueBackState(320, 224);
+    SetReg(state, 0x000, 0x0002);   // TVMD: HRES = hi-res, 640 wide
+    PutBE16(state.vdp1, 0x20, 0x0008);   // user clip: (1,0) - (1,223)
+    PutBE16(state.vdp1, 0x2C, 1);
+    PutBE16(state.vdp1, 0x2E, 0);
+    PutBE16(state.vdp1, 0x34, 1);
+    PutBE16(state.vdp1, 0x36, 223);
+    PutPolygon(state, 0x40, 0x801F, 0x0400, 0, 0, 5, 2);   // user clipping on, draw inside
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 640, 224);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 6; ++x)
+            CHECK(IsColorAt(pixels, 640, x, y, 255, 0, 0) == (x == 2 || x == 3));
 }
 
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
-    TestHalfTransparentSpriteBlendsAgainstWhatIsBelowIt();
+    TestHalfTransparentSpriteDoesNotBlendWithVdp2();
     TestPrioritySummaryConsidersEveryReachableNumber();
     TestSpritePriorityIsPerPixel();
     TestSpritePrioritySummaryIsTheFrontMost();
@@ -1175,6 +1413,16 @@ int main()
     TestColorOffset();
     TestMosaic();
     TestSpriteHalfLuminance();
+    TestLaterVdp1CommandReplacesEarlierRegardlessOfPriority();
+    TestSpritePriorityZeroIsSuppressed();
+    TestNormalSpriteCoversExactlyItsSize();
+    TestHalfTransparencyIgnoresVdp2Background();
+    TestHalfTransparencyAveragesFiveBitChannels();
+    TestShadowHalvesTheFramebufferPixel();
+    TestEndCodeTerminatesTheTextureRow();
+    TestLoneEndCodeIsOnlyTransparent();
+    TestSkippedStateCommandsChangeNothing();
+    TestHiResUserClipCoversBothDoubledColumns();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

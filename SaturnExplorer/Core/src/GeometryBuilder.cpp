@@ -82,6 +82,14 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             break;
         }
 
+        // A skipped command (JP >= 4) is linked through but never executed, so it must not move
+        // the local origin or the clip rectangles either: the hardware leaves that state alone.
+        // Traversal is unaffected -- Vdp1Walk already followed its link.
+        if (skip)
+        {
+            continue;
+        }
+
         if (comm == 0xA)  // local coordinate set
         {
             originX = xa;
@@ -113,7 +121,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const bool polyline = (comm == 0x5);   // untextured, 4 edges
         const bool line = (comm == 0x6);       // untextured, single edge A-B
         const bool untextured = polygon || polyline || line;
-        if (skip || (!textured && !untextured))
+        if (!textured && !untextured)
         {
             continue;
         }
@@ -133,10 +141,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         se_vec2 A, B, C, D;
         if (comm == 0x0)  // normal sprite: one corner + size
         {
-            A = { float(xa + originX),         float(ya + originY) };
-            B = { float(xa + width + originX),  float(ya + originY) };
-            C = { float(xa + width + originX),  float(ya + height + originY) };
-            D = { float(xa + originX),         float(ya + height + originY) };
+            // Corners are inclusive pixel coordinates (see ExpandQuadInclusive), so a sprite
+            // 'width' wide ends at x + width - 1. Using x + width made every normal sprite
+            // draw an extra row and column.
+            A = { float(xa + originX),             float(ya + originY) };
+            B = { float(xa + width - 1 + originX),  float(ya + originY) };
+            C = { float(xa + width - 1 + originX),  float(ya + height - 1 + originY) };
+            D = { float(xa + originX),             float(ya + height - 1 + originY) };
         }
         else if (comm == 0x1)  // scaled sprite
         {
@@ -266,6 +277,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         sr.solid = untextured;
         sr.color = colr;   // CMDCOLR as a solid RGB555 (only used when 'solid')
         sr.primKind = polyline ? 1 : line ? 2 : 0;
+        sr.endCodeEnabled = ((pmod >> 7) & 0x1) == 0;   // CMDPMOD bit 7 is End Code *Disable*
         sr.clip.enable = (pmod >> 10) & 0x1;
         sr.clip.mode = (pmod >> 9) & 0x1;
         sr.clip.x0 = userClipX0; sr.clip.y0 = userClipY0;

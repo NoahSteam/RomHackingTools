@@ -495,9 +495,16 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > screens (RBG0/1), bitmap-mode backgrounds, line/vertical-cell scroll, zoom, mosaic, color
    > calculation, and the VDP2 back/line-color screens (empty pixels use a flat backdrop). See
    > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
-   > **Sprite seams.** VDP1 sprite corners are inclusive pixel coordinates and the game tiles a
-   > mech out of many small strips; the rasterizer nudges each quad's corners outward half a pixel
-   > (`ExpandQuadInclusive`) so adjacent strips overlap instead of leaving 1px backdrop seams.
+   > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
+   > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
+   > out to the mixer at the VDP2 priority each pixel's own word selects; priority 0 is not
+   > displayed. Shadow / half-transparency read the framebuffer pixel, not VDP2, and do their
+   > arithmetic on 5-bit channels; they act only on a pixel that holds an RGB colour. Texture end
+   > codes (CMDPMOD ECD clear) and skipped (JP >= 4) commands follow the hardware.
+   > **Sprite pixel coverage.** VDP1 corners are inclusive pixel *indices* and the game tiles a
+   > mech out of many small strips; `ExpandQuadInclusive` moves each corner to its pixel's centre
+   > and out half a pixel, so a primitive covers exactly the pixels between its corners and
+   > adjacent strips neither overlap nor leave a seam.
    > **Multiple emulators.** `se_savestate_open` sniffs the file magic and dispatches to a
    > per-emulator parser, all producing the same `se_data_source` so the core stays format-agnostic.
    > Supported: the **Yabause family** `.yss` and **Mednafen/Beetle Saturn** `MDFNSVST`. The `.yss`
