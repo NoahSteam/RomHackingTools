@@ -79,8 +79,6 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
     const uint16_t colr = ReadBE16(vram, address + 0x06);
     const uint16_t srca = ReadBE16(vram, address + 0x08);
     const uint16_t size = ReadBE16(vram, address + 0x0A);
-    const int16_t  xa   = ReadBE16S(vram, address + 0x0C);
-    const int16_t  ya   = ReadBE16S(vram, address + 0x0E);
     const uint16_t grda = ReadBE16(vram, address + 0x1C);
 
     const uint16_t comm    = ctrl & 0xF;
@@ -114,8 +112,10 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
 
     cmd.width = ((size >> 8) & 0x3F) * 8;
     cmd.height = size & 0xFF;
-    cmd.x = xa;
-    cmd.y = ya;
+    // 13-bit signed for a primitive, 11-bit for the local-coordinate origin (see SignExtend).
+    const int coordBits = (comm == 0xA) ? 11 : 13;
+    cmd.x = ReadBE16Sx(vram, address + 0x0C, coordBits);
+    cmd.y = ReadBE16Sx(vram, address + 0x0E, coordBits);
 
     cmd.scale_x = 1.0f;   // resolved for scaled/distorted sprites in M3
     cmd.scale_y = 1.0f;

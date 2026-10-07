@@ -33,10 +33,10 @@ enum : uint32_t
     kLWTA0U = 0x0D8, kLWTA0L = 0x0DA, kLWTA1U = 0x0DC, kLWTA1L = 0x0DE,
     kSPCTL = 0x0E0,
     kBKTAU = 0x0AC, kBKTAL = 0x0AE,
-    kCCCTL = 0x0EC,
+    kSDCTL = 0x0E2, kLNCLEN = 0x0E8, kCCCTL = 0x0EC, kLCTAU = 0x0A8, kLCTAL = 0x0AA,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA,
-    kCCRNA = 0x108, kCCRNB = 0x10A,
+    kCCRNA = 0x108, kCCRNB = 0x10A, kCCRLB = 0x10E,
     // Rotation (RBG0): pattern name, map offset, char/bitmap control, plane sizes,
     // the rotation parameter tables, coefficient control, and RBG0's own priority /
     // colour-offset / colour-calc-ratio registers.
@@ -45,18 +45,11 @@ enum : uint32_t
     kRPMD = 0x0B0, kKTCTL = 0x0B4, kKTAOF = 0x0B6, kOVPNRA = 0x0B8, kOVPNRB = 0x0BA,
     kRPTAU = 0x0BC, kRPTAL = 0x0BE,
     kCRAOFB = 0x0E6, kPRIR = 0x0FC, kCCRR = 0x10C,
-    kMZCTL = 0x022,
+    kMZCTL = 0x022, kSFSEL = 0x024, kSFCODE = 0x026, kSFPRMD = 0x0EA, kSFCCMD = 0x0EE, kZMCTL = 0x098, kVCSTAU = 0x09C, kVCSTAL = 0x09E,
     kCLOFEN = 0x110, kCLOFSL = 0x112,
     kCOAR = 0x114, kCOAG = 0x116, kCOAB = 0x118,
     kCOBR = 0x11A, kCOBG = 0x11C, kCOBB = 0x11E
 };
-
-// Sign-extend the low n bits of v to a signed 32-bit value (Mednafen sign_x_to_s32).
-inline int32_t SignX(uint32_t v, int n)
-{
-    const int s = 32 - n;
-    return static_cast<int32_t>(v << s) >> s;
-}
 
 uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
 {
@@ -123,30 +116,62 @@ struct NbgConfig
     uint8_t scrollCtrl;          // SCRCTL byte for this NBG
     uint32_t lineScrollBase;     // line scroll/zoom table VRAM word address
     uint32_t mosaicH;            // horizontal mosaic block width (1 = no mosaic)
-    bool colorOff;               // per-screen colour offset enabled (CLOFEN)
-    int coR, coG, coB;           // signed R/G/B offsets (COxR/G/B), applied post-fetch
+    bool vcScroll;               // vertical cell scroll (SCRCTL VCSC, off under mosaic)
+    bool vcInterleaved;          // NBG0 and NBG1 both use it: their table entries alternate
+    bool vcZoomLimit;            // ZMCTL reduction limit set: cells are read per screen group of 8 dots
+    uint32_t vcBase;             // VCSTA: the table's VRAM word address
+    uint16_t mixFlags;           // the mixer flags (PixelMixer.h) the screen's registers fix
+    uint8_t rank;                // kRank*: how the hardware orders it against equal priorities
+    // Special functions (SFPRMD / SFCCMD / SFSEL+SFCODE), see ApplySpecialFunctions.
+    uint8_t prioMode;            // 0 priority LSB from the register, 1 per character, 2 per dot
+    uint8_t ccMode;              // 0 per screen, 1 per character, 2 per dot, 3 by colour data MSB
+    uint8_t sfCode;              // the special function code bits (8 pairs of dot colour codes)
+    bool bitmapSpr, bitmapScc;   // bitmap screens: the special priority / colour calculation bits
 };
 
-// Resolve the per-screen colour offset (CLOFEN/CLOFSL select set A or B; the COxR/G/B
-// registers are signed 9-bit). 'screen' is 0..3 for NBG0-3, 4 for RBG0.
-void ReadColorOffset(const HardwareSnapshot& s, int screen, NbgConfig& c)
+// The mixer flags a screen's registers fix: sprite-shadow enable (SDCTL), line colour insertion
+// (LNCLEN) and colour offset enable/select (CLOFEN/CLOFSL). Each register numbers the screens
+// slightly differently, so the bit is given per register (-1: the screen has none): NBG0-3 and
+// RBG0 are bits 0-4 of all four, the back screen is bit 5 of SDCTL and CLOFEN, and sprites are
+// bit 5 of LNCLEN but bit 6 of CLOFEN. The offset itself is applied when a column resolves
+// (MixState), because VDP2 offsets the result of colour calculation using the top image's
+// registers, not each layer before the blend.
+uint16_t ScreenMixFlags(const HardwareSnapshot& s, int shadowBit, int lineBit, int offsetBit)
 {
-    c.colorOff = (Reg(s, kCLOFEN) & (1u << screen)) != 0;
-    if (!c.colorOff) { c.coR = c.coG = c.coB = 0; return; }
-    const bool useB = (Reg(s, kCLOFSL) & (1u << screen)) != 0;
-    c.coR = SignX(Reg(s, useB ? kCOBR : kCOAR) & 0x1FF, 9);
-    c.coG = SignX(Reg(s, useB ? kCOBG : kCOAG) & 0x1FF, 9);
-    c.coB = SignX(Reg(s, useB ? kCOBB : kCOAB) & 0x1FF, 9);
+    auto set = [&](uint32_t reg, int bit) { return bit >= 0 && (Reg(s, reg) & (1u << bit)) != 0; };
+    uint16_t f = 0;
+    if (set(kSDCTL, shadowBit))  f |= kShadowEnable;
+    if (set(kLNCLEN, lineBit))   f |= kLineColorEn;
+    if (set(kCLOFEN, offsetBit)) f |= kOffsetEnable;
+    if (set(kCLOFSL, offsetBit)) f |= kOffsetSelect;
+    return f;
 }
 
 // Colour calculation (CCCTL enable bit `screen`, additive via CCMD, and the given 5-bit
-// ratio) resolved into a config. Shared by ReadNbgConfig and ReadRbg0Config.
+// ratio) resolved into a config. Shared by ReadNbgConfig and ReadRbgConfig.
 void SetColorCalc(const HardwareSnapshot& s, uint32_t screen, uint32_t ratio, NbgConfig& c)
 {
     const uint16_t ccctl = Reg(s, kCCCTL);
     c.colorCalc = (ccctl & (1u << screen)) != 0;
     c.colorCalcRatio = ratio & 0x1F;
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
+    if (c.colorCalc) c.mixFlags |= kLayerCc;
+    // BOKEN (bit 15) enables gradation, BOKN (bits 14-12) picks the screen: 1 RBG0, 2 NBG0 (RBG1),
+    // 4 NBG1, 5 NBG2, 6 NBG3 (and 0 the sprite layer).
+    static const uint16_t kGradCode[5] = { 2, 4, 5, 6, 1 };
+    if ((ccctl & 0x8000) != 0 && ((ccctl >> 12) & 0x7) == kGradCode[screen]) c.mixFlags |= kGradation;
+}
+
+// The special function registers for a screen (0-3 NBG, 4 RBG0; RBG1 uses NBG0's). The priority and
+// colour-calculation modes are per screen, and SFSEL picks which of the two special function codes
+// (A in the low byte of SFCODE, B in the high) the screen's mode 2 tests dot colours against.
+// Mode 3 of the priority register is not allowed and reads as 0. Colour-calculation modes only
+// apply to a screen whose CCCTL enable is set; call after SetColorCalc.
+void ReadSpecialFunctions(const HardwareSnapshot& s, int screen, NbgConfig& c)
+{
+    c.prioMode = static_cast<uint8_t>(((Reg(s, kSFPRMD) >> (screen * 2)) & 0x3) % 3);
+    c.ccMode = c.colorCalc ? static_cast<uint8_t>((Reg(s, kSFCCMD) >> (screen * 2)) & 0x3) : uint8_t(0);
+    c.sfCode = static_cast<uint8_t>(Reg(s, kSFCODE) >> (((Reg(s, kSFSEL) >> screen) & 1) * 8));
 }
 
 // Horizontal mosaic block width for a screen (MZCTL enable bit `screen`); 1 = no mosaic.
@@ -154,17 +179,6 @@ uint32_t ReadMosaicH(const HardwareSnapshot& s, uint32_t screen)
 {
     const uint16_t m = Reg(s, kMZCTL);
     return ((m >> screen) & 1) ? (((m >> 8) & 0xF) + 1) : 1;
-}
-
-// Apply a screen's colour offset to a fetched texel (clamped to 0..255). No-op when the
-// screen has no offset enabled. Runs before color calculation, per hardware.
-inline void ApplyColorOffset(Rgba& col, const NbgConfig& c)
-{
-    if (!c.colorOff) return;
-    auto clamp8 = [](int v) { return static_cast<uint8_t>(v < 0 ? 0 : (v > 255 ? 255 : v)); };
-    col.r = clamp8(col.r + c.coR);
-    col.g = clamp8(col.g + c.coG);
-    col.b = clamp8(col.b + c.coB);
 }
 
 // Resolve the per-layer configuration for NBG 'n' (0..3).
@@ -224,6 +238,8 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
     // (N2 low / N3 high); CCCTL bit n enables it and CCMD selects additive blending.
     const uint16_t ccrn = (n < 2) ? Reg(s, kCCRNA) : Reg(s, kCCRNB);
     SetColorCalc(s, n, (n & 1) ? (ccrn >> 8) : ccrn, c);
+    ReadSpecialFunctions(s, n, c);
+    c.rank = static_cast<uint8_t>(kRankNbg0 - n);
 
     // Bitmap mode is available on NBG0/1 only (CHCTLA N0/N1BMEN). The bitmap base comes
     // from the map-offset nibble, its size from CHCTLA, and its palette from BMPNA.
@@ -236,6 +252,8 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
         c.bitmapBase = static_cast<uint32_t>((mpofn >> (n * 4)) & 0x7) << 16;
         c.bitmapPalette = static_cast<uint32_t>((Reg(s, kBMPNA) >> (n * 8)) & 0x7) << 4;
+        c.bitmapScc = ((Reg(s, kBMPNA) >> (n * 8 + 4)) & 1) != 0;
+        c.bitmapSpr = ((Reg(s, kBMPNA) >> (n * 8 + 5)) & 1) != 0;
 
         // Fractional scroll + zoom + line scroll (NBG0/1). Integer + fractional parts form
         // an .8 fixed-point base scroll; the zoom register is the .8 per-dot coordinate
@@ -256,9 +274,23 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         c.zoomScroll = true;
     }
 
+    // Vertical cell scroll (NBG0/1): one 32-bit entry per 8-dot cell column, added to the screen's Y
+    // scroll. Mosaic takes precedence over it. When both screens use it the entries alternate NBG0,
+    // NBG1, one cell at a time.
+    if (n < 2)
+    {
+        const uint16_t scrctl = Reg(s, kSCRCTL);
+        const uint16_t mzctl = Reg(s, kMZCTL);
+        auto vcsOn = [&](int k) { return ((scrctl >> (k * 8)) & 1) && !((mzctl >> k) & 1); };
+        c.vcScroll = vcsOn(n);
+        c.vcInterleaved = vcsOn(0) && vcsOn(1);
+        c.vcZoomLimit = ((Reg(s, kZMCTL) >> (n * 8)) & 0x3) != 0;
+        c.vcBase = (static_cast<uint32_t>(Reg(s, kVCSTAU) & 0x7) << 16) | (Reg(s, kVCSTAL) & 0xFFFE);
+    }
+
     // Mosaic (horizontal) + per-screen colour offset.
     c.mosaicH = ReadMosaicH(s, n);
-    ReadColorOffset(s, n, c);
+    c.mixFlags |= ScreenMixFlags(s, n, n, n);
     return c;
 }
 
@@ -354,7 +386,7 @@ WindowLine ResolveWindowLine(const WindowConfig& config, int index,
              CoordinateInside(static_cast<uint32_t>(y), window.yStart, window.yEnd) };
 }
 
-bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x)
+bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x, bool spriteBit = false)
 {
     // WCTL describes a *transparent-processing* window: true means the layer
     // pixel is suppressed. Disabled inputs take the identity value for the
@@ -377,13 +409,45 @@ bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x)
         }
     }
 
-    // Sprite-window pixels are not available to the command-list compositor yet.
-    // Ignore that input by supplying the selected operation's identity value;
-    // otherwise an outside-area sprite window would incorrectly hide the whole NBG.
-    const bool spriteValue = useAnd;
+    // The sprite window is the third input: the sprite pixel's window bit (SPCTL SPWINEN makes the
+    // shadow bit of a type 2-7 sprite one), inside or outside per the area bit. The rotation-
+    // parameter window byte has no sprite input and arrives with these bits masked off.
+    const bool spriteValue = (control & 0x20) ? (spriteBit ^ ((control & 0x10) != 0)) : useAnd;
     return useAnd ? (values[0] && values[1] && spriteValue)
                   : (values[0] || values[1] || spriteValue);
 }
+
+// A screen's window state while it is emitted: its own transparent-processing window and the
+// colour-calculation window (which clears a pixel's colour-calculation enable instead of the
+// pixel), each resolved per display row. Inactive -- and free -- when window display is off.
+struct LayerWindows
+{
+    bool active = false;
+    WindowConfig cfg {}, cc {};
+    WindowLine lines[2] = {}, ccLines[2] = {};
+
+    void Begin(const HardwareSnapshot& snap, int windowLayer, bool apply)
+    {
+        active = apply;
+        if (active)
+        {
+            cfg = ReadWindowConfig(snap, windowLayer);
+            cc = ReadWindowConfig(snap, kWinLayerColorCalc);
+        }
+    }
+    void BeginRow(const std::vector<uint8_t>& vram, int y)
+    {
+        if (!active) return;
+        for (int i = 0; i < 2; ++i)
+        {
+            lines[i] = ResolveWindowLine(cfg, i, vram, y);
+            ccLines[i] = ResolveWindowLine(cc, i, vram, y);
+        }
+    }
+    // 'swBit' is the sprite layer's window bit at this pixel.
+    bool Masks(int x, bool swBit) const { return active && WindowMasksPixel(cfg.control, lines, x, swBit); }
+    bool CcMasked(int x, bool swBit) const { return active && WindowMasksPixel(cc.control, ccLines, x, swBit); }
+};
 
 // Bytes one 8x8 cell occupies, by color-number field.
 uint32_t CellByteSize(uint32_t colorNum)
@@ -405,6 +469,7 @@ struct PatternName
     uint32_t charBase;
     uint32_t palette;
     uint32_t flip;   // bit0 = H, bit1 = V
+    bool spr, scc;   // the special priority / colour calculation bits
 };
 
 PatternName DecodePatternName(const std::vector<uint8_t>& vram, uint32_t addr,
@@ -419,6 +484,8 @@ PatternName DecodePatternName(const std::vector<uint8_t>& vram, uint32_t addr,
     if (oneWord)
     {
         const uint16_t tmp = ReadBE16(vram, addr);
+        p.spr = (supp & 0x200u) != 0;   // one-word names carry them in the supplement
+        p.scc = (supp & 0x100u) != 0;
         p.palette = (c.colorNum == 0) ? (((tmp & 0xF000u) >> 8) | ((supp & 0xE0u) << 3))
                                       : ((tmp & 0x7000u) >> 4);
         if (auxMode == 0)
@@ -440,6 +507,8 @@ PatternName DecodePatternName(const std::vector<uint8_t>& vram, uint32_t addr,
         const uint16_t t2 = ReadBE16(vram, addr + 2);
         ch = t2 & 0x7FFFu;
         p.flip = (t1 & 0xC000u) >> 14;
+        p.spr = (t1 & 0x2000u) != 0;
+        p.scc = (t1 & 0x1000u) != 0;
         p.palette = (c.colorNum == 0) ? ((t1 & 0x7Fu) << 4) : ((t1 & 0x70u) << 4);
     }
 
@@ -451,13 +520,45 @@ PatternName DecodePatternName(const std::vector<uint8_t>& vram, uint32_t addr,
     return p;
 }
 
+// What a texel's special functions can test beyond its colour: the dot colour code (palette
+// formats), the colour RAM entry's MSB, and the pattern name's special priority / colour
+// calculation bits.
+struct DotInfo
+{
+    uint16_t dcc = 0;
+    bool cramMsb = false;
+    bool spr = false, scc = false;
+    // The dot's decoded colour even where it is transparent. A transparent dot draws nothing, but the
+    // gradation calculation blurs the screen's colour data across it all the same (Mednafen keeps
+    // the colour of transparent and windowed-out dots in its line buffer).
+    Rgba color{ 0, 0, 0, 255 };
+};
+
 // Sample one 8x8-cell texel (ix,iy in 0..7) at 'cellBase'. Returns a == 0 when
 // the pixel is transparent (palette index 0, or MSB clear in RGB modes).
 Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                     se_cram_mode cramMode, const NbgConfig& c, const PatternName& p,
-                    uint32_t cellBase, int ix, int iy)
+                    uint32_t cellBase, int ix, int iy, DotInfo* info = nullptr)
 {
     const uint32_t pix = static_cast<uint32_t>(iy) * 8 + ix;
+    if (info)
+    {
+        *info = DotInfo{};
+        info->spr = p.spr;
+        info->scc = p.scc;
+    }
+    // A palette texel's dot colour code and the MSB of the colour RAM entry it selects.
+    auto palette = [&](uint32_t dot, uint32_t index) -> Rgba
+    {
+        if (info)
+        {
+            info->dcc = static_cast<uint16_t>(dot);
+            info->cramMsb = CramMsb(cram, cramMode, index);
+        }
+        const Rgba full = CramColor(cram, cramMode, index);
+        if (info) info->color = full;
+        return full;
+    };
     switch (c.colorNum)
     {
     case 0:   // 16-color (4 bpp)
@@ -465,32 +566,38 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
         const uint32_t off = cellBase + (pix >> 1);
         const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
         const uint8_t dot = (ix & 1) ? (byte & 0x0F) : (byte >> 4);
+        const Rgba full = palette(dot, c.colorOffset + (p.palette | dot));
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return CramColor(cram, cramMode, c.colorOffset + (p.palette | dot));
+        return full;
     }
     case 1:   // 256-color (8 bpp)
     {
         const uint32_t off = cellBase + pix;
         const uint8_t dot = (off < vram.size()) ? vram[off] : 0;
+        const Rgba full = palette(dot, c.colorOffset + (p.palette | dot));
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return CramColor(cram, cramMode, c.colorOffset + (p.palette | dot));
+        return full;
     }
     case 2:   // 2048-color (16 bpp palette)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2) & 0x7FF;
+        const Rgba full = palette(dot, c.colorOffset + dot);
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return CramColor(cram, cramMode, c.colorOffset + dot);
+        return full;
     }
     case 3:   // 32K-color (16 bpp RGB555)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2);
+        const Rgba full = Rgb555ToRgba(dot);
+        if (info) info->color = full;
         if (!(dot & 0x8000) && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return Rgb555ToRgba(dot);
+        return full;
     }
     default:  // 16M-color (32 bpp RGB888)
     {
         const uint32_t off = cellBase + pix * 4;
         if (off + 3 >= vram.size()) return { 0, 0, 0, 0 };
+        if (info) info->color = { vram[off + 3], vram[off + 2], vram[off + 1], 255 };
         if (!(vram[off] & 0x80) && !c.transparentPixelDisable)
             return { 0, 0, 0, 0 };   // MSB = transparency
         // The 32-bit RGB word is stored big-endian as [code][B][G][R]: the two VDP2
@@ -506,7 +613,8 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
 // treating the horizontal 8-pixel group as a one-row "cell": the group's byte address is
 // cellBase and the pixel within it is (ix & 7). Wraps to the bitmap dimensions.
 Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
-                      se_cram_mode cramMode, const NbgConfig& c, int ix, int iy)
+                      se_cram_mode cramMode, const NbgConfig& c, int ix, int iy,
+                      DotInfo* info = nullptr)
 {
     const uint32_t xw = static_cast<uint32_t>(ix) & (c.bitmapW - 1);
     const uint32_t yw = static_cast<uint32_t>(iy) & (c.bitmapH - 1);
@@ -514,18 +622,71 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
         (c.bitmapBase * 2 + (((yw * c.bitmapW + (xw & ~7u)) * c.bitmapBpp) >> 3)) & 0x7FFFFu;
     PatternName pn {};
     pn.palette = c.bitmapPalette;
+    pn.spr = c.bitmapSpr;   // a bitmap has no pattern names: its register supplies the bits
+    pn.scc = c.bitmapScc;
     return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                          static_cast<int>(xw & 7u), 0);
+                          static_cast<int>(xw & 7u), 0, info);
+}
+
+// The extras with any buffer that is not this frame's size dropped, so a stale or mis-sized one
+// degrades to "not supplied" instead of being indexed out of range.
+EmitExtras ValidatedExtras(const EmitExtras& in, size_t pixels)
+{
+    EmitExtras out = in;
+    if (out.sprites && out.sprites->size() != pixels) out.sprites = nullptr;
+    if (out.gradation && out.gradation->size() != pixels) out.gradation = nullptr;
+    if (out.lineOverride && out.lineOverride->size() != pixels) out.lineOverride = nullptr;
+    return out;
+}
+
+// The sprite layer's window bit at flat pixel index 'i' (false with no sprite layer).
+inline bool SwBitAt(const EmitExtras& ex, size_t i)
+{
+    return ex.sprites && (*ex.sprites)[i].swBit;
 }
 
 // Emit one resolved texel into its column as a descriptor at the layer's priority,
 // carrying the layer's colour-calculation parameters. The mixer applies colour
 // calculation at resolve time (only ever blending the top pixel with the one below),
 // so the per-layer blend that CompositeTexel used to do inline now happens once, later.
-inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg)
+// 'ccWindowMasked' is the colour-calculation window clearing this pixel's enable.
+//
+// A screen's special functions are applied here, per texel: the special priority function replaces
+// the priority number's LSB (per screen, per character, or per dot colour code) and a priority of
+// 0 makes the texel transparent; the special colour calculation function replaces the screen's
+// colour-calculation enable (per screen, per character, per dot colour code, or by the colour
+// data's MSB). Modes 2 test the dot colour code's top three bits against the special function code
+// and only apply to palette formats -- an RGB texel just keeps the LSB at 0 / the enable off.
+inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg, bool ccWindowMasked,
+                      const DotInfo& dot)
 {
-    EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(cfg.priority),
-            cfg.colorCalc, static_cast<uint8_t>(cfg.colorCalcRatio), cfg.colorCalcAdd);
+    const bool isRgb = cfg.colorNum >= 3;
+    const bool codeHit = ((cfg.sfCode >> ((dot.dcc & 0xE) >> 1)) & 1) != 0;
+
+    unsigned prio = cfg.priority;
+    if (cfg.prioMode >= 1)
+    {
+        prio &= ~1u;
+        if (cfg.prioMode == 1)      prio |= dot.spr ? 1u : 0u;
+        else if (!isRgb)            prio |= (dot.spr && codeHit) ? 1u : 0u;
+    }
+    if (prio == 0)
+    {
+        return;   // a priority number of 0 is not displayed
+    }
+
+    bool cce = false;
+    switch (cfg.ccMode)
+    {
+    case 0:  cce = cfg.colorCalc; break;
+    case 1:  cce = dot.scc; break;
+    case 2:  cce = !isRgb && dot.scc && codeHit; break;
+    default: cce = isRgb || dot.cramMsb; break;
+    }
+
+    const uint16_t flags = cfg.mixFlags | (isRgb ? kIsRgb : 0);
+    EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(prio), cce && !ccWindowMasked,
+            static_cast<uint8_t>(cfg.colorCalcRatio), cfg.colorCalcAdd, flags, cfg.rank);
 }
 
 // VRAM word address of one plane's pattern-name table, from the combined map-offset +
@@ -600,12 +761,12 @@ inline PlaneGeom MakeGeom(const uint32_t* planeBase, uint32_t planesPerRow, uint
 // same way.
 Rgba FetchPatternTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                        se_cram_mode cramMode, const NbgConfig& c, const PatternName& pn,
-                       uint32_t cellBytes, uint32_t inX, uint32_t inY)
+                       uint32_t cellBytes, uint32_t inX, uint32_t inY, DotInfo* info = nullptr)
 {
     const uint32_t subCell = (inY / 8) * c.patternWH + (inX / 8);
     const uint32_t cellBase = (pn.charBase + subCell * cellBytes) & 0x7FFFFu;
     return FetchCellTexel(vram, cram, cramMode, c, pn, cellBase,
-                          static_cast<int>(inX % 8), static_cast<int>(inY % 8));
+                          static_cast<int>(inX % 8), static_cast<int>(inY % 8), info);
 }
 
 // Byte address of the pattern-name entry for map cell (patX, patY), counted across the
@@ -629,7 +790,7 @@ uint32_t PatternNameAddress(const PlaneGeom& g, uint32_t patX, uint32_t patY)
 // the NBG and RBG0 renderers (they differ only in plane-grid width and coordinate source).
 Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
                      se_cram_mode cramMode, const NbgConfig& c, uint16_t vrsize,
-                     const PlaneGeom& g, uint32_t x, uint32_t y)
+                     const PlaneGeom& g, uint32_t x, uint32_t y, DotInfo* info = nullptr)
 {
     const PatternName pn = DecodePatternName(
         vram, PatternNameAddress(g, x >> g.cellShift, y >> g.cellShift), c, vrsize);
@@ -639,7 +800,7 @@ Rgba FetchPlaneTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t
     uint32_t inY = y & (g.cellWH - 1);
     if (pn.flip & 1) inX = g.cellWH - 1 - inX;
     if (pn.flip & 2) inY = g.cellWH - 1 - inY;
-    return FetchPatternTexel(vram, cram, cramMode, c, pn, g.cellBytes, inX, inY);
+    return FetchPatternTexel(vram, cram, cramMode, c, pn, g.cellBytes, inX, inY, info);
 }
 
 // Resolve an NBG's four plane bases (A-D, tiling the screen as a 2x2 grid of planes) and
@@ -689,14 +850,15 @@ inline bool OnTileBoundary(const NbgConfig& c, uint32_t cellWH, uint32_t planeX,
 // on a pattern boundary is marked and no texel is read.
 void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
                  const NbgConfig& c, int layerIndex, int width, int height,
-                 std::vector<PixColumn>& cols)
+                 std::vector<PixColumn>& cols, const EmitExtras& ex)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
     const uint16_t vrsize = Reg(snap, kVRSIZE);
-    const WindowConfig windowConfig = ReadWindowConfig(snap, layerIndex);
+    LayerWindows windows;
+    windows.Begin(snap, layerIndex, applyWindows);
 
     std::array<uint32_t, 4> planeBase {};
     PlaneGeom geom {};
@@ -706,15 +868,13 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
 
     for (int sy = 0; sy < height; ++sy)
     {
-        const WindowLine windowLines[2] = {
-            ResolveWindowLine(windowConfig, 0, vram, sy),
-            ResolveWindowLine(windowConfig, 1, vram, sy)
-        };
+        windows.BeginRow(vram, sy);
         // Per-line horizontal start (.8), per-dot increment (.8), and the plane-space Y.
         // NBG2/3 use plain integer scroll; NBG0/1 add fractional scroll, zoom, and an
         // optional per-line scroll/zoom table (SCRCTL/LSTA).
         uint32_t xcStart = c.scrollX << 8, xcinc = 0x100;
         int yCoord = c.scrollY + sy;
+        uint32_t yBase8 = static_cast<uint32_t>(yCoord) << 8;
         if (c.zoomScroll)
         {
             const uint8_t sc = c.scrollCtrl;
@@ -748,24 +908,55 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             }
             xcStart = lineX8;
             xcinc = inc;
-            yCoord = haveLineY ? static_cast<int>(lineY8 >> 8)
-                               : static_cast<int>((c.yScroll8 + c.yInc8 * sy) >> 8);
+            yBase8 = haveLineY ? lineY8 : c.yScroll8 + c.yInc8 * sy;
+            yCoord = static_cast<int>(yBase8 >> 8);
         }
+        uint32_t vcCell = ~0u, vcEntry8 = 0;   // the vertical cell scroll entry last read
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
+            const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
+            // A windowed-out dot draws nothing, but the gradation screen still blurs its colour.
+            const bool windowed = windows.Masks(sx, SwBitAt(ex, pixelIndex));
+            Rgba* const gradDot = (ex.gradation && (c.mixFlags & kGradation)) ? &(*ex.gradation)[pixelIndex] : nullptr;
+            if (windowed && !gradDot)
             {
                 continue;
             }
             // Horizontal mosaic replicates each block's leftmost dot across the block.
             const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
             const int sampleX = static_cast<int>((xcStart + xcinc * msx) >> 8);
+            int yPx = yCoord;
+            if (c.vcScroll)
+            {
+                // The table lists cells left to right from the screen's edge. Normally cell k is the
+                // k-th group of 8 map dots (the first, partial one counts as cell 0); with a zoom
+                // reduction limit set the cells are plain groups of 8 screen dots.
+                const uint32_t cell = c.vcZoomLimit
+                                          ? static_cast<uint32_t>(sx) >> 3
+                                          : (static_cast<uint32_t>(sx) + ((xcStart >> 8) & 7)) >> 3;
+                if (cell != vcCell)   // eight neighbouring dots share one entry
+                {
+                    const uint32_t entryIndex = c.vcInterleaved
+                                                    ? cell * 2 + static_cast<uint32_t>(layerIndex) : cell;
+                    const uint32_t addr = c.vcBase + entryIndex * 2;
+                    vcEntry8 = ((ReadVdp2Word(vram, addr) & 0x7FFu) << 8) |
+                               (ReadVdp2Word(vram, addr + 1) >> 8);
+                    vcCell = cell;
+                }
+                yPx = static_cast<int>((yBase8 + vcEntry8) >> 8);
+            }
             const uint32_t planeX = static_cast<uint32_t>(sampleX) & xMask;
-            const uint32_t planeY = static_cast<uint32_t>(yCoord) & yMask;
+            const uint32_t planeY = static_cast<uint32_t>(yPx) & yMask;
             // Bitmap mode indexes the linear image directly; cell mode walks the plane.
+            DotInfo dot;
             Rgba col = c.bitmap
-                ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord)
-                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom, planeX, planeY);
+                ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yPx, &dot)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom, planeX, planeY, &dot);
+            if (gradDot) *gradDot = dot.color;
+            if (windowed)
+            {
+                continue;
+            }
             // A grid line is drawn even where the layer's own texel is transparent —
             // that is the point of it, showing where the empty tiles are.
             if (opts.show_tile_grid && OnTileBoundary(c, geom.cellWH, planeX, planeY))
@@ -776,8 +967,8 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             {
                 continue;
             }
-            ApplyColorOffset(col, c);
-            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c);
+            EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
+                      dot);
         }
     }
 }
@@ -797,49 +988,70 @@ struct RotParam
 RotParam FetchRotParam(const std::vector<uint8_t>& v, uint32_t a)
 {
     RotParam r {};
-    r.Xst = SignX(ReadVdp2Dword(v, a + 0x00) >> 6, 23);
-    r.Yst = SignX(ReadVdp2Dword(v, a + 0x02) >> 6, 23);
-    r.Zst = SignX(ReadVdp2Dword(v, a + 0x04) >> 6, 23);
-    r.DXst = SignX(ReadVdp2Dword(v, a + 0x06) >> 6, 13);
-    r.DYst = SignX(ReadVdp2Dword(v, a + 0x08) >> 6, 13);
-    r.DX = SignX(ReadVdp2Dword(v, a + 0x0A) >> 6, 13);
-    r.DY = SignX(ReadVdp2Dword(v, a + 0x0C) >> 6, 13);
+    r.Xst = SignExtend(ReadVdp2Dword(v, a + 0x00) >> 6, 23);
+    r.Yst = SignExtend(ReadVdp2Dword(v, a + 0x02) >> 6, 23);
+    r.Zst = SignExtend(ReadVdp2Dword(v, a + 0x04) >> 6, 23);
+    r.DXst = SignExtend(ReadVdp2Dword(v, a + 0x06) >> 6, 13);
+    r.DYst = SignExtend(ReadVdp2Dword(v, a + 0x08) >> 6, 13);
+    r.DX = SignExtend(ReadVdp2Dword(v, a + 0x0A) >> 6, 13);
+    r.DY = SignExtend(ReadVdp2Dword(v, a + 0x0C) >> 6, 13);
     for (int m = 0; m < 6; ++m)
-        r.M[m] = SignX(ReadVdp2Dword(v, a + 0x0E + m * 2) >> 6, 14);
-    r.Px = SignX(ReadVdp2Word(v, a + 0x1A), 14);
-    r.Py = SignX(ReadVdp2Word(v, a + 0x1B), 14);
-    r.Pz = SignX(ReadVdp2Word(v, a + 0x1C), 14);
-    r.Cx = SignX(ReadVdp2Word(v, a + 0x1E), 14);
-    r.Cy = SignX(ReadVdp2Word(v, a + 0x1F), 14);
-    r.Cz = SignX(ReadVdp2Word(v, a + 0x20), 14);
-    r.Mx = SignX(ReadVdp2Dword(v, a + 0x22) >> 6, 24);
-    r.My = SignX(ReadVdp2Dword(v, a + 0x24) >> 6, 24);
-    r.kx = SignX(ReadVdp2Dword(v, a + 0x26), 24);
-    r.ky = SignX(ReadVdp2Dword(v, a + 0x28), 24);
+        r.M[m] = SignExtend(ReadVdp2Dword(v, a + 0x0E + m * 2) >> 6, 14);
+    r.Px = SignExtend(ReadVdp2Word(v, a + 0x1A), 14);
+    r.Py = SignExtend(ReadVdp2Word(v, a + 0x1B), 14);
+    r.Pz = SignExtend(ReadVdp2Word(v, a + 0x1C), 14);
+    r.Cx = SignExtend(ReadVdp2Word(v, a + 0x1E), 14);
+    r.Cy = SignExtend(ReadVdp2Word(v, a + 0x1F), 14);
+    r.Cz = SignExtend(ReadVdp2Word(v, a + 0x20), 14);
+    r.Mx = SignExtend(ReadVdp2Dword(v, a + 0x22) >> 6, 24);
+    r.My = SignExtend(ReadVdp2Dword(v, a + 0x24) >> 6, 24);
+    r.kx = SignExtend(ReadVdp2Dword(v, a + 0x26), 24);
+    r.ky = SignExtend(ReadVdp2Dword(v, a + 0x28), 24);
     r.KAst = ReadVdp2Dword(v, a + 0x2A) >> 6;
-    r.DKAst = SignX(ReadVdp2Dword(v, a + 0x2C) >> 6, 20);
-    r.DKAx = SignX(ReadVdp2Dword(v, a + 0x2E) >> 6, 20);
+    r.DKAst = SignExtend(ReadVdp2Dword(v, a + 0x2C) >> 6, 20);
+    r.DKAx = SignExtend(ReadVdp2Dword(v, a + 0x2E) >> 6, 20);
     return r;
 }
 
 // Resolve the RBG0 cell configuration (shares the cell/pattern layout with the NBGs;
 // the rotation-specific plane map + coordinates are handled in RenderRbg0). 'paramB'
 // selects which rotation parameter set supplies plane size / map offset.
-NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
+NbgConfig ReadRbgConfig(const HardwareSnapshot& s, bool paramB, bool rbg1 = false)
 {
-    const uint16_t chb = Reg(s, kCHCTLB);
     const uint16_t plsz = Reg(s, kPLSZ);
     const uint16_t mpofr = Reg(s, kMPOFR);
     NbgConfig c {};
+    c.planeSize = (plsz >> (paramB ? 12 : 8)) & 0x3;
+    c.mapOffset = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 6;
+    if (rbg1)
+    {
+        // RBG1 takes NBG0's place and its registers: the pattern-name control, character size and
+        // colour format, colour RAM offset, priority, transparency, colour calculation and the
+        // per-screen mixer flags are all NBG0's. Only the plane layout comes from rotation set B.
+        const uint16_t cha = Reg(s, kCHCTLA);
+        c.patternCtrl = Reg(s, kPNCN0);
+        c.colorNum = std::min<uint32_t>(4u, (cha >> 4) & 0x7);
+        c.patternWH = (cha & 0x0001) ? 2 : 1;
+        c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFA) & 0x0007) << 8;
+        c.priority = Reg(s, kPRINA) & 0x7;
+        c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 8)) != 0;
+        SetColorCalc(s, 0, Reg(s, kCCRNA), c);
+        ReadSpecialFunctions(s, 0, c);
+        c.rank = kRankNbg0;
+        c.mosaicH = ReadMosaicH(s, 0);
+        c.mixFlags |= ScreenMixFlags(s, 0, 0, 0);
+        return c;   // no bitmap mode for RBG1
+    }
+    const uint16_t chb = Reg(s, kCHCTLB);
     c.patternCtrl = Reg(s, kPNCR);
     c.colorNum = std::min<uint32_t>(4u, (chb >> 12) & 0x7);
     c.patternWH = (chb & 0x0100) ? 2 : 1;
-    c.planeSize = (plsz >> (paramB ? 12 : 8)) & 0x3;
-    c.mapOffset = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 6;
     c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFB) & 0x0007) << 8;
     c.priority = Reg(s, kPRIR) & 0x7;
     c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 12)) != 0;
     SetColorCalc(s, 4, Reg(s, kCCRR), c);
+    ReadSpecialFunctions(s, 4, c);
+    c.rank = kRankRbg0;
 
     // RBG0 bitmap mode (CHCTLB R0BMEN): 512-wide, 256 or 512 tall.
     c.bitmap = (chb >> 9) & 1;
@@ -848,9 +1060,11 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
     c.bitmapBase = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 16;
     c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
+    c.bitmapScc = (Reg(s, kBMPNB) & 0x10) != 0;
+    c.bitmapSpr = (Reg(s, kBMPNB) & 0x20) != 0;
 
     c.mosaicH = ReadMosaicH(s, 4);
-    ReadColorOffset(s, 4, c);
+    c.mixFlags |= ScreenMixFlags(s, 4, 4, 4);
     return c;
 }
 
@@ -873,7 +1087,7 @@ uint32_t ReadCoeff(const std::vector<uint8_t>& vram, const std::vector<uint8_t>&
     if (coeffWord)
     {
         const uint16_t t = word(addr);
-        return (static_cast<uint32_t>(SignX(t << 6, 21)) & 0x00FFFFFFu) |
+        return (static_cast<uint32_t>(SignExtend(t << 6, 21)) & 0x00FFFFFFu) |
                (static_cast<uint32_t>(t & 0x8000) << 16);
     }
     return (static_cast<uint32_t>(word(addr)) << 16) | word(addr + 1);
@@ -894,6 +1108,7 @@ struct RotSet
     bool     useCoeff = false;
     bool     coeffWord = false;
     uint32_t coeffMode = 0;
+    bool     lcCoeff = false;   // the coefficient table's seven line colour bits are in use
 
     // Per-line state, recomputed by BeginRotLine.
     int64_t  Xsp = 0, Ysp = 0;
@@ -901,7 +1116,7 @@ struct RotSet
     uint32_t KAstLine = 0;
 };
 
-void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
+void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s, bool rbg1 = false)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
 
@@ -920,7 +1135,9 @@ void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
     s.coeffMode = (ktctl >> 2) & 0x3;
     s.screenOver = (Reg(snap, kPLSZ) >> (paramB ? 14 : 10)) & 0x3;
 
-    s.cfg = ReadRbg0Config(snap, paramB);
+    s.cfg = ReadRbgConfig(snap, paramB, rbg1);
+    // KTCTL's line colour enable only applies to the 2-word coefficient format.
+    s.lcCoeff = (ktctl & 0x10) != 0 && s.useCoeff && !s.coeffWord;
 
     // Plane geometry: RBG0 tiles a 4x4 grid of 16 planes.
     const NbgConfig& c = s.cfg;
@@ -967,18 +1184,24 @@ void BeginRotLine(RotSet& s, int sy)
     s.KAstLine = rp.KAst + static_cast<uint32_t>(rp.DKAst) * static_cast<uint32_t>(sy);
 }
 
-// Composite the RBG0 rotation screen. For each screen dot a rotation parameter set is
+// Composite a rotation screen. For each screen dot a rotation parameter set is
 // evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
-// coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
+// coefficient table) to a plane-space coordinate, which indexes the 4x4 grid of 16
 // planes via the same page->pattern->cell walk the NBGs use (or the bitmap image in
 // bitmap mode); screen-over "repeat" wraps, other modes read transparent outside.
 //
 // RPMD picks the set: 0/1 use A/B for the whole screen, 2 switches per dot on the sign
 // bit of A's coefficient, and 3 switches per dot on the rotation parameter window. Modes
-// 2 and 3 are how a game draws a horizon — one set for the sky, the other for the ground
-// — so treating them as "always A" leaves half the screen sampling the wrong table.
-void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd,
-                int width, int height, std::vector<PixColumn>& cols)
+// 2 and 3 are how a game draws a horizon -- one set for the sky, the other for the ground
+// -- so treating them as "always A" leaves half the screen sampling the wrong table.
+//
+// With 'rbg1' this draws RBG1 instead: it takes NBG0's place (and its registers, window and
+// mosaic), is fixed to set B, reads one coefficient per line instead of one per dot, and RPMD
+// no longer applies to RBG0 (it is treated as 0/1). The line colour screen's coefficient bits
+// then always come from set A's table.
+void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd, bool rbg1,
+               bool rbg0AlsoOn, int width, int height, std::vector<PixColumn>& cols,
+               const EmitExtras& ex)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
@@ -989,17 +1212,21 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
 
     // RPMD 0/1 use one set for the whole screen; only 2 (coefficient sign) and 3 (rotation
     // parameter window) choose per dot, and only then is the second set's setup worth doing.
-    const bool perDot = (rpmd >= 2);
-    const int fixedSet = (rpmd == 1) ? 1 : 0;
+    // RBG1 being on forces RBG0 to a fixed set, whatever RPMD says.
+    const uint32_t effRpmd = (rbg1 || rbg0AlsoOn) ? (rpmd & 1u) : rpmd;
+    const bool perDot = (effRpmd >= 2);
+    const int fixedSet = rbg1 ? 1 : ((effRpmd == 1) ? 1 : 0);
 
     RotSet sets[2];
-    BuildRotSet(snap, fixedSet != 0, sets[fixedSet]);
-    if (perDot) BuildRotSet(snap, true, sets[1]);
+    BuildRotSet(snap, fixedSet != 0, sets[fixedSet], rbg1);
+    // The other set is needed per dot (RPMD 2/3), and for its line colour coefficients when RBG1 is on.
+    if (perDot || rbg1 || rbg0AlsoOn) BuildRotSet(snap, fixedSet == 0, sets[1 - fixedSet], false);
 
-    // RBG0's own transparent-processing window (WCTLC low byte), and separately the
-    // rotation parameter window (WCTLD low byte) that mode 3 selects the set with. The
-    // latter is geometry, not masking, so it applies even when window display is off.
-    const WindowConfig windowConfig = ReadWindowConfig(snap, kWinLayerRbg0);
+    // The screen's own transparent-processing window (RBG0: WCTLC low byte; RBG1 is NBG0's),
+    // and separately the rotation parameter window (WCTLD low byte) that mode 3 selects the set
+    // with. The latter is geometry, not masking, so it applies even when window display is off.
+    LayerWindows windows;
+    windows.Begin(snap, rbg1 ? kWinLayerNbg0 : kWinLayerRbg0, applyWindows);
     const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
     const uint32_t mosaicH = sets[fixedSet].cfg.mosaicH;
 
@@ -1012,29 +1239,23 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
 
     for (int sy = 0; sy < height; ++sy)
     {
-        const WindowLine windowLines[2] = {
-            ResolveWindowLine(windowConfig, 0, vram, sy),
-            ResolveWindowLine(windowConfig, 1, vram, sy)
-        };
+        windows.BeginRow(vram, sy);
         WindowLine rotWindowLines[2] = {};
-        if (rpmd == 3)
+        if (effRpmd == 3)
         {
             rotWindowLines[0] = ResolveWindowLine(rotWindowConfig, 0, vram, sy);
             rotWindowLines[1] = ResolveWindowLine(rotWindowConfig, 1, vram, sy);
         }
         BeginRotLine(sets[fixedSet], sy);
-        if (perDot) BeginRotLine(sets[1], sy);
+        if (perDot || rbg1 || rbg0AlsoOn) BeginRotLine(sets[1 - fixedSet], sy);
         // In mode 2 set B contributes only the coefficient sampled at the start of the
-        // line; the per-dot walk is done in set A's table alone.
+        // line; the per-dot walk is done in set A's table alone. RBG1 reads just that one.
         const uint32_t baseCoeffB =
-            (rpmd == 2 && sets[1].useCoeff) ? coeffAt(sets[1], 0) : 0u;
+            ((effRpmd == 2 || rbg1) && sets[1].useCoeff) ? coeffAt(sets[1], 0) : 0u;
 
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
-            {
-                continue;
-            }
+            const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
             // Horizontal mosaic snaps the sampled dot to its block's left edge.
             const int msx = (mosaicH > 1) ? sx - (sx % static_cast<int>(mosaicH)) : sx;
 
@@ -1042,27 +1263,53 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
             int ab = fixedSet;
             uint32_t coeff = 0;
             bool haveCoeff = false;
-            if (rpmd == 3)
+            if (rbg1)
+            {
+                coeff = baseCoeffB;
+                haveCoeff = true;
+            }
+            else if (effRpmd == 3)
             {
                 ab = WindowMasksPixel(rotWindowConfig.control, rotWindowLines, sx) ? 1 : 0;
             }
-            else if (rpmd == 2 && sets[0].useCoeff)
+            else if (effRpmd == 2 && sets[0].useCoeff)
             {
                 const uint32_t ca = coeffAt(sets[0], msx);
                 ab = static_cast<int>(ca >> 31);
                 coeff = (static_cast<int32_t>(ca) < 0) ? baseCoeffB : ca;
                 haveCoeff = true;
             }
+
+            // The coefficient table can also carry seven bits of the line colour screen's CRAM address,
+            // for every dot of the line whether or not this screen draws it. Set A's table is used for
+            // RPMD 2 and whenever RBG1 is on; otherwise the dot's own set.
+            if (ex.lineOverride)
+            {
+                const RotSet& lcSet = (effRpmd == 2 || rbg1 || rbg0AlsoOn) ? sets[0] : sets[ab];
+                if (lcSet.lcCoeff)
+                {
+                    (*ex.lineOverride)[pixelIndex] = static_cast<uint8_t>((coeffAt(lcSet, sx) >> 24) & 0x7F);
+                }
+            }
+
+            const bool windowed = windows.Masks(sx, SwBitAt(ex, pixelIndex));
+            if (windowed && !ex.gradation)
+            {
+                continue;
+            }
             const RotSet& s = sets[ab];
             const NbgConfig& c = s.cfg;
 
+            // A dot the coefficient or the screen-over rule makes transparent is still sampled: it draws
+            // nothing, but the gradation screen blurs the colour it would have had.
+            bool dotTransparent = false;
             int32_t kx = s.rp.kx, ky = s.rp.ky, Xp = s.XpBase;
             if (s.useCoeff)
             {
                 // One coefficient per dot along the line; it can override kx/ky or Xp.
                 const uint32_t k = haveCoeff ? coeff : coeffAt(s, msx);
-                if (static_cast<int32_t>(k) < 0) continue;   // coefficient = transparent
-                const int32_t sext = SignX(k, 24);
+                dotTransparent = static_cast<int32_t>(k) < 0;   // coefficient = transparent
+                const int32_t sext = SignExtend(k, 24);
                 switch (s.coeffMode)
                 {
                 case 0: kx = ky = sext; break;
@@ -1082,13 +1329,19 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
                 (ixs < 0 || iys < 0 || static_cast<uint32_t>(ixs) >= s.totalW ||
                  static_cast<uint32_t>(iys) >= s.totalH))
             {
-                continue;
+                dotTransparent = true;
             }
             const uint32_t planeX = static_cast<uint32_t>(ixs) & (s.totalW - 1);
             const uint32_t planeY = static_cast<uint32_t>(iys) & (s.totalH - 1);
+            DotInfo dot;
             Rgba col = c.bitmap
-                ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys)
-                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom, planeX, planeY);
+                ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys, &dot)
+                : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom, planeX, planeY, &dot);
+            if (ex.gradation && (c.mixFlags & kGradation)) (*ex.gradation)[pixelIndex] = dot.color;
+            if (windowed || dotTransparent)
+            {
+                continue;
+            }
             if (opts.show_tile_grid && OnTileBoundary(c, s.geom.cellWH, planeX, planeY))
             {
                 TintTileGrid(col);
@@ -1097,8 +1350,8 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
             {
                 continue;
             }
-            ApplyColorOffset(col, c);
-            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c);
+            EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
+                      dot);
         }
     }
 }
@@ -1110,7 +1363,7 @@ struct ResolvedLayer
 {
     NbgConfig cfg {};
     PlaneGeom geom {};
-    std::array<uint32_t, 16> planes {};   // 4 used by an NBG, all 16 by RBG0
+    std::array<uint32_t, 16> planes {};   // 4 used by an NBG, all 16 by RBG0 or RBG1
 };
 
 // Which rotation parameter set a tile map / tileset describes. Only RPMD 1 uses set B for
@@ -1121,16 +1374,32 @@ bool Rbg0UsesParamB(const HardwareSnapshot& s)
     return (Reg(s, kRPMD) & 0x3) == 1;
 }
 
+// True when 'layer' (the NBG0 slot) is showing RBG1 instead: BGON's R1ON takes NBG0's place, so the
+// NBG0 tile map describes the rotation screen, with rotation parameter set B's plane layout.
+bool IsRbg1(const HardwareSnapshot& s, int layer)
+{
+    return layer == 0 && (Reg(s, kBGON) & (1u << 5)) != 0;
+}
+
 // A screen's cell configuration (colour depth, pattern size, palette base, priority).
 // Returns false when BGON does not enable the screen — the same gate EmitLayers applies
 // before drawing anything.
 bool ResolveLayerConfig(const HardwareSnapshot& s, int layer, NbgConfig& out)
 {
-    if (layer < 0 || layer > 4 || !(Reg(s, kBGON) & (1u << layer)))
+    if (layer < 0 || layer > 4)
     {
         return false;
     }
-    out = (layer == 4) ? ReadRbg0Config(s, Rbg0UsesParamB(s)) : ReadNbgConfig(s, layer);
+    if (IsRbg1(s, layer))
+    {
+        out = ReadRbgConfig(s, true, true);
+        return true;
+    }
+    if (!(Reg(s, kBGON) & (1u << layer)))
+    {
+        return false;
+    }
+    out = (layer == 4) ? ReadRbgConfig(s, Rbg0UsesParamB(s)) : ReadNbgConfig(s, layer);
     return true;
 }
 
@@ -1141,10 +1410,10 @@ bool ResolveLayer(const HardwareSnapshot& s, int layer, ResolvedLayer& out)
     {
         return false;
     }
-    if (layer == 4)
+    if (layer == 4 || IsRbg1(s, layer))
     {
         RotSet rot;
-        BuildRotSet(s, Rbg0UsesParamB(s), rot);
+        BuildRotSet(s, layer == 4 ? Rbg0UsesParamB(s) : true, rot, layer != 4);
         out.planes = rot.planeBase;
         out.geom = rot.geom;
     }
@@ -1202,7 +1471,7 @@ bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMa
         return false;
     }
 
-    // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0.
+    // The plane grid is square: 2x2 planes for an NBG, 4x4 for RBG0 and RBG1.
     out.mapWidth = g.planesPerRow * g.planeCellsW;
     out.mapHeight = g.planesPerRow * g.planeCellsH;
     return true;
@@ -1211,68 +1480,227 @@ bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMa
 }  // namespace
 
 void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                               int width, int height, std::vector<PixColumn>& cols)
+                               int width, int height, std::vector<PixColumn>& cols,
+                               const EmitExtras& extras)
 {
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
     }
 
+    const EmitExtras ex = ValidatedExtras(extras, static_cast<size_t>(width) * height);
     const uint16_t bgon = Reg(snapshot, kBGON);
 
-    // Resolve the enabled NBGs first (no rendering yet). A layer is drawn only if
+    // Resolve the enabled screens first (no rendering yet). A layer is drawn only if
     // BGON enables it, the host toggle is on, and its priority is non-zero
     // (priority 0 = not displayed on hardware).
+    enum class Kind { Nbg, Rbg0, Rbg1 };
     struct Layer
     {
-        int index;      // NBG number, or 4 for RBG0
+        Kind kind;
+        int index;      // NBG number; 4 for RBG0; 0 for RBG1, which sits in NBG0's place
         NbgConfig config;
-        bool rbg0 = false;
     };
     std::vector<Layer> layers;
-    layers.reserve(SE_LAYER_COUNT);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
+    layers.reserve(SE_LAYER_COUNT + 1);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
     auto consider = [&](const Layer& layer)
     {
-        if (layer.config.priority == 0) return;    // priority 0 = not displayed
+        // Priority 0 = not displayed -- unless the special priority function can lift individual
+        // characters or dots to priority 1.
+        if (layer.config.priority == 0 && layer.config.prioMode == 0) return;
         layers.push_back(layer);
     };
+    const bool rbg0On = (bgon & (1u << 4)) != 0;
+    const bool rbg1On = (bgon & (1u << 5)) != 0;
+    // RBG1 cannot be displayed in the exclusive monitor modes (HRESO bit 2), though it still takes
+    // NBG0's slot.
+    const bool rbg1Drawn = rbg1On && (Reg(snapshot, kTVMD) & 0x4) == 0;
     for (int n = 0; n < 4; ++n)
     {
-        if (!(bgon & (1u << n)) || !opts.show_layer[n])
+        // RBG1 takes NBG0's slot, and with RBG0 also on the rotation screens use up the rest of
+        // the VRAM bandwidth: NBG1-3 are not displayed.
+        if (!(bgon & (1u << n)) || !opts.show_layer[n] || (n == 0 && rbg1On) ||
+            (rbg0On && rbg1On))
         {
             continue;
         }
-        consider({ n, ReadNbgConfig(snapshot, n), false });
+        consider({ Kind::Nbg, n, ReadNbgConfig(snapshot, n) });
     }
     // RBG0 (rotation) occupies BGON bit 4. RPMD selects the rotation parameter set, which
-    // can vary per dot; RenderRbg0 resolves that itself. Priority and colour calculation
+    // can vary per dot; RenderRbg resolves that itself. Priority and colour calculation
     // come from RBG0's own registers either way, so set A's config orders the layer.
-    if ((bgon & (1u << 4)) && opts.show_layer[SE_LAYER_RBG0])
+    if (rbg0On && opts.show_layer[SE_LAYER_RBG0])
     {
-        consider({ 4, ReadRbg0Config(snapshot, false), true });
+        consider({ Kind::Rbg0, 4, ReadRbgConfig(snapshot, false) });
+    }
+    // RBG1 (BGON bit 5) is the NBG0 screen drawn as a rotation screen, so the NBG0 toggle shows it.
+    if (rbg1Drawn && opts.show_layer[SE_LAYER_NBG0])
+    {
+        consider({ Kind::Rbg1, 0, ReadRbgConfig(snapshot, true, true) });
     }
 
-    // Emit order = back to front: ascending priority; for equal priority the
-    // higher-numbered NBG is emitted first, so on ties EmitPix's later-wins rule leaves
-    // NBG0 on top. Emitting in this order also means a same-priority sprite (emitted
-    // after all layers) wins its tie against the NBGs, matching hardware.
-    std::stable_sort(layers.begin(), layers.end(), [](const Layer& a, const Layer& b)
-    {
-        if (a.config.priority != b.config.priority) return a.config.priority < b.config.priority;
-        return a.index > b.index;
-    });
-
+    // Emission order does not matter: every contribution carries its priority and its rank, which
+    // together decide the stacking (an equal priority is broken by the hardware's screen order).
     for (const Layer& layer : layers)
     {
-        if (layer.rbg0)
+        if (layer.kind == Kind::Nbg)
         {
-            RenderRbg0(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, width, height, cols);
+            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols, ex);
         }
         else
         {
-            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols);
+            RenderRbg(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, layer.kind == Kind::Rbg1,
+                      rbg0On && rbg1On, width, height, cols, ex);
         }
     }
+}
+
+void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                 int width, int height, const std::vector<SpritePixel>& sprites,
+                                 const SpritePriorityTable& prios, std::vector<PixColumn>& cols,
+                                 const EmitExtras& extras)
+{
+    if (width <= 0 || height <= 0 || sprites.size() != static_cast<size_t>(width) * height)
+    {
+        return;
+    }
+    const bool applyWindows = opts.show_window != 0 && snapshot.HasVdp2Regs() &&
+                              !snapshot.Vdp2Vram().empty();
+    const bool shadows = opts.show_shadow_highlight != 0;
+    // The sprite layer has its own transparent-processing window, and its sprite-window input is
+    // the pixel's own window bit. The colour-calculation window can additionally clear a pixel's
+    // colour-calculation enable.
+    LayerWindows windows;
+    windows.Begin(snapshot, kWinLayerSprite, applyWindows);
+    uint16_t baseFlags = 0;
+    const EmitExtras ex = ValidatedExtras(extras, sprites.size());
+    Rgba* gradation = ex.gradation ? ex.gradation->data() : nullptr;
+    if (snapshot.HasVdp2Regs())
+    {
+        baseFlags = ScreenMixFlags(snapshot, -1, 5, 6);   // sprites: no SDCTL bit; LNCLEN 5, CLOFEN 6
+        const uint16_t ccctl = Reg(snapshot, kCCCTL);
+        if ((ccctl & 0x8000) && ((ccctl >> 12) & 0x7) == 0)  baseFlags |= kGradation;
+    }
+    if (prios.ccEnable)
+    {
+        baseFlags |= kLayerCc;
+    }
+    for (int y = 0; y < height; ++y)
+    {
+        windows.BeginRow(snapshot.Vdp2Vram(), y);
+        for (int x = 0; x < width; ++x)
+        {
+            const size_t i = static_cast<size_t>(y) * width + x;
+            const SpritePixel& p = sprites[i];
+            // The gradation screen blurs the sprite word's colour whether or not the dot is drawn.
+            if (gradation && (baseFlags & kGradation)) gradation[i] = p.color;
+            if (!p.visible)
+            {
+                continue;
+            }
+            if (windows.Masks(x, p.swBit))
+            {
+                continue;
+            }
+            if (p.shadowMarker)
+            {
+                if (shadows)
+                {
+                    EmitShadowMarker(cols[i], p.prio);
+                }
+                continue;
+            }
+            uint16_t flags = baseFlags;
+            if (shadows && p.shadowSelf) flags |= kShadowSelf;
+            if (p.isRgb) flags |= kIsRgb;
+            EmitPix(cols[i], p.color.r, p.color.g, p.color.b, p.prio, p.ccEn && !windows.CcMasked(x, p.swBit),
+                    p.ccRatio, prios.ccAdd, flags, kRankSprite);
+        }
+    }
+}
+
+MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                      int width, int height, const EmitExtras& extras)
+{
+    MixState mix;
+    mix.colorCalc = opts.show_color_calculation != 0;
+    mix.width = width;
+    if (!snapshot.HasVdp2Regs())
+    {
+        return mix;
+    }
+    const uint16_t ccctl = Reg(snapshot, kCCCTL);
+    const uint16_t tvmd = Reg(snapshot, kTVMD);
+    const bool hiRes = (tvmd & 0x6) != 0;   // 640/704 or the exclusive monitor modes
+    mix.secondRatio = (ccctl & 0x0200) != 0;
+    mix.cram0 = snapshot.CramMode() == SE_CRAM_RGB555_1024;
+    // Extended colour calculation only exists at normal resolution; in hi-res a colour RAM mode 1/2
+    // palette second image simply cannot be blended with.
+    mix.extended = (ccctl & 0x0400) != 0 && !hiRes;
+    mix.hiresCram12 = hiRes && !mix.cram0;
+    mix.cram = &snapshot.Cram();
+    mix.cramMode = snapshot.CramMode();
+    const size_t pixels = static_cast<size_t>(width) * height;
+    const EmitExtras ex = ValidatedExtras(extras, pixels);
+    mix.lineOverride = ex.lineOverride;
+    // Gradation (BOKEN) only exists at normal resolution with colour RAM mode 0; it replaces the line
+    // colour screen and extended calculation. The blur is only read by colour calculation.
+    if ((ccctl & 0x8000) != 0 && !hiRes && mix.cram0 && ex.gradation && mix.colorCalc)
+    {
+        mix.gradation = true;
+        mix.extended = false;
+        mix.blur.resize(pixels);
+        for (int y = 0; y < height; ++y)
+        {
+            // Each pixel is 1/4 of the dot two to its left, 1/4 of the one to its left and 1/2 of
+            // itself; the line starts with its first dot standing in for the ones before it.
+            const Rgba* src = ex.gradation->data() + static_cast<size_t>(y) * width;
+            Rgba* dst = mix.blur.data() + static_cast<size_t>(y) * width;
+            auto avg = [](const Rgba& a, const Rgba& b)
+            {
+                return Rgba{ static_cast<uint8_t>((a.r + b.r) >> 1), static_cast<uint8_t>((a.g + b.g) >> 1),
+                             static_cast<uint8_t>((a.b + b.b) >> 1), 255 };
+            };
+            Rgba prev0 = src[0], prev1 = src[0];
+            for (int x = 0; x < width; ++x)
+            {
+                dst[x] = avg(avg(prev0, prev1), src[x]);
+                prev0 = prev1;
+                prev1 = src[x];
+            }
+        }
+    }
+    mix.lineCc = (ccctl & 0x0020) != 0;
+    mix.lineRatio = static_cast<uint8_t>(Reg(snapshot, kCCRLB) & 0x1F);
+
+    // Colour offset A / B: signed 9-bit R, G, B.
+    static const uint32_t kOffsetRegs[2][3] = { { kCOAR, kCOAG, kCOAB }, { kCOBR, kCOBG, kCOBB } };
+    for (int set = 0; set < 2; ++set)
+    {
+        for (int ch = 0; ch < 3; ++ch)
+        {
+            mix.offset[set][ch] = static_cast<int16_t>(SignExtend(Reg(snapshot, kOffsetRegs[set][ch]) & 0x1FF, 9));
+        }
+    }
+
+    // Line colour screen: a table of CRAM addresses in VDP2 VRAM, one for the whole screen or one per
+    // display line (LCTAU bit 15). The colour is read through CRAM like any other.
+    const std::vector<uint8_t>& vram = snapshot.Vdp2Vram();
+    if (!vram.empty() && height > 0)
+    {
+        const uint16_t lctau = Reg(snapshot, kLCTAU);
+        const uint32_t base = (static_cast<uint32_t>(lctau & 0x0007) << 16) | Reg(snapshot, kLCTAL);
+        const bool perLine = (lctau & 0x8000) != 0;
+        mix.lineColors.resize(static_cast<size_t>(height));
+        mix.lineEntry.resize(static_cast<size_t>(height));
+        for (int y = 0; y < height; ++y)
+        {
+            const uint32_t entry = ReadVdp2Word(vram, base + (perLine ? static_cast<uint32_t>(y) : 0u)) & 0x7FF;
+            mix.lineEntry[static_cast<size_t>(y)] = static_cast<uint16_t>(entry);
+            mix.lineColors[static_cast<size_t>(y)] = CramColor(snapshot.Cram(), snapshot.CramMode(), entry);
+        }
+    }
+    return mix;
 }
 
 void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
@@ -1290,6 +1718,10 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     const uint16_t bktal = Reg(snapshot, kBKTAL);
     const uint32_t base = (static_cast<uint32_t>(bktau & 0x0007) << 16) | bktal;
     const bool perLine = (bktau & 0x8000) != 0;
+    // The back screen is RGB, may be shadowed (BKSDEN) and colour-offset (BKCOEN/BKCOSL), and carries
+    // CCRLB's back-screen ratio for the second-image ratio mode.
+    const uint16_t backFlags = kIsRgb | ScreenMixFlags(snapshot, 5, -1, 5);
+    const uint8_t backRatio = static_cast<uint8_t>((Reg(snapshot, kCCRLB) >> 8) & 0x1F);
 
     for (int y = 0; y < height; ++y)
     {
@@ -1301,7 +1733,7 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
             // Priority 0: the always-below backdrop. Marks the column valid so the
             // fallback backdrop never shows where VDP2 is present, and gives the lowest
             // colour-calc layer a real surface to blend against.
-            EmitPix(row[x], col.r, col.g, col.b, 0, false, 0, false);
+            EmitPix(row[x], col.r, col.g, col.b, 0, false, backRatio, false, backFlags, kRankBack);
         }
     }
 }

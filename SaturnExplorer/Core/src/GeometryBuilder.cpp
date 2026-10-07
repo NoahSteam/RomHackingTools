@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ByteOrder.h"
+#include "Vdp1Color.h"
 #include "Vdp1Parser.h"
 
 namespace se
@@ -17,6 +18,31 @@ namespace
 // still pulling genuinely overlapping/stacked sprites apart. See ARCHITECTURE.md
 // §7. Purely a display tunable.
 constexpr float kZSpacing = 6.0f;
+
+// Whether the hardware draws nothing for an untextured primitive (polygon, polyline, line) with this
+// CMDPMOD. The manual says SPD must be set to 1 for these and defines nothing otherwise, but the
+// hardware does not ignore it: the pixel's transparency is decided by "reading a texel" at texture
+// address -1, which lands on the last word of VDP1 VRAM, and applying the colour mode's transparent
+// code (SPD clear) and end code (ECD clear) to that. Mednafen reproduces this (vdp1_poly.cpp,
+// SPD_Opaque via TexFetch(0xFFFFFFFF)); a primitive with SPD clear therefore draws only if that
+// word is not a transparent code. A VRAM image that stops short of the last word cannot say, so the
+// primitive is drawn.
+bool UntexturedReadsTransparent(const std::vector<uint8_t>& vram, uint16_t pmod)
+{
+    constexpr uint32_t kVramBytes = 0x80000;
+    const unsigned mode = (pmod >> 3) & 0x7;
+    if (mode >= 6 || vram.size() < kVramBytes)
+    {
+        return false;
+    }
+    const bool spd = (pmod & 0x40) != 0;
+    const bool ecd = (pmod & 0x80) != 0;
+    const uint16_t w = ReadBE16(vram, kVramBytes - 2);
+    const se_color_mode cm = static_cast<se_color_mode>(mode);
+    // The "texel" is the low nibble, low byte or whole word of that last VRAM word, by colour mode.
+    const uint16_t raw = (mode <= 1) ? (w & 0xF) : (mode == 5) ? w : (w & 0xFF);
+    return (!ecd && IsEndCode(cm, raw)) || (!spd && IsTransparentRaw(cm, raw));
+}
 
 // Axis-aligned bounds of a sprite in screen space, plus its assigned layer.
 struct PlacedSprite
@@ -34,6 +60,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     out.screenWidth = 320;
     out.screenHeight = 224;
     out.hasSystemClip = false;
+    out.vdp1Height = 0;
 
     const std::vector<uint32_t> addresses = Vdp1Walk(vram);
 
@@ -45,6 +72,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     // relies on a rect set earlier. Defaulting to unbounded means "draw inside" doesn't
     // wrongly clip it away; a real user-clip command (comm 6) narrows it.
     int32_t userClipX0 = 0, userClipY0 = 0, userClipX1 = 0x3FFF, userClipY1 = 0x3FFF;
+    int32_t sysClipX1 = 0x7FFFFFFF, sysClipY1 = 0x7FFFFFFF;   // the system clip so far; none until set
     uint32_t objectNumber = 0;
     std::vector<PlacedSprite> placed;   // bounds+layer of sprites already emitted
 
@@ -57,14 +85,14 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const uint16_t colr = ReadBE16(vram, a + 0x06);
         const uint16_t srca = ReadBE16(vram, a + 0x08);
         const uint16_t size = ReadBE16(vram, a + 0x0A);
-        const int32_t  xa = ReadBE16S(vram, a + 0x0C);
-        const int32_t  ya = ReadBE16S(vram, a + 0x0E);
-        const int32_t  xb = ReadBE16S(vram, a + 0x10);
-        const int32_t  yb = ReadBE16S(vram, a + 0x12);
-        const int32_t  xc = ReadBE16S(vram, a + 0x14);
-        const int32_t  yc = ReadBE16S(vram, a + 0x16);
-        const int32_t  xd = ReadBE16S(vram, a + 0x18);
-        const int32_t  yd = ReadBE16S(vram, a + 0x1A);
+        const int32_t  xa = ReadBE16Sx(vram, a + 0x0C, 13);
+        const int32_t  ya = ReadBE16Sx(vram, a + 0x0E, 13);
+        const int32_t  xb = ReadBE16Sx(vram, a + 0x10, 13);
+        const int32_t  yb = ReadBE16Sx(vram, a + 0x12, 13);
+        const int32_t  xc = ReadBE16Sx(vram, a + 0x14, 13);
+        const int32_t  yc = ReadBE16Sx(vram, a + 0x16, 13);
+        const int32_t  xd = ReadBE16Sx(vram, a + 0x18, 13);
+        const int32_t  yd = ReadBE16Sx(vram, a + 0x1A, 13);
         const uint16_t grda = ReadBE16(vram, a + 0x1C);   // gouraud table (words)
 
         const uint16_t comm = ctrl & 0xF;
@@ -82,25 +110,41 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             break;
         }
 
+        // A skipped command (JP >= 4) is linked through but never executed, so it must not move
+        // the local origin or the clip rectangles either: the hardware leaves that state alone.
+        // Traversal is unaffected -- Vdp1Walk already followed its link.
+        if (skip)
+        {
+            continue;
+        }
+
+        // The state commands decode their fields differently from a primitive's: the local origin is
+        // 11-bit signed, and the clip rectangles are 13-bit UNSIGNED (a clip edge has no sign).
         if (comm == 0xA)  // local coordinate set
         {
-            originX = xa;
-            originY = ya;
+            originX = ReadBE16Sx(vram, a + 0x0C, 11);
+            originY = ReadBE16Sx(vram, a + 0x0E, 11);
             continue;
         }
         if (comm == 0x8)  // user clip: (xa,ya) upper-left, (xc,yc) lower-right
         {
-            userClipX0 = xa; userClipY0 = ya;
-            userClipX1 = xc; userClipY1 = yc;
+            userClipX0 = ReadBE16(vram, a + 0x0C) & 0x1FFF;
+            userClipY0 = ReadBE16(vram, a + 0x0E) & 0x1FFF;
+            userClipX1 = ReadBE16(vram, a + 0x14) & 0x1FFF;
+            userClipY1 = ReadBE16(vram, a + 0x16) & 0x1FFF;
             continue;
         }
         if (comm == 0x9)  // system clip: lower-right defines the drawing area
         {
-            if (xc > 0 && yc > 0)
+            const int32_t sx = ReadBE16(vram, a + 0x14) & 0x1FFF;
+            const int32_t sy = ReadBE16(vram, a + 0x16) & 0x1FFF;
+            if (sx > 0 && sy > 0)
             {
-                out.screenWidth = xc + 1;
-                out.screenHeight = yc + 1;
+                out.screenWidth = sx + 1;
+                out.screenHeight = sy + 1;
                 out.hasSystemClip = true;
+                sysClipX1 = sx;
+                sysClipY1 = sy;
             }
             continue;
         }
@@ -113,7 +157,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const bool polyline = (comm == 0x5);   // untextured, 4 edges
         const bool line = (comm == 0x6);       // untextured, single edge A-B
         const bool untextured = polygon || polyline || line;
-        if (skip || (!textured && !untextured))
+        if (!textured && !untextured)
         {
             continue;
         }
@@ -133,10 +177,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         se_vec2 A, B, C, D;
         if (comm == 0x0)  // normal sprite: one corner + size
         {
-            A = { float(xa + originX),         float(ya + originY) };
-            B = { float(xa + width + originX),  float(ya + originY) };
-            C = { float(xa + width + originX),  float(ya + height + originY) };
-            D = { float(xa + originX),         float(ya + height + originY) };
+            // Corners are inclusive pixel coordinates (see ExpandQuadInclusive), so a sprite
+            // 'width' wide ends at x + width - 1. Using x + width made every normal sprite
+            // draw an extra row and column.
+            A = { float(xa + originX),             float(ya + originY) };
+            B = { float(xa + width - 1 + originX),  float(ya + originY) };
+            C = { float(xa + width - 1 + originX),  float(ya + height - 1 + originY) };
+            D = { float(xa + originX),             float(ya + height - 1 + originY) };
         }
         else if (comm == 0x1)  // scaled sprite
         {
@@ -235,11 +282,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const unsigned ccb = pmod & 0x7;
         const bool msbShadow = (pmod & 0x8000) != 0;
         DrawFx fx;
-        fx.effect = msbShadow ? 1 : static_cast<uint8_t>(ccb & 0x3);
+        // MSB-on (bit 15) replaces the colour-calculation mode outright rather than adding to it.
+        fx.msbOn = msbShadow;
+        fx.effect = msbShadow ? 0 : static_cast<uint8_t>(ccb & 0x3);
         fx.mesh = (pmod & 0x0100) ? 1 : 0;
         s.draw_mode = (fx.effect == 3) ? SE_DRAW_HALF_TRANS
                     : (fx.effect == 2) ? SE_DRAW_HALF_LUM
-                    : (fx.effect == 1) ? SE_DRAW_SHADOW
+                    : (fx.effect == 1 || fx.msbOn) ? SE_DRAW_SHADOW
                     : (fx.mesh)        ? SE_DRAW_MESH
                                        : SE_DRAW_NORMAL;
 
@@ -266,10 +315,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         sr.solid = untextured;
         sr.color = colr;   // CMDCOLR as a solid RGB555 (only used when 'solid')
         sr.primKind = polyline ? 1 : line ? 2 : 0;
+        sr.endCodeEnabled = ((pmod >> 7) & 0x1) == 0;   // CMDPMOD bit 7 is End Code *Disable*
+        sr.spdHidden = untextured && UntexturedReadsTransparent(vram, pmod);
         sr.clip.enable = (pmod >> 10) & 0x1;
         sr.clip.mode = (pmod >> 9) & 0x1;
         sr.clip.x0 = userClipX0; sr.clip.y0 = userClipY0;
         sr.clip.x1 = userClipX1; sr.clip.y1 = userClipY1;
+        sr.sysClipX1 = sysClipX1; sr.sysClipY1 = sysClipY1;
         sr.gouraud.on = (pmod & 0x4) != 0;
         if (sr.gouraud.on)
         {

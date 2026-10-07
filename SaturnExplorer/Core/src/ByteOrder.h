@@ -20,9 +20,19 @@ inline uint16_t ReadBE16(const std::vector<uint8_t>& mem, uint32_t off)
     return static_cast<uint16_t>((mem[off] << 8) | mem[off + 1]);
 }
 
-inline int16_t ReadBE16S(const std::vector<uint8_t>& mem, uint32_t off)
+// Sign-extend the low 'bits' of 'value'. VDP1 coordinates are not 16-bit: drawing coordinates are
+// 13-bit two's complement and the local-coordinate origin is 11-bit, so 0x1FFF is -1 and a local
+// 0x07FF is -1 -- reading them as int16 gives 8191 and 2047 and throws a primitive off-screen.
+inline int32_t SignExtend(uint32_t value, int bits)
 {
-    return static_cast<int16_t>(ReadBE16(mem, off));
+    const uint32_t sign = 1u << (bits - 1);
+    value &= (sign << 1) - 1;
+    return static_cast<int32_t>((value ^ sign) - sign);
+}
+
+inline int32_t ReadBE16Sx(const std::vector<uint8_t>& mem, uint32_t off, int bits)
+{
+    return SignExtend(ReadBE16(mem, off), bits);
 }
 
 }  // namespace se

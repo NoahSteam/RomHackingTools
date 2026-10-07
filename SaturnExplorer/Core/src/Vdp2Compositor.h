@@ -4,29 +4,22 @@
 // hierarchy. Ported from the validated Python prototype and cross-checked
 // against Yabause's vidsoft.c. See ARCHITECTURE.md §7.
 //
-// Scope today: the four normal backgrounds (NBG0-3), cell (non-bitmap) mode,
-// 1- and 2-word pattern names, and every cell color format (16/256/2048-color
-// palette, RGB555, RGB888), normal and line-window clipping for NBG0-3, the real
-// back-screen color (BKTA, single-colour or per-line), and per-screen color
-// calculation (CCCTL/CCRN, ratio + additive blending against the layers below), the RBG0
-// rotation screen (rotation parameter set A/B, coefficient tables, screen-over repeat),
-// bitmap mode (NBG0/1 + RBG0), NBG0/1 fractional scroll, zoom, and per-line scroll/zoom,
-// per-screen colour offset (CLOFEN/COxR/G/B), and horizontal mosaic. Vertical cell
-// scroll, vertical mosaic, shadow, special priority/colour-calc, RBG1, and RPMD
-// per-dot/window parameter selection are not modeled yet.
-//
 // Rather than blending straight into an RGBA buffer, every VDP2 source emits a per-pixel
 // descriptor into a PixColumn (see PixelMixer.h): the back screen at priority 0, then each
 // enabled NBG/RBG0 layer at its own priority. The VDP1 sprites emit into the same columns
-// (Vdp1Rasterizer::EmitSprites), and Context resolves each column to one RGBA pixel. This
-// two-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
-// and the line-colour screen natural rather than special cases — colour calculation on
-// VDP2 only ever blends the top-priority pixel with the one immediately below it.
+// (Vdp2Compositor::EmitSprites), and Context resolves each column to one RGBA pixel. This
+// four-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
+// the line-colour screen and extended colour calculation natural rather than special cases --
+// standard colour calculation only ever blends the top pixel with the one below it, and the
+// extended form reads up to four.
 //
 // Modeled today: NBG0-3 (cell + bitmap), RBG0 rotation, fractional/line scroll + zoom,
-// windows, per-screen colour calculation and colour offset, horizontal mosaic, and the
-// real back screen. Sprite windows, the line-colour screen, vertical cell scroll, vertical
-// mosaic, and RBG1 are not modeled yet.
+// windows (including the sprite and colour-calculation windows), per-screen colour calculation
+// (with second-image ratio, line colour insertion and the extended form), colour offset applied
+// after colour calculation, horizontal mosaic, the real back screen, the sprite layer's own
+// colour calculation, sprite shadows, gradation calculation, vertical cell scroll, and RBG1
+// (NBG0's slot, rotation set B), the special priority and colour-calculation functions, and the
+// exclusive monitor modes. Vertical mosaic is not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -36,6 +29,7 @@
 #include "saturnexplorer/SeTypes.h"
 #include "HardwareSnapshot.h"
 #include "PixelMixer.h"
+#include "SpriteLayer.h"
 
 namespace se
 {
@@ -84,6 +78,17 @@ struct Vdp2TileMap : Vdp2TileMapShape
     }
 };
 
+// Side inputs and outputs of the layer emitters, which all share one frame's pixel grid.
+struct EmitExtras
+{
+    // In: the finished sprite layer, whose window bits feed every layer's window logic.
+    const std::vector<SpritePixel>* sprites = nullptr;
+    // Out: the colour of the screen CCCTL's gradation calculation is set up for, per pixel.
+    std::vector<Rgba>* gradation = nullptr;
+    // Out: RBG0's coefficient-table line colour bits (0xFF where the table supplies none).
+    std::vector<uint8_t>* lineOverride = nullptr;
+};
+
 class Vdp2Compositor
 {
 public:
@@ -99,8 +104,28 @@ public:
     // afterwards wins the tie, exactly as VDP1 sprites sit in front of same-priority NBGs
     // on hardware. Honors opts.show_layer[] and the BGON enable bits; priority-0 layers
     // (not displayed) are skipped. A no-op when the snapshot lacks VDP2 VRAM or registers.
+    //
+    // 'extras' carries the sprite layer in (its window bits feed each layer's window logic) and the
+    // gradation / line-colour side buffers out.
     static void EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                           int width, int height, std::vector<PixColumn>& cols);
+                           int width, int height, std::vector<PixColumn>& cols,
+                           const EmitExtras& extras = EmitExtras());
+
+    // Emit the sprite layer into 'cols' after every VDP2 layer, so a sprite wins a priority tie.
+    // Applies the sprite layer's own window, colour calculation (the pixel's ratio, enabled by its
+    // SPCCCS condition) and, when opts.show_shadow_highlight is set, sprite shadows: a shadow marker
+    // darkens the layer under it, and a self-shadowed pixel darkens itself.
+    static void EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                            int width, int height, const std::vector<SpritePixel>& sprites,
+                            const SpritePriorityTable& prios, std::vector<PixColumn>& cols,
+                            const EmitExtras& extras = EmitExtras());
+
+    // Everything the mixer reads from the VDP2 registers when it resolves a column: the colour-
+    // calculation modes (second-image ratio, extended), the line colour screen's per-line colours
+    // and ratio, and the two colour offsets. Call after the layers are emitted, before
+    // ResolveColumns.
+    static MixState ReadMixState(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                 int width, int height, const EmitExtras& extras = EmitExtras());
 
     // Seed the VDP2 back screen (the always-present backdrop below every screen) into
     // every column at priority 0, reading its colour from the BKTA table in VDP2 VRAM —

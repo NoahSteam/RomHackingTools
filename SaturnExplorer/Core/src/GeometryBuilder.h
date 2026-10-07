@@ -29,6 +29,7 @@ struct DrawFx
 {
     uint8_t effect = 0;
     uint8_t mesh = 0;
+    bool    msbOn = false;   // CMDPMOD bit 15: only set the destination MSB (it overrides 'effect')
 };
 
 // Per-sprite VDP1 user clipping. 'enable' from CMDPMOD bit 10; 'mode' from bit 9
@@ -48,9 +49,18 @@ struct SpriteRender
     GouraudQuad gouraud;
     DrawFx      fx;
     ClipRect    clip;
+    // The system clip in force when this command ran: the inclusive lower-right corner of the drawing
+    // area, in VDP1 coordinates (unbounded before the list sets one). It bounds the framebuffer
+    // writes, and is not the framebuffer's size -- the two part company in the exclusive monitor
+    // modes, where the framebuffer is 240 rows whatever the clip says. A later clip command never
+    // reaches back to pixels already drawn, so each primitive keeps its own.
+    int32_t     sysClipX1 = 0x7FFFFFFF, sysClipY1 = 0x7FFFFFFF;
     bool        solid = false;      // untextured polygon/line: fill/edges with 'color'
     uint16_t    color = 0;          // RGB555 fill color, valid when 'solid'
     uint8_t     primKind = 0;       // 0 = filled quad, 1 = polyline (4 edges), 2 = line A-B
+    bool        spdHidden = false;   // untextured with SPD clear: the hardware reads it as transparent
+    bool        endCodeEnabled = false;   // textured: an end-code texel is transparent, and a
+                                          // second one in a row ends the texture line
 };
 
 struct Vdp1Scene
@@ -65,6 +75,9 @@ struct Vdp1Scene
     // display (screenWidth) is 2x this — VDP1 draws at half width and is doubled at
     // scan-out — so the rasterizer scales sprite X by screenWidth / vdp1Width.
     int vdp1Width = 320;
+    // The same for the vertical axis, which only differs in the exclusive monitor modes: VDP1 draws
+    // 240 lines and each is shown twice on the 480-line screen. 0 = the same as screenHeight.
+    int vdp1Height = 0;
 };
 
 class GeometryBuilder

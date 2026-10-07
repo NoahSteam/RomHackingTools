@@ -47,6 +47,16 @@ inline void SetReg(State& state, uint32_t offset, uint16_t value)
     state.regs[offset >> 1] = value;
 }
 
+// Give every sprite priority number somewhere to go: all eight map to VDP2 priority 1, and SPCTL is
+// type 0 with SPCLMD set, so a framebuffer word with its MSB set is an RGB colour and one with it
+// clear is a palette code. A sprite pixel whose number maps to priority 0 is not displayed, and with
+// SPCLMD clear every word is a palette code, so a fixture that draws sprites has to say where they go.
+inline void SpritesInFront(State& state)
+{
+    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
+    SetReg(state, 0x0E0, 0x0020);
+}
+
 // The VDP1 system-clip command at address 0. This is what fixes the composited frame
 // size, so every scene needs one before its first sprite.
 inline void WriteSystemClip(State& state, int width, int height)

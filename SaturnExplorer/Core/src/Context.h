@@ -115,7 +115,7 @@ public:
     // Render the composited 2D frame into a scene-sized image. Every source emits a
     // per-pixel descriptor into a column of the pixel mixer: the VDP2 back screen at
     // priority 0, then each enabled NBG/RBG0 layer at its VDP2 priority, then the VDP1
-    // sprites at their resolved priority (ResolveSpritePriorities). Because sprites emit
+    // sprites, each pixel at the priority its own framebuffer word selects. Because sprites emit
     // after the same-priority NBGs, they win the priority tie and sit in front, per
     // hardware. Each column then resolves to one RGBA pixel — the top-priority
     // contribution, blended with the one immediately below when colour calculation is on.
@@ -137,10 +137,34 @@ public:
             {
                 Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
             }
-            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
-            Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                        mSnapshot.CramMode(), mSpritePrios, opts, mColumns);
-            ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
+            // The sprite layer is built first: its pixels' window bits are an input to every VDP2
+            // layer's window logic. It is emitted last, so a sprite wins a priority tie.
+            const bool sprites = opts.show_vdp1_sprites != 0 &&
+                                 Vdp1Rasterizer::BuildSpriteLayer(mScene, mSnapshot.Vdp1Vram(),
+                                                                  mSnapshot.Cram(),
+                                                                  mSnapshot.CramMode(),
+                                                                  mSpritePrios, mSpriteLayer);
+            // Side buffers the emitters fill: the gradation screen's colours, and RBG0's coefficient-
+            // table line colour bits (0xFF = none). Reused across frames like the columns.
+            // Only when something can use them: gradation needs CCCTL BOKEN, and the line colour bits
+            // come from an enabled rotation screen's coefficient table.
+            const bool regs = mSnapshot.HasVdp2Regs();
+            const bool wantGradation = regs && (mSnapshot.Vdp2Reg(0x0EC) & 0x8000) != 0;
+            const bool wantLineOverride = regs && (mSnapshot.Vdp2Reg(0x020) & 0x30) != 0;
+            if (wantGradation) mGradation.assign(n, Rgba{ 0, 0, 0, 255 }); else mGradation.clear();
+            if (wantLineOverride) mLineOverride.assign(n, 0xFF); else mLineOverride.clear();
+            EmitExtras extras;
+            extras.sprites = sprites ? &mSpriteLayer : nullptr;
+            extras.gradation = &mGradation;
+            extras.lineOverride = &mLineOverride;
+            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns, extras);
+            if (sprites)
+            {
+                Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
+                                            mColumns, extras);
+            }
+            ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h, extras),
+                           mRenderBuffer);
             if (!opts.transparent_background)
             {
                 FillBackdrop();
@@ -547,14 +571,22 @@ public:
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {
-        // The click is in display space; sprite corners are in VDP1 space, which is
-        // narrower in hi-res (the rasterizer scales sprite X up to display). Map back.
-        const float xScale = (mScene.screenWidth > 0)
-                                 ? static_cast<float>(mScene.vdp1Width) / mScene.screenWidth : 1.0f;
-        const float sx = (x + 0.5f) * xScale;
+        // The click is in display space; sprites are in VDP1 pixels, which are narrower in hi-res
+        // (the framebuffer is doubled at scan-out). Map back with the same integer step the
+        // scan-out uses, then test that pixel's centre against the quad the rasterizer fills.
+        const int fbWidth = (mScene.vdp1Width > 0) ? mScene.vdp1Width : mScene.screenWidth;
+        const float sx = (mScene.screenWidth > 0)
+                             ? static_cast<float>(Vdp1Rasterizer::FramebufferColumn(
+                                   x, fbWidth, mScene.screenWidth))
+                             : static_cast<float>(x);
+        const int fbHeight = (mScene.vdp1Height > 0) ? mScene.vdp1Height : mScene.screenHeight;
+        const float sy = (mScene.screenHeight > 0)
+                             ? static_cast<float>(Vdp1Rasterizer::FramebufferColumn(
+                                   y, fbHeight, mScene.screenHeight))
+                             : static_cast<float>(y);
         for (size_t i = mScene.sprites.size(); i-- > 0; )
         {
-            if (PointInSprite(mScene.sprites[i], sx, y + 0.5f))
+            if (PointInSprite(mScene.sprites[i], sx + 0.5f, sy + 0.5f))
             {
                 *outCommandIndex = mScene.sprites[i].command_index;
                 return SE_OK;
@@ -654,21 +686,37 @@ private:
         const uint16_t tvmd = mSnapshot.Vdp2Reg(0x000);
         const uint32_t hres = tvmd & 0x7;
         const bool hiRes = (hres & 0x2) != 0;   // 640/704 — VDP1 draws at half this width
+        // HRESO bit 2 selects the exclusive monitor modes (31 kHz / Hi-Vision): 480 lines,
+        // non-interlaced, whatever VRESO and LSMD say. VDP1 draws the usual 240 lines and shows each
+        // twice (and in the hi-res widths each column twice), so the display is 2x its framebuffer.
+        const bool exclusive = (hres & 0x4) != 0;
         // The VDP1 system clip is authoritative for the display in normal-res scenes (and
         // it's what the compositor tests use as a fixture). In hi-res, though, the clip is
         // the *half-width* VDP1 area (e.g. 352) while VDP2 scans out at the full TVMD dot
         // count (704), so the TVMD width must win or the backgrounds render half the
         // field of view. mScene.vdp1Width keeps the VDP1 coordinate space either way.
-        if (mScene.hasSystemClip && !hiRes)
+        const bool clipWins = mScene.hasSystemClip && !hiRes;
+        if (clipWins && !exclusive)
         {
             return;
         }
-        int w = (hres & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
-        if (hiRes) w *= 2;                  // HRES bit 1: hi-res (640 / 704)
+        if (!clipWins)
+        {
+            int w = (hres & 0x1) ? 352 : 320;   // HRES bit 0: 352 vs 320 base
+            if (hiRes) w *= 2;                  // HRES bit 1: hi-res (640 / 704)
+            mScene.screenWidth = w;
+        }
+        if (exclusive)
+        {
+            // The framebuffer is always 240 rows here, each shown twice; the system clip bounds
+            // what is drawn into it and does not resize it.
+            mScene.vdp1Height = 240;
+            mScene.screenHeight = 480;
+            return;
+        }
         static const int kVRes[4] = { 224, 240, 256, 256 };
         int h = kVRes[(tvmd >> 4) & 0x3];   // VRES bits 4-5
         if (((tvmd >> 6) & 0x3) == 0x3) h *= 2;   // LSMD: double-density interlace
-        mScene.screenWidth = w;
         mScene.screenHeight = h;
     }
 
@@ -815,16 +863,25 @@ private:
         mSpritePrios.type = spctl & 0xF;
         mSpritePrios.spclmd = (spctl & 0x20) != 0;
         mSpritePrios.valid = true;
-        const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
-        const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
-        const uint16_t prisc = mSnapshot.Vdp2Reg(0x0F4);
-        const uint16_t prisd = mSnapshot.Vdp2Reg(0x0F6);
-        const uint8_t pt[8] = {
-            static_cast<uint8_t>(prisa & 0x7), static_cast<uint8_t>((prisa >> 8) & 0x7),
-            static_cast<uint8_t>(prisb & 0x7), static_cast<uint8_t>((prisb >> 8) & 0x7),
-            static_cast<uint8_t>(prisc & 0x7), static_cast<uint8_t>((prisc >> 8) & 0x7),
-            static_cast<uint8_t>(prisd & 0x7), static_cast<uint8_t>((prisd >> 8) & 0x7) };
-        for (int i = 0; i < 8; ++i) mSpritePrios.slot[i] = pt[i];
+        mSpritePrios.spriteWindow = (spctl & 0x10) != 0;
+        mSpritePrios.ccCond = static_cast<uint8_t>((spctl >> 12) & 0x3);
+        mSpritePrios.ccNum = static_cast<uint8_t>((spctl >> 8) & 0x7);
+        mSpritePrios.transparentShadow = (mSnapshot.Vdp2Reg(0x0E2) & 0x0100) != 0;
+        const uint16_t ccctl = mSnapshot.Vdp2Reg(0x0EC);
+        mSpritePrios.ccEnable = (ccctl & 0x0040) != 0;
+        mSpritePrios.ccAdd = (ccctl & 0x0100) != 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            // PRISA..PRISD (priority) and CCRSA..CCRSD (colour-calculation ratio) each hold two
+            // entries: number 2i in the low byte, 2i+1 in the high byte.
+            const uint16_t pris = mSnapshot.Vdp2Reg(0x0F0 + 2 * i);
+            const uint16_t ccrs = mSnapshot.Vdp2Reg(0x100 + 2 * i);
+            mSpritePrios.slot[2 * i] = static_cast<uint8_t>(pris & 0x7);
+            mSpritePrios.slot[2 * i + 1] = static_cast<uint8_t>((pris >> 8) & 0x7);
+            mSpritePrios.ccRatio[2 * i] = static_cast<uint8_t>(ccrs & 0x1F);
+            mSpritePrios.ccRatio[2 * i + 1] = static_cast<uint8_t>((ccrs >> 8) & 0x1F);
+        }
+        mSpritePrios.cramOffset = static_cast<uint32_t>((mSnapshot.Vdp2Reg(0x0E6) >> 4) & 0x7) << 8;
 
         const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
         for (se_sprite_2d& s : mScene.sprites)
@@ -935,6 +992,9 @@ private:
     std::vector<uint8_t>    mRenderBuffer;
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     SpritePriorityTable     mSpritePrios;   // rebuilt per frame from the VDP2 sprite regs
+    std::vector<SpritePixel> mSpriteLayer;  // the VDP1 framebuffer as VDP2 reads it (per frame)
+    std::vector<Rgba>       mGradation;     // gradation screen colours (per frame)
+    std::vector<uint8_t>    mLineOverride;  // coefficient-table line colour bits (per frame)
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()

@@ -489,15 +489,40 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > the VDP1 sprite colors too.
    > **Known simplifications (M4b):** VDP1 and NBGs interleave by priority, per framebuffer pixel
    > -- a sprite whose CLUT or colour bank spans several SPCTL priority numbers interleaves at
-   > each of them, as the hardware does. NBG0-3 normal and line windows are modeled;
-   > sprite/color-calculation windows are not, and sprites do not yet carry a colour-calculation
-   > ratio of their own. Still missing: rotation
-   > screens (RBG0/1), bitmap-mode backgrounds, line/vertical-cell scroll, zoom, mosaic, color
-   > calculation, and the VDP2 back/line-color screens (empty pixels use a flat backdrop). See
-   > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
-   > **Sprite seams.** VDP1 sprite corners are inclusive pixel coordinates and the game tiles a
-   > mech out of many small strips; the rasterizer nudges each quad's corners outward half a pixel
-   > (`ExpandQuadInclusive`) so adjacent strips overlap instead of leaving 1px backdrop seams.
+   > each of them, as the hardware does. NBG0-3, RBG0 and sprite windows (including the sprite
+   > window input fed by SPWINEN) and the colour-calculation window are modeled. Colour calculation
+   > covers the sprite layer (SPCCEN / SPCCCS / CCRSx), second-image ratio mode (CCRTMD), the line
+   > colour screen inserted as the second image (LNCLEN / LCTA / CCRLB) and extended three/four-
+   > screen calculation (EXCCEN, with the colour RAM mode rules of the manual's Table 12.2). Colour
+   > offset is applied to the *result* of colour calculation with the top image's registers, for
+   > every screen including the back screen and sprites. Sprite shadows (normal, MSB, transparent;
+   > SDCTL / TPSDSL) are modeled, as are gradation calculation (BOKEN: the second image becomes a
+   > 1:1:2 horizontal blur of the designated screen), RBG0's coefficient-table line colour bits,
+   > vertical cell scroll for NBG0/NBG1 and RBG1 (NBG0's registers, rotation set B, one coefficient
+   > per line; it takes NBG0's place and, with RBG0 also on, NBG1-3 are not drawn; its tile map is
+   > the NBG0 layer's), the special priority and special colour calculation functions (SFPRMD /
+   > SFCCMD / SFSEL+SFCODE: the priority LSB and the colour-calculation enable per screen, per
+   > character or per dot, or by the colour data's MSB; every contribution carries its screen rank so
+   > equal priorities stack in the hardware's fixed order), and the exclusive monitor modes (HRESO
+   > bit 2: 480 non-interlaced lines, VDP1 lines shown twice, RBG1 not displayed, no extended
+   > calculation or gradation). Still missing: per-line zoom-limit timing of vertical cell scroll and
+   > RGB888 restrictions in the exclusive modes. See `Docs/RenderingAccuracyRoadmap.md` for the
+   > ordered completion plan.
+   > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
+   > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
+   > out through `SpritePriorityTable::Resolve`, which decodes each packed word as VDP2 does (SPCTL
+   > type, SPCLMD, CRAOFB sprite offset) into visibility, colour and priority; priority 0 is not
+   > displayed. Shadow / half-transparency / half-luminance read and rewrite the framebuffer WORD
+   > (packed RGB555 arithmetic, not VDP2 layers), so a changed word changes the priority and colour
+   > VDP2 then derives; they act on a destination whose MSB is set. Texture end
+   > codes (CMDPMOD ECD clear) and skipped (JP >= 4) commands follow the hardware. MSB-on only
+   > sets the destination MSB (VDP2 reads it as a sprite shadow), and an untextured primitive with SPD
+   > clear is read as transparent or not from the last word of VDP1 VRAM, as Mednafen does -- the
+   > manual only says to set SPD to 1 for those.
+   > **Sprite pixel coverage.** VDP1 corners are inclusive pixel *indices* and the game tiles a
+   > mech out of many small strips; `ExpandQuadInclusive` moves each corner to its pixel's centre
+   > and out half a pixel, so a primitive covers exactly the pixels between its corners and
+   > adjacent strips neither overlap nor leave a seam.
    > **Multiple emulators.** `se_savestate_open` sniffs the file magic and dispatches to a
    > per-emulator parser, all producing the same `se_data_source` so the core stays format-agnostic.
    > Supported: the **Yabause family** `.yss` and **Mednafen/Beetle Saturn** `MDFNSVST`. The `.yss`
