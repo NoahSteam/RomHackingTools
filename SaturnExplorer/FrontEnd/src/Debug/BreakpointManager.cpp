@@ -41,6 +41,19 @@ bool BreakpointManager::ToggleExecution(uint32_t addr)
     return true;
 }
 
+void BreakpointManager::EnableExecution(uint32_t addr)
+{
+    for (Breakpoint& b : mBps)
+    {
+        if (b.kind == BpKind::Execution && b.address == addr)
+        {
+            if (!b.enabled) { b.enabled = true; ++mGeneration; }
+            return;
+        }
+    }
+    ToggleExecution(addr);   // none there: this is the add
+}
+
 bool BreakpointManager::HasExecutionAt(uint32_t addr) const
 {
     return ExecutionAt(addr) != nullptr;   // same address-keyed lookup, not a second copy of it

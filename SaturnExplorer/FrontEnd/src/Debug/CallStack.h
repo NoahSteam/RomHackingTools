@@ -45,6 +45,12 @@ struct CallStackFrame
     // label a frame whose entry point is unknown without having to invent one.
     uint32_t        currentAddress = 0;
     uint32_t        returnAddress = 0;       // where this frame returns to
+    // Where returnAddress came from. True only when the emulator RECORDED this frame's call, so
+    // the address is the one that call pushed. False for everything derived from registers and the
+    // stack image -- frame #0 of a heuristic reconstruction takes it from PR, which any call the
+    // function makes overwrites. This is separate from 'confidence': frame #0 is Confirmed because
+    // its PC is exactly known, which says nothing about where it returns to.
+    bool            returnRecorded = false;
     uint32_t        stackPointer = 0;        // R15 at / for this frame
     uint64_t        cycle = 0;               // when the call happened (shadow stack only)
     uint32_t        frameNumber = 0;         // emulated frame of the call (shadow only)

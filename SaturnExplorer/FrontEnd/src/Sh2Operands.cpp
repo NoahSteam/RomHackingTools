@@ -144,6 +144,25 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
            ResolveSh2OperandAddress(ins, index, r, outAddr, outWidth);
 }
 
+bool Sh2MayAccessRange(const DisassembledInstruction& ins, const se_sh2_regs& r, uint32_t base,
+                       uint32_t size)
+{
+    if (ins.Mnemonic == "rte" || ins.Mnemonic == "trapa") return true;
+    if (Sh2OperandIsAddressOnly(ins.Mnemonic)) return false;
+    Sh2OperandSpan sp;
+    for (int i = 0; Sh2OperandAt(ins.Operands, i, sp); ++i)
+    {
+        if (ins.Operands.find('@', sp.begin) >= sp.end) continue;
+        const std::string text = OperandText(ins.Operands, sp);
+        if (text.find("@-") != std::string::npos || text.back() == '+') return true;
+        uint32_t addr = 0, width = 0;
+        if (!ResolveSh2MemOperand(text, ins.Mnemonic, r, addr, width)) return true;
+        // Unsigned distance, so a range at the top of the address space does not wrap.
+        if (addr < base + size && base < addr + width) return true;
+    }
+    return false;
+}
+
 bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index)
 {
     Sh2OperandSpan sp;

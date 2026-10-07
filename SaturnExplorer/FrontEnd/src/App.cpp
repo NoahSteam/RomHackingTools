@@ -30,6 +30,7 @@
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
+#include "Sh2Operands.h"          // Sh2MayAccessRange: could the halting instruction touch a watchpoint
 #include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
@@ -1127,12 +1128,21 @@ void App::BuildUI(IPlatform& platform)
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
         // CPU's registers, which are exact at this PC. PC breakpoints are shared across both
         // SH-2s, so match on address regardless of the breakpoint's stored CPU.
-        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp)
+        // The same stop reason covers a data watchpoint on this instruction, so a false guard only
+        // retires the execution breakpoint's own claim on the halt: an independent break-on-access
+        // watchpoint that may have hit still stops here, and a logging one is recorded either way.
+        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
+            mBreakpoints.HasEnabledExecutionAt(report.pc))
         {
             const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(report.pc);
-            if (guarded && !EvalCondition(guarded->condition, static_cast<int>(report.cpu)))
+            const bool guardFailed =
+                guarded && !EvalCondition(guarded->condition, static_cast<int>(report.cpu));
+            const BreakpointManager::WatchCauses w =
+                WatchCausesAtHalt(static_cast<int>(report.cpu), report.pc);
+            if (w.logging) RecordAccess(static_cast<int>(report.cpu), report.pc);
+            if (guardFailed && !w.halting)
             {
-                Continue();      // guard not satisfied — keep running
+                Continue();      // guard not satisfied and nothing else to stop for — keep running
                 stopped = false; // don't fall into the pause path this frame
                 mStepHalt.SuppressHalt();
             }
@@ -2103,6 +2113,28 @@ bool App::EvalCondition(const std::string& cond, int cpu)
     return ConditionEval(cond, fc);
 }
 
+// Which memory watchpoints could be behind a halt at 'pc' on 'cpu': those whose range the stopping
+// instruction may touch. When the instruction cannot be read, every enabled watchpoint counts.
+BreakpointManager::WatchCauses App::WatchCausesAtHalt(int cpu, uint32_t pc)
+{
+    se_sh2_regs regs{};
+    const bool haveRegs = mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK;
+    DisassembledInstruction ins;
+    bool decoded = false;
+    if (haveRegs)
+    {
+        auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
+        if (!res.empty() && res[0].success && res[0].bytes.size() == 2)
+        {
+            ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+            decoded = true;
+        }
+    }
+    return mBreakpoints.WatchCausesFor([&](uint32_t addr, uint32_t size) {
+        return !decoded || Sh2MayAccessRange(ins, regs, addr, size);
+    });
+}
+
 // Record a data-watchpoint hit: the instruction at 'pc' on 'cpu' just touched a watched
 // address. Reconstruct that CPU's call stack from the halted registers (exact at this PC)
 // and file it into the access log, which dedups by instruction and keeps a hit count.
@@ -2144,9 +2176,16 @@ void App::SyncTracepointsToLive()
         descs.push_back((v >> 16) & 0xFF); descs.push_back((v >> 24) & 0xFF);
     };
     uint32_t count = 0;
+    // The emulator holds at most SE_LIVE_MAX_TRACE_DESCS descriptors, and a disabled one takes a
+    // place like any other. Past that the rest would be dropped without a word, so send the enabled
+    // ones first (they are the ones that must fire) and say how many did not fit.
+    uint32_t dropped = 0;
+    for (int pass = 0; pass < 2; ++pass)
     for (const ExecutionAction& a : mActions.All())
     {
         if (a.type != ActionType::Log) continue;
+        if (a.enabled != (pass == 0)) continue;
+        if (count >= SE_LIVE_MAX_TRACE_DESCS) { ++dropped; continue; }
         w32(static_cast<uint32_t>(a.id));
         w32(static_cast<uint32_t>(a.cpu));
         w32(a.address);
@@ -2155,6 +2194,7 @@ void App::SyncTracepointsToLive()
         // we can evaluate -- in which case it forwards every execution and we count the ones whose
         // condition held. An emulator older than v21 ignores these bits, and AcceptHit counts for it.
         uint32_t flags = a.enabled ? SE_LIVE_TP_ENABLED : 0u;
+        flags |= (static_cast<uint32_t>(a.rearm) << SE_LIVE_TP_REARM_SHIFT) & SE_LIVE_TP_REARM_MASK;
         if (!a.condition.empty())                                  flags |= SE_LIVE_TP_GUARDED;
         else if (a.repeat == RepeatMode::Once)                     flags |= SE_LIVE_TP_ONCE;
         else if (a.repeat == RepeatMode::EveryN && a.repeatN > 1)
@@ -2163,6 +2203,15 @@ void App::SyncTracepointsToLive()
         ++count;
     }
     se_live_set_tracepoints(&mDataSource, descs.data(), count);
+    if (dropped > 0)
+    {
+        char msg[160];
+        std::snprintf(msg, sizeof msg,
+                      "Tracepoints: the emulator holds at most %u; %u not installed "
+                      "(enabled ones are installed first). Remove some to free places.",
+                      SE_LIVE_MAX_TRACE_DESCS, dropped);
+        mLog.Warn(msg);
+    }
 #endif
 }
 
@@ -3324,6 +3373,7 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
                 f.functionKnown   = (wire[i].func != 0);   // the emulator recorded the call
                 f.currentAddress  = wire[i].func ? wire[i].func : wire[i].ret;
                 f.returnAddress   = wire[i].ret;
+                f.returnRecorded  = true;                  // pushed by the call the emulator saw
                 f.stackPointer    = wire[i].sp;
                 f.cycle           = wire[i].cycle;
                 f.frameNumber     = wire[i].frame_no;
@@ -3573,7 +3623,7 @@ void App::DrawCallStack(IPlatform& platform)
                 // Execution BPs are shared across both SH-2s, so the frame's own cpu plays
                 // no part in where this lands — it would only ever collide by address.
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
-                { mBreakpoints.ToggleExecution(FrameCodeAddress(fr)); }
+                { mBreakpoints.EnableExecution(FrameCodeAddress(fr)); }
                 // A rename is stored against an address, so offering it for a frame whose
                 // entry point is unknown would file the name under a mid-function address and
                 // then show it for every other frame that returns near there.

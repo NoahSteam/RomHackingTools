@@ -151,6 +151,14 @@
  * ignores these bits and forwards every execution. */
 #define SE_LIVE_TP_ONCE        0x4u
 #define SE_LIVE_TP_GUARDED     0x8u
+/* Re-arm token (bits 4..7): the client advances it each time it re-arms or disarms a
+ * tracepoint, so a fire-once one that has spent itself is restarted by an explicit change in the
+ * descriptor rather than by the emulator happening to see a disabled state in between. Updates are
+ * latest-wins: a disable followed by an enable before the emulator next looks arrives as the final
+ * enabled descriptor alone, which without a token is indistinguishable from the one already
+ * installed. Wraps; any change in the descriptor's flags restarts its repeat state. */
+#define SE_LIVE_TP_REARM_SHIFT 4u
+#define SE_LIVE_TP_REARM_MASK  0xF0u
 #define SE_LIVE_TP_EVERY_SHIFT 8u
 #define SE_LIVE_TP_EVERY_MAX   0xFFFFFFu
 

@@ -64,6 +64,12 @@ int main()
         a.SetEnabled(id, true);
         Check(a.AcceptHit(id, false), "re-enabled, it fires once more");
         Check(!a.Get(id)->enabled, "and spends itself again");
+
+        // Each change of the enabled state advances the re-arm token sent to the emulator, so a
+        // disable+enable that is collapsed into one update still differs from what it installed.
+        const uint8_t t0 = a.Get(id)->rearm;
+        a.SetEnabled(id, true);
+        Check(a.Get(id)->rearm != t0, "re-enabling advances the re-arm token");
     }
 
     // Every N, counted here: the Nth, 2Nth... qualifying execution.

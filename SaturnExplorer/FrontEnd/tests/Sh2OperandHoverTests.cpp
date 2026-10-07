@@ -575,8 +575,28 @@ void TestImmediateCommentsSignExtendAndTstIsNotAnAssignment()
     CHECK(C(0xC9FF) == "r0 = r0 and 0xFF");   // and/or/xor zero-extend: nothing to correct
 }
 
+void TestMayAccessRangeOnlyRulesOutWhatItCanShowMisses()
+{
+    se_sh2_regs r{};
+    r.r[4] = 0x06001000u;
+    const DisassembledInstruction load = Decode(0x6142, "@r4,r1");        // mov.l @r4,r1
+    CHECK(Sh2MayAccessRange(load, r, 0x06001000u, 1));                    // inside the word
+    CHECK(Sh2MayAccessRange(load, r, 0x06001003u, 1));
+    CHECK(!Sh2MayAccessRange(load, r, 0x06001004u, 4));                   // just past it
+    CHECK(!Sh2MayAccessRange(load, r, 0x06000FFCu, 4));                   // just before it
+    CHECK(Sh2MayAccessRange(load, r, 0x06000FFEu, 4));                    // overlapping its start
+
+    // No memory operand: cannot be a data hit whatever is watched.
+    CHECK(!Sh2MayAccessRange(Sh2Decode(0x06000000, 0x0009), r, 0x06001000u, 4));   // nop
+    // Updating operands and implicit stack accesses cannot be ruled out from the registers.
+    const DisassembledInstruction post = Decode(0x6146, "@r4+,r1");       // mov.l @r4+,r1
+    CHECK(Sh2MayAccessRange(post, r, 0x07000000u, 4));
+    CHECK(Sh2MayAccessRange(Sh2Decode(0x06000000, 0x002B), r, 0x07000000u, 4));    // rte
+}
+
 int main()
 {
+    TestMayAccessRangeOnlyRulesOutWhatItCanShowMisses();
     TestEitherRegisterOperandIsHoverable();
     TestIndexedOperandIsOneHoverTarget();
     TestDisplacementOperandIsOneHoverTarget();
