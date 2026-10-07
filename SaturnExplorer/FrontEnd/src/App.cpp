@@ -8637,9 +8637,10 @@ int App::DecodeSlotSample(int slot, std::vector<int16_t>& out, uint32_t& rate)
                                        static_cast<int>(out.size()), &rate);
     if (frames < 0) frames = 0;
     out.resize(static_cast<size_t>(frames));
-    if (rate < static_cast<uint32_t>(kAudioMinRate) ||
-        rate > static_cast<uint32_t>(kAudioMaxRate))
-        rate = 44100;                                  // sanity-clamp the natural rate
+    // The natural rate is kept as is, even where it is outside what an audio device accepts
+    // (OCT/FNS spans about 1 kHz to 350 kHz): export and the frame mix need the true pitch.
+    // Only a failed decode has no rate, and PlaySound resamples for the device.
+    if (rate == 0) rate = 44100;
     return frames;
 }
 
@@ -8688,10 +8689,17 @@ void App::PlaySound(IPlatform& platform, int slot)
     std::vector<int16_t> pcm;
     uint32_t rate = 44100;
     const int frames = DecodeSlotSample(slot, pcm, rate);
-    if (frames > 0)
+    if (frames <= 0) return;
+    if (rate >= static_cast<uint32_t>(kAudioMinRate) &&
+        rate <= static_cast<uint32_t>(kAudioMaxRate))
     {
         platform.PlayAudio(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
+        return;
     }
+    // A valid pitch the device cannot take directly: resample, which keeps pitch and length.
+    std::vector<int16_t> dev;
+    ScspResampleMono(pcm.data(), static_cast<size_t>(frames), rate, 44100, dev);
+    if (!dev.empty()) platform.PlayAudio(dev.data(), dev.size(), 44100, 1);
 }
 
 // Mix every voice sounding this frame into one stereo preview and play it. The per-voice

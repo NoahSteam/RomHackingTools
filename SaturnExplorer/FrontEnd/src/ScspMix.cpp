@@ -18,6 +18,19 @@ int16_t SampleAt(const ScspMixVoice& v, double pos)
     return static_cast<int16_t>(a + (b - a) * frac);
 }
 
+// The hardware's attenuation and pan are arithmetic shifts, which round toward minus
+// infinity: a heavily attenuated waveform lands on 0 for its positive half and -1 for its
+// negative half. That is a faithful quirk of a 16-bit DAC, but this mix is peak-normalised,
+// so a DC residue of -1 would be amplified to the target level and a near-silent voice would
+// come out as a loud artifact. Both stages here round toward zero instead, so what is
+// inaudible stays 0 and the relative balance of everything audible is unchanged.
+int AttenuateTowardZero(int16_t sample, int vlevel)
+{
+    const int mag = sample < 0 ? -static_cast<int>(sample) : sample;
+    const int a = ScspAttenuate(static_cast<int16_t>(std::min(mag, 32767)), vlevel);
+    return sample < 0 ? -a : a;
+}
+
 // How a voice is read: its resampling step, and where it goes on reaching the end. All of
 // it is fixed per voice, so the mix loop advances a position rather than re-deriving one
 // (and a loop wrap) for every one of its millions of samples.
@@ -120,6 +133,7 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
         ScspDirectVolume(v.directLevel, v.directPan, volL, volR);
         if (volL == 0 && volR == 0) continue;   // DISDL 0: not sent to the DAC at all
         const int vlevel = ScspVLevel(v.egLevel, v.totalLevel);
+        if (vlevel >= 0x3FF) continue;          // fully attenuated: silence, not a residue
 
         const VoiceCursor cur(v, outRate);
         double pos = 0.0;
@@ -127,9 +141,9 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
         {
             // Past the end: loop back, or stop and leave the rest of the mix as it stands.
             if (pos >= cur.end && !cur.Wrap(pos)) break;
-            const int s = ScspAttenuate(SampleAt(v, pos), vlevel);
-            acc[f * 2 + 0] += (s * volL) >> 14;   // 1.14 fixed point
-            acc[f * 2 + 1] += (s * volR) >> 14;
+            const int s = AttenuateTowardZero(SampleAt(v, pos), vlevel);
+            acc[f * 2 + 0] += (s * volL) / 0x4000;   // 1.14 fixed point, toward zero
+            acc[f * 2 + 1] += (s * volR) / 0x4000;
             pos += cur.step;
         }
     }
@@ -155,6 +169,21 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
             std::max<int64_t>(-32768, std::min<int64_t>(32767, s)));
     }
     return frames;
+}
+
+void ScspResampleMono(const int16_t* pcm, size_t frames, uint32_t srcRate, uint32_t dstRate,
+                      std::vector<int16_t>& out)
+{
+    out.clear();
+    if (!pcm || frames == 0 || srcRate == 0 || dstRate == 0) return;
+    ScspMixVoice v;
+    v.pcm = pcm;
+    v.frames = frames;
+    const double step = static_cast<double>(srcRate) / static_cast<double>(dstRate);
+    const size_t n = static_cast<size_t>(static_cast<double>(frames) / step);
+    out.resize(n);
+    for (size_t i = 0; i < n; ++i)
+        out[i] = SampleAt(v, static_cast<double>(i) * step);
 }
 
 }  // namespace sfe

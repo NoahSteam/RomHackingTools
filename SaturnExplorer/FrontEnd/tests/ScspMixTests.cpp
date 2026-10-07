@@ -256,6 +256,52 @@ void TestSilentVoicesAreSkipped()
         if (out[i] != 0) { ++gFailures; break; }
 }
 
+void TestHeavilyAttenuatedBipolarVoiceStaysSilent()
+{
+    // Hardware shifts round toward minus infinity, so a fully attenuated +-8000 square wave
+    // is 0 / -1. Normalising that residue would turn silence into a near-full-scale artifact.
+    std::vector<int16_t> pcm;
+    for (int i = 0; i < 4410; ++i) pcm.push_back(i & 1 ? -8000 : 8000);
+    ScspMixVoice v = MakeVoice(pcm, 44100);
+    v.egLevel = 0x3FF;
+    std::vector<int16_t> out;
+    int peak = -1;
+    ScspMixVoices(&v, 1, 44100, 44100 * 4, out, &peak);
+    CHECK(peak == 0);
+    for (size_t i = 0; i < out.size(); ++i)
+        if (out[i] != 0) { ++gFailures; break; }
+
+    // Just under full attenuation the quantisation floor must not survive either.
+    v.egLevel = 0x3F0;
+    ScspMixVoices(&v, 1, 44100, 44100 * 4, out, &peak);
+    CHECK(peak == 0);
+    for (size_t i = 0; i < out.size(); ++i)
+        if (out[i] != 0) { ++gFailures; break; }
+
+    // A negative-only voice is symmetric with a positive-only one.
+    std::vector<int16_t> neg(4410, -8000), pos(4410, 8000);
+    ScspMixVoice vn = MakeVoice(neg, 44100), vp = MakeVoice(pos, 44100);
+    vn.totalLevel = vp.totalLevel = 96;
+    std::vector<int16_t> on, op;
+    int pn = 0, pp = 0;
+    ScspMixVoices(&vn, 1, 44100, 44100 * 4, on, &pn);
+    ScspMixVoices(&vp, 1, 44100, 44100 * 4, op, &pp);
+    CHECK(pn == pp);
+    CHECK(on[0] == -op[0]);
+}
+
+void TestResampleKeepsPitchAndDuration()
+{
+    std::vector<int16_t> pcm(1378, 1000), out;
+    ScspResampleMono(pcm.data(), pcm.size(), 1378, 44100, out);   // below a device's floor
+    CHECK(out.size() >= 44099 && out.size() <= 44100);            // one second either way
+    std::vector<int16_t> hi(352800, 1000);
+    ScspResampleMono(hi.data(), hi.size(), 352800, 44100, out);   // above its ceiling
+    CHECK(out.size() >= 44099 && out.size() <= 44100);
+    ScspResampleMono(nullptr, 0, 1, 1, out);
+    CHECK(out.empty());
+}
+
 void TestDenseMixDoesNotWrap()
 {
     // Many loud centre voices sum far past full scale. Normalisation brings them back down,
@@ -336,6 +382,8 @@ int main()
     TestLoopFloorGivesShortLoopsRoom();
     TestPanPlacesVoicesOnTheRightSide();
     TestSilentVoicesAreSkipped();
+    TestHeavilyAttenuatedBipolarVoiceStaysSilent();
+    TestResampleKeepsPitchAndDuration();
     TestDenseMixDoesNotWrap();
     TestQuietMixIsBroughtUpToLevel();
     TestNormalisationKeepsTheBalance();
