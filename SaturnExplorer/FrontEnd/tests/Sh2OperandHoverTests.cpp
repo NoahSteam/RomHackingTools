@@ -11,6 +11,7 @@
 // glyphs: a headless context has no font atlas upload, so nothing may be inferred from
 // rendered text. Item rects and hover state are ImGui core state and are reliable.
 
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -353,6 +354,94 @@ void TestRegMaskMatchesWholeTokens()
 
 }  // namespace
 
+void TestMacWordDecodesForEverySourceRegister()
+{
+    // The low byte used to be matched whole against 0x0F, so only a source of r0 decoded.
+    for (int m = 0; m < 16; ++m)
+    {
+        const DisassembledInstruction ins = Sh2Decode(0x06000000, (uint16_t)(0x450F | (m << 4)));
+        char want[24]; std::snprintf(want, sizeof(want), "@r%d+,@r5+", m);
+        CHECK(ins.IsValid && ins.Mnemonic == "mac.w" && ins.Operands == want);
+    }
+}
+
+void TestPcRelativeOperandInADelaySlotUsesTheBranchDestination()
+{
+    // bra 0x06000200 at 0x06000100; the mova in its slot reads PC as the destination plus two.
+    const DisassembledInstruction bra = Sh2Decode(0x06000100, 0xA07E);
+    CHECK(bra.HasDelaySlot && bra.HasBranchTarget && bra.BranchTarget == 0x06000200);
+    const DisassembledInstruction alone = Sh2Decode(0x06000102, 0xC700);
+    CHECK(alone.Operands == "@(0x06000104),r0");
+    const DisassembledInstruction slot = Sh2DecodeInDelaySlot(0x06000102, 0xC700, bra);
+    CHECK(slot.Operands == "@(0x06000200),r0");
+    // mov.w / mov.l literals follow the same PC.
+    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0x9102, bra).Operands == "@(0x06000206),r1");   // 0x...202 + 4
+    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0xD102, bra).Operands == "@(0x06000208),r1");   // (0x...202 & ~3) + 8
+    // A non-branch before it changes nothing.
+    const DisassembledInstruction nop = Sh2Decode(0x06000100, 0x0009);
+    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0xC700, nop).Operands == alone.Operands);
+}
+
+void TestPcRelativeOperandAfterAConditionalOrIndirectBranchIsContextDependent()
+{
+    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt.s
+    const DisassembledInstruction rts = Sh2Decode(0x06000100, 0x000B);
+    const DisassembledInstruction bt  = Sh2Decode(0x06000100, 0x8900);   // no delay slot
+    CHECK(bts.HasDelaySlot && rts.HasDelaySlot && !bt.HasDelaySlot);
+    for (const DisassembledInstruction* b : { &bts, &rts })
+    {
+        const DisassembledInstruction slot = Sh2DecodeInDelaySlot(0x06000102, 0xD102, *b);
+        CHECK(slot.PcRelAmbiguous && slot.Operands == "@(0x8,pc),r1");
+        const se_sh2_regs r = TestRegs();
+        uint32_t ea = 0, w = 0;
+        CHECK(!ResolveSh2MemOperand(slot, -1, r, ea, w));
+        CHECK(Join(Sh2OperandHoverLines(slot, 0, r, Reader())) == "address depends on whether the branch is taken\n");
+        CHECK(Sh2Comment(slot, r, Reader()) == "PC-relative: address depends on the branch");
+    }
+}
+
+void TestGbrIndexedByteOperationsResolve()
+{
+    const se_sh2_regs r = TestRegs();   // r0 = 0x10, gbr = 0x20000000
+    for (uint16_t op : { 0xCC03, 0xCD03, 0xCE03, 0xCF03 })
+    {
+        const DisassembledInstruction ins = Sh2Decode(0x06000000, op);
+        uint32_t ea = 0, w = 0;
+        CHECK(ResolveSh2MemOperand(ins, -1, r, ea, w) && ea == 0x20000010 && w == 1);
+        CHECK(Join(Sh2OperandHoverLines(ins, 1, r, Reader())) == "r0  = 00000010\n[20000010] = DE\n");
+    }
+}
+
+void TestAddressOperandsAreNotMemoryAccesses()
+{
+    const se_sh2_regs r = TestRegs();
+    const DisassembledInstruction jsr = Sh2Decode(0x06000000, 0x440B);   // jsr @r4
+    uint32_t ea = 0, w = 0;
+    CHECK(!ResolveSh2MemOperand(jsr, 0, r, ea, w));
+    CHECK(ResolveSh2OperandAddress(jsr, 0, r, ea, w) && ea == 0x06004000);
+    CHECK(Join(Sh2OperandHoverLines(jsr, 0, r, Reader())) == "r4  = 06004000\ntarget = 06004000\n");
+
+    const DisassembledInstruction mova = Sh2Decode(0x06000000, 0xC701);
+    CHECK(!ResolveSh2MemOperand(mova, 0, r, ea, w));
+    CHECK(ResolveSh2OperandAddress(mova, 0, r, ea, w) && ea == 0x06000008);
+    CHECK(Join(Sh2OperandHoverLines(mova, 0, r, Reader())) == "address = 06000008\n");
+
+    // A real load still previews its value.
+    CHECK(ResolveSh2MemOperand(Sh2Decode(0x06000000, 0x6142), 0, r, ea, w));
+}
+
+void TestImmediateCommentsSignExtendAndTstIsNotAnAssignment()
+{
+    const se_sh2_regs r = TestRegs();
+    auto C = [&](uint16_t op) { return Sh2Comment(Sh2Decode(0x06000000, op), r, Reader()); };
+    CHECK(C(0xE0FF) == "r0 = 0xFFFFFFFF");
+    CHECK(C(0xE041) == "r0 = 0x41 ('A')");
+    CHECK(C(0x88FF) == "compare r0 with 0xFFFFFFFF");
+    CHECK(C(0x7FFE) == "r15 += -2");
+    CHECK(C(0xC8FF) == "T = ((r0 & 0xFF) == 0)");
+    CHECK(C(0xC9FF) == "r0 = r0 and 0xFF");   // and/or/xor zero-extend: nothing to correct
+}
+
 int main()
 {
     TestEitherRegisterOperandIsHoverable();
@@ -367,6 +456,12 @@ int main()
     TestMemOperandIndexDecidesLoadVersusStore();
     TestAccessWidthFromMnemonic();
     TestRegMaskMatchesWholeTokens();
+    TestMacWordDecodesForEverySourceRegister();
+    TestPcRelativeOperandInADelaySlotUsesTheBranchDestination();
+    TestPcRelativeOperandAfterAConditionalOrIndirectBranchIsContextDependent();
+    TestGbrIndexedByteOperationsResolve();
+    TestAddressOperandsAreNotMemoryAccesses();
+    TestImmediateCommentsSignExtendAndTstIsNotAnAssignment();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " SH-2 operand hover check(s) failed\n";

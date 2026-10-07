@@ -67,82 +67,6 @@ Sh2MemReader MemReaderFor(IMemoryBackend& backend)
     };
 }
 
-// Printable-ASCII annotation for a value, e.g. 0x66 -> " ('f')".
-std::string AsciiTag(uint32_t v)
-{
-    if (v >= 0x20 && v <= 0x7E)
-    { char b[8]; std::snprintf(b, sizeof(b), " ('%c')", (char)v); return b; }
-    return "";
-}
-
-// A heuristic, human-readable comment for one instruction. Structural only —
-// branch intent, immediates, compares, loads/stores, and PC-relative literal-pool
-// resolution — not dataflow. Returns "" when nothing useful can be said.
-std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& regs,
-                       const Sh2MemReader& readMem)
-{
-    if (!ins.IsValid) return "";
-    const std::string& m = ins.Mnemonic;
-    const std::string& o = ins.Operands;
-
-    // --- Control flow ---
-    if (ins.IsReturn) return "return";
-    if (ins.HasBranchTarget)
-    {
-        char loc[24]; std::snprintf(loc, sizeof(loc), "loc_%08X", ins.BranchTarget);
-        if (ins.IsCall) return std::string("call ") + loc;
-        if (ins.IsConditional)
-            return std::string((m == "bt" || m == "bt.s") ? "if T set -> " : "if T clear -> ") + loc;
-        return std::string("-> ") + loc;
-    }
-    if (m == "jmp" || m == "braf")  return std::string("jump ") + o;
-    if (m == "jsr" || m == "bsrf")  return std::string("call ") + o;
-
-    // --- Immediate to register: mov/add/cmp/eq/and/or/xor/tst #imm,rN ---
-    unsigned imm = 0, rn = 0, rm = 0;
-    if (std::sscanf(o.c_str(), "#0x%x,r%u", &imm, &rn) == 2 && rn < 16)
-    {
-        char b[80];
-        if (m == "mov")         std::snprintf(b, sizeof(b), "r%u = 0x%X%s", rn, imm, AsciiTag(imm).c_str());
-        else if (m == "add")    std::snprintf(b, sizeof(b), "r%u += %d", rn, (int)(int8_t)(unsigned char)imm);
-        else if (m == "cmp/eq") std::snprintf(b, sizeof(b), "compare r%u with 0x%X%s", rn, imm, AsciiTag(imm).c_str());
-        else                    std::snprintf(b, sizeof(b), "r%u = r%u %s 0x%X", rn, rn, m.c_str(), imm);
-        return b;
-    }
-
-    // --- Register compare / move ---
-    if (m.rfind("cmp/", 0) == 0 && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
-    { char b[48]; std::snprintf(b, sizeof(b), "compare r%u, r%u", rm, rn); return b; }
-    if (m == "mov" && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
-    { char b[32]; std::snprintf(b, sizeof(b), "r%u = r%u", rn, rm); return b; }
-
-    // --- Memory move: a load when the memory operand is the source, else a store ---
-    if (m.rfind("mov.", 0) == 0)
-    {
-        const uint32_t width = Sh2AccessWidth(m);
-        const char* unit = (width == 1) ? "byte" : (width == 2) ? "word" : "long";
-        // Which *operand* the '@' falls in, not which side of the first comma it is on:
-        // that comma can be the group's own, as in "@(r0,r4),r1".
-        const int memOp = Sh2MemOperandIndex(o);
-        Sh2OperandSpan second;
-        if (memOp >= 0 && Sh2OperandAt(o, 1, second))
-        {
-            const bool isLoad = memOp == 0;   // "@src,rN" vs "rN,@dst"
-            // PC-relative literal pool: the disassembler resolves it to @(0xABS),rN.
-            uint32_t ea; WatchType wt; uint32_t val = 0;
-            if (isLoad && o.rfind("@(0x", 0) == 0 && o.find(",r") != std::string::npos &&
-                ResolveMemOperand(ins, memOp, regs, ea, wt) &&
-                readMem(ea, WatchTypeSize(wt), val))
-            {
-                char b[64]; std::snprintf(b, sizeof(b), "= [%08X] = 0x%X%s", ea, val,
-                                          wt == WatchType::U8 ? AsciiTag(val).c_str() : "");
-                return b;
-            }
-            return std::string(isLoad ? "load " : "store ") + unit;
-        }
-    }
-    return "";
-}
 }  // namespace
 
 void AssemblyPanel::GoTo(int cpu, uint32_t addr)
@@ -344,7 +268,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
         if ((size_t)(k * 2 + 1) < code.size())
         {
             ln.op = (uint16_t)((code[k*2] << 8) | code[k*2+1]);
-            ln.ins = Sh2Decode(ln.addr, ln.op);
+            // The instruction after a delayed branch runs in its slot, where a PC-relative operand
+            // reads a different PC (see Sh2DecodeInDelaySlot).
+            const bool inSlot = k > 0 && mLines[k - 1].readable && mLines[k - 1].ins.HasDelaySlot;
+            ln.ins = inSlot ? Sh2DecodeInDelaySlot(ln.addr, ln.op, mLines[k - 1].ins)
+                            : Sh2Decode(ln.addr, ln.op);
             ln.readable = true;
         }
         mLines.push_back(std::move(ln));
@@ -554,6 +482,12 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             uint32_t ea = 0;
             WatchType wt = WatchType::U32;
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, ea, wt);
+            // The address a jmp/jsr/mova operand names is not memory it accesses, so it cannot be
+            // watched, but it can still be shown in the memory view.
+            uint32_t addrOnly = 0, addrWidth = 0;
+            const bool hasAddr = hasMem || (ln.readable &&
+                ResolveSh2OperandAddress(ln.ins, mCtxOperand, regs, addrOnly, addrWidth));
+            const uint32_t viewAddr = hasMem ? ea : addrOnly;
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
                 bps.ToggleExecution(ln.addr);
             if (ImGui::MenuItem(tp ? "Remove Tracepoint" : "Toggle Tracepoint", nullptr, false, ln.readable))
@@ -594,7 +528,7 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             // Aims at the memory operand when the instruction has one, else at the
             // instruction's own address, so the item is available on every row.
             if (ImGui::MenuItem("View Address in Memory"))
-            { req.viewHex = true; req.hexAddr = hasMem ? ea : ln.addr; }
+            { req.viewHex = true; req.hexAddr = hasAddr ? viewAddr : ln.addr; }
 
             // Find the selected instruction(s)'s code bytes in the game data directory.
             // If this row is inside the current multi-selection, search the whole range;
