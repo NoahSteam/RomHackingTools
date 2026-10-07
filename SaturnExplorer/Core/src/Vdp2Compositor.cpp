@@ -33,10 +33,10 @@ enum : uint32_t
     kLWTA0U = 0x0D8, kLWTA0L = 0x0DA, kLWTA1U = 0x0DC, kLWTA1L = 0x0DE,
     kSPCTL = 0x0E0,
     kBKTAU = 0x0AC, kBKTAL = 0x0AE,
-    kCCCTL = 0x0EC,
+    kSDCTL = 0x0E2, kCCCTL = 0x0EC,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA,
-    kCCRNA = 0x108, kCCRNB = 0x10A,
+    kCCRSA = 0x100, kCCRNA = 0x108, kCCRNB = 0x10A,
     // Rotation (RBG0): pattern name, map offset, char/bitmap control, plane sizes,
     // the rotation parameter tables, coefficient control, and RBG0's own priority /
     // colour-offset / colour-calc-ratio registers.
@@ -107,6 +107,7 @@ struct NbgConfig
     bool colorCalc;         // CCCTL: this screen participates in color calculation
     uint32_t colorCalcRatio;// CCRNx 5-bit: 0 = mostly this screen, 31 = mostly below
     bool colorCalcAdd;      // CCCTL CCMD: additive blend (ratio ignored)
+    bool shadowEnable;      // SDCTL: a sprite shadow may darken this screen
     // Bitmap mode (NBG0/1 and RBG0): the screen is a single linear image rather than a
     // tiled plane. When bitmap is set the plane/pattern fields above are unused.
     bool bitmap;
@@ -147,6 +148,8 @@ void SetColorCalc(const HardwareSnapshot& s, uint32_t screen, uint32_t ratio, Nb
     c.colorCalc = (ccctl & (1u << screen)) != 0;
     c.colorCalcRatio = ratio & 0x1F;
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
+    // SDCTL's enable bits share the screen numbering (NBG0-3, RBG0 = 4).
+    c.shadowEnable = (Reg(s, kSDCTL) & (1u << screen)) != 0;
 }
 
 // Horizontal mosaic block width for a screen (MZCTL enable bit `screen`); 1 = no mosaic.
@@ -354,7 +357,7 @@ WindowLine ResolveWindowLine(const WindowConfig& config, int index,
              CoordinateInside(static_cast<uint32_t>(y), window.yStart, window.yEnd) };
 }
 
-bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x)
+bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x, bool spriteBit = false)
 {
     // WCTL describes a *transparent-processing* window: true means the layer
     // pixel is suppressed. Disabled inputs take the identity value for the
@@ -377,10 +380,10 @@ bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x)
         }
     }
 
-    // Sprite-window pixels are not available to the command-list compositor yet.
-    // Ignore that input by supplying the selected operation's identity value;
-    // otherwise an outside-area sprite window would incorrectly hide the whole NBG.
-    const bool spriteValue = useAnd;
+    // The sprite window is the third input: the sprite pixel's window bit (SPCTL SPWINEN makes the
+    // shadow bit of a type 2-7 sprite one), inside or outside per the area bit. The rotation-
+    // parameter window byte has no sprite input and arrives with these bits masked off.
+    const bool spriteValue = (control & 0x20) ? (spriteBit ^ ((control & 0x10) != 0)) : useAnd;
     return useAnd ? (values[0] && values[1] && spriteValue)
                   : (values[0] || values[1] || spriteValue);
 }
@@ -525,7 +528,8 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
 inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg)
 {
     EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(cfg.priority),
-            cfg.colorCalc, static_cast<uint8_t>(cfg.colorCalcRatio), cfg.colorCalcAdd);
+            cfg.colorCalc, static_cast<uint8_t>(cfg.colorCalcRatio), cfg.colorCalcAdd,
+            cfg.shadowEnable ? kShadowEnable : uint8_t(0));
 }
 
 // VRAM word address of one plane's pattern-name table, from the combined map-offset +
@@ -689,7 +693,7 @@ inline bool OnTileBoundary(const NbgConfig& c, uint32_t cellWH, uint32_t planeX,
 // on a pattern boundary is marked and no texel is read.
 void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
                  const NbgConfig& c, int layerIndex, int width, int height,
-                 std::vector<PixColumn>& cols)
+                 std::vector<PixColumn>& cols, const std::vector<SpritePixel>* sprites)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
@@ -753,7 +757,9 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
         }
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
+            if (applyWindows &&
+                WindowMasksPixel(windowConfig.control, windowLines, sx,
+                                 sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit))
             {
                 continue;
             }
@@ -978,7 +984,8 @@ void BeginRotLine(RotSet& s, int sy)
 // 2 and 3 are how a game draws a horizon — one set for the sky, the other for the ground
 // — so treating them as "always A" leaves half the screen sampling the wrong table.
 void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd,
-                int width, int height, std::vector<PixColumn>& cols)
+                int width, int height, std::vector<PixColumn>& cols,
+                const std::vector<SpritePixel>* sprites)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
@@ -1031,7 +1038,9 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
 
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows && WindowMasksPixel(windowConfig.control, windowLines, sx))
+            if (applyWindows &&
+                WindowMasksPixel(windowConfig.control, windowLines, sx,
+                                 sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit))
             {
                 continue;
             }
@@ -1211,13 +1220,18 @@ bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMa
 }  // namespace
 
 void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                               int width, int height, std::vector<PixColumn>& cols)
+                               int width, int height, std::vector<PixColumn>& cols,
+                               const std::vector<SpritePixel>* sprites)
 {
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
     }
 
+    if (sprites && sprites->size() != static_cast<size_t>(width) * height)
+    {
+        sprites = nullptr;   // not this frame's layer: no sprite-window input
+    }
     const uint16_t bgon = Reg(snapshot, kBGON);
 
     // Resolve the enabled NBGs first (no rendering yet). A layer is drawn only if
@@ -1266,11 +1280,63 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
     {
         if (layer.rbg0)
         {
-            RenderRbg0(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, width, height, cols);
+            RenderRbg0(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, width, height, cols, sprites);
         }
         else
         {
-            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols);
+            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols, sprites);
+        }
+    }
+}
+
+void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                 int width, int height, const std::vector<SpritePixel>& sprites,
+                                 const SpritePriorityTable& prios, std::vector<PixColumn>& cols)
+{
+    if (width <= 0 || height <= 0 || sprites.size() != static_cast<size_t>(width) * height)
+    {
+        return;
+    }
+    const bool applyWindows = opts.show_window != 0 && snapshot.HasVdp2Regs() &&
+                              !snapshot.Vdp2Vram().empty();
+    const bool shadows = opts.show_shadow_highlight != 0;
+    // The sprite layer has its own transparent-processing window, and its sprite-window input is
+    // the pixel's own window bit.
+    WindowConfig windowConfig {};
+    if (applyWindows)
+    {
+        windowConfig = ReadWindowConfig(snapshot, kWinLayerSprite);
+    }
+    for (int y = 0; y < height; ++y)
+    {
+        WindowLine lines[2] = { { 0, 0, false }, { 0, 0, false } };
+        if (applyWindows)
+        {
+            lines[0] = ResolveWindowLine(windowConfig, 0, snapshot.Vdp2Vram(), y);
+            lines[1] = ResolveWindowLine(windowConfig, 1, snapshot.Vdp2Vram(), y);
+        }
+        for (int x = 0; x < width; ++x)
+        {
+            const size_t i = static_cast<size_t>(y) * width + x;
+            const SpritePixel& p = sprites[i];
+            if (!p.visible)
+            {
+                continue;
+            }
+            if (applyWindows && WindowMasksPixel(windowConfig.control, lines, x, p.swBit))
+            {
+                continue;
+            }
+            if (p.shadowMarker)
+            {
+                if (shadows)
+                {
+                    EmitShadowMarker(cols[i], p.prio);
+                }
+                continue;
+            }
+            EmitPix(cols[i], p.color.r, p.color.g, p.color.b, p.prio, p.ccEn, p.ccRatio,
+                    prios.ccAdd, (shadows && p.shadowSelf) ? kShadowSelf : uint8_t(0));
         }
     }
 }
@@ -1290,6 +1356,7 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     const uint16_t bktal = Reg(snapshot, kBKTAL);
     const uint32_t base = (static_cast<uint32_t>(bktau & 0x0007) << 16) | bktal;
     const bool perLine = (bktau & 0x8000) != 0;
+    const uint8_t backShadow = (Reg(snapshot, kSDCTL) & 0x20) ? kShadowEnable : uint8_t(0);
 
     for (int y = 0; y < height; ++y)
     {
@@ -1301,7 +1368,7 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
             // Priority 0: the always-below backdrop. Marks the column valid so the
             // fallback backdrop never shows where VDP2 is present, and gives the lowest
             // colour-calc layer a real surface to blend against.
-            EmitPix(row[x], col.r, col.g, col.b, 0, false, 0, false);
+            EmitPix(row[x], col.r, col.g, col.b, 0, false, 0, false, backShadow);
         }
     }
 }

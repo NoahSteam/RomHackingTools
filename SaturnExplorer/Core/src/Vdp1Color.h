@@ -78,6 +78,20 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
     return Rgb555ToRgba(ReadBE16(cram, CramWrap(index, words) * 2));
 }
 
+// The MSB of a CRAM entry. In the RGB555 layouts it is bit 15 of the word; in RGB888 the entry is
+// 32 bits and the flag is bit 15 of its first halfword. VDP2 sprite colour calculation can be told
+// to follow it (SPCCCS = 3) instead of a priority comparison.
+inline bool CramMsb(const std::vector<uint8_t>& cram, se_cram_mode mode, uint32_t index)
+{
+    const uint32_t words = CramEntryCount(cram, mode);
+    if (words == 0)
+    {
+        return false;
+    }
+    const uint32_t width = (mode == SE_CRAM_RGB888_1024) ? 4u : 2u;
+    return (ReadBE16(cram, CramWrap(index, words) * width) & 0x8000) != 0;
+}
+
 // A decoded texel: its colour, and the 16-bit word the VDP1 would put in the framebuffer for
 // it.
 //

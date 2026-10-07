@@ -18,6 +18,37 @@ namespace
 // §7. Purely a display tunable.
 constexpr float kZSpacing = 6.0f;
 
+// Whether the hardware draws nothing for an untextured primitive (polygon, polyline, line) with this
+// CMDPMOD. The manual says SPD must be set to 1 for these and defines nothing otherwise, but the
+// hardware does not ignore it: the pixel's transparency is decided by "reading a texel" at texture
+// address -1, which lands on the last word of VDP1 VRAM, and applying the colour mode's transparent
+// code (SPD clear) and end code (ECD clear) to that. Mednafen reproduces this (vdp1_poly.cpp,
+// SPD_Opaque via TexFetch(0xFFFFFFFF)); a primitive with SPD clear therefore draws only if that
+// word is not a transparent code. A VRAM image that stops short of the last word cannot say, so the
+// primitive is drawn.
+bool UntexturedReadsTransparent(const std::vector<uint8_t>& vram, uint16_t pmod)
+{
+    constexpr uint32_t kVramBytes = 0x80000;
+    const unsigned mode = (pmod >> 3) & 0x7;
+    if (mode >= 6 || vram.size() < kVramBytes)
+    {
+        return false;
+    }
+    const bool spd = (pmod & 0x40) != 0;
+    const bool ecd = (pmod & 0x80) != 0;
+    const uint16_t w = ReadBE16(vram, kVramBytes - 2);
+    switch (mode)
+    {
+    case 0:
+    case 1:   // 4 bpp: the low nibble
+        return (!ecd && (w & 0xF) == 0xF) || (!spd && (w & 0xF) == 0);
+    case 5:   // RGB: the whole word
+        return (!ecd && (w & 0xC000) == 0x4000) || (!spd && w < 0x4000);
+    default:  // 8 bpp: the low byte
+        return (!ecd && (w & 0xFF) == 0xFF) || (!spd && (w & 0xFF) == 0);
+    }
+}
+
 // Axis-aligned bounds of a sprite in screen space, plus its assigned layer.
 struct PlacedSprite
 {
@@ -252,11 +283,13 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const unsigned ccb = pmod & 0x7;
         const bool msbShadow = (pmod & 0x8000) != 0;
         DrawFx fx;
-        fx.effect = msbShadow ? 1 : static_cast<uint8_t>(ccb & 0x3);
+        // MSB-on (bit 15) replaces the colour-calculation mode outright rather than adding to it.
+        fx.msbOn = msbShadow;
+        fx.effect = msbShadow ? 0 : static_cast<uint8_t>(ccb & 0x3);
         fx.mesh = (pmod & 0x0100) ? 1 : 0;
         s.draw_mode = (fx.effect == 3) ? SE_DRAW_HALF_TRANS
                     : (fx.effect == 2) ? SE_DRAW_HALF_LUM
-                    : (fx.effect == 1) ? SE_DRAW_SHADOW
+                    : (fx.effect == 1 || fx.msbOn) ? SE_DRAW_SHADOW
                     : (fx.mesh)        ? SE_DRAW_MESH
                                        : SE_DRAW_NORMAL;
 
@@ -284,6 +317,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         sr.color = colr;   // CMDCOLR as a solid RGB555 (only used when 'solid')
         sr.primKind = polyline ? 1 : line ? 2 : 0;
         sr.endCodeEnabled = ((pmod >> 7) & 0x1) == 0;   // CMDPMOD bit 7 is End Code *Disable*
+        sr.spdHidden = untextured && UntexturedReadsTransparent(vram, pmod);
         sr.clip.enable = (pmod >> 10) & 0x1;
         sr.clip.mode = (pmod >> 9) & 0x1;
         sr.clip.x0 = userClipX0; sr.clip.y0 = userClipY0;

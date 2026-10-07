@@ -137,9 +137,20 @@ public:
             {
                 Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
             }
-            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns);
-            Vdp1Rasterizer::EmitSprites(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                        mSnapshot.CramMode(), mSpritePrios, opts, mColumns);
+            // The sprite layer is built first: its pixels' window bits are an input to every VDP2
+            // layer's window logic. It is emitted last, so a sprite wins a priority tie.
+            const bool sprites = opts.show_vdp1_sprites != 0 &&
+                                 Vdp1Rasterizer::BuildSpriteLayer(mScene, mSnapshot.Vdp1Vram(),
+                                                                  mSnapshot.Cram(),
+                                                                  mSnapshot.CramMode(),
+                                                                  mSpritePrios, mSpriteLayer);
+            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns,
+                                       sprites ? &mSpriteLayer : nullptr);
+            if (sprites)
+            {
+                Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
+                                            mColumns);
+            }
             ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
             if (!opts.transparent_background)
             {
@@ -818,6 +829,20 @@ private:
         mSpritePrios.type = spctl & 0xF;
         mSpritePrios.spclmd = (spctl & 0x20) != 0;
         mSpritePrios.valid = true;
+        mSpritePrios.spriteWindow = (spctl & 0x10) != 0;
+        mSpritePrios.ccCond = static_cast<uint8_t>((spctl >> 12) & 0x3);
+        mSpritePrios.ccNum = static_cast<uint8_t>((spctl >> 8) & 0x7);
+        mSpritePrios.transparentShadow = (mSnapshot.Vdp2Reg(0x0E2) & 0x0100) != 0;
+        const uint16_t ccctl = mSnapshot.Vdp2Reg(0x0EC);
+        mSpritePrios.ccEnable = (ccctl & 0x0040) != 0;
+        mSpritePrios.ccAdd = (ccctl & 0x0100) != 0;
+        for (int i = 0; i < 4; ++i)
+        {
+            // CCRSA..CCRSD hold two 5-bit ratios each: numbers 2i (low byte) and 2i+1 (high byte).
+            const uint16_t r = mSnapshot.Vdp2Reg(0x100 + 2 * i);
+            mSpritePrios.ccRatio[2 * i] = static_cast<uint8_t>(r & 0x1F);
+            mSpritePrios.ccRatio[2 * i + 1] = static_cast<uint8_t>((r >> 8) & 0x1F);
+        }
         mSpritePrios.cramOffset = static_cast<uint32_t>((mSnapshot.Vdp2Reg(0x0E6) >> 4) & 0x7) << 8;
         const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
         const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
@@ -939,6 +964,7 @@ private:
     std::vector<uint8_t>    mRenderBuffer;
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     SpritePriorityTable     mSpritePrios;   // rebuilt per frame from the VDP2 sprite regs
+    std::vector<SpritePixel> mSpriteLayer;  // the VDP1 framebuffer as VDP2 reads it (per frame)
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()

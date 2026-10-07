@@ -536,14 +536,41 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
         out.color = (word & 0x8000) ? Rgb555ToRgba(word) : CramColor(cram, cramMode, word);
         return out;
     }
+
+    // Colour calculation: the pixel's ratio comes from its colour-calculation bits, and it is enabled
+    // by the SPCCCS condition on its priority (or by the data MSB for condition 3).
+    auto finish = [&](unsigned pr, unsigned cc, bool msbCc, bool transparent)
+    {
+        out.prio = slot[pr & 0x7];
+        out.visible = !transparent && out.prio != 0;
+        out.ccRatio = ccRatio[cc & 0x7];
+        bool en = false;
+        if (ccEnable)
+        {
+            switch (ccCond)
+            {
+            case 0: en = out.prio <= ccNum; break;
+            case 1: en = out.prio == ccNum; break;
+            case 2: en = out.prio >= ccNum; break;
+            default: en = msbCc; break;
+            }
+        }
+        out.ccEn = en;
+    };
+
     if (spclmd && (word & 0x8000))
     {
         out.color = Rgb555ToRgba(word);
-        out.prio = slot[0];
+        bool tp = false;
         if (type & 0x8)
         {
-            out.visible = (word & 0xFF) != 0;
+            tp = (word & 0xFF) == 0;
         }
+        else if (spriteWindow && type >= 0x2 && type <= 0x7)
+        {
+            tp = (word & 0x7FFF) == 0;
+        }
+        finish(0, 0, true, tp);
         return out;
     }
 
@@ -552,47 +579,82 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
     {
         src &= 0xFF;
     }
-    unsigned pr = 0, dc = 0;
+    unsigned pr = 0, cc = 0, dc = 0, dcMask = 0;
     bool sd = false;
     switch (type)
     {
-    case 0x0: pr = (src >> 14) & 0x3; dc = src & 0x7FF; break;
-    case 0x1: pr = (src >> 13) & 0x7; dc = src & 0x7FF; break;
-    case 0x2: sd = (src >> 15) & 1; pr = (src >> 14) & 0x1; dc = src & 0x7FF; break;
-    case 0x3: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; dc = src & 0x7FF; break;
-    case 0x4: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; dc = src & 0x3FF; break;
-    case 0x5: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x7FF; break;
-    case 0x6: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x3FF; break;
-    case 0x7: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x1FF; break;
-    case 0x8: pr = (src >> 7) & 0x1; dc = src & 0x7F; break;
-    case 0x9: pr = (src >> 7) & 0x1; dc = src & 0x3F; break;
-    case 0xA: pr = (src >> 6) & 0x3; dc = src & 0x3F; break;
-    case 0xB: dc = src & 0x3F; break;
-    case 0xC: case 0xD: pr = (src >> 7) & 0x1; dc = src & 0xFF; break;
-    case 0xE: pr = (src >> 6) & 0x3; dc = src & 0xFF; break;
-    default:  dc = src & 0xFF; break;
+    case 0x0: pr = (src >> 14) & 0x3; cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
+    case 0x1: pr = (src >> 13) & 0x7; cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
+    case 0x2: sd = (src >> 15) & 1; pr = (src >> 14) & 0x1; cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
+    case 0x3: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
+    case 0x4: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; cc = (src >> 10) & 0x7; dcMask = 0x3FF; break;
+    case 0x5: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 11) & 0x1; dcMask = 0x7FF; break;
+    case 0x6: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 10) & 0x3; dcMask = 0x3FF; break;
+    case 0x7: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 9) & 0x7; dcMask = 0x1FF; break;
+    case 0x8: pr = (src >> 7) & 0x1; dcMask = 0x7F; break;
+    case 0x9: pr = (src >> 7) & 0x1; cc = (src >> 6) & 0x1; dcMask = 0x3F; break;
+    case 0xA: pr = (src >> 6) & 0x3; dcMask = 0x3F; break;
+    case 0xB: cc = (src >> 6) & 0x3; dcMask = 0x3F; break;
+    case 0xC: pr = (src >> 7) & 0x1; dcMask = 0xFF; break;
+    case 0xD: pr = (src >> 7) & 0x1; cc = (src >> 6) & 0x1; dcMask = 0xFF; break;
+    case 0xE: pr = (src >> 6) & 0x3; dcMask = 0xFF; break;
+    default:  cc = (src >> 6) & 0x3; dcMask = 0xFF; break;
     }
-    // A zero word is transparent, and so is a shadow-bit word with no colour data.
-    if (src == 0 || (sd && (src & 0x7FFF) == 0))
-    {
-        out.visible = false;
-        return out;
-    }
+    dc = src & dcMask;
+
+    // A zero word is transparent. A normal shadow is a pixel whose dot-colour bits are all ones
+    // but the lowest; it draws no colour and darkens the layer under it.
+    bool tp = (src == 0);
+    const bool normalShadow = (dc == (dcMask & ~1u));
     out.color = CramColor(cram, cramMode, cramOffset + dc);
-    out.prio = slot[pr & 0x7];
+    const bool msbCc = CramMsb(cram, cramMode, cramOffset + dc);
+    if (spriteWindow)
+    {
+        out.swBit = sd;   // under SPWINEN the shadow bit is the window bit instead
+    }
+    if (normalShadow)
+    {
+        out.shadowMarker = true;
+    }
+    else if (spriteWindow)
+    {
+        if (type >= 0x2 && type <= 0x7)
+        {
+            tp = (src & 0x7FFF) == 0;
+        }
+    }
+    else if (sd)
+    {
+        // MSB shadow (types 2-7). With colour data it is a sprite shadow: this pixel is shadowed.
+        // Without, it is a transparent shadow, which darkens what is under it if TPSDSL allows and
+        // is otherwise transparent.
+        if (src & 0x7FFF)
+        {
+            out.shadowSelf = true;
+        }
+        else if (transparentShadow)
+        {
+            out.shadowMarker = true;
+        }
+        else
+        {
+            tp = true;
+        }
+    }
+    finish(pr, cc, msbCc, tp);
     return out;
 }
 
-void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
-                                 const std::vector<uint8_t>& cram, se_cram_mode cramMode,
-                                 const SpritePriorityTable& prios,
-                                 const se_render_opts& opts, std::vector<PixColumn>& cols)
+bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
+                                      const std::vector<uint8_t>& cram, se_cram_mode cramMode,
+                                      const SpritePriorityTable& prios, std::vector<SpritePixel>& layer)
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
-    if (!opts.show_vdp1_sprites || width <= 0 || height <= 0)
+    layer.assign(static_cast<size_t>(std::max(width, 0)) * std::max(height, 0), SpritePixel{});
+    if (width <= 0 || height <= 0)
     {
-        return;
+        return false;
     }
     // VDP1 draws into its own framebuffer, at its own width. In hi-res modes that is half the
     // display width and every column is doubled at scan-out, so sprite and clip coordinates stay in
@@ -609,6 +671,7 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         // pixel that survived. Draw-mode effects read the framebuffer pixel under them, never the
         // VDP2 layers -- VDP2 only sees the finished framebuffer -- and work on the packed word:
         //
+        //  - MSB-on only sets the destination's MSB;
         //  - shadow halves the destination if its MSB is set, and otherwise does nothing;
         //  - half-luminance halves the sprite's own word;
         //  - half-transparency averages with the destination if its MSB is set, and otherwise
@@ -616,6 +679,15 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         auto sink = [&fb](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word)
         {
             FbPixel& d = fb[idx];
+            if (fx.msbOn)
+            {
+                // MSB-on keeps the pixel under it and only sets its MSB (and writes a bare MSB
+                // where nothing was drawn). It is what marks a sprite for VDP2's MSB shadow; it
+                // overrides the colour-calculation mode and draws no colour of its own.
+                d.word = static_cast<uint16_t>(d.word | 0x8000);
+                d.written = true;
+                return;
+            }
             if (fx.effect == 1)   // shadow
             {
                 if (d.written && (d.word & 0x8000))
@@ -640,6 +712,10 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         RVert v[4] = { { c[0].x, c[0].y, 0.0f }, { c[1].x, c[1].y, 0.0f },
                        { c[2].x, c[2].y, 0.0f }, { c[3].x, c[3].y, 0.0f } };
         const SpriteRender& r = scene.render[i];
+        if (r.spdHidden)
+        {
+            continue;   // an untextured primitive the hardware reads as transparent
+        }
         const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
@@ -666,10 +742,10 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
                    vram, cram, cramMode, fbWidth, height, nullptr, r.gouraud, da, sink);
     }
 
-    // Scan the finished framebuffer out to the mixer, each pixel at the VDP2 priority its own word
-    // selects (a sprite whose CLUT spans several priority numbers interleaves with the VDP2 layers
-    // at each). Priority 0 means "not displayed" once the VDP2 registers say what 0 maps to.
-    // Sprites emit after the VDP2 layers, so they win a priority tie.
+    // Read the finished framebuffer out as VDP2 sees it: each pixel resolved through the sprite type
+    // into a colour, a priority, colour-calculation and shadow state, and a sprite-window bit. In a
+    // hi-res mode every VDP1 column is doubled here.
+    bool any = false;
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
@@ -680,16 +756,11 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
             {
                 continue;
             }
-            const SpritePriorityTable::Pixel px = prios.Resolve(p.word, cram, cramMode);
-            // Priority 0 means "not displayed" once the VDP2 registers say what 0 maps to.
-            if (!px.visible || (prios.valid && px.prio == 0))
-            {
-                continue;
-            }
-            EmitPix(cols[static_cast<size_t>(y) * width + x], px.color.r, px.color.g, px.color.b,
-                    px.prio, false, 0, false);
+            layer[static_cast<size_t>(y) * width + x] = prios.Resolve(p.word, cram, cramMode);
+            any = true;
         }
     }
+    return any;
 }
 
 void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,

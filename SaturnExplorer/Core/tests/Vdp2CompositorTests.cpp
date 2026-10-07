@@ -1143,7 +1143,10 @@ void TestSpriteBetweenTwoColorCalcLayers()
 // the finished framebuffer. These fixtures use frames of their own size, so they render through
 // RenderSized rather than the 4x2 Render above.
 
-std::vector<uint8_t> RenderSized(State& state, int width, int height)
+// Render a width x height frame; 'extra' sets any render options a case needs beyond the layers
+// and sprites (window, colour calculation, shadow).
+template <typename Setup>
+std::vector<uint8_t> RenderWith(State& state, int width, int height, Setup&& extra)
 {
     se_context* context = se_test::CreateContext(state);
     CHECK(context != nullptr);
@@ -1151,6 +1154,7 @@ std::vector<uint8_t> RenderSized(State& state, int width, int height)
     se_render_opts options = {};
     for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
     options.show_vdp1_sprites = 1;
+    extra(options);
     se_image image = {};
     size_t needed = 0;
     CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
@@ -1162,6 +1166,11 @@ std::vector<uint8_t> RenderSized(State& state, int width, int height)
     CHECK(image.height == static_cast<uint32_t>(height));
     se_destroy(context);
     return pixels;
+}
+
+std::vector<uint8_t> RenderSized(State& state, int width, int height)
+{
+    return RenderWith(state, width, height, [](se_render_opts&) {});
 }
 
 bool IsColorAt(const std::vector<uint8_t>& pixels, int width, int x, int y,
@@ -1542,6 +1551,157 @@ void TestThinSpriteCanBeHitTested()
     se_destroy(context);
 }
 
+// ---- VDP2 sprite colour calculation, shadow, window ---------------------------------------------
+
+// A frame whose only VDP2 content is a blue back screen, with every sprite priority number mapped
+// to 1 and SPCTL = 'spctl'.
+State MakeSpriteVdp2State(uint16_t spctl)
+{
+    State state = MakeBlueBackState(4, 2);
+    SetReg(state, 0x0E0, spctl);
+    return state;
+}
+
+// The sprite layer takes part in colour calculation: CCCTL SPCCEN enables it, SPCCCS picks the
+// condition on the pixel's priority, and the ratio comes from CCRSx by the pixel's own colour-
+// calculation bits. Red over the blue back screen at ratio 15 is (127,0,127).
+void TestSpriteColorCalculation()
+{
+    auto render = [](uint16_t spctl, uint16_t ccctl, uint16_t ccrsa, uint16_t word, uint16_t cramRed)
+    {
+        State state = MakeSpriteVdp2State(spctl);
+        SetReg(state, 0x0EC, ccctl);
+        SetReg(state, 0x100, ccrsa);
+        PutBE16(state.cram, 31 * 2, cramRed);
+        PutPolygon(state, 0x20, word, 0, 0, 0, 3, 1);
+        PutBE16(state.vdp1, 0x40, 0x8000);
+        return RenderWith(state, 4, 2, [](se_render_opts& o) { o.show_color_calculation = 1; });
+    };
+    // Type 0, palette-only; condition 0 (priority <= 7): enabled, ratio number 0 = 15.
+    CHECK(IsColorAt(render(0x0700, 0x0040, 0x000F, 0x001F, 0x001F), 4, 1, 1, 127, 0, 127));
+    // SPCCEN clear: plain red.
+    CHECK(IsColorAt(render(0x0700, 0x0000, 0x000F, 0x001F, 0x001F), 4, 1, 1, 255, 0, 0));
+    // Condition 1 (priority == 2): the pixel's priority is 1, so no colour calculation.
+    CHECK(IsColorAt(render(0x1200, 0x0040, 0x000F, 0x001F, 0x001F), 4, 1, 1, 255, 0, 0));
+    // Condition 2 (priority >= 1): enabled.
+    CHECK(IsColorAt(render(0x2100, 0x0040, 0x000F, 0x001F, 0x001F), 4, 1, 1, 127, 0, 127));
+    // Condition 3 follows the colour's own MSB in CRAM: set -> blended, clear -> plain.
+    CHECK(IsColorAt(render(0x3000, 0x0040, 0x000F, 0x001F, 0x801F), 4, 1, 1, 127, 0, 127));
+    CHECK(IsColorAt(render(0x3000, 0x0040, 0x000F, 0x001F, 0x001F), 4, 1, 1, 255, 0, 0));
+    // The ratio is chosen by the word's colour-calculation bits (11-13 in type 0): number 1 = 16,
+    // so the sprite keeps 15/32 of itself and takes 17/32 of the back screen.
+    CHECK(IsColorAt(render(0x0700, 0x0040, 0x1000, 0x081F, 0x001F), 4, 1, 1, 119, 0, 135));
+}
+
+// MSB-on only sets the destination's MSB. In a sprite type with a shadow bit (2-7) that makes the
+// pixel a sprite shadow, which darkens itself: red drawn first, then MSB-on over it, is half red.
+void TestMsbOnShadowsTheSpriteItself()
+{
+    State state = MakeSpriteVdp2State(0x0002);   // type 2, palette-only
+    PutBE16(state.cram, 31 * 2, 0x001F);
+    PutPolygon(state, 0x20, 0x001F, 0x0000, 0, 0, 3, 1);   // red
+    PutPolygon(state, 0x40, 0x0000, 0x8000, 0, 0, 1, 1);   // MSB-on over the left two columns
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels =
+        RenderWith(state, 4, 2, [](se_render_opts& o) { o.show_shadow_highlight = 1; });
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsColorAt(pixels, 4, 0, y, 127, 0, 0));
+        CHECK(IsColorAt(pixels, 4, 1, y, 127, 0, 0));
+        CHECK(IsColorAt(pixels, 4, 2, y, 255, 0, 0));
+        CHECK(IsColorAt(pixels, 4, 3, y, 255, 0, 0));
+    }
+    // Shadows off: the MSB still changes nothing visible.
+    const std::vector<uint8_t> off = RenderSized(state, 4, 2);
+    CHECK(IsColorAt(off, 4, 0, 0, 255, 0, 0));
+}
+
+// MSB-on over empty framebuffer is a bare MSB: a transparent shadow. With TPSDSL set it darkens
+// the layers whose SDCTL enable is set (here the back screen); without TPSDSL it is transparent.
+void TestTransparentShadowNeedsTpsdAndTheLayerEnable()
+{
+    auto render = [](uint16_t sdctl)
+    {
+        State state = MakeSpriteVdp2State(0x0002);
+        SetReg(state, 0x0E2, sdctl);
+        PutPolygon(state, 0x20, 0x0000, 0x8000, 0, 0, 1, 1);   // bare MSB over the left columns
+        PutBE16(state.vdp1, 0x40, 0x8000);
+        return RenderWith(state, 4, 2, [](se_render_opts& o) { o.show_shadow_highlight = 1; });
+    };
+    const std::vector<uint8_t> shadowed = render(0x0120);   // TPSDSL + BKSDEN
+    CHECK(IsColorAt(shadowed, 4, 0, 0, 0, 0, 127));
+    CHECK(IsColorAt(shadowed, 4, 2, 0, 0, 0, 255));
+    CHECK(IsColorAt(render(0x0020), 4, 0, 0, 0, 0, 255));   // TPSDSL clear: transparent
+    CHECK(IsColorAt(render(0x0100), 4, 0, 0, 0, 0, 255));   // back screen not enabled
+}
+
+// A normal shadow is a pixel whose dot-colour bits are all ones but the lowest (0x7FE in type 0).
+// It draws no colour; the layer under it is darkened.
+void TestNormalShadowDarkensTheLayerUnderIt()
+{
+    State state = MakeSpriteVdp2State(0x0000);
+    SetReg(state, 0x0E2, 0x0020);   // BKSDEN
+    PutPolygon(state, 0x20, 0x07FE, 0x0000, 0, 0, 1, 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels =
+        RenderWith(state, 4, 2, [](se_render_opts& o) { o.show_shadow_highlight = 1; });
+    CHECK(IsColorAt(pixels, 4, 0, 0, 0, 0, 127));
+    CHECK(IsColorAt(pixels, 4, 3, 0, 0, 0, 255));
+}
+
+// The sprite window: with SPWINEN a type 2-7 sprite's shadow bit is a window bit instead. NBG3's
+// window control selects it (SW enable, inside), so NBG3 is cut away exactly where the sprite layer
+// carries the bit -- even though that sprite pixel itself is priority 0 and invisible.
+void TestSpriteWindowCutsLayersWhereTheShadowBitIsSet()
+{
+    State state = MakeNbg3State();   // NBG3 white, priority 1
+    SetReg(state, 0x0E0, 0x0012);   // type 2, SPWINEN
+    SetReg(state, 0x0F0, 0x0100);   // PRISA: number 0 -> priority 0 (the window sprite is invisible)
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetReg(state, 0x0D2, 0x2000);   // WCTLB high byte: NBG3 -- sprite window enabled, area bit clear
+    ResizeVdp1(state, 0x400);
+    PutPolygon(state, 0x20, 0x8001, 0x0000, 0, 0, 1, 1);   // sd = 1: window bit on the left columns
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels =
+        RenderWith(state, 4, 2, [](se_render_opts& o) { o.show_window = 1; });
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsColorAt(pixels, 4, 0, y, 0, 0, 255));
+        CHECK(IsColorAt(pixels, 4, 1, y, 0, 0, 255));
+        CHECK(IsColorAt(pixels, 4, 2, y, 255, 255, 255));
+        CHECK(IsColorAt(pixels, 4, 3, y, 255, 255, 255));
+    }
+}
+
+// SPD is documented as "set to 1 for polygons". With it clear the hardware still decides
+// transparency, by reading a texel at address -1 -- the last word of VDP1 VRAM -- so a polygon with
+// SPD clear draws only if that word is not the colour mode's transparent (or end) code.
+void TestPolygonWithSpdClearFollowsTheLastVramWord()
+{
+    auto render = [](uint16_t pmod, uint16_t lastWord)
+    {
+        State state = MakeBlueBackState(4, 2);
+        state.vdp1.assign(0x80000, 0);
+        se_test::WriteSystemClip(state, 4, 2);
+        PutPolygon(state, 0x20, 0x801F, pmod, 0, 0, 3, 1);
+        PutBE16(state.vdp1, 0x40, 0x8000);
+        PutBE16(state.vdp1, 0x7FFFE, lastWord);
+        return RenderSized(state, 4, 2);
+    };
+    CHECK(IsColorAt(render(0x0000, 0x0000), 4, 1, 1, 0, 0, 255));   // transparent code: not drawn
+    CHECK(IsColorAt(render(0x0000, 0x0001), 4, 1, 1, 255, 0, 0));   // other data: drawn
+    CHECK(IsColorAt(render(0x0040, 0x0000), 4, 1, 1, 255, 0, 0));   // SPD set: always drawn
+    CHECK(IsColorAt(render(0x0040, 0x000F), 4, 1, 1, 0, 0, 255));   // end code (ECD clear): not drawn
+    CHECK(IsColorAt(render(0x00C0, 0x000F), 4, 1, 1, 255, 0, 0));   // ECD and SPD set: drawn
+    // A VRAM image too short to hold that word cannot say, so the polygon is drawn.
+    State shortVram = MakeBlueBackState(4, 2);
+    PutPolygon(shortVram, 0x20, 0x801F, 0x0000, 0, 0, 3, 1);
+    PutBE16(shortVram.vdp1, 0x40, 0x8000);
+    CHECK(IsColorAt(RenderSized(shortVram, 4, 2), 4, 1, 1, 255, 0, 0));
+}
+
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
@@ -1588,6 +1748,12 @@ int main()
     TestEffectsChangeThePriorityTheWordSelects();
     TestPolygonPaletteCodesAreLookedUpInCram();
     TestThinSpriteCanBeHitTested();
+    TestSpriteColorCalculation();
+    TestMsbOnShadowsTheSpriteItself();
+    TestTransparentShadowNeedsTpsdAndTheLayerEnable();
+    TestNormalShadowDarkensTheLayerUnderIt();
+    TestSpriteWindowCutsLayersWhereTheShadowBitIsSet();
+    TestPolygonWithSpdClearFollowsTheLastVramWord();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

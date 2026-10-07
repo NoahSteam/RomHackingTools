@@ -29,6 +29,7 @@ struct DrawFx
 {
     uint8_t effect = 0;
     uint8_t mesh = 0;
+    bool    msbOn = false;   // CMDPMOD bit 15: only set the destination MSB (it overrides 'effect')
 };
 
 // Per-sprite VDP1 user clipping. 'enable' from CMDPMOD bit 10; 'mode' from bit 9
@@ -51,6 +52,7 @@ struct SpriteRender
     bool        solid = false;      // untextured polygon/line: fill/edges with 'color'
     uint16_t    color = 0;          // RGB555 fill color, valid when 'solid'
     uint8_t     primKind = 0;       // 0 = filled quad, 1 = polyline (4 edges), 2 = line A-B
+    bool        spdHidden = false;   // untextured with SPD clear: the hardware reads it as transparent
     bool        endCodeEnabled = false;   // textured: an end-code texel is transparent, and a
                                           // second one in a row ends the texture line
 };

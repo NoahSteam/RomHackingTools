@@ -12,7 +12,7 @@
 // rotation screen (rotation parameter set A/B, coefficient tables, screen-over repeat),
 // bitmap mode (NBG0/1 + RBG0), NBG0/1 fractional scroll, zoom, and per-line scroll/zoom,
 // per-screen colour offset (CLOFEN/COxR/G/B), and horizontal mosaic. Vertical cell
-// scroll, vertical mosaic, shadow, special priority/colour-calc, RBG1, and RPMD
+// scroll, vertical mosaic, special priority/colour-calc, RBG1, and RPMD
 // per-dot/window parameter selection are not modeled yet.
 //
 // Rather than blending straight into an RGBA buffer, every VDP2 source emits a per-pixel
@@ -25,8 +25,8 @@
 //
 // Modeled today: NBG0-3 (cell + bitmap), RBG0 rotation, fractional/line scroll + zoom,
 // windows, per-screen colour calculation and colour offset, horizontal mosaic, and the
-// real back screen. Sprite windows, the line-colour screen, vertical cell scroll, vertical
-// mosaic, and RBG1 are not modeled yet.
+// real back screen, the sprite layer's own colour calculation and shadows, and sprite windows.
+// The line-colour screen, vertical cell scroll, vertical mosaic, and RBG1 are not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -36,6 +36,7 @@
 #include "saturnexplorer/SeTypes.h"
 #include "HardwareSnapshot.h"
 #include "PixelMixer.h"
+#include "SpriteLayer.h"
 
 namespace se
 {
@@ -99,8 +100,20 @@ public:
     // afterwards wins the tie, exactly as VDP1 sprites sit in front of same-priority NBGs
     // on hardware. Honors opts.show_layer[] and the BGON enable bits; priority-0 layers
     // (not displayed) are skipped. A no-op when the snapshot lacks VDP2 VRAM or registers.
+    //
+    // 'sprites' (may be null) is the finished sprite layer: its pixels' window bits feed the
+    // sprite-window input of each layer's window logic.
     static void EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                           int width, int height, std::vector<PixColumn>& cols);
+                           int width, int height, std::vector<PixColumn>& cols,
+                           const std::vector<SpritePixel>* sprites = nullptr);
+
+    // Emit the sprite layer into 'cols' after every VDP2 layer, so a sprite wins a priority tie.
+    // Applies the sprite layer's own window, colour calculation (the pixel's ratio, enabled by its
+    // SPCCCS condition) and, when opts.show_shadow_highlight is set, sprite shadows: a shadow marker
+    // darkens the layer under it, and a self-shadowed pixel darkens itself.
+    static void EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                            int width, int height, const std::vector<SpritePixel>& sprites,
+                            const SpritePriorityTable& prios, std::vector<PixColumn>& cols);
 
     // Seed the VDP2 back screen (the always-present backdrop below every screen) into
     // every column at priority 0, reading its colour from the BKTA table in VDP2 VRAM —

@@ -489,12 +489,12 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > the VDP1 sprite colors too.
    > **Known simplifications (M4b):** VDP1 and NBGs interleave by priority, per framebuffer pixel
    > -- a sprite whose CLUT or colour bank spans several SPCTL priority numbers interleaves at
-   > each of them, as the hardware does. NBG0-3 normal and line windows are modeled;
-   > sprite/color-calculation windows are not, and sprites do not yet carry a colour-calculation
-   > ratio of their own. Still missing: rotation
-   > screens (RBG0/1), bitmap-mode backgrounds, line/vertical-cell scroll, zoom, mosaic, color
-   > calculation, and the VDP2 back/line-color screens (empty pixels use a flat backdrop). See
-   > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
+   > each of them, as the hardware does. NBG0-3, RBG0 and sprite windows (including the sprite
+   > window input fed by SPWINEN) are modeled; the colour-calculation window is not. Sprites carry
+   > their own colour calculation (SPCCEN / SPCCCS / CCRSx) and the sprite shadow functions (normal,
+   > MSB and transparent shadow, SDCTL / TPSDSL). Still missing: bitmap-mode edge cases,
+   > vertical-cell scroll, extended (3-layer) colour calculation, the line-colour screen, and
+   > sprite colour offset. See `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
    > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
    > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
    > out through `SpritePriorityTable::Resolve`, which decodes each packed word as VDP2 does (SPCTL
@@ -502,7 +502,10 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > displayed. Shadow / half-transparency / half-luminance read and rewrite the framebuffer WORD
    > (packed RGB555 arithmetic, not VDP2 layers), so a changed word changes the priority and colour
    > VDP2 then derives; they act on a destination whose MSB is set. Texture end
-   > codes (CMDPMOD ECD clear) and skipped (JP >= 4) commands follow the hardware.
+   > codes (CMDPMOD ECD clear) and skipped (JP >= 4) commands follow the hardware. MSB-on only
+   > sets the destination MSB (VDP2 reads it as a sprite shadow), and an untextured primitive with SPD
+   > clear is read as transparent or not from the last word of VDP1 VRAM, as Mednafen does -- the
+   > manual only says to set SPD to 1 for those.
    > **Sprite pixel coverage.** VDP1 corners are inclusive pixel *indices* and the game tiles a
    > mech out of many small strips; `ExpandQuadInclusive` moves each corner to its pixel's centre
    > and out half a pixel, so a primitive covers exactly the pixels between its corners and
