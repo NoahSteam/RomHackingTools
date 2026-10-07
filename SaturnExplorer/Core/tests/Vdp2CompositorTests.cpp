@@ -2187,6 +2187,39 @@ void TestExclusiveModeStillEnforcesTheSystemClip()
     CHECK(IsColorAt(pixels, 4, 1, 449, 0, 0, 255));
 }
 
+// A system-clip command at 'cmd' ending the drawing area at (x1,y1).
+void PutSystemClip(State& state, uint32_t cmd, int x1, int y1)
+{
+    PutBE16(state.vdp1, cmd + 0x00, 0x0009);
+    PutBE16(state.vdp1, cmd + 0x14, static_cast<uint16_t>(x1));
+    PutBE16(state.vdp1, cmd + 0x16, static_cast<uint16_t>(y1));
+}
+
+// A clip command changes what is drawn AFTER it; pixels already in the framebuffer stay. Each primitive
+// is bounded by the clip in force when it ran, not by the list's last one.
+void TestSystemClipAppliesFromItsCommandOnward()
+{
+    // Clip ends at row 239, red goes down on row 224, then the clip shrinks to row 223: the red stays.
+    State shrink = MakeBlueBackState(4, 240);
+    SetReg(shrink, 0x000, 0x0004);
+    PutPolygon(shrink, 0x20, 0x801F, 0, 0, 224, 3, 224);
+    PutSystemClip(shrink, 0x40, 3, 223);
+    PutBE16(shrink.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> a = RenderWith(shrink, 4, 480, [](se_render_opts&) {});
+    CHECK(IsColorAt(a, 4, 1, 448, 255, 0, 0));
+    CHECK(IsColorAt(a, 4, 1, 449, 255, 0, 0));
+
+    // Clip ends at row 223, red is attempted on row 224, then the clip grows to 239: nothing was drawn.
+    State grow = MakeBlueBackState(4, 224);
+    SetReg(grow, 0x000, 0x0004);
+    PutPolygon(grow, 0x20, 0x801F, 0, 0, 224, 3, 224);
+    PutSystemClip(grow, 0x40, 3, 239);
+    PutBE16(grow.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> b = RenderWith(grow, 4, 480, [](se_render_opts&) {});
+    CHECK(IsColorAt(b, 4, 1, 448, 0, 0, 255));
+    CHECK(IsColorAt(b, 4, 1, 449, 0, 0, 255));
+}
+
 // RBG1 cannot be displayed in the exclusive monitor modes (and it still holds NBG0's slot).
 void TestRbg1IsNotDrawnInTheExclusiveMonitorModes()
 {
@@ -2380,6 +2413,7 @@ int main()
     TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled();
     TestExclusiveScanoutDoublesRowsEvenWithAShorterSystemClip();
     TestExclusiveModeStillEnforcesTheSystemClip();
+    TestSystemClipAppliesFromItsCommandOnward();
     TestLineHonoursHalfLuminance();
     TestLineHonoursHalfTransparency();
     TestLineHonoursMesh();

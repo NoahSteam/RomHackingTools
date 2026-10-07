@@ -49,6 +49,12 @@ struct SpriteRender
     GouraudQuad gouraud;
     DrawFx      fx;
     ClipRect    clip;
+    // The system clip in force when this command ran: the inclusive lower-right corner of the drawing
+    // area, in VDP1 coordinates (unbounded before the list sets one). It bounds the framebuffer
+    // writes, and is not the framebuffer's size -- the two part company in the exclusive monitor
+    // modes, where the framebuffer is 240 rows whatever the clip says. A later clip command never
+    // reaches back to pixels already drawn, so each primitive keeps its own.
+    int32_t     sysClipX1 = 0x7FFFFFFF, sysClipY1 = 0x7FFFFFFF;
     bool        solid = false;      // untextured polygon/line: fill/edges with 'color'
     uint16_t    color = 0;          // RGB555 fill color, valid when 'solid'
     uint8_t     primKind = 0;       // 0 = filled quad, 1 = polyline (4 edges), 2 = line A-B
@@ -65,10 +71,6 @@ struct Vdp1Scene
     int screenWidth  = 320;   // display width (may be raised to the VDP2 TVMD dot count)
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above
-    // That command's inclusive lower-right corner, in VDP1 coordinates. The drawing area is a rectangle
-    // the framebuffer is clipped to, not the framebuffer's own size: the two part company in the
-    // exclusive monitor modes, where the framebuffer is 240 rows whatever the clip says.
-    int sysClipX1 = 0, sysClipY1 = 0;
     // The width of the VDP1 coordinate space (the system-clip width). In hi-res modes the
     // display (screenWidth) is 2x this — VDP1 draws at half width and is doubled at
     // scan-out — so the rasterizer scales sprite X by screenWidth / vdp1Width.

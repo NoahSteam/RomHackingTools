@@ -761,17 +761,19 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     //  - half-luminance halves the sprite's own word;
     //  - half-transparency averages with the destination if its MSB is set, and otherwise
     //    just replaces it.
-    // The system clip bounds every draw, independently of the framebuffer's size.
-    const bool sysClip = scene.hasSystemClip &&
-                         (scene.sysClipX1 < fbWidth - 1 || scene.sysClipY1 < fbHeight - 1);
-    const int clipX1 = scene.sysClipX1, clipY1 = scene.sysClipY1;
-    auto sink = [&fb, fbWidth, sysClip, clipX1, clipY1](size_t idx, uint8_t, uint8_t, uint8_t,
-                                                       const DrawFx& fx, uint16_t word)
+    // Each primitive is bounded by the system clip in force when it ran (set per command below); the
+    // framebuffer's own size is separate.
+    int clipX1 = 0x7FFFFFFF, clipY1 = 0x7FFFFFFF;
+    auto sink = [&fb, fbWidth, fbHeight, &clipX1, &clipY1](size_t idx, uint8_t, uint8_t, uint8_t,
+                                                 const DrawFx& fx, uint16_t word)
     {
-        if (sysClip && (static_cast<int>(idx % static_cast<size_t>(fbWidth)) > clipX1 ||
-                        static_cast<int>(idx / static_cast<size_t>(fbWidth)) > clipY1))
+        if (clipX1 < fbWidth - 1 || clipY1 < fbHeight - 1)
         {
-            return;
+            if (static_cast<int>(idx % static_cast<size_t>(fbWidth)) > clipX1 ||
+                static_cast<int>(idx / static_cast<size_t>(fbWidth)) > clipY1)
+            {
+                return;
+            }
         }
         FbPixel& d = fb[idx];
         if (fx.msbOn)
@@ -815,6 +817,8 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
             continue;   // an untextured primitive the hardware reads as transparent
         }
         const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
+        clipX1 = r.sysClipX1;
+        clipY1 = r.sysClipY1;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
             DrawEdges(fbWidth, fbHeight, v, r.primKind, Rgb555ToRgba(r.color), r.color, r.fx,

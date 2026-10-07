@@ -72,6 +72,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
     // relies on a rect set earlier. Defaulting to unbounded means "draw inside" doesn't
     // wrongly clip it away; a real user-clip command (comm 6) narrows it.
     int32_t userClipX0 = 0, userClipY0 = 0, userClipX1 = 0x3FFF, userClipY1 = 0x3FFF;
+    int32_t sysClipX1 = 0x7FFFFFFF, sysClipY1 = 0x7FFFFFFF;   // the system clip so far; none until set
     uint32_t objectNumber = 0;
     std::vector<PlacedSprite> placed;   // bounds+layer of sprites already emitted
 
@@ -142,8 +143,8 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
                 out.screenWidth = sx + 1;
                 out.screenHeight = sy + 1;
                 out.hasSystemClip = true;
-                out.sysClipX1 = sx;
-                out.sysClipY1 = sy;
+                sysClipX1 = sx;
+                sysClipY1 = sy;
             }
             continue;
         }
@@ -320,6 +321,7 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         sr.clip.mode = (pmod >> 9) & 0x1;
         sr.clip.x0 = userClipX0; sr.clip.y0 = userClipY0;
         sr.clip.x1 = userClipX1; sr.clip.y1 = userClipY1;
+        sr.sysClipX1 = sysClipX1; sr.sysClipY1 = sysClipY1;
         sr.gouraud.on = (pmod & 0x4) != 0;
         if (sr.gouraud.on)
         {
