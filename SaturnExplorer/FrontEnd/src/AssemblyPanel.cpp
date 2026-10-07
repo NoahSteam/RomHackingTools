@@ -479,12 +479,6 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             uint32_t ea = 0;
             WatchType wt = WatchType::U32;
             const bool hasMem = ln.readable && ResolveMemOperand(ln.ins, mCtxOperand, regs, ea, wt);
-            // The address a jmp/jsr/mova operand names is not memory it accesses, so it cannot be
-            // watched, but it can still be shown in the memory view.
-            uint32_t addrOnly = 0, addrWidth = 0;
-            const bool hasAddr = hasMem || (ln.readable &&
-                ResolveSh2OperandAddress(ln.ins, mCtxOperand, regs, addrOnly, addrWidth));
-            const uint32_t viewAddr = hasMem ? ea : addrOnly;
             if (ImGui::MenuItem(bp ? "Remove Breakpoint" : "Toggle Breakpoint", nullptr, false, ln.readable))
                 bps.ToggleExecution(ln.addr);
             if (ImGui::MenuItem(tp ? "Remove Tracepoint" : "Toggle Tracepoint", nullptr, false, ln.readable))
@@ -522,10 +516,11 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
             if (ImGui::MenuItem("Clear Comment", nullptr, false, mComments.count(ln.addr) != 0))
             { mComments.erase(ln.addr); SaveComments(); }
             ImGui::Separator();
-            // Aims at the memory operand when the instruction has one, else at the
-            // instruction's own address, so the item is available on every row.
-            if (ImGui::MenuItem("View Address in Memory"))
-            { req.viewHex = true; req.hexAddr = hasAddr ? viewAddr : ln.addr; }
+            // Aims at the operand's address when it has one, else the instruction's own, so the
+            // item is available on every row (but not on an uncertain PC-relative operand).
+            uint32_t viewAddr = 0;
+            if (DrawViewAddressMenuItem(ln.ins, ln.readable ? mCtxOperand : -1, regs, viewAddr))
+            { req.viewHex = true; req.hexAddr = ln.readable ? viewAddr : ln.addr; }
 
             // Find the selected instruction(s)'s code bytes in the game data directory.
             // If this row is inside the current multi-selection, search the whole range;

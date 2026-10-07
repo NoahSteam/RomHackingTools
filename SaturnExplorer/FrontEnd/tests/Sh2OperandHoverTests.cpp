@@ -431,6 +431,108 @@ void TestWindowDecodingDoesNotDependOnWhereTheWindowStarts()
     CHECK(d[0].readable && !d[1].readable && !d[2].readable);
 }
 
+// The row's right-click menu with just the item under test, driven the way the panel drives it: the
+// operand under the pointer is latched when the menu opens and handed to DrawViewAddressMenuItem.
+struct MenuRow
+{
+    DisassembledInstruction ins;
+    Sh2OperandsDrawn drawn;
+    ImVec2 cellMin {}, cellMax {};
+    int    operand = -2;           // latched when the menu opened
+    bool   menuShown = false;
+    ImVec2 otherMin {}, otherMax {};
+    ImVec2 itemMin {}, itemMax {};
+    int    activations = 0;
+    uint32_t viewAddr = 0;
+
+    void Draw()
+    {
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(600.0f, 200.0f));
+        ImGui::Begin("Asm", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        drawn = DrawSh2Operands(ins);
+        cellMin = start;
+        cellMax = ImGui::GetItemRectMax();
+        if (drawn.rightClicked) { operand = drawn.hovered; ImGui::OpenPopup("ctx"); }
+        // Another cell of the row, which opens the same menu with no operand (the panel's openRowContext).
+        ImGui::SameLine(300.0f);
+        ImGui::TextUnformatted("comment");
+        otherMin = ImGui::GetItemRectMin();
+        otherMax = ImGui::GetItemRectMax();
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { operand = -1; ImGui::OpenPopup("ctx"); }
+        menuShown = false;
+        if (ImGui::BeginPopup("ctx"))
+        {
+            menuShown = true;
+            uint32_t addr = 0;
+            const bool hit = DrawViewAddressMenuItem(ins, operand, TestRegs(), addr);
+            itemMin = ImGui::GetItemRectMin();
+            itemMax = ImGui::GetItemRectMax();
+            if (hit) { ++activations; viewAddr = addr; }
+            ImGui::EndPopup();
+        }
+        ImGui::End();
+    }
+};
+
+// Right-click operand 'operand' of 'row' (-1: another cell of the row), then click "View Address in Memory". Returns whether the item was activated.
+bool ClickViewAddress(MenuRow& row, int operand)
+{
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    const float y = (row.cellMin.y + row.cellMax.y) * 0.5f;
+    bool opened = false;
+    if (operand < 0)
+    {
+        const ImVec2 p((row.otherMin.x + row.otherMax.x) * 0.5f, (row.otherMin.y + row.otherMax.y) * 0.5f);
+        harness.Hover(p);
+        harness.RightClick(p);
+        opened = row.menuShown;
+    }
+    else
+        for (float x = row.cellMin.x + 0.5f; x < row.cellMax.x && !opened; x += 1.0f)
+        {
+            harness.Hover(ImVec2(x, y));
+            if (row.drawn.hovered != operand) continue;
+            harness.RightClick(ImVec2(x, y));
+            opened = row.menuShown;
+        }
+    Check(opened, "the row menu opens", __LINE__);
+    const ImVec2 centre((row.itemMin.x + row.itemMax.x) * 0.5f, (row.itemMin.y + row.itemMax.y) * 0.5f);
+    harness.Hover(centre);
+    harness.Click(centre);
+    return row.activations > 0;
+}
+
+void TestViewAddressIsDisabledForAnUncertainPcRelativeOperand()
+{
+    // bra at 0x06000100 with a mova after it: the operand's address depends on how that mova is reached.
+    const DisassembledInstruction bra = Sh2Decode(0x06000100, 0xA07E);
+    MenuRow amb;
+    amb.ins = Sh2DecodeAfterBranch(0x06000102, 0xC700, bra);
+    CHECK(amb.ins.Operands == "@(0x0,pc),r0");
+    CHECK(!ClickViewAddress(amb, 0));      // the "@(0x0,pc)" operand: disabled, nothing opened
+    CHECK(amb.operand == 0);
+
+    // Control: the same menu on an ordinary operand does activate, at the operand's own address.
+    MenuRow load;
+    load.ins = Sh2Decode(0x06000000, 0x6142);   // mov.l @r4,r1
+    CHECK(ClickViewAddress(load, 0) && load.viewAddr == TestRegs().r[4]);
+
+    // Ordinary row actions keep the instruction-address fallback: the register half of an operand
+    // pair, and the row elsewhere, both open the instruction itself -- even on the uncertain row.
+    MenuRow reg;
+    reg.ins = Sh2Decode(0x06000000, 0x6142);
+    CHECK(ClickViewAddress(reg, 1) && reg.viewAddr == 0x06000000);
+    MenuRow elsewhere;
+    elsewhere.ins = amb.ins;
+    CHECK(ClickViewAddress(elsewhere, -1) && elsewhere.viewAddr == 0x06000102);
+    MenuRow ambReg;
+    ambReg.ins = amb.ins;
+    CHECK(ClickViewAddress(ambReg, 1) && ambReg.viewAddr == 0x06000102);
+}
+
 void TestGbrIndexedByteOperationsResolve()
 {
     const se_sh2_regs r = TestRegs();   // r0 = 0x10, gbr = 0x20000000
@@ -491,6 +593,7 @@ int main()
     TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress();
     TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress();
     TestWindowDecodingDoesNotDependOnWhereTheWindowStarts();
+    TestViewAddressIsDisabledForAnUncertainPcRelativeOperand();
     TestGbrIndexedByteOperationsResolve();
     TestAddressOperandsAreNotMemoryAccesses();
     TestImmediateCommentsSignExtendAndTstIsNotAnAssignment();

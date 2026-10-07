@@ -144,6 +144,24 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
            ResolveSh2OperandAddress(ins, index, r, outAddr, outWidth);
 }
 
+bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index)
+{
+    Sh2OperandSpan sp;
+    return ins.PcRelAmbiguous && Sh2OperandAt(ins.Operands, index, sp) &&
+           ins.Operands.find("pc", sp.begin) < sp.end;
+}
+
+bool DrawViewAddressMenuItem(const DisassembledInstruction& ins, int operand, const se_sh2_regs& r,
+                             uint32_t& outAddr)
+{
+    if (!ImGui::MenuItem("View Address in Memory", nullptr, false,
+                         !Sh2OperandIsUncertainPcRel(ins, operand)))
+        return false;
+    uint32_t width = 0;
+    if (!ResolveSh2OperandAddress(ins, operand, r, outAddr, width)) outAddr = ins.Address;
+    return true;
+}
+
 std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins, int index,
                                               const se_sh2_regs& r, const Sh2MemReader& readMem)
 {
@@ -162,7 +180,7 @@ std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins
         }
 
     uint32_t ea = 0, n = 0;
-    if (ins.PcRelAmbiguous && text.find("pc") != std::string::npos)
+    if (Sh2OperandIsUncertainPcRel(ins, index))
     {
         // Memory cannot say whether this runs in the branch's delay slot, so give each candidate.
         const bool mova = ins.PcRel == Sh2PcRel::Mova;

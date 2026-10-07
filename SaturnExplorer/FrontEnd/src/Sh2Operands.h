@@ -74,6 +74,19 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
 bool ResolveSh2OperandAddress(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
                               uint32_t& outAddr, uint32_t& outWidth);
 
+// True when operand 'index' is a PC-relative operand whose address cannot be told from the code alone
+// (see DisassembledInstruction::PcRelAmbiguous).
+bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index);
+
+// The row menu's "View Address in Memory" item, drawn at the cursor. Returns true when it was
+// activated, with the address to show in 'outAddr'. 'operand' is the operand the menu was opened on
+// (-1: opened elsewhere on the row). It aims at that operand's address, and falls back to the
+// instruction's own address when there is none, so it is available on every ordinary row -- but it is
+// disabled for an uncertain PC-relative operand, where either address would be a guess presented as
+// the operand's.
+bool DrawViewAddressMenuItem(const DisassembledInstruction& ins, int operand, const se_sh2_regs& r,
+                             uint32_t& outAddr);
+
 // Reads 'n' (1/2/4) big-endian bytes at 'addr' into 'outValue'; false if the read fails.
 // Deliberately the same contract as IFormatContext::ReadMem (Debug/FormatString.h), so a
 // caller holding one can forward it; a plain callable rather than that interface because
