@@ -373,7 +373,11 @@ SCSP_SLOT_METHOD = """\
    const bool released = (s.EnvPhase == ENV_PHASE_RELEASE) && (s.EnvLevel >= 0x3FF);
    int oct = s.Octave & 0xF; if(oct & 0x8) oct -= 16; // OCT is 4-bit signed (-8..+7)
    r[0]  = s.KeyBit ? 1 : 0;
-   r[1]  = (s.KeyBit && !released) ? 1 : 0;
+   // Sounding = still producing output. Key-off only starts the release, which keeps playing
+   // until the envelope is fully attenuated, so a keyed-off voice with an audible tail is
+   // active; key-on (r[0]) is reported separately.
+   const bool tail = (s.EnvPhase == ENV_PHASE_RELEASE) && (s.EnvLevel < 0x3FF);
+   r[1]  = s.KeyBit ? (released ? 0 : 1) : (tail ? 1 : 0);
    r[2]  = (unsigned char)s.EnvPhase;
    r[3]  = s.WF8Bit ? 1 : 0;
    r[4]  = (unsigned char)s.LoopMode;

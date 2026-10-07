@@ -59,6 +59,13 @@ void ScspDirectVolume(uint8_t directLevel, uint8_t directPan, int& outLeft, int&
 // usable listening level whatever the game's own mix was doing.
 const int kScspMixTargetPeak = 29500;
 
+// Resample mono PCM from 'srcRate' to 'dstRate' (linear), keeping pitch and duration. For
+// previewing a voice whose natural rate (OCT/FNS spans roughly 1 kHz to 350 kHz) is outside
+// what an audio device accepts: the source rate is kept for export and mixing, and only the
+// playback copy is converted.
+void ScspResampleMono(const int16_t* pcm, size_t frames, uint32_t srcRate, uint32_t dstRate,
+                      std::vector<int16_t>& out);
+
 // Mix 'n' voices into interleaved stereo at 'outRate'. Returns the frame count written to
 // 'outStereo' (which is resized to frames*2). When 'outPeak' is non-null it receives the
 // mix's peak BEFORE normalisation, on the 32767 scale -- the frame's true level, which the
