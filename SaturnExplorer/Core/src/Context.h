@@ -144,14 +144,21 @@ public:
                                                                   mSnapshot.Cram(),
                                                                   mSnapshot.CramMode(),
                                                                   mSpritePrios, mSpriteLayer);
-            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns,
-                                       sprites ? &mSpriteLayer : nullptr);
+            // Side buffers the emitters fill: the gradation screen's colours, and RBG0's coefficient-
+            // table line colour bits (0xFF = none). Reused across frames like the columns.
+            mGradation.assign(n, Rgba{ 0, 0, 0, 255 });
+            mLineOverride.assign(n, 0xFF);
+            EmitExtras extras;
+            extras.sprites = sprites ? &mSpriteLayer : nullptr;
+            extras.gradation = &mGradation;
+            extras.lineOverride = &mLineOverride;
+            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns, extras);
             if (sprites)
             {
                 Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
-                                            mColumns);
+                                            mColumns, extras);
             }
-            ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h),
+            ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h, extras),
                            mRenderBuffer);
             if (!opts.transparent_background)
             {
@@ -966,6 +973,8 @@ private:
     std::vector<PixColumn>  mColumns;       // per-pixel descriptor mixer (PixelMixer.h)
     SpritePriorityTable     mSpritePrios;   // rebuilt per frame from the VDP2 sprite regs
     std::vector<SpritePixel> mSpriteLayer;  // the VDP1 framebuffer as VDP2 reads it (per frame)
+    std::vector<Rgba>       mGradation;     // gradation screen colours (per frame)
+    std::vector<uint8_t>    mLineOverride;  // coefficient-table line colour bits (per frame)
     std::vector<float>      mDepthBuffer;
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()

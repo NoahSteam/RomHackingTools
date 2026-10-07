@@ -1863,6 +1863,166 @@ void TestSecondImageRatioMode()
     CHECK(IsColor(RenderCc(state), 1, 0, 127, 255, 127));   // second image's ratio: 16 : 16
 }
 
+// ---- Vertical cell scroll, gradation ----------------------------------------------------------
+
+// NBG0 as a 512x256 8bpp bitmap whose rows 0, 1 and 2 are palette indices 1 (white), 2 (red) and 3
+// (green) across the first 8 dots.
+State MakeBitmapRowsState()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0
+    SetReg(state, 0x028, 0x0012);   // CHCTLA: N0BMEN + 8bpp
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: priority 1
+    PutBE16(state.cram, 2, 0x7FFF);   // 1 = white
+    PutBE16(state.cram, 4, 0x001F);   // 2 = red
+    PutBE16(state.cram, 6, 0x03E0);   // 3 = green
+    for (int row = 0; row < 3; ++row)
+        for (int x = 0; x < 8; ++x) state.vdp2[row * 512 + x] = static_cast<uint8_t>(row + 1);
+    return state;
+}
+
+// Vertical cell scroll adds a per-cell offset (11-bit integer, 8-bit fraction, one 32-bit entry per
+// 8-dot cell from the screen's left edge) to the screen's Y scroll. An entry of +1 shows the next
+// bitmap row, so the first frame row reads bitmap row 1 (red) and the second row 2 (green).
+void TestVerticalCellScroll()
+{
+    State state = MakeBitmapRowsState();
+    SetReg(state, 0x09A, 0x0001);   // SCRCTL: N0VCSC
+    SetReg(state, 0x09C, 0x0000);   // VCSTA: word address 0x1000
+    SetReg(state, 0x09E, 0x1000);
+    PutBE16(state.vdp2, 0x2000, 0x0001);   // cell 0: integer 1
+    PutBE16(state.vdp2, 0x2002, 0x0000);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int x = 0; x < 4; ++x)
+    {
+        CHECK(IsRed(pixels, x, 0));
+        CHECK(IsColor(pixels, x, 1, 0, 255, 0));
+    }
+    // Without the enable bit the table is ignored.
+    SetReg(state, 0x09A, 0x0000);
+    CHECK(IsWhite(Render(state, false), 0, 0));
+}
+
+// With both NBG0 and NBG1 using it, the table alternates NBG0, NBG1, one cell at a time, so NBG1's
+// first entry is the second one.
+void TestVerticalCellScrollEntriesAlternateBetweenScreens()
+{
+    State state = MakeBitmapRowsState();
+    SetReg(state, 0x020, 0x0003);   // BGON: NBG0 + NBG1
+    SetReg(state, 0x0F8, 0x0301);   // PRINA: NBG0 priority 1, NBG1 priority 3
+    SetReg(state, 0x028, 0x1212);   // CHCTLA: both 8bpp bitmaps
+    SetReg(state, 0x09A, 0x0101);   // SCRCTL: both vertical cell scroll
+    SetReg(state, 0x09C, 0x0000);
+    SetReg(state, 0x09E, 0x1000);
+    PutBE16(state.vdp2, 0x2000, 0x0000);   // NBG0 cell 0: 0
+    PutBE16(state.vdp2, 0x2004, 0x0002);   // NBG1 cell 0: +2
+    // NBG1's bitmap lives at VRAM 0x20000; give its row 2 the green index.
+    for (int x = 0; x < 8; ++x) state.vdp2[0x20000 + 2 * 512 + x] = 3;
+    SetReg(state, 0x03C, 0x0010);   // MPOFN: NBG1 bitmap base = 0x10000 words
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 1, 0, 0, 255, 0));   // NBG1 row 2 (offset +2) is in front
+}
+
+// Gradation calculation replaces the second image with a blur of the designated screen -- 1/4 of the
+// dot two to the left, 1/4 of the one to its left, 1/2 of itself. NBG3 alternates white and black
+// across the frame; it is set up as the gradation screen and colour-calculates at 16:16.
+void TestGradationBlursTheDesignatedScreen()
+{
+    State state = MakeCcState();
+    std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x12);   // 1 2 1 2 ... (white, black)
+    SetReg(state, 0x0EC, 0xE008);   // CCCTL: BOKEN, BOKN = NBG3, NBG3 colour calculation
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    // blur = 255, 127, 191, 63; blended 16:16 with the dot itself = 255, 63, 223, 31.
+    CHECK(pixels[0] == 255);
+    CHECK(pixels[4] == 63);
+    CHECK(pixels[8] == 223);
+    CHECK(pixels[12] == 31);
+    // Without BOKEN the dots blend with the blue back screen instead.
+    SetReg(state, 0x0EC, 0x6008);
+    CHECK(IsColor(RenderCc(state), 1, 0, 0, 0, 127));
+}
+
+// ---- RBG1 and RBG0 coefficient line colour -------------------------------------------------------
+
+// At equal priority the hardware ranks RBG0 above NBG0 above NBG1-3. NBG3 (white) and RBG0 (rotation
+// set B, red under RPMD 1) share priority 1: RBG0 wins.
+void TestRbg0BeatsAnNbgAtEqualPriority()
+{
+    State state = MakeTwoParamRotState();
+    SetReg(state, 0x020, 0x0018);   // BGON: NBG3 + RBG0
+    SetReg(state, 0x0B0, 0x0001);   // RPMD: set B everywhere
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));
+}
+
+// RBG1 is NBG0's screen drawn as a rotation screen: NBG0's pattern-name, colour and priority
+// registers, with rotation set B's plane layout. Set B's map 2 is the red character.
+State MakeRbg1State()
+{
+    State state = MakeTwoParamRotState();
+    SetReg(state, 0x020, 0x0020);   // BGON: RBG1 only
+    SetReg(state, 0x030, 0x8000);   // PNCN0: one-word pattern names
+    SetReg(state, 0x028, 0x0000);   // CHCTLA: 16 colours, 8x8 cells
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 (RBG1) priority 1
+    return state;
+}
+
+void TestRbg1DrawsRotationSetBThroughNbg0Registers()
+{
+    State state = MakeRbg1State();
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsRed(pixels, x, y));
+    // Priority 0 (NBG0's) hides it, and so does the NBG0 layer toggle.
+    SetReg(state, 0x0F8, 0x0000);
+    CHECK(!IsRed(Render(state, false), 0, 0));
+}
+
+// With RBG0 also on the rotation screens use up the VRAM bandwidth and NBG1-3 are not displayed;
+// with RBG1 alone NBG3 still is. NBG3 (white, priority 2) sits above RBG1 (red, priority 1).
+void TestRbg1WithRbg0SuppressesTheOtherNbgs()
+{
+    State state = MakeRbg1State();
+    SetReg(state, 0x020, 0x0028);   // BGON: RBG1 + NBG3
+    SetReg(state, 0x0FA, 0x0200);   // PRINB: NBG3 priority 2
+    CHECK(IsWhite(Render(state, false), 1, 0));
+    SetReg(state, 0x020, 0x0038);   // + RBG0 (priority 0 below, so it draws nothing)
+    SetReg(state, 0x0FC, 0x0000);
+    CHECK(IsRed(Render(state, false), 1, 0));
+}
+
+// RBG0's coefficient table carries seven bits of the line colour screen's CRAM address (KTCTL line
+// colour enable, 2-word format); the top four bits stay from the line colour table. White RBG0 at
+// 16:16 with the line colour: entry 5 is green.
+void TestRbg0CoefficientLineColor()
+{
+    State state = MakeTwoParamRotState();
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetReg(state, 0x0EC, 0x0010);         // CCCTL: RBG0 colour calculation
+    SetReg(state, 0x10C, 0x000F);         // CCRR: ratio 15
+    SetReg(state, 0x0E8, 0x0010);         // LNCLEN: RBG0
+    SetReg(state, 0x0A8, 0x0000);         // LCTA: one colour, table at word 0x300
+    SetReg(state, 0x0AA, 0x0300);
+    PutBE16(state.vdp2, 0x600, 0x0000);   // table entry: top four bits 0
+    PutRotDword(state.vdp2, 0x00000, 0x05010000u);   // coefficient: line colour 5, kx = ky = 1.0
+    PutBE16(state.cram, 5 * 2, 0x03E0);   // green
+    PutBE16(state.cram, 0x85 * 2, 0x001F);   // red
+    SetReg(state, 0x0B4, 0x0011);         // KTCTL: coefficient table + line colour enable
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 255, 127));
+    // The top four bits come from the line colour table: 0x080 | 5 = CRAM 0x85.
+    PutBE16(state.vdp2, 0x600, 0x0080);
+    CHECK(IsColor(RenderCc(state), 1, 0, 255, 127, 127));
+    // Without the enable bit the table's bits are ignored and the line colour is CRAM 0 (black).
+    SetReg(state, 0x0B4, 0x0001);
+    PutBE16(state.vdp2, 0x600, 0x0000);
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 127, 127));
+}
+
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
@@ -1922,6 +2082,12 @@ int main()
     TestExtendedColorCalculationAveragesTheSecondAndThirdImages();
     TestExtendedColorCalculationWithTheLineColorScreen();
     TestSecondImageRatioMode();
+    TestVerticalCellScroll();
+    TestGradationBlursTheDesignatedScreen();
+    TestRbg0BeatsAnNbgAtEqualPriority();
+    TestRbg1DrawsRotationSetBThroughNbg0Registers();
+    TestRbg1WithRbg0SuppressesTheOtherNbgs();
+    TestRbg0CoefficientLineColor();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

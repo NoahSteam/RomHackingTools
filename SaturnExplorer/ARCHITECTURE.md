@@ -496,8 +496,12 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > screen calculation (EXCCEN, with the colour RAM mode rules of the manual's Table 12.2). Colour
    > offset is applied to the *result* of colour calculation with the top image's registers, for
    > every screen including the back screen and sprites. Sprite shadows (normal, MSB, transparent;
-   > SDCTL / TPSDSL) are modeled. Still missing: gradation (BOKEN) calculation, line colour from
-   > RBG0 coefficient data, vertical-cell scroll, RBG1 and the exclusive-monitor modes. See
+   > SDCTL / TPSDSL) are modeled, as are gradation calculation (BOKEN: the second image becomes a
+   > 1:1:2 horizontal blur of the designated screen), RBG0's coefficient-table line colour bits,
+   > vertical cell scroll for NBG0/NBG1 and RBG1 (NBG0's registers, rotation set B, one coefficient
+   > per line; it takes NBG0's place and, with RBG0 also on, NBG1-3 are not drawn). Still missing:
+   > special priority / colour-calculation functions (SFPRMD, SFCCMD), per-line zoom-limit timing of
+   > vertical cell scroll, the exclusive-monitor modes, and tile-map export for RBG1. See
    > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
    > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
    > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it

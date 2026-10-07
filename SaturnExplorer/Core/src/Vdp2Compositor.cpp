@@ -45,7 +45,7 @@ enum : uint32_t
     kRPMD = 0x0B0, kKTCTL = 0x0B4, kKTAOF = 0x0B6, kOVPNRA = 0x0B8, kOVPNRB = 0x0BA,
     kRPTAU = 0x0BC, kRPTAL = 0x0BE,
     kCRAOFB = 0x0E6, kPRIR = 0x0FC, kCCRR = 0x10C,
-    kMZCTL = 0x022,
+    kMZCTL = 0x022, kZMCTL = 0x098, kVCSTAU = 0x09C, kVCSTAL = 0x09E,
     kCLOFEN = 0x110, kCLOFSL = 0x112,
     kCOAR = 0x114, kCOAG = 0x116, kCOAB = 0x118,
     kCOBR = 0x11A, kCOBG = 0x11C, kCOBB = 0x11E
@@ -124,9 +124,14 @@ struct NbgConfig
     uint8_t scrollCtrl;          // SCRCTL byte for this NBG
     uint32_t lineScrollBase;     // line scroll/zoom table VRAM word address
     uint32_t mosaicH;            // horizontal mosaic block width (1 = no mosaic)
+    bool vcScroll;               // vertical cell scroll (SCRCTL VCSC, off under mosaic)
+    bool vcInterleaved;          // NBG0 and NBG1 both use it: their table entries alternate
+    bool vcZoomLimit;            // ZMCTL reduction limit set: cells are read per screen group of 8 dots
+    uint32_t vcBase;             // VCSTA: the table's VRAM word address
     bool colorOff;               // per-screen colour offset enabled (CLOFEN)
     bool colorOffSel;            // CLOFSL: offset set B
     bool lineColor;              // LNCLEN: insert the line colour screen when this is the top image
+    bool gradation;              // CCCTL gradation calculation is set up for this screen
 };
 
 // Which of a screen's mixer flags are fixed by its registers: colour offset enable and select
@@ -150,6 +155,10 @@ void SetColorCalc(const HardwareSnapshot& s, uint32_t screen, uint32_t ratio, Nb
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
     // SDCTL's enable bits share the screen numbering (NBG0-3, RBG0 = 4).
     c.shadowEnable = (Reg(s, kSDCTL) & (1u << screen)) != 0;
+    // BOKEN (bit 15) enables gradation, BOKN (bits 14-12) picks the screen: 1 RBG0, 2 NBG0 (RBG1),
+    // 4 NBG1, 5 NBG2, 6 NBG3 (and 0 the sprite layer).
+    static const uint16_t kGradCode[5] = { 2, 4, 5, 6, 1 };
+    c.gradation = (ccctl & 0x8000) != 0 && ((ccctl >> 12) & 0x7) == kGradCode[screen];
 }
 
 // Horizontal mosaic block width for a screen (MZCTL enable bit `screen`); 1 = no mosaic.
@@ -246,6 +255,20 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         c.lineScrollBase = (static_cast<uint32_t>(Reg(s, lsta) & 0x7) << 16) |
                            (Reg(s, lsta + 2) & 0xFFFE);
         c.zoomScroll = true;
+    }
+
+    // Vertical cell scroll (NBG0/1): one 32-bit entry per 8-dot cell column, added to the screen's Y
+    // scroll. Mosaic takes precedence over it. When both screens use it the entries alternate NBG0,
+    // NBG1, one cell at a time.
+    if (n < 2)
+    {
+        const uint16_t scrctl = Reg(s, kSCRCTL);
+        const uint16_t mzctl = Reg(s, kMZCTL);
+        auto vcsOn = [&](int k) { return ((scrctl >> (k * 8)) & 1) && !((mzctl >> k) & 1); };
+        c.vcScroll = vcsOn(n);
+        c.vcInterleaved = vcsOn(0) && vcsOn(1);
+        c.vcZoomLimit = ((Reg(s, kZMCTL) >> (n * 8)) & 0x3) != 0;
+        c.vcBase = (static_cast<uint32_t>(Reg(s, kVCSTAU) & 0x7) << 16) | (Reg(s, kVCSTAL) & 0xFFFE);
     }
 
     // Mosaic (horizontal) + per-screen colour offset.
@@ -514,16 +537,25 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
 // carrying the layer's colour-calculation parameters. The mixer applies colour
 // calculation at resolve time (only ever blending the top pixel with the one below),
 // so the per-layer blend that CompositeTexel used to do inline now happens once, later.
-// 'ccWindowMasked' is the colour-calculation window clearing this pixel's enable.
-inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg, bool ccWindowMasked)
+// The sprite layer's window bit at flat pixel index 'i' (false with no sprite layer).
+inline bool SwBitAt(const EmitExtras& ex, size_t i)
 {
-    uint8_t flags = 0;
+    return ex.sprites && (*ex.sprites)[i].swBit;
+}
+
+// 'ccWindowMasked' is the colour-calculation window clearing this pixel's enable.
+inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg, bool ccWindowMasked,
+                      Rgba* gradOut)
+{
+    if (gradOut && cfg.gradation) *gradOut = c;
+    uint16_t flags = 0;
     if (cfg.shadowEnable) flags |= kShadowEnable;
     if (cfg.lineColor)    flags |= kLineColorEn;
     if (cfg.colorOff)     flags |= kOffsetEnable;
     if (cfg.colorOffSel)  flags |= kOffsetSelect;
     if (cfg.colorCalc)    flags |= kLayerCc;
     if (cfg.colorNum >= 3) flags |= kIsRgb;
+    if (cfg.gradation)     flags |= kGradation;
     EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(cfg.priority),
             cfg.colorCalc && !ccWindowMasked, static_cast<uint8_t>(cfg.colorCalcRatio),
             cfg.colorCalcAdd, flags);
@@ -690,7 +722,7 @@ inline bool OnTileBoundary(const NbgConfig& c, uint32_t cellWH, uint32_t planeX,
 // on a pattern boundary is marked and no texel is read.
 void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
                  const NbgConfig& c, int layerIndex, int width, int height,
-                 std::vector<PixColumn>& cols, const std::vector<SpritePixel>* sprites)
+                 std::vector<PixColumn>& cols, const EmitExtras& ex)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
@@ -722,6 +754,7 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
         // optional per-line scroll/zoom table (SCRCTL/LSTA).
         uint32_t xcStart = c.scrollX << 8, xcinc = 0x100;
         int yCoord = c.scrollY + sy;
+        uint32_t yBase8 = static_cast<uint32_t>(yCoord) << 8;
         if (c.zoomScroll)
         {
             const uint8_t sc = c.scrollCtrl;
@@ -755,25 +788,41 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             }
             xcStart = lineX8;
             xcinc = inc;
-            yCoord = haveLineY ? static_cast<int>(lineY8 >> 8)
-                               : static_cast<int>((c.yScroll8 + c.yInc8 * sy) >> 8);
+            yBase8 = haveLineY ? lineY8 : c.yScroll8 + c.yInc8 * sy;
+            yCoord = static_cast<int>(yBase8 >> 8);
         }
         for (int sx = 0; sx < width; ++sx)
         {
             if (applyWindows &&
                 WindowMasksPixel(windowConfig.control, windowLines, sx,
-                                 sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit))
+                                 SwBitAt(ex, static_cast<size_t>(sy) * width + sx)))
             {
                 continue;
             }
             // Horizontal mosaic replicates each block's leftmost dot across the block.
             const int msx = (c.mosaicH > 1) ? sx - (sx % static_cast<int>(c.mosaicH)) : sx;
             const int sampleX = static_cast<int>((xcStart + xcinc * msx) >> 8);
+            int yPx = yCoord;
+            if (c.vcScroll)
+            {
+                // The table lists cells left to right from the screen's edge. Normally cell k is the
+                // k-th group of 8 map dots (the first, partial one counts as cell 0); with a zoom
+                // reduction limit set the cells are plain groups of 8 screen dots.
+                const uint32_t cell = c.vcZoomLimit
+                                          ? static_cast<uint32_t>(sx) >> 3
+                                          : (static_cast<uint32_t>(sx) + ((xcStart >> 8) & 7)) >> 3;
+                const uint32_t entryIndex = c.vcInterleaved ? cell * 2 + static_cast<uint32_t>(layerIndex)
+                                                            : cell;
+                const uint32_t addr = c.vcBase + entryIndex * 2;
+                const uint32_t entry8 = ((ReadVdp2Word(vram, addr) & 0x7FFu) << 8) |
+                                        (ReadVdp2Word(vram, addr + 1) >> 8);
+                yPx = static_cast<int>((yBase8 + entry8) >> 8);
+            }
             const uint32_t planeX = static_cast<uint32_t>(sampleX) & xMask;
-            const uint32_t planeY = static_cast<uint32_t>(yCoord) & yMask;
+            const uint32_t planeY = static_cast<uint32_t>(yPx) & yMask;
             // Bitmap mode indexes the linear image directly; cell mode walks the plane.
             Rgba col = c.bitmap
-                ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yCoord)
+                ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yPx)
                 : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom, planeX, planeY);
             // A grid line is drawn even where the layer's own texel is transparent —
             // that is the point of it, showing where the empty tiles are.
@@ -788,7 +837,9 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c,
                       applyWindows &&
                           WindowMasksPixel(ccWindow.control, ccLines, sx,
-                                           sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit));
+                                           SwBitAt(ex, static_cast<size_t>(sy) * width + sx)),
+                      ex.gradation ? &(*ex.gradation)[static_cast<size_t>(sy) * width + sx]
+                                   : nullptr);
         }
     }
 }
@@ -836,17 +887,34 @@ RotParam FetchRotParam(const std::vector<uint8_t>& v, uint32_t a)
 // Resolve the RBG0 cell configuration (shares the cell/pattern layout with the NBGs;
 // the rotation-specific plane map + coordinates are handled in RenderRbg0). 'paramB'
 // selects which rotation parameter set supplies plane size / map offset.
-NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
+NbgConfig ReadRbgConfig(const HardwareSnapshot& s, bool paramB, bool rbg1 = false)
 {
-    const uint16_t chb = Reg(s, kCHCTLB);
     const uint16_t plsz = Reg(s, kPLSZ);
     const uint16_t mpofr = Reg(s, kMPOFR);
     NbgConfig c {};
+    c.planeSize = (plsz >> (paramB ? 12 : 8)) & 0x3;
+    c.mapOffset = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 6;
+    if (rbg1)
+    {
+        // RBG1 takes NBG0's place and its registers: the pattern-name control, character size and
+        // colour format, colour RAM offset, priority, transparency, colour calculation and the
+        // per-screen mixer flags are all NBG0's. Only the plane layout comes from rotation set B.
+        const uint16_t cha = Reg(s, kCHCTLA);
+        c.patternCtrl = Reg(s, kPNCN0);
+        c.colorNum = std::min<uint32_t>(4u, (cha >> 4) & 0x7);
+        c.patternWH = (cha & 0x0001) ? 2 : 1;
+        c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFA) & 0x0007) << 8;
+        c.priority = Reg(s, kPRINA) & 0x7;
+        c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 8)) != 0;
+        SetColorCalc(s, 0, Reg(s, kCCRNA), c);
+        c.mosaicH = ReadMosaicH(s, 0);
+        ReadScreenMixFlags(s, 0, c);
+        return c;   // no bitmap mode for RBG1
+    }
+    const uint16_t chb = Reg(s, kCHCTLB);
     c.patternCtrl = Reg(s, kPNCR);
     c.colorNum = std::min<uint32_t>(4u, (chb >> 12) & 0x7);
     c.patternWH = (chb & 0x0100) ? 2 : 1;
-    c.planeSize = (plsz >> (paramB ? 12 : 8)) & 0x3;
-    c.mapOffset = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 6;
     c.colorOffset = static_cast<uint32_t>(Reg(s, kCRAOFB) & 0x0007) << 8;
     c.priority = Reg(s, kPRIR) & 0x7;
     c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 12)) != 0;
@@ -863,6 +931,11 @@ NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
     c.mosaicH = ReadMosaicH(s, 4);
     ReadScreenMixFlags(s, 4, c);
     return c;
+}
+
+NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
+{
+    return ReadRbgConfig(s, paramB, false);
 }
 
 // One coefficient, read from the running .10 fixed-point table offset and normalised to the
@@ -905,6 +978,7 @@ struct RotSet
     bool     useCoeff = false;
     bool     coeffWord = false;
     uint32_t coeffMode = 0;
+    bool     lcCoeff = false;   // the coefficient table's seven line colour bits are in use
 
     // Per-line state, recomputed by BeginRotLine.
     int64_t  Xsp = 0, Ysp = 0;
@@ -912,7 +986,7 @@ struct RotSet
     uint32_t KAstLine = 0;
 };
 
-void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
+void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s, bool rbg1 = false)
 {
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
 
@@ -931,7 +1005,9 @@ void BuildRotSet(const HardwareSnapshot& snap, bool paramB, RotSet& s)
     s.coeffMode = (ktctl >> 2) & 0x3;
     s.screenOver = (Reg(snap, kPLSZ) >> (paramB ? 14 : 10)) & 0x3;
 
-    s.cfg = ReadRbg0Config(snap, paramB);
+    s.cfg = ReadRbgConfig(snap, paramB, rbg1);
+    // KTCTL's line colour enable only applies to the 2-word coefficient format.
+    s.lcCoeff = (ktctl & 0x10) != 0 && s.useCoeff && !s.coeffWord;
 
     // Plane geometry: RBG0 tiles a 4x4 grid of 16 planes.
     const NbgConfig& c = s.cfg;
@@ -978,19 +1054,24 @@ void BeginRotLine(RotSet& s, int sy)
     s.KAstLine = rp.KAst + static_cast<uint32_t>(rp.DKAst) * static_cast<uint32_t>(sy);
 }
 
-// Composite the RBG0 rotation screen. For each screen dot a rotation parameter set is
+// Composite a rotation screen. For each screen dot a rotation parameter set is
 // evaluated (matrix + view/centre/move + per-line accumulation + optional per-dot
-// coefficient table) to a plane-space coordinate, which indexes RBG0's 4x4 grid of 16
+// coefficient table) to a plane-space coordinate, which indexes the 4x4 grid of 16
 // planes via the same page->pattern->cell walk the NBGs use (or the bitmap image in
 // bitmap mode); screen-over "repeat" wraps, other modes read transparent outside.
 //
 // RPMD picks the set: 0/1 use A/B for the whole screen, 2 switches per dot on the sign
 // bit of A's coefficient, and 3 switches per dot on the rotation parameter window. Modes
-// 2 and 3 are how a game draws a horizon — one set for the sky, the other for the ground
-// — so treating them as "always A" leaves half the screen sampling the wrong table.
-void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd,
-                int width, int height, std::vector<PixColumn>& cols,
-                const std::vector<SpritePixel>* sprites)
+// 2 and 3 are how a game draws a horizon -- one set for the sky, the other for the ground
+// -- so treating them as "always A" leaves half the screen sampling the wrong table.
+//
+// With 'rbg1' this draws RBG1 instead: it takes NBG0's place (and its registers, window and
+// mosaic), is fixed to set B, reads one coefficient per line instead of one per dot, and RPMD
+// no longer applies to RBG0 (it is treated as 0/1). The line colour screen's coefficient bits
+// then always come from set A's table.
+void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_t rpmd, bool rbg1,
+               bool rbg0AlsoOn, int width, int height, std::vector<PixColumn>& cols,
+               const EmitExtras& ex)
 {
     const bool applyWindows = opts.show_window != 0;
     const std::vector<uint8_t>& vram = snap.Vdp2Vram();
@@ -1001,17 +1082,20 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
 
     // RPMD 0/1 use one set for the whole screen; only 2 (coefficient sign) and 3 (rotation
     // parameter window) choose per dot, and only then is the second set's setup worth doing.
-    const bool perDot = (rpmd >= 2);
-    const int fixedSet = (rpmd == 1) ? 1 : 0;
+    // RBG1 being on forces RBG0 to a fixed set, whatever RPMD says.
+    const uint32_t effRpmd = (rbg1 || rbg0AlsoOn) ? (rpmd & 1u) : rpmd;
+    const bool perDot = (effRpmd >= 2);
+    const int fixedSet = rbg1 ? 1 : ((effRpmd == 1) ? 1 : 0);
 
     RotSet sets[2];
-    BuildRotSet(snap, fixedSet != 0, sets[fixedSet]);
-    if (perDot) BuildRotSet(snap, true, sets[1]);
+    BuildRotSet(snap, fixedSet != 0, sets[fixedSet], rbg1);
+    // The other set is needed per dot (RPMD 2/3), and for its line colour coefficients when RBG1 is on.
+    if (perDot || rbg1 || rbg0AlsoOn) BuildRotSet(snap, fixedSet == 0, sets[1 - fixedSet], false);
 
-    // RBG0's own transparent-processing window (WCTLC low byte), and separately the
-    // rotation parameter window (WCTLD low byte) that mode 3 selects the set with. The
-    // latter is geometry, not masking, so it applies even when window display is off.
-    const WindowConfig windowConfig = ReadWindowConfig(snap, kWinLayerRbg0);
+    // The screen's own transparent-processing window (RBG0: WCTLC low byte; RBG1 is NBG0's),
+    // and separately the rotation parameter window (WCTLD low byte) that mode 3 selects the set
+    // with. The latter is geometry, not masking, so it applies even when window display is off.
+    const WindowConfig windowConfig = ReadWindowConfig(snap, rbg1 ? kWinLayerNbg0 : kWinLayerRbg0);
     const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
     const WindowConfig ccWindow = ReadWindowConfig(snap, kWinLayerColorCalc);
     const uint32_t mosaicH = sets[fixedSet].cfg.mosaicH;
@@ -1034,26 +1118,21 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
             ResolveWindowLine(ccWindow, 1, vram, sy)
         };
         WindowLine rotWindowLines[2] = {};
-        if (rpmd == 3)
+        if (effRpmd == 3)
         {
             rotWindowLines[0] = ResolveWindowLine(rotWindowConfig, 0, vram, sy);
             rotWindowLines[1] = ResolveWindowLine(rotWindowConfig, 1, vram, sy);
         }
         BeginRotLine(sets[fixedSet], sy);
-        if (perDot) BeginRotLine(sets[1], sy);
+        if (perDot || rbg1 || rbg0AlsoOn) BeginRotLine(sets[1 - fixedSet], sy);
         // In mode 2 set B contributes only the coefficient sampled at the start of the
-        // line; the per-dot walk is done in set A's table alone.
+        // line; the per-dot walk is done in set A's table alone. RBG1 reads just that one.
         const uint32_t baseCoeffB =
-            (rpmd == 2 && sets[1].useCoeff) ? coeffAt(sets[1], 0) : 0u;
+            ((effRpmd == 2 || rbg1) && sets[1].useCoeff) ? coeffAt(sets[1], 0) : 0u;
 
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows &&
-                WindowMasksPixel(windowConfig.control, windowLines, sx,
-                                 sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit))
-            {
-                continue;
-            }
+            const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
             // Horizontal mosaic snaps the sampled dot to its block's left edge.
             const int msx = (mosaicH > 1) ? sx - (sx % static_cast<int>(mosaicH)) : sx;
 
@@ -1061,16 +1140,39 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
             int ab = fixedSet;
             uint32_t coeff = 0;
             bool haveCoeff = false;
-            if (rpmd == 3)
+            if (rbg1)
+            {
+                coeff = baseCoeffB;
+                haveCoeff = true;
+            }
+            else if (effRpmd == 3)
             {
                 ab = WindowMasksPixel(rotWindowConfig.control, rotWindowLines, sx) ? 1 : 0;
             }
-            else if (rpmd == 2 && sets[0].useCoeff)
+            else if (effRpmd == 2 && sets[0].useCoeff)
             {
                 const uint32_t ca = coeffAt(sets[0], msx);
                 ab = static_cast<int>(ca >> 31);
                 coeff = (static_cast<int32_t>(ca) < 0) ? baseCoeffB : ca;
                 haveCoeff = true;
+            }
+
+            // The coefficient table can also carry seven bits of the line colour screen's CRAM address,
+            // for every dot of the line whether or not this screen draws it. Set A's table is used for
+            // RPMD 2 and whenever RBG1 is on; otherwise the dot's own set.
+            if (ex.lineOverride)
+            {
+                const RotSet& lcSet = (effRpmd == 2 || rbg1 || rbg0AlsoOn) ? sets[0] : sets[ab];
+                if (lcSet.lcCoeff)
+                {
+                    (*ex.lineOverride)[pixelIndex] = static_cast<uint8_t>((coeffAt(lcSet, sx) >> 24) & 0x7F);
+                }
+            }
+
+            if (applyWindows &&
+                WindowMasksPixel(windowConfig.control, windowLines, sx, SwBitAt(ex, pixelIndex)))
+            {
+                continue;
             }
             const RotSet& s = sets[ab];
             const NbgConfig& c = s.cfg;
@@ -1116,10 +1218,10 @@ void RenderRbg0(const HardwareSnapshot& snap, const se_render_opts& opts, uint32
             {
                 continue;
             }
-            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c,
+            EmitTexel(cols[pixelIndex], col, c,
                       applyWindows &&
-                          WindowMasksPixel(ccWindow.control, ccLines, sx,
-                                           sprites && (*sprites)[static_cast<size_t>(sy) * width + sx].swBit));
+                          WindowMasksPixel(ccWindow.control, ccLines, sx, SwBitAt(ex, pixelIndex)),
+                      ex.gradation ? &(*ex.gradation)[pixelIndex] : nullptr);
         }
     }
 }
@@ -1233,77 +1335,92 @@ bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMa
 
 void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                                int width, int height, std::vector<PixColumn>& cols,
-                               const std::vector<SpritePixel>* sprites)
+                               const EmitExtras& extras)
 {
+    EmitExtras ex = extras;
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
     }
 
-    if (sprites && sprites->size() != static_cast<size_t>(width) * height)
-    {
-        sprites = nullptr;   // not this frame's layer: no sprite-window input
-    }
+    const size_t pixels = static_cast<size_t>(width) * height;
+    if (ex.sprites && ex.sprites->size() != pixels) ex.sprites = nullptr;   // not this frame's layer
+    if (ex.gradation && ex.gradation->size() != pixels) ex.gradation = nullptr;
+    if (ex.lineOverride && ex.lineOverride->size() != pixels) ex.lineOverride = nullptr;
     const uint16_t bgon = Reg(snapshot, kBGON);
 
-    // Resolve the enabled NBGs first (no rendering yet). A layer is drawn only if
+    // Resolve the enabled screens first (no rendering yet). A layer is drawn only if
     // BGON enables it, the host toggle is on, and its priority is non-zero
     // (priority 0 = not displayed on hardware).
+    enum class Kind { Nbg, Rbg0, Rbg1 };
     struct Layer
     {
-        int index;      // NBG number, or 4 for RBG0
+        Kind kind;
+        int index;      // NBG number; 4 for RBG0; 0 for RBG1, which sits in NBG0's place
         NbgConfig config;
-        bool rbg0 = false;
     };
     std::vector<Layer> layers;
-    layers.reserve(SE_LAYER_COUNT);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
+    layers.reserve(SE_LAYER_COUNT + 1);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
     auto consider = [&](const Layer& layer)
     {
         if (layer.config.priority == 0) return;    // priority 0 = not displayed
         layers.push_back(layer);
     };
+    const bool rbg0On = (bgon & (1u << 4)) != 0;
+    const bool rbg1On = (bgon & (1u << 5)) != 0;
     for (int n = 0; n < 4; ++n)
     {
-        if (!(bgon & (1u << n)) || !opts.show_layer[n])
+        // RBG1 takes NBG0's slot, and with RBG0 also on the rotation screens use up the rest of
+        // the VRAM bandwidth: NBG1-3 are not displayed.
+        if (!(bgon & (1u << n)) || !opts.show_layer[n] || (n == 0 && rbg1On) ||
+            (rbg0On && rbg1On))
         {
             continue;
         }
-        consider({ n, ReadNbgConfig(snapshot, n), false });
+        consider({ Kind::Nbg, n, ReadNbgConfig(snapshot, n) });
     }
     // RBG0 (rotation) occupies BGON bit 4. RPMD selects the rotation parameter set, which
-    // can vary per dot; RenderRbg0 resolves that itself. Priority and colour calculation
+    // can vary per dot; RenderRbg resolves that itself. Priority and colour calculation
     // come from RBG0's own registers either way, so set A's config orders the layer.
-    if ((bgon & (1u << 4)) && opts.show_layer[SE_LAYER_RBG0])
+    if (rbg0On && opts.show_layer[SE_LAYER_RBG0])
     {
-        consider({ 4, ReadRbg0Config(snapshot, false), true });
+        consider({ Kind::Rbg0, 4, ReadRbgConfig(snapshot, false) });
+    }
+    // RBG1 (BGON bit 5) is the NBG0 screen drawn as a rotation screen, so the NBG0 toggle shows it.
+    if (rbg1On && opts.show_layer[SE_LAYER_NBG0])
+    {
+        consider({ Kind::Rbg1, 0, ReadRbgConfig(snapshot, true, true) });
     }
 
-    // Emit order = back to front: ascending priority; for equal priority the
-    // higher-numbered NBG is emitted first, so on ties EmitPix's later-wins rule leaves
-    // NBG0 on top. Emitting in this order also means a same-priority sprite (emitted
-    // after all layers) wins its tie against the NBGs, matching hardware.
-    std::stable_sort(layers.begin(), layers.end(), [](const Layer& a, const Layer& b)
+    // Emit order = back to front: ascending priority. At equal priority the hardware ranks
+    // RBG0 above NBG0 (or RBG1) above NBG1, NBG2, NBG3; EmitPix's later-wins rule makes the last
+    // one emitted the winner, so emit the lowest rank first. A same-priority sprite (emitted
+    // after all layers) then wins its tie against all of them, matching hardware.
+    auto rank = [](const Layer& l) { return l.kind == Kind::Rbg0 ? 4 : 3 - l.index; };
+    std::stable_sort(layers.begin(), layers.end(), [&](const Layer& a, const Layer& b)
     {
         if (a.config.priority != b.config.priority) return a.config.priority < b.config.priority;
-        return a.index > b.index;
+        return rank(a) < rank(b);
     });
 
     for (const Layer& layer : layers)
     {
-        if (layer.rbg0)
+        if (layer.kind == Kind::Nbg)
         {
-            RenderRbg0(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, width, height, cols, sprites);
+            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols, ex);
         }
         else
         {
-            RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols, sprites);
+            RenderRbg(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, layer.kind == Kind::Rbg1,
+                      rbg0On && rbg1On, width, height, cols, ex);
         }
     }
 }
 
 void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                                  int width, int height, const std::vector<SpritePixel>& sprites,
-                                 const SpritePriorityTable& prios, std::vector<PixColumn>& cols)
+                                 const SpritePriorityTable& prios, std::vector<PixColumn>& cols,
+                                 const EmitExtras& extras)
 {
     if (width <= 0 || height <= 0 || sprites.size() != static_cast<size_t>(width) * height)
     {
@@ -1322,9 +1439,13 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
         windowConfig = ReadWindowConfig(snapshot, kWinLayerSprite);
         ccWindow = ReadWindowConfig(snapshot, kWinLayerColorCalc);
     }
-    uint8_t baseFlags = 0;
+    uint16_t baseFlags = 0;
+    Rgba* gradation = (extras.gradation && extras.gradation->size() == sprites.size())
+                          ? extras.gradation->data() : nullptr;
     if (snapshot.HasVdp2Regs())
     {
+        const uint16_t ccctl = Reg(snapshot, kCCCTL);
+        if ((ccctl & 0x8000) && ((ccctl >> 12) & 0x7) == 0)  baseFlags |= kGradation;
         if (Reg(snapshot, kLNCLEN) & 0x20)  baseFlags |= kLineColorEn;
         if (Reg(snapshot, kCLOFEN) & 0x40)  baseFlags |= kOffsetEnable;
         if (Reg(snapshot, kCLOFSL) & 0x40)  baseFlags |= kOffsetSelect;
@@ -1366,7 +1487,8 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
             }
             const bool ccMasked =
                 applyWindows && WindowMasksPixel(ccWindow.control, ccLines, x, p.swBit);
-            uint8_t flags = baseFlags;
+            if (gradation && (baseFlags & kGradation)) gradation[i] = p.color;
+            uint16_t flags = baseFlags;
             if (shadows && p.shadowSelf) flags |= kShadowSelf;
             if (p.isRgb) flags |= kIsRgb;
             EmitPix(cols[i], p.color.r, p.color.g, p.color.b, p.prio, p.ccEn && !ccMasked,
@@ -1376,7 +1498,7 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
 }
 
 MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                                      int width, int height)
+                                      int width, int height, const EmitExtras& extras)
 {
     MixState mix;
     mix.colorCalc = opts.show_color_calculation != 0;
@@ -1394,6 +1516,41 @@ MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se
     // palette second image simply cannot be blended with.
     mix.extended = (ccctl & 0x0400) != 0 && !hiRes;
     mix.hiresCram12 = hiRes && !mix.cram0;
+    mix.cram = &snapshot.Cram();
+    mix.cramMode = snapshot.CramMode();
+    const size_t pixels = static_cast<size_t>(width) * height;
+    if (extras.lineOverride && extras.lineOverride->size() == pixels)
+    {
+        mix.lineOverride = extras.lineOverride;
+    }
+    // Gradation (BOKEN) only exists at normal resolution with colour RAM mode 0; it replaces the line
+    // colour screen and extended calculation.
+    if ((ccctl & 0x8000) != 0 && !hiRes && mix.cram0 && extras.gradation &&
+        extras.gradation->size() == pixels)
+    {
+        mix.gradation = true;
+        mix.extended = false;
+        mix.blur.resize(pixels);
+        for (int y = 0; y < height; ++y)
+        {
+            // Each pixel is 1/4 of the dot two to its left, 1/4 of the one to its left and 1/2 of
+            // itself; the line starts with its first dot standing in for the ones before it.
+            const Rgba* src = extras.gradation->data() + static_cast<size_t>(y) * width;
+            Rgba* dst = mix.blur.data() + static_cast<size_t>(y) * width;
+            auto avg = [](const Rgba& a, const Rgba& b)
+            {
+                return Rgba{ static_cast<uint8_t>((a.r + b.r) >> 1), static_cast<uint8_t>((a.g + b.g) >> 1),
+                             static_cast<uint8_t>((a.b + b.b) >> 1), 255 };
+            };
+            Rgba prev0 = src[0], prev1 = src[0];
+            for (int x = 0; x < width; ++x)
+            {
+                dst[x] = avg(avg(prev0, prev1), src[x]);
+                prev0 = prev1;
+                prev1 = src[x];
+            }
+        }
+    }
     mix.lineCc = (ccctl & 0x0020) != 0;
     mix.lineRatio = static_cast<uint8_t>(Reg(snapshot, kCCRLB) & 0x1F);
 
@@ -1416,9 +1573,11 @@ MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se
         const uint32_t base = (static_cast<uint32_t>(lctau & 0x0007) << 16) | Reg(snapshot, kLCTAL);
         const bool perLine = (lctau & 0x8000) != 0;
         mix.lineColors.resize(static_cast<size_t>(height));
+        mix.lineEntry.resize(static_cast<size_t>(height));
         for (int y = 0; y < height; ++y)
         {
             const uint32_t entry = ReadVdp2Word(vram, base + (perLine ? static_cast<uint32_t>(y) : 0u)) & 0x7FF;
+            mix.lineEntry[static_cast<size_t>(y)] = static_cast<uint16_t>(entry);
             mix.lineColors[static_cast<size_t>(y)] = CramColor(snapshot.Cram(), snapshot.CramMode(), entry);
         }
     }
@@ -1442,7 +1601,7 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     const bool perLine = (bktau & 0x8000) != 0;
     // The back screen is RGB, may be shadowed (BKSDEN) and colour-offset (BKCOEN/BKCOSL), and carries
     // CCRLB's back-screen ratio for the second-image ratio mode.
-    uint8_t backFlags = kIsRgb;
+    uint16_t backFlags = kIsRgb;
     if (Reg(snapshot, kSDCTL) & 0x20)  backFlags |= kShadowEnable;
     if (Reg(snapshot, kCLOFEN) & 0x20) backFlags |= kOffsetEnable;
     if (Reg(snapshot, kCLOFSL) & 0x20) backFlags |= kOffsetSelect;

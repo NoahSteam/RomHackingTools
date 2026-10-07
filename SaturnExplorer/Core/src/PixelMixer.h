@@ -21,7 +21,7 @@ namespace se
 {
 
 // Per-contribution flags (PixDesc::flags).
-enum : uint8_t
+enum : uint16_t
 {
     kShadowEnable = 1,    // a scroll/back layer: VDP2 SDCTL lets a sprite shadow darken it
     kShadowMarker = 2,    // a sprite pixel that only shadows what lies under it (normal / transparent
@@ -32,7 +32,8 @@ enum : uint8_t
     kOffsetSelect = 32,   // CLOFSL: use offset set B instead of A
     kLayerCc      = 64,   // the screen's own CCCTL enable, which a colour-calculation window does not
                           // clear -- extended colour calculation consults it on the second/third image
-    kIsRgb        = 128   // the pixel's colour came from RGB data rather than a palette
+    kIsRgb        = 128,  // the pixel's colour came from RGB data rather than a palette
+    kGradation    = 256   // the screen is the one CCCTL's gradation calculation is set up for
 };
 
 // One source's contribution at a pixel. prio 0 = the back screen / no contribution;
@@ -42,7 +43,7 @@ struct PixDesc
     uint8_t r = 0, g = 0, b = 0;
     uint8_t prio = 0;
     uint8_t ccEn = 0, ccRatio = 0, ccAdd = 0;   // this layer's colour-calc parameters
-    uint8_t flags = 0;                          // k* flags above
+    uint16_t flags = 0;                         // k* flags above
     bool    live = false;                       // a source emitted this (the slot is not empty)
 };
 
@@ -70,6 +71,19 @@ struct MixState
     bool lineCc = false;              // CCCTL LCCCEN: line colour screen colour-calc enable
     std::vector<Rgba> lineColors;     // one line colour per display row (empty: none defined)
     int16_t offset[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };   // colour offset A / B, R G B
+
+    // Line colour per pixel: the table entry (a CRAM address) of each display row, and an optional
+    // per-pixel override of its low seven bits that RBG0's coefficient table can supply
+    // (0xFF = none). CRAM is needed to turn the composed address into a colour.
+    std::vector<uint16_t> lineEntry;
+    const std::vector<uint8_t>* lineOverride = nullptr;
+    const std::vector<uint8_t>* cram = nullptr;
+    se_cram_mode cramMode = SE_CRAM_RGB555_1024;
+
+    // Gradation calculation (CCCTL BOKEN): when the top or second image is the designated screen, the
+    // second image takes this per-pixel blur of that screen instead. Empty when not in use.
+    bool gradation = false;
+    std::vector<Rgba> blur;
 };
 
 // Blend a source colour over dst (RGB) using VDP2 colour-calculation rules — additive
@@ -98,7 +112,7 @@ inline void BlendCC(uint8_t* dst, uint8_t r, uint8_t g, uint8_t b, uint32_t rati
 // emitted in draw order (back screen, then NBGs sorted low-priority/high-index first,
 // then sprites).
 inline void EmitPix(PixColumn& col, uint8_t r, uint8_t g, uint8_t b, uint8_t prio,
-                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint8_t flags = 0)
+                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint16_t flags = 0)
 {
     PixDesc d;
     d.r = r; d.g = g; d.b = b; d.prio = prio;
@@ -178,7 +192,17 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
         PixDesc second = *img[first + 1];
         PixDesc third = *img[first + 2];
         PixDesc fourth = *img[first + 3];
-        if (top.flags & kLineColorEn)
+        if (mix.gradation)
+        {
+            // Gradation: the second image becomes the blurred designated screen whenever that screen is
+            // the top or the second image. (The line colour screen and extended calculation are off.)
+            if ((top.flags | second.flags) & kGradation)
+            {
+                const Rgba& b = mix.blur[index];
+                second.r = b.r; second.g = b.g; second.b = b.b;
+            }
+        }
+        else if (top.flags & kLineColorEn)
         {
             // The line colour screen has no priority: it is forced in as the second image, and
             // everything that was below moves down one.
@@ -188,9 +212,17 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
             second.live = true;
             second.ccRatio = mix.lineRatio;
             second.flags = mix.lineCc ? kLayerCc : uint8_t(0);
-            if (index / static_cast<size_t>(std::max(mix.width, 1)) < mix.lineColors.size())
+            const size_t row = index / static_cast<size_t>(std::max(mix.width, 1));
+            if (row < mix.lineColors.size())
             {
-                const Rgba& lc = mix.lineColors[index / static_cast<size_t>(std::max(mix.width, 1))];
+                Rgba lc = mix.lineColors[row];
+                if (mix.lineOverride && mix.cram && (*mix.lineOverride)[index] != 0xFF)
+                {
+                    // The coefficient table's seven bits replace the low seven bits of the line's
+                    // CRAM address; the top four stay from the line colour table.
+                    lc = CramColor(*mix.cram, mix.cramMode,
+                                   (mix.lineEntry[row] & ~0x7Fu) | (*mix.lineOverride)[index]);
+                }
                 second.r = lc.r; second.g = lc.g; second.b = lc.b;
             }
             if (mix.extended && mix.lineCc)

@@ -28,8 +28,9 @@
 // windows (including the sprite and colour-calculation windows), per-screen colour calculation
 // (with second-image ratio, line colour insertion and the extended form), colour offset applied
 // after colour calculation, horizontal mosaic, the real back screen, the sprite layer's own
-// colour calculation, and sprite shadows. Gradation calculation, vertical cell scroll, vertical
-// mosaic, and RBG1 are not modeled yet.
+// colour calculation, sprite shadows, gradation calculation, vertical cell scroll, and RBG1
+// (NBG0's slot, rotation set B). Vertical mosaic and the special priority/colour-calculation
+// functions are not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -88,6 +89,17 @@ struct Vdp2TileMap : Vdp2TileMapShape
     }
 };
 
+// Side inputs and outputs of the layer emitters, which all share one frame's pixel grid.
+struct EmitExtras
+{
+    // In: the finished sprite layer, whose window bits feed every layer's window logic.
+    const std::vector<SpritePixel>* sprites = nullptr;
+    // Out: the colour of the screen CCCTL's gradation calculation is set up for, per pixel.
+    std::vector<Rgba>* gradation = nullptr;
+    // Out: RBG0's coefficient-table line colour bits (0xFF where the table supplies none).
+    std::vector<uint8_t>* lineOverride = nullptr;
+};
+
 class Vdp2Compositor
 {
 public:
@@ -104,11 +116,11 @@ public:
     // on hardware. Honors opts.show_layer[] and the BGON enable bits; priority-0 layers
     // (not displayed) are skipped. A no-op when the snapshot lacks VDP2 VRAM or registers.
     //
-    // 'sprites' (may be null) is the finished sprite layer: its pixels' window bits feed the
-    // sprite-window input of each layer's window logic.
+    // 'extras' carries the sprite layer in (its window bits feed each layer's window logic) and the
+    // gradation / line-colour side buffers out.
     static void EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                            int width, int height, std::vector<PixColumn>& cols,
-                           const std::vector<SpritePixel>* sprites = nullptr);
+                           const EmitExtras& extras = EmitExtras());
 
     // Emit the sprite layer into 'cols' after every VDP2 layer, so a sprite wins a priority tie.
     // Applies the sprite layer's own window, colour calculation (the pixel's ratio, enabled by its
@@ -116,14 +128,15 @@ public:
     // darkens the layer under it, and a self-shadowed pixel darkens itself.
     static void EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                             int width, int height, const std::vector<SpritePixel>& sprites,
-                            const SpritePriorityTable& prios, std::vector<PixColumn>& cols);
+                            const SpritePriorityTable& prios, std::vector<PixColumn>& cols,
+                            const EmitExtras& extras = EmitExtras());
 
     // Everything the mixer reads from the VDP2 registers when it resolves a column: the colour-
     // calculation modes (second-image ratio, extended), the line colour screen's per-line colours
     // and ratio, and the two colour offsets. Call after the layers are emitted, before
     // ResolveColumns.
     static MixState ReadMixState(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                                 int width, int height);
+                                 int width, int height, const EmitExtras& extras = EmitExtras());
 
     // Seed the VDP2 back screen (the always-present backdrop below every screen) into
     // every column at priority 0, reading its colour from the BKTA table in VDP2 VRAM —
