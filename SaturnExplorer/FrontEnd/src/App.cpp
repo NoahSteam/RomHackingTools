@@ -1698,7 +1698,7 @@ void App::DrawTransportBar()
                           "arrive a moment after each frame, and the oldest are dropped as the buffer "
                           "fills.\nPick another frame with the scrub bar.\n\n"
                           "Savestates: %zu of %zu recorded frames can be resumed (%zu have a block).\n"
-                          "Blocks received %llu: %llu invalid, %llu for frames not in the buffer; "
+                          "Blocks received %llu: %llu invalid, %llu for frames that were never recorded; "
                           "newest for frame #%llu.",
                           st.resumable, st.frames, st.withState,
                           static_cast<unsigned long long>(st.received),

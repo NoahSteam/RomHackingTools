@@ -393,9 +393,15 @@
  * Default endpoints. The TCP port is used for the web bridge: the browser build
  * tunnels a normal TCP connect over a WebSocket proxy to this port (the client
  * writes the endpoint as "tcp:host:port"). */
+/* Overridable (-D) only so a test can listen somewhere of its own instead of on the endpoints a
+ * running emulator is using; nothing else defines these. */
+#ifndef SE_LIVE_DEFAULT_SOCK_PATH
 #define SE_LIVE_DEFAULT_SOCK_PATH "/tmp/saturn_explorer.sock"
+#endif
 #define SE_LIVE_DEFAULT_PIPE_NAME "\\\\.\\pipe\\SaturnExplorer"
+#ifndef SE_LIVE_DEFAULT_TCP_PORT
 #define SE_LIVE_DEFAULT_TCP_PORT  6845
+#endif
 /* The browser build has no local socket, so it defaults to this TCP endpoint, which
  * the WebSocket->TCP bridge forwards to the emulator's export port (see the Yabause
  * README "Web (browser) live viewing"). */

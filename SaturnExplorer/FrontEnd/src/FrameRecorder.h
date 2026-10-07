@@ -9,6 +9,7 @@
 #pragma once
 
 #include <atomic>
+#include <map>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
@@ -110,9 +111,18 @@ public:
     bool Select(size_t i, se_data_source* out);
 
     // --- Savestate rewind (v16) ---
-    // Attach a received savestate block to the frame it belongs to (matched by number).
-    // Lagging: the frame was captured earlier. No-op if that frame isn't resident, or if the
-    // payload does not decode to exactly 'fullLen' bytes (a corrupt block is never stored).
+    // Take a received savestate block, matched to its frame by number. A block is refused if its
+    // payload does not decode to exactly 'fullLen' bytes (a corrupt one is never stored).
+    //
+    // A block can arrive before or after its frame is in the ring. Frames are published by a
+    // worker thread, and the front end sees only some of the emulator's frames, so a block is
+    // often ahead of the frame it belongs to: those wait (a bounded few) and attach when the
+    // frame lands. A block for a frame older than the ring's newest that is not in it is for a
+    // frame that was never recorded, and is dropped.
+    //
+    // Keyframes are kept apart from the frames. A delta is the difference against its keyframe,
+    // and the keyframe's own frame is no more likely to have been recorded than any other, so
+    // tying the two together left most deltas with nothing to be reconstructed from.
     void AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_t baseKeyframe,
                           uint32_t fullLen, const uint8_t* payload, size_t len);
     // Reconstruct the full emulator savestate for frame i into 'out' (keyframe, or keyframe +
@@ -127,9 +137,11 @@ public:
         size_t   frames = 0;        // frames in the ring
         size_t   withState = 0;     // ... that have a block attached
         size_t   resumable = 0;     // ... whose block and keyframe are both resident
+        size_t   keyframes = 0;     // keyframe blocks held
+        size_t   waiting = 0;       // blocks waiting for their frame to be published
         uint64_t received = 0;      // blocks handed to AttachStateBlock
         uint64_t invalid = 0;       // ... refused as corrupt
-        uint64_t noFrame = 0;       // ... for a frame that is not in the ring
+        uint64_t noFrame = 0;       // ... dropped: their frame was never recorded
         uint64_t newestBlock = 0;   // frame number of the newest block received
     };
     StateStats GetStateStats() const;
@@ -161,7 +173,13 @@ private:
     void Evict();   // caller holds mRingMtx
     // The resident keyframe a delta frame is based on, or null. Caller holds mRingMtx; shared
     // by CanReconstruct and ReconstructState so they agree on what is resumable.
-    const Frame* FindKeyframe(const Frame& f) const;
+    struct StateBlock;
+    const StateBlock* FindKeyframe(const Frame& f) const;
+    // Give a frame the worker has just finished any block already waiting for it. Caller holds
+    // mRingMtx; runs before the frame is counted, so its size is accounted for once.
+    void AdoptWaitingState(Frame& f);
+    // Forget keyframes nothing can use any more. Caller holds mRingMtx.
+    void PruneKeyframes();
 
     // Highest frame number Capture() has accepted; skips stale/duplicate frames (esp. the
     // transient frame-0 window right after a rewind). UI-thread only.
@@ -183,6 +201,19 @@ private:
     // Compressed ring (shared: UI reads via Count/Select, worker appends/evicts).
     mutable std::mutex mRingMtx;
     std::deque<Frame>  mFrames;
+    // A savestate block outside the ring: a keyframe (kept for the deltas against it, whether or
+    // not its own frame was recorded) or a delta whose frame has not been published yet.
+    struct StateBlock
+    {
+        uint8_t  kind = 0;
+        uint64_t frameNumber = 0;
+        uint64_t base = 0;
+        uint32_t fullLen = 0;
+        std::vector<uint8_t> payload;
+    };
+    std::map<uint64_t, StateBlock> mKeyframes;   // by frame number
+    std::deque<StateBlock>         mWaiting;     // deltas ahead of their frame, oldest first
+    static constexpr size_t        kMaxWaiting = 48;
     size_t             mBytes = 0;
     size_t             mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
     uint64_t           mMaxBytes = kDefaultMaxBytes;

@@ -704,6 +704,26 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
 
+        # The rewind path as a whole -- exporter, driver and FrameRecorder -- asking whether a
+        # recorded frame can be resumed from. Listens on a socket and port of its own, so unlike
+        # the tests around it it neither needs the shared lock nor disturbs a running emulator.
+        add_executable(SaturnExplorerRewindPipelineTests
+            FrontEnd/tests/RewindPipelineTests.cpp
+            FrontEnd/src/FrameRecorder.cpp
+            FrontEnd/src/FrameLz.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerRewindPipelineTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_rewind_pipeline_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6947)
+        target_include_directories(SaturnExplorerRewindPipelineTests PRIVATE
+            FrontEnd/src
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerRewindPipelineTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerRewindPipelineTests COMMAND SaturnExplorerRewindPipelineTests)
+
         # The exporter against hostile/slow peers, and frame-step accounting, over the same
         # default socket.
         add_executable(SaturnExplorerLiveExporterRobustnessTests
