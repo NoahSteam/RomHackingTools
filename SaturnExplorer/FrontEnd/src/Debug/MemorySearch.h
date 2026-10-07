@@ -11,7 +11,9 @@
 // region aligned to the value width (the standard "fast scan").
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "Debug/MemoryBackend.h"
@@ -35,6 +37,24 @@ enum class SearchCompare
 
 struct SearchRegion { uint32_t base = 0; uint32_t size = 0; };
 
+// The bytes a scan runs over, copied out of the backend up front. A scan then needs no backend,
+// so it can run on a worker thread while the UI keeps drawing: the snapshot is private to the
+// scan and nothing else writes to it. Memory is kept per region and per 256-byte page, because
+// a narrowing scan over a few hundred candidates should read the pages they sit in, not the
+// whole 1 MiB bank again.
+struct SearchSnapshot
+{
+    enum : uint32_t { kPage = 256 };   // an enumerator, so C++14 needs no out-of-line definition
+    struct Region
+    {
+        SearchRegion         r;
+        std::vector<uint8_t> data;     // r.size bytes; only pages flagged in pageOk are valid
+        std::vector<uint8_t> pageOk;   // one flag per kPage bytes
+        bool                 failed = false;   // some page the scan needed could not be read
+    };
+    std::vector<Region> regions;
+};
+
 struct SearchHit
 {
     uint32_t addr = 0;
@@ -44,6 +64,22 @@ struct SearchHit
     // compare a user reaches for: "unchanged" over a region that failed to read reports every
     // hit in it as unchanged, when the truth is that nothing looked.
     bool     verified = true;
+};
+
+// Where a stepped scan stopped, so the next call resumes there (see ScanFirstStep).
+struct SearchScanCursor
+{
+    std::size_t region = 0;     // First: the region being walked
+    uint32_t    off = 0;        //        and the byte offset in it
+    std::size_t index = 0;      // Next: the hit being tested
+    std::size_t kept = 0;       //        and how many survivors are compacted so far
+    bool        entered = false;
+};
+
+struct SearchScan   // what a scan produced; Complete() installs it
+{
+    std::vector<SearchHit>    hits;
+    std::vector<SearchRegion> unread;
 };
 
 class MemorySearch
@@ -61,6 +97,38 @@ public:
     // Narrow the current hits against memory now. Returns the surviving hit count.
     // A no-op (hits unchanged) when there is no active scan.
     std::size_t Next(IMemoryBackend& backend, SearchCompare cmp, int64_t operand);
+
+    // The same scan, split so the slow half can run off the UI thread:
+    //   Begin*/Capture*  -- on the calling thread: touch the backend, copy the bytes
+    //   Scan*            -- pure: a snapshot and the previous hits in, the new hits out;
+    //                       touches no MemorySearch and no backend, so any thread may run it
+    //   Complete         -- on the calling thread: install the result
+    // First()/Next() above are exactly these three in a row.
+    void BeginFirst(const std::vector<SearchRegion>& regions, WatchType type);
+    static SearchSnapshot CaptureFirst(IMemoryBackend& backend,
+                                       const std::vector<SearchRegion>& regions);
+    // Reads only the pages that hold a current hit (all of them when the hits are dense).
+    SearchSnapshot CaptureNext(IMemoryBackend& backend) const;
+    // Hands the hit list to a scan, leaving this one empty so nothing reads it meanwhile and
+    // nothing has to copy a couple of million entries.
+    std::vector<SearchHit> TakeHits() { return std::move(mHits); }
+    static SearchScan ScanFirst(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                                int64_t operand);
+    static SearchScan ScanNext(const SearchSnapshot& snap, WatchType type,
+                               std::vector<SearchHit> previous, SearchCompare cmp,
+                               int64_t operand);
+    // The same two scans in slices, for a build with no threads to run them on: each call does
+    // at most 'maxItems' candidates and returns false until the scan is finished, then true with
+    // 'out' filled in (for ScanNextStep, 'previous' is consumed). The caller keeps the cursor and
+    // the output between calls, and paces the slices to leave the UI its frame.
+    static bool ScanFirstStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                              int64_t operand, SearchScanCursor& cursor, SearchScan& out,
+                              std::size_t maxItems);
+    static bool ScanNextStep(const SearchSnapshot& snap, WatchType type, SearchCompare cmp,
+                             int64_t operand, SearchScanCursor& cursor,
+                             std::vector<SearchHit>& previous, SearchScan& out,
+                             std::size_t maxItems);
+    void Complete(SearchScan&& scan);
 
     void Reset();
     bool                          Active() const { return mActive; }
@@ -83,8 +151,6 @@ public:
 
 private:
     static bool Match(SearchCompare cmp, int64_t cur, int64_t prev, int64_t operand);
-    static bool ReadRegion(IMemoryBackend& backend, const SearchRegion& r,
-                           std::vector<uint8_t>& out);
 
     bool                      mActive = false;
     WatchType                 mType = WatchType::U32;

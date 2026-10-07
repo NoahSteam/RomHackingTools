@@ -705,6 +705,46 @@ void TestOpenDoesNotWaitOnAStalledLookup()
     if (r == SE_OK && ds.close) ds.close(ds.user);
 }
 
+// A client that retries while the lookup is stalled must not leave a resolver thread behind per
+// attempt: attempts at the same host share the one in flight, and a different host past the
+// concurrency cap is refused instead of starting yet another.
+void TestStalledLookupsDoNotAccumulateThreads()
+{
+    // Let the previous test's abandoned lookup finish before the release flag is reused.
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    gResolveCalls = 0; gResolveAllowed = 0; gResolveRelease = false;
+    se_live_test_set_resolver(TestResolver);
+    // Attempts run together (each waits out the lookup bound), as a retrying client's would
+    // overlap an earlier attempt's abandoned lookup.
+    auto attempt = [](const char* endpoint) {
+        se_data_source ds = {};
+        CHECK(se_live_open(endpoint, &ds) != SE_OK);
+    };
+    {
+        std::thread t1(attempt, "tcp:stalls-shared.invalid:6845"), t2(attempt, "tcp:stalls-shared.invalid:6845"),
+                    t3(attempt, "tcp:stalls-shared.invalid:6845");
+        t1.join(); t2.join(); t3.join();
+    }
+    CHECK(gResolveCalls.load() == 1);   // three attempts, one lookup
+
+    // Other hosts: each is its own lookup, up to the cap and no further. The first host's
+    // lookup is still stalled and holds a slot.
+    {
+        std::thread t1(attempt, "tcp:other-a.invalid:6845"), t2(attempt, "tcp:other-b.invalid:6845"),
+                    t3(attempt, "tcp:other-c.invalid:6845");
+        t1.join(); t2.join(); t3.join();
+    }
+    CHECK(gResolveCalls.load() <= 2);   // the stalled host holds one slot; one more fits
+
+    gResolveRelease = true;             // let them finish, and free their slots
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    gResolveCalls = 0; gResolveAllowed = 0; gResolveRelease = true;
+    se_data_source d = {};
+    se_live_open("tcp:after.invalid:6845", &d);
+    CHECK(gResolveCalls.load() == 1);   // slots were released, so a new lookup starts again
+    se_live_test_set_resolver(nullptr);
+}
+
 void TestCloseDoesNotWaitOnAStalledLookup()
 {
     gResolveCalls = 0; gResolveAllowed = 2; gResolveRelease = false;   // probe + first attach resolve
@@ -746,6 +786,7 @@ int main()
     TestPeerHangUpDuringSendDoesNotKillTheProcess();
     TestEditFromTheOldDisplayIsRefused();
     TestOpenDoesNotWaitOnAStalledLookup();
+    TestStalledLookupsDoNotAccumulateThreads();
     TestCloseDoesNotWaitOnAStalledLookup();
     if (gFailures)
     {

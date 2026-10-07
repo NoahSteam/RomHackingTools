@@ -242,6 +242,43 @@ void TestStepCompletionIsObserved(se_data_source& ds, se_context* ctx)
     Sleep(100);
 }
 
+// A halted emulator republishes the same machine state every poll. The driver reports whether the
+// newest publish is content the display already shows, so a client can skip re-copying several MB
+// to draw nothing new -- and must stop saying so the moment the content moves.
+void TestUnchangedDisplayIsReported(se_data_source& ds, se_context* ctx)
+{
+    Emulator emu;
+    emu.frameMs = 5;
+    emu.Start();
+    Check(ds.frame_pause(ds.user) == 0, "pause posted");
+    Sleep(300);
+    for (int i = 0; i < 200 && se_live_capture_pending(&ds) == 1; ++i) { se_begin_frame(ctx); Sleep(5); }
+    se_begin_frame(ctx);
+
+    Check(WaitFor([&] { return se_live_capture_unchanged(&ds) == 1; }),
+          "a caught-up, paused display is reported unchanged");
+    // The poll thread keeps publishing while paused; none of those publishes may read as new.
+    bool flickered = false;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(400);
+    while (std::chrono::steady_clock::now() < until)
+    {
+        if (se_live_capture_unchanged(&ds) != 1) flickered = true;
+        Sleep(2);
+    }
+    Check(!flickered, "republishing identical state does not look like a change");
+
+    // A step moves the machine: the display is no longer current until it is captured again.
+    Check(ds.frame_step(ds.user, 1) == 0, "step posted");
+    Check(WaitFor([&] { return se_live_capture_unchanged(&ds) == 0; }),
+          "a new frame is reported as a change");
+    for (int i = 0; i < 400 && se_live_capture_pending(&ds) == 1; ++i) { se_begin_frame(ctx); Sleep(3); }
+    se_begin_frame(ctx);
+    Check(WaitFor([&] { return se_live_capture_unchanged(&ds) == 1; }),
+          "and unchanged again once the display has caught up");
+    ds.frame_step(ds.user, 0);   // resume
+    Sleep(100);
+}
+
 // Shutdown with a client attached that never says anything: the server thread is parked in
 // recv() on it. Closing the listening socket only wakes accept(), so the join used to wait
 // until that client left. Run with a watchdog so a regression fails instead of hanging the suite.
@@ -304,6 +341,7 @@ int main()
 
     TestEveryRequestedStepRuns(ds);
     TestStepCompletionIsObserved(ds, ctx);
+    TestUnchangedDisplayIsReported(ds, ctx);
 
     se_destroy(ctx);   // the driver detaches; the exporter's client slot frees up
     Sleep(100);

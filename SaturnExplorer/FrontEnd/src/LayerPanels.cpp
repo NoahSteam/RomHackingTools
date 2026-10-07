@@ -217,22 +217,35 @@ void LayerPanels::DrawPanel(const LayerPanelDesc& desc, const LayerPanelFrame& f
     const se_render_opts one = frame.opts
         ? LayerRenderOpts(*frame.opts, desc.id, view.showGrid)
         : se_render_opts();
-    const bool rendered =
-        frame.context && frame.opts &&
-        FetchCoreImage([&](se_image* i, size_t* n)
-                       { return se_render_frame(frame.context, &one, i, n); },
-                       view.pixels, w, h);
-    if (!rendered)
+    // A tab on screen over an unchanged snapshot would re-run the compositor and re-upload the
+    // same pixels every UI frame. The key (derive serial + options) says when it can differ.
+    const bool current = view.texture != 0 && frame.context && frame.opts &&
+                         view.key.Matches(frame.context, one);
+    if (!current)
     {
-        ImGui::TextDisabled("No data loaded. File > Open Memory Dump...");
-        ImGui::End();
-        return;
+        view.key.Invalidate();
+        const bool rendered =
+            frame.context && frame.opts &&
+            FetchCoreImage([&](se_image* i, size_t* n)
+                           { return se_render_frame(frame.context, &one, i, n); },
+                           view.pixels, w, h);
+        if (!rendered)
+        {
+            ImGui::TextDisabled("No data loaded. File > Open Memory Dump...");
+            ImGui::End();
+            return;
+        }
+        view.texture = EnsureTexture(platform, view.texture, view.width, view.height,
+                                     static_cast<int>(w), static_cast<int>(h));
+        if (view.texture != 0)
+        {
+            platform.UpdateTexture(view.texture, view.pixels.data(), static_cast<int>(w),
+                                   static_cast<int>(h));
+            view.key.Set(frame.context, one);
+        }
     }
-
-    const int iw = static_cast<int>(w);
-    const int ih = static_cast<int>(h);
-    view.texture = EnsureTexture(platform, view.texture, view.width, view.height, iw, ih);
-    if (view.texture != 0) platform.UpdateTexture(view.texture, view.pixels.data(), iw, ih);
+    const int iw = view.width;
+    const int ih = view.height;
 
     ImVec2 pos;
     const ImVec2 size = FitToDisplayAspect(ImGui::GetContentRegionAvail(), pos);

@@ -3,6 +3,7 @@
 
 #include "LiveDriver.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -95,9 +96,55 @@ struct LiveSnapshot
     uint32_t             stepPending = 0;
     bool                 hasStepInfo = false;
     bool                 valid = false;
+    // Moves only when the CONTENT of a published snapshot differs from the one before it. A
+    // halted emulator republishes the same machine state every poll; a client that wants to
+    // know whether a capture would show anything new compares this rather than the pointer.
+    // 0 on a snapshot not yet published.
+    uint64_t             revision = 0;
 };
 
 using SnapshotPtr = std::shared_ptr<const LiveSnapshot>;
+
+// Whether two snapshots would show a client exactly the same thing. Every field a capture or a
+// per-frame query reads is compared (the revision itself is not), so a "same" answer means a
+// capture of 'b' after one of 'a' could change nothing; a field added to LiveSnapshot without
+// being added here would make a change invisible, so keep the two together.
+static bool SameContent(const LiveSnapshot& a, const LiveSnapshot& b)
+{
+    auto same = [](const auto& x, const auto& y) {
+        return x.size() == y.size() &&
+               (x.empty() || std::memcmp(x.data(), y.data(), x.size() * sizeof(x[0])) == 0);
+    };
+    if (!(a.valid == b.valid && a.generation == b.generation && a.frame == b.frame &&
+          a.paused == b.paused && a.latestFrame == b.latestFrame &&
+          a.stepPending == b.stepPending && a.hasStepInfo == b.hasStepInfo &&
+          a.hasCdStatus == b.hasCdStatus && a.restoreDone == b.restoreDone &&
+          a.restoreFailed == b.restoreFailed && a.hasRestoreInfo == b.hasRestoreInfo &&
+          a.stop.reason == b.stop.reason && a.stop.cpu == b.stop.cpu && a.stop.pc == b.stop.pc &&
+          a.stop.seq == b.stop.seq && a.stop.hasSeq == b.stop.hasSeq &&
+          a.hasSh2[0] == b.hasSh2[0] && a.hasSh2[1] == b.hasSh2[1]))
+        return false;
+    if (!(same(a.vdp1Vram, b.vdp1Vram) && same(a.vdp2Vram, b.vdp2Vram) && same(a.cram, b.cram) &&
+          same(a.vdp2Regs, b.vdp2Regs) && same(a.vdp1Regs, b.vdp1Regs) &&
+          same(a.wramLow, b.wramLow) && same(a.wramHigh, b.wramHigh) &&
+          same(a.vdp1Fb, b.vdp1Fb) && same(a.soundRam, b.soundRam) &&
+          same(a.scspSlots, b.scspSlots)))
+        return false;
+    if (std::memcmp(&a.cdStatus, &b.cdStatus, sizeof(a.cdStatus)) != 0 ||
+        std::memcmp(a.sh2, b.sh2, sizeof(a.sh2)) != 0)
+        return false;
+    for (int c = 0; c < 2; ++c)
+    {
+        const std::vector<LiveCallFrame>& x = a.callStacks.cpu[c];
+        const std::vector<LiveCallFrame>& y = b.callStacks.cpu[c];
+        if (x.size() != y.size()) return false;
+        for (size_t i = 0; i < x.size(); ++i)
+            if (x[i].callSite != y[i].callSite || x[i].func != y[i].func || x[i].ret != y[i].ret ||
+                x[i].sp != y[i].sp || x[i].cycle != y[i].cycle || x[i].frameNo != y[i].frameNo)
+                return false;
+    }
+    return true;
+}
 
 // A fired tracepoint event (v8+): its id, the CPU, the frame it fired on, and the
 // captured SH-2 register file (se_sh2_regs order). The client formats the message.
@@ -467,6 +514,20 @@ struct ResolveJob
     ~ResolveJob() { if (res) { ::freeaddrinfo(res); } }
 };
 
+const size_t kMaxConcurrentResolves = 2;   // lookups in flight at once, process-wide
+// Never destroyed: an abandoned lookup can finish after main() returns, and must still find its
+// registry there to deregister from.
+struct ResolveRegistry
+{
+    std::mutex                               mtx;
+    std::vector<std::shared_ptr<ResolveJob>> inflight;
+};
+ResolveRegistry& Resolves()
+{
+    static ResolveRegistry* r = new ResolveRegistry;
+    return *r;
+}
+
 // Resolve host:port. Numeric addresses (the usual 127.0.0.1) are parsed inline, which never
 // blocks and needs no thread. Anything else is looked up on a worker and waited for up to
 // 'timeoutMs', returning early if 'running' goes false. Null on failure, timeout or cancellation.
@@ -490,23 +551,50 @@ std::shared_ptr<ResolveJob> ResolveBounded(const std::string& host, const std::s
     job->res = nullptr;
 
     job->fn = gResolve.load();
-    try
+
+    // Lookups that are still running, shared by every opener. A resolver that stalls outlives
+    // the wait that gave up on it, and a client retrying once a second would otherwise start a
+    // fresh thread (and a fresh stalled lookup) per attempt for as long as the network stayed
+    // down. So: an attempt at a host:port that already has a lookup in flight waits on that one
+    // instead of starting another, and the number of lookups running at once is capped -- past
+    // it the attempt fails at once, as a timeout would, and the next one tries again.
+    ResolveRegistry& rr = Resolves();
+    std::unique_lock<std::mutex> reg(rr.mtx);
+    std::shared_ptr<ResolveJob> inflight;
+    for (const std::shared_ptr<ResolveJob>& j : rr.inflight)
+        if (j->host == host && j->port == port && j->fn == job->fn) { inflight = j; break; }
+    if (inflight)
     {
-        std::thread([job] {
-            addrinfo* r = nullptr;
-            const int rc = job->fn(job->host.c_str(), job->port.c_str(), &job->hints, &r);
-            {
-                std::lock_guard<std::mutex> lk(job->m);
-                job->rc = rc;
-                job->res = r;
-                job->done = true;
-            }
-            job->cv.notify_all();
-        }).detach();
+        reg.unlock();
+        job = inflight;
     }
-    catch (const std::system_error&)
+    else
     {
-        return nullptr;
+        if (rr.inflight.size() >= kMaxConcurrentResolves) { return nullptr; }
+        rr.inflight.push_back(job);
+        try
+        {
+            std::thread([job] {
+                addrinfo* r = nullptr;
+                const int rc = job->fn(job->host.c_str(), job->port.c_str(), &job->hints, &r);
+                {
+                    std::lock_guard<std::mutex> lk(job->m);
+                    job->rc = rc;
+                    job->res = r;
+                    job->done = true;
+                }
+                job->cv.notify_all();
+                std::lock_guard<std::mutex> lk(Resolves().mtx);
+                std::vector<std::shared_ptr<ResolveJob>>& live = Resolves().inflight;
+                live.erase(std::remove(live.begin(), live.end(), job), live.end());
+            }).detach();
+        }
+        catch (const std::system_error&)
+        {
+            rr.inflight.pop_back();
+            return nullptr;
+        }
+        reg.unlock();
     }
 
     std::unique_lock<std::mutex> lk(job->m);
@@ -1343,6 +1431,15 @@ void PollLoop(LiveState* st)
             }
         }
         {
+            // Only this thread writes 'front', so the one read here is the previous publish. The
+            // compare reads two immutable snapshots -- a few MB of memcmp -- so it is done before
+            // taking the lock the UI thread reads 'front' under.
+            const SnapshotPtr prev = Newest(st);
+            fresh->revision = prev ? (SameContent(*prev, *fresh) ? prev->revision
+                                                                  : prev->revision + 1)
+                                   : 1;
+        }
+        {
             // Snapshot and generation together: a reader that sees the new generation is
             // guaranteed (it takes this lock to read the snapshot) to capture the new data.
             std::lock_guard<std::mutex> lk(st->mtx);
@@ -1877,6 +1974,19 @@ extern "C" int se_live_capture_pending(const se_data_source* ds)
         SnapshotPtr shown = DisplayedSnapshot(st);
         if (!shown || shown->frame != newest->frame) { return 1; }
         return 0;
+    });
+}
+
+extern "C" int se_live_capture_unchanged(const se_data_source* ds)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        SnapshotPtr newest = Newest(st);
+        if (!newest || !newest->valid || newest->revision == 0) { return 0; }
+        if (gLastCaptured.id != st->id || !gLastCaptured.snap) { return 0; }
+        return gLastCaptured.snap->revision == newest->revision ? 1 : 0;
     });
 }
 

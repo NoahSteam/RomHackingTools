@@ -8,6 +8,8 @@ void AccessLog::Record(uint32_t pc, int cpu, uint32_t frame, std::string insn,
 {
     const int      c = cpu ? 1 : 0;
     const uint64_t k = Key(pc, c);
+    // Innermost frames are the ones that say who called; a deeper tail is what gets cut.
+    if (stack.size() > mMaxStackFrames) stack.resize(mMaxStackFrames);
     auto it = mIndex.find(k);
     if (it != mIndex.end())
     {
@@ -16,6 +18,11 @@ void AccessLog::Record(uint32_t pc, int cpu, uint32_t frame, std::string insn,
         r.lastFrame = frame;
         r.stack = std::move(stack);
         if (!insn.empty()) { r.insn = std::move(insn); }   // the code at this PC may have changed
+        return;
+    }
+    if (mRecords.size() >= mMaxRows)
+    {
+        ++mDropped;
         return;
     }
     AccessRecord r;
@@ -33,6 +40,7 @@ void AccessLog::Clear()
 {
     mRecords.clear();
     mIndex.clear();
+    mDropped = 0;
 }
 
 }  // namespace sfe

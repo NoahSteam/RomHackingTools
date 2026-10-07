@@ -26,6 +26,7 @@
 
 #include "BinaryWriter.h"
 #include "LayerExport.h"
+#include "RenderKey.h"
 
 using namespace sfe;
 
@@ -332,6 +333,51 @@ void TestDeriveSerialTracksEveryRederive()
     const uint8_t byte = 0x12;
     CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP2_VRAM, 0x2000, &byte, 1) == 1);
     CHECK(se_derive_serial(ctx) != afterReg);
+    se_destroy(ctx);
+}
+
+// A render cache keyed on (context, derive serial, options) must say "same" only when the pixels
+// would be the same: not after an edit, not after an option changes, and not for a different
+// context that happens to sit at a freed one's address.
+void TestRenderKeyTracksWhatChangesThePixels()
+{
+    State state = MakeTiledNbg3State();
+    se_context* ctx = Open(state);
+    se_render_opts opts;
+    se_default_render_opts(&opts);
+
+    sfe::RenderKey key;
+    CHECK(!key.Matches(ctx, opts));          // nothing drawn yet
+    key.Set(ctx, opts);
+    CHECK(key.Matches(ctx, opts));
+    CHECK(key.Matches(ctx, opts));           // asking does not disturb it
+
+    se_render_opts toggled = opts;
+    toggled.show_layer[SE_LAYER_NBG0] = 0;
+    CHECK(!key.Matches(ctx, toggled));       // an option moved
+    toggled = opts;
+    toggled.highlight_command = 3;
+    CHECK(!key.Matches(ctx, toggled));
+
+    const uint8_t byte = 0x12;
+    CHECK(se_write_vram(ctx, SE_VRAM_KIND_VDP2_VRAM, 0x2000, &byte, 1) == 1);
+    CHECK(!key.Matches(ctx, opts));          // an in-place edit
+    key.Set(ctx, opts);
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    CHECK(!key.Matches(ctx, opts));          // a fresh capture
+
+    key.Set(ctx, opts);
+    key.Invalidate();
+    CHECK(!key.Matches(ctx, opts));
+
+    // A second context never shares a serial with the first, so a new source opened where
+    // the old one was freed cannot be mistaken for it.
+    State other = MakeTiledNbg3State();
+    se_context* ctx2 = Open(other);
+    CHECK(se_derive_serial(ctx2) != se_derive_serial(ctx));
+    key.Set(ctx, opts);
+    CHECK(!key.Matches(ctx2, opts));
+    se_destroy(ctx2);
     se_destroy(ctx);
 }
 
@@ -645,6 +691,7 @@ int main()
     TestTileMapShapeMatchesWithoutCounting();
     TestPlaneGridAddressesEachPlaneSeparately();
     TestDeriveSerialTracksEveryRederive();
+    TestRenderKeyTracksWhatChangesThePixels();
     TestRebuildDoesNotLeakPreviousMap();
     TestTileGrid();
     TestBitmapLayerHasNoTileMap();

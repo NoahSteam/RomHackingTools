@@ -441,9 +441,11 @@ void App::SaveSearchOptions()
 // emulator attaches next, so the sync generation is forced stale too.
 void App::ResetSessionDebugState()
 {
+    mRamSearchRunner.Stop();   // a scan in flight belongs to the game being left
     mRamSearch.Reset();
     mRamSearchStatus.clear();
     mAccessLog.Clear();
+    mAccessSelected = -1;
     mLastTpGeneration = mActions.Generation() - 1;
     mActions.ResetCounts();
 }
@@ -487,6 +489,7 @@ void App::CloseData(bool cancelAutoConnect)
         se_destroy(mContext);
         mContext = nullptr;
     }
+    mFrameKey.Invalidate();
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
     mRestoreOutstanding = 0;
     mRestoreTimedOut = mRestoreUnconfirmable = false;
@@ -705,6 +708,15 @@ void App::RenderFrameToTexture(IPlatform& platform)
     {
         return;
     }
+    // A static dump, a paused game and a halted breakpoint present the same snapshot every UI
+    // frame; drawing it again would repeat the compositor pass and the texture upload for the
+    // same pixels. The key says when the image can differ: the context's derive serial moves
+    // on every capture and every in-place edit, and the options are the other input.
+    if (mFrameTexture != 0 && mFrameKey.Matches(mContext, mRenderOpts))
+    {
+        return;
+    }
+    mFrameKey.Invalidate();
 
     se_image img = {};
     size_t needed = 0;
@@ -726,6 +738,7 @@ void App::RenderFrameToTexture(IPlatform& platform)
     if (se_render_frame(mContext, &mRenderOpts, &img, &needed) == SE_OK && mFrameTexture != 0)
     {
         platform.UpdateTexture(mFrameTexture, mFrameBuffer.data(), w, h);
+        mFrameKey.Set(mContext, mRenderOpts);
     }
 }
 
@@ -1036,7 +1049,21 @@ void App::BuildUI(IPlatform& platform)
         sessionBehind = se_live_captured_generation(&mDataSource) !=
                         se_live_connection_generation(&mDataSource);
 #endif
-        if (!mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting || sessionBehind)
+        bool capture = !mbPaused || followingStep || mStepHalt.HaltActive() || restoreWaiting ||
+                       sessionBehind;
+#ifdef SE_ENABLE_LIVE
+        // A halt that is the only reason to capture re-publishes the same machine state every
+        // poll; copying it again (several MB, then re-parsing and rebuilding the geometry and
+        // dropping the tile-map caches) shows nothing new. Skip it while the newest snapshot's
+        // content is what this thread already captured. Everything that can change what a
+        // halted display shows -- a step, an edit the emulator applied, a restore -- changes
+        // the content, and the connection / restore / session conditions above still force a
+        // capture on their own.
+        if (capture && !(!mbPaused || followingStep || restoreWaiting || sessionBehind) &&
+            se_live_capture_unchanged(&mDataSource) == 1)
+            capture = false;
+#endif
+        if (capture)
         {
 #ifdef SE_ENABLE_LIVE
             // Read the counters BEFORE capturing: the driver only moves forward, so what the
@@ -1279,9 +1306,10 @@ void App::BuildUI(IPlatform& platform)
     }
 #endif
 
-    if (mbHasData)
+    if (mScreenshotRequested)
     {
-        RenderFrameToTexture(platform);
+        mScreenshotRequested = false;
+        SaveScreenshot(platform);   // mContext is the context on screen (scrubbed frame or live)
     }
 
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
@@ -2775,24 +2803,34 @@ void App::DrawRamSearch()
         mRamSearchStatus = buf;
     };
 
+    // The scan runs on a worker (it decodes up to two million candidates); a finished one is
+    // installed here, once, before anything below reads the hits.
+    if (mRamSearchRunner.Poll(mRamSearch)) report(mRamSearch.Count());
+    const bool scanning = mRamSearchRunner.Running();
+
     ImGui::Separator();
+    ImGui::BeginDisabled(scanning);
     if (!active)
     {
         const bool canScan = mRamSearchLow || mRamSearchHigh;
         ImGui::BeginDisabled(!canScan);
         if (ImGui::Button("First Scan"))
-            report(mRamSearch.First(mMemBackend, buildRegions(), kTypes[mRamSearchType].wt,
-                                    kCmps[mRamSearchCmp].cmp, operand()));
+            mRamSearchRunner.StartFirst(mRamSearch, mMemBackend, buildRegions(),
+                                        kTypes[mRamSearchType].wt, kCmps[mRamSearchCmp].cmp,
+                                        operand());
         ImGui::EndDisabled();
         if (!canScan) { ImGui::SameLine(); ImGui::TextDisabled("(pick a region)"); }
     }
     else
     {
         if (ImGui::Button("Next Scan"))
-            report(mRamSearch.Next(mMemBackend, kCmps[mRamSearchCmp].cmp, operand()));
+            mRamSearchRunner.StartNext(mRamSearch, mMemBackend, kCmps[mRamSearchCmp].cmp,
+                                       operand());
         ImGui::SameLine();
         if (ImGui::Button("New Search")) { mRamSearch.Reset(); mRamSearchStatus.clear(); }
     }
+    ImGui::EndDisabled();
+    if (scanning) { ImGui::SameLine(); ImGui::TextDisabled("Scanning..."); }
     if (!mRamSearchStatus.empty())
     {
         ImGui::SameLine();
@@ -2921,6 +2959,7 @@ void App::DrawAccessLog()
                                   : mAccessKind == 2 ? BpKind::MemWrite
                                                      : BpKind::MemReadWrite;
                 mAccessLog.Clear();
+                mAccessSelected = -1;
                 mAccessWatchId = mBreakpoints.AddMemory(addr, watchSize, kind);
                 mBreakpoints.SetLogAccess(mAccessWatchId, true);
                 mAccessWatchAddr = addr;
@@ -2935,7 +2974,7 @@ void App::DrawAccessLog()
             mAccessWatchId = 0;
         }
         ImGui::SameLine();
-        if (ImGui::Button("Clear")) mAccessLog.Clear();
+        if (ImGui::Button("Clear")) { mAccessLog.Clear(); mAccessSelected = -1; }
         ImGui::SameLine();
         ImGui::Text("watching %08X (%s)", mAccessWatchAddr, kinds[mAccessKind]);
     }
@@ -2953,38 +2992,65 @@ void App::DrawAccessLog()
         return;
     }
 
-    // One row per accessing instruction, expandable to its captured call stack.
-    for (size_t i = 0; i < records.size(); ++i)
+    if (mAccessLog.Dropped() > 0)
+        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f),
+                           "Log full (%zu rows): %zu hit%s from further instructions not recorded. "
+                           "Clear to start over.",
+                           mAccessLog.Size(), mAccessLog.Dropped(),
+                           mAccessLog.Dropped() == 1 ? "" : "s");
+
+    // One row per accessing instruction, each a fixed-height line so only the visible ones are
+    // formatted and submitted (the list can hold thousands). The captured call stack of the
+    // selected row is shown below it rather than as an in-place expansion, which would make the
+    // rows variable height and force every one to be laid out to find the scroll extent.
+    if (mAccessSelected >= static_cast<int>(records.size())) mAccessSelected = -1;
+    const float detailH = ImGui::GetTextLineHeightWithSpacing() * 9.0f;
+    const float listH = std::max(ImGui::GetTextLineHeightWithSpacing() * 4.0f,
+                                 ImGui::GetContentRegionAvail().y - detailH);
+    if (ImGui::BeginChild("accessrows", ImVec2(0, listH), true))
     {
-        const AccessRecord& r = records[i];
-        ImGui::PushID(static_cast<int>(i));
-
-        char header[128];
-        std::snprintf(header, sizeof(header), "%08X  %-24s  x%llu  (%s)",
-                      r.pc, r.insn.c_str(), (unsigned long long)r.count,
-                      r.cpu ? "Slave" : "Master");
-
-        const bool open = ImGui::TreeNode(header);
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-        { mAssemblyPanel.GoTo(r.cpu, r.pc); mPanels.assembly = true; }
-        ImGui::SetItemTooltip("Right-click to show in SH-2 Assembly");
-        if (open)
+        ImGuiListClipper clip;
+        clip.Begin(static_cast<int>(records.size()));
+        while (clip.Step())
         {
-            if (r.stack.empty())
-                ImGui::TextDisabled("  (no call stack)");
-            for (size_t f = 0; f < r.stack.size(); ++f)
+            for (int i = clip.DisplayStart; i < clip.DisplayEnd; ++i)
             {
-                const CallStackFrame& fr = r.stack[f];
-                ImGui::Text("  #%zu  %s", f, FrameLabel(fr).c_str());
-                if (fr.returnAddress)
-                {
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("\xe2\x86\x92 %08X", fr.returnAddress);
-                }
+                const AccessRecord& r = records[static_cast<size_t>(i)];
+                ImGui::PushID(i);
+                char header[128];
+                std::snprintf(header, sizeof(header), "%08X  %-24s  x%llu  (%s)",
+                              r.pc, r.insn.c_str(), (unsigned long long)r.count,
+                              r.cpu ? "Slave" : "Master");
+                if (ImGui::Selectable(header, mAccessSelected == i)) mAccessSelected = i;
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                { mAssemblyPanel.GoTo(r.cpu, r.pc); mPanels.assembly = true; }
+                ImGui::SetItemTooltip("Right-click to show in SH-2 Assembly");
+                ImGui::PopID();
             }
-            ImGui::TreePop();
         }
-        ImGui::PopID();
+    }
+    ImGui::EndChild();
+
+    if (mAccessSelected >= 0)
+    {
+        const AccessRecord& r = records[static_cast<size_t>(mAccessSelected)];
+        ImGui::Text("Call stack at %08X", r.pc);
+        if (r.stack.empty())
+            ImGui::TextDisabled("  (no call stack)");
+        for (size_t f = 0; f < r.stack.size(); ++f)
+        {
+            const CallStackFrame& fr = r.stack[f];
+            ImGui::Text("  #%zu  %s", f, FrameLabel(fr).c_str());
+            if (fr.returnAddress)
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("\xe2\x86\x92 %08X", fr.returnAddress);
+            }
+        }
+    }
+    else
+    {
+        ImGui::TextDisabled("Select a row to see its call stack.");
     }
 
     ImGui::End();
@@ -3879,9 +3945,11 @@ void App::StepOut(int cpu)
 
 void App::DrawVdpOutput(IPlatform& platform)
 {
-    (void)platform;
     if (ImGui::Begin("VDP Output"))
     {
+        // Composite only when this window is actually on screen: a tab behind another, a
+        // collapsed window or a closed panel needs no pixels. (A screenshot renders for itself.)
+        RenderFrameToTexture(platform);
         // Reserve a strip at the bottom for the transport bar (live sources only).
         const float transportH = mbLiveSource ? (ImGui::GetFrameHeightWithSpacing() + 6.0f) : 0.0f;
         const ImVec2 vpContentStart = ImGui::GetCursorScreenPos();
@@ -6935,7 +7003,9 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         }
         break;
     case TopBarCommandType::TakeScreenshot:
-        SaveScreenshot(platform);
+        // Top-bar commands run before the scrub context is selected as the view, and a
+        // screenshot is of the view. Taken later in the frame, once mContext is the displayed one.
+        mScreenshotRequested = true;
         break;
     case TopBarCommandType::OpenHelp:
         mOpenHelp = true;
@@ -7249,6 +7319,7 @@ void App::DrawUpdateModal(IPlatform& platform)
 
 void App::SaveScreenshot(IPlatform& platform)
 {
+    RenderFrameToTexture(platform);   // free when VDP Output already drew this frame
     if (!mbHasData || mFrameBuffer.empty() || mFrameWidth <= 0 || mFrameHeight <= 0)
     {
         mOperationStatus = "No rendered frame is available to capture.";
