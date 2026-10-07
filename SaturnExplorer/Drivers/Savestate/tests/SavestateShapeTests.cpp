@@ -198,7 +198,8 @@ void TestMalformedMednafenStructureRefused()
     // (b) valid VDP2, then a MAIN section whose only field claims far more than the section.
     std::vector<uint8_t> mainsec;
     mainsec.push_back(8);
-    mainsec.insert(mainsec.end(), "WorkRAML", "WorkRAML" + 8);
+    const std::string fieldName = "WorkRAML";   // 8 bytes, matching the length byte above
+    mainsec.insert(mainsec.end(), fieldName.begin(), fieldName.end());
     Put32LE(mainsec, 0x100000);                  // declared payload, but nothing follows
     std::vector<uint8_t> b = MdfnHeader();
     AddMdfnSection(b, "VDP2", vdp2sec);
