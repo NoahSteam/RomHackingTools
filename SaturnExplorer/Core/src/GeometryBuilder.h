@@ -65,6 +65,10 @@ struct Vdp1Scene
     int screenWidth  = 320;   // display width (may be raised to the VDP2 TVMD dot count)
     int screenHeight = 224;
     bool hasSystemClip = false;   // a VDP1 system-clip command set the dimensions above
+    // That command's inclusive lower-right corner, in VDP1 coordinates. The drawing area is a rectangle
+    // the framebuffer is clipped to, not the framebuffer's own size: the two part company in the
+    // exclusive monitor modes, where the framebuffer is 240 rows whatever the clip says.
+    int sysClipX1 = 0, sysClipY1 = 0;
     // The width of the VDP1 coordinate space (the system-clip width). In hi-res modes the
     // display (screenWidth) is 2x this — VDP1 draws at half width and is doubled at
     // scan-out — so the rasterizer scales sprite X by screenWidth / vdp1Width.

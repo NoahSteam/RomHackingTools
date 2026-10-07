@@ -142,6 +142,8 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
                 out.screenWidth = sx + 1;
                 out.screenHeight = sy + 1;
                 out.hasSystemClip = true;
+                out.sysClipX1 = sx;
+                out.sysClipY1 = sy;
             }
             continue;
         }

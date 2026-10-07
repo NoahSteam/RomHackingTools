@@ -1300,12 +1300,15 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
             const RotSet& s = sets[ab];
             const NbgConfig& c = s.cfg;
 
+            // A dot the coefficient or the screen-over rule makes transparent is still sampled: it draws
+            // nothing, but the gradation screen blurs the colour it would have had.
+            bool dotTransparent = false;
             int32_t kx = s.rp.kx, ky = s.rp.ky, Xp = s.XpBase;
             if (s.useCoeff)
             {
                 // One coefficient per dot along the line; it can override kx/ky or Xp.
                 const uint32_t k = haveCoeff ? coeff : coeffAt(s, msx);
-                if (static_cast<int32_t>(k) < 0) continue;   // coefficient = transparent
+                dotTransparent = static_cast<int32_t>(k) < 0;   // coefficient = transparent
                 const int32_t sext = SignExtend(k, 24);
                 switch (s.coeffMode)
                 {
@@ -1326,7 +1329,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 (ixs < 0 || iys < 0 || static_cast<uint32_t>(ixs) >= s.totalW ||
                  static_cast<uint32_t>(iys) >= s.totalH))
             {
-                continue;
+                dotTransparent = true;
             }
             const uint32_t planeX = static_cast<uint32_t>(ixs) & (s.totalW - 1);
             const uint32_t planeY = static_cast<uint32_t>(iys) & (s.totalH - 1);
@@ -1335,7 +1338,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys, &dot)
                 : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom, planeX, planeY, &dot);
             if (ex.gradation && (c.mixFlags & kGradation)) (*ex.gradation)[pixelIndex] = dot.color;
-            if (windowed)
+            if (windowed || dotTransparent)
             {
                 continue;
             }

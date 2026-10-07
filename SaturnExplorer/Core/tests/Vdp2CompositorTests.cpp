@@ -1928,6 +1928,33 @@ void TestGradationBlursTransparentDotColours()
     CHECK(IsColor(pixels, 2, 0, 255, 223, 223));
 }
 
+// A rotation-screen dot that screen-over makes transparent is still sampled, and the gradation blur
+// reads that sample's colour. The whole plane area is white and the screen starts two dots left of it
+// (screen-over mode 2), so dots 0 and 1 are transparent; dot 2's blur is still white, not the darkened
+// (127) it would be if the transparent dots counted as black.
+void TestGradationBlursScreenOverSamples()
+{
+    State state = MakeNbg3State();
+    SetBlueBackScreen(state);
+    SetReg(state, 0x020, 0x0010);   // BGON: RBG0 only
+    SetReg(state, 0x02A, 0x0000);   // CHCTLB: 16-colour, 8x8 cells
+    SetReg(state, 0x038, 0x8000);   // PNCR: one-word pattern names
+    SetReg(state, 0x03E, 0x0000);   // MPOFR
+    SetReg(state, 0x050, 0x0101);   // MPABRA: planes A and B -> map 1 (white)
+    SetReg(state, 0x052, 0x0101);   // MPCDRA: planes C and D -> map 1
+    SetReg(state, 0x03A, 0x0800);   // PLSZ: screen-over mode 2 (transparent outside) for set A
+    SetReg(state, 0x0FC, 0x0001);   // PRIR: RBG0 priority 1
+    SetReg(state, 0x0B0, 0x0000);   // RPMD: set A
+    SetReg(state, 0x0BE, 0x8000);   // RPTAL
+    WriteIdentityRotParam(state.vdp2, 0x8000);
+    PutRotDword(state.vdp2, 0x8000, static_cast<uint32_t>(-2 * 1024) << 6);   // Xst = -2
+    for (uint32_t a = 0x2000; a < 0x4000; a += 2) PutBE16(state.vdp2, a, 0x0001);   // every cell of map 1 is character 1
+    SetReg(state, 0x0EC, 0x9010);   // CCCTL: BOKEN, BOKN = RBG0, RBG0 colour calculation (R0CCEN)
+    SetReg(state, 0x10C, 0x000F);   // CCRR: RBG0 ratio 15
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    CHECK(IsColor(pixels, 2, 0, 255, 255, 255));
+}
+
 // ---- RBG1 and RBG0 coefficient line colour -------------------------------------------------------
 
 // At equal priority the hardware ranks RBG0 above NBG0 above NBG1-3. NBG3 (white) and RBG0 (rotation
@@ -2125,8 +2152,10 @@ void TestLineHonoursMesh()
     CHECK(IsColor(pixels, 3, 0, 0, 255, 0));
 }
 
-// Gouraud shading runs along a line between its two end colours: the neutral ramp (0x4210) leaves red
-// alone and a ramp of zero darkens the channel by 16 steps.
+// Gouraud shading runs along a line with the hardware's integer stepper, not a linear interpolation:
+// from ramp 0 to neutral over four pixels the red channel (31 + ramp - 16) comes out as the words
+// 0x8011, 0x8015, 0x8019, 0x801D -- 17, 21, 25 and 29 in five bits -- where a straight lerp would give
+// 15, 20, 26, 31.
 void TestLineInterpolatesGouraud()
 {
     State state = MakeBlueBackState(4, 2);
@@ -2136,8 +2165,26 @@ void TestLineInterpolatesGouraud()
     PutBE16(state.vdp1, 0x102, 0x4210);     // end B: neutral
     PutBE16(state.vdp1, 0x40, 0x8000);
     const std::vector<uint8_t> pixels = Render(state, false);
-    CHECK(IsColor(pixels, 0, 0, 123, 0, 0));
-    CHECK(IsColor(pixels, 3, 0, 255, 0, 0));
+    CHECK(IsColor(pixels, 0, 0, 139, 0, 0));
+    CHECK(IsColor(pixels, 1, 0, 172, 0, 0));
+    CHECK(IsColor(pixels, 2, 0, 205, 0, 0));
+    CHECK(IsColor(pixels, 3, 0, 238, 0, 0));
+}
+
+// The system clip still bounds drawing in the exclusive modes, where it no longer sizes the 240-row
+// framebuffer: a primitive on row 224 lies below a clip that ends at row 223, so display rows 448-449
+// stay blue.
+void TestExclusiveModeStillEnforcesTheSystemClip()
+{
+    State state = MakeBlueBackState(4, 224);
+    SetReg(state, 0x000, 0x0004);
+    PutPolygon(state, 0x20, 0x801F, 0, 0, 223, 3, 224);   // rows 223 (inside) and 224 (outside)
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderWith(state, 4, 480, [](se_render_opts&) {});
+    CHECK(IsColorAt(pixels, 4, 1, 446, 255, 0, 0));
+    CHECK(IsColorAt(pixels, 4, 1, 447, 255, 0, 0));
+    CHECK(IsColorAt(pixels, 4, 1, 448, 0, 0, 255));
+    CHECK(IsColorAt(pixels, 4, 1, 449, 0, 0, 255));
 }
 
 // RBG1 cannot be displayed in the exclusive monitor modes (and it still holds NBG0's slot).
@@ -2324,6 +2371,7 @@ int main()
     TestVerticalCellScroll();
     TestGradationBlursTheDesignatedScreen();
     TestGradationBlursTransparentDotColours();
+    TestGradationBlursScreenOverSamples();
     TestRbg0BeatsAnNbgAtEqualPriority();
     TestRbg1DrawsRotationSetBThroughNbg0Registers();
     TestRbg1WithRbg0SuppressesTheOtherNbgs();
@@ -2331,6 +2379,7 @@ int main()
     TestRbg1TileMapDescribesTheRotationScreen();
     TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled();
     TestExclusiveScanoutDoublesRowsEvenWithAShorterSystemClip();
+    TestExclusiveModeStillEnforcesTheSystemClip();
     TestLineHonoursHalfLuminance();
     TestLineHonoursHalfTransparency();
     TestLineHonoursMesh();

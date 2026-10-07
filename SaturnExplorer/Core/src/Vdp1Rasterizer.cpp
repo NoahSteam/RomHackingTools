@@ -168,6 +168,65 @@ uint16_t ShadeWord(uint16_t word, int g5r, int g5g, int g5b)
                                  (ch((word >> 10) & 0x1F, g5b) << 10));
 }
 
+// The hardware's integer Gouraud ramp along a line: each channel steps by whole 5-bit units from
+// the start colour to the end colour over 'length' pixels, with a Bresenham-style error term deciding
+// where the extra steps fall. A straight linear interpolation rounds differently -- the first pixel of
+// a steep ramp is already a step in, and the last lands exactly on the end colour -- so this follows
+// the same arithmetic rather than approximating it.
+struct GouraudStepper
+{
+    bool     on = false;
+    uint32_t g = 0;        // the three 5-bit channels, packed as in a framebuffer word
+    uint32_t intinc = 0;
+    int32_t  ginc[3] = { 0, 0, 0 };
+    int32_t  error[3] = { 0, 0, 0 };
+    int32_t  errorInc[3] = { 0, 0, 0 };
+    int32_t  errorAdj[3] = { 0, 0, 0 };
+
+    void Setup(unsigned length, uint16_t gstart, uint16_t gend)
+    {
+        on = true;
+        g = gstart & 0x7FFFu;
+        intinc = 0;
+        for (unsigned cc = 0; cc < 3; ++cc)
+        {
+            const int dg = static_cast<int>((gend >> (cc * 5)) & 0x1F) - static_cast<int>((gstart >> (cc * 5)) & 0x1F);
+            const unsigned absDg = static_cast<unsigned>(dg < 0 ? -dg : dg);
+            ginc[cc] = static_cast<int32_t>(static_cast<uint32_t>(dg >= 0 ? 1 : -1) << (cc * 5));
+            if (length <= absDg)
+            {
+                errorInc[cc] = static_cast<int32_t>((absDg + 1) * 2);
+                errorAdj[cc] = static_cast<int32_t>(length * 2);
+                error[cc] = static_cast<int32_t>(absDg + 1 - (length * 2 + ((dg < 0) ? 1 : 0)));
+                while (error[cc] >= 0) { g += static_cast<uint32_t>(ginc[cc]); error[cc] -= errorAdj[cc]; }
+                while (errorInc[cc] >= errorAdj[cc]) { intinc += static_cast<uint32_t>(ginc[cc]); errorInc[cc] -= errorAdj[cc]; }
+            }
+            else
+            {
+                errorInc[cc] = static_cast<int32_t>(absDg * 2);
+                errorAdj[cc] = static_cast<int32_t>((length - 1) * 2);
+                error[cc] = static_cast<int32_t>(length) - static_cast<int32_t>(length * 2 - ((dg < 0) ? 1 : 0));
+                if (error[cc] >= 0) { g += static_cast<uint32_t>(ginc[cc]); error[cc] -= errorAdj[cc]; }
+                if (errorInc[cc] >= errorAdj[cc]) { intinc += static_cast<uint32_t>(ginc[cc]); errorInc[cc] -= errorAdj[cc]; }
+            }
+            error[cc] = ~error[cc];
+        }
+    }
+
+    void Step()
+    {
+        if (!on) return;
+        g += intinc;
+        for (unsigned cc = 0; cc < 3; ++cc)
+        {
+            error[cc] -= errorInc[cc];
+            const uint32_t mask = static_cast<uint32_t>(error[cc] >> 31);
+            g += static_cast<uint32_t>(ginc[cc]) & mask;
+            error[cc] += errorAdj[cc] & static_cast<int32_t>(mask);
+        }
+    }
+};
+
 // Shade a covered pixel with the interpolated 5-bit gouraud channels: the displayed colour always,
 // and the framebuffer word only when it is a colour (MSB set) -- a palette code is an index, which
 // adding a colour ramp would corrupt.
@@ -342,7 +401,7 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
 // shadow, MSB-on and mesh to a line exactly as it does to a polygon.
 //
 // 'g0'/'g1' are the gouraud colours at the two ends (null = no shading); the hardware interpolates
-// them along the run.
+// them along the run with the hardware's integer stepper.
 //
 // When 'depth' is supplied (the 3D view), the segment is depth-tested and written like a
 // triangle is, interpolating each vertex's projected depth along the run -- otherwise a line
@@ -359,7 +418,10 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
     const float sy = steps ? float(y1 - y0) / steps : 0.0f;
     const float sd = steps ? (b.depth - a.depth) / steps : 0.0f;
     float fxp = x0 + 0.5f, fyp = y0 + 0.5f, fd = a.depth;
-    for (int i = 0; i <= steps; ++i, fxp += sx, fyp += sy, fd += sd)
+    GouraudStepper gs;
+    if (g0 && g1) gs.Setup(static_cast<unsigned>(steps) + 1, *g0, *g1);
+    // The ramp advances with every pixel along the line, drawn or clipped.
+    for (int i = 0; i <= steps; ++i, fxp += sx, fyp += sy, fd += sd, gs.Step())
     {
         const int x = static_cast<int>(fxp), y = static_cast<int>(fyp);
         if (x < 0 || x >= width || y < 0 || y >= height) continue;
@@ -373,13 +435,10 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
         }
         uint8_t cr = c.r, cg = c.g, cb = c.b;
         uint16_t w = word;
-        if (g0 && g1)
+        if (gs.on)
         {
-            const float t = steps ? float(i) / steps : 0.0f;
-            auto lerp = [t](int s0, int s1) { return s0 + (s1 - s0) * t; };
-            ApplyGouraudPixel(cr, cg, cb, w, lerp(*g0 & 0x1F, *g1 & 0x1F),
-                              lerp((*g0 >> 5) & 0x1F, (*g1 >> 5) & 0x1F),
-                              lerp((*g0 >> 10) & 0x1F, (*g1 >> 10) & 0x1F));
+            ApplyGouraudPixel(cr, cg, cb, w, static_cast<float>(gs.g & 0x1F),
+                              static_cast<float>((gs.g >> 5) & 0x1F), static_cast<float>((gs.g >> 10) & 0x1F));
         }
         sink(idx, cr, cg, cb, fx, w);
     }
@@ -702,8 +761,18 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     //  - half-luminance halves the sprite's own word;
     //  - half-transparency averages with the destination if its MSB is set, and otherwise
     //    just replaces it.
-    auto sink = [&fb](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word)
+    // The system clip bounds every draw, independently of the framebuffer's size.
+    const bool sysClip = scene.hasSystemClip &&
+                         (scene.sysClipX1 < fbWidth - 1 || scene.sysClipY1 < fbHeight - 1);
+    const int clipX1 = scene.sysClipX1, clipY1 = scene.sysClipY1;
+    auto sink = [&fb, fbWidth, sysClip, clipX1, clipY1](size_t idx, uint8_t, uint8_t, uint8_t,
+                                                       const DrawFx& fx, uint16_t word)
     {
+        if (sysClip && (static_cast<int>(idx % static_cast<size_t>(fbWidth)) > clipX1 ||
+                        static_cast<int>(idx / static_cast<size_t>(fbWidth)) > clipY1))
+        {
+            return;
+        }
         FbPixel& d = fb[idx];
         if (fx.msbOn)
         {
