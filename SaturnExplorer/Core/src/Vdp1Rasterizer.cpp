@@ -93,11 +93,11 @@ struct DrawAttribs
 
 // End-code handling for one textured primitive (CMDPMOD ECD clear).
 //
-// An end-code texel is never drawn, and the hardware stops reading a texture line at the second
-// end code in a row, so every texel after it in that line is transparent too. The rasterizer
-// samples texels at random, so the stop position of each line is found by scanning it once, in the
-// order the hardware reads it -- right to left when the sprite is flipped horizontally -- and
-// cached for the primitive's other pixels.
+// An end-code texel is never drawn, and the hardware stops reading a texture line at the SECOND end
+// code it meets -- a running count over the line, not two in a row -- so every texel after it in
+// that line is transparent too. The rasterizer samples texels at random, so the stop position of
+// each line is found by scanning it once, in the order the hardware reads it -- right to left when
+// the sprite is flipped horizontally -- and cached for the primitive's other pixels.
 struct EndCodeRows
 {
     const std::vector<uint8_t>* vram = nullptr;
@@ -114,8 +114,7 @@ struct EndCodeRows
         {
             return false;
         }
-        const uint16_t ec = EndCodeValue(mode);
-        if (raw == ec)
+        if (IsEndCode(mode, raw))
         {
             return true;
         }
@@ -123,13 +122,12 @@ struct EndCodeRows
         if (s < 0)
         {
             s = width;   // no terminator
-            int run = 0;
+            int seen = 0;
             for (int k = 0; k < width; ++k)
             {
                 uint16_t v = 0;
                 RawTexel(*vram, mode, addr, width, flipX ? width - 1 - k : k, y, v);
-                run = (v == ec) ? run + 1 : 0;
-                if (run == 2)
+                if (IsEndCode(mode, v) && ++seen == 2)
                 {
                     s = k;
                     break;
@@ -163,7 +161,7 @@ uint8_t ApplyGouraud(uint8_t t8, float g5)
 
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
-// to 'sink(idx, r, g, b, fx, word, direct)', which decides how it lands: the 2D path emits a descriptor
+// to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path emits a descriptor
 // into its PixColumn at the priority 'word' selects (applying draw-mode effects against the
 // column below); the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
 // both paths share the coverage/UV/gouraud walk without either owning the other's compositing
@@ -239,7 +237,6 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
 
             Rgba c;
             uint16_t word = da.solidWord;
-            bool direct = true;   // an untextured fill is a colour, not a palette code
             if (da.solid)
             {
                 c = *da.solid;   // untextured polygon: solid fill, always opaque
@@ -255,7 +252,6 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                                                 tex.palette_bank, tex.clut_address, spd);
                 c = t.color;
                 word = t.word;
-                direct = t.direct;
                 if (c.a == 0)
                 {
                     continue;  // transparent texel
@@ -296,7 +292,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
             // Hand the covered pixel to the sink with the sprite's draw-mode; the sink
             // owns how shadow / half-luminance / half-transparency and the final write or
             // descriptor emission are applied.
-            sink(idx, cr, cg, cb, da.fx, word, direct);
+            sink(idx, cr, cg, cb, da.fx, word);
         }
     }
 }
@@ -347,7 +343,7 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
             if (fd >= (*depth)[idx]) continue;
             (*depth)[idx] = fd;
         }
-        sink(idx, c.r, c.g, c.b, DrawFx{}, word, true);
+        sink(idx, c.r, c.g, c.b, DrawFx{}, word);
     }
 }
 
@@ -486,7 +482,9 @@ namespace
 {
 
 // One pixel of the VDP1 framebuffer. 'direct' is the framebuffer word's MSB: the pixel holds an
-// RGB colour, as opposed to a palette code that VDP2 looks up later.
+// RGB colour, as opposed to a palette code that VDP2 looks up later. It is what shadow and
+// half-transparency test on the destination: they act on a pixel whose MSB is set and leave an
+// MSB-clear one alone (half-transparency then just replaces it).
 struct FbPixel
 {
     Rgba     color{ 0, 0, 0, 0 };
@@ -545,7 +543,7 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         //  - half-transparency averages with the destination if it holds a colour, and otherwise
         //    just replaces it.
         auto sink = [&fb](size_t idx, uint8_t r, uint8_t g, uint8_t b, const DrawFx& fx,
-                          uint16_t word, bool direct)
+                          uint16_t word)
         {
             FbPixel& d = fb[idx];
             Rgba src{ r, g, b, 255 };
@@ -568,7 +566,7 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
             d.color = src;
             d.word = word;
             d.written = true;
-            d.direct = direct;
+            d.direct = (word & 0x8000) != 0;
         };
 
         const se_vec2* c = s.corners;
@@ -657,7 +655,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // The exploded view separates sprites along Z by draw order, so a pixel's VDP2 priority
         // plays no part in it and the framebuffer word is dropped here.
         auto lineSink = [&outRgba](size_t idx, uint8_t cr, uint8_t cg, uint8_t cb, const DrawFx&,
-                                   uint16_t, bool)
+                                   uint16_t)
         {
             const size_t o = idx * 4;
             outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;

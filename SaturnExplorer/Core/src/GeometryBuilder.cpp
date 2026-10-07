@@ -57,14 +57,14 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
         const uint16_t colr = ReadBE16(vram, a + 0x06);
         const uint16_t srca = ReadBE16(vram, a + 0x08);
         const uint16_t size = ReadBE16(vram, a + 0x0A);
-        const int32_t  xa = ReadBE16S(vram, a + 0x0C);
-        const int32_t  ya = ReadBE16S(vram, a + 0x0E);
-        const int32_t  xb = ReadBE16S(vram, a + 0x10);
-        const int32_t  yb = ReadBE16S(vram, a + 0x12);
-        const int32_t  xc = ReadBE16S(vram, a + 0x14);
-        const int32_t  yc = ReadBE16S(vram, a + 0x16);
-        const int32_t  xd = ReadBE16S(vram, a + 0x18);
-        const int32_t  yd = ReadBE16S(vram, a + 0x1A);
+        const int32_t  xa = ReadBE16Sx(vram, a + 0x0C, 13);
+        const int32_t  ya = ReadBE16Sx(vram, a + 0x0E, 13);
+        const int32_t  xb = ReadBE16Sx(vram, a + 0x10, 13);
+        const int32_t  yb = ReadBE16Sx(vram, a + 0x12, 13);
+        const int32_t  xc = ReadBE16Sx(vram, a + 0x14, 13);
+        const int32_t  yc = ReadBE16Sx(vram, a + 0x16, 13);
+        const int32_t  xd = ReadBE16Sx(vram, a + 0x18, 13);
+        const int32_t  yd = ReadBE16Sx(vram, a + 0x1A, 13);
         const uint16_t grda = ReadBE16(vram, a + 0x1C);   // gouraud table (words)
 
         const uint16_t comm = ctrl & 0xF;
@@ -90,24 +90,30 @@ void GeometryBuilder::Build(const std::vector<uint8_t>& vram, Vdp1Scene& out)
             continue;
         }
 
+        // The state commands decode their fields differently from a primitive's: the local origin is
+        // 11-bit signed, and the clip rectangles are 13-bit UNSIGNED (a clip edge has no sign).
         if (comm == 0xA)  // local coordinate set
         {
-            originX = xa;
-            originY = ya;
+            originX = ReadBE16Sx(vram, a + 0x0C, 11);
+            originY = ReadBE16Sx(vram, a + 0x0E, 11);
             continue;
         }
         if (comm == 0x8)  // user clip: (xa,ya) upper-left, (xc,yc) lower-right
         {
-            userClipX0 = xa; userClipY0 = ya;
-            userClipX1 = xc; userClipY1 = yc;
+            userClipX0 = ReadBE16(vram, a + 0x0C) & 0x1FFF;
+            userClipY0 = ReadBE16(vram, a + 0x0E) & 0x1FFF;
+            userClipX1 = ReadBE16(vram, a + 0x14) & 0x1FFF;
+            userClipY1 = ReadBE16(vram, a + 0x16) & 0x1FFF;
             continue;
         }
         if (comm == 0x9)  // system clip: lower-right defines the drawing area
         {
-            if (xc > 0 && yc > 0)
+            const int32_t sx = ReadBE16(vram, a + 0x14) & 0x1FFF;
+            const int32_t sy = ReadBE16(vram, a + 0x16) & 0x1FFF;
+            if (sx > 0 && sy > 0)
             {
-                out.screenWidth = xc + 1;
-                out.screenHeight = yc + 1;
+                out.screenWidth = sx + 1;
+                out.screenHeight = sy + 1;
                 out.hasSystemClip = true;
             }
             continue;

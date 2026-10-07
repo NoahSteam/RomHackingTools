@@ -87,15 +87,10 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
 // RGB555. The bits differ per texel, which is the whole of finding VDP1-02: one sprite can carry
 // pixels at several priorities, and resolving one priority for the command puts some of them in
 // front of VDP2 layers that should cover them.
-//
-// 'direct' says the colour is coded in the word itself (RGB555, or a CLUT entry whose MSB is
-// set) rather than looked up in CRAM. The VDP1 can only average or halve a framebuffer pixel
-// that holds a colour; a palette code has nothing to halve (see Vdp1Rasterizer's EmitSprites).
 struct Texel
 {
     Rgba     color;
     uint16_t word = 0;
-    bool     direct = false;
 };
 
 // Decode one texel (x,y) of a sprite texture, with the framebuffer word it came from. Returns
@@ -132,7 +127,7 @@ inline Texel DecodeTexelWord(const std::vector<uint8_t>& vram, const std::vector
         // with direct RGB colors (all MSB set), so this must not be inverted.
         if (entry & 0x8000)
         {
-            return { Rgb555ToRgba(entry), entry, true };   // direct RGB555
+            return { Rgb555ToRgba(entry), entry };   // direct RGB555
         }
         return { CramColor(cram, cramMode, entry), entry };   // CRAM color-bank index
     }
@@ -155,8 +150,10 @@ inline Texel DecodeTexelWord(const std::vector<uint8_t>& vram, const std::vector
     {
         const uint32_t off = texAddr + (y * width + x) * 2;   // 16 bpp
         const uint16_t v = ReadBE16(vram, off);
-        if (v == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
-        return { Rgb555ToRgba(v), v, true };
+        // With transparent-pixel disable clear, the hardware drops every RGB word below 0x4000 --
+        // not just zero -- so a word such as 0x0001 is see-through rather than a dark red pixel.
+        if (v < 0x4000 && !spd) return { { 0, 0, 0, 0 }, 0 };
+        return { Rgb555ToRgba(v), v };
     }
     default:
         return { { 0, 0, 0, 0 }, 0 };
@@ -194,16 +191,18 @@ inline bool RawTexel(const std::vector<uint8_t>& vram, se_color_mode colorMode, 
     }
 }
 
-// The end code of a colour mode: all ones in the texel's own width (0xF at 4 bpp, 0xFF at 8 bpp,
-// 0x7FFF for RGB555 -- the MSB is the RGB flag, not part of the colour).
-inline uint16_t EndCodeValue(se_color_mode colorMode)
+// True if 'raw' (see RawTexel) is an end code in this colour mode: all ones in the texel's own
+// width at 4 and 8 bpp (0xF, 0xFF), and in RGB555 any word with bit 14 set and the MSB clear
+// (0x4000-0x7FFF), not just 0x7FFF -- the MSB is the RGB flag, and the hardware checks the two top
+// bits only.
+inline bool IsEndCode(se_color_mode colorMode, uint16_t raw)
 {
     switch (colorMode)
     {
     case SE_COLOR_BANK_16:
-    case SE_COLOR_LUT_16:  return 0x000F;
-    case SE_COLOR_RGB555:  return 0x7FFF;
-    default:               return 0x00FF;
+    case SE_COLOR_LUT_16:  return raw == 0x000F;
+    case SE_COLOR_RGB555:  return (raw & 0xC000) == 0x4000;
+    default:               return raw == 0x00FF;
     }
 }
 

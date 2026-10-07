@@ -1385,6 +1385,91 @@ void TestHiResUserClipCoversBothDoubledColumns()
             CHECK(IsColorAt(pixels, 640, x, y, 255, 0, 0) == (x == 2 || x == 3));
 }
 
+// Drawing coordinates are 13-bit signed and the local origin 11-bit signed, not 16-bit: 0x1FFF is -1
+// and a local 0x07FF is -1. Read as int16 they were 8191 and 2047, which throws the primitive off
+// screen.
+void TestCoordinatesAreSignExtendedFromTheirHardwareWidth()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0x801F, 0, 0x1FFF, 0x1FFF, 3, 1);   // (-1,-1) - (3,1)
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> drawn = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(drawn, 4, x, y, 255, 0, 0));
+
+    State local = MakeBlueBackState(4, 2);
+    PutBE16(local.vdp1, 0x20, 0x000A);   // local coordinate (0x07FF, 0x07FF) == (-1,-1)
+    PutBE16(local.vdp1, 0x2C, 0x07FF);
+    PutBE16(local.vdp1, 0x2E, 0x07FF);
+    PutPolygon(local, 0x40, 0x801F, 0, 1, 1, 4, 2);   // + origin -> (0,0) - (3,1)
+    PutBE16(local.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> shifted = RenderSized(local, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(shifted, 4, x, y, 255, 0, 0));
+}
+
+// An 8x1 RGB555 texture, drawn at (0,0) of an 8x2 frame with 'pmod'.
+std::vector<uint8_t> RenderRgbRow(const uint16_t words[8], uint16_t pmod)
+{
+    State state = MakeBlueBackState(8, 2);
+    PutBE16(state.vdp1, 0x20, 0x0000);
+    PutBE16(state.vdp1, 0x24, pmod);
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    for (uint32_t i = 0; i < 8; ++i) PutBE16(state.vdp1, 0x100 + i * 2, words[i]);
+    return RenderSized(state, 8, 2);
+}
+
+// With SPD clear every RGB word below 0x4000 is transparent, not just zero: 0x0001 is not a
+// dark-red pixel. 0x4000 itself is an ordinary colour once the end code is disabled.
+void TestRgbTexelsBelow0x4000AreTransparent()
+{
+    const uint16_t row[8] = { 0x0001, 0x3FFF, 0x4000, 0x801F, 0x801F, 0x801F, 0x801F, 0x801F };
+    const std::vector<uint8_t> pixels = RenderRgbRow(row, 0x0028 | 0x0080);   // RGB555, ECD set
+    CHECK(IsColorAt(pixels, 8, 0, 0, 0, 0, 255));
+    CHECK(IsColorAt(pixels, 8, 1, 0, 0, 0, 255));
+    CHECK(IsColorAt(pixels, 8, 2, 0, 0, 0, 131));   // 0x4000: blue channel 16 of 31
+    CHECK(IsColorAt(pixels, 8, 3, 0, 255, 0, 0));
+}
+
+// RGB end codes are every word in 0x4000-0x7FFF (MSB clear, bit 14 set), and the second one met
+// ends the line.
+void TestRgbEndCodesSpanTheWholeRange()
+{
+    const uint16_t row[8] = { 0x4001, 0x5000, 0x801F, 0x801F, 0x801F, 0x801F, 0x801F, 0x801F };
+    const std::vector<uint8_t> pixels = RenderRgbRow(row, 0x0028);   // end code enabled
+    for (int x = 0; x < 8; ++x) CHECK(IsColorAt(pixels, 8, x, 0, 0, 0, 255));
+}
+
+// The hardware counts end codes over the line -- the second one met ends it even with colours in
+// between, not only two in a row.
+void TestEndCodesAreCountedAcrossTheLine()
+{
+    const uint8_t row[4] = { 0x1F, 0x1F, 0x11, 0x11 };   // 1 F 1 F 1 1 1 1
+    const std::vector<uint8_t> pixels = RenderEndCodeRow(row, 0x0000);
+    CHECK(IsColorAt(pixels, 8, 0, 0, 255, 0, 0));
+    CHECK(IsColorAt(pixels, 8, 1, 0, 0, 0, 255));   // first end code: transparent
+    CHECK(IsColorAt(pixels, 8, 2, 0, 255, 0, 0));
+    for (int x = 3; x < 8; ++x) CHECK(IsColorAt(pixels, 8, x, 0, 0, 0, 255));   // second ends it
+}
+
+// Half-transparency tests the destination's MSB, not what kind of primitive wrote it: over a pixel
+// whose MSB is clear (a palette code) the half-transparent pixel simply replaces it.
+void TestHalfTransparencyNeedsAnMsbSetDestination()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0x001F, 0x0000, 0, 0, 3, 1);   // MSB clear: a palette code
+    PutPolygon(state, 0x40, 0x83E0, 0x0003, 0, 0, 3, 1);   // green, half-transparent
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 0, 255, 0));
+}
+
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
@@ -1423,6 +1508,11 @@ int main()
     TestLoneEndCodeIsOnlyTransparent();
     TestSkippedStateCommandsChangeNothing();
     TestHiResUserClipCoversBothDoubledColumns();
+    TestCoordinatesAreSignExtendedFromTheirHardwareWidth();
+    TestRgbTexelsBelow0x4000AreTransparent();
+    TestRgbEndCodesSpanTheWholeRange();
+    TestEndCodesAreCountedAcrossTheLine();
+    TestHalfTransparencyNeedsAnMsbSetDestination();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();
