@@ -1014,10 +1014,13 @@ else()
             ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/Live/src
         )
         target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_LIVE)
+        # Core goes after the drivers: they depend on it and a static library must follow its
+        # dependents. Listed first, CMake emits it a second time after them anyway, and Apple's
+        # linker warns about the duplicate.
         target_link_libraries(SaturnExplorerFrontEnd PRIVATE
-            SaturnExplorerCore
             SaturnExplorerSavestateDriver
             SaturnExplorerLiveDriver
+            SaturnExplorerCore
             ${SDL2_LIBRARIES}
             OpenGL::GL
         )
