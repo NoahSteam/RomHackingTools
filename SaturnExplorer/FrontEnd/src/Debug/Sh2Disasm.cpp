@@ -299,22 +299,51 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
     return ins;
 }
 
-DisassembledInstruction Sh2DecodeInDelaySlot(uint32_t address, uint16_t op,
+DisassembledInstruction Sh2DecodeAfterBranch(uint32_t address, uint16_t op,
                                              const DisassembledInstruction& branch)
 {
     DisassembledInstruction ins = Sh2Decode(address, op);
     if (ins.PcRel == Sh2PcRel::None || !branch.HasDelaySlot) return ins;
     const int reg = ins.PcRel == Sh2PcRel::Mova ? 0 : (op >> 8) & 0xF;
-    // bra/bsr always take their static target; everything else (bt.s/bf.s on T, jmp/jsr/braf/bsrf/rts/rte
-    // on a register) leaves it unknown here.
-    if (branch.HasBranchTarget && !branch.IsConditional)
-        WritePcRelOperand(ins, branch.BranchTarget + 2, reg);
-    else
+    ins.PcRelAmbiguous = true;
+    ins.PcRelDirectAddress = PcRelAddress(ins.PcRel, address + 4, ins.PcRelDisp);
+    if (branch.HasBranchTarget)
     {
-        ins.PcRelAmbiguous = true;
-        WritePcRelOperand(ins, 0, reg);
+        ins.PcRelHasSlotAddress = true;
+        ins.PcRelSlotAddress = PcRelAddress(ins.PcRel, branch.BranchTarget + 2, ins.PcRelDisp);
     }
+    WritePcRelOperand(ins, 0, reg);
     return ins;
+}
+
+std::vector<Sh2WindowLine> Sh2DecodeWindow(uint32_t base, const uint8_t* bytes, size_t size,
+                                           int count, const uint8_t* prevBytes)
+{
+    std::vector<Sh2WindowLine> lines;
+    lines.reserve(count > 0 ? (size_t)count : 0);
+    DisassembledInstruction prev;   // the instruction before the row being decoded
+    bool havePrev = false;
+    if (prevBytes)
+    {
+        prev = Sh2Decode(base - 2, (uint16_t)((prevBytes[0] << 8) | prevBytes[1]));
+        havePrev = true;
+    }
+    for (int k = 0; k < count; ++k)
+    {
+        Sh2WindowLine ln;
+        ln.addr = base + (uint32_t)k * 2;
+        if (bytes && (size_t)(k * 2 + 1) < size)
+        {
+            ln.op = (uint16_t)((bytes[k * 2] << 8) | bytes[k * 2 + 1]);
+            ln.ins = havePrev ? Sh2DecodeAfterBranch(ln.addr, ln.op, prev) : Sh2Decode(ln.addr, ln.op);
+            ln.readable = true;
+            prev = ln.ins;
+            havePrev = true;
+        }
+        else havePrev = false;
+        lines.push_back(std::move(ln));
+    }
+    return lines;
 }
 
 DisassembledInstruction Sh2DecodeAt(uint32_t address, const uint8_t* bytes, size_t size)

@@ -365,39 +365,70 @@ void TestMacWordDecodesForEverySourceRegister()
     }
 }
 
-void TestPcRelativeOperandInADelaySlotUsesTheBranchDestination()
+void TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress()
 {
-    // bra 0x06000200 at 0x06000100; the mova in its slot reads PC as the destination plus two.
+    // bra 0x06000200 at 0x06000100. The mova after it is in the slot when the branch is taken (PC =
+    // destination + 2 -> 0x06000200), but it is at 0x06000104 if something jumps straight to it. Memory
+    // cannot say which, so neither is printed as the operand.
     const DisassembledInstruction bra = Sh2Decode(0x06000100, 0xA07E);
     CHECK(bra.HasDelaySlot && bra.HasBranchTarget && bra.BranchTarget == 0x06000200);
     const DisassembledInstruction alone = Sh2Decode(0x06000102, 0xC700);
-    CHECK(alone.Operands == "@(0x06000104),r0");
-    const DisassembledInstruction slot = Sh2DecodeInDelaySlot(0x06000102, 0xC700, bra);
-    CHECK(slot.Operands == "@(0x06000200),r0");
-    // mov.w / mov.l literals follow the same PC.
-    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0x9102, bra).Operands == "@(0x06000206),r1");   // 0x...202 + 4
-    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0xD102, bra).Operands == "@(0x06000208),r1");   // (0x...202 & ~3) + 8
-    // A non-branch before it changes nothing.
+    CHECK(alone.Operands == "@(0x06000104),r0" && !alone.PcRelAmbiguous);
+    const DisassembledInstruction after = Sh2DecodeAfterBranch(0x06000102, 0xC700, bra);
+    CHECK(after.PcRelAmbiguous && after.Operands == "@(0x0,pc),r0");
+    CHECK(after.PcRelDirectAddress == 0x06000104 && after.PcRelHasSlotAddress &&
+          after.PcRelSlotAddress == 0x06000200);
+    // mov.w / mov.l literals: the same two candidates under their own formulas.
+    const DisassembledInstruction w = Sh2DecodeAfterBranch(0x06000102, 0x9102, bra);
+    CHECK(w.PcRelDirectAddress == 0x0600010A && w.PcRelSlotAddress == 0x06000206);   // PC + 4 each
+    const DisassembledInstruction l = Sh2DecodeAfterBranch(0x06000102, 0xD102, bra);
+    CHECK(l.PcRelDirectAddress == 0x0600010C && l.PcRelSlotAddress == 0x06000208);
+    // The ambiguous operand is neither a memory access nor resolvable, and the tooltip lists both.
+    const se_sh2_regs r = TestRegs();
+    uint32_t ea = 0, wd = 0;
+    CHECK(!ResolveSh2MemOperand(after, -1, r, ea, wd) && !ResolveSh2OperandAddress(after, -1, r, ea, wd));
+    CHECK(Join(Sh2OperandHoverLines(after, 0, r, Reader())) ==
+          "reached directly: address = 06000104\nin the slot of the taken branch: address = 06000200\n");
+    CHECK(Join(Sh2OperandHoverLines(l, 0, r, Reader())) ==
+          "reached directly: [0600010C] = DEADBEEF\nin the slot of the taken branch: [06000208] = DEADBEEF\n");
+    // After something that is not a delayed branch, nothing is in question.
     const DisassembledInstruction nop = Sh2Decode(0x06000100, 0x0009);
-    CHECK(Sh2DecodeInDelaySlot(0x06000102, 0xC700, nop).Operands == alone.Operands);
+    CHECK(Sh2DecodeAfterBranch(0x06000102, 0xC700, nop).Operands == alone.Operands);
 }
 
-void TestPcRelativeOperandAfterAConditionalOrIndirectBranchIsContextDependent()
+void TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress()
 {
-    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt.s
     const DisassembledInstruction rts = Sh2Decode(0x06000100, 0x000B);
+    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt.s: destination static
     const DisassembledInstruction bt  = Sh2Decode(0x06000100, 0x8900);   // no delay slot
-    CHECK(bts.HasDelaySlot && rts.HasDelaySlot && !bt.HasDelaySlot);
-    for (const DisassembledInstruction* b : { &bts, &rts })
-    {
-        const DisassembledInstruction slot = Sh2DecodeInDelaySlot(0x06000102, 0xD102, *b);
-        CHECK(slot.PcRelAmbiguous && slot.Operands == "@(0x8,pc),r1");
-        const se_sh2_regs r = TestRegs();
-        uint32_t ea = 0, w = 0;
-        CHECK(!ResolveSh2MemOperand(slot, -1, r, ea, w));
-        CHECK(Join(Sh2OperandHoverLines(slot, 0, r, Reader())) == "address depends on whether the branch is taken\n");
-        CHECK(Sh2Comment(slot, r, Reader()) == "PC-relative: address depends on the branch");
-    }
+    CHECK(rts.HasDelaySlot && bts.HasDelaySlot && !bt.HasDelaySlot);
+    const se_sh2_regs r = TestRegs();
+    const DisassembledInstruction a = Sh2DecodeAfterBranch(0x06000102, 0xD102, rts);
+    CHECK(a.PcRelAmbiguous && !a.PcRelHasSlotAddress);
+    CHECK(Join(Sh2OperandHoverLines(a, 0, r, Reader())).find("depends on its destination") != std::string::npos);
+    CHECK(Sh2Comment(a, r, Reader()) == "PC-relative: address depends on whether this is the branch's delay slot");
+    const DisassembledInstruction b = Sh2DecodeAfterBranch(0x06000102, 0xD102, bts);
+    CHECK(b.PcRelAmbiguous && b.PcRelHasSlotAddress && b.PcRelSlotAddress == ((bts.BranchTarget + 2) & ~3u) + 8);
+}
+
+void TestWindowDecodingDoesNotDependOnWhereTheWindowStarts()
+{
+    // 0x06000100: bra 0x06000200 / 0x06000102: mova @(0,pc),r0 / 0x06000104: nop
+    const uint8_t code[] = { 0xA0, 0x7E, 0xC7, 0x00, 0x00, 0x09 };
+    // Window A holds the branch; window B starts on the mova with the branch as its predecessor.
+    const auto a = Sh2DecodeWindow(0x06000100, code, 6, 3, nullptr);
+    const auto b = Sh2DecodeWindow(0x06000102, code + 2, 4, 2, code);
+    CHECK(a.size() == 3 && b.size() == 2);
+    CHECK(a[1].ins.PcRelAmbiguous && b[0].ins.PcRelAmbiguous);
+    CHECK(a[1].ins.Operands == b[0].ins.Operands);
+    CHECK(a[1].ins.PcRelDirectAddress == b[0].ins.PcRelDirectAddress);
+    CHECK(a[1].ins.PcRelSlotAddress == b[0].ins.PcRelSlotAddress && b[0].ins.PcRelSlotAddress == 0x06000200);
+    // Without the predecessor the first row cannot know, and decodes as an ordinary instruction.
+    const auto c = Sh2DecodeWindow(0x06000102, code + 2, 4, 2, nullptr);
+    CHECK(!c[0].ins.PcRelAmbiguous && c[0].ins.Operands == "@(0x06000104),r0");
+    // Rows past the readable bytes are unreadable and break the chain.
+    const auto d = Sh2DecodeWindow(0x06000100, code, 3, 3, nullptr);
+    CHECK(d[0].readable && !d[1].readable && !d[2].readable);
 }
 
 void TestGbrIndexedByteOperationsResolve()
@@ -457,8 +488,9 @@ int main()
     TestAccessWidthFromMnemonic();
     TestRegMaskMatchesWholeTokens();
     TestMacWordDecodesForEverySourceRegister();
-    TestPcRelativeOperandInADelaySlotUsesTheBranchDestination();
-    TestPcRelativeOperandAfterAConditionalOrIndirectBranchIsContextDependent();
+    TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress();
+    TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress();
+    TestWindowDecodingDoesNotDependOnWhereTheWindowStarts();
     TestGbrIndexedByteOperationsResolve();
     TestAddressOperandsAreNotMemoryAccesses();
     TestImmediateCommentsSignExtendAndTstIsNotAnAssignment();

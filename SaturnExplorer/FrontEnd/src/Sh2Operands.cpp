@@ -164,7 +164,25 @@ std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins
     uint32_t ea = 0, n = 0;
     if (ins.PcRelAmbiguous && text.find("pc") != std::string::npos)
     {
-        lines.push_back("address depends on whether the branch is taken");
+        // Memory cannot say whether this runs in the branch's delay slot, so give each candidate.
+        const bool mova = ins.PcRel == Sh2PcRel::Mova;
+        const uint32_t width = mova ? 0 : (ins.PcRel == Sh2PcRel::Word ? 2u : 4u);
+        auto candidate = [&](const char* how, uint32_t addr)
+        {
+            if (mova) std::snprintf(b, sizeof(b), "%s: address = %08X", how, addr);
+            else
+            {
+                uint32_t val = 0;
+                if (readMem && readMem(addr, width, val))
+                    std::snprintf(b, sizeof(b), "%s: [%08X] = %0*X", how, addr, (int)(width * 2), val);
+                else
+                    std::snprintf(b, sizeof(b), "%s: [%08X] unavailable", how, addr);
+            }
+            lines.push_back(b);
+        };
+        candidate("reached directly", ins.PcRelDirectAddress);
+        if (ins.PcRelHasSlotAddress) candidate("in the slot of the taken branch", ins.PcRelSlotAddress);
+        else lines.push_back("in the slot of the taken branch: depends on its destination");
         return lines;
     }
     if (ResolveSh2MemOperand(text, ins.Mnemonic, r, ea, n))
@@ -218,7 +236,7 @@ std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& re
     if (m == "jsr" || m == "bsrf")  return std::string("call ") + o;
 
     // --- PC-relative operand in a delay slot whose branch may not be taken ---
-    if (ins.PcRelAmbiguous) return "PC-relative: address depends on the branch";
+    if (ins.PcRelAmbiguous) return "PC-relative: address depends on whether this is the branch's delay slot";
     if (m == "mova")
     {
         uint32_t ea = 0, w = 0;

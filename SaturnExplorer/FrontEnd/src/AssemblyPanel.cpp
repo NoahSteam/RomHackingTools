@@ -254,27 +254,24 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
     if (mAutoRefresh || !mHaveWindowBytes || mWindowBytesBase != mWindowBase ||
         mWindowBytes.size() != winLen || mWindowBytesSource != sourceId)
     {
-        auto results = backend.ReadMemoryBatch({ { mWindowBase, winLen } });
+        // One instruction before the window as well: the first row may sit in the delay slot of the
+        // branch above it, and decoding it must not depend on where the window happens to start.
+        // Unreadable (the window starts at its region's edge) just means no predecessor.
+        auto results = backend.ReadMemoryBatch({ { mWindowBase, winLen }, { mWindowBase >= 2 ? mWindowBase - 2 : 0, 2 } });
         mWindowBytes = results[0].success ? results[0].bytes : std::vector<uint8_t>();
+        mHaveWindowPrev = mWindowBase >= 2 && results[1].success && results[1].bytes.size() >= 2;
+        if (mHaveWindowPrev) { mWindowPrev[0] = results[1].bytes[0]; mWindowPrev[1] = results[1].bytes[1]; }
         mWindowBytesBase = mWindowBase;
         mWindowBytesSource = sourceId;
         mHaveWindowBytes = true;
     }
-    const std::vector<uint8_t>& code = mWindowBytes;
+    const std::vector<Sh2WindowLine> decoded =
+        Sh2DecodeWindow(mWindowBase, mWindowBytes.data(), mWindowBytes.size(), mWindowInstr,
+                        mHaveWindowPrev ? mWindowPrev : nullptr);
     mLines.clear();
-    for (int k = 0; k < mWindowInstr; ++k)
+    for (const Sh2WindowLine& w : decoded)
     {
-        Line ln; ln.addr = mWindowBase + (uint32_t)k * 2;
-        if ((size_t)(k * 2 + 1) < code.size())
-        {
-            ln.op = (uint16_t)((code[k*2] << 8) | code[k*2+1]);
-            // The instruction after a delayed branch runs in its slot, where a PC-relative operand
-            // reads a different PC (see Sh2DecodeInDelaySlot).
-            const bool inSlot = k > 0 && mLines[k - 1].readable && mLines[k - 1].ins.HasDelaySlot;
-            ln.ins = inSlot ? Sh2DecodeInDelaySlot(ln.addr, ln.op, mLines[k - 1].ins)
-                            : Sh2Decode(ln.addr, ln.op);
-            ln.readable = true;
-        }
+        Line ln; ln.addr = w.addr; ln.op = w.op; ln.readable = w.readable; ln.ins = w.ins;
         mLines.push_back(std::move(ln));
     }
 
