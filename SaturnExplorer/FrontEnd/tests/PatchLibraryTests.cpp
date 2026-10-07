@@ -348,7 +348,8 @@ int main()
 
             // --- The no-dirfd fallback (what Windows runs) ---------------------------------
             // Forced on here. It opens the name, then judges the opened handle's own final
-            // path (a /proc readlink stands in for GetFinalPathNameByHandleW). A parent swapped
+            // path (a /proc readlink on Linux, F_GETPATH on macOS, stands in for
+            // GetFinalPathNameByHandleW). A parent swapped
             // for a symlink immediately before the open is caught after it, and the file is
             // closed unwritten; an unswapped run still patches normally.
             for (int swapIt = 0; swapIt < 2; ++swapIt)
@@ -374,7 +375,13 @@ int main()
                     "m = importlib.util.module_from_spec(spec)\n"
                     "spec.loader.exec_module(m)\n"
                     "m.HAVE_DIRFD = False\n"
-                    "m.final_path = lambda fd: os.readlink('/proc/self/fd/%d' % fd)\n"
+                    "def stub_final_path(fd):\n"
+                    "    if os.path.isdir('/proc/self/fd'):\n"
+                    "        return os.readlink('/proc/self/fd/%d' % fd)\n"
+                    "    import fcntl\n"
+                    "    buf = fcntl.fcntl(fd, getattr(fcntl, 'F_GETPATH', 50), b'\\0' * 1024)\n"
+                    "    return os.fsdecode(buf.split(b'\\0', 1)[0])\n"
+                    "m.final_path = stub_final_path\n"
                     "real_open = os.open\n"
                     "def swapped(path, *a, **k):\n"
                     "    base = os.path.dirname(os.path.abspath(script))\n"
