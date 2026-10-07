@@ -672,7 +672,14 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
 {
     const int width = scene.screenWidth;
     const int height = scene.screenHeight;
-    layer.assign(static_cast<size_t>(std::max(width, 0)) * std::max(height, 0), SpritePixel{});
+    // A pixel nothing drew is invisible, but VDP2 still reads the zero word there and the gradation
+    // screen blurs the colour it decodes to (the CRAM entry at the sprite colour offset).
+    SpritePixel blank;
+    if (prios.valid)
+    {
+        blank.color = prios.Resolve(0, cram, cramMode).color;
+    }
+    layer.assign(static_cast<size_t>(std::max(width, 0)) * std::max(height, 0), blank);
     if (width <= 0 || height <= 0)
     {
         return false;

@@ -1914,6 +1914,20 @@ void TestGradationBlursTheDesignatedScreen()
     CHECK(IsColor(RenderCc(state), 1, 0, 0, 0, 127));
 }
 
+// The blur reads the screen's colour data, drawn or not: a transparent dot still carries the colour its
+// code decodes to (CRAM entry 0, red here), and the blur spreads it into its drawn neighbours. White
+// dots alternate with transparent ones, so each white dot's blur is 1/4 white + 1/4 red + 1/2 white
+// ... (255,191,191) blended 16:16 with the white dot itself.
+void TestGradationBlursTransparentDotColours()
+{
+    State state = MakeCcState();
+    std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x10);   // 1 0 1 0 ... (white, transparent)
+    PutBE16(state.cram, 0, 0x001F);                                          // entry 0 is red
+    SetReg(state, 0x0EC, 0xE008);
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    CHECK(IsColor(pixels, 2, 0, 255, 223, 223));
+}
+
 // ---- RBG1 and RBG0 coefficient line colour -------------------------------------------------------
 
 // At equal priority the hardware ranks RBG0 above NBG0 above NBG1-3. NBG3 (white) and RBG0 (rotation
@@ -2309,6 +2323,7 @@ int main()
     TestSecondImageRatioMode();
     TestVerticalCellScroll();
     TestGradationBlursTheDesignatedScreen();
+    TestGradationBlursTransparentDotColours();
     TestRbg0BeatsAnNbgAtEqualPriority();
     TestRbg1DrawsRotationSetBThroughNbg0Registers();
     TestRbg1WithRbg0SuppressesTheOtherNbgs();

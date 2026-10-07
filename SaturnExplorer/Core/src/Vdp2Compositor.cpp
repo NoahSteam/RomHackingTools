@@ -528,6 +528,10 @@ struct DotInfo
     uint16_t dcc = 0;
     bool cramMsb = false;
     bool spr = false, scc = false;
+    // The dot's decoded colour even where it is transparent. A transparent dot draws nothing, but the
+    // gradation calculation blurs the screen's colour data across it all the same (Mednafen keeps
+    // the colour of transparent and windowed-out dots in its line buffer).
+    Rgba color{ 0, 0, 0, 255 };
 };
 
 // Sample one 8x8-cell texel (ix,iy in 0..7) at 'cellBase'. Returns a == 0 when
@@ -551,7 +555,9 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
             info->dcc = static_cast<uint16_t>(dot);
             info->cramMsb = CramMsb(cram, cramMode, index);
         }
-        return CramColor(cram, cramMode, index);
+        const Rgba full = CramColor(cram, cramMode, index);
+        if (info) info->color = full;
+        return full;
     };
     switch (c.colorNum)
     {
@@ -560,32 +566,38 @@ Rgba FetchCellTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_t>
         const uint32_t off = cellBase + (pix >> 1);
         const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
         const uint8_t dot = (ix & 1) ? (byte & 0x0F) : (byte >> 4);
+        const Rgba full = palette(dot, c.colorOffset + (p.palette | dot));
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return palette(dot, c.colorOffset + (p.palette | dot));
+        return full;
     }
     case 1:   // 256-color (8 bpp)
     {
         const uint32_t off = cellBase + pix;
         const uint8_t dot = (off < vram.size()) ? vram[off] : 0;
+        const Rgba full = palette(dot, c.colorOffset + (p.palette | dot));
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return palette(dot, c.colorOffset + (p.palette | dot));
+        return full;
     }
     case 2:   // 2048-color (16 bpp palette)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2) & 0x7FF;
+        const Rgba full = palette(dot, c.colorOffset + dot);
         if (dot == 0 && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return palette(dot, c.colorOffset + dot);
+        return full;
     }
     case 3:   // 32K-color (16 bpp RGB555)
     {
         const uint16_t dot = ReadBE16(vram, cellBase + pix * 2);
+        const Rgba full = Rgb555ToRgba(dot);
+        if (info) info->color = full;
         if (!(dot & 0x8000) && !c.transparentPixelDisable) return { 0, 0, 0, 0 };
-        return Rgb555ToRgba(dot);
+        return full;
     }
     default:  // 16M-color (32 bpp RGB888)
     {
         const uint32_t off = cellBase + pix * 4;
         if (off + 3 >= vram.size()) return { 0, 0, 0, 0 };
+        if (info) info->color = { vram[off + 3], vram[off + 2], vram[off + 1], 255 };
         if (!(vram[off] & 0x80) && !c.transparentPixelDisable)
             return { 0, 0, 0, 0 };   // MSB = transparency
         // The 32-bit RGB word is stored big-endian as [code][B][G][R]: the two VDP2
@@ -646,9 +658,8 @@ inline bool SwBitAt(const EmitExtras& ex, size_t i)
 // data's MSB). Modes 2 test the dot colour code's top three bits against the special function code
 // and only apply to palette formats -- an RGB texel just keeps the LSB at 0 / the enable off.
 inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg, bool ccWindowMasked,
-                      Rgba* gradOut, const DotInfo& dot)
+                      const DotInfo& dot)
 {
-    if (gradOut && (cfg.mixFlags & kGradation)) *gradOut = c;
     const bool isRgb = cfg.colorNum >= 3;
     const bool codeHit = ((cfg.sfCode >> ((dot.dcc & 0xE) >> 1)) & 1) != 0;
 
@@ -904,7 +915,10 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
         for (int sx = 0; sx < width; ++sx)
         {
             const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
-            if (windows.Masks(sx, SwBitAt(ex, pixelIndex)))
+            // A windowed-out dot draws nothing, but the gradation screen still blurs its colour.
+            const bool windowed = windows.Masks(sx, SwBitAt(ex, pixelIndex));
+            Rgba* const gradDot = (ex.gradation && (c.mixFlags & kGradation)) ? &(*ex.gradation)[pixelIndex] : nullptr;
+            if (windowed && !gradDot)
             {
                 continue;
             }
@@ -938,6 +952,11 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             Rgba col = c.bitmap
                 ? FetchBitmapTexel(vram, cram, cramMode, c, sampleX, yPx, &dot)
                 : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, geom, planeX, planeY, &dot);
+            if (gradDot) *gradDot = dot.color;
+            if (windowed)
+            {
+                continue;
+            }
             // A grid line is drawn even where the layer's own texel is transparent —
             // that is the point of it, showing where the empty tiles are.
             if (opts.show_tile_grid && OnTileBoundary(c, geom.cellWH, planeX, planeY))
@@ -949,7 +968,7 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
                 continue;
             }
             EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
-                      ex.gradation ? &(*ex.gradation)[pixelIndex] : nullptr, dot);
+                      dot);
         }
     }
 }
@@ -1273,7 +1292,8 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 }
             }
 
-            if (windows.Masks(sx, SwBitAt(ex, pixelIndex)))
+            const bool windowed = windows.Masks(sx, SwBitAt(ex, pixelIndex));
+            if (windowed && !ex.gradation)
             {
                 continue;
             }
@@ -1314,6 +1334,11 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
             Rgba col = c.bitmap
                 ? FetchBitmapTexel(vram, cram, cramMode, c, ixs, iys, &dot)
                 : FetchPlaneTexel(vram, cram, cramMode, c, vrsize, s.geom, planeX, planeY, &dot);
+            if (ex.gradation && (c.mixFlags & kGradation)) (*ex.gradation)[pixelIndex] = dot.color;
+            if (windowed)
+            {
+                continue;
+            }
             if (opts.show_tile_grid && OnTileBoundary(c, s.geom.cellWH, planeX, planeY))
             {
                 TintTileGrid(col);
@@ -1323,7 +1348,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 continue;
             }
             EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
-                      ex.gradation ? &(*ex.gradation)[pixelIndex] : nullptr, dot);
+                      dot);
         }
     }
 }
@@ -1564,6 +1589,8 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
         {
             const size_t i = static_cast<size_t>(y) * width + x;
             const SpritePixel& p = sprites[i];
+            // The gradation screen blurs the sprite word's colour whether or not the dot is drawn.
+            if (gradation && (baseFlags & kGradation)) gradation[i] = p.color;
             if (!p.visible)
             {
                 continue;
@@ -1580,7 +1607,6 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
                 }
                 continue;
             }
-            if (gradation && (baseFlags & kGradation)) gradation[i] = p.color;
             uint16_t flags = baseFlags;
             if (shadows && p.shadowSelf) flags |= kShadowSelf;
             if (p.isRgb) flags |= kIsRgb;
