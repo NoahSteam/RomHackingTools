@@ -122,7 +122,8 @@ void SeExportNotifyStop(int cpu, unsigned int pc);
  *  - SeExportNotifyStep(cpu, pc): latch a stop as SE_LIVE_STOP_STEP (a completed step),
  *    the step analog of SeExportNotifyStop.
  *  - SeExportNotifyDmaStop(cpu, pc): a halt that did NOT come from the per-instruction hook --
- *    an SCU-DMA watchpoint, which stops between instructions. 'pc' is the instruction the CPU is
+ *    an SCU-DMA watchpoint, which stops between instructions. Latched as SE_LIVE_STOP_DMA_WATCH,
+ *    so the client knows the cause without inferring it from the instruction at 'pc'. 'pc' is the instruction the CPU is
  *    about to execute, which has not run yet (so its first presentation after a step is not a
  *    retirement, unlike the hook's own halts, where the instruction at the halt PC runs next).
  *  - SeExportInsnStepBegin(): call right after the halt gate releases; returns 1 if an

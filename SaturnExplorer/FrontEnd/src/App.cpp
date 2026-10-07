@@ -1123,6 +1123,22 @@ void App::BuildUI(IPlatform& platform)
             stopped = false;
             mStepHalt.SuppressHalt();
         }
+        // An SCU-DMA watchpoint halt is explained by the emulator, not by the instruction at the PC
+        // (which has not run, and whose execution breakpoint, if any, has not been reached): any
+        // armed watchpoint may be the one. A logging one is recorded; the halt stands only if a
+        // break-on-access one is armed.
+        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_DMA_WATCH && !atStepBp)
+        {
+            const BreakpointManager::WatchCauses w = mBreakpoints.WatchCausesFor(
+                [](uint32_t, uint32_t, bool, bool) { return true; });
+            if (w.logging) RecordAccess(static_cast<int>(report.cpu), report.pc);
+            if (!w.halting)
+            {
+                Continue();
+                stopped = false;
+                mStepHalt.SuppressHalt();
+            }
+        }
         // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
         // evaluates false (and it isn't the transient step target), resume without surfacing
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted

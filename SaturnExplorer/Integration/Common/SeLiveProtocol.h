@@ -350,6 +350,14 @@
 #define SE_LIVE_STOP_NONE     0u     /* not stopped, or paused by the user */
 #define SE_LIVE_STOP_EXEC_BP  1u     /* halted on an execution breakpoint */
 #define SE_LIVE_STOP_STEP     2u     /* halted after an instruction step (IST) completed */
+/* Halted by a data watchpoint that SCU DMA hit. The PC is where the CPU stood when the DMA ran: no
+ * instruction made the access and the one at the PC has not run, so nothing about that instruction
+ * says what stopped it -- and an execution breakpoint there has not been reached. A client must
+ * treat this as a watchpoint halt, not infer the cause from the PC. (Watchpoints hit by an SH-2
+ * instruction are reported as SE_LIVE_STOP_EXEC_BP, with the PC of the accessing instruction.)
+ * Added without a version bump: the reason is an open value, and a client that does not know it
+ * shows a plain halt. */
+#define SE_LIVE_STOP_DMA_WATCH 3u
 
 /* Canonical section sizes (bytes). The header still carries the actual lengths,
  * so a client validates rather than assumes; these are the expected values. */

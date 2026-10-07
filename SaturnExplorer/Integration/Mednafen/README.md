@@ -315,7 +315,8 @@ same PC repeatedly without retiring. A repeated PC therefore spends no budget �
 branch **to itself** (`bt .` / `bf .`, displacement −2), which retires and leaves the PC where it
 was; the glue decodes the instruction (`SeMednafenSelfBranchTaken`) and says so. An SCU-DMA
 watchpoint halts *between* instructions (`SeExportNotifyDmaStop`): the instruction at the halt PC has
-not run, so its first presentation after a step is not a retirement. One case remains that a PC and
+not run, so its first presentation after a step is not a retirement. That halt is reported as its own stop reason, `SE_LIVE_STOP_DMA_WATCH`: no instruction made the
+access, so the client does not infer the cause from the instruction (or an execution breakpoint) at the PC. One case remains that a PC and
 an opcode cannot settle — a taken self-branch that is *also* stalled on the bus; it would need a
 retire counter from the CPU core.
 

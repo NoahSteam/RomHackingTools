@@ -254,6 +254,13 @@ void TestStopSequence(Client& cl)
     const Ctl s = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(s.ok && s.reason == SE_LIVE_STOP_STEP && s.cpu == 1 && s.seq != b.seq,
           "a step halt on the slave is a new, distinct halt");
+
+    // An SCU-DMA watchpoint says so: no instruction made the access, so the client must not have
+    // to guess the cause from the instruction at the PC.
+    SeExportNotifyDmaStop(0, 0x06002008u);
+    const Ctl d = cl.Exchange(SE_LIVE_VERB_GET, 0);
+    Check(d.ok && d.reason == SE_LIVE_STOP_DMA_WATCH && d.pc == 0x06002008u && d.seq != s.seq,
+          "a DMA watchpoint halt is reported as its own reason");
     cl.Exchange(SE_LIVE_VERB_RESUME, 0);
 }
 
