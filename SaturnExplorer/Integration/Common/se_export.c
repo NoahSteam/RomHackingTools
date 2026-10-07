@@ -580,6 +580,24 @@ static void SeStateCapture(unsigned long long frame, unsigned epoch)
     SE_SUNLOCK();
 }
 
+/* A savestate wanted for the frame SeExportSnapshot just published, taken by SeExportEndFrame
+ * once the emulator has finished that frame. Emulate thread only, so no lock. */
+static int                sPendingState;
+static unsigned long long sPendingStateFrame;
+static unsigned           sPendingStateEpoch;
+
+/* Emulate thread, once per frame, as the very last thing the emulator does for it. Takes the
+ * savestate SeExportSnapshot asked for. This is the point a load reproduces exactly: a load is
+ * applied at the top of the next frame, and the state at the end of this one IS the state at the
+ * top of that one. Taken part-way through the frame it would not be, and the game would resume
+ * subtly off its original course (found by replaying a restored frame against the original run). */
+void SeExportEndFrame(void)
+{
+    if (!sPendingState) return;
+    sPendingState = 0;
+    SeStateCapture(sPendingStateFrame, sPendingStateEpoch);
+}
+
 /* Apply the LST memory-edit blob (SE_LIVE_EDIT_* layout) after a restore, so the game
  * re-simulates from frame N with the user's modifications. Byte-by-byte, like WRM/WRS. */
 static void SeStateApplyEdits(const unsigned char* edits, size_t len)
@@ -1437,14 +1455,21 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
                                * reports the step as retired also holds its frame */
     SE_UNLOCK();
-    /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
-     * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
-     * paused: a snapshot taken from inside a debugger halt (breakpoint/step) is mid-frame — the
-     * emulator's event timing isn't at a frame boundary, so its savestate isn't a clean rewind
-     * point. The rewind timeline simply omits halt frames; running frames still capture.
-     * Also skipped entirely while the client has rewind switched off (REW, v18): the full
-     * savestate is the most expensive thing on this thread and nothing would read it. */
-    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted)) SeStateCapture(sFrameNo, epochNow);
+    /* v16 rewind: see below -- the savestate is taken at the end of the frame, not here. */
+    /* The savestate is NOT taken here. The glue calls this from wherever the emulator has the
+     * frame's pictures ready, which for Mednafen is part-way through the frame's run loop, and a
+     * state saved there resumes wrongly: a load is applied at the TOP of the next frame, so the
+     * rest of this one -- the timestamp rebase, end-of-frame bookkeeping -- would never run. Note the
+     * frame and take the state when the frame is really over (SeExportEndFrame). Skipped while
+     * paused: a snapshot taken from inside a debugger halt is mid-frame too. Also skipped entirely
+     * while the client has rewind switched off (REW, v18): the full savestate is the most expensive
+     * thing on this thread and nothing would read it. */
+    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted))
+    {
+        sPendingStateFrame = sFrameNo;
+        sPendingStateEpoch = epochNow;
+        sPendingState = 1;
+    }
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1579,6 +1604,11 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap);
 static void SeServeClient(SeConn cl, SeFrame* snap)
 {
     SeAtAdd(&sClients, 1);
+    /* A client that joins part-way through a run has never seen the keyframe the deltas now being
+     * produced are measured against, so none of them could be rebuilt until the next one came
+     * round -- up to SE_STATE_KF_MAX frames of the history it records would be unusable. Make the
+     * next state a keyframe so the first thing it receives is a base it can start from. */
+    SeStateFlushAndRekey();
     SeServeClientLoop(cl, snap);
     SeAtAdd(&sClients, -1);
 }

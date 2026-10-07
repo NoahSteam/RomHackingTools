@@ -79,6 +79,7 @@ void Frame()
 {
     SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
                      nullptr, nullptr, nullptr, nullptr, nullptr);
+    SeExportEndFrame();   // the glue's last call of the frame: where the savestate is taken
 }
 
 // What the front end does once it has submitted a load: discard blocks from before it.
@@ -89,6 +90,12 @@ void OnBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base, uint32_t f
              uint32_t epoch, const uint8_t* payload, uint32_t len)
 {
     if (epoch < gEpochFloor) { ++gStaleDropped; return; }
+    static_cast<sfe::FrameRecorder*>(user)->AttachStateBlock(frame, kind, base, fullLen, payload, len);
+}
+// For a client that has never asked for a load, so there is no epoch floor to apply.
+void OnBlock2(void* user, uint8_t kind, uint32_t frame, uint32_t base, uint32_t fullLen,
+              uint32_t, const uint8_t* payload, uint32_t len)
+{
     static_cast<sfe::FrameRecorder*>(user)->AttachStateBlock(frame, kind, base, fullLen, payload, len);
 }
 }  // namespace
@@ -248,9 +255,51 @@ int main()
     // in; on a slow one there is nothing to drop and the checks above are the whole test.
     if (gStaleDropped == 0) std::printf("note: no blocks of the abandoned timeline were in flight this run\n");
 
+    // --- A client that joins an emulator that has been running a while ---
+    // The exporter's deltas are measured against a keyframe sent some time ago. A newcomer never
+    // saw it, so unless the exporter starts it a keyframe of its own, nothing it records can be
+    // rebuilt until the next one comes round (hundreds of frames away).
+    se_destroy(ctx);   // the first client leaves; the emulator carries on
+    {
+        se_data_source ds2{};
+        se_result r2 = SE_ERR_IO;
+        for (int i = 0; i < 400 && r2 != SE_OK; ++i)
+        {
+            r2 = se_live_open(endpoint, &ds2);
+            if (r2 != SE_OK) Sleep(5);
+        }
+        se_context* ctx2 = r2 == SE_OK ? se_create(&ds2, &cfg) : nullptr;
+        Check(ctx2 != nullptr, "a second client attaches mid-run");
+        if (ctx2)
+        {
+            sfe::FrameRecorder rec2;
+            rec2.Configure(300);
+            const auto start = std::chrono::steady_clock::now();
+            while (rec2.Count() < 16 && std::chrono::steady_clock::now() - start < std::chrono::seconds(90))
+            {
+                se_begin_frame(ctx2);
+                rec2.Capture(ctx2, se_frame_number(ctx2));
+                se_live_drain_state_blocks(&ds2, &OnBlock2, &rec2);
+                Sleep(16);
+            }
+            // Let the newest frames' blocks arrive.
+            for (int i = 0; i < 60; ++i)
+            {
+                se_begin_frame(ctx2);
+                se_live_drain_state_blocks(&ds2, &OnBlock2, &rec2);
+                Sleep(16);
+            }
+            const sfe::FrameRecorder::StateStats late = rec2.GetStateStats();
+            std::printf("late joiner: frames %zu, resumable %zu\n", late.frames, late.resumable);
+            Check(late.frames >= 8, "the late joiner recorded frames");
+            Check(late.resumable * 2 >= late.frames,
+                  "a client that joins mid-run can resume from most of what it records");
+            se_destroy(ctx2);
+        }
+    }
+
     stop = true;
     emu.join();
-    se_destroy(ctx);
     SeExportDeinit();
     if (gFailures == 0) std::printf("All RewindPipeline tests passed.\n");
     return gFailures == 0 ? 0 : 1;

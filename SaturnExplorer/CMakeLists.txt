@@ -724,6 +724,22 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerRewindPipelineTests COMMAND SaturnExplorerRewindPipelineTests)
 
+        # Play From Here against a REAL emulator: restores a recorded frame and checks the game
+        # re-runs the following frames byte for byte as it did the first time. Needs a patched
+        # Mednafen already running a game (see Docs/PlayFromHereVerification.md), so it is a tool
+        # to run by hand and deliberately not a test.
+        add_executable(se-rewind-live-check
+            FrontEnd/tools/RewindLiveCheck.cpp
+            FrontEnd/src/FrameRecorder.cpp
+            FrontEnd/src/FrameLz.cpp)
+        target_include_directories(se-rewind-live-check PRIVATE
+            FrontEnd/src
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(se-rewind-live-check PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+
         # The exporter against hostile/slow peers, and frame-step accounting, over the same
         # default socket.
         add_executable(SaturnExplorerLiveExporterRobustnessTests

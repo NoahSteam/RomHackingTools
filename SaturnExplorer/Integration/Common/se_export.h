@@ -82,6 +82,14 @@ void SeExportApplyInstalls(void);
  * fixed little-endian layout documented in SeLiveProtocol.h (current FAD + play range +
  * state). NULL omits it (Disc Explorer shows no live read position). Last arg, same forward-
  * compat reason. */
+/* Call once per frame, when the emulator has FINISHED it -- after the last of its own end-of-frame
+ * work -- on the emulate thread. Takes the savestate (rewind, v16+) for the frame SeExportSnapshot
+ * published. It is separate because the savestate has to be taken at the point a load reproduces
+ * (the end of a frame), which is not where an emulator necessarily has the frame's pictures ready
+ * (Mednafen has them part-way through the frame's run loop). A glue that never calls this records
+ * pictures but no savestates. */
+void SeExportEndFrame(void);
+
 void SeExportSnapshot(const void* vdp1_vram_512k, const void* vdp2_vram_512k,
                       const void* cram_4k, const void* vdp2_regs_struct_288,
                       const void* vdp1_regs_struct, const void* wram_low_1m,
