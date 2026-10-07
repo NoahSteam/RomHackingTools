@@ -3,10 +3,12 @@
 // Instead of each source blending straight into an RGBA buffer back-to-front (the old
 // priority-band loop), every source (back screen, NBG0-3, RBG0, VDP1 sprites) emits a
 // per-pixel descriptor into a column, and the column resolves to one RGBA pixel at the
-// end. VDP2 colour calculation only ever blends the top-priority pixel with the one
-// immediately below it, so a column needs just the top two contributions by priority —
-// no full sort. This is what makes per-pixel sprite priority, cross-layer colour calc,
-// shadows, and line colour natural rather than special cases.
+// end. VDP2 colour calculation only ever blends the top-priority pixel with the layers
+// immediately below it, so a column keeps just the top four contributions by priority --
+// no full sort. Four is what the extended (up to four-screen) colour calculation with a
+// line colour screen inserted can read. This is what makes per-pixel sprite priority,
+// cross-layer colour calc, shadows, colour offset and line colour natural rather than
+// special cases.
 #pragma once
 
 #include <algorithm>
@@ -18,13 +20,19 @@
 namespace se
 {
 
-// Sprite-shadow flags a contribution can carry (PixDesc::shad).
+// Per-contribution flags (PixDesc::flags).
 enum : uint8_t
 {
-    kShadowEnable = 1,   // a scroll/back layer: VDP2 SDCTL lets a sprite shadow darken it
-    kShadowMarker = 2,   // a sprite pixel that only shadows what lies under it (normal / transparent
-                         // shadow): it draws nothing itself and the layer below shows, darkened
-    kShadowSelf   = 4    // a sprite pixel that is shadowed itself (MSB shadow, sprite shadow)
+    kShadowEnable = 1,    // a scroll/back layer: VDP2 SDCTL lets a sprite shadow darken it
+    kShadowMarker = 2,    // a sprite pixel that only shadows what lies under it (normal / transparent
+                          // shadow): it draws nothing itself and the layer below shows, darkened
+    kShadowSelf   = 4,    // a sprite pixel that is shadowed itself (MSB shadow, sprite shadow)
+    kLineColorEn  = 8,    // LNCLEN: insert the line colour screen when this is the top image
+    kOffsetEnable = 16,   // CLOFEN: apply colour offset when this is the (resulting) top image
+    kOffsetSelect = 32,   // CLOFSL: use offset set B instead of A
+    kLayerCc      = 64,   // the screen's own CCCTL enable, which a colour-calculation window does not
+                          // clear -- extended colour calculation consults it on the second/third image
+    kIsRgb        = 128   // the pixel's colour came from RGB data rather than a palette
 };
 
 // One source's contribution at a pixel. prio 0 = the back screen / no contribution;
@@ -34,20 +42,34 @@ struct PixDesc
     uint8_t r = 0, g = 0, b = 0;
     uint8_t prio = 0;
     uint8_t ccEn = 0, ccRatio = 0, ccAdd = 0;   // this layer's colour-calc parameters
-    uint8_t shad = 0;                           // kShadow* flags
+    uint8_t flags = 0;                          // k* flags above
     bool    live = false;                       // a source emitted this (the slot is not empty)
 };
 
-// The three highest-priority contributions at a pixel. 'valid' is set once any source
-// (back screen, an NBG/RBG layer, or a sprite) has emitted here -- it distinguishes a
-// pixel the mixer actually touched from one still showing the fallback backdrop. Colour
-// calculation only ever blends the top contribution with the one under it, but a sprite
-// shadow marker on top hides itself, which promotes the second to top and makes the third the
-// one it blends with.
+// The four highest-priority contributions at a pixel. 'valid' is set once any source (back
+// screen, an NBG/RBG layer, or a sprite) has emitted here -- it distinguishes a pixel the
+// mixer actually touched from one still showing the fallback backdrop. A sprite shadow
+// marker on top hides itself, which promotes the second to top and shifts the rest up.
 struct PixColumn
 {
-    PixDesc top, second, third;
+    PixDesc top, second, third, fourth;
     bool valid = false;
+};
+
+// The VDP2 state the mixer reads when it resolves a column, as opposed to what each source
+// emitted. Built once per frame by Vdp2Compositor::ReadMixState.
+struct MixState
+{
+    bool colorCalc = true;            // the "show colour calculation" option
+    bool secondRatio = false;         // CCCTL CCRTMD: the ratio comes from the second image
+    bool extended = false;            // CCCTL EXCCEN, in a mode that allows it (normal resolution)
+    bool cram0 = true;                // colour RAM mode 0 (otherwise modes 1/2)
+    bool hiresCram12 = false;         // hi-res with colour RAM mode 1/2: palette seconds don't blend
+    int  width = 0;                   // columns per row, to find a pixel's row
+    uint8_t lineRatio = 0;            // CCRLB: the line colour screen's own ratio
+    bool lineCc = false;              // CCCTL LCCCEN: line colour screen colour-calc enable
+    std::vector<Rgba> lineColors;     // one line colour per display row (empty: none defined)
+    int16_t offset[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };   // colour offset A / B, R G B
 };
 
 // Blend a source colour over dst (RGB) using VDP2 colour-calculation rules — additive
@@ -71,33 +93,31 @@ inline void BlendCC(uint8_t* dst, uint8_t r, uint8_t g, uint8_t b, uint32_t rati
     }
 }
 
-// Insert a contribution, keeping the three highest-priority entries. `prio >=` on ties so a
+// Insert a contribution, keeping the four highest-priority entries. `prio >=` on ties so a
 // later insert wins -- reproducing the old back-to-front overwrite order when sources are
 // emitted in draw order (back screen, then NBGs sorted low-priority/high-index first,
 // then sprites).
 inline void EmitPix(PixColumn& col, uint8_t r, uint8_t g, uint8_t b, uint8_t prio,
-                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint8_t shad = 0)
+                    bool ccEn, uint8_t ccRatio, bool ccAdd, uint8_t flags = 0)
 {
     PixDesc d;
     d.r = r; d.g = g; d.b = b; d.prio = prio;
     d.ccEn = static_cast<uint8_t>(ccEn); d.ccRatio = ccRatio; d.ccAdd = static_cast<uint8_t>(ccAdd);
-    d.shad = shad;
+    d.flags = flags;
     d.live = true;
     col.valid = true;
-    if (prio >= col.top.prio || !col.top.live)
+    PixDesc* slot[4] = { &col.top, &col.second, &col.third, &col.fourth };
+    for (int i = 0; i < 4; ++i)
     {
-        col.third = col.second;
-        col.second = col.top;
-        col.top = d;
-    }
-    else if (prio >= col.second.prio || !col.second.live)
-    {
-        col.third = col.second;
-        col.second = d;
-    }
-    else if (prio >= col.third.prio || !col.third.live)
-    {
-        col.third = d;
+        if (prio >= slot[i]->prio || !slot[i]->live)
+        {
+            for (int j = 3; j > i; --j)
+            {
+                *slot[j] = *slot[j - 1];
+            }
+            *slot[i] = d;
+            return;
+        }
     }
 }
 
@@ -113,60 +133,139 @@ inline void EmitShadowMarker(PixColumn& col, uint8_t prio)
     }
 }
 
-// Resolve a column to an opaque RGBA pixel: the top contribution, blended with the layer
-// immediately below when colour calculation is on and the top layer enables it, then shadowed
-// when a sprite shadow applies. Returns false (leaving 'out' alone) for a shadow marker with
-// nothing beneath it, which draws nothing.
-//
-// A shadow marker on top is replaced by the layer under it, and that layer is darkened if its
-// SDCTL enable is set (a marker is "normal"/"transparent" shadow, which VDP2 applies per layer). A
-// sprite pixel that is itself a sprite shadow is darkened regardless. Shadow runs after colour
-// calculation, as on VDP2.
-inline bool ResolveColumnTo(const PixColumn& col, bool colorCalc, Rgba& out)
+namespace mixer_detail
 {
-    const PixDesc* d = &col.top;
-    const PixDesc* below = &col.second;
+// Per-channel truncated mean of two packed colours, which is how VDP2 averages for the extended
+// colour calculation.
+inline void Average(uint8_t* a, const uint8_t* b)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        a[i] = static_cast<uint8_t>((a[i] + b[i]) >> 1);
+    }
+}
+}  // namespace mixer_detail
+
+// Resolve one column (the pixel at flat index 'index') to an opaque RGBA pixel, in the order VDP2
+// does it: pick the top image (a shadow marker is replaced by the layer under it), colour-calculate
+// it against what lies below -- optionally through the line colour screen and the extended
+// three/four-screen average -- then colour offset by the top image's registers, then shadow.
+// Returns false (leaving 'out' alone) for a shadow marker with nothing beneath it, which draws
+// nothing.
+inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t index, Rgba& out)
+{
+    using mixer_detail::Average;
+    // The candidate images, top first; a marker is skipped.
+    PixDesc empty;
+    const PixDesc* img[5] = { &col.top, &col.second, &col.third, &col.fourth, &empty };
+    int first = 0;
     bool shadow = false;
-    if (col.top.shad & kShadowMarker)
+    if (col.top.flags & kShadowMarker)
     {
         if (!col.second.live)
         {
             return false;
         }
-        d = &col.second;
-        below = &col.third;
-        shadow = (d->shad & kShadowEnable) != 0;
+        first = 1;
+        shadow = (col.second.flags & kShadowEnable) != 0;
     }
-    shadow = shadow || (d->shad & kShadowSelf) != 0;
+    const PixDesc& top = *img[first];
+    shadow = shadow || (top.flags & kShadowSelf) != 0;
 
-    out = Rgba{ d->r, d->g, d->b, 255 };
-    if (colorCalc && d->ccEn)
+    uint8_t rgb[3] = { top.r, top.g, top.b };
+    if (mix.colorCalc && top.ccEn)
     {
-        uint8_t dst[3] = { below->r, below->g, below->b };
-        BlendCC(dst, d->r, d->g, d->b, d->ccRatio, d->ccAdd);
-        out.r = dst[0];
-        out.g = dst[1];
-        out.b = dst[2];
+        PixDesc second = *img[first + 1];
+        PixDesc third = *img[first + 2];
+        PixDesc fourth = *img[first + 3];
+        if (top.flags & kLineColorEn)
+        {
+            // The line colour screen has no priority: it is forced in as the second image, and
+            // everything that was below moves down one.
+            fourth = third;
+            third = second;
+            second = PixDesc{};
+            second.live = true;
+            second.ccRatio = mix.lineRatio;
+            second.flags = mix.lineCc ? kLayerCc : uint8_t(0);
+            if (index / static_cast<size_t>(std::max(mix.width, 1)) < mix.lineColors.size())
+            {
+                const Rgba& lc = mix.lineColors[index / static_cast<size_t>(std::max(mix.width, 1))];
+                second.r = lc.r; second.g = lc.g; second.b = lc.b;
+            }
+            if (mix.extended && mix.lineCc)
+            {
+                // Only with the line colour screen's own colour-calculation enable (LCCCEN).
+                uint8_t sec[3] = { second.r, second.g, second.b };
+                uint8_t thr[3] = { third.r, third.g, third.b };
+                if (mix.cram0)
+                {
+                    // Colour RAM mode 0: the second image is the line colour averaged with the third,
+                    // which is itself halved first when it colour-calculates.
+                    if (third.flags & kLayerCc)
+                    {
+                        for (int i = 0; i < 3; ++i) thr[i] = static_cast<uint8_t>(thr[i] >> 1);
+                    }
+                    Average(sec, thr);
+                    second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+                }
+                else if (third.flags & kIsRgb)
+                {
+                    // Modes 1/2 need an RGB third image (a palette one cannot take part).
+                    if ((third.flags & kLayerCc) && (fourth.flags & kIsRgb))
+                    {
+                        const uint8_t fth[3] = { fourth.r, fourth.g, fourth.b };
+                        Average(thr, fth);
+                    }
+                    Average(sec, thr);
+                    second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+                }
+            }
+        }
+        else if (mix.extended && (second.flags & kLayerCc) &&
+                 (mix.cram0 || (third.flags & kIsRgb)))
+        {
+            // Extended colour calculation: the second image is itself the average of the second
+            // and third before the top blends with it.
+            uint8_t sec[3] = { second.r, second.g, second.b };
+            const uint8_t thr[3] = { third.r, third.g, third.b };
+            Average(sec, thr);
+            second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+        }
+
+        uint8_t dst[3] = { second.r, second.g, second.b };
+        if (mix.hiresCram12 && !(second.flags & kIsRgb))
+        {
+            // Hi-res with colour RAM mode 1/2: a palette-format second image cannot be blended
+            // with, so the pixel stays as it is.
+            dst[0] = top.r; dst[1] = top.g; dst[2] = top.b;
+        }
+        const uint32_t ratio = mix.secondRatio ? second.ccRatio : top.ccRatio;
+        BlendCC(dst, top.r, top.g, top.b, ratio, top.ccAdd != 0);
+        rgb[0] = dst[0]; rgb[1] = dst[1]; rgb[2] = dst[2];
+    }
+
+    if (top.flags & kOffsetEnable)
+    {
+        const int16_t* o = mix.offset[(top.flags & kOffsetSelect) ? 1 : 0];
+        for (int i = 0; i < 3; ++i)
+        {
+            rgb[i] = static_cast<uint8_t>(std::max(0, std::min(255, rgb[i] + o[i])));
+        }
     }
     if (shadow)
     {
-        out.r >>= 1; out.g >>= 1; out.b >>= 1;
+        for (int i = 0; i < 3; ++i) rgb[i] = static_cast<uint8_t>(rgb[i] >> 1);
     }
+    out = Rgba{ rgb[0], rgb[1], rgb[2], 255 };
     return true;
-}
-
-inline Rgba ResolveColumn(const PixColumn& col, bool colorCalc)
-{
-    Rgba out{ 0, 0, 0, 255 };
-    ResolveColumnTo(col, colorCalc, out);
-    return out;
 }
 
 // Resolve a whole column buffer to an opaque RGBA image (4 bytes/pixel, sized count*4).
 // The counterpart to EmitPix: all column read-out policy lives here rather than in the
 // caller. Columns no source touched are left transparent (alpha 0) so the caller's
 // fallback backdrop shows through there; every touched column becomes an opaque pixel.
-inline void ResolveColumns(const std::vector<PixColumn>& cols, bool colorCalc,
+inline void ResolveColumns(const std::vector<PixColumn>& cols, const MixState& mix,
                            std::vector<uint8_t>& outRgba)
 {
     outRgba.assign(cols.size() * 4, 0);
@@ -177,7 +276,7 @@ inline void ResolveColumns(const std::vector<PixColumn>& cols, bool colorCalc,
             continue;
         }
         Rgba c{};
-        if (!ResolveColumnTo(cols[i], colorCalc, c))
+        if (!ResolveColumnAt(cols[i], mix, i, c))
         {
             continue;
         }

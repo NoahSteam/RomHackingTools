@@ -27,6 +27,7 @@ struct SpritePixel
     bool    ccEn = false;           // colour calculation applies to this pixel
     uint8_t ccRatio = 0;
     bool    swBit = false;          // the sprite-window bit (shadow bit under SPWINEN)
+    bool    isRgb = false;          // the colour is RGB data in the word, not a CRAM lookup
 };
 
 // How a VDP1 sprite pixel's priority is decided.

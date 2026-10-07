@@ -1702,6 +1702,167 @@ void TestPolygonWithSpdClearFollowsTheLastVramWord()
     CHECK(IsColorAt(RenderSized(shortVram, 4, 2), 4, 1, 1, 255, 0, 0));
 }
 
+// ---- Colour offset, colour-calculation window, line colour screen, extended colour calculation ----
+
+// NBG3 (white, priority 1, colour calculation at ratio 15) over a blue back screen, in the 4x2 frame.
+State MakeCcState()
+{
+    State state = MakeNbg3State();
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetReg(state, 0x0EC, 0x0008);         // CCCTL: NBG3 colour calculation
+    SetReg(state, 0x10A, 0x0F00);         // CCRNB: NBG3 ratio 15
+    return state;
+}
+
+std::vector<uint8_t> RenderCc(State& state, bool window = false)
+{
+    return RenderWith(state, 4, 2, [&](se_render_opts& o)
+    {
+        o.show_color_calculation = 1;
+        o.show_window = window ? 1 : 0;
+    });
+}
+
+// VDP2 applies colour offset to the RESULT of colour calculation, with the top image's registers --
+// not to each layer before the blend. White blended 16:16 with blue is (127,127,255); an R offset of
+// -128 then takes red to 0. Offsetting the white first would blend (127,255,255) and give 63.
+void TestColorOffsetFollowsColorCalculation()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x110, 0x0008);   // CLOFEN: NBG3
+    SetReg(state, 0x112, 0x0000);   // CLOFSL: set A
+    SetReg(state, 0x114, 0x0180);   // COAR = -128
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColor(pixels, x, y, 0, 127, 255));
+}
+
+// The back screen and the sprite layer have colour offset enables of their own (BKCOEN, SPCOEN), and
+// CLOFSL picks set B for either.
+void TestBackAndSpriteColorOffset()
+{
+    State back = MakeBlueBackState(4, 2);
+    SetReg(back, 0x110, 0x0020);   // CLOFEN: back screen
+    SetReg(back, 0x112, 0x0020);   // CLOFSL: back screen uses set B
+    SetReg(back, 0x11A, 100);      // COBR = +100
+    CHECK(IsColorAt(RenderSized(back, 4, 2), 4, 1, 1, 100, 0, 255));
+
+    State sprite = MakeBlueBackState(4, 2);
+    PutBE16(sprite.cram, 31 * 2, 0x001F);   // red
+    PutPolygon(sprite, 0x20, 0x001F, 0, 0, 0, 3, 1);
+    PutBE16(sprite.vdp1, 0x40, 0x8000);
+    SetReg(sprite, 0x110, 0x0040);   // CLOFEN: sprites
+    SetReg(sprite, 0x116, 50);       // COAG = +50
+    CHECK(IsColorAt(RenderSized(sprite, 4, 2), 4, 1, 1, 255, 50, 0));
+}
+
+// The colour-calculation window clears a pixel's colour-calculation enable (not the pixel): inside it
+// the white NBG3 is solid, outside it blends with the back screen.
+void TestColorCalculationWindow()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x0C0, 2);        // W0: x = 1..2 (half-dots 2..4), y = 0..1
+    SetReg(state, 0x0C4, 4);
+    SetReg(state, 0x0C2, 0);
+    SetReg(state, 0x0C6, 1);
+    SetReg(state, 0x0D6, 0x0200);   // WCTLD high byte: colour-calc window = W0 enabled, inside
+    const std::vector<uint8_t> pixels = RenderCc(state, true);
+    for (int y = 0; y < 2; ++y)
+    {
+        CHECK(IsColor(pixels, 0, y, 127, 127, 255));
+        CHECK(IsColor(pixels, 1, y, 255, 255, 255));
+        CHECK(IsColor(pixels, 2, y, 255, 255, 255));
+        CHECK(IsColor(pixels, 3, y, 127, 127, 255));
+    }
+    // With window display off the window does nothing.
+    const std::vector<uint8_t> off = RenderCc(state, false);
+    CHECK(IsColor(off, 1, 0, 127, 127, 255));
+}
+
+// The line colour screen is forced in as the second image of any screen whose LNCLEN bit is set, so
+// the top blends with the line colour instead of what is really below it. The colour is a CRAM
+// address read from a table in VDP2 VRAM -- one per display line when LCTAU bit 15 is set.
+void TestLineColorScreenIsInsertedAsTheSecondImage()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x0E8, 0x0008);   // LNCLEN: NBG3
+    SetReg(state, 0x0A8, 0x8000);   // LCTA: per-line, table at word 0x300
+    SetReg(state, 0x0AA, 0x0300);
+    PutBE16(state.vdp2, 0x600, 5);  // line 0 -> CRAM 5
+    PutBE16(state.vdp2, 0x602, 6);  // line 1 -> CRAM 6
+    PutBE16(state.cram, 5 * 2, 0x03E0);   // green
+    PutBE16(state.cram, 6 * 2, 0x001F);   // red
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    CHECK(IsColor(pixels, 1, 0, 127, 255, 127));   // white 16 : green 16
+    CHECK(IsColor(pixels, 1, 1, 255, 127, 127));   // white 16 : red 16
+
+    // Without the enable bit the top blends with the back screen as usual.
+    SetReg(state, 0x0E8, 0x0000);
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 127, 255));
+}
+
+// Two colour-calculating layers over the back screen: NBG3 (white, priority 5) > NBG2 (green,
+// priority 3) > blue back screen.
+State MakeThreeLayerState()
+{
+    State state = MakeCcState();
+    SetReg(state, 0x020, 0x000C);   // BGON: NBG2 + NBG3
+    SetReg(state, 0x034, 0x8000);   // PNCN2: one-word
+    SetReg(state, 0x048, 0x0002);   // MPABN2: plane A map number 2 -> name table at 0x4000
+    SetReg(state, 0x0FA, 0x0503);   // PRINB: NBG3 priority 5, NBG2 priority 3
+    PutBE16(state.vdp2, 0x4000, 0x0002);
+    std::fill(state.vdp2.begin() + 0x40, state.vdp2.begin() + 0x60, 0x33);   // index 3
+    PutBE16(state.cram, 3 * 2, 0x03E0);   // green
+    SetReg(state, 0x0EC, 0x000C);         // CCCTL: NBG2 + NBG3 colour calculation
+    SetReg(state, 0x10A, 0x0F0F);         // both ratio 15
+    return state;
+}
+
+// Extended colour calculation (EXCCEN) first averages the second image with the third, so the top
+// blends with (green + blue) / 2 instead of with green alone.
+void TestExtendedColorCalculationAveragesTheSecondAndThirdImages()
+{
+    State state = MakeThreeLayerState();
+    const std::vector<uint8_t> normal = RenderCc(state);
+    CHECK(IsColor(normal, 1, 0, 127, 255, 127));      // white 16 : green 16
+    SetReg(state, 0x0EC, 0x040C);                     // + EXCCEN
+    const std::vector<uint8_t> extended = RenderCc(state);
+    CHECK(IsColor(extended, 1, 0, 127, 191, 191));    // white 16 : (green+blue)/2 16
+    // Not when the second image's own enable bit is clear.
+    SetReg(state, 0x0EC, 0x0408);                     // NBG2 colour calculation off
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 255, 127));
+}
+
+// With a line colour screen inserted the extended calculation reaches four screens: the second image
+// becomes the line colour averaged with the (halved, if it colour-calculates) old second image.
+void TestExtendedColorCalculationWithTheLineColorScreen()
+{
+    State state = MakeThreeLayerState();
+    SetReg(state, 0x0EC, 0x042C);     // NBG2 + NBG3, EXCCEN, LCCCEN
+    SetReg(state, 0x0E8, 0x0008);     // LNCLEN: NBG3
+    SetReg(state, 0x0A8, 0x0000);     // LCTA: single colour, table at word 0x300
+    SetReg(state, 0x0AA, 0x0300);
+    PutBE16(state.vdp2, 0x600, 5);
+    PutBE16(state.cram, 5 * 2, 0x7C00);   // blue line colour
+    const std::vector<uint8_t> pixels = RenderCc(state);
+    // second = (blue + green/2) / 2 = (0,63,127); top white blends 16:16 with it.
+    CHECK(IsColor(pixels, 1, 0, 127, 159, 191));
+}
+
+// CCRTMD takes the blend ratio from the second image instead of the top: NBG3 asks for ratio 0 but
+// the NBG2 beneath it says 15.
+void TestSecondImageRatioMode()
+{
+    State state = MakeThreeLayerState();
+    SetReg(state, 0x10A, 0x000F);     // NBG3 ratio 0, NBG2 ratio 15
+    CHECK(IsColor(RenderCc(state), 1, 0, 247, 255, 247));   // top ratio: 31 : 1
+    SetReg(state, 0x0EC, 0x020C);                          // CCRTMD
+    CHECK(IsColor(RenderCc(state), 1, 0, 127, 255, 127));   // second image's ratio: 16 : 16
+}
+
 int main()
 {
     TestSpriteBetweenTwoColorCalcLayers();
@@ -1754,6 +1915,13 @@ int main()
     TestNormalShadowDarkensTheLayerUnderIt();
     TestSpriteWindowCutsLayersWhereTheShadowBitIsSet();
     TestPolygonWithSpdClearFollowsTheLastVramWord();
+    TestColorOffsetFollowsColorCalculation();
+    TestBackAndSpriteColorOffset();
+    TestColorCalculationWindow();
+    TestLineColorScreenIsInsertedAsTheSecondImage();
+    TestExtendedColorCalculationAveragesTheSecondAndThirdImages();
+    TestExtendedColorCalculationWithTheLineColorScreen();
+    TestSecondImageRatioMode();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

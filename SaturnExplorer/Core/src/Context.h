@@ -151,7 +151,8 @@ public:
                 Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
                                             mColumns);
             }
-            ResolveColumns(mColumns, opts.show_color_calculation != 0, mRenderBuffer);
+            ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h),
+                           mRenderBuffer);
             if (!opts.transparent_background)
             {
                 FillBackdrop();

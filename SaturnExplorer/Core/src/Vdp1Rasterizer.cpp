@@ -561,6 +561,7 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
     if (spclmd && (word & 0x8000))
     {
         out.color = Rgb555ToRgba(word);
+        out.isRgb = true;
         bool tp = false;
         if (type & 0x8)
         {

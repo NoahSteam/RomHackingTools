@@ -490,11 +490,15 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > **Known simplifications (M4b):** VDP1 and NBGs interleave by priority, per framebuffer pixel
    > -- a sprite whose CLUT or colour bank spans several SPCTL priority numbers interleaves at
    > each of them, as the hardware does. NBG0-3, RBG0 and sprite windows (including the sprite
-   > window input fed by SPWINEN) are modeled; the colour-calculation window is not. Sprites carry
-   > their own colour calculation (SPCCEN / SPCCCS / CCRSx) and the sprite shadow functions (normal,
-   > MSB and transparent shadow, SDCTL / TPSDSL). Still missing: bitmap-mode edge cases,
-   > vertical-cell scroll, extended (3-layer) colour calculation, the line-colour screen, and
-   > sprite colour offset. See `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
+   > window input fed by SPWINEN) and the colour-calculation window are modeled. Colour calculation
+   > covers the sprite layer (SPCCEN / SPCCCS / CCRSx), second-image ratio mode (CCRTMD), the line
+   > colour screen inserted as the second image (LNCLEN / LCTA / CCRLB) and extended three/four-
+   > screen calculation (EXCCEN, with the colour RAM mode rules of the manual's Table 12.2). Colour
+   > offset is applied to the *result* of colour calculation with the top image's registers, for
+   > every screen including the back screen and sprites. Sprite shadows (normal, MSB, transparent;
+   > SDCTL / TPSDSL) are modeled. Still missing: gradation (BOKEN) calculation, line colour from
+   > RBG0 coefficient data, vertical-cell scroll, RBG1 and the exclusive-monitor modes. See
+   > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
    > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
    > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
    > out through `SpritePriorityTable::Resolve`, which decodes each packed word as VDP2 does (SPCTL

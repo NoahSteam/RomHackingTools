@@ -19,14 +19,17 @@
 // descriptor into a PixColumn (see PixelMixer.h): the back screen at priority 0, then each
 // enabled NBG/RBG0 layer at its own priority. The VDP1 sprites emit into the same columns
 // (Vdp1Rasterizer::EmitSprites), and Context resolves each column to one RGBA pixel. This
-// two-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
-// and the line-colour screen natural rather than special cases — colour calculation on
-// VDP2 only ever blends the top-priority pixel with the one immediately below it.
+// four-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
+// the line-colour screen and extended colour calculation natural rather than special cases --
+// standard colour calculation only ever blends the top pixel with the one below it, and the
+// extended form reads up to four.
 //
 // Modeled today: NBG0-3 (cell + bitmap), RBG0 rotation, fractional/line scroll + zoom,
-// windows, per-screen colour calculation and colour offset, horizontal mosaic, and the
-// real back screen, the sprite layer's own colour calculation and shadows, and sprite windows.
-// The line-colour screen, vertical cell scroll, vertical mosaic, and RBG1 are not modeled yet.
+// windows (including the sprite and colour-calculation windows), per-screen colour calculation
+// (with second-image ratio, line colour insertion and the extended form), colour offset applied
+// after colour calculation, horizontal mosaic, the real back screen, the sprite layer's own
+// colour calculation, and sprite shadows. Gradation calculation, vertical cell scroll, vertical
+// mosaic, and RBG1 are not modeled yet.
 #pragma once
 
 #include <cstdint>
@@ -114,6 +117,13 @@ public:
     static void EmitSprites(const HardwareSnapshot& snapshot, const se_render_opts& opts,
                             int width, int height, const std::vector<SpritePixel>& sprites,
                             const SpritePriorityTable& prios, std::vector<PixColumn>& cols);
+
+    // Everything the mixer reads from the VDP2 registers when it resolves a column: the colour-
+    // calculation modes (second-image ratio, extended), the line colour screen's per-line colours
+    // and ratio, and the two colour offsets. Call after the layers are emitted, before
+    // ResolveColumns.
+    static MixState ReadMixState(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                 int width, int height);
 
     // Seed the VDP2 back screen (the always-present backdrop below every screen) into
     // every column at priority 0, reading its colour from the BKTA table in VDP2 VRAM —
