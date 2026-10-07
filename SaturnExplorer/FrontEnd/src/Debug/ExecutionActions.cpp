@@ -105,7 +105,7 @@ void ExecutionActions::SetEnabled(uint64_t id, bool enabled)
         if (a->enabled != enabled)
         {
             a->enabled = enabled;
-            a->rearm = static_cast<uint8_t>((a->rearm + 1u) & 0xFu);
+            a->BumpRearm();
             if (enabled) a->seen = 0;   // switched back on: a fire-once one is armed again
             ++mGeneration;
         }
@@ -158,7 +158,7 @@ bool ExecutionActions::AcceptHit(uint64_t id, bool emulatorApplies)
         // set is re-sent, and until then it keeps reporting an action the client has stopped
         // honouring.
         a->enabled = false;
-        a->rearm = static_cast<uint8_t>((a->rearm + 1u) & 0xFu);
+        a->BumpRearm();
         ++mGeneration;
     }
     return true;

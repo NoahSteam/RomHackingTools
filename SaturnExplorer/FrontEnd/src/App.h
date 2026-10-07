@@ -134,6 +134,7 @@ private:
     void DrawAccessLog();                   // "find what accesses this address"
     void DrawSoundCpu();                    // SCSP 68000 sound-CPU disassembly (Sound RAM)
     void DrawDiscExplorer(IPlatform& platform); // disc image ISO browser (sector -> file)
+    bool FetchSh2Instruction(uint32_t pc, DisassembledInstruction& ins);
     BreakpointManager::WatchCauses WatchCausesAtHalt(int cpu, uint32_t pc);
     void RecordAccess(int cpu, uint32_t pc);// file a data-watchpoint hit into the access log
     void DrawSound(IPlatform& platform);    // SCSP voices: who's playing + Play/Export

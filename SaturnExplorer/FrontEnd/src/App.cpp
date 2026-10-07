@@ -1132,7 +1132,7 @@ void App::BuildUI(IPlatform& platform)
         // retires the execution breakpoint's own claim on the halt: an independent break-on-access
         // watchpoint that may have hit still stops here, and a logging one is recorded either way.
         if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
-            mBreakpoints.HasEnabledExecutionAt(report.pc))
+            report.userBreakpoint)
         {
             const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(report.pc);
             const bool guardFailed =
@@ -2113,25 +2113,29 @@ bool App::EvalCondition(const std::string& cond, int cpu)
     return ConditionEval(cond, fc);
 }
 
+// Read and decode the instruction at 'pc' (false when memory is unreadable).
+bool App::FetchSh2Instruction(uint32_t pc, DisassembledInstruction& ins)
+{
+    auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
+    if (res.empty() || !res[0].success || res[0].bytes.size() != 2) return false;
+    ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+    return true;
+}
+
 // Which memory watchpoints could be behind a halt at 'pc' on 'cpu': those whose range the stopping
-// instruction may touch. When the instruction cannot be read, every enabled watchpoint counts.
+// instruction may touch. When the instruction cannot be read, every enabled watchpoint counts. The
+// registers and instruction are fetched on the first watchpoint asked about, so a halt with no
+// memory watchpoint armed (the common case) does neither.
 BreakpointManager::WatchCauses App::WatchCausesAtHalt(int cpu, uint32_t pc)
 {
     se_sh2_regs regs{};
-    const bool haveRegs = mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK;
     DisassembledInstruction ins;
-    bool decoded = false;
-    if (haveRegs)
-    {
-        auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
-        if (!res.empty() && res[0].success && res[0].bytes.size() == 2)
-        {
-            ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
-            decoded = true;
-        }
-    }
+    enum { Unfetched, Fetched, Failed } state = Unfetched;
     return mBreakpoints.WatchCausesFor([&](uint32_t addr, uint32_t size) {
-        return !decoded || Sh2MayAccessRange(ins, regs, addr, size);
+        if (state == Unfetched)
+            state = (mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK &&
+                     FetchSh2Instruction(pc, ins)) ? Fetched : Failed;
+        return state == Failed || Sh2MayAccessRange(ins, regs, addr, size);
     });
 }
 
@@ -2151,12 +2155,9 @@ void App::RecordAccess(int cpu, uint32_t pc)
     // Decode the accessing instruction once, here, so the panel doesn't re-read + re-decode
     // it every frame.
     std::string insn;
-    auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
-    if (!res.empty() && res[0].success && res[0].bytes.size() == 2)
-    {
-        DisassembledInstruction ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+    DisassembledInstruction ins;
+    if (FetchSh2Instruction(pc, ins))
         insn = ins.Mnemonic + (ins.Operands.empty() ? "" : " " + ins.Operands);
-    }
     const uint32_t frame = (mbHasData && mContext)
                                ? static_cast<uint32_t>(se_frame_number(mContext)) : 0;
     mAccessLog.Record(pc, cpu, frame, std::move(insn), std::move(frames));
@@ -2175,17 +2176,22 @@ void App::SyncTracepointsToLive()
         descs.push_back(v & 0xFF); descs.push_back((v >> 8) & 0xFF);
         descs.push_back((v >> 16) & 0xFF); descs.push_back((v >> 24) & 0xFF);
     };
-    uint32_t count = 0;
     // The emulator holds at most SE_LIVE_MAX_TRACE_DESCS descriptors, and a disabled one takes a
     // place like any other. Past that the rest would be dropped without a word, so send the enabled
     // ones first (they are the ones that must fire) and say how many did not fit.
-    uint32_t dropped = 0;
-    for (int pass = 0; pass < 2; ++pass)
+    std::vector<const ExecutionAction*> logs;
     for (const ExecutionAction& a : mActions.All())
+        if (a.type == ActionType::Log) logs.push_back(&a);
+    std::stable_partition(logs.begin(), logs.end(),
+                          [](const ExecutionAction* a) { return a->enabled; });
+    const uint32_t dropped =
+        logs.size() > SE_LIVE_MAX_TRACE_DESCS
+            ? static_cast<uint32_t>(logs.size()) - SE_LIVE_MAX_TRACE_DESCS : 0u;
+    if (dropped) logs.resize(SE_LIVE_MAX_TRACE_DESCS);
+    uint32_t count = 0;
+    for (const ExecutionAction* ap : logs)
     {
-        if (a.type != ActionType::Log) continue;
-        if (a.enabled != (pass == 0)) continue;
-        if (count >= SE_LIVE_MAX_TRACE_DESCS) { ++dropped; continue; }
+        const ExecutionAction& a = *ap;
         w32(static_cast<uint32_t>(a.id));
         w32(static_cast<uint32_t>(a.cpu));
         w32(a.address);

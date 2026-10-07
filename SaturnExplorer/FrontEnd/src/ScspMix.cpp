@@ -133,7 +133,7 @@ size_t ScspMixVoices(const ScspMixVoice* voices, size_t n, uint32_t outRate,
         ScspDirectVolume(v.directLevel, v.directPan, volL, volR);
         if (volL == 0 && volR == 0) continue;   // DISDL 0: not sent to the DAC at all
         const int vlevel = ScspVLevel(v.egLevel, v.totalLevel);
-        if (vlevel >= 0x3FF) continue;          // fully attenuated: silence, not a residue
+        if (vlevel >= 0x3FF) continue;          // fully attenuated: nothing to mix (shortcut)
 
         const VoiceCursor cur(v, outRate);
         double pos = 0.0;
