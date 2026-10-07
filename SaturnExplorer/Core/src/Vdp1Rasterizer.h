@@ -31,6 +31,7 @@ struct SpritePriorityTable
     int     type = 0;                               // SPCTL sprite type (0..F)
     bool    spclmd = false;                         // SPCLMD: mixed RGB/palette data
     bool    valid = false;                          // false with no VDP2 registers captured
+    uint32_t cramOffset = 0;                        // CRAOFB sprite offset, pre-shifted (<< 8)
 
     // Where the priority number sits in a framebuffer word, per SPCTL sprite type (VDP1 manual;
     // mirrors Yabause's Vdp1GetSpritePixelInfo). A zero mask means the type has no priority bits.
@@ -79,6 +80,20 @@ struct SpritePriorityTable
     {
         return valid ? slot[NumberOf(word) & 0x7] : 0;
     }
+
+    // What VDP2 makes of one framebuffer word: whether it is displayed, its colour and its
+    // priority. This is the only place a framebuffer word becomes a colour -- the framebuffer holds
+    // the packed word the hardware would, and what the word means depends on the SPCTL sprite type
+    // and SPCLMD, not on what drew it. A word with the MSB set is an RGB555 colour only in mixed mode
+    // (SPCLMD); otherwise, and always when the MSB is clear, it is a palette code: the type picks the
+    // dot-colour bits out of it, and CRAM is read at CRAOFB's sprite offset plus that.
+    struct Pixel
+    {
+        bool    visible = false;
+        Rgba    color{ 0, 0, 0, 255 };
+        uint8_t prio = 0;
+    };
+    Pixel Resolve(uint16_t word, const std::vector<uint8_t>& cram, se_cram_mode cramMode) const;
 };
 
 class Vdp1Rasterizer

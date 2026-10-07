@@ -547,10 +547,9 @@ public:
     // Topmost sprite (last drawn) containing the screen point, if any.
     se_result HitTest(int x, int y, size_t* outCommandIndex) const
     {
-        // The click is in display space; sprite corners are VDP1 pixel indices, which are
-        // narrower in hi-res (the framebuffer is doubled at scan-out). Map back with the same
-        // integer step the scan-out uses, and test the pixel's index against the inclusive
-        // corners rather than a centre half a pixel past them.
+        // The click is in display space; sprites are in VDP1 pixels, which are narrower in hi-res
+        // (the framebuffer is doubled at scan-out). Map back with the same integer step the
+        // scan-out uses, then test that pixel's centre against the quad the rasterizer fills.
         const int fbWidth = (mScene.vdp1Width > 0) ? mScene.vdp1Width : mScene.screenWidth;
         const float sx = (mScene.screenWidth > 0)
                              ? static_cast<float>(static_cast<int64_t>(x) * fbWidth /
@@ -558,7 +557,7 @@ public:
                              : static_cast<float>(x);
         for (size_t i = mScene.sprites.size(); i-- > 0; )
         {
-            if (PointInSprite(mScene.sprites[i], sx, static_cast<float>(y)))
+            if (PointInSprite(mScene.sprites[i], sx + 0.5f, y + 0.5f))
             {
                 *outCommandIndex = mScene.sprites[i].command_index;
                 return SE_OK;
@@ -819,6 +818,7 @@ private:
         mSpritePrios.type = spctl & 0xF;
         mSpritePrios.spclmd = (spctl & 0x20) != 0;
         mSpritePrios.valid = true;
+        mSpritePrios.cramOffset = static_cast<uint32_t>((mSnapshot.Vdp2Reg(0x0E6) >> 4) & 0x7) << 8;
         const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
         const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
         const uint16_t prisc = mSnapshot.Vdp2Reg(0x0F4);

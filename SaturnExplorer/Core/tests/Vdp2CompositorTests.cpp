@@ -40,6 +40,9 @@ State MakeNbg3State()
     // PRISA..PRISD: every sprite priority number maps to priority 1. A sprite pixel whose number
     // maps to priority 0 is not displayed, so a fixture that draws one has to say where it goes.
     for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
+    // SPCTL: type 0 with SPCLMD set, so a framebuffer word with its MSB set is an RGB colour and one
+    // with it clear is a palette code. (SPCLMD clear makes every word a palette code.)
+    SetReg(state, 0x0E0, 0x0020);
     PutBE16(state.vdp2, 0x2000, 0x0001);
     std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x11);
     PutBE16(state.cram, 2, 0x7FFF);
@@ -508,7 +511,7 @@ void TestDrawEndNotDrawn()
     SetReg(state, 0x020, 0x0000);   // BGON off — only the polygon draws
     ResizeVdp1(state, 0x120);       // room for the terminator's leftover texture
     PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
-    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x26, 0x801F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B
     PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C
@@ -536,7 +539,7 @@ void TestPolygon()
     ResizeVdp1(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0004);   // CMDCTRL: polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
-    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red (RGB555)
+    PutBE16(state.vdp1, 0x26, 0x801F);   // CMDCOLR: red (RGB555)
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B = (4,0)
     PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C = (4,2)
@@ -555,7 +558,7 @@ void TestLine()
     ResizeVdp1(state, 0x60);
     PutBE16(state.vdp1, 0x20, 0x0006);   // CMDCTRL: line (comm 6), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
-    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x26, 0x801F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A = (0,0)
     PutBE16(state.vdp1, 0x30, 3); PutBE16(state.vdp1, 0x32, 0);   // B = (3,0)
     const std::vector<uint8_t> pixels = Render(state, false);
@@ -581,7 +584,7 @@ void TestUserClip()
     PutBE16(state.vdp1, 0x40, 0x0004);   // polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x60, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x44, 0x0400);   // CMDPMOD: user clip enable (bit 10), mode inside
-    PutBE16(state.vdp1, 0x46, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x46, 0x801F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x4C, 0); PutBE16(state.vdp1, 0x4E, 0);   // A
     PutBE16(state.vdp1, 0x50, 4); PutBE16(state.vdp1, 0x52, 0);   // B
     PutBE16(state.vdp1, 0x54, 4); PutBE16(state.vdp1, 0x56, 2);   // C
@@ -606,7 +609,7 @@ void TestUserClipDefaultUnbounded()
     PutBE16(state.vdp1, 0x20, 0x0004);   // polygon (comm 4), JP next
     PutBE16(state.vdp1, 0x40, 0x8000);   // draw-end terminator
     PutBE16(state.vdp1, 0x24, 0x0400);   // CMDPMOD: user-clip enable, mode inside, no comm 8
-    PutBE16(state.vdp1, 0x26, 0x001F);   // CMDCOLR: red
+    PutBE16(state.vdp1, 0x26, 0x801F);   // CMDCOLR: red
     PutBE16(state.vdp1, 0x2C, 0); PutBE16(state.vdp1, 0x2E, 0);   // A
     PutBE16(state.vdp1, 0x30, 4); PutBE16(state.vdp1, 0x32, 0);   // B
     PutBE16(state.vdp1, 0x34, 4); PutBE16(state.vdp1, 0x36, 2);   // C
@@ -1199,27 +1202,29 @@ void PutPolygon(State& state, uint32_t cmd, uint16_t color, uint16_t pmod,
 }
 
 // VDP1 resolves overlap in command order, before VDP2 priority has any say. A later pixel replaces
-// an earlier one however the two rank: the red polygon's priority number maps to 7 and the blue
-// one's to 1, and blue still wins because it was drawn last.
+// an earlier one however the two rank: the first polygon's priority number maps to 7 and the second
+// one's to 1, and the second still wins because it was drawn last.
 void TestLaterVdp1CommandReplacesEarlierRegardlessOfPriority()
 {
     State state = MakeBlueBackState(4, 2);
-    SetReg(state, 0x0F2, 0x0107);   // PRISB: number 2 -> priority 7, number 3 -> priority 1
-    PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 1);   // red: number 2 (bits 15-14 = 10)
-    PutPolygon(state, 0x40, 0xFC00, 0, 0, 0, 3, 1);   // blue: number 3 (bits 15-14 = 11)
+    SetReg(state, 0x0F0, 0x0107);   // PRISA: number 0 -> priority 7, number 1 -> priority 1
+    PutBE16(state.cram, 31 * 2, 0x001F);   // red
+    PutBE16(state.cram, 32 * 2, 0x03E0);   // green
+    PutPolygon(state, 0x20, 0x001F, 0, 0, 0, 3, 1);   // palette code: number 0, colour 31 (red)
+    PutPolygon(state, 0x40, 0x4020, 0, 0, 0, 3, 1);   // palette code: number 1, colour 32 (green)
     PutBE16(state.vdp1, 0x60, 0x8000);
     const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
-            CHECK(IsColorAt(pixels, 4, x, y, 0, 0, 255));
+            CHECK(IsColorAt(pixels, 4, x, y, 0, 255, 0));
 }
 
 // A sprite pixel whose priority maps to 0 is not displayed.
 void TestSpritePriorityZeroIsSuppressed()
 {
     State state = MakeBlueBackState(4, 2);
-    SetReg(state, 0x0F2, 0x0100);   // PRISB: number 2 -> priority 0
-    PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 1);   // red, number 2
+    SetReg(state, 0x0F0, 0x0100);   // PRISA: number 0 -> priority 0 (an RGB word is always number 0)
+    PutPolygon(state, 0x20, 0x801F, 0, 0, 0, 3, 1);   // red RGB
     PutBE16(state.vdp1, 0x40, 0x8000);
     const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
     for (int y = 0; y < 2; ++y)
@@ -1424,14 +1429,15 @@ std::vector<uint8_t> RenderRgbRow(const uint16_t words[8], uint16_t pmod)
 }
 
 // With SPD clear every RGB word below 0x4000 is transparent, not just zero: 0x0001 is not a
-// dark-red pixel. 0x4000 itself is an ordinary colour once the end code is disabled.
+// dark-red pixel. 0x4000 itself is not transparent once the end code is disabled -- it is a
+// palette code (MSB clear), here CRAM entry 0.
 void TestRgbTexelsBelow0x4000AreTransparent()
 {
     const uint16_t row[8] = { 0x0001, 0x3FFF, 0x4000, 0x801F, 0x801F, 0x801F, 0x801F, 0x801F };
     const std::vector<uint8_t> pixels = RenderRgbRow(row, 0x0028 | 0x0080);   // RGB555, ECD set
     CHECK(IsColorAt(pixels, 8, 0, 0, 0, 0, 255));
     CHECK(IsColorAt(pixels, 8, 1, 0, 0, 0, 255));
-    CHECK(IsColorAt(pixels, 8, 2, 0, 0, 0, 131));   // 0x4000: blue channel 16 of 31
+    CHECK(IsColorAt(pixels, 8, 2, 0, 0, 0, 0));   // 0x4000: drawn, as CRAM entry 0 (black)
     CHECK(IsColorAt(pixels, 8, 3, 0, 255, 0, 0));
 }
 
@@ -1468,6 +1474,72 @@ void TestHalfTransparencyNeedsAnMsbSetDestination()
     for (int y = 0; y < 2; ++y)
         for (int x = 0; x < 4; ++x)
             CHECK(IsColorAt(pixels, 4, x, y, 0, 255, 0));
+}
+
+// VDP2 reads the priority (and colour) out of the framebuffer word, so a draw-mode effect has to
+// change the word, not just a colour kept beside it. Half-luminance turns 0xC01F into 0xA00F: its
+// priority number goes from 3 to 2, which must move it behind the background.
+void TestEffectsChangeThePriorityTheWordSelects()
+{
+    State state = MakeNbg3State();   // NBG3 white
+    SetReg(state, 0x0E0, 0x0000);    // SPCTL type 0, SPCLMD clear: every word is a palette code
+    SetReg(state, 0x0FA, 0x0300);    // NBG3 priority 3
+    SetReg(state, 0x0F2, 0x0601);    // number 2 -> priority 1, number 3 -> priority 6
+    PutBE16(state.cram, 0x01F * 2, 0x001F);   // the palette colours either word resolves to
+    PutBE16(state.cram, 0x00F * 2, 0x03E0);
+    ResizeVdp1(state, 0x400);
+    PutPolygon(state, 0x20, 0xC01F, 0x0002, 0, 0, 3, 1);   // half-luminance
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 255, 255, 255));   // behind NBG3 after halving
+
+    // Control: without the effect the word keeps number 3 and sits in front, as its palette colour.
+    PutPolygon(state, 0x20, 0xC01F, 0x0000, 0, 0, 3, 1);
+    const std::vector<uint8_t> plain = RenderSized(state, 4, 2);
+    CHECK(IsColorAt(plain, 4, 0, 0, 255, 0, 0));
+}
+
+// A word with its MSB clear is a palette code, whatever drew it: a polygon of 0x4020 is CRAM entry
+// 32 (here blue), not the RGB555 colour those bits would spell.
+void TestPolygonPaletteCodesAreLookedUpInCram()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutBE16(state.vdp2, 0x200, 0x03E0);   // green back screen
+    PutBE16(state.cram, 32 * 2, 0x7C00);  // CRAM 32: blue
+    PutPolygon(state, 0x20, 0x4020, 0, 0, 0, 3, 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderSized(state, 4, 2);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsColorAt(pixels, 4, x, y, 0, 0, 255));
+}
+
+// A one-pixel-thin sprite is drawn, so it has to be selectable: its own corners are a zero-area
+// quad, and the hit test has to use the pixels the rasterizer fills instead.
+void TestThinSpriteCanBeHitTested()
+{
+    State state = MakeBlueBackState(16, 4);
+    PutBE16(state.vdp1, 0x20, 0x0000);
+    PutBE16(state.vdp1, 0x24, 0x0028 | 0x0040);
+    PutBE16(state.vdp1, 0x28, 0x100 / 8);
+    PutBE16(state.vdp1, 0x2A, (1 << 8) | 1);   // 8 x 1
+    PutBE16(state.vdp1, 0x2C, 2);
+    PutBE16(state.vdp1, 0x2E, 1);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    for (uint32_t i = 0; i < 8; ++i) PutBE16(state.vdp1, 0x100 + i * 2, 0x801F);
+    se_context* context = se_test::CreateContext(state);
+    CHECK(context != nullptr);
+    CHECK(se_begin_frame(context) == SE_OK);
+    size_t cmd = 99;
+    for (int x = 0; x < 16; ++x)
+        for (int y = 0; y < 4; ++y)
+        {
+            const bool drawn = (y == 1 && x >= 2 && x <= 9);
+            CHECK((se_hit_test(context, x, y, &cmd) == SE_OK) == drawn);
+        }
+    se_destroy(context);
 }
 
 int main()
@@ -1513,6 +1585,9 @@ int main()
     TestRgbEndCodesSpanTheWholeRange();
     TestEndCodesAreCountedAcrossTheLine();
     TestHalfTransparencyNeedsAnMsbSetDestination();
+    TestEffectsChangeThePriorityTheWordSelects();
+    TestPolygonPaletteCodesAreLookedUpInCram();
+    TestThinSpriteCanBeHitTested();
     TestSpriteMesh();
     TestDrawEndNotDrawn();
     TestPolygon();

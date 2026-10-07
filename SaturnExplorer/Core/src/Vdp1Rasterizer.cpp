@@ -159,6 +159,15 @@ uint8_t ApplyGouraud(uint8_t t8, float g5)
     return static_cast<uint8_t>(o5 * 255 / 31);
 }
 
+// ApplyGouraud on a packed RGB555 word: add the interpolated 5-bit ramp (neutral 16) per channel.
+uint16_t ShadeWord(uint16_t word, int g5r, int g5g, int g5b)
+{
+    auto ch = [](int t5, int g5) { const int o = t5 + g5 - 16; return o < 0 ? 0 : (o > 31 ? 31 : o); };
+    return static_cast<uint16_t>((word & 0x8000) | ch(word & 0x1F, g5r) |
+                                 (ch((word >> 5) & 0x1F, g5g) << 5) |
+                                 (ch((word >> 10) & 0x1F, g5b) << 10));
+}
+
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
 // to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path emits a descriptor
@@ -288,6 +297,13 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 cr = ApplyGouraud(c.r, gr);
                 cg = ApplyGouraud(c.g, gg);
                 cb = ApplyGouraud(c.b, gb);
+                // The framebuffer holds the shaded WORD. Shade its RGB channels when it is a colour
+                // (MSB set); a palette code is an index, which adding a colour ramp would corrupt.
+                if (word & 0x8000)
+                {
+                    word = ShadeWord(word, static_cast<int>(gr + 0.5f), static_cast<int>(gg + 0.5f),
+                                     static_cast<int>(gb + 0.5f));
+                }
             }
             // Hand the covered pixel to the sink with the sprite's draw-mode; the sink
             // owns how shadow / half-luminance / half-transparency and the final write or
@@ -481,36 +497,91 @@ RVert Project(const se_vec3& w, const se_camera3d& cam,
 namespace
 {
 
-// One pixel of the VDP1 framebuffer. 'direct' is the framebuffer word's MSB: the pixel holds an
-// RGB colour, as opposed to a palette code that VDP2 looks up later. It is what shadow and
-// half-transparency test on the destination: they act on a pixel whose MSB is set and leave an
-// MSB-clear one alone (half-transparency then just replaces it).
+// One pixel of the VDP1 framebuffer: the packed 16-bit word the hardware would hold. Everything
+// downstream -- shadow and half-transparency (which test its MSB: they act on a pixel that holds an
+// RGB colour, and leave an MSB-clear one alone), the priority VDP2 reads out of its bits, and the
+// colour it decodes -- is a function of this word, so a draw-mode effect has to change the word, not
+// a colour kept beside it.
 struct FbPixel
 {
-    Rgba     color{ 0, 0, 0, 0 };
     uint16_t word = 0;
     bool     written = false;
-    bool     direct = false;
 };
 
-// VDP1 colour arithmetic runs on the framebuffer's 5-bit channels, so halving and averaging
-// truncate there. Doing it on the expanded 8-bit values keeps a bit the hardware drops: red and
-// blue averaged are (15,0,15) -- shown as (123,0,123) -- not (127,0,127).
-int To5(uint8_t c8) { return (static_cast<int>(c8) * 31 + 127) / 255; }
-uint8_t From5(int c5) { return static_cast<uint8_t>(c5 * 255 / 31); }
-
-Rgba Halve5(const Rgba& c)
+// VDP1 colour arithmetic runs on the packed RGB555 word: halving shifts every 5-bit channel down
+// (truncating) and keeps the MSB, averaging is the per-channel truncated mean.
+uint16_t HalveWord(uint16_t w)
 {
-    return { From5(To5(c.r) >> 1), From5(To5(c.g) >> 1), From5(To5(c.b) >> 1), 255 };
+    return static_cast<uint16_t>(((w & 0x7BDE) >> 1) | (w & 0x8000));
 }
 
-Rgba Average5(const Rgba& a, const Rgba& b)
+uint16_t AverageWord(uint16_t a, uint16_t b)
 {
-    return { From5((To5(a.r) + To5(b.r)) >> 1), From5((To5(a.g) + To5(b.g)) >> 1),
-             From5((To5(a.b) + To5(b.b)) >> 1), 255 };
+    return static_cast<uint16_t>(((static_cast<uint32_t>(a) + b) -
+                                  ((static_cast<uint32_t>(a) ^ b) & 0x8421)) >> 1);
 }
 
 }  // namespace
+
+SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
+                                                        const std::vector<uint8_t>& cram,
+                                                        se_cram_mode cramMode) const
+{
+    Pixel out;
+    out.visible = true;
+    if (!valid)
+    {
+        // No VDP2 registers, so no sprite type to go by: read the MSB as the RGB flag and anything
+        // else as a CRAM entry.
+        out.color = (word & 0x8000) ? Rgb555ToRgba(word) : CramColor(cram, cramMode, word);
+        return out;
+    }
+    if (spclmd && (word & 0x8000))
+    {
+        out.color = Rgb555ToRgba(word);
+        out.prio = slot[0];
+        if (type & 0x8)
+        {
+            out.visible = (word & 0xFF) != 0;
+        }
+        return out;
+    }
+
+    unsigned src = word;
+    if (type & 0x8)
+    {
+        src &= 0xFF;
+    }
+    unsigned pr = 0, dc = 0;
+    bool sd = false;
+    switch (type)
+    {
+    case 0x0: pr = (src >> 14) & 0x3; dc = src & 0x7FF; break;
+    case 0x1: pr = (src >> 13) & 0x7; dc = src & 0x7FF; break;
+    case 0x2: sd = (src >> 15) & 1; pr = (src >> 14) & 0x1; dc = src & 0x7FF; break;
+    case 0x3: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; dc = src & 0x7FF; break;
+    case 0x4: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; dc = src & 0x3FF; break;
+    case 0x5: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x7FF; break;
+    case 0x6: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x3FF; break;
+    case 0x7: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; dc = src & 0x1FF; break;
+    case 0x8: pr = (src >> 7) & 0x1; dc = src & 0x7F; break;
+    case 0x9: pr = (src >> 7) & 0x1; dc = src & 0x3F; break;
+    case 0xA: pr = (src >> 6) & 0x3; dc = src & 0x3F; break;
+    case 0xB: dc = src & 0x3F; break;
+    case 0xC: case 0xD: pr = (src >> 7) & 0x1; dc = src & 0xFF; break;
+    case 0xE: pr = (src >> 6) & 0x3; dc = src & 0xFF; break;
+    default:  dc = src & 0xFF; break;
+    }
+    // A zero word is transparent, and so is a shadow-bit word with no colour data.
+    if (src == 0 || (sd && (src & 0x7FFF) == 0))
+    {
+        out.visible = false;
+        return out;
+    }
+    out.color = CramColor(cram, cramMode, cramOffset + dc);
+    out.prio = slot[pr & 0x7];
+    return out;
+}
 
 void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                                  const std::vector<uint8_t>& cram, se_cram_mode cramMode,
@@ -536,37 +607,33 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
         // Commands draw into the framebuffer strictly in list order, and a later pixel replaces an
         // earlier one however the two rank in VDP2 priority: that is decided afterwards, on the
         // pixel that survived. Draw-mode effects read the framebuffer pixel under them, never the
-        // VDP2 layers -- VDP2 only sees the finished framebuffer.
+        // VDP2 layers -- VDP2 only sees the finished framebuffer -- and work on the packed word:
         //
-        //  - shadow halves the destination if it holds a colour, and otherwise does nothing;
-        //  - half-luminance halves the sprite's own colour;
-        //  - half-transparency averages with the destination if it holds a colour, and otherwise
+        //  - shadow halves the destination if its MSB is set, and otherwise does nothing;
+        //  - half-luminance halves the sprite's own word;
+        //  - half-transparency averages with the destination if its MSB is set, and otherwise
         //    just replaces it.
-        auto sink = [&fb](size_t idx, uint8_t r, uint8_t g, uint8_t b, const DrawFx& fx,
-                          uint16_t word)
+        auto sink = [&fb](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word)
         {
             FbPixel& d = fb[idx];
-            Rgba src{ r, g, b, 255 };
             if (fx.effect == 1)   // shadow
             {
-                if (d.written && d.direct)
+                if (d.written && (d.word & 0x8000))
                 {
-                    d.color = Halve5(d.color);
+                    d.word = HalveWord(d.word);
                 }
                 return;
             }
             if (fx.effect == 2)   // half-luminance
             {
-                src = Halve5(src);
+                word = HalveWord(word);
             }
-            else if (fx.effect == 3 && d.written && d.direct)   // half-transparency
+            else if (fx.effect == 3 && d.written && (d.word & 0x8000))   // half-transparency
             {
-                src = Average5(src, d.color);
+                word = AverageWord(word, d.word);
             }
-            d.color = src;
             d.word = word;
             d.written = true;
-            d.direct = (word & 0x8000) != 0;
         };
 
         const se_vec2* c = s.corners;
@@ -613,13 +680,14 @@ void Vdp1Rasterizer::EmitSprites(const Vdp1Scene& scene, const std::vector<uint8
             {
                 continue;
             }
-            const uint8_t prio = prios.Of(p.word);
-            if (prios.valid && prio == 0)
+            const SpritePriorityTable::Pixel px = prios.Resolve(p.word, cram, cramMode);
+            // Priority 0 means "not displayed" once the VDP2 registers say what 0 maps to.
+            if (!px.visible || (prios.valid && px.prio == 0))
             {
                 continue;
             }
-            EmitPix(cols[static_cast<size_t>(y) * width + x], p.color.r, p.color.g, p.color.b,
-                    prio, false, 0, false);
+            EmitPix(cols[static_cast<size_t>(y) * width + x], px.color.r, px.color.g, px.color.b,
+                    px.prio, false, 0, false);
         }
     }
 }
@@ -737,7 +805,14 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
 
 bool PointInSprite(const se_sprite_2d& sprite, float px, float py)
 {
-    return PointInQuad(sprite.corners, px, py);
+    // Test against the quad the rasterizer actually fills. The corners are inclusive pixel indices,
+    // so a one-pixel-thin sprite's own corners are a zero-area quad that nothing can be inside.
+    RVert v[4] = { { sprite.corners[0].x, sprite.corners[0].y, 0.0f },
+                   { sprite.corners[1].x, sprite.corners[1].y, 0.0f },
+                   { sprite.corners[2].x, sprite.corners[2].y, 0.0f },
+                   { sprite.corners[3].x, sprite.corners[3].y, 0.0f } };
+    ExpandQuadInclusive(v);
+    return PointInQuad(v, px, py);
 }
 
 }  // namespace se

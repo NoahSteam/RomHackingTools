@@ -497,9 +497,11 @@ manager; the D3D11, OpenGL and SDL2 backends ship with it.
    > `Docs/RenderingAccuracyRoadmap.md` for the ordered completion plan.
    > **VDP1 framebuffer.** `Vdp1Rasterizer::EmitSprites` draws the command list into a VDP1
    > framebuffer (at VDP1's own width -- half the display in hi-res) in list order, then scans it
-   > out to the mixer at the VDP2 priority each pixel's own word selects; priority 0 is not
-   > displayed. Shadow / half-transparency read the framebuffer pixel, not VDP2, and do their
-   > arithmetic on 5-bit channels; they act only on a pixel that holds an RGB colour. Texture end
+   > out through `SpritePriorityTable::Resolve`, which decodes each packed word as VDP2 does (SPCTL
+   > type, SPCLMD, CRAOFB sprite offset) into visibility, colour and priority; priority 0 is not
+   > displayed. Shadow / half-transparency / half-luminance read and rewrite the framebuffer WORD
+   > (packed RGB555 arithmetic, not VDP2 layers), so a changed word changes the priority and colour
+   > VDP2 then derives; they act on a destination whose MSB is set. Texture end
    > codes (CMDPMOD ECD clear) and skipped (JP >= 4) commands follow the hardware.
    > **Sprite pixel coverage.** VDP1 corners are inclusive pixel *indices* and the game tiles a
    > mech out of many small strips; `ExpandQuadInclusive` moves each corner to its pixel's centre

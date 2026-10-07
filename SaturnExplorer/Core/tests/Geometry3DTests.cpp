@@ -86,6 +86,7 @@ void AddQuadPrim(State& state, uint32_t cmd, uint16_t comm, uint16_t color,
 void SpritesInFront(State& state)
 {
     for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
+    SetReg(state, 0x0E0, 0x0020);   // SPCLMD: an MSB-set word is an RGB colour
 }
 
 State MakeScene()
