@@ -1768,10 +1768,14 @@ void App::DrawTransportBar()
 // until the user scrubs, so a stale mScrubIndex from an earlier scrub is deliberately ignored.
 int App::PlayFromHereTarget() const
 {
+#ifdef SE_ENABLE_LIVE
     const int n = static_cast<int>(mRecorder.Count());
     if (!mbPaused || n == 0) return -1;
     if (!mbScrubbing) return n - 1;
     return (mScrubIndex >= 0 && mScrubIndex < n) ? mScrubIndex : -1;
+#else
+    return -1;   // no live source, so no recorded history to resume from
+#endif
 }
 
 // "Play from here": load the selected frame's full savestate into the emulator, replay the
