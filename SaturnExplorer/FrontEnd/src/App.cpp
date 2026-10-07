@@ -1658,7 +1658,7 @@ void App::DrawTransportBar()
     if (mSeekSupported)
     {
         const int target = PlayFromHereTarget();
-        const bool canPlayHere = target >= 0 && se_supports_state_rewind(ctl) &&
+        const bool canPlayHere = target >= 0 && EmulatorStampsStates() && se_supports_state_rewind(ctl) &&
                                  mRecorder.CanReconstruct(static_cast<size_t>(target));
 
         if (IconButton("##tp_playhere", Ico::PlayHere, nullptr, !canPlayHere))
@@ -1718,6 +1718,19 @@ void App::DrawTransportBar()
 #endif
 }
 
+// Whether the connected emulator stamps its savestate blocks with the timeline they belong to
+// (protocol v22). Without it a block of a timeline a load abandoned cannot be told from one of the
+// new, so Play From Here -- which rewinds, and reuses frame numbers -- must not be offered: it
+// could resume into a state of the old history. Older emulators still record and scrub as before.
+bool App::EmulatorStampsStates() const
+{
+#ifdef SE_ENABLE_LIVE
+    return se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER;
+#else
+    return false;
+#endif
+}
+
 // What hovering Play From Here says: what it will do, or why it cannot and how to turn it on.
 std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const
 {
@@ -1733,6 +1746,10 @@ std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHe
                       n - 1 - target);
         return buf;
     }
+    if (!EmulatorStampsStates())
+        return "Play From Here (unavailable)\nThis emulator build is too old to tell the frames of a "
+               "rewound game from the ones it replaced, so a restore could resume into the wrong "
+               "history.\nRebuild the emulator (./update.sh).";
     if (!mbPaused)
         return "Play From Here (unavailable)\nPause the game first, then pick a recorded frame "
                "with the scrub bar.\nThis restores the game to that frame and resumes from it, "
@@ -1790,7 +1807,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 {
 #ifdef SE_ENABLE_LIVE
     const int target = PlayFromHereTarget();
-    if (!mSeekSupported || target < 0 || !se_supports_state_rewind(ctl) ||
+    if (!mSeekSupported || target < 0 || !EmulatorStampsStates() || !se_supports_state_rewind(ctl) ||
         !mRecorder.CanReconstruct(static_cast<size_t>(target)))
         return;
 
@@ -6684,7 +6701,7 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
     // batch that have settled while others are still outstanding. (Only against a server that
     // stamps its blocks; an older one sends 0 there, which any floor would reject, so for it stale
     // blocks go unfiltered as they always did.)
-    if (se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER)
+    if (EmulatorStampsStates())
         mBlockEpochFloor = std::max(mBlockEpochFloor,
                                     (mRestoreBaseDone + mRestoreBaseFailed +
                                      static_cast<uint32_t>(mRestoreOutstanding)) & 0xFFFFFFu);

@@ -280,6 +280,7 @@ private:
     void DrawVdp1Table();
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
+    bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
     void PlayFromScrubbedFrame(se_context* ctl);   // restore the scrubbed frame, drop what followed

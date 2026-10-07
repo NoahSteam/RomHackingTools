@@ -8,6 +8,9 @@
 // a socket of this test's own (see the definitions in CMake), so it never touches a running
 // emulator's. POSIX only, like the other tests that stand up the exporter: CMake builds it
 // where the unix-socket transport exists, and the Windows driver's named pipe is not covered.
+#if defined(_WIN32)
+#error "RewindPipelineTests is POSIX-only: it listens on a unix socket. CMake builds it only where that exists."
+#endif
 #include <atomic>
 #include <chrono>
 #include <cstdint>
