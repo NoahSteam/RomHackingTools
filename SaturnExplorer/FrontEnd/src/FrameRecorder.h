@@ -214,6 +214,7 @@ private:
     std::map<uint64_t, StateBlock> mKeyframes;   // by frame number
     std::deque<StateBlock>         mWaiting;     // deltas ahead of their frame, oldest first
     static constexpr size_t        kMaxWaiting = 48;
+    size_t                         mWaitingBytes = 0;   // payload bytes in mWaiting (also in mBytes)
     size_t             mBytes = 0;
     size_t             mMaxFrames = 5 * 60;   // ring length in frames (App sets this)
     uint64_t           mMaxBytes = kDefaultMaxBytes;

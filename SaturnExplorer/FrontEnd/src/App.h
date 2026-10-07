@@ -322,6 +322,10 @@ private:
     // which is served here from the current se_context — live snapshot or scrub).
     ContextBackend           mMemBackend{&mContext};
     int                      mRestoreOutstanding = 0;   // load requests the emulator has not yet resolved
+    // Savestate blocks of an epoch older than this belong to a timeline a state load has since
+    // abandoned (see OnStateBlock). The count the emulator will report once every load submitted
+    // so far has landed; 0 accepts everything.
+    uint32_t                 mBlockEpochFloor = 0;
     uint32_t                 mRestoreBaseDone = 0, mRestoreBaseFailed = 0;   // counters when the first was sent
     float                    mRestoreWaitSeconds = 0.0f;
     bool                     mRestoreTimedOut = false;      // reported once; edits stay refused
@@ -557,7 +561,7 @@ private:
     double RecorderCapacityMB() const;
     // Recorder callback thunks (static; 'user' is this App).
     static void OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
-                             uint32_t fullLen, const uint8_t* payload, uint32_t len);
+                             uint32_t fullLen, uint32_t epoch, const uint8_t* payload, uint32_t len);
     static void OnScrubEdit(void* user, int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
 
     // --- Patch feature: locate memory edits in game files, then apply them back ---

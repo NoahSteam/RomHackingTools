@@ -235,6 +235,68 @@ int main()
         Check(r9.CanReconstruct(0), "and the frame resumed from is still resumable");
     }
 
+    // --- Pruning must not delete the keyframe a waiting delta is about to need ---
+    {
+        FrameRecorder r10;
+        r10.Configure(10);
+        // Keyframe 1 and a delta against it for frame 2, which is not recorded yet; then two
+        // newer keyframes (the exporter promotes one on a scene change) before frame 2 lands.
+        r10.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N, encKf.data(), encKf.size());
+        r10.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
+        r10.AttachStateBlock(3, SE_LIVE_STATE_KIND_KEYFRAME, 3, (uint32_t)N, encKf.data(), encKf.size());
+        r10.AttachStateBlock(4, SE_LIVE_STATE_KIND_KEYFRAME, 4, (uint32_t)N, encKf.data(), encKf.size());
+        Check(CaptureFrame(r10, ctx, 2), "r10 frame 2");
+        std::vector<uint8_t> out;
+        Check(r10.CanReconstruct(0) && r10.ReconstructState(0, out) && out == full2,
+              "the delta that was waiting still has its keyframe");
+    }
+
+    // --- Blocks waiting for a frame are counted against the byte budget, and bounded by it ---
+    {
+        // Incompressible payloads, so each is a real few KB. A tiny budget must not be
+        // overrun by early blocks that never find a frame.
+        std::vector<uint8_t> noisy(4096);
+        uint32_t x = 12345;
+        for (auto& b : noisy) { x = x * 1664525u + 1013904223u; b = (uint8_t)(x >> 24); }
+        const std::vector<uint8_t> encNoisy = Encode(noisy);
+
+        FrameRecorder r11;
+        r11.Configure(10, 1024);
+        for (uint64_t f = 2; f < 50; ++f)
+            r11.AttachStateBlock(f, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)noisy.size(),
+                                 encNoisy.data(), encNoisy.size());
+        Check(r11.BytesUsed() <= 1024, "48 early blocks do not exceed a 1 KiB budget");
+        Check(r11.GetStateStats().waiting == 0, "blocks bigger than the allowance are not held");
+
+        FrameRecorder r11b;
+        r11b.Configure(10, 4 * encNoisy.size());   // a quarter of this fits one block, not two
+        for (uint64_t f = 2; f < 12; ++f)
+            r11b.AttachStateBlock(f, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)noisy.size(),
+                                  encNoisy.data(), encNoisy.size());
+        Check(r11b.GetStateStats().waiting == 1, "only what the allowance covers is held");
+        Check(r11b.BytesUsed() == encNoisy.size(), "and what is held is counted in the footprint");
+        r11b.TruncateAfter(0);   // no frames: a no-op for the ring, but the held blocks must go
+        r11b.Clear();
+        Check(r11b.BytesUsed() == 0 && r11b.GetStateStats().waiting == 0, "clearing releases them");
+    }
+
+    // --- A keyframe replaces a delta the frame already holds ---
+    {
+        FrameRecorder r12;
+        r12.Configure(10);
+        Check(CaptureFrame(r12, ctx, 3), "r12 frame 3");
+        const size_t frameOnly = r12.BytesUsed();   // the frame's own footprint, before any state
+        // A delta for frame 3 against a keyframe that is not there, then frame 3's own keyframe.
+        r12.AttachStateBlock(3, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD3.data(), encD3.size());
+        const size_t withDelta = r12.BytesUsed() - frameOnly;
+        r12.AttachStateBlock(3, SE_LIVE_STATE_KIND_KEYFRAME, 3, (uint32_t)N, encKf.data(), encKf.size());
+        std::vector<uint8_t> out;
+        Check(r12.CanReconstruct(0) && r12.ReconstructState(0, out) && out == keyframe,
+              "the keyframe is the state, not the delta it arrived behind");
+        Check(r12.BytesUsed() - frameOnly == encKf.size() && withDelta == encD3.size(),
+              "and the replaced delta is no longer counted");
+    }
+
     // --- A frame that does not fully decode is refused, not blanked and served (REW-02) ---
     // Nothing can corrupt a blob once the recorder has stored one, so the frame is posed
     // directly. DecompressFrame is the recorder's only decode entry point, so these cover

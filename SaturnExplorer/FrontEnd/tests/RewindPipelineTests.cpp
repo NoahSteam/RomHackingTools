@@ -6,7 +6,8 @@
 // Each piece has its own test and passes; what none of them covers is the pieces together, which
 // is where a live session found no recorded frame could ever be resumed. The exporter listens on
 // a socket of this test's own (see the definitions in CMake), so it never touches a running
-// emulator's.
+// emulator's. POSIX only, like the other tests that stand up the exporter: CMake builds it
+// where the unix-socket transport exists, and the Windows driver's named pipe is not covered.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -41,6 +42,17 @@ void Sleep(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 // compress between frames.
 constexpr size_t kStateBytes = 1u << 20;
 std::atomic<uint32_t> gSaves{ 0 };
+// What a state of the fake machine looks like, built so a state that is wrong can be told from
+// one that is right without knowing which frame it came from:
+//  - a run of bytes that follows a pattern of its own (n, n+1, n+2, ...), different every save.
+//    A delta applied to a keyframe other than the one it was taken against does not yield a
+//    state with the pattern intact, so a mismatched pair shows up as corrupt.
+//  - the timeline the machine is on. A load starts a new one, so a state from the timeline a
+//    rewind abandoned is told apart from one of the new -- even a state that is itself intact,
+//    which is the case a frame number cannot settle, since both timelines use the same numbers.
+std::atomic<uint32_t> gTimeline{ 1 };
+constexpr size_t kPatternBytes = 4096;
+constexpr size_t kMarkerOffset = 100000;
 
 extern "C" size_t FakeSave(unsigned char* buf, size_t cap)
 {
@@ -48,10 +60,20 @@ extern "C" size_t FakeSave(unsigned char* buf, size_t cap)
     if (cap < kStateBytes) return 0;
     const uint32_t n = ++gSaves;
     std::memset(buf, 0x5A, kStateBytes);
-    for (size_t i = 0; i < 4096; ++i) buf[i] = static_cast<unsigned char>(n + i);
+    for (size_t i = 0; i < kPatternBytes; ++i) buf[i] = static_cast<unsigned char>(n + i);
+    buf[kMarkerOffset] = static_cast<unsigned char>(gTimeline.load());
     return kStateBytes;
 }
-extern "C" int FakeLoad(const unsigned char*, size_t) { return 0; }
+extern "C" int FakeLoad(const unsigned char*, size_t) { ++gTimeline; return 0; }
+
+// True if a rebuilt state is one the machine could have saved.
+bool Intact(const std::vector<uint8_t>& st)
+{
+    if (st.size() != kStateBytes) return false;
+    for (size_t i = 1; i < kPatternBytes; ++i)
+        if (static_cast<uint8_t>(st[i] - st[i - 1]) != 1) return false;
+    return true;
+}
 
 void Frame()
 {
@@ -59,9 +81,14 @@ void Frame()
                      nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
+// What the front end does once it has submitted a load: discard blocks from before it.
+uint32_t gEpochFloor = 0;
+uint32_t gStaleDropped = 0;
+
 void OnBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base, uint32_t fullLen,
-             const uint8_t* payload, uint32_t len)
+             uint32_t epoch, const uint8_t* payload, uint32_t len)
 {
+    if (epoch < gEpochFloor) { ++gStaleDropped; return; }
     static_cast<sfe::FrameRecorder*>(user)->AttachStateBlock(frame, kind, base, fullLen, payload, len);
 }
 }  // namespace
@@ -119,19 +146,87 @@ int main()
         Sleep(16);
     }
 
-    const sfe::FrameRecorder::StateStats st = rec.GetStateStats();
-    std::printf("frames %zu, with a block %zu, resumable %zu; blocks received %llu "
-                "(invalid %llu, no such frame %llu)\n",
-                st.frames, st.withState, st.resumable,
-                static_cast<unsigned long long>(st.received),
-                static_cast<unsigned long long>(st.invalid),
-                static_cast<unsigned long long>(st.noFrame));
-
-    Check(st.received > 0, "the emulator's savestate blocks reach the front end");
-    Check(st.frames >= 100, "frames were recorded");
+    const sfe::FrameRecorder::StateStats before = rec.GetStateStats();
+    Check(before.received > 0, "the emulator's savestate blocks reach the front end");
+    Check(before.frames >= 40, "frames were recorded");
     // Most recorded frames must be resumable. Not all: the oldest may hang off a keyframe that
     // has aged out of the ring, and the newest have no block yet.
-    Check(st.resumable * 2 >= st.frames, "at least half of the recorded frames can be resumed from");
+    Check(before.resumable * 2 >= before.frames, "at least half of the recorded frames can be resumed from");
+    std::printf("before the rewind: frames %zu, with a block %zu, resumable %zu; blocks received %llu "
+                "(invalid %llu, never recorded %llu)\n",
+                before.frames, before.withState, before.resumable,
+                static_cast<unsigned long long>(before.received),
+                static_cast<unsigned long long>(before.invalid),
+                static_cast<unsigned long long>(before.noFrame));
+
+    // --- Rewind to the middle of what was recorded and carry on, as Play From Here does ---
+    // First let the transport fill up with blocks of the timeline about to be abandoned: they are
+    // the ones that arrive after the load and reuse the numbers of the frames recorded after it.
+    se_frame_resume(ctx);
+    Sleep(400);
+    const size_t index = rec.Count() / 2;
+    std::vector<uint8_t> state;
+    Check(rec.CanReconstruct(index) && rec.ReconstructState(index, state), "a frame to rewind to");
+    const uint64_t resumeFrame = rec.FrameNumber(index);
+    uint32_t done = 0, failed = 0;
+    Check(se_live_restore_state(&ds, &done, &failed) != 0, "the server reports restore counters");
+    Check(se_load_state(ctx, resumeFrame, state.data(), state.size(), nullptr, 0) == SE_OK,
+          "the load is accepted");
+    rec.TruncateAfter(index);
+    gEpochFloor = done + failed + 1;   // the front end's BeginRestoreWait
+    const size_t keptFrames = rec.Count();
+
+    const auto rewound = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - rewound < std::chrono::seconds(4))
+    {
+        // The counters are read BEFORE the snapshot is latched, as the front end does: the driver
+        // only moves forward, so what is latched is at least as new as what was read. The other
+        // way round can see "landed" while still holding the frame that was left, record it, and
+        // have the recorder refuse everything up to its number as already seen.
+        uint32_t d = 0, f = 0;
+        const bool signal = se_live_restore_state(&ds, &d, &f) != 0;
+        se_begin_frame(ctx);
+        const bool landed = signal && d + f >= gEpochFloor;
+        // Not while the load is outstanding: the display still shows the frame that was left.
+        if (landed) rec.Capture(ctx, se_frame_number(ctx));
+        se_live_drain_state_blocks(&ds, &OnBlock, &rec);
+        Sleep(16);
+    }
+    se_frame_pause(ctx);
+    for (int i = 0; i < 30; ++i)
+    {
+        se_begin_frame(ctx);
+        se_live_drain_state_blocks(&ds, &OnBlock, &rec);
+        Sleep(16);
+    }
+
+    // Every resumable frame must rebuild to a state the machine could have saved, on the timeline
+    // its frame number belongs to: the old one up to the resume point, the new one after it. A
+    // state from the abandoned timeline filed under a reused frame number would resume the game
+    // into a future that already did not happen.
+    size_t recordedAfter = 0, after = 0, corrupt = 0, wrongTimeline = 0;
+    for (size_t i = 0; i < rec.Count(); ++i)
+    {
+        const bool isAfter = rec.FrameNumber(i) > resumeFrame;
+        if (isAfter) ++recordedAfter;
+        std::vector<uint8_t> out;
+        if (!rec.CanReconstruct(i) || !rec.ReconstructState(i, out)) continue;
+        if (!Intact(out)) { ++corrupt; continue; }
+        const uint8_t want = isAfter ? gTimeline.load() : 1;
+        if (out[kMarkerOffset] != want) { ++wrongTimeline; continue; }
+        if (isAfter) ++after;
+    }
+    std::printf("rewind to #%llu: kept %zu, now %zu frames; resumable after it %zu of %zu, "
+                "corrupt %zu, wrong timeline %zu; stale blocks dropped %u\n",
+                static_cast<unsigned long long>(resumeFrame), keptFrames, rec.Count(), after,
+                recordedAfter, corrupt, wrongTimeline, gStaleDropped);
+    Check(rec.Count() > keptFrames, "recording continued after the rewind");
+    Check(after > 0, "frames recorded after the rewind can be resumed from");
+    // All but the newest few, whose blocks are still on their way when the test stops.
+    Check(after + 8 >= recordedAfter, "nearly every frame recorded after the rewind can be resumed from");
+    Check(corrupt == 0, "no frame rebuilds to a state the machine could not have saved");
+    Check(wrongTimeline == 0, "no frame rebuilds to a state of the other timeline");
+    Check(gStaleDropped > 0, "blocks from before the load were in flight, and were dropped");
 
     stop = true;
     emu.join();

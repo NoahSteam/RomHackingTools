@@ -244,6 +244,7 @@ void FrameRecorder::Clear()
     mFrames.clear();
     mKeyframes.clear();
     mWaiting.clear();
+    mWaitingBytes = 0;
     mBytes = 0;
     mLastCaptured = 0;
     mBlocksReceived = mBlocksInvalid = mBlocksNoFrame = mNewestBlock = 0;
@@ -400,13 +401,15 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
         for (auto it = mFrames.rbegin(); it != mFrames.rend(); ++it)
         {
             if (it->frameNumber != frameNumber) continue;
-            if (!it->hasState)
-            {
-                it->hasState = true;
-                it->stateKind = kind;
-                it->baseKeyframe = frameNumber;
-                it->stateFullLen = fullLen;
-            }
+            // Authoritative: a keyframe is the exact state for this frame, so it replaces
+            // whatever delta the frame was holding rather than being ignored behind it.
+            mBytes -= it->state.size();
+            it->bytes -= it->state.size();
+            std::vector<uint8_t>().swap(it->state);
+            it->hasState = true;
+            it->stateKind = kind;
+            it->baseKeyframe = frameNumber;
+            it->stateFullLen = fullLen;
             break;
         }
         // A keyframe is large and counts against the ring's budget like any other block.
@@ -449,11 +452,20 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
     w.fullLen = fullLen;
     w.payload.assign(payload, payload + len);
     mWaiting.push_back(std::move(w));
-    while (mWaiting.size() > kMaxWaiting)
+    mWaitingBytes += len;
+    mBytes += len;
+    // Bounded in memory as well as in number: a quarter of the ring's budget at most, so blocks
+    // that never find a frame cannot grow past what the budget was set to allow.
+    const uint64_t cap = mMaxBytes / 4;
+    while (!mWaiting.empty() && (mWaiting.size() > kMaxWaiting || mWaitingBytes > cap))
     {
+        const size_t n = mWaiting.front().payload.size();
+        mWaitingBytes -= n;
+        mBytes -= n;
         mWaiting.pop_front();
         ++mBlocksNoFrame;
     }
+    Evict();
 }
 
 void FrameRecorder::AdoptWaitingState(Frame& f)
@@ -471,6 +483,10 @@ void FrameRecorder::AdoptWaitingState(Frame& f)
     while (!mWaiting.empty() && mWaiting.front().frameNumber <= f.frameNumber)
     {
         StateBlock& w = mWaiting.front();
+        // Leaving the queue either way. An adopted payload is counted again as part of the
+        // frame's own size, which the caller adds to mBytes.
+        mWaitingBytes -= w.payload.size();
+        mBytes -= w.payload.size();
         if (w.frameNumber == f.frameNumber && !f.hasState)
         {
             f.state = std::move(w.payload);
@@ -498,6 +514,9 @@ void FrameRecorder::PruneKeyframes()
         if (f.hasState) needed.insert(f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME ? f.frameNumber
                                                                                   : f.baseKeyframe);
     }
+    // A delta still waiting for its frame is about to need its base; deleting that keyframe now
+    // would leave the frame it lands on unable to be rebuilt.
+    for (const StateBlock& w : mWaiting) needed.insert(w.base);
     size_t newest = 0;
     for (auto it = mKeyframes.rbegin(); it != mKeyframes.rend() && newest < 2; ++it, ++newest)
         needed.insert(it->first);
@@ -599,6 +618,8 @@ void FrameRecorder::TruncateAfter(size_t i)
     mLastCaptured = mFrames[i].frameNumber;   // Capture() resumes accepting at N+1
     // Whatever the emulator sent for the frames just discarded describes a future that did not
     // happen: the waiting deltas, and any keyframe taken after the resume point.
+    mBytes -= mWaitingBytes;
+    mWaitingBytes = 0;
     mWaiting.clear();
     for (auto it = mKeyframes.begin(); it != mKeyframes.end();)
     {

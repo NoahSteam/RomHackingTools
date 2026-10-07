@@ -267,6 +267,11 @@ static void SeStopClear(void)
  * SE_LOCK and only ever increase. ---- */
 static unsigned int sRestoreDone;
 static unsigned int sRestoreFailed;
+/* Every state load that has been settled, one way or the other: bumped when a load is applied and
+ * when one is refused or superseded. Stamped on each savestate block at capture (v22), so a
+ * client can tell the blocks of the timeline a load abandoned from those of the one it started.
+ * Guarded by the same lock as the two above. */
+static unsigned int sRestoreResolved;
 /* Restores applied whose "done" has not been counted yet. A COUNT, not a flag: a rewind load and an
  * emulator-slot load use separate mailboxes, so both can run in one gate call, and a flag would
  * collapse the two into a single completion -- the client, which waits for one outcome per accepted
@@ -489,12 +494,13 @@ static int            sFreeCount;
 static volatile unsigned sStateGen;
 static unsigned          sKeyGen;                 /* generation the current keyframe belongs to */
 
-typedef struct { unsigned long long frame; int poolIdx; size_t len; unsigned gen; } SeRawItem;
+typedef struct { unsigned long long frame; int poolIdx; size_t len; unsigned gen; unsigned epoch; } SeRawItem;
 static SeRawItem sRawFifo[SE_STATE_QUEUE];
 static int sRawHead, sRawCount;
 
 typedef struct {
     unsigned char      kind;                      /* SE_LIVE_STATE_KIND_* */
+    unsigned           epoch;                     /* loads resolved when captured (see sRestoreResolved) */
     unsigned long long frame, base;
     unsigned char*     payload; size_t len;       /* RLE payload */
     size_t             full;                      /* decoded full-state size */
@@ -548,7 +554,7 @@ static void SeStateFlushAndRekey(void)
 /* Emulate thread, from SeExportSnapshot: save the current full state and stage it for the
  * worker (SAVE only; no diff/RLE). Drops the frame (leaving it non-seekable) if the worker
  * is behind. No-op until a save hook + buffer pool exist. */
-static void SeStateCapture(unsigned long long frame)
+static void SeStateCapture(unsigned long long frame, unsigned epoch)
 {
     int idx; size_t n;
     if (!sSaveState || sStateCap == 0) return;
@@ -567,7 +573,7 @@ static void SeStateCapture(unsigned long long frame)
     {
         int slot = (sRawHead + sRawCount) % SE_STATE_QUEUE;
         sRawFifo[slot].frame = frame; sRawFifo[slot].poolIdx = idx;
-        sRawFifo[slot].len = n; sRawFifo[slot].gen = sStateGen;
+        sRawFifo[slot].len = n; sRawFifo[slot].gen = sStateGen; sRawFifo[slot].epoch = epoch;
         ++sRawCount;
     }
     else { sFreeStack[sFreeCount++] = idx; }
@@ -612,6 +618,7 @@ static void SeRestoreFailed(void)
 {
     SE_LOCK();
     ++sRestoreFailed;
+    ++sRestoreResolved;
     SE_UNLOCK();
 }
 
@@ -620,6 +627,7 @@ static void SeStateAfterRestore(void)
     SE_LOCK();
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
     ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
+    ++sRestoreResolved;
     SE_UNLOCK();
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
@@ -1200,6 +1208,7 @@ static void SeStateWorkerBody(void)
             int slot = (sOutHead + sOutCount) % SE_STATE_OUTQ;
             sOutFifo[slot].kind  = keyframe ? (unsigned char)SE_LIVE_STATE_KIND_KEYFRAME
                                             : (unsigned char)SE_LIVE_STATE_KIND_DELTA;
+            sOutFifo[slot].epoch = item.epoch;
             sOutFifo[slot].frame = item.frame;
             sOutFifo[slot].base  = keyframe ? item.frame : sKeyFrame;
             sOutFifo[slot].payload = payload; sOutFifo[slot].len = plen;
@@ -1395,6 +1404,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     {
         return;
     }
+    unsigned epochNow;
     SE_LOCK();
     SeFrame* dst = sRing[sRingWrite];   /* the ring slot this frame lands in */
     if (vdp1) memcpy(dst->v1, vdp1, SE_V1); else memset(dst->v1, 0, SE_V1);
@@ -1423,6 +1433,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
+    epochNow = sRestoreResolved;
     SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
                                * reports the step as retired also holds its frame */
     SE_UNLOCK();
@@ -1433,7 +1444,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
      * point. The rewind timeline simply omits halt frames; running frames still capture.
      * Also skipped entirely while the client has rewind switched off (REW, v18): the full
      * savestate is the most expensive thing on this thread and nothing would read it. */
-    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted)) SeStateCapture(sFrameNo);
+    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted)) SeStateCapture(sFrameNo, epochNow);
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1945,7 +1956,10 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             for (i = 0; i < cnt; ++i)
             {
                 unsigned char h[SE_LIVE_STATE_HDR_LEN];
-                h[0] = local[i].kind; h[1] = h[2] = h[3] = 0;
+                h[0] = local[i].kind;
+                h[1] = (unsigned char)(local[i].epoch & 0xFFu);
+                h[2] = (unsigned char)((local[i].epoch >> 8) & 0xFFu);
+                h[3] = (unsigned char)((local[i].epoch >> 16) & 0xFFu);
                 SeWr32(h + 4,  (unsigned int)(local[i].frame & 0xFFFFFFFFu));
                 SeWr32(h + 8,  (unsigned int)(local[i].base  & 0xFFFFFFFFu));
                 SeWr32(h + 12, (unsigned int)local[i].len);

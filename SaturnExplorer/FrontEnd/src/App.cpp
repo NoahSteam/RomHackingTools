@@ -492,6 +492,7 @@ void App::CloseData(bool cancelAutoConnect)
     mFrameKey.Invalidate();
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
     mRestoreOutstanding = 0;
+    mBlockEpochFloor = 0;
     mRestoreTimedOut = mRestoreUnconfirmable = false;
     mbHasData = false;
     mbLiveSource = false;
@@ -1895,9 +1896,14 @@ bool App::RefreshScrubContext()
 // to the slot tracker for Save State -- the ring only keeps blocks for frames it captured
 // (so, only while recording), which is not a precondition the save-state slots should have.
 void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
-                       uint32_t fullLen, const uint8_t* payload, uint32_t len)
+                       uint32_t fullLen, uint32_t epoch, const uint8_t* payload, uint32_t len)
 {
     App* app = static_cast<App*>(user);
+    // A state load makes the emulator carry on from an earlier frame number, so the frames it
+    // goes on to emulate reuse the numbers of the ones just discarded. A block sent before the
+    // load (in flight, or waiting in the driver) would match by number and attach the abandoned
+    // timeline's state to the new one's frames. Its reply says it predates the load.
+    if (epoch < app->mBlockEpochFloor) return;
     app->mRecorder.AttachStateBlock(frame, kind, base, fullLen, payload, len);
     app->mStateSlots.OnBlock(frame, kind, base, fullLen, payload, len);
 }
@@ -6576,6 +6582,7 @@ void App::AdoptNewEmulatorInstance()
 
     DropRecordedHistory();   // the ring, the slot tracker and any scrubbed-frame edits
     mRestoreOutstanding = 0; // its counters start over; a wait on the old run can never resolve
+    mBlockEpochFloor = 0;
     mRestoreTimedOut = mRestoreUnconfirmable = false;   // a new process: the load is moot
     if (mScrubContext)
     {
@@ -6654,6 +6661,16 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
                   "until it is restarted with a current build or the connection is re-established.");
         return;
     }
+    // Blocks from replies that predate this load belong to the timeline it abandons. The load
+    // is one more than the count seen when it was submitted -- more if earlier ones are still
+    // outstanding, since each of those will also move the count.
+    // (Only against a server that stamps its blocks; an older one sends 0 in that field, which
+    // every floor would reject, so there the stale blocks go unfiltered as they always did.)
+#ifdef SE_ENABLE_LIVE
+    if (se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER)
+        mBlockEpochFloor = std::max(mBlockEpochFloor, (before.done + before.failed +
+                                    static_cast<uint32_t>(mRestoreOutstanding) + 1u) & 0xFFFFFFu);
+#endif
     if (mRestoreOutstanding == 0)
     {
         mRestoreBaseDone = before.done;
