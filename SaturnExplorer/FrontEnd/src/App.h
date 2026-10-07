@@ -281,6 +281,7 @@ private:
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
     int  PlayFromHereTarget() const;
+    std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
     void PlayFromScrubbedFrame(se_context* ctl);   // restore the scrubbed frame, drop what followed
     void DrawPlaceholder(const char* title, const char* note);
 

@@ -1098,8 +1098,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
             if (!ConnReadFull(c, h, SE_LIVE_STATE_HDR_LEN)) return false;
             LiveStateBlock b;
             b.kind    = h[0];
-            b.epoch   = version >= SE_LIVE_STATE_EPOCH_MINVER
-                            ? (uint32_t(h[1]) | uint32_t(h[2]) << 8 | uint32_t(h[3]) << 16) : 0u;
+            b.epoch   = version >= SE_LIVE_STATE_EPOCH_MINVER ? Rd32LE(h) >> 8 : 0u;   // bytes 1-3
             b.frame   = Rd32LE(h + 4);
             b.base    = Rd32LE(h + 8);
             const uint32_t plen = Rd32LE(h + 12);

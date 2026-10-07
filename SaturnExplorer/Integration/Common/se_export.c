@@ -267,11 +267,6 @@ static void SeStopClear(void)
  * SE_LOCK and only ever increase. ---- */
 static unsigned int sRestoreDone;
 static unsigned int sRestoreFailed;
-/* Every state load that has been settled, one way or the other: bumped when a load is applied and
- * when one is refused or superseded. Stamped on each savestate block at capture (v22), so a
- * client can tell the blocks of the timeline a load abandoned from those of the one it started.
- * Guarded by the same lock as the two above. */
-static unsigned int sRestoreResolved;
 /* Restores applied whose "done" has not been counted yet. A COUNT, not a flag: a rewind load and an
  * emulator-slot load use separate mailboxes, so both can run in one gate call, and a flag would
  * collapse the two into a single completion -- the client, which waits for one outcome per accepted
@@ -500,7 +495,7 @@ static int sRawHead, sRawCount;
 
 typedef struct {
     unsigned char      kind;                      /* SE_LIVE_STATE_KIND_* */
-    unsigned           epoch;                     /* loads resolved when captured (see sRestoreResolved) */
+    unsigned           epoch;                     /* loads settled when captured (see SeExportSnapshot) */
     unsigned long long frame, base;
     unsigned char*     payload; size_t len;       /* RLE payload */
     size_t             full;                      /* decoded full-state size */
@@ -636,7 +631,6 @@ static void SeRestoreFailed(void)
 {
     SE_LOCK();
     ++sRestoreFailed;
-    ++sRestoreResolved;
     SE_UNLOCK();
 }
 
@@ -645,7 +639,6 @@ static void SeStateAfterRestore(void)
     SE_LOCK();
     { int i; for (i = 0; i < SE_RING; ++i) sRingFrame[i] = 0; sRingWrite = 0; }
     ++sRestoreAckPending;   /* each restore is counted done when the next frame lands in the emptied ring */
-    ++sRestoreResolved;
     SE_UNLOCK();
     /* The restored machine has its own, different SH-2 stacks; every frame we recorded
      * belongs to the timeline we just abandoned, and the returns that would have unwound
@@ -1451,11 +1444,15 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
-    epochNow = sRestoreResolved;
+    /* How many loads have been settled, one way or the other: the stamp each savestate block of
+     * this frame carries (v22), so a client can tell the blocks of a timeline a load abandoned from
+     * those of the one it started. Read right after the pending acks are folded in, so it is the
+     * same number the reply's control block reports as done + failed -- which is what the client
+     * compares it with. */
+    epochNow = sRestoreDone + sRestoreFailed;
     SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
                                * reports the step as retired also holds its frame */
     SE_UNLOCK();
-    /* v16 rewind: see below -- the savestate is taken at the end of the frame, not here. */
     /* The savestate is NOT taken here. The glue calls this from wherever the emulator has the
      * frame's pictures ready, which for Mednafen is part-way through the frame's run loop, and a
      * state saved there resumes wrongly: a load is applied at the TOP of the next frame, so the
@@ -1986,10 +1983,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             for (i = 0; i < cnt; ++i)
             {
                 unsigned char h[SE_LIVE_STATE_HDR_LEN];
-                h[0] = local[i].kind;
-                h[1] = (unsigned char)(local[i].epoch & 0xFFu);
-                h[2] = (unsigned char)((local[i].epoch >> 8) & 0xFFu);
-                h[3] = (unsigned char)((local[i].epoch >> 16) & 0xFFu);
+                SeWr32(h, (unsigned int)local[i].kind | ((local[i].epoch & 0xFFFFFFu) << 8));   /* kind + 24-bit epoch */
                 SeWr32(h + 4,  (unsigned int)(local[i].frame & 0xFFFFFFFFu));
                 SeWr32(h + 8,  (unsigned int)(local[i].base  & 0xFFFFFFFFu));
                 SeWr32(h + 12, (unsigned int)local[i].len);

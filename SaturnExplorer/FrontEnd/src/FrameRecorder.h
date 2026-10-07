@@ -171,9 +171,19 @@ private:
 
     void Worker();
     void Evict();   // caller holds mRingMtx
-    // The resident keyframe a delta frame is based on, or null. Caller holds mRingMtx; shared
-    // by CanReconstruct and ReconstructState so they agree on what is resumable.
-    struct StateBlock;
+    // A savestate block outside the ring: a keyframe (kept for the deltas against it, whether or
+    // not its own frame was recorded) or a delta whose frame has not been published yet.
+    struct StateBlock
+    {
+        uint8_t  kind = 0;
+        uint64_t frameNumber = 0;
+        uint64_t base = 0;
+        uint32_t fullLen = 0;
+        std::vector<uint8_t> payload;
+    };
+    // The held keyframe block that frame f is rebuilt from (f's own, for a keyframe), or null.
+    // Caller holds mRingMtx; shared by CanReconstruct and ReconstructState so they agree on what
+    // is resumable.
     const StateBlock* FindKeyframe(const Frame& f) const;
     // Give a frame the worker has just finished any block already waiting for it. Caller holds
     // mRingMtx; runs before the frame is counted, so its size is accounted for once.
@@ -201,16 +211,6 @@ private:
     // Compressed ring (shared: UI reads via Count/Select, worker appends/evicts).
     mutable std::mutex mRingMtx;
     std::deque<Frame>  mFrames;
-    // A savestate block outside the ring: a keyframe (kept for the deltas against it, whether or
-    // not its own frame was recorded) or a delta whose frame has not been published yet.
-    struct StateBlock
-    {
-        uint8_t  kind = 0;
-        uint64_t frameNumber = 0;
-        uint64_t base = 0;
-        uint32_t fullLen = 0;
-        std::vector<uint8_t> payload;
-    };
     std::map<uint64_t, StateBlock> mKeyframes;   // by frame number
     std::deque<StateBlock>         mWaiting;     // deltas ahead of their frame, oldest first
     static constexpr size_t        kMaxWaiting = 48;

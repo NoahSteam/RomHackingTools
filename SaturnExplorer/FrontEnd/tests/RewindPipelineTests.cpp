@@ -82,7 +82,8 @@ void Frame()
     SeExportEndFrame();   // the glue's last call of the frame: where the savestate is taken
 }
 
-// What the front end does once it has submitted a load: discard blocks from before it.
+// What the front end does once it has submitted a load: discard blocks from before it. Zero (no
+// load submitted) accepts everything.
 uint32_t gEpochFloor = 0;
 uint32_t gStaleDropped = 0;
 
@@ -92,12 +93,81 @@ void OnBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base, uint32_t f
     if (epoch < gEpochFloor) { ++gStaleDropped; return; }
     static_cast<sfe::FrameRecorder*>(user)->AttachStateBlock(frame, kind, base, fullLen, payload, len);
 }
-// For a client that has never asked for a load, so there is no epoch floor to apply.
-void OnBlock2(void* user, uint8_t kind, uint32_t frame, uint32_t base, uint32_t fullLen,
-              uint32_t, const uint8_t* payload, uint32_t len)
+
+// One front end: a live connection and the recorder it feeds.
+//
+// How fast any of this runs depends on the machine -- a shared CI runner manages a few frames a
+// second where a laptop does sixty -- so each phase runs until what it is for has happened, with a
+// ceiling, and the checks are about proportions rather than absolute counts.
+struct Client
 {
-    static_cast<sfe::FrameRecorder*>(user)->AttachStateBlock(frame, kind, base, fullLen, payload, len);
-}
+    se_data_source        ds{};
+    se_context*           ctx = nullptr;
+    sfe::FrameRecorder    rec;
+
+    ~Client() { Close(); }
+    void Close() { if (ctx) { se_destroy(ctx); ctx = nullptr; } }
+
+    bool Open(const char* endpoint)
+    {
+        se_result r = SE_ERR_IO;
+        for (int i = 0; i < 400 && r != SE_OK; ++i)
+        {
+            r = se_live_open(endpoint, &ds);
+            if (r != SE_OK) Sleep(5);
+        }
+        if (r != SE_OK) return false;
+        se_config cfg;
+        cfg.abi_version = SE_ABI_VERSION;
+        cfg.reserved = 0;
+        ctx = se_create(&ds, &cfg);
+        rec.Configure(300);
+        return ctx != nullptr;
+    }
+
+    // One pass of the front end's per-frame loop, ~60 times a second: read the load counters,
+    // latch a snapshot, record it, drain the savestate blocks.
+    void Tick()
+    {
+        // The counters are read BEFORE the snapshot is latched, as the front end does: the driver
+        // only moves forward, so what is latched is at least as new as what was read. The other way
+        // round can see "landed" while still holding the frame that was left, record it, and have
+        // the recorder refuse everything up to its number as already seen.
+        uint32_t d = 0, f = 0;
+        const bool signal = se_live_restore_state(&ds, &d, &f) != 0;
+        se_begin_frame(ctx);
+        // Not while a load is outstanding: the display still shows the frame that was left.
+        if (gEpochFloor == 0 || (signal && d + f >= gEpochFloor)) rec.Capture(ctx, se_frame_number(ctx));
+        se_live_drain_state_blocks(&ds, &OnBlock, &rec);
+        Sleep(16);
+    }
+
+    template <typename Done>
+    bool RunUntil(Done done, int maxSeconds)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        while (!done() && std::chrono::steady_clock::now() - start < std::chrono::seconds(maxSeconds)) Tick();
+        return done();
+    }
+
+    size_t FramesAfter(uint64_t frame) const
+    {
+        size_t n = 0;
+        for (size_t i = 0; i < rec.Count(); ++i) if (rec.FrameNumber(i) > frame) ++n;
+        return n;
+    }
+    size_t ResumableAfter(uint64_t frame) const
+    {
+        size_t n = 0;
+        for (size_t i = 0; i < rec.Count(); ++i) if (rec.FrameNumber(i) > frame && rec.CanReconstruct(i)) ++n;
+        return n;
+    }
+    bool MostlyResumable() const
+    {
+        const sfe::FrameRecorder::StateStats s = rec.GetStateStats();
+        return s.resumable * 2 >= s.frames;
+    }
+};
 }  // namespace
 
 int main()
@@ -107,19 +177,9 @@ int main()
     SeExportSetLoadStateHook(FakeLoad);
 
     const char* endpoint = SE_LIVE_DEFAULT_SOCK_PATH;
-    se_data_source ds{};
-    se_result r = SE_ERR_IO;
-    for (int i = 0; i < 400 && r != SE_OK; ++i)
-    {
-        r = se_live_open(endpoint, &ds);
-        if (r != SE_OK) Sleep(5);
-    }
-    if (r != SE_OK) { std::cerr << "could not open the live source\n"; SeExportDeinit(); return 1; }
-    se_config cfg;
-    cfg.abi_version = SE_ABI_VERSION;
-    cfg.reserved = 0;
-    se_context* ctx = se_create(&ds, &cfg);
-    if (!ctx) { std::cerr << "se_create failed\n"; SeExportDeinit(); return 1; }
+    Client first;
+    if (!first.Open(endpoint)) { std::cerr << "could not open the live source\n"; SeExportDeinit(); return 1; }
+    sfe::FrameRecorder& rec = first.rec;
 
     // The emulate thread: about 60 frames a second, through the gate like the real one.
     std::atomic<bool> stop{ false };
@@ -132,38 +192,11 @@ int main()
         }
     });
 
-    sfe::FrameRecorder rec;
-    rec.Configure(300);
-
-    // How fast any of this runs depends on the machine -- a shared CI runner manages a few frames a
-    // second where a laptop does sixty -- so each phase runs until what it is for has happened,
-    // with a ceiling, and the checks are about proportions rather than absolute counts.
-    auto framesAfter = [&](uint64_t resumeFrame) {
-        size_t n = 0;
-        for (size_t i = 0; i < rec.Count(); ++i) if (rec.FrameNumber(i) > resumeFrame) ++n;
-        return n;
-    };
-
-    // The front end's loop, ~60 times a second: latch, record, drain.
-    auto tick = [&] {
-        se_begin_frame(ctx);
-        rec.Capture(ctx, se_frame_number(ctx));
-        se_live_drain_state_blocks(&ds, &OnBlock, &rec);
-        Sleep(16);
-    };
-    auto runUntil = [&](auto done, int maxSeconds) {
-        const auto start = std::chrono::steady_clock::now();
-        while (!done() && std::chrono::steady_clock::now() - start < std::chrono::seconds(maxSeconds)) tick();
-        return done();
-    };
-    Check(runUntil([&] { return rec.Count() >= 30; }, 90), "frames were recorded");
+    Check(first.RunUntil([&] { return rec.Count() >= 30; }, 90), "frames were recorded");
 
     // Pause, as the user does, and let what is already in flight land.
-    se_frame_pause(ctx);
-    runUntil([&] {
-        const sfe::FrameRecorder::StateStats s = rec.GetStateStats();
-        return s.resumable * 2 >= s.frames;
-    }, 30);
+    se_frame_pause(first.ctx);
+    first.RunUntil([&] { return first.MostlyResumable(); }, 30);
 
     const sfe::FrameRecorder::StateStats before = rec.GetStateStats();
     Check(before.received > 0, "the emulator's savestate blocks reach the front end");
@@ -180,7 +213,7 @@ int main()
     // --- Rewind to the middle of what was recorded and carry on, as Play From Here does ---
     // First let the transport fill up with blocks of the timeline about to be abandoned: they are
     // the ones that arrive after the load and reuse the numbers of the frames recorded after it.
-    se_frame_resume(ctx);
+    se_frame_resume(first.ctx);
     Sleep(400);
     size_t index = rec.Count() / 2;
     while (index + 1 < rec.Count() && !rec.CanReconstruct(index)) ++index;
@@ -188,51 +221,26 @@ int main()
     Check(rec.CanReconstruct(index) && rec.ReconstructState(index, state), "a frame to rewind to");
     const uint64_t resumeFrame = rec.FrameNumber(index);
     uint32_t done = 0, failed = 0;
-    Check(se_live_restore_state(&ds, &done, &failed) != 0, "the server reports restore counters");
-    Check(se_load_state(ctx, resumeFrame, state.data(), state.size(), nullptr, 0) == SE_OK,
+    Check(se_live_restore_state(&first.ds, &done, &failed) != 0, "the server reports restore counters");
+    Check(se_load_state(first.ctx, resumeFrame, state.data(), state.size(), nullptr, 0) == SE_OK,
           "the load is accepted");
     rec.TruncateAfter(index);
     gEpochFloor = done + failed + 1;   // the front end's BeginRestoreWait
     const size_t keptFrames = rec.Count();
 
-    auto tickAfterLoad = [&] {
-        // The counters are read BEFORE the snapshot is latched, as the front end does: the driver
-        // only moves forward, so what is latched is at least as new as what was read. The other
-        // way round can see "landed" while still holding the frame that was left, record it, and
-        // have the recorder refuse everything up to its number as already seen.
-        uint32_t d = 0, f = 0;
-        const bool signal = se_live_restore_state(&ds, &d, &f) != 0;
-        se_begin_frame(ctx);
-        const bool landed = signal && d + f >= gEpochFloor;
-        // Not while the load is outstanding: the display still shows the frame that was left.
-        if (landed) rec.Capture(ctx, se_frame_number(ctx));
-        se_live_drain_state_blocks(&ds, &OnBlock, &rec);
-        Sleep(16);
-    };
-    const auto rewound = std::chrono::steady_clock::now();
-    while (framesAfter(resumeFrame) < 12 &&
-           std::chrono::steady_clock::now() - rewound < std::chrono::seconds(90))
-        tickAfterLoad();
-    se_frame_pause(ctx);
-    const auto settling = std::chrono::steady_clock::now();
-    while (std::chrono::steady_clock::now() - settling < std::chrono::seconds(30))
-    {
-        tickAfterLoad();
-        size_t resumableAfter = 0;
-        for (size_t i = 0; i < rec.Count(); ++i)
-            if (rec.FrameNumber(i) > resumeFrame && rec.CanReconstruct(i)) ++resumableAfter;
-        if (resumableAfter + 8 >= framesAfter(resumeFrame)) break;
-    }
+    first.RunUntil([&] { return first.FramesAfter(resumeFrame) >= 12; }, 90);
+    se_frame_pause(first.ctx);
+    first.RunUntil([&] { return first.ResumableAfter(resumeFrame) + 8 >= first.FramesAfter(resumeFrame); }, 30);
 
     // Every resumable frame must rebuild to a state the machine could have saved, on the timeline
     // its frame number belongs to: the old one up to the resume point, the new one after it. A
     // state from the abandoned timeline filed under a reused frame number would resume the game
     // into a future that already did not happen.
-    size_t recordedAfter = 0, after = 0, corrupt = 0, wrongTimeline = 0;
+    const size_t recordedAfter = first.FramesAfter(resumeFrame);
+    size_t after = 0, corrupt = 0, wrongTimeline = 0;
     for (size_t i = 0; i < rec.Count(); ++i)
     {
         const bool isAfter = rec.FrameNumber(i) > resumeFrame;
-        if (isAfter) ++recordedAfter;
         std::vector<uint8_t> out;
         if (!rec.CanReconstruct(i) || !rec.ReconstructState(i, out)) continue;
         if (!Intact(out)) { ++corrupt; continue; }
@@ -259,44 +267,21 @@ int main()
     // The exporter's deltas are measured against a keyframe sent some time ago. A newcomer never
     // saw it, so unless the exporter starts it a keyframe of its own, nothing it records can be
     // rebuilt until the next one comes round (hundreds of frames away).
-    se_destroy(ctx);   // the first client leaves; the emulator carries on
+    first.Close();   // the first client leaves; the emulator carries on
+    gEpochFloor = 0; // a new client has submitted no load
+    Client late;
+    const bool attached = late.Open(endpoint);
+    Check(attached, "a second client attaches mid-run");
+    if (attached)
     {
-        se_data_source ds2{};
-        se_result r2 = SE_ERR_IO;
-        for (int i = 0; i < 400 && r2 != SE_OK; ++i)
-        {
-            r2 = se_live_open(endpoint, &ds2);
-            if (r2 != SE_OK) Sleep(5);
-        }
-        se_context* ctx2 = r2 == SE_OK ? se_create(&ds2, &cfg) : nullptr;
-        Check(ctx2 != nullptr, "a second client attaches mid-run");
-        if (ctx2)
-        {
-            sfe::FrameRecorder rec2;
-            rec2.Configure(300);
-            const auto start = std::chrono::steady_clock::now();
-            while (rec2.Count() < 16 && std::chrono::steady_clock::now() - start < std::chrono::seconds(90))
-            {
-                se_begin_frame(ctx2);
-                rec2.Capture(ctx2, se_frame_number(ctx2));
-                se_live_drain_state_blocks(&ds2, &OnBlock2, &rec2);
-                Sleep(16);
-            }
-            // Let the newest frames' blocks arrive.
-            for (int i = 0; i < 60; ++i)
-            {
-                se_begin_frame(ctx2);
-                se_live_drain_state_blocks(&ds2, &OnBlock2, &rec2);
-                Sleep(16);
-            }
-            const sfe::FrameRecorder::StateStats late = rec2.GetStateStats();
-            std::printf("late joiner: frames %zu, resumable %zu\n", late.frames, late.resumable);
-            Check(late.frames >= 8, "the late joiner recorded frames");
-            Check(late.resumable * 2 >= late.frames,
-                  "a client that joins mid-run can resume from most of what it records");
-            se_destroy(ctx2);
-        }
+        late.RunUntil([&] { return late.rec.Count() >= 16; }, 90);
+        late.RunUntil([&] { return late.MostlyResumable(); }, 30);   // let the newest blocks arrive
+        const sfe::FrameRecorder::StateStats s = late.rec.GetStateStats();
+        std::printf("late joiner: frames %zu, resumable %zu\n", s.frames, s.resumable);
+        Check(s.frames >= 8, "the late joiner recorded frames");
+        Check(s.resumable * 2 >= s.frames, "a client that joins mid-run can resume from most of what it records");
     }
+    late.Close();
 
     stop = true;
     emu.join();

@@ -821,7 +821,10 @@ FRAME_ANCHOR = r'(espec->MasterCycles\s*=\s*[^;]*;\s*\n)'
 # which is right for the frame's pictures but wrong for a savestate: a state is loaded at the TOP
 # of the next frame, so the one to save is the state at the END of this one, after the timestamp
 # rebase and the rest of the frame's bookkeeping. Anchored on the signature of the function that
-# follows Emulate (its closing brace is the insertion point), like the debug handler below.
+# FOLLOWS Emulate (the closing brace just before it is the insertion point) because Emulate has no
+# marker of its own at its end. That ties it to the order of the two functions: if a fork moves
+# them, apply.py reports ANCHOR MISS and the build would record pictures but no savestates, so a
+# miss must be treated as a failed install, not a warning.
 END_FRAME_HOOK = (
     " /* Saturn Explorer live tap: the frame is over; take its savestate here (rewind). */\n"
     " SeMednafenEndFrameHook();\n"

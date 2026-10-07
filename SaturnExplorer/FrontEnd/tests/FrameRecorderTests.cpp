@@ -275,7 +275,6 @@ int main()
                                   encNoisy.data(), encNoisy.size());
         Check(r11b.GetStateStats().waiting == 1, "only what the allowance covers is held");
         Check(r11b.BytesUsed() == encNoisy.size(), "and what is held is counted in the footprint");
-        r11b.TruncateAfter(0);   // no frames: a no-op for the ring, but the held blocks must go
         r11b.Clear();
         Check(r11b.BytesUsed() == 0 && r11b.GetStateStats().waiting == 0, "clearing releases them");
     }

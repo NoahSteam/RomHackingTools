@@ -21,7 +21,8 @@ button is wired to all of it, or what the player sees. That is this plan.
 - Nothing else listening on the live socket (`/tmp/saturn_explorer.sock`, TCP 6845).
 - Checks 1 and 3 to 7 can be run without the window, by `se-rewind-live-check` against a running
   emulator (`./build/bin/se-rewind-live-check`; start Mednafen with `-ss.smpc.autortc 0 -sound 0`).
-  Checks 2, 4, 8 and 9 are about the button and need a person at the window (see Results).
+  Checks 2, 8 and 9, and the lit state in check 4, are about the button and need a person at the
+  window (see Results).
 
 ## The checks
 
@@ -83,23 +84,23 @@ Run against the real patched Mednafen, with Sakura Wars 2 (`SW.cue`), on macOS a
 | The frames after the rewound one are discarded at once | pass (153 discarded; 100-recorded/restore-at-40 scenario holds) |
 | Frame numbers stay strictly increasing through the restore, twice in a row | pass |
 | Savestate blocks of the abandoned run are kept out of the new one | pass (2 to 4 dropped per restore) |
-| A second restore of the **same frame** replays identically to the first | pass: **40 of 40** frames, all runs |
+| A second restore of the **same frame** replays the same way as the first | pass: 39 to 40 of 40 frames identical, final frames always identical |
 | The replay matches the original run | **pass, with one caveat below**: about 95 percent of compared frames are bit-identical (VDP1/VDP2 VRAM, color RAM, work RAM), and the final 10 compared frames always are |
 
 ### The caveat: a short settling transient after a restore
 
-Roughly 4 of 85 compared frames differ from the original run, **always within the first ~20 frames
-after the load**, after which the replay matches the original exactly again. So the game is back on
-its original course; Mednafen's own savestate leaves something small unrestored that the game
-settles within a few dozen milliseconds. It never drifts, and it is the same every time (two
-restores of one frame agree exactly). Not investigated further.
+Roughly 2 to 5 of every 90 compared frames differ from the original run, **always within the first
+~20 frames after the load**, in VDP1 VRAM and high work RAM together; after that the replay matches
+the original exactly again, in every run. So the game is back on its original course. Mednafen's
+savestate leaves something small unrestored that the game settles within a few dozen milliseconds.
+It never drifts. Two restores of the same frame show the same thing against each other (39 of 40 in
+one run), so the transient is not fully deterministic either. Not investigated further.
 
 ### Defects the verification found and fixed
 
 1. **The savestate was taken in the wrong place in the frame** (mid-frame, inside `MidSync()`). A
    restored game ran off its original course: only 3 of 76 compared frames matched, and high work
-   RAM differed in 73. Moving the capture to the end of `Emulate()` brought that to about 95 percent
-   and to 100 percent for a second restore.
+   RAM differed in 73. Moving the capture to the end of `Emulate()` brought that to about 95 percent.
 2. **A client attaching mid-run could resume from only ~40 percent of what it recorded** (114 to 128
    of 300), because the keyframe its deltas were measured against predated it. The first state a
    client receives is now a keyframe: 300 of 300.

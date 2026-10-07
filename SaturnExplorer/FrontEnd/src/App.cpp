@@ -111,8 +111,7 @@ enum class Ico { Play, Pause, Step, Prev, Next, PlayHere };
 
 // Icon-only button (fixed square-ish size). 'id' must be unique (kept invisible
 // with "##"); the glyph is drawn over the button rect. Returns true when pressed.
-bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false,
-                const char* disabledTip = nullptr)
+bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false)
 {
     const float h = ImGui::GetFrameHeight();
     if (disabled) ImGui::BeginDisabled();
@@ -144,11 +143,6 @@ bool IconButton(const char* id, Ico ico, const char* tip, bool disabled = false,
     }
     if (disabled) ImGui::EndDisabled();
     if (tip && !disabled) ImGui::SetItemTooltip("%s", tip);
-    // A disabled button is the one that most needs explaining, and ImGui hides a disabled
-    // item's hover unless it is asked not to.
-    else if (disabledTip &&
-             ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("%s", disabledTip);
     return pressed;
 }
 
@@ -1667,51 +1661,12 @@ void App::DrawTransportBar()
         const bool canPlayHere = target >= 0 && se_supports_state_rewind(ctl) &&
                                  mRecorder.CanReconstruct(static_cast<size_t>(target));
 
-        char enabledTip[256] = "";
-        char disabledBuf[768] = "";
-        const char* disabledTip = nullptr;
-        if (canPlayHere)
-        {
-            std::snprintf(enabledTip, sizeof(enabledTip),
-                          "Play From Here\nRestore the game to frame #%llu and resume from it.\n"
-                          "The %d recorded frame(s) after it are discarded.",
-                          static_cast<unsigned long long>(mRecorder.FrameNumber(static_cast<size_t>(target))),
-                          n - 1 - target);
-        }
-        else if (!mbPaused)
-            disabledTip = "Play From Here (unavailable)\nPause the game first, then pick a recorded frame "
-                          "with the scrub bar.\nThis restores the game to that frame and resumes from it, "
-                          "discarding the recorded frames after it.";
-        else if (n == 0)
-            disabledTip = "Play From Here (unavailable)\nNothing has been recorded yet. Let the game run "
-                          "with Rewind enabled, then pause and pick a frame.\nThis restores the game to "
-                          "that frame and resumes from it, discarding the recorded frames after it.";
-        else if (!se_supports_state_rewind(ctl))
-            disabledTip = "Play From Here (unavailable)\nThe connected emulator can't load savestates.";
-        else
-        {
-            // The numbers say where the stream is stuck: none received means the emulator is not
-            // sending them; received but "not in the buffer" means they miss the recorded frames;
-            // received and attached but not resumable means the keyframes they hang off are gone.
-            const FrameRecorder::StateStats st = mRecorder.GetStateStats();
-            std::snprintf(disabledBuf, sizeof(disabledBuf),
-                          "Play From Here (unavailable)\nThis frame has no savestate to restore. States "
-                          "arrive a moment after each frame, and the oldest are dropped as the buffer "
-                          "fills.\nPick another frame with the scrub bar.\n\n"
-                          "Savestates: %zu of %zu recorded frames can be resumed (%zu have a block).\n"
-                          "Blocks received %llu: %llu invalid, %llu for frames that were never recorded; "
-                          "newest for frame #%llu.",
-                          st.resumable, st.frames, st.withState,
-                          static_cast<unsigned long long>(st.received),
-                          static_cast<unsigned long long>(st.invalid),
-                          static_cast<unsigned long long>(st.noFrame),
-                          static_cast<unsigned long long>(st.newestBlock));
-            disabledTip = disabledBuf;
-        }
-
-        if (IconButton("##tp_playhere", Ico::PlayHere, canPlayHere ? enabledTip : nullptr,
-                       !canPlayHere, disabledTip))
+        if (IconButton("##tp_playhere", Ico::PlayHere, nullptr, !canPlayHere))
             PlayFromScrubbedFrame(ctl);
+        // Built only while the pointer is on it: this runs every UI frame, and the unavailable
+        // case reads the recorder's stats under its lock.
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", PlayFromHereTooltip(ctl, target, canPlayHere).c_str());
         ImGui::SameLine();
     }
 
@@ -1760,6 +1715,55 @@ void App::DrawTransportBar()
         }
     }
     ImGui::EndDisabled();
+#endif
+}
+
+// What hovering Play From Here says: what it will do, or why it cannot and how to turn it on.
+std::string App::PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const
+{
+#ifdef SE_ENABLE_LIVE
+    const int n = static_cast<int>(mRecorder.Count());
+    char buf[768];
+    if (canPlayHere)
+    {
+        std::snprintf(buf, sizeof(buf),
+                      "Play From Here\nRestore the game to frame #%llu and resume from it.\n"
+                      "The %d recorded frame(s) after it are discarded.",
+                      static_cast<unsigned long long>(mRecorder.FrameNumber(static_cast<size_t>(target))),
+                      n - 1 - target);
+        return buf;
+    }
+    if (!mbPaused)
+        return "Play From Here (unavailable)\nPause the game first, then pick a recorded frame "
+               "with the scrub bar.\nThis restores the game to that frame and resumes from it, "
+               "discarding the recorded frames after it.";
+    if (n == 0)
+        return "Play From Here (unavailable)\nNothing has been recorded yet. Let the game run "
+               "with Rewind enabled, then pause and pick a frame.\nThis restores the game to "
+               "that frame and resumes from it, discarding the recorded frames after it.";
+    if (!se_supports_state_rewind(ctl))
+        return "Play From Here (unavailable)\nThe connected emulator can't load savestates.";
+
+    // The numbers say where the stream is stuck: none received means the emulator is not sending
+    // them; received but "never recorded" means they miss the recorded frames; received and
+    // attached but not resumable means the keyframes they hang off are gone.
+    const FrameRecorder::StateStats st = mRecorder.GetStateStats();
+    std::snprintf(buf, sizeof(buf),
+                  "Play From Here (unavailable)\nThis frame has no savestate to restore. States "
+                  "arrive a moment after each frame, and the oldest are dropped as the buffer "
+                  "fills.\nPick another frame with the scrub bar.\n\n"
+                  "Savestates: %zu of %zu recorded frames can be resumed (%zu have a block).\n"
+                  "Blocks received %llu: %llu invalid, %llu for frames that were never recorded; "
+                  "newest for frame #%llu.",
+                  st.resumable, st.frames, st.withState,
+                  static_cast<unsigned long long>(st.received),
+                  static_cast<unsigned long long>(st.invalid),
+                  static_cast<unsigned long long>(st.noFrame),
+                  static_cast<unsigned long long>(st.newestBlock));
+    return buf;
+#else
+    (void)ctl; (void)target; (void)canPlayHere;
+    return std::string();   // no live source, so the button is never drawn
 #endif
 }
 
@@ -1906,7 +1910,8 @@ void App::OnStateBlock(void* user, uint8_t kind, uint32_t frame, uint32_t base,
     // A state load makes the emulator carry on from an earlier frame number, so the frames it
     // goes on to emulate reuse the numbers of the ones just discarded. A block sent before the
     // load (in flight, or waiting in the driver) would match by number and attach the abandoned
-    // timeline's state to the new one's frames. Its reply says it predates the load.
+    // timeline's state to the new one's frames. The emulator stamped it with how many loads it had
+    // settled when it captured the state, which is below the count this load will make.
     if (epoch < app->mBlockEpochFloor) return;
     app->mRecorder.AttachStateBlock(frame, kind, base, fullLen, payload, len);
     app->mStateSlots.OnBlock(frame, kind, base, fullLen, payload, len);
@@ -6665,16 +6670,6 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
                   "until it is restarted with a current build or the connection is re-established.");
         return;
     }
-    // Blocks from replies that predate this load belong to the timeline it abandons. The load
-    // is one more than the count seen when it was submitted -- more if earlier ones are still
-    // outstanding, since each of those will also move the count.
-    // (Only against a server that stamps its blocks; an older one sends 0 in that field, which
-    // every floor would reject, so there the stale blocks go unfiltered as they always did.)
-#ifdef SE_ENABLE_LIVE
-    if (se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER)
-        mBlockEpochFloor = std::max(mBlockEpochFloor, (before.done + before.failed +
-                                    static_cast<uint32_t>(mRestoreOutstanding) + 1u) & 0xFFFFFFu);
-#endif
     if (mRestoreOutstanding == 0)
     {
         mRestoreBaseDone = before.done;
@@ -6683,6 +6678,16 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
         mRestoreTimedOut = false;
     }
     ++mRestoreOutstanding;
+    // Blocks the emulator stamped before this load belong to the timeline it abandons. Its count of
+    // settled loads will be the batch's base plus every load submitted since, this one included --
+    // counted from the base, not from the latest sample, which already includes the loads of the
+    // batch that have settled while others are still outstanding. (Only against a server that
+    // stamps its blocks; an older one sends 0 there, which any floor would reject, so for it stale
+    // blocks go unfiltered as they always did.)
+    if (se_live_server_version(&mDataSource) >= SE_LIVE_STATE_EPOCH_MINVER)
+        mBlockEpochFloor = std::max(mBlockEpochFloor,
+                                    (mRestoreBaseDone + mRestoreBaseFailed +
+                                     static_cast<uint32_t>(mRestoreOutstanding)) & 0xFFFFFFu);
 }
 
 void App::ResolveRestoreWait(uint32_t done, uint32_t failed)

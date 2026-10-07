@@ -389,11 +389,8 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
 
     if (kind == SE_LIVE_STATE_KIND_KEYFRAME)
     {
-        StateBlock& kf = mKeyframes[frameNumber];
+        StateBlock& kf = mKeyframes[frameNumber];   // keyed by frame number; only the size and bytes are read back
         const size_t before = kf.payload.size();
-        kf.kind = kind;
-        kf.frameNumber = frameNumber;
-        kf.base = frameNumber;
         kf.fullLen = fullLen;
         kf.payload.assign(payload, payload + len);
         mBytes = mBytes - before + len;
@@ -418,8 +415,10 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
         return;
     }
 
-    // A delta. Search from the back: it is normally for one of the most recent frames.
-    for (auto it = mFrames.rbegin(); it != mFrames.rend(); ++it)
+    // A delta. Ahead of the newest frame is the usual case (see the header), and cannot be in the
+    // ring, so go straight to waiting; otherwise search from the back, where the recent frames are.
+    const bool ahead = mFrames.empty() || frameNumber > mFrames.back().frameNumber;
+    for (auto it = mFrames.rbegin(); !ahead && it != mFrames.rend(); ++it)
     {
         if (it->frameNumber != frameNumber) continue;
         if (it->hasState) return;              // already attached (ignore a duplicate)
@@ -511,8 +510,7 @@ void FrameRecorder::PruneKeyframes()
     std::set<uint64_t> needed;
     for (const Frame& f : mFrames)
     {
-        if (f.hasState) needed.insert(f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME ? f.frameNumber
-                                                                                  : f.baseKeyframe);
+        if (f.hasState) needed.insert(f.baseKeyframe);
     }
     // A delta still waiting for its frame is about to need its base; deleting that keyframe now
     // would leave the frame it lands on unable to be rebuilt.
@@ -567,8 +565,7 @@ static bool DecodeRle(const std::vector<uint8_t>& payload, uint32_t fullLen, std
 const FrameRecorder::StateBlock* FrameRecorder::FindKeyframe(const Frame& f) const
 {
     if (!f.hasState) return nullptr;
-    const uint64_t key = f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME ? f.frameNumber : f.baseKeyframe;
-    auto it = mKeyframes.find(key);
+    auto it = mKeyframes.find(f.baseKeyframe);
     if (it == mKeyframes.end() || it->second.fullLen != f.stateFullLen) return nullptr;
     return &it->second;
 }
