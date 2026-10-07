@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "ByteOrder.h"
+#include "Vdp1Color.h"
 #include "Vdp1Parser.h"
 
 namespace se
@@ -37,16 +38,10 @@ bool UntexturedReadsTransparent(const std::vector<uint8_t>& vram, uint16_t pmod)
     const bool spd = (pmod & 0x40) != 0;
     const bool ecd = (pmod & 0x80) != 0;
     const uint16_t w = ReadBE16(vram, kVramBytes - 2);
-    switch (mode)
-    {
-    case 0:
-    case 1:   // 4 bpp: the low nibble
-        return (!ecd && (w & 0xF) == 0xF) || (!spd && (w & 0xF) == 0);
-    case 5:   // RGB: the whole word
-        return (!ecd && (w & 0xC000) == 0x4000) || (!spd && w < 0x4000);
-    default:  // 8 bpp: the low byte
-        return (!ecd && (w & 0xFF) == 0xFF) || (!spd && (w & 0xFF) == 0);
-    }
+    const se_color_mode cm = static_cast<se_color_mode>(mode);
+    // The "texel" is the low nibble, low byte or whole word of that last VRAM word, by colour mode.
+    const uint16_t raw = (mode <= 1) ? (w & 0xF) : (mode == 5) ? w : (w & 0xFF);
+    return (!ecd && IsEndCode(cm, raw)) || (!spd && IsTransparentRaw(cm, raw));
 }
 
 // Axis-aligned bounds of a sprite in screen space, plus its assigned layer.

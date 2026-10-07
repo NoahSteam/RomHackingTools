@@ -4,21 +4,10 @@
 // hierarchy. Ported from the validated Python prototype and cross-checked
 // against Yabause's vidsoft.c. See ARCHITECTURE.md §7.
 //
-// Scope today: the four normal backgrounds (NBG0-3), cell (non-bitmap) mode,
-// 1- and 2-word pattern names, and every cell color format (16/256/2048-color
-// palette, RGB555, RGB888), normal and line-window clipping for NBG0-3, the real
-// back-screen color (BKTA, single-colour or per-line), and per-screen color
-// calculation (CCCTL/CCRN, ratio + additive blending against the layers below), the RBG0
-// rotation screen (rotation parameter set A/B, coefficient tables, screen-over repeat),
-// bitmap mode (NBG0/1 + RBG0), NBG0/1 fractional scroll, zoom, and per-line scroll/zoom,
-// per-screen colour offset (CLOFEN/COxR/G/B), and horizontal mosaic. Vertical cell
-// scroll, vertical mosaic, special priority/colour-calc, RBG1, and RPMD
-// per-dot/window parameter selection are not modeled yet.
-//
 // Rather than blending straight into an RGBA buffer, every VDP2 source emits a per-pixel
 // descriptor into a PixColumn (see PixelMixer.h): the back screen at priority 0, then each
 // enabled NBG/RBG0 layer at its own priority. The VDP1 sprites emit into the same columns
-// (Vdp1Rasterizer::EmitSprites), and Context resolves each column to one RGBA pixel. This
+// (Vdp2Compositor::EmitSprites), and Context resolves each column to one RGBA pixel. This
 // four-deep column is what makes per-pixel sprite priority, cross-layer colour calculation,
 // the line-colour screen and extended colour calculation natural rather than special cases --
 // standard colour calculation only ever blends the top pixel with the one below it, and the

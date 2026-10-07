@@ -42,19 +42,19 @@ struct PixDesc
 {
     uint8_t r = 0, g = 0, b = 0;
     uint8_t prio = 0;
-    uint8_t ccEn = 0, ccRatio = 0, ccAdd = 0;   // this layer's colour-calc parameters
+    bool    ccEn = false, ccAdd = false;        // this layer's colour-calc parameters
+    uint8_t ccRatio = 0;
     uint16_t flags = 0;                         // k* flags above
     bool    live = false;                       // a source emitted this (the slot is not empty)
 };
 
-// The four highest-priority contributions at a pixel. 'valid' is set once any source (back
-// screen, an NBG/RBG layer, or a sprite) has emitted here -- it distinguishes a pixel the
-// mixer actually touched from one still showing the fallback backdrop. A sprite shadow
-// marker on top hides itself, which promotes the second to top and shifts the rest up.
+// The four highest-priority contributions at a pixel. A column whose top is not 'live' was never
+// touched by any source (back screen, an NBG/RBG layer, or a sprite) and still shows the fallback
+// backdrop. A sprite shadow marker on top hides itself, which promotes the second to top and
+// shifts the rest up.
 struct PixColumn
 {
     PixDesc top, second, third, fourth;
-    bool valid = false;
 };
 
 // The VDP2 state the mixer reads when it resolves a column, as opposed to what each source
@@ -75,6 +75,9 @@ struct MixState
     // Line colour per pixel: the table entry (a CRAM address) of each display row, and an optional
     // per-pixel override of its low seven bits that RBG0's coefficient table can supply
     // (0xFF = none). CRAM is needed to turn the composed address into a colour.
+    //
+    // 'lineOverride' and 'cram' point into the frame's own buffers: a MixState is built, used by
+    // ResolveColumns and dropped within one RenderFrame, and must not outlive it.
     std::vector<uint16_t> lineEntry;
     const std::vector<uint8_t>* lineOverride = nullptr;
     const std::vector<uint8_t>* cram = nullptr;
@@ -116,10 +119,9 @@ inline void EmitPix(PixColumn& col, uint8_t r, uint8_t g, uint8_t b, uint8_t pri
 {
     PixDesc d;
     d.r = r; d.g = g; d.b = b; d.prio = prio;
-    d.ccEn = static_cast<uint8_t>(ccEn); d.ccRatio = ccRatio; d.ccAdd = static_cast<uint8_t>(ccAdd);
+    d.ccEn = ccEn; d.ccRatio = ccRatio; d.ccAdd = ccAdd;
     d.flags = flags;
     d.live = true;
-    col.valid = true;
     PixDesc* slot[4] = { &col.top, &col.second, &col.third, &col.fourth };
     for (int i = 0; i < 4; ++i)
     {
@@ -149,14 +151,13 @@ inline void EmitShadowMarker(PixColumn& col, uint8_t prio)
 
 namespace mixer_detail
 {
-// Per-channel truncated mean of two packed colours, which is how VDP2 averages for the extended
-// colour calculation.
-inline void Average(uint8_t* a, const uint8_t* b)
+// Replace a pixel's colour with the per-channel truncated mean of it and (r, g, b), which is how
+// VDP2 averages for the extended colour calculation.
+inline void Average(PixDesc& a, uint8_t r, uint8_t g, uint8_t b)
 {
-    for (int i = 0; i < 3; ++i)
-    {
-        a[i] = static_cast<uint8_t>((a[i] + b[i]) >> 1);
-    }
+    a.r = static_cast<uint8_t>((a.r + r) >> 1);
+    a.g = static_cast<uint8_t>((a.g + g) >> 1);
+    a.b = static_cast<uint8_t>((a.b + b) >> 1);
 }
 }  // namespace mixer_detail
 
@@ -228,29 +229,22 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
             if (mix.extended && mix.lineCc)
             {
                 // Only with the line colour screen's own colour-calculation enable (LCCCEN).
-                uint8_t sec[3] = { second.r, second.g, second.b };
-                uint8_t thr[3] = { third.r, third.g, third.b };
                 if (mix.cram0)
                 {
                     // Colour RAM mode 0: the second image is the line colour averaged with the third,
                     // which is itself halved first when it colour-calculates.
-                    if (third.flags & kLayerCc)
-                    {
-                        for (int i = 0; i < 3; ++i) thr[i] = static_cast<uint8_t>(thr[i] >> 1);
-                    }
-                    Average(sec, thr);
-                    second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+                    const int shift = (third.flags & kLayerCc) ? 1 : 0;
+                    Average(second, static_cast<uint8_t>(third.r >> shift),
+                            static_cast<uint8_t>(third.g >> shift), static_cast<uint8_t>(third.b >> shift));
                 }
                 else if (third.flags & kIsRgb)
                 {
                     // Modes 1/2 need an RGB third image (a palette one cannot take part).
                     if ((third.flags & kLayerCc) && (fourth.flags & kIsRgb))
                     {
-                        const uint8_t fth[3] = { fourth.r, fourth.g, fourth.b };
-                        Average(thr, fth);
+                        Average(third, fourth.r, fourth.g, fourth.b);
                     }
-                    Average(sec, thr);
-                    second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+                    Average(second, third.r, third.g, third.b);
                 }
             }
         }
@@ -259,10 +253,7 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
         {
             // Extended colour calculation: the second image is itself the average of the second
             // and third before the top blends with it.
-            uint8_t sec[3] = { second.r, second.g, second.b };
-            const uint8_t thr[3] = { third.r, third.g, third.b };
-            Average(sec, thr);
-            second.r = sec[0]; second.g = sec[1]; second.b = sec[2];
+            Average(second, third.r, third.g, third.b);
         }
 
         uint8_t dst[3] = { second.r, second.g, second.b };
@@ -273,7 +264,7 @@ inline bool ResolveColumnAt(const PixColumn& col, const MixState& mix, size_t in
             dst[0] = top.r; dst[1] = top.g; dst[2] = top.b;
         }
         const uint32_t ratio = mix.secondRatio ? second.ccRatio : top.ccRatio;
-        BlendCC(dst, top.r, top.g, top.b, ratio, top.ccAdd != 0);
+        BlendCC(dst, top.r, top.g, top.b, ratio, top.ccAdd);
         rgb[0] = dst[0]; rgb[1] = dst[1]; rgb[2] = dst[2];
     }
 
@@ -303,7 +294,7 @@ inline void ResolveColumns(const std::vector<PixColumn>& cols, const MixState& m
     outRgba.assign(cols.size() * 4, 0);
     for (size_t i = 0; i < cols.size(); ++i)
     {
-        if (!cols[i].valid)
+        if (!cols[i].top.live)
         {
             continue;
         }

@@ -92,88 +92,6 @@ inline bool CramMsb(const std::vector<uint8_t>& cram, se_cram_mode mode, uint32_
     return (ReadBE16(cram, CramWrap(index, words) * width) & 0x8000) != 0;
 }
 
-// A decoded texel: its colour, and the 16-bit word the VDP1 would put in the framebuffer for
-// it.
-//
-// That word is what the sprite-priority and colour-calculation bits are defined over: SPCTL
-// picks a bit field out of it per sprite type, and which word it is depends on the colour mode --
-// the composed CRAM index in the bank modes, the CLUT entry in LUT mode, the colour itself in
-// RGB555. The bits differ per texel, which is the whole of finding VDP1-02: one sprite can carry
-// pixels at several priorities, and resolving one priority for the command puts some of them in
-// front of VDP2 layers that should cover them.
-struct Texel
-{
-    Rgba     color;
-    uint16_t word = 0;
-};
-
-// Decode one texel (x,y) of a sprite texture, with the framebuffer word it came from. Returns
-// color.a == 0 for transparent (the word is then meaningless and set to 0).
-// colorBank is CMDCOLR (bank modes); clutAddr is the LUT address (LUT mode).
-// spd == true keeps index 0 opaque (transparent-pixel disable).
-inline Texel DecodeTexelWord(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
-                             se_cram_mode cramMode, se_color_mode colorMode, uint32_t texAddr,
-                             uint16_t width, int x, int y, uint16_t colorBank,
-                             uint32_t clutAddr, bool spd)
-{
-    switch (colorMode)
-    {
-    case SE_COLOR_BANK_16:
-    {
-        const uint32_t stride = width / 2;               // 4 bpp
-        const uint32_t off = texAddr + y * stride + x / 2;
-        const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
-        const uint8_t p = (x & 1) ? (byte & 0x0F) : (byte >> 4);
-        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
-        const uint16_t word = static_cast<uint16_t>((colorBank & 0xFFF0) | p);
-        return { CramColor(cram, cramMode, word), word };
-    }
-    case SE_COLOR_LUT_16:
-    {
-        const uint32_t stride = width / 2;
-        const uint32_t off = texAddr + y * stride + x / 2;
-        const uint8_t byte = (off < vram.size()) ? vram[off] : 0;
-        const uint8_t p = (x & 1) ? (byte & 0x0F) : (byte >> 4);
-        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
-        const uint16_t entry = ReadBE16(vram, clutAddr + p * 2);
-        // Saturn color word: MSB (bit 15) set = a direct RGB555 color; MSB clear
-        // = a CRAM color-bank index (VDP1 manual §5.x). Games often fill a CLUT
-        // with direct RGB colors (all MSB set), so this must not be inverted.
-        if (entry & 0x8000)
-        {
-            return { Rgb555ToRgba(entry), entry };   // direct RGB555
-        }
-        return { CramColor(cram, cramMode, entry), entry };   // CRAM color-bank index
-    }
-    case SE_COLOR_BANK_64:
-    case SE_COLOR_BANK_128:
-    case SE_COLOR_BANK_256:
-    {
-        const uint32_t stride = width;                   // 8 bpp
-        const uint32_t off = texAddr + y * stride + x;
-        const uint8_t p = (off < vram.size()) ? vram[off] : 0;
-        uint16_t mask, bankMask;
-        if (colorMode == SE_COLOR_BANK_64)  { mask = 0x3F; bankMask = 0xFFC0; }
-        else if (colorMode == SE_COLOR_BANK_128) { mask = 0x7F; bankMask = 0xFF80; }
-        else                                { mask = 0xFF; bankMask = 0xFF00; }
-        if (p == 0 && !spd) return { { 0, 0, 0, 0 }, 0 };
-        const uint16_t word = static_cast<uint16_t>((colorBank & bankMask) | (p & mask));
-        return { CramColor(cram, cramMode, word), word };
-    }
-    case SE_COLOR_RGB555:
-    {
-        const uint32_t off = texAddr + (y * width + x) * 2;   // 16 bpp
-        const uint16_t v = ReadBE16(vram, off);
-        // With transparent-pixel disable clear, the hardware drops every RGB word below 0x4000 --
-        // not just zero -- so a word such as 0x0001 is see-through rather than a dark red pixel.
-        if (v < 0x4000 && !spd) return { { 0, 0, 0, 0 }, 0 };
-        return { Rgb555ToRgba(v), v };
-    }
-    default:
-        return { { 0, 0, 0, 0 }, 0 };
-    }
-}
-
 // The value a texel holds in VRAM before any palette or colour-bank composition -- what the
 // end code is compared against. Returns false for a mode that has no such value.
 inline bool RawTexel(const std::vector<uint8_t>& vram, se_color_mode colorMode, uint32_t texAddr,
@@ -217,6 +135,82 @@ inline bool IsEndCode(se_color_mode colorMode, uint16_t raw)
     case SE_COLOR_LUT_16:  return raw == 0x000F;
     case SE_COLOR_RGB555:  return (raw & 0xC000) == 0x4000;
     default:               return raw == 0x00FF;
+    }
+}
+
+// True if 'raw' is the colour mode's transparent code, which SPD clear makes see-through: zero at
+// 4 and 8 bpp, and every RGB555 word below 0x4000 (not just zero) -- a word such as 0x0001 is
+// see-through rather than a dark red pixel.
+inline bool IsTransparentRaw(se_color_mode colorMode, uint16_t raw)
+{
+    return colorMode == SE_COLOR_RGB555 ? raw < 0x4000 : raw == 0;
+}
+
+// A decoded texel: its colour, and the 16-bit word the VDP1 would put in the framebuffer for
+// it.
+//
+// That word is what the sprite-priority and colour-calculation bits are defined over: SPCTL
+// picks a bit field out of it per sprite type, and which word it is depends on the colour mode --
+// the composed CRAM index in the bank modes, the CLUT entry in LUT mode, the colour itself in
+// RGB555. The bits differ per texel, which is the whole of finding VDP1-02: one sprite can carry
+// pixels at several priorities, and resolving one priority for the command puts some of them in
+// front of VDP2 layers that should cover them.
+struct Texel
+{
+    Rgba     color;
+    uint16_t word = 0;
+};
+
+// Decode one texel (x,y) of a sprite texture, with the framebuffer word it came from. Returns
+// color.a == 0 for transparent (the word is then meaningless and set to 0).
+// colorBank is CMDCOLR (bank modes); clutAddr is the LUT address (LUT mode).
+// spd == true keeps index 0 opaque (transparent-pixel disable).
+inline Texel DecodeTexelWord(const std::vector<uint8_t>& vram, const std::vector<uint8_t>& cram,
+                             se_cram_mode cramMode, se_color_mode colorMode, uint32_t texAddr,
+                             uint16_t width, int x, int y, uint16_t colorBank,
+                             uint32_t clutAddr, bool spd)
+{
+    uint16_t p = 0;
+    if (!RawTexel(vram, colorMode, texAddr, width, x, y, p))
+    {
+        return { { 0, 0, 0, 0 }, 0 };
+    }
+    if (!spd && IsTransparentRaw(colorMode, p))
+    {
+        return { { 0, 0, 0, 0 }, 0 };
+    }
+    switch (colorMode)
+    {
+    case SE_COLOR_BANK_16:
+    {
+        const uint16_t word = static_cast<uint16_t>((colorBank & 0xFFF0) | p);
+        return { CramColor(cram, cramMode, word), word };
+    }
+    case SE_COLOR_LUT_16:
+    {
+        const uint16_t entry = ReadBE16(vram, clutAddr + p * 2);
+        // Saturn color word: MSB (bit 15) set = a direct RGB555 color; MSB clear
+        // = a CRAM color-bank index (VDP1 manual §5.x). Games often fill a CLUT
+        // with direct RGB colors (all MSB set), so this must not be inverted.
+        if (entry & 0x8000)
+        {
+            return { Rgb555ToRgba(entry), entry };   // direct RGB555
+        }
+        return { CramColor(cram, cramMode, entry), entry };   // CRAM color-bank index
+    }
+    case SE_COLOR_BANK_64:
+    case SE_COLOR_BANK_128:
+    case SE_COLOR_BANK_256:
+    {
+        uint16_t mask, bankMask;
+        if (colorMode == SE_COLOR_BANK_64)  { mask = 0x3F; bankMask = 0xFFC0; }
+        else if (colorMode == SE_COLOR_BANK_128) { mask = 0x7F; bankMask = 0xFF80; }
+        else                                { mask = 0xFF; bankMask = 0xFF00; }
+        const uint16_t word = static_cast<uint16_t>((colorBank & bankMask) | (p & mask));
+        return { CramColor(cram, cramMode, word), word };
+    }
+    default:   // SE_COLOR_RGB555
+        return { Rgb555ToRgba(p), p };
     }
 }
 

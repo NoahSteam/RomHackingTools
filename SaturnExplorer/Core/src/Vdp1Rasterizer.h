@@ -1,7 +1,7 @@
-// Vdp1Rasterizer — software-composites the VDP1 sprite quads into the finished
-// frame (RGBA), the way the hardware draws distorted sprites. Each sprite is two
-// UV-mapped triangles sampled through Vdp1Color; sprites are drawn in command
-// order (painter's order). See ARCHITECTURE.md §7.
+// Vdp1Rasterizer — draws the VDP1 command list into a VDP1 framebuffer, the way the
+// hardware draws distorted sprites (each quad is two UV-mapped triangles sampled through
+// Vdp1Color, in command order), reads that framebuffer out as VDP2 sees it, and renders the
+// exploded 3D view. See ARCHITECTURE.md §7.
 #pragma once
 
 #include <cstdint>
@@ -9,7 +9,6 @@
 
 #include "saturnexplorer/SeTypes.h"
 #include "GeometryBuilder.h"
-#include "PixelMixer.h"
 #include "SpriteLayer.h"
 
 namespace se
@@ -18,6 +17,14 @@ namespace se
 class Vdp1Rasterizer
 {
 public:
+    // The VDP1 framebuffer column a display column reads: VDP1 draws at its own width, which in a
+    // hi-res mode is half the display's, and every column is doubled at scan-out. The hit test maps
+    // clicks back with the same step.
+    static int FramebufferColumn(int x, int fbWidth, int displayWidth)
+    {
+        return static_cast<int>(static_cast<int64_t>(x) * fbWidth / displayWidth);
+    }
+
     // Draw the scene's VDP1 commands into a VDP1 framebuffer in command order (later pixels
     // replace earlier ones; MSB-on, shadow, half-luminance and half-transparency act on the
     // framebuffer word, never on VDP2 layers), then read it out as VDP2 does into 'layer' (one

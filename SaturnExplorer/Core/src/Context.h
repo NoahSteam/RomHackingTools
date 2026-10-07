@@ -115,7 +115,7 @@ public:
     // Render the composited 2D frame into a scene-sized image. Every source emits a
     // per-pixel descriptor into a column of the pixel mixer: the VDP2 back screen at
     // priority 0, then each enabled NBG/RBG0 layer at its VDP2 priority, then the VDP1
-    // sprites at their resolved priority (ResolveSpritePriorities). Because sprites emit
+    // sprites, each pixel at the priority its own framebuffer word selects. Because sprites emit
     // after the same-priority NBGs, they win the priority tie and sit in front, per
     // hardware. Each column then resolves to one RGBA pixel — the top-priority
     // contribution, blended with the one immediately below when colour calculation is on.
@@ -146,8 +146,13 @@ public:
                                                                   mSpritePrios, mSpriteLayer);
             // Side buffers the emitters fill: the gradation screen's colours, and RBG0's coefficient-
             // table line colour bits (0xFF = none). Reused across frames like the columns.
-            mGradation.assign(n, Rgba{ 0, 0, 0, 255 });
-            mLineOverride.assign(n, 0xFF);
+            // Only when something can use them: gradation needs CCCTL BOKEN, and the line colour bits
+            // come from an enabled rotation screen's coefficient table.
+            const bool regs = mSnapshot.HasVdp2Regs();
+            const bool wantGradation = regs && (mSnapshot.Vdp2Reg(0x0EC) & 0x8000) != 0;
+            const bool wantLineOverride = regs && (mSnapshot.Vdp2Reg(0x020) & 0x30) != 0;
+            if (wantGradation) mGradation.assign(n, Rgba{ 0, 0, 0, 255 }); else mGradation.clear();
+            if (wantLineOverride) mLineOverride.assign(n, 0xFF); else mLineOverride.clear();
             EmitExtras extras;
             extras.sprites = sprites ? &mSpriteLayer : nullptr;
             extras.gradation = &mGradation;
@@ -571,8 +576,8 @@ public:
         // scan-out uses, then test that pixel's centre against the quad the rasterizer fills.
         const int fbWidth = (mScene.vdp1Width > 0) ? mScene.vdp1Width : mScene.screenWidth;
         const float sx = (mScene.screenWidth > 0)
-                             ? static_cast<float>(static_cast<int64_t>(x) * fbWidth /
-                                                  mScene.screenWidth)
+                             ? static_cast<float>(Vdp1Rasterizer::FramebufferColumn(
+                                   x, fbWidth, mScene.screenWidth))
                              : static_cast<float>(x);
         for (size_t i = mScene.sprites.size(); i-- > 0; )
         {
@@ -846,22 +851,16 @@ private:
         mSpritePrios.ccAdd = (ccctl & 0x0100) != 0;
         for (int i = 0; i < 4; ++i)
         {
-            // CCRSA..CCRSD hold two 5-bit ratios each: numbers 2i (low byte) and 2i+1 (high byte).
-            const uint16_t r = mSnapshot.Vdp2Reg(0x100 + 2 * i);
-            mSpritePrios.ccRatio[2 * i] = static_cast<uint8_t>(r & 0x1F);
-            mSpritePrios.ccRatio[2 * i + 1] = static_cast<uint8_t>((r >> 8) & 0x1F);
+            // PRISA..PRISD (priority) and CCRSA..CCRSD (colour-calculation ratio) each hold two
+            // entries: number 2i in the low byte, 2i+1 in the high byte.
+            const uint16_t pris = mSnapshot.Vdp2Reg(0x0F0 + 2 * i);
+            const uint16_t ccrs = mSnapshot.Vdp2Reg(0x100 + 2 * i);
+            mSpritePrios.slot[2 * i] = static_cast<uint8_t>(pris & 0x7);
+            mSpritePrios.slot[2 * i + 1] = static_cast<uint8_t>((pris >> 8) & 0x7);
+            mSpritePrios.ccRatio[2 * i] = static_cast<uint8_t>(ccrs & 0x1F);
+            mSpritePrios.ccRatio[2 * i + 1] = static_cast<uint8_t>((ccrs >> 8) & 0x1F);
         }
         mSpritePrios.cramOffset = static_cast<uint32_t>((mSnapshot.Vdp2Reg(0x0E6) >> 4) & 0x7) << 8;
-        const uint16_t prisa = mSnapshot.Vdp2Reg(0x0F0);
-        const uint16_t prisb = mSnapshot.Vdp2Reg(0x0F2);
-        const uint16_t prisc = mSnapshot.Vdp2Reg(0x0F4);
-        const uint16_t prisd = mSnapshot.Vdp2Reg(0x0F6);
-        const uint8_t pt[8] = {
-            static_cast<uint8_t>(prisa & 0x7), static_cast<uint8_t>((prisa >> 8) & 0x7),
-            static_cast<uint8_t>(prisb & 0x7), static_cast<uint8_t>((prisb >> 8) & 0x7),
-            static_cast<uint8_t>(prisc & 0x7), static_cast<uint8_t>((prisc >> 8) & 0x7),
-            static_cast<uint8_t>(prisd & 0x7), static_cast<uint8_t>((prisd >> 8) & 0x7) };
-        for (int i = 0; i < 8; ++i) mSpritePrios.slot[i] = pt[i];
 
         const std::vector<uint8_t>& vram = mSnapshot.Vdp1Vram();
         for (se_sprite_2d& s : mScene.sprites)

@@ -36,7 +36,7 @@ enum : uint32_t
     kSDCTL = 0x0E2, kLNCLEN = 0x0E8, kCCCTL = 0x0EC, kLCTAU = 0x0A8, kLCTAL = 0x0AA,
     kPRISA = 0x0F0, kPRISB = 0x0F2, kPRISC = 0x0F4, kPRISD = 0x0F6,
     kCRAOFA = 0x0E4, kPRINA = 0x0F8, kPRINB = 0x0FA,
-    kCCRSA = 0x100, kCCRNA = 0x108, kCCRNB = 0x10A, kCCRLB = 0x10E,
+    kCCRNA = 0x108, kCCRNB = 0x10A, kCCRLB = 0x10E,
     // Rotation (RBG0): pattern name, map offset, char/bitmap control, plane sizes,
     // the rotation parameter tables, coefficient control, and RBG0's own priority /
     // colour-offset / colour-calc-ratio registers.
@@ -50,13 +50,6 @@ enum : uint32_t
     kCOAR = 0x114, kCOAG = 0x116, kCOAB = 0x118,
     kCOBR = 0x11A, kCOBG = 0x11C, kCOBB = 0x11E
 };
-
-// Sign-extend the low n bits of v to a signed 32-bit value (Mednafen sign_x_to_s32).
-inline int32_t SignX(uint32_t v, int n)
-{
-    const int s = 32 - n;
-    return static_cast<int32_t>(v << s) >> s;
-}
 
 uint16_t Reg(const HardwareSnapshot& s, uint32_t hw)
 {
@@ -107,7 +100,6 @@ struct NbgConfig
     bool colorCalc;         // CCCTL: this screen participates in color calculation
     uint32_t colorCalcRatio;// CCRNx 5-bit: 0 = mostly this screen, 31 = mostly below
     bool colorCalcAdd;      // CCCTL CCMD: additive blend (ratio ignored)
-    bool shadowEnable;      // SDCTL: a sprite shadow may darken this screen
     // Bitmap mode (NBG0/1 and RBG0): the screen is a single linear image rather than a
     // tiled plane. When bitmap is set the plane/pattern fields above are unused.
     bool bitmap;
@@ -128,37 +120,40 @@ struct NbgConfig
     bool vcInterleaved;          // NBG0 and NBG1 both use it: their table entries alternate
     bool vcZoomLimit;            // ZMCTL reduction limit set: cells are read per screen group of 8 dots
     uint32_t vcBase;             // VCSTA: the table's VRAM word address
-    bool colorOff;               // per-screen colour offset enabled (CLOFEN)
-    bool colorOffSel;            // CLOFSL: offset set B
-    bool lineColor;              // LNCLEN: insert the line colour screen when this is the top image
-    bool gradation;              // CCCTL gradation calculation is set up for this screen
+    uint16_t mixFlags;           // the mixer flags (PixelMixer.h) the screen's registers fix
 };
 
-// Which of a screen's mixer flags are fixed by its registers: colour offset enable and select
-// (CLOFEN/CLOFSL) and line colour insertion (LNCLEN). 'screen' is 0..3 for NBG0-3, 4 for RBG0.
-// The offset itself is applied when a column resolves (MixState), because VDP2 offsets the result
-// of colour calculation using the top image's registers, not each layer before the blend.
-void ReadScreenMixFlags(const HardwareSnapshot& s, int screen, NbgConfig& c)
+// The mixer flags a screen's registers fix: sprite-shadow enable (SDCTL), line colour insertion
+// (LNCLEN) and colour offset enable/select (CLOFEN/CLOFSL). Each register numbers the screens
+// slightly differently, so the bit is given per register (-1: the screen has none): NBG0-3 and
+// RBG0 are bits 0-4 of all four, the back screen is bit 5 of SDCTL and CLOFEN, and sprites are
+// bit 5 of LNCLEN but bit 6 of CLOFEN. The offset itself is applied when a column resolves
+// (MixState), because VDP2 offsets the result of colour calculation using the top image's
+// registers, not each layer before the blend.
+uint16_t ScreenMixFlags(const HardwareSnapshot& s, int shadowBit, int lineBit, int offsetBit)
 {
-    c.colorOff = (Reg(s, kCLOFEN) & (1u << screen)) != 0;
-    c.colorOffSel = (Reg(s, kCLOFSL) & (1u << screen)) != 0;
-    c.lineColor = (Reg(s, kLNCLEN) & (1u << screen)) != 0;
+    auto set = [&](uint32_t reg, int bit) { return bit >= 0 && (Reg(s, reg) & (1u << bit)) != 0; };
+    uint16_t f = 0;
+    if (set(kSDCTL, shadowBit))  f |= kShadowEnable;
+    if (set(kLNCLEN, lineBit))   f |= kLineColorEn;
+    if (set(kCLOFEN, offsetBit)) f |= kOffsetEnable;
+    if (set(kCLOFSL, offsetBit)) f |= kOffsetSelect;
+    return f;
 }
 
 // Colour calculation (CCCTL enable bit `screen`, additive via CCMD, and the given 5-bit
-// ratio) resolved into a config. Shared by ReadNbgConfig and ReadRbg0Config.
+// ratio) resolved into a config. Shared by ReadNbgConfig and ReadRbgConfig.
 void SetColorCalc(const HardwareSnapshot& s, uint32_t screen, uint32_t ratio, NbgConfig& c)
 {
     const uint16_t ccctl = Reg(s, kCCCTL);
     c.colorCalc = (ccctl & (1u << screen)) != 0;
     c.colorCalcRatio = ratio & 0x1F;
     c.colorCalcAdd = (ccctl & 0x0100) != 0;
-    // SDCTL's enable bits share the screen numbering (NBG0-3, RBG0 = 4).
-    c.shadowEnable = (Reg(s, kSDCTL) & (1u << screen)) != 0;
+    if (c.colorCalc) c.mixFlags |= kLayerCc;
     // BOKEN (bit 15) enables gradation, BOKN (bits 14-12) picks the screen: 1 RBG0, 2 NBG0 (RBG1),
     // 4 NBG1, 5 NBG2, 6 NBG3 (and 0 the sprite layer).
     static const uint16_t kGradCode[5] = { 2, 4, 5, 6, 1 };
-    c.gradation = (ccctl & 0x8000) != 0 && ((ccctl >> 12) & 0x7) == kGradCode[screen];
+    if ((ccctl & 0x8000) != 0 && ((ccctl >> 12) & 0x7) == kGradCode[screen]) c.mixFlags |= kGradation;
 }
 
 // Horizontal mosaic block width for a screen (MZCTL enable bit `screen`); 1 = no mosaic.
@@ -273,7 +268,7 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
 
     // Mosaic (horizontal) + per-screen colour offset.
     c.mosaicH = ReadMosaicH(s, n);
-    ReadScreenMixFlags(s, n, c);
+    c.mixFlags |= ScreenMixFlags(s, n, n, n);
     return c;
 }
 
@@ -399,6 +394,38 @@ bool WindowMasksPixel(uint8_t control, const WindowLine (&windows)[2], int x, bo
     return useAnd ? (values[0] && values[1] && spriteValue)
                   : (values[0] || values[1] || spriteValue);
 }
+
+// A screen's window state while it is emitted: its own transparent-processing window and the
+// colour-calculation window (which clears a pixel's colour-calculation enable instead of the
+// pixel), each resolved per display row. Inactive -- and free -- when window display is off.
+struct LayerWindows
+{
+    bool active = false;
+    WindowConfig cfg {}, cc {};
+    WindowLine lines[2] = {}, ccLines[2] = {};
+
+    void Begin(const HardwareSnapshot& snap, int windowLayer, bool apply)
+    {
+        active = apply;
+        if (active)
+        {
+            cfg = ReadWindowConfig(snap, windowLayer);
+            cc = ReadWindowConfig(snap, kWinLayerColorCalc);
+        }
+    }
+    void BeginRow(const std::vector<uint8_t>& vram, int y)
+    {
+        if (!active) return;
+        for (int i = 0; i < 2; ++i)
+        {
+            lines[i] = ResolveWindowLine(cfg, i, vram, y);
+            ccLines[i] = ResolveWindowLine(cc, i, vram, y);
+        }
+    }
+    // 'swBit' is the sprite layer's window bit at this pixel.
+    bool Masks(int x, bool swBit) const { return active && WindowMasksPixel(cfg.control, lines, x, swBit); }
+    bool CcMasked(int x, bool swBit) const { return active && WindowMasksPixel(cc.control, ccLines, x, swBit); }
+};
 
 // Bytes one 8x8 cell occupies, by color-number field.
 uint32_t CellByteSize(uint32_t colorNum)
@@ -533,29 +560,33 @@ Rgba FetchBitmapTexel(const std::vector<uint8_t>& vram, const std::vector<uint8_
                           static_cast<int>(xw & 7u), 0);
 }
 
-// Emit one resolved texel into its column as a descriptor at the layer's priority,
-// carrying the layer's colour-calculation parameters. The mixer applies colour
-// calculation at resolve time (only ever blending the top pixel with the one below),
-// so the per-layer blend that CompositeTexel used to do inline now happens once, later.
+// The extras with any buffer that is not this frame's size dropped, so a stale or mis-sized one
+// degrades to "not supplied" instead of being indexed out of range.
+EmitExtras ValidatedExtras(const EmitExtras& in, size_t pixels)
+{
+    EmitExtras out = in;
+    if (out.sprites && out.sprites->size() != pixels) out.sprites = nullptr;
+    if (out.gradation && out.gradation->size() != pixels) out.gradation = nullptr;
+    if (out.lineOverride && out.lineOverride->size() != pixels) out.lineOverride = nullptr;
+    return out;
+}
+
 // The sprite layer's window bit at flat pixel index 'i' (false with no sprite layer).
 inline bool SwBitAt(const EmitExtras& ex, size_t i)
 {
     return ex.sprites && (*ex.sprites)[i].swBit;
 }
 
+// Emit one resolved texel into its column as a descriptor at the layer's priority,
+// carrying the layer's colour-calculation parameters. The mixer applies colour
+// calculation at resolve time (only ever blending the top pixel with the one below),
+// so the per-layer blend that CompositeTexel used to do inline now happens once, later.
 // 'ccWindowMasked' is the colour-calculation window clearing this pixel's enable.
 inline void EmitTexel(PixColumn& col, const Rgba& c, const NbgConfig& cfg, bool ccWindowMasked,
                       Rgba* gradOut)
 {
-    if (gradOut && cfg.gradation) *gradOut = c;
-    uint16_t flags = 0;
-    if (cfg.shadowEnable) flags |= kShadowEnable;
-    if (cfg.lineColor)    flags |= kLineColorEn;
-    if (cfg.colorOff)     flags |= kOffsetEnable;
-    if (cfg.colorOffSel)  flags |= kOffsetSelect;
-    if (cfg.colorCalc)    flags |= kLayerCc;
-    if (cfg.colorNum >= 3) flags |= kIsRgb;
-    if (cfg.gradation)     flags |= kGradation;
+    if (gradOut && (cfg.mixFlags & kGradation)) *gradOut = c;
+    const uint16_t flags = cfg.mixFlags | (cfg.colorNum >= 3 ? kIsRgb : 0);
     EmitPix(col, c.r, c.g, c.b, static_cast<uint8_t>(cfg.priority),
             cfg.colorCalc && !ccWindowMasked, static_cast<uint8_t>(cfg.colorCalcRatio),
             cfg.colorCalcAdd, flags);
@@ -729,9 +760,8 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
     const std::vector<uint8_t>& cram = snap.Cram();
     const se_cram_mode cramMode = snap.CramMode();
     const uint16_t vrsize = Reg(snap, kVRSIZE);
-    const WindowConfig windowConfig = ReadWindowConfig(snap, layerIndex);
-    // The colour-calculation window clears a pixel's colour-calculation enable rather than the pixel.
-    const WindowConfig ccWindow = ReadWindowConfig(snap, kWinLayerColorCalc);
+    LayerWindows windows;
+    windows.Begin(snap, layerIndex, applyWindows);
 
     std::array<uint32_t, 4> planeBase {};
     PlaneGeom geom {};
@@ -741,14 +771,7 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
 
     for (int sy = 0; sy < height; ++sy)
     {
-        const WindowLine windowLines[2] = {
-            ResolveWindowLine(windowConfig, 0, vram, sy),
-            ResolveWindowLine(windowConfig, 1, vram, sy)
-        };
-        const WindowLine ccLines[2] = {
-            ResolveWindowLine(ccWindow, 0, vram, sy),
-            ResolveWindowLine(ccWindow, 1, vram, sy)
-        };
+        windows.BeginRow(vram, sy);
         // Per-line horizontal start (.8), per-dot increment (.8), and the plane-space Y.
         // NBG2/3 use plain integer scroll; NBG0/1 add fractional scroll, zoom, and an
         // optional per-line scroll/zoom table (SCRCTL/LSTA).
@@ -791,11 +814,11 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             yBase8 = haveLineY ? lineY8 : c.yScroll8 + c.yInc8 * sy;
             yCoord = static_cast<int>(yBase8 >> 8);
         }
+        uint32_t vcCell = ~0u, vcEntry8 = 0;   // the vertical cell scroll entry last read
         for (int sx = 0; sx < width; ++sx)
         {
-            if (applyWindows &&
-                WindowMasksPixel(windowConfig.control, windowLines, sx,
-                                 SwBitAt(ex, static_cast<size_t>(sy) * width + sx)))
+            const size_t pixelIndex = static_cast<size_t>(sy) * width + sx;
+            if (windows.Masks(sx, SwBitAt(ex, pixelIndex)))
             {
                 continue;
             }
@@ -811,12 +834,16 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
                 const uint32_t cell = c.vcZoomLimit
                                           ? static_cast<uint32_t>(sx) >> 3
                                           : (static_cast<uint32_t>(sx) + ((xcStart >> 8) & 7)) >> 3;
-                const uint32_t entryIndex = c.vcInterleaved ? cell * 2 + static_cast<uint32_t>(layerIndex)
-                                                            : cell;
-                const uint32_t addr = c.vcBase + entryIndex * 2;
-                const uint32_t entry8 = ((ReadVdp2Word(vram, addr) & 0x7FFu) << 8) |
-                                        (ReadVdp2Word(vram, addr + 1) >> 8);
-                yPx = static_cast<int>((yBase8 + entry8) >> 8);
+                if (cell != vcCell)   // eight neighbouring dots share one entry
+                {
+                    const uint32_t entryIndex = c.vcInterleaved
+                                                    ? cell * 2 + static_cast<uint32_t>(layerIndex) : cell;
+                    const uint32_t addr = c.vcBase + entryIndex * 2;
+                    vcEntry8 = ((ReadVdp2Word(vram, addr) & 0x7FFu) << 8) |
+                               (ReadVdp2Word(vram, addr + 1) >> 8);
+                    vcCell = cell;
+                }
+                yPx = static_cast<int>((yBase8 + vcEntry8) >> 8);
             }
             const uint32_t planeX = static_cast<uint32_t>(sampleX) & xMask;
             const uint32_t planeY = static_cast<uint32_t>(yPx) & yMask;
@@ -834,12 +861,8 @@ void RenderLayer(const HardwareSnapshot& snap, const se_render_opts& opts,
             {
                 continue;
             }
-            EmitTexel(cols[static_cast<size_t>(sy) * width + sx], col, c,
-                      applyWindows &&
-                          WindowMasksPixel(ccWindow.control, ccLines, sx,
-                                           SwBitAt(ex, static_cast<size_t>(sy) * width + sx)),
-                      ex.gradation ? &(*ex.gradation)[static_cast<size_t>(sy) * width + sx]
-                                   : nullptr);
+            EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
+                      ex.gradation ? &(*ex.gradation)[pixelIndex] : nullptr);
         }
     }
 }
@@ -859,28 +882,28 @@ struct RotParam
 RotParam FetchRotParam(const std::vector<uint8_t>& v, uint32_t a)
 {
     RotParam r {};
-    r.Xst = SignX(ReadVdp2Dword(v, a + 0x00) >> 6, 23);
-    r.Yst = SignX(ReadVdp2Dword(v, a + 0x02) >> 6, 23);
-    r.Zst = SignX(ReadVdp2Dword(v, a + 0x04) >> 6, 23);
-    r.DXst = SignX(ReadVdp2Dword(v, a + 0x06) >> 6, 13);
-    r.DYst = SignX(ReadVdp2Dword(v, a + 0x08) >> 6, 13);
-    r.DX = SignX(ReadVdp2Dword(v, a + 0x0A) >> 6, 13);
-    r.DY = SignX(ReadVdp2Dword(v, a + 0x0C) >> 6, 13);
+    r.Xst = SignExtend(ReadVdp2Dword(v, a + 0x00) >> 6, 23);
+    r.Yst = SignExtend(ReadVdp2Dword(v, a + 0x02) >> 6, 23);
+    r.Zst = SignExtend(ReadVdp2Dword(v, a + 0x04) >> 6, 23);
+    r.DXst = SignExtend(ReadVdp2Dword(v, a + 0x06) >> 6, 13);
+    r.DYst = SignExtend(ReadVdp2Dword(v, a + 0x08) >> 6, 13);
+    r.DX = SignExtend(ReadVdp2Dword(v, a + 0x0A) >> 6, 13);
+    r.DY = SignExtend(ReadVdp2Dword(v, a + 0x0C) >> 6, 13);
     for (int m = 0; m < 6; ++m)
-        r.M[m] = SignX(ReadVdp2Dword(v, a + 0x0E + m * 2) >> 6, 14);
-    r.Px = SignX(ReadVdp2Word(v, a + 0x1A), 14);
-    r.Py = SignX(ReadVdp2Word(v, a + 0x1B), 14);
-    r.Pz = SignX(ReadVdp2Word(v, a + 0x1C), 14);
-    r.Cx = SignX(ReadVdp2Word(v, a + 0x1E), 14);
-    r.Cy = SignX(ReadVdp2Word(v, a + 0x1F), 14);
-    r.Cz = SignX(ReadVdp2Word(v, a + 0x20), 14);
-    r.Mx = SignX(ReadVdp2Dword(v, a + 0x22) >> 6, 24);
-    r.My = SignX(ReadVdp2Dword(v, a + 0x24) >> 6, 24);
-    r.kx = SignX(ReadVdp2Dword(v, a + 0x26), 24);
-    r.ky = SignX(ReadVdp2Dword(v, a + 0x28), 24);
+        r.M[m] = SignExtend(ReadVdp2Dword(v, a + 0x0E + m * 2) >> 6, 14);
+    r.Px = SignExtend(ReadVdp2Word(v, a + 0x1A), 14);
+    r.Py = SignExtend(ReadVdp2Word(v, a + 0x1B), 14);
+    r.Pz = SignExtend(ReadVdp2Word(v, a + 0x1C), 14);
+    r.Cx = SignExtend(ReadVdp2Word(v, a + 0x1E), 14);
+    r.Cy = SignExtend(ReadVdp2Word(v, a + 0x1F), 14);
+    r.Cz = SignExtend(ReadVdp2Word(v, a + 0x20), 14);
+    r.Mx = SignExtend(ReadVdp2Dword(v, a + 0x22) >> 6, 24);
+    r.My = SignExtend(ReadVdp2Dword(v, a + 0x24) >> 6, 24);
+    r.kx = SignExtend(ReadVdp2Dword(v, a + 0x26), 24);
+    r.ky = SignExtend(ReadVdp2Dword(v, a + 0x28), 24);
     r.KAst = ReadVdp2Dword(v, a + 0x2A) >> 6;
-    r.DKAst = SignX(ReadVdp2Dword(v, a + 0x2C) >> 6, 20);
-    r.DKAx = SignX(ReadVdp2Dword(v, a + 0x2E) >> 6, 20);
+    r.DKAst = SignExtend(ReadVdp2Dword(v, a + 0x2C) >> 6, 20);
+    r.DKAx = SignExtend(ReadVdp2Dword(v, a + 0x2E) >> 6, 20);
     return r;
 }
 
@@ -908,7 +931,7 @@ NbgConfig ReadRbgConfig(const HardwareSnapshot& s, bool paramB, bool rbg1 = fals
         c.transparentPixelDisable = (Reg(s, kBGON) & (1u << 8)) != 0;
         SetColorCalc(s, 0, Reg(s, kCCRNA), c);
         c.mosaicH = ReadMosaicH(s, 0);
-        ReadScreenMixFlags(s, 0, c);
+        c.mixFlags |= ScreenMixFlags(s, 0, 0, 0);
         return c;   // no bitmap mode for RBG1
     }
     const uint16_t chb = Reg(s, kCHCTLB);
@@ -929,13 +952,8 @@ NbgConfig ReadRbgConfig(const HardwareSnapshot& s, bool paramB, bool rbg1 = fals
     c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
 
     c.mosaicH = ReadMosaicH(s, 4);
-    ReadScreenMixFlags(s, 4, c);
+    c.mixFlags |= ScreenMixFlags(s, 4, 4, 4);
     return c;
-}
-
-NbgConfig ReadRbg0Config(const HardwareSnapshot& s, bool paramB)
-{
-    return ReadRbgConfig(s, paramB, false);
 }
 
 // One coefficient, read from the running .10 fixed-point table offset and normalised to the
@@ -957,7 +975,7 @@ uint32_t ReadCoeff(const std::vector<uint8_t>& vram, const std::vector<uint8_t>&
     if (coeffWord)
     {
         const uint16_t t = word(addr);
-        return (static_cast<uint32_t>(SignX(t << 6, 21)) & 0x00FFFFFFu) |
+        return (static_cast<uint32_t>(SignExtend(t << 6, 21)) & 0x00FFFFFFu) |
                (static_cast<uint32_t>(t & 0x8000) << 16);
     }
     return (static_cast<uint32_t>(word(addr)) << 16) | word(addr + 1);
@@ -1095,9 +1113,9 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
     // The screen's own transparent-processing window (RBG0: WCTLC low byte; RBG1 is NBG0's),
     // and separately the rotation parameter window (WCTLD low byte) that mode 3 selects the set
     // with. The latter is geometry, not masking, so it applies even when window display is off.
-    const WindowConfig windowConfig = ReadWindowConfig(snap, rbg1 ? kWinLayerNbg0 : kWinLayerRbg0);
+    LayerWindows windows;
+    windows.Begin(snap, rbg1 ? kWinLayerNbg0 : kWinLayerRbg0, applyWindows);
     const WindowConfig rotWindowConfig = ReadWindowConfig(snap, kWinLayerRotParam);
-    const WindowConfig ccWindow = ReadWindowConfig(snap, kWinLayerColorCalc);
     const uint32_t mosaicH = sets[fixedSet].cfg.mosaicH;
 
     auto coeffAt = [&](const RotSet& s, int msx) -> uint32_t
@@ -1109,14 +1127,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
 
     for (int sy = 0; sy < height; ++sy)
     {
-        const WindowLine windowLines[2] = {
-            ResolveWindowLine(windowConfig, 0, vram, sy),
-            ResolveWindowLine(windowConfig, 1, vram, sy)
-        };
-        const WindowLine ccLines[2] = {
-            ResolveWindowLine(ccWindow, 0, vram, sy),
-            ResolveWindowLine(ccWindow, 1, vram, sy)
-        };
+        windows.BeginRow(vram, sy);
         WindowLine rotWindowLines[2] = {};
         if (effRpmd == 3)
         {
@@ -1169,8 +1180,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 }
             }
 
-            if (applyWindows &&
-                WindowMasksPixel(windowConfig.control, windowLines, sx, SwBitAt(ex, pixelIndex)))
+            if (windows.Masks(sx, SwBitAt(ex, pixelIndex)))
             {
                 continue;
             }
@@ -1183,7 +1193,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
                 // One coefficient per dot along the line; it can override kx/ky or Xp.
                 const uint32_t k = haveCoeff ? coeff : coeffAt(s, msx);
                 if (static_cast<int32_t>(k) < 0) continue;   // coefficient = transparent
-                const int32_t sext = SignX(k, 24);
+                const int32_t sext = SignExtend(k, 24);
                 switch (s.coeffMode)
                 {
                 case 0: kx = ky = sext; break;
@@ -1218,9 +1228,7 @@ void RenderRbg(const HardwareSnapshot& snap, const se_render_opts& opts, uint32_
             {
                 continue;
             }
-            EmitTexel(cols[pixelIndex], col, c,
-                      applyWindows &&
-                          WindowMasksPixel(ccWindow.control, ccLines, sx, SwBitAt(ex, pixelIndex)),
+            EmitTexel(cols[pixelIndex], col, c, windows.CcMasked(sx, SwBitAt(ex, pixelIndex)),
                       ex.gradation ? &(*ex.gradation)[pixelIndex] : nullptr);
         }
     }
@@ -1253,7 +1261,7 @@ bool ResolveLayerConfig(const HardwareSnapshot& s, int layer, NbgConfig& out)
     {
         return false;
     }
-    out = (layer == 4) ? ReadRbg0Config(s, Rbg0UsesParamB(s)) : ReadNbgConfig(s, layer);
+    out = (layer == 4) ? ReadRbgConfig(s, Rbg0UsesParamB(s)) : ReadNbgConfig(s, layer);
     return true;
 }
 
@@ -1337,16 +1345,12 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
                                int width, int height, std::vector<PixColumn>& cols,
                                const EmitExtras& extras)
 {
-    EmitExtras ex = extras;
     if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
     {
         return;
     }
 
-    const size_t pixels = static_cast<size_t>(width) * height;
-    if (ex.sprites && ex.sprites->size() != pixels) ex.sprites = nullptr;   // not this frame's layer
-    if (ex.gradation && ex.gradation->size() != pixels) ex.gradation = nullptr;
-    if (ex.lineOverride && ex.lineOverride->size() != pixels) ex.lineOverride = nullptr;
+    const EmitExtras ex = ValidatedExtras(extras, static_cast<size_t>(width) * height);
     const uint16_t bgon = Reg(snapshot, kBGON);
 
     // Resolve the enabled screens first (no rendering yet). A layer is drawn only if
@@ -1432,23 +1436,16 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
     // The sprite layer has its own transparent-processing window, and its sprite-window input is
     // the pixel's own window bit. The colour-calculation window can additionally clear a pixel's
     // colour-calculation enable.
-    WindowConfig windowConfig {};
-    WindowConfig ccWindow {};
-    if (applyWindows)
-    {
-        windowConfig = ReadWindowConfig(snapshot, kWinLayerSprite);
-        ccWindow = ReadWindowConfig(snapshot, kWinLayerColorCalc);
-    }
+    LayerWindows windows;
+    windows.Begin(snapshot, kWinLayerSprite, applyWindows);
     uint16_t baseFlags = 0;
-    Rgba* gradation = (extras.gradation && extras.gradation->size() == sprites.size())
-                          ? extras.gradation->data() : nullptr;
+    const EmitExtras ex = ValidatedExtras(extras, sprites.size());
+    Rgba* gradation = ex.gradation ? ex.gradation->data() : nullptr;
     if (snapshot.HasVdp2Regs())
     {
+        baseFlags = ScreenMixFlags(snapshot, -1, 5, 6);   // sprites: no SDCTL bit; LNCLEN 5, CLOFEN 6
         const uint16_t ccctl = Reg(snapshot, kCCCTL);
         if ((ccctl & 0x8000) && ((ccctl >> 12) & 0x7) == 0)  baseFlags |= kGradation;
-        if (Reg(snapshot, kLNCLEN) & 0x20)  baseFlags |= kLineColorEn;
-        if (Reg(snapshot, kCLOFEN) & 0x40)  baseFlags |= kOffsetEnable;
-        if (Reg(snapshot, kCLOFSL) & 0x40)  baseFlags |= kOffsetSelect;
     }
     if (prios.ccEnable)
     {
@@ -1456,15 +1453,7 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
     }
     for (int y = 0; y < height; ++y)
     {
-        WindowLine lines[2] = { { 0, 0, false }, { 0, 0, false } };
-        WindowLine ccLines[2] = { { 0, 0, false }, { 0, 0, false } };
-        if (applyWindows)
-        {
-            lines[0] = ResolveWindowLine(windowConfig, 0, snapshot.Vdp2Vram(), y);
-            lines[1] = ResolveWindowLine(windowConfig, 1, snapshot.Vdp2Vram(), y);
-            ccLines[0] = ResolveWindowLine(ccWindow, 0, snapshot.Vdp2Vram(), y);
-            ccLines[1] = ResolveWindowLine(ccWindow, 1, snapshot.Vdp2Vram(), y);
-        }
+        windows.BeginRow(snapshot.Vdp2Vram(), y);
         for (int x = 0; x < width; ++x)
         {
             const size_t i = static_cast<size_t>(y) * width + x;
@@ -1473,7 +1462,7 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
             {
                 continue;
             }
-            if (applyWindows && WindowMasksPixel(windowConfig.control, lines, x, p.swBit))
+            if (windows.Masks(x, p.swBit))
             {
                 continue;
             }
@@ -1485,13 +1474,11 @@ void Vdp2Compositor::EmitSprites(const HardwareSnapshot& snapshot, const se_rend
                 }
                 continue;
             }
-            const bool ccMasked =
-                applyWindows && WindowMasksPixel(ccWindow.control, ccLines, x, p.swBit);
             if (gradation && (baseFlags & kGradation)) gradation[i] = p.color;
             uint16_t flags = baseFlags;
             if (shadows && p.shadowSelf) flags |= kShadowSelf;
             if (p.isRgb) flags |= kIsRgb;
-            EmitPix(cols[i], p.color.r, p.color.g, p.color.b, p.prio, p.ccEn && !ccMasked,
+            EmitPix(cols[i], p.color.r, p.color.g, p.color.b, p.prio, p.ccEn && !windows.CcMasked(x, p.swBit),
                     p.ccRatio, prios.ccAdd, flags);
         }
     }
@@ -1519,14 +1506,11 @@ MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se
     mix.cram = &snapshot.Cram();
     mix.cramMode = snapshot.CramMode();
     const size_t pixels = static_cast<size_t>(width) * height;
-    if (extras.lineOverride && extras.lineOverride->size() == pixels)
-    {
-        mix.lineOverride = extras.lineOverride;
-    }
+    const EmitExtras ex = ValidatedExtras(extras, pixels);
+    mix.lineOverride = ex.lineOverride;
     // Gradation (BOKEN) only exists at normal resolution with colour RAM mode 0; it replaces the line
-    // colour screen and extended calculation.
-    if ((ccctl & 0x8000) != 0 && !hiRes && mix.cram0 && extras.gradation &&
-        extras.gradation->size() == pixels)
+    // colour screen and extended calculation. The blur is only read by colour calculation.
+    if ((ccctl & 0x8000) != 0 && !hiRes && mix.cram0 && ex.gradation && mix.colorCalc)
     {
         mix.gradation = true;
         mix.extended = false;
@@ -1535,7 +1519,7 @@ MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se
         {
             // Each pixel is 1/4 of the dot two to its left, 1/4 of the one to its left and 1/2 of
             // itself; the line starts with its first dot standing in for the ones before it.
-            const Rgba* src = extras.gradation->data() + static_cast<size_t>(y) * width;
+            const Rgba* src = ex.gradation->data() + static_cast<size_t>(y) * width;
             Rgba* dst = mix.blur.data() + static_cast<size_t>(y) * width;
             auto avg = [](const Rgba& a, const Rgba& b)
             {
@@ -1560,7 +1544,7 @@ MixState Vdp2Compositor::ReadMixState(const HardwareSnapshot& snapshot, const se
     {
         for (int ch = 0; ch < 3; ++ch)
         {
-            mix.offset[set][ch] = static_cast<int16_t>(SignX(Reg(snapshot, kOffsetRegs[set][ch]) & 0x1FF, 9));
+            mix.offset[set][ch] = static_cast<int16_t>(SignExtend(Reg(snapshot, kOffsetRegs[set][ch]) & 0x1FF, 9));
         }
     }
 
@@ -1601,10 +1585,7 @@ void Vdp2Compositor::SeedBackScreen(const HardwareSnapshot& snapshot, int width,
     const bool perLine = (bktau & 0x8000) != 0;
     // The back screen is RGB, may be shadowed (BKSDEN) and colour-offset (BKCOEN/BKCOSL), and carries
     // CCRLB's back-screen ratio for the second-image ratio mode.
-    uint16_t backFlags = kIsRgb;
-    if (Reg(snapshot, kSDCTL) & 0x20)  backFlags |= kShadowEnable;
-    if (Reg(snapshot, kCLOFEN) & 0x20) backFlags |= kOffsetEnable;
-    if (Reg(snapshot, kCLOFSL) & 0x20) backFlags |= kOffsetSelect;
+    const uint16_t backFlags = kIsRgb | ScreenMixFlags(snapshot, 5, -1, 5);
     const uint8_t backRatio = static_cast<uint8_t>((Reg(snapshot, kCCRLB) >> 8) & 0x1F);
 
     for (int y = 0; y < height; ++y)

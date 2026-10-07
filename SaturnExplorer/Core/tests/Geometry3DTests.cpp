@@ -18,7 +18,7 @@
 namespace
 {
 using se_test::PutBE16;
-using se_test::SetReg;
+using se_test::SpritesInFront;
 using se_test::State;
 
 int gFailures = 0;
@@ -81,14 +81,6 @@ void AddQuadPrim(State& state, uint32_t cmd, uint16_t comm, uint16_t color,
 // and to the left, a green square down and to the right, and a white square drawn *over*
 // the blue one. The white square is only visible when the layer stack faces the camera the
 // right way round, and blue vs green only land correctly when X is not mirrored.
-// A sprite pixel whose priority number maps to priority 0 is not displayed, so a fixture that
-// composites its sprites has to give them somewhere to go: every number maps to priority 1.
-void SpritesInFront(State& state)
-{
-    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
-    SetReg(state, 0x0E0, 0x0020);   // SPCLMD: an MSB-set word is an RGB colour
-}
-
 State MakeScene()
 {
     State state(kVdp1Size);

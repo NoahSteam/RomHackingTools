@@ -24,6 +24,14 @@ void Check(bool condition, const char* expression, int line)
 
 #define CHECK(expression) Check(static_cast<bool>(expression), #expression, __LINE__)
 
+// A blue (RGB555 0x7C00) back screen: the single-colour table sits at VDP2 VRAM 0x200.
+void SetBlueBackScreen(State& state)
+{
+    SetReg(state, 0x0AC, 0x0000);
+    SetReg(state, 0x0AE, 0x0100);
+    PutBE16(state.vdp2, 0x200, 0x7C00);
+}
+
 State MakeNbg3State()
 {
     State state;
@@ -37,12 +45,7 @@ State MakeNbg3State()
     SetReg(state, 0x036, 0x8000);  // PNCN3: one-word
     SetReg(state, 0x04C, 0x0001);  // MPABN3: plane A map number 1
     SetReg(state, 0x0FA, 0x0100);  // PRINB: NBG3 priority 1
-    // PRISA..PRISD: every sprite priority number maps to priority 1. A sprite pixel whose number
-    // maps to priority 0 is not displayed, so a fixture that draws one has to say where it goes.
-    for (uint32_t reg = 0x0F0; reg <= 0x0F6; reg += 2) SetReg(state, reg, 0x0101);
-    // SPCTL: type 0 with SPCLMD set, so a framebuffer word with its MSB set is an RGB colour and one
-    // with it clear is a palette code. (SPCLMD clear makes every word a palette code.)
-    SetReg(state, 0x0E0, 0x0020);
+    se_test::SpritesInFront(state);   // sprites are priority 1, MSB-set words are RGB
     PutBE16(state.vdp2, 0x2000, 0x0001);
     std::fill(state.vdp2.begin() + 0x20, state.vdp2.begin() + 0x40, 0x11);
     PutBE16(state.cram, 2, 0x7FFF);
@@ -76,17 +79,18 @@ State MakeSpriteState(uint16_t pmod)
     return state;
 }
 
-std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = false)
+// Render a width x height frame; 'extra' sets any render options a case needs beyond the layers
+// and sprites (window, colour calculation, shadow).
+template <typename Setup>
+std::vector<uint8_t> RenderWith(State& state, int width, int height, Setup&& extra)
 {
     se_context* context = se_test::CreateContext(state);
     CHECK(context != nullptr);
     CHECK(se_begin_frame(context) == SE_OK);
-
     se_render_opts options = {};
     for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
     options.show_vdp1_sprites = 1;
-    options.show_window = showWindow ? 1 : 0;
-    options.show_color_calculation = colorCalc ? 1 : 0;
+    extra(options);
     se_image image = {};
     size_t needed = 0;
     CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
@@ -94,18 +98,32 @@ std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = fals
     image.pixels = pixels.data();
     image.capacity = pixels.size();
     CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
-    CHECK(image.width == 4);
-    CHECK(image.height == 2);
+    CHECK(image.width == static_cast<uint32_t>(width));
+    CHECK(image.height == static_cast<uint32_t>(height));
     se_destroy(context);
     return pixels;
+}
+
+bool IsColorAt(const std::vector<uint8_t>& pixels, int width, int x, int y,
+               uint8_t r, uint8_t g, uint8_t b)
+{
+    const size_t o = static_cast<size_t>(y * width + x) * 4;
+    return pixels[o] == r && pixels[o + 1] == g && pixels[o + 2] == b;
+}
+
+std::vector<uint8_t> Render(State& state, bool showWindow, bool colorCalc = false)
+{
+    return RenderWith(state, 4, 2, [&](se_render_opts& o)
+    {
+        o.show_window = showWindow ? 1 : 0;
+        o.show_color_calculation = colorCalc ? 1 : 0;
+    });
 }
 
 bool IsColor(const std::vector<uint8_t>& pixels, int x, int y,
              uint8_t r, uint8_t g, uint8_t b)
 {
-    const size_t offset = static_cast<size_t>(y * 4 + x) * 4;
-    return pixels[offset] == r && pixels[offset + 1] == g &&
-           pixels[offset + 2] == b && pixels[offset + 3] == 255;
+    return IsColorAt(pixels, 4, x, y, r, g, b) && pixels[static_cast<size_t>(y * 4 + x) * 4 + 3] == 255;
 }
 
 bool IsWhite(const std::vector<uint8_t>& pixels, int x, int y)
@@ -641,9 +659,7 @@ void TestColorCalc()
     // NBG3 (white, priority 1) with color calculation enabled, ratio 15, composited
     // over a blue back screen. Expect a half-blend: R,G = (255*16)>>5 = 127, B = 255.
     State state = MakeNbg3State();
-    SetReg(state, 0x0AC, 0x0000);
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);  // RGB555 blue back screen
+    SetBlueBackScreen(state);
     SetReg(state, 0x0EC, 0x0008);        // CCCTL: N3 color-calc enable
     SetReg(state, 0x10A, 0x0F00);        // CCRNB: N3 ratio = 15 (high byte)
 
@@ -1054,9 +1070,7 @@ void TestHalfTransparentSpriteDoesNotBlendWithVdp2()
 {
     State state = MakeNbg3State();
     SetReg(state, 0x0FA, 0x0400);   // PRINB: NBG3 priority 4
-    SetReg(state, 0x0AC, 0x0000);   // BKTAU / BKTAL: back-screen table at VDP2 0x200
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: RGB555 blue
+    SetBlueBackScreen(state);
     SetReg(state, 0x0EC, 0x0008);   // CCCTL: NBG3 colour-calc enable
     SetReg(state, 0x10A, 0x0F00);   // CCRNB: NBG3 ratio 15
 
@@ -1100,9 +1114,7 @@ void TestSpriteBetweenTwoColorCalcLayers()
     SetReg(state, 0x034, 0x8000);   // PNCN2: one-word
     SetReg(state, 0x048, 0x0002);   // MPABN2: plane A map number 2 -> name table at 0x4000
     SetReg(state, 0x0FA, 0x0502);   // PRINB: NBG3 priority 5, NBG2 priority 2
-    SetReg(state, 0x0AC, 0x0000);   // back-screen table at VDP2 0x200
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // back screen: blue
+    SetBlueBackScreen(state);
     SetReg(state, 0x0EC, 0x000C);   // CCCTL: colour calc on for both NBG2 and NBG3
     SetReg(state, 0x10A, 0x0F0F);   // CCRNB: ratio 15 for both
 
@@ -1143,41 +1155,9 @@ void TestSpriteBetweenTwoColorCalcLayers()
 // the finished framebuffer. These fixtures use frames of their own size, so they render through
 // RenderSized rather than the 4x2 Render above.
 
-// Render a width x height frame; 'extra' sets any render options a case needs beyond the layers
-// and sprites (window, colour calculation, shadow).
-template <typename Setup>
-std::vector<uint8_t> RenderWith(State& state, int width, int height, Setup&& extra)
-{
-    se_context* context = se_test::CreateContext(state);
-    CHECK(context != nullptr);
-    CHECK(se_begin_frame(context) == SE_OK);
-    se_render_opts options = {};
-    for (int i = 0; i < SE_LAYER_COUNT; ++i) options.show_layer[i] = 1;
-    options.show_vdp1_sprites = 1;
-    extra(options);
-    se_image image = {};
-    size_t needed = 0;
-    CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
-    std::vector<uint8_t> pixels(needed);
-    image.pixels = pixels.data();
-    image.capacity = pixels.size();
-    CHECK(se_render_frame(context, &options, &image, &needed) == SE_OK);
-    CHECK(image.width == static_cast<uint32_t>(width));
-    CHECK(image.height == static_cast<uint32_t>(height));
-    se_destroy(context);
-    return pixels;
-}
-
 std::vector<uint8_t> RenderSized(State& state, int width, int height)
 {
     return RenderWith(state, width, height, [](se_render_opts&) {});
-}
-
-bool IsColorAt(const std::vector<uint8_t>& pixels, int width, int x, int y,
-               uint8_t r, uint8_t g, uint8_t b)
-{
-    const size_t o = static_cast<size_t>(y * width + x) * 4;
-    return pixels[o] == r && pixels[o + 1] == g && pixels[o + 2] == b;
 }
 
 // A frame with no VDP2 layers over a blue back screen, 'width' x 'height'.
@@ -1185,9 +1165,7 @@ State MakeBlueBackState(int width, int height)
 {
     State state = MakeNbg3State();
     SetReg(state, 0x020, 0x0000);   // BGON off
-    SetReg(state, 0x0AC, 0x0000);   // back-screen table at VDP2 0x200
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue
+    SetBlueBackScreen(state);
     ResizeVdp1(state, 0x400);
     se_test::WriteSystemClip(state, width, height);
     return state;
@@ -1272,9 +1250,7 @@ void TestNormalSpriteCoversExactlyItsSize()
 void TestHalfTransparencyIgnoresVdp2Background()
 {
     State state = MakeNbg3State();   // NBG3 white, priority 1
-    SetReg(state, 0x0AC, 0x0000);
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);
+    SetBlueBackScreen(state);
     ResizeVdp1(state, 0x60);
     PutPolygon(state, 0x20, 0x801F, 0x0003, 0, 0, 3, 1);
     PutBE16(state.vdp1, 0x40, 0x8000);
@@ -1657,9 +1633,7 @@ void TestSpriteWindowCutsLayersWhereTheShadowBitIsSet()
     State state = MakeNbg3State();   // NBG3 white, priority 1
     SetReg(state, 0x0E0, 0x0012);   // type 2, SPWINEN
     SetReg(state, 0x0F0, 0x0100);   // PRISA: number 0 -> priority 0 (the window sprite is invisible)
-    SetReg(state, 0x0AC, 0x0000);
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetBlueBackScreen(state);
     SetReg(state, 0x0D2, 0x2000);   // WCTLB high byte: NBG3 -- sprite window enabled, area bit clear
     ResizeVdp1(state, 0x400);
     PutPolygon(state, 0x20, 0x8001, 0x0000, 0, 0, 1, 1);   // sd = 1: window bit on the left columns
@@ -1708,9 +1682,7 @@ void TestPolygonWithSpdClearFollowsTheLastVramWord()
 State MakeCcState()
 {
     State state = MakeNbg3State();
-    SetReg(state, 0x0AC, 0x0000);
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetBlueBackScreen(state);
     SetReg(state, 0x0EC, 0x0008);         // CCCTL: NBG3 colour calculation
     SetReg(state, 0x10A, 0x0F00);         // CCRNB: NBG3 ratio 15
     return state;
@@ -2000,9 +1972,7 @@ void TestRbg1WithRbg0SuppressesTheOtherNbgs()
 void TestRbg0CoefficientLineColor()
 {
     State state = MakeTwoParamRotState();
-    SetReg(state, 0x0AC, 0x0000);
-    SetReg(state, 0x0AE, 0x0100);
-    PutBE16(state.vdp2, 0x200, 0x7C00);   // blue back screen
+    SetBlueBackScreen(state);
     SetReg(state, 0x0EC, 0x0010);         // CCCTL: RBG0 colour calculation
     SetReg(state, 0x10C, 0x000F);         // CCRR: ratio 15
     SetReg(state, 0x0E8, 0x0010);         // LNCLEN: RBG0

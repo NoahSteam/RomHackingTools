@@ -103,7 +103,7 @@ struct EndCodeRows
     const std::vector<uint8_t>* vram = nullptr;
     se_color_mode mode = SE_COLOR_BANK_16;
     uint32_t addr = 0;
-    uint16_t width = 0, height = 0;
+    uint16_t width = 0;
     bool flipX = false;
     std::vector<int32_t> stop;   // per row: read-order index of the terminating end code, -1 unscanned
 
@@ -170,9 +170,9 @@ uint16_t ShadeWord(uint16_t word, int g5r, int g5g, int g5b)
 
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
-// to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path emits a descriptor
-// into its PixColumn at the priority 'word' selects (applying draw-mode effects against the
-// column below); the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
+// to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path writes the packed
+// 'word' into the VDP1 framebuffer (applying draw-mode effects against the pixel already there);
+// the 3D path writes RGBA and ignores the word. Keeping the sink out of here lets
 // both paths share the coverage/UV/gouraud walk without either owning the other's compositing
 // rules.
 //
@@ -580,25 +580,25 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
     {
         src &= 0xFF;
     }
-    unsigned pr = 0, cc = 0, dc = 0, dcMask = 0;
+    unsigned cc = 0, dc = 0, dcMask = 0;
     bool sd = false;
     switch (type)
     {
-    case 0x0: pr = (src >> 14) & 0x3; cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
-    case 0x1: pr = (src >> 13) & 0x7; cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
-    case 0x2: sd = (src >> 15) & 1; pr = (src >> 14) & 0x1; cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
-    case 0x3: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
-    case 0x4: sd = (src >> 15) & 1; pr = (src >> 13) & 0x3; cc = (src >> 10) & 0x7; dcMask = 0x3FF; break;
-    case 0x5: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 11) & 0x1; dcMask = 0x7FF; break;
-    case 0x6: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 10) & 0x3; dcMask = 0x3FF; break;
-    case 0x7: sd = (src >> 15) & 1; pr = (src >> 12) & 0x7; cc = (src >> 9) & 0x7; dcMask = 0x1FF; break;
-    case 0x8: pr = (src >> 7) & 0x1; dcMask = 0x7F; break;
-    case 0x9: pr = (src >> 7) & 0x1; cc = (src >> 6) & 0x1; dcMask = 0x3F; break;
-    case 0xA: pr = (src >> 6) & 0x3; dcMask = 0x3F; break;
+    case 0x0: cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
+    case 0x1: cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
+    case 0x2: sd = (src >> 15) & 1; cc = (src >> 11) & 0x7; dcMask = 0x7FF; break;
+    case 0x3: sd = (src >> 15) & 1; cc = (src >> 11) & 0x3; dcMask = 0x7FF; break;
+    case 0x4: sd = (src >> 15) & 1; cc = (src >> 10) & 0x7; dcMask = 0x3FF; break;
+    case 0x5: sd = (src >> 15) & 1; cc = (src >> 11) & 0x1; dcMask = 0x7FF; break;
+    case 0x6: sd = (src >> 15) & 1; cc = (src >> 10) & 0x3; dcMask = 0x3FF; break;
+    case 0x7: sd = (src >> 15) & 1; cc = (src >> 9) & 0x7; dcMask = 0x1FF; break;
+    case 0x8: dcMask = 0x7F; break;
+    case 0x9: cc = (src >> 6) & 0x1; dcMask = 0x3F; break;
+    case 0xA: dcMask = 0x3F; break;
     case 0xB: cc = (src >> 6) & 0x3; dcMask = 0x3F; break;
-    case 0xC: pr = (src >> 7) & 0x1; dcMask = 0xFF; break;
-    case 0xD: pr = (src >> 7) & 0x1; cc = (src >> 6) & 0x1; dcMask = 0xFF; break;
-    case 0xE: pr = (src >> 6) & 0x3; dcMask = 0xFF; break;
+    case 0xC: dcMask = 0xFF; break;
+    case 0xD: cc = (src >> 6) & 0x1; dcMask = 0xFF; break;
+    case 0xE: dcMask = 0xFF; break;
     default:  cc = (src >> 6) & 0x3; dcMask = 0xFF; break;
     }
     dc = src & dcMask;
@@ -609,10 +609,7 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
     const bool normalShadow = (dc == (dcMask & ~1u));
     out.color = CramColor(cram, cramMode, cramOffset + dc);
     const bool msbCc = CramMsb(cram, cramMode, cramOffset + dc);
-    if (spriteWindow)
-    {
-        out.swBit = sd;   // under SPWINEN the shadow bit is the window bit instead
-    }
+    out.swBit = spriteWindow && sd;   // under SPWINEN the shadow bit is the window bit instead
     if (normalShadow)
     {
         out.shadowMarker = true;
@@ -642,7 +639,7 @@ SpritePriorityTable::Pixel SpritePriorityTable::Resolve(uint16_t word,
             tp = true;
         }
     }
-    finish(pr, cc, msbCc, tp);
+    finish(static_cast<unsigned>(NumberOf(word)), cc, msbCc, tp);
     return out;
 }
 
@@ -664,51 +661,51 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     const int fbWidth = (scene.vdp1Width > 0) ? scene.vdp1Width : width;
     std::vector<FbPixel> fb(static_cast<size_t>(fbWidth) * height);
 
+    // Commands draw into the framebuffer strictly in list order, and a later pixel replaces an
+    // earlier one however the two rank in VDP2 priority: that is decided afterwards, on the
+    // pixel that survived. Draw-mode effects read the framebuffer pixel under them, never the
+    // VDP2 layers -- VDP2 only sees the finished framebuffer -- and work on the packed word:
+    //
+    //  - MSB-on only sets the destination's MSB;
+    //  - shadow halves the destination if its MSB is set, and otherwise does nothing;
+    //  - half-luminance halves the sprite's own word;
+    //  - half-transparency averages with the destination if its MSB is set, and otherwise
+    //    just replaces it.
+    auto sink = [&fb](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word)
+    {
+        FbPixel& d = fb[idx];
+        if (fx.msbOn)
+        {
+            // MSB-on keeps the pixel under it and only sets its MSB (and writes a bare MSB
+            // where nothing was drawn). It is what marks a sprite for VDP2's MSB shadow; it
+            // overrides the colour-calculation mode and draws no colour of its own.
+            d.word = static_cast<uint16_t>(d.word | 0x8000);
+            d.written = true;
+            return;
+        }
+        if (fx.effect == 1)   // shadow
+        {
+            if (d.written && (d.word & 0x8000))
+            {
+                d.word = HalveWord(d.word);
+            }
+            return;
+        }
+        if (fx.effect == 2)   // half-luminance
+        {
+            word = HalveWord(word);
+        }
+        else if (fx.effect == 3 && d.written && (d.word & 0x8000))   // half-transparency
+        {
+            word = AverageWord(word, d.word);
+        }
+        d.word = word;
+        d.written = true;
+    };
+
     for (size_t i = 0; i < scene.sprites.size(); ++i)
     {
         const se_sprite_2d& s = scene.sprites[i];
-        // Commands draw into the framebuffer strictly in list order, and a later pixel replaces an
-        // earlier one however the two rank in VDP2 priority: that is decided afterwards, on the
-        // pixel that survived. Draw-mode effects read the framebuffer pixel under them, never the
-        // VDP2 layers -- VDP2 only sees the finished framebuffer -- and work on the packed word:
-        //
-        //  - MSB-on only sets the destination's MSB;
-        //  - shadow halves the destination if its MSB is set, and otherwise does nothing;
-        //  - half-luminance halves the sprite's own word;
-        //  - half-transparency averages with the destination if its MSB is set, and otherwise
-        //    just replaces it.
-        auto sink = [&fb](size_t idx, uint8_t, uint8_t, uint8_t, const DrawFx& fx, uint16_t word)
-        {
-            FbPixel& d = fb[idx];
-            if (fx.msbOn)
-            {
-                // MSB-on keeps the pixel under it and only sets its MSB (and writes a bare MSB
-                // where nothing was drawn). It is what marks a sprite for VDP2's MSB shadow; it
-                // overrides the colour-calculation mode and draws no colour of its own.
-                d.word = static_cast<uint16_t>(d.word | 0x8000);
-                d.written = true;
-                return;
-            }
-            if (fx.effect == 1)   // shadow
-            {
-                if (d.written && (d.word & 0x8000))
-                {
-                    d.word = HalveWord(d.word);
-                }
-                return;
-            }
-            if (fx.effect == 2)   // half-luminance
-            {
-                word = HalveWord(word);
-            }
-            else if (fx.effect == 3 && d.written && (d.word & 0x8000))   // half-transparency
-            {
-                word = AverageWord(word, d.word);
-            }
-            d.word = word;
-            d.written = true;
-        };
-
         const se_vec2* c = s.corners;
         RVert v[4] = { { c[0].x, c[0].y, 0.0f }, { c[1].x, c[1].y, 0.0f },
                        { c[2].x, c[2].y, 0.0f }, { c[3].x, c[3].y, 0.0f } };
@@ -734,7 +731,6 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
             endCode.mode = s.texture.color_mode;
             endCode.addr = s.texture.vram_address;
             endCode.width = s.texture.width;
-            endCode.height = s.texture.height;
             endCode.flipX = s.flip_x != 0;
             endCode.stop.assign(s.texture.height, -1);
             da.endCode = &endCode;
@@ -746,18 +742,32 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     // Read the finished framebuffer out as VDP2 sees it: each pixel resolved through the sprite type
     // into a colour, a priority, colour-calculation and shadow state, and a sprite-window bit. In a
     // hi-res mode every VDP1 column is doubled here.
+    std::vector<int> column(static_cast<size_t>(width));
+    for (int x = 0; x < width; ++x)
+    {
+        column[static_cast<size_t>(x)] = FramebufferColumn(x, fbWidth, width);
+    }
     bool any = false;
+    uint16_t lastWord = 0;
+    SpritePixel lastPixel;
+    bool haveLast = false;
     for (int y = 0; y < height; ++y)
     {
         for (int x = 0; x < width; ++x)
         {
-            const int fx = static_cast<int>(static_cast<int64_t>(x) * fbWidth / width);
-            const FbPixel& p = fb[static_cast<size_t>(y) * fbWidth + fx];
+            const FbPixel& p = fb[static_cast<size_t>(y) * fbWidth + column[static_cast<size_t>(x)]];
             if (!p.written)
             {
                 continue;
             }
-            layer[static_cast<size_t>(y) * width + x] = prios.Resolve(p.word, cram, cramMode);
+            // A solid sprite repeats one word thousands of times; resolve it once.
+            if (!haveLast || p.word != lastWord)
+            {
+                lastPixel = prios.Resolve(p.word, cram, cramMode);
+                lastWord = p.word;
+                haveLast = true;
+            }
+            layer[static_cast<size_t>(y) * width + x] = lastPixel;
             any = true;
         }
     }
