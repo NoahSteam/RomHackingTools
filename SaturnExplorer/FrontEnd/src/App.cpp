@@ -1667,6 +1667,7 @@ void App::DrawTransportBar()
                                  mRecorder.CanReconstruct(static_cast<size_t>(target));
 
         char enabledTip[256] = "";
+        char disabledBuf[768] = "";
         const char* disabledTip = nullptr;
         if (canPlayHere)
         {
@@ -1687,9 +1688,25 @@ void App::DrawTransportBar()
         else if (!se_supports_state_rewind(ctl))
             disabledTip = "Play From Here (unavailable)\nThe connected emulator can't load savestates.";
         else
-            disabledTip = "Play From Here (unavailable)\nThis frame has no savestate to restore. States "
+        {
+            // The numbers say where the stream is stuck: none received means the emulator is not
+            // sending them; received but "not in the buffer" means they miss the recorded frames;
+            // received and attached but not resumable means the keyframes they hang off are gone.
+            const FrameRecorder::StateStats st = mRecorder.GetStateStats();
+            std::snprintf(disabledBuf, sizeof(disabledBuf),
+                          "Play From Here (unavailable)\nThis frame has no savestate to restore. States "
                           "arrive a moment after each frame, and the oldest are dropped as the buffer "
-                          "fills.\nPick another frame with the scrub bar.";
+                          "fills.\nPick another frame with the scrub bar.\n\n"
+                          "Savestates: %zu of %zu recorded frames can be resumed (%zu have a block).\n"
+                          "Blocks received %llu: %llu invalid, %llu for frames not in the buffer; "
+                          "newest for frame #%llu.",
+                          st.resumable, st.frames, st.withState,
+                          static_cast<unsigned long long>(st.received),
+                          static_cast<unsigned long long>(st.invalid),
+                          static_cast<unsigned long long>(st.noFrame),
+                          static_cast<unsigned long long>(st.newestBlock));
+            disabledTip = disabledBuf;
+        }
 
         if (IconButton("##tp_playhere", Ico::PlayHere, canPlayHere ? enabledTip : nullptr,
                        !canPlayHere, disabledTip))

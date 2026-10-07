@@ -240,6 +240,7 @@ void FrameRecorder::Clear()
     mFrames.clear();
     mBytes = 0;
     mLastCaptured = 0;
+    mBlocksReceived = mBlocksInvalid = mBlocksNoFrame = mNewestBlock = 0;
 }
 
 size_t FrameRecorder::Count() const
@@ -370,8 +371,11 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
     // allocating, so a truncated or corrupt block is rejected here rather than becoming a frame
     // that offers itself as a rewind target and only fails when the user picks it. This is what
     // lets CanReconstruct answer from presence alone.
+    ++mBlocksReceived;
+    if (frameNumber > mNewestBlock.load()) mNewestBlock = frameNumber;
     if (!payload || len == 0 || se_state_rle_decoded_size(payload, len) != fullLen)
     {
+        ++mBlocksInvalid;
         return;
     }
     std::lock_guard<std::mutex> lk(mRingMtx);
@@ -394,6 +398,25 @@ void FrameRecorder::AttachStateBlock(uint64_t frameNumber, uint8_t kind, uint64_
         return;
     }
     // Frame not resident (evicted or never captured): drop the block.
+    ++mBlocksNoFrame;
+}
+
+FrameRecorder::StateStats FrameRecorder::GetStateStats() const
+{
+    StateStats st;
+    st.received = mBlocksReceived;
+    st.invalid = mBlocksInvalid;
+    st.noFrame = mBlocksNoFrame;
+    st.newestBlock = mNewestBlock;
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    st.frames = mFrames.size();
+    for (const Frame& f : mFrames)
+    {
+        if (!f.hasState) continue;
+        ++st.withState;
+        if (f.stateKind == SE_LIVE_STATE_KIND_KEYFRAME || FindKeyframe(f)) ++st.resumable;
+    }
+    return st;
 }
 
 // Decode one block's RLE payload into 'out' sized to its full length. Caller holds mRingMtx.

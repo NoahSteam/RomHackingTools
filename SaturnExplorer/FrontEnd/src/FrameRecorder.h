@@ -120,6 +120,19 @@ public:
     bool ReconstructState(size_t i, std::vector<uint8_t>& out) const;
     // True if frame i can currently be resumed-from (its block + keyframe are resident).
     bool CanReconstruct(size_t i) const;
+    // Where the savestate stream stands, so the UI can say why a frame is not resumable instead
+    // of only that it is not. The three counters run since the last Clear().
+    struct StateStats
+    {
+        size_t   frames = 0;        // frames in the ring
+        size_t   withState = 0;     // ... that have a block attached
+        size_t   resumable = 0;     // ... whose block and keyframe are both resident
+        uint64_t received = 0;      // blocks handed to AttachStateBlock
+        uint64_t invalid = 0;       // ... refused as corrupt
+        uint64_t noFrame = 0;       // ... for a frame that is not in the ring
+        uint64_t newestBlock = 0;   // frame number of the newest block received
+    };
+    StateStats GetStateStats() const;
     // Drop every frame after index i (used on rewind: the future is re-simulated). Also
     // re-arms Capture() to accept the next frame after this one.
     void TruncateAfter(size_t i);
@@ -153,6 +166,10 @@ private:
     // Highest frame number Capture() has accepted; skips stale/duplicate frames (esp. the
     // transient frame-0 window right after a rewind). UI-thread only.
     uint64_t mLastCaptured = 0;
+
+    // Savestate stream counters (GetStateStats). Atomic: AttachStateBlock runs on the UI thread
+    // but is cheap to read from anywhere, and they sit outside the ring's lock.
+    std::atomic<uint64_t> mBlocksReceived{0}, mBlocksInvalid{0}, mBlocksNoFrame{0}, mNewestBlock{0};
 
     // Edit sink (App) for writes made against a scrubbed frame (SetEditSink). UI-thread only.
     void* mEditUser = nullptr;
