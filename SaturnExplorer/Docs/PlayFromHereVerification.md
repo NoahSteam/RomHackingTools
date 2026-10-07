@@ -107,14 +107,33 @@ one run), so the transient is not fully deterministic either. Not investigated f
 3. Earlier in the same effort: the button was never available at all (blocks arrived before their
    frames and were dropped; keyframes were looked up as recorded frames).
 
+### Seen in the real window (screenshots)
+
+Saturn Explorer, launched from the branch build, connected by itself to the Mednafen running Sakura
+Wars 2 ("Connected to Emulator", the language-select screen rendering, frame counter advancing).
+
+| Moment | What the transport bar showed |
+|---|---|
+| Game running | Pause shown; the Play From Here button (bar and triangle, right of Play) is **dim**; the scrub bar reads "pause to scrub" |
+| Paused at a breakpoint halt ("BREAKPOINT HIT, Master SH-2, PC 060402E6", status "Frame 4541 \| Paused"), nothing scrubbed | scrub bar `#4536  300 / 300`; the button is **lit**, as bright as Play |
+
+That second row is the original failure (the button greyed out after pausing, with a full history
+behind it) and it is fixed. The halt was produced by a side client that sent one breakpoint request
+and then stayed idle, because nothing could be clicked (below).
+
+**An observation, not a defect of this change.** My first attempt used a side client that polled the
+emulator continuously. The app then showed the button *dim* with a full 300-frame history, and its
+newest recorded frame ~190 frames behind the halt. The exporter hands savestate blocks to
+whichever client's reply comes first, so two attached clients share one stream and a busy second one
+starves the first. Not a problem for the normal single-client case.
+
 ### Not verified
 
-- **The button itself, its tooltips and the window.** Driving the GUI needs screen access, and macOS
-  raised a system prompt for it (*"Claude" is requesting to bypass the system private window picker
-  and directly access your screen and audio*). That is a security permission and was left for the
-  user to decide; no GUI interaction was attempted. A person should check, once, with the checks
-  above: pause a running game, hover the button (the tooltip should say it will restore frame #N
-  and how many frames it discards), scrub back, press it, confirm the game continues from there
-  and the scrub bar's count falls to the frames up to it.
+- **Pressing the button, and the tooltips.** Sending clicks or keystrokes needs the macOS
+  Accessibility permission, which was not available (`osascript is not allowed assistive access`)
+  and which was not granted on the user's behalf. A hover tooltip and a button press are therefore
+  the two things still to be tried by a person: press it with a scrubbed-back frame selected, and
+  confirm the game resumes from there and the scrub bar's count falls to the frames up to it.
+  (The same restore, driven through the same driver and recorder, is covered above.)
 - Windows. The tool and the pipeline test are POSIX-only.
 - Panzer Dragoon Saga: not run.
