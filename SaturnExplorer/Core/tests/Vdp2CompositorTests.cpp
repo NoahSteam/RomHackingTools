@@ -2041,6 +2041,91 @@ void TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled()
     }
 }
 
+// The framebuffer is 240 rows whatever the system clip says: the clip bounds what is drawn into it and
+// does not resize it, so a clip shorter than 240 must not stretch the scan-out. VDP1 row 1 still lands
+// on display rows 2-3, and row 2 on rows 4-5.
+void TestExclusiveScanoutDoublesRowsEvenWithAShorterSystemClip()
+{
+    State state = MakeBlueBackState(4, 224);
+    SetReg(state, 0x000, 0x0004);
+    PutPolygon(state, 0x20, 0x801F, 0, 0, 1, 3, 1);   // VDP1 row 1 only
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = RenderWith(state, 4, 480, [](se_render_opts&) {});
+    CHECK(IsColorAt(pixels, 4, 1, 1, 0, 0, 255));
+    CHECK(IsColorAt(pixels, 4, 1, 2, 255, 0, 0));
+    CHECK(IsColorAt(pixels, 4, 1, 3, 255, 0, 0));
+    CHECK(IsColorAt(pixels, 4, 1, 4, 0, 0, 255));
+}
+
+// ---- Line draw modes --------------------------------------------------------------------------
+
+// A line command A=(x0,y0) B=(x1,y1) at 'cmd'.
+void PutLine(State& state, uint32_t cmd, uint16_t color, uint16_t pmod, int x0, int y0, int x1, int y1)
+{
+    PutBE16(state.vdp1, cmd + 0x00, 0x0006);
+    PutBE16(state.vdp1, cmd + 0x04, pmod);
+    PutBE16(state.vdp1, cmd + 0x06, color);
+    PutBE16(state.vdp1, cmd + 0x0C, static_cast<uint16_t>(x0));
+    PutBE16(state.vdp1, cmd + 0x0E, static_cast<uint16_t>(y0));
+    PutBE16(state.vdp1, cmd + 0x10, static_cast<uint16_t>(x1));
+    PutBE16(state.vdp1, cmd + 0x12, static_cast<uint16_t>(y1));
+}
+
+// A line goes through the same draw-mode processing as a polygon: half-luminance halves the word
+// (0x801F -> 0x800F, which Explorer expands to 123).
+void TestLineHonoursHalfLuminance()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutLine(state, 0x20, 0x801F, 0x0002, 0, 0, 3, 0);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int x = 0; x < 4; ++x)
+    {
+        CHECK(IsColor(pixels, x, 0, 123, 0, 0));
+    }
+}
+
+// Half-transparency averages with the framebuffer word under the line when that has its MSB set.
+void TestLineHonoursHalfTransparency()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0x83E0, 0, 0, 0, 3, 1);        // green underneath
+    PutLine(state, 0x40, 0x801F, 0x0003, 0, 0, 3, 0);      // red, half-transparent
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 1, 0, 123, 123, 0));
+    CHECK(IsColor(pixels, 1, 1, 0, 255, 0));   // the row below is untouched
+}
+
+// Mesh drops every other pixel of a line as it does of a polygon.
+void TestLineHonoursMesh()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutPolygon(state, 0x20, 0x83E0, 0, 0, 0, 3, 1);
+    PutLine(state, 0x40, 0x801F, 0x0100, 0, 0, 3, 0);
+    PutBE16(state.vdp1, 0x60, 0x8000);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 0, 0, 255, 0, 0));
+    CHECK(IsColor(pixels, 1, 0, 0, 255, 0));
+    CHECK(IsColor(pixels, 2, 0, 255, 0, 0));
+    CHECK(IsColor(pixels, 3, 0, 0, 255, 0));
+}
+
+// Gouraud shading runs along a line between its two end colours: the neutral ramp (0x4210) leaves red
+// alone and a ramp of zero darkens the channel by 16 steps.
+void TestLineInterpolatesGouraud()
+{
+    State state = MakeBlueBackState(4, 2);
+    PutLine(state, 0x20, 0x801F, 0x0004, 0, 0, 3, 0);
+    PutBE16(state.vdp1, 0x3C, 0x20);        // CMDGRDA: table at 0x100
+    PutBE16(state.vdp1, 0x100, 0x0000);     // end A: ramp 0 in every channel
+    PutBE16(state.vdp1, 0x102, 0x4210);     // end B: neutral
+    PutBE16(state.vdp1, 0x40, 0x8000);
+    const std::vector<uint8_t> pixels = Render(state, false);
+    CHECK(IsColor(pixels, 0, 0, 123, 0, 0));
+    CHECK(IsColor(pixels, 3, 0, 255, 0, 0));
+}
+
 // RBG1 cannot be displayed in the exclusive monitor modes (and it still holds NBG0's slot).
 void TestRbg1IsNotDrawnInTheExclusiveMonitorModes()
 {
@@ -2230,6 +2315,11 @@ int main()
     TestRbg0CoefficientLineColor();
     TestRbg1TileMapDescribesTheRotationScreen();
     TestExclusiveMonitorIs480LinesWithVdp1LinesDoubled();
+    TestExclusiveScanoutDoublesRowsEvenWithAShorterSystemClip();
+    TestLineHonoursHalfLuminance();
+    TestLineHonoursHalfTransparency();
+    TestLineHonoursMesh();
+    TestLineInterpolatesGouraud();
     TestRbg1IsNotDrawnInTheExclusiveMonitorModes();
     TestEqualPriorityScreensStackInTheirFixedOrder();
     TestSpecialPriorityPerCharacter();

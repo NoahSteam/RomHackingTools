@@ -708,7 +708,9 @@ private:
         }
         if (exclusive)
         {
-            mScene.vdp1Height = mScene.hasSystemClip ? mScene.screenHeight : 240;
+            // The framebuffer is always 240 rows here, each shown twice; the system clip bounds
+            // what is drawn into it and does not resize it.
+            mScene.vdp1Height = 240;
             mScene.screenHeight = 480;
             return;
         }

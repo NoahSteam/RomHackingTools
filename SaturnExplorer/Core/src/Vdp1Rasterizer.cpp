@@ -168,6 +168,21 @@ uint16_t ShadeWord(uint16_t word, int g5r, int g5g, int g5b)
                                  (ch((word >> 10) & 0x1F, g5b) << 10));
 }
 
+// Shade a covered pixel with the interpolated 5-bit gouraud channels: the displayed colour always,
+// and the framebuffer word only when it is a colour (MSB set) -- a palette code is an index, which
+// adding a colour ramp would corrupt.
+void ApplyGouraudPixel(uint8_t& cr, uint8_t& cg, uint8_t& cb, uint16_t& word, float gr, float gg, float gb)
+{
+    cr = ApplyGouraud(cr, gr);
+    cg = ApplyGouraud(cg, gg);
+    cb = ApplyGouraud(cb, gb);
+    if (word & 0x8000)
+    {
+        word = ShadeWord(word, static_cast<int>(gr + 0.5f), static_cast<int>(gg + 0.5f),
+                         static_cast<int>(gb + 0.5f));
+    }
+}
+
 // Rasterize one UV-mapped triangle. When 'depth' is non-null, depth-test and write per
 // pixel (3D view). For each covered pixel the final texel colour (after gouraud) is handed
 // to 'sink(idx, r, g, b, fx, word)', which decides how it lands: the 2D path writes the packed
@@ -294,16 +309,7 @@ void RasterTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
                 const float gr = w0 * (g0 & 0x1F)        + w1 * (g1 & 0x1F)        + w2 * (g2 & 0x1F);
                 const float gg = w0 * ((g0 >> 5) & 0x1F) + w1 * ((g1 >> 5) & 0x1F) + w2 * ((g2 >> 5) & 0x1F);
                 const float gb = w0 * ((g0 >> 10) & 0x1F)+ w1 * ((g1 >> 10) & 0x1F)+ w2 * ((g2 >> 10) & 0x1F);
-                cr = ApplyGouraud(c.r, gr);
-                cg = ApplyGouraud(c.g, gg);
-                cb = ApplyGouraud(c.b, gb);
-                // The framebuffer holds the shaded WORD. Shade its RGB channels when it is a colour
-                // (MSB set); a palette code is an index, which adding a colour ramp would corrupt.
-                if (word & 0x8000)
-                {
-                    word = ShadeWord(word, static_cast<int>(gr + 0.5f), static_cast<int>(gg + 0.5f),
-                                     static_cast<int>(gb + 0.5f));
-                }
+                ApplyGouraudPixel(cr, cg, cb, word, gr, gg, gb);
             }
             // Hand the covered pixel to the sink with the sprite's draw-mode; the sink
             // owns how shadow / half-luminance / half-transparency and the final write or
@@ -331,14 +337,19 @@ void RasterQuad(const RVert v[4], const se_vec2 uv[4], const se_texture_ref& tex
 }
 
 // Plot a solid-color segment between two vertices (DDA), clipped to the frame. Used for
-// untextured polyline/line primitives; each pixel goes to 'sink' with a neutral draw-mode
-// (opaque, no blending), the same way a plain textured pixel would.
+// untextured polyline/line primitives; each pixel goes to 'sink' with the command's draw mode,
+// the same way a textured pixel would -- the hardware applies half-luminance, half-transparency,
+// shadow, MSB-on and mesh to a line exactly as it does to a polygon.
+//
+// 'g0'/'g1' are the gouraud colours at the two ends (null = no shading); the hardware interpolates
+// them along the run.
 //
 // When 'depth' is supplied (the 3D view), the segment is depth-tested and written like a
 // triangle is, interpolating each vertex's projected depth along the run -- otherwise a line
 // behind a quad would draw over it, which reads as the line being in front.
 template <typename Sink>
 void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uint16_t word,
+              const DrawFx& fx, const uint16_t* g0, const uint16_t* g1,
               const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
 {
     const int x0 = static_cast<int>(std::lround(a.x)), y0 = static_cast<int>(std::lround(a.y));
@@ -347,11 +358,12 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
     const float sx = steps ? float(x1 - x0) / steps : 0.0f;
     const float sy = steps ? float(y1 - y0) / steps : 0.0f;
     const float sd = steps ? (b.depth - a.depth) / steps : 0.0f;
-    float fx = x0 + 0.5f, fy = y0 + 0.5f, fd = a.depth;
-    for (int i = 0; i <= steps; ++i, fx += sx, fy += sy, fd += sd)
+    float fxp = x0 + 0.5f, fyp = y0 + 0.5f, fd = a.depth;
+    for (int i = 0; i <= steps; ++i, fxp += sx, fyp += sy, fd += sd)
     {
-        const int x = static_cast<int>(fx), y = static_cast<int>(fy);
+        const int x = static_cast<int>(fxp), y = static_cast<int>(fyp);
         if (x < 0 || x >= width || y < 0 || y >= height) continue;
+        if (fx.mesh && ((x + y) & 1)) continue;
         if (ClipRejects(clip, x, y)) continue;
         const size_t idx = static_cast<size_t>(y) * width + x;
         if (depth)
@@ -359,22 +371,33 @@ void DrawLine(int width, int height, const RVert& a, const RVert& b, Rgba c, uin
             if (fd >= (*depth)[idx]) continue;
             (*depth)[idx] = fd;
         }
-        sink(idx, c.r, c.g, c.b, DrawFx{}, word);
+        uint8_t cr = c.r, cg = c.g, cb = c.b;
+        uint16_t w = word;
+        if (g0 && g1)
+        {
+            const float t = steps ? float(i) / steps : 0.0f;
+            auto lerp = [t](int s0, int s1) { return s0 + (s1 - s0) * t; };
+            ApplyGouraudPixel(cr, cg, cb, w, lerp(*g0 & 0x1F, *g1 & 0x1F),
+                              lerp((*g0 >> 5) & 0x1F, (*g1 >> 5) & 0x1F),
+                              lerp((*g0 >> 10) & 0x1F, (*g1 >> 10) & 0x1F));
+        }
+        sink(idx, cr, cg, cb, fx, w);
     }
 }
 
 // Draw a line primitive's edges: A-B for a line (kind 2), the full A-B-C-D-A outline for
-// a polyline (kind 1).
+// a polyline (kind 1). Each edge shades between the gouraud colours of its own two corners.
 template <typename Sink>
 void DrawEdges(int width, int height, const RVert v[4], uint8_t primKind, Rgba c, uint16_t word,
-               const ClipRect* clip, std::vector<float>* depth, Sink&& sink)
+               const DrawFx& fx, const GouraudQuad& g, const ClipRect* clip,
+               std::vector<float>* depth, Sink&& sink)
 {
-    DrawLine(width, height, v[0], v[1], c, word, clip, depth, sink);
-    if (primKind == 1)
+    const int edges = (primKind == 1) ? 4 : 1;
+    for (int k = 0; k < edges; ++k)
     {
-        DrawLine(width, height, v[1], v[2], c, word, clip, depth, sink);
-        DrawLine(width, height, v[2], v[3], c, word, clip, depth, sink);
-        DrawLine(width, height, v[3], v[0], c, word, clip, depth, sink);
+        const int n = (k + 1) & 3;
+        DrawLine(width, height, v[k], v[n], c, word, fx,
+                 g.on ? &g.corner[k] : nullptr, g.on ? &g.corner[n] : nullptr, clip, depth, sink);
     }
 }
 
@@ -718,8 +741,8 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
         const ClipRect* clip = r.clip.enable ? &r.clip : nullptr;
         if (r.primKind != 0)   // polyline/line: draw edges in solid color (no quad fill)
         {
-            DrawEdges(fbWidth, fbHeight, v, r.primKind, Rgb555ToRgba(r.color), r.color, clip,
-                      nullptr, sink);
+            DrawEdges(fbWidth, fbHeight, v, r.primKind, Rgb555ToRgba(r.color), r.color, r.fx,
+                      r.gouraud, clip, nullptr, sink);
             continue;
         }
         ExpandQuadInclusive(v);
@@ -819,8 +842,8 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             // with line commands would simply be absent, and the user has no way to tell that
             // from the game not having drawn it. No corner expansion: that exists to close the
             // seams between abutting quad strips, and a line has no interior to widen.
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, nullptr,
-                      &depth, lineSink);
+            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, DrawFx{},
+                      r.gouraud, nullptr, &depth, lineSink);
             continue;
         }
         ExpandQuadInclusive(v);
