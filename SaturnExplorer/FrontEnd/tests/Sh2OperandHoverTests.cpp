@@ -580,23 +580,53 @@ void TestMayAccessRangeOnlyRulesOutWhatItCanShowMisses()
     se_sh2_regs r{};
     r.r[4] = 0x06001000u;
     const DisassembledInstruction load = Decode(0x6142, "@r4,r1");        // mov.l @r4,r1
-    CHECK(Sh2MayAccessRange(load, r, 0x06001000u, 1));                    // inside the word
-    CHECK(Sh2MayAccessRange(load, r, 0x06001003u, 1));
-    CHECK(!Sh2MayAccessRange(load, r, 0x06001004u, 4));                   // just past it
-    CHECK(!Sh2MayAccessRange(load, r, 0x06000FFCu, 4));                   // just before it
-    CHECK(Sh2MayAccessRange(load, r, 0x06000FFEu, 4));                    // overlapping its start
+    CHECK(Sh2MayAccessRange(load, r, 0x06001000u, 1, true, true));                    // inside the word
+    CHECK(Sh2MayAccessRange(load, r, 0x06001003u, 1, true, true));
+    CHECK(!Sh2MayAccessRange(load, r, 0x06001004u, 4, true, true));                   // just past it
+    CHECK(!Sh2MayAccessRange(load, r, 0x06000FFCu, 4, true, true));                   // just before it
+    CHECK(Sh2MayAccessRange(load, r, 0x06000FFEu, 4, true, true));                    // overlapping its start
 
     // No memory operand: cannot be a data hit whatever is watched.
-    CHECK(!Sh2MayAccessRange(Sh2Decode(0x06000000, 0x0009), r, 0x06001000u, 4));   // nop
+    CHECK(!Sh2MayAccessRange(Sh2Decode(0x06000000, 0x0009), r, 0x06001000u, 4, true, true));   // nop
     // Updating operands and implicit stack accesses cannot be ruled out from the registers.
     const DisassembledInstruction post = Decode(0x6146, "@r4+,r1");       // mov.l @r4+,r1
-    CHECK(Sh2MayAccessRange(post, r, 0x07000000u, 4));
-    CHECK(Sh2MayAccessRange(Sh2Decode(0x06000000, 0x002B), r, 0x07000000u, 4));    // rte
+    CHECK(Sh2MayAccessRange(post, r, 0x07000000u, 4, true, true));
+    CHECK(Sh2MayAccessRange(Sh2Decode(0x06000000, 0x002B), r, 0x07000000u, 4, true, true));    // rte
+}
+
+void TestMayAccessRangeMatchesAliasesAndDirection()
+{
+    se_sh2_regs r{};
+    // mov.l r0,@r1 through the cache-through image of a watched cached address.
+    const DisassembledInstruction store = Decode(0x2102, "r0,@r1");
+    r.r[1] = 0x26001000u;
+    CHECK(Sh2MayAccessRange(store, r, 0x06001000u, 4, false, true));   // the emulator watches both
+    r.r[1] = 0x06001000u;
+    CHECK(Sh2MayAccessRange(store, r, 0x26001000u, 4, false, true));   // and the other way round
+    r.r[1] = 0x46001000u;
+    CHECK(!Sh2MayAccessRange(store, r, 0x06001000u, 4, false, true));  // only bit 29 is an alias
+
+    // Direction: a read does not trip a write watchpoint, nor a write a read one.
+    const DisassembledInstruction load = Decode(0x6112, "@r1,r1");
+    r.r[1] = 0x06001000u;
+    CHECK(!Sh2MayAccessRange(load, r, 0x06001000u, 4, false, true));
+    CHECK(Sh2MayAccessRange(load, r, 0x06001000u, 4, true, false));
+    CHECK(Sh2MayAccessRange(store, r, 0x06001000u, 4, false, true));
+    CHECK(!Sh2MayAccessRange(store, r, 0x06001000u, 4, true, false));
+    // tas.b reads and writes; tst.b #imm,@(r0,gbr) only reads.
+    const DisassembledInstruction tas = Sh2Decode(0x06000000, 0x411B);   // tas.b @r1
+    CHECK(Sh2MayAccessRange(tas, r, 0x06001000u, 1, true, false));
+    CHECK(Sh2MayAccessRange(tas, r, 0x06001000u, 1, false, true));
+    const DisassembledInstruction tst = Sh2Decode(0x06000000, 0xCC01);   // tst.b #1,@(r0,gbr)
+    r.r[0] = 0x06001000u; r.gbr = 0;
+    CHECK(Sh2MayAccessRange(tst, r, 0x06001000u, 1, true, false));
+    CHECK(!Sh2MayAccessRange(tst, r, 0x06001000u, 1, false, true));
 }
 
 int main()
 {
     TestMayAccessRangeOnlyRulesOutWhatItCanShowMisses();
+    TestMayAccessRangeMatchesAliasesAndDirection();
     TestEitherRegisterOperandIsHoverable();
     TestIndexedOperandIsOneHoverTarget();
     TestDisplacementOperandIsOneHoverTarget();

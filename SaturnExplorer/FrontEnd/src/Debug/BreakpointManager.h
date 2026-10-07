@@ -88,8 +88,9 @@ public:
     // ConditionalExecutionAt — the stop handler asks one question, the manager owns the policy.
     bool IsAccessLogHalt(uint32_t pc) const;
 
-    // Which kinds of enabled memory watchpoint could be behind a halt, given 'mayHit(address, size)'
-    // for whether the stopping instruction can touch a watchpoint's range. The stop event carries
+    // Which kinds of enabled memory watchpoint could be behind a halt, given
+    // 'mayHit(address, size, watchesRead, watchesWrite)' for whether the stopping instruction can
+    // make an access of a kind the watchpoint cares about within its range. The stop event carries
     // one reason for an execution breakpoint and a watchpoint alike, so a halt at an address with
     // an execution breakpoint says nothing about whether a watchpoint was also hit; this is how the
     // handler asks, so that a false execution guard does not discard an independent watchpoint.
@@ -105,7 +106,9 @@ public:
         for (const Breakpoint& b : mBps)
         {
             if (!b.enabled || b.kind == BpKind::Execution) continue;
-            if (!mayHit(b.address, b.size)) continue;
+            const bool read  = b.kind == BpKind::MemRead  || b.kind == BpKind::MemReadWrite;
+            const bool write = b.kind == BpKind::MemWrite || b.kind == BpKind::MemReadWrite;
+            if (!mayHit(b.address, b.size, read, write)) continue;
             (b.logAccess ? c.logging : c.halting) = true;
         }
         return c;

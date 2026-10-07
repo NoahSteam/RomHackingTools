@@ -70,6 +70,16 @@ int main()
         const uint8_t t0 = a.Get(id)->rearm;
         a.SetEnabled(id, true);
         Check(a.Get(id)->rearm != t0, "re-enabling advances the re-arm token");
+
+        // An editor opened before the action fired holds the old token and the old enabled state.
+        // Saving it must neither roll the token back nor leave the descriptor looking unchanged.
+        ExecutionAction stale = *a.Get(id);
+        a.SetEnabled(id, false);                        // it fires and spends itself (token moves)
+        const uint8_t spentToken = a.Get(id)->rearm;
+        a.Update(stale);                                // the editor's OK: enabled again
+        Check(a.Get(id)->enabled, "the editor's enabled state stands");
+        Check(a.Get(id)->rearm != spentToken && a.Get(id)->rearm != stale.rearm,
+              "and the token moves on from both the live one and the stale copy");
     }
 
     // Every N, counted here: the Nth, 2Nth... qualifying execution.

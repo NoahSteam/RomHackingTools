@@ -138,7 +138,7 @@ void BreakpointManager::SetLogAccess(uint64_t id, bool on)
 
 bool BreakpointManager::OnlyLoggingWatchpoints() const
 {
-    const WatchCauses c = WatchCausesFor([](uint32_t, uint32_t) { return true; });
+    const WatchCauses c = WatchCausesFor([](uint32_t, uint32_t, bool, bool) { return true; });
     return c.logging && !c.halting;
 }
 

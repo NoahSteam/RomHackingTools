@@ -144,9 +144,16 @@ int main()
         const uint64_t halting = bps.AddMemory(0x06001000u, 4, BpKind::MemWrite);
         const uint64_t logging = bps.AddMemory(0x06002000u, 4, BpKind::MemRead);
         bps.SetLogAccess(logging, true);
-        auto all = [](uint32_t, uint32_t) { return true; };
-        auto none = [](uint32_t, uint32_t) { return false; };
-        auto onlyFirst = [](uint32_t a, uint32_t) { return a == 0x06001000u; };
+        auto all = [](uint32_t, uint32_t, bool, bool) { return true; };
+        auto none = [](uint32_t, uint32_t, bool, bool) { return false; };
+        auto onlyFirst = [](uint32_t a, uint32_t, bool, bool) { return a == 0x06001000u; };
+        // Direction reaches the predicate: a write watchpoint asks about writes only.
+        bool sawWriteOnly = false;
+        bps.WatchCausesFor([&](uint32_t a, uint32_t, bool rd, bool wr) {
+            if (a == 0x06001000u) sawWriteOnly = !rd && wr;
+            return false;
+        });
+        Check(sawWriteOnly, "a write watchpoint passes read=false, write=true");
         BreakpointManager::WatchCauses c = bps.WatchCausesFor(all);
         Check(c.halting && c.logging, "both kinds may have hit");
         c = bps.WatchCausesFor(none);

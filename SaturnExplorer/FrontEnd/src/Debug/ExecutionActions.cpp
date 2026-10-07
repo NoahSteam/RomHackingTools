@@ -74,9 +74,17 @@ void ExecutionActions::Update(const ExecutionAction& in)
         if (a.id == in.id)
         {
             const uint64_t hits = a.hits;   // preserve the runtime hit count
+            // The re-arm token is runtime state the editor never saw: a copy taken before the
+            // action fired holds an older one, and writing it back would make the descriptor look
+            // like the one the emulator already has. The editor's enabled state is authoritative,
+            // so a change from the live one is a re-arm and advances the live token.
+            const uint8_t rearm = a.rearm;
+            const bool wasEnabled = a.enabled;
             a = in;
             Normalize(a);
             a.hits = hits;
+            a.rearm = rearm;
+            if (a.enabled != wasEnabled) a.BumpRearm();
             a.seen = 0;                     // the policy may have changed: count afresh
             ++mGeneration;
             return;

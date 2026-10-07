@@ -2131,11 +2131,11 @@ BreakpointManager::WatchCauses App::WatchCausesAtHalt(int cpu, uint32_t pc)
     se_sh2_regs regs{};
     DisassembledInstruction ins;
     enum { Unfetched, Fetched, Failed } state = Unfetched;
-    return mBreakpoints.WatchCausesFor([&](uint32_t addr, uint32_t size) {
+    return mBreakpoints.WatchCausesFor([&](uint32_t addr, uint32_t size, bool rd, bool wr) {
         if (state == Unfetched)
             state = (mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK &&
                      FetchSh2Instruction(pc, ins)) ? Fetched : Failed;
-        return state == Failed || Sh2MayAccessRange(ins, regs, addr, size);
+        return state == Failed || Sh2MayAccessRange(ins, regs, addr, size, rd, wr);
     });
 }
 
