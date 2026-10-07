@@ -144,6 +144,8 @@ private:
     std::vector<uint8_t> mWindowBytes;
     uint32_t             mWindowBytesBase = 0;
     bool                 mHaveWindowBytes = false;
+    uint8_t              mWindowPrev[2] = {};      // the instruction just before mWindowBase
+    bool                 mHaveWindowPrev = false;
     uint64_t             mWindowBytesSource = 0;   // backend.SourceId() the bytes were read from
 
     // User comment store (address -> note), overlaid on the auto-generated comment

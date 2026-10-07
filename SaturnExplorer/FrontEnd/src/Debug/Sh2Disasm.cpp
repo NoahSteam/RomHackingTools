@@ -23,6 +23,35 @@ struct Out
     }
 };
 
+// The address a PC-relative operand names for a given PC. 'pc' is what the hardware reads: the
+// instruction's address plus four in the ordinary case.
+uint32_t PcRelAddress(Sh2PcRel kind, uint32_t pc, uint32_t disp)
+{
+    return (kind == Sh2PcRel::Word ? pc : (pc & ~3u)) + disp;
+}
+
+void WritePcRelOperand(DisassembledInstruction& ins, uint32_t pc, int reg)
+{
+    Out o{ ins };
+    const bool mova = ins.PcRel == Sh2PcRel::Mova;
+    if (ins.PcRelAmbiguous)
+    {
+        if (mova) o.ops("@(0x%X,pc),r0", ins.PcRelDisp);
+        else      o.ops("@(0x%X,pc),r%d", ins.PcRelDisp, reg);
+        return;
+    }
+    const uint32_t ea = PcRelAddress(ins.PcRel, pc, ins.PcRelDisp);
+    if (mova) o.ops("@(0x%08X),r0", ea);
+    else      o.ops("@(0x%08X),r%d", ea, reg);
+}
+
+void SetPcRel(DisassembledInstruction& ins, Sh2PcRel kind, uint32_t disp, int reg)
+{
+    ins.PcRel = kind;
+    ins.PcRelDisp = disp;
+    WritePcRelOperand(ins, ins.Address + 4, reg);
+}
+
 int32_t s8ext(uint16_t v) { return (int32_t)(int8_t)(v & 0xFF); }
 int32_t s12(uint16_t v)   { int32_t d = v & 0xFFF; if (d & 0x800) d |= ~0xFFF; return d; }
 }  // namespace
@@ -53,8 +82,8 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
             break;
         case 0x3:
             switch (m) {
-            case 0: o.set("bsrf"); o.ops("r%d", n); ins.IsBranch = ins.IsCall = true; return ins;
-            case 2: o.set("braf"); o.ops("r%d", n); ins.IsBranch = true; return ins;
+            case 0: o.set("bsrf"); o.ops("r%d", n); ins.IsBranch = ins.IsCall = ins.HasDelaySlot = true; return ins;
+            case 2: o.set("braf"); o.ops("r%d", n); ins.IsBranch = ins.HasDelaySlot = true; return ins;
             }
             break;
         case 0x4: o.set("mov.b"); o.ops("r%d,@(r0,r%d)", m, n); return ins;
@@ -82,9 +111,9 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
             break;
         case 0xB:
             switch (op) {
-            case 0x000B: o.set("rts");   ins.Operands.clear(); ins.IsBranch = ins.IsReturn = true; return ins;
+            case 0x000B: o.set("rts");   ins.Operands.clear(); ins.IsBranch = ins.IsReturn = ins.HasDelaySlot = true; return ins;
             case 0x001B: o.set("sleep"); ins.Operands.clear(); return ins;
-            case 0x002B: o.set("rte");   ins.Operands.clear(); ins.IsBranch = ins.IsReturn = true; return ins;
+            case 0x002B: o.set("rte");   ins.Operands.clear(); ins.IsBranch = ins.IsReturn = ins.HasDelaySlot = true; return ins;
             }
             break;
         case 0xC: o.set("mov.b"); o.ops("@(r0,r%d),r%d", m, n); return ins;
@@ -148,7 +177,7 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x08: o.set("shll2"); o.ops("r%d", n); return ins;
         case 0x09: o.set("shlr2"); o.ops("r%d", n); return ins;
         case 0x0A: o.set("lds");   o.ops("r%d,mach", n); return ins;
-        case 0x0B: o.set("jsr");   o.ops("@r%d", n); ins.IsBranch = ins.IsCall = true; return ins;
+        case 0x0B: o.set("jsr");   o.ops("@r%d", n); ins.IsBranch = ins.IsCall = ins.HasDelaySlot = true; return ins;
         case 0x0E: o.set("ldc");   o.ops("r%d,sr", n); return ins;
         case 0x10: o.set("dt");    o.ops("r%d", n); return ins;
         case 0x11: o.set("cmp/pz");o.ops("r%d", n); return ins;
@@ -173,10 +202,10 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x28: o.set("shll16");o.ops("r%d", n); return ins;
         case 0x29: o.set("shlr16");o.ops("r%d", n); return ins;
         case 0x2A: o.set("lds");   o.ops("r%d,pr", n); return ins;
-        case 0x2B: o.set("jmp");   o.ops("@r%d", n); ins.IsBranch = true; return ins;
+        case 0x2B: o.set("jmp");   o.ops("@r%d", n); ins.IsBranch = ins.HasDelaySlot = true; return ins;
         case 0x2E: o.set("ldc");   o.ops("r%d,vbr", n); return ins;
-        case 0x0F: o.set("mac.w"); o.ops("@r%d+,@r%d+", m, n); return ins;
         }
+        if (d4 == 0xF) { o.set("mac.w"); o.ops("@r%d+,@r%d+", m, n); return ins; }
         break;
 
     case 0x5:  o.set("mov.l"); o.ops("@(0x%X,r%d),r%d", d4 * 4, m, n); return ins;
@@ -220,20 +249,20 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
             const uint32_t t = address + 4 + s8ext(op) * 2;
             o.set(mn); o.ops("0x%08X", t);
             ins.HasBranchTarget = true; ins.BranchTarget = t;
-            ins.IsBranch = ins.IsConditional = true; return ins; }
+            ins.IsBranch = ins.IsConditional = true;
+            ins.HasDelaySlot = sub == 0xD || sub == 0xF; return ins; }
         }
         break;
 
-    case 0x9: { const uint32_t t = address + 4 + (op & 0xFF) * 2;
-                o.set("mov.w"); o.ops("@(0x%08X),r%d", t, n); return ins; }
+    case 0x9: o.set("mov.w"); SetPcRel(ins, Sh2PcRel::Word, (op & 0xFF) * 2, n); return ins;
 
     case 0xA: { const uint32_t t = address + 4 + s12(op) * 2;
                 o.set("bra"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                ins.IsBranch = true; return ins; }
+                ins.IsBranch = ins.HasDelaySlot = true; return ins; }
 
     case 0xB: { const uint32_t t = address + 4 + s12(op) * 2;
                 o.set("bsr"); o.ops("0x%08X", t); ins.HasBranchTarget = true; ins.BranchTarget = t;
-                ins.IsBranch = ins.IsCall = true; return ins; }
+                ins.IsBranch = ins.IsCall = ins.HasDelaySlot = true; return ins; }
 
     case 0xC:
         switch ((op >> 8) & 0xF) {
@@ -244,8 +273,7 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x4: o.set("mov.b"); o.ops("@(0x%X,gbr),r0", imm); return ins;
         case 0x5: o.set("mov.w"); o.ops("@(0x%X,gbr),r0", imm * 2); return ins;
         case 0x6: o.set("mov.l"); o.ops("@(0x%X,gbr),r0", imm * 4); return ins;
-        case 0x7: { const uint32_t t = (address & ~3u) + 4 + imm * 4;
-                    o.set("mova"); o.ops("@(0x%08X),r0", t); return ins; }
+        case 0x7: o.set("mova"); SetPcRel(ins, Sh2PcRel::Mova, imm * 4, 0); return ins;
         case 0x8: o.set("tst");   o.ops("#0x%X,r0", imm); return ins;
         case 0x9: o.set("and");   o.ops("#0x%X,r0", imm); return ins;
         case 0xA: o.set("xor");   o.ops("#0x%X,r0", imm); return ins;
@@ -257,8 +285,7 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         }
         break;
 
-    case 0xD: { const uint32_t t = (address & ~3u) + 4 + (op & 0xFF) * 4;
-                o.set("mov.l"); o.ops("@(0x%08X),r%d", t, n); return ins; }
+    case 0xD: o.set("mov.l"); SetPcRel(ins, Sh2PcRel::Long, (op & 0xFF) * 4, n); return ins;
 
     case 0xE:  o.set("mov"); o.ops("#0x%X,r%d", (uint8_t)imm, n); return ins;
 
@@ -270,6 +297,53 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
     o.ops("0x%04X", op);
     ins.IsValid = false;
     return ins;
+}
+
+DisassembledInstruction Sh2DecodeAfterBranch(uint32_t address, uint16_t op,
+                                             const DisassembledInstruction& branch)
+{
+    DisassembledInstruction ins = Sh2Decode(address, op);
+    if (ins.PcRel == Sh2PcRel::None || !branch.HasDelaySlot) return ins;
+    const int reg = ins.PcRel == Sh2PcRel::Mova ? 0 : (op >> 8) & 0xF;
+    ins.PcRelAmbiguous = true;
+    ins.PcRelDirectAddress = PcRelAddress(ins.PcRel, address + 4, ins.PcRelDisp);
+    if (branch.HasBranchTarget)
+    {
+        ins.PcRelHasSlotAddress = true;
+        ins.PcRelSlotAddress = PcRelAddress(ins.PcRel, branch.BranchTarget + 2, ins.PcRelDisp);
+    }
+    WritePcRelOperand(ins, 0, reg);
+    return ins;
+}
+
+std::vector<Sh2WindowLine> Sh2DecodeWindow(uint32_t base, const uint8_t* bytes, size_t size,
+                                           int count, const uint8_t* prevBytes)
+{
+    std::vector<Sh2WindowLine> lines;
+    lines.reserve(count > 0 ? (size_t)count : 0);
+    DisassembledInstruction prev;   // the instruction before the row being decoded
+    bool havePrev = false;
+    if (prevBytes)
+    {
+        prev = Sh2Decode(base - 2, (uint16_t)((prevBytes[0] << 8) | prevBytes[1]));
+        havePrev = true;
+    }
+    for (int k = 0; k < count; ++k)
+    {
+        Sh2WindowLine ln;
+        ln.addr = base + (uint32_t)k * 2;
+        if (bytes && (size_t)(k * 2 + 1) < size)
+        {
+            ln.op = (uint16_t)((bytes[k * 2] << 8) | bytes[k * 2 + 1]);
+            ln.ins = havePrev ? Sh2DecodeAfterBranch(ln.addr, ln.op, prev) : Sh2Decode(ln.addr, ln.op);
+            ln.readable = true;
+            prev = ln.ins;
+            havePrev = true;
+        }
+        else havePrev = false;
+        lines.push_back(std::move(ln));
+    }
+    return lines;
 }
 
 DisassembledInstruction Sh2DecodeAt(uint32_t address, const uint8_t* bytes, size_t size)

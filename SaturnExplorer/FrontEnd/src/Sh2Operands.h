@@ -50,17 +50,42 @@ int Sh2MemOperandIndex(const std::string& operands);
 // Bytes the mnemonic's .b/.w/.l suffix reads or writes (1/2/4); anything else is a long.
 uint32_t Sh2AccessWidth(const std::string& mnemonic);
 
+// True when the mnemonic's "@..." operand is an address the instruction uses rather than memory it
+// reads or writes: jmp/jsr jump there, mova loads the address itself. Previewing a value there, or
+// offering to watch it, would describe something the instruction never does.
+bool Sh2OperandIsAddressOnly(const std::string& mnemonic);
+
 // Effective address of a memory operand ("@..."), from the operand text and the live
 // registers. The mnemonic's .b/.w/.l suffix gives the access width (outWidth 1/2/4).
 // False when the operand is not a memory access or is not statically resolvable.
 bool ResolveSh2MemOperand(const std::string& operand, const std::string& mnemonic,
                           const se_sh2_regs& r, uint32_t& outAddr, uint32_t& outWidth);
 
-// As above for a whole instruction. 'index' picks one operand — the one the pointer was
+// As above for a whole instruction, but only for operands the instruction actually accesses: false
+// for jmp/jsr/mova (see Sh2OperandIsAddressOnly) and for a PC-relative operand whose address is not
+// known (DisassembledInstruction::PcRelAmbiguous). 'index' picks one operand — the one the pointer was
 // over — so a menu acting on "mac.l @r4+,@r5+" can act on the half the user aimed at;
 // -1 falls back to the first operand that resolves, for callers with no pointer to go on.
 bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
                           uint32_t& outAddr, uint32_t& outWidth);
+
+// The address an "@..." operand names, whether or not the instruction accesses memory there: also
+// resolves the jump destination of jmp/jsr and the address mova loads. Same arguments as above.
+bool ResolveSh2OperandAddress(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
+                              uint32_t& outAddr, uint32_t& outWidth);
+
+// True when operand 'index' is a PC-relative operand whose address cannot be told from the code alone
+// (see DisassembledInstruction::PcRelAmbiguous).
+bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index);
+
+// The row menu's "View Address in Memory" item, drawn at the cursor. Returns true when it was
+// activated, with the address to show in 'outAddr'. 'operand' is the operand the menu was opened on
+// (-1: opened elsewhere on the row). It aims at that operand's address, and falls back to the
+// instruction's own address when there is none, so it is available on every ordinary row -- but it is
+// disabled for an uncertain PC-relative operand, where either address would be a guess presented as
+// the operand's.
+bool DrawViewAddressMenuItem(const DisassembledInstruction& ins, int operand, const se_sh2_regs& r,
+                             uint32_t& outAddr);
 
 // Reads 'n' (1/2/4) big-endian bytes at 'addr' into 'outValue'; false if the read fails.
 // Deliberately the same contract as IFormatContext::ReadMem (Debug/FormatString.h), so a
@@ -74,6 +99,12 @@ using Sh2MemReader = std::function<bool(uint32_t addr, uint32_t n, uint32_t& out
 // tooltip rather than open an empty one.
 std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins, int index,
                                               const se_sh2_regs& r, const Sh2MemReader& readMem);
+
+// A short, human-readable note for one instruction (branch intent, immediates with their real sign
+// extension, compares, loads/stores, literal-pool resolution). Structural, not dataflow; "" when
+// nothing useful can be said.
+std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& r,
+                       const Sh2MemReader& readMem);
 
 struct Sh2OperandsDrawn
 {

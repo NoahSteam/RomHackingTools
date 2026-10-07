@@ -11,6 +11,7 @@
 // glyphs: a headless context has no font atlas upload, so nothing may be inferred from
 // rendered text. Item rects and hover state are ImGui core state and are reliable.
 
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -353,6 +354,227 @@ void TestRegMaskMatchesWholeTokens()
 
 }  // namespace
 
+void TestMacWordDecodesForEverySourceRegister()
+{
+    // The low byte used to be matched whole against 0x0F, so only a source of r0 decoded.
+    for (int m = 0; m < 16; ++m)
+    {
+        const DisassembledInstruction ins = Sh2Decode(0x06000000, (uint16_t)(0x450F | (m << 4)));
+        char want[24]; std::snprintf(want, sizeof(want), "@r%d+,@r5+", m);
+        CHECK(ins.IsValid && ins.Mnemonic == "mac.w" && ins.Operands == want);
+    }
+}
+
+void TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress()
+{
+    // bra 0x06000200 at 0x06000100. The mova after it is in the slot when the branch is taken (PC =
+    // destination + 2 -> 0x06000200), but it is at 0x06000104 if something jumps straight to it. Memory
+    // cannot say which, so neither is printed as the operand.
+    const DisassembledInstruction bra = Sh2Decode(0x06000100, 0xA07E);
+    CHECK(bra.HasDelaySlot && bra.HasBranchTarget && bra.BranchTarget == 0x06000200);
+    const DisassembledInstruction alone = Sh2Decode(0x06000102, 0xC700);
+    CHECK(alone.Operands == "@(0x06000104),r0" && !alone.PcRelAmbiguous);
+    const DisassembledInstruction after = Sh2DecodeAfterBranch(0x06000102, 0xC700, bra);
+    CHECK(after.PcRelAmbiguous && after.Operands == "@(0x0,pc),r0");
+    CHECK(after.PcRelDirectAddress == 0x06000104 && after.PcRelHasSlotAddress &&
+          after.PcRelSlotAddress == 0x06000200);
+    // mov.w / mov.l literals: the same two candidates under their own formulas.
+    const DisassembledInstruction w = Sh2DecodeAfterBranch(0x06000102, 0x9102, bra);
+    CHECK(w.PcRelDirectAddress == 0x0600010A && w.PcRelSlotAddress == 0x06000206);   // PC + 4 each
+    const DisassembledInstruction l = Sh2DecodeAfterBranch(0x06000102, 0xD102, bra);
+    CHECK(l.PcRelDirectAddress == 0x0600010C && l.PcRelSlotAddress == 0x06000208);
+    // The ambiguous operand is neither a memory access nor resolvable, and the tooltip lists both.
+    const se_sh2_regs r = TestRegs();
+    uint32_t ea = 0, wd = 0;
+    CHECK(!ResolveSh2MemOperand(after, -1, r, ea, wd) && !ResolveSh2OperandAddress(after, -1, r, ea, wd));
+    CHECK(Join(Sh2OperandHoverLines(after, 0, r, Reader())) ==
+          "reached directly: address = 06000104\nin the slot of the taken branch: address = 06000200\n");
+    CHECK(Join(Sh2OperandHoverLines(l, 0, r, Reader())) ==
+          "reached directly: [0600010C] = DEADBEEF\nin the slot of the taken branch: [06000208] = DEADBEEF\n");
+    // After something that is not a delayed branch, nothing is in question.
+    const DisassembledInstruction nop = Sh2Decode(0x06000100, 0x0009);
+    CHECK(Sh2DecodeAfterBranch(0x06000102, 0xC700, nop).Operands == alone.Operands);
+}
+
+void TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress()
+{
+    const DisassembledInstruction rts = Sh2Decode(0x06000100, 0x000B);
+    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt.s: destination static
+    const DisassembledInstruction bt  = Sh2Decode(0x06000100, 0x8900);   // no delay slot
+    CHECK(rts.HasDelaySlot && bts.HasDelaySlot && !bt.HasDelaySlot);
+    const se_sh2_regs r = TestRegs();
+    const DisassembledInstruction a = Sh2DecodeAfterBranch(0x06000102, 0xD102, rts);
+    CHECK(a.PcRelAmbiguous && !a.PcRelHasSlotAddress);
+    CHECK(Join(Sh2OperandHoverLines(a, 0, r, Reader())).find("depends on its destination") != std::string::npos);
+    CHECK(Sh2Comment(a, r, Reader()) == "PC-relative: address depends on whether this is the branch's delay slot");
+    const DisassembledInstruction b = Sh2DecodeAfterBranch(0x06000102, 0xD102, bts);
+    CHECK(b.PcRelAmbiguous && b.PcRelHasSlotAddress && b.PcRelSlotAddress == ((bts.BranchTarget + 2) & ~3u) + 8);
+}
+
+void TestWindowDecodingDoesNotDependOnWhereTheWindowStarts()
+{
+    // 0x06000100: bra 0x06000200 / 0x06000102: mova @(0,pc),r0 / 0x06000104: nop
+    const uint8_t code[] = { 0xA0, 0x7E, 0xC7, 0x00, 0x00, 0x09 };
+    // Window A holds the branch; window B starts on the mova with the branch as its predecessor.
+    const auto a = Sh2DecodeWindow(0x06000100, code, 6, 3, nullptr);
+    const auto b = Sh2DecodeWindow(0x06000102, code + 2, 4, 2, code);
+    CHECK(a.size() == 3 && b.size() == 2);
+    CHECK(a[1].ins.PcRelAmbiguous && b[0].ins.PcRelAmbiguous);
+    CHECK(a[1].ins.Operands == b[0].ins.Operands);
+    CHECK(a[1].ins.PcRelDirectAddress == b[0].ins.PcRelDirectAddress);
+    CHECK(a[1].ins.PcRelSlotAddress == b[0].ins.PcRelSlotAddress && b[0].ins.PcRelSlotAddress == 0x06000200);
+    // Without the predecessor the first row cannot know, and decodes as an ordinary instruction.
+    const auto c = Sh2DecodeWindow(0x06000102, code + 2, 4, 2, nullptr);
+    CHECK(!c[0].ins.PcRelAmbiguous && c[0].ins.Operands == "@(0x06000104),r0");
+    // Rows past the readable bytes are unreadable and break the chain.
+    const auto d = Sh2DecodeWindow(0x06000100, code, 3, 3, nullptr);
+    CHECK(d[0].readable && !d[1].readable && !d[2].readable);
+}
+
+// The row's right-click menu with just the item under test, driven the way the panel drives it: the
+// operand under the pointer is latched when the menu opens and handed to DrawViewAddressMenuItem.
+struct MenuRow
+{
+    DisassembledInstruction ins;
+    Sh2OperandsDrawn drawn;
+    ImVec2 cellMin {}, cellMax {};
+    int    operand = -2;           // latched when the menu opened
+    bool   menuShown = false;
+    ImVec2 otherMin {}, otherMax {};
+    ImVec2 itemMin {}, itemMax {};
+    int    activations = 0;
+    uint32_t viewAddr = 0;
+
+    void Draw()
+    {
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(600.0f, 200.0f));
+        ImGui::Begin("Asm", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        drawn = DrawSh2Operands(ins);
+        cellMin = start;
+        cellMax = ImGui::GetItemRectMax();
+        if (drawn.rightClicked) { operand = drawn.hovered; ImGui::OpenPopup("ctx"); }
+        // Another cell of the row, which opens the same menu with no operand (the panel's openRowContext).
+        ImGui::SameLine(300.0f);
+        ImGui::TextUnformatted("comment");
+        otherMin = ImGui::GetItemRectMin();
+        otherMax = ImGui::GetItemRectMax();
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { operand = -1; ImGui::OpenPopup("ctx"); }
+        menuShown = false;
+        if (ImGui::BeginPopup("ctx"))
+        {
+            menuShown = true;
+            uint32_t addr = 0;
+            const bool hit = DrawViewAddressMenuItem(ins, operand, TestRegs(), addr);
+            itemMin = ImGui::GetItemRectMin();
+            itemMax = ImGui::GetItemRectMax();
+            if (hit) { ++activations; viewAddr = addr; }
+            ImGui::EndPopup();
+        }
+        ImGui::End();
+    }
+};
+
+// Right-click operand 'operand' of 'row' (-1: another cell of the row), then click "View Address in Memory". Returns whether the item was activated.
+bool ClickViewAddress(MenuRow& row, int operand)
+{
+    ImGuiHarness harness([&] { row.Draw(); });
+    harness.Settle();
+    const float y = (row.cellMin.y + row.cellMax.y) * 0.5f;
+    bool opened = false;
+    if (operand < 0)
+    {
+        const ImVec2 p((row.otherMin.x + row.otherMax.x) * 0.5f, (row.otherMin.y + row.otherMax.y) * 0.5f);
+        harness.Hover(p);
+        harness.RightClick(p);
+        opened = row.menuShown;
+    }
+    else
+        for (float x = row.cellMin.x + 0.5f; x < row.cellMax.x && !opened; x += 1.0f)
+        {
+            harness.Hover(ImVec2(x, y));
+            if (row.drawn.hovered != operand) continue;
+            harness.RightClick(ImVec2(x, y));
+            opened = row.menuShown;
+        }
+    Check(opened, "the row menu opens", __LINE__);
+    const ImVec2 centre((row.itemMin.x + row.itemMax.x) * 0.5f, (row.itemMin.y + row.itemMax.y) * 0.5f);
+    harness.Hover(centre);
+    harness.Click(centre);
+    return row.activations > 0;
+}
+
+void TestViewAddressIsDisabledForAnUncertainPcRelativeOperand()
+{
+    // bra at 0x06000100 with a mova after it: the operand's address depends on how that mova is reached.
+    const DisassembledInstruction bra = Sh2Decode(0x06000100, 0xA07E);
+    MenuRow amb;
+    amb.ins = Sh2DecodeAfterBranch(0x06000102, 0xC700, bra);
+    CHECK(amb.ins.Operands == "@(0x0,pc),r0");
+    CHECK(!ClickViewAddress(amb, 0));      // the "@(0x0,pc)" operand: disabled, nothing opened
+    CHECK(amb.operand == 0);
+
+    // Control: the same menu on an ordinary operand does activate, at the operand's own address.
+    MenuRow load;
+    load.ins = Sh2Decode(0x06000000, 0x6142);   // mov.l @r4,r1
+    CHECK(ClickViewAddress(load, 0) && load.viewAddr == TestRegs().r[4]);
+
+    // Ordinary row actions keep the instruction-address fallback: the register half of an operand
+    // pair, and the row elsewhere, both open the instruction itself -- even on the uncertain row.
+    MenuRow reg;
+    reg.ins = Sh2Decode(0x06000000, 0x6142);
+    CHECK(ClickViewAddress(reg, 1) && reg.viewAddr == 0x06000000);
+    MenuRow elsewhere;
+    elsewhere.ins = amb.ins;
+    CHECK(ClickViewAddress(elsewhere, -1) && elsewhere.viewAddr == 0x06000102);
+    MenuRow ambReg;
+    ambReg.ins = amb.ins;
+    CHECK(ClickViewAddress(ambReg, 1) && ambReg.viewAddr == 0x06000102);
+}
+
+void TestGbrIndexedByteOperationsResolve()
+{
+    const se_sh2_regs r = TestRegs();   // r0 = 0x10, gbr = 0x20000000
+    for (uint16_t op : { 0xCC03, 0xCD03, 0xCE03, 0xCF03 })
+    {
+        const DisassembledInstruction ins = Sh2Decode(0x06000000, op);
+        uint32_t ea = 0, w = 0;
+        CHECK(ResolveSh2MemOperand(ins, -1, r, ea, w) && ea == 0x20000010 && w == 1);
+        CHECK(Join(Sh2OperandHoverLines(ins, 1, r, Reader())) == "r0  = 00000010\n[20000010] = DE\n");
+    }
+}
+
+void TestAddressOperandsAreNotMemoryAccesses()
+{
+    const se_sh2_regs r = TestRegs();
+    const DisassembledInstruction jsr = Sh2Decode(0x06000000, 0x440B);   // jsr @r4
+    uint32_t ea = 0, w = 0;
+    CHECK(!ResolveSh2MemOperand(jsr, 0, r, ea, w));
+    CHECK(ResolveSh2OperandAddress(jsr, 0, r, ea, w) && ea == 0x06004000);
+    CHECK(Join(Sh2OperandHoverLines(jsr, 0, r, Reader())) == "r4  = 06004000\ntarget = 06004000\n");
+
+    const DisassembledInstruction mova = Sh2Decode(0x06000000, 0xC701);
+    CHECK(!ResolveSh2MemOperand(mova, 0, r, ea, w));
+    CHECK(ResolveSh2OperandAddress(mova, 0, r, ea, w) && ea == 0x06000008);
+    CHECK(Join(Sh2OperandHoverLines(mova, 0, r, Reader())) == "address = 06000008\n");
+
+    // A real load still previews its value.
+    CHECK(ResolveSh2MemOperand(Sh2Decode(0x06000000, 0x6142), 0, r, ea, w));
+}
+
+void TestImmediateCommentsSignExtendAndTstIsNotAnAssignment()
+{
+    const se_sh2_regs r = TestRegs();
+    auto C = [&](uint16_t op) { return Sh2Comment(Sh2Decode(0x06000000, op), r, Reader()); };
+    CHECK(C(0xE0FF) == "r0 = 0xFFFFFFFF");
+    CHECK(C(0xE041) == "r0 = 0x41 ('A')");
+    CHECK(C(0x88FF) == "compare r0 with 0xFFFFFFFF");
+    CHECK(C(0x7FFE) == "r15 += -2");
+    CHECK(C(0xC8FF) == "T = ((r0 & 0xFF) == 0)");
+    CHECK(C(0xC9FF) == "r0 = r0 and 0xFF");   // and/or/xor zero-extend: nothing to correct
+}
+
 int main()
 {
     TestEitherRegisterOperandIsHoverable();
@@ -367,6 +589,14 @@ int main()
     TestMemOperandIndexDecidesLoadVersusStore();
     TestAccessWidthFromMnemonic();
     TestRegMaskMatchesWholeTokens();
+    TestMacWordDecodesForEverySourceRegister();
+    TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress();
+    TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress();
+    TestWindowDecodingDoesNotDependOnWhereTheWindowStarts();
+    TestViewAddressIsDisabledForAnUncertainPcRelativeOperand();
+    TestGbrIndexedByteOperationsResolve();
+    TestAddressOperandsAreNotMemoryAccesses();
+    TestImmediateCommentsSignExtendAndTstIsNotAnAssignment();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " SH-2 operand hover check(s) failed\n";

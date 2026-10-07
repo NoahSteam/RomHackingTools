@@ -89,6 +89,11 @@ int Sh2MemOperandIndex(const std::string& operands)
     return -1;
 }
 
+bool Sh2OperandIsAddressOnly(const std::string& mnemonic)
+{
+    return mnemonic == "jmp" || mnemonic == "jsr" || mnemonic == "mova";
+}
+
 bool ResolveSh2MemOperand(const std::string& operand, const std::string& mnemonic,
                           const se_sh2_regs& r, uint32_t& outAddr, uint32_t& outWidth)
 {
@@ -107,6 +112,9 @@ bool ResolveSh2MemOperand(const std::string& operand, const std::string& mnemoni
     if (std::strncmp(s.c_str(), "(0x", 3) == 0 && s.find(",gbr)") != std::string::npos &&
         std::sscanf(s.c_str(), "(0x%x", &disp) == 1)
     { outAddr = r.gbr + disp; return true; }
+    // @(r0,gbr): the byte read-modify-write forms (tst.b/and.b/xor.b/or.b)
+    if (s.compare(0, 8, "(r0,gbr)") == 0)
+    { outAddr = r.r[0] + r.gbr; return true; }
     // @(r0,rN)
     if (std::sscanf(s.c_str(), "(r0,r%u)", &reg2) == 1 && reg2 < 16)
     { outAddr = r.r[0] + r.r[reg2]; return true; }
@@ -118,8 +126,8 @@ bool ResolveSh2MemOperand(const std::string& operand, const std::string& mnemoni
     return false;
 }
 
-bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
-                          uint32_t& outAddr, uint32_t& outWidth)
+bool ResolveSh2OperandAddress(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
+                              uint32_t& outAddr, uint32_t& outWidth)
 {
     if (index < 0) index = Sh2MemOperandIndex(ins.Operands);
     Sh2OperandSpan sp;
@@ -127,6 +135,31 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
     // frame: those leave with no operand walked and no text copied.
     return Sh2OperandAt(ins.Operands, index, sp) &&
            ResolveSh2MemOperand(OperandText(ins.Operands, sp), ins.Mnemonic, r, outAddr, outWidth);
+}
+
+bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
+                          uint32_t& outAddr, uint32_t& outWidth)
+{
+    return !Sh2OperandIsAddressOnly(ins.Mnemonic) &&
+           ResolveSh2OperandAddress(ins, index, r, outAddr, outWidth);
+}
+
+bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index)
+{
+    Sh2OperandSpan sp;
+    return ins.PcRelAmbiguous && Sh2OperandAt(ins.Operands, index, sp) &&
+           ins.Operands.find("pc", sp.begin) < sp.end;
+}
+
+bool DrawViewAddressMenuItem(const DisassembledInstruction& ins, int operand, const se_sh2_regs& r,
+                             uint32_t& outAddr)
+{
+    if (!ImGui::MenuItem("View Address in Memory", nullptr, false,
+                         !Sh2OperandIsUncertainPcRel(ins, operand)))
+        return false;
+    uint32_t width = 0;
+    if (!ResolveSh2OperandAddress(ins, operand, r, outAddr, width)) outAddr = ins.Address;
+    return true;
 }
 
 std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins, int index,
@@ -147,8 +180,38 @@ std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins
         }
 
     uint32_t ea = 0, n = 0;
+    if (Sh2OperandIsUncertainPcRel(ins, index))
+    {
+        // Memory cannot say whether this runs in the branch's delay slot, so give each candidate.
+        const bool mova = ins.PcRel == Sh2PcRel::Mova;
+        const uint32_t width = mova ? 0 : (ins.PcRel == Sh2PcRel::Word ? 2u : 4u);
+        auto candidate = [&](const char* how, uint32_t addr)
+        {
+            if (mova) std::snprintf(b, sizeof(b), "%s: address = %08X", how, addr);
+            else
+            {
+                uint32_t val = 0;
+                if (readMem && readMem(addr, width, val))
+                    std::snprintf(b, sizeof(b), "%s: [%08X] = %0*X", how, addr, (int)(width * 2), val);
+                else
+                    std::snprintf(b, sizeof(b), "%s: [%08X] unavailable", how, addr);
+            }
+            lines.push_back(b);
+        };
+        candidate("reached directly", ins.PcRelDirectAddress);
+        if (ins.PcRelHasSlotAddress) candidate("in the slot of the taken branch", ins.PcRelSlotAddress);
+        else lines.push_back("in the slot of the taken branch: depends on its destination");
+        return lines;
+    }
     if (ResolveSh2MemOperand(text, ins.Mnemonic, r, ea, n))
     {
+        if (Sh2OperandIsAddressOnly(ins.Mnemonic))
+        {
+            // Not a memory access: the operand is the address itself.
+            std::snprintf(b, sizeof(b), "%s = %08X", ins.Mnemonic == "mova" ? "address" : "target", ea);
+            lines.push_back(b);
+            return lines;
+        }
         // Read exactly the access width the mnemonic implies (.b/.w/.l -> 1/2/4) so a
         // mov.l shows a long and a mov.b a byte, not a fixed-size dump.
         uint32_t val = 0;
@@ -157,6 +220,97 @@ std::vector<std::string> Sh2OperandHoverLines(const DisassembledInstruction& ins
         lines.push_back(b);
     }
     return lines;
+}
+
+namespace
+{
+// Printable-ASCII annotation for a value, e.g. 0x66 -> " ('f')".
+std::string AsciiTag(uint32_t v)
+{
+    if (v >= 0x20 && v <= 0x7E)
+    { char b[8]; std::snprintf(b, sizeof(b), " ('%c')", (char)v); return b; }
+    return "";
+}
+}  // namespace
+
+std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& regs,
+                       const Sh2MemReader& readMem)
+{
+    if (!ins.IsValid) return "";
+    const std::string& m = ins.Mnemonic;
+    const std::string& o = ins.Operands;
+
+    // --- Control flow ---
+    if (ins.IsReturn) return "return";
+    if (ins.HasBranchTarget)
+    {
+        char loc[24]; std::snprintf(loc, sizeof(loc), "loc_%08X", ins.BranchTarget);
+        if (ins.IsCall) return std::string("call ") + loc;
+        if (ins.IsConditional)
+            return std::string((m == "bt" || m == "bt.s") ? "if T set -> " : "if T clear -> ") + loc;
+        return std::string("-> ") + loc;
+    }
+    if (m == "jmp" || m == "braf")  return std::string("jump ") + o;
+    if (m == "jsr" || m == "bsrf")  return std::string("call ") + o;
+
+    // --- PC-relative operand in a delay slot whose branch may not be taken ---
+    if (ins.PcRelAmbiguous) return "PC-relative: address depends on whether this is the branch's delay slot";
+    if (m == "mova")
+    {
+        uint32_t ea = 0, w = 0;
+        if (ResolveSh2OperandAddress(ins, 0, regs, ea, w)) { char b[40]; std::snprintf(b, sizeof(b), "r0 = address 0x%08X", ea); return b; }
+        return "";
+    }
+
+    // --- Immediate to register: mov/add/cmp/eq/and/or/xor/tst #imm,rN ---
+    unsigned imm = 0, rn = 0, rm = 0;
+    if (std::sscanf(o.c_str(), "#0x%x,r%u", &imm, &rn) == 2 && rn < 16)
+    {
+        // mov, add and cmp/eq sign-extend the 8-bit immediate to 32 bits (E0FF loads 0xFFFFFFFF); and,
+        // or, xor and tst zero-extend it. The operand text keeps the encoded byte.
+        const uint32_t sext = (uint32_t)(int32_t)(int8_t)(unsigned char)imm;
+        char b[80];
+        if (m == "mov")         std::snprintf(b, sizeof(b), "r%u = 0x%X%s", rn, sext, AsciiTag(sext).c_str());
+        else if (m == "add")    std::snprintf(b, sizeof(b), "r%u += %d", rn, (int)(int8_t)(unsigned char)imm);
+        else if (m == "cmp/eq") std::snprintf(b, sizeof(b), "compare r%u with 0x%X%s", rn, sext, AsciiTag(sext).c_str());
+        else if (m == "tst")    std::snprintf(b, sizeof(b), "T = ((r%u & 0x%X) == 0)", rn, imm);
+        else                    std::snprintf(b, sizeof(b), "r%u = r%u %s 0x%X", rn, rn, m.c_str(), imm);
+        return b;
+    }
+
+    // --- Register compare / move ---
+    if (m.rfind("cmp/", 0) == 0 && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
+    { char b[48]; std::snprintf(b, sizeof(b), "compare r%u, r%u", rm, rn); return b; }
+    if (m == "tst" && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
+    { char b[48]; std::snprintf(b, sizeof(b), "T = ((r%u & r%u) == 0)", rn, rm); return b; }
+    if (m == "mov" && std::sscanf(o.c_str(), "r%u,r%u", &rm, &rn) == 2)
+    { char b[32]; std::snprintf(b, sizeof(b), "r%u = r%u", rn, rm); return b; }
+
+    // --- Memory move: a load when the memory operand is the source, else a store ---
+    if (m.rfind("mov.", 0) == 0)
+    {
+        const uint32_t width = Sh2AccessWidth(m);
+        const char* unit = (width == 1) ? "byte" : (width == 2) ? "word" : "long";
+        // Which *operand* the '@' falls in, not which side of the first comma it is on:
+        // that comma can be the group's own, as in "@(r0,r4),r1".
+        const int memOp = Sh2MemOperandIndex(o);
+        Sh2OperandSpan second;
+        if (memOp >= 0 && Sh2OperandAt(o, 1, second))
+        {
+            const bool isLoad = memOp == 0;   // "@src,rN" vs "rN,@dst"
+            // PC-relative literal pool: the disassembler resolves it to @(0xABS),rN.
+            uint32_t ea = 0, w = 0, val = 0;
+            if (isLoad && o.rfind("@(0x", 0) == 0 && o.find(",r") != std::string::npos &&
+                ResolveSh2MemOperand(ins, memOp, regs, ea, w) && readMem && readMem(ea, w, val))
+            {
+                char b[64]; std::snprintf(b, sizeof(b), "= [%08X] = 0x%X%s", ea, val,
+                                          w == 1 ? AsciiTag(val).c_str() : "");
+                return b;
+            }
+            return std::string(isLoad ? "load " : "store ") + unit;
+        }
+    }
+    return "";
 }
 
 Sh2OperandsDrawn DrawSh2Operands(const DisassembledInstruction& ins)
