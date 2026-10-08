@@ -471,7 +471,9 @@ void ConfigureSocket(int fd)
 // send/recv that follows is what reports it, with the real errno.
 int WaitFd(int fd, short events, const std::atomic<bool>* running, int idleMs)
 {
-    int waited = 0;
+    // A wall-clock deadline, not a count of slices: a poll() slice on a loaded machine can take
+    // far longer than it asked for, and the bound has to hold in real time.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(idleMs);
     for (;;)
     {
         if (running && !running->load()) { return 0; }
@@ -486,8 +488,7 @@ int WaitFd(int fd, short events, const std::atomic<bool>* running, int idleMs)
             if (errno == EINTR) { continue; }
             return -1;
         }
-        waited += kIoSliceMs;
-        if (waited >= idleMs) { return 0; }
+        if (std::chrono::steady_clock::now() >= deadline) { return 0; }
     }
 }
 
@@ -610,10 +611,14 @@ std::shared_ptr<ResolveJob> ResolveBounded(const std::string& host, const std::s
     }
 
     std::unique_lock<std::mutex> lk(job->m);
-    for (int waited = 0; waited < timeoutMs; waited += 50)
+    // Bounded in wall-clock time: counting 50 ms slices let a loaded machine, where each slice
+    // overshoots, stretch a 3 s bound to twice that.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    for (;;)
     {
         if (job->cv.wait_for(lk, std::chrono::milliseconds(50), [&] { return job->done; })) { break; }
         if (running && !running->load()) { return nullptr; }
+        if (std::chrono::steady_clock::now() >= deadline) { break; }
     }
     if (!job->done || job->rc != 0 || !job->res) { return nullptr; }
     return job;
@@ -746,12 +751,11 @@ bool WinIo(Conn& c, bool write, void* buf, DWORD len, DWORD& got)
     if (!started)
     {
         if (GetLastError() != ERROR_IO_PENDING) { return false; }
-        int waited = 0;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(c.idleMs);
         for (;;)
         {
             if (WaitForSingleObject(c.ev, kIoSliceMs) == WAIT_OBJECT_0) { break; }
-            waited += kIoSliceMs;
-            if (c.Aborted() || waited >= c.idleMs)
+            if (c.Aborted() || std::chrono::steady_clock::now() >= deadline)
             {
                 CancelIoEx(c.h, &ov);
                 DWORD ignored = 0;

@@ -51,6 +51,24 @@ bool WaitFor(Fn pred, int budgetMs = 5000)
     return pred();
 }
 
+// frame_pause only POSTS the request: the driver's poll thread ships it on its next cycle, which
+// on a loaded machine can be well past any fixed sleep. Wait until the emulator has actually
+// stopped -- no frame for a while -- before treating it as paused.
+void WaitUntilStopped(const std::atomic<uint32_t>& ran, int stillMs = 300)
+{
+    uint32_t last = ran.load();
+    auto since = std::chrono::steady_clock::now();
+    const auto deadline = since + std::chrono::seconds(15);
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        Sleep(10);
+        const uint32_t cur = ran.load();
+        const auto now = std::chrono::steady_clock::now();
+        if (cur != last) { last = cur; since = now; }
+        else if (now - since >= std::chrono::milliseconds(stillMs)) return;
+    }
+}
+
 void Frame()
 {
     SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
@@ -158,7 +176,7 @@ void TestEveryRequestedStepRuns(se_data_source& ds)
     Emulator emu;
     emu.Start();
     Check(ds.frame_pause(ds.user) == 0, "pause posted");
-    Sleep(150);
+    WaitUntilStopped(emu.ran);
     const uint32_t before = emu.ran.load();
     const int kSteps = 300;
     for (int i = 0; i < kSteps; ++i)
@@ -183,7 +201,7 @@ void TestStepCompletionIsObserved(se_data_source& ds, se_context* ctx)
     emu.frameMs = 30;
     emu.Start();
     Check(ds.frame_pause(ds.user) == 0, "pause posted");
-    Sleep(300);
+    WaitUntilStopped(emu.ran);
     // Settle: capture until the display agrees with the paused emulator.
     for (int i = 0; i < 200 && se_live_capture_pending(&ds) == 1; ++i) { se_begin_frame(ctx); Sleep(5); }
     Check(se_live_capture_pending(&ds) == 0, "a paused, caught-up display has nothing pending");
@@ -251,7 +269,7 @@ void TestUnchangedDisplayIsReported(se_data_source& ds, se_context* ctx)
     emu.frameMs = 5;
     emu.Start();
     Check(ds.frame_pause(ds.user) == 0, "pause posted");
-    Sleep(300);
+    WaitUntilStopped(emu.ran);
     for (int i = 0; i < 200 && se_live_capture_pending(&ds) == 1; ++i) { se_begin_frame(ctx); Sleep(5); }
     se_begin_frame(ctx);
 
