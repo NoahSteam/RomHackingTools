@@ -376,6 +376,7 @@ private:
     HexEditorPanel           mHexEditor;
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
+    int                      mInputPort = 0;    // ...and the port it went to
     uint64_t                 mControllerFrame = 0; // live frame (never scrub-context frame)
 
     // Structured event log + the tracepoint (execution-action) store, plus the state

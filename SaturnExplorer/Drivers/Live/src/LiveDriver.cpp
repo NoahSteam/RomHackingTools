@@ -301,8 +301,12 @@ struct LiveState
     // thread sends an INP whenever this is non-zero or has changed since the last one
     // sent, so a held button survives even a glue that doesn't latch, and the release
     // edge (back to 0) is always delivered.
-    std::atomic<uint32_t> inputState{0};
-    uint32_t              lastInputSent = 0;   // poll-thread-local (guarded by ctlMtx use)
+    // One slot per pad port, so moving the panel from port 1 to port 2 still delivers
+    // port 1's release edge instead of overwriting it with the new port's state.
+    static constexpr uint32_t kInputPorts = 2;
+    std::atomic<uint32_t> inputMask[kInputPorts] = {};
+    uint32_t              lastInputSent[kInputPorts] = {};   // poll-thread-local
+    uint32_t              nextInputPort = 0;                 // poll-thread-local round robin
     // Gap-free cursor: the frame number of the last snapshot we received. A GET carries it
     // as its arg so the server hands back the next unseen frame (server keeps an N-deep
     // ring); the emulator can run ahead without us silently skipping frames. Poll-thread-local.
@@ -1219,7 +1223,7 @@ void ForgetConnection(LiveState* st)
         st->stepFrames = 0;
         st->stepInsns = 0;
         st->stepsAnswered = st->stepsPosted;
-        st->lastInputSent = 0;
+        for (uint32_t& m : st->lastInputSent) m = 0;
         st->emuSlotsValid = false;
     }
     st->pausedByUs.store(false);   // the exporter releases a pause when a client leaves
@@ -1345,12 +1349,18 @@ void PollLoop(LiveState* st)
                 // Inject controller input when a button is held or the mask changed
                 // since the last send (covers the release edge and a non-latching
                 // glue). INP still returns a full snapshot, so we lose no frame data.
-                const uint32_t inp = st->inputState.load();
-                if (inp != 0 || inp != st->lastInputSent)
+                // One INP per cycle; ports are visited round robin so a release on one
+                // port is never starved by a button still held on the other.
+                for (uint32_t i = 0; i < LiveState::kInputPorts; ++i)
                 {
+                    const uint32_t port = (st->nextInputPort + i) % LiveState::kInputPorts;
+                    const uint32_t inp = st->inputMask[port].load();
+                    if (inp == 0 && inp == st->lastInputSent[port]) continue;
                     verb = SE_LIVE_VERB_INPUT;
-                    arg = static_cast<int32_t>(inp);
-                    st->lastInputSent = inp;
+                    arg = static_cast<int32_t>((port << 16) | inp);
+                    st->lastInputSent[port] = inp;
+                    st->nextInputPort = (port + 1) % LiveState::kInputPorts;
+                    break;
                 }
             }
         }
@@ -2074,9 +2084,9 @@ extern "C" void se_live_send_input(const se_data_source* ds, uint32_t port, uint
     if (!ds || !ds->user || ds->close != CbClose) { return; }
     se::GuardVoid([&]
     {
-        // Pack port + SE_PAD_* mask; the poll thread sends it (INP) on its next cycle.
-        const uint32_t packed = ((port & 0xFFFFu) << 16) | (buttons & SE_PAD_ALL);
-        St(ds->user)->inputState.store(packed);
+        // The poll thread sends it (INP) on its next cycle.
+        if (port >= LiveState::kInputPorts) return;
+        St(ds->user)->inputMask[port].store(buttons & SE_PAD_ALL);
     });
 }
 

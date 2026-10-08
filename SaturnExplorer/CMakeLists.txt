@@ -212,6 +212,12 @@ if(BUILD_TESTING)
     target_link_libraries(SaturnExplorerGeometry3DTests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerGeometry3DTests COMMAND SaturnExplorerGeometry3DTests)
 
+    add_executable(SaturnExplorerVramMapTests
+        Core/tests/VramMapTests.cpp
+    )
+    target_link_libraries(SaturnExplorerVramMapTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerVramMapTests COMMAND SaturnExplorerVramMapTests)
+
     add_executable(SaturnExplorerTopBarTests
         FrontEnd/tests/TopBarTests.cpp
         FrontEnd/src/TopBar.cpp
@@ -429,6 +435,17 @@ if(BUILD_TESTING)
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerSeStateCodecTests COMMAND SaturnExplorerSeStateCodecTests)
 
+    # ControllerPanel logic that needs no window (macro playback vs. deletion, live key map).
+    add_executable(SaturnExplorerControllerPanelTests
+        FrontEnd/tests/ControllerPanelTests.cpp
+        FrontEnd/src/ControllerPanel.cpp
+        FrontEnd/src/Settings.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerControllerPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests Integration/Common ${SE_IMGUI_DIR})
+    add_test(NAME SaturnExplorerControllerPanelTests COMMAND SaturnExplorerControllerPanelTests)
+
     # Panel interaction — ImGui hit testing driven headlessly (no backend or window).
     # Guards the row/cell click behaviour the panels depend on; see PanelWidgets.h.
     add_executable(SaturnExplorerPanelInteractionTests
@@ -618,6 +635,19 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerMednafenHaltOrdering
                  COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_halt_ordering.py
                          ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py)
+        # The injected SMPC pad code is C++ that never compiles in this build; this compiles
+        # it against stub Mednafen types and checks each button on both pad layouts.
+        find_program(SE_CXX_FOR_PADTEST NAMES g++ c++ clang++)
+        if(SE_CXX_FOR_PADTEST)
+            add_test(NAME SaturnExplorerMednafenPadInjection
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_pad_injection.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/pad_injection_test ${SE_CXX_FOR_PADTEST})
+            add_test(NAME SaturnExplorerMednafenVdp1Latch
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_vdp1_latch.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/vdp1_latch_test ${SE_CXX_FOR_PADTEST})
+        endif()
     endif()
 endif()
 

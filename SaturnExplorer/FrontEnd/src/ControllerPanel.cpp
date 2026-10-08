@@ -152,17 +152,28 @@ void ControllerPanel::ApplyLiveKeyMap(const int32_t* scancodes, int count)
     for (int i = 0; i < count; ++i)
     {
         mAdoptedScancodes[i] = scancodes[i];
-        if (scancodes[i] < 0) continue;                    // unbound / non-keyboard
-        const ImGuiKey k = HidToImGuiKey(scancodes[i]);
-        if (k == ImGuiKey_None) continue;
         const int idx = ButtonIndex(kKeyMapBits[i]);
-        if (idx >= 0) { mKeyBind[idx] = (int)k; ++matched; }
+        if (idx < 0) continue;
+        // A button Mednafen has unbound (or bound to something SE can't surface, such as a
+        // joystick) must end up unbound here too: keeping SE's default key would press a
+        // button the emulator's own window does not, contradicting "matches Mednafen".
+        const ImGuiKey k = scancodes[i] < 0 ? ImGuiKey_None : HidToImGuiKey(scancodes[i]);
+        mKeyBind[idx] = (int)k;
+        if (k != ImGuiKey_None) ++matched;
     }
     mLiveKeyMapAdopted = true;
     mSettingsDirty = true;
-    if (matched) std::snprintf(mBindMsg, sizeof(mBindMsg),
-                               "Matched Mednafen's keys for Port %d (%d button%s).",
-                               mPort + 1, matched, matched == 1 ? "" : "s");
+    std::snprintf(mBindMsg, sizeof(mBindMsg),
+                  "Matched Mednafen's keys for Port %d (%d button%s%s).",
+                  mPort + 1, matched, matched == 1 ? "" : "s",
+                  matched < count ? ", rest unbound" : "");
+}
+
+int ControllerPanel::KeyBindingFor(unsigned int padBit)
+{
+    EnsureBindings();
+    const int idx = ButtonIndex(padBit);
+    return idx >= 0 ? mKeyBind[idx] : 0;
 }
 
 void ControllerPanel::DrawKeyBindings()
@@ -391,7 +402,12 @@ void ControllerPanel::Update(bool connected, uint64_t frame)
         }
     }
 
-    if (mMacroIndex >= 0 && mMacroIndex < static_cast<int>(mMacros.size()))
+    if (mMacroIndex >= static_cast<int>(mMacros.size()))
+    {
+        mMacroIndex = -1;   // defensive: never leave the last step held on a stale index
+        mSources.macro = 0;
+    }
+    if (mMacroIndex >= 0)
     {
         Macro& macro = mMacros[static_cast<size_t>(mMacroIndex)];
         const uint64_t step = frame >= mMacroStartFrame ? frame - mMacroStartFrame : 0;
@@ -511,7 +527,8 @@ void ControllerPanel::DrawControllerCanvas(bool connected)
     // Use the user-configurable bindings; don't drive the pad while capturing a rebind.
     if (keyboard && mRebindIndex < 0)
         for (int i = 0; i < kNumButtons; ++i)
-            if (ImGui::IsKeyDown((ImGuiKey)mKeyBind[i])) mSources.keyboardMomentary |= kButtons[i].bit;
+            if (mKeyBind[i] != ImGuiKey_None && ImGui::IsKeyDown((ImGuiKey)mKeyBind[i]))
+                mSources.keyboardMomentary |= kButtons[i].bit;
     mSources.mouseMomentary = 0;
 
     const float availW = ImGui::GetContentRegionAvail().x;
@@ -883,6 +900,41 @@ void ControllerPanel::DrawRecording(IPlatform& platform)
     ImGui::End();
 }
 
+void ControllerPanel::PlayMacro(size_t i)
+{
+    if (i >= mMacros.size()) return;
+    mMacroIndex = static_cast<int>(i);
+    mMacroStep = 0;
+    mMacroStartFrame = mLastObservedFrame == std::numeric_limits<uint64_t>::max()
+                         ? 0 : mLastObservedFrame + 1;
+}
+
+void ControllerPanel::DeleteMacro(size_t i)
+{
+    if (i >= mMacros.size()) return;
+    if (mMacroIndex == static_cast<int>(i))
+    {
+        // The playing macro: release its last step now. Update() only clears it when it
+        // finds its own index valid, and that index is about to stop existing.
+        mMacroIndex = -1;
+        mSources.macro = 0;
+        RecomputeFinal();
+    }
+    else if (mMacroIndex > static_cast<int>(i))
+    {
+        --mMacroIndex;     // the playing macro shifts down with the erase
+    }
+    mMacros.erase(mMacros.begin() + static_cast<std::ptrdiff_t>(i));
+}
+
+void ControllerPanel::AddMacro(std::string name, std::vector<unsigned int> states)
+{
+    Macro m;
+    m.name = std::move(name);
+    m.states = std::move(states);
+    mMacros.push_back(std::move(m));
+}
+
 void ControllerPanel::DrawMacros()
 {
     if (!ImGui::Begin("Macros", &mShowMacros)) { ImGui::End(); return; }
@@ -891,24 +943,17 @@ void ControllerPanel::DrawMacros()
     ImGui::SameLine();
     if (ImGui::Button("Add Current"))
     {
-        Macro m; m.name = mMacroName[0] ? mMacroName : "Macro"; m.states.push_back(mFinalState);
-        mMacros.push_back(std::move(m));
+        AddMacro(mMacroName[0] ? mMacroName : "Macro", {mFinalState});
     }
     for (size_t i = 0; i < mMacros.size(); ++i)
     {
         ImGui::PushID(static_cast<int>(i));
-        if (ImGui::SmallButton("Play"))
-        {
-            mMacroIndex = static_cast<int>(i);
-            mMacroStep = 0;
-            mMacroStartFrame = mLastObservedFrame == std::numeric_limits<uint64_t>::max()
-                                 ? 0 : mLastObservedFrame + 1;
-        }
+        if (ImGui::SmallButton("Play")) PlayMacro(i);
         ImGui::SameLine(); ImGui::TextUnformatted(mMacros[i].name.c_str());
         if (ImGui::BeginPopupContextItem("##macro_menu"))
         {
             if (ImGui::MenuItem("Duplicate")) mMacros.push_back(mMacros[i]);
-            if (ImGui::MenuItem("Delete")) { mMacros.erase(mMacros.begin() + i); ImGui::EndPopup(); ImGui::PopID(); break; }
+            if (ImGui::MenuItem("Delete")) { DeleteMacro(i); ImGui::EndPopup(); ImGui::PopID(); break; }
             ImGui::EndPopup();
         }
         ImGui::PopID();

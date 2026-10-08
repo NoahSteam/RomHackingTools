@@ -7,6 +7,10 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <map>
+#include <set>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include "saturnexplorer/SeGuard.h"
@@ -774,20 +778,31 @@ private:
         }
     }
 
-    // Classify VDP1 VRAM into the regions each drawable command references — its
-    // command table, texture, CLUT (LUT mode), and gouraud table — for the VRAM
-    // map. Distinct (address, kind) pairs are listed once, sorted by address.
+    // Classify VDP1 VRAM into the regions the command list references — each command's
+    // table, and for drawn commands their texture, CLUT (LUT mode) and gouraud table — for
+    // the VRAM map, sorted by address.
+    //
+    // A command table occupies VRAM whatever the command does, so every walked command gets
+    // one (polygons, lines, control commands and skipped entries included). Textures, CLUTs
+    // and gouraud tables are listed only for entries that really draw.
+    //
+    // Commands can share one block (sprites reusing a texture, polygons sharing a gouraud
+    // table). Each (address, kind, owner) is listed once, so selecting any of the commands
+    // can find its block, and every entry of a shared block carries the block's largest
+    // extent — the first owner's smaller sprite must not shrink what a later, larger one uses.
     void BuildVramRegions()
     {
         mVramRegions.clear();
-        auto add = [this](uint32_t addr, uint32_t size, se_vram_region_kind kind, uint32_t ref)
+        // Largest size seen per (address, kind) block, and the owners already listed for it.
+        std::map<std::pair<uint32_t, int>, uint32_t> extent;
+        std::set<std::tuple<uint32_t, int, uint32_t>> listed;
+        auto add = [&](uint32_t addr, uint32_t size, se_vram_region_kind kind, uint32_t ref)
         {
-            for (const se_vram_region& r : mVramRegions)
+            uint32_t& maxSize = extent[{addr, static_cast<int>(kind)}];
+            maxSize = std::max(maxSize, size);
+            if (!listed.insert({addr, static_cast<int>(kind), ref}).second)
             {
-                if (r.address == addr && r.kind == kind)
-                {
-                    return;  // already listed
-                }
+                return;  // this owner already listed
             }
             se_vram_region reg {};
             reg.address = addr;
@@ -799,19 +814,25 @@ private:
 
         for (const se_command& c : mCommands)
         {
+            add(c.table_address, 0x20, SE_VRAM_CMD_TABLE, c.index);
+
             const bool textured = (c.type == SE_CMD_NORMAL_SPRITE ||
                                    c.type == SE_CMD_SCALED_SPRITE ||
                                    c.type == SE_CMD_DISTORTED_SPRITE);
+            const bool shaded = textured || c.type == SE_CMD_POLYGON ||
+                                c.type == SE_CMD_POLYLINE || c.type == SE_CMD_LINE;
             // Match the draw path: only SE_CMDSTAT_NORMAL contributes real VRAM usage.
-            if (!textured || c.status != SE_CMDSTAT_NORMAL)
+            if (c.status != SE_CMDSTAT_NORMAL || !shaded)
             {
                 continue;
             }
-            add(c.table_address, 0x20, SE_VRAM_CMD_TABLE, c.index);
-            add(c.texture_address, TextureByteSize(c), SE_VRAM_TEXTURE, c.index);
-            if (c.color_mode == SE_COLOR_LUT_16)
+            if (textured)
             {
-                add(c.clut_address, 0x20, SE_VRAM_CLUT, c.index);   // 16 entries x 2 bytes
+                add(c.texture_address, TextureByteSize(c), SE_VRAM_TEXTURE, c.index);
+                if (c.color_mode == SE_COLOR_LUT_16)
+                {
+                    add(c.clut_address, 0x20, SE_VRAM_CLUT, c.index);   // 16 entries x 2 bytes
+                }
             }
             if (c.gouraud)
             {
@@ -819,8 +840,14 @@ private:
             }
         }
 
-        std::sort(mVramRegions.begin(), mVramRegions.end(),
-                  [](const se_vram_region& a, const se_vram_region& b)
+        // Owners listed before a later, larger one raised the block's extent catch up.
+        for (se_vram_region& r : mVramRegions)
+        {
+            r.size = extent[{r.address, static_cast<int>(r.kind)}];
+        }
+
+        std::stable_sort(mVramRegions.begin(), mVramRegions.end(),
+                         [](const se_vram_region& a, const se_vram_region& b)
         {
             return a.address < b.address;
         });
