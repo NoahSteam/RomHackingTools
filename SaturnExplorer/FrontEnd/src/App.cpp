@@ -722,12 +722,24 @@ void App::RequestTextureDump(int layer)
     mLayerPanels.RequestExport(static_cast<LayerId>(layer));
 }
 
-// Snapshot what a dump needs from the live context and start the job. The panel's own CPU, user
-// notes and registers are taken here, once, so a dump is a consistent picture of one moment even
-// though the writing spans several frames.
+// Snapshot what a dump needs and start the job. Everything is taken here, once, so a dump is a
+// consistent picture of one moment even though the writing spans several frames -- and so the
+// job holds no se_context*, which matters because the source can be closed while it runs.
+//
+// "One moment" means the frame on screen. This is reached from the options dialog, which
+// DrawDumpSh2Modal draws after the scrub swap, so mContext is the displayed context and
+// mMemBackend -- which holds se_context** rather than a context -- follows it. The guard below
+// is what notices if that ever stops being true.
 void App::BeginDumpSh2()
 {
-    if (!mbHasData || !mContext) return;
+    WarnIfNotFromDisplayedSnapshot("Dump SH-2");
+    if (!mbHasData || !mContext)
+    {
+        mOperationStatus = "No data is loaded, so there was nothing to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+        return;
+    }
 
     Sh2DumpInput in;
     in.opt = mDumpSh2Options;
@@ -870,14 +882,23 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
             if (done)
             {
                 const std::string text = mDumpSh2Job->TakeText();
+                const std::string name = mDumpSh2FileName;
                 mDumpSh2Job.reset();
                 ImGui::CloseCurrentPopup();
-                platform.SaveFile(mDumpSh2FileName.c_str(), text.data(), text.size());
+                // A dump is a second of work, so staying silent about where it went -- or
+                // about its not going anywhere -- is the worst of the save paths to leave
+                // unreported. ReportSave also keeps "cancelled at the file dialog" from
+                // reading as a failure.
+                ReportSave(platform.SaveFile(name.c_str(), text.data(), text.size()), name);
             }
             else if (ImGui::Button("Cancel", ImVec2(90, 0)))
             {
+                // Dropped before any file is opened, so there is nothing written to clean up.
                 mDumpSh2Job.reset();
                 ImGui::CloseCurrentPopup();
+                mOperationStatus = "SH-2 dump cancelled; nothing was written.";
+                mOperationError = false;
+                mLog.Info(mOperationStatus);
             }
         }
         ImGui::EndPopup();

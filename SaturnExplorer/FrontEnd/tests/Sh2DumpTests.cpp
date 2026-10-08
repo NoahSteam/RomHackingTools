@@ -201,6 +201,33 @@ void TestCountsAndProgress()
     CHECK(lines - comments == 0x80000u);
 }
 
+// Neither region readable: the job has nothing to write and must say so AND finish on the first
+// step. The progress modal closes on Done() and has no other exit once it is up, so a job that
+// never reported finished would leave the app sitting behind a modal that cannot be dismissed.
+// Reachable: the options dialog probes the regions when it opens and can sit open while the
+// source changes under it, so the memory read at OK time can come back empty for both.
+void TestEveryRegionUnavailableFinishesImmediately()
+{
+    Sh2DumpInput in = Input();
+    in.opt.regions[0] = in.opt.regions[1] = true;
+    in.memory[0].clear();
+    in.memory[1].clear();
+
+    Sh2DumpJob job(in);
+    CHECK(job.TotalInstructions() == 0);
+    CHECK(job.Progress() == 1.0f);        // not 0/0
+    CHECK(job.Step(20000));               // done on the first slice
+    CHECK(job.Done());
+    CHECK(job.Progress() == 1.0f);
+
+    // And it is honest about why rather than handing back an empty file.
+    const std::string& t = job.Text();
+    CHECK(t.find("LWRAM: not available from this source, skipped") != std::string::npos);
+    CHECK(t.find("HWRAM: not available from this source, skipped") != std::string::npos);
+    CHECK(t.find("00200000") == std::string::npos);   // no rows
+    CHECK(t.find("06000000") == std::string::npos);
+}
+
 // Nothing selected is not a dump.
 void TestValid()
 {
@@ -224,6 +251,7 @@ int main()
     TestSliceSizeDoesNotChangeTheText();
     TestRegionsAndUnavailable();
     TestCountsAndProgress();
+    TestEveryRegionUnavailableFinishesImmediately();
     TestValid();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
