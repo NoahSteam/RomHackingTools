@@ -92,10 +92,17 @@ private:
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
+    // Write one layer's textures to the export folder -- Data > Dump Textures, which is the
+    // layer viewer's own Export reached without opening its panel. 'layer' is a LayerId.
+    void DumpLayerTextures(IPlatform& platform, int layer);
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(std::vector<TopBarCommand>& commands);
     void DrawWindowsMenu(std::vector<TopBarCommand>& commands);
+    // The ImGui toolbar's stand-in for the native bar's Data > Dump Textures submenu. The SDL
+    // backends draw the toolbar instead of an OS menu bar, so without this the feature would
+    // be reachable on Windows and macOS only.
+    void DrawDumpTexturesMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DrawStatusBar();
     void RefreshLaunchValidation();
     TopBarViewModel BuildTopBarViewModel() const;
@@ -121,6 +128,9 @@ private:
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);
     void DrawLayerPanels(IPlatform& platform);   // per-layer viewer tabs (VDP1 / NBG / RBG0)
+    // The context + render options + frame number the layer panels and their exports read. One
+    // builder, so a menu-driven export sees exactly the frame the panels would have drawn.
+    LayerPanelFrame BuildLayerPanelFrame();
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)

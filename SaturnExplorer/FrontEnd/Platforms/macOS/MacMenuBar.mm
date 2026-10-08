@@ -102,6 +102,7 @@ constexpr int ID_PANEL_BASE     = kMenuIdPanelBase;
 constexpr int ID_SAVESTATE_BASE = kMenuIdSaveStateBase;
 constexpr int ID_LOADSTATE_BASE = kMenuIdLoadStateBase;
 constexpr int ID_EMULOAD_BASE   = kMenuIdEmuLoadBase;
+constexpr int ID_DUMPTEX_BASE   = kMenuIdDumpTexBase;
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -427,6 +428,14 @@ struct MacMenuBarImpl
         {
             NSMenu* data = AddSub(bar, @"Data");
             AddItem(data, ID_DUMP, @"Dump Memory\tCtrl+Shift+D");
+            // One item per layer, from the shared table. The tag is ID_DUMPTEX_BASE + LayerId,
+            // which NativeMenuDecodeIndexedId turns back into the DumpTextures command carrying
+            // that layer -- so the item's position in the submenu is free to change.
+            NSMenu* dumpTex = AddSub(data, @"Dump Textures");
+            const NativeMenuTextureLayer* texLayers = NativeMenuTextureLayerList();
+            for (int i = 0; i < kNativeMenuTextureLayers; ++i)
+                AddItem(dumpTex, ID_DUMPTEX_BASE + texLayers[i].layer, Str(texLayers[i].label));
+            AddSep(data);
             AddItem(data, ID_DATADIR, @"Set Data Directory…");
         }
 
@@ -553,6 +562,8 @@ struct MacMenuBarImpl
 
         // Data
         EnableTag(ID_DUMP, s.dumpEnabled);
+        for (int i = 0; i < kNativeMenuTextureLayers; ++i)
+            EnableTag(ID_DUMPTEX_BASE + i, s.dumpTexturesEnabled);
 
         // Layers
         for (int i = 0; i < NM_LAYER_COUNT; ++i)

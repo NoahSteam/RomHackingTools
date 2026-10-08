@@ -58,6 +58,14 @@ public:
     // True once after the user changed a persisted preference (export folder, grid toggle).
     bool ConsumeSettingsDirty();
 
+    // Export one layer without its panel being open — the Data > Dump Textures menu. Writes
+    // exactly what that layer's Export button writes, into the same folder, so the menu is a
+    // second way in rather than a second implementation. Returns false on failure; either way
+    // 'message' is filled with what to show the user, because the caller has no panel status
+    // line to put it in.
+    bool ExportLayer(LayerId layer, const LayerPanelFrame& frame, IPlatform& platform,
+                     std::string& message);
+
 private:
     // Per-layer view state: the uploaded texture and the pixels behind it.
     struct View

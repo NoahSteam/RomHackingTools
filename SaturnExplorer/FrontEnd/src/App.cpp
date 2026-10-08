@@ -651,6 +651,26 @@ void App::DumpMemory(IPlatform& platform)
     platform.SaveFile(name, out.data(), out.size());
 }
 
+// Data > Dump Textures. The work itself is the layer viewer's export (LayerExport.cpp), so the
+// menu and the panel button write the same files into the same folder -- for VDP1 that is every
+// sprite on screen as its own BMP, for a VDP2 screen its tileset plus the tile-index CSV. The
+// only thing added here is reporting: the panel has a status line under its toolbar and the menu
+// has not, so the result goes to the operation banner and the log.
+void App::DumpLayerTextures(IPlatform& platform, int layer)
+{
+    if (layer < 0 || layer >= kLayerCount)
+    {
+        return;   // a stale menu id; the decoder bounds the range, so this is belt-and-braces
+    }
+    const LayerPanelFrame frame = BuildLayerPanelFrame();
+    std::string message;
+    const bool ok = mLayerPanels.ExportLayer(static_cast<LayerId>(layer), frame, platform, message);
+    mOperationStatus = message;
+    mOperationError = !ok;
+    if (ok) mLog.Info(message);
+    else    mLog.Error(message);
+}
+
 void App::SelectCommand(int command, bool additive)
 {
     if (command < 0)
@@ -4192,12 +4212,18 @@ void App::AdoptNewPanels(ImGuiID dockId)
             ImGui::DockBuilderDockWindow(layer.title, central->ID);
 }
 
-void App::DrawLayerPanels(IPlatform& platform)
+LayerPanelFrame App::BuildLayerPanelFrame()
 {
     LayerPanelFrame frame;
     frame.context = mContext;
     frame.opts = &mRenderOpts;
     frame.frame = mbHasData ? se_frame_number(mContext) : 0;
+    return frame;
+}
+
+void App::DrawLayerPanels(IPlatform& platform)
+{
+    const LayerPanelFrame frame = BuildLayerPanelFrame();
     bool visible[kLayerCount] = {};
     visible[kLayerVdp1] = mPanels.layerVdp1;
     visible[kLayerNbg0] = mPanels.layerNbg0;
@@ -6016,6 +6042,26 @@ TopBarViewModel App::BuildTopBarViewModel() const
     return vm;
 }
 
+void App::DrawDumpTexturesMenu(const TopBarViewModel& state,
+                               std::vector<TopBarCommand>& commands)
+{
+    const bool enabled = TopBarCommandEnabled(TopBarCommandType::DumpTextures, state);
+    ImGui::BeginDisabled(!enabled);
+    if (ImGui::Button("Dump Textures")) ImGui::OpenPopup("##dump_textures_menu");
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip(
+        "Write a layer's graphics to the export folder: for VDP1, every sprite on screen as "
+        "its own BMP; for a scroll screen, its tileset and tile-index CSV.");
+    if (!ImGui::BeginPopup("##dump_textures_menu")) return;
+
+    // Driven off LayerPanelList so this menu, the panel tabs and the Windows menu cannot
+    // disagree about which layers exist or what they are called.
+    for (const LayerPanelDesc& layer : LayerPanelList())
+        if (ImGui::MenuItem(layer.title))
+            commands.emplace_back(TopBarCommandType::DumpTextures, static_cast<int>(layer.id));
+    ImGui::EndPopup();
+}
+
 void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
 {
     if (ImGui::Button("Windows")) ImGui::OpenPopup("##windows_menu");
@@ -6113,6 +6159,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         if (ImGui::Button("Dump Memory")) commands.emplace_back(TopBarCommandType::DumpMemory);
         ImGui::SetItemTooltip("Save the current memory and registers to a .sedump file");
         ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        DrawDumpTexturesMenu(state, commands);
 
         ImGui::SameLine();
         if (ImGui::Button(ImGui::GetWindowWidth() < 1500.0f ? "Data Directory" : "Set Data Directory"))
@@ -7090,6 +7139,9 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::DumpMemory:
         DumpMemory(platform);
         break;
+    case TopBarCommandType::DumpTextures:
+        DumpLayerTextures(platform, command.index);
+        break;
 #ifdef SE_ENABLE_LIVE
     case TopBarCommandType::SaveState: DoSaveState(command.index); break;
     case TopBarCommandType::LoadState: DoLoadState(command.index); break;
@@ -7182,6 +7234,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
     m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
     m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+    m.dumpTexturesEnabled = TopBarCommandEnabled(TopBarCommandType::DumpTextures, s);
 #ifdef SE_ENABLE_LIVE
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)

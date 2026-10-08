@@ -262,36 +262,49 @@ void LayerPanels::DrawPanel(const LayerPanelDesc& desc, const LayerPanelFrame& f
     ImGui::End();
 }
 
-void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
-                            IPlatform& platform)
+bool LayerPanels::ExportLayer(LayerId layer, const LayerPanelFrame& frame,
+                              IPlatform& platform, std::string& message)
 {
-    View& view = mViews[desc.id];
-    auto fail = [&view](const std::string& why) { view.status = why; view.statusError = true; };
+    // The result is recorded on the layer's own view as well as handed back, so an export
+    // started from the Data menu still shows under that layer's toolbar if its panel is open.
+    View& view = mViews[layer];
+    auto fail = [&view, &message](const std::string& why)
+    {
+        message = why;
+        view.status = why;
+        view.statusError = true;
+        return false;
+    };
     if (!frame.context || !frame.opts)
     {
-        fail("No data is loaded.");
-        return;
+        return fail("No data is loaded.");
     }
     if (!platform.HasHostFilesystem())
     {
-        fail("This build has no filesystem to export to.");
-        return;
+        return fail("This build has no filesystem to export to.");
     }
-    const LayerExport built =
-        BuildLayerExport(frame.context, desc.id, *frame.opts, frame.frame);
+    const LayerExport built = BuildLayerExport(frame.context, layer, *frame.opts, frame.frame);
     std::string dir;
     std::string error;
     if (!WriteLayerExport(ExportRoot(), built, dir, error))
     {
-        fail(error);
-        return;
+        return fail(error);
     }
     char msg[512];
     std::snprintf(msg, sizeof(msg), "Exported %zu file%s to %s", built.files.size(),
                   built.files.size() == 1 ? "" : "s", dir.c_str());
-    view.status = msg;
-    if (!built.note.empty()) view.status += "  (" + built.note + ")";
+    message = msg;
+    if (!built.note.empty()) message += "  (" + built.note + ")";
+    view.status = message;
     view.statusError = false;
+    return true;
+}
+
+void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
+                            IPlatform& platform)
+{
+    std::string message;   // the view already carries it; the panel reads it from there
+    (void)ExportLayer(desc.id, frame, platform, message);
 }
 
 }  // namespace sfe

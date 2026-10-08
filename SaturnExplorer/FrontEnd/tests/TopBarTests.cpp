@@ -1,6 +1,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "LayerExport.h"   // LayerId, which the Dump Textures menu ids carry
 #include "Launcher.h"
 #include "NativeMenu.h"
 #include "Settings.h"
@@ -159,6 +160,8 @@ static void TestNativeMenuActionMapping()
     CHECK(NativeMenuActionToCommand(NativeMenuAction(MenuCommand::SelectRecentRom, 5), cmd));
     CHECK(cmd.type == TopBarCommandType::SelectRecentRom && cmd.index == 5);
 
+    CHECK(NativeMenuActionToCommand(NativeMenuAction(MenuCommand::DumpTextures, kLayerRbg0), cmd));
+    CHECK(cmd.type == TopBarCommandType::DumpTextures && cmd.index == kLayerRbg0);
     CHECK(NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ToggleWindow, 12), cmd));
     CHECK(cmd.type == TopBarCommandType::ToggleWindow && cmd.index == 12);
 
@@ -270,6 +273,14 @@ static void TestNativeMenuIdDecoding()
     CHECK(a.command == MenuCommand::LoadEmulatorState && a.index == 9);
     CHECK(NativeMenuDecodeIndexedId(kMenuIdLayerBase + NM_LAYER_RBG0, 2, 2, 2, a));
     CHECK(a.command == MenuCommand::LayerToggle && a.index == NM_LAYER_RBG0);
+    // Dump Textures: the index is the LayerId itself, not the item's position in the submenu
+    // (the sprite layer is listed first but is the LAST LayerId), so the platform bars are free
+    // to order the items however they display best.
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdDumpTexBase + kLayerVdp1, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::DumpTextures && a.index == kLayerVdp1);
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdDumpTexBase + kLayerNbg2, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::DumpTextures && a.index == kLayerNbg2);
+    CHECK(!NativeMenuDecodeIndexedId(kMenuIdDumpTexBase + kNativeMenuTextureLayers, 2, 2, 2, a));
 
     // The list counts bound the variable-length groups, so an id past the end of a list
     // decodes as nothing rather than as the next group's command.
@@ -281,6 +292,37 @@ static void TestNativeMenuIdDecoding()
     // A fixed (non-indexed) id is left for the platform's own switch.
     CHECK(!NativeMenuDecodeIndexedId(0x1000, 4, 4, 4, a));
     CHECK(!NativeMenuDecodeIndexedId(kMenuIdEmuLoadBase + kNativeStateSlots, 4, 4, 4, a));
+
+    // No two indexed groups overlap, and no group reaches the Win32 placeholder range (0xEF00)
+    // or the system SC_* range (0xF000). The placeholder ids are deliberately NOT decoded, so an
+    // overlap would silently turn a disabled caption into a real command.
+    const int kBases[] = { kMenuIdLayerBase, kMenuIdEmulatorBase, kMenuIdRecentRomBase,
+                           kMenuIdPanelBase, kMenuIdSaveStateBase, kMenuIdLoadStateBase,
+                           kMenuIdEmuLoadBase, kMenuIdDumpTexBase };
+    const int kCounts[] = { NM_LAYER_COUNT, 64, 64, 128, kNativeStateSlots, kNativeStateSlots,
+                            kNativeStateSlots, kNativeMenuTextureLayers };
+    for (size_t i = 0; i < sizeof(kBases) / sizeof(kBases[0]); ++i)
+    {
+        CHECK(kBases[i] + kCounts[i] <= 0xEF00);
+        for (size_t j = i + 1; j < sizeof(kBases) / sizeof(kBases[0]); ++j)
+            CHECK(kBases[i] + kCounts[i] <= kBases[j] || kBases[j] + kCounts[j] <= kBases[i]);
+    }
+}
+
+// The Dump Textures submenu table: every LayerId appears exactly once, so no layer is
+// unreachable from the menu and none is listed twice under different labels.
+static void TestDumpTextureLayerTable()
+{
+    const NativeMenuTextureLayer* layers = NativeMenuTextureLayerList();
+    bool seen[kLayerCount] = {};
+    for (int i = 0; i < kNativeMenuTextureLayers; ++i)
+    {
+        CHECK(layers[i].label != nullptr && layers[i].label[0] != '\0');
+        CHECK(layers[i].layer >= 0 && layers[i].layer < kLayerCount);
+        CHECK(!seen[layers[i].layer]);
+        seen[layers[i].layer] = true;
+    }
+    for (int i = 0; i < kLayerCount; ++i) CHECK(seen[i]);
 }
 
 int main()
@@ -288,6 +330,7 @@ int main()
     TestEnablementMatrix();
     TestSaveStateEnablement();
     TestNativeMenuIdDecoding();
+    TestDumpTextureLayerTable();
     TestLaunchModel();
     TestPatchEnablement();
     TestNativeMenuStructureKey();

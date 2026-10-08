@@ -37,7 +37,11 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     // them itself -- only on its having reported that it has them.
     case TopBarCommandType::LoadEmulatorState:
         return state.connected && state.hasEmulatorStates;
+    // Both dumps read the loaded snapshot, so both need a source and an idle app. A layer
+    // being switched off in the Layers menu is not a reason to gray its export: the export
+    // renders that layer on its own regardless of the composite's toggles.
     case TopBarCommandType::DumpMemory:
+    case TopBarCommandType::DumpTextures:
         return state.source != SourceType::None && !state.operationBusy;
     // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image
     // needs a Data Directory. Open Project is always available (it is how you get locations). This
