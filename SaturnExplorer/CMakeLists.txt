@@ -458,6 +458,26 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # The SH-2 Assembly panel itself -- links the real panel (an unoptimized C++14 build catches an
+    # ODR-use of a class-static constant) and pins that its virtual list's row height does not
+    # change while a comment is being edited, which would shift every jump.
+    add_executable(SaturnExplorerAssemblyPanelTests
+        FrontEnd/tests/AssemblyPanelTests.cpp
+        FrontEnd/src/AssemblyPanel.cpp
+        FrontEnd/src/Sh2Operands.cpp
+        FrontEnd/src/WatchPanel.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+        FrontEnd/src/Debug/MemoryBackend.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerAssemblyPanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests Core/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(SaturnExplorerAssemblyPanelTests PRIVATE SaturnExplorerCore)
+    add_test(NAME SaturnExplorerAssemblyPanelTests COMMAND SaturnExplorerAssemblyPanelTests)
+
     # ContextBackend over a real core context: read-only enforced at write time, driver refusals
     # surfaced as unwritten bytes, and SourceId moving with the data behind an address.
     add_executable(SaturnExplorerMemoryBackendTests

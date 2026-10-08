@@ -19,6 +19,18 @@ namespace sfe
 
 namespace
 {
+// Rows decoded per cached page (pages are aligned to the span's base).
+constexpr uint32_t kPageRows = 64;
+
+// Instructions in the page starting at row 'first': a full page, or what is left of the span.
+// By value on purpose: std::min would bind a class-static kPageRows by reference, an ODR-use that
+// needs an out-of-line definition under C++14 and fails to link in an unoptimized build.
+uint32_t PageRows(const AsmSpan& span, uint32_t first)
+{
+    const uint32_t left = span.size / 2 - first;
+    return left < kPageRows ? left : kPageRows;
+}
+
 // Subtle syntax colours for the dark theme.
 const ImU32 kColAddr  = IM_COL32(150, 150, 160, 255);
 const ImU32 kColBytes = IM_COL32(120, 120, 130, 255);
@@ -100,7 +112,7 @@ void AssemblyPanel::LoadPages(IMemoryBackend& backend, const AsmSpan& span, uint
     for (uint32_t p : missing)
     {
         const uint32_t first = p * kPageRows;
-        const uint32_t rows = std::min(kPageRows, span.size / 2 - first);
+        const uint32_t rows = PageRows(span, first);
         const uint32_t base = span.base + first * 2;
         reqs.push_back({ base, rows * 2 });
         prevAt.push_back(first ? (int)reqs.size() : -1);
@@ -116,7 +128,7 @@ void AssemblyPanel::LoadPages(IMemoryBackend& backend, const AsmSpan& span, uint
         const bool havePrev = prevAt[i] >= 0 && results[prevAt[i]].success && results[prevAt[i]].bytes.size() >= 2;
         const MemoryReadResult* prev = havePrev ? &results[prevAt[i]] : nullptr;
         next += prevAt[i] >= 0 ? 2 : 1;
-        const uint32_t rows = std::min(kPageRows, span.size / 2 - first);
+        const uint32_t rows = PageRows(span, first);
         const std::vector<Sh2WindowLine> decoded =
             Sh2DecodeWindow(base, body.success ? body.bytes.data() : nullptr,
                             body.success ? body.bytes.size() : 0, (int)rows,
@@ -444,8 +456,14 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 {
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     if (mCommentFocus) { ImGui::SetKeyboardFocusHere(); mCommentFocus = false; }
+                    // No vertical frame padding: the list is clipped on the assumption that every
+                    // row is one text line tall, and a taller edit row shifts every scroll position
+                    // computed from that height (a jump lands far from its target).
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                                        ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
                     const bool enter = ImGui::InputText("##cmt", mCommentBuf, sizeof(mCommentBuf),
                                                         ImGuiInputTextFlags_EnterReturnsTrue);
+                    ImGui::PopStyleVar();
                     if (enter || ImGui::IsItemDeactivated())
                     {
                         if (mCommentBuf[0]) mComments[ln.addr] = mCommentBuf;
