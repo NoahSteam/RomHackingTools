@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
 #include "FileWrite.h"
 
 using namespace sfe;
@@ -91,10 +95,28 @@ void TestWriteAndReadBack()
     CHECK(RemoveFile(P("empty.bin")));
 }
 
-// THE regression. Two bytes to /dev/full: fwrite succeeds, fclose fails. The old code
-// returned "wrote == size" and called that saved.
+// /dev/full is a Linux thing: macOS and Windows have no equivalent, and the node can be
+// missing in a minimal container. Checked rather than assumed, because a test that hard-codes
+// a Linux device is how a suite that is green here fails on somebody's Mac.
+bool HaveDevFull()
+{
+#ifdef _WIN32
+    return false;
+#else
+    struct stat st;
+    return ::stat("/dev/full", &st) == 0 && S_ISCHR(st.st_mode);
+#endif
+}
+
+// THE regression. Two bytes to /dev/full: fwrite succeeds, fclose fails -- the device accepts
+// everything and discards it. The old code returned "wrote == size" and called that saved.
 void TestCloseFailureIsReported()
 {
+    if (!HaveDevFull())
+    {
+        std::cout << "FileWriteTests: no /dev/full here, skipping the close-failure case\n";
+        return;
+    }
     const std::string body = "hi";
     std::string error;
     CHECK(!WriteFileAtomically("/dev/full", body.data(), body.size(), error));
@@ -102,8 +124,9 @@ void TestCloseFailureIsReported()
     CHECK(error.find("/dev/full") != std::string::npos);
 
     // A device is written in place, never staged -- a rename would have replaced the node
-    // itself. So the device is still there and no temporary was left beside it.
-    CHECK(FileOrDirectoryExists("/dev/full"));
+    // itself, turning /dev/full into an ordinary file. So it is still a character device and
+    // no temporary was left beside it.
+    CHECK(HaveDevFull());
     CHECK(!FileOrDirectoryExists("/dev/full.separt"));
 }
 
