@@ -12,6 +12,7 @@
 
 #include "saturnexplorer/SaturnExplorer.h"
 
+#include "AsmCodeWindow.h"
 #include "Debug/MemoryBackend.h"
 #include "Debug/BreakpointManager.h"
 #include "Debug/ExecutionActions.h"
@@ -94,16 +95,13 @@ private:
     bool     mBpStopActive = false;
     int      mBpStopCpu = 0;
     uint32_t mBpStopPc = 0;
-    bool     mAutoRefresh = true;      // re-read the code window every frame (live)
-    uint32_t mWindowBase = 0;          // address of the first disassembled line
+    bool     mAutoRefresh = true;      // re-read the code bytes every frame (live)
     // The address the view is framed on -- the PC while following, else the last navigation
-    // target. Distinct from mWindowBase, which now sits a lead before it so there is code
-    // above the anchor to scroll back into; this is what the history records.
+    // target. It picks which captured region the list spans (see AsmCodeWindow.h); the list
+    // itself is that whole region, only the rows on screen are read and decoded.
     uint32_t mWindowAnchor = 0;
-    // Instructions actually decoded. Not always kWinInstr: the window is trimmed to what the
-    // anchor's region can serve, since the panel reads it in one request that would otherwise
-    // be rejected whole.
-    int      mWindowInstr = 0;
+    // False forces the next frame to re-frame on the PC and scroll to it (CPU switch, Follow PC
+    // re-enabled, Go to PC).
     bool     mWindowValid = false;
     uint32_t mLastPc = 0;
     // Pending scroll request, by address rather than "the PC": a navigation target is usually
@@ -129,7 +127,16 @@ private:
     bool     mFocusRequested = false;  // bring the window forward after an external GoTo/Navigate
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
-    std::vector<Line>    mLines;       // reused decode buffer
+
+    // Decoded rows, cached a page at a time (kPageRows instructions, aligned to the span's base)
+    // so a frame reads a couple of small pages rather than a row at a time. Cleared every frame
+    // while Auto Refresh is on; held otherwise, which is what lets the disassembly hold still.
+    static constexpr uint32_t kPageRows = 64;
+    struct Page { std::vector<Line> lines; };
+    std::unordered_map<uint32_t, Page> mPages;   // keyed by the page's first address
+    uint64_t mPagesSource = 0;                   // backend.SourceId() the pages were read from
+    void        LoadPages(IMemoryBackend& backend, const AsmSpan& span, uint32_t rowFirst, uint32_t rowEnd);
+    const Line* LineAt(const AsmSpan& span, uint32_t row) const;
 
     // Instruction selection (by address) for "Find in data directory". Click an
     // address to select one instruction; shift-click another to extend a contiguous
@@ -139,15 +146,6 @@ private:
     uint32_t mSelLoAddr = 0;
     uint32_t mSelHiAddr = 0;
 
-    // Frozen-window cache: when Auto Refresh is off (and the base hasn't moved) the
-    // panel reuses these bytes instead of re-reading, so the view holds still.
-    std::vector<uint8_t> mWindowBytes;
-    uint32_t             mWindowBytesBase = 0;
-    bool                 mHaveWindowBytes = false;
-    uint8_t              mWindowPrev[2] = {};      // the instruction just before mWindowBase
-    bool                 mHaveWindowPrev = false;
-    uint64_t             mWindowBytesSource = 0;   // backend.SourceId() the bytes were read from
-
     // User comment store (address -> note), overlaid on the auto-generated comment
     // and persisted across sessions. Shared by both CPUs (they share the address map).
     std::unordered_map<uint32_t, std::string> mComments;
@@ -155,6 +153,12 @@ private:
     // was opened from a cell other than the operands). The pointer has usually moved off
     // the operand by the time a menu item is picked, so it cannot be re-read then.
     int      mCtxOperand = -1;
+
+    // The code bytes the row context menu's "Find in data directory" will search, read once when
+    // the menu opens: the selection can span rows that are not on screen, and re-reading it
+    // every frame the menu stays open would be a request per frame.
+    std::vector<uint8_t> mCtxFindBytes;
+    uint32_t             mCtxFindStart = 0;
 
     uint32_t mEditCommentAddr = 0;     // address whose comment cell is being edited
     bool     mEditingComment = false;

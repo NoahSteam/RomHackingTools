@@ -1,10 +1,8 @@
-// AsmWindowFor — the Assembly panel's decode window, including its lead-in.
+// AsmSpanFor — the span of memory the Assembly panel scrolls through.
 //
-// The panel reads its whole window in ONE request and ContextBackend rejects a request that
-// leaves the region rather than serving the mapped part of it. So a window that starts even two
-// bytes before its region turns every line into "????" -- which is what an unclamped 192-byte
-// lead does at 0x06000000, the first address of HWRAM and a perfectly ordinary place to stop.
-// These cases pin the clamp at both ends, and that a mirrored address keeps its mirror.
+// The panel is a virtual list over the whole captured region the view is framed in. The span
+// must be exactly that region (so every row is reachable), must never leave it (a read that does
+// is rejected whole and every row becomes "????"), and must keep the anchor's mirror.
 #include "AsmCodeWindow.h"
 
 #include <cstdio>
@@ -20,89 +18,63 @@ int gFailures;
     if (!(cond)) { std::printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); ++gFailures; } \
 } while (0)
 
-constexpr int kInstr = 256;   // the panel's kWinInstr
-constexpr int kLead  = 96;    // the panel's kWinLead
 constexpr uint32_t kHwram = 0x06000000u;
 constexpr uint32_t kHwramSize = 0x100000u;
 
-AsmCodeWindow Win(uint32_t anchor) { return AsmWindowFor(anchor, kInstr, kLead); }
-
-// The reported bug: the first instruction of HWRAM. The lead must collapse rather than start
-// below the region, or the single window read fails and the whole view shows "????".
-void TestRegionStartKeepsTheWindowInsideTheRegion()
+// Wherever in HWRAM the view is framed, the span is all of HWRAM -- first and last instruction
+// included, so the user can scroll to either end.
+void TestSpanIsTheWholeRegion()
 {
-    const AsmCodeWindow w = Win(kHwram);
-    CHECK(w.base == kHwram);                       // not kHwram - 192
-    CHECK(w.instructions == kInstr);               // and nothing lost below the anchor
-    CHECK(w.base + (uint32_t)w.instructions * 2u <= kHwram + kHwramSize);
+    const uint32_t anchors[] = { kHwram, kHwram + 0x8000u, kHwram + kHwramSize - 2u };
+    for (uint32_t a : anchors)
+    {
+        const AsmSpan s = AsmSpanFor(a);
+        CHECK(s.base == kHwram);
+        CHECK(s.size == kHwramSize);
+    }
 }
 
-// Well inside a region the lead applies in full -- this is what gives the scroll-back room.
-void TestInteriorAnchorGetsTheFullLead()
+// A region smaller than a screenful (the VDP1 register image is 0x18 bytes) is its own span.
+void TestTinyRegion()
 {
-    const uint32_t anchor = kHwram + 0x8000u;
-    const AsmCodeWindow w = Win(anchor);
-    CHECK(w.base == anchor - (uint32_t)kLead * 2u);
-    CHECK(w.instructions == kInstr);
-    CHECK(w.base < anchor);                        // there IS code above the anchor
-}
-
-// The tail needs the same treatment: a window running past the end of the region is rejected
-// just as readily as one starting before it.
-void TestNearRegionEndTrimsTheLength()
-{
-    const uint32_t anchor = kHwram + kHwramSize - 0x10u;   // 16 bytes left in the region
-    const AsmCodeWindow w = Win(anchor);
-    CHECK(w.instructions < kInstr);                        // trimmed
-    CHECK(w.instructions > 0);
-    CHECK(w.base + (uint32_t)w.instructions * 2u == kHwram + kHwramSize);
-    CHECK(w.base == anchor - (uint32_t)kLead * 2u);         // the lead still fits behind it
-}
-
-// A region smaller than the window at all (the VDP1 register image is 0x18 bytes) must not
-// produce a window reaching outside it in either direction.
-void TestTinyRegionIsFullyContained()
-{
-    const uint32_t base = 0x05D00000u, size = 0x18u;
-    const AsmCodeWindow w = Win(base + 8u);
-    CHECK(w.base >= base);
-    CHECK(w.base + (uint32_t)w.instructions * 2u <= base + size);
-    CHECK(w.instructions > 0);
+    const AsmSpan s = AsmSpanFor(0x05D00008u);
+    CHECK(s.base == 0x05D00000u);
+    CHECK(s.size == 0x18u);
 }
 
 // An address in a mirror must stay in that mirror: the region table normalizes to compare, and
-// clamping against its canonical base would silently move the view somewhere else.
+// returning the canonical base would silently show different addresses than were navigated to.
 void TestMirroredAnchorKeepsItsMirror()
 {
-    const uint32_t mirrored = 0x26000000u;     // HWRAM through a different mirror
-    const AsmCodeWindow w = Win(mirrored);
-    CHECK(w.base == mirrored);
-    CHECK((w.base & 0x07FFFFFFu) == kHwram);
-    CHECK(w.instructions == kInstr);
+    const uint32_t mirrored = 0x26004000u;     // HWRAM through the uncached mirror
+    const AsmSpan s = AsmSpanFor(mirrored);
+    CHECK(s.base == 0x26000000u);
+    CHECK(s.size == kHwramSize);
+    CHECK(mirrored >= s.base && mirrored < s.base + s.size);
 }
 
-// Nothing in BIOS or the cartridge is captured, so there is no better window to pick; it is
-// left alone rather than snapped to some unrelated region.
-void TestUnmappedAnchorIsLeftAlone()
+// Nothing in BIOS or the cartridge is captured: a bounded block around the anchor, not a
+// span reaching into some unrelated region or wrapping.
+void TestUnmappedAnchorGetsABoundedBlock()
 {
-    const uint32_t anchor = 0x00010000u;   // below LWRAM, not a captured region
-    const AsmCodeWindow w = Win(anchor);
-    CHECK(w.base == anchor - (uint32_t)kLead * 2u);
-    CHECK(w.instructions == kInstr);
+    const uint32_t anchor = 0x00010004u;   // below LWRAM, not a captured region
+    const AsmSpan s = AsmSpanFor(anchor);
+    CHECK(anchor >= s.base && anchor < s.base + s.size);
+    CHECK(s.size == kAsmUnmappedSpan);
+    CHECK(s.base + s.size > s.base);
 }
 
-// Odd anchors are instruction-aligned, and an anchor near zero must not wrap underneath it.
-void TestAlignmentAndNoWrapAtZero()
+// Odd anchors are instruction-aligned, and an anchor at zero must not wrap.
+void TestAlignmentAndZero()
 {
-    CHECK((Win(kHwram + 0x8001u).base & 1u) == 0u);
-    const AsmCodeWindow w = Win(0x10u);
-    CHECK(w.base == 0u);                 // clamped, not 0x10 - 192 wrapping to ~4 GiB
-    CHECK(w.instructions > 0);
+    CHECK(AsmSpanFor(kHwram + 0x8001u).base == kHwram);
+    const AsmSpan z = AsmSpanFor(0u);
+    CHECK(z.base == 0u && z.size == kAsmUnmappedSpan);
 }
 
-// The invariant behind all of the above, over every captured region: whatever the anchor, the
-// window never leaves the region it is in.
-void TestWindowNeverLeavesItsRegion()
+// The invariant over every captured region: the span is exactly the region, whatever the
+// anchor, and has an even size.
+void TestSpanMatchesEveryRegion()
 {
     size_t count = 0;
     const SaturnRegion* regions = SaturnRegions(count);
@@ -113,12 +85,10 @@ void TestWindowNeverLeavesItsRegion()
         for (uint32_t off : probes)
         {
             if (off >= r.size) continue;
-            const AsmCodeWindow w = Win(r.base + off);
-            const uint32_t lo = w.base & 0x07FFFFFFu;
-            const uint32_t hi = lo + (uint32_t)w.instructions * 2u;
-            CHECK(lo >= r.base);
-            CHECK(hi <= r.base + r.size);
-            CHECK(w.instructions > 0);
+            const AsmSpan s = AsmSpanFor(r.base + off);
+            CHECK(s.base == r.base);
+            CHECK(s.size == (r.size & ~1u));
+            CHECK((s.size & 1u) == 0u);
         }
     }
 }
@@ -126,14 +96,12 @@ void TestWindowNeverLeavesItsRegion()
 
 int main()
 {
-    TestRegionStartKeepsTheWindowInsideTheRegion();
-    TestInteriorAnchorGetsTheFullLead();
-    TestNearRegionEndTrimsTheLength();
-    TestTinyRegionIsFullyContained();
+    TestSpanIsTheWholeRegion();
+    TestTinyRegion();
     TestMirroredAnchorKeepsItsMirror();
-    TestUnmappedAnchorIsLeftAlone();
-    TestAlignmentAndNoWrapAtZero();
-    TestWindowNeverLeavesItsRegion();
+    TestUnmappedAnchorGetsABoundedBlock();
+    TestAlignmentAndZero();
+    TestSpanMatchesEveryRegion();
     if (gFailures) { std::printf("FAILURES: %d\n", gFailures); return 1; }
     std::printf("all cases passed\n");
     return 0;
