@@ -53,6 +53,7 @@ enum : int
 
     // Data
     ID_DUMP,
+    ID_DUMP_SH2,
     ID_DATADIR,
 
     // Patch
@@ -236,6 +237,7 @@ struct MacMenuBarImpl
             case ID_TOGGLE_PAUSE:      c = MenuCommand::TogglePause; break;
             case ID_STEP:              c = MenuCommand::StepFrame; break;
             case ID_DUMP:              c = MenuCommand::DumpMemory; break;
+            case ID_DUMP_SH2:          c = MenuCommand::DumpSh2; break;
             case ID_DATADIR:           c = MenuCommand::SetDataDirectory; break;
             case ID_PATCH_APPLY:       c = MenuCommand::ApplyChangesToDisc; break;
             case ID_PATCH_MANAGE:      c = MenuCommand::ManageLocations; break;
@@ -428,6 +430,7 @@ struct MacMenuBarImpl
         {
             NSMenu* data = AddSub(bar, @"Data");
             AddItem(data, ID_DUMP, @"Dump Memory\tCtrl+Shift+D");
+            AddItem(data, ID_DUMP_SH2, @"Dump SH-2…");
             // One item per layer, from the shared table. The tag is ID_DUMPTEX_BASE + LayerId,
             // which NativeMenuDecodeIndexedId turns back into the DumpTextures command carrying
             // that layer -- so the item's position in the submenu is free to change.
@@ -564,6 +567,7 @@ struct MacMenuBarImpl
         EnableTag(ID_DUMP, s.dumpEnabled);
         for (int i = 0; i < kNativeMenuTextureLayers; ++i)
             EnableTag(ID_DUMPTEX_BASE + i, s.dumpTexturesEnabled);
+        EnableTag(ID_DUMP_SH2, s.dumpSh2Enabled);
 
         // Layers
         for (int i = 0; i < NM_LAYER_COUNT; ++i)

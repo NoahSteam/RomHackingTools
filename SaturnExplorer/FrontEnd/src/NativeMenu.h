@@ -115,6 +115,7 @@ enum class MenuCommand
     // Data
     DumpMemory,
     DumpTextures,         // uses index (LayerId)
+    DumpSh2,
     SetDataDirectory,
     // Patch
     ApplyChangesToDisc,
@@ -188,6 +189,7 @@ struct NativeMenuState
     // --- Data ---
     bool dumpEnabled = false;
     bool dumpTexturesEnabled = false;
+    bool dumpSh2Enabled = false;
 
     // --- Layers (indexed by NativeMenuLayer) ---
     bool layer[NM_LAYER_COUNT] = {};

@@ -72,6 +72,10 @@ public:
     // following the PC. Used when execution stops so the halted instruction is on screen.
     void Reveal(int cpu) { mCpu = cpu & 1; mFocusRequested = true; }
 
+    // The user's notes (address -> text), shared by both CPUs. Read by Data > Dump SH-2, which
+    // writes them in place of the generated comments exactly as the panel shows them.
+    const std::unordered_map<uint32_t, std::string>& UserComments() const { return mComments; }
+
     // Persist / restore the user comment store (address -> note). Called by the App
     // at startup / shutdown, mirroring WatchPanel session persistence.
     void LoadComments();

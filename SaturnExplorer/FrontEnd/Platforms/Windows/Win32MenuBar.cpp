@@ -36,6 +36,7 @@ enum : UINT
 
     // Data
     ID_DUMP,
+    ID_DUMP_SH2,
     ID_DATADIR,
 
     // Patch
@@ -195,6 +196,7 @@ bool Win32MenuBar::OnCommand(int id)
         case ID_TOGGLE_PAUSE:      c = MenuCommand::TogglePause; break;
         case ID_STEP:              c = MenuCommand::StepFrame; break;
         case ID_DUMP:              c = MenuCommand::DumpMemory; break;
+        case ID_DUMP_SH2:          c = MenuCommand::DumpSh2; break;
         case ID_DATADIR:           c = MenuCommand::SetDataDirectory; break;
         case ID_PATCH_APPLY:       c = MenuCommand::ApplyChangesToDisc; break;
         case ID_PATCH_MANAGE:      c = MenuCommand::ManageLocations; break;
@@ -292,6 +294,7 @@ void Win32MenuBar::RefreshState()
     EnableById(mMenu, ID_DUMP, s.dumpEnabled);
     for (int i = 0; i < kNativeMenuTextureLayers; ++i)
         EnableById(mMenu, ID_DUMPTEX_BASE + (UINT)i, s.dumpTexturesEnabled);
+    EnableById(mMenu, ID_DUMP_SH2, s.dumpSh2Enabled);
 
     // Layers
     for (int i = 0; i < NM_LAYER_COUNT; ++i)
@@ -455,6 +458,7 @@ void Win32MenuBar::Rebuild()
     {
         HMENU data = ::CreatePopupMenu();
         AddItem(data, ID_DUMP, L"Dump Memory\tCtrl+Shift+D");
+        AddItem(data, ID_DUMP_SH2, L"Dump SH-2...");
         // One item per layer, from the shared table. The id is ID_DUMPTEX_BASE + LayerId,
         // which NativeMenuDecodeIndexedId turns back into the DumpTextures command carrying
         // that layer -- so the item's position in the submenu is free to change.

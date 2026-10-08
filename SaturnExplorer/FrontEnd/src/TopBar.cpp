@@ -42,6 +42,7 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     // renders that layer on its own regardless of the composite's toggles.
     case TopBarCommandType::DumpMemory:
     case TopBarCommandType::DumpTextures:
+    case TopBarCommandType::DumpSh2:
         return state.source != SourceType::None && !state.operationBusy;
     // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image
     // needs a Data Directory. Open Project is always available (it is how you get locations). This

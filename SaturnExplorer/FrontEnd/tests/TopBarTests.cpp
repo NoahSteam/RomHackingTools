@@ -32,10 +32,12 @@ static void TestEnablementMatrix()
     CHECK(!TopBarCommandEnabled(TopBarCommandType::StartRecording, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::TogglePause, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::DumpMemory, state));
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::DumpSh2, state));
 
     state.source = SourceType::Dump;
     CHECK(TopBarCommandEnabled(TopBarCommandType::ConnectLive, state));
     CHECK(TopBarCommandEnabled(TopBarCommandType::DumpMemory, state));
+    CHECK(TopBarCommandEnabled(TopBarCommandType::DumpSh2, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::TogglePause, state));
 
     state.source = SourceType::Live;

@@ -55,6 +55,7 @@ enum class TopBarCommandType
     // (sfe::kLayerVdp1 or an se_vdp2_layer); the same export the layer viewer's own
     // Export button produces.
     DumpTextures,
+    DumpSh2,          // the Assembly listing as text; opens its options dialog
     SetDataDirectory,
     ToggleWindow,
     ShowWindow,

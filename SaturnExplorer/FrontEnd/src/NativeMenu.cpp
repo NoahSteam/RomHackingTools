@@ -97,6 +97,7 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::LoadEmulatorState: out = TopBarCommand(TopBarCommandType::LoadEmulatorState, a.index); return true;
     case MenuCommand::DumpMemory:        out = TopBarCommand(TopBarCommandType::DumpMemory); return true;
     case MenuCommand::DumpTextures:      out = TopBarCommand(TopBarCommandType::DumpTextures, a.index); return true;
+    case MenuCommand::DumpSh2:           out = TopBarCommand(TopBarCommandType::DumpSh2); return true;
     case MenuCommand::SetDataDirectory:  out = TopBarCommand(TopBarCommandType::SetDataDirectory); return true;
     case MenuCommand::ApplyChangesToDisc: out = TopBarCommand(TopBarCommandType::ApplyChangesToDisc); return true;
     case MenuCommand::ManageLocations:   out = TopBarCommand(TopBarCommandType::ManageLocations); return true;
