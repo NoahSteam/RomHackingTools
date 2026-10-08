@@ -9174,7 +9174,9 @@ void App::DrawVdp1Table()
                 for (int col = 0; col < cols; ++col)
                 {
                     ImGui::TableSetColumnIndex(col);
-                    ImGui::TableHeader(ImGui::TableGetColumnName(col));
+                    const char* name = ImGui::TableGetColumnName(col);
+                    CenterInCell(ImGui::CalcTextSize(name).x);
+                    ImGui::TableHeader(name);
                     if (col >= 2) HoverHelp(kWordDesc[col - 2]);   // # and Addr have no help
                 }
 
