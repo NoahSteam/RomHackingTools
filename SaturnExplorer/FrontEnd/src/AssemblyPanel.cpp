@@ -17,11 +17,6 @@
 namespace sfe
 {
 
-// std::min takes its arguments by const reference, so LoadPages odr-uses kPageRows and C++14
-// (which this project builds as) wants a definition to bind to -- without it the whole front end
-// fails to link. Redundant from C++17 on, where a static constexpr member is implicitly inline.
-constexpr uint32_t AssemblyPanel::kPageRows;
-
 namespace
 {
 // Subtle syntax colours for the dark theme.
