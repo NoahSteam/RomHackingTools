@@ -3894,8 +3894,16 @@ static std::string DescribePad(unsigned int mask)
 
 void App::SendInput(unsigned int mask)
 {
-    if (mask == mInputMask) { return; }   // only send on change (the glue latches)
+    const int port = mController.Port();
+    if (mask == mInputMask && port == mInputPort) { return; }   // only send on change (the glue latches)
+#ifdef SE_ENABLE_LIVE
+    // The pad moved to another port while a button was down: release the port we left,
+    // otherwise the emulator keeps that button latched on it.
+    if (mbLiveSource && port != mInputPort && mInputMask != 0)
+        se_live_send_input(&mDataSource, static_cast<uint32_t>(mInputPort), 0);
+#endif
     mInputMask = mask;
+    mInputPort = port;
 #ifdef SE_ENABLE_LIVE
     if (mbLiveSource)
     {

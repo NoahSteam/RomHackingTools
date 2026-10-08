@@ -380,9 +380,9 @@ re-sending each frame is safe.
 
 **Which pad device.** The injection overlays whichever device the port is set to in
 Mednafen's Input config, for the two supported types: the **Digital Control Pad**
-(2-byte data) and the **3D Control Pad** (10-byte data — digital buttons share the
-gamepad bit layout; L/R are driven as full analog when injected; mode + stick are left
-to the host). If a port is set to a device the injection doesn't handle (mouse, mission
+(2-byte data) and the **3D Control Pad** (10-byte data — its digital bit layout differs
+from the Digital Pad's, so each is translated separately; L/R are driven as full analog
+when injected; mode + stick are left to the host). If a port is set to a device the injection doesn't handle (mouse, mission
 stick, gun, …), Saturn Explorer input for that port is ignored. So if presses don't
 reach the game, first check the port's device is a Control Pad, and make sure you
 **rebuilt Mednafen** (`update.bat`) after any `apply.py` change — the injection lives in
@@ -391,7 +391,7 @@ the compiled `smpc.cpp`, not in an already-built binary.
 **Verifying what the pad sees.** `apply.py` also injects `SsDbgQueryInput(port, out[3])`
 into `smpc.cpp` — it reports, per port, `out[0]` device kind (0 none / 1 gamepad / 2 3D
 pad / 3 other), `out[1]` the host-input bits, and `out[2]` the Saturn Explorer-injected
-bits. This is the readback hook a client can poll to confirm its injection is actually
+bits (the protocol's `SE_PAD_*` mask). This is the readback hook a client can poll to confirm its injection is actually
 reaching the emulated pad (device is a Control Pad, injected bits non-zero) rather than
 being dropped by a device-type mismatch.
 

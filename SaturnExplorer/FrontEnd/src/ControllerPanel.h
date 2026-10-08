@@ -38,6 +38,15 @@ public:
     void ReleaseManualInput();
     bool ConsumeResetLayoutRequest();
 
+    // Per-frame tick (Draw calls it): advances playback/macros and recomputes the final state.
+    void Update(bool liveConnected, uint64_t frame);
+    // Macro list, also the API behind the Macros window.
+    void AddMacro(std::string name, std::vector<unsigned int> states);
+    void PlayMacro(size_t index);
+    void DeleteMacro(size_t index);   // stops it first if it is the one playing
+    // Keyboard key bound to a pad button as an ImGuiKey value (0 = unbound).
+    int KeyBindingFor(unsigned int padBit);
+
     int Port() const { return mPort; }
     unsigned int FinalState() const { return mFinalState; }
 
@@ -59,7 +68,6 @@ private:
 
     enum class PlaybackPolicy { Overlay = 0, Exclusive = 1, Override = 2 };
 
-    void Update(bool liveConnected, uint64_t frame);
     void StopPlayback();
     void RecomputeFinal();
     void ObserveFrame(uint64_t frame);

@@ -74,6 +74,11 @@ extern "C" const unsigned short* SsDbgVdp1Fb(void)   { return (const unsigned sh
    falls back to live VRAM. */
 static unsigned short SsVdp1Latch[0x40000];   /* 512 KiB, matches VRAM[0x40000] */
 static int SsVdp1LatchValid = 0;
+/* The latch is not part of Mednafen's state, so it must not outlive the VRAM it copied: a
+   state load or a reset replaces the timeline, and a stale latch would keep describing the
+   abandoned one (command list, VRAM Map, reconstructed output) until the next draw-end. After
+   this, the glue falls back to live VRAM exactly as on a fresh boot. */
+extern "C" void SsDbgVdp1LatchInvalidate(void) { SsVdp1LatchValid = 0; }
 extern "C" void SsDbgVdp1LatchDrawEnd(void) {
    memcpy(SsVdp1Latch, VRAM, sizeof SsVdp1Latch);
    SsVdp1LatchValid = 1;
@@ -92,7 +97,21 @@ extern "C" void SsDbgVdp1Regs(unsigned short o[11]) {
 # right after the "Drawing finished" completion. `extern "C"` is illegal inside a function
 # body, so the call is plain and resolves to VDP1_DRAWEND_FWD (a file-scope forward decl
 # prepended at BOF) — its C linkage matches the definition appended at EOF (VDP1_ACCESSORS).
-VDP1_DRAWEND_FWD = 'extern "C" void SsDbgVdp1LatchDrawEnd(void);  /* SE_VDP1_LATCH_FWD */\n'
+VDP1_DRAWEND_FWD = (
+    'extern "C" void SsDbgVdp1LatchDrawEnd(void);  /* SE_VDP1_LATCH_FWD */\n'
+    'extern "C" void SsDbgVdp1LatchInvalidate(void);\n'
+)
+# The latch must not survive a state load or a reset (see SsDbgVdp1LatchInvalidate). Anchored
+# on the start of VDP1::Reset (both power-on and soft reset) and on the VDP1 section's
+# MDFNSS_StateAction, which is what restores VRAM on a load.
+VDP1_RESET_ANCHOR = r'(void Reset\(bool powering_up\)\s*\{\s*\n)'
+VDP1_RESET_HOOK = (
+    "  SsDbgVdp1LatchInvalidate();   /* SE_VDP1_LATCH_RESET */\n"
+)
+VDP1_LOAD_ANCHOR = r'(MDFNSS_StateAction\(sm, load, data_only, StateRegs, "VDP1"\);\s*\n)'
+VDP1_LOAD_HOOK = (
+    "  if(load) SsDbgVdp1LatchInvalidate();   /* SE_VDP1_LATCH_LOAD */\n"
+)
 VDP1_DRAWEND_HOOK = (
     "    /* Saturn Explorer: latch VDP1 VRAM the instant the command list finishes plotting,\n"
     "       so the live command re-render matches what was drawn (see se_mednafen_glue.c). */\n"
@@ -547,46 +566,65 @@ void SMPC_SetInjectedInput(unsigned port, uint32 buttons);
 
 SMPC_INPUT_STATE = """\
 /* Saturn Explorer controller injection. The server thread writes these masks while
-   the emulation thread consumes them, so keep the handoff atomic. Values use
-   Mednafen's digital-pad data-buffer bit order, which is the ENTRY POSITION in
-   IODevice_Gamepad_IDII (input/gamepad.cpp) -- NOT the number in each entry's
-   IDIIS_Button(...) third argument, which is only the config-prompt order:
-     0 Z, 1 Y, 2 X, 3 R, 4 UP, 5 DOWN, 6 LEFT, 7 RIGHT,
-     8 B, 9 C, 10 A, 11 START, 12-14 padding, 15 L
-   (Confirmed against the emulator's own host input: pressing Right in Mednafen's
-   window sets 0x0080 = bit 7.) */
+   the emulation thread consumes them, so keep the handoff atomic. The stored value is
+   the protocol's SE_PAD_* mask, NOT a data-buffer layout: the Digital Control Pad and the
+   3D Control Pad lay their input buffers out differently, and the device on a port can be
+   changed at runtime, so the translation happens where the injection is merged
+   (SeSMPCUpdateInput), once the device is known.
+
+   Both layouts are the ENTRY POSITION in the device's IDII (input/gamepad.cpp,
+   input/3dpad.cpp) -- NOT the number in each IDIIS_Button(...) third argument, which is
+   only the config-prompt order:
+     Digital pad: 0 Z, 1 Y, 2 X, 3 R, 4 UP, 5 DOWN, 6 LEFT, 7 RIGHT,
+                  8 B, 9 C, 10 A, 11 START, 12-14 padding, 15 L
+     3D pad:      0 UP, 1 DOWN, 2 LEFT, 3 RIGHT, 4 B, 5 C, 6 A, 7 START,
+                  8 Z, 9 Y, 10 X, 11 padding, 12 MODE; then 16-bit analog values at
+                  byte 2 stick X, 4 stick Y, 6 right shoulder, 8 left shoulder
+   (Digital layout confirmed against the emulator's own host input: pressing Right in
+   Mednafen's window sets 0x0080 = bit 7.) */
 static std::atomic_uint_least16_t SeInjectedPad[2];
 
 extern "C" void SeExportLog(const char* msg);   /* diagnostic log -> SE Log window (v11+) */
 
+/* SE_PAD_* -> data-buffer bit, one row per button. Spelled out as tables rather than shift
+   arithmetic: the layouts interleave face buttons and directions, so there is no clean
+   shift, and a wrong bit silently presses a different button (START was once mapped onto
+   bit 4, which is UP on the digital pad -- and bit 4 is B on the 3D pad). A negative bit
+   means the device has no digital bit for that button (the 3D pad's L/R are analog). */
+struct SePadBit { uint16 se; int8 gamepad; int8 threedpad; };
+static const SePadBit SePadBits[13] = {
+ { 0x0001u,  4,  0 },   /* UP    */  { 0x0002u,  5,  1 },   /* DOWN  */
+ { 0x0004u,  6,  2 },   /* LEFT  */  { 0x0008u,  7,  3 },   /* RIGHT */
+ { 0x0010u, 10,  6 },   /* A     */  { 0x0020u,  8,  4 },   /* B     */
+ { 0x0040u,  9,  5 },   /* C     */  { 0x0080u,  2, 10 },   /* X     */
+ { 0x0100u,  1,  9 },   /* Y     */  { 0x0200u,  0,  8 },   /* Z     */
+ { 0x0400u, 15, -1 },   /* L     */  { 0x0800u,  3, -1 },   /* R     */
+ { 0x1000u, 11,  7 },   /* START */
+};
+
+static uint16 SeNativePadBits(uint16 se, bool threedpad)
+{
+ uint16 native = 0;
+ for(unsigned i = 0; i < 13; i++)
+ {
+  const int bit = threedpad ? SePadBits[i].threedpad : SePadBits[i].gamepad;
+  if(bit >= 0 && (se & SePadBits[i].se)) native |= (uint16)(1u << bit);
+ }
+ return native;
+}
+
 void SMPC_SetInjectedInput(unsigned port, uint32 buttons)
 {
  if(port >= 2) return;
- /* SE_PAD_* -> data-buffer bit, per the IDII entry order documented above. Spelled out
-    as a table rather than shift arithmetic: the layout interleaves face buttons and
-    directions, so there is no clean shift, and a wrong bit silently presses a different
-    button (this previously mapped START onto bit 4, which is UP). */
- static const struct { uint16 se; uint8 bit; } se_to_pad[13] = {
-  { 0x0001u,  4 },   /* UP    */  { 0x0002u,  5 },   /* DOWN  */
-  { 0x0004u,  6 },   /* LEFT  */  { 0x0008u,  7 },   /* RIGHT */
-  { 0x0010u, 10 },   /* A     */  { 0x0020u,  8 },   /* B     */
-  { 0x0040u,  9 },   /* C     */  { 0x0080u,  2 },   /* X     */
-  { 0x0100u,  1 },   /* Y     */  { 0x0200u,  0 },   /* Z     */
-  { 0x0400u, 15 },   /* L     */  { 0x0800u,  3 },   /* R     */
-  { 0x1000u, 11 },   /* START */
- };
- uint16 native = 0;
- for(unsigned i = 0; i < 13; i++)
-  if(buttons & se_to_pad[i].se) native |= (uint16)(1u << se_to_pad[i].bit);
- const uint16 prev = SeInjectedPad[port].exchange(native, std::memory_order_relaxed);
- /* Diagnostic: what the SMPC translate produced. Only on change — the LiveDriver poll
-    thread re-sends INP every cycle while a button is held (to cover a non-latching
-    glue), so logging every call would flood SE's Log window at poll rate. */
- if(native != prev)
+ const uint16 se = (uint16)(buttons & 0x1FFFu);
+ const uint16 prev = SeInjectedPad[port].exchange(se, std::memory_order_relaxed);
+ /* Diagnostic: only on change -- the LiveDriver poll thread re-sends INP every cycle
+    while a button is held (to cover a non-latching glue), so logging every call would
+    flood SE's Log window at poll rate. */
+ if(se != prev)
  {
-  char m[80];
-  snprintf(m, sizeof(m), "SMPC inject: port=%u se=0x%04X -> native=0x%04X",
-           port, (unsigned)(buttons & 0x1FFFu), (unsigned)native);
+  char m[64];
+  snprintf(m, sizeof(m), "SMPC inject: port=%u se=0x%04X", port, (unsigned)se);
   SeExportLog(m);
  }
 }
@@ -665,9 +703,11 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
  uint8 merged[10];
  if(vp < 2 && data)
  {
-  const uint16 inj = SeInjectedPad[vp].load(std::memory_order_relaxed);
+  const uint16 se = SeInjectedPad[vp].load(std::memory_order_relaxed);
   const bool ispad = (VirtualPorts[vp] == &PossibleDevices[vp].gamepad);
   const bool is3d  = (VirtualPorts[vp] == &PossibleDevices[vp].threedpad);
+  /* The injection in the device's own data-buffer layout (0 for any other device). */
+  const uint16 inj = (ispad || is3d) ? SeNativePadBits(se, is3d) : (uint16)0;
   /* Diagnostic: log every change of the INJECTED mask — including the release edge and
      the case where the port is not a pad at all, which is the one situation where an
      injection is silently dropped. Keyed on the injected mask rather than the merged
@@ -682,13 +722,19 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
   static uint16 sLastHost[2] = { 0xFFFFu, 0xFFFFu };
   if(hostBits != sLastHost[vp])
   {
-   /* Data-buffer bit order = IDII entry order (input/gamepad.cpp); see the note on
-      SMPC_SetInjectedInput. Bits 12-14 are padding and never named. */
-   static const char* const bn[16] =
+   /* Data-buffer bit order = IDII entry order of the port's device (input/gamepad.cpp or
+      input/3dpad.cpp); see the note on SMPC_SetInjectedInput. Padding bits are never
+      named. */
+   static const char* const bn_pad[16] =
     { "Z","Y","X","R","UP","DOWN","LEFT","RIGHT","B","C","A","START","-","-","-","L" };
+   static const char* const bn_3d[16] =
+    { "UP","DOWN","LEFT","RIGHT","B","C","A","START","Z","Y","X","-","MODE","-","-","-" };
+   const char* const* const bn = is3d ? bn_3d : bn_pad;
    /* SsDbgQueryKeyMap reports in SE_PAD_* order (up,down,left,right,a,b,c,x,y,z,ls,rs,
       start); map each of those slots to the data-buffer bit above. */
-   static const int km2data[13] = { 4,5,6,7, 10,8,9, 2,1,0, 15,3, 11 };
+   int km2data[13];
+   for(unsigned k = 0; k < 13; k++)
+    km2data[k] = is3d ? SePadBits[k].threedpad : SePadBits[k].gamepad;
    int km[13], i;
    if(!SsDbgQueryKeyMap(vp, km)) { for(i = 0; i < 13; i++) km[i] = -1; }
    char names[176]; unsigned pos = 0; names[0] = 0;
@@ -708,17 +754,17 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
    sLastHost[vp] = hostBits;
   }
   static uint16 sLastInj[2] = { 0xFFFFu, 0xFFFFu };
-  if(inj != sLastInj[vp])
+  if(se != sLastInj[vp])
   {
    const uint16 h = hostBits;
    char m[128];
-   snprintf(m, sizeof(m), "pad merge: port=%u inj=0x%04X host=0x%04X -> pad=0x%04X (%s)",
-            vp, (unsigned)inj, (unsigned)h, (unsigned)((ispad || is3d) ? (h | inj) : h),
+   snprintf(m, sizeof(m), "pad merge: port=%u se=0x%04X native=0x%04X host=0x%04X -> pad=0x%04X (%s)",
+            vp, (unsigned)se, (unsigned)inj, (unsigned)h, (unsigned)(h | inj),
             ispad ? "gamepad" : (is3d ? "3D pad" : "NOT A PAD - injection ignored"));
    SeExportLog(m);
-   sLastInj[vp] = inj;
+   sLastInj[vp] = se;
   }
-  if(inj && ispad)
+  if(se && ispad)
   {
    /* Digital Control Pad: 2-byte data buffer, digital bits at [0..1]. */
    const uint16 host = (uint16)(data[0] | ((uint16)data[1] << 8));
@@ -727,19 +773,20 @@ static void SeSMPCUpdateInput(unsigned vp, const int32 time_elapsed)
    merged[1] = (uint8)(combined >> 8);
    data = merged;
   }
-  else if(inj && is3d)
+  else if(se && is3d)
   {
-   /* 3D Control Pad: 10-byte buffer (input/3dpad.cpp) — digital bits at [0..1] (bits
-      0..10 share the gamepad layout), analog stick at [2..5], analog shoulders at
-      [6..9]. OR the digital bits in, and drive L/R as full analog when injected so
-      shoulder games respond. Mode + stick are left as the host provides. */
+   /* 3D Control Pad: 10-byte buffer (input/3dpad.cpp) -- digital bits at [0..1] (UP, DOWN,
+      LEFT, RIGHT, B, C, A, START, Z, Y, X; its layout is NOT the digital pad's), mode in
+      bit 12, then 16-bit little-endian analog values: stick X [2..3], stick Y [4..5],
+      RIGHT shoulder [6..7], LEFT shoulder [8..9]. OR the digital bits in, and drive L/R
+      as full analog when injected so shoulder games respond (the pad derives the
+      digital L/R bits from those). Mode + stick are left as the host provides. */
    memcpy(merged, data, 10);
-   /* Digital bits share the gamepad layout: 0..11 plus L at 15 (12..14 are padding). */
-   const uint16 dtmp = (uint16)((data[0] | ((uint16)data[1] << 8)) | (inj & 0x8FFFu));
+   const uint16 dtmp = (uint16)((data[0] | ((uint16)data[1] << 8)) | inj);
    merged[0] = (uint8)dtmp;
    merged[1] = (uint8)(dtmp >> 8);
-   if(inj & (1u << 15)) { merged[6] = 0xFF; merged[7] = 0xFF; } /* L shoulder analog full */
-   if(inj & (1u <<  3)) { merged[8] = 0xFF; merged[9] = 0xFF; } /* R shoulder analog full */
+   if(se & 0x0800u) { merged[6] = 0xFF; merged[7] = 0xFF; } /* R shoulder analog full */
+   if(se & 0x0400u) { merged[8] = 0xFF; merged[9] = 0xFF; } /* L shoulder analog full */
    data = merged;
   }
  }
@@ -1036,6 +1083,10 @@ def process_vdp1_drawend(src_dir, do_write):
     text, n = apply_prepend(text, VDP1_DRAWEND_FWD, "SE_VDP1_LATCH_FWD")
     notes.append(n)
     text, n = apply_anchored(text, VDP1_DRAWEND_ANCHOR, VDP1_DRAWEND_HOOK, "SsDbgVdp1LatchDrawEnd();")
+    notes.append(n)
+    text, n = apply_anchored(text, VDP1_RESET_ANCHOR, VDP1_RESET_HOOK, "SE_VDP1_LATCH_RESET")
+    notes.append(n)
+    text, n = apply_anchored(text, VDP1_LOAD_ANCHOR, VDP1_LOAD_HOOK, "SE_VDP1_LATCH_LOAD")
     notes.append(n)
     if do_write and text != original:
         open(path, "w", encoding="utf-8", errors="surrogateescape").write(text)

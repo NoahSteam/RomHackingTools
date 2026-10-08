@@ -307,11 +307,36 @@ void TestShutdownDoesNotWaitForASilentClient()
     Check(took < std::chrono::milliseconds(3000), "deinit returns promptly with a silent client attached");
     ::close(fd);
 }
+
+// What the emulator's pad hook last received for each port.
+std::atomic<unsigned> gPadState[2];
+void PadHook(unsigned port, unsigned buttons)
+{
+    if (port < 2) gPadState[port].store(buttons);
+}
+
+// Moving the controller panel to the other port while a button is down: the app releases the
+// port it leaves and then drives the new one, and the driver's two submissions can land before
+// one poll cycle. The release must still reach the emulator -- a single pending slot let the
+// second submission overwrite the first and left the button latched on the old port.
+void TestPortSwitchReleasesTheOldPort(se_data_source& ds)
+{
+    se_live_send_input(&ds, 0, SE_PAD_A);
+    Check(WaitFor([] { return gPadState[0].load() == SE_PAD_A; }), "A reaches port 1");
+    se_live_send_input(&ds, 0, 0);
+    se_live_send_input(&ds, 1, 0);
+    Check(WaitFor([] { return gPadState[0].load() == 0; }), "port 1 is released after switching to port 2");
+    se_live_send_input(&ds, 1, SE_PAD_B);
+    Check(WaitFor([] { return gPadState[1].load() == SE_PAD_B; }), "B reaches port 2");
+    se_live_send_input(&ds, 1, 0);
+    Check(WaitFor([] { return gPadState[1].load() == 0; }), "B is released on port 2");
+}
 }  // namespace
 
 int main()
 {
     if (SeExportInit() != 0) { std::cerr << "SeExportInit failed\n"; return 1; }
+    SeExportSetInputHook(PadHook);
 
     TestVanishingClientDoesNotKillTheEmulator();
 
@@ -339,6 +364,7 @@ int main()
     }
     se_begin_frame(ctx);
 
+    TestPortSwitchReleasesTheOldPort(ds);
     TestEveryRequestedStepRuns(ds);
     TestStepCompletionIsObserved(ds, ctx);
     TestUnchangedDisplayIsReported(ds, ctx);
