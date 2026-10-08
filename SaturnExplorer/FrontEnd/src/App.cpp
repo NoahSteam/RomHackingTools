@@ -746,17 +746,23 @@ void App::BeginDumpSh2()
     in.cpu = mDumpSh2Cpu;
     in.haveRegs = se_get_sh2_regs(mContext, mDumpSh2Cpu, &in.regs) == SE_OK;
     in.userComments = mAssemblyPanel.UserComments();
-    // Every region is read, selected or not: a generated comment resolves literal-pool loads
-    // from any of them.
+    // An unselected region is still read when generated comments are on, because one resolves
+    // literal-pool loads from any region -- but only then. Each region is a megabyte, read and
+    // copied twice on the way in, so reading one nothing can consult is a hitch in the frame the
+    // user clicked Dump for no gain.
     // (ReadRegionBytes, not one big request: a single read is capped at 64 KiB.)
+    const bool poolsNeeded = in.opt.comments && in.opt.autoComments && in.haveRegs;
     for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
-        ReadRegionBytes(mMemBackend, Sh2DumpRegionAt(i).base, Sh2DumpRegionAt(i).size, in.memory[i]);
+        if (in.opt.regions[i] || poolsNeeded)
+            ReadRegionBytes(mMemBackend, Sh2DumpRegionAt(i).base, Sh2DumpRegionAt(i).size,
+                            in.memory[i]);
 
     char name[64];
     std::snprintf(name, sizeof(name), "saturn_sh2_%s_frame_%llu.txt", mDumpSh2Cpu ? "slave" : "master",
                   static_cast<unsigned long long>(se_frame_number(mContext)));
     mDumpSh2FileName = name;
     mDumpSh2Job.reset(new Sh2DumpJob(std::move(in)));
+    mOpenDumpSh2Progress = true;
 }
 
 void App::DrawDumpSh2Modal(IPlatform& platform)
@@ -768,13 +774,11 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
     {
         mOpenDumpSh2Modal = false;
         mDumpSh2Cpu = mAssemblyPanel.Cpu();   // default to the CPU the panel is showing
-        // Which regions this source can actually read: a probe of the first word of each.
+        // Which regions this source can actually read, for the checkbox state and the estimate.
+        // Cosmetic and allowed to go stale while the dialog is open: what actually gets written
+        // is decided by the read in BeginDumpSh2.
         for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
-        {
-            const auto r = mbHasData ? mMemBackend.ReadMemoryBatch({ { Sh2DumpRegionAt(i).base, 2 } })
-                                     : std::vector<MemoryReadResult>();
-            mDumpSh2Available[i] = !r.empty() && r[0].success;
-        }
+            mDumpSh2Available[i] = mbHasData && IsReadableAddress(&mMemBackend, Sh2DumpRegionAt(i).base);
         ImGui::OpenPopup(kOptionsTitle);
     }
 
@@ -828,7 +832,7 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         {
             const Sh2DumpRegion& r = Sh2DumpRegionAt(i);
             char label[96];
-            std::snprintf(label, sizeof(label), "%s   %08X-%08X", i ? "High work RAM" : "Low work RAM",
+            std::snprintf(label, sizeof(label), "%s   %08X-%08X", r.label,
                           r.base, r.base + r.size - 1u);
             ImGui::BeginDisabled(!mDumpSh2Available[i]);
             ImGui::Checkbox(label, &o.regions[i]);
@@ -851,8 +855,12 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         ImGui::BeginDisabled(!valid);
         if (ImGui::Button("Dump...", ImVec2(110, 0)))
         {
-            // A region not provided cannot be dumped, whatever the checkbox remembers.
-            for (size_t i = 0; i < kSh2DumpRegionCount; ++i) o.regions[i] = o.regions[i] && mDumpSh2Available[i];
+            // The selection is NOT filtered against the probe here. It used to be, which edited
+            // the user's remembered checkboxes from a transient fact about one source -- open a
+            // source without HWRAM and that box stayed off afterwards -- and it hid the case the
+            // job is built to report: a selected region whose bytes do not come through is named
+            // in the dump's header as skipped. Availability is a property of the read, and the
+            // read reports it.
             BeginDumpSh2();
             ImGui::CloseCurrentPopup();   // the progress modal opens next frame, from outside this popup
         }
@@ -862,36 +870,47 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         ImGui::EndPopup();
     }
 
-    // Opened at the top level, not from inside the options popup: a popup opened from within another
-    // is its child and goes with it when that one closes.
-    if (mDumpSh2Job && !ImGui::IsPopupOpen(kProgressTitle)) ImGui::OpenPopup(kProgressTitle);
+    // The work is stepped HERE, not inside the progress popup below, and the distinction
+    // matters: a popup that loses its slot (another OpenPopup at the same level -- several
+    // modals are drawn right after this one) would stop a job that is holding ~50 MB of text
+    // and never finish it. Driven from the frame instead, a displaced popup costs the progress
+    // bar and nothing else. Safe from anywhere in the frame because the job owns its snapshot
+    // and holds no se_context.
+    //
+    // A slice a frame keeps the window responsive; 20000 rows is a few milliseconds, so a full
+    // dump takes about a second.
+    if (mDumpSh2Job && mDumpSh2Job->Step(20000))
+    {
+        const std::string text = mDumpSh2Job->TakeText();
+        const std::string name = mDumpSh2FileName;
+        mDumpSh2Job.reset();
+        // A dump is a second of work, so staying silent about where it went -- or about its not
+        // going anywhere -- is the worst of the save paths to leave unreported. ReportSave also
+        // keeps "cancelled at the file dialog" from reading as a failure.
+        ReportSave(platform.SaveFile(name.c_str(), text.data(), text.size()), name);
+    }
+
+    // Opened once when the job starts, from outside the options popup: a popup opened from
+    // within another is its child and goes with it when that one closes.
+    if (mOpenDumpSh2Progress)
+    {
+        mOpenDumpSh2Progress = false;
+        ImGui::OpenPopup(kProgressTitle);
+    }
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     if (ImGui::BeginPopupModal(kProgressTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        // Draw-only. The job finishing above is what closes this, which is also what happens
+        // when it was cancelled or never started.
         if (!mDumpSh2Job)
         {
             ImGui::CloseCurrentPopup();
         }
         else
         {
-            // A slice a frame keeps the window alive and the bar moving; 20000 rows is a few
-            // milliseconds, so a full dump takes a second or so.
-            const bool done = mDumpSh2Job->Step(20000);
             ImGui::Text("Writing %s", mDumpSh2FileName.c_str());
             ImGui::ProgressBar(mDumpSh2Job->Progress(), ImVec2(360, 0));
-            if (done)
-            {
-                const std::string text = mDumpSh2Job->TakeText();
-                const std::string name = mDumpSh2FileName;
-                mDumpSh2Job.reset();
-                ImGui::CloseCurrentPopup();
-                // A dump is a second of work, so staying silent about where it went -- or
-                // about its not going anywhere -- is the worst of the save paths to leave
-                // unreported. ReportSave also keeps "cancelled at the file dialog" from
-                // reading as a failure.
-                ReportSave(platform.SaveFile(name.c_str(), text.data(), text.size()), name);
-            }
-            else if (ImGui::Button("Cancel", ImVec2(90, 0)))
+            if (ImGui::Button("Cancel", ImVec2(90, 0)))
             {
                 // Dropped before any file is opened, so there is nothing written to clean up.
                 mDumpSh2Job.reset();

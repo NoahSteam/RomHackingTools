@@ -653,6 +653,7 @@ private:
     bool                 mOpenDataDirModal = false;   // request to open the modal
     // Data > Dump SH-2.
     bool                 mOpenDumpSh2Modal = false;   // request to open the options dialog
+    bool                 mOpenDumpSh2Progress = false;  // ...and the progress modal, once a job starts
     Sh2DumpOptions       mDumpSh2Options;             // kept between uses
     int                  mDumpSh2Cpu = 0;             // whose registers resolve the generated comments
     bool                 mDumpSh2Available[kSh2DumpRegionCount] = {};   // which regions the source can read
