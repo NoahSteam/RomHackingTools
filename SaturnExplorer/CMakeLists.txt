@@ -566,6 +566,7 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerLayerExportTests
         FrontEnd/tests/LayerExportTests.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Settings.cpp
     )
@@ -580,6 +581,7 @@ if(BUILD_TESTING)
         FrontEnd/tests/LayerPanelTests.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Settings.cpp
         ${SE_IMGUI_CORE}
@@ -814,6 +816,7 @@ if(WIN32)
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
@@ -901,6 +904,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
@@ -1005,6 +1009,7 @@ else()
             FrontEnd/src/LogPanel.cpp
             FrontEnd/src/LayerPanels.cpp
             FrontEnd/src/LayerExport.cpp
+            FrontEnd/src/FileWrite.cpp
             FrontEnd/src/BinaryWriter.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp

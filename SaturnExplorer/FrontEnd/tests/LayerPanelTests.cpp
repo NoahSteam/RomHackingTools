@@ -52,7 +52,10 @@ public:
     void UpdateTexture(TextureHandle, const void*, int, int) override {}
     void DestroyTexture(TextureHandle) override {}
     bool OpenFileDialog(std::string&) override { return false; }
-    bool SaveFile(const char*, const void*, size_t) override { return false; }
+    SaveOutcome SaveFile(const char*, const void*, size_t) override
+    {
+        return SaveOutcome::Cancelled;   // these tests never save a single-file artifact
+    }
     // A desktop-shaped platform, so the toolbar lays out its export controls in full.
     bool HasHostFilesystem() override { return true; }
 };

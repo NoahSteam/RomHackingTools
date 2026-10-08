@@ -35,7 +35,7 @@ public:
     void DestroyTexture(TextureHandle handle) override;
 
     bool OpenFileDialog(std::string& outPath) override;
-    bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
+    SaveOutcome SaveFile(const char* suggestedName, const void* data, size_t size) override;
     bool PickDirectory(std::string& outPath) override;
     bool HasHostFilesystem() override { return true; }
     bool OpenFileDialogFiltered(std::string& outPath, const char* filterLabel,

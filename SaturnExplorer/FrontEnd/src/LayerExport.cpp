@@ -2,10 +2,10 @@
 
 #include <cstdarg>
 #include <cstdio>
-#include <fstream>
 
 #include "BinaryWriter.h"
-#include "Settings.h"   // config dir + the shared mkdir / path separator
+#include "FileWrite.h"  // the checked write/close and the directory primitives
+#include "Settings.h"   // the config dir the default export root lives under
 
 namespace sfe
 {
@@ -243,8 +243,18 @@ LayerExport BuildLayerExport(se_context* ctx, LayerId layer, const se_render_opt
     return ex;
 }
 
+bool ExportFs::WriteFile(const std::string& path, const void* data, size_t size,
+                         std::string& error)
+{
+    return WriteFileAtomically(path, data, size, error);
+}
+bool ExportFs::MakeDir(const std::string& path)       { return MakeDirectory(path); }
+bool ExportFs::RemoveFlatDir(const std::string& path) { return RemoveFlatDirectory(path); }
+bool ExportFs::Move(const std::string& from, const std::string& to) { return MovePath(from, to); }
+bool ExportFs::Exists(const std::string& path)        { return FileOrDirectoryExists(path); }
+
 bool WriteLayerExport(const std::string& root, const LayerExport& ex, std::string& outDir,
-                      std::string& error)
+                      std::string& error, ExportFs* fs)
 {
     outDir.clear();
     error.clear();
@@ -258,21 +268,66 @@ bool WriteLayerExport(const std::string& root, const LayerExport& ex, std::strin
         error = "No export folder is set.";
         return false;
     }
-    const char sep = Settings::PathSeparator();
-    const std::string dir = root + sep + ex.folder;
-    Settings::EnsureDirectory(dir);
+    ExportFs real;
+    ExportFs& io = fs ? *fs : real;
+
+    const char sep = PathSeparator();
+    const std::string dir     = root + sep + ex.folder;
+    // Siblings of the destination, so publishing is a rename within one filesystem.
+    const std::string staging = dir + ".separt";
+    const std::string backup  = dir + ".seold";
+
+    if (!io.MakeDir(root))
+    {
+        error = "Could not create the export folder " + root;
+        return false;
+    }
+    // A staging or backup directory still present is debris from a crash or an earlier
+    // failure, not state worth keeping. Clearing both makes the two renames below
+    // unambiguous.
+    io.RemoveFlatDir(staging);
+    io.RemoveFlatDir(backup);
+    if (!io.MakeDir(staging))
+    {
+        error = "Could not create a temporary folder beside " + dir;
+        return false;
+    }
+
     for (size_t i = 0; i < ex.files.size(); ++i)
     {
-        const std::string path = dir + sep + ex.files[i].name;
-        std::ofstream f(path.c_str(), std::ios::binary | std::ios::trunc);
-        if (f) f.write(reinterpret_cast<const char*>(ex.files[i].bytes.data()),
-                       static_cast<std::streamsize>(ex.files[i].bytes.size()));
-        if (!f)
+        std::string why;
+        if (!io.WriteFile(staging + sep + ex.files[i].name, ex.files[i].bytes.data(),
+                          ex.files[i].bytes.size(), why))
         {
-            error = "Could not write " + path;
+            // Nothing is published yet, so there is nothing to roll back: drop the staging
+            // directory and any previous export at 'dir' is still exactly as it was.
+            io.RemoveFlatDir(staging);
+            error = why.empty() ? ("Could not write " + ex.files[i].name) : why;
             return false;
         }
     }
+
+    // Publish. Two renames rather than one replace, because neither POSIX nor Windows will
+    // rename onto an existing directory: the old export steps aside, the new one takes the
+    // name, and only then is the old one deleted.
+    const bool hadPrevious = io.Exists(dir);
+    if (hadPrevious && !io.Move(dir, backup))
+    {
+        io.RemoveFlatDir(staging);
+        error = "Could not replace the previous export at " + dir;
+        return false;
+    }
+    if (!io.Move(staging, dir))
+    {
+        // Put the previous export back before reporting: losing it to a failed publish is
+        // the exact outcome this function exists to prevent.
+        if (hadPrevious) io.Move(backup, dir);
+        io.RemoveFlatDir(staging);
+        error = "Could not publish the export to " + dir;
+        return false;
+    }
+    if (hadPrevious) io.RemoveFlatDir(backup);
+
     outDir = dir;
     return true;
 }

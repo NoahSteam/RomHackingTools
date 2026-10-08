@@ -92,6 +92,9 @@ private:
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
+    // Turn a SaveOutcome into the operation banner + log line. Returns true only for a real
+    // save, so a caller can skip whatever it would have said about the file afterwards.
+    bool ReportSave(SaveOutcome outcome, const std::string& what);
     // Queue Data > Dump Textures for the layer 'layer' (a LayerId). Run by LayerPanels::Draw,
     // not here, so it exports the frame on screen rather than the live one -- see the comment
     // on the definition.
@@ -125,6 +128,7 @@ private:
     void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
     void SaveScreenshot(IPlatform& platform);
     bool mScreenshotRequested = false;   // taken once the displayed context is selected
+    bool mDumpMemoryRequested = false;   // likewise -- a dump of the frame on screen
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);

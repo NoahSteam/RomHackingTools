@@ -560,10 +560,42 @@ ImVec2 AspectFit(const ImVec2& avail, int w, int h, float& outScale)
 // (VRAM/CRAM/work-RAM big-endian as the Saturn stores them; registers as a
 // hardware-offset big-endian image). The section table names each region and gives
 // its Saturn bus address + size + file offset, so a region is trivial to carve out.
+// One place that turns a SaveOutcome into what the user sees, so every save in the app says
+// the same three things -- and so "cancelled" never reads as a failure. 'what' names the
+// artifact ("saturn_frame_42.sedump", "the screenshot").
+bool App::ReportSave(SaveOutcome outcome, const std::string& what)
+{
+    switch (outcome)
+    {
+    case SaveOutcome::Saved:
+        mOperationStatus = "Saved " + what + ".";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        return true;
+    case SaveOutcome::Cancelled:
+        // Not an error: nothing was written because nothing was asked for any more.
+        mOperationStatus = "Save cancelled; " + what + " was not written.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        return false;
+    case SaveOutcome::Failed:
+    default:
+        mOperationStatus = "Could not write " + what + ". Nothing was saved.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+        return false;
+    }
+}
+
 void App::DumpMemory(IPlatform& platform)
 {
     if (!mbHasData || !mContext)
     {
+        // Reachable: the dump is queued during command handling and run later in the frame,
+        // so a Close Source queued alongside it lands first and there is nothing left to read.
+        mOperationStatus = "No data is loaded, so there was nothing to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
         return;
     }
 
@@ -613,6 +645,9 @@ void App::DumpMemory(IPlatform& platform)
 
     if (sections.empty())
     {
+        mOperationStatus = "This source provided no memory regions to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
         return;
     }
 
@@ -648,7 +683,7 @@ void App::DumpMemory(IPlatform& platform)
     char name[64];
     std::snprintf(name, sizeof(name), "saturn_frame_%llu.sedump",
                   static_cast<unsigned long long>(se_frame_number(mContext)));
-    platform.SaveFile(name, out.data(), out.size());
+    ReportSave(platform.SaveFile(name, out.data(), out.size()), name);
 }
 
 // Data > Dump Textures. The work itself is the layer viewer's export (LayerExport.cpp), so the
@@ -1346,10 +1381,23 @@ void App::BuildUI(IPlatform& platform)
     }
 #endif
 
+    // Everything that turns the displayed frame into a file runs HERE, after the swap above
+    // chose which context that is, and never where the command arrived. A toolbar or menu
+    // command is handled near the top of this function, where mContext is still the live
+    // context, so a dump taken there wrote frame 3000 while the user was looking at 2800.
+    //
+    // Both are flags rather than captured contexts on purpose: Close Source is a command too,
+    // so it can be handled in the same batch and destroy the context before this point. A
+    // retained se_context* would dangle; a flag just finds mContext null and says so.
     if (mScreenshotRequested)
     {
         mScreenshotRequested = false;
         SaveScreenshot(platform);   // mContext is the context on screen (scrubbed frame or live)
+    }
+    if (mDumpMemoryRequested)
+    {
+        mDumpMemoryRequested = false;
+        DumpMemory(platform);       // likewise: the bytes AND the filename are the shown frame's
     }
 
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
@@ -4786,7 +4834,7 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h
         bmp = BuildBmp(w, h, mTexBuffer, 0, nullptr);
     }
 
-    platform.SaveFile(name, bmp.data(), bmp.size());
+    ReportSave(platform.SaveFile(name, bmp.data(), bmp.size()), name);
 }
 
 // Kick a "find this texture in the game data" search. The needle is the texture's
@@ -5308,15 +5356,21 @@ void App::DoSaveProject(IPlatform& platform)
     // IPlatform::SaveFile prompts (desktop Save-As / web download); emit the project text
     // through it under a suggested name.
     const std::string text = mPatchLib.Serialize();
-    if (platform.SaveFile("patches.seproj", text.data(), text.size()))
+    const SaveOutcome saved = platform.SaveFile("patches.seproj", text.data(), text.size());
+    if (saved == SaveOutcome::Saved)
     {
         mPatchLib.ClearDirty();
         mPatchResultText = "Saved the patch project (" + std::to_string(mPatchLib.Count()) +
                            " location(s)).";
     }
+    else if (saved == SaveOutcome::Cancelled)
+    {
+        // Still dirty, but nothing went wrong -- say so without crying failure.
+        mPatchResultText = "Project save was cancelled; nothing was written.";
+    }
     else
     {
-        mPatchResultText = "Project save was cancelled or failed.";
+        mPatchResultText = "Could not write the patch project. The file was not saved.";
     }
     mShowPatchResults = true;
 }
@@ -7141,7 +7195,9 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
         break;
     case TopBarCommandType::DumpMemory:
-        DumpMemory(platform);
+        // Queued, not run: see the dispatch point in BuildUI. Running it here would dump the
+        // live frame while a scrubbed one is on screen.
+        mDumpMemoryRequested = true;
         break;
     case TopBarCommandType::DumpTextures:
         RequestTextureDump(command.index);
@@ -7518,17 +7574,8 @@ void App::SaveScreenshot(IPlatform& platform)
         return;
     }
     const std::vector<uint8_t> bmp = BuildBmpRgba(mFrameWidth, mFrameHeight, mFrameBuffer);
-    if (platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()))
-    {
-        mOperationStatus = "Screenshot saved.";
-        mOperationError = false;
-        mLog.Info(mOperationStatus);
-    }
-    else
-    {
-        mOperationStatus = "Screenshot was not saved.";
-        mOperationError = true;
-    }
+    ReportSave(platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()),
+               "saturn-screenshot.bmp");
 }
 
 // Launch Settings: a compact card for each emulator, with the common fields prominent
@@ -8848,7 +8895,10 @@ void App::ExportSound(IPlatform& platform, int slot)
         BuildWav(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
     char name[32];
     std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
-    platform.SaveFile(name, wav.data(), wav.size());
+    if (!ReportSave(platform.SaveFile(name, wav.data(), wav.size()), name))
+    {
+        return;   // nothing on disk, so nothing to describe
+    }
     // The .wav itself cannot carry the caveat, and the tooltip is gone by the time the file is
     // in a folder, so the log keeps the record of what was exported.
     char note[224];

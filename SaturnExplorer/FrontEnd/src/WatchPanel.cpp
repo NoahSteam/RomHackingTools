@@ -342,10 +342,17 @@ void WatchPanel::DoImport(IPlatform& platform)
 void WatchPanel::DoExport(IPlatform& platform)
 {
     const std::string json = mList.ToJson();
-    if (platform.SaveFile("watches.json", json.data(), json.size()))
+    const SaveOutcome saved = platform.SaveFile("watches.json", json.data(), json.size());
+    if (saved == SaveOutcome::Saved)
     {
         mNotice = "Exported " + std::to_string(mList.Entries().size()) + " watches";
         mNoticeTime = 4.0f;
+    }
+    else if (saved == SaveOutcome::Failed)
+    {
+        // Silence here used to mean the same thing for Cancel and for a full disk.
+        mNotice = "Could not write watches.json";
+        mNoticeTime = 6.0f;
     }
 }
 
