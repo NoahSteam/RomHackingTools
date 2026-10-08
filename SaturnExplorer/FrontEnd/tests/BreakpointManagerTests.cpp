@@ -118,6 +118,53 @@ int main()
         Check(allExecShared, "every execution breakpoint carries cpu 0 (shared across both SH-2s)");
     }
 
+    // "Set Execution Breakpoint" adds or arms, and never removes what is there.
+    {
+        BreakpointManager bps;
+        bps.EnableExecution(0x4000);
+        Check(bps.HasEnabledExecutionAt(0x4000) && bps.All().size() == 1, "Enable adds a breakpoint");
+        bps.SetCondition(bps.All()[0].id, "r0 == 1");
+        const uint64_t gen = bps.Generation();
+        bps.EnableExecution(0x4000);
+        Check(bps.HasEnabledExecutionAt(0x4000) && bps.All().size() == 1,
+              "Enable on an existing breakpoint keeps it");
+        Check(bps.All()[0].condition == "r0 == 1", "and keeps its condition");
+        Check(bps.Generation() == gen, "and changes nothing, so nothing is re-sent");
+        bps.SetEnabled(bps.All()[0].id, false);
+        bps.EnableExecution(0x4000);
+        Check(bps.HasEnabledExecutionAt(0x4000) && bps.All().size() == 1,
+              "Enable arms a disabled breakpoint rather than deleting it");
+        Check(bps.All()[0].condition == "r0 == 1", "with its condition intact");
+    }
+
+    // Which watchpoints could be behind a halt: independent of any execution breakpoint there.
+    {
+        BreakpointManager bps;
+        bps.ToggleExecution(0x5000);
+        const uint64_t halting = bps.AddMemory(0x06001000u, 4, BpKind::MemWrite);
+        const uint64_t logging = bps.AddMemory(0x06002000u, 4, BpKind::MemRead);
+        bps.SetLogAccess(logging, true);
+        auto all = [](uint32_t, uint32_t, bool, bool) { return true; };
+        auto none = [](uint32_t, uint32_t, bool, bool) { return false; };
+        auto onlyFirst = [](uint32_t a, uint32_t, bool, bool) { return a == 0x06001000u; };
+        // Direction reaches the predicate: a write watchpoint asks about writes only.
+        bool sawWriteOnly = false;
+        bps.WatchCausesFor([&](uint32_t a, uint32_t, bool rd, bool wr) {
+            if (a == 0x06001000u) sawWriteOnly = !rd && wr;
+            return false;
+        });
+        Check(sawWriteOnly, "a write watchpoint passes read=false, write=true");
+        BreakpointManager::WatchCauses c = bps.WatchCausesFor(all);
+        Check(c.halting && c.logging, "both kinds may have hit");
+        c = bps.WatchCausesFor(none);
+        Check(!c.halting && !c.logging, "an instruction that touches neither stops for neither");
+        c = bps.WatchCausesFor(onlyFirst);
+        Check(c.halting && !c.logging, "only the watchpoint in range counts");
+        bps.SetEnabled(halting, false);
+        c = bps.WatchCausesFor(all);
+        Check(!c.halting && c.logging, "a disabled watchpoint is not a cause");
+    }
+
     if (gFail == 0) std::printf("All BreakpointManager tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

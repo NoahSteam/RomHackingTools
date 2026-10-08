@@ -49,6 +49,10 @@ struct ExecutionAction
     int          cpu = 0;             // 0 master, 1 slave
     uint32_t     address = 0;
     bool         enabled = true;
+    // Advanced each time the enabled state changes; sent to the emulator in the descriptor so a
+    // re-armed tracepoint is restarted by an explicit token (see SE_LIVE_TP_REARM_SHIFT).
+    uint8_t      rearm = 0;
+    void         BumpRearm() { rearm = static_cast<uint8_t>((rearm + 1u) & 0xFu); }
 
     std::string  format;             // Log: output template (FormatString mini-syntax)
     std::string  condition;          // optional guard, e.g. "r0 == 5" (stored; Phase 3 evals)

@@ -35,6 +35,10 @@ struct StopReport
     // SH-2s, so the transient step target (installed as one) stops whichever CPU reaches it first;
     // a stop that the user's own breakpoint explains is a real halt whoever reached it.
     bool     userBreakpoint = false;
+    // The halt is an SCU-DMA watchpoint (SE_LIVE_STOP_DMA_WATCH), which stops between instructions:
+    // the PC is where the CPU stood, not somewhere a step or a breakpoint arrived. It is therefore
+    // never "the step reaching its target", whichever CPU's PC happens to equal the transient.
+    bool     dmaWatch = false;
 };
 
 // What just happened this frame, as opposed to what is now true.

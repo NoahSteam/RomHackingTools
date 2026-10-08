@@ -476,11 +476,11 @@ static void TestPendingFlowIsPerCpu(void)
 
 /* ---- tracepoint repeat policy (v21) --------------------------------------------------- */
 
-/* Install up to two tracepoints at consecutive addresses, as the server's TRC verb would, and let
+/* Install up to SE_LIVE_MAX_TRACE_DESCS tracepoints at consecutive addresses, as the server's TRC verb would, and let
  * the CPU side pick the new set up (what its first per-instruction call after an install does). */
 static void InstallTps(unsigned int n, const unsigned int* ids, const unsigned int* flags)
 {
-    unsigned char d[2 * SE_LIVE_TRACE_DESC_LEN];
+    unsigned char d[SE_LIVE_MAX_TRACE_DESCS * SE_LIVE_TRACE_DESC_LEN];
     unsigned int i;
     int k;
     for (i = 0; i < n; ++i)
@@ -581,6 +581,31 @@ static void TestReinstallKeepsUnchangedCounts(void)
     CHECK(FiresAt(0, 3, w, 8) == 1 && w[0] == 2);
 }
 
+/* Re-arming must not depend on the emulator seeing a disabled state in between: updates are
+ * latest-wins, so a disable immediately followed by an enable arrives as the enabled descriptor
+ * alone. The client's re-arm token is what makes that descriptor differ from the installed one. */
+static void TestRearmTokenRestartsASpentOnceTracepoint(void)
+{
+    unsigned int w[8] = { 0 };
+    const unsigned int once = SE_LIVE_TP_ENABLED | SE_LIVE_TP_ONCE;
+    InstallTp(20, once);
+    CHECK(Fires(3, w, 8) == 1);                        /* fired, now spent */
+    InstallTp(20, once);                               /* the same descriptor: stays spent */
+    CHECK(Fires(3, w, 8) == 0);
+    InstallTp(20, once | (1u << SE_LIVE_TP_REARM_SHIFT));   /* disable+enable collapsed, token moved */
+    CHECK(Fires(3, w, 8) == 1);
+}
+
+/* Every tracepoint the protocol accepts is installed, not just the first 64. */
+static void TestAllProtocolTracepointsInstall(void)
+{
+    unsigned int ids[SE_LIVE_MAX_TRACE_DESCS], flags[SE_LIVE_MAX_TRACE_DESCS], i;
+    for (i = 0; i < SE_LIVE_MAX_TRACE_DESCS; ++i) { ids[i] = 100 + i; flags[i] = SE_LIVE_TP_ENABLED; }
+    InstallTps(SE_LIVE_MAX_TRACE_DESCS, ids, flags);
+    CHECK(FiresAt(64, 1, NULL, 0) == 1);               /* the 65th used to be dropped */
+    CHECK(FiresAt(SE_LIVE_MAX_TRACE_DESCS - 1, 1, NULL, 0) == 1);
+}
+
 /* ---- a branch to itself ---------------------------------------------------------------- */
 
 static void TestSelfBranchDetection(void)
@@ -622,6 +647,8 @@ int main(void)
     TestPendingFlowIsPerCpu();
     TestTracepointRepeatPolicy();
     TestReinstallKeepsUnchangedCounts();
+    TestRearmTokenRestartsASpentOnceTracepoint();
+    TestAllProtocolTracepointsInstall();
     TestSelfBranchDetection();
     if (gFailures)
     {

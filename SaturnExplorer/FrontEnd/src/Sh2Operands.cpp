@@ -144,6 +144,42 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
            ResolveSh2OperandAddress(ins, index, r, outAddr, outWidth);
 }
 
+bool Sh2MayAccessRange(const DisassembledInstruction& ins, const se_sh2_regs& r, uint32_t base,
+                       uint32_t size, bool watchRead, bool watchWrite)
+{
+    // rte pops the stack and trapa pushes it; neither names an operand to resolve.
+    if (ins.Mnemonic == "rte") return watchRead;
+    if (ins.Mnemonic == "trapa") return watchWrite;
+    if (Sh2OperandIsAddressOnly(ins.Mnemonic)) return false;
+
+    // Direction of the "@" operand. In the move/load/store forms the source is written first, so
+    // an "@" in the first slot is read and one in the second is written; these are the exceptions.
+    const std::string& m = ins.Mnemonic;
+    const bool readModifyWrite = m == "tas.b" || m == "and.b" || m == "or.b" || m == "xor.b";
+    const bool readsOnly = m == "tst.b" || m == "mac.w" || m == "mac.l";
+
+    // Bit 29 selects the cache-through image of the same memory, which the emulator also watches.
+    constexpr uint32_t kCacheThrough = 0x20000000u;
+    const uint64_t lo = base & ~kCacheThrough;
+
+    Sh2OperandSpan sp;
+    for (int i = 0; Sh2OperandAt(ins.Operands, i, sp); ++i)
+    {
+        if (ins.Operands.find('@', sp.begin) >= sp.end) continue;
+        const bool reads = readModifyWrite || readsOnly || i == 0;
+        const bool writes = readModifyWrite || (!readsOnly && i != 0);
+        if (!((reads && watchRead) || (writes && watchWrite))) continue;
+
+        const std::string text = OperandText(ins.Operands, sp);
+        if (text.find("@-") != std::string::npos || text.back() == '+') return true;
+        uint32_t addr = 0, width = 0;
+        if (!ResolveSh2MemOperand(text, ins.Mnemonic, r, addr, width)) return true;
+        const uint64_t a = addr & ~kCacheThrough;
+        if (a < lo + size && lo < a + width) return true;
+    }
+    return false;
+}
+
 bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index)
 {
     Sh2OperandSpan sp;

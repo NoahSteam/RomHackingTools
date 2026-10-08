@@ -46,7 +46,10 @@ StepOutcome StepHaltMachine::Observe(const StopReport& reported)
     // The halt is at the transient's address. It is the step ARRIVING only for the CPU that is
     // stepping (PC breakpoints are shared, so which CPU reported the stop is exactly what separates
     // "my step finished" from "the other core walked over my transient").
-    const bool atTargetAddr = report.stopped && mStepBpActive && report.pc == mStepBpAddr;
+    // A DMA watchpoint halt is not an arrival at all (nothing executed to get there), so its PC
+    // matching the transient says nothing: it is neither the step finishing nor a stray to resume.
+    const bool atTargetAddr =
+        report.stopped && !report.dmaWatch && mStepBpActive && report.pc == mStepBpAddr;
     const bool atStepTarget = atTargetAddr && report.cpu == static_cast<uint32_t>(mStepBpCpu);
     // The wrong core, with no user breakpoint to explain the stop: not something to present.
     // Independent of the hold -- which gives up after a while on a long step -- because the transient

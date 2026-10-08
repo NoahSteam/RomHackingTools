@@ -74,6 +74,20 @@ bool ResolveSh2MemOperand(const DisassembledInstruction& ins, int index, const s
 bool ResolveSh2OperandAddress(const DisassembledInstruction& ins, int index, const se_sh2_regs& r,
                               uint32_t& outAddr, uint32_t& outWidth);
 
+// Whether the instruction may touch any byte of [base, base+size) as data. Conservative: it answers
+// false only when it can show the access misses -- the instruction has no memory operand at all, or
+// each one resolves to an address outside the range. An operand that updates its register
+// (@rN+, @-rN) or cannot be resolved, and rte/trapa (which pop/push the stack implicitly), count as
+// possible: the registers a halt reports may already reflect the instruction, and a PC-relative
+// operand may be addressed differently in a delay slot. For telling whether a data watchpoint could
+// be behind a halt whose stop reason does not say.
+//
+// Addresses match the way the emulator installs a watchpoint: the cached and cache-through images
+// (bit 29) are the same memory. 'watchRead'/'watchWrite' say which directions the watchpoint cares
+// about, and only an access in one of them counts -- a read does not trip a write watchpoint.
+bool Sh2MayAccessRange(const DisassembledInstruction& ins, const se_sh2_regs& r, uint32_t base,
+                       uint32_t size, bool watchRead, bool watchWrite);
+
 // True when operand 'index' is a PC-relative operand whose address cannot be told from the code alone
 // (see DisassembledInstruction::PcRelAmbiguous).
 bool Sh2OperandIsUncertainPcRel(const DisassembledInstruction& ins, int index);

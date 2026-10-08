@@ -30,6 +30,7 @@
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
+#include "Sh2Operands.h"          // Sh2MayAccessRange: could the halting instruction touch a watchpoint
 #include "ScspMix.h"              // mix the frame's sounding voices into one preview
 #include "Debug/M68kDisasm.h"     // SCSP 68000 sound-CPU disassembly
 #include "SavestateDriver.h"
@@ -1099,6 +1100,7 @@ void App::BuildUI(IPlatform& platform)
             // core reaching the same PC, and a new halt at the PC the last one was at.
             report.hasSeq = se_live_get_stop_seq(&mDataSource, &report.seq) != 0;
             report.userBreakpoint = mBreakpoints.HasEnabledExecutionAt(report.pc);
+            report.dmaWatch = report.reason == SE_LIVE_STOP_DMA_WATCH;
         }
         // Fold the report into the run-control machine, which owns the halt presentation, the step
         // hold and the transient's identity (Debug/StepHaltMachine.h). What comes back describes
@@ -1122,17 +1124,42 @@ void App::BuildUI(IPlatform& platform)
             stopped = false;
             mStepHalt.SuppressHalt();
         }
+        // An SCU-DMA watchpoint halt is explained by the emulator, not by the instruction at the PC
+        // (which has not run, and whose execution breakpoint, if any, has not been reached): any
+        // armed watchpoint may be the one. A logging one is recorded; the halt stands only if a
+        // break-on-access one is armed.
+        if (stopped && !mbPaused && report.dmaWatch)
+        {
+            const BreakpointManager::WatchCauses w = mBreakpoints.WatchCausesFor(
+                [](uint32_t, uint32_t, bool, bool) { return true; });
+            if (w.logging) RecordAccess(static_cast<int>(report.cpu), report.pc);
+            if (!w.halting)
+            {
+                Continue();
+                stopped = false;
+                mStepHalt.SuppressHalt();
+            }
+        }
         // Conditional breakpoint: if the halt is at a user execution breakpoint whose guard
         // evaluates false (and it isn't the transient step target), resume without surfacing
         // the halt — the break only "sticks" once the guard holds. The guard reads the halted
         // CPU's registers, which are exact at this PC. PC breakpoints are shared across both
         // SH-2s, so match on address regardless of the breakpoint's stored CPU.
-        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp)
+        // The same stop reason covers a data watchpoint on this instruction, so a false guard only
+        // retires the execution breakpoint's own claim on the halt: an independent break-on-access
+        // watchpoint that may have hit still stops here, and a logging one is recorded either way.
+        if (stopped && !mbPaused && report.reason == SE_LIVE_STOP_EXEC_BP && !atStepBp &&
+            report.userBreakpoint)
         {
             const Breakpoint* guarded = mBreakpoints.ConditionalExecutionAt(report.pc);
-            if (guarded && !EvalCondition(guarded->condition, static_cast<int>(report.cpu)))
+            const bool guardFailed =
+                guarded && !EvalCondition(guarded->condition, static_cast<int>(report.cpu));
+            const BreakpointManager::WatchCauses w =
+                WatchCausesAtHalt(static_cast<int>(report.cpu), report.pc);
+            if (w.logging) RecordAccess(static_cast<int>(report.cpu), report.pc);
+            if (guardFailed && !w.halting)
             {
-                Continue();      // guard not satisfied — keep running
+                Continue();      // guard not satisfied and nothing else to stop for — keep running
                 stopped = false; // don't fall into the pause path this frame
                 mStepHalt.SuppressHalt();
             }
@@ -2120,6 +2147,32 @@ bool App::EvalCondition(const std::string& cond, int cpu)
     return ConditionEval(cond, fc);
 }
 
+// Read and decode the instruction at 'pc' (false when memory is unreadable).
+bool App::FetchSh2Instruction(uint32_t pc, DisassembledInstruction& ins)
+{
+    auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
+    if (res.empty() || !res[0].success || res[0].bytes.size() != 2) return false;
+    ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+    return true;
+}
+
+// Which memory watchpoints could be behind a halt at 'pc' on 'cpu': those whose range the stopping
+// instruction may touch. When the instruction cannot be read, every enabled watchpoint counts. The
+// registers and instruction are fetched on the first watchpoint asked about, so a halt with no
+// memory watchpoint armed (the common case) does neither.
+BreakpointManager::WatchCauses App::WatchCausesAtHalt(int cpu, uint32_t pc)
+{
+    se_sh2_regs regs{};
+    DisassembledInstruction ins;
+    enum { Unfetched, Fetched, Failed } state = Unfetched;
+    return mBreakpoints.WatchCausesFor([&](uint32_t addr, uint32_t size, bool rd, bool wr) {
+        if (state == Unfetched)
+            state = (mbHasData && mContext && se_get_sh2_regs(mContext, cpu, &regs) == SE_OK &&
+                     FetchSh2Instruction(pc, ins)) ? Fetched : Failed;
+        return state == Failed || Sh2MayAccessRange(ins, regs, addr, size, rd, wr);
+    });
+}
+
 // Record a data-watchpoint hit: the instruction at 'pc' on 'cpu' just touched a watched
 // address. Reconstruct that CPU's call stack from the halted registers (exact at this PC)
 // and file it into the access log, which dedups by instruction and keeps a hit count.
@@ -2136,12 +2189,9 @@ void App::RecordAccess(int cpu, uint32_t pc)
     // Decode the accessing instruction once, here, so the panel doesn't re-read + re-decode
     // it every frame.
     std::string insn;
-    auto res = mMemBackend.ReadMemoryBatch({{pc, 2}});
-    if (!res.empty() && res[0].success && res[0].bytes.size() == 2)
-    {
-        DisassembledInstruction ins = Sh2DecodeAt(pc, res[0].bytes.data(), 2);
+    DisassembledInstruction ins;
+    if (FetchSh2Instruction(pc, ins))
         insn = ins.Mnemonic + (ins.Operands.empty() ? "" : " " + ins.Operands);
-    }
     const uint32_t frame = (mbHasData && mContext)
                                ? static_cast<uint32_t>(se_frame_number(mContext)) : 0;
     mAccessLog.Record(pc, cpu, frame, std::move(insn), std::move(frames));
@@ -2160,10 +2210,22 @@ void App::SyncTracepointsToLive()
         descs.push_back(v & 0xFF); descs.push_back((v >> 8) & 0xFF);
         descs.push_back((v >> 16) & 0xFF); descs.push_back((v >> 24) & 0xFF);
     };
-    uint32_t count = 0;
+    // The emulator holds at most SE_LIVE_MAX_TRACE_DESCS descriptors, and a disabled one takes a
+    // place like any other. Past that the rest would be dropped without a word, so send the enabled
+    // ones first (they are the ones that must fire) and say how many did not fit.
+    std::vector<const ExecutionAction*> logs;
     for (const ExecutionAction& a : mActions.All())
+        if (a.type == ActionType::Log) logs.push_back(&a);
+    std::stable_partition(logs.begin(), logs.end(),
+                          [](const ExecutionAction* a) { return a->enabled; });
+    const uint32_t dropped =
+        logs.size() > SE_LIVE_MAX_TRACE_DESCS
+            ? static_cast<uint32_t>(logs.size()) - SE_LIVE_MAX_TRACE_DESCS : 0u;
+    if (dropped) logs.resize(SE_LIVE_MAX_TRACE_DESCS);
+    uint32_t count = 0;
+    for (const ExecutionAction* ap : logs)
     {
-        if (a.type != ActionType::Log) continue;
+        const ExecutionAction& a = *ap;
         w32(static_cast<uint32_t>(a.id));
         w32(static_cast<uint32_t>(a.cpu));
         w32(a.address);
@@ -2172,6 +2234,7 @@ void App::SyncTracepointsToLive()
         // we can evaluate -- in which case it forwards every execution and we count the ones whose
         // condition held. An emulator older than v21 ignores these bits, and AcceptHit counts for it.
         uint32_t flags = a.enabled ? SE_LIVE_TP_ENABLED : 0u;
+        flags |= (static_cast<uint32_t>(a.rearm) << SE_LIVE_TP_REARM_SHIFT) & SE_LIVE_TP_REARM_MASK;
         if (!a.condition.empty())                                  flags |= SE_LIVE_TP_GUARDED;
         else if (a.repeat == RepeatMode::Once)                     flags |= SE_LIVE_TP_ONCE;
         else if (a.repeat == RepeatMode::EveryN && a.repeatN > 1)
@@ -2180,6 +2243,15 @@ void App::SyncTracepointsToLive()
         ++count;
     }
     se_live_set_tracepoints(&mDataSource, descs.data(), count);
+    if (dropped > 0)
+    {
+        char msg[160];
+        std::snprintf(msg, sizeof msg,
+                      "Tracepoints: the emulator holds at most %u; %u not installed "
+                      "(enabled ones are installed first). Remove some to free places.",
+                      SE_LIVE_MAX_TRACE_DESCS, dropped);
+        mLog.Warn(msg);
+    }
 #endif
 }
 
@@ -3341,6 +3413,7 @@ void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
                 f.functionKnown   = (wire[i].func != 0);   // the emulator recorded the call
                 f.currentAddress  = wire[i].func ? wire[i].func : wire[i].ret;
                 f.returnAddress   = wire[i].ret;
+                f.returnRecorded  = true;                  // pushed by the call the emulator saw
                 f.stackPointer    = wire[i].sp;
                 f.cycle           = wire[i].cycle;
                 f.frameNumber     = wire[i].frame_no;
@@ -3590,7 +3663,7 @@ void App::DrawCallStack(IPlatform& platform)
                 // Execution BPs are shared across both SH-2s, so the frame's own cpu plays
                 // no part in where this lands — it would only ever collide by address.
                 if (ImGui::MenuItem("Set Execution Breakpoint"))
-                { mBreakpoints.ToggleExecution(FrameCodeAddress(fr)); }
+                { mBreakpoints.EnableExecution(FrameCodeAddress(fr)); }
                 // A rename is stored against an address, so offering it for a frame whose
                 // entry point is unknown would file the name under a mid-function address and
                 // then show it for every other frame that returns near there.

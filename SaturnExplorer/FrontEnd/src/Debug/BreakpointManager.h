@@ -57,6 +57,10 @@ public:
     // Execution BP at 'addr': add if none present, remove if present. Returns true if a
     // breakpoint now exists there.
     bool ToggleExecution(uint32_t addr);
+    // Execution BP at 'addr' that exists and is armed afterwards: added if none, enabled if it was
+    // disabled, otherwise left exactly as it is (its condition included). For "Set ..." actions,
+    // where choosing the item must never remove what the user already has.
+    void EnableExecution(uint32_t addr);
     bool HasExecutionAt(uint32_t addr) const;
     const Breakpoint* ExecutionAt(uint32_t addr) const;
     // An execution breakpoint at 'addr' that is ARMED in the emulator (enabled), as opposed to one that
@@ -83,6 +87,32 @@ public:
     // both SH-2s) and every active memory watchpoint is a logging one. Mirrors
     // ConditionalExecutionAt — the stop handler asks one question, the manager owns the policy.
     bool IsAccessLogHalt(uint32_t pc) const;
+
+    // Which kinds of enabled memory watchpoint could be behind a halt, given
+    // 'mayHit(address, size, watchesRead, watchesWrite)' for whether the stopping instruction can
+    // make an access of a kind the watchpoint cares about within its range. The stop event carries
+    // one reason for an execution breakpoint and a watchpoint alike, so a halt at an address with
+    // an execution breakpoint says nothing about whether a watchpoint was also hit; this is how the
+    // handler asks, so that a false execution guard does not discard an independent watchpoint.
+    struct WatchCauses
+    {
+        bool halting = false;   // a break-on-access watchpoint may have hit: the halt must stand
+        bool logging = false;   // a "find what accesses" watchpoint may have hit: record it
+    };
+    template <class MayHit>
+    WatchCauses WatchCausesFor(MayHit mayHit) const
+    {
+        WatchCauses c;
+        for (const Breakpoint& b : mBps)
+        {
+            if (!b.enabled || b.kind == BpKind::Execution) continue;
+            const bool read  = b.kind == BpKind::MemRead  || b.kind == BpKind::MemReadWrite;
+            const bool write = b.kind == BpKind::MemWrite || b.kind == BpKind::MemReadWrite;
+            if (!mayHit(b.address, b.size, read, write)) continue;
+            (b.logAccess ? c.logging : c.halting) = true;
+        }
+        return c;
+    }
 
     const std::vector<Breakpoint>& All() const { return mBps; }
 

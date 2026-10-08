@@ -192,6 +192,7 @@ sfe::CallStackFrame ConfirmedFrame(uint32_t ret, uint32_t sp)
 {
     sfe::CallStackFrame f;
     f.confidence = sfe::FrameConfidence::Confirmed;
+    f.returnRecorded = true;
     f.returnAddress = ret;
     f.stackPointer = sp;
     return f;
@@ -253,8 +254,24 @@ void TestStepOutRefusesWhatItCannotRecover()
     CHECK(sfe::ChooseStepOutTarget({ ConfirmedFrame(0x06001010u, 0x06080000u) }, same).ok);
 }
 
+void TestStepOutRefusesTheReconstructorsFrameZero()
+{
+    // The real reconstructor marks frame #0 Confirmed (its PC is exact) and fills its return
+    // address from PR. With no recorded frames that PR may have been overwritten by a nested call,
+    // so Step Out must not run to it.
+    FakeMemory mem;
+    sfe::CallStack cs;
+    const se_sh2_regs regs = RegsAt(0x06002050u, 0x06002040u, 0x0607FFE0u);
+    cs.Reconstruct(0, regs, mem);
+    CHECK(!cs.Frames(0).empty());
+    CHECK(cs.Frames(0)[0].confidence == sfe::FrameConfidence::Confirmed);
+    CHECK(!cs.Frames(0)[0].returnRecorded);
+    CHECK(!sfe::ChooseStepOutTarget(cs.Frames(0), regs).ok);
+}
+
 int main()
 {
+    TestStepOutRefusesTheReconstructorsFrameZero();
     TestStepOutUsesTheRecordedFrameNotPr();
     TestStepOutRefusesWhatItCannotRecover();
     TestBsrCallSiteYieldsRealEntryPoint();

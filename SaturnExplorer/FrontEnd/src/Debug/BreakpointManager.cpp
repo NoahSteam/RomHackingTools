@@ -41,6 +41,12 @@ bool BreakpointManager::ToggleExecution(uint32_t addr)
     return true;
 }
 
+void BreakpointManager::EnableExecution(uint32_t addr)
+{
+    if (const Breakpoint* b = ExecutionAt(addr)) SetEnabled(b->id, true);   // no-op when armed
+    else ToggleExecution(addr);                                              // none there: the add
+}
+
 bool BreakpointManager::HasExecutionAt(uint32_t addr) const
 {
     return ExecutionAt(addr) != nullptr;   // same address-keyed lookup, not a second copy of it
@@ -132,14 +138,8 @@ void BreakpointManager::SetLogAccess(uint64_t id, bool on)
 
 bool BreakpointManager::OnlyLoggingWatchpoints() const
 {
-    bool anyLogging = false;
-    for (const Breakpoint& b : mBps)
-    {
-        if (!b.enabled || b.kind == BpKind::Execution) continue;   // memory watchpoints only
-        if (b.logAccess) anyLogging = true;
-        else             return false;   // a halting watchpoint is present
-    }
-    return anyLogging;
+    const WatchCauses c = WatchCausesFor([](uint32_t, uint32_t, bool, bool) { return true; });
+    return c.logging && !c.halting;
 }
 
 bool BreakpointManager::IsAccessLogHalt(uint32_t pc) const

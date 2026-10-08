@@ -231,6 +231,25 @@ void TestTheOtherCpuReachingTheTargetIsNotTheStep()
     CHECK(m.HaltCpu() == 0 && m.HaltPc() == 0x06002000);
 }
 
+// An SCU-DMA watchpoint stops between instructions, so its PC equalling the transient proves
+// nothing: on either CPU it is not the step arriving, and it is not a stray to resume from.
+void TestADmaHaltAtTheTargetIsNeitherTheStepNorAStray()
+{
+    for (uint32_t cpu = 0; cpu < 2; ++cpu)
+    {
+        StepHaltMachine m = HaltedAt(0x06001000, 0);
+        m.BeginRunTo(0x06002000, 1);                 // stepping the slave
+        (void)m.TakeStepTargetDirty();
+
+        StopReport dma = Numbered(9, 0x06002000, cpu);
+        dma.dmaWatch = true;
+        const StepOutcome o = m.Observe(dma);
+        CHECK(!o.atStepTarget);                      // not the step finishing
+        CHECK(!o.strayTarget);                       // and not discarded before the DMA policy
+        CHECK(m.StepTargetActive());                 // the transient is untouched
+    }
+}
+
 // A user breakpoint at the same address explains the other core's halt: it is a real hit, so it is
 // presented, and the step it interrupted is over -- its transient goes with it.
 void TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu()
@@ -451,6 +470,7 @@ int main()
     TestALongRunningStepEventuallyRevealsRunning();
     TestHoldingDoesNotAdoptAReportedPc();
     TestRunToTargetIsRecognisedAndRetired();
+    TestADmaHaltAtTheTargetIsNeitherTheStepNorAStray();
     TestTheOtherCpuReachingTheTargetIsNotTheStep();
     TestAUserBreakpointAtTheTargetIsARealHaltOnEitherCpu();
     TestAHaltElsewhereRetiresTheTransient();

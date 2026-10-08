@@ -973,7 +973,7 @@ void SeExportNotifyStep(int cpu, unsigned int pc)
  * instruction the CPU is about to execute, and has not executed. */
 void SeExportNotifyDmaStop(int cpu, unsigned int pc)
 {
-    SeStopSet(SE_LIVE_STOP_EXEC_BP, cpu, pc);
+    SeStopSet(SE_LIVE_STOP_DMA_WATCH, cpu, pc);
     SeHaltCommon(cpu, pc, 1);
 }
 

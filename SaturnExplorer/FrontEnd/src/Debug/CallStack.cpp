@@ -288,7 +288,7 @@ StepOutTarget ChooseStepOutTarget(const std::vector<CallStackFrame>& frames, con
         return t;
     }
     const CallStackFrame& f = frames.front();   // innermost: the frame the CPU is executing in
-    if (f.confidence != FrameConfidence::Confirmed)
+    if (!f.returnRecorded)
     {
         t.why = "no recorded call covers this frame, and PR is overwritten by any call the function "
                 "makes, so its return address cannot be told from the stack alone";

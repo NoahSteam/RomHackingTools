@@ -354,7 +354,7 @@ static const char* SeMdfnPortDeviceName(unsigned int port)
  * callback (SeSsBpHook, via SsDbgSetTraceActive) calls every instruction while any
  * tracepoint is armed (see README "Tracepoints"; needs --enable-debugger, exactly like
  * execution breakpoints). */
-#define SE_MDFN_TP_MAX 64
+#define SE_MDFN_TP_MAX SE_LIVE_MAX_TRACE_DESCS   /* the protocol's own limit: nothing it accepts is dropped here */
 /* The installed set, with each tracepoint's repeat state (v21): the executions seen and whether a
  * fire-once one has spent itself. EMULATE-THREAD ONLY. SeMdfnSetTracepoints is run by the exporter on
  * the emulate thread (it publishes a set into a mailbox and the emulate thread takes it at its next
