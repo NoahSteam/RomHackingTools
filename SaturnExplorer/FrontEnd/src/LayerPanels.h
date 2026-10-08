@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "LayerExport.h"        // LayerId + the export artifacts
@@ -58,13 +59,22 @@ public:
     // True once after the user changed a persisted preference (export folder, grid toggle).
     bool ConsumeSettingsDirty();
 
-    // Export one layer without its panel being open — the Data > Dump Textures menu. Writes
-    // exactly what that layer's Export button writes, into the same folder, so the menu is a
-    // second way in rather than a second implementation. Returns false on failure; either way
-    // 'message' is filled with what to show the user, because the caller has no panel status
-    // line to put it in.
-    bool ExportLayer(LayerId layer, const LayerPanelFrame& frame, IPlatform& platform,
-                     std::string& message);
+    // Queue an export of one layer, to run at the next Draw — the Data > Dump Textures menu.
+    //
+    // Deliberately NOT done on the spot. Menu commands are executed early in the frame, before
+    // the app has chosen which context the panels will show, so an export run there reads the
+    // live frame even while the user is scrubbing history: pause at frame 3000, scrub back to
+    // 2800, and the menu would write 3000 while every panel shows 2800. Draw services the queue
+    // with the very frame it draws the panels from, so the menu and the panel's own Export
+    // button cannot disagree about which frame they wrote.
+    //
+    // The panel need not be open: the export reads the core, not the view.
+    void RequestExport(LayerId layer);
+
+    // Take the oldest result of an export Draw has serviced, oldest first; false when none is
+    // waiting. The panel shows its own result under its toolbar, so this exists for the menu
+    // path, whose caller has nowhere else to put it.
+    bool ConsumeExportResult(std::string& message, bool& error);
 
 private:
     // Per-layer view state: the uploaded texture and the pixels behind it.
@@ -93,6 +103,14 @@ private:
                      IPlatform& platform);
     void RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
                    IPlatform& platform);
+    // The shared body behind the panel button and the queued menu request. Records the result
+    // on the layer's own view as well as returning it, so a panel that is open shows the same
+    // status line whichever way the export was started.
+    bool ExportLayer(LayerId layer, const LayerPanelFrame& frame, IPlatform& platform,
+                     std::string& message);
+    // Run every queued RequestExport against 'frame'. Called from Draw, which is where the
+    // displayed context is in force.
+    void ServiceExportRequests(const LayerPanelFrame& frame, IPlatform& platform);
 
     View        mViews[kLayerCount];
     // se_derive_serial as of the previous Draw. Equal on two consecutive draws means the
@@ -107,6 +125,10 @@ private:
     std::string mDefaultRoot;         // cached DefaultExportRoot()
     bool        mDefaultRootResolved = false;
     bool        mSettingsDirty = false;
+    // Exports asked for by the Data menu, waiting for a Draw to run them with the frame on
+    // screen, and their results waiting for App to report them.
+    std::vector<LayerId>                     mExportRequests;
+    std::vector<std::pair<std::string, bool>> mExportResults;   // message, isError
 };
 
 }  // namespace sfe

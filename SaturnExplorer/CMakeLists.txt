@@ -585,7 +585,7 @@ if(BUILD_TESTING)
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerLayerPanelTests
-        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+        PRIVATE FrontEnd/src FrontEnd/tests Core/tests ${SE_IMGUI_DIR}
                 ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(SaturnExplorerLayerPanelTests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerLayerPanelTests COMMAND SaturnExplorerLayerPanelTests)

@@ -92,9 +92,10 @@ private:
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
-    // Write one layer's textures to the export folder -- Data > Dump Textures, which is the
-    // layer viewer's own Export reached without opening its panel. 'layer' is a LayerId.
-    void DumpLayerTextures(IPlatform& platform, int layer);
+    // Queue Data > Dump Textures for the layer 'layer' (a LayerId). Run by LayerPanels::Draw,
+    // not here, so it exports the frame on screen rather than the live one -- see the comment
+    // on the definition.
+    void RequestTextureDump(int layer);
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(std::vector<TopBarCommand>& commands);
@@ -128,9 +129,6 @@ private:
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);
     void DrawLayerPanels(IPlatform& platform);   // per-layer viewer tabs (VDP1 / NBG / RBG0)
-    // The context + render options + frame number the layer panels and their exports read. One
-    // builder, so a menu-driven export sees exactly the frame the panels would have drawn.
-    LayerPanelFrame BuildLayerPanelFrame();
     void DrawWatch(IPlatform& platform);   // debugger Watch Window
     void DrawAssembly();                    // SH-2 Assembly (live disassembly)
     void DrawHexEditor();                   // Hex Editor (memory view/edit)

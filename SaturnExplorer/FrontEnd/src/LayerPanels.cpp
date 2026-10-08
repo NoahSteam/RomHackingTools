@@ -105,6 +105,12 @@ void LayerPanels::Draw(const LayerPanelFrame& frame, const bool* visible,
     mSnapshotHeld = frame.context && serial == mLastSerial;
     mLastSerial = serial;
 
+    // Before the panels draw, so an export asked for from the Data menu has already left its
+    // status line on the layer's toolbar by the time that toolbar is submitted. 'frame' is the
+    // displayed frame -- the scrubbed one while scrubbing -- which is the whole reason the
+    // request waited for Draw instead of running where the menu command was handled.
+    ServiceExportRequests(frame, platform);
+
     for (const LayerPanelDesc& desc : LayerPanelList())
     {
         if (visible && !visible[desc.id]) continue;
@@ -305,6 +311,35 @@ void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& f
 {
     std::string message;   // the view already carries it; the panel reads it from there
     (void)ExportLayer(desc.id, frame, platform, message);
+}
+
+void LayerPanels::RequestExport(LayerId layer)
+{
+    if (layer >= 0 && layer < kLayerCount) mExportRequests.push_back(layer);
+}
+
+void LayerPanels::ServiceExportRequests(const LayerPanelFrame& frame, IPlatform& platform)
+{
+    if (mExportRequests.empty()) return;
+    // Swapped out first: an export cannot queue another, but taking the list by value keeps
+    // that true of any future caller too, instead of iterating a vector being appended to.
+    std::vector<LayerId> requests;
+    requests.swap(mExportRequests);
+    for (size_t i = 0; i < requests.size(); ++i)
+    {
+        std::string message;
+        const bool ok = ExportLayer(requests[i], frame, platform, message);
+        mExportResults.push_back(std::make_pair(message, !ok));
+    }
+}
+
+bool LayerPanels::ConsumeExportResult(std::string& message, bool& error)
+{
+    if (mExportResults.empty()) return false;
+    message = mExportResults.front().first;
+    error   = mExportResults.front().second;
+    mExportResults.erase(mExportResults.begin());
+    return true;
 }
 
 }  // namespace sfe

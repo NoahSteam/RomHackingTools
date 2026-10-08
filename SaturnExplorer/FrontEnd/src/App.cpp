@@ -653,22 +653,20 @@ void App::DumpMemory(IPlatform& platform)
 
 // Data > Dump Textures. The work itself is the layer viewer's export (LayerExport.cpp), so the
 // menu and the panel button write the same files into the same folder -- for VDP1 that is every
-// sprite on screen as its own BMP, for a VDP2 screen its tileset plus the tile-index CSV. The
-// only thing added here is reporting: the panel has a status line under its toolbar and the menu
-// has not, so the result goes to the operation banner and the log.
-void App::DumpLayerTextures(IPlatform& platform, int layer)
+// sprite on screen as its own BMP, for a VDP2 screen its tileset plus the tile-index CSV.
+//
+// Only queued here, never run here. Toolbar and menu commands are executed near the top of
+// BuildUI, before the scrub swap picks the context the panels will show, so exporting on the
+// spot would write the live frame while the user is looking at a past one. LayerPanels::Draw
+// runs the request against the frame it draws, the same way a screenshot waits for the
+// displayed context (see mScreenshotRequested).
+void App::RequestTextureDump(int layer)
 {
     if (layer < 0 || layer >= kLayerCount)
     {
         return;   // a stale menu id; the decoder bounds the range, so this is belt-and-braces
     }
-    const LayerPanelFrame frame = BuildLayerPanelFrame();
-    std::string message;
-    const bool ok = mLayerPanels.ExportLayer(static_cast<LayerId>(layer), frame, platform, message);
-    mOperationStatus = message;
-    mOperationError = !ok;
-    if (ok) mLog.Info(message);
-    else    mLog.Error(message);
+    mLayerPanels.RequestExport(static_cast<LayerId>(layer));
 }
 
 void App::SelectCommand(int command, bool additive)
@@ -4212,18 +4210,12 @@ void App::AdoptNewPanels(ImGuiID dockId)
             ImGui::DockBuilderDockWindow(layer.title, central->ID);
 }
 
-LayerPanelFrame App::BuildLayerPanelFrame()
+void App::DrawLayerPanels(IPlatform& platform)
 {
     LayerPanelFrame frame;
     frame.context = mContext;
     frame.opts = &mRenderOpts;
     frame.frame = mbHasData ? se_frame_number(mContext) : 0;
-    return frame;
-}
-
-void App::DrawLayerPanels(IPlatform& platform)
-{
-    const LayerPanelFrame frame = BuildLayerPanelFrame();
     bool visible[kLayerCount] = {};
     visible[kLayerVdp1] = mPanels.layerVdp1;
     visible[kLayerNbg0] = mPanels.layerNbg0;
@@ -4233,6 +4225,17 @@ void App::DrawLayerPanels(IPlatform& platform)
     visible[kLayerRbg0] = mPanels.layerRbg0;
     mLayerPanels.Draw(frame, visible, platform);
     if (mLayerPanels.ConsumeSettingsDirty()) mSettingsDirty = true;
+    // A Data > Dump Textures request has no panel status line of its own to land in, so its
+    // result is reported here instead -- every one of them, in case more than one was queued.
+    std::string exportMessage;
+    bool exportError = false;
+    while (mLayerPanels.ConsumeExportResult(exportMessage, exportError))
+    {
+        mOperationStatus = exportMessage;
+        mOperationError = exportError;
+        if (exportError) mLog.Error(exportMessage);
+        else             mLog.Info(exportMessage);
+    }
 }
 
 void App::DrawWorldView(IPlatform& platform)
@@ -7140,7 +7143,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         DumpMemory(platform);
         break;
     case TopBarCommandType::DumpTextures:
-        DumpLayerTextures(platform, command.index);
+        RequestTextureDump(command.index);
         break;
 #ifdef SE_ENABLE_LIVE
     case TopBarCommandType::SaveState: DoSaveState(command.index); break;
