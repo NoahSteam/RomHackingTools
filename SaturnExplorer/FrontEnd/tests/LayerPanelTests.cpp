@@ -20,6 +20,7 @@
 
 #include "FakeVdpSource.h"
 
+#include "FileWrite.h"
 #include "LayerPanels.h"
 #include "Settings.h"
 
@@ -334,6 +335,49 @@ void TestEveryQueuedRequestIsReported()
     se_destroy(ctx);
 }
 
+// Close Source is a toolbar command too, so it can be handled in the same batch as a Dump
+// Textures request and destroy the context before the request runs. The request carries a
+// layer id and nothing else -- no se_context* that unloading could leave dangling -- so the
+// export simply finds no data and says so, rather than reading freed memory.
+void TestUnloadBeforeAQueuedExportRunsIsReportedNotCrashed()
+{
+    se_test::State state(0x200);
+    se_context* ctx = OpenMinimalContext(state);
+    if (ctx == nullptr) return;
+
+    Settings settings;
+    settings.Set("export", "dir", "se_layer_panel_test");
+    LayerPanels panels;
+    panels.Load(settings);
+    StubPlatform platform;
+
+    LayerPanelFrame frame;
+    frame.context = ctx;
+    static const se_render_opts kOpts = {};
+    frame.opts = &kOpts;
+    frame.frame = 500;
+    const bool visible[kLayerCount] = {};
+
+    panels.RequestExport(kLayerVdp1);
+
+    // The source closes before the Draw that would have serviced the request: App destroys
+    // the context and mContext becomes null, so that is what Draw is handed.
+    se_destroy(ctx);
+    frame.context = nullptr;
+    panels.Draw(frame, visible, platform);
+
+    const std::vector<LayerPanels::ExportResult> results = TakeResults(panels);
+    CHECK(results.size() == 1);
+    if (results.size() == 1)
+    {
+        CHECK(results[0].error);
+        CHECK(results[0].message.find("No data") != std::string::npos);
+    }
+    // Nothing was written, so there is no folder and no staging debris for frame 500.
+    CHECK(!FileOrDirectoryExists("se_layer_panel_test/vdp1_frame00500"));
+    CHECK(!FileOrDirectoryExists("se_layer_panel_test/vdp1_frame00500.separt"));
+}
+
 // An out-of-range layer -- a menu id from a stale menu -- is dropped rather than indexing the
 // view array out of bounds.
 void TestOutOfRangeRequestIsIgnored()
@@ -363,6 +407,7 @@ int main()
     TestSpriteLayerHasNoTileGrid();
     TestMenuRequestExportsTheFrameOnScreen();
     TestEveryQueuedRequestIsReported();
+    TestUnloadBeforeAQueuedExportRunsIsReportedNotCrashed();
     TestOutOfRangeRequestIsIgnored();
     // The export tests create this root on demand (WriteLayerExport makes the folder); its
     // contents are removed as each result is checked, so only the empty root is left.

@@ -563,6 +563,15 @@ if(BUILD_TESTING)
     # Per-layer viewers: the isolated layer render, the tile map/tileset extraction, and
     # the export artifacts (tileset BMP, tile-index CSV, per-sprite images). Links the core
     # against a synthetic VDP2 snapshot -- no renderer, no window.
+    # The write/close/publish layer every save and export ends in. Uses /dev/full for the
+    # close-time failure, which is the one fault that needs no mock.
+    add_executable(SaturnExplorerFileWriteTests
+        FrontEnd/tests/FileWriteTests.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerFileWriteTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerFileWriteTests COMMAND SaturnExplorerFileWriteTests)
+
     add_executable(SaturnExplorerLayerExportTests
         FrontEnd/tests/LayerExportTests.cpp
         FrontEnd/src/LayerExport.cpp

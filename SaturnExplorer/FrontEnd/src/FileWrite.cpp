@@ -6,11 +6,13 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>        // _unlink
 #include <windows.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #define SE_MKDIR(p)  _mkdir(p)
 #define SE_RMDIR(p)  _rmdir(p)
+#define SE_UNLINK(p) _unlink(p)
 #define SE_STAT      struct _stat
 #define SE_STAT_FN   _stat
 #ifndef S_ISREG
@@ -23,6 +25,7 @@
 #include <unistd.h>
 #define SE_MKDIR(p)  ::mkdir((p), 0755)
 #define SE_RMDIR(p)  ::rmdir(p)
+#define SE_UNLINK(p) ::unlink(p)
 #define SE_STAT      struct stat
 #define SE_STAT_FN   ::stat
 #endif
@@ -142,7 +145,10 @@ bool RemoveFile(const std::string& path)
 {
     if (path.empty()) return false;
     errno = 0;
-    if (std::remove(path.c_str()) == 0) return true;
+    // unlink, not std::remove: remove() falls back to rmdir, so it deletes an empty
+    // DIRECTORY sitting at this path. The staging path is cleared before use, and a
+    // directory that happens to share that name belongs to someone else.
+    if (SE_UNLINK(path.c_str()) == 0) return true;
     return errno == ENOENT;
 }
 

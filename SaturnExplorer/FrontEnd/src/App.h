@@ -95,6 +95,9 @@ private:
     // Turn a SaveOutcome into the operation banner + log line. Returns true only for a real
     // save, so a caller can skip whatever it would have said about the file afterwards.
     bool ReportSave(SaveOutcome outcome, const std::string& what);
+    // Complain loudly if a save of the displayed frame is running before that frame has been
+    // chosen. See the definition; 'what' names the feature for the message.
+    void WarnIfNotFromDisplayedSnapshot(const char* what);
     // Queue Data > Dump Textures for the layer 'layer' (a LayerId). Run by LayerPanels::Draw,
     // not here, so it exports the frame on screen rather than the live one -- see the comment
     // on the definition.
@@ -129,6 +132,7 @@ private:
     void SaveScreenshot(IPlatform& platform);
     bool mScreenshotRequested = false;   // taken once the displayed context is selected
     bool mDumpMemoryRequested = false;   // likewise -- a dump of the frame on screen
+    bool mDispatchingCommands = false;   // inside the toolbar/menu command loop (see the guard)
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);

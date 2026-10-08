@@ -560,6 +560,23 @@ ImVec2 AspectFit(const ImVec2& avail, int w, int h, float& outScale)
 // (VRAM/CRAM/work-RAM big-endian as the Saturn stores them; registers as a
 // hardware-offset big-endian image). The section table names each region and gives
 // its Saturn bus address + size + file offset, so a region is trivial to carve out.
+// Called by everything that writes the displayed frame to a file. The output has to come from
+// the context the scrub swap selected, which happens well after commands are dispatched -- so
+// being called during dispatch means someone has wired a save back to where the command
+// arrives and it is now silently exporting the live frame while a past one is on screen.
+// Reported rather than refused: a loud wrong answer beats a feature that quietly stops.
+void App::WarnIfNotFromDisplayedSnapshot(const char* what)
+{
+    if (!mDispatchingCommands) return;
+    char msg[192];
+    std::snprintf(msg, sizeof(msg),
+                  "BUG: %s ran during command dispatch, before the displayed frame was "
+                  "selected. It must be queued and run after the scrub swap.", what);
+    mOperationStatus = msg;
+    mOperationError = true;
+    mLog.Error(msg);
+}
+
 // One place that turns a SaveOutcome into what the user sees, so every save in the app says
 // the same three things -- and so "cancelled" never reads as a failure. 'what' names the
 // artifact ("saturn_frame_42.sedump", "the screenshot").
@@ -589,6 +606,7 @@ bool App::ReportSave(SaveOutcome outcome, const std::string& what)
 
 void App::DumpMemory(IPlatform& platform)
 {
+    WarnIfNotFromDisplayedSnapshot("Dump Memory");
     if (!mbHasData || !mContext)
     {
         // Reachable: the dump is queued during command handling and run later in the frame,
@@ -1329,8 +1347,16 @@ void App::BuildUI(IPlatform& platform)
 #else
     DrawToolbar(topBarCommands);
 #endif
-    for (const TopBarCommand& command : topBarCommands)
-        ExecuteTopBarCommand(command, platform);
+    {
+        // Marked for the guard in WarnIfNotFromDisplayedSnapshot: anything that turns the
+        // frame on screen into a file must not run in here, because the context that decides
+        // which frame that is has not been chosen yet. App's frame loop has no test harness,
+        // so this is what catches the mistake being reintroduced.
+        mDispatchingCommands = true;
+        for (const TopBarCommand& command : topBarCommands)
+            ExecuteTopBarCommand(command, platform);
+        mDispatchingCommands = false;
+    }
     // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
     // effect this frame. Reads the hotkey/menu requests set during DrawToolbar above.
     UpdateDemo(platform);
@@ -7565,6 +7591,7 @@ void App::DrawUpdateModal(IPlatform& platform)
 
 void App::SaveScreenshot(IPlatform& platform)
 {
+    WarnIfNotFromDisplayedSnapshot("Screenshot");
     RenderFrameToTexture(platform);   // free when VDP Output already drew this frame
     if (!mbHasData || mFrameBuffer.empty() || mFrameWidth <= 0 || mFrameHeight <= 0)
     {
