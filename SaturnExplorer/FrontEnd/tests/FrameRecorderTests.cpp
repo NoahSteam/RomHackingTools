@@ -165,24 +165,135 @@ int main()
         Check(rec.ReconstructState(1, out) && out == full2, "frame 2 still reconstructs after truncate");
     }
 
-    // --- Evicted keyframe: a delta whose base keyframe is gone can't be reconstructed ---
+    // --- A keyframe outlives its own frame; a delta with no keyframe cannot be rebuilt ---
     {
         FrameRecorder r2;
         r2.Configure(2);   // tiny ring: only the 2 newest frames survive
         // Frame 1 is the keyframe; frames 2 and 3 are deltas onto it. With maxFrames=2, adding
-        // frame 3 evicts frame 1 (the keyframe), orphaning frame 3's delta.
+        // frame 3 evicts frame 1 -- but the keyframe block is held apart from its frame, so the
+        // deltas against it are still resumable.
         Check(CaptureFrame(r2, ctx, 1), "r2 frame 1");
         r2.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N, encKf.data(), encKf.size());
         Check(CaptureFrame(r2, ctx, 2), "r2 frame 2");
         r2.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
-        // A 3rd frame pushes the ring past its cap; the front (frame 1, the keyframe) is evicted.
         Check(CaptureFrame(r2, ctx, 3), "r2 frame 3 evicts frame 1");
         r2.AttachStateBlock(3, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD3.data(), encD3.size());
         Check(r2.Count() == 2 && r2.FrameNumber(0) == 2, "r2 ring holds frames 2,3");
-        // Frame 3's delta (index 1) references the evicted keyframe (frame 1) -> not reconstructable.
         std::vector<uint8_t> out;
-        Check(!r2.CanReconstruct(1) && !r2.ReconstructState(1, out),
-              "delta with evicted keyframe is not reconstructable");
+        Check(r2.CanReconstruct(1) && r2.ReconstructState(1, out) && out == full3,
+              "a delta still reconstructs after its keyframe's frame was evicted");
+
+        // Whereas a delta whose keyframe block never arrived has nothing to be applied to.
+        FrameRecorder r2b;
+        r2b.Configure(10);
+        Check(CaptureFrame(r2b, ctx, 2), "r2b frame 2");
+        r2b.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
+        Check(!r2b.CanReconstruct(0) && !r2b.ReconstructState(0, out),
+              "a delta whose keyframe never arrived is not reconstructable");
+    }
+
+    // --- A block can arrive before its frame is published (it does, in practice) ---
+    {
+        FrameRecorder r8;
+        r8.Configure(10);
+        // Blocks first, frames after: the emulator's stream runs ahead of what the front end has
+        // recorded, so the recorder has to hold what it is given.
+        r8.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N, encKf.data(), encKf.size());
+        r8.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
+        r8.AttachStateBlock(3, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD3.data(), encD3.size());
+        Check(r8.GetStateStats().waiting == 2, "r8 holds the two deltas ahead of their frames");
+        Check(CaptureFrame(r8, ctx, 1) && CaptureFrame(r8, ctx, 2), "r8 frames 1,2");
+        std::vector<uint8_t> out;
+        Check(r8.CanReconstruct(0) && r8.ReconstructState(0, out) && out == keyframe,
+              "the keyframe's frame is resumable once recorded");
+        Check(r8.CanReconstruct(1) && r8.ReconstructState(1, out) && out == full2,
+              "a delta that arrived early attaches when its frame is recorded");
+
+        // The front end sees only some frames, so frame 3 may never be recorded: its block must
+        // not wait forever. Recording frame 4 shows the ring has moved past it.
+        Check(CaptureFrame(r8, ctx, 4), "r8 frame 4");
+        Check(r8.GetStateStats().waiting == 0, "a block for a frame that was skipped is dropped");
+        Check(r8.GetStateStats().noFrame >= 1, "and counted as never recorded");
+    }
+
+    // --- Deltas rebuild against a keyframe whose own frame was never recorded ---
+    {
+        FrameRecorder r9;
+        r9.Configure(10);
+        r9.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N, encKf.data(), encKf.size());
+        Check(CaptureFrame(r9, ctx, 2), "r9 frame 2");
+        r9.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
+        std::vector<uint8_t> out;
+        Check(r9.CanReconstruct(0) && r9.ReconstructState(0, out) && out == full2,
+              "frame 2 rebuilds from a keyframe taken at a frame that was not recorded");
+
+        // Rewinding to frame 2 discards a keyframe taken after it: that future did not happen.
+        r9.AttachStateBlock(9, SE_LIVE_STATE_KIND_KEYFRAME, 9, (uint32_t)N, encKf.data(), encKf.size());
+        Check(r9.GetStateStats().keyframes == 2, "r9 holds both keyframes");
+        r9.TruncateAfter(0);
+        Check(r9.GetStateStats().keyframes == 1, "a keyframe from after the resume point is dropped");
+        Check(r9.CanReconstruct(0), "and the frame resumed from is still resumable");
+    }
+
+    // --- Pruning must not delete the keyframe a waiting delta is about to need ---
+    {
+        FrameRecorder r10;
+        r10.Configure(10);
+        // Keyframe 1 and a delta against it for frame 2, which is not recorded yet; then two
+        // newer keyframes (the exporter promotes one on a scene change) before frame 2 lands.
+        r10.AttachStateBlock(1, SE_LIVE_STATE_KIND_KEYFRAME, 1, (uint32_t)N, encKf.data(), encKf.size());
+        r10.AttachStateBlock(2, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD2.data(), encD2.size());
+        r10.AttachStateBlock(3, SE_LIVE_STATE_KIND_KEYFRAME, 3, (uint32_t)N, encKf.data(), encKf.size());
+        r10.AttachStateBlock(4, SE_LIVE_STATE_KIND_KEYFRAME, 4, (uint32_t)N, encKf.data(), encKf.size());
+        Check(CaptureFrame(r10, ctx, 2), "r10 frame 2");
+        std::vector<uint8_t> out;
+        Check(r10.CanReconstruct(0) && r10.ReconstructState(0, out) && out == full2,
+              "the delta that was waiting still has its keyframe");
+    }
+
+    // --- Blocks waiting for a frame are counted against the byte budget, and bounded by it ---
+    {
+        // Incompressible payloads, so each is a real few KB. A tiny budget must not be
+        // overrun by early blocks that never find a frame.
+        std::vector<uint8_t> noisy(4096);
+        uint32_t x = 12345;
+        for (auto& b : noisy) { x = x * 1664525u + 1013904223u; b = (uint8_t)(x >> 24); }
+        const std::vector<uint8_t> encNoisy = Encode(noisy);
+
+        FrameRecorder r11;
+        r11.Configure(10, 1024);
+        for (uint64_t f = 2; f < 50; ++f)
+            r11.AttachStateBlock(f, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)noisy.size(),
+                                 encNoisy.data(), encNoisy.size());
+        Check(r11.BytesUsed() <= 1024, "48 early blocks do not exceed a 1 KiB budget");
+        Check(r11.GetStateStats().waiting == 0, "blocks bigger than the allowance are not held");
+
+        FrameRecorder r11b;
+        r11b.Configure(10, 4 * encNoisy.size());   // a quarter of this fits one block, not two
+        for (uint64_t f = 2; f < 12; ++f)
+            r11b.AttachStateBlock(f, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)noisy.size(),
+                                  encNoisy.data(), encNoisy.size());
+        Check(r11b.GetStateStats().waiting == 1, "only what the allowance covers is held");
+        Check(r11b.BytesUsed() == encNoisy.size(), "and what is held is counted in the footprint");
+        r11b.Clear();
+        Check(r11b.BytesUsed() == 0 && r11b.GetStateStats().waiting == 0, "clearing releases them");
+    }
+
+    // --- A keyframe replaces a delta the frame already holds ---
+    {
+        FrameRecorder r12;
+        r12.Configure(10);
+        Check(CaptureFrame(r12, ctx, 3), "r12 frame 3");
+        const size_t frameOnly = r12.BytesUsed();   // the frame's own footprint, before any state
+        // A delta for frame 3 against a keyframe that is not there, then frame 3's own keyframe.
+        r12.AttachStateBlock(3, SE_LIVE_STATE_KIND_DELTA, 1, (uint32_t)N, encD3.data(), encD3.size());
+        const size_t withDelta = r12.BytesUsed() - frameOnly;
+        r12.AttachStateBlock(3, SE_LIVE_STATE_KIND_KEYFRAME, 3, (uint32_t)N, encKf.data(), encKf.size());
+        std::vector<uint8_t> out;
+        Check(r12.CanReconstruct(0) && r12.ReconstructState(0, out) && out == keyframe,
+              "the keyframe is the state, not the delta it arrived behind");
+        Check(r12.BytesUsed() - frameOnly == encKf.size() && withDelta == encD3.size(),
+              "and the replaced delta is no longer counted");
     }
 
     // --- A frame that does not fully decode is refused, not blanked and served (REW-02) ---

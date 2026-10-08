@@ -55,7 +55,15 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      21u   /* +v21 stop sequence number (control block +40): every
+#define SE_LIVE_VERSION      22u   /* +v22 each savestate block carries the number of state loads
+                                  * the emulator had resolved when the state was captured (24
+                                  * bits, in the block header's former padding), so a client that
+                                  * has asked for a load can tell a block of the timeline the
+                                  * load abandoned -- which reuses the new timeline's frame
+                                  * numbers -- from one of the new, exactly. Reading the counts
+                                  * off the reply that carries the block cannot: the counts and
+                                  * the blocks are not captured together.
+                                  * +v21 stop sequence number (control block +40): every
                                   * published halt takes the next number, so a client can tell
                                   * a NEW halt from a re-report of the one it already has --
                                   * which comparing PCs cannot, because a step can land on the
@@ -272,7 +280,10 @@
  * a worker thread, so a block usually arrives a few frames behind its snapshot). Section layout:
  *   u32 count; then 'count' blocks, each:
  *     u8  kind            (SE_LIVE_STATE_KIND_*: 0 = delta, 1 = keyframe)
- *     u8  pad[3]
+ *     u8  epoch[3]        (v22+; zero before) state loads, applied or refused, that the
+ *                         emulator had resolved when this state was captured, little-endian,
+ *                         modulo 2^24. A client that has submitted a load discards blocks whose
+ *                         epoch is below the count that load will make.
  *     u32 frame_no        the frame this block reconstructs
  *     u32 base_keyframe   frame_no of the keyframe this delta is against (== frame_no if kind==keyframe)
  *     u32 payload_len     bytes of payload that follow
@@ -281,9 +292,10 @@
  * count 0 = the worker had nothing ready this response, or the feature is off (no save hook).
  * The RLE + XOR codec is opaque byte-crunching (SeStateCodec.h); the client never interprets
  * the savestate contents, only reconstructs the full image to hand back via the LST verb. */
-#define SE_LIVE_STATE_HDR_LEN     20u   /* kind(1)+pad(3)+frame(4)+base(4)+payload_len(4)+full_len(4) */
+#define SE_LIVE_STATE_HDR_LEN     20u   /* kind(1)+epoch(3)+frame(4)+base(4)+payload_len(4)+full_len(4) */
 #define SE_LIVE_STATE_KIND_DELTA   0u
 #define SE_LIVE_STATE_KIND_KEYFRAME 1u
+#define SE_LIVE_STATE_EPOCH_MINVER 22u   /* servers older than this send 0 in the epoch bytes */
 #define SE_LIVE_STATE_MAX_PER_REPLY 4u  /* cap on blocks drained into one response */
 #define SE_LIVE_STATE_MAX_PAYLOAD (64u * 1024u * 1024u) /* sanity bound on one block's payload */
 
@@ -409,9 +421,15 @@
  * Default endpoints. The TCP port is used for the web bridge: the browser build
  * tunnels a normal TCP connect over a WebSocket proxy to this port (the client
  * writes the endpoint as "tcp:host:port"). */
+/* Overridable (-D) only so a test can listen somewhere of its own instead of on the endpoints a
+ * running emulator is using; nothing else defines these. */
+#ifndef SE_LIVE_DEFAULT_SOCK_PATH
 #define SE_LIVE_DEFAULT_SOCK_PATH "/tmp/saturn_explorer.sock"
+#endif
 #define SE_LIVE_DEFAULT_PIPE_NAME "\\\\.\\pipe\\SaturnExplorer"
+#ifndef SE_LIVE_DEFAULT_TCP_PORT
 #define SE_LIVE_DEFAULT_TCP_PORT  6845
+#endif
 /* The browser build has no local socket, so it defaults to this TCP endpoint, which
  * the WebSocket->TCP bridge forwards to the emulator's export port (see the Yabause
  * README "Web (browser) live viewing"). */

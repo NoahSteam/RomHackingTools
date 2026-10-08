@@ -181,11 +181,14 @@ uint32_t se_live_poll_log(const se_data_source* ds, char* out, uint32_t lineLen,
 /* Drain the savestate blocks the emulator sent (v16+) — the per-frame delta/keyframe stream
  * that powers rewind "Play from here". 'cb' is called once per block, oldest first, with the
  * block kind (SE_LIVE_STATE_KIND_*), its frame number, the base keyframe frame it deltas
- * against (== frame for a keyframe), and its opaque RLE payload. Returns the number drained
+ * against (== frame for a keyframe), the number of state loads the emulator had resolved when
+ * it captured the state ('epoch', from v22; 0 before -- see se_live_server_version), and its
+ * opaque RLE payload. A client that has submitted a load discards blocks whose epoch is below
+ * the count that load will make: they are of the timeline it abandoned. Returns the number drained
  * (0 if not a live source or the server predates v16). Call each frame to feed the client's
  * FrameRecorder ring. */
 typedef void (*se_live_state_block_cb)(void* user, uint8_t kind, uint32_t frame,
-                                       uint32_t base, uint32_t full_len,
+                                       uint32_t base, uint32_t full_len, uint32_t epoch,
                                        const uint8_t* payload, uint32_t len);
 uint32_t se_live_drain_state_blocks(const se_data_source* ds,
                                     se_live_state_block_cb cb, void* user);

@@ -184,6 +184,14 @@ struct LiveStateBlock
     uint32_t frame = 0;
     uint32_t base = 0;   // frame_no of the keyframe a delta is against (== frame for a keyframe)
     uint32_t fullLen = 0;   // decoded full-savestate size
+    // How many state loads (applied or refused) the emulator had resolved when it captured this
+    // state. A load starts a new timeline and reuses the frame numbers of the one it abandoned, so
+    // this is what tells a block of the old timeline -- still in flight, or queued here -- from
+    // one of the new: it is below the count the client expects once its load has landed. Stamped
+    // by the emulator at capture, not read off the reply: a reply's counters and its blocks are
+    // not taken together, and the first block of a new timeline can ship under the old count.
+    // 0 from a server older than SE_LIVE_STATE_EPOCH_MINVER.
+    uint32_t epoch = 0;
     std::vector<uint8_t> payload;
 };
 
@@ -1090,6 +1098,7 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
             if (!ConnReadFull(c, h, SE_LIVE_STATE_HDR_LEN)) return false;
             LiveStateBlock b;
             b.kind    = h[0];
+            b.epoch   = version >= SE_LIVE_STATE_EPOCH_MINVER ? Rd32LE(h) >> 8 : 0u;   // bytes 1-3
             b.frame   = Rd32LE(h + 4);
             b.base    = Rd32LE(h + 8);
             const uint32_t plen = Rd32LE(h + 12);
@@ -2004,7 +2013,7 @@ extern "C" uint32_t se_live_drain_state_blocks(const se_data_source* ds,
         }
         for (const LiveStateBlock& b : local)
         {
-            cb(user, b.kind, b.frame, b.base, b.fullLen,
+            cb(user, b.kind, b.frame, b.base, b.fullLen, b.epoch,
                b.payload.empty() ? nullptr : b.payload.data(),
                static_cast<uint32_t>(b.payload.size()));
         }

@@ -727,6 +727,13 @@ void SeMednafenTraceHook(int cpu, unsigned int pc)
  * The process teardown reclaims the server thread; call SeExportDeinit() from
  * CloseGame() too if you want a clean per-game stop. */
 #if defined(SE_MEDNAFEN_WIRED)
+/* The second injected call, at the very end of Emulate(): the frame is over, its timestamps are
+ * rebased, and the machine is in exactly the state the next frame will start from. */
+void SeMednafenEndFrameHook(void)
+{
+    SeExportEndFrame();
+}
+
 void SeMednafenFrameHook(void)
 {
     static int inited = 0;
@@ -753,6 +760,7 @@ void SeMednafenFrameHook(void)
  * per-insn call, neither compiled here — keep the compiler quiet without them.
  * SeMednafenTraceHook is public (apply.py injects a call to it) so it's compiled either
  * way; SeMdfnSetTracepoints/SeRd32LE are only used under SE_MEDNAFEN_WIRED. */
+void SeMednafenEndFrameHook(void) {}   /* stub build: no savestates to take */
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnAddMemBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;

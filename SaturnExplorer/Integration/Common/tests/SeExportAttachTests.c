@@ -56,6 +56,7 @@ static void Frame(void)
 {
     SeExportSnapshot(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
                      NULL, NULL, NULL);
+    SeExportEndFrame();   /* the glue's last call of the frame: where the savestate is taken */
 }
 
 static void Sleep5ms(void)

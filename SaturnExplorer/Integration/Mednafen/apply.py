@@ -762,6 +762,7 @@ APPEND_EDITS = [
 # the call sites below are plain calls that resolve to these). Prepended at BOF.
 FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
+    "extern \"C\" void SeMednafenEndFrameHook(void);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeExportNotifyStep(int cpu, unsigned int pc);\n"
@@ -817,6 +818,21 @@ FRAME_HOOK = (
     "   SeMednafenFrameHook();\n"
 )
 FRAME_ANCHOR = r'(espec->MasterCycles\s*=\s*[^;]*;\s*\n)'
+
+# End-of-frame call, injected as the last statement of Emulate(). The snapshot hook above sits
+# inside MidSync() -- FRAME_ANCHOR's first match is there, part-way through the frame's run loop --
+# which is right for the frame's pictures but wrong for a savestate: a state is loaded at the TOP
+# of the next frame, so the one to save is the state at the END of this one, after the timestamp
+# rebase and the rest of the frame's bookkeeping. Anchored on the signature of the function that
+# FOLLOWS Emulate (the closing brace just before it is the insertion point) because Emulate has no
+# marker of its own at its end. That ties it to the order of the two functions: if a fork moves
+# them, apply.py reports ANCHOR MISS and the build would record pictures but no savestates, so a
+# miss must be treated as a failed install, not a warning.
+END_FRAME_HOOK = (
+    " /* Saturn Explorer live tap: the frame is over; take its savestate here (rewind). */\n"
+    " SeMednafenEndFrameHook();\n"
+)
+END_FRAME_ANCHOR = r'(\n)\}\n\nstatic void OutputMIDI\(uint8 v\)'
 
 # Optional pause/step gate at the top of Emulate() (opt-in: can disturb audio timing).
 GATE_HOOK = (
@@ -954,6 +970,8 @@ def process_ss(src_dir, do_write, with_pause):
     text, n = apply_prepend(text, FWD_DECLS, "SeMednafenFrameHook(void)")
     notes.append(n)
     text, n = apply_anchored(text, FRAME_ANCHOR, FRAME_HOOK, "SeMednafenFrameHook();")
+    notes.append(n)
+    text, n = apply_anchored(text, END_FRAME_ANCHOR, END_FRAME_HOOK, "SeMednafenEndFrameHook();")
     notes.append(n)
     if with_pause:
         text, n = apply_anchored(text, GATE_ANCHOR, GATE_HOOK, "while (!SeExportGateFrame())")

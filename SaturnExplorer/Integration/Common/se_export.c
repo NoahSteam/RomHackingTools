@@ -489,12 +489,13 @@ static int            sFreeCount;
 static volatile unsigned sStateGen;
 static unsigned          sKeyGen;                 /* generation the current keyframe belongs to */
 
-typedef struct { unsigned long long frame; int poolIdx; size_t len; unsigned gen; } SeRawItem;
+typedef struct { unsigned long long frame; int poolIdx; size_t len; unsigned gen; unsigned epoch; } SeRawItem;
 static SeRawItem sRawFifo[SE_STATE_QUEUE];
 static int sRawHead, sRawCount;
 
 typedef struct {
     unsigned char      kind;                      /* SE_LIVE_STATE_KIND_* */
+    unsigned           epoch;                     /* loads settled when captured (see SeExportSnapshot) */
     unsigned long long frame, base;
     unsigned char*     payload; size_t len;       /* RLE payload */
     size_t             full;                      /* decoded full-state size */
@@ -548,7 +549,7 @@ static void SeStateFlushAndRekey(void)
 /* Emulate thread, from SeExportSnapshot: save the current full state and stage it for the
  * worker (SAVE only; no diff/RLE). Drops the frame (leaving it non-seekable) if the worker
  * is behind. No-op until a save hook + buffer pool exist. */
-static void SeStateCapture(unsigned long long frame)
+static void SeStateCapture(unsigned long long frame, unsigned epoch)
 {
     int idx; size_t n;
     if (!sSaveState || sStateCap == 0) return;
@@ -567,11 +568,29 @@ static void SeStateCapture(unsigned long long frame)
     {
         int slot = (sRawHead + sRawCount) % SE_STATE_QUEUE;
         sRawFifo[slot].frame = frame; sRawFifo[slot].poolIdx = idx;
-        sRawFifo[slot].len = n; sRawFifo[slot].gen = sStateGen;
+        sRawFifo[slot].len = n; sRawFifo[slot].gen = sStateGen; sRawFifo[slot].epoch = epoch;
         ++sRawCount;
     }
     else { sFreeStack[sFreeCount++] = idx; }
     SE_SUNLOCK();
+}
+
+/* A savestate wanted for the frame SeExportSnapshot just published, taken by SeExportEndFrame
+ * once the emulator has finished that frame. Emulate thread only, so no lock. */
+static int                sPendingState;
+static unsigned long long sPendingStateFrame;
+static unsigned           sPendingStateEpoch;
+
+/* Emulate thread, once per frame, as the very last thing the emulator does for it. Takes the
+ * savestate SeExportSnapshot asked for. This is the point a load reproduces exactly: a load is
+ * applied at the top of the next frame, and the state at the end of this one IS the state at the
+ * top of that one. Taken part-way through the frame it would not be, and the game would resume
+ * subtly off its original course (found by replaying a restored frame against the original run). */
+void SeExportEndFrame(void)
+{
+    if (!sPendingState) return;
+    sPendingState = 0;
+    SeStateCapture(sPendingStateFrame, sPendingStateEpoch);
 }
 
 /* Apply the LST memory-edit blob (SE_LIVE_EDIT_* layout) after a restore, so the game
@@ -1200,6 +1219,7 @@ static void SeStateWorkerBody(void)
             int slot = (sOutHead + sOutCount) % SE_STATE_OUTQ;
             sOutFifo[slot].kind  = keyframe ? (unsigned char)SE_LIVE_STATE_KIND_KEYFRAME
                                             : (unsigned char)SE_LIVE_STATE_KIND_DELTA;
+            sOutFifo[slot].epoch = item.epoch;
             sOutFifo[slot].frame = item.frame;
             sOutFifo[slot].base  = keyframe ? item.frame : sKeyFrame;
             sOutFifo[slot].payload = payload; sOutFifo[slot].len = plen;
@@ -1395,6 +1415,7 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     {
         return;
     }
+    unsigned epochNow;
     SE_LOCK();
     SeFrame* dst = sRing[sRingWrite];   /* the ring slot this frame lands in */
     if (vdp1) memcpy(dst->v1, vdp1, SE_V1); else memset(dst->v1, 0, SE_V1);
@@ -1423,17 +1444,29 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
+    /* How many loads have been settled, one way or the other: the stamp each savestate block of
+     * this frame carries (v22), so a client can tell the blocks of a timeline a load abandoned from
+     * those of the one it started. Read right after the pending acks are folded in, so it is the
+     * same number the reply's control block reports as done + failed -- which is what the client
+     * compares it with. */
+    epochNow = sRestoreDone + sRestoreFailed;
     SeStepFramePublished();   /* in the same critical section as the ring write, so a reply that
                                * reports the step as retired also holds its frame */
     SE_UNLOCK();
-    /* v16 rewind: stage a full savestate for this frame (off-lock; no-op unless a save hook
-     * is wired). The worker delta-compresses it and the server ships it lagging. Skip it while
-     * paused: a snapshot taken from inside a debugger halt (breakpoint/step) is mid-frame — the
-     * emulator's event timing isn't at a frame boundary, so its savestate isn't a clean rewind
-     * point. The rewind timeline simply omits halt frames; running frames still capture.
-     * Also skipped entirely while the client has rewind switched off (REW, v18): the full
-     * savestate is the most expensive thing on this thread and nothing would read it. */
-    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted)) SeStateCapture(sFrameNo);
+    /* The savestate is NOT taken here. The glue calls this from wherever the emulator has the
+     * frame's pictures ready, which for Mednafen is part-way through the frame's run loop, and a
+     * state saved there resumes wrongly: a load is applied at the TOP of the next frame, so the
+     * rest of this one -- the timestamp rebase, end-of-frame bookkeeping -- would never run. Note the
+     * frame and take the state when the frame is really over (SeExportEndFrame). Skipped while
+     * paused: a snapshot taken from inside a debugger halt is mid-frame too. Also skipped entirely
+     * while the client has rewind switched off (REW, v18): the full savestate is the most expensive
+     * thing on this thread and nothing would read it. */
+    if (!SeAtLoad(&sPaused) && SeAtLoad(&sRewindWanted))
+    {
+        sPendingStateFrame = sFrameNo;
+        sPendingStateEpoch = epochNow;
+        sPendingState = 1;
+    }
 }
 
 /* ---- Blocking, exact-length socket I/O (0 = success). ---- */
@@ -1568,6 +1601,11 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap);
 static void SeServeClient(SeConn cl, SeFrame* snap)
 {
     SeAtAdd(&sClients, 1);
+    /* A client that joins part-way through a run has never seen the keyframe the deltas now being
+     * produced are measured against, so none of them could be rebuilt until the next one came
+     * round -- up to SE_STATE_KF_MAX frames of the history it records would be unusable. Make the
+     * next state a keyframe so the first thing it receives is a base it can start from. */
+    SeStateFlushAndRekey();
     SeServeClientLoop(cl, snap);
     SeAtAdd(&sClients, -1);
 }
@@ -1945,7 +1983,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             for (i = 0; i < cnt; ++i)
             {
                 unsigned char h[SE_LIVE_STATE_HDR_LEN];
-                h[0] = local[i].kind; h[1] = h[2] = h[3] = 0;
+                SeWr32(h, (unsigned int)local[i].kind | ((local[i].epoch & 0xFFFFFFu) << 8));   /* kind + 24-bit epoch */
                 SeWr32(h + 4,  (unsigned int)(local[i].frame & 0xFFFFFFFFu));
                 SeWr32(h + 8,  (unsigned int)(local[i].base  & 0xFFFFFFFFu));
                 SeWr32(h + 12, (unsigned int)local[i].len);

@@ -521,6 +521,26 @@ few frames behind. On Play-from-scrub the client reconstructs frame N's full sta
 with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so **rewind requires
 `--with-pause`** (the gate is where the load is applied).
 
+### Where in the frame the state is taken
+
+Not where the frame's pictures are published. `SeMednafenFrameHook` sits inside Mednafen's
+`MidSync()`, part-way through the frame's run loop (that is where `FRAME_ANCHOR` first matches), and
+that is right for the snapshot. It is wrong for a savestate: a load is applied at the **top** of the
+next `Emulate()`, so the state to save is the one at the **end** of the frame, after
+`SMPC_EndFrame`, `RebaseTS` and the timestamp adjustments. Saved mid-frame and loaded at the top of
+the next, the rest of that frame never runs, and the game resumes subtly off its original course.
+
+So `SeExportSnapshot` only *notes* that a state is wanted, and the second injected call,
+`SeMednafenEndFrameHook()` (the last statement of `Emulate()`, placed by `END_FRAME_ANCHOR`), takes
+it through `SeExportEndFrame()`. A glue that never calls `SeExportEndFrame` records pictures but no
+savestates, silently. Also: a client that attaches mid-run is sent a keyframe first, so what it
+records is resumable from the start instead of after the next one (up to 300 frames away).
+
+This was found by running a real game: replay a restored frame and compare the memory of the frames
+that follow with the first time round. Mid-frame, only 3 of 76 matched; at the end of the frame,
+nearly all do. `se-rewind-live-check` does exactly that against a running emulator (see
+`Docs/PlayFromHereVerification.md`).
+
 ### What it costs, and how to turn it off
 
 A full savestate per frame is the most expensive thing the tap asks of the emulate thread: several
