@@ -128,10 +128,9 @@ private:
     std::vector<uint32_t> mBack, mFwd; // navigation history (current CPU)
     char     mGotoBuf[16] = {};
 
-    // Decoded rows, cached a page at a time (kPageRows instructions, aligned to the span's base)
+    // Decoded rows, cached a page at a time (kPageRows instructions, aligned to the span's base; see the .cpp)
     // so a frame reads a couple of small pages rather than a row at a time. Cleared every frame
     // while Auto Refresh is on; held otherwise, which is what lets the disassembly hold still.
-    static constexpr uint32_t kPageRows = 64;
     struct Page { std::vector<Line> lines; };
     std::unordered_map<uint32_t, Page> mPages;   // keyed by the page's first address
     uint64_t mPagesSource = 0;                   // backend.SourceId() the pages were read from
