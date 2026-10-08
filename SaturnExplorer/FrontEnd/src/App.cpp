@@ -4227,14 +4227,15 @@ void App::DrawLayerPanels(IPlatform& platform)
     if (mLayerPanels.ConsumeSettingsDirty()) mSettingsDirty = true;
     // A Data > Dump Textures request has no panel status line of its own to land in, so its
     // result is reported here instead -- every one of them, in case more than one was queued.
-    std::string exportMessage;
-    bool exportError = false;
-    while (mLayerPanels.ConsumeExportResult(exportMessage, exportError))
+    // The banner has room for one, so it ends up showing the last; the log keeps them all.
+    std::vector<LayerPanels::ExportResult> exports;
+    mLayerPanels.TakeExportResults(exports);
+    for (size_t i = 0; i < exports.size(); ++i)
     {
-        mOperationStatus = exportMessage;
-        mOperationError = exportError;
-        if (exportError) mLog.Error(exportMessage);
-        else             mLog.Info(exportMessage);
+        mOperationStatus = exports[i].message;
+        mOperationError = exports[i].error;
+        if (exports[i].error) mLog.Error(exports[i].message);
+        else                  mLog.Info(exports[i].message);
     }
 }
 

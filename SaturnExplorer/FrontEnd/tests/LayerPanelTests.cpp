@@ -116,12 +116,11 @@ se_context* OpenMinimalContext(se_test::State& state)
     return ctx;
 }
 
-// Delete the folder an export wrote, so a run leaves nothing behind.
-void RemoveExportedFiles(const std::string& message)
+// Delete what an export wrote, so a run leaves nothing behind. Best effort: the point of the
+// tests below is which frame was exported, and a leftover file would only be untidy.
+void RemoveExport(const std::string& message)
 {
-    // The message ends with the directory. Files are named from the same stem, so removing
-    // the directory's contents means removing what BuildLayerExport named -- the composed
-    // layer image is the only file a sprite-less VDP1 export writes.
+    // "Exported N files to <dir>", optionally followed by "  (<note>)".
     const std::string marker = " to ";
     const size_t at = message.rfind(marker);
     if (at == std::string::npos) return;
@@ -130,7 +129,17 @@ void RemoveExportedFiles(const std::string& message)
     if (note != std::string::npos) dir.erase(note);
     const size_t slash = dir.find_last_of("/\\");
     const std::string stem = (slash == std::string::npos) ? dir : dir.substr(slash + 1);
+    // The composed layer image is the only file a sprite-less VDP1 export writes.
     std::remove((dir + "/" + stem + "_layer.bmp").c_str());
+    std::remove(dir.c_str());   // removes the now-empty folder where remove() handles one
+}
+
+// The whole of what the Data menu path reports, in one call.
+std::vector<LayerPanels::ExportResult> TakeResults(LayerPanels& panels)
+{
+    std::vector<LayerPanels::ExportResult> out;
+    panels.TakeExportResults(out);
+    return out;
 }
 
 // --- Tests ---
@@ -242,41 +251,44 @@ void TestMenuRequestExportsTheFrameOnScreen()
     frame.opts = &kOpts;
     const bool visible[kLayerCount] = {};   // no panel open: the export reads the core, not the view
 
-    std::string message;
-    bool error = true;
-
     // Stand in for "paused at frame 3000, then scrubbed back to 2800": the request is made at a
     // point where 3000 is what an immediate export would have seen, and the Draw that services
     // it carries 2800, the frame the panels are drawing.
     frame.frame = 3000;
     panels.RequestExport(kLayerVdp1);
-    CHECK(!panels.ConsumeExportResult(message, error));   // nothing has run yet
+    CHECK(TakeResults(panels).empty());   // nothing has run yet
 
     frame.frame = 2800;
     panels.Draw(frame, visible, platform);
-    CHECK(panels.ConsumeExportResult(message, error));
-    CHECK(!error);
-    CHECK(message.find("vdp1_frame02800") != std::string::npos);
-    CHECK(message.find("3000") == std::string::npos);
-    CHECK(!panels.ConsumeExportResult(message, error));   // the result is one-shot
-    RemoveExportedFiles(message);
+    std::vector<LayerPanels::ExportResult> results = TakeResults(panels);
+    CHECK(results.size() == 1);
+    if (results.size() == 1)
+    {
+        CHECK(!results[0].error);
+        CHECK(results[0].message.find("vdp1_frame02800") != std::string::npos);
+        CHECK(results[0].message.find("3000") == std::string::npos);
+        RemoveExport(results[0].message);
+    }
+    CHECK(TakeResults(panels).empty());   // taken means taken
 
-    // A Draw with no request pending exports nothing, so the frame number alone cannot
-    // trigger one.
+    // A Draw with no request pending exports nothing, so drawing alone cannot trigger one.
     frame.frame = 2801;
     panels.Draw(frame, visible, platform);
-    std::string unexpected;
-    CHECK(!panels.ConsumeExportResult(unexpected, error));
+    CHECK(TakeResults(panels).empty());
 
-    // And the frame really is read per-Draw rather than captured once: the same request made
-    // again against a later frame writes that one.
+    // And the frame is read per-Draw rather than captured once: the same request made again
+    // against a later frame writes that one.
     panels.RequestExport(kLayerVdp1);
     frame.frame = 2900;
     panels.Draw(frame, visible, platform);
-    CHECK(panels.ConsumeExportResult(message, error));
-    CHECK(!error);
-    CHECK(message.find("vdp1_frame02900") != std::string::npos);
-    RemoveExportedFiles(message);
+    results = TakeResults(panels);
+    CHECK(results.size() == 1);
+    if (results.size() == 1)
+    {
+        CHECK(!results[0].error);
+        CHECK(results[0].message.find("vdp1_frame02900") != std::string::npos);
+        RemoveExport(results[0].message);
+    }
 
     se_destroy(ctx);
 }
@@ -306,17 +318,15 @@ void TestEveryQueuedRequestIsReported()
     panels.RequestExport(kLayerVdp1);
     panels.Draw(frame, visible, platform);
 
-    std::string message;
-    bool error = true;
-    int reported = 0;
-    while (panels.ConsumeExportResult(message, error))
+    const std::vector<LayerPanels::ExportResult> results = TakeResults(panels);
+    CHECK(results.size() == 2);
+    for (size_t i = 0; i < results.size(); ++i)
     {
-        ++reported;
-        CHECK(!error);
-        CHECK(message.find("vdp1_frame00012") != std::string::npos);
+        CHECK(!results[i].error);
+        CHECK(results[i].message.find("vdp1_frame00012") != std::string::npos);
+        RemoveExport(results[i].message);
     }
-    CHECK(reported == 2);
-    RemoveExportedFiles(message);
+    CHECK(TakeResults(panels).empty());
 
     se_destroy(ctx);
 }
@@ -336,9 +346,7 @@ void TestOutOfRangeRequestIsIgnored()
     const bool visible[kLayerCount] = {};
     panels.Draw(frame, visible, platform);
 
-    std::string message;
-    bool error = false;
-    CHECK(!panels.ConsumeExportResult(message, error));
+    CHECK(TakeResults(panels).empty());
 }
 
 }  // namespace
@@ -353,6 +361,9 @@ int main()
     TestMenuRequestExportsTheFrameOnScreen();
     TestEveryQueuedRequestIsReported();
     TestOutOfRangeRequestIsIgnored();
+    // The export tests create this root on demand (WriteLayerExport makes the folder); its
+    // contents are removed as each result is checked, so only the empty root is left.
+    std::remove("se_layer_panel_test");
 
     if (gFailures)
     {

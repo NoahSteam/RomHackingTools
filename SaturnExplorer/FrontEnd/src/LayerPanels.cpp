@@ -327,19 +327,16 @@ void LayerPanels::ServiceExportRequests(const LayerPanelFrame& frame, IPlatform&
     requests.swap(mExportRequests);
     for (size_t i = 0; i < requests.size(); ++i)
     {
-        std::string message;
-        const bool ok = ExportLayer(requests[i], frame, platform, message);
-        mExportResults.push_back(std::make_pair(message, !ok));
+        ExportResult result;
+        result.error = !ExportLayer(requests[i], frame, platform, result.message);
+        mExportResults.push_back(result);
     }
 }
 
-bool LayerPanels::ConsumeExportResult(std::string& message, bool& error)
+void LayerPanels::TakeExportResults(std::vector<ExportResult>& out)
 {
-    if (mExportResults.empty()) return false;
-    message = mExportResults.front().first;
-    error   = mExportResults.front().second;
-    mExportResults.erase(mExportResults.begin());
-    return true;
+    out.swap(mExportResults);
+    mExportResults.clear();   // swap left the caller's previous contents here
 }
 
 }  // namespace sfe

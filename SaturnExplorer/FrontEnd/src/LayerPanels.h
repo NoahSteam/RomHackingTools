@@ -13,7 +13,6 @@
 
 #include <cstdint>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "LayerExport.h"        // LayerId + the export artifacts
@@ -71,10 +70,19 @@ public:
     // The panel need not be open: the export reads the core, not the view.
     void RequestExport(LayerId layer);
 
-    // Take the oldest result of an export Draw has serviced, oldest first; false when none is
-    // waiting. The panel shows its own result under its toolbar, so this exists for the menu
-    // path, whose caller has nowhere else to put it.
-    bool ConsumeExportResult(std::string& message, bool& error);
+    // What a serviced export had to say. The panel shows its own result under its toolbar, so
+    // these exist for the menu path, whose caller has nowhere else to put it.
+    struct ExportResult
+    {
+        std::string message;
+        bool        error = false;
+    };
+
+    // Move out every result Draw has produced, oldest first, leaving none behind. All of them
+    // in one call rather than one per call: a caller draining a one-at-a-time accessor has to
+    // loop, and a loop over an accessor that failed to consume would hang the UI instead of
+    // merely reporting the wrong thing.
+    void TakeExportResults(std::vector<ExportResult>& out);
 
 private:
     // Per-layer view state: the uploaded texture and the pixels behind it.
@@ -127,8 +135,8 @@ private:
     bool        mSettingsDirty = false;
     // Exports asked for by the Data menu, waiting for a Draw to run them with the frame on
     // screen, and their results waiting for App to report them.
-    std::vector<LayerId>                     mExportRequests;
-    std::vector<std::pair<std::string, bool>> mExportResults;   // message, isError
+    std::vector<LayerId>      mExportRequests;
+    std::vector<ExportResult> mExportResults;
 };
 
 }  // namespace sfe
