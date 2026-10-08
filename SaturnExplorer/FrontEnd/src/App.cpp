@@ -651,6 +651,168 @@ void App::DumpMemory(IPlatform& platform)
     platform.SaveFile(name, out.data(), out.size());
 }
 
+// Snapshot what a dump needs from the live context and start the job. The panel's own CPU, user
+// notes and registers are taken here, once, so a dump is a consistent picture of one moment even
+// though the writing spans several frames.
+void App::BeginDumpSh2()
+{
+    if (!mbHasData || !mContext) return;
+
+    Sh2DumpInput in;
+    in.opt = mDumpSh2Options;
+    in.cpu = mDumpSh2Cpu;
+    in.haveRegs = se_get_sh2_regs(mContext, mDumpSh2Cpu, &in.regs) == SE_OK;
+    in.userComments = mAssemblyPanel.UserComments();
+    // Every region is read, selected or not: a generated comment resolves literal-pool loads
+    // from any of them.
+    // (ReadRegionBytes, not one big request: a single read is capped at 64 KiB.)
+    for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
+        ReadRegionBytes(mMemBackend, Sh2DumpRegionAt(i).base, Sh2DumpRegionAt(i).size, in.memory[i]);
+
+    char name[64];
+    std::snprintf(name, sizeof(name), "saturn_sh2_%s_frame_%llu.txt", mDumpSh2Cpu ? "slave" : "master",
+                  static_cast<unsigned long long>(se_frame_number(mContext)));
+    mDumpSh2FileName = name;
+    mDumpSh2Job.reset(new Sh2DumpJob(std::move(in)));
+}
+
+void App::DrawDumpSh2Modal(IPlatform& platform)
+{
+    static const char* const kOptionsTitle = "Dump SH-2";
+    static const char* const kProgressTitle = "Writing SH-2 dump";
+
+    if (mOpenDumpSh2Modal)
+    {
+        mOpenDumpSh2Modal = false;
+        mDumpSh2Cpu = mAssemblyPanel.Cpu();   // default to the CPU the panel is showing
+        // Which regions this source can actually read: a probe of the first word of each.
+        for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
+        {
+            const auto r = mbHasData ? mMemBackend.ReadMemoryBatch({ { Sh2DumpRegionAt(i).base, 2 } })
+                                     : std::vector<MemoryReadResult>();
+            mDumpSh2Available[i] = !r.empty() && r[0].success;
+        }
+        ImGui::OpenPopup(kOptionsTitle);
+    }
+
+    const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal(kOptionsTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        Sh2DumpOptions& o = mDumpSh2Options;
+        ImGui::TextWrapped("Write the SH-2 disassembly to a text file, one instruction per line, "
+                           "as the SH-2 Assembly panel shows it.");
+        ImGui::Spacing();
+
+        ImGui::TextUnformatted("Include");
+        ImGui::Checkbox("Memory addresses", &o.addresses);
+        ImGui::SetItemTooltip("The address of each instruction, e.g. 06005210.");
+        ImGui::Checkbox("Bytes", &o.bytes);
+        ImGui::SetItemTooltip("The instruction's raw 16-bit word, e.g. D108.");
+        ImGui::Checkbox("Op codes", &o.opcodes);
+        ImGui::SetItemTooltip("The decoded instruction: mnemonic and operands, e.g. mov.l @(0x06005234),r1.");
+        ImGui::Checkbox("Comments", &o.comments);
+        ImGui::SetItemTooltip("Your own notes from the Assembly panel, and the generated comment "
+                              "next to instructions you have not annotated.");
+
+        // The generated comments read registers (what r2 holds, where a branch lands), so they need
+        // a CPU's register file and are only as meaningful as that CPU's state at this moment.
+        const bool haveRegs = [&]
+        {
+            se_sh2_regs r = {};
+            return mbHasData && se_get_sh2_regs(mContext, mDumpSh2Cpu, &r) == SE_OK;
+        }();
+        ImGui::Indent();
+        ImGui::BeginDisabled(!o.comments || !haveRegs);
+        ImGui::Checkbox("Generated comments", &o.autoComments);
+        ImGui::EndDisabled();
+        ImGui::SetItemTooltip(haveRegs
+            ? "The panel's grey comments (\"r2 = 0x0\", \"if T set -> loc_...\"). Some resolve "
+              "registers, so they describe this CPU's state right now.\nOff: only your own notes."
+            : "This source has no registers for that CPU, so only your own notes can be written.");
+        ImGui::Unindent();
+        if (o.comments)
+        {
+            ImGui::SetNextItemWidth(130.0f);
+            const char* const kCpus[] = { "Master SH-2", "Slave SH-2" };
+            ImGui::Combo("Comments from", &mDumpSh2Cpu, kCpus, 2);
+            ImGui::SetItemTooltip("Which SH-2's registers the generated comments are resolved against.");
+        }
+
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Memory");
+        for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
+        {
+            const Sh2DumpRegion& r = Sh2DumpRegionAt(i);
+            char label[96];
+            std::snprintf(label, sizeof(label), "%s   %08X-%08X", i ? "High work RAM" : "Low work RAM",
+                          r.base, r.base + r.size - 1u);
+            ImGui::BeginDisabled(!mDumpSh2Available[i]);
+            ImGui::Checkbox(label, &o.regions[i]);
+            ImGui::EndDisabled();
+            if (!mDumpSh2Available[i])
+                ImGui::SetItemTooltip("This source does not provide that memory.");
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        const uint64_t rows = Sh2DumpJob::EstimateInstructions(o, mDumpSh2Available);
+        const bool valid = o.Valid() && rows > 0;
+        if (valid)
+            ImGui::TextDisabled("%llu instructions, roughly %llu MB of text",
+                                static_cast<unsigned long long>(rows),
+                                static_cast<unsigned long long>(Sh2DumpJob::EstimateBytes(o, rows) >> 20));
+        else
+            ImGui::TextDisabled("Pick at least one column and one memory region.");
+
+        ImGui::BeginDisabled(!valid);
+        if (ImGui::Button("Dump...", ImVec2(110, 0)))
+        {
+            // A region not provided cannot be dumped, whatever the checkbox remembers.
+            for (size_t i = 0; i < kSh2DumpRegionCount; ++i) o.regions[i] = o.regions[i] && mDumpSh2Available[i];
+            BeginDumpSh2();
+            ImGui::CloseCurrentPopup();   // the progress modal opens next frame, from outside this popup
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+
+    // Opened at the top level, not from inside the options popup: a popup opened from within another
+    // is its child and goes with it when that one closes.
+    if (mDumpSh2Job && !ImGui::IsPopupOpen(kProgressTitle)) ImGui::OpenPopup(kProgressTitle);
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal(kProgressTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        if (!mDumpSh2Job)
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        else
+        {
+            // A slice a frame keeps the window alive and the bar moving; 20000 rows is a few
+            // milliseconds, so a full dump takes a second or so.
+            const bool done = mDumpSh2Job->Step(20000);
+            ImGui::Text("Writing %s", mDumpSh2FileName.c_str());
+            ImGui::ProgressBar(mDumpSh2Job->Progress(), ImVec2(360, 0));
+            if (done)
+            {
+                const std::string text = mDumpSh2Job->TakeText();
+                mDumpSh2Job.reset();
+                ImGui::CloseCurrentPopup();
+                platform.SaveFile(mDumpSh2FileName.c_str(), text.data(), text.size());
+            }
+            else if (ImGui::Button("Cancel", ImVec2(90, 0)))
+            {
+                mDumpSh2Job.reset();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void App::SelectCommand(int command, bool additive)
 {
     if (command < 0)
@@ -1430,6 +1592,7 @@ void App::BuildUI(IPlatform& platform)
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
     DrawDataDirModal(platform);
+    DrawDumpSh2Modal(platform);
     DrawSearchOptionsModal(platform);    // modal; no-op until the texture menu requests it
     DrawLaunchSettingsModal(platform);   // modal; no-op until the menu requests it
     DrawRecordingSettingsModal();
@@ -6123,6 +6286,12 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         ImGui::EndDisabled();
 
         ImGui::SameLine();
+        ImGui::BeginDisabled(!TopBarCommandEnabled(TopBarCommandType::DumpSh2, state));
+        if (ImGui::Button("Dump SH-2")) commands.emplace_back(TopBarCommandType::DumpSh2);
+        ImGui::SetItemTooltip("Write the SH-2 disassembly to a text file");
+        ImGui::EndDisabled();
+
+        ImGui::SameLine();
         if (ImGui::Button(ImGui::GetWindowWidth() < 1500.0f ? "Data Directory" : "Set Data Directory"))
             commands.emplace_back(TopBarCommandType::SetDataDirectory);
         ImGui::SetItemTooltip("%s", mDataDir.empty() ? "No game data directory is set" : mDataDir.c_str());
@@ -7098,6 +7267,9 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::DumpMemory:
         DumpMemory(platform);
         break;
+    case TopBarCommandType::DumpSh2:
+        mOpenDumpSh2Modal = true;
+        break;
 #ifdef SE_ENABLE_LIVE
     case TopBarCommandType::SaveState: DoSaveState(command.index); break;
     case TopBarCommandType::LoadState: DoLoadState(command.index); break;
@@ -7190,6 +7362,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
     m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
     m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+    m.dumpSh2Enabled = TopBarCommandEnabled(TopBarCommandType::DumpSh2, s);
 #ifdef SE_ENABLE_LIVE
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)

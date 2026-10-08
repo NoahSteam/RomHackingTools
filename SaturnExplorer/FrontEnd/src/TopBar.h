@@ -51,6 +51,7 @@ enum class TopBarCommandType
     // Load one of the emulator's OWN save slots (it performs the load). 'index' is the slot.
     LoadEmulatorState,
     DumpMemory,
+    DumpSh2,          // the Assembly listing as text; opens its options dialog
     SetDataDirectory,
     ToggleWindow,
     ShowWindow,

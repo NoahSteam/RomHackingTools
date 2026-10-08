@@ -543,6 +543,20 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerSh2OperandHoverTests
              COMMAND SaturnExplorerSh2OperandHoverTests)
 
+    # Data > Dump SH-2: the text the command writes -- columns, user notes over generated ones,
+    # block-boundary-independent decoding, unavailable regions skipped.
+    add_executable(SaturnExplorerSh2DumpTests
+        FrontEnd/tests/Sh2DumpTests.cpp
+        FrontEnd/src/Sh2Dump.cpp
+        FrontEnd/src/Sh2Operands.cpp
+        FrontEnd/src/Debug/Sh2Disasm.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerSh2DumpTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerSh2DumpTests COMMAND SaturnExplorerSh2DumpTests)
+
     # Save-state slots: keyframe/delta reconstruction + the slot file format.
     add_executable(SaturnExplorerSavestateSlotsTests
         FrontEnd/tests/SavestateSlotsTests.cpp
@@ -859,6 +873,7 @@ if(WIN32)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
+        FrontEnd/src/Sh2Dump.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
@@ -946,6 +961,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/WatchPanel.cpp
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
+        FrontEnd/src/Sh2Dump.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
@@ -1050,6 +1066,7 @@ else()
             FrontEnd/src/WatchPanel.cpp
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/Sh2Operands.cpp
+            FrontEnd/src/Sh2Dump.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp

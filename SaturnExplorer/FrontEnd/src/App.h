@@ -24,6 +24,7 @@
 #include "DataSearchRunner.h"           // its worker thread, queueing and result routing
 #include "WatchPanel.h"          // Watch Window (debugger; emulator-agnostic)
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
+#include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
@@ -92,6 +93,11 @@ private:
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
+    // Data > Dump SH-2: write the SH-2 disassembly the Assembly panel shows to a text file. The
+    // dialog picks the columns and memory; the job then runs a slice per frame under a progress
+    // modal, and the finished text goes to the platform's save dialog.
+    void DrawDumpSh2Modal(IPlatform& platform);
+    void BeginDumpSh2();
     void RenderFrameToTexture(IPlatform& platform);
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(std::vector<TopBarCommand>& commands);
@@ -630,6 +636,13 @@ private:
     // automatically when a search is requested with no directory set yet.
     std::string          mDataDir;
     bool                 mOpenDataDirModal = false;   // request to open the modal
+    // Data > Dump SH-2.
+    bool                 mOpenDumpSh2Modal = false;   // request to open the options dialog
+    Sh2DumpOptions       mDumpSh2Options;             // kept between uses
+    int                  mDumpSh2Cpu = 0;             // whose registers resolve the generated comments
+    bool                 mDumpSh2Available[kSh2DumpRegionCount] = {};   // which regions the source can read
+    std::unique_ptr<Sh2DumpJob> mDumpSh2Job;          // set while a dump is being written
+    std::string          mDumpSh2FileName;
     bool                 mSearchAfterSetDir = false;  // run pending search once dir set
     std::vector<uint8_t> mPendingNeedle;              // texture bytes to search for
     std::string          mPendingSearchLabel;         // human label for the search

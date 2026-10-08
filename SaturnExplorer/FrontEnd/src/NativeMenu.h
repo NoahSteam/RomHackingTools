@@ -94,6 +94,7 @@ enum class MenuCommand
     LoadEmulatorState,    // uses index (slot); the emulator's own slots
     // Data
     DumpMemory,
+    DumpSh2,
     SetDataDirectory,
     // Patch
     ApplyChangesToDisc,
@@ -166,6 +167,7 @@ struct NativeMenuState
 
     // --- Data ---
     bool dumpEnabled = false;
+    bool dumpSh2Enabled = false;
 
     // --- Layers (indexed by NativeMenuLayer) ---
     bool layer[NM_LAYER_COUNT] = {};

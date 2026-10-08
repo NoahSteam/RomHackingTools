@@ -38,6 +38,7 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     case TopBarCommandType::LoadEmulatorState:
         return state.connected && state.hasEmulatorStates;
     case TopBarCommandType::DumpMemory:
+    case TopBarCommandType::DumpSh2:
         return state.source != SourceType::None && !state.operationBusy;
     // Patch feature: Apply / Manage / Save need at least one recorded location; Build Disc Image
     // needs a Data Directory. Open Project is always available (it is how you get locations). This
