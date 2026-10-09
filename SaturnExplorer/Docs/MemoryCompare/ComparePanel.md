@@ -10,29 +10,40 @@ Memory Compare
 +----------------------------------------------------------------------+
 | Frame A (baseline)  1800   00:30.000   | Frame B (compare)  1884 ...  |
 +----------------------------------------------------------------------+
-| Region [All Memory v]  [x] Changes Only  [x] Context (2)               |
-|                                         [Export...] [Go to A][Go to B]|
-+--------------------------------+-------------------------------------+
-| Region        Size  Changed  Ranges | HWRAM - 247 changed bytes (12)  |
-| HWRAM        1 MiB    247   12     | Address  Frame A    Frame B  ASCII|
-| LWRAM        1 MiB     86    8     | 06034F20 00 64 ...  00 5A ... ..  |
-| ...                                |                                  |
-+--------------------------------+-------------------------------------+
+| [x] Changes Only  [x] Show Context (2 lines)  [Export...] [Go to A]   |
+| [Go to B]  Jump to: [________] [Go]                                   |
++----------------------------------------------------------------------+
+| Region        Size   Changed Bytes   Changed Ranges    <- summary     |
+| All Memory    3.4 MiB      373              20                        |
+| HWRAM         1 MiB        247              12                        |
+| ...                                                                   |
++--------------------------------- (draggable splitter) ----------------+
+| Address   Frame A (1800)    Frame B (1884)    ASCII (A)   ASCII (B)   |
+| 06034F20  00 64 00 64 ...   00 5A 00 64 ...   .d.d...      .Z.d...    |
+| ...                                                                   |
++----------------------------------------------------------------------+
 ```
 
-The left part (summary) and right part (hex diff) are split with `HorizontalSplitter` /
-`SplitTopHeight` from `PanelWidgets.h`, not a hand-rolled splitter.
+The summary and the hex diff are stacked and split with `HorizontalSplitter` / `SplitTopHeight`
+from `PanelWidgets.h`, not a hand-rolled splitter. That helper splits vertically, so the layout is
+summary over diff rather than side by side. There is no region combo: selecting a row in the
+summary is how a region is chosen.
 
 ## Inputs
 
 The panel owns no memory and runs no diff. `App` gives it:
 
-- a `DiffResult` from `Diff()`, which holds the two `shared_ptr<const MemSnapshot>` (A and B)
-- each marker's attached/detached state
-- per-frame: `dt`
+- a `DiffResult` from `Diff()`, which holds the two `shared_ptr<const MemSnapshot>` (A and B), or
+  null before a comparison exists
+- whether each side is still attached to the rewind timeline
 
-and rebuilds the visible row list (`BuildRows`) when the selected region, Changes Only or context
-count changes. The panel never reads the emulator.
+(`Draw(const DiffResult*, bool aAttached, bool bAttached)`.) It rebuilds the visible line list
+(`BuildRows` per region) when the selected region, Changes Only, or Show Context changes, and
+never reads the emulator. A different pair of snapshots is recognised by `weak_ptr` identity, not
+by address, and starts clean: selection, region and any `GoTo` still waiting all reset.
+
+The split between the summary and the diff is not persisted (the Call Stack persists its split
+through `Settings`). It resets to a default height on each launch; persisting it is a follow-up.
 
 **There is no Refresh button.** The snapshots are immutable and the diff is deterministic, so
 there is nothing to refresh: changing an option recomputes the rows from the same two snapshots
@@ -44,8 +55,8 @@ the markers again on the timeline. (The later live "Compare Against A" mode show
 ## Header cards
 
 Frame number, time (`frame / 60`, see README for the PAL caveat), and the snapshot's provenance:
-`Live head` or `Rewind frame`, plus a **Detached** badge when the frame is no longer on the rewind
-timeline (tooltip: "not in rewind history; snapshot kept"). There is deliberately no
+`live head` or `rewind frame`, plus a `[detached]` badge when the frame is no longer on the rewind
+timeline (tooltip: it is no longer in the rewind history; the snapshot is kept and still compares). There is deliberately no
 "Snapshot: Valid/Invalid" line. A snapshot only exists if its capture fully succeeded, so showing
 one is already the statement that it is complete; a failed capture is reported at the timeline when
 the user tries to mark, and no card is created.
@@ -57,9 +68,9 @@ the tooltip saying why.
 
 One row per captured region plus an "All Memory" entry, columns Region, Size, Changed Bytes,
 Changed Ranges. Counts are exact (`RegionDiff::changedBytes` / `rangeCount`); only the stored range
-list is capped, and the cap does not affect the hex view or export, which rescan the snapshots. Rows use `RowSelectable`; selecting one filters the
-hex diff. Regions with zero changes are shown dimmed and are not selectable targets for "next
-change". The colour swatch beside a region follows its type (work RAM, VDP1, VDP2, colour RAM,
+list is capped, and the cap does not affect the hex view or export, which rescan the snapshots. Rows
+use `RowSelectable`; selecting one filters the hex diff. Regions with zero changes are shown dimmed
+but stay selectable. The colour swatch beside a region follows its type (work RAM, VDP1, VDP2, colour RAM,
 sound RAM).
 
 ## Hex diff
@@ -74,47 +85,56 @@ sound RAM).
 - ASCII columns are plain ASCII, with non-printable bytes as `.`. Shift-JIS is a possible
   follow-up, shared with whatever `HexEditorPanel` does.
 - Addresses are shown as the bus address (`06034F20`) for `Sh2Bus` regions. For `DeviceImage` and
-  `RegisterImage` regions the row label is region-qualified (`VDP1 FB+0x01230`, `VDP2 Regs+0x0E0`),
+  `RegisterImage` regions the row label is region-qualified (`VDP1 FB+1230`, `VDP2 Regs+E0`: hex offset, no padding),
   because those are not bus-addressed memory; the rest of the app keeps using the Memory tab's
   addresses for them. Selection and every action carry a `RegionRef`, not a raw address.
-- **Jump to Address** box: accepts a bus address (mirrors folded) or `Region+offset`, selects that
-  region, and scrolls to the row. If Changes Only elides it, the panel switches Changes Only off for
-  that jump and says so.
-- Byte selection is keyed by absolute address (as in `HexEditorPanel`), so it survives a region
-  switch or a row-list rebuild.
+- The toolbar wraps: each control stays on its line only if it fits in the window, and the Jump to
+  group (label, box, Go) moves as one and shrinks its box rather than running past the edge, so a
+  narrow dock never hides one (the grid's scrollbar does not scroll the toolbar).
+- **Jump to** box (`ParseLocation`): accepts a bus address (mirrors folded) or `Region+offset`, and
+  scrolls to the row and selects the byte. When a single region is selected it follows the byte into
+  its region; All Memory stays All Memory. If Changes Only elides the row, the panel switches Changes
+  Only off for that jump and says so (once, not when there are no differences at all).
+  The text is hex only with no sign; a value wider than 32 bits, or an offset past the region, is
+  refused rather than wrapped into a valid location.
+- Selection is keyed by `RegionRef`, so it survives a region switch or a row-list rebuild, and is
+  cleared when a different pair of snapshots is shown. Click selects a byte, shift-click extends
+  within the region.
 - Read-only. There is no editing here; the Memory tab is for that.
 
 ## Context menu actions
 
 Right-click a byte. The panel does not perform the action. Like `HexEditorPanel`, it raises a
-request carrying a `RegionRef`, the byte count of the selection (1, 2 or 4) and which side was
-clicked, and `App` polls it after `Draw` and calls the existing component:
+request carrying the action, a `RegionRef`, the byte count of the selection (1, 2 or 4) and which
+side was clicked. `App` polls `TakeRequest()` once after `Draw` and calls the existing component:
 
-| Action | Request | App does |
-|---|---|---|
-| Go to Memory | `TakeGoToMemoryRequest` | Scrub to that side's frame if it is attached, then `mHexEditor.GoTo(BusAddress(ref)); mPanels.hexEditor = true;`. A detached side has no frame to scrub to, so the item reads **Go to Memory (current view)** and says so: the Memory tab then shows the current frame, not the snapshot. |
-| Add to Watch | `TakeWatchRequest` | `mWatchPanel.AddWatch(name, expr, type)`, type from the selection length. A watch tracks the running game, not frame A or B. |
-| Break on Write | `TakeBreakpointRequest` | `mBreakpoints.AddMemory(BusAddress(ref), size, BpKind::MemWrite)` |
-| View in Assembly | `TakeAssemblyRequest` | `mAssemblyPanel.GoTo(mAssemblyPanel.Cpu(), BusAddress(ref)); mPanels.assembly = true;` |
-| Export Diff | `TakeExportRequest` | `WriteCsv` into the existing export path |
+| Action | App does |
+|---|---|
+| Go to Memory | Scrub to that side's frame if it is attached, then `mHexEditor.GoTo(BusAddress(ref)); mPanels.hexEditor = true;`. A detached side has no frame to scrub to, so the item reads **Go to Memory (current view)** and says so: the Memory tab then shows the current frame, not the snapshot. |
+| Add to Watch | `mWatchPanel.AddWatch(name, expr, type)`, type from the selection length. A watch tracks the running game, not frame A or B. |
+| Break on Write | `mBreakpoints.AddMemory(BusAddress(ref), size, BpKind::MemWrite)` |
+| View in Assembly | `mAssemblyPanel.GoTo(mAssemblyPanel.Cpu(), BusAddress(ref)); mPanels.assembly = true;` |
+| Export Diff | `WriteCsv` into the existing export path. The menu item exports the clicked byte's region; the toolbar **Export...** button exports the region selected in the summary, or every region on All Memory (`Request::allRegions` / `exportRegion`). |
 
-Watch and Break on Write act on the running emulator, so the tooltip says so; they do not depend on
-which snapshot the byte was clicked in.
+Watch and Break on Write act on the running emulator, so their tooltips say so; they do not depend
+on which snapshot the byte was clicked in.
 
-**Availability comes from `RegionTraits::caps`** (see the engine doc), not from address ranges:
+**Availability comes from `RegionTraits::caps`** (see the engine doc), not from address ranges.
+The menu asks `MemoryComparePanel::ActionEnabled(action, region)`, which the tests pin:
 
 | Region | Go to Memory | Watch | Break on Write | View in Assembly |
 |---|---|---|---|---|
 | LWRAM, HWRAM | yes | yes | yes | yes (SH-2) |
 | VDP1 RAM, VDP2 RAM, VDP2 CRAM | yes | yes | yes (SH-2 and SCU-DMA writes) | no |
 | VDP1/VDP2 Regs | yes | yes (register image) | yes (SH-2 writes to the register) | no |
-| Sound RAM | yes | yes | **no**: its writer is the 68K, and the emulator's watchpoints see SH-2 instructions and SCU DMA only (`Integration/Mednafen/apply.py` notes) | no: the 68K listing is in the Sound CPU tab, not `AssemblyPanel` (SH-2 cores only) |
+| Sound RAM | yes | yes | yes, **for SH-2 and SCU-DMA writes only**: the SH-2 uploads sound programs and samples there, and the emulator's watchpoint matches every SH-2 effective address and SCU DMA write, but it cannot see the 68K sound CPU's own writes (`Integration/Mednafen/apply.py` notes). The enabled item says so in its tooltip | no: the 68K listing is in the Sound CPU tab, not `AssemblyPanel` (SH-2 cores only) |
 | VDP1 FB | yes | yes (derived image) | **no**: an app-derived image written by VDP1 drawing, not a bus write | no |
 
-A disabled item carries a tooltip with the reason. There is no Find in ROM, since cartridge space
+A disabled Break on Write or View in Assembly carries a tooltip with the reason (Go to Memory and
+Add to Watch are enabled in every region). There is no Find in ROM, since cartridge space
 is not captured.
 
-## Registration (done in the hook-up pass)
+## Registration (pending: done in the hook-up pass)
 
 1. `bool memoryCompare` in `struct Panels` (`App.h`).
 2. A `PanelList()` row, group "Memory & Data".
@@ -127,18 +147,19 @@ is not captured.
 ## Tests
 
 `FrontEnd/tests/MemoryComparePanelTests.cpp`, using `ImGuiHarness` and hand-built
-`MemSnapshot`s, so it needs neither the engine's capture path nor an emulator:
+`MemSnapshot`s, so it needs neither the engine's capture path nor an emulator. Covered:
 
-- the summary row and a hex row are clickable: a click selects, a double click on a row does not
-  steal focus (the `RowSelectable` traps described in `CLAUDE.md`)
-- selecting a region changes the visible rows; Changes Only and context count rebuild them
-- jump to an elided address switches Changes Only off
-- each context-menu action raises exactly the right request with the right address, and a request is
-  consumed once
-- detached sides disable Go to A / B, and make Go to Memory read "(current view)"
-- each region's menu items match the capability table (Sound RAM and VDP1 FB have no Break on Write)
-- there is no control that can change which snapshots are shown; changing Changes Only or context
-  rebuilds rows from the same snapshots (pointer identity of `DiffResult::a`/`b` is unchanged)
-- a truncated region (more than `kMaxStoredRanges` changes) still shows every changed row
-- a `Metrics()` accessor (as on `HexEditorPanel`) exposes row geometry so layout assertions do not
-  depend on pixels
+- address parsing (bus address, `Region+offset`, mirrors, refusals)
+- the action capability table (VDP1 FB has no Break on Write; Sound RAM has it; View in Assembly only
+  in work RAM)
+- the empty state, the summary and grid tables, and the opening view
+- clicking a summary row selects its region; clicking a byte selects it, on either side, and a
+  right-click selects and opens the menu
+- `GoTo`: a visible row keeps Changes Only, an elided one turns it off, and it follows the region
+- a new pair of snapshots clears selection and region, and a `GoTo` still waiting when the pair
+  changes is dropped
+- identical snapshots show no grid
+
+Still to cover when `App` is wired up, because they need the toolbar or popup items to be
+reachable: each action raising exactly one request that is consumed once, detached sides disabling
+Go to A / B, and the double-click focus trap on the summary rows.
