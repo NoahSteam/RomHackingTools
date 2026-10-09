@@ -20,6 +20,32 @@ Connect/reconnect, pause/resume, frame/instruction stepping, Step Over/Out, both
 
 Search/mapping -> memory edit -> generated patch with baseline protection -> BIN/CUE rebuild -> verify every track -> boot modified image.
 
+## Frame Memory Compare (needs a live emulator)
+
+The engine, panel and marker rules are unit-tested; the transport bar and the App wiring are not
+reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
+
+- pause, right-click the scrub bar, **Set as Compare Frame A**; scrub elsewhere, **Set as Compare
+  Frame B**: both carets sit exactly over their frames and the row under the bar shows both numbers
+- **Compare Memory...** opens the Memory Compare tab, docked beside Memory, with plausible changed
+  regions; the summary, Changes Only, Show Context and Jump to behave
+- marking at the live head while paused works; marking a scrubbed frame works; marking a scrubbed
+  frame with an unapplied hex edit is refused with a message
+- **Go to A / Go to B** scrub the timeline to that frame; right-click a changed byte: Go to Memory,
+  Add to Watch, Break on Write, View in Assembly and Export land where expected, and the disabled
+  items (Break on Write on Sound RAM and VDP1 FB, View in Assembly outside work RAM) say why
+- let the ring evict a marked frame: its caret goes hollow and pinned left, the label says
+  `(detached)`, **Go to** is disabled, and the comparison still works
+- Play From Here: a marker past the resume frame detaches; one at or before it stays attached
+- restart the emulator, or load another source (savestate file, dump, disc): both markers and the
+  comparison are cleared
+- load an emulator or app save slot (history replaced, same game): the markers stay but go hollow and
+  `(detached)`; the snapshots still compare
+- mark a live-head frame the recorder never kept (after Stop Recording): it is accepted, shows
+  `(detached)`, and still compares
+- **Clear Compare Markers** removes both carets and closes the row
+- **Export...** writes a CSV whose line count equals the changed-byte total for what was exported
+
 ## Supported platform UI
 
 After Windows build defects are fixed, verify on both supported platforms:

@@ -26,6 +26,8 @@
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
+#include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
+#include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
 #include "LayerPanels.h"       // per-layer viewer tabs (VDP1 / NBG0-3 / RBG0)
@@ -304,6 +306,19 @@ private:
     void DrawVdp1Table();
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
+    bool MarkCompareFrame(CompareMarkers::Slot slot);   // snapshot the shown frame as marker A or B
+    void OpenCompare();                                 // diff the two markers and show the panel
+    void ClearCompare();                                // drop the markers and the diff
+    void ResetCompareSession();                         // a different emulator run or source
+    int  CompareMarkerIndex(CompareMarkers::Slot slot) const;     // a marker's place on the timeline, or -1
+    int  CompareDiffSideIndex(CompareMarkers::Slot slot) const;   // the shown comparison's side on the timeline, or -1
+    void ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform);
+    bool CompareRowVisible() const;
+    void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
+    void DrawCompareRow();
+    void DrawMemoryCompare(IPlatform& platform);
+    void HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform& platform);
+    void ScrubToFrameIndex(int index);                  // pause if needed and show recorded frame 'index'
     bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
@@ -396,6 +411,12 @@ private:
     bool             mDiscResolveIsFad = false; // interpret the resolve box as a FAD (LBA+150)
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
+
+    // Frame Memory Compare (Docs/MemoryCompare)
+    CompareMarkers           mCompare;
+    MemoryComparePanel       mMemoryCompare;
+    DiffResult               mCompareDiff;              // what the panel shows (a == null: none); holds both snapshots
+    std::string              mCompareStatus;            // why the last mark or compare did not happen
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
     int                      mInputPort = 0;    // ...and the port it went to
@@ -539,6 +560,7 @@ private:
     // everything derived from the run that ended. See the definition.
     void AdoptNewEmulatorInstance();
     uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
+    void ClearRecordedFrames();   // empty the ring and detach the compare markers
     void DropRecordedHistory();
     // The thing the data panels are editing is about to change underneath them (the transport
     // picked another frame, a slot is being restored). Voids every in-flight edit now and
@@ -714,6 +736,7 @@ private:
         bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
         bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
         bool discExplorer = true; // disc image ISO 9660 browser (sector -> file)
+        bool memoryCompare = false; // Frame Memory Compare: hidden until a comparison is opened
     };
     Panels           mPanels;
 

@@ -22,8 +22,12 @@ const ImU32 kColSel    = IM_COL32(70, 110, 90, 170);
 const ImU32 kColHover  = IM_COL32(80, 90, 110, 110);
 // Side colours: A is the baseline (blue), B the comparison (orange). The same two tint the
 // changed bytes in their own columns and the card titles, so a glance says which side is which.
-const ImVec4 kColA     = ImVec4(0.38f, 0.60f, 0.95f, 1.0f);
-const ImVec4 kColB     = ImVec4(0.95f, 0.62f, 0.25f, 1.0f);
+ImVec4 SideColor(uint32_t rgb)
+{
+    return ImVec4(((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, 1.0f);
+}
+const ImVec4 kColA     = SideColor(kCompareColorA);
+const ImVec4 kColB     = SideColor(kCompareColorB);
 const ImU32  kTintA    = IM_COL32(70, 120, 215, 160);
 const ImU32  kTintB    = IM_COL32(225, 140, 50, 160);
 

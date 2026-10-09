@@ -1,12 +1,12 @@
 # Frame Memory Compare
 
-Status: **designed, not implemented.** This directory is the spec the implementation is built
-against. Component docs:
+Status: **implemented** (engine, panel, markers and App wiring); the transport bar and App glue are
+checked by hand, see `Docs/FunctionalityVerification/99_MANUAL_VERIFICATION_REMAINING.md`. Component docs:
 
 | Component | Doc | New code |
 |---|---|---|
 | Snapshot + diff engine | [SnapshotAndDiffEngine.md](SnapshotAndDiffEngine.md) | `FrontEnd/src/Debug/MemoryCompare.{h,cpp}` |
-| Timeline markers + snapshot capture | [TimelineMarkers.md](TimelineMarkers.md) | `App::DrawTransportBar`, a small `CompareState` |
+| Timeline markers + snapshot capture | [TimelineMarkers.md](TimelineMarkers.md) | `FrontEnd/src/CompareMarkers.h`, plus the transport-bar glue in `App` |
 | Memory Compare tab | [ComparePanel.md](ComparePanel.md) | `FrontEnd/src/MemoryComparePanel.{h,cpp}` |
 
 ## What it is
@@ -63,7 +63,9 @@ Assembly, Watch and Breakpoint tools.
   follows the live context or the scrubbed frame.
 - **Pure logic is separate from ImGui.** The engine has no UI dependency and is unit-tested. The
   panel is its own class (like `HexEditorPanel`) and is tested headlessly with `ImGuiHarness`.
-  `App.cpp` only gains registration and glue.
+  `App.cpp` gains registration, the transport-bar markers and menu, and the glue that turns the
+  panel's requests into calls on the existing components (about 270 lines). A `CompareController`
+  owning that glue would be the next extraction if `App` should shrink.
 
 ## Differences from the concept image
 

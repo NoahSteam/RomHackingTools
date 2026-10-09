@@ -31,7 +31,8 @@ its snapshot, so ring eviction cannot change or invalidate it.
 
 Available only while paused, like the scrub slider.
 
-1. **Preconditions** (a disabled menu item with a tooltip says which fails):
+1. **Preconditions** (when one fails, nothing is marked and the reason appears in the row under the
+   scrub bar):
    - a source is loaded and `mMemBackend.Connected()`;
    - not mid-restore: `mRestoreOutstanding == 0` and `!mRestoreUnconfirmable`;
    - when scrubbing: `mScrubShownIndex >= 0`, i.e. the last `Select` was not refused, and the shown
@@ -41,11 +42,12 @@ Available only while paused, like the scrub slider.
 2. **Which frame:** the frame the *displayed context* holds, not where the slider points. A
    transport action earlier in the same UI frame can already have moved `mScrubIndex` while panels
    still draw the old frame; `RecordPendingEdit` documents the same hazard. The frame number is
-   `FrameRecorder::SelectedFrameNumber()` when scrubbing, and `se_frame_number(mLiveCtx)`
-   (the capture's frame) at the live head. See the engine doc for why neither can be re-derived from
+   `FrameRecorder::SelectedFrameNumber()` when scrubbing, and `se_frame_number(mContext)` (the
+   displayed context's captured frame) at the live head. See the engine doc for why neither can be re-derived from
    an index afterwards.
-3. **Capture** runs synchronously, on the UI thread, through `mMemBackend` while `ScopedContextSwap`
-   is active, so it reads the context the user is looking at. Any failure (a region fails to read,
+3. **Capture** runs synchronously, on the UI thread, through `mMemBackend`. It is only reachable from
+   the transport bar, which `BuildUI` draws inside `ScopedContextSwap`, so it reads the context the
+   user is looking at. Any failure (a region fails to read,
    `se_derive_serial` or the source id moves, frame number 0) leaves the marker unchanged and shows
    a short inline reason. A marker is therefore always backed by a complete snapshot.
 4. The snapshot is stamped with `mCompare.Origin(frameNo, liveHead)` (the current session and epoch).
@@ -59,9 +61,9 @@ app already handles those events, not detected by a new mechanism.
 
 | Event | Where `App` already handles it | Effect on markers |
 |---|---|---|
-| Emulator restarted, replaced by another process, or its connection replaced (reconnect, new game or ROM launched from the Session menu) | `AdoptNewEmulatorInstance` (`se_live_captured_generation` changed) | `mCompare.NewSession()`; **both markers cleared** |
-| Source unloaded, a different state/dump/disc loaded, disconnect | the `se_destroy(mContext)` / `mContext = ...` paths in `App.cpp` (teardown near `:482`, loaders near `:1051`-`:1247`) | `mCompare.NewSession()`; both cleared |
-| Rewind history replaced: load-state jump, `DropRecordedHistory`, `FrameRecorder::Clear` | `DropRecordedHistory` | `mCompare.ReplaceTimeline()`; markers become **detached** (kept) |
+| Emulator restarted, replaced by another process, or its connection replaced (reconnect, new game or ROM launched from the Session menu) | `AdoptNewEmulatorInstance` (`se_live_captured_generation` changed) | `ResetCompareSession()` (`NewSession()` plus dropping the open comparison); **both markers cleared** |
+| Source unloaded, a different state/dump/disc loaded, disconnect | `CloseData`, which every loader and the disconnect path go through before replacing `mContext` | `ResetCompareSession()`; both cleared |
+| Rewind history replaced: load-state jump (an emulator or app slot), a fresh recording | `DropRecordedHistory` and `StartRecording`, both through `ClearRecordedFrames()` (which pairs `FrameRecorder::Clear` with the epoch bump) | `mCompare.ReplaceTimeline()`; markers become **detached** (kept) |
 | Play From Here (`TruncateAfter(K)`) | `PlayFromScrubbedFrame` | `mCompare.TruncateAfter(K)`; markers with `frameNo <= K` keep their state (one already detached stays detached); with `frameNo > K` become detached. Frame numbers above K will be reused by the new timeline with different content, so a stale marker must never be located by number. |
 | Recording length changed (ring reconfigured) | Recording Settings modal | none; eviction is handled by locatability below |
 
@@ -79,11 +81,13 @@ their snapshot, still compare, and can't be located or scrubbed to.
 
 - Right-click menu on the scrub slider (`ImGui::BeginPopupContextItem` on `##tp_scrub`): Set as
   Compare Frame A, Set as Compare Frame B, a separator, Compare A <-> B (disabled until both are
-  set), Clear Compare Markers (disabled when none are set).
+  set), Clear Compare Markers (disabled when none are set). The Set items are always enabled; a
+  refused mark shows its reason in the row below rather than needing a hover.
 - Attached markers are drawn with the window draw list over the slider's frame rect, using the same
   grab position as the slider (`SliderGrabCenterX`, given the slider's frame rect).
-- Detached markers are drawn hollow, pinned at the left edge, with a tooltip ("not in rewind
-  history; snapshot kept").
+- Detached markers are drawn hollow and pinned at the left edge; the `(detached)` label in the row
+  below carries the tooltip (the frame has left the history or was never recorded; the snapshot is
+  kept).
 - Labels beneath the slider: `Frame A: 1800`, `Frame B: 1884`, plus a **Compare Memory...** button
   enabled only when both markers are set.
 - Colours: A blue, B orange. Use theme accents if the theme already has fitting ones.
@@ -92,7 +96,7 @@ their snapshot, still compare, and can't be located or scrubbed to.
 
 The button and the menu item do the same thing: run `Diff(mCompare.Snapshot(A), mCompare.Snapshot(B))`, hand the
 result to the panel, set `mPanels.memoryCompare = true` and focus the window. Registration is listed
-in [ComparePanel.md](ComparePanel.md#registration-done-in-the-hook-up-pass). A `Diff` error
+in [ComparePanel.md](ComparePanel.md#registration-done-in-the-app-integration-change). A `Diff` error
 (session mismatch) shows inline and opens nothing.
 
 ## Tests
