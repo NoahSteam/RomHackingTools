@@ -83,20 +83,26 @@ public:
         if (!dst || !src || offset >= dst->size()) return 0;
         const size_t avail = dst->size() - offset;
         const size_t n = size < avail ? size : avail;
-        std::memcpy(dst->data() + offset, src, n);
         // RGB555 1024 colours: the hardware writes every CRAM word into both 2 KiB halves (vdp2.cpp
         // RW<>()), and a read of either half returns it. Without the mirror an edit changed two
         // entries in the emulator and one here, until the next capture. CRMD 0 only: the prohibited
         // CRMD 3 decodes like it but is stored like RGB888, unmirrored.
+        //
+        // Byte and mirror together, in address order, as the emulator applies a poke: a write longer
+        // than one half covers some byte AND its mirror, and the later byte wins in both. Copying
+        // first and mirroring after left the earlier half's bytes on top in one half.
         if (kind == SE_VRAM_KIND_CRAM && mbHasVdp2Regs && ((Vdp2Reg(0x0E) >> 12) & 0x3) == 0 &&
             dst->size() >= 0x1000)
         {
+            const uint8_t* s = static_cast<const uint8_t*>(src);
             for (size_t i = 0; i < n; ++i)
             {
-                const size_t o = (offset + i) ^ 0x800;
-                if (o < dst->size()) (*dst)[o] = static_cast<const uint8_t*>(src)[i];
+                (*dst)[offset + i] = s[i];
+                (*dst)[(offset + i) ^ 0x800] = s[i];
             }
+            return n;
         }
+        std::memcpy(dst->data() + offset, src, n);
         return n;
     }
 

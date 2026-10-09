@@ -511,6 +511,34 @@ int main()
             const bool landed = Until([&] { diff = FirstDiff(want, BusImage(reg)); return diff.empty(); });
             Check(landed, m + ": " + reg.name + " pokes change exactly the poked bytes (" + diff + ")");
         }
+        // 3b. One CRAM write covering a byte AND its mirror, with different data at each: the whole
+        //     of CRAM, and a run straddling the halves. The hardware applies it in address order, so
+        //     in RGB555 1024 the later half's bytes win in both halves.
+        {
+            const Region& reg = kRegions[3];   // CRAM
+            struct Span { uint32_t off, len; };
+            for (const Span sp : { Span{ 0, 0x1000 }, Span{ 0x400, 0x800 }, Span{ 0x7F0, 0x20 } })
+            {
+                std::vector<uint8_t> want = BusImage(reg);
+                std::vector<uint8_t> data(sp.len);
+                for (uint32_t i = 0; i < sp.len; ++i) data[i] = static_cast<uint8_t>(i * 7 + (sp.off + i) / 0x800 * 0x80 + 1);
+                const std::string what = m + ": a CRAM write of " + std::to_string(sp.len) + " at " + std::to_string(sp.off);
+                if (se_write_vram(ctx, SE_VRAM_KIND_CRAM, sp.off, data.data(), sp.len) != sp.len)
+                {
+                    Check(false, what + " is accepted");
+                    continue;
+                }
+                for (uint32_t i = 0; i < sp.len; ++i)
+                {
+                    want[sp.off + i] = data[i];
+                    if (mode == 0) want[(sp.off + i) ^ 0x800] = data[i];
+                }
+                std::string diff = FirstDiff(want, ClientImage(ctx, reg));
+                Check(diff.empty(), what + " shows in the view as the emulator applies it (" + diff + ")");
+                const bool landed = Until([&] { diff = FirstDiff(want, BusImage(reg)); return diff.empty(); });
+                Check(landed, what + " lands as the hardware applies it (" + diff + ")");
+            }
+        }
         Check(std::memcmp(VDP2::RendVRAM, VDP2::VRAM, sizeof VDP2::VRAM) == 0,
               m + ": VDP2 VRAM pokes reach the renderer's copy");
         Check(std::memcmp(VDP2::RendCRAM, VDP2::CRAM, sizeof VDP2::CRAM) == 0,
