@@ -242,7 +242,14 @@ extern "C" { int SeSsBothCpus = 0; int SeSsExecCpu = 0; }
    Continuous still passes bpoint=true on breakpoint PCs, so it is a superset. */
 /* Set while a halt holds the CPUs (the gate spin below): the mode is then being edited, not entered. */
 static int sSeHalted = 0;
+/* DBG_CPUHandler depth (see SeSsActiveCpuScope in debug.inc) and a re-arm it postponed. */
+extern "C" { int SeSsInHandler = 0; }
+static int sSeSyncPending = 0;
 static void SeSyncCpuHook(void) {
+   /* Never change the callback while DBG_CPUHandler is running: it has already decided to call it.
+      The handler's scope guard re-runs this as it returns, before the next instruction. */
+   if (SeSsInHandler > 0) { sSeSyncPending = 1; return; }
+   sSeSyncPending = 0;
    const int on = sSeBpActive || sSeTraceActive || sSeStepActive;
    SeSsBothCpus = on;
    /* A held call/return is completed by the instructions that follow it; if the CPU is about to run
@@ -253,6 +260,7 @@ static void SeSyncCpuHook(void) {
    else
       DBG_SetCPUCallback(0, false);
 }
+extern "C" void SeSsHandlerExit(void) { if (sSeSyncPending) SeSyncCpuHook(); }
 static void SeSsBpHook(uint32 PC, bool bpoint) {
    /* The CPU this call is about -- passed explicitly (see the note above), never read back from
       DBG.ActiveCPU. */
@@ -281,7 +289,7 @@ static void SeSsBpHook(uint32 PC, bool bpoint) {
          SeExportSnapshot skips the rewind-ring capture (guarded on !sPaused). */
       sSeHalted = 1;   /* before the snapshot: it applies queued installs, whose SeSyncCpuHook must see a halt */
       SeMednafenFrameHook();
-      while (!SeExportGateFrame()) { }
+      while (!SeExportGateHalt()) { }   /* a load waits for the frame boundary; see SeGateDecide */
       sSeHalted = 0;
       /* Gate released: set the callback mode for what runs next — continuous iff an
          instruction step (IST) was just requested, else it reverts to the bp/tracepoint
@@ -315,7 +323,7 @@ extern "C" void SeSsDmaWatch(unsigned int A, unsigned int len, int isWrite) {
    SeExportNotifyDmaStop(0, (unsigned int)CPU[0].GetRegister(SH7095::GSREG_PC_ID, NULL, 0));
    sSeHalted = 1;   /* before the snapshot: it applies queued installs, whose SeSyncCpuHook must see a halt */
    SeMednafenFrameHook();          /* publish the halted state (regs/RAM at the DMA write) */
-   while (!SeExportGateFrame()) { }
+   while (!SeExportGateHalt()) { }
    sSeHalted = 0;
    /* Hand off to the CPU step machinery if a single-step (IST) was requested from this DMA
       halt, exactly like SeSsBpHook does after its gate: arm the per-instruction hook so the
@@ -372,7 +380,14 @@ extern "C" void SsDbgSetTraceActive(int active) {
    sSeTraceActive = active ? 1 : 0;
    SeSyncCpuHook();
 }
+/* Whether the CPU hooks above are real: 1 in a --enable-debugger (WANT_DEBUGGER) build. The glue
+   advertises breakpoints, watchpoints, instruction steps and tracepoints from it, so a client does
+   not offer controls that the no-op stubs below would silently ignore. */
+extern "C" int SsDbgHasDebugger(void) { return 1; }
 #else
+extern "C" int SsDbgHasDebugger(void) { return 0; }
+extern "C" { int SeSsInHandler = 0; }
+extern "C" void SeSsHandlerExit(void) {}
 extern "C" void SsDbgAddExecBp(int cpu, unsigned int addr) { (void)cpu; (void)addr; }
 extern "C" void SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind) { (void)cpu; (void)addr; (void)size; (void)kind; }
 extern "C" void SsDbgClearBps(void) {}
@@ -884,6 +899,7 @@ FWD_DECLS = (
     "extern \"C\" void SeMednafenFrameHook(void);\n"
     "extern \"C\" void SeMednafenEndFrameHook(void);\n"
     "extern \"C\" int  SeExportGateFrame(void);\n"
+    "extern \"C\" int  SeExportGateHalt(void);\n"
     "extern \"C\" void SeExportNotifyStop(int cpu, unsigned int pc);\n"
     "extern \"C\" void SeExportNotifyStep(int cpu, unsigned int pc);\n"
     "extern \"C\" int  SeExportInsnStepBegin(void);\n"
@@ -917,13 +933,20 @@ DEBUG_SCOPE_HELPER = """\
    (see Integration/Mednafen/apply.py, "The slave SH-2 under the debugger"). */
 extern "C" int SeSsBothCpus;
 extern "C" int SeSsExecCpu;
+/* How deep we are in DBG_CPUHandler, and the hook re-arm that waited for it to return (ss.cpp). The
+   handler tests DBG.CPUHook, then runs ForceEventUpdates -- which can reach MidSync, publish a frame
+   and apply a breakpoint/tracepoint edit -- and only then calls the hook: an edit that removed the
+   last tracepoint there nulled the hook between the test and the call (a crash on the real fork). */
+extern "C" int SeSsInHandler;
+extern "C" void SeSsHandlerExit(void);
 template<typename T> struct SeSsActiveCpuScope {
    T& ref; T saved;
    SeSsActiveCpuScope(T& active, unsigned int which) : ref(active), saved(active) {
       SeSsExecCpu = (int)which;
       if(SeSsBothCpus) ref = (T)which;
+      ++SeSsInHandler;
    }
-   ~SeSsActiveCpuScope() { ref = saved; }
+   ~SeSsActiveCpuScope() { ref = saved; if(--SeSsInHandler == 0) SeSsHandlerExit(); }
 };"""
 DEBUG_SCOPE_USE = (
     "  /* Saturn Explorer: run this handler for the executing SH-2, not only the debugger's active one. */\n"

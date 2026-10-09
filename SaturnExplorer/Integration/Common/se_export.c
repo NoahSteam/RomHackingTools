@@ -68,6 +68,7 @@ typedef struct
     unsigned char cd[SE_LIVE_CD_BLOCK_LEN];  /* CD-block status (v15); has_cd gates the block */
     int has_cd;                /* 1 if this frame captured CD status */
     int valid;
+    unsigned long long stop;   /* sStopWord when this slot was published; see the reply */
 } SeFrame;
 
 /* Build the hardware-offset, big-endian VDP1 register image from Yabause's Vdp1
@@ -111,6 +112,11 @@ static volatile int sRunning;
  * bounded number of frames (single-step) before halting again. sFrameNo counts
  * emulated frames (bumped by SeExportSnapshot, i.e. once per completed frame). */
 static volatile int sPaused;
+/* Set once the top-of-frame gate has run: proof the build has it (apply.py --with-pause), and so that
+ * pause, frame step and loads will take effect. Advertised as SE_LIVE_CAP_FRAME_GATE. */
+static volatile int sGateSeen;
+/* SE_LIVE_CAP_* bits the glue says its debugger hooks really implement (SeExportSetDebugCaps). */
+static volatile unsigned int sDebugCaps;
 static volatile int sStepBudget;
 /* Frame-step completion (v20). sStepOutstanding is the frames a STP granted that have not been
  * published yet; sStepInflight marks that the frame now running was granted by the budget (as
@@ -131,6 +137,7 @@ static volatile int sStepInflight;
 #define SeAtAdd(p, v)     ((void)__atomic_fetch_add((p), (v), __ATOMIC_SEQ_CST))
 #define SeAtCas(p, e, d)  __atomic_compare_exchange_n((p), (e), (d), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define SeAtXchg(p, v)    __atomic_exchange_n((p), (v), __ATOMIC_SEQ_CST)
+#define SeAtAddFetch(p, v) __atomic_add_fetch((p), (v), __ATOMIC_SEQ_CST)
 #define SeAtLoad64(p)     __atomic_load_n((p), __ATOMIC_SEQ_CST)
 #define SeAtStore64(p, v) __atomic_store_n((p), (v), __ATOMIC_SEQ_CST)
 #define SeAtCas64(p, e, d) __atomic_compare_exchange_n((p), (e), (d), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
@@ -147,6 +154,7 @@ static int SeAtCasWin(volatile int* p, int* e, int d)
 }
 #define SeAtCas(p, e, d)  SeAtCasWin((p), (e), (d))
 #define SeAtXchg(p, v)    ((int)_InterlockedExchange((volatile long*)(p), (long)(v)))
+#define SeAtAddFetch(p, v) ((int)_InterlockedExchangeAdd((volatile long*)(p), (long)(v)) + (int)(v))
 #define SeAtLoad64(p)     ((unsigned long long)_InterlockedCompareExchange64((volatile __int64*)(p), 0, 0))
 #define SeAtStore64(p, v) ((void)_InterlockedExchange64((volatile __int64*)(p), (__int64)(v)))
 static int SeAtCas64Win(volatile unsigned long long* p, unsigned long long* e, unsigned long long d)
@@ -863,12 +871,19 @@ static void SeLogPortDevices(void)
  * flag: on POSIX the local socket and the web-bridge TCP port are served by two threads. */
 static volatile int sClients;
 
+void SeExportSetDebugCaps(unsigned int caps)
+{
+    SeAtStore(&sDebugCaps, caps & (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
+                                   SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS));
+}
+
 int SeExportHasClient(void)
 {
     return SeAtLoad(&sClients) != 0;
 }
 
 static void SePublishBreakpoints(const unsigned char* descs, unsigned int count);   /* below */
+static void SePublishTracepoints(const unsigned char* descs, unsigned int count);   /* below */
 
 static void SeOnClientDisconnect(void)
 {
@@ -886,8 +901,12 @@ static void SeOnClientDisconnect(void)
         sSetPad(1, 0);
     }
     SePublishBreakpoints(NULL, 0);   /* the emulate thread drops them at its next gate or frame */
+    /* Tracepoints too: an armed one keeps the per-instruction hook on (60 -> 8.5 fps on the real
+     * fork) and its events would stream to whichever client attaches next. */
+    SePublishTracepoints(NULL, 0);
     SeAtStore(&sRewindWanted, 1);   /* the next client states its own setting; don't inherit this one's */
     SE_LOCK();
+    sEvHead = sEvCount = 0;   /* events fired for the client that left are its own */
     SeCancelSteps();
     SeAtStore(&sInsnStepPending, 0);
     SeStopClear();
@@ -1221,21 +1240,40 @@ static void SeGateSleep(void)
  * without its own sleep and without busy-pegging a core. The export server
  * thread keeps running, so a resume/step from Saturn Explorer releases the loop.
  * Safe to call even before SeExportInit (returns 1). */
-static int SeGateDecide(void)
+static int SeGateDecide(int frameBoundary)
 {
     /* Install what the server thread has published (breakpoints, tracepoints) -- here, on the
      * emulate thread, because it is the only one that reads them. This is also reached from the halt
      * gate, so an edit made while a breakpoint holds the CPU still lands. */
     SeApplyPendingInstalls();
+    /* A load (LST or ELS) is applied only at a frame boundary. The halt gate spins inside the CPU
+     * hook, part-way through an instruction dispatch and a frame: a state loaded there is resumed by a
+     * run loop holding the abandoned timeline's locals, and the machine that comes out differs from
+     * the one saved (measured on the real fork: the master SH-2's pipeline and the SCSP timing). So the
+     * halt lets go instead -- the load leaves the machine running anyway -- and the rest of the frame
+     * runs to the next top-of-frame gate, which applies it. The stop goes with the halt it described. */
+    if (!frameBoundary)
+    {
+        if (SeAtLoad(&sLoadPending) || SeAtLoad(&sEmuLoadPending))
+        {
+            SeStopClear();
+            return 1;
+        }
+    }
+    else
+    {
+        SeAtStore(&sGateSeen, 1);   /* the frame gate is wired: pause, frame step and loads work */
+    }
     /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
      * before honoring the pause: a load always leaves the emulator paused on frame N. */
-    if (SeAtLoad(&sLoadPending))
+    if (frameBoundary && SeAtLoad(&sLoadPending))
     {
         SeStateConsumeLoad();
     }
     /* Same for an emulator-native slot load (ELS). The emulator loads it through its own
      * code, so nothing here knows the resulting frame; drop the savestate pipeline and the
      * wire ring for the same reason a rewind does, and let the client's history go with it. */
+    if (frameBoundary)
     {
         const int pendingSlot = SeAtXchg(&sEmuLoadPending, 0);   /* take it, so a new one is never lost */
         const int slot = pendingSlot - 1;
@@ -1278,9 +1316,9 @@ static int SeGateDecide(void)
     return 0;
 }
 
-int SeExportGateFrame(void)
+static int SeGateRelease(int frameBoundary)
 {
-    const int run = SeGateDecide();
+    const int run = SeGateDecide(frameBoundary);
     /* A release is ordered after the installs that preceded it: the server thread publishes a
      * breakpoint set BEFORE it clears the pause (RUN, STP, IST), so a CPU that has just seen the
      * pause lifted -- by the loads above -- must look at the mailbox AGAIN. The install check at the
@@ -1290,6 +1328,9 @@ int SeExportGateFrame(void)
     if (run) SeApplyPendingInstalls();
     return run;
 }
+
+int SeExportGateFrame(void) { return SeGateRelease(1); }
+int SeExportGateHalt(void)  { return SeGateRelease(0); }
 
 /* Savestate worker thread: pop raw full states, diff against the current keyframe (or emit
  * a keyframe), RLE-compress, and queue the compact block for the wire. Off the emulate
@@ -1387,6 +1428,9 @@ static void SeWr32(unsigned char* p, unsigned int v)
 void SeExportQueueTraceEvent(unsigned int id, unsigned int cpu, const unsigned int* regs)
 {
     unsigned int slot, i;
+    /* Nobody to deliver it to: the set that fired it belonged to a client that has left (its
+     * removal reaches the emulate thread a frame later), and the next client must not inherit it. */
+    if (!SeExportHasClient()) return;
     SE_LOCK();
     if (sEvCount >= SE_EVQ_CAP)
     {
@@ -1578,7 +1622,16 @@ void SeExportSnapshot(const void* vdp1, const void* vdp2, const void* cram,
     if (cdStatus) { memcpy(dst->cd, cdStatus, SE_LIVE_CD_BLOCK_LEN); dst->has_cd = 1; }
     else          { memset(dst->cd, 0, SE_LIVE_CD_BLOCK_LEN);        dst->has_cd = 0; }
     dst->valid = 1;
-    sRingFrame[sRingWrite] = ++sFrameNo;               /* tag this slot with its frame number */
+    dst->stop = SeAtLoad64(&sStopWord);
+    /* A publish from inside a debugger halt (a breakpoint, a step, a DMA watchpoint: a stop latched
+     * and the CPU held) shows a moment part-way through the frame now running; it is not a new
+     * frame. Tag it with the current number so the counter keeps counting emulated frames -- 300
+     * halts used to advance it by 300 while the machine moved a few hundred instructions -- and a
+     * GET with nothing newer serves the latest slot, which is this one. */
+    sRingFrame[sRingWrite] = (SeAtLoad(&sPaused) && SE_STOP_REASON(dst->stop) != SE_LIVE_STOP_NONE &&
+                              sFrameNo != 0)
+                                 ? sFrameNo      /* a halt: a moment inside the current frame */
+                                 : ++sFrameNo;   /* a frame (free-running, or granted by a step) */
     sRingWrite = (sRingWrite + 1) % SE_RING;           /* advance (wraps, overwriting oldest) */
     if (sRestoreAckPending) { sRestoreDone += sRestoreAckPending; sRestoreAckPending = 0; }   /* first post-restore frame */
     /* How many loads have been settled, one way or the other: the stamp each savestate block of
@@ -1790,7 +1843,11 @@ static void SeServeClient(SeConn cl, SeFrame* snap)
      * next state a keyframe so the first thing it receives is a base it can start from. */
     SeStateFlushAndRekey();
     SeServeClientLoop(cl, snap);
-    SeAtAdd(&sClients, -1);
+    /* Release what the debugger holds only when the LAST client leaves. Two can be attached (the
+     * local socket and the TCP port), and the one that remains still owns its breakpoints and its
+     * halt: a stray connection to the TCP port -- a second Saturn Explorer, the web build, a port
+     * probe -- used to resume a halted desktop session and silently disarm every breakpoint it had. */
+    if (SeAtAddFetch(&sClients, -1) == 0) SeOnClientDisconnect();
 }
 
 /* Serve one connected client until it disconnects or the server stops. 'snap' is
@@ -1994,12 +2051,23 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             memcpy(snap, sRing[slot], sizeof(SeFrame));
             served = sRingFrame[slot];
         }
-        SeWr32(ctl, (unsigned int)(SeAtLoad(&sPaused) ? 1 : 0));
         SeWr32(ctl + 4, (unsigned int)(served & 0xFFFFFFFFu));
         SeWr32(ctl + 8, (unsigned int)((served >> 32) & 0xFFFFFFFFu));
+        const unsigned long long stop = SeAtLoad64(&sStopWord);
         {
-            const unsigned long long stop = SeAtLoad64(&sStopWord);   /* one stop, read whole */
-            SeWr32(ctl + 12, SE_STOP_REASON(stop));
+            /* One stop, read whole. A halt latches its stop and THEN publishes the snapshot taken at
+             * it, and the registers and memory sent below come from a ring slot: a reply built in
+             * between paired the new halt with an older moment's registers (61 of 300 real halts), and
+             * the client acts on that first report -- a conditional breakpoint's guard is evaluated
+             * on it. So a stop is reported only with a slot published after it was latched; until
+             * then it reads as not stopped, and the next reply carries both together. A resume still
+             * clears the stop at once, since this reads the live word. */
+            const int shown = SE_STOP_REASON(stop) == SE_LIVE_STOP_NONE ||
+                              SE_STOP_SEQ(snap->stop) == SE_STOP_SEQ(stop);
+            /* The pause a halt raises goes with its stop: until both can be shown, the reply
+             * describes the moment before the halt (running), never "paused for no reason". */
+            SeWr32(ctl, (unsigned int)(SeAtLoad(&sPaused) && shown ? 1 : 0));
+            SeWr32(ctl + 12, shown ? SE_STOP_REASON(stop) : SE_LIVE_STOP_NONE);
             SeWr32(ctl + 16, SE_STOP_CPU(stop));
             SeWr32(ctl + 20, SE_STOP_PC(stop));
         }
@@ -2007,13 +2075,21 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 28, sRestoreFailed);
         SeWr32(ctl + 32, (unsigned int)(sRingFrame[(sRingWrite + SE_RING - 1) % SE_RING] & 0xFFFFFFFFu));
         SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
-        SeWr32(ctl + 40, SE_STOP_SEQ(SeAtLoad64(&sStopWord)));
+        SeWr32(ctl + 40, SE_STOP_SEQ(stop));   /* the same read as the reason above */
         SE_UNLOCK();
         SE_SLOCK();
         SeWr32(ctl + 44, sPokesApplied);
         SeWr32(ctl + 48, sPokesDropped);
         SE_SUNLOCK();
-        SeWr32(ctl + 52, sWriteVdpByte ? SE_LIVE_CAP_VDP_POKE : 0u);
+        {
+            unsigned int caps = SeAtLoad(&sDebugCaps);
+            if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
+            if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
+            SE_SLOCK();
+            if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
+            SE_SUNLOCK();
+            SeWr32(ctl + 52, caps);
+        }
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];
         hdr[0] = SE_LIVE_MAGIC0; hdr[1] = SE_LIVE_MAGIC1;
@@ -2291,8 +2367,7 @@ static DWORD WINAPI SeServerThread(LPVOID arg)
                                        1, 0, 0, 0, NULL);
         if (pipe == INVALID_HANDLE_VALUE) break;
         BOOL ok = ConnectNamedPipe(pipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
-        if (ok) SeServeClient(pipe, snap);
-        SeOnClientDisconnect();
+        if (ok) SeServeClient(pipe, snap);   /* releases the debugger state when it was the last */
         DisconnectNamedPipe(pipe);
         CloseHandle(pipe);
     }
@@ -2349,8 +2424,7 @@ static void* SeServerThread(void* arg)
         if (cl < 0) break;   /* closed on deinit */
         SeQuietSocket(cl);
         SeRegisterClient(0, cl);
-        SeServeClient(cl, snap);
-        SeOnClientDisconnect();
+        SeServeClient(cl, snap);   /* releases the debugger state when it was the last */
         SeUnregisterClient(0);
         close(cl);
     }
@@ -2387,8 +2461,7 @@ static void* SeTcpServerThread(void* arg)
         if (cl < 0) break;   /* closed on deinit */
         SeQuietSocket(cl);
         SeRegisterClient(1, cl);
-        SeServeClient(cl, snap);
-        SeOnClientDisconnect();
+        SeServeClient(cl, snap);   /* releases the debugger state when it was the last */
         SeUnregisterClient(1);
         close(cl);
     }

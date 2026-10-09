@@ -95,6 +95,9 @@ struct TopBarViewModel
     bool recording = false;
     bool paused = false;
     bool frameControl = false;
+    // The emulator build has its frame gate, so a pause or a frame step takes effect. Resuming does
+    // not need it: a breakpoint halt is released by the same command, gate or not.
+    bool canPause = true;
     bool launchValid = false;
     bool operationBusy = false;
     // A savestate has been received and the emulator can restore one, so the save-state

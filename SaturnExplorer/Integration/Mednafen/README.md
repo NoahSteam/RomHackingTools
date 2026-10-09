@@ -39,6 +39,18 @@ python3 /path/to/SaturnExplorer/Integration/Mednafen/apply.py /path/to/mednafen
 # Then build Mednafen as usual and launch Saturn Explorer with --live.
 ```
 
+Three build choices decide what the tap can do, and the emulator reports each one to Saturn
+Explorer (protocol v24, the `SE_LIVE_CAP_*` bits), which offers only the controls that will work and
+lists the rest in its Log on connect:
+
+| Build choice | Without it |
+|---|---|
+| `apply.py --with-pause` | no pause, frame step, rewind load or emulator-slot load |
+| `-DSE_MDFN_REWIND=1` in `CPPFLAGS` | no rewind, Play From Here or save states (the savestate accessors are stubs) |
+| the debugger (`./configure` default; off with `--disable-debugger`) | no breakpoints, watchpoints, instruction steps or tracepoints |
+
+`Integration/install.py` sets all three.
+
 `apply.py` copies the portable server (`../Common/se_export.{c,h}` + `SeLiveProtocol.h`)
 and the glue (`se_mednafen_glue.c`, with `SE_MEDNAFEN_WIRED` defined) into `src/ss/`,
 appends the accessors (§"Accessors") to `vdp1.cpp`/`vdp2.cpp`/`ss.cpp`, injects one
@@ -256,8 +268,13 @@ return true, so ss.cpp's per-frame run-loop dispatcher
 (`rltab[…][DBG_NeedCPUHooks()]`) switches to the per-instruction `DBG_CPUHandler`
 path on its own — **no explicit debug-mode toggle needed**. On a hit the injected
 hook reports the halted PC and the CPU that hit it (`SeSsExecCpu`, see "Both SH-2s"
-below) via `SeExportNotifyStop`, then blocks on `SeExportGateFrame` right at the instruction
-until Saturn Explorer resumes — an **instruction-exact halt**, like the Yabause tap.
+below) via `SeExportNotifyStop`, publishes the snapshot taken at the instruction, then blocks on
+`SeExportGateHalt` right there until Saturn Explorer resumes — an **instruction-exact halt**. The
+server reports the stop only together with that snapshot, so the first reply that shows the halt
+also carries the registers and memory at it (before, about one halt in five was first reported with
+the previous moment's registers, and the client evaluates conditional breakpoints on that report).
+A publish from inside a halt keeps the current frame number: halts and steps are moments inside a
+frame, not frames.
 (Blocking mid-frame freezes Mednafen's frame pump while halted, so audio underruns
 for the duration — the same trade as the frame-gate caveat below, expected while
 you're stopped at a breakpoint.) The glue registers this through the existing
@@ -303,6 +320,18 @@ halt-gate spin (`SeApplyPendingInstalls`) and runs the install hooks itself, so 
 single-threaded. The glue calls `SeExportApplyInstalls()` even on frames with nothing attached, so a
 client that leaves has its breakpoints dropped promptly; and a halt that nobody is attached to
 release is let go by the gate, so a hit that lands before the drop cannot freeze the game.
+
+`SeExportGateHalt` is the halt's own gate: it applies these installs and honours a resume or an
+instruction step, but never a state load. A rewind (`LST`) or emulator-slot load (`ELS`) that arrives
+while halted releases the halt instead, and the next top-of-frame `SeExportGateFrame` applies it.
+Applied inside the halt, mid-instruction, the load resumed a different machine from the one saved
+(on the real fork the master SH-2's pipeline and the SCSP timing came out different).
+
+What the debugger holds is released when the **last** client leaves: breakpoints, tracepoints, a
+pause or halt, a held pad. The local socket and the TCP port can both be attached, and one
+leaving must not disarm the other's breakpoints or resume its halt; a leftover tracepoint would keep
+the per-instruction hook on (on a test host, 60 fps fell to 8.5) and stream its events to the next
+client.
 
 A resume is ordered after the installs sent before it: the server thread publishes a set, then
 clears the pause. The gate checks the mailbox first and the pause second, so a resume landing between
@@ -546,7 +575,9 @@ image to a **worker thread** that XOR-diffs it against a keyframe and RLE-compre
 tiny deltas are kept, not a multi-MB state per frame); the compact blocks stream to the client a
 few frames behind. On Play-from-scrub the client reconstructs frame N's full state, ships it back
 with the `LST` verb, and `SsDbgLoadState` restores it at the frame gate — so **rewind requires
-`--with-pause`** (the gate is where the load is applied).
+`--with-pause`** (the gate is where the load is applied). A load sent while a breakpoint holds the
+CPU waits for that gate too: the halt is released, the frame finishes, and the load is applied
+before the next one starts.
 
 ### Where in the frame the state is taken
 

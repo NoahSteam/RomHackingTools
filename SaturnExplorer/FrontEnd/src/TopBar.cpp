@@ -24,9 +24,9 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     case TopBarCommandType::Launch:
         return state.launchValid && !state.operationBusy;
     case TopBarCommandType::TogglePause:
-        return state.connected && state.frameControl;
+        return state.connected && state.frameControl && (state.paused || state.canPause);
     case TopBarCommandType::StepFrame:
-        return state.connected && state.frameControl && state.paused;
+        return state.connected && state.frameControl && state.paused && state.canPause;
     // Save needs a state to have arrived (the emulator streams the first one a few seconds
     // in, and never at all if its rewind support is off); Load only needs a slot on disk,
     // which is checked per-slot where the menu is built.

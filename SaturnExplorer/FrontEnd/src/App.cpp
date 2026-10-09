@@ -1566,8 +1566,9 @@ void App::BuildUI(IPlatform& platform)
         // "Play from here" needs states to rewind to. With capture off there are none, so the
         // transport must not offer it -- and scrubbed memory stays read-only, since an edit
         // could not be re-simulated forward.
-        mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
-        ReconcilePokes();
+        ReconcilePokes();   // first: it refreshes the capability word the line below reads
+        mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u &&
+                         LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     }
 #endif
 
@@ -2048,7 +2049,11 @@ void App::DrawTransportBar()
             VoidEditTarget();
         }
     }
-    else if (IconButton("##tp_pause", Ico::Pause, "Pause"))
+    else if (IconButton("##tp_pause", Ico::Pause,
+                        LiveHas(SE_LIVE_CAP_FRAME_GATE)
+                            ? "Pause"
+                            : "This emulator build has no frame gate (apply.py --with-pause), so it cannot pause.",
+                        !LiveHas(SE_LIVE_CAP_FRAME_GATE)))
     {
         se_frame_pause(ctl);
         mbPaused = true;
@@ -2113,7 +2118,8 @@ void App::DrawTransportBar()
     ImGui::SameLine();
 
     // [ next frame ] — advance one recorded frame while scrubbing, else step the emulator.
-    if (IconButton("##tp_next", Ico::Next, "Next frame"))
+    if (IconButton("##tp_next", Ico::Next, "Next frame",
+                   !(mbScrubbing && mScrubIndex < n - 1) && !LiveHas(SE_LIVE_CAP_FRAME_GATE)))
     {
         if (mbScrubbing && mScrubIndex < n - 1)
         {
@@ -4771,10 +4777,29 @@ void App::RunToTransient(uint32_t addr, int cpu)
     Continue();
 }
 
+bool App::LiveHas(uint32_t cap) const
+{
+#ifdef SE_ENABLE_LIVE
+    if (!mbLiveSource) return true;   // not a live source: nothing here is gated on the emulator
+    if (se_live_server_version(&mDataSource) < SE_LIVE_MINVER_CAPS) return true;
+    return (mLiveCaps & cap) != 0;
+#else
+    (void)cap;
+    return true;
+#endif
+}
+
 void App::StepInto(int cpu)
 {
     (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already resuming the CPU; don't issue another
+    if (!LiveHas(SE_LIVE_CAP_INSN_STEP))
+    {
+        // Asked of a build that cannot step, the request would release the halt and the CPU would
+        // run on with nothing to stop it.
+        mLog.Warn("Step Into: this emulator build cannot single-step (a Mednafen built with --disable-debugger, or Yabause).");
+        return;
+    }
 #ifdef SE_ENABLE_LIVE
     se_live_step_insn(&mDataSource, 1);
 #endif
@@ -4790,6 +4815,12 @@ void App::StepOver(int cpu)
     // (not trapa, whose return is PC+2), the same set the glue's SeMdfnTrackFlow uses.
     (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
+    if (!LiveHas(SE_LIVE_CAP_EXEC_BP) || !LiveHas(SE_LIVE_CAP_INSN_STEP))
+    {
+        mLog.Warn("Step Over: this emulator build cannot step or halt at breakpoints (a Mednafen built "
+                  "with --disable-debugger, or Yabause).");
+        return;
+    }
     const int stepped = SteppedCpu();
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
@@ -4809,6 +4840,11 @@ void App::StepOut(int cpu)
 {
     (void)cpu;   // the halted CPU, always: see SteppedCpu
     if (mStepHalt.StepInFlight()) return;   // a step is already in flight
+    if (!LiveHas(SE_LIVE_CAP_EXEC_BP))
+    {
+        mLog.Warn("Step Out: this emulator build cannot halt at breakpoints (Mednafen built with --disable-debugger).");
+        return;
+    }
     const int stepped = SteppedCpu();
     se_sh2_regs r{};
     if (!mbHasData || se_get_sh2_regs(mContext, stepped, &r) != SE_OK) { return; }
@@ -6807,6 +6843,12 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.canSaveState = mStateSlots.HaveState() &&
                       se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0;
     vm.hasEmulatorStates = mEmuSlotCount > 0;
+    // Pause, frame step and every load are applied at the emulator's frame gate, and a save-state
+    // load needs its real savestate hooks: a build without them would take the request and do nothing.
+    vm.canPause = LiveHas(SE_LIVE_CAP_FRAME_GATE);
+    vm.canSaveState = vm.canSaveState && LiveHas(SE_LIVE_CAP_FRAME_GATE) &&
+                      LiveHas(SE_LIVE_CAP_STATE_REWIND);
+    vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
 #endif
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
@@ -7463,6 +7505,12 @@ void App::DoSaveState(int slot)
 
 void App::DoLoadState(int slot)
 {
+    if (!LiveHas(SE_LIVE_CAP_FRAME_GATE) || !LiveHas(SE_LIVE_CAP_STATE_REWIND))
+    {
+        mStateStatus = "This emulator build cannot load a state (it needs the frame gate and the rewind hooks).";
+        mLog.Error(mStateStatus);
+        return;
+    }
     se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
     std::vector<uint8_t> image;
     uint64_t frame = 0;
@@ -7543,7 +7591,8 @@ void App::AdoptNewEmulatorInstance()
     mLastBpGeneration = mBreakpoints.Generation() - 1;
     ResetSessionDebugState();        // its tracepoints are not installed, its counts start at
                                      // nothing, and the old game's search/access rows are void
-    mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
+    mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u &&
+                     LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     mLog.Info("The emulator was replaced — cleared the recorded history from the previous "
               "session.");
 #endif
@@ -7638,6 +7687,20 @@ void App::ReconcilePokes()
     uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0;
     se_live_poke_info(&mDataSource, &applied, &dropped, &lost, &unconfirmed, &caps);
     mVdpPokeSupported = (caps & SE_LIVE_CAP_VDP_POKE) != 0;
+    mLiveCaps = caps;
+    if (se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_CAPS && caps != mLiveCapsLogged)
+    {
+        mLiveCapsLogged = caps;
+        std::string missing;
+        auto note = [&](uint32_t bit, const char* what) { if (!(caps & bit)) missing += std::string("\n  - ") + what; };
+        note(SE_LIVE_CAP_FRAME_GATE, "pause, frame step and state loads (apply.py --with-pause)");
+        note(SE_LIVE_CAP_STATE_REWIND, "rewind, Play From Here and save states (-DSE_MDFN_REWIND=1)");
+        note(SE_LIVE_CAP_EXEC_BP, "execution breakpoints (Mednafen built with --disable-debugger)");
+        note(SE_LIVE_CAP_MEM_WATCH, "memory watchpoints");
+        note(SE_LIVE_CAP_INSN_STEP, "instruction stepping");
+        note(SE_LIVE_CAP_TRACEPOINTS, "tracepoints");
+        if (!missing.empty()) mLog.Warn("This emulator build does not support:" + missing);
+    }
     mRecorder.SetVdpBusEditsAccepted(mVdpPokeSupported);
     // Both counters belong to something that can start over: the emulator's to one run of it, the
     // driver's to the source. A smaller value than the one reported is a new baseline, not a debt.
@@ -7694,6 +7757,12 @@ void App::RefreshEmulatorSlots()
 
 void App::DoLoadEmulatorState(int slot)
 {
+    if (!LiveHas(SE_LIVE_CAP_FRAME_GATE))
+    {
+        mStateStatus = "This emulator build has no frame gate (apply.py --with-pause), so it cannot load a slot.";
+        mLog.Error(mStateStatus);
+        return;
+    }
     // The emulator loads its own slot through its own code, so nothing comes back about
     // where it lands -- no frame number, unlike a rewind. Everything recorded is therefore
     // a future that may never have happened: drop it rather than leave a ring that claims

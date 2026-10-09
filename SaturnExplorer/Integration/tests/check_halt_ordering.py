@@ -15,7 +15,7 @@ bad = 0
 for name, start in (("SeSsBpHook", "static void SeSsBpHook(uint32 PC, bool bpoint) {"),
                     ("SeSsDmaWatch", 'extern "C" void SeSsDmaWatch(')):
     i = src.index(start)
-    j = src.index("while (!SeExportGateFrame())", i)
+    j = src.index("while (!SeExportGateHalt())", i)
     body = src[i:j]
     code = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
     code = re.sub(r"//[^\n]*", "", code)

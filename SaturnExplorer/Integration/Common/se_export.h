@@ -311,6 +311,18 @@ unsigned int SeExportSerializeCallStack(int cpu, unsigned char* out);
  * Returns 1 when the server isn't running, so an un-paused build is unaffected. */
 int SeExportGateFrame(void);
 
+/* The same gate, for an emulator that holds a debugger halt INSIDE its CPU hook (an instruction
+ * breakpoint, a step, a watchpoint): spin on it there instead of on SeExportGateFrame. It applies
+ * breakpoint/tracepoint edits and honours resume and instruction steps, but never a state load --
+ * loading mid-instruction resumes a different machine from the one saved. A load that arrives
+ * while halted releases the halt instead, and the next SeExportGateFrame applies it. */
+int SeExportGateHalt(void);
+
+/* What the emulator's debugger hooks can really do, as SE_LIVE_CAP_* bits (EXEC_BP, MEM_WATCH,
+ * INSN_STEP, TRACEPOINTS). Reported to the client (v24) so it offers only working controls; a
+ * build whose hooks compile to stubs passes 0. Call once after SeExportInit. Defaults to 0. */
+void SeExportSetDebugCaps(unsigned int caps);
+
 /* Stop the server thread and free resources. */
 void SeExportDeinit(void);
 

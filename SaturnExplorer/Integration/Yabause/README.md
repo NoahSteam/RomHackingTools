@@ -114,6 +114,8 @@ add three tiny file-scope helpers (all inserted for you by `apply.py`):
 static void SeExpBpHit(void *ctx, u32 addr, void *ud) {
     (void)ud;
     SeExportNotifyStop(ctx == (void *)SSH2 ? 1 : 0, (unsigned int)addr);
+    SeExpPublishHalt();               /* the same SeExportSnapshot call Vdp2VBlankOUT makes */
+    while (!SeExportGateHalt()) { }   /* hold the CPU here, before the instruction runs */
 }
 static void SeExpAddExecBp(int cpu, unsigned int addr) {
     /* Both cores: PC breakpoints are shared across both SH-2s, and 'cpu' is reserved
@@ -129,7 +131,14 @@ static void SeExpClearBps(void) {
 SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);
 SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);
 SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);
+SeExportSetDebugCaps(SE_LIVE_CAP_EXEC_BP);   /* v24: what the client may offer */
 ```
+
+The halt is taken inside the breakpoint callback, so it is instruction-exact: the registers and
+memory shown are the ones at the breakpoint. (Only latching the stop let the CPU run on to the frame
+gate, and the halt showed end-of-frame registers under the breakpoint's PC.) The tap advertises
+execution breakpoints only; instruction stepping, watchpoints, tracepoints and rewind are not wired
+for Yabause, so Saturn Explorer does not offer them. Not yet verified against a built Yabause.
 
 **Caveat:** Yabause only honours code breakpoints in the **debug SH-2 interpreter**
 (`SH2InterpreterExec` with breakpoint checking), not the fast interpreter or a

@@ -65,6 +65,7 @@ extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: in
 extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind); /* data watchpoint */
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC + data breakpoints */
 extern void            SsDbgSetTraceActive(int active);           /* arm per-insn tracepoint scan */
+extern int             SsDbgHasDebugger(void);                    /* 1 in a --enable-debugger build: the CPU hooks are real */
 /* Controller injection (v7+). apply.py implements this accessor through the SMPC
  * gamepad path, translating SE_PAD_* to Mednafen's bit order and atomically overlaying
  * it after each host-input refresh. `port` is 0-based (0 = controller 1). */
@@ -779,6 +780,12 @@ void SeMednafenFrameHook(void)
         SeExportSetKeyMapHook(SeMdfnGetKeyMap);   /* emulator keyboard bindings -> panel (v10+) */
         SeExportSetPortInfoHook(SeMdfnPortDeviceName);  /* controller config -> Log on connect (v12+) */
         SeExportSetTracepointHook(SeMdfnSetTracepoints);  /* tracepoints (v8+) */
+        /* What the CPU hooks can really do (v24): all of it under --enable-debugger, none of it
+         * otherwise -- the accessors are then no-op stubs, and a client must not offer them. */
+        SeExportSetDebugCaps(SsDbgHasDebugger()
+                                 ? (SE_LIVE_CAP_EXEC_BP | SE_LIVE_CAP_MEM_WATCH |
+                                    SE_LIVE_CAP_INSN_STEP | SE_LIVE_CAP_TRACEPOINTS)
+                                 : 0u);
     }
     SeMednafenSnapshot();
 }

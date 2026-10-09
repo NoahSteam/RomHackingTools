@@ -55,7 +55,13 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      23u   /* +v23 pokes (WRM/WRS) are applied on the emulate thread at the frame
+#define SE_LIVE_VERSION      24u   /* +v24 the capability word reports what this build really has:
+                                  * the frame gate, rewind save/load, and the debugger hooks
+                                  * (SE_LIVE_CAP_* below). A client gates those controls on the bits
+                                  * from SE_LIVE_MINVER_CAPS on; older servers report only VDP_POKE.
+                                  * A halt's stop is reported together with the snapshot taken at it,
+                                  * and a publish from inside a halt keeps the current frame number.
+                                  * +v23 pokes (WRM/WRS) are applied on the emulate thread at the frame
                                   * gate instead of on the server thread, and the control block
                                   * grows to 56 bytes: pokes_applied, pokes_dropped and a server
                                   * capability word. A WRM to the CRAM / VDP1 frame buffer windows
@@ -417,6 +423,15 @@
                                       * (0x05C80000..) window is applied; without it the emulator's bus
                                       * writer drops those bytes silently, so a client must not offer
                                       * the edit. Also covers LST edits of type 0 in those windows. */
+#define SE_LIVE_CAP_FRAME_GATE  2u   /* the top-of-frame gate is wired (apply.py --with-pause): pause,
+                                      * frame step, LST and ELS take effect. Set once it has run. */
+#define SE_LIVE_CAP_STATE_REWIND 4u  /* real savestate save + load hooks: the rewind stream is produced and
+                                      * LST can be applied. Clear when the save hook is a stub. */
+#define SE_LIVE_CAP_EXEC_BP     8u   /* execution breakpoints halt */
+#define SE_LIVE_CAP_MEM_WATCH   16u  /* data (read/write) watchpoints halt */
+#define SE_LIVE_CAP_INSN_STEP   32u  /* IST single-steps the halted CPU */
+#define SE_LIVE_CAP_TRACEPOINTS 64u  /* TRC tracepoints fire */
+#define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */

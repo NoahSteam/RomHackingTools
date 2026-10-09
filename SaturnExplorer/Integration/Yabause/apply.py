@@ -60,7 +60,7 @@ EDITS = [
     ("yabause.c",
      r'(\n)(int YabauseInit\s*\(yabauseinit_struct)',
      "before_group2",
-     '#include "se_export.h"\n',
+     '#include "se_export.h"\n#include "SeLiveProtocol.h"\n#include "vdp1.h"\n#include "vdp2.h"\n#include "memory.h"\n#include "sh2core.h"\n',
      '#include "se_export.h"'),
 
     # Breakpoint bridge: file-scope helpers that install execution breakpoints in
@@ -69,10 +69,29 @@ EDITS = [
     ("yabause.c",
      r'(\n)(int YabauseInit\s*\(yabauseinit_struct)',
      "before_group2",
+     "/* Publish the machine as it is at the breakpoint (the same sections Vdp2VBlankOUT sends). */\n"
+     "static void SeExpPublishHalt(void)\n"
+     "{\n"
+     "   extern u8 *VIDSoftGetVdp1FrameBuffer(void);\n"
+     "   extern u8 * SoundRam;\n"
+     "   sh2regs_struct se_msh2, se_ssh2;\n"
+     "   SH2GetRegisters(MSH2, &se_msh2);\n"
+     "   SH2GetRegisters(SSH2, &se_ssh2);\n"
+     "   SeExportSnapshot(Vdp1Ram, Vdp2Ram, Vdp2ColorRam, Vdp2Regs,\n"
+     "                    Vdp1Regs, LowWram, HighWram, VIDSoftGetVdp1FrameBuffer(),\n"
+     "                    &se_msh2, &se_ssh2, SoundRam, (void*)0, (void*)0);\n"
+     "}\n"
      "static void SeExpBpHit(void *ctx, u32 addr, void *ud)\n"
      "{\n"
      "   (void)ud;\n"
+     "   /* Halt HERE, before the instruction at 'addr' runs, the way the Mednafen tap does. Only\n"
+     "    * latching the stop let the CPU run on to the frame gate: the halt showed the breakpoint's\n"
+     "    * PC with registers from the end of the frame, and a later hit in the same frame replaced\n"
+     "    * the stop. Publish the state at the breakpoint, then hold the CPU in the halt gate (which\n"
+     "    * applies breakpoint edits and resumes, but leaves state loads for the frame gate). */\n"
      "   SeExportNotifyStop(ctx == (void *)SSH2 ? 1 : 0, (unsigned int)addr);\n"
+     "   SeExpPublishHalt();\n"
+     "   while (!SeExportGateHalt()) { }\n"
      "}\n"
      "static void SeExpAddExecBp(int cpu, unsigned int addr)\n"
      "{\n"
@@ -112,7 +131,9 @@ EDITS = [
      "   /* Install SH-2 breakpoints from Saturn Explorer + report hits. */\n"
      "   SH2SetBreakpointCallBack(MSH2, SeExpBpHit, NULL);\n"
      "   SH2SetBreakpointCallBack(SSH2, SeExpBpHit, NULL);\n"
-     "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n"
+     "   SeExportSetBreakpointHooks(SeExpAddExecBp, SeExpClearBps);\n"     "   /* What the hooks can do (v24): execution breakpoints only -- no instruction step,\n"
+     "    * watchpoints or tracepoints are wired here, so the client must not offer them. */\n"
+     "   SeExportSetDebugCaps(SE_LIVE_CAP_EXEC_BP);\n"
      "   SeExportSetMemWriteHook(SeExpWriteByte);   /* Hex Editor pokes */\n"
      "   SeExportSetSoundWriteHook(SeExpWriteSoundByte);   /* Sound RAM pokes (v13) */\n",
      "SeExportInit("),

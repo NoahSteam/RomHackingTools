@@ -160,6 +160,7 @@ void SsDbgAddExecBp(int, unsigned int) {}
 void SsDbgAddMemBp(int, unsigned int, unsigned int, unsigned int) {}
 void SsDbgClearBps(void) {}
 void SsDbgSetTraceActive(int) {}
+int SsDbgHasDebugger(void) { return 1; }
 void SsDbgSetPad(unsigned int, unsigned int) {}
 unsigned short SsDbgReadOpcode(unsigned int) { return 0x0009; }
 int SsDbgQueryKeyMap(unsigned int, int out[13]) { for (int i = 0; i < 13; ++i) out[i] = -1; return 0; }

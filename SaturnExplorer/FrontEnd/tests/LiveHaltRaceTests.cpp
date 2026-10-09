@@ -163,6 +163,17 @@ private:
     int mFd = -1;
 };
 
+// A halt as the real CPU hook makes one: latch the stop, then publish the snapshot taken at it
+// (the server reports a stop only together with a snapshot published after it).
+static void PublishHalt()
+{
+    SeExportSnapshot(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                     nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+static void HaltStop(int cpu, uint32_t pc) { SeExportNotifyStop(cpu, pc); PublishHalt(); }
+static void HaltStep(int cpu, uint32_t pc) { SeExportNotifyStep(cpu, pc); PublishHalt(); }
+static void HaltDma(int cpu, uint32_t pc)  { SeExportNotifyDmaStop(cpu, pc); PublishHalt(); }
+
 // The emulate thread's side of a halt, as the per-instruction hook plays it: publish the stop
 // (which raises the pause), park in the gate until the client releases it, and then -- the case
 // that matters -- halt AGAIN at once, either because an instruction step was requested (and its one
@@ -174,16 +185,16 @@ public:
     {
         mThread = std::thread([this] {
             uint32_t pc = 0x06001000u;
-            SeExportNotifyStop(0, pc);
+            HaltStop(0, pc);
             while (!mStop.load())
             {
-                if (!SeExportGateFrame()) continue;   // still parked (spins: SE_EXPORT_SPIN_GATE)
+                if (!SeExportGateHalt()) continue;   // still parked (spins: SE_EXPORT_SPIN_GATE)
                 ++mReleased;
                 pc += 2;
                 if (SeExportInsnStepBegin() && SeExportInsnStepTick(0, pc, 0))
-                    SeExportNotifyStep(0, pc);
+                    HaltStep(0, pc);
                 else
-                    SeExportNotifyStop(0, pc);
+                    HaltStop(0, pc);
                 ++mHalts;
             }
         });
@@ -235,7 +246,8 @@ void TestAnImmediateStopSurvivesTheRelease(Client& cl)
 // still two halts.
 void TestStopSequence(Client& cl)
 {
-    SeExportNotifyStop(0, 0x06002000u);
+    cl.Exchange(SE_LIVE_VERB_GET, 0);   // attached: a snapshot published from here on is kept
+    HaltStop(0, 0x06002000u);
     const Ctl a = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(a.ok && a.reason == SE_LIVE_STOP_EXEC_BP && a.pc == 0x06002000u && a.paused == 1,
           "a stop is reported with its PC");
@@ -244,20 +256,20 @@ void TestStopSequence(Client& cl)
     Check(r.ok && r.reason == SE_LIVE_STOP_NONE, "a resume clears the reason");
     Check(r.seq == a.seq, "and does not move the sequence number");
 
-    SeExportNotifyStop(0, 0x06002000u);   // the very same address
+    HaltStop(0, 0x06002000u);   // the very same address
     const Ctl b = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(b.ok && b.reason == SE_LIVE_STOP_EXEC_BP && b.pc == a.pc, "a second halt at the same PC");
     Check(b.seq != a.seq, "is told apart from the first by its sequence number");
     Check(((b.seq - a.seq) & 0x0FFFFFFFu) == 1u, "it is the next number");
 
-    SeExportNotifyStep(1, 0x06002004u);
+    HaltStep(1, 0x06002004u);
     const Ctl s = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(s.ok && s.reason == SE_LIVE_STOP_STEP && s.cpu == 1 && s.seq != b.seq,
           "a step halt on the slave is a new, distinct halt");
 
     // An SCU-DMA watchpoint says so: no instruction made the access, so the client must not have
     // to guess the cause from the instruction at the PC.
-    SeExportNotifyDmaStop(0, 0x06002008u);
+    HaltDma(0, 0x06002008u);
     const Ctl d = cl.Exchange(SE_LIVE_VERB_GET, 0);
     Check(d.ok && d.reason == SE_LIVE_STOP_DMA_WATCH && d.pc == 0x06002008u && d.seq != s.seq,
           "a DMA watchpoint halt is reported as its own reason");
@@ -278,12 +290,12 @@ void TestInstructionStepCountsRetirement(Client& cl)
     constexpr uint32_t A = 0x06003000u;
 
     // The ordinary case: the halted instruction runs, and the next presentation is a different PC.
-    SeExportNotifyStop(0, A);
+    HaltStop(0, A);
     ReleaseForStep(cl, 1);
     Check(SeExportInsnStepTick(0, A + 2, 0) == 1, "one instruction: the next PC completes it");
 
     // A bus-stalled instruction presents the same PC again and again without retiring.
-    SeExportNotifyStop(0, A);
+    HaltStop(0, A);
     ReleaseForStep(cl, 1);
     int early = 0;
     for (int i = 0; i < 1000; ++i) early += SeExportInsnStepTick(0, A, 0);
@@ -292,13 +304,13 @@ void TestInstructionStepCountsRetirement(Client& cl)
 
     // A taken branch to itself retires an instruction and leaves the PC where it was. Reproduces
     // the failure: a PC comparison alone left the budget untouched for ever.
-    SeExportNotifyStop(0, A);
+    HaltStop(0, A);
     ReleaseForStep(cl, 1);
     Check(SeExportInsnStepTick(0, A, 1) == 1,
           "a taken branch to itself retires, so a one-instruction step completes");
 
     // Two instructions: the self-branch counts, and so does what follows it.
-    SeExportNotifyStop(0, A);
+    HaltStop(0, A);
     ReleaseForStep(cl, 2);
     Check(SeExportInsnStepTick(0, A, 1) == 0, "the self-branch is the first");
     Check(SeExportInsnStepTick(0, A, 0) == 0, "an unretired repeat after it is not the second");
@@ -306,14 +318,14 @@ void TestInstructionStepCountsRetirement(Client& cl)
 
     // A halt between instructions (an SCU-DMA watchpoint): the instruction at the halt PC has NOT
     // run, so its first presentation is not a retirement even if it is a self-branch...
-    SeExportNotifyDmaStop(0, A);
+    HaltDma(0, A);
     ReleaseForStep(cl, 1);
     Check(SeExportInsnStepTick(0, A, 1) == 0, "a pending self-branch presenting itself retires nothing");
     // ...but once it has been presented, a repeat of the branch is the branch running.
     Check(SeExportInsnStepTick(0, A, 1) == 1, "its next presentation is the retirement");
 
     // The pending instruction is stalled behind the DMA, then runs and moves on.
-    SeExportNotifyDmaStop(0, A);
+    HaltDma(0, A);
     ReleaseForStep(cl, 1);
     int stalled = 0;
     for (int i = 0; i < 100; ++i) stalled += SeExportInsnStepTick(0, A, 0);
@@ -327,10 +339,10 @@ void TestInstructionStepCountsRetirement(Client& cl)
 void TestAHaltOnTheOtherCpuEndsTheStep(Client& cl)
 {
     constexpr uint32_t A = 0x06004000u;
-    SeExportNotifyStop(0, A);
+    HaltStop(0, A);
     ReleaseForStep(cl, 5);
     Check(SeExportInsnStepTick(0, A + 2, 0) == 0, "one of five instructions");
-    SeExportNotifyStop(1, 0x06005000u);   // the slave hits a breakpoint
+    HaltStop(1, 0x06005000u);   // the slave hits a breakpoint
     Check(SeExportInsnStepTick(0, A + 4, 0) == 0 && SeExportInsnStepTick(0, A + 6, 0) == 0 &&
           SeExportInsnStepTick(0, A + 8, 0) == 0 && SeExportInsnStepTick(0, A + 10, 0) == 0,
           "the master's step does not carry on after the slave's halt");
@@ -472,7 +484,7 @@ void TestAResumeAppliesTheInstallsBeforeIt(Client& cl)
     gEmuKnown = true;
     SeExportGateFrame();                       // settle whatever the earlier tests left pending
     gBpAdds.clear();
-    SeExportNotifyStop(0, 0x06000100u);        // halted at a breakpoint
+    HaltStop(0, 0x06000100u);        // halted at a breakpoint
     gRaceClient = &cl;
     SeExportTestGateHook = ResumeInTheWindow;
     // The hook publishes the temporary breakpoint and resumes while the gate is mid-decision.
@@ -492,7 +504,7 @@ void TestAResumeAppliesTheInstallsBeforeIt(Client& cl)
 // the game for good. The gate lets go of a hold nobody is there to end.
 void TestAHaltWithNoClientIsReleased()
 {
-    SeExportNotifyStop(0, 0x06009000u);
+    HaltStop(0, 0x06009000u);
     Check(SeExportGateFrame() == 1, "a halt with nobody attached does not hold the emulate thread");
     Check(SeExportGateFrame() == 1, "and stays released");
 }
