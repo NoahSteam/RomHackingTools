@@ -471,6 +471,8 @@ void App::CloseData(bool cancelAutoConnect)
     mbScrubbing = false;
     mScrubIndex = -1;
     mScrubShownIndex = -1;
+    mScrubShownFrame = 0;
+    mScrubTargetFrame = 0;
     mRecorder.Clear();
     mStateSlots.Reset();         // its cached savestate is the previous game's
     DiscardPendingEdits();
@@ -2228,13 +2230,14 @@ int App::CompareMarkerIndex(CompareMarkers::Slot slot) const
 #endif
 }
 
-// Where a side of the comparison on screen sits on the timeline, or -1. A side counts only while its
-// marker still holds the snapshot the panel shows: marking again replaces the marker.
-int App::CompareDiffSideIndex(CompareMarkers::Slot slot) const
+// The frame number of a side of the comparison on screen when it is on the timeline, else 0. A side
+// counts only while its marker still holds the snapshot the panel shows: marking again replaces it.
+// A frame number, not an index: navigation must name the frame, since the ring can shift under an index.
+uint64_t App::CompareDiffSideFrame(CompareMarkers::Slot slot) const
 {
-    if (!mCompareDiff.a) return -1;
+    if (!mCompareDiff.a) return 0;
     const std::shared_ptr<const MemSnapshot>& shown = slot == CompareMarkers::A ? mCompareDiff.a : mCompareDiff.b;
-    return mCompare.Snapshot(slot) == shown ? CompareMarkerIndex(slot) : -1;
+    return mCompare.Snapshot(slot) == shown && CompareMarkerIndex(slot) >= 0 ? shown->origin.frameNo : 0;
 }
 
 // Snapshot the frame the display is showing as marker A or B. False, with the reason in
@@ -2308,18 +2311,28 @@ bool App::CompareRowVisible() const
     return mbLiveSource && (mCompare.Any() || !mCompareStatus.empty());
 }
 
-// Pause if needed and show recorded frame 'index', as the transport bar's own buttons do.
-void App::ScrubToFrameIndex(int index)
+// Pause if needed and show recorded frame 'frameNo', as the transport bar's own buttons do. The frame
+// is named rather than indexed: RefreshScrubContext resolves it by number, under the recorder's lock,
+// on the next frame, because the ring can shift between now and then. Refused (with the reason in the
+// compare row) when it has already left the ring.
+bool App::ScrubToFrame(uint64_t frameNo)
 {
 #ifdef SE_ENABLE_LIVE
-    if (!mbLiveSource || index < 0) return;
+    if (!mbLiveSource || frameNo == 0) return false;
+    if (mRecorder.IndexOfFrame(frameNo) < 0)
+    {
+        mCompareStatus = "That frame has left the rewind history.";
+        return false;
+    }
     se_context* const ctl = mLiveCtx ? mLiveCtx : mContext;
     if (!mbPaused) { se_frame_pause(ctl); mbPaused = true; }
     mbScrubbing = true;
-    mScrubIndex = index;
+    mScrubTargetFrame = frameNo;
     VoidEditTarget();
+    return true;
 #else
-    (void)index;
+    (void)frameNo;
+    return false;
 #endif
 }
 
@@ -2354,39 +2367,83 @@ void App::DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, i
 #endif
 }
 
-// The line under the transport bar while any marker is set: which frames are marked, the Compare
-// button, and why the last mark or compare did not happen.
-void App::DrawCompareRow()
+// The row under the transport bar while any marker is set: which frames are marked, the Compare
+// button, and why the last mark or compare did not happen. Its items wrap to the window width, and
+// CompareRowHeight runs the same LineFlow over the same widths so the strip reserved for it matches.
+void App::CompareRowMetrics(char (&text)[2][64], float (&width)[3]) const
 {
-#ifdef SE_ENABLE_LIVE
     for (int s = 0; s < 2; ++s)
     {
         const CompareMarkers::Slot slot = static_cast<CompareMarkers::Slot>(s);
-        const char letter = static_cast<char>('A' + s);
+        if (mCompare.Has(slot))
+            std::snprintf(text[s], sizeof(text[s]), "Frame %c: %llu%s", 'A' + s,
+                          static_cast<unsigned long long>(mCompare.Snapshot(slot)->origin.frameNo),
+                          CompareMarkerIndex(slot) >= 0 ? "" : " (detached)");
+        else
+            std::snprintf(text[s], sizeof(text[s]), "Frame %c: not set", 'A' + s);
+        width[s] = ImGui::CalcTextSize(text[s]).x;
+    }
+    width[2] = ImGui::CalcTextSize("Compare Memory...").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
+float App::CompareRowHeight(float availWidth) const
+{
+    if (!CompareRowVisible()) return 0.0f;
+    const ImGuiStyle& style = ImGui::GetStyle();
+    char text[2][64];
+    float width[3];
+    CompareRowMetrics(text, width);
+    const float itemH[3] = { ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight(), ImGui::GetFrameHeight() };
+    LineFlow flow(availWidth, style.ItemSpacing.x);
+    float height = 0.0f, line = 0.0f;
+    for (int i = 0; i < 3; ++i)
+    {
+        if (flow.BreaksBefore(width[i])) { height += line + style.ItemSpacing.y; line = 0.0f; }
+        line = std::max(line, itemH[i]);
+    }
+    height += line + style.ItemSpacing.y;
+    if (!mCompareStatus.empty())   // wrapped, on a line of its own
+        height += ImGui::CalcTextSize(mCompareStatus.c_str(), nullptr, false, availWidth).y + style.ItemSpacing.y;
+    return height;
+}
+
+void App::DrawCompareRow()
+{
+#ifdef SE_ENABLE_LIVE
+    char text[2][64];
+    float width[3];
+    CompareRowMetrics(text, width);
+    LineFlow flow(ImGui::GetContentRegionAvail().x, ImGui::GetStyle().ItemSpacing.x);
+    auto place = [&](int i)
+    {
+        if (!flow.BreaksBefore(width[i]) && i > 0) ImGui::SameLine();
+    };
+    for (int s = 0; s < 2; ++s)
+    {
+        const CompareMarkers::Slot slot = static_cast<CompareMarkers::Slot>(s);
+        place(s);
         if (mCompare.Has(slot))
         {
-            const bool attached = CompareMarkerIndex(slot) >= 0;
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(CompareSideColor(slot)), "Frame %c: %llu%s", letter,
-                               static_cast<unsigned long long>(mCompare.Snapshot(slot)->origin.frameNo),
-                               attached ? "" : " (detached)");
-            if (!attached && ImGui::IsItemHovered())
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(CompareSideColor(slot)), "%s", text[s]);
+            if (CompareMarkerIndex(slot) < 0 && ImGui::IsItemHovered())
                 ImGui::SetTooltip("This frame is not on the rewind timeline (it has left the history, or was\n"
                                   "never recorded). The snapshot is kept and still compares, but the\n"
                                   "timeline cannot go to it.");
         }
         else
         {
-            ImGui::TextDisabled("Frame %c: not set", letter);
+            ImGui::TextDisabled("%s", text[s]);
         }
-        ImGui::SameLine();
     }
+    place(2);
     ImGui::BeginDisabled(!mCompare.HasBoth());
     if (ImGui::Button("Compare Memory...")) OpenCompare();
     ImGui::EndDisabled();
     if (!mCompareStatus.empty())
     {
-        ImGui::SameLine();
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "%s", mCompareStatus.c_str());
+        ImGui::PopTextWrapPos();
     }
 #endif
 }
@@ -2394,8 +2451,8 @@ void App::DrawCompareRow()
 void App::DrawMemoryCompare(IPlatform& platform)
 {
     mMemoryCompare.Draw(mCompareDiff.a ? &mCompareDiff : nullptr,
-                        CompareDiffSideIndex(CompareMarkers::A) >= 0,
-                        CompareDiffSideIndex(CompareMarkers::B) >= 0);
+                        CompareDiffSideFrame(CompareMarkers::A) != 0,
+                        CompareDiffSideFrame(CompareMarkers::B) != 0);
     MemoryComparePanel::Request req;
     if (mMemoryCompare.TakeRequest(req)) HandleCompareRequest(req, platform);
 }
@@ -2442,11 +2499,11 @@ void App::HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform
     switch (req.action)
     {
     case Action::GoToFrame:
-        ScrubToFrameIndex(CompareDiffSideIndex(slot));
+        ScrubToFrame(CompareDiffSideFrame(slot));
         break;
     case Action::GoToMemory:
         // A detached side has no frame to go to: the Memory tab then shows the current frame.
-        ScrubToFrameIndex(CompareDiffSideIndex(slot));
+        ScrubToFrame(CompareDiffSideFrame(slot));
         mHexEditor.GoTo(BusAddress(req.ref));
         mPanels.hexEditor = true;
         break;
@@ -2476,13 +2533,40 @@ bool App::RefreshScrubContext()
     {
         return false;
     }
-    if (mScrubIndex < 0)  mScrubIndex = 0;
-    if (mScrubIndex >= n) mScrubIndex = n - 1;
 
-    // Already showing this frame: nothing to rebuild.
-    if (mScrubContext && mScrubIndex == mScrubShownIndex)
+    // A navigation (Go to A/B, Go to Memory) names a frame, not an index: the ring can shift between
+    // the request and now (the worker publishes a frame and evicts the oldest), and the old index
+    // would open a different frame. Resolve and decompress it under one recorder lock; a frame that
+    // has left is refused, and the view falls back to live like any other refused Select.
+    const uint64_t wantFrame = mScrubTargetFrame;
+    mScrubTargetFrame = 0;
+    se_data_source ds;
+    bool selected = false;
+    if (wantFrame != 0)
     {
-        return true;
+        size_t found = 0;
+        selected = mRecorder.SelectFrame(wantFrame, &found, &ds);
+        if (!selected)
+        {
+            mCompareStatus = "That frame has left the rewind history, so it could not be shown.";
+            mScrubShownIndex = -1;
+            mScrubShownFrame = 0;
+            return false;
+        }
+        mScrubIndex = static_cast<int>(found);
+    }
+    else
+    {
+        if (mScrubIndex < 0)  mScrubIndex = 0;
+        if (mScrubIndex >= n) mScrubIndex = n - 1;
+
+        // Already showing this frame: nothing to rebuild. The index alone is not enough, since
+        // eviction shifts which frame an index names; the frame itself must still be the one shown.
+        if (mScrubContext && mScrubIndex == mScrubShownIndex &&
+            mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex)) == mScrubShownFrame)
+        {
+            return true;
+        }
     }
 
     // Scrubbing to a different frame: pending edits belong to the frame they were made on, so
@@ -2496,8 +2580,7 @@ bool App::RefreshScrubContext()
     // Select decompresses the frame into the recorder's scratch. The scrub context
     // is created once; its copied data source keeps the recorder's callbacks + user
     // pointer, so a later Select + se_begin_frame re-renders any frame exactly.
-    se_data_source ds;
-    if (!mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
+    if (!selected && !mRecorder.Select(static_cast<size_t>(mScrubIndex), &ds))
     {
         // Select refused the frame. Name it in the Log and fall back to live, rather than
         // leaving the user to wonder why scrubbing stopped.
@@ -2509,6 +2592,7 @@ bool App::RefreshScrubContext()
         // shortcut above must not believe it is showing anything: without this, scrubbing back
         // to the last good index would take that shortcut and skip the Select that reloads it.
         mScrubShownIndex = -1;
+        mScrubShownFrame = 0;
         return false;
     }
     if (!mScrubContext)
@@ -2524,6 +2608,7 @@ bool App::RefreshScrubContext()
     }
     se_begin_frame(mScrubContext);
     mScrubShownIndex = mScrubIndex;
+    mScrubShownFrame = mRecorder.SelectedFrameNumber();
     mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
     return true;
 #else
@@ -2562,10 +2647,7 @@ void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, si
     // panels still draw (and commit to) the old frame. Tagged with the new index, that edit
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
     mPendingEditsFrame = mScrubShownIndex;
-    if (mScrubShownIndex >= 0 && static_cast<size_t>(mScrubShownIndex) < mRecorder.Count())
-    {
-        mPendingEditsFrameNo = mRecorder.FrameNumber(static_cast<size_t>(mScrubShownIndex));
-    }
+    mPendingEditsFrameNo = mScrubShownFrame;
     // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
     for (size_t i = 0; i < len; ++i)
     {
@@ -4669,8 +4751,9 @@ void App::DrawVdpOutput(IPlatform& platform)
         // collapsed window or a closed panel needs no pixels. (A screenshot renders for itself.)
         RenderFrameToTexture(platform);
         // Reserve a strip at the bottom for the transport bar (live sources only).
+        // The compare row wraps, so its height depends on the width it is drawn at.
         const float transportH = mbLiveSource
-            ? (ImGui::GetFrameHeightWithSpacing() * (CompareRowVisible() ? 2.0f : 1.0f) + 6.0f)
+            ? (ImGui::GetFrameHeightWithSpacing() + CompareRowHeight(ImGui::GetContentRegionAvail().x) + 6.0f)
             : 0.0f;
         const ImVec2 vpContentStart = ImGui::GetCursorScreenPos();
         const ImVec2 vpFullAvail    = ImGui::GetContentRegionAvail();
@@ -7341,6 +7424,8 @@ void App::AdoptNewEmulatorInstance()
         mScrubContext = nullptr;
     }
     mScrubShownIndex = -1;
+    mScrubShownFrame = 0;
+    mScrubTargetFrame = 0;
     mMemBackend.NoteSourceChanged();
     mCallStack.ClearAll();           // a stack through code the new run may not even load
     mCallStackDirty = true;
@@ -7388,6 +7473,7 @@ void App::DropRecordedHistory()
     mCallStackDirty = true;   // the registers it was built from are about to be replaced
     mbScrubbing = false;
     mScrubIndex = -1;
+    mScrubTargetFrame = 0;   // a navigation to a frame of the history that was just dropped
     mbPaused = false;
     VoidEditTarget();
 }

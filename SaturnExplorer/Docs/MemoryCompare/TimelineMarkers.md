@@ -89,8 +89,22 @@ their snapshot, still compare, and can't be located or scrubbed to.
   below carries the tooltip (the frame has left the history or was never recorded; the snapshot is
   kept).
 - Labels beneath the slider: `Frame A: 1800`, `Frame B: 1884`, plus a **Compare Memory...** button
-  enabled only when both markers are set.
+  enabled only when both markers are set, and the status line when a mark or compare was refused.
+  The items wrap to the window width (`LineFlow`, in `CompareMarkers.h`), and the status wraps on a
+  line of its own. The strip reserved for the transport bar is sized by `CompareRowHeight`, which runs
+  the same `LineFlow` over the same widths, so what is reserved cannot drift from what is drawn.
 - Colours: A blue, B orange. Use theme accents if the theme already has fitting ones.
+
+## Navigating to a marked frame
+
+Go to A / Go to B and an attached **Go to Memory** name the frame by number, never by index. The ring
+evicts from the front, so an index looked up now can name a different frame by the time the scrub
+context is built on the next UI frame (the worker may publish a frame and evict the oldest in
+between). `ScrubToFrame(frameNo)` checks the frame is still there and sets `mScrubTargetFrame`;
+`RefreshScrubContext` then calls `FrameRecorder::SelectFrame`, which finds the frame and decompresses
+it under one recorder lock, and refuses (with a message in the compare row, falling back to the live
+view) if it has been evicted. The "already showing this frame" shortcut compares the frame number
+(`mScrubShownFrame`) as well as the index.
 
 ## Opening the panel
 

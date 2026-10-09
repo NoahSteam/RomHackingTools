@@ -271,6 +271,35 @@ size_t FrameRecorder::BytesUsed() const
 
 bool FrameRecorder::Select(size_t i, se_data_source* out)
 {
+    return SelectImpl(nullptr, i, nullptr, out);
+}
+
+bool FrameRecorder::SelectFrame(uint64_t frameNo, size_t* outIndex, se_data_source* out)
+{
+    return SelectImpl(&frameNo, 0, outIndex, out);
+}
+
+// The ring is strictly ascending in frame number (Capture rejects anything else), so a binary search.
+size_t FrameRecorder::FindFrame(uint64_t frameNo) const
+{
+    size_t lo = 0, hi = mFrames.size();
+    while (lo < hi)
+    {
+        const size_t mid = lo + (hi - lo) / 2;
+        if (mFrames[mid].frameNumber < frameNo) lo = mid + 1; else hi = mid;
+    }
+    return lo < mFrames.size() && mFrames[lo].frameNumber == frameNo ? lo : mFrames.size();
+}
+
+int FrameRecorder::IndexOfFrame(uint64_t frameNo) const
+{
+    std::lock_guard<std::mutex> lk(mRingMtx);
+    const size_t i = FindFrame(frameNo);
+    return i < mFrames.size() ? static_cast<int>(i) : -1;
+}
+
+bool FrameRecorder::SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outIndex, se_data_source* out)
+{
     // Cleared first, so any refusal below reports "nothing selected" (a failed decode leaves the
     // scratch half-decoded).
     mSelFrameNumber = 0;
@@ -280,10 +309,12 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
     }
     {
         std::lock_guard<std::mutex> lk(mRingMtx);
+        if (wantFrame) i = FindFrame(*wantFrame);   // resolved under the lock the decode runs under
         if (i >= mFrames.size())
         {
             return false;
         }
+        if (outIndex) *outIndex = i;
         const Frame& f = mFrames[i];
         if (!DecompressFrame(f, mScratch))
         {

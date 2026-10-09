@@ -514,6 +514,36 @@ int main()
         se_destroy(vctx);
     }
 
+    // --- SelectFrame names a frame, not an index, and refuses one that has been evicted ---
+    // Go to A/B resolves a frame number a UI frame after it was looked up; by then the worker may have
+    // published a newer frame and evicted the oldest, so the old index names a different frame.
+    {
+        se_test::State st;
+        for (size_t i = 0; i < st.vdp1.size(); ++i) st.vdp1[i] = PatternByte(i);
+        se_context* vctx = se_test::CreateContext(st);
+        se_begin_frame(vctx);
+        FrameRecorder rFind;
+        rFind.Configure(3);
+        for (uint64_t fn = 10; fn <= 12; ++fn) CaptureFrame(rFind, vctx, fn);
+        Check(rFind.IndexOfFrame(11) == 1 && rFind.IndexOfFrame(10) == 0, "frames are found by number");
+        Check(rFind.IndexOfFrame(9) == -1 && rFind.IndexOfFrame(99) == -1, "a missing frame is not matched to a neighbour");
+
+        const int staleIndex = rFind.IndexOfFrame(11);   // what a caller would remember
+        CaptureFrame(rFind, vctx, 13);                   // evicts frame 10; every index shifts down
+        se_data_source ds{};
+        Check(rFind.Select(static_cast<size_t>(staleIndex), &ds) && rFind.SelectedFrameNumber() == 12,
+              "the remembered index now opens frame 12, which is the bug SelectFrame exists to avoid");
+
+        size_t found = 99;
+        Check(rFind.SelectFrame(11, &found, &ds), "frame 11 is still selectable by number");
+        Check(found == 0 && rFind.SelectedFrameNumber() == 11, "it is found at its new index and is frame 11, never 12");
+        Check(!rFind.SelectFrame(10, &found, &ds), "an evicted frame is refused");
+        Check(rFind.SelectedFrameNumber() == 0, "and a refusal leaves nothing selected");
+        Check(!rFind.SelectFrame(99, nullptr, &ds), "a frame that never existed is refused");
+        Check(rFind.SelectFrame(13, nullptr, &ds) && rFind.SelectedFrameNumber() == 13, "the index out-parameter is optional");
+        se_destroy(vctx);
+    }
+
     se_destroy(ctx);
     if (gFail == 0) std::printf("All FrameRecorder tests passed.\n");
     return gFail == 0 ? 0 : 1;

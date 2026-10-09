@@ -46,6 +46,12 @@ reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
 - mark a live-head frame the recorder never kept (after Stop Recording): it is accepted, shows
   `(detached)`, and still compares
 - **Clear Compare Markers** removes both carets and closes the row
+- shrink the dock to a narrow width with two detached markers and a refusal message showing: the
+  labels, **Compare Memory...** and the message wrap onto further lines and stay reachable, and the
+  VDP image above the bar gives up exactly the height they take
+- start Go to A/B while the recorder is still publishing frames (just after pausing): it opens the
+  marked frame, never a neighbour; if that frame was evicted meanwhile, the row says so and the view
+  stays live
 - **Export...** writes a CSV whose line count equals the changed-byte total for what was exported
 
 ## Supported platform UI

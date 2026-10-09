@@ -311,14 +311,16 @@ private:
     void ClearCompare();                                // drop the markers and the diff
     void ResetCompareSession();                         // a different emulator run or source
     int  CompareMarkerIndex(CompareMarkers::Slot slot) const;     // a marker's place on the timeline, or -1
-    int  CompareDiffSideIndex(CompareMarkers::Slot slot) const;   // the shown comparison's side on the timeline, or -1
+    uint64_t CompareDiffSideFrame(CompareMarkers::Slot slot) const;   // the shown comparison's frame if it is on the timeline, else 0
     void ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform);
     bool CompareRowVisible() const;
     void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareRow();
+    void CompareRowMetrics(char (&text)[2][64], float (&width)[3]) const;   // the row's labels and item widths
+    float CompareRowHeight(float availWidth) const;                         // what the row takes at that width, 0 if hidden
     void DrawMemoryCompare(IPlatform& platform);
     void HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform& platform);
-    void ScrubToFrameIndex(int index);                  // pause if needed and show recorded frame 'index'
+    bool ScrubToFrame(uint64_t frameNo);                // pause if needed and show recorded frame 'frameNo'
     bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
@@ -589,6 +591,8 @@ private:
     bool             mbScrubbing = false;      // viewing a recorded (past) frame
     int              mScrubIndex = -1;         // selected recorded-frame index
     int              mScrubShownIndex = -1;    // index currently built into mScrubContext
+    uint64_t         mScrubShownFrame = 0;     // ...and the frame number it holds (indexes shift as the ring evicts)
+    uint64_t         mScrubTargetFrame = 0;    // a navigation's frame, resolved by number in RefreshScrubContext
     se_context*      mLiveCtx = nullptr;       // the live context, reachable while panels
                                                // render from the scrub context (transport)
     // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
