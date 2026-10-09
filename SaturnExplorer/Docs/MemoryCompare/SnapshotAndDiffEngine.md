@@ -24,8 +24,10 @@ of thing:
 - **VDP1/VDP2 Regs** are 16-bit register *images* assembled from `se_get_vdpN_register`
   (`ContextBackend::ReadOne`), not bus bytes. Write-only registers read back their stored value,
   which a bus read would not return. Their sizes (0x18 and 0x120 bytes) are not multiples of 16.
-- **Sound RAM** is visible to the SH-2 at `0x05A00000`, but its writer is the 68K. The 68K sees
-  the same bytes at offset 0.
+- **Sound RAM** is visible to the SH-2 at `0x05A00000`, and both CPUs write it: the SH-2 uploads sound
+  programs and samples, and the 68K sound CPU runs from it and updates it. The 68K sees the same bytes
+  at offset 0. The emulator's write watchpoint matches SH-2 effective addresses and SCU DMA writes, so
+  it catches the first and cannot see the second.
 
 So every region carries an explicit id, space and capability set, and every location is a
 `RegionRef`, never a bare `uint32_t`:
@@ -125,9 +127,9 @@ Verified against the code:
    edits, is what a frame comparison is about. At the live head there is no pending state: a poke
    is applied to the running emulator and the snapshot is whatever the Memory tab currently shows.
 
-`CaptureSnapshot(IMemoryBackend&, ContextProbe, SnapshotOrigin)` needs only `ReadRegionBytes`
-(inline in `MemoryBackend.h`) plus two callbacks for the serial and source id, so its tests link
-neither the core nor an emulator. It returns null on any failure, and a partial region is never
+`CaptureSnapshot(IMemoryBackend&, const SnapshotOrigin&, guard, std::string* error)` needs only
+`ReadRegionBytes` (inline in `MemoryBackend.h`) plus a `guard` callback returning a `CaptureGuard`
+(the serial and source id), so its tests link neither the core nor an emulator. It returns null on any failure, and a partial region is never
 kept (`ReadRegionBytes` clears its output on failure). A snapshot is complete or absent, so there
 is no "invalid snapshot" state to display.
 
@@ -143,7 +145,7 @@ struct RegionDiff {
     uint32_t                  changedBytes;     // EXACT
     uint32_t                  rangeCount;       // EXACT count of merged ranges
     std::vector<ChangedRange> ranges;           // SUMMARY ONLY: first kMaxStoredRanges
-    bool                      rangesTruncated;  // rangeCount > ranges.size()
+    bool RangesTruncated() const;               // rangeCount > ranges.size()
 };
 
 struct DiffResult {
@@ -151,13 +153,15 @@ struct DiffResult {
     std::vector<RegionDiff>            regions;
 };
 
-enum class DiffStatus { Ok, SessionMismatch, RegionMismatch };
+enum class DiffStatus { Ok, NullSnapshot, SessionMismatch, RegionMismatch };
 DiffStatus Diff(a, b, const DiffOptions&, DiffResult* out);
+uint64_t   DiffResult::TotalChangedBytes() const;
 ```
 
 - Byte-for-byte over each region, with an 8-byte word fast path that descends to bytes only when a
   word differs.
-- Ranges are maximal runs of differing bytes, merged when the gap is below `mergeGap` (default 4).
+- Ranges are maximal runs of differing bytes, merged when the gap is below `mergeGap` (default 4;
+  0 and 1 both mean contiguous bytes only).
   `kMaxStoredRanges` is 100,000 per region. Past that, ranges stop being stored but
   `changedBytes` and `rangeCount` stay exact and `rangesTruncated` is set.
 - **`ranges` is a summary for display and nothing else.** It feeds the "Changed Ranges" column. No
@@ -179,7 +183,8 @@ struct DiffRow {
 std::vector<DiffRow> BuildRows(const DiffResult&, RegionId, const DiffOptions&);
 
 struct CsvSink { virtual bool Write(const char* data, size_t len) = 0; };   // false: stop/cancel
-bool WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
+enum class CsvResult { Ok, Cancelled, IntegrityError };
+CsvResult WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
 ```
 
 - `BuildRows` emits every row containing a changed byte, plus `contextRows` either side when
@@ -191,8 +196,8 @@ bool WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
   frame numbers, both session ids and the timeline epochs. `bus_address` is empty for regions with
   no bus address meaning (`DeviceImage`). It returns false if the sink stops it.
 - Integrity check: `WriteCsv` counts the lines it wrote per region and compares with
-  `RegionDiff::changedBytes`. A mismatch is a bug, reported as an export failure, never a silent
-  short file.
+  `RegionDiff::changedBytes`. A mismatch (or a `DiffResult` without every region's count) is
+  `IntegrityError`, never a silent short file.
 - "All Memory" in the panel is a sequence of per-region sections (`BuildRows` per region, built
   lazily), not one merged list.
 
@@ -204,8 +209,9 @@ New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
 - identical snapshots: zero changes, no ranges, no rows in Changes Only mode
 - single byte at the first and last byte of a region; change spanning a row boundary
 - two changes inside and beyond `mergeGap`
-- word fast path: change at each offset 0..7 in a word, and at the tail of a region whose size is
-  not a multiple of 8 or 16 (the 0x18-byte register region; `validMask` is correct)
+- word fast path: change at each offset 0..7 in a word. Every region size is a multiple of 8, so the
+  byte-at-a-time tail path is not reachable through the public API; the 0x18-byte register region
+  covers the partial *row* case instead (`validMask`)
 - **truncation**: more than `kMaxStoredRanges` isolated changes in one region.
   `rangesTruncated` is set, `rangeCount` and `changedBytes` are exact, and **the union of
   `BuildRows` masks and the CSV lines each equal the true set of differing bytes** (compared against

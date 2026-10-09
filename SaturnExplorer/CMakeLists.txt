@@ -262,6 +262,15 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerMemorySearchTests COMMAND SaturnExplorerMemorySearchTests)
 
+    # Frame Memory Compare's snapshot + diff engine: pure logic over byte vectors, no ImGui.
+    add_executable(SaturnExplorerMemoryCompareTests
+        FrontEnd/tests/MemoryCompareTests.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+    )
+    target_include_directories(SaturnExplorerMemoryCompareTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerMemoryCompareTests COMMAND SaturnExplorerMemoryCompareTests)
+
     # The worker that keeps a RAM scan off the UI thread: same results as the synchronous scan,
     # one scan at a time, and the sparse narrowing pass reads only the pages the hits are in.
     add_executable(SaturnExplorerMemorySearchRunnerTests
