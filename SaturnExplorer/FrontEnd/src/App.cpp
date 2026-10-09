@@ -252,7 +252,7 @@ void App::Initialize()
 
 #ifdef SE_ENABLE_LIVE
     mRecorder.Configure(mRecordSeconds * kFramesPerSecond);
-    // Route edits made against a scrubbed frame into mPendingEdits, so a rewind (Play from
+    // Route edits made against a scrubbed frame into mStaged, so a rewind (Play from
     // here) can replay them atop the restored savestate. Set before the first scrub Select,
     // whose data source latches SE_CAP_MEM_WRITE from this sink being present.
     mRecorder.SetEditSink(this, &App::OnScrubEdit);
@@ -2165,7 +2165,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 
     // Staged edits replay only onto the frame they were made against. Ordinary Play, another
     // scrub or a new session leaves them behind, and they must not ride onto this target.
-    if (!mPendingEdits.empty() && mPendingEditsFrameNo != frameNo) { DiscardPendingEdits(); }
+    mStaged.KeepOnlyFor(frameNo);
     const std::vector<uint8_t> edits = BuildEditBlob();
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
@@ -2257,7 +2257,7 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
     {
         if (mScrubShownIndex < 0) return fail("That recorded frame could not be loaded.");
         // Pending edits change what the context serves without being part of the recorded frame.
-        if (!mPendingEdits.empty() && mPendingEditsFrame == mScrubShownIndex)
+        if (mStaged.BelongsTo(mScrubShownFrame))
             return fail("This frame has unapplied edits. A comparison is of recorded memory: scrub to "
                         "another frame or press Play first.");
         // Not FrameNumber(index): the ring evicts from the front, so an index goes stale.
@@ -2528,24 +2528,32 @@ void App::HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform
 bool App::RefreshScrubContext()
 {
 #ifdef SE_ENABLE_LIVE
-    const int n = static_cast<int>(mRecorder.Count());
-    if (n == 0)
+    // What is shown is a FRAME, not an index (see ScrubState.h): the ring evicts from the front, so
+    // the same frame moves to a lower index while the view is up, and the worker may still be
+    // publishing frames just after a pause. The plan follows the frame; staged edits go by frame number.
+    const uint64_t wantFrame = mScrubTargetFrame;
+    mScrubTargetFrame = 0;
+    const ScrubPlan plan = PlanScrub(mRecorder, mScrubContext != nullptr, mScrubIndex, mScrubShownIndex,
+                                     mScrubShownFrame, wantFrame);
+    if (plan.kind == ScrubPlan::Nothing)
     {
         return false;
     }
+    if (plan.kind == ScrubPlan::Keep)
+    {
+        mScrubIndex = mScrubShownIndex = plan.index;   // same frame, wherever the ring put it now
+        return true;
+    }
 
-    // A navigation (Go to A/B, Go to Memory) names a frame, not an index: the ring can shift between
-    // the request and now (the worker publishes a frame and evicts the oldest), and the old index
-    // would open a different frame. Resolve and decompress it under one recorder lock; a frame that
-    // has left is refused, and the view falls back to live like any other refused Select.
-    const uint64_t wantFrame = mScrubTargetFrame;
-    mScrubTargetFrame = 0;
     se_data_source ds;
     bool selected = false;
-    if (wantFrame != 0)
+    if (plan.kind == ScrubPlan::SelectFrame)
     {
+        // A navigation (Go to A/B, Go to Memory) names its frame by number: found and decompressed
+        // under one recorder lock, and refused if it has left. The view then falls back to live,
+        // like any other refused Select.
         size_t found = 0;
-        selected = mRecorder.SelectFrame(wantFrame, &found, &ds);
+        selected = mRecorder.SelectFrame(plan.frame, &found, &ds);
         if (!selected)
         {
             mCompareStatus = "That frame has left the rewind history, so it could not be shown.";
@@ -2557,24 +2565,7 @@ bool App::RefreshScrubContext()
     }
     else
     {
-        if (mScrubIndex < 0)  mScrubIndex = 0;
-        if (mScrubIndex >= n) mScrubIndex = n - 1;
-
-        // Already showing this frame: nothing to rebuild. The index alone is not enough, since
-        // eviction shifts which frame an index names; the frame itself must still be the one shown.
-        if (mScrubContext && mScrubIndex == mScrubShownIndex &&
-            mRecorder.FrameNumber(static_cast<size_t>(mScrubIndex)) == mScrubShownFrame)
-        {
-            return true;
-        }
-    }
-
-    // Scrubbing to a different frame: pending edits belong to the frame they were made on, so
-    // drop them when the shown frame changes (avoids applying edits to the wrong rewind target).
-    if (mScrubIndex != mPendingEditsFrame)
-    {
-        mPendingEdits.clear();
-        mPendingEditsFrame = mScrubIndex;
+        mScrubIndex = plan.index;
     }
 
     // Select decompresses the frame into the recorder's scratch. The scrub context
@@ -2589,12 +2580,17 @@ bool App::RefreshScrubContext()
                        " could not be decompressed; returning to the live view",
                    static_cast<uint32_t>(bad));
         // The scratch now holds a half-decoded frame, so the "already showing this frame"
-        // shortcut above must not believe it is showing anything: without this, scrubbing back
+        // shortcut must not believe it is showing anything: without this, scrubbing back
         // to the last good index would take that shortcut and skip the Select that reloads it.
         mScrubShownIndex = -1;
         mScrubShownFrame = 0;
+        DiscardPendingEdits();
         return false;
     }
+    // Staged edits belong to the frame they were made on, so changing frames drops them. By frame
+    // number: an index can name a different frame by now, and edits that survived onto one would be
+    // replayed onto it by Play From Here.
+    mStaged.KeepOnlyFor(mRecorder.SelectedFrameNumber());
     if (!mScrubContext)
     {
         se_config cfg;
@@ -2644,27 +2640,10 @@ void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, si
 {
     // Tag with the frame the written-to context actually displays, not where the slider points:
     // a transport action earlier in this same frame may already have moved mScrubIndex while the
-    // panels still draw (and commit to) the old frame. Tagged with the new index, that edit
+    // panels still draw (and commit to) the old frame. Tagged with the new frame, that edit
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
-    mPendingEditsFrame = mScrubShownIndex;
-    mPendingEditsFrameNo = mScrubShownFrame;
-    // The hex editor writes one byte at a time; coalesce runs that extend the last poke.
-    for (size_t i = 0; i < len; ++i)
-    {
-        const uint32_t a = addr + static_cast<uint32_t>(i);
-        const uint8_t  v = bytes[i];
-        if (!mPendingEdits.empty())
-        {
-            PendingPoke& p = mPendingEdits.back();
-            if (p.isSound == (isSound != 0) && a == p.addr + p.bytes.size())
-            {
-                p.bytes.push_back(v);
-                continue;
-            }
-        }
-        PendingPoke p; p.isSound = (isSound != 0); p.addr = a; p.bytes.push_back(v);
-        mPendingEdits.push_back(std::move(p));
-    }
+    // A batch staged on another frame is dropped rather than retagged (StagedEdits::Record).
+    mStaged.Record(mScrubShownFrame, isSound != 0, addr, bytes, len);
 }
 
 std::vector<uint8_t> App::BuildEditBlob() const
@@ -2675,8 +2654,8 @@ std::vector<uint8_t> App::BuildEditBlob() const
         blob.push_back((uint8_t)(v & 0xFF));         blob.push_back((uint8_t)((v >> 8) & 0xFF));
         blob.push_back((uint8_t)((v >> 16) & 0xFF)); blob.push_back((uint8_t)((v >> 24) & 0xFF));
     };
-    put32(static_cast<uint32_t>(mPendingEdits.size()));
-    for (const PendingPoke& p : mPendingEdits)
+    put32(static_cast<uint32_t>(mStaged.Pokes().size()));
+    for (const StagedPoke& p : mStaged.Pokes())
     {
         blob.push_back(p.isSound ? (uint8_t)SE_LIVE_EDIT_TYPE_SOUND : (uint8_t)SE_LIVE_EDIT_TYPE_WRAM);
         blob.push_back(0); blob.push_back(0); blob.push_back(0);
@@ -7453,9 +7432,7 @@ void App::AdoptNewEmulatorInstance()
 // frame that IS in the ring, so it truncates the future instead of dropping the past.
 void App::DiscardPendingEdits()
 {
-    mPendingEdits.clear();
-    mPendingEditsFrame = -1;
-    mPendingEditsFrameNo = 0;
+    mStaged.Clear();
 }
 
 // The ring is emptied: markers keep their snapshots but can no longer be found by frame number.

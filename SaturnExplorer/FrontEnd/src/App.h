@@ -27,6 +27,7 @@
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
+#include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
@@ -598,11 +599,7 @@ private:
     // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
     // and the edits made while scrubbed, replayed atop the restored state when rewinding.
     bool             mSeekSupported = false;
-    struct PendingPoke { bool isSound = false; uint32_t addr = 0; std::vector<uint8_t> bytes; };
-    std::vector<PendingPoke> mPendingEdits;
-    int              mPendingEditsFrame = -1;  // scrub index the edits belong to (cleared on change)
-    uint64_t         mPendingEditsFrameNo = 0; // recorder frame number of that frame: the identity a
-                                               // replay checks, since indexes shift as the ring evicts
+    StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
     void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).

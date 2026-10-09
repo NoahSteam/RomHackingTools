@@ -52,6 +52,9 @@ reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
 - start Go to A/B while the recorder is still publishing frames (just after pausing): it opens the
   marked frame, never a neighbour; if that frame was evicted meanwhile, the row says so and the view
   stays live
+- after Go to A/B, keep the game paused while frames are still arriving (just after pausing): the shown
+  frame stays the marked one as the ring shifts, and a hex edit made on it is not carried to another
+  frame by navigating or scrubbing (Play From Here replays only the edits made on the frame it resumes)
 - **Export...** writes a CSV whose line count equals the changed-byte total for what was exported
 
 ## Supported platform UI

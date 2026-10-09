@@ -103,8 +103,16 @@ context is built on the next UI frame (the worker may publish a frame and evict 
 between). `ScrubToFrame(frameNo)` checks the frame is still there and sets `mScrubTargetFrame`;
 `RefreshScrubContext` then calls `FrameRecorder::SelectFrame`, which finds the frame and decompresses
 it under one recorder lock, and refuses (with a message in the compare row, falling back to the live
-view) if it has been evicted. The "already showing this frame" shortcut compares the frame number
-(`mScrubShownFrame`) as well as the index.
+view) if it has been evicted.
+
+The view stays on that frame afterwards. What is shown is a frame, not an index, so `PlanScrub`
+(`ScrubState.h`) re-points the index at the shown frame on every refresh while the user has not moved
+the slider, instead of selecting by index again and sliding onto a neighbour as the ring evicts. Only an
+explicit seek (slider, step buttons, another navigation) or the frame leaving the ring changes it.
+
+Staged scrub edits are keyed the same way: `StagedEdits` carries one frame number for the whole batch,
+changing frames drops it (`KeepOnlyFor`), and an edit recorded on another frame drops the old batch
+instead of retagging it, so Play From Here can never replay frame 11's edit onto frame 12.
 
 ## Opening the panel
 
