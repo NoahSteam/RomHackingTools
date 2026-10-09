@@ -24,8 +24,10 @@ of thing:
 - **VDP1/VDP2 Regs** are 16-bit register *images* assembled from `se_get_vdpN_register`
   (`ContextBackend::ReadOne`), not bus bytes. Write-only registers read back their stored value,
   which a bus read would not return. Their sizes (0x18 and 0x120 bytes) are not multiples of 16.
-- **Sound RAM** is visible to the SH-2 at `0x05A00000`, but its writer is the 68K. The 68K sees
-  the same bytes at offset 0.
+- **Sound RAM** is visible to the SH-2 at `0x05A00000`, and both CPUs write it: the SH-2 uploads sound
+  programs and samples, and the 68K sound CPU runs from it and updates it. The 68K sees the same bytes
+  at offset 0. The emulator's write watchpoint matches SH-2 effective addresses and SCU DMA writes, so
+  it catches the first and cannot see the second.
 
 So every region carries an explicit id, space and capability set, and every location is a
 `RegionRef`, never a bare `uint32_t`:

@@ -137,7 +137,8 @@ void TestTraits()
         Check(std::strcmp(Traits(static_cast<RegionId>(i)).name, expected[i]) == 0, "each RegionId keeps its region");
     Check(HasBusAddress(Traits(RegionId::Hwram)) && !HasBusAddress(Traits(RegionId::Vdp1Fb)),
           "only the VDP1 FB has no bus address");
-    Check(!(Traits(RegionId::SoundRam).caps & kCapBreakWrite), "Sound RAM: the 68K writes it, no SH-2 write break");
+    Check(Traits(RegionId::SoundRam).caps & kCapBreakWrite, "Sound RAM: SH-2 and SCU-DMA writes to it can be caught");
+    Check(!(Traits(RegionId::SoundRam).caps & kCapSh2Code), "but it is not SH-2 code (the 68K runs from it)");
     Check(!(Traits(RegionId::Vdp1Fb).caps & kCapBreakWrite), "VDP1 FB: not a bus write, no write break");
     Check(Traits(RegionId::Vdp1Fb).space == AddressSpace::DeviceImage, "VDP1 FB is a device image");
     Check(Traits(RegionId::Vdp2Regs).space == AddressSpace::RegisterImage, "VDP2 regs are a register image");

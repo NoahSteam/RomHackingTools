@@ -17,8 +17,9 @@ struct Extra { AddressSpace space; uint8_t caps; };
 constexpr Extra kExtra[] = {
     /* Lwram    */ { AddressSpace::Sh2Bus,        kCapNavigate | kCapWatch | kCapBreakWrite | kCapSh2Code },
     /* Hwram    */ { AddressSpace::Sh2Bus,        kCapNavigate | kCapWatch | kCapBreakWrite | kCapSh2Code },
-    // Written by the 68K, which the emulator's SH-2/SCU-DMA watchpoints do not see.
-    /* SoundRam */ { AddressSpace::Sh2Bus,        kCapNavigate | kCapWatch },
+    // The SH-2 writes it too (uploading sound programs and samples), and the emulator's watchpoint
+    // matches every SH-2 effective address and SCU DMA write. It cannot see the 68K's own writes.
+    /* SoundRam */ { AddressSpace::Sh2Bus,        kCapNavigate | kCapWatch | kCapBreakWrite },
     /* Vdp1Ram  */ { AddressSpace::Sh2Bus,        kCapNavigate | kCapWatch | kCapBreakWrite },
     // A derived image written by VDP1 drawing, not a bus write.
     /* Vdp1Fb   */ { AddressSpace::DeviceImage,   kCapNavigate | kCapWatch },
