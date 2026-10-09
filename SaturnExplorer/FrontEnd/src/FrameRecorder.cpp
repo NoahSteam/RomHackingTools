@@ -388,15 +388,18 @@ size_t FrameRecorder::CbEditVram(void* u, se_vram_kind kind, uint32_t offset, co
                                  size_t size)
 {
     FrameRecorder* r = static_cast<FrameRecorder*>(u);
-    uint32_t base;
+    uint32_t base, len;
     switch (kind)
     {
-        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; break;
-        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; break;
-        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; break;
-        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; break;
+        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; len = SE_LIVE_VDP1_VRAM_LEN; break;
+        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; len = SE_LIVE_VDP1_FB_LEN;   break;
+        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; len = SE_LIVE_VDP2_VRAM_LEN; break;
+        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; len = SE_LIVE_CRAM_LEN;      break;
         default: return 0;
     }
+    // The bus windows are adjacent: past its region, a replayed edit would land in the next one
+    // (as in the live driver's CbWriteVram).
+    if (offset >= len || size > len - offset) return 0;
     // CRAM and the frame buffer are not in the emulator's fast memory map: a replayed edit there is
     // dropped unless the server has a VDP writer. Refuse it now, like a live edit, instead of
     // showing a colour that Play From Here will not reproduce.

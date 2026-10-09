@@ -1607,15 +1607,32 @@ void App::BuildUI(IPlatform& platform)
     // A scrubbed frame's edit is only worth taking if Play From Here can replay it. That needs
     // rewind on (mSeekSupported) and an emulator that stamps its states (v22): Play From Here is
     // never offered to an older one, so its edits would be labelled staged and replayed by nothing.
-    const bool scrubEditsReplayable = mSeekSupported && EmulatorStampsStates();
-    mMemBackend.SetReadOnly((mbScrubbing && !scrubEditsReplayable) || mRestoreOutstanding > 0 ||
-                            mRestoreUnconfirmable,
+    // It also needs the frame itself to be restorable: a frame whose savestate block never arrived
+    // (dropped while the emulator's worker was behind) or has been pruned is never offered either.
+    // Looked up by frame number, since the ring's indexes shift as it evicts. A block that arrives
+    // late makes the frame editable from then on.
+    const bool scrubVersionOk = mSeekSupported && EmulatorStampsStates();
+    bool scrubFrameRestorable = false;
+    if (mbScrubbing && scrubVersionOk)
+    {
+        const int at = mRecorder.IndexOfFrame(mScrubShownFrame);
+        scrubFrameRestorable = at >= 0 && mRecorder.CanReconstruct(static_cast<size_t>(at));
+    }
+    mMemBackend.SetReadOnly((mbScrubbing && !(scrubVersionOk && scrubFrameRestorable)) ||
+                            mRestoreOutstanding > 0 || mRestoreUnconfirmable,
                             mRestoreOutstanding > 0
                                 ? "A state load is still being applied; editing returns when the emulator confirms it."
                             : mRestoreUnconfirmable
                                 ? "The emulator did not confirm the last state load; reconnect or load a state again."
-                                : "This recorded frame cannot be resumed from (rewind is off or the emulator is too old), "
-                                  "so an edit to it could not be re-simulated.");
+                            : !scrubVersionOk
+                                ? "This recorded frame cannot be resumed from (rewind is off or the emulator is too old), "
+                                  "so an edit to it could not be re-simulated."
+                                : "This recorded frame has no savestate to restore, so an edit to it could not be "
+                                  "re-simulated. Pick another frame.");
+    // CRAM and the VDP1 frame buffer are outside the emulator's ordinary bus writer: only a server
+    // with a VDP writer applies an edit there, live or replayed. Without one they are not offered,
+    // rather than accepting the typing and then reporting "Not written".
+    mMemBackend.SetVdpWindowsWritable(!(mbLiveSource || mbScrubbing) || mVdpPokeSupported);
     // The VDP register windows are served through the snapshot's setters, which reach neither an
     // emulator nor a replay: on a live emulator or a recorded frame an edit there would show for a
     // moment and be undone by the next capture. Only a loaded dump or savestate keeps it.
@@ -2189,7 +2206,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
     // Staged edits replay only onto the frame they were made against. Ordinary Play, another
     // scrub or a new session leaves them behind, and they must not ride onto this target.
     if (!mStaged.BelongsTo(frameNo)) DiscardPendingEdits();
-    const std::vector<uint8_t> edits = BuildEditBlob();
+    const std::vector<uint8_t> edits = sfe::EncodeEditBlob(mStaged);
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
     if (se_load_state(ctl, frameNo, state.data(), state.size(),
@@ -2710,26 +2727,6 @@ void App::RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, si
     // would pass the "belongs to this frame" test and replay onto the wrong rewind target.
     // A batch staged on another frame is dropped rather than retagged (StagedEdits::Record).
     mStaged.Record(mScrubShownFrame, isSound != 0, addr, bytes, len);
-}
-
-std::vector<uint8_t> App::BuildEditBlob() const
-{
-    // SE_LIVE_EDIT_* blob: u32 count; then per edit type(1)+pad(3)+addr(4)+len(4)+bytes.
-    std::vector<uint8_t> blob;
-    auto put32 = [&](uint32_t v) {
-        blob.push_back((uint8_t)(v & 0xFF));         blob.push_back((uint8_t)((v >> 8) & 0xFF));
-        blob.push_back((uint8_t)((v >> 16) & 0xFF)); blob.push_back((uint8_t)((v >> 24) & 0xFF));
-    };
-    put32(static_cast<uint32_t>(mStaged.Pokes().size()));
-    for (const StagedPoke& p : mStaged.Pokes())
-    {
-        blob.push_back(p.isSound ? (uint8_t)SE_LIVE_EDIT_TYPE_SOUND : (uint8_t)SE_LIVE_EDIT_TYPE_WRAM);
-        blob.push_back(0); blob.push_back(0); blob.push_back(0);
-        put32(p.addr);
-        put32(static_cast<uint32_t>(p.bytes.size()));
-        blob.insert(blob.end(), p.bytes.begin(), p.bytes.end());
-    }
-    return blob;
 }
 
 double App::RecorderCapacityMB() const
@@ -7578,7 +7575,8 @@ void App::ReconcilePokes()
 {
     uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0;
     se_live_poke_info(&mDataSource, &applied, &dropped, &lost, &unconfirmed, &caps);
-    mRecorder.SetVdpBusEditsAccepted((caps & SE_LIVE_CAP_VDP_POKE) != 0);
+    mVdpPokeSupported = (caps & SE_LIVE_CAP_VDP_POKE) != 0;
+    mRecorder.SetVdpBusEditsAccepted(mVdpPokeSupported);
     // Both counters belong to something that can start over: the emulator's to one run of it, the
     // driver's to the source. A smaller value than the one reported is a new baseline, not a debt.
     if (dropped < mPokeDroppedSeen) mPokeDroppedSeen = dropped;

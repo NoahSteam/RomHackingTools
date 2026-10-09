@@ -19,7 +19,16 @@ spec.loader.exec_module(mod)
 HARNESS = r'''
 #include <cstdio>
 #include <cstring>
-namespace MDFN_IEN_SS { namespace VDP1 {
+#include <cstdint>
+typedef uint8_t uint8; typedef uint16_t uint16;
+namespace MDFN_IEN_SS {
+template<typename T> static void ne16_wbo_be(uint16* base, uint32_t byte_off, T v)
+{   /* Mednafen's helper: big-endian byte order inside each 16-bit word */
+    const unsigned sh = ((byte_off & 1) ^ 1) * 8;
+    uint16& w = base[byte_off >> 1];
+    w = (uint16)((w & ~(0xFF << sh)) | ((unsigned)v << sh));
+}
+namespace VDP1 {
 static unsigned short VRAM[0x40000];
 static unsigned short FB[2][0x20000]; static int FBDrawWhich;
 static unsigned short TVMR, FBCR, PTMR, EWDR, EWLR, EWRR, EDSR, LOPR;
@@ -28,6 +37,7 @@ static unsigned short TVMR, FBCR, PTMR, EWDR, EWLR, EWRR, EDSR, LOPR;
 extern "C" const unsigned short* SsDbgVdp1Latch(void);
 extern "C" void SsDbgVdp1LatchDrawEnd(void);
 extern "C" void SsDbgVdp1LatchInvalidate(void);
+extern "C" void SsDbgVdp1LatchPokeByte(unsigned int off, unsigned char val);
 namespace { int bad = 0; }
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); bad++; } } while (0)
 int main()
@@ -44,6 +54,15 @@ int main()
  CHECK(SsDbgVdp1Latch() == 0, "latch must be dropped after a load/reset");
  SsDbgVdp1LatchDrawEnd();
  CHECK(SsDbgVdp1Latch() && SsDbgVdp1Latch()[0] == 0x2222, "the next draw-end latches the new timeline");
+ /* A debugger poke reaches the latch the snapshot shows, big-endian within the word. */
+ SsDbgVdp1LatchPokeByte(0, 0xAB);
+ SsDbgVdp1LatchPokeByte(3, 0xCD);
+ CHECK(SsDbgVdp1Latch()[0] == 0xAB22 && SsDbgVdp1Latch()[1] == 0x00CD, "a poke lands in the latch big-endian");
+ SsDbgVdp1LatchPokeByte(0x7FFFF + 0x80000, 0x5A);
+ CHECK(SsDbgVdp1Latch()[0x3FFFF] == 0x005A, "an offset past VDP1 VRAM is masked into it");
+ SsDbgVdp1LatchInvalidate();
+ SsDbgVdp1LatchPokeByte(0, 0x77);
+ CHECK(SsDbgVdp1Latch() == 0, "with no latch a poke does not create one");
  return bad ? 1 : 0;
 }
 '''

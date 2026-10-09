@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "SeLiveProtocol.h"
+
 namespace sfe
 {
 
@@ -137,5 +139,27 @@ private:
     std::vector<StagedPoke> mPokes;
     uint64_t                mFrame = 0;
 };
+
+// The LST edit blob (SE_LIVE_EDIT_* layout) Play From Here sends: u32 count, then per poke
+// type(1) + pad(3) + addr(4) + len(4) + bytes, all little-endian. The emulator replays them in
+// this order on top of the restored state.
+inline std::vector<uint8_t> EncodeEditBlob(const StagedEdits& staged)
+{
+    std::vector<uint8_t> blob;
+    auto put32 = [&](uint32_t v) {
+        for (int i = 0; i < 4; ++i) blob.push_back(static_cast<uint8_t>(v >> (8 * i)));
+    };
+    put32(static_cast<uint32_t>(staged.Pokes().size()));
+    for (const StagedPoke& p : staged.Pokes())
+    {
+        blob.push_back(p.isSound ? static_cast<uint8_t>(SE_LIVE_EDIT_TYPE_SOUND)
+                                 : static_cast<uint8_t>(SE_LIVE_EDIT_TYPE_WRAM));
+        blob.push_back(0); blob.push_back(0); blob.push_back(0);
+        put32(p.addr);
+        put32(static_cast<uint32_t>(p.bytes.size()));
+        blob.insert(blob.end(), p.bytes.begin(), p.bytes.end());
+    }
+    return blob;
+}
 
 }  // namespace sfe

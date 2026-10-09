@@ -136,7 +136,9 @@ the renderer's CRAM copy follows) and `SsDbgPokeVdp1FbByte` (vdp1.cpp: the displ
 client offers a CRAM / frame-buffer edit to a running emulator only when that bit is set.
 VDP2 VRAM *is* in the fast map, but the VDP2 renderer keeps a second copy of it that only
 `VDP2REND_Write16_DB` feeds, so `SsDbgPokeByte` also hands a VDP2 VRAM poke to `VDP2::PokeVRAM`;
-without that the snapshot showed the edit while the game kept drawing the old tiles.
+without that the snapshot showed the edit while the game kept drawing the old tiles. Likewise a VDP1
+VRAM poke is written into the draw-end latch (`SsDbgVdp1LatchPokeByte`), which is what the snapshot
+shows: otherwise an edit made at a breakpoint vanished from the view until the next draw-end.
 `Integration/tests/check_vdp_poke.py` compiles these against stubs of the Mednafen statics and checks
 each poke round-trips through the capture and the client's normalization.
 

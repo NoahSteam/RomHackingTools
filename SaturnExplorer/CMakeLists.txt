@@ -489,7 +489,8 @@ if(BUILD_TESTING)
     add_executable(SaturnExplorerScrubStateTests
         FrontEnd/tests/ScrubStateTests.cpp
     )
-    target_include_directories(SaturnExplorerScrubStateTests PRIVATE FrontEnd/src)
+    target_include_directories(SaturnExplorerScrubStateTests PRIVATE FrontEnd/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
     add_test(NAME SaturnExplorerScrubStateTests COMMAND SaturnExplorerScrubStateTests)
 
     # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
@@ -859,6 +860,46 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         target_link_libraries(SaturnExplorerLivePokeTests PRIVATE
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerLivePokeTests COMMAND SaturnExplorerLivePokeTests)
+
+        # Every reader and writer of emulated memory agreeing on which byte is which: the real
+        # Mednafen glue and the accessor code apply.py injects (extracted from apply.py at build
+        # time, so it is the injected code and not a copy), over Mednafen-shaped storage, through
+        # the real exporter, live driver, core, savestate importer and FrameRecorder.
+        find_package(Python3 COMPONENTS Interpreter)
+        if(Python3_FOUND)
+            set(SE_RT_GEN ${CMAKE_CURRENT_BINARY_DIR}/mednafen_accessors)
+            add_custom_command(
+                OUTPUT ${SE_RT_GEN}/vdp1_accessors.inc ${SE_RT_GEN}/vdp1_poke.inc
+                       ${SE_RT_GEN}/vdp2_accessors.inc ${SE_RT_GEN}/vdp2_poke.inc ${SE_RT_GEN}/ss_poke.inc
+                COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/emit_mednafen_accessors.py
+                        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py ${SE_RT_GEN}
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                        ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/emit_mednafen_accessors.py
+                COMMENT "Extracting the Mednafen accessors from apply.py")
+            add_executable(SaturnExplorerMemoryRoundTripTests
+                FrontEnd/tests/MemoryRoundTripTests.cpp
+                FrontEnd/src/FrameRecorder.cpp
+                FrontEnd/src/FrameLz.cpp
+                Integration/Common/se_export.c
+                Integration/Mednafen/se_mednafen_glue.c
+                ${SE_RT_GEN}/vdp1_accessors.inc ${SE_RT_GEN}/vdp1_poke.inc
+                ${SE_RT_GEN}/vdp2_accessors.inc ${SE_RT_GEN}/vdp2_poke.inc ${SE_RT_GEN}/ss_poke.inc)
+            set_source_files_properties(Integration/Mednafen/se_mednafen_glue.c PROPERTIES
+                COMPILE_DEFINITIONS SE_MEDNAFEN_WIRED)
+            target_compile_definitions(SaturnExplorerMemoryRoundTripTests PRIVATE
+                SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_memory_roundtrip_test.sock"
+                SE_LIVE_DEFAULT_TCP_PORT=6949)
+            target_include_directories(SaturnExplorerMemoryRoundTripTests PRIVATE
+                ${SE_RT_GEN}
+                FrontEnd/src
+                Drivers/Live/src
+                Drivers/Savestate/src
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+            target_link_libraries(SaturnExplorerMemoryRoundTripTests PRIVATE
+                SaturnExplorerLiveDriver SaturnExplorerSavestateDriver SaturnExplorerCore Threads::Threads)
+            add_test(NAME SaturnExplorerMemoryRoundTripTests COMMAND SaturnExplorerMemoryRoundTripTests)
+        endif()
 
         # Play From Here against a REAL emulator: restores a recorded frame and checks the game
         # re-runs the following frames byte for byte as it did the first time. Needs a patched

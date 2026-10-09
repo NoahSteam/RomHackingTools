@@ -142,7 +142,8 @@ bool ContextBackend::CanWrite(uint32_t address) const
     const uint32_t a = Canonical(address);
     for (const Region& reg : kRegions)
         if (IsWritableKind(reg.kind) && a >= reg.base && a < reg.base + reg.size)
-            return true;
+            return mVdpWindowsWritable ||
+                   (reg.kind != SE_VRAM_KIND_CRAM && reg.kind != SE_VRAM_KIND_VDP1_FB);
     // VDP register windows are served through the register getters/setters, not se_read/write_vram.
     if (!mRegistersReadOnly)
     {
@@ -235,6 +236,8 @@ size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_
         if (a < reg.base || a + size > reg.base + reg.size) continue;
         if (!IsWritableKind(reg.kind))
             return 0;   // (all captured regions are writable now; kept as a guard)
+        if (!mVdpWindowsWritable && (reg.kind == SE_VRAM_KIND_CRAM || reg.kind == SE_VRAM_KIND_VDP1_FB))
+            return 0;   // the same rule CanWrite offers edits under
         return se_write_vram(ctx, reg.kind, a - reg.base, bytes, size);
     }
     return 0;

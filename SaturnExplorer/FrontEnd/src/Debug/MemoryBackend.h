@@ -137,6 +137,11 @@ public:
     // editable there; on a live emulator or a scrubbed frame they are not offered at all.
     void SetRegistersReadOnly(bool readOnly) { mRegistersReadOnly = readOnly; }
 
+    // Whether CRAM and the VDP1 frame buffer can take an edit. A live emulator (and a replay into
+    // one) applies them only through a server-side VDP writer; without it the sink refuses every
+    // such write, so they are not offered as editable in the first place.
+    void SetVdpWindowsWritable(bool writable) { mVdpWindowsWritable = writable; }
+
     // Where the source's write sink takes an accepted edit: a live emulator, a scrubbed frame's
     // replay list (staged for Play From Here), or nowhere past the snapshot. Said by the owner,
     // not inferred from the sink: a savestate has a work-RAM sink too, and it only edits its own
@@ -157,6 +162,7 @@ private:
     bool         mForceReadOnly = false;
     const char*  mReadOnlyWhy = nullptr;
     bool         mRegistersReadOnly = false;
+    bool         mVdpWindowsWritable = true;
     WriteDest    mEditSink = WriteDest::ViewOnly;
     uint64_t     mGeneration = 0;
 };

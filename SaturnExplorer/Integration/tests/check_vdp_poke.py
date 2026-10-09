@@ -65,9 +65,10 @@ void Write16_DB(uint32_t A, uint16 DB)
 #include "vdp2_poke.inc"
 }
 /* SsDbgPokeByte's world: the bus writer and the renderer-aware VRAM writer, recording calls. */
-static unsigned gCheatA, gCheatN, gPokeA, gPokeN;
+static unsigned gCheatA, gCheatN, gPokeA, gPokeN, gLatchOff, gLatchN;
 static void CheatMemWrite(unsigned A, uint8) { gCheatA = A; ++gCheatN; }
 namespace VDP2 { static void PokeVRAM(uint32_t A, uint8) { gPokeA = A; ++gPokeN; } }
+extern "C" void SsDbgVdp1LatchPokeByte(unsigned int off, unsigned char) { gLatchOff = off; ++gLatchN; }
 #include "ss_poke.inc"
 }
 using namespace MDFN_IEN_SS;
@@ -161,6 +162,21 @@ int main()
         gPokeN = 0; gCheatN = 0;
         SsDbgPokeByte(a, 1);
         CHECK(gPokeN == 0 && gCheatN == 1, "other regions go to the bus writer only");
+    }
+    /* VDP1 VRAM (any alias) also reaches the draw-end latch the snapshot shows; nothing else does. */
+    const unsigned v1[] = { 0x05C00000u, 0x25C7FFFFu };
+    for (unsigned a : v1)
+    {
+        gLatchN = 0;
+        SsDbgPokeByte(a, 1);
+        CHECK(gLatchN == 1 && gLatchOff == ((a & 0x07FFFFFFu) - 0x05C00000u), "a VDP1 VRAM poke reaches the latch");
+    }
+    const unsigned notV1[] = { 0x05C80000u, 0x05BFFFFFu, 0x05E00000u };
+    for (unsigned a : notV1)
+    {
+        gLatchN = 0;
+        SsDbgPokeByte(a, 1);
+        CHECK(gLatchN == 0, "nothing outside VDP1 VRAM reaches the latch");
     }
 
     return bad ? 1 : 0;

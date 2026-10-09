@@ -86,6 +86,13 @@ extern "C" void SsDbgVdp1LatchDrawEnd(void) {
 extern "C" const unsigned short* SsDbgVdp1Latch(void) {
    return SsVdp1LatchValid ? SsVdp1Latch : (const unsigned short*)0;
 }
+/* A debugger poke into VDP1 VRAM ('off' within the 512 KiB, big-endian in the word) goes into the
+   latch too. The snapshot shows the latch, so otherwise an edit made at a breakpoint or while
+   stepping vanished from the view at the next capture -- though VRAM, and so the next draw, had
+   it -- and stayed gone until the following draw-end. */
+extern "C" void SsDbgVdp1LatchPokeByte(unsigned int off, unsigned char val) {
+   if (SsVdp1LatchValid) ne16_wbo_be<uint8>(SsVdp1Latch, off & 0x7FFFF, val);
+}
 extern "C" void SsDbgVdp1Regs(unsigned short o[11]) {
    o[0]=TVMR; o[1]=FBCR; o[2]=PTMR; o[3]=EWDR; o[4]=EWLR; o[5]=EWRR;
    o[6]=0;    o[7]=EDSR; o[8]=LOPR; o[9]=0;    o[10]=0;   /* ENDR/COPR/MODR write-only/computed */
@@ -161,6 +168,7 @@ extern "C" void SsDbgSh2Regs(int cpu, unsigned int o[23]) {
    o[22] = DBG_NeedCPUHooks() ? c.GetRegister(SH7095::GSREG_PC_ID, 0, 0)
                               : (c.GetRegister(SH7095::GSREG_RPC, 0, 0) - 4);
 }
+extern "C" void SsDbgVdp1LatchPokeByte(unsigned int off, unsigned char val);   /* vdp1.cpp */
 extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
    /* Route to Mednafen's own byte bus-write (used by the cheat engine): it does the
       writeability check + SH-2 cache invalidation and takes a Saturn bus address, so
@@ -176,6 +184,9 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       word to the renderer; CheatMemWrite above has already updated the SH-2 caches. */
    const unsigned int a = addr & ((1U << 27) - 1);
    if (a >= 0x05E00000u && a < 0x05F00000u) VDP2::PokeVRAM(a, (uint8)val);
+   /* VDP1 VRAM is shown from the draw-end latch (vdp1.cpp's SsDbgVdp1Latch), which this write
+      does not reach on its own. */
+   if (a >= 0x05C00000u && a < 0x05C80000u) SsDbgVdp1LatchPokeByte(a - 0x05C00000u, (unsigned char)val);
 }
 /* SsDbgSoundRam (v13, SCSP RAM read) and SsDbgScspSlots (v14, decoded voices) are NOT here:
    they need the `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], which

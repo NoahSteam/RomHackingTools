@@ -121,6 +121,16 @@ int main()
               "a refused CRAM edit says the emulator needs the VDP writer");
         Check(b.WriteRefusal(0x04000000u).find("not in a captured region") != std::string::npos,
               "an unmapped address says so");
+        // Without a VDP writer, CRAM and the frame buffer are not offered -- and an edit already in
+        // flight is refused too -- while VRAM stays writable.
+        const uint8_t one = 0x11;
+        Check(b.CanWrite(0x05F00000u) && b.CanWrite(0x05C80000u), "CRAM and the FB are editable by default");
+        b.SetVdpWindowsWritable(false);
+        Check(!b.CanWrite(0x05F00000u) && !b.CanWrite(0x05C80000u), "not without a VDP writer");
+        Check(b.WriteMemory(0x05F00000u, &one, 1) == 0, "and a write there is refused, as CanWrite says");
+        Check(b.WriteRefusal(0x05F00000u).find("VDP writer") != std::string::npos, "with the reason");
+        Check(b.CanWrite(kVdp1), "VRAM is unaffected");
+        b.SetVdpWindowsWritable(true);
         se_destroy(ctx);
 
         se_test::State st2;

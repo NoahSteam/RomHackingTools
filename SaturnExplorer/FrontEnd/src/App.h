@@ -611,6 +611,7 @@ private:
     // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
     // and the edits made while scrubbed, replayed atop the restored state when rewinding.
     bool             mSeekSupported = false;
+    bool             mVdpPokeSupported = false;   // the server applies CRAM / frame-buffer pokes (v23 VDP writer)
     bool             mScrubEdited = false;     // the scrub context shows edits that are no longer staged
     StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
     void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
@@ -618,7 +619,6 @@ private:
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
     void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
     // Build the SE_LIVE_EDIT_* blob from mStaged (for the LST rewind payload).
-    std::vector<uint8_t> BuildEditBlob() const;
     // Estimated recorder capacity at the current history length, in MB (per-frame average x
     // the configured frame budget). Shown as the "available" half of the footprint readout.
     double RecorderCapacityMB() const;
