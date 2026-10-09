@@ -491,6 +491,29 @@ int main()
         Check(r7.Count() == 41 && r7.FrameNumber(40) == 41, "the new frame 41 follows frame 40");
     }
 
+    // --- SelectedFrameNumber names the decompressed frame, not an index (eviction shifts indexes) ---
+    {
+        se_test::State st;   // a small non-empty VDP1 VRAM is enough for a frame to decompress
+        for (size_t i = 0; i < st.vdp1.size(); ++i) st.vdp1[i] = PatternByte(i);
+        se_context* vctx = se_test::CreateContext(st);
+        se_begin_frame(vctx);
+        FrameRecorder rSel;
+        rSel.Configure(3);
+        Check(rSel.SelectedFrameNumber() == 0, "nothing is selected before the first Select");
+        for (uint64_t fn = 10; fn <= 12; ++fn) CaptureFrame(rSel, vctx, fn);
+        se_data_source ds{};
+        Check(rSel.Select(1, &ds) && rSel.SelectedFrameNumber() == 11, "Select(1) selects frame 11");
+
+        CaptureFrame(rSel, vctx, 13);   // cap 3: frame 10 is evicted, every index shifts down
+        Check(rSel.FrameNumber(1) == 12, "after eviction, index 1 now names frame 12");
+        Check(rSel.SelectedFrameNumber() == 11, "but the scratch still holds, and reports, frame 11");
+
+        Check(!rSel.Select(99, &ds) && rSel.SelectedFrameNumber() == 0, "a refused Select leaves nothing selected");
+        rSel.Clear();
+        Check(rSel.SelectedFrameNumber() == 0, "Clear drops the selection");
+        se_destroy(vctx);
+    }
+
     se_destroy(ctx);
     if (gFail == 0) std::printf("All FrameRecorder tests passed.\n");
     return gFail == 0 ? 0 : 1;

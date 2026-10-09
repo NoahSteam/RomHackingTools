@@ -110,6 +110,11 @@ public:
     // against the scrubbed frame are forwarded to the sink as pending pokes.
     bool Select(size_t i, se_data_source* out);
 
+    // The frame number of what the last successful Select() decompressed; 0 if that Select was
+    // refused or nothing is selected. Use this, not FrameNumber(index), to name the frame in the
+    // scratch: the ring evicts from the front, so an index goes stale. UI thread only.
+    uint64_t SelectedFrameNumber() const { return mSelFrameNumber; }
+
     // --- Savestate rewind (v16) ---
     // Take a received savestate block, matched to its frame by number. A block is refused if its
     // payload does not decode to exactly 'fullLen' bytes (a corrupt one is never stored).
@@ -231,6 +236,7 @@ private:
     // Scratch holding the currently-selected decompressed frame (UI thread only;
     // read by the data-source callbacks below). Outlives the created context.
     Scratch               mScratch;
+    uint64_t              mSelFrameNumber = 0;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};
     bool                  mSelHasSh2[2] = { false, false };

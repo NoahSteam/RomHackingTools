@@ -247,6 +247,7 @@ void FrameRecorder::Clear()
     mWaitingBytes = 0;
     mBytes = 0;
     mLastCaptured = 0;
+    mSelFrameNumber = 0;
     mBlocksReceived = mBlocksInvalid = mBlocksNoFrame = mNewestBlock = 0;
 }
 
@@ -270,6 +271,9 @@ size_t FrameRecorder::BytesUsed() const
 
 bool FrameRecorder::Select(size_t i, se_data_source* out)
 {
+    // Cleared first, so any refusal below reports "nothing selected" (a failed decode leaves the
+    // scratch half-decoded).
+    mSelFrameNumber = 0;
     if (!out)
     {
         return false;
@@ -285,6 +289,7 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
         {
             return false;
         }
+        mSelFrameNumber = f.frameNumber;
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
