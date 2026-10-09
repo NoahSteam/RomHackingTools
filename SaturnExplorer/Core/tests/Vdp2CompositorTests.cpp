@@ -404,6 +404,29 @@ void TestBitmapNbg0()
             CHECK(IsWhite(pixels, x, y));
 }
 
+void TestBitmapPaletteNumber()
+{
+    // BMPNA's palette number is bits 6-4 of the pattern-name palette number, so N0BMP = 2 puts the
+    // bitmap's palette at CRAM entry 2 << 8, not 2 << 4 (Dragon Force's menus, which read as
+    // gold and green instead of white and blue). Index 1 is white at the right entry and a decoy
+    // red where the shift used to land.
+    State state = MakeNbg3State();
+    SetReg(state, 0x020, 0x0001);   // BGON: NBG0 only
+    SetReg(state, 0x028, 0x0012);   // CHCTLA: N0BMEN + 8bpp, 512x256
+    SetReg(state, 0x02C, 0x0002);   // BMPNA: N0BMP = 2
+    SetReg(state, 0x03C, 0x0000);   // MPOFN: bitmap base 0
+    SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 priority 1
+    PutBE16(state.cram, (0x200 + 1) * 2, 0x7FFF);   // entry 0x201 = white
+    PutBE16(state.cram, (0x020 + 1) * 2, 0x001F);   // entry 0x021 = red (the old, wrong address)
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            state.vdp2[y * 512 + x] = 1;
+    const std::vector<uint8_t> pixels = Render(state, false);
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 4; ++x)
+            CHECK(IsWhite(pixels, x, y));
+}
+
 void TestBitmapRgb888()
 {
     // NBG0 in 32bpp RGB888 bitmap mode (like the Sonic Team movie): each pixel is a
@@ -2377,6 +2400,7 @@ int main()
     TestRotationParamWindow();
     TestRotationCoeffTableOffset();
     TestBitmapNbg0();
+    TestBitmapPaletteNumber();
     TestBitmapRgb888();
     TestZoomBitmap();
     TestColorOffset();

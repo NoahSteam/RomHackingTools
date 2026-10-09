@@ -105,7 +105,7 @@ struct NbgConfig
     bool bitmap;
     uint32_t bitmapW, bitmapH;   // pixel dimensions
     uint32_t bitmapBase;         // VRAM word address of the image
-    uint32_t bitmapPalette;      // palette base for the 16/256-colour formats
+    uint32_t bitmapPalette;      // CRAM entry the 16/256-colour formats' palette starts at (BMPN << 8)
     uint32_t bitmapBpp;          // bits per pixel (precomputed from colorNum)
     // Fractional scroll + zoom + line scroll (NBG0/1 only). When zoomScroll is set the
     // coordinate is stepped in .8 fixed-point from xScroll8/yScroll8 by xInc8/yInc8, and
@@ -251,7 +251,7 @@ NbgConfig ReadNbgConfig(const HardwareSnapshot& s, int n)
         c.bitmapH = (bmsz & 0x1) ? 512 : 256;
         c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
         c.bitmapBase = static_cast<uint32_t>((mpofn >> (n * 4)) & 0x7) << 16;
-        c.bitmapPalette = static_cast<uint32_t>((Reg(s, kBMPNA) >> (n * 8)) & 0x7) << 4;
+        c.bitmapPalette = static_cast<uint32_t>((Reg(s, kBMPNA) >> (n * 8)) & 0x7) << 8;
         c.bitmapScc = ((Reg(s, kBMPNA) >> (n * 8 + 4)) & 1) != 0;
         c.bitmapSpr = ((Reg(s, kBMPNA) >> (n * 8 + 5)) & 1) != 0;
 
@@ -1059,7 +1059,7 @@ NbgConfig ReadRbgConfig(const HardwareSnapshot& s, bool paramB, bool rbg1 = fals
     c.bitmapH = ((chb >> 10) & 1) ? 512 : 256;
     c.bitmapBpp = CellByteSize(c.colorNum) >> 3;
     c.bitmapBase = static_cast<uint32_t>((mpofr >> (paramB ? 4 : 0)) & 0x7) << 16;
-    c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 4;
+    c.bitmapPalette = static_cast<uint32_t>(Reg(s, kBMPNB) & 0x7) << 8;
     c.bitmapScc = (Reg(s, kBMPNB) & 0x10) != 0;
     c.bitmapSpr = (Reg(s, kBMPNB) & 0x20) != 0;
 
