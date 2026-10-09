@@ -169,6 +169,13 @@ extern "C" void SsDbgPokeByte(unsigned int addr, unsigned char val) {
       at the equivalent bus/debug byte writer. Sound-RAM pokes (v13) also route here at
       the SCSP RAM bus base 0x25A00000 (see SeMdfnWriteSoundByte in the glue). */
    CheatMemWrite((unsigned int)addr, (unsigned char)val);
+   /* VDP2 VRAM has a second copy: the renderer (vdp2_render.cpp, possibly on its own thread)
+      keeps its own VRAM, fed only by VDP2REND_Write16_DB. CheatMemWrite writes the fast-map
+      array alone, so the CPU and the snapshot saw the edit while the game kept drawing the
+      old tiles. PokeVRAM rewrites the same byte (a no-op for the array) and forwards the
+      word to the renderer; CheatMemWrite above has already updated the SH-2 caches. */
+   const unsigned int a = addr & ((1U << 27) - 1);
+   if (a >= 0x05E00000u && a < 0x05F00000u) VDP2::PokeVRAM(a, (uint8)val);
 }
 /* SsDbgSoundRam (v13, SCSP RAM read) and SsDbgScspSlots (v14, decoded voices) are NOT here:
    they need the `static SS_SCSP SCSP` instance and scsp.h's private Slots[]/SlotRegs[], which
@@ -431,20 +438,39 @@ SCSP_SLOT_METHOD = """\
 # VDP1 FB mapping and the absent CRAM one are why a CRAM or frame-buffer poke was accepted and
 # dropped. These write the SAME arrays the snapshot accessors expose, byte for byte as a read sees
 # them, so the next frame shows the edit.
-#   * CRAM: 'off' indexes the raw CRAM[] array (SsDbgCram). The write goes through VDP2::Write16_DB,
-#     the bus path, so VDP2REND's own copy of CRAM is updated too -- writing the array alone would
-#     leave the renderer on the old colours. The bus address that reaches raw word w is the inverse
-#     of RW()'s mapping: identity in the RGB555 modes, de-interleaved in RGB888.
+#   * CRAM: 'off' is a byte offset into the CPU's CRAM window (0x05F00000), the layout the client
+#     shows. In RGB888 mode Mednafen stores bus word cri at CRAM[(cri >> 1) | (cri & 1) << 10] (the
+#     high halves of all entries, then the low halves), so the raw array is not that layout;
+#     SsDbgCramWire exports the bus view and the poke reads-modifies-writes the same bus word, so a
+#     poke and the next capture name the same byte in every mode. The write goes through
+#     VDP2::Write16_DB, the bus path, so VDP2REND's own copy of CRAM is updated too -- writing the
+#     array alone would leave the renderer on the old colours.
 #   * VDP1 FB: the DISPLAYED bank, FB[!FBDrawWhich], exactly what SsDbgVdp1Fb reads (the CPU-visible
-#     window is the draw bank, so a bus write would change a buffer the snapshot never shows).
+#     window is the draw bank, so a bus write would change a buffer the snapshot never shows). 'off'
+#     is big-endian within each word, matching the glue's byte swap of the capture.
 VDP2_POKE_ACCESSORS = """\
-/* Saturn Explorer v23: byte poke into the raw CRAM array (see SsDbgCram), through the bus write path. */
+/* Saturn Explorer v23: CRAM as the CPU's bus window sees it, for capture and poke alike. */
 namespace MDFN_IEN_SS { namespace VDP2 {
+static unsigned SeCramRawIndex(unsigned cri) {
+   cri &= 0x7FF;
+   return (CRAM_Mode == CRAM_MODE_RGB555_1024 || CRAM_Mode == CRAM_MODE_RGB555_2048)
+          ? cri : (((cri >> 1) & 0x3FF) | ((cri & 1) << 10));
+}
+/* Fills 'out' (4096 bytes) in the little-endian order the client's CRAM normalization undoes: RAMCTL
+   CRMD 2 reverses each 4-byte entry, every other mode each 2-byte word. That is the Yabause
+   wire shape, built here from bus words rather than from Mednafen's raw array. */
+extern "C" void SsDbgCramWire(unsigned char* out) {
+   const bool rgb888 = CRAM_Mode == CRAM_MODE_RGB888_1024;
+   for (unsigned cri = 0; cri < 2048; ++cri) {
+      const uint16 v = CRAM[SeCramRawIndex(cri)];
+      const unsigned at = rgb888 ? ((cri & ~1u) * 2 + ((cri & 1) ? 0 : 2)) : cri * 2;
+      out[at] = (unsigned char)v;
+      out[at + 1] = (unsigned char)(v >> 8);
+   }
+}
 extern "C" void SsDbgPokeCramByte(unsigned int off, unsigned char val) {
-   const unsigned w = (off >> 1) & 0x7FF;
-   const unsigned cri = (CRAM_Mode == CRAM_MODE_RGB555_1024 || CRAM_Mode == CRAM_MODE_RGB555_2048)
-                        ? w : (((w & 0x3FF) << 1) | ((w >> 10) & 1));
-   const uint16 cur = CRAM[w];
+   const unsigned cri = (off >> 1) & 0x7FF;
+   const uint16 cur = CRAM[SeCramRawIndex(cri)];
    const uint16 nv = (off & 1) ? (uint16)((cur & 0xFF00) | val)
                                : (uint16)((cur & 0x00FF) | ((uint16)val << 8));
    Write16_DB(0x100000 | (cri << 1), nv);

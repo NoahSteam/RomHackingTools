@@ -1,12 +1,15 @@
-"""CRAM and VDP1 frame-buffer pokes must land in the arrays the snapshot reads back.
+"""CRAM, VDP1 frame-buffer and VDP2 VRAM pokes must change the byte the client next reads back.
 
 Mednafen's CheatMemWrite (what SsDbgPokeByte calls) writes only ranges in SH7095_FastMap, and
 neither the CRAM window nor the VDP1 frame buffer is in it, so a poke there was accepted and dropped.
-apply.py injects two accessors instead. This compiles them against stubs of the vdp1.cpp / vdp2.cpp
-statics they touch -- Write16_DB's CRAM mapping is copied from vdp2.cpp's RW<>() -- and checks that a
-byte poke at raw offset 'off' changes exactly that byte of CRAM[] (in every CRAM mode, which is what
-the inverse mapping in the accessor exists for) and of the DISPLAYED frame-buffer bank, the one
-SsDbgVdp1Fb reads. Usage: check_vdp_poke.py <apply.py> <scratch dir> [c++]"""
+apply.py injects accessors instead. This compiles them against stubs of the vdp1.cpp / vdp2.cpp
+statics they touch -- Write16_DB's CRAM mapping is copied from vdp2.cpp's RW<>() -- and checks the
+round trip a user sees: poke byte 'off', capture the way the glue does, normalize the way the client
+does (sedrv::NormalizeCramToBigEndian, se_mednafen_glue.c's SwapU16ToBE), and only byte 'off' has
+changed. Checking the raw arrays alone passed while RGB888 CRAM and the frame buffer came back with a
+different byte changed. It also checks that SsDbgPokeByte hands a VDP2 VRAM poke to PokeVRAM, the
+only writer that reaches the renderer's copy of VRAM.
+Usage: check_vdp_poke.py <apply.py> <scratch dir> [c++]"""
 import importlib.util
 import os
 import subprocess
@@ -61,12 +64,31 @@ void Write16_DB(uint32_t A, uint16 DB)
 }
 #include "vdp2_poke.inc"
 }
+/* SsDbgPokeByte's world: the bus writer and the renderer-aware VRAM writer, recording calls. */
+static unsigned gCheatA, gCheatN, gPokeA, gPokeN;
+static void CheatMemWrite(unsigned A, uint8) { gCheatA = A; ++gCheatN; }
+namespace VDP2 { static void PokeVRAM(uint32_t A, uint8) { gPokeA = A; ++gPokeN; } }
+#include "ss_poke.inc"
 }
 using namespace MDFN_IEN_SS;
 namespace { int bad = 0; }
 #define CHECK(c, m) do { if (!(c)) { printf("FAIL: %s\n", m); bad++; } } while (0)
 extern "C" void SsDbgPokeCramByte(unsigned int off, unsigned char val);
 extern "C" void SsDbgPokeVdp1FbByte(unsigned int off, unsigned char val);
+/* The client's view of CRAM after a capture: the glue's wire bytes, then NormalizeCramToBigEndian. */
+static void CaptureCram(uint8 out[4096])
+{
+    VDP2::SsDbgCramWire(out);
+    const unsigned step = VDP2::CRAM_Mode == 2 ? 4 : 2;
+    for (unsigned i = 0; i < 4096; i += step)
+        for (unsigned a = 0, b = step - 1; a < b; ++a, --b) { uint8 t = out[i + a]; out[i + a] = out[i + b]; out[i + b] = t; }
+}
+/* The client's view of the displayed FB bank: host words swapped to big-endian (on a little-endian host). */
+static uint8 CaptureFbByte(unsigned off)
+{
+    const uint16 w = VDP1::FB[!VDP1::FBDrawWhich][off >> 1];
+    return (uint8)((off & 1) ? w : (w >> 8));
+}
 int main()
 {
     /* Frame buffer: the displayed bank takes the byte, the draw bank is untouched. */
@@ -84,31 +106,73 @@ int main()
     SsDbgPokeVdp1FbByte(0x3FFFF + 0x40000, 0x5A);   /* past the bank wraps inside it, never out of the array */
     CHECK(VDP1::FB[0][0x1FFFF] == 0x005A, "an offset past the bank is masked into it");
 
-    /* CRAM: every raw word, every mode. */
+    /* Frame buffer round trip: each byte of an asymmetric word reads back where it was poked. */
+    for (int draw = 0; draw < 2; ++draw)
+    {
+        VDP1::FBDrawWhich = draw != 0;
+        VDP1::FB[0][0] = VDP1::FB[1][0] = 0;
+        SsDbgPokeVdp1FbByte(0, 0x12);
+        CHECK(CaptureFbByte(0) == 0x12 && CaptureFbByte(1) == 0x00, "FB even byte reads back at its own offset");
+        SsDbgPokeVdp1FbByte(1, 0x34);
+        CHECK(CaptureFbByte(0) == 0x12 && CaptureFbByte(1) == 0x34, "FB odd byte reads back at its own offset");
+    }
+
+    /* CRAM round trip: every byte, every mode -- poke, capture, normalize, and only that byte moved. */
     for (int mode = 0; mode < 4; ++mode)
     {
         VDP2::CRAM_Mode = (uint8)mode;
-        for (unsigned w = 0; w < 2048; ++w)
+        /* RGB555 1024 mirrors the two halves; its bus window is the first 2 KiB. */
+        const unsigned span = mode == 0 ? 2048 : 4096;
+        static uint8 before[4096], after[4096];
+        for (unsigned off = 0; off < span; ++off)
         {
-            for (unsigned i = 0; i < 2048; ++i) VDP2::CRAM[i] = (uint16)(0x1000 + i);
-            const uint16 before = VDP2::CRAM[w];
-            SsDbgPokeCramByte(w * 2 + 1, 0x77);   /* low byte */
-            if (VDP2::CRAM[w] != (uint16)((before & 0xFF00) | 0x77)) { printf("FAIL: mode %d word %u low byte -> %04X\n", mode, w, VDP2::CRAM[w]); ++bad; break; }
-            SsDbgPokeCramByte(w * 2, 0x99);       /* high byte */
-            if ((VDP2::CRAM[w] >> 8) != 0x99) { printf("FAIL: mode %d word %u high byte\n", mode, w); ++bad; break; }
-            if (mode == 1 || mode >= 2)
-            {
-                for (unsigned i = 0; i < 2048; ++i)
-                    if (i != w && VDP2::CRAM[i] != (uint16)(0x1000 + i)) { printf("FAIL: mode %d poke of word %u also changed word %u\n", mode, w, i); ++bad; w = 2048; break; }
-            }
+            for (unsigned i = 0; i < 2048; ++i) VDP2::CRAM[i] = (uint16)(0x1000 + i * 7);
+            if (mode == 0) for (unsigned i = 0; i < 1024; ++i) VDP2::CRAM[0x400 + i] = VDP2::CRAM[i];
+            CaptureCram(before);
+            const uint8 v = (uint8)(before[off] ^ 0xA5);
+            SsDbgPokeCramByte(off, v);
+            CaptureCram(after);
+            bool ok = after[off] == v;
+            for (unsigned i = 0; i < span && ok; ++i) if (i != off && after[i] != before[i]) ok = false;
+            if (!ok) { printf("FAIL: mode %d CRAM byte %u does not round-trip\n", mode, off); ++bad; break; }
         }
     }
+    /* The reported case: RGB888, zero CRAM, AB at offset 0 reads back AB 00 00 00. */
+    VDP2::CRAM_Mode = 2;
+    for (unsigned i = 0; i < 2048; ++i) VDP2::CRAM[i] = 0;
+    SsDbgPokeCramByte(0, 0xAB);
+    {
+        uint8 c[4096];
+        CaptureCram(c);
+        CHECK(c[0] == 0xAB && c[1] == 0 && c[2] == 0 && c[3] == 0, "RGB888 byte 0 reads back as AB 00 00 00");
+    }
+
+    /* VDP2 VRAM (and its mirrors, at any cache-area alias) also goes to PokeVRAM; nothing else does. */
+    const unsigned vram[] = { 0x05E00000u, 0x25E7FFFFu, 0x05EFFFFFu };
+    for (unsigned a : vram)
+    {
+        gPokeN = 0;
+        SsDbgPokeByte(a, 1);
+        CHECK(gPokeN == 1 && gPokeA == (a & 0x07FFFFFFu), "a VDP2 VRAM poke reaches the renderer's copy");
+    }
+    const unsigned other[] = { 0x06000000u, 0x05C00000u, 0x05F00000u, 0x25A00000u, 0x05DFFFFFu };
+    for (unsigned a : other)
+    {
+        gPokeN = 0; gCheatN = 0;
+        SsDbgPokeByte(a, 1);
+        CHECK(gPokeN == 0 && gCheatN == 1, "other regions go to the bus writer only");
+    }
+
     return bad ? 1 : 0;
 }
 '''
 os.makedirs(work, exist_ok=True)
 open(os.path.join(work, "vdp1_poke.inc"), "w").write(body(mod.VDP1_POKE_ACCESSORS))
 open(os.path.join(work, "vdp2_poke.inc"), "w").write(body(mod.VDP2_POKE_ACCESSORS))
+# Just SsDbgPokeByte out of ss.cpp's accessor block; the rest needs the whole emulator.
+ss = mod.SS_ACCESSORS
+fn = ss.index('extern "C" void SsDbgPokeByte(')
+open(os.path.join(work, "ss_poke.inc"), "w").write(ss[fn:ss.index("\n}\n", fn) + 3])
 src = os.path.join(work, "vdp_poke.cpp")
 open(src, "w").write(HARNESS)
 exe = os.path.join(work, "vdp_poke")

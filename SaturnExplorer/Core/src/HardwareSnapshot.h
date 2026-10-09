@@ -52,7 +52,19 @@ public:
     const std::vector<uint8_t>& WramHigh() const { return mWramHigh; }
     const std::vector<uint8_t>& Vdp1Fb() const { return mVdp1Fb; }
     const std::vector<uint8_t>& SoundRam() const { return mSoundRam; }
-    se_cram_mode CramMode() const { return mCramMode; }
+    // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13. Read from the register on
+    // every call rather than cached at capture, so an edit to RAMCTL (SetVdp2Reg) changes how
+    // CRAM is decoded at once instead of leaving the palette on the captured mode.
+    se_cram_mode CramMode() const
+    {
+        if (!mbHasVdp2Regs) return SE_CRAM_RGB555_1024;
+        switch ((Vdp2Reg(0x0E) >> 12) & 0x3)
+        {
+        case 1:  return SE_CRAM_RGB555_2048;
+        case 2:  return SE_CRAM_RGB888_1024;
+        default: return SE_CRAM_RGB555_1024;
+        }
+    }
 
     // Bytes of a region's captured buffer from 'offset' to its end (0 for an unknown kind or an
     // offset past the end): the most a write there can store.
@@ -150,7 +162,6 @@ private:
     std::vector<se_scsp_slot> mScspSlots; // decoded SCSP voices (SE_CAP_SCSP_SLOTS)
     se_cd_status          mCdStatus = {};  // live CD-block state (SE_CAP_CD_STATUS)
     bool                  mHasCdStatus = false;
-    se_cram_mode          mCramMode = SE_CRAM_RGB555_1024;
     bool mbHasVdp1Regs = false;
     bool mbHasVdp2Regs = false;
     bool mbHasSh2[2] = { false, false };

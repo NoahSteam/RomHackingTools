@@ -1616,8 +1616,11 @@ void App::BuildUI(IPlatform& platform)
     // emulator nor a replay: on a live emulator or a recorded frame an edit there would show for a
     // moment and be undone by the next capture. Only a loaded dump or savestate keeps it.
     mMemBackend.SetRegistersReadOnly(mbLiveSource || mbScrubbing);
-    // A scrubbed frame's edits go to the replay list (Play From Here), not to the emulator.
-    mMemBackend.SetEditsStaged(mbScrubbing);
+    // A scrubbed frame's edits go to the replay list (Play From Here), not to the emulator; a
+    // loaded dump or savestate takes them into its own copy and nothing else.
+    mMemBackend.SetEditSink(mbScrubbing     ? IMemoryBackend::WriteDest::Staged
+                            : mbLiveSource ? IMemoryBackend::WriteDest::Emulator
+                                           : IMemoryBackend::WriteDest::ViewOnly);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 #ifdef SE_ENABLE_LIVE

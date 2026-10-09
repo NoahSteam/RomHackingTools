@@ -58,7 +58,8 @@ extern int             SsDbgEmuLoadSlot(unsigned slot); /* have the emulator loa
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
-extern void            SsDbgPokeCramByte(uint32_t off, uint8_t val);   /* v23: byte of the raw CRAM array (what SsDbgCram exposes) */
+extern void            SsDbgPokeCramByte(uint32_t off, uint8_t val);   /* v23: byte of the CRAM bus window (0x05F00000-relative) */
+extern void            SsDbgCramWire(uint8_t* out);  /* CRAM bus view, 4096 bytes in the client's CRMD-dependent wire order */
 extern void            SsDbgPokeVdp1FbByte(uint32_t off, uint8_t val); /* v23: byte of the displayed VDP1 FB bank (SsDbgVdp1Fb) */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
 extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind); /* data watchpoint */
@@ -153,6 +154,8 @@ void SeMednafenSnapshot(void)
     static uint8_t  sr[SE_LIVE_SOUND_RAM_LEN];
     static uint8_t  sl[SE_LIVE_SCSP_BLOCK_LEN];
     static uint8_t  cd[SE_LIVE_CD_BLOCK_LEN];
+    static uint8_t  cr[4096];
+    static uint8_t  fb[SE_LIVE_VDP1_FB_LEN];
     static uint16_t vdp1[11];
     static uint32_t msh2[23], ssh2[23];
 
@@ -174,6 +177,11 @@ void SeMednafenSnapshot(void)
     }
     SwapU16ToBE(v2, (const uint8_t*)SsDbgVdp2Vram(), sizeof v2);
     BuildYabauseVdp2Struct(vs, SsDbgRawRegs());
+    /* Not SsDbgCram: in RGB888 mode Mednafen's raw array is split into high and low halves,
+     * so it is not the layout the CPU sees at 0x05F00000, where pokes address it. */
+    SsDbgCramWire(cr);
+    /* The frame buffer is host-order uint16 like VRAM; a poke addresses it big-endian. */
+    SwapU16ToBE(fb, (const uint8_t*)SsDbgVdp1Fb(), sizeof fb);
     SsDbgVdp1Regs(vdp1);
     SsDbgSh2Regs(0, msh2);
     SsDbgSh2Regs(1, ssh2);
@@ -194,19 +202,19 @@ void SeMednafenSnapshot(void)
     SeExportSnapshot(
         v1,                          /* VDP1 VRAM  (big-endian)                 */
         v2,                          /* VDP2 VRAM  (big-endian)                 */
-        (const void*)SsDbgCram(),    /* CRAM       (host order — client normalizes) */
+        cr,                          /* CRAM       (bus view, wire order — client normalizes) */
         vs,                          /* VDP2 regs  (raw Yabause struct)         */
         vdp1,                        /* VDP1 regs  (11-u16 Yabause struct;      */
                                      /*  se_export builds the hw-offset image)  */
         (const void*)SsDbgWramL(),   /* low work RAM  (host order; verify — §Byte order) */
         (const void*)SsDbgWramH(),   /* high work RAM (host order; verify)      */
-        (const void*)SsDbgVdp1Fb(),  /* VDP1 framebuffer (displayed bank, RGB555) */
+        fb,                          /* VDP1 framebuffer (displayed bank, big-endian) */
         msh2, ssh2,                  /* SH-2 master + slave                     */
         SsDbgSoundRam() ? (const void*)sr : (const void*)0,  /* SCSP sound RAM (v13) */
         scspSlotCount ? (const void*)sl : (const void*)0,    /* SCSP slots (v14)    */
         cdOk ? (const void*)cd : (const void*)0);            /* CD status (v15)     */
 #else
-    (void)v1; (void)v2; (void)vs; (void)sr; (void)sl; (void)cd; (void)vdp1; (void)msh2; (void)ssh2;
+    (void)v1; (void)v2; (void)vs; (void)cr; (void)fb; (void)sr; (void)sl; (void)cd; (void)vdp1; (void)msh2; (void)ssh2;
     (void)SwapU16ToBE; (void)BuildYabauseVdp2Struct;
 #endif
 }

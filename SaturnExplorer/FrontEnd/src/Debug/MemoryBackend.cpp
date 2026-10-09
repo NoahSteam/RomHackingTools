@@ -192,7 +192,7 @@ IMemoryBackend::WriteDest ContextBackend::WriteDestination(uint32_t address) con
     if (InRegisterWindow(a)) return WriteDest::ViewOnly;   // register setters touch the snapshot only
     const Region* reg = RegionAt(a);
     if (!reg || !se_has_write_sink(*mContext, reg->kind)) return WriteDest::ViewOnly;
-    return mEditsStaged ? WriteDest::Staged : WriteDest::Emulator;
+    return mEditSink;
 }
 
 size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)

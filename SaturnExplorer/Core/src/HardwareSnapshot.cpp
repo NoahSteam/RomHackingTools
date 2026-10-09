@@ -201,19 +201,6 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
         mHasCdStatus = dataSource.read_cd_status(dataSource.user, &mCdStatus) != 0;
     if (mHasCdStatus) mbValid = true;
 
-    // CRAM color mode from VDP2 RAMCTL (offset 0x0E), bits 12-13.
-    mCramMode = SE_CRAM_RGB555_1024;
-    if (mbHasVdp2Regs)
-    {
-        const uint16_t ramctl = Vdp2Reg(0x0E);
-        switch ((ramctl >> 12) & 0x3)
-        {
-        case 1:  mCramMode = SE_CRAM_RGB555_2048; break;
-        case 2:  mCramMode = SE_CRAM_RGB888_1024; break;
-        default: mCramMode = SE_CRAM_RGB555_1024; break;
-        }
-    }
-
     return mbValid;
 }
 

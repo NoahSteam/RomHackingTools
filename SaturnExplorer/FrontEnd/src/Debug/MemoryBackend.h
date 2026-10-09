@@ -137,9 +137,11 @@ public:
     // editable there; on a live emulator or a scrubbed frame they are not offered at all.
     void SetRegistersReadOnly(bool readOnly) { mRegistersReadOnly = readOnly; }
 
-    // The source's write sink is a scrubbed frame's replay list rather than a live emulator: its
-    // edits are staged for Play From Here, and no emulator has them until then.
-    void SetEditsStaged(bool staged) { mEditsStaged = staged; }
+    // Where the source's write sink takes an accepted edit: a live emulator, a scrubbed frame's
+    // replay list (staged for Play From Here), or nowhere past the snapshot. Said by the owner,
+    // not inferred from the sink: a savestate has a work-RAM sink too, and it only edits its own
+    // in-memory copy. Defaults to ViewOnly, so a source nobody vouched for never claims more.
+    void SetEditSink(WriteDest dest) { mEditSink = dest; }
 
     // Call when the data behind the context changes without the context pointer changing
     // (a different scrubbed frame loaded in place, or a destroyed context's address reused), so
@@ -155,7 +157,7 @@ private:
     bool         mForceReadOnly = false;
     const char*  mReadOnlyWhy = nullptr;
     bool         mRegistersReadOnly = false;
-    bool         mEditsStaged = false;
+    WriteDest    mEditSink = WriteDest::ViewOnly;
     uint64_t     mGeneration = 0;
 };
 

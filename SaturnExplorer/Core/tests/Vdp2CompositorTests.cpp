@@ -780,6 +780,18 @@ void TestEditReRenders()
         if (after[i] > 200 && after[i + 1] < 60 && after[i + 2] < 60) { sawRed = true; break; }
     CHECK(sawRed);
 
+    // An edit to RAMCTL changes how CRAM decodes at once: the mode is read from the register,
+    // not cached at capture, so the palette and the image follow without a re-capture.
+    CHECK(se_get_cram_mode(ctx) == SE_CRAM_RGB555_1024);
+    const uint16_t ramctl = se_get_vdp2_register(ctx, 0x00E);
+    CHECK(se_set_vdp2_register(ctx, 0x00E, static_cast<uint16_t>((ramctl & ~0x3000) | 0x2000)) == 1);   // CRMD = 2
+    CHECK(se_get_cram_mode(ctx) == SE_CRAM_RGB888_1024);
+    std::vector<uint8_t> rgb888;
+    render(rgb888);
+    CHECK(rgb888 != after);
+    CHECK(se_set_vdp2_register(ctx, 0x00E, ramctl) == 1);
+    CHECK(se_get_cram_mode(ctx) == SE_CRAM_RGB555_1024);
+
     // A VDP register edit also re-derives: turning NBG3 off (BGON=0) removes the layer.
     std::vector<uint8_t> withLayer;
     render(withLayer);

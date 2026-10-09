@@ -105,12 +105,15 @@ int main()
         se_test::State st;
         se_context* ctx = Make(st, true);
         ContextBackend b(&ctx);
-        Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Emulator, "a region with a sink reaches the emulator");
+        Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::ViewOnly,
+              "a sink alone is not an emulator: a savestate's work-RAM sink edits its own copy");
+        b.SetEditSink(IMemoryBackend::WriteDest::Emulator);
+        Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Emulator, "a live source's sink reaches the emulator");
         Check(b.WriteDestination(0x05F80000u) == IMemoryBackend::WriteDest::ViewOnly, "a register edit never does");
-        b.SetEditsStaged(true);
+        b.SetEditSink(IMemoryBackend::WriteDest::Staged);
         Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Staged,
               "on a scrubbed frame the sink is the replay list: staged, not sent");
-        b.SetEditsStaged(false);
+        b.SetEditSink(IMemoryBackend::WriteDest::ViewOnly);
         b.SetReadOnly(true, "state load in flight");
         Check(b.WriteRefusal(kVdp1) == "state load in flight", "a forced read-only carries the reason it was given");
         b.SetReadOnly(false);
@@ -123,6 +126,7 @@ int main()
         se_test::State st2;
         se_context* snap = Make(st2, false);
         ContextBackend b2(&snap);
+        b2.SetEditSink(IMemoryBackend::WriteDest::Emulator);
         Check(b2.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::ViewOnly, "with no sink an edit changes the snapshot only");
         se_destroy(snap);
         ContextBackend none(nullptr);

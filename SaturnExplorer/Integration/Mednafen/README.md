@@ -72,12 +72,12 @@ small accessor next to each (see §"Accessors").
 |---|---|---|---|---|
 | VDP1 VRAM (512K) | `Vdp1Ram` | `VDP1::VRAM[0x40000]` u16 (vdp1.cpp) | file-scope | host u16 → **swap to big-endian** |
 | VDP2 VRAM (512K) | `Vdp2Ram` | `VDP2::VRAM[262144]` u16 (vdp2.cpp) | **static** | host u16 → **swap to big-endian** |
-| CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM[2048]` u16 | **static** | host order — pass straight |
+| CRAM (4K) | `Vdp2ColorRam` | `VDP2::CRAM[2048]` u16 | **static** | bus view via `SsDbgCramWire` — see below |
 | VDP2 regs (288) | `Vdp2Regs` struct | `VDP2::RawRegs[0x100]` u16 *"For debugging"* | **static** | layout differs — see "VDP2 registers" |
 | VDP1 regs (struct) | `Vdp1Regs` struct | `VDP1::{TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,EDSR,LOPR}` | **mixed static** | accessor fills the 11-u16 `Vdp1` struct; `se_export` builds the hw-offset image. ENDR/COPR/MODR write-only/computed → 0 |
 | Work RAM low (1M) | `LowWram` | `WorkRAML[0x80000]` u16 (ss.cpp) | **static** | host u16 (like VRAM) — pass raw, client `Bswap16`s |
 | Work RAM high (1M) | `HighWram` | `WorkRAMH[0x80000]` u16 | **static** | host u16 — pass raw (see §Byte order) |
-| VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | `VDP1::FB[!FBDrawWhich]` (displayed bank of `FB[2][0x20000]`) | file-scope | RGB555 host order |
+| VDP1 framebuffer (256K) | `VIDSoftGetVdp1FrameBuffer()` | `VDP1::FB[!FBDrawWhich]` (displayed bank of `FB[2][0x20000]`) | file-scope | RGB555 host u16 → **swap to big-endian** |
 | Master SH-2 regs | `SH2GetRegisters(MSH2,…)` | `CPU[0]` (`SH7095`, ss.cpp) | file-scope | accessor packs 23 u32 via `CPU[0].GetRegister(GSREG_*)` |
 | Slave SH-2 regs | `SH2GetRegisters(SSH2,…)` | `CPU[1]` | file-scope | " (cpu 1) |
 
@@ -129,12 +129,16 @@ extern "C" void SsDbgPokeByte(unsigned int a, unsigned char v){ CheatMemWrite(a,
 `CheatMemWrite` only reaches ranges in `SH7095_FastMap` (BIOS, work RAM, VDP1/VDP2 VRAM, sound
 RAM). **CRAM (`0x05F00000`) and the VDP1 frame buffer (`0x05C80000`) are not in it**, so a poke
 there is accepted and dropped. `apply.py` therefore also injects `SsDbgPokeCramByte` (vdp2.cpp:
-raw CRAM word `w` is written through `VDP2::Write16_DB` at the bus address that maps back to it, so
+a byte of the CRAM bus window is merged into its bus word and written through `VDP2::Write16_DB`, so
 the renderer's CRAM copy follows) and `SsDbgPokeVdp1FbByte` (vdp1.cpp: the displayed bank, the one
 `SsDbgVdp1Fb` reads). The glue's `SeMdfnWriteVdpByte` calls them and is registered with
 `SeExportSetVdpWriteHook`, which sets the `SE_LIVE_CAP_VDP_POKE` bit in the control block; the
 client offers a CRAM / frame-buffer edit to a running emulator only when that bit is set.
-`Integration/tests/check_vdp_poke.py` compiles both against stubs of the Mednafen statics.
+VDP2 VRAM *is* in the fast map, but the VDP2 renderer keeps a second copy of it that only
+`VDP2REND_Write16_DB` feeds, so `SsDbgPokeByte` also hands a VDP2 VRAM poke to `VDP2::PokeVRAM`;
+without that the snapshot showed the edit while the game kept drawing the old tiles.
+`Integration/tests/check_vdp_poke.py` compiles these against stubs of the Mednafen statics and checks
+each poke round-trips through the capture and the client's normalization.
 
 Pokes (`WRM`, `WRS`) are queued by the server thread and applied by the **emulate thread** at the
 frame gate (also while a breakpoint holds the CPU), never while the cores are running: the hooks
@@ -157,8 +161,12 @@ to `SeExportSnapshot`. Per section:
 - **VDP1/VDP2 VRAM** — stored native `uint16` host-order (accessed big-endian via
   Mednafen's `ne16_*_be` helpers). Swap each 16-bit word to big-endian for the wire.
   (`SwapU16ToBE` in the glue.)
-- **CRAM** — `uint16` host order; pass straight. The client normalizes it via RAMCTL
-  (mode-aware).
+- **CRAM** — not the raw array. In RGB888 mode `VDP2::CRAM[]` holds every entry's high
+  word in its first half and every low word in its second (`RW()` in vdp2.cpp), which is not
+  the layout the CPU sees at `0x05F00000`, where pokes address it. `SsDbgCramWire` exports the
+  bus view in the little-endian shape the client's RAMCTL-aware normalization undoes (4-byte
+  entries in CRMD 2, 2-byte words otherwise), and `SsDbgPokeCramByte` reads-modifies-writes the
+  same bus word, so a poke and the next capture name the same byte in every mode.
 - **Work RAM** — `WorkRAML/H` are `uint16` arrays (host order), the **same storage as
   VDP1/VDP2 VRAM**, just accessed via `ne16_rbo_be`. The wire carries work RAM
   host-order and the client `Bswap16`s it to big-endian (LiveDriver), so pass it raw —
@@ -166,8 +174,8 @@ to `SeExportSnapshot`. Per section:
   right big-endian instruction). One residual: `WorkRAMH`'s comment notes it's
   "effectively 32-bit … 16-bit here because of fastmap" — the 16-bit path matches VRAM,
   but if a 32-bit value ever looks half-word-swapped on a real build, spot-check it.
-- **VDP1 framebuffer** — `FB[!FBDrawWhich]`, native `uint16` RGB555 (host order like
-  CRAM); pass straight.
+- **VDP1 framebuffer** — `FB[!FBDrawWhich]`, native `uint16` RGB555 host order like VRAM;
+  `SwapU16ToBE` it, since `SsDbgPokeVdp1FbByte` addresses it big-endian.
 - **SH-2 regs** — host-order u32 in `sh2regs_struct` field order; the client reads
   them as LE u32. The `SsDbgSh2Regs` accessor fills the 23-u32 array.
 - **SCSP sound RAM (v13)** — the 512 KiB sound block (68000 program + PCM tone bank +
