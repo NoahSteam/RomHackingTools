@@ -48,9 +48,9 @@ Assembly, Watch and Breakpoint tools.
   The hex rows and the CSV export rescan the immutable snapshots, so no changed byte is ever
   omitted by a cap.
 - **Regions are not just address ranges.** Every location is a `RegionRef` with an explicit region
-  id, address space and capability set. VDP1 FB (derived image), the VDP register images and Sound
-  RAM (68K-written) are not plain SH-2 bus memory, so navigation, watches, breakpoints and the
-  assembly view are enabled per region rather than assumed.
+  id, address space and capability set. VDP1 FB (a derived image), the VDP register images and Sound
+  RAM (also written by the 68K, which watchpoints cannot see) are not plain SH-2 bus memory, so
+  navigation, watches, breakpoints and the assembly view are enabled per region rather than assumed.
 - **Pending scrub edits are never captured.** Marking is refused while the shown frame has pending
   edits, because the context serves them without them being part of the recorded frame.
 - **Snapshot diff only.** A byte that changed and changed back between A and B does not appear. The
@@ -72,8 +72,8 @@ Assembly, Watch and Breakpoint tools.
 - The frame cards have no VDP thumbnails in v1. They need a per-snapshot composited render; this is
   a possible later addition.
 - The region table lists the regions we capture, including VDP1 FB and register images, and has no
-  BIOS row. Context-menu actions are enabled per region (for example, no Break on Write on Sound RAM
-  or VDP1 FB).
+  BIOS row. Context-menu actions are enabled per region (for example, no Break on Write on VDP1 FB,
+  and Sound RAM's carries a note that 68K writes are not caught).
 - There is a single hex table with both columns inside it, so "synchronised scrolling" is free
   rather than a feature to build.
 - Time is shown as `frame / 60` (NTSC). PAL titles will read slightly off until the video standard

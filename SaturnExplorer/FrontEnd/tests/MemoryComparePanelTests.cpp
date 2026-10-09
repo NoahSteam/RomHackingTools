@@ -141,7 +141,7 @@ void TestActionTable()
     }
     Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Hwram), "HWRAM can break on write");
     Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Vdp2Ram), "VDP2 RAM can break on write");
-    Check(!MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::SoundRam), "Sound RAM cannot (68K writes it)");
+    Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::SoundRam), "Sound RAM can (the SH-2 writes it; the 68K's writes just are not seen)");
     Check(!MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Vdp1Fb), "VDP1 FB cannot (not a bus write)");
     Check(MemoryComparePanel::ActionEnabled(A::ViewInAssembly, RegionId::Lwram), "LWRAM can show SH-2 code");
     Check(!MemoryComparePanel::ActionEnabled(A::ViewInAssembly, RegionId::SoundRam), "Sound RAM is not SH-2 code");
