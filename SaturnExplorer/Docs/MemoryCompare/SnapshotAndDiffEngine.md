@@ -125,9 +125,9 @@ Verified against the code:
    edits, is what a frame comparison is about. At the live head there is no pending state: a poke
    is applied to the running emulator and the snapshot is whatever the Memory tab currently shows.
 
-`CaptureSnapshot(IMemoryBackend&, ContextProbe, SnapshotOrigin)` needs only `ReadRegionBytes`
-(inline in `MemoryBackend.h`) plus two callbacks for the serial and source id, so its tests link
-neither the core nor an emulator. It returns null on any failure, and a partial region is never
+`CaptureSnapshot(IMemoryBackend&, const SnapshotOrigin&, guard, std::string* error)` needs only
+`ReadRegionBytes` (inline in `MemoryBackend.h`) plus a `guard` callback returning the serial and
+source id, so its tests link neither the core nor an emulator. It returns null on any failure, and a partial region is never
 kept (`ReadRegionBytes` clears its output on failure). A snapshot is complete or absent, so there
 is no "invalid snapshot" state to display.
 
@@ -204,8 +204,9 @@ New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
 - identical snapshots: zero changes, no ranges, no rows in Changes Only mode
 - single byte at the first and last byte of a region; change spanning a row boundary
 - two changes inside and beyond `mergeGap`
-- word fast path: change at each offset 0..7 in a word, and at the tail of a region whose size is
-  not a multiple of 8 or 16 (the 0x18-byte register region; `validMask` is correct)
+- word fast path: change at each offset 0..7 in a word. Every region size is a multiple of 8, so the
+  byte-at-a-time tail path is not reachable through the public API; the 0x18-byte register region
+  covers the partial *row* case instead (`validMask`)
 - **truncation**: more than `kMaxStoredRanges` isolated changes in one region.
   `rangesTruncated` is set, `rangeCount` and `changedBytes` are exact, and **the union of
   `BuildRows` masks and the CSV lines each equal the true set of differing bytes** (compared against
