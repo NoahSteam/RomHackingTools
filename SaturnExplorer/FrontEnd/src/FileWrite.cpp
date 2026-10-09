@@ -117,20 +117,35 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
         RemoveFile(temp);
         return false;
     }
-    // std::rename replaces an existing regular file atomically on POSIX. On Windows it
-    // fails if the destination exists, so the old file is removed first -- which opens a
-    // window where neither exists, unavoidable without MoveFileEx, and still better than
-    // truncating before the write.
+    // Publish by replacing, never by deleting first. std::rename does that on POSIX. On
+    // Windows std::rename refuses an existing destination, and the obvious workaround --
+    // remove it, then rename -- is what this function exists to avoid: if the rename then
+    // failed, or the process died in between, the old file would be gone and the new one
+    // never published. MoveFileEx with MOVEFILE_REPLACE_EXISTING replaces in one step, so
+    // the destination always holds one complete file or the other.
+    //
+    // MOVEFILE_WRITE_THROUGH asks for the change to reach the disk before it returns, so a
+    // power loss cannot leave the directory entry pointing at a file whose contents never
+    // landed.
 #ifdef _WIN32
-    RemoveFile(path);
-#endif
+    if (::MoveFileExA(temp.c_str(), path.c_str(),
+                      MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0)
+    {
+        // Nothing has been removed, so the previous contents of 'path' are still there.
+        error = "could not publish " + path;
+        RemoveFile(temp);
+        return false;
+    }
+#else
     errno = 0;
     if (std::rename(temp.c_str(), path.c_str()) != 0)
     {
+        // Same guarantee: a failed rename leaves the destination untouched.
         error = Reason("could not publish", path);
         RemoveFile(temp);
         return false;
     }
+#endif
     return true;
 }
 

@@ -282,11 +282,42 @@ bool WriteLayerExport(const std::string& root, const LayerExport& ex, std::strin
         error = "Could not create the export folder " + root;
         return false;
     }
-    // A staging or backup directory still present is debris from a crash or an earlier
-    // failure, not state worth keeping. Clearing both makes the two renames below
-    // unambiguous.
-    io.RemoveFlatDir(staging);
-    io.RemoveFlatDir(backup);
+    // Staging is always debris: a partially written new export, never the only copy of
+    // anything. Checked, though -- if it could not be cleared, something that is not ours is
+    // in there, and MakeDir below would succeed on the existing directory and publish those
+    // files as part of this export.
+    if (!io.RemoveFlatDir(staging))
+    {
+        error = "Could not clear the temporary folder " + staging + "; nothing was written.";
+        return false;
+    }
+
+    // A backup is NOT debris. It exists only between the two renames below, so finding one
+    // means an earlier publish was interrupted there -- and which copy is authoritative
+    // depends on whether the destination made it across:
+    //
+    //   no destination  -> the backup IS the previous export, and the only copy left. Deleting
+    //                      it (which this code used to do) destroys the user's last good export
+    //                      and, if this run then fails too, leaves them with nothing at all.
+    //   destination here -> the publish completed and only its cleanup was lost. Debris.
+    if (io.Exists(backup))
+    {
+        if (!io.Exists(dir))
+        {
+            if (!io.Move(backup, dir))
+            {
+                // Refuse rather than carry on: carrying on would delete it on the next line.
+                error = "An earlier export of this layer was interrupted and its previous copy "
+                        "is in " + backup + ". It could not be moved back to " + dir +
+                        ", so nothing was written -- move it back by hand first.";
+                return false;
+            }
+        }
+        else
+        {
+            io.RemoveFlatDir(backup);   // best effort; a leftover only costs the rename below
+        }
+    }
     if (!io.MakeDir(staging))
     {
         error = "Could not create a temporary folder beside " + dir;
@@ -319,11 +350,16 @@ bool WriteLayerExport(const std::string& root, const LayerExport& ex, std::strin
     }
     if (!io.Move(staging, dir))
     {
-        // Put the previous export back before reporting: losing it to a failed publish is
-        // the exact outcome this function exists to prevent.
-        if (hadPrevious) io.Move(backup, dir);
-        io.RemoveFlatDir(staging);
         error = "Could not publish the export to " + dir;
+        // Put the previous export back before reporting: losing it to a failed publish is
+        // the exact outcome this function exists to prevent. If even that fails, say where
+        // it is -- the recovery above will pick it up next time, but only if the user knows
+        // not to go looking for the export in the meantime.
+        if (hadPrevious && !io.Move(backup, dir))
+        {
+            error += ", and the previous export could not be put back. It is in " + backup + ".";
+        }
+        io.RemoveFlatDir(staging);
         return false;
     }
     if (hadPrevious) io.RemoveFlatDir(backup);

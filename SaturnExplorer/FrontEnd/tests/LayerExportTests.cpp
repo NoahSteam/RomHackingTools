@@ -890,6 +890,125 @@ void TestSuccessfulExportLeavesNoStaleFiles()
     RemoveFlatDirectory(dir);
 }
 
+// Put the filesystem into the state a crash between the two publish renames leaves: the
+// previous export sits in <folder>.seold and there is no <folder> at all.
+void StageInterruptedPublish(const std::string& folder, int files, char fill)
+{
+    const std::string dir = Join(kRoot, folder);
+    RemoveFlatDirectory(dir);
+    RemoveFlatDirectory(dir + ".seold");
+    std::string ignored;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, files, fill), ignored, ignored));
+    CHECK(MovePath(dir, dir + ".seold"));          // the first rename landed...
+    CHECK(!FileOrDirectoryExists(dir));            // ...and the second never ran
+}
+
+// THE P1. A crash between the two renames leaves the previous export as the only copy, in
+// .seold. The next attempt used to delete .seold before writing anything -- so if that
+// attempt then failed, both the old export and the new one were gone. Now the interrupted
+// publish is finished first, and a failure afterwards costs nothing.
+void TestInterruptedPublishIsRecoveredNotDeleted()
+{
+    const std::string folder = "publish_interrupted";
+    StageInterruptedPublish(folder, 3, 'O');
+
+    // The next attempt fails on its second file -- the reproduction from the review.
+    FaultyFs fs;
+    fs.failWriteAt = 1;
+    std::string dir;
+    std::string error;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 3, 'N'), dir, error, &fs));
+    CHECK(dir.empty());
+
+    // The previous export survived, in the place the user looks for it.
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 3);
+    CHECK(!after.debris);                    // and the backup is no longer hanging around
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(Join(kRoot, folder), "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'O'));   // the OLD bytes
+
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
+// The same starting state, but this attempt succeeds: the recovered export is replaced
+// properly rather than ending up beside the new one.
+void TestInterruptedPublishThenASuccessfulExport()
+{
+    const std::string folder = "publish_interrupted_ok";
+    StageInterruptedPublish(folder, 4, 'O');
+
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error));
+    CHECK(error.empty());
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 2);      // not 4, and not 2 new beside 4 recovered
+    CHECK(!after.debris);
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(dir, "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'N'));
+
+    RemoveFlatDirectory(dir);
+}
+
+// If the interrupted copy cannot be put back, nothing is written and the message says where
+// it is -- the alternative is deleting it and reporting a tidy failure.
+void TestUnrecoverableBackupRefusesToExport()
+{
+    const std::string folder = "publish_stuck";
+    StageInterruptedPublish(folder, 2, 'O');
+
+    struct NoRestoreFs : ExportFs
+    {
+        bool Move(const std::string& from, const std::string& to) override
+        {
+            if (from.find(".seold") != std::string::npos) return false;   // the restore fails
+            return ExportFs::Move(from, to);
+        }
+    } fs;
+
+    std::string dir;
+    std::string error;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error, &fs));
+    CHECK(dir.empty());
+    CHECK(error.find(".seold") != std::string::npos);   // names where the old copy is
+    // Still there, untouched, for the next attempt to recover.
+    std::vector<std::string> names;
+    CHECK(ListDirectory(Join(kRoot, folder + ".seold"), names));
+    CHECK(names.size() == 2);
+
+    RemoveFlatDirectory(Join(kRoot, folder + ".seold"));
+}
+
+// A failed publish that also cannot roll back says so, rather than reporting a plain
+// "could not publish" while the previous export sits under a name nobody would look in.
+void TestFailedRollbackIsReported()
+{
+    const std::string folder = "publish_norollback";
+    RemoveFlatDirectory(Join(kRoot, folder));
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'O'), dir, error));
+
+    // The publish fails AND the roll-back fails.
+    struct NoPublishNoRollbackFs : ExportFs
+    {
+        bool Move(const std::string& from, const std::string& to) override
+        {
+            if (from.find(".separt") != std::string::npos) return false;   // publish refused
+            if (from.find(".seold") != std::string::npos) return false;    // roll-back refused
+            return ExportFs::Move(from, to);
+        }
+    } fs;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error, &fs));
+    CHECK(error.find("could not be put back") != std::string::npos);
+    CHECK(error.find(".seold") != std::string::npos);
+
+    RemoveFlatDirectory(Join(kRoot, folder + ".seold"));
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
 // Debris from a crashed run must not be mistaken for state to keep, nor confuse the renames.
 void TestStaleStagingDebrisIsCleared()
 {
@@ -937,6 +1056,10 @@ int main()
     TestFailedPublishRestoresThePreviousExport();
     TestSuccessfulExportLeavesNoStaleFiles();
     TestStaleStagingDebrisIsCleared();
+    TestInterruptedPublishIsRecoveredNotDeleted();
+    TestInterruptedPublishThenASuccessfulExport();
+    TestUnrecoverableBackupRefusesToExport();
+    TestFailedRollbackIsReported();
     RemoveEmptyDirectory("se_layer_export_test");   // leave nothing behind
 
     if (gFailures)
