@@ -369,6 +369,15 @@ struct LiveState
     bool                  emuSlotsValid = false;
     // Pending ELS (v17): slot + 1, or 0 for none. Guarded by ctlMtx.
     int                   emuLoadSlot = 0;
+    // State loads (LST or ELS) accepted and not yet seen settled. Pokes are refused while any is
+    // outstanding: one queued before the load ships is cleared with the queue, and one sent after
+    // it would land on the restored state it was never made against. Settled means the server's
+    // done + failed restore counters (v19+) reached restoreSettledBase + restoresPending; a server
+    // too old to count never settles one, so editing stays off until the connection is replaced
+    // -- the same rule the app applies. Guarded by ctlMtx.
+    uint32_t              restoresPending = 0;
+    uint32_t              restoreSettledBase = 0;
+    uint32_t              restoreSettledSeen = 0;   // done + failed in the newest reply
     // Rewind capture (v18). 'rewindDirty' means the server has not been told the current value:
     // set by the setter, and again on a reconnect, since a fresh server starts with capture on.
     // Guarded by ctlMtx.
@@ -432,6 +441,15 @@ bool EditTargetIsCurrent(const LiveState* st)
     else if (gLastCaptured.id == st->id)            { pin = &gLastCaptured; }
     if (!pin || !pin->snap) { return true; }
     return pin->snap->generation == st->connGeneration.load();
+}
+
+// A state load was accepted: pokes stop until the emulator reports it settled (see
+// LiveState::restoresPending). The base is taken only when nothing is outstanding, so a batch
+// of loads settles when the counters have advanced by all of them. Called with ctlMtx held.
+void NoteRestoreSubmitted(LiveState* st)
+{
+    if (st->restoresPending == 0) st->restoreSettledBase = st->restoreSettledSeen;
+    ++st->restoresPending;
 }
 
 /* ---- Local-socket transport (POSIX Unix socket / Windows named pipe). ----
@@ -1261,6 +1279,9 @@ void ForgetConnection(LiveState* st)
         st->stepsAnswered = st->stepsPosted;
         for (uint32_t& m : st->lastInputSent) m = 0;
         st->emuSlotsValid = false;
+        // The next emulator's counters start over, and a load sent to this one is moot.
+        st->restoresPending = 0;
+        st->restoreSettledBase = st->restoreSettledSeen = 0;
     }
     st->pausedByUs.store(false);   // the exporter releases a pause when a client leaves
     // Unknown until the next connection answers: every version-gated verb refuses meanwhile, and a
@@ -1466,6 +1487,14 @@ void PollLoop(LiveState* st)
             ConnClose(conn);   // will reconnect next iteration
             SleepWhileRunning(st, 100);
             continue;
+        }
+        if (snap.hasRestoreInfo)
+        {
+            std::lock_guard<std::mutex> lk(st->ctlMtx);
+            st->restoreSettledSeen = snap.restoreDone + snap.restoreFailed;
+            if (st->restoresPending != 0 &&
+                st->restoreSettledSeen - st->restoreSettledBase >= st->restoresPending)
+                st->restoresPending = 0;
         }
         if (snap.hasPokeInfo)
         {
@@ -1746,7 +1775,7 @@ size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
     if (InVdpPokeWindow(address, size) && !(st->srvCaps.load() & SE_LIVE_CAP_VDP_POKE)) return 0;
     std::vector<uint8_t> payload = BuildPoke(address, src, size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected || !EditTargetIsCurrent(st)) return 0;
+    if (!st->connected || !EditTargetIsCurrent(st) || st->restoresPending != 0) return 0;
     return st->writes.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1756,7 +1785,7 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
     LiveState* st = St(u);
     std::vector<uint8_t> payload = BuildPoke(offset, src, size);   // shipped as WRS
     std::lock_guard<std::mutex> lk(st->ctlMtx);
-    if (!st->connected || !EditTargetIsCurrent(st)) return 0;
+    if (!st->connected || !EditTargetIsCurrent(st) || st->restoresPending != 0) return 0;
     return st->soundWrites.Push(std::move(payload), kMaxPokeBytes) ? size : 0;
 }
 
@@ -1766,15 +1795,18 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
 // CbWriteMainRam checks. This is how a paused VDP edit persists in the running game.
 size_t CbWriteVram(void* u, se_vram_kind kind, uint32_t offset, const void* src, size_t size)
 {
-    uint32_t base;
+    uint32_t base, len;
     switch (kind)
     {
-        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; break;
-        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; break;
-        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; break;
-        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; break;
+        case SE_VRAM_KIND_VDP1_VRAM: base = 0x05C00000u; len = SE_LIVE_VDP1_VRAM_LEN; break;
+        case SE_VRAM_KIND_VDP1_FB:   base = 0x05C80000u; len = SE_LIVE_VDP1_FB_LEN;   break;
+        case SE_VRAM_KIND_VDP2_VRAM: base = 0x05E00000u; len = SE_LIVE_VDP2_VRAM_LEN; break;
+        case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; len = SE_LIVE_CRAM_LEN;      break;
         default: return 0;   // work/sound RAM go through their own callbacks
     }
+    // The offset is region-local, and the bus windows sit next to each other: past its own region
+    // an edit would land in the next one (a VDP1 VRAM offset of 0x200000 is VDP2 VRAM). Refuse it.
+    if (offset >= len || size > len - offset) return 0;
     return CbWriteMainRam(u, base + offset, src, size);
 }
 
@@ -1825,6 +1857,7 @@ int CbLoadState(void* u, uint64_t frame, const void* state, size_t state_len,
     st->loadPayload = std::move(payload);
     st->loadFrame = static_cast<uint32_t>(frame);
     st->loadDirty = true;
+    NoteRestoreSubmitted(st);
     st->pausedByUs.store(false);   // the rewind resumes the emulator itself
     return 0;
 }
@@ -2215,6 +2248,7 @@ extern "C" int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
         // Same refusals as a rewind load, for the same reasons (see CbLoadState).
         if (!st->connected || !EditTargetIsCurrent(st) || st->emuLoadSlot != 0) { return -1; }
         st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
+        NoteRestoreSubmitted(st);
         return 0;
     });
 }

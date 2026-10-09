@@ -1604,7 +1604,11 @@ void App::BuildUI(IPlatform& platform)
                        "off until it does; reconnecting or loading a state again clears it.");
         }
     }
-    mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mRestoreOutstanding > 0 ||
+    // A scrubbed frame's edit is only worth taking if Play From Here can replay it. That needs
+    // rewind on (mSeekSupported) and an emulator that stamps its states (v22): Play From Here is
+    // never offered to an older one, so its edits would be labelled staged and replayed by nothing.
+    const bool scrubEditsReplayable = mSeekSupported && EmulatorStampsStates();
+    mMemBackend.SetReadOnly((mbScrubbing && !scrubEditsReplayable) || mRestoreOutstanding > 0 ||
                             mRestoreUnconfirmable,
                             mRestoreOutstanding > 0
                                 ? "A state load is still being applied; editing returns when the emulator confirms it."

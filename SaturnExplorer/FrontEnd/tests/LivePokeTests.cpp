@@ -231,6 +231,24 @@ int main()
 
     Check(Until([&] { return Poll(ds).known; }), "the server reports poke info (v23)");
     Check(se_begin_frame(ctx) == SE_OK, "a first capture");
+    // A region-local offset stays in its region. The bus windows are adjacent, so VDP1 VRAM + 0x200000
+    // is VDP2 VRAM: the driver must refuse that, and an edit straddling a region's end, not forward it.
+    {
+        const uint8_t b = 0x11;
+        const uint8_t two[2] = { 0x11, 0x22 };
+        Check(ds.write_vram(ds.user, SE_VRAM_KIND_VDP1_VRAM, 0x200000u, &b, 1) == 0, "a VDP1 offset past VDP1 VRAM is refused");
+        Check(ds.write_vram(ds.user, SE_VRAM_KIND_VDP1_VRAM, 0x7FFFFu, two, 2) == 0, "an edit straddling its end is refused");
+        Check(ds.write_vram(ds.user, SE_VRAM_KIND_VDP1_FB, 0x40000u, &b, 1) == 0, "so is one past the frame buffer");
+        Check(ds.write_vram(ds.user, SE_VRAM_KIND_CRAM, 0x1000u, &b, 1) == 0, "and one past CRAM");
+        Check(ds.write_vram(ds.user, SE_VRAM_KIND_VDP1_VRAM, 0x7FFFFu, &b, 1) == 1, "the last byte of a region is accepted");
+        const uint32_t appliedBefore = Poll(ds).applied;
+        Check(Until([&] { return Count('P') == 1; }), "and applied");
+        Check(Until([&] { return Poll(ds).applied == appliedBefore + 1; }), "and counted");
+        std::lock_guard<std::mutex> lk(gMtx);
+        Check(gEvents.back().addr == 0x05C7FFFFu, "at its own bus address");
+        gEvents.clear();
+    }
+
     Info base = Poll(ds);
     Check(!(base.caps & SE_LIVE_CAP_VDP_POKE), "no VDP writer is wired yet: the capability bit is clear");
 
@@ -299,6 +317,11 @@ int main()
         }
         const std::vector<uint8_t> state(64, 0x5A);
         Check(se_load_state(ctx, 7, state.data(), state.size(), nullptr, 0) == SE_OK, "the load request is accepted");
+        // Until the emulator reports the load settled, a new poke would either be cleared with the
+        // queue when the load ships or land on the restored state it was not made against.
+        const uint8_t b = 0x33;
+        Check(ds.write_main_ram(ds.user, 0x06000400u, &b, 1) == 0, "a poke is refused while the load is unapplied");
+        Check(ds.write_sound_ram(ds.user, 0x400u, &b, 1) == 0, "so is a sound-RAM poke");
         Check(Until([&] { return Count('L') == 1; }), "the load is applied");
         // Give anything still wrongly queued time to ship and be applied after it.
         for (int i = 0; i < 100; ++i) { EmulatorTick(); Sleep(5); }
@@ -310,6 +333,8 @@ int main()
         }
         Check(afterLoad == 0, "no queued poke is applied after the load that replaced its state");
         Check(Count('P') - before < kPokes, "the load discarded the queue instead of draining it first");
+        Check(Until([&] { return ds.write_main_ram(ds.user, 0x06000400u, &b, 1) == 1; }),
+              "pokes are accepted again once the emulator reports the load settled");
     }
 
 
