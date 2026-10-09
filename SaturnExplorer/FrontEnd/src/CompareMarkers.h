@@ -57,6 +57,36 @@ inline float SliderGrabCenterX(float minX, float maxX, float grabMinSize, int co
     return lo + (hi - lo) * t;
 }
 
+// Greedy left-to-right wrapping for a row of controls: an item stays on the line only if it fits in
+// 'avail' after the ones already there (items on a line are 'spacing' apart). The row that draws and
+// the code that reserves its height both run this, so the reservation cannot drift from the layout.
+// An item wider than the line still takes a line of its own rather than producing an empty one.
+class LineFlow
+{
+public:
+    LineFlow(float avail, float spacing) : mAvail(avail), mSpacing(spacing) {}
+
+    // True when a line break goes before an item 'width' wide. Advances the position either way.
+    bool BreaksBefore(float width)
+    {
+        if (mX > 0.0f && mX + mSpacing + width > mAvail)
+        {
+            mX = width;
+            ++mLines;
+            return true;
+        }
+        mX += (mX > 0.0f ? mSpacing : 0.0f) + width;
+        return false;
+    }
+
+    int Lines() const { return mLines; }
+
+private:
+    float mAvail, mSpacing;
+    float mX = 0.0f;
+    int   mLines = 1;
+};
+
 class CompareMarkers
 {
 public:

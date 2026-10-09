@@ -79,7 +79,7 @@ struct MemSnapshot {         // immutable once built; shared as shared_ptr<const
 };
 ```
 
-- `sessionId` is assigned by `App` (see [TimelineMarkers.md](TimelineMarkers.md#identity-lifecycle)).
+- `sessionId` is owned by `CompareMarkers` and advanced by `App` (see [TimelineMarkers.md](TimelineMarkers.md#identity-lifecycle)).
   `Diff` refuses two snapshots with different `sessionId` and returns an error, so unrelated
   captures can never be combined however the markers got there. Different `timelineEpoch` within
   one session is allowed: both are real memory of the same run, and comparing across an abandoned

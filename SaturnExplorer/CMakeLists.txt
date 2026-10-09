@@ -484,6 +484,14 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
+    # edits belong to. Pure logic against a ring that evicts like FrameRecorder's.
+    add_executable(SaturnExplorerScrubStateTests
+        FrontEnd/tests/ScrubStateTests.cpp
+    )
+    target_include_directories(SaturnExplorerScrubStateTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerScrubStateTests COMMAND SaturnExplorerScrubStateTests)
+
     # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
     # geometry they are drawn with (checked against ImGui's own SliderBehavior).
     add_executable(SaturnExplorerCompareMarkersTests

@@ -111,7 +111,7 @@ side was clicked. `App` polls `TakeRequest()` once after `Draw` and calls the ex
 | Action | App does |
 |---|---|
 | Go to Memory | Scrub to that side's frame if it is attached, then `mHexEditor.GoTo(BusAddress(ref)); mPanels.hexEditor = true;`. A detached side has no frame to scrub to, so the item reads **Go to Memory (current view)** and says so: the Memory tab then shows the current frame, not the snapshot. |
-| Add to Watch | `mWatchPanel.AddWatch(name, expr, type)`, type from the selection length. A watch tracks the running game, not frame A or B. |
+| Add to Watch | `AddAddressWatch("diff", BusAddress(ref), type)` (which calls `mWatchPanel.AddWatch`), type from the selection length. A watch tracks the running game, not frame A or B. |
 | Break on Write | `mBreakpoints.AddMemory(BusAddress(ref), size, BpKind::MemWrite)` |
 | View in Assembly | `mAssemblyPanel.GoTo(mAssemblyPanel.Cpu(), BusAddress(ref)); mPanels.assembly = true;` |
 | Export Diff | `WriteCsv` into the existing export path. The menu item exports the clicked byte's region; the toolbar **Export...** button exports the region selected in the summary, or every region on All Memory (`Request::allRegions` / `exportRegion`). |
@@ -134,13 +134,14 @@ A disabled Break on Write or View in Assembly carries a tooltip with the reason 
 Add to Watch are enabled in every region). There is no Find in ROM, since cartridge space
 is not captured.
 
-## Registration (pending: done in the hook-up pass)
+## Registration (done in the App-integration change)
 
 1. `bool memoryCompare` in `struct Panels` (`App.h`).
 2. A `PanelList()` row, group "Memory & Data".
-3. `void DrawMemoryCompare()` in `App`, which wraps `mMemoryCompare.Draw` in
-   `ImGui::Begin("Memory Compare")`.
-4. `if (mPanels.memoryCompare) DrawMemoryCompare();` in `BuildUI`.
+3. `void DrawMemoryCompare(IPlatform&)` in `App`: it calls `mMemoryCompare.Draw` (which does the
+   `ImGui::Begin("Memory Compare")` itself), then takes the panel's request and carries it out in
+   `HandleCompareRequest`.
+4. `if (mPanels.memoryCompare) DrawMemoryCompare(platform);` in `BuildUI`.
 5. `DockBuilderDockWindow("Memory Compare", bAsm)` in `BuildDefaultLayout`.
 6. An entry in `AdoptNewPanels` so existing `imgui.ini` layouts pick it up.
 
@@ -160,6 +161,7 @@ is not captured.
   changes is dropped
 - identical snapshots show no grid
 
-Still to cover when `App` is wired up, because they need the toolbar or popup items to be
-reachable: each action raising exactly one request that is consumed once, detached sides disabling
-Go to A / B, and the double-click focus trap on the summary rows.
+Checked by hand (`Docs/FunctionalityVerification/99_MANUAL_VERIFICATION_REMAINING.md`), because they
+need the toolbar or popup items to be reachable: each action raising exactly one request that is
+consumed once, detached sides disabling Go to A / B, and the double-click focus trap on the summary
+rows.

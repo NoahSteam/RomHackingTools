@@ -3,6 +3,7 @@
 // ImGui update that moves the grab shows up here instead of as markers drifting off their frames.
 #include "CompareMarkers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -45,6 +46,77 @@ void TestFindFrameIndex()
     Check(FindFrameIndex(f.size(), at, 9) == -1 && FindFrameIndex(f.size(), at, 22) == -1, "outside the ring");
     Check(FindFrameIndex(0, at, 10) == -1, "empty ring");
     Check(FindFrameIndex(1, at, 10) == 0, "single frame");
+}
+
+void TestLineFlow()
+{
+    {
+        LineFlow f(400.0f, 8.0f);
+        Check(!f.BreaksBefore(100.0f) && !f.BreaksBefore(100.0f) && !f.BreaksBefore(150.0f) && f.Lines() == 1,
+              "100 + 8 + 100 + 8 + 150 = 366 fits on a 400 line");
+    }
+    {
+        LineFlow f(320.0f, 8.0f);
+        f.BreaksBefore(100.0f);
+        f.BreaksBefore(100.0f);
+        Check(f.BreaksBefore(150.0f) && f.Lines() == 2, "the third item (366 > 320) goes to a second line");
+    }
+    {
+        LineFlow f(120.0f, 8.0f);
+        Check(!f.BreaksBefore(100.0f) && f.BreaksBefore(100.0f) && f.BreaksBefore(100.0f) && f.Lines() == 3,
+              "when nothing fits beside another, each item has its own line");
+    }
+    {
+        LineFlow f(50.0f, 8.0f);
+        Check(!f.BreaksBefore(200.0f) && f.Lines() == 1, "an item wider than the line does not make an empty line before it");
+        Check(f.BreaksBefore(10.0f) && f.Lines() == 2, "but nothing shares its line");
+    }
+    {
+        LineFlow f(100.0f, 10.0f);
+        Check(!f.BreaksBefore(45.0f) && !f.BreaksBefore(45.0f) && f.Lines() == 1, "45 + 10 + 45 = 100 fits exactly");
+        Check(f.BreaksBefore(1.0f), "and one more pixel does not");
+    }
+
+    // The model against ImGui's own layout: place real items by LineFlow and check where they land.
+    float width = 600.0f;
+    int lines = 0;
+    float maxRight = 0.0f, windowRight = 0.0f;
+    int distinctLines = 0;
+    ImGuiHarness h([&]
+    {
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(width, 300), ImGuiCond_Always);
+        ImGui::Begin("flow", nullptr, ImGuiWindowFlags_NoSavedSettings);
+        const char* labels[3] = { "Frame A: 1800 (detached)", "Frame B: 1884 (detached)", "Compare Memory..." };
+        float w[3];
+        for (int i = 0; i < 3; ++i)
+            w[i] = ImGui::CalcTextSize(labels[i]).x + (i == 2 ? ImGui::GetStyle().FramePadding.x * 2.0f : 0.0f);
+        LineFlow flow(ImGui::GetContentRegionAvail().x, ImGui::GetStyle().ItemSpacing.x);
+        float lastY = -1.0f;
+        maxRight = 0.0f;
+        distinctLines = 0;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (!flow.BreaksBefore(w[i]) && i > 0) ImGui::SameLine();
+            if (i == 2) ImGui::Button(labels[i]); else ImGui::TextUnformatted(labels[i]);
+            maxRight = std::max(maxRight, ImGui::GetItemRectMax().x);
+            if (ImGui::GetItemRectMin().y != lastY) { ++distinctLines; lastY = ImGui::GetItemRectMin().y; }
+        }
+        lines = flow.Lines();
+        windowRight = ImGui::GetCurrentWindow()->WorkRect.Max.x;
+        ImGui::End();
+    });
+    for (float ww : { 900.0f, 600.0f, 420.0f, 320.0f, 260.0f })
+    {
+        width = ww;
+        h.Frame(ImVec2(1270.0f, 710.0f), false);
+        h.Frame(ImVec2(1270.0f, 710.0f), false);
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "the row's items stay inside a %.0f px window", ww);
+        Check(maxRight <= windowRight + 0.5f, msg);
+        std::snprintf(msg, sizeof(msg), "LineFlow predicts the %d line(s) ImGui lays out at %.0f px", lines, ww);
+        Check(lines == distinctLines, msg);
+    }
 }
 
 void TestSetAndClear()
@@ -187,6 +259,7 @@ void TestGeometry()
 int main()
 {
     TestFindFrameIndex();
+    TestLineFlow();
     TestSetAndClear();
     TestNewSession();
     TestReplaceTimeline();

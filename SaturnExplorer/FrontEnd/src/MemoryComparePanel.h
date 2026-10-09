@@ -18,6 +18,11 @@
 namespace sfe
 {
 
+// The colour of each side (0xRRGGBB): A is the baseline, B the comparison. Shared with the timeline
+// markers so a glance says which side is which.
+constexpr uint32_t kCompareColorA = 0x6199F2;
+constexpr uint32_t kCompareColorB = 0xF29E40;
+
 class MemoryComparePanel
 {
 public:

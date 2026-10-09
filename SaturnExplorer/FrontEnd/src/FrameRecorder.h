@@ -110,6 +110,15 @@ public:
     // against the scrubbed frame are forwarded to the sink as pending pokes.
     bool Select(size_t i, se_data_source* out);
 
+    // Select the frame whose number is exactly 'frameNo'. The lookup and the decompress happen under
+    // one lock, so a frame the worker evicts a moment earlier is refused rather than replaced by
+    // whatever now sits at its old index. 'outIndex' (optional) gets the index it was found at.
+    bool SelectFrame(uint64_t frameNo, size_t* outIndex, se_data_source* out);
+
+    // Index of the frame numbered exactly 'frameNo', or -1 when it is not (or no longer) in the ring.
+    // An answer is only as fresh as the call: to act on a frame, name it with SelectFrame.
+    int IndexOfFrame(uint64_t frameNo) const;
+
     // The frame number of what the last successful Select() decompressed; 0 if that Select was
     // refused or nothing is selected. Use this, not FrameNumber(index), to name the frame in the
     // scratch: the ring evicts from the front, so an index goes stale. UI thread only.
@@ -236,6 +245,8 @@ private:
     // Scratch holding the currently-selected decompressed frame (UI thread only;
     // read by the data-source callbacks below). Outlives the created context.
     Scratch               mScratch;
+    bool SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outIndex, se_data_source* out);
+    size_t FindFrame(uint64_t frameNo) const;   // mRingMtx held; mFrames.size() when absent
     uint64_t              mSelFrameNumber = 0;
     std::vector<uint16_t> mSelVdp1Regs, mSelVdp2Regs;
     se_sh2_regs           mSelSh2[2] = {};

@@ -26,6 +26,9 @@
 #include "AssemblyPanel.h"       // SH-2 Assembly (debugger)
 #include "Sh2Dump.h"             // Data > Dump SH-2: the listing as text
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
+#include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
+#include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
+#include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
 #include "LayerPanels.h"       // per-layer viewer tabs (VDP1 / NBG0-3 / RBG0)
@@ -304,6 +307,21 @@ private:
     void DrawVdp1Table();
     void DrawVdp2Table();
     void DrawTransportBar();   // prev/play/scrub/next, at the bottom of the VDP Output view
+    bool MarkCompareFrame(CompareMarkers::Slot slot);   // snapshot the shown frame as marker A or B
+    void OpenCompare();                                 // diff the two markers and show the panel
+    void ClearCompare();                                // drop the markers and the diff
+    void ResetCompareSession();                         // a different emulator run or source
+    int  CompareMarkerIndex(CompareMarkers::Slot slot) const;     // a marker's place on the timeline, or -1
+    uint64_t CompareDiffSideFrame(CompareMarkers::Slot slot) const;   // the shown comparison's frame if it is on the timeline, else 0
+    void ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform);
+    bool CompareRowVisible() const;
+    void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
+    void DrawCompareRow();
+    void CompareRowMetrics(char (&text)[2][64], float (&width)[3]) const;   // the row's labels and item widths
+    float CompareRowHeight(float availWidth) const;                         // what the row takes at that width, 0 if hidden
+    void DrawMemoryCompare(IPlatform& platform);
+    void HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform& platform);
+    bool ScrubToFrame(uint64_t frameNo);                // pause if needed and show recorded frame 'frameNo'
     bool EmulatorStampsStates() const;   // protocol v22+: Play From Here is only safe against these
     int  PlayFromHereTarget() const;
     std::string PlayFromHereTooltip(se_context* ctl, int target, bool canPlayHere) const;
@@ -396,6 +414,12 @@ private:
     bool             mDiscResolveIsFad = false; // interpret the resolve box as a FAD (LBA+150)
     AssemblyPanel            mAssemblyPanel;
     HexEditorPanel           mHexEditor;
+
+    // Frame Memory Compare (Docs/MemoryCompare)
+    CompareMarkers           mCompare;
+    MemoryComparePanel       mMemoryCompare;
+    DiffResult               mCompareDiff;              // what the panel shows (a == null: none); holds both snapshots
+    std::string              mCompareStatus;            // why the last mark or compare did not happen
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
     int                      mInputPort = 0;    // ...and the port it went to
@@ -539,6 +563,7 @@ private:
     // everything derived from the run that ended. See the definition.
     void AdoptNewEmulatorInstance();
     uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
+    void ClearRecordedFrames();   // empty the ring and detach the compare markers
     void DropRecordedHistory();
     // The thing the data panels are editing is about to change underneath them (the transport
     // picked another frame, a slot is being restored). Voids every in-flight edit now and
@@ -567,16 +592,15 @@ private:
     bool             mbScrubbing = false;      // viewing a recorded (past) frame
     int              mScrubIndex = -1;         // selected recorded-frame index
     int              mScrubShownIndex = -1;    // index currently built into mScrubContext
+    uint64_t         mScrubShownFrame = 0;     // ...and the frame number it holds (indexes shift as the ring evicts)
+    uint64_t         mScrubTargetFrame = 0;    // a navigation's frame, resolved by number in RefreshScrubContext
     se_context*      mLiveCtx = nullptr;       // the live context, reachable while panels
                                                // render from the scrub context (transport)
     // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
     // and the edits made while scrubbed, replayed atop the restored state when rewinding.
     bool             mSeekSupported = false;
-    struct PendingPoke { bool isSound = false; uint32_t addr = 0; std::vector<uint8_t> bytes; };
-    std::vector<PendingPoke> mPendingEdits;
-    int              mPendingEditsFrame = -1;  // scrub index the edits belong to (cleared on change)
-    uint64_t         mPendingEditsFrameNo = 0; // recorder frame number of that frame: the identity a
-                                               // replay checks, since indexes shift as the ring evicts
+    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer staged
+    StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
     void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
@@ -714,6 +738,7 @@ private:
         bool accessLog = true;    // "find what accesses this address" (data watchpoint log)
         bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
         bool discExplorer = true; // disc image ISO 9660 browser (sector -> file)
+        bool memoryCompare = false; // Frame Memory Compare: hidden until a comparison is opened
     };
     Panels           mPanels;
 
