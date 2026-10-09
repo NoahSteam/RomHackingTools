@@ -2165,7 +2165,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 
     // Staged edits replay only onto the frame they were made against. Ordinary Play, another
     // scrub or a new session leaves them behind, and they must not ride onto this target.
-    mStaged.KeepOnlyFor(frameNo);
+    if (!mStaged.BelongsTo(frameNo)) DiscardPendingEdits();
     const std::vector<uint8_t> edits = BuildEditBlob();
     // Sampled before the request goes out: the emulator can finish it before the call returns.
     const RestoreBaseline before = SampleRestoreBaseline();
@@ -2534,7 +2534,7 @@ bool App::RefreshScrubContext()
     const uint64_t wantFrame = mScrubTargetFrame;
     mScrubTargetFrame = 0;
     const ScrubPlan plan = PlanScrub(mRecorder, mScrubContext != nullptr, mScrubIndex, mScrubShownIndex,
-                                     mScrubShownFrame, wantFrame);
+                                     mScrubShownFrame, wantFrame, mScrubEdited);
     if (plan.kind == ScrubPlan::Nothing)
     {
         return false;
@@ -2587,10 +2587,11 @@ bool App::RefreshScrubContext()
         DiscardPendingEdits();
         return false;
     }
-    // Staged edits belong to the frame they were made on, so changing frames drops them. By frame
-    // number: an index can name a different frame by now, and edits that survived onto one would be
-    // replayed onto it by Play From Here.
-    mStaged.KeepOnlyFor(mRecorder.SelectedFrameNumber());
+    // The context was rebuilt from the recording, so what was edited on screen is gone and its staged
+    // edits must go with it, or Play From Here would replay edits that are no longer displayed. (A
+    // frame kept as it is, edits included, never gets here: PlanScrub says Keep.)
+    mStaged.Clear();
+    mScrubEdited = false;
     if (!mScrubContext)
     {
         se_config cfg;
@@ -7432,6 +7433,8 @@ void App::AdoptNewEmulatorInstance()
 // frame that IS in the ring, so it truncates the future instead of dropping the past.
 void App::DiscardPendingEdits()
 {
+    // The context may still show those edits; it is rebuilt from the recording before it is shown again.
+    if (!mStaged.Empty()) mScrubEdited = true;
     mStaged.Clear();
 }
 

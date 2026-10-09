@@ -44,26 +44,29 @@ struct View
 {
     int index = -1, shownIndex = -1;
     uint64_t shownFrame = 0, target = 0;
-    bool haveContext = false;
+    bool haveContext = false, edited = false;
+    int reloads = 0;   // how many times the context was rebuilt from the recording
 
     // One refresh against 'ring', applying the plan the way App does. Returns the frame now shown.
     ScrubPlan Refresh(const Ring& ring)
     {
-        const ScrubPlan plan = PlanScrub(ring, haveContext, index, shownIndex, shownFrame, target);
+        const ScrubPlan plan = PlanScrub(ring, haveContext, index, shownIndex, shownFrame, target, edited);
         target = 0;
         switch (plan.kind)
         {
         case ScrubPlan::Nothing: break;
-        case ScrubPlan::Keep: index = shownIndex = plan.index; break;
+        case ScrubPlan::Keep: index = shownIndex = plan.index; break;   // no reload: the context stays as it is
         case ScrubPlan::SelectFrame:
             index = ring.IndexOfFrame(plan.frame);
             if (index < 0) { shownIndex = -1; shownFrame = 0; break; }
             shownIndex = index; shownFrame = plan.frame; haveContext = true;
+            ++reloads; edited = false;
             break;
         case ScrubPlan::SelectIndex:
             index = shownIndex = plan.index;
             shownFrame = ring.frames[static_cast<size_t>(plan.index)];
             haveContext = true;
+            ++reloads; edited = false;
             break;
         }
         return plan;
@@ -159,6 +162,56 @@ void TestUserSeekWins()
     Check(p.kind == ScrubPlan::SelectFrame && v.shownFrame == 13, "a navigation names its own frame");
 }
 
+void TestSameFrameNavigationKeepsTheEditedContext()
+{
+    Ring ring(5, 10, 12);
+    View v;
+    v.index = 2;
+    v.Refresh(ring);   // showing frame 12, one reload
+    const int before = v.reloads;
+    v.target = 12;     // Go to the frame that is already shown
+    const ScrubPlan p = v.Refresh(ring);
+    Check(p.kind == ScrubPlan::Keep && v.reloads == before,
+          "navigating to the shown frame keeps the context (and so its edits) instead of reloading it");
+    ring.Publish(13);
+    ring.Publish(14);
+    v.target = 12;
+    const ScrubPlan q = v.Refresh(ring);
+    Check(q.kind == ScrubPlan::Keep && v.shownFrame == 12 && v.index == ring.IndexOfFrame(12) && v.reloads == before,
+          "also after the ring shifted: still no reload, index re-pointed");
+    v.target = 13;
+    v.Refresh(ring);
+    Check(v.shownFrame == 13 && v.reloads == before + 1, "a different frame does reload");
+}
+
+void TestForceReload()
+{
+    // Staged edits were discarded while the context still shows them (Play, an abandoned frame): the
+    // frame must be rebuilt from the recording before it is shown again, not kept as it is.
+    Ring ring(5, 10, 12);
+    View v;
+    v.index = 2;
+    v.Refresh(ring);
+    const int before = v.reloads;
+    v.edited = true;
+    ScrubPlan p = v.Refresh(ring);   // the user has not moved
+    Check(p.kind == ScrubPlan::SelectFrame && p.frame == 12 && v.reloads == before + 1 && !v.edited,
+          "an unmoved view with discarded edits is rebuilt, by frame number");
+    v.edited = true;
+    v.target = 12;
+    p = v.Refresh(ring);
+    Check(p.kind == ScrubPlan::SelectFrame && v.reloads == before + 2,
+          "so is a navigation to the same frame");
+    v.edited = true;
+    ring.Publish(13);
+    ring.Publish(14);
+    ring.Publish(15);
+    ring.Publish(16);
+    ring.Publish(17);   // frame 12 is gone (the ring holds 13..17)
+    p = v.Refresh(ring);
+    Check(p.kind == ScrubPlan::SelectIndex, "if the frame has left the ring it falls back to the index");
+}
+
 void TestStagedEdits()
 {
     const uint8_t a[] = { 1, 2, 3 };
@@ -207,6 +260,8 @@ int main()
     TestNavigationPersists();
     TestNavigationToEvictedFrame();
     TestUserSeekWins();
+    TestSameFrameNavigationKeepsTheEditedContext();
+    TestForceReload();
     TestStagedEdits();
     TestStagedEditsDoNotCrossFrames();
     if (gFail == 0) std::printf("ScrubStateTests: all passed\n");

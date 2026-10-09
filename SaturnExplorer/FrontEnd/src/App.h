@@ -599,6 +599,7 @@ private:
     // Rewind (v16): whether the connected server supports "Play from here" (savestate rewind),
     // and the edits made while scrubbed, replayed atop the restored state when rewinding.
     bool             mSeekSupported = false;
+    bool             mScrubEdited = false;     // the scrub context shows edits that are no longer staged
     StagedEdits      mStaged;                  // edits made against the scrubbed frame, tagged with its frame number
     void DiscardPendingEdits();                // abandoned frame / ended session: nothing to replay
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)

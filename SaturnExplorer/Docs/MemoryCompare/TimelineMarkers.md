@@ -114,6 +114,13 @@ Staged scrub edits are keyed the same way: `StagedEdits` carries one frame numbe
 changing frames drops it (`KeepOnlyFor`), and an edit recorded on another frame drops the old batch
 instead of retagging it, so Play From Here can never replay frame 11's edit onto frame 12.
 
+The invariant the two share: the scrub context shows edits if and only if they are staged for replay.
+Navigating to the frame already on screen is therefore a no-op (`PlanScrub` says Keep), not a reload,
+so an edit made on it stays both displayed and staged. Any reload rebuilds the context from the
+recording, so it clears the staged batch with it; and staged edits discarded while the context still
+shows them (Play, an abandoned frame) set `mScrubEdited`, which makes the next refresh rebuild the frame
+rather than keep the edited context.
+
 ## Opening the panel
 
 The button and the menu item do the same thing: run `Diff(mCompare.Snapshot(A), mCompare.Snapshot(B))`, hand the

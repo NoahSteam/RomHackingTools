@@ -38,28 +38,38 @@ struct ScrubPlan
 // A view the user has not moved keeps showing the same FRAME: the index is re-pointed at it as the
 // ring shifts, instead of the old index silently opening a neighbour. A frame that has left the
 // ring falls back to whatever the index now names.
+//
+// The context on screen may hold edits made to it. Keeping it (no reload) keeps them, so navigating
+// to the frame already shown is a Keep, not a reload that would show the recorded bytes while the
+// edits were still staged. 'forceReload' says the displayed edits were discarded (staged edits
+// dropped without rebuilding the context): the frame is then rebuilt from the recording.
 template <class Ring>
 ScrubPlan PlanScrub(const Ring& ring, bool haveContext, int index, int shownIndex, uint64_t shownFrame,
-                    uint64_t targetFrame)
+                    uint64_t targetFrame, bool forceReload)
 {
     ScrubPlan plan;
     const int n = static_cast<int>(ring.Count());
     if (n == 0) return plan;
+    const bool showing = haveContext && shownFrame != 0;
+    const int shownNow = showing ? ring.IndexOfFrame(shownFrame) : -1;
     if (targetFrame != 0)
     {
+        if (showing && targetFrame == shownFrame && shownNow >= 0 && !forceReload)
+        {
+            plan.kind = ScrubPlan::Keep;
+            plan.index = shownNow;
+            return plan;
+        }
         plan.kind = ScrubPlan::SelectFrame;
         plan.frame = targetFrame;
         return plan;
     }
-    if (haveContext && shownFrame != 0 && index == shownIndex)
+    if (showing && index == shownIndex && shownNow >= 0)
     {
-        const int now = ring.IndexOfFrame(shownFrame);
-        if (now >= 0)
-        {
-            plan.kind = ScrubPlan::Keep;
-            plan.index = now;
-            return plan;
-        }
+        plan.kind = forceReload ? ScrubPlan::SelectFrame : ScrubPlan::Keep;
+        plan.index = shownNow;
+        plan.frame = shownFrame;
+        return plan;
     }
     plan.kind = ScrubPlan::SelectIndex;
     plan.index = index < 0 ? 0 : index >= n ? n - 1 : index;

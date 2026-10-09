@@ -55,6 +55,8 @@ reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
 - after Go to A/B, keep the game paused while frames are still arriving (just after pausing): the shown
   frame stays the marked one as the ring shifts, and a hex edit made on it is not carried to another
   frame by navigating or scrubbing (Play From Here replays only the edits made on the frame it resumes)
+- edit a byte on the shown frame, then choose Go to that same frame: the byte keeps its edited value (it is
+  still staged); seek away and back: the recorded value returns and Play From Here replays nothing
 - **Export...** writes a CSV whose line count equals the changed-byte total for what was exported
 
 ## Supported platform UI
