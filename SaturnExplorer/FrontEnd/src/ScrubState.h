@@ -66,9 +66,16 @@ ScrubPlan PlanScrub(const Ring& ring, bool haveContext, int index, int shownInde
     }
     if (showing && index == shownIndex && shownNow >= 0)
     {
-        plan.kind = forceReload ? ScrubPlan::SelectFrame : ScrubPlan::Keep;
-        plan.index = shownNow;
-        plan.frame = shownFrame;
+        if (forceReload)
+        {
+            plan.kind = ScrubPlan::SelectFrame;
+            plan.frame = shownFrame;
+        }
+        else
+        {
+            plan.kind = ScrubPlan::Keep;
+            plan.index = shownNow;
+        }
         return plan;
     }
     plan.kind = ScrubPlan::SelectIndex;
@@ -95,10 +102,10 @@ public:
     bool BelongsTo(uint64_t frame) const { return !mPokes.empty() && mFrame == frame; }
 
     // Stage 'len' bytes at 'addr' on 'frame'. The hex editor writes one byte at a time, so a write
-    // that continues the last poke extends it.
+    // that continues the last poke extends it. A batch staged on another frame is dropped first.
     void Record(uint64_t frame, bool isSound, uint32_t addr, const uint8_t* bytes, size_t len)
     {
-        KeepOnlyFor(frame);
+        if (mFrame != frame) Clear();
         mFrame = frame;
         for (size_t i = 0; i < len; ++i)
         {
@@ -118,12 +125,6 @@ public:
             p.bytes.push_back(bytes[i]);
             mPokes.push_back(std::move(p));
         }
-    }
-
-    // Changing frames: keep the batch only if it was staged on 'frame'.
-    void KeepOnlyFor(uint64_t frame)
-    {
-        if (mFrame != frame) Clear();
     }
 
     void Clear()

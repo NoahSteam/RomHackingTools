@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cfloat>
-#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -2198,13 +2197,6 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 
 // ---- Frame Memory Compare (Docs/MemoryCompare) --------------------------------------------------
 
-// A and B read as one thing across the timeline markers, the label row and the panel.
-static ImU32 CompareSideColor(CompareMarkers::Slot slot)
-{
-    const uint32_t rgb = slot == CompareMarkers::A ? kCompareColorA : kCompareColorB;
-    return IM_COL32((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255);
-}
-
 // A different emulator run or loaded source: nothing marked on the old one is comparable with the new.
 void App::ResetCompareSession()
 {
@@ -2223,7 +2215,8 @@ void App::ClearCompare()
 int App::CompareMarkerIndex(CompareMarkers::Slot slot) const
 {
 #ifdef SE_ENABLE_LIVE
-    return mCompare.IndexOf(slot, mRecorder.Count(), [this](size_t i) { return mRecorder.FrameNumber(i); });
+    const uint64_t frame = mCompare.AttachedFrame(slot);
+    return frame ? mRecorder.IndexOfFrame(frame) : -1;
 #else
     (void)slot;
     return -1;
@@ -2242,9 +2235,9 @@ uint64_t App::CompareDiffSideFrame(CompareMarkers::Slot slot) const
 
 // Snapshot the frame the display is showing as marker A or B. False, with the reason in
 // mCompareStatus, when it cannot be done: a marker is only ever backed by a complete capture.
+#ifdef SE_ENABLE_LIVE
 bool App::MarkCompareFrame(CompareMarkers::Slot slot)
 {
-#ifdef SE_ENABLE_LIVE
     auto fail = [this](const std::string& why) { mCompareStatus = why; return false; };
     if (!mbHasData || !mMemBackend.Connected()) return fail("No memory source is loaded.");
     if (mRestoreOutstanding > 0 || mRestoreUnconfirmable) return fail("A restore is still in progress.");
@@ -2252,7 +2245,6 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
     // The frame the displayed context holds, not where the slider points: a transport action earlier
     // in this UI frame can already have moved the slider while the panels still draw the old frame.
     const bool showingScrub = mScrubContext != nullptr && mContext == mScrubContext;
-    uint64_t frameNo = 0;
     if (showingScrub)
     {
         if (mScrubShownIndex < 0) return fail("That recorded frame could not be loaded.");
@@ -2260,13 +2252,10 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
         if (mStaged.BelongsTo(mScrubShownFrame))
             return fail("This frame has unapplied edits. A comparison is of recorded memory: scrub to "
                         "another frame or press Play first.");
-        // Not FrameNumber(index): the ring evicts from the front, so an index goes stale.
-        frameNo = mRecorder.SelectedFrameNumber();
     }
-    else
-    {
-        frameNo = se_frame_number(mContext);   // the frame this capture came from, not the newest
-    }
+    // The frame the context holds: the recorder's frame when scrubbing (not an index, which the ring's
+    // eviction makes stale), else the frame this capture came from rather than the newest.
+    const uint64_t frameNo = showingScrub ? mScrubShownFrame : se_frame_number(mContext);
 
     std::string error;
     auto guard = [this]
@@ -2282,11 +2271,8 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
     if (!mCompare.Set(slot, std::move(snap))) return fail("The memory source changed while capturing.");
     mCompareStatus.clear();
     return true;
-#else
-    (void)slot;
-    return false;
-#endif
 }
+#endif
 
 // Diff the two markers and bring the panel forward. Synchronous: it is a few MB of compare.
 void App::OpenCompare()
@@ -2338,9 +2324,9 @@ bool App::ScrubToFrame(uint64_t frameNo)
 
 // A caret above the scrub bar at each marked frame: filled and on its frame while the frame is on
 // the timeline, hollow and pinned to the left edge once it has left (the snapshot is kept).
+#ifdef SE_ENABLE_LIVE
 void App::DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount)
 {
-#ifdef SE_ENABLE_LIVE
     ImDrawList* dl = ImGui::GetWindowDrawList();
     for (int s = 0; s < 2; ++s)
     {
@@ -2350,7 +2336,7 @@ void App::DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, i
         const bool attached = idx >= 0;
         const float x = attached ? SliderGrabCenterX(sliderMin.x, sliderMax.x, ImGui::GetStyle().GrabMinSize, frameCount, idx)
                                  : sliderMin.x + 8.0f;
-        const ImU32 col = CompareSideColor(slot);
+        const ImU32 col = CompareSideColor(s);   // A and B read as one thing across markers, row and panel
         const ImVec2 left(x - 5.0f, sliderMin.y - 2.0f), right(x + 5.0f, sliderMin.y - 2.0f), tip(x, sliderMin.y + 6.0f);
         if (attached)
         {
@@ -2362,10 +2348,8 @@ void App::DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, i
             dl->AddTriangle(left, right, tip, col, 1.5f);
         }
     }
-#else
-    (void)sliderMin; (void)sliderMax; (void)frameCount;
-#endif
 }
+#endif
 
 // The row under the transport bar while any marker is set: which frames are marked, the Compare
 // button, and why the last mark or compare did not happen. Its items wrap to the window width, and
@@ -2424,7 +2408,7 @@ void App::DrawCompareRow()
         place(s);
         if (mCompare.Has(slot))
         {
-            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(CompareSideColor(slot)), "%s", text[s]);
+            ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(CompareSideColor(s)), "%s", text[s]);
             if (CompareMarkerIndex(slot) < 0 && ImGui::IsItemHovered())
                 ImGui::SetTooltip("This frame is not on the rewind timeline (it has left the history, or was\n"
                                   "never recorded). The snapshot is kept and still compares, but the\n"
@@ -2463,30 +2447,20 @@ void App::DrawMemoryCompare(IPlatform& platform)
 void App::ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform)
 {
     if (!mCompareDiff.a) return;
-    struct StringSink : CsvSink
-    {
-        std::string text;
-        bool Write(const char* data, size_t len) override { text.append(data, len); return true; }
-    } sink;
-    RegionId region = req.exportRegion;
-    const uint64_t lines = req.allRegions ? mCompareDiff.TotalChangedBytes() : mCompareDiff.regions[static_cast<size_t>(region)].changedBytes;
-    sink.text.reserve(static_cast<size_t>(std::min<uint64_t>(lines * 48 + 256, 64u << 20)));
-    if (WriteCsv(mCompareDiff, req.allRegions ? nullptr : &region, sink) != CsvResult::Ok)
+    StringCsvSink sink;
+    const RegionId region = req.exportRegion;
+    const RegionId* only = req.allRegions ? nullptr : &region;
+    const uint64_t lines = only ? mCompareDiff.regions[static_cast<size_t>(region)].changedBytes
+                                : mCompareDiff.TotalChangedBytes();
+    sink.text.reserve(static_cast<size_t>(std::min<uint64_t>(lines * 44 + 256, 64u << 20)));
+    if (WriteCsv(mCompareDiff, only, sink) != CsvResult::Ok)
     {
         mOperationStatus = "Could not export the memory diff.";
         mOperationError = true;
         mLog.Error(mOperationStatus + " The written line count did not match the diff.");
         return;
     }
-    std::string name = "saturn_memory_diff_" + std::to_string(mCompareDiff.a->origin.frameNo) + "_" +
-                       std::to_string(mCompareDiff.b->origin.frameNo);
-    if (!req.allRegions)
-    {
-        name += '_';
-        for (const char* c = Traits(region).name; *c; ++c)
-            name += *c == ' ' ? '_' : static_cast<char>(std::tolower(static_cast<unsigned char>(*c)));
-    }
-    name += ".csv";
+    const std::string name = CsvFileName(mCompareDiff, only);
     ReportSave(platform.SaveFile(name.c_str(), sink.text.data(), sink.text.size()), name);
 }
 
@@ -7405,7 +7379,6 @@ void App::AdoptNewEmulatorInstance()
     }
     mScrubShownIndex = -1;
     mScrubShownFrame = 0;
-    mScrubTargetFrame = 0;
     mMemBackend.NoteSourceChanged();
     mCallStack.ClearAll();           // a stack through code the new run may not even load
     mCallStackDirty = true;

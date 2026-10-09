@@ -18,10 +18,13 @@
 namespace sfe
 {
 
-// The colour of each side (0xRRGGBB): A is the baseline, B the comparison. Shared with the timeline
-// markers so a glance says which side is which.
-constexpr uint32_t kCompareColorA = 0x6199F2;
-constexpr uint32_t kCompareColorB = 0xF29E40;
+// The colour of side 0 (A, the baseline: blue) or 1 (B, the comparison: orange), packed as ImGui's
+// IM_COL32 does. Shared by the panel and the timeline markers so a glance says which side is which.
+inline uint32_t CompareSideColor(int side, uint32_t alpha = 255)
+{
+    const uint32_t rgb = side == 0 ? 0x6199F2u : 0xF29E40u;
+    return (alpha << 24) | ((rgb & 0xFFu) << 16) | (rgb & 0xFF00u) | ((rgb >> 16) & 0xFFu);
+}
 
 class MemoryComparePanel
 {
@@ -102,18 +105,24 @@ private:
     };
     BuildKey Key() const { return { mRegionSel, mChangesOnly, mChangesOnly && mShowContext }; }
 
-    void DrawBody(const DiffResult* diff, bool aAttached, bool bAttached);
+    void DrawBody(const DiffResult* diff);
     void EnsureLines(const DiffResult& diff);
     void SelectByte(const RegionRef& ref, bool extend);
     bool InSelection(RegionId region, uint32_t offset) const;
-    void DrawCards(const DiffResult& diff, bool aAttached, bool bAttached);
-    void DrawToolbar(bool aAttached, bool bAttached);
+    const float* AsciiAdvance();   // mAsciiAdvance, refreshed when the font or size changed
+    void DrawCards(const DiffResult& diff);
+    void DrawToolbar();
     void DrawSummary(const DiffResult& diff, float height);
-    void DrawGrid(const DiffResult& diff, bool aAttached, bool bAttached);
-    void DrawContextMenu(bool aAttached, bool bAttached);
+    void DrawGrid(const DiffResult& diff);
+    void DrawContextMenu();
     void Raise(Action action, Side side);
     void RaiseExport(bool allRegions, RegionId region);
     int  FindLine(const RegionRef& ref) const;
+
+    bool     mAttached[2] = { false, false };   // per side: still on the rewind timeline (set by Draw)
+    float    mAsciiAdvance[95] = {};            // advance of each printable ASCII char, for the font below
+    const void* mAdvanceFont = nullptr;
+    float    mAdvanceSize = 0.0f;
 
     int      mRegionSel = -1;            // -1 = All Memory, else a RegionId
     bool     mChangesOnly = true;

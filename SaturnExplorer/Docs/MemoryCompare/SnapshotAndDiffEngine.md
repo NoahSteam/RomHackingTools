@@ -33,7 +33,7 @@ So every region carries an explicit id, space and capability set, and every loca
 `RegionRef`, never a bare `uint32_t`:
 
 ```cpp
-enum class RegionId : uint8_t {          // order == SaturnRegions(); static_assert on the count
+enum class RegionId : uint8_t {          // order == SaturnRegions()
     Lwram, Hwram, SoundRam, Vdp1Ram, Vdp1Fb, Vdp1Regs, Vdp2Ram, Vdp2Cram, Vdp2Regs, Count };
 
 enum class AddressSpace : uint8_t {
@@ -43,10 +43,10 @@ enum class AddressSpace : uint8_t {
 };
 
 enum RegionCaps : uint8_t {
-    kNavigate   = 1,   // Memory tab GoTo is valid
-    kWatch      = 2,   // readable through IMemoryBackend, so a Watch can resolve it
-    kBreakWrite = 4,   // an SH-2 / SCU-DMA write watchpoint can observe a write here
-    kSh2Code    = 8    // may hold SH-2 code: View in Assembly is meaningful
+    kCapNavigate   = 1,   // Memory tab GoTo is valid
+    kCapWatch      = 2,   // readable through IMemoryBackend, so a Watch can resolve it
+    kCapBreakWrite = 4,   // an SH-2 / SCU-DMA write watchpoint can observe a write here
+    kCapSh2Code    = 8    // may hold SH-2 code: View in Assembly is meaningful
 };
 
 struct RegionTraits { RegionId id; const char* name; AddressSpace space;
@@ -58,8 +58,9 @@ bool     Resolve(uint32_t busAddress, RegionRef* out); // via SaturnRegionIndex(
 ```
 
 The capability table is the single source for what the panel's context menu offers; see
-[ComparePanel.md](ComparePanel.md). It is derived from `SaturnRegions()` by index, with the
-`static_assert`, so a region added there cannot silently lack traits.
+[ComparePanel.md](ComparePanel.md). It is derived from `SaturnRegions()` by index, and a
+`static_assert` on the per-region address-space and capability table means a `RegionId` added without
+its entry fails to compile; `TestTraits` checks the table against `SaturnRegions()`.
 
 ## Snapshot and identity
 
@@ -93,9 +94,9 @@ Verified against the code:
 
 1. **Per-region reads are coherent.** `se_begin_frame` copies every region and register into the
    context's `HardwareSnapshot` inside the driver's `begin_capture`/`end_capture` pin
-   (`Core/src/HardwareSnapshot.cpp:56-70`; the live driver pins the newest snapshot per thread,
-   `Drivers/Live/src/LiveDriver.cpp:1620`). `se_read_vram` and `se_get_vdpN_register` then read that
-   immutable copy (`Core/src/Context.h:458`, `:378`). Reading nine regions through `IMemoryBackend`
+   (`HardwareSnapshot` in `Core/src/HardwareSnapshot.cpp`; the live driver pins the newest snapshot per
+   thread in `LiveDriver.cpp`). `se_read_vram` and `se_get_vdpN_register` then read that
+   immutable copy (`Context.h`). Reading nine regions through `IMemoryBackend`
    therefore cannot straddle two emulator frames, **at the live head too**, as long as nothing
    re-derives the context between the reads. The live driver publishing a newer snapshot on its
    poll thread does not affect an already-begun context.
@@ -110,19 +111,19 @@ Verified against the code:
    snapshot.
 4. **The frame number must come from the same source as the bytes.**
    - At the live head: `se_frame_number(ctx)` returns the frame the *capture* came from
-     (`CapturedFrame`, `Core/src/HostAbi.cpp:582`), not the newest the emulator has reached.
+     (`CapturedFrame` in `Core/src/HostAbi.cpp`), not the newest the emulator has reached.
    - On a scrubbed frame: the scrub data source has no `frame_number` callback, so
      `se_frame_number` returns 0 there. The number must come from the recorder.
    - Deriving it afterwards from `FrameNumber(mScrubShownIndex)` is not safe: that is a deque
      *index*, and the ring evicts from the front (the worker on publish, or `Configure`), so the
-     index can name a different frame than the one decompressed into the scratch. Add
-     `FrameRecorder::SelectedFrameNumber()`, set under `mRingMtx` in `Select()` from the frame it
-     actually decompressed (0 when nothing is selected or the last `Select` was refused), and use
-     that. Capture also fails when it is 0.
+     index can name a different frame than the one decompressed into the scratch. So
+     `FrameRecorder::SelectedFrameNumber()` is set under `mRingMtx` in `Select()`/`SelectFrame()` from
+     the frame they actually decompressed (0 when nothing is selected or the last select was
+     refused), and capture uses that. It also fails when it is 0.
 5. **Pending scrub edits.** The scrub source is writable: `CbEditVram`/`CbEditMain` update the
    context's visible copy (`Context::WriteVram`) *and* record a pending poke
-   (`FrameRecorder.cpp:318`, `App::RecordPendingEdit`). So the context the backend reads can differ
-   from the recorded frame. Rule: **capture is refused while the shown scrub frame has pending
+   (`FrameRecorder`'s edit callbacks, `App::RecordPendingEdit`). So the context the backend reads can differ
+   from the recorded frame. Rule: **capture is refused while the shown scrub frame has staged
    edits.** The caller checks; the engine just receives bytes. Recorded history, not hypothetical
    edits, is what a frame comparison is about. At the live head there is no pending state: a poke
    is applied to the running emulator and the snapshot is whatever the Memory tab currently shows.
@@ -138,19 +139,14 @@ Region sizes come from `SaturnRegions()`: about 3.5 MB per snapshot in total.
 ## Diff
 
 ```cpp
-struct ChangedRange { uint32_t offset; uint32_t length; };
-
 struct RegionDiff {
-    RegionId                  id;
-    uint32_t                  changedBytes;     // EXACT
-    uint32_t                  rangeCount;       // EXACT count of merged ranges
-    std::vector<ChangedRange> ranges;           // SUMMARY ONLY: first kMaxStoredRanges
-    bool RangesTruncated() const;               // rangeCount > ranges.size()
+    uint32_t changedBytes;   // differing bytes
+    uint32_t rangeCount;     // runs of them, after merging runs closer than mergeGap
 };
 
 struct DiffResult {
     std::shared_ptr<const MemSnapshot> a, b;    // the exact data every later scan reads
-    std::vector<RegionDiff>            regions;
+    std::vector<RegionDiff>            regions; // indexed by RegionId
 };
 
 enum class DiffStatus { Ok, NullSnapshot, SessionMismatch, RegionMismatch };
@@ -160,21 +156,20 @@ uint64_t   DiffResult::TotalChangedBytes() const;
 
 - Byte-for-byte over each region, with an 8-byte word fast path that descends to bytes only when a
   word differs.
-- Ranges are maximal runs of differing bytes, merged when the gap is below `mergeGap` (default 4;
-  0 and 1 both mean contiguous bytes only).
-  `kMaxStoredRanges` is 100,000 per region. Past that, ranges stop being stored but
-  `changedBytes` and `rangeCount` stay exact and `RangesTruncated()` is true.
-- **`ranges` is a summary for display and nothing else.** It feeds the "Changed Ranges" column. No
-  other function reads it.
+- A range is a maximal run of differing bytes, merged with the next when the gap is below `mergeGap`
+  (default 4; 0 and 1 both mean contiguous bytes only). Only the count is kept: `rangeCount` feeds the
+  "Changed Ranges" column and nothing else, and both counts are exact however many changes there are.
 
 ## Complete outputs: rows and CSV rescan the snapshots
 
 `BuildRows` and `WriteCsv` take the two snapshots (via `DiffResult::a`/`b`) and scan the region
-bytes directly. They never consume `RegionDiff::ranges`, so the storage cap cannot omit anything.
+bytes directly. They never consume the summaries, so nothing is ever left out.
 
 ```cpp
+constexpr uint32_t kDiffRowBytes = 16;   // bytes per row, shared with the panel's grid
+
 struct DiffRow {
-    RegionRef ref;           // 16-byte-aligned row start within the region
+    RegionRef ref;           // kDiffRowBytes-aligned row start within the region
     uint16_t  validMask;     // bytes of the row inside the region (a 0x18-byte region ends mid-row)
     uint16_t  changedMask;   // subset of validMask that differs
     bool      isContext;     // shown only as context around a change
@@ -183,8 +178,10 @@ struct DiffRow {
 std::vector<DiffRow> BuildRows(const DiffResult&, RegionId, const DiffOptions&);
 
 struct CsvSink { virtual bool Write(const char* data, size_t len) = 0; };   // false: stop/cancel
+struct StringCsvSink : CsvSink { std::string text; /* Write appends */ };    // what an export uses
 enum class CsvResult { Ok, Cancelled, IntegrityError };
-CsvResult WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
+CsvResult   WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
+std::string CsvFileName(const DiffResult&, const RegionId* only);   // saturn_memory_diff_<a>_<b>[_<region>].csv
 ```
 
 - `BuildRows` emits every row containing a changed byte, plus `contextRows` either side when
@@ -194,28 +191,27 @@ CsvResult WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSi
 - `WriteCsv` **streams** through a sink instead of building one string: an all-bytes-differ export
   is millions of lines. One line per changed byte: `region,offset,bus_address,old,new`. Header: both
   frame numbers, both session ids and the timeline epochs. `bus_address` is empty for regions with
-  no bus address meaning (`DeviceImage`). It returns false if the sink stops it.
+  no bus address meaning (`DeviceImage`). It returns `Cancelled` if the sink stops it.
 - Integrity check: `WriteCsv` counts the lines it wrote per region and compares with
   `RegionDiff::changedBytes`. A mismatch (or a `DiffResult` without every region's count) is
   `IntegrityError`, never a silent short file.
 - "All Memory" in the panel is a sequence of per-region sections (`BuildRows` per region, built
-  lazily), not one merged list.
+  on demand), not one merged list.
 
 ## Tests
 
 New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
 `MemorySearchTests`:
 
-- identical snapshots: zero changes, no ranges, no rows in Changes Only mode
+- identical snapshots: zero changes, no rows in Changes Only mode
 - single byte at the first and last byte of a region; change spanning a row boundary
 - two changes inside and beyond `mergeGap`
 - word fast path: change at each offset 0..7 in a word. Every region size is a multiple of 8, so the
   byte-at-a-time tail path is not reachable through the public API; the 0x18-byte register region
   covers the partial *row* case instead (`validMask`)
-- **truncation**: more than `kMaxStoredRanges` isolated changes in one region.
-  `RangesTruncated()` is true, `rangeCount` and `changedBytes` are exact, and **the union of
-  `BuildRows` masks and the CSV lines each equal the true set of differing bytes** (compared against
-  a brute-force oracle)
+- **large diffs stay exact** (`TestLargeDiffsStayExact`): with many isolated changes in a region,
+  `rangeCount` and `changedBytes` are exact and **the union of `BuildRows` masks and the CSV lines
+  each equal the true set of differing bytes** (compared against a brute-force oracle)
 - context windows merge, `gapBefore` appears exactly where rows are elided, windows clip at region
   edges
 - `Diff` returns `SessionMismatch` for different `sessionId`, and `Ok` across different
@@ -224,6 +220,6 @@ New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
 - capture: a failed read returns null; success copies, and later mutation of the source does not
   change the snapshot; a changed `se_derive_serial` or source id during capture is rejected; a zero
   frame number is rejected
-- region table: the `static_assert` and capability flags match the table above (guards against a
-  region being added without traits)
-- CSV golden output for a small fixture; a sink that cancels stops cleanly
+- region table: ids, address spaces and capability flags match the table above (`TestTraits`; the
+  `static_assert` covers a region added without an entry)
+- CSV golden output for a small fixture, `CsvFileName`; a sink that cancels stops cleanly

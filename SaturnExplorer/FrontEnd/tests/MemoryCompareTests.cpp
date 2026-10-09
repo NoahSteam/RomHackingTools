@@ -56,16 +56,26 @@ std::vector<uint32_t> Oracle(const MemSnapshot& a, const MemSnapshot& b, RegionI
     return v;
 }
 
-struct StringSink : CsvSink
+// StringCsvSink that can be told to stop, to test cancellation.
+struct StringSink : StringCsvSink
 {
-    std::string text;
     size_t limit = ~size_t(0);
     bool Write(const char* d, size_t n) override
     {
-        text.append(d, n);
+        StringCsvSink::Write(d, n);
         return text.size() < limit;
     }
 };
+
+// Every differing offset of a region, read back from the rows the diff produces.
+std::vector<uint32_t> OffsetsFromRows(const DiffResult& d, RegionId id, const DiffOptions& o = DiffOptions())
+{
+    std::vector<uint32_t> v;
+    for (const DiffRow& row : BuildRows(d, id, o))
+        for (uint32_t k = 0; k < kDiffRowBytes; ++k)
+            if (row.changedMask & (1u << k)) v.push_back(row.ref.offset + k);
+    return v;
+}
 
 size_t CountLines(const std::string& s, const char* prefix)
 {
@@ -160,8 +170,7 @@ void TestIdentical()
     DiffResult d = MakeDiff(a, b);
     Check(d.TotalChangedBytes() == 0, "identical snapshots: no changes");
     for (const RegionDiff& r : d.regions)
-        Check(r.changedBytes == 0 && r.rangeCount == 0 && r.ranges.empty() && !r.RangesTruncated(),
-              "identical: empty region diff");
+        Check(r.changedBytes == 0 && r.rangeCount == 0, "identical: empty region diff");
     Check(BuildRows(d, RegionId::Hwram, DiffOptions()).empty(), "identical: no rows in Changes Only");
 }
 
@@ -176,8 +185,8 @@ void TestSingleBytes()
             b->regions[Ix(id)].bytes[off] = 0x5A;
             DiffResult d = MakeDiff(a, b);
             const RegionDiff& r = d.regions[Ix(id)];
-            Check(r.changedBytes == 1 && r.rangeCount == 1 && r.ranges.size() == 1 &&
-                  r.ranges[0].offset == off && r.ranges[0].length == 1, "a single changed byte is one range");
+            Check(r.changedBytes == 1 && r.rangeCount == 1 && OffsetsFromRows(d, id) == std::vector<uint32_t>({ off }),
+                  "a single changed byte is one range, at that offset");
             Check(d.TotalChangedBytes() == 1, "and nothing else changed");
         }
     }
@@ -192,7 +201,7 @@ void TestWordFastPath()
         b->regions[Ix(RegionId::Lwram)].bytes[64 + k] = 1;
         DiffResult d = MakeDiff(a, b);
         const RegionDiff& r = d.regions[Ix(RegionId::Lwram)];
-        Check(r.changedBytes == 1 && r.ranges.size() == 1 && r.ranges[0].offset == 64 + k,
+        Check(r.changedBytes == 1 && OffsetsFromRows(d, RegionId::Lwram) == std::vector<uint32_t>({ 64 + k }),
               "a change at every offset of a word is found exactly");
     }
     auto a = Blank(1), b = Blank(2);
@@ -213,10 +222,9 @@ void TestMergeGap()
         return MakeDiff(a, b, o).regions[Ix(RegionId::Hwram)];
     };
     RegionDiff r = edit(10, 11);
-    Check(r.rangeCount == 1 && r.ranges[0].length == 2, "adjacent bytes always merge");
+    Check(r.rangeCount == 1 && r.changedBytes == 2, "adjacent bytes always merge");
     r = edit(10, 13);   // gap of 2
-    Check(r.rangeCount == 1 && r.ranges[0].offset == 10 && r.ranges[0].length == 4 && r.changedBytes == 2,
-          "a gap below mergeGap merges, and changedBytes stays exact");
+    Check(r.rangeCount == 1 && r.changedBytes == 2, "a gap below mergeGap merges, and changedBytes stays exact");
     r = edit(10, 14);   // gap of 3
     Check(r.rangeCount == 1, "a gap of mergeGap-1 still merges");
     r = edit(10, 15);   // gap of 4
@@ -285,10 +293,10 @@ void TestPartialRow()
     Check(rows[1].changedMask == (1u << 7), "and the change lands inside them");
 }
 
-void TestTruncationStaysExact()
+void TestLargeDiffsStayExact()
 {
-    // Every second byte of a 1 MiB region differs and mergeGap 1 keeps them apart: far more
-    // ranges than are stored. Counts, rows and CSV must still be exact.
+    // Every second byte of a 1 MiB region differs and mergeGap 1 keeps them apart: half a million
+    // ranges. Counts, rows and CSV must all cover every one.
     DiffOptions o;
     o.mergeGap = 1;
     auto a = Blank(1), b = Blank(2);
@@ -297,21 +305,14 @@ void TestTruncationStaysExact()
     DiffResult d = MakeDiff(a, b, o);
     const RegionDiff& r = d.regions[Ix(RegionId::Hwram)];
     const uint32_t expect = static_cast<uint32_t>(bytes.size() / 2);
-    Check(r.changedBytes == expect && r.rangeCount == expect, "counts are exact past the cap");
-    Check(r.ranges.size() == kMaxStoredRanges && r.RangesTruncated(), "only the stored list is capped");
+    Check(r.changedBytes == expect && r.rangeCount == expect, "counts are exact however many ranges there are");
 
     const std::vector<uint32_t> truth = Oracle(*a, *b, RegionId::Hwram);
-    std::vector<DiffRow> rows = BuildRows(d, RegionId::Hwram, o);
-    std::vector<uint32_t> fromRows;
-    fromRows.reserve(truth.size());
-    for (const DiffRow& row : rows)
-        for (uint32_t k = 0; k < 16; ++k)
-            if (row.changedMask & (1u << k)) fromRows.push_back(row.ref.offset + k);
-    Check(fromRows == truth, "rows cover every changed byte, not just the stored ranges");
+    Check(OffsetsFromRows(d, RegionId::Hwram, o) == truth, "rows cover every changed byte");
 
     StringSink sink;
     RegionId only = RegionId::Hwram;
-    Check(WriteCsv(d, &only, sink) == CsvResult::Ok, "CSV of a truncated diff succeeds");
+    Check(WriteCsv(d, &only, sink) == CsvResult::Ok, "CSV of a large diff succeeds");
     Check(CountLines(sink.text, "HWRAM,") == truth.size(), "CSV has a line for every changed byte");
 }
 
@@ -416,6 +417,11 @@ void TestCsv()
     Check(one.text.find("HWRAM,") != std::string::npos && one.text.find("VDP1 FB,") == std::string::npos,
           "a single-region export holds only that region");
 
+    Check(CsvFileName(d, nullptr) == "saturn_memory_diff_100_200.csv", "the export file name carries both frames");
+    Check(CsvFileName(d, &only) == "saturn_memory_diff_100_200_hwram.csv", "and the region, lower case");
+    const RegionId fb = RegionId::Vdp1Fb;
+    Check(CsvFileName(d, &fb) == "saturn_memory_diff_100_200_vdp1_fb.csv", "with spaces as underscores");
+
     StringSink cancel;
     cancel.limit = 1;   // refuse the first chunk
     Check(WriteCsv(d, nullptr, cancel) == CsvResult::Cancelled, "a sink that stops the write cancels cleanly");
@@ -436,7 +442,7 @@ int main()
     TestMergeGap();
     TestRowsAndContext();
     TestPartialRow();
-    TestTruncationStaysExact();
+    TestLargeDiffsStayExact();
     TestIdentityRules();
     TestSwapMirrors();
     TestCapture();

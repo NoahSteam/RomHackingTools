@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 #include "imgui.h"
@@ -22,14 +21,7 @@ const ImU32 kColSel    = IM_COL32(70, 110, 90, 170);
 const ImU32 kColHover  = IM_COL32(80, 90, 110, 110);
 // Side colours: A is the baseline (blue), B the comparison (orange). The same two tint the
 // changed bytes in their own columns and the card titles, so a glance says which side is which.
-ImVec4 SideColor(uint32_t rgb)
-{
-    return ImVec4(((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, 1.0f);
-}
-const ImVec4 kColA     = SideColor(kCompareColorA);
-const ImVec4 kColB     = SideColor(kCompareColorB);
-const ImU32  kTintA    = IM_COL32(70, 120, 215, 160);
-const ImU32  kTintB    = IM_COL32(225, 140, 50, 160);
+const ImU32  kTint[2]  = { CompareSideColor(0, 160), CompareSideColor(1, 160) };   // a changed byte, per side
 
 constexpr float kByteGap = 4.0f;
 constexpr float kPadX = 4.0f;
@@ -88,7 +80,8 @@ std::string RowLabel(const RegionRef& ref)
 
 const char* NoBreakReason(RegionId id)
 {
-    if (id == RegionId::Vdp1Fb) return "VDP1 FB is an image drawn by VDP1, not written over the bus.";
+    if (Traits(id).space == AddressSpace::DeviceImage)
+        return "This is an image drawn by the VDP, not memory written over the bus.";
     return "A write watchpoint cannot observe this region.";
 }
 
@@ -177,6 +170,23 @@ bool MemoryComparePanel::ActionEnabled(Action action, RegionId region)
     return false;
 }
 
+// Advance of each printable ASCII character at the current font and size: measured once per font,
+// not per cell per frame (the ASCII columns are about 1500 cells on screen).
+const float* MemoryComparePanel::AsciiAdvance()
+{
+    if (mAdvanceFont != ImGui::GetFont() || mAdvanceSize != ImGui::GetFontSize())
+    {
+        for (int i = 0; i < 95; ++i)
+        {
+            const char ch = static_cast<char>(0x20 + i);
+            mAsciiAdvance[i] = ImGui::CalcTextSize(&ch, &ch + 1).x;
+        }
+        mAdvanceFont = ImGui::GetFont();
+        mAdvanceSize = ImGui::GetFontSize();
+    }
+    return mAsciiAdvance;
+}
+
 MemoryComparePanel::GridMetrics MemoryComparePanel::Metrics()
 {
     // The widest hex digit sets the byte width (proportional digits A-D are wider than F).
@@ -226,7 +236,7 @@ bool MemoryComparePanel::InSelection(RegionId region, uint32_t offset) const
 
 int MemoryComparePanel::FindLine(const RegionRef& ref) const
 {
-    const uint32_t rowStart = ref.offset & ~15u;
+    const uint32_t rowStart = ref.offset - ref.offset % kDiffRowBytes;
     for (size_t i = 0; i < mLines.size(); ++i)
         if (mLines[i].kind == Line::Row && mLines[i].region == ref.id && mLines[i].row.ref.offset == rowStart)
             return static_cast<int>(i);
@@ -272,7 +282,6 @@ void MemoryComparePanel::EnsureLines(const DiffResult& diff)
         const RegionId id = static_cast<RegionId>(i);
         const std::vector<DiffRow> rows = BuildRows(diff, id, o);
         if (rows.empty()) continue;
-        mLines.reserve(mLines.size() + rows.size() + 1);
         if (all)
         {
             Line h;
@@ -284,7 +293,7 @@ void MemoryComparePanel::EnsureLines(const DiffResult& diff)
         uint32_t nextRow = 0;   // the row index just past the previous kept row
         for (const DiffRow& r : rows)
         {
-            const uint32_t idx = r.ref.offset / 16u;
+            const uint32_t idx = r.ref.offset / kDiffRowBytes;
             if (r.gapBefore)
             {
                 Line g;
@@ -309,11 +318,13 @@ void MemoryComparePanel::Draw(const DiffResult* diff, bool aAttached, bool bAtta
 {
     if (mFocusRequested) { ImGui::SetNextWindowFocus(); mFocusRequested = false; }
     const bool open = ImGui::Begin("Memory Compare");
-    if (open) DrawBody(diff, aAttached, bAttached);
+    mAttached[0] = aAttached;
+    mAttached[1] = bAttached;
+    if (open) DrawBody(diff);
     ImGui::End();
 }
 
-void MemoryComparePanel::DrawBody(const DiffResult* diff, bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawBody(const DiffResult* diff)
 {
     if (!diff || !diff->a || !diff->b)
     {
@@ -338,8 +349,8 @@ void MemoryComparePanel::DrawBody(const DiffResult* diff, bool aAttached, bool b
         mLinesValid = false;
     }
 
-    DrawCards(*diff, aAttached, bAttached);
-    DrawToolbar(aAttached, bAttached);
+    DrawCards(*diff);
+    DrawToolbar();
 
     if (diff->TotalChangedBytes() == 0)
     {
@@ -378,19 +389,20 @@ void MemoryComparePanel::DrawBody(const DiffResult* diff, bool aAttached, bool b
         }
         mScrollLine = line;
     }
-    DrawGrid(*diff, aAttached, bAttached);
+    DrawGrid(*diff);
 }
 
-void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawCards(const DiffResult& diff)
 {
     if (!ImGui::BeginTable("cmpcards", 2, ImGuiTableFlags_SizingStretchSame)) return;
     for (int s = 0; s < 2; ++s)
     {
         const MemSnapshot& snap = s == 0 ? *diff.a : *diff.b;
-        const bool attached = s == 0 ? aAttached : bAttached;
-        ImGui::TableNextColumn();
         const bool isA = s == 0;
-        ImGui::TextColored(isA ? kColA : kColB, isA ? "Frame A (baseline)" : "Frame B (compare)");
+        const bool attached = mAttached[s];
+        ImGui::TableNextColumn();
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(CompareSideColor(s)),
+                           isA ? "Frame A (baseline)" : "Frame B (compare)");
         ImGui::Text("%llu", static_cast<unsigned long long>(snap.origin.frameNo));
         ImGui::SameLine();
         ImGui::TextDisabled("%s  -  %s", FormatTime(snap.origin.frameNo).c_str(),
@@ -407,7 +419,7 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool 
     ImGui::EndTable();
 }
 
-void MemoryComparePanel::DrawToolbar(bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawToolbar()
 {
     // The controls wrap: each stays on the line only if it fits in the window, so a narrow dock
     // never pushes one out of reach (the grid's own scrollbar does not scroll the toolbar).
@@ -431,7 +443,7 @@ void MemoryComparePanel::DrawToolbar(bool aAttached, bool bAttached)
         RaiseExport(mRegionSel < 0, mRegionSel < 0 ? RegionId::Lwram : static_cast<RegionId>(mRegionSel));
     for (int s = 0; s < 2; ++s)
     {
-        const bool attached = s == 0 ? aAttached : bAttached;
+        const bool attached = mAttached[s];
         const char* label = s == 0 ? "Go to A" : "Go to B";
         place(buttonW(label));
         ImGui::BeginDisabled(!attached);
@@ -450,7 +462,7 @@ void MemoryComparePanel::DrawToolbar(bool aAttached, bool bAttached)
     ImGui::SameLine();
     const float room = right - ImGui::GetCursorScreenPos().x - gap - goW;
     ImGui::SetNextItemWidth(std::max(60.0f, std::min(150.0f, room)));
-        bool go = ImGui::InputText("##cmpjump", mJumpBuf, sizeof(mJumpBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+    bool go = ImGui::InputText("##cmpjump", mJumpBuf, sizeof(mJumpBuf), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();
     go |= ImGui::Button("Go");
     if (go)
@@ -518,11 +530,13 @@ void MemoryComparePanel::DrawSummary(const DiffResult& diff, float height)
     ImGui::EndTable();
 }
 
-void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawGrid(const DiffResult& diff)
 {
     const GridMetrics gm = Metrics();
-    const float hexW = gm.byteW * 16.0f + kPadX;
-    const float asciiW = gm.asciiW * 16.0f + kPadX;
+    const float rowBytes = static_cast<float>(kDiffRowBytes);
+    const float hexW = gm.byteW * rowBytes + kPadX;
+    const float asciiW = gm.asciiW * rowBytes + kPadX;
+    const float* advance = AsciiAdvance();
     float addrW = 0.0f;
     for (size_t i = 0; i < kRegionCount; ++i)
         addrW = std::max(addrW, ImGui::CalcTextSize(RowLabel({ static_cast<RegionId>(i), 0xFFFFF }).c_str()).x);
@@ -600,11 +614,11 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
                     ImGui::TableSetColumnIndex(1 + side);
                     const ImVec2 p = ImGui::GetCursorScreenPos();
                     ImGui::PushID(side);
-                    ImGui::InvisibleButton("##hex", ImVec2(gm.byteW * 16.0f, lineH));
+                    ImGui::InvisibleButton("##hex", ImVec2(gm.byteW * rowBytes, lineH));
                     int hovByte = -1;
                     if (ImGui::IsItemHovered())
                     {
-                        hovByte = std::min(15, std::max(0, static_cast<int>((ImGui::GetIO().MousePos.x - p.x) / gm.byteW)));
+                        hovByte = std::min(static_cast<int>(kDiffRowBytes) - 1, std::max(0, static_cast<int>((ImGui::GetIO().MousePos.x - p.x) / gm.byteW)));
                         if (!(r.validMask & (1u << hovByte))) hovByte = -1;
                     }
                     if (hovByte >= 0)
@@ -622,13 +636,13 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
                             openPopup = true;
                         }
                     }
-                    for (int k = 0; k < 16; ++k)
+                    for (int k = 0; k < static_cast<int>(kDiffRowBytes); ++k)
                     {
                         if (!(r.validMask & (1u << k))) continue;
                         const uint32_t off = r.ref.offset + static_cast<uint32_t>(k);
                         const ImVec2 bp(p.x + k * gm.byteW, p.y);
                         const ImVec2 be(bp.x + gm.byteW - 1.0f, bp.y + lineH);
-                        if (r.changedMask & (1u << k)) dl->AddRectFilled(bp, be, side == 0 ? kTintA : kTintB);
+                        if (r.changedMask & (1u << k)) dl->AddRectFilled(bp, be, kTint[side]);
                         if (InSelection(r.ref.id, off)) dl->AddRectFilled(bp, be, kColSel);
                         else if (k == hovByte)          dl->AddRectFilled(bp, be, kColHover);
                         const char digits[2] = { kHex[bytes[off] >> 4], kHex[bytes[off] & 15] };
@@ -642,16 +656,16 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
                     const std::vector<uint8_t>& bytes = (side == 0 ? diff.a : diff.b)->regions[ri].bytes;
                     ImGui::TableSetColumnIndex(3 + side);
                     const ImVec2 p = ImGui::GetCursorScreenPos();
-                    ImGui::Dummy(ImVec2(gm.asciiW * 16.0f, lineH));
-                    for (int k = 0; k < 16; ++k)
+                    ImGui::Dummy(ImVec2(gm.asciiW * rowBytes, lineH));
+                    for (int k = 0; k < static_cast<int>(kDiffRowBytes); ++k)
                     {
                         if (!(r.validMask & (1u << k))) continue;
                         const ImVec2 cp(p.x + k * gm.asciiW, p.y);
                         if (r.changedMask & (1u << k))
-                            dl->AddRectFilled(cp, ImVec2(cp.x + gm.asciiW, cp.y + lineH), side == 0 ? kTintA : kTintB);
+                            dl->AddRectFilled(cp, ImVec2(cp.x + gm.asciiW, cp.y + lineH), kTint[side]);
                         const uint8_t c = bytes[r.ref.offset + static_cast<uint32_t>(k)];
                         const char ch = (c >= 0x20 && c < 0x7F) ? static_cast<char>(c) : '.';
-                        const float w = ImGui::CalcTextSize(&ch, &ch + 1).x;
+                        const float w = advance[ch - 0x20];
                         dl->AddText(ImVec2(cp.x + (gm.asciiW - w) * 0.5f, cp.y), ByteColor(r, k), &ch, &ch + 1);
                     }
                 }
@@ -661,15 +675,15 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
         ImGui::EndTable();
     }
     if (openPopup) ImGui::OpenPopup(popupId);
-    DrawContextMenu(aAttached, bAttached);
+    DrawContextMenu();
 }
 
-void MemoryComparePanel::DrawContextMenu(bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawContextMenu()
 {
     if (!ImGui::BeginPopup("cmpctx")) return;
     if (!mSelValid) { ImGui::EndPopup(); return; }
     const bool isA = mSelSide == Side::A;
-    const bool attached = isA ? aAttached : bAttached;
+    const bool attached = mAttached[isA ? 0 : 1];
     ImGui::TextDisabled("%s  %s  (frame %c)", Traits(mSelRegion).name,
                         RowLabel({ mSelRegion, mSelLo }).c_str(), isA ? 'A' : 'B');
     ImGui::Separator();

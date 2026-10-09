@@ -22,23 +22,6 @@
 namespace sfe
 {
 
-// Index of the entry whose frame number is exactly 'frameNo', or -1. 'frameAt(i)' is the frame
-// number of entry i; entries ascend (the rewind ring is strictly monotonic). Exact, never "nearest":
-// the nearest frame is a different frame.
-template <class F>
-int FindFrameIndex(size_t count, F frameAt, uint64_t frameNo)
-{
-    size_t lo = 0, hi = count;
-    while (lo < hi)
-    {
-        const size_t mid = lo + (hi - lo) / 2;
-        const uint64_t f = frameAt(mid);
-        if (f == frameNo) return static_cast<int>(mid);
-        if (f < frameNo) lo = mid + 1; else hi = mid;
-    }
-    return -1;
-}
-
 // Where ImGui draws the centre of the grab of an integer SliderInt over [0, count-1], so a marker can
 // sit exactly where the slider puts that frame. 'minX'/'maxX' are the slider's frame rect (an item
 // with an empty label has the same rect as its frame). This mirrors ImGui's SliderBehaviorT (the 2.0
@@ -92,8 +75,6 @@ class CompareMarkers
 public:
     enum Slot { A = 0, B = 1 };
 
-    uint64_t Session() const { return mSession; }
-
     bool Has(Slot s) const { return mMarker[s].snap != nullptr; }
     bool HasBoth() const { return Has(A) && Has(B); }
     bool Any() const { return Has(A) || Has(B); }
@@ -144,14 +125,14 @@ public:
             m.attached = m.attached && m.snap && m.snap->origin.frameNo <= keptFrame;
     }
 
-    // Index of marker 's' on the timeline, or -1 when it is detached or its frame has left the ring.
-    // Never a nearest match.
-    template <class F>
-    int IndexOf(Slot s, size_t count, F frameAt) const
+    // The frame number marker 's' names on the current timeline: 0 when it is unset or detached. Finding
+    // that frame in the ring is the recorder's job (IndexOfFrame / SelectFrame), by number and exactly,
+    // never nearest; a detached marker has no frame to look up because its number may now belong to
+    // different content.
+    uint64_t AttachedFrame(Slot s) const
     {
         const Marker& m = mMarker[s];
-        if (!m.snap || !m.attached) return -1;
-        return FindFrameIndex(count, frameAt, m.snap->origin.frameNo);
+        return m.snap && m.attached ? m.snap->origin.frameNo : 0;
     }
 
 private:

@@ -29,25 +29,6 @@ std::shared_ptr<const MemSnapshot> Snap(const CompareMarkers& m, uint64_t frame)
     return s;
 }
 
-// Index of marker 's' in a ring holding exactly these frame numbers.
-int Find(const CompareMarkers& m, CompareMarkers::Slot s, const std::vector<uint64_t>& frames)
-{
-    return m.IndexOf(s, frames.size(), [&frames](size_t i) { return frames[i]; });
-}
-
-void TestFindFrameIndex()
-{
-    const std::vector<uint64_t> f = { 10, 11, 13, 20, 21 };   // sparse: the recorder drops frames
-    auto at = [&](size_t i) { return f[i]; };
-    Check(FindFrameIndex(f.size(), at, 10) == 0, "first");
-    Check(FindFrameIndex(f.size(), at, 21) == 4, "last");
-    Check(FindFrameIndex(f.size(), at, 13) == 2, "middle");
-    Check(FindFrameIndex(f.size(), at, 12) == -1, "a missing frame is not matched to its neighbour");
-    Check(FindFrameIndex(f.size(), at, 9) == -1 && FindFrameIndex(f.size(), at, 22) == -1, "outside the ring");
-    Check(FindFrameIndex(0, at, 10) == -1, "empty ring");
-    Check(FindFrameIndex(1, at, 10) == 0, "single frame");
-}
-
 void TestLineFlow()
 {
     {
@@ -142,24 +123,26 @@ void TestSetAndClear()
 void TestNewSession()
 {
     CompareMarkers m;
-    const uint64_t s = m.Session();
+    const uint64_t s = m.Origin(1, false).sessionId;
     m.Set(CompareMarkers::A, Snap(m, 100));
     m.Set(CompareMarkers::B, Snap(m, 200));
     m.NewSession();
-    Check(m.Session() != s, "the session changes");
+    Check(m.Origin(1, false).sessionId != s, "the session changes");
     Check(!m.Any(), "and both markers are dropped");
 }
 
+// Which frame a marker names on the timeline is what the recorder is asked to find (IndexOfFrame /
+// SelectFrame, tested in FrameRecorderTests); the markers decide only whether they name one at all.
 void TestReplaceTimeline()
 {
     CompareMarkers m;
-    const std::vector<uint64_t> ring = { 100, 101, 102 };
+    Check(m.AttachedFrame(CompareMarkers::A) == 0, "an unset marker names no frame");
     m.Set(CompareMarkers::A, Snap(m, 101));
-    Check(Find(m, CompareMarkers::A, ring) == 1, "attached while on its timeline");
+    Check(m.AttachedFrame(CompareMarkers::A) == 101, "attached while on its timeline");
     m.ReplaceTimeline();
     Check(m.Has(CompareMarkers::A), "the snapshot is kept");
-    Check(Find(m, CompareMarkers::A, ring) == -1,
-          "but is not found by number: the new timeline may reuse frame 101 with other content");
+    Check(m.AttachedFrame(CompareMarkers::A) == 0,
+          "but names no frame: the new timeline may reuse number 101 with other content");
 }
 
 void TestTruncateAfter()
@@ -168,16 +151,15 @@ void TestTruncateAfter()
     m.Set(CompareMarkers::A, Snap(m, 12));   // at the resume point
     m.Set(CompareMarkers::B, Snap(m, 14));   // after it
     m.TruncateAfter(12);
-    Check(Find(m, CompareMarkers::A, { 10, 11, 12 }) == 2, "a marker at the resume frame stays attached");
-    // The new timeline reaches 14 with other content: the old marker must not be found there.
-    Check(Find(m, CompareMarkers::B, { 10, 11, 12, 13, 14, 15 }) == -1,
-          "a marker past it is detached, even if its number comes back");
+    Check(m.AttachedFrame(CompareMarkers::A) == 12, "a marker at the resume frame stays attached");
+    // The new timeline may reach 14 with other content: the old marker must not name it.
+    Check(m.AttachedFrame(CompareMarkers::B) == 0, "a marker past it is detached");
     Check(m.HasBoth(), "both snapshots are kept");
 
     CompareMarkers early;
     early.Set(CompareMarkers::A, Snap(early, 5));
     early.TruncateAfter(12);
-    Check(Find(early, CompareMarkers::A, { 5 }) == 0, "a marker well before it stays attached");
+    Check(early.AttachedFrame(CompareMarkers::A) == 5, "a marker well before it stays attached");
 
     // Truncating again must not resurrect a marker an earlier reset detached, even one that is at
     // or before the new resume frame.
@@ -185,20 +167,12 @@ void TestTruncateAfter()
     twice.Set(CompareMarkers::B, Snap(twice, 14));
     twice.TruncateAfter(12);
     twice.TruncateAfter(20);
-    Check(Find(twice, CompareMarkers::B, { 14 }) == -1, "a truncated-away marker stays detached");
+    Check(twice.AttachedFrame(CompareMarkers::B) == 0, "a truncated-away marker stays detached");
     CompareMarkers replaced;
     replaced.Set(CompareMarkers::A, Snap(replaced, 5));
     replaced.ReplaceTimeline();
     replaced.TruncateAfter(12);
-    Check(Find(replaced, CompareMarkers::A, { 5 }) == -1, "a marker detached by a reset stays detached");
-}
-
-void TestEvictedFrame()
-{
-    CompareMarkers m;
-    m.Set(CompareMarkers::A, Snap(m, 100));
-    Check(Find(m, CompareMarkers::A, { 101, 102 }) == -1, "an evicted frame is not found");   // 100 left the ring
-    Check(m.Has(CompareMarkers::A), "its snapshot is kept");
+    Check(replaced.AttachedFrame(CompareMarkers::A) == 0, "a marker detached by a reset stays detached");
 }
 
 void TestGeometry()
@@ -258,13 +232,11 @@ void TestGeometry()
 
 int main()
 {
-    TestFindFrameIndex();
     TestLineFlow();
     TestSetAndClear();
     TestNewSession();
     TestReplaceTimeline();
     TestTruncateAfter();
-    TestEvictedFrame();
     TestGeometry();
     if (gFail == 0) std::printf("CompareMarkersTests: all passed\n");
     return gFail == 0 ? 0 : 1;

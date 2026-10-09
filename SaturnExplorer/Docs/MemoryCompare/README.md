@@ -6,7 +6,7 @@ checked by hand, see `Docs/FunctionalityVerification/99_MANUAL_VERIFICATION_REMA
 | Component | Doc | New code |
 |---|---|---|
 | Snapshot + diff engine | [SnapshotAndDiffEngine.md](SnapshotAndDiffEngine.md) | `FrontEnd/src/Debug/MemoryCompare.{h,cpp}` |
-| Timeline markers + snapshot capture | [TimelineMarkers.md](TimelineMarkers.md) | `FrontEnd/src/CompareMarkers.h`, plus the transport-bar glue in `App` |
+| Timeline markers + snapshot capture | [TimelineMarkers.md](TimelineMarkers.md) | `FrontEnd/src/CompareMarkers.h`, `FrontEnd/src/ScrubState.h`, the `FrameRecorder` additions (`SelectedFrameNumber`, `SelectFrame`, `IndexOfFrame`), plus the transport-bar glue in `App` |
 | Memory Compare tab | [ComparePanel.md](ComparePanel.md) | `FrontEnd/src/MemoryComparePanel.{h,cpp}` |
 
 ## What it is
@@ -25,8 +25,8 @@ Assembly, Watch and Breakpoint tools.
 3. Click **Compare Memory...** (or right-click, **Compare A <-> B**). The Memory Compare tab opens
    and is focused.
 4. Pick a region in the summary table, tick **Changes Only**, and inspect the diff.
-5. Right-click a changed byte for Go to Memory, Add Watch, Break on Write, View in Assembly or
-   Export.
+5. Right-click a changed byte for Go to Memory, Add to Watch, Break on Write, View in Assembly or
+   Export Diff (this region).
 
 ## Design decisions
 
@@ -44,9 +44,8 @@ Assembly, Watch and Breakpoint tools.
   and a marker can never be located on a timeline that replaced it. Details:
   [engine doc](SnapshotAndDiffEngine.md#capture-consistency) and
   [identity lifecycle](TimelineMarkers.md#identity-lifecycle).
-- **Counts are exact, outputs are complete.** The stored range list is a capped display summary.
-  The hex rows and the CSV export rescan the immutable snapshots, so no changed byte is ever
-  omitted by a cap.
+- **Counts are exact, outputs are complete.** The diff keeps only per-region counts. The hex rows
+  and the CSV export rescan the immutable snapshots, so no changed byte is ever omitted.
 - **Regions are not just address ranges.** Every location is a `RegionRef` with an explicit region
   id, address space and capability set. VDP1 FB (a derived image), the VDP register images and Sound
   RAM (also written by the 68K, which watchpoints cannot see) are not plain SH-2 bus memory, so
@@ -64,8 +63,8 @@ Assembly, Watch and Breakpoint tools.
 - **Pure logic is separate from ImGui.** The engine has no UI dependency and is unit-tested. The
   panel is its own class (like `HexEditorPanel`) and is tested headlessly with `ImGuiHarness`.
   `App.cpp` gains registration, the transport-bar markers and menu, and the glue that turns the
-  panel's requests into calls on the existing components (about 270 lines). A `CompareController`
-  owning that glue would be the next extraction if `App` should shrink.
+  panel's requests into calls on the existing components. A `CompareController` owning that glue
+  would be the next extraction if `App` should shrink.
 
 ## Differences from the concept image
 
@@ -81,18 +80,6 @@ Assembly, Watch and Breakpoint tools.
 - Time is shown as `frame / 60` (NTSC). PAL titles will read slightly off until the video standard
   is plumbed through; the label is a hint, the frame number is authoritative.
 
-## Build order and parallelism
-
-1. **Serial, small:** write `MemoryCompare.h` (types and signatures only). It is the contract the
-   three pieces share.
-2. **Parallel:** engine + tests; panel + headless tests against hand-built snapshots; timeline
-   markers + capture (including the small `FrameRecorder::SelectedFrameNumber()` accessor and its
-   test). The panel is its own class so only the timeline work edits `App.cpp` at this
-   stage. `CMakeLists.txt` gets one line from each.
-3. **Serial hook-up:** register the panel (`Panels` flag, `PanelList()`, `BuildUI`,
-   `BuildDefaultLayout`, `AdoptNewPanels`), connect the button to capture, diff and panel, and wire
-   the context-menu actions.
-
 ## Later (not in v1)
 
 - **Compare Against A** as a persistent mode: B follows the current scrub frame and the diff
@@ -107,10 +94,10 @@ Assembly, Watch and Breakpoint tools.
 - A frame whose regions fail to decode is refused by `FrameRecorder::Select`; marking then fails
   with an inline reason and sets no marker. There is no "invalid snapshot" state to display, and a
   zero-filled snapshot is never produced.
-- VDP1 FB and VDP2 VRAM can change in thousands of places per frame. Only the stored range list is
-  capped; counts, rows and CSV are exact (CSV streams, since an all-bytes-differ export is millions
-  of lines).
-- `FrameRecorder` gains one small accessor, `SelectedFrameNumber()`, because the frame a scrubbed
-  snapshot was taken from cannot safely be re-derived from a ring index.
+- VDP1 FB and VDP2 VRAM can change in thousands of places per frame. Counts, rows and CSV are all
+  exact (CSV streams, since an all-bytes-differ export is millions of lines).
+- `FrameRecorder` gains `SelectedFrameNumber()`, `SelectFrame(frameNo, ...)` and `IndexOfFrame(frameNo)`,
+  because a frame is identified by number and its ring index changes as the ring evicts; the
+  frame a scrubbed snapshot was taken from cannot safely be re-derived from an index.
 - Nothing in the live protocol identifies the ROM. A ROM change is visible only as a new emulator
   process or a loaded source, both of which already reset session state in `App`.

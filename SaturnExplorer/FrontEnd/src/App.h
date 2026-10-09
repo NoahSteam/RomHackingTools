@@ -605,7 +605,7 @@ private:
     int              mCallStackViewKey = -1;   // scrubbed frame the call stack was built for (-1 live)
     // Record an edit made against the scrubbed frame (routed from the recorder's write sink).
     void RecordPendingEdit(int isSound, uint32_t addr, const uint8_t* bytes, size_t len);
-    // Build the SE_LIVE_EDIT_* blob from mPendingEdits (for the LST rewind payload).
+    // Build the SE_LIVE_EDIT_* blob from mStaged (for the LST rewind payload).
     std::vector<uint8_t> BuildEditBlob() const;
     // Estimated recorder capacity at the current history length, in MB (per-frame average x
     // the configured frame budget). Shown as the "available" half of the footprint readout.

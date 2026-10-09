@@ -125,17 +125,10 @@ struct DiffOptions
     bool     changesOnly = true;
 };
 
-struct ChangedRange { uint32_t offset = 0; uint32_t length = 0; };
-
-constexpr uint32_t kMaxStoredRanges = 100000;
-
 struct RegionDiff
 {
-    RegionId                  id = RegionId::Lwram;
-    uint32_t                  changedBytes = 0;     // EXACT
-    uint32_t                  rangeCount = 0;       // EXACT count of merged ranges
-    std::vector<ChangedRange> ranges;               // SUMMARY ONLY: the first kMaxStoredRanges
-    bool RangesTruncated() const { return rangeCount > ranges.size(); }
+    uint32_t changedBytes = 0;   // differing bytes
+    uint32_t rangeCount = 0;     // runs of them, after merging runs closer than DiffOptions::mergeGap
 };
 
 struct DiffResult
@@ -152,11 +145,13 @@ DiffStatus Diff(const std::shared_ptr<const MemSnapshot>& a,
                 const DiffOptions& opts, DiffResult* out);
 
 // ---- Complete outputs --------------------------------------------------------------------------
-// These scan the snapshots, never RegionDiff::ranges, so the range cap cannot omit a byte.
+// These scan the snapshots, so every changed byte is covered however many there are.
+
+constexpr uint32_t kDiffRowBytes = 16;   // bytes per row of the hex diff
 
 struct DiffRow
 {
-    RegionRef ref;             // 16-byte-aligned start of the row within the region
+    RegionRef ref;             // kDiffRowBytes-aligned start of the row within the region
     uint16_t  validMask = 0;   // bytes of the row that lie inside the region
     uint16_t  changedMask = 0; // subset of validMask that differs
     bool      isContext = false;   // shown only as context around a change
@@ -171,10 +166,20 @@ struct CsvSink
     virtual bool Write(const char* data, size_t len) = 0;   // false: stop
 };
 
+// Collects the CSV in memory (an export goes out through one SaveFile call).
+struct StringCsvSink : CsvSink
+{
+    std::string text;
+    bool Write(const char* data, size_t len) override { text.append(data, len); return true; }
+};
+
 enum class CsvResult { Ok, Cancelled, IntegrityError };
 
 // One line per changed byte: region,offset,bus_address,old,new. 'only' null means every region.
 // Streams in chunks, because an all-bytes-differ export is millions of lines.
 CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink);
+
+// The file name an export of 'only' (null: every region) is saved under.
+std::string CsvFileName(const DiffResult& diff, const RegionId* only);
 
 }  // namespace sfe

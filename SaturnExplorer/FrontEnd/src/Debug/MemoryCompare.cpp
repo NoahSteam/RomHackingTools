@@ -1,6 +1,7 @@
 #include "Debug/MemoryCompare.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -46,11 +47,10 @@ const RegionTraits* BuildTraits()
 
 size_t Index(RegionId id) { return static_cast<size_t>(id); }
 
-constexpr uint32_t kRowBytes = 16;
 
 uint16_t MaskOfFirst(uint32_t n)   // n in 0..16
 {
-    return n >= kRowBytes ? 0xFFFFu : static_cast<uint16_t>((1u << n) - 1u);
+    return n >= kDiffRowBytes ? 0xFFFFu : static_cast<uint16_t>((1u << n) - 1u);
 }
 
 // Byte differences of one region, in ascending order, with a word compare to skip identical
@@ -162,29 +162,18 @@ DiffStatus Diff(const std::shared_ptr<const MemSnapshot>& a,
     for (size_t i = 0; i < kRegionCount; ++i)
     {
         RegionDiff& rd = out->regions[i];
-        rd.id = static_cast<RegionId>(i);
         bool open = false;
-        uint32_t start = 0, end = 0;
-        auto close = [&]()
-        {
-            if (!open) return;
-            ++rd.rangeCount;
-            if (rd.ranges.size() < kMaxStoredRanges) rd.ranges.push_back({ start, end - start });
-            open = false;
-        };
+        uint32_t end = 0;   // one past the last differing byte of the run in progress
         ScanDifferences(a->regions[i].bytes.data(), b->regions[i].bytes.data(),
                         a->regions[i].bytes.size(), [&](size_t off)
         {
             const uint32_t o = static_cast<uint32_t>(off);
             ++rd.changedBytes;
-            if (open && o - end <= maxGap) { end = o + 1; return true; }
-            close();
+            if (!open || o - end > maxGap) ++rd.rangeCount;   // too far from the last run: a new one
             open = true;
-            start = o;
             end = o + 1;
             return true;
         });
-        close();
     }
     return DiffStatus::Ok;
 }
@@ -201,12 +190,12 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
     const std::vector<uint8_t>& A = diff.a->regions[Index(region)].bytes;
     const std::vector<uint8_t>& B = diff.b->regions[Index(region)].bytes;
     const size_t n = A.size();
-    const size_t rowCount = (n + kRowBytes - 1) / kRowBytes;
+    const size_t rowCount = (n + kDiffRowBytes - 1) / kDiffRowBytes;
 
     std::vector<uint16_t> changed(rowCount, 0);
     ScanDifferences(A.data(), B.data(), n, [&](size_t off)
     {
-        changed[off / kRowBytes] |= static_cast<uint16_t>(1u << (off % kRowBytes));
+        changed[off / kDiffRowBytes] |= static_cast<uint16_t>(1u << (off % kDiffRowBytes));
         return true;
     });
 
@@ -229,12 +218,12 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
     {
         if (!keep[r]) continue;
         DiffRow row;
-        row.ref = { region, static_cast<uint32_t>(r * kRowBytes) };
-        row.validMask = MaskOfFirst(static_cast<uint32_t>(std::min<size_t>(kRowBytes, n - r * kRowBytes)));
+        row.ref = { region, static_cast<uint32_t>(r * kDiffRowBytes) };
+        row.validMask = MaskOfFirst(static_cast<uint32_t>(std::min<size_t>(kDiffRowBytes, n - r * kDiffRowBytes)));
         row.changedMask = changed[r];
         row.isContext = changed[r] == 0;
         // The previous kept row is rows.back(): a gap is any distance other than the next row.
-        row.gapBefore = rows.empty() ? r != 0 : r != rows.back().ref.offset / kRowBytes + 1;
+        row.gapBefore = rows.empty() ? r != 0 : r != rows.back().ref.offset / kDiffRowBytes + 1;
         rows.push_back(row);
     }
     return rows;
@@ -280,10 +269,11 @@ CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
         const std::vector<uint8_t>& A = diff.a->regions[i].bytes;
         const std::vector<uint8_t>& B = diff.b->regions[i].bytes;
         uint64_t written = 0;
+        const bool hasBus = HasBusAddress(t);
         ScanDifferences(A.data(), B.data(), A.size(), [&](size_t off)
         {
             char bus[16] = "";   // empty for a region with no bus address
-            if (HasBusAddress(t))
+            if (hasBus)
                 std::snprintf(bus, sizeof(bus), "0x%08X", static_cast<unsigned>(t.busBase + off));
             const int n = std::snprintf(line, sizeof(line), "%s,0x%08X,%s,0x%02X,0x%02X\n", t.name,
                                         static_cast<unsigned>(off), bus, A[off], B[off]);
@@ -302,6 +292,19 @@ CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
     }
     flush();
     return cancelled ? CsvResult::Cancelled : CsvResult::Ok;
+}
+
+std::string CsvFileName(const DiffResult& diff, const RegionId* only)
+{
+    std::string name = "saturn_memory_diff_" + std::to_string(diff.a->origin.frameNo) + "_" +
+                       std::to_string(diff.b->origin.frameNo);
+    if (only)
+    {
+        name += '_';
+        for (const char* c = Traits(*only).name; *c; ++c)
+            name += *c == ' ' ? '_' : static_cast<char>(std::tolower(static_cast<unsigned char>(*c)));
+    }
+    return name + ".csv";
 }
 
 }  // namespace sfe

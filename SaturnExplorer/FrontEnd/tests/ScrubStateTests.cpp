@@ -228,16 +228,17 @@ void TestStagedEdits()
 void TestStagedEditsDoNotCrossFrames()
 {
     // Edit frame 11 (index 1 of {10,11,12}); eviction moves frame 12 to index 1; navigate to 12.
+    // A reload clears the batch (App does that when the shown frame is rebuilt)...
     const uint8_t b[] = { 0xAA };
     StagedEdits e;
     e.Record(11, false, 0x06000000u, b, 1);
-    e.KeepOnlyFor(12);   // what RefreshScrubContext does when the shown frame changes
-    Check(e.Empty() && !e.BelongsTo(11) && !e.BelongsTo(12), "changing frame drops the other frame's edit");
+    e.Clear();
+    Check(e.Empty() && !e.BelongsTo(11) && !e.BelongsTo(12), "a reload drops the other frame's edit");
     e.Record(12, false, 0x06000100u, b, 1);
     Check(e.Pokes().size() == 1 && e.Pokes()[0].addr == 0x06000100u && e.BelongsTo(12),
           "so a later edit tags only itself as frame 12");
 
-    // And if the refresh did not run first, recording on another frame must not retag the batch.
+    // ...and even if it did not run first, recording on another frame must not retag the batch.
     StagedEdits late;
     late.Record(11, false, 0x06000000u, b, 1);
     late.Record(12, false, 0x06000100u, b, 1);
@@ -246,8 +247,8 @@ void TestStagedEditsDoNotCrossFrames()
 
     StagedEdits same;
     same.Record(11, false, 0x06000000u, b, 1);
-    same.KeepOnlyFor(11);
-    Check(!same.Empty(), "staying on the frame keeps its edits");
+    same.Record(11, false, 0x06000010u, b, 1);
+    Check(same.Pokes().size() == 2 && same.BelongsTo(11), "more edits on the same frame join its batch");
     same.Clear();
     Check(same.Empty() && !same.BelongsTo(11), "Clear empties the batch and its tag");
 }

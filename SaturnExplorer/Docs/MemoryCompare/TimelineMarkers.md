@@ -9,7 +9,7 @@ The capture rules it relies on are in
 
 The marker state and the identity rules live in `FrontEnd/src/CompareMarkers.h`, a header-only class
 with no ImGui, App or recorder dependency so the rules are unit-tested
-(`CompareMarkersTests.cpp`). `App` holds one `CompareMarkers mCompare` (wired in by the App-integration change).
+(`CompareMarkersTests.cpp`). `App` holds one `CompareMarkers mCompare`.
 
 - `Set(slot, snapshot)` adopts a snapshot as marker A or B. It is **refused** unless the snapshot
   carries the current session and epoch (`Origin(frameNo, liveHead)` builds that stamp), so a capture
@@ -17,9 +17,9 @@ with no ImGui, App or recorder dependency so the rules are unit-tested
 - `NewSession()` bumps the session and drops both markers. `ReplaceTimeline()` bumps the epoch.
   `TruncateAfter(keptFrame)` bumps the epoch and keeps attached only the markers at or before the
   resume frame.
-- `IndexOf(slot, count, frameAt)` finds a marker on the timeline: `-1` when it is detached (an older
-  epoch) or its frame has left the ring; otherwise the exact index by binary search
-  (`FindFrameIndex`), never a nearest match.
+- `AttachedFrame(slot)` is the frame number a marker names on the current timeline: 0 when it is unset
+  or detached (an older epoch). Finding that frame in the ring is the recorder's job
+  (`FrameRecorder::IndexOfFrame` / `SelectFrame`), by number and exactly, never a nearest match.
 - `SliderGrabCenterX(...)` is where ImGui draws the grab of an integer `SliderInt`, so a marker is
   drawn exactly over its frame. It mirrors ImGui's `SliderBehaviorT`, which is not exposed, and the
   tests compare it with ImGui's own result so an ImGui update that moves the grab fails a test.
@@ -36,14 +36,14 @@ Available only while paused, like the scrub slider.
    - a source is loaded and `mMemBackend.Connected()`;
    - not mid-restore: `mRestoreOutstanding == 0` and `!mRestoreUnconfirmable`;
    - when scrubbing: `mScrubShownIndex >= 0`, i.e. the last `Select` was not refused, and the shown
-     frame has **no pending edits** (`mPendingEdits` empty or `mPendingEditsFrame !=
-     mScrubShownIndex`). Pending edits change what the context serves without being part of the
-     recorded frame, so the capture is refused rather than silently including them.
+     frame has **no staged edits** (`!mStaged.BelongsTo(mScrubShownFrame)`). Staged edits change what
+     the context serves without being part of the recorded frame, so the capture is refused rather
+     than silently including them.
 2. **Which frame:** the frame the *displayed context* holds, not where the slider points. A
    transport action earlier in the same UI frame can already have moved `mScrubIndex` while panels
    still draw the old frame; `RecordPendingEdit` documents the same hazard. The frame number is
-   `FrameRecorder::SelectedFrameNumber()` when scrubbing, and `se_frame_number(mContext)` (the
-   displayed context's captured frame) at the live head. See the engine doc for why neither can be re-derived from
+   `mScrubShownFrame` when scrubbing (the frame the context was built from, taken from the recorder),
+   and `se_frame_number(mContext)` (the displayed context's captured frame) at the live head. See the engine doc for why neither can be re-derived from
    an index afterwards.
 3. **Capture** runs synchronously, on the UI thread, through `mMemBackend`. It is only reachable from
    the transport bar, which `BuildUI` draws inside `ScopedContextSwap`, so it reads the context the
@@ -52,7 +52,7 @@ Available only while paused, like the scrub slider.
    a short inline reason. A marker is therefore always backed by a complete snapshot.
 4. The snapshot is stamped with `mCompare.Origin(frameNo, liveHead)` (the current session and epoch).
 5. Marking A and B at the same frame is allowed; the diff is empty and says so.
-6. **Clear Compare Markers** drops both snapshots.
+6. **Clear Compare Markers** drops both snapshots and the open comparison and status.
 
 ## Identity lifecycle
 
@@ -68,13 +68,13 @@ app already handles those events, not detected by a new mechanism.
 | Recording length changed (ring reconfigured) | Recording Settings modal | none; eviction is handled by locatability below |
 
 The protocol does not identify the ROM, so a ROM change is observable only as a new emulator process
-or a new loaded source, both covered by the session. Use the same `mLiveConnGeneration`
-bookkeeping as `AdoptNewEmulatorInstance`; do not add a second detector. `Diff` independently
+or a new loaded source, both covered by the session. That is detected by the same `mLiveConnGeneration`
+bookkeeping `AdoptNewEmulatorInstance` already does. `Diff` independently
 refuses mismatched `sessionId`, so a missed bump cannot produce a mixed comparison in the engine,
 only a stale marker in the UI.
 
 **Attached** means the marker's epoch matches and the ring holds a frame whose
-`FrameNumber(i) == frameNo` exactly (binary search; never "nearest"). **Detached** markers keep
+`FrameNumber(i) == frameNo` exactly (`IndexOfFrame`; never "nearest"). **Detached** markers keep
 their snapshot, still compare, and can't be located or scrubbed to.
 
 ## Drawing
@@ -93,7 +93,7 @@ their snapshot, still compare, and can't be located or scrubbed to.
   The items wrap to the window width (`LineFlow`, in `CompareMarkers.h`), and the status wraps on a
   line of its own. The strip reserved for the transport bar is sized by `CompareRowHeight`, which runs
   the same `LineFlow` over the same widths, so what is reserved cannot drift from what is drawn.
-- Colours: A blue, B orange. Use theme accents if the theme already has fitting ones.
+- Colours: A blue, B orange, fixed (`CompareSideColor`, shared by the carets, the labels and the panel's cards).
 
 ## Navigating to a marked frame
 
@@ -111,8 +111,7 @@ the slider, instead of selecting by index again and sliding onto a neighbour as 
 explicit seek (slider, step buttons, another navigation) or the frame leaving the ring changes it.
 
 Staged scrub edits are keyed the same way: `StagedEdits` carries one frame number for the whole batch,
-changing frames drops it (`KeepOnlyFor`), and an edit recorded on another frame drops the old batch
-instead of retagging it, so Play From Here can never replay frame 11's edit onto frame 12.
+and `Record` on another frame drops the old batch instead of retagging it, so Play From Here can never replay frame 11's edit onto frame 12.
 
 The invariant the two share: the scrub context shows edits if and only if they are staged for replay.
 Navigating to the frame already on screen is therefore a no-op (`PlanScrub` says Keep), not a reload,
@@ -125,7 +124,7 @@ rather than keep the edited context.
 
 The button and the menu item do the same thing: run `Diff(mCompare.Snapshot(A), mCompare.Snapshot(B))`, hand the
 result to the panel, set `mPanels.memoryCompare = true` and focus the window. Registration is listed
-in [ComparePanel.md](ComparePanel.md#registration-done-in-the-app-integration-change). A `Diff` error
+in [ComparePanel.md](ComparePanel.md#registration). A `Diff` error
 (session mismatch) shows inline and opens nothing.
 
 ## Tests
@@ -134,10 +133,14 @@ The transport bar is part of `App` and is not unit-testable in isolation. Covera
 
 - engine tests for capture, immutability, identity and truncation (see the engine doc)
 - `CompareMarkersTests.cpp`: the session/epoch rules (including `TruncateAfter(K)` on both sides of
-  K and a detached marker staying detached), exact frame lookup (sparse ring, evicted frame), and
+  K and a detached marker staying detached), `AttachedFrame` (unset and detached markers), the shared `LineFlow` wrapping, and
   `SliderGrabCenterX` against ImGui's own `SliderBehavior`
-- a recorder test for `SelectedFrameNumber()`: tracks the decompressed frame after eviction shifts
-  indexes, and is 0 after a refused `Select`
+- recorder tests (`FrameRecorderTests.cpp`) for `SelectedFrameNumber()` (tracks the decompressed frame
+  after eviction shifts indexes, 0 after a refused `Select`), `SelectFrame` / `IndexOfFrame` across
+  eviction, and a scrub simulation of same-frame navigation and edit consistency
+- `ScrubStateTests.cpp`: `PlanScrub` (an unmoved view follows its frame, navigation persists, an evicted
+  target is refused, same-frame navigation keeps the edited context, forced reload) and `StagedEdits`
+  (one frame tag per batch, never crossing frames)
 - the transport bar and its context menu live in `App` and are checked by hand (an entry in
   `Docs/FunctionalityVerification/`): marking at the live head while paused, marking a scrubbed
   frame, marking refused with pending edits, emulator restart, and Play From Here

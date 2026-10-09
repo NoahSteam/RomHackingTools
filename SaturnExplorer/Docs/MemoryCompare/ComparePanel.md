@@ -37,7 +37,8 @@ The panel owns no memory and runs no diff. `App` gives it:
   null before a comparison exists
 - whether each side is still attached to the rewind timeline
 
-(`Draw(const DiffResult*, bool aAttached, bool bAttached)`.) It rebuilds the visible line list
+(`Draw(const DiffResult*, bool aAttached, bool bAttached)`; the panel keeps the two flags for the
+rest of that draw.) It rebuilds the visible line list
 (`BuildRows` per region) when the selected region, Changes Only, or Show Context changes, and
 never reads the emulator. A different pair of snapshots is recognised by `weak_ptr` identity, not
 by address, and starts clean: selection, region and any `GoTo` still waiting all reset.
@@ -67,8 +68,8 @@ the tooltip saying why.
 ## Region summary table
 
 One row per captured region plus an "All Memory" entry, columns Region, Size, Changed Bytes,
-Changed Ranges. Counts are exact (`RegionDiff::changedBytes` / `rangeCount`); only the stored range
-list is capped, and the cap does not affect the hex view or export, which rescan the snapshots. Rows
+Changed Ranges. Counts are exact (`RegionDiff::changedBytes` / `rangeCount`), and the hex view and
+export rescan the snapshots rather than reading them. Rows
 use `RowSelectable`; selecting one filters the hex diff. Regions with zero changes are shown dimmed
 but stay selectable. The colour swatch beside a region follows its type (work RAM, VDP1, VDP2, colour RAM,
 sound RAM).
@@ -134,7 +135,7 @@ A disabled Break on Write or View in Assembly carries a tooltip with the reason 
 Add to Watch are enabled in every region). There is no Find in ROM, since cartridge space
 is not captured.
 
-## Registration (done in the App-integration change)
+## Registration
 
 1. `bool memoryCompare` in `struct Panels` (`App.h`).
 2. A `PanelList()` row, group "Memory & Data".
@@ -142,8 +143,9 @@ is not captured.
    `ImGui::Begin("Memory Compare")` itself), then takes the panel's request and carries it out in
    `HandleCompareRequest`.
 4. `if (mPanels.memoryCompare) DrawMemoryCompare(platform);` in `BuildUI`.
-5. `DockBuilderDockWindow("Memory Compare", bAsm)` in `BuildDefaultLayout`.
-6. An entry in `AdoptNewPanels` so existing `imgui.ini` layouts pick it up.
+5. `DockBuilderDockWindow("Memory Compare", bAsm)` in `BuildDefaultLayout` (a fresh layout).
+6. `AdoptNewPanels` docks it beside Memory (or in the central node) for an existing `imgui.ini`
+   layout that predates it.
 
 ## Tests
 
@@ -160,6 +162,7 @@ is not captured.
 - a new pair of snapshots clears selection and region, and a `GoTo` still waiting when the pair
   changes is dropped
 - identical snapshots show no grid
+- the toolbar wraps in a narrow window (`TestToolbarWrapsInNarrowWindows`)
 
 Checked by hand (`Docs/FunctionalityVerification/99_MANUAL_VERIFICATION_REMAINING.md`), because they
 need the toolbar or popup items to be reachable: each action raising exactly one request that is
