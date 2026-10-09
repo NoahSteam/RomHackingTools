@@ -95,6 +95,13 @@ struct LiveSnapshot
     uint32_t             latestFrame = 0;
     uint32_t             stepPending = 0;
     bool                 hasStepInfo = false;
+    // Poke accounting from the control block (v23+). Deliberately NOT in SameContent: applying a
+    // poke to a paused emulator publishes no new frame, so these moving must not make an
+    // unchanged display look new. PollLoop copies them to LiveState on every reply instead.
+    uint32_t             pokesApplied = 0;
+    uint32_t             pokesDropped = 0;
+    uint32_t             serverCaps = 0;
+    bool                 hasPokeInfo = false;
     bool                 valid = false;
     // Moves only when the CONTENT of a published snapshot differs from the one before it. A
     // halted emulator republishes the same machine state every poll; a client that wants to
@@ -294,6 +301,19 @@ struct LiveState
     sfe::ByteQueue<std::vector<uint8_t>> writes;
     // Pending sound-RAM pokes (v13). Each entry is a WRS payload: offset(u32 LE) + bytes.
     sfe::ByteQueue<std::vector<uint8_t>> soundWrites;
+    // Pokes the user was told were accepted that the emulator never got: dropped with a lost
+    // connection, a refused version gate, or a failed send. Counted per poke request; monotonic
+    // over the life of the source (it is NOT reset by a reconnect, so a client comparing it to
+    // the last value it reported never misses one). A restore discarding the queue is not a loss:
+    // the state those pokes were made against is being replaced.
+    std::atomic<uint32_t> pokesLost{0};
+    // What the server last reported (control block, v23+): pokes its emulate thread applied and
+    // dropped, and its capability word. Reset with the connection, since the counters belong to
+    // one emulator run.
+    std::atomic<uint32_t> srvPokesApplied{0};
+    std::atomic<uint32_t> srvPokesDropped{0};
+    std::atomic<uint32_t> srvCaps{0};
+    std::atomic<bool>     srvHasPokeInfo{false};
     // True once we've told the emulator to pause/step and not since resumed, so the
     // poll thread knows to release it on close (never leave Yabause paused).
     std::atomic<bool>     pausedByUs{false};
@@ -1164,6 +1184,13 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
         outStop.seq    = Rd32LE(ctl.data() + 40);
         outStop.hasSeq = true;
     }
+    if (ct >= 56)
+    {
+        snap.pokesApplied = Rd32LE(ctl.data() + 44);
+        snap.pokesDropped = Rd32LE(ctl.data() + 48);
+        snap.serverCaps   = Rd32LE(ctl.data() + 52);
+        snap.hasPokeInfo  = true;
+    }
 
     // SH-2 state (v5+): master then slave, each a 92-byte sh2regs_struct.
     for (int cpu = 0; cpu < 2; ++cpu)
@@ -1218,6 +1245,7 @@ void ForgetConnection(LiveState* st)
     {
         std::lock_guard<std::mutex> lk(st->ctlMtx);
         st->connected = false;
+        st->pokesLost.fetch_add(static_cast<uint32_t>(st->writes.q.size() + st->soundWrites.q.size()));
         st->writes.Clear();
         st->soundWrites.Clear();
         st->loadPayload.clear();
@@ -1231,8 +1259,13 @@ void ForgetConnection(LiveState* st)
         st->emuSlotsValid = false;
     }
     st->pausedByUs.store(false);   // the exporter releases a pause when a client leaves
-    // Unknown until the next connection answers: every version-gated verb refuses meanwhile.
+    // Unknown until the next connection answers: every version-gated verb refuses meanwhile, and a
+    // capability the old emulator had says nothing about the next one.
     st->serverVersion.store(0);
+    st->srvCaps.store(0);
+    st->srvPokesApplied.store(0);
+    st->srvPokesDropped.store(0);
+    st->srvHasPokeInfo.store(false);
 }
 
 void PollLoop(LiveState* st)
@@ -1283,6 +1316,11 @@ void PollLoop(LiveState* st)
                 payload = std::move(st->loadPayload);
                 st->loadPayload.clear();
                 st->loadDirty = false;
+                // Whatever was queued was made against the state being replaced; shipped after the
+                // LST it would land on the restored one. (The edits that belong to the restore travel
+                // in the LST payload itself.)
+                st->writes.Clear();
+                st->soundWrites.Clear();
                 shippedLoad = true;
                 loadResyncFrame = st->loadFrame;
             }
@@ -1292,6 +1330,8 @@ void PollLoop(LiveState* st)
                 verb = SE_LIVE_VERB_EMULOAD;
                 arg = st->emuLoadSlot - 1;
                 st->emuLoadSlot = 0;
+                st->writes.Clear();   // see the LST branch above
+                st->soundWrites.Clear();
             }
             else if (st->rewindDirty)
             {
@@ -1401,6 +1441,8 @@ void PollLoop(LiveState* st)
         // the payload to find out.
         if (st->serverVersion.load() < MinVerFor(verb))
         {
+            if (std::memcmp(verb, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
+                st->pokesLost.fetch_add(1);   // accepted by the UI, never sent
             verb = SE_LIVE_VERB_GET;
             arg = 0;
             payload.clear();
@@ -1409,11 +1451,22 @@ void PollLoop(LiveState* st)
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
                           logLines, stateBlocks, emuSlots))
         {
-            // Whatever was queued belonged to this connection, and it is gone.
+            // Whatever was queued belonged to this connection, and it is gone -- and so is the
+            // poke that was on its way out, which the queue no longer holds.
+            if (std::memcmp(verb, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0 ||
+                std::memcmp(verb, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
+                st->pokesLost.fetch_add(1);
             ForgetConnection(st);
             ConnClose(conn);   // will reconnect next iteration
             SleepWhileRunning(st, 100);
             continue;
+        }
+        if (snap.hasPokeInfo)
+        {
+            st->srvPokesApplied.store(snap.pokesApplied);
+            st->srvPokesDropped.store(snap.pokesDropped);
+            st->srvCaps.store(snap.serverCaps);
+            st->srvHasPokeInfo.store(true);
         }
         snap.paused = paused;
         snap.generation = st->connGeneration.load() + (handshaken ? 0u : 1u);   // the one this publish carries
@@ -1666,10 +1719,25 @@ std::vector<uint8_t> BuildPoke(uint32_t dest, const void* src, size_t size)
 //
 // So does a write while no emulator is attached: there is nothing to apply it to, and queueing
 // it would apply it to whichever one answers next (see ForgetConnection).
+// Whether [address, address+size) touches the CRAM or VDP1 frame-buffer window (bus addresses, mirrors
+// folded) -- the two VDP arrays the emulator's own bus writer cannot reach.
+static bool InVdpPokeWindow(uint32_t address, size_t size)
+{
+    const uint64_t lo = address & 0x07FFFFFFu;
+    const uint64_t hi = lo + (size ? size : 1);
+    auto overlaps = [&](uint64_t base, uint64_t end) { return lo < end && hi > base; };
+    return overlaps(0x05C80000u, 0x05D00000u) || overlaps(0x05F00000u, 0x05F80000u);
+}
+
 size_t CbWriteMainRam(void* u, uint32_t address, const void* src, size_t size)
 {
     if (!src || size == 0) return 0;
     LiveState* st = St(u);
+    // The CRAM and VDP1 frame-buffer windows are not reachable through the emulator's ordinary bus
+    // writer: it takes the byte and drops it. Only a server that wired a VDP writer (and says so)
+    // applies them, so until it does the edit is refused rather than accepted and lost -- the
+    // caller then neither shows nor keeps it.
+    if (InVdpPokeWindow(address, size) && !(st->srvCaps.load() & SE_LIVE_CAP_VDP_POKE)) return 0;
     std::vector<uint8_t> payload = BuildPoke(address, src, size);
     std::lock_guard<std::mutex> lk(st->ctlMtx);
     if (!st->connected || !EditTargetIsCurrent(st)) return 0;
@@ -1687,8 +1755,9 @@ size_t CbWriteSoundRam(void* u, uint32_t offset, const void* src, size_t size)
 }
 
 // VDP memory poke: map the region-local offset to its Saturn bus address and ship it as a
-// WRM (the emulator glue's CheatMemWrite handles any bus region, VRAM/CRAM included). This
-// is how a paused VDP1/VDP2 VRAM, CRAM, or framebuffer edit persists in the running game.
+// WRM. VDP1/VDP2 VRAM go through the emulator's bus writer; CRAM and the VDP1 frame buffer are not
+// in its fast memory map and need the server's VDP writer (SE_LIVE_CAP_VDP_POKE), which
+// CbWriteMainRam checks. This is how a paused VDP edit persists in the running game.
 size_t CbWriteVram(void* u, se_vram_kind kind, uint32_t offset, const void* src, size_t size)
 {
     uint32_t base;
@@ -1971,6 +2040,22 @@ extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, u
         *done = snap->restoreDone;
         *failed = snap->restoreFailed;
         return 1;
+    });
+}
+
+extern "C" int se_live_poke_info(const se_data_source* ds, uint32_t* applied, uint32_t* dropped,
+                                  uint32_t* lost, uint32_t* caps)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(0, [&]() -> int
+    {
+        const LiveState* st = St(ds->user);
+        if (lost) *lost = st->pokesLost.load();
+        const bool known = st->srvHasPokeInfo.load();
+        if (applied) *applied = known ? st->srvPokesApplied.load() : 0;
+        if (dropped) *dropped = known ? st->srvPokesDropped.load() : 0;
+        if (caps)    *caps    = known ? st->srvCaps.load() : 0;
+        return known ? 1 : 0;
     });
 }
 

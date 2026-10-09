@@ -87,3 +87,21 @@ After Windows build defects are fixed, verify on both supported platforms:
 - debugger interactions
 
 Linux and Web do not require release verification.
+
+## Live memory edits (needs a patched emulator)
+
+The poke path is covered end to end by `SaturnExplorerLivePokeTests` (real exporter and driver, fake
+emulator); the Mednafen-side writers by `SaturnExplorerMednafenVdpPoke` (stubs). Against a real game:
+
+- paused, edit a **CRAM** byte in the Memory tab, resume: the colour stays (it used to revert); the
+  same for a **VDP1 FB** byte. Against an emulator built before the VDP writer existed, the edit is
+  refused with a message naming the VDP writer, not shown and lost
+- paused at a breakpoint, edit work RAM: the byte lands (pokes are applied at the gate, also while
+  the CPU is halted), and the game never sees a half-written multi-byte poke mid-frame
+- edit a byte and quit the emulator before resuming: the status bar reports the edit never reached it
+- type `ABCD` into a byte the source refuses: the caret stays on that byte and the reason is shown
+  under the grid; nothing lands on the next byte
+- the VDP1 / VDP2 register tabs are read-only on a live emulator and on a scrubbed frame (the
+  selection line says why), and editable on a loaded dump or savestate
+- go to `0x26000000` (a cache-through address): the byte is selected and typing edits it
+- queue edits, then load a state (rewind / slot) right away: the edits do not appear on the restored state

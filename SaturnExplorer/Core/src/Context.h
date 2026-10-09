@@ -542,6 +542,23 @@ public:
     // in-memory; live edits persist through write_main_ram).
     bool CanWrite() const { return mSnapshot.Valid(); }
 
+    // Whether WriteVram forwards an accepted edit of 'kind' to the source, as opposed to changing
+    // only the snapshot. Mirrors the dispatch in WriteVram.
+    bool HasWriteSink(se_vram_kind kind) const
+    {
+        switch (kind)
+        {
+        case SE_VRAM_KIND_WRAM_LOW:
+        case SE_VRAM_KIND_WRAM_HIGH:  return mDs.write_main_ram != nullptr;
+        case SE_VRAM_KIND_SOUND_RAM:  return mDs.write_sound_ram != nullptr;
+        case SE_VRAM_KIND_VDP1_VRAM:
+        case SE_VRAM_KIND_VDP2_VRAM:
+        case SE_VRAM_KIND_CRAM:
+        case SE_VRAM_KIND_VDP1_FB:    return mDs.write_vram != nullptr;
+        default:                      return false;
+        }
+    }
+
     // Decode CRAM entries [start, start+count) into RGBA palette entries. Returns
     // the number written (clamped to the CRAM size for the current color mode).
     size_t ReadCramColors(uint16_t start, uint16_t count, se_palette_entry* out) const

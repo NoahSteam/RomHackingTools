@@ -83,6 +83,9 @@ HexEditorPanel::GridMetrics HexEditorPanel::Metrics()
 
 void HexEditorPanel::GoTo(uint32_t address)
 {
+    // Fold the cache/through mirrors first: the grid draws and edits the canonical address, so a
+    // selection left un-folded matches no cell while typing would still write the folded byte.
+    address &= 0x07FFFFFFu;
     mSelectTab = RegionForAddr(address);
     mScrollTab = mSelectTab;   // the scroll must wait until this region tab is actually active
     mScrollPending = true;
@@ -244,6 +247,8 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
     {
         CancelEdit();
         mSourceId = sourceId;
+        mWriteError.clear();
+        mModifiedFlash = 0.0f;
     }
 
     mConnected = backend.Connected();
@@ -281,6 +286,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         if (it->second <= 0.0f) it = mChangeAge.erase(it); else ++it;
     }
     if (mModifiedFlash > 0.0f) mModifiedFlash = std::max(0.0f, mModifiedFlash - dt);
+    if (mWriteErrorAge > 0.0f && (mWriteErrorAge -= dt) <= 0.0f) mWriteError.clear();
     // Keep the change history bounded when scrolling across large regions.
     if (mPrevByte.size() > 200000) mPrevByte.clear();
 
@@ -297,14 +303,27 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         CopySelection(backend, selLo, selHi);
     }
 
-    // Commit one byte through the backend and record it for the change highlight.
-    auto writeByte = [&](uint32_t addr, unsigned value)
+    // Say why an edit did not happen. Silence here is what let a refused byte look written: the
+    // caret moved on and the next digits landed one byte further along.
+    auto refuse = [&](uint32_t addr)
+    {
+        mWriteError = backend.WriteRefusal(addr);
+        if (mWriteError.empty()) mWriteError = "The edit was not accepted.";
+        mWriteErrorAge = 8.0f;
+        mModifiedFlash = 0.0f;
+    };
+    // Commit one byte through the backend and record it for the change highlight. False means it was
+    // refused: the caller leaves the caret where it is, so the user sees the byte they tried to edit.
+    auto writeByte = [&](uint32_t addr, unsigned value) -> bool
     {
         const uint8_t byte = (uint8_t)(value & 0xFF);
-        if (backend.WriteMemory(addr, &byte, 1) != 1) return;
+        if (backend.WriteMemory(addr, &byte, 1) != 1) { refuse(addr); return false; }
         mPrevByte[addr] = byte;
         mChangeAge[addr] = 1.0f;
         mModifiedFlash = 1.5f;
+        mModifiedReachedSource = backend.WriteReachesSource(addr);
+        mWriteError.clear();
+        return true;
     };
     auto hexVal = [](unsigned c) -> unsigned
     {
@@ -337,9 +356,9 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             }
             else if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
             {
-                writeByte((uint32_t)mEditAddr, hexVal((unsigned char)mEditBuf[0]));   // lone digit
+                const bool wrote = writeByte((uint32_t)mEditAddr, hexVal((unsigned char)mEditBuf[0]));   // lone digit
                 mEditFlow = false; mEditAddr = -1;
-                if (sel + 1 < (int64_t)regionEnd) mSelStart = mSelEnd = sel + 1;
+                if (wrote && sel + 1 < (int64_t)regionEnd) mSelStart = mSelEnd = sel + 1;
             }
         }
         for (ImWchar ch : ImGui::GetIO().InputQueueCharacters)
@@ -347,14 +366,17 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             if (!isHex(ch)) continue;
             if (!mEditFlow)
             {
-                if (!backend.CanWrite((uint32_t)sel)) break;
+                if (!backend.CanWrite((uint32_t)sel)) { refuse((uint32_t)sel); break; }
                 mEditAddr = sel; mEditFlow = true;
                 mEditBuf[0] = (char)ch; mEditBuf[1] = '\0';
             }
             else
             {
-                writeByte((uint32_t)mEditAddr, (hexVal((unsigned char)mEditBuf[0]) << 4) | hexVal(ch));
+                const bool wrote = writeByte((uint32_t)mEditAddr, (hexVal((unsigned char)mEditBuf[0]) << 4) | hexVal(ch));
                 mEditFlow = false; mEditAddr = -1;
+                // Refused: stay on this byte and drop the digits still queued, which were meant for
+                // the byte after it and would otherwise start over on this one.
+                if (!wrote) break;
                 // Nowhere to advance to: stop here rather than let the rest of the queue
                 // start over on (and overwrite) this same last byte.
                 if (sel + 1 >= (int64_t)regionEnd) break;
@@ -377,6 +399,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
             else if (ImGui::IsMouseClicked(0))
             {
                 if (mEditFlow) { mEditFlow = false; mEditAddr = -1; }   // abandon a pending digit
+                mWriteError.clear();   // about the byte they were on
                 if (ImGui::GetIO().KeyShift && mSelStart >= 0)
                 {
                     // Extend the range from the existing anchor (mSelStart) to the clicked
@@ -559,13 +582,14 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
                         if (enter || deactivated)
                         {
                             unsigned val = 0;
+                            bool wrote = true;   // nothing typed is not a refusal
                             if (mEditBuf[0] && std::sscanf(mEditBuf, "%x", &val) == 1)
-                                writeByte(addr, val);
+                                wrote = writeByte(addr, val);
                             mEditAddr = -1;
                             // Enter moves to the next byte so you can keep going down the row; a
-                            // click-away just stops.
+                            // click-away just stops. A refused byte keeps the caret.
                             const int64_t next = (int64_t)addr + 1;
-                            if (enter && next < (int64_t)regionEnd) mSelStart = mSelEnd = next;
+                            if (enter && wrote && next < (int64_t)regionEnd) mSelStart = mSelEnd = next;
                         }
                         continue;
                     }
@@ -753,7 +777,20 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         if (mModifiedFlash > 0.0f)
         {
             ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f), "Modified");
+            // "Queued" is as far as the panel can know for a live source: the emulator applies the poke
+            // at its next frame gate and does not confirm it here. An edit the source never sees
+            // changes this view only, and says so.
+            ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f),
+                               mModifiedReachedSource ? "Sent to emulator" : "Modified (this view only)");
+        }
+        if (!mWriteError.empty())
+            ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1.0f), "Not written: %s", mWriteError.c_str());
+        else if (selLo == selHi && !backend.CanWrite((uint32_t)selLo))
+        {
+            // Read-only here, and why -- the registers on a live emulator, a recorded frame the
+            // server cannot resume from -- instead of a grid that silently ignores typing.
+            const std::string why = backend.WriteRefusal((uint32_t)selLo);
+            if (!why.empty()) ImGui::TextDisabled("Read-only: %s", why.c_str());
         }
     }
     else

@@ -1533,6 +1533,7 @@ void App::BuildUI(IPlatform& platform)
         // transport must not offer it -- and scrubbed memory stays read-only, since an edit
         // could not be re-simulated forward.
         mSeekSupported = mRewindEnabled && se_live_server_version(&mDataSource) >= 16u;
+        ReconcilePokes();
     }
 #endif
 
@@ -1603,7 +1604,17 @@ void App::BuildUI(IPlatform& platform)
         }
     }
     mMemBackend.SetReadOnly((mbScrubbing && !mSeekSupported) || mRestoreOutstanding > 0 ||
-                            mRestoreUnconfirmable);
+                            mRestoreUnconfirmable,
+                            mRestoreOutstanding > 0
+                                ? "A state load is still being applied; editing returns when the emulator confirms it."
+                            : mRestoreUnconfirmable
+                                ? "The emulator did not confirm the last state load; reconnect or load a state again."
+                                : "This recorded frame cannot be resumed from (rewind is off or the emulator is too old), "
+                                  "so an edit to it could not be re-simulated.");
+    // The VDP register windows are served through the snapshot's setters, which reach neither an
+    // emulator nor a replay: on a live emulator or a recorded frame an edit there would show for a
+    // moment and be undone by the next capture. Only a loaded dump or savestate keeps it.
+    mMemBackend.SetRegistersReadOnly(mbLiveSource || mbScrubbing);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 #ifdef SE_ENABLE_LIVE
@@ -5183,7 +5194,7 @@ void App::WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t
         char msg[96];
         std::snprintf(msg, sizeof msg, "Edit of VDP1 command at %06X was not written.",
                       cmd.table_address);
-        mLog.Warn(msg);
+        mLog.Warn(std::string(msg) + " " + mMemBackend.WriteRefusal(address));
     }
 }
 
@@ -7504,7 +7515,7 @@ void App::DropRecordedHistory()
 void App::VoidEditTarget()
 {
     mMemBackend.NoteSourceChanged();   // Memory panel / command boxes drop what they hold
-    mMemBackend.SetReadOnly(true);     // and nothing commits to the context still on screen
+    mMemBackend.SetReadOnly(true, "The emulator was replaced; the view is being brought up to date.");   // and nothing commits to the context still on screen
 }
 
 App::RestoreBaseline App::SampleRestoreBaseline() const
@@ -7546,6 +7557,35 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
         mBlockEpochFloor = std::max(mBlockEpochFloor,
                                     (mRestoreBaseDone + mRestoreBaseFailed +
                                      static_cast<uint32_t>(mRestoreOutstanding)) & 0xFFFFFFu);
+}
+
+// A poke to a running emulator is queued and applied later on the emulator's own thread, and the
+// reply to it says nothing about whether it took -- the view already shows the edit. Two counters do
+// say: the emulator counts the pokes it had no writer for or no room to hold, and the driver counts
+// the ones it accepted and never delivered (a dropped connection, a server too old for the verb, a
+// failed send). Either way the view now shows a byte the emulator does not have.
+void App::ReconcilePokes()
+{
+    uint32_t applied = 0, dropped = 0, lost = 0, caps = 0;
+    se_live_poke_info(&mDataSource, &applied, &dropped, &lost, &caps);
+    mRecorder.SetVdpBusEditsAccepted((caps & SE_LIVE_CAP_VDP_POKE) != 0);
+    // Both counters belong to something that can start over: the emulator's to one run of it, the
+    // driver's to the source. A smaller value than the one reported is a new baseline, not a debt.
+    if (dropped < mPokeDroppedSeen) mPokeDroppedSeen = dropped;
+    if (lost < mPokeLostSeen) mPokeLostSeen = lost;
+    const uint32_t refused = dropped - mPokeDroppedSeen;
+    const uint32_t undelivered = lost - mPokeLostSeen;
+    mPokeDroppedSeen = dropped;
+    mPokeLostSeen = lost;
+    if (refused + undelivered == 0) return;
+    std::string what = "Emulator edit not applied: ";
+    if (undelivered) what += std::to_string(undelivered) + " never reached the emulator";
+    if (undelivered && refused) what += ", ";
+    if (refused) what += std::to_string(refused) + " could not be written by it";
+    what += ". The view still shows the edit; the emulator's memory does not have it.";
+    mOperationStatus = what;
+    mOperationError = true;
+    mLog.Error(what);
 }
 
 void App::ResolveRestoreWait(uint32_t done, uint32_t failed)

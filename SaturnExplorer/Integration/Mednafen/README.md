@@ -126,6 +126,23 @@ extern "C" void SsDbgSh2Regs(int c, unsigned int o[23]){         /* R0..R15, SR,
 extern "C" void SsDbgPokeByte(unsigned int a, unsigned char v){ CheatMemWrite(a, v); }
 ```
 
+`CheatMemWrite` only reaches ranges in `SH7095_FastMap` (BIOS, work RAM, VDP1/VDP2 VRAM, sound
+RAM). **CRAM (`0x05F00000`) and the VDP1 frame buffer (`0x05C80000`) are not in it**, so a poke
+there is accepted and dropped. `apply.py` therefore also injects `SsDbgPokeCramByte` (vdp2.cpp:
+raw CRAM word `w` is written through `VDP2::Write16_DB` at the bus address that maps back to it, so
+the renderer's CRAM copy follows) and `SsDbgPokeVdp1FbByte` (vdp1.cpp: the displayed bank, the one
+`SsDbgVdp1Fb` reads). The glue's `SeMdfnWriteVdpByte` calls them and is registered with
+`SeExportSetVdpWriteHook`, which sets the `SE_LIVE_CAP_VDP_POKE` bit in the control block; the
+client offers a CRAM / frame-buffer edit to a running emulator only when that bit is set.
+`Integration/tests/check_vdp_poke.py` compiles both against stubs of the Mednafen statics.
+
+Pokes (`WRM`, `WRS`) are queued by the server thread and applied by the **emulate thread** at the
+frame gate (also while a breakpoint holds the CPU), never while the cores are running: the hooks
+above are called from `SeApplyPendingPokes` in `se_export.c`. The control block reports how many
+were applied and how many could not be (`pokes_applied` / `pokes_dropped`), which the client
+turns into an "edit not applied" message. A state load (`LST`/`ELS`) discards pokes still queued
+on the client for the state it replaces.
+
 This is the bulk of what the Mednafen patcher does; the rest is the
 five hook calls from the table above.
 

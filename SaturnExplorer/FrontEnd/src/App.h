@@ -591,6 +591,11 @@ private:
     RestoreBaseline SampleRestoreBaseline() const;
     void BeginRestoreWait(const RestoreBaseline& before);
     void ResolveRestoreWait(uint32_t done, uint32_t failed);
+    // Emulator pokes: tell the user when one the view shows did not reach the emulator, and feed the
+    // server's VDP-write capability to the recorder (see FrameRecorder::SetVdpBusEditsAccepted).
+    void ReconcilePokes();
+    uint32_t         mPokeDroppedSeen = 0;     // the emulator's dropped-poke count already reported
+    uint32_t         mPokeLostSeen = 0;        // the driver's lost-poke count already reported
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

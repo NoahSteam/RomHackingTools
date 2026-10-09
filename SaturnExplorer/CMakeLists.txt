@@ -732,6 +732,10 @@ if(BUILD_TESTING)
                      COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_vdp1_latch.py
                              ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
                              ${CMAKE_CURRENT_BINARY_DIR}/vdp1_latch_test ${SE_CXX_FOR_PADTEST})
+            add_test(NAME SaturnExplorerMednafenVdpPoke
+                     COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/Integration/tests/check_vdp_poke.py
+                             ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Mednafen/apply.py
+                             ${CMAKE_CURRENT_BINARY_DIR}/vdp_poke_test ${SE_CXX_FOR_PADTEST})
         endif()
     endif()
 endif()
@@ -838,6 +842,23 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         target_link_libraries(SaturnExplorerRewindPipelineTests PRIVATE
             SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
         add_test(NAME SaturnExplorerRewindPipelineTests COMMAND SaturnExplorerRewindPipelineTests)
+
+        # Emulator pokes end to end: applied on the emulate thread at the gate, CRAM / frame-buffer
+        # pokes gated on the server's capability bit, counted, and discarded by a state load. Its own
+        # socket and port, so it neither needs the shared lock nor disturbs a running emulator.
+        add_executable(SaturnExplorerLivePokeTests
+            FrontEnd/tests/LivePokeTests.cpp
+            Integration/Common/se_export.c)
+        target_compile_definitions(SaturnExplorerLivePokeTests PRIVATE
+            SE_LIVE_DEFAULT_SOCK_PATH="/tmp/saturn_explorer_live_poke_test.sock"
+            SE_LIVE_DEFAULT_TCP_PORT=6948)
+        target_include_directories(SaturnExplorerLivePokeTests PRIVATE
+            Drivers/Live/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+        target_link_libraries(SaturnExplorerLivePokeTests PRIVATE
+            SaturnExplorerLiveDriver SaturnExplorerCore Threads::Threads)
+        add_test(NAME SaturnExplorerLivePokeTests COMMAND SaturnExplorerLivePokeTests)
 
         # Play From Here against a REAL emulator: restores a recorded frame and checks the game
         # re-runs the following frames byte for byte as it did the first time. Needs a patched

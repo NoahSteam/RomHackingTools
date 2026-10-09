@@ -172,6 +172,11 @@ void SeExportSetMemWriteHook(void (*write)(unsigned int address, unsigned char v
  * a 0-based offset within the 512 KiB sound RAM. May be NULL (sound-RAM writes are then
  * dropped). Call once after SeExportInit, e.g. SeExportSetSoundWriteHook(SeMednafenWriteSoundByte). */
 void SeExportSetSoundWriteHook(void (*write)(unsigned int offset, unsigned char value));
+/* VDP write hook (v23+): writes one byte at a Saturn bus address in the CRAM (0x05F00000..) or
+ * VDP1 frame-buffer (0x05C80000..) window, which the emulator's ordinary bus writer does not
+ * reach. Setting it advertises SE_LIVE_CAP_VDP_POKE to clients. NULL (the default) leaves those
+ * windows unwritable. Called on the emulate thread. */
+void SeExportSetVdpWriteHook(void (*write)(unsigned int address, unsigned char value));
 
 /* Wire full-savestate save/load (v16+), enabling the rewind timeline's "Play from here":
  * a per-frame savestate ring (delta-compressed on a worker thread) that the client can ask

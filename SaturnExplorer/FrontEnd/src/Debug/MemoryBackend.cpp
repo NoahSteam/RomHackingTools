@@ -144,9 +144,54 @@ bool ContextBackend::CanWrite(uint32_t address) const
         if (IsWritableKind(reg.kind) && a >= reg.base && a < reg.base + reg.size)
             return true;
     // VDP register windows are served through the register getters/setters, not se_read/write_vram.
-    if (a >= kVdp1RegBase && a < kVdp1RegBase + kVdp1RegSize) return true;
-    if (a >= kVdp2RegBase && a < kVdp2RegBase + kVdp2RegSize) return true;
+    if (!mRegistersReadOnly)
+    {
+        if (a >= kVdp1RegBase && a < kVdp1RegBase + kVdp1RegSize) return true;
+        if (a >= kVdp2RegBase && a < kVdp2RegBase + kVdp2RegSize) return true;
+    }
     return false;
+}
+
+static bool InRegisterWindow(uint32_t a)
+{
+    return (a >= kVdp1RegBase && a < kVdp1RegBase + kVdp1RegSize) ||
+           (a >= kVdp2RegBase && a < kVdp2RegBase + kVdp2RegSize);
+}
+
+static const Region* RegionAt(uint32_t a)
+{
+    for (const Region& reg : kRegions)
+        if (a >= reg.base && a < reg.base + reg.size) return &reg;
+    return nullptr;
+}
+
+std::string ContextBackend::WriteRefusal(uint32_t address) const
+{
+    if (!Connected()) return "No source is loaded.";
+    if (mForceReadOnly) return mReadOnlyWhy ? mReadOnlyWhy : "Editing is off right now.";
+    if (!se_can_write(*mContext)) return "This source has no editable snapshot.";
+    const uint32_t a = Canonical(address);
+    if (InRegisterWindow(a))
+        return mRegistersReadOnly
+            ? "VDP registers can only be edited in a loaded dump or savestate. On a live emulator or "
+              "a recorded frame the edit would change this view and nothing else, and the next "
+              "capture would undo it."
+            : std::string();
+    const Region* reg = RegionAt(a);
+    if (!reg) return "That address is not in a captured region.";
+    if (reg->kind == SE_VRAM_KIND_CRAM || reg->kind == SE_VRAM_KIND_VDP1_FB)
+        return "CRAM and the VDP1 frame buffer can only be written to an emulator patched with the VDP "
+               "writer (Integration/Mednafen), which this one does not have.";
+    return "The source did not take the edit (it is not connected, or its poke queue is full).";
+}
+
+bool ContextBackend::WriteReachesSource(uint32_t address) const
+{
+    if (!Connected()) return false;
+    const uint32_t a = Canonical(address);
+    if (InRegisterWindow(a)) return false;   // register setters touch the snapshot only
+    const Region* reg = RegionAt(a);
+    return reg && se_has_write_sink(*mContext, reg->kind) != 0;
 }
 
 size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
@@ -157,6 +202,7 @@ size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_
     if (mForceReadOnly || !se_can_write(*mContext)) return 0;
     se_context* ctx = *mContext;
     const uint32_t a = Canonical(address);
+    if (mRegistersReadOnly && InRegisterWindow(a)) return 0;
 
     // VDP register windows: rebuild each 16-bit big-endian register from the byte(s) being
     // written and push it through the register setter (which re-derives the image).

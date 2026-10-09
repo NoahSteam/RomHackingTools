@@ -381,8 +381,9 @@ size_t FrameRecorder::CbEditSound(void* u, uint32_t offset, const void* src, siz
 }
 
 // VDP memory rides the work-RAM edit type: the emulator applies a replayed edit with its bus
-// write, which reaches VRAM, CRAM and the framebuffer the same way a live poke does. Without
-// this the edit changed the displayed frame and nothing else, so it vanished when Play rewound.
+// write. That reaches VDP1/VDP2 VRAM; CRAM and the framebuffer only when the server has a VDP
+// writer (see SetVdpBusEditsAccepted). Without this the edit changed the displayed frame and
+// nothing else, so it vanished when Play rewound.
 size_t FrameRecorder::CbEditVram(void* u, se_vram_kind kind, uint32_t offset, const void* src,
                                  size_t size)
 {
@@ -396,6 +397,10 @@ size_t FrameRecorder::CbEditVram(void* u, se_vram_kind kind, uint32_t offset, co
         case SE_VRAM_KIND_CRAM:      base = 0x05F00000u; break;
         default: return 0;
     }
+    // CRAM and the frame buffer are not in the emulator's fast memory map: a replayed edit there is
+    // dropped unless the server has a VDP writer. Refuse it now, like a live edit, instead of
+    // showing a colour that Play From Here will not reproduce.
+    if (!r->mVdpBusEdits && (kind == SE_VRAM_KIND_CRAM || kind == SE_VRAM_KIND_VDP1_FB)) return 0;
     if (r->mEditCb && src && size)
         r->mEditCb(r->mEditUser, 0, base + offset, static_cast<const uint8_t*>(src), size);
     return size;

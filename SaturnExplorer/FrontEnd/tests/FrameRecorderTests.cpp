@@ -475,6 +475,27 @@ int main()
                 se_read_vram(scrub, c.kind, c.off, back, 2);
                 Check(back[0] == 0xAB && back[1] == 0xCD, "and the displayed frame shows it");
             }
+            // Without a VDP writer on the server, Play From Here would drop a CRAM or frame-buffer
+            // edit (the emulator's bus writer does not reach them), so the edit is refused instead
+            // of staged and shown; VRAM is unaffected.
+            r5.SetVdpBusEditsAccepted(false);
+            for (const auto& c : cases)
+            {
+                sink.clear();
+                const bool bus = c.kind == SE_VRAM_KIND_CRAM || c.kind == SE_VRAM_KIND_VDP1_FB;
+                uint8_t before[2] = {};
+                se_read_vram(scrub, c.kind, c.off, before, 2);
+                const uint8_t other[2] = { 0x11, 0x22 };
+                const size_t n = se_write_vram(scrub, c.kind, c.off, other, 2);
+                uint8_t after[2] = {};
+                se_read_vram(scrub, c.kind, c.off, after, 2);
+                if (bus)
+                    Check(n == 0 && sink.empty() && std::memcmp(before, after, 2) == 0 && after[0] != 0x11,
+                          "a CRAM / frame-buffer edit is refused, staged nowhere, when the server cannot apply it");
+                else
+                    Check(n == 2 && sink.size() == 1, "a VRAM edit still stages");
+            }
+            r5.SetVdpBusEditsAccepted(true);
             se_destroy(scrub);
         }
         se_destroy(vctx);

@@ -79,6 +79,51 @@ int main()
         se_destroy(ctx);
     }
 
+    // The VDP register windows are a snapshot-level scratchpad: fine on a loaded dump, never
+    // offered on a source whose edits are meant to reach an emulator or a replay (they would go
+    // nowhere and vanish on the next capture).
+    {
+        constexpr uint32_t kVdp2Reg = 0x05F80000u;
+        se_test::State st;
+        se_context* ctx = Make(st, true);
+        ContextBackend b(&ctx);
+        const uint8_t reg[2] = { 0x12, 0x34 };
+        Check(b.CanWrite(kVdp2Reg), "registers are editable by default (a dump or savestate)");
+        Check(b.WriteMemory(kVdp2Reg, reg, 2) == 2, "and the edit lands");
+        b.SetRegistersReadOnly(true);
+        Check(!b.CanWrite(kVdp2Reg) && !b.CanWrite(0x05D00000u), "marked read-only, neither register window is writable");
+        Check(b.WriteMemory(kVdp2Reg, reg, 2) == 0, "and an edit already in flight is refused");
+        Check(b.CanWrite(kVdp1), "memory is unaffected");
+        Check(!b.WriteRefusal(kVdp2Reg).empty(), "the refusal has a reason the UI can show");
+        Check(b.WriteRefusal(kVdp2Reg).find("live emulator") != std::string::npos, "that says why");
+        se_destroy(ctx);
+    }
+
+    // Reasons for a refusal, and whether an accepted edit goes anywhere beyond the snapshot.
+    {
+        se_test::State st;
+        se_context* ctx = Make(st, true);
+        ContextBackend b(&ctx);
+        Check(b.WriteReachesSource(kVdp1), "a region with a sink reaches the source");
+        Check(!b.WriteReachesSource(0x05F80000u), "a register edit never does");
+        b.SetReadOnly(true, "state load in flight");
+        Check(b.WriteRefusal(kVdp1) == "state load in flight", "a forced read-only carries the reason it was given");
+        b.SetReadOnly(false);
+        Check(b.WriteRefusal(0x05F00000u).find("VDP writer") != std::string::npos,
+              "a refused CRAM edit says the emulator needs the VDP writer");
+        Check(b.WriteRefusal(0x04000000u).find("not in a captured region") != std::string::npos,
+              "an unmapped address says so");
+        se_destroy(ctx);
+
+        se_test::State st2;
+        se_context* snap = Make(st2, false);
+        ContextBackend b2(&snap);
+        Check(!b2.WriteReachesSource(kVdp1), "with no sink an edit changes the snapshot only");
+        se_destroy(snap);
+        ContextBackend none(nullptr);
+        Check(!none.WriteRefusal(kVdp1).empty() && !none.WriteReachesSource(kVdp1), "no source: refused, and says so");
+    }
+
     // SourceId follows the context, and NoteSourceChanged covers a reused address / reloaded frame.
     {
         se_test::State st;

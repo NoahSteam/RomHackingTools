@@ -165,6 +165,11 @@ size_t      se_write_vram(se_context* ctx, se_vram_kind kind, uint32_t offset,
    snapshot). Edits always update the view; they persist to the emulator only when
    the source advertises SE_CAP_MEM_WRITE. */
 int         se_can_write(se_context* ctx);
+/* 1 when an accepted se_write_vram to 'kind' is also handed to the source (a live emulator's poke
+ * queue, a scrubbed frame's replay list), 0 when the edit changes only the loaded snapshot -- a
+ * savestate or dump, or a source with no write callback for that region. Lets a caller say
+ * "sent to the emulator" or "this view only" instead of calling both "modified". */
+int         se_has_write_sink(se_context* ctx, se_vram_kind kind);
 /* Decode CRAM entries [start, start+count) into palette entries. Returns the
    number written (clamped to the CRAM size for the current color mode). */
 size_t      se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,

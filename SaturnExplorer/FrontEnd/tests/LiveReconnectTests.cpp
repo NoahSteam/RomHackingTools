@@ -263,6 +263,64 @@ void TestLoadStateRefusedWithoutANegotiatedVersion()
 }
 
 
+// A poke the UI was told was accepted is not a poke the emulator has. The driver counts the ones it
+// accepted and then could not deliver, so the front end can say so instead of leaving an edit on
+// screen that the running game never got.
+void TestUndeliveredPokesAreCounted()
+{
+    auto lostOf = [](const se_data_source& ds) {
+        uint32_t applied = 0, dropped = 0, lost = 0, caps = 0;
+        se_live_poke_info(&ds, &applied, &dropped, &lost, &caps);
+        return lost;
+    };
+    const uint8_t byte = 0x42;
+
+    // A server too old for the sound-RAM verb: the version gate drops the payload (shipping it would
+    // desync the stream), and that drop is a loss.
+    {
+        LiveFixture live([](int fd, int)
+        {
+            Request r;
+            while (fakelive::ReadRequest(fd, r))
+            {
+                Reply rep;
+                rep.version = 12;
+                const std::vector<uint8_t> bytes = fakelive::Build(rep);
+                if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+            }
+        });
+        CHECK(live.Ok());
+        if (!live.Ok()) return;
+        se_data_source& ds = live.Source();
+        CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
+        CHECK(lostOf(ds) == 0);
+        CHECK(ds.write_sound_ram(ds.user, 0, &byte, 1) == 1);
+        CHECK(WaitFor([&] { return lostOf(ds) == 1; }));
+    }
+
+    // The connection dies with a poke still queued behind a request that is never answered.
+    {
+        std::atomic<bool> queued{false};
+        LiveFixture live([&](int fd, int)
+        {
+            AnswerOnce(fd, Reply());
+            Request r;
+            if (!fakelive::ReadRequest(fd, r)) return;   // the driver's next request: left unanswered
+            while (!queued) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            // returning hangs up
+        });
+        CHECK(live.Ok());
+        if (!live.Ok()) return;
+        se_data_source& ds = live.Source();
+        CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
+        CHECK(WaitFor([&] { return live.Connections() >= 1; }));
+        CHECK(ds.write_main_ram(ds.user, 0x06000000u, &byte, 1) == 1);
+        CHECK(ds.write_main_ram(ds.user, 0x06000001u, &byte, 1) == 1);
+        queued = true;
+        CHECK(WaitFor([&] { return lostOf(ds) >= 2; }));
+    }
+}
+
 // With no emulator attached there is nothing to apply a write, load or step to, and queueing
 // them would apply them to whichever emulator answers next. They are refused instead.
 void TestMutationsRefusedWhileNothingIsAttached()
@@ -774,6 +832,7 @@ int main()
     TestGenerationCountsEveryAttach();
     TestGenerationIsZeroForANonLiveSource();
     TestPokeQueueAppliesBackpressure();
+    TestUndeliveredPokesAreCounted();
     TestBreakpointApiRejectsBadPairs();
     TestLoadStateRefusedWithoutANegotiatedVersion();
     TestMutationsRefusedWhileNothingIsAttached();

@@ -59,6 +59,16 @@ public:
     // written (0 if the region isn't writable). Default: no-op read-only backend.
     virtual size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)
     { (void)address; (void)bytes; (void)size; return 0; }
+
+    // Why an edit at 'address' is not accepted -- for the UI to say, instead of swallowing the
+    // refusal. Meaningful once CanWrite(address) is false or a WriteMemory returned short; empty
+    // when the backend has nothing to add.
+    virtual std::string WriteRefusal(uint32_t address) const { (void)address; return std::string(); }
+
+    // Whether an accepted edit at 'address' is also handed to the source behind the backend (a
+    // live emulator's poke queue, a scrubbed frame's replay list) rather than changing only the
+    // loaded snapshot. Lets the UI say "sent to the emulator" or "this view only".
+    virtual bool WriteReachesSource(uint32_t address) const { (void)address; return false; }
 };
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
@@ -104,10 +114,23 @@ public:
     uint64_t SourceId() const override;
     bool CanWrite(uint32_t address) const override;
     size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
+    std::string WriteRefusal(uint32_t address) const override;
+    bool WriteReachesSource(uint32_t address) const override;
 
     // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
-    // frame on a server that can't rewind, so edits that would go nowhere are disabled).
-    void SetReadOnly(bool readOnly) { mForceReadOnly = readOnly; }
+    // frame on a server that can't rewind, so edits that would go nowhere are disabled). 'why' is
+    // what WriteRefusal tells the user; it must outlive the call (a string literal).
+    void SetReadOnly(bool readOnly, const char* why = nullptr)
+    {
+        mForceReadOnly = readOnly;
+        mReadOnlyWhy = why;
+    }
+
+    // The VDP register windows are served through the snapshot's register setters, which never
+    // reach an emulator or a replay: an edit there changes this view and is gone on the next
+    // capture. That is a fair scratchpad on a loaded dump or savestate, so the windows are
+    // editable there; on a live emulator or a scrubbed frame they are not offered at all.
+    void SetRegistersReadOnly(bool readOnly) { mRegistersReadOnly = readOnly; }
 
     // Call when the data behind the context changes without the context pointer changing
     // (a different scrubbed frame loaded in place, or a destroyed context's address reused), so
@@ -121,6 +144,8 @@ public:
 private:
     se_context** mContext = nullptr;
     bool         mForceReadOnly = false;
+    const char*  mReadOnlyWhy = nullptr;
+    bool         mRegistersReadOnly = false;
     uint64_t     mGeneration = 0;
 };
 

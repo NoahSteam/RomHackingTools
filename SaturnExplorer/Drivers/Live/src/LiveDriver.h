@@ -60,6 +60,16 @@ uint32_t se_live_captured_generation(const se_data_source* ds);
  * that is not live -- the caller then has no completion signal and must say so. */
 int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed);
 
+/* Poke accounting (the Hex Editor's emulator edits). 'applied' and 'dropped' are what the
+ * emulator's own thread reports having written / not been able to write (v23+, per emulator run);
+ * 'lost' counts pokes this side accepted and then never delivered -- the connection dropped, a
+ * version gate refused the verb, or the send failed -- and keeps counting across reconnects, so a
+ * client that remembers the last value it showed never misses one. 'caps' is the server's
+ * SE_LIVE_CAP_* word (0 until known). Any pointer may be null. Returns 1 when the server reports
+ * poke info (v23+), 0 otherwise -- 'lost' is still filled then. */
+int se_live_poke_info(const se_data_source* ds, uint32_t* applied, uint32_t* dropped,
+                      uint32_t* lost, uint32_t* caps);
+
 /* Whether the display of a PAUSED live source still has frames to catch up on (v20+): a frame
  * step that has been posted but not yet answered, granted by the emulator but not yet
  * published, published but not yet fetched, or fetched but not yet captured. Returns 1 when a

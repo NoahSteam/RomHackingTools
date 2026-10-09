@@ -394,6 +394,46 @@ void SeExportSetSoundWriteHook(SeWriteSoundByteFn fn)
     sWriteSoundByte = fn;
 }
 
+/* ---- VDP write hook (v23+). The emulator's own bus writer (Mednafen's CheatMemWrite) only
+ * reaches ranges in its fast memory map -- BIOS, work RAM, VDP1/VDP2 VRAM, sound RAM -- and
+ * silently drops a write to the CRAM and VDP1 frame-buffer windows. apply.py wires this hook to
+ * writers that reach those arrays (and the renderer's copy of them). It takes the Saturn bus
+ * address. While it is NULL a poke to either window is counted as dropped, and the capability
+ * bit SE_LIVE_CAP_VDP_POKE stays clear so a client never offers the edit. ---- */
+static SeWriteByteFn sWriteVdpByte;
+
+void SeExportSetVdpWriteHook(SeWriteByteFn fn)
+{
+    sWriteVdpByte = fn;
+}
+
+#define SE_VDP1_FB_WIN_BASE  0x05C80000u
+#define SE_VDP1_FB_WIN_END   0x05D00000u
+#define SE_CRAM_WIN_BASE     0x05F00000u
+#define SE_CRAM_WIN_END      0x05F80000u
+
+static int SeInVdpPokeWindow(unsigned int address)
+{
+    const unsigned int a = address & 0x07FFFFFFu;   /* cache/through mirrors fold away */
+    return (a >= SE_VDP1_FB_WIN_BASE && a < SE_VDP1_FB_WIN_END) ||
+           (a >= SE_CRAM_WIN_BASE && a < SE_CRAM_WIN_END);
+}
+
+/* One byte of a bus poke (a WRM, or a type-0 LST edit), routed to the writer that can reach it.
+ * Returns 1 when a writer took it, 0 when none is wired for that address. */
+static int SeBusPokeByte(unsigned int address, unsigned char value)
+{
+    if (SeInVdpPokeWindow(address))
+    {
+        if (!sWriteVdpByte) return 0;
+        sWriteVdpByte(address & 0x07FFFFFFu, value);
+        return 1;
+    }
+    if (!sWriteByte) return 0;
+    sWriteByte(address, value);
+    return 1;
+}
+
 /* Frame lock + server/transport handles (used across the file; declared up here so the
  * savestate rewind code below can invalidate the frame ring under SE_LOCK). */
 #if defined(_WIN32)
@@ -613,7 +653,7 @@ static void SeStateApplyEdits(const unsigned char* edits, size_t len)
         {
             unsigned char v = edits[pos + i];
             if (type == SE_LIVE_EDIT_TYPE_SOUND) { if (sWriteSoundByte) sWriteSoundByte(addr + i, v); }
-            else                                 { if (sWriteByte)      sWriteByte(addr + i, v); }
+            else                                 { (void)SeBusPokeByte(addr + i, v); }
         }
         pos += elen;
     }
@@ -910,10 +950,77 @@ static void SePublishTracepoints(const unsigned char* descs, unsigned int count)
 
 void SeExportApplyInstalls(void);   /* public name, defined below */
 
+/* ---- Poke mailbox (v23). WRM and WRS used to write straight from the server thread, which
+ * runs concurrently with the emulate thread: a byte landed in the middle of a frame (and, for a
+ * work-RAM poke, in the middle of an SH-2 cache update), while LST was already deferred to the
+ * frame gate. A poke is now received into a node, queued here under the state lock, and applied by
+ * the emulate thread at the gate (or the halt gate, so an edit made while a breakpoint holds the
+ * CPU still lands). The box is bounded; past the bound a poke is counted as dropped. Counters are
+ * per poke request and go out in the control block. ---- */
+typedef struct SePokeNode
+{
+    struct SePokeNode* next;
+    unsigned int       dest;      /* bus address (main) or 0-based offset (sound) */
+    unsigned int       len;
+    int                sound;
+    unsigned char      data[1];   /* len bytes */
+} SePokeNode;
+
+#define SE_POKE_BOX_BYTES (8u * 1024u * 1024u)
+static SePokeNode*  sPokeHead;
+static SePokeNode*  sPokeTail;
+static size_t       sPokeBoxBytes;
+static volatile int sPokePending;
+static unsigned int sPokesApplied;   /* guarded by the state lock */
+static unsigned int sPokesDropped;
+
+static void SeCountPokeDropped(void)
+{
+    SE_SLOCK();
+    ++sPokesDropped;
+    SE_SUNLOCK();
+}
+
+/* EMULATE thread: apply every queued poke. */
+static void SeApplyPendingPokes(void)
+{
+    SePokeNode* list;
+    unsigned int applied = 0, dropped = 0;
+    if (!SeAtLoad(&sPokePending)) return;
+    SE_SLOCK();
+    list = sPokeHead;
+    sPokeHead = sPokeTail = 0;
+    sPokeBoxBytes = 0;
+    SeAtStore(&sPokePending, 0);   /* inside the lock: a poke queued after this take sets it again */
+    SE_SUNLOCK();
+    while (list)
+    {
+        SePokeNode* n = list;
+        unsigned int i, ok = 1;
+        list = n->next;
+        for (i = 0; i < n->len; ++i)
+        {
+            if (n->sound)
+            {
+                if (!sWriteSoundByte) { ok = 0; break; }
+                sWriteSoundByte(n->dest + i, n->data[i]);
+            }
+            else if (!SeBusPokeByte(n->dest + i, n->data[i])) { ok = 0; break; }
+        }
+        if (ok) ++applied; else ++dropped;
+        free(n);
+    }
+    SE_SLOCK();
+    sPokesApplied += applied;
+    sPokesDropped += dropped;
+    SE_SUNLOCK();
+}
+
 /* EMULATE thread: take whatever has been published and install it. Cheap when nothing has (one
  * atomic load per call). */
 static void SeApplyPendingInstalls(void)
 {
+    SeApplyPendingPokes();
     if (SeAtLoad(&sBpPending))
     {
         unsigned int n, i;
@@ -1562,34 +1669,70 @@ static int SeDrain(SeConn cl, unsigned int n)
     return SeDrainWith(cl, n, scratch, (unsigned int)sizeof(scratch));
 }
 
-/* Receive a poke stream -- destination(4 LE) + 'count' bytes -- and apply it through 'hook'.
- * Shared by WRM and WRS, which differ only in the hook and in whether the destination is a bus
- * address or a sound-RAM offset. Bytes past 'cap' are drained rather than written.
+/* Receive a poke stream -- destination(4 LE) + 'count' bytes -- into the poke mailbox for the
+ * emulate thread to apply. Shared by WRM and WRS, which differ only in whether the destination is
+ * a bus address or a sound-RAM offset. Bytes past 'cap', and a poke that does not fit the box (or
+ * cannot be allocated), are drained rather than kept, so the stream stays aligned, and counted as
+ * dropped.
  *
  * The bytes are read in blocks rather than one at a time for the reason SeDrain gives: the old
  * per-byte loop spent a syscall per byte, so the protocol's own 1 MiB maximum cost the
  * emulator's server thread over half a second. */
-static int SeRecvPokeStream(SeConn cl, void (*hook)(unsigned int, unsigned char),
-                            unsigned int count, unsigned int cap)
+static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned int cap)
 {
     unsigned char destb[4];
     unsigned char block[16u * 1024u];
     unsigned int dest, done = 0;
+    SePokeNode* node = 0;
+    const unsigned int keep = count > cap ? cap : count;
     if (SeRecv(cl, destb, 4) != 0) return -1;
     dest = (unsigned int)destb[0] | ((unsigned int)destb[1] << 8) |
            ((unsigned int)destb[2] << 16) | ((unsigned int)destb[3] << 24);
-    const unsigned int keep = count > cap ? cap : count;
-    while (done < keep)
+    if (keep)
     {
-        const unsigned int take = (keep - done) > sizeof(block)
-                                      ? (unsigned int)sizeof(block) : (keep - done);
-        unsigned int i;
-        if (SeRecv(cl, block, take) != 0) return -1;
-        if (hook) { for (i = 0; i < take; ++i) hook(dest + done + i, block[i]); }
-        done += take;
+        int room;
+        SE_SLOCK();
+        room = sPokeBoxBytes + keep <= SE_POKE_BOX_BYTES;
+        if (room) sPokeBoxBytes += keep;   /* reserved now, so concurrent servers cannot overfill it */
+        SE_SUNLOCK();
+        if (room)
+        {
+            node = (SePokeNode*)malloc(sizeof(SePokeNode) + keep);
+            if (!node)
+            {
+                SE_SLOCK();
+                sPokeBoxBytes -= keep;
+                SE_SUNLOCK();
+            }
+        }
     }
-    /* Reuse 'block' rather than letting SeDrain's own buffer inline a second one in. */
-    return SeDrainWith(cl, count - keep, block, (unsigned int)sizeof(block));
+    if (keep && !node) SeCountPokeDropped();   /* nowhere to put it */
+    if (node)
+    {
+        node->next = 0; node->dest = dest; node->len = keep; node->sound = sound;
+        while (done < keep)
+        {
+            const unsigned int take = (keep - done) > sizeof(block)
+                                          ? (unsigned int)sizeof(block) : (keep - done);
+            if (SeRecv(cl, node->data + done, take) != 0)
+            {
+                SE_SLOCK();
+                sPokeBoxBytes -= keep;
+                SE_SUNLOCK();
+                free(node);
+                return -1;
+            }
+            done += take;
+        }
+        SE_SLOCK();
+        if (sPokeTail) sPokeTail->next = node; else sPokeHead = node;
+        sPokeTail = node;
+        SeAtStore(&sPokePending, 1);
+        SE_SUNLOCK();
+        return SeDrainWith(cl, count - keep, block, (unsigned int)sizeof(block));
+    }
+    /* Not kept: consume the bytes to stay aligned. */
+    return SeDrainWith(cl, count, block, (unsigned int)sizeof(block));
 }
 
 static void SeServeClientLoop(SeConn cl, SeFrame* snap);
@@ -1702,12 +1845,12 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
         {
             /* Poke work RAM: payload = address(4 LE) + 'arg' big-endian bytes. */
-            if (SeRecvPokeStream(cl, sWriteByte, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
+            if (SeRecvPokeStream(cl, 0, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
         {
             /* Poke sound RAM (v13+): payload = offset(4 LE) + 'arg' raw bytes. */
-            if (SeRecvPokeStream(cl, sWriteSoundByte, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
+            if (SeRecvPokeStream(cl, 1, arg, SE_LIVE_MAX_WRITE_BYTES) != 0) return;
         }
         else if (memcmp(req, SE_LIVE_VERB_LOADSTATE, SE_LIVE_VERB_LEN) == 0)
         {
@@ -1824,6 +1967,11 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         SeWr32(ctl + 36, (unsigned int)SeAtLoad(&sStepOutstanding));
         SeWr32(ctl + 40, SE_STOP_SEQ(SeAtLoad64(&sStopWord)));
         SE_UNLOCK();
+        SE_SLOCK();
+        SeWr32(ctl + 44, sPokesApplied);
+        SeWr32(ctl + 48, sPokesDropped);
+        SE_SUNLOCK();
+        SeWr32(ctl + 52, sWriteVdpByte ? SE_LIVE_CAP_VDP_POKE : 0u);
 
         unsigned char hdr[SE_LIVE_HEADER_LEN];
         hdr[0] = SE_LIVE_MAGIC0; hdr[1] = SE_LIVE_MAGIC1;

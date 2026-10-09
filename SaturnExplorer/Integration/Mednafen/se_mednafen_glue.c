@@ -58,6 +58,8 @@ extern int             SsDbgEmuLoadSlot(unsigned slot); /* have the emulator loa
 extern void            SsDbgVdp1Regs(uint16_t out11[11]); /* TVMR,FBCR,PTMR,EWDR,EWLR,EWRR,ENDR,EDSR,LOPR,COPR,MODR */
 extern void            SsDbgSh2Regs(int cpu, uint32_t out23[23]); /* R[16],SR,GBR,VBR,MACH,MACL,PR,PC */
 extern void            SsDbgPokeByte(uint32_t addr, uint8_t val); /* bus/debug byte write */
+extern void            SsDbgPokeCramByte(uint32_t off, uint8_t val);   /* v23: byte of the raw CRAM array (what SsDbgCram exposes) */
+extern void            SsDbgPokeVdp1FbByte(uint32_t off, uint8_t val); /* v23: byte of the displayed VDP1 FB bank (SsDbgVdp1Fb) */
 extern void            SsDbgAddExecBp(int cpu, unsigned int addr); /* Tier 3: install PC breakpoint */
 extern void            SsDbgAddMemBp(int cpu, unsigned int addr, unsigned int size, unsigned int kind); /* data watchpoint */
 extern void            SsDbgClearBps(void);                        /* Tier 3: clear PC + data breakpoints */
@@ -254,6 +256,22 @@ static void SeMdfnWriteByte(unsigned int address, unsigned char value)
 {
 #if defined(SE_MEDNAFEN_WIRED)
     SsDbgPokeByte(address, value);   /* cache-correct bus poke (see apply.py accessor) */
+#else
+    (void)address; (void)value;
+#endif
+}
+/* CRAM / VDP1 frame-buffer poke (v23). CheatMemWrite, which SsDbgPokeByte uses, writes only the
+ * ranges in Mednafen's fast memory map (BIOS, work RAM, VDP1/VDP2 VRAM, sound RAM); these two
+ * windows are not in it, so a poke there was accepted and silently dropped. The accessors apply.py
+ * injects into vdp1.cpp / vdp2.cpp write the same arrays the snapshot reads back, so the poke is
+ * visible on the next frame. 'address' is a Saturn bus address (0x05C80000.. / 0x05F00000..). */
+static void SeMdfnWriteVdpByte(unsigned int address, unsigned char value)
+{
+#if defined(SE_MEDNAFEN_WIRED)
+    if (address >= 0x05F00000u && address < 0x05F80000u)
+        SsDbgPokeCramByte(address - 0x05F00000u, value);
+    else if (address >= 0x05C80000u && address < 0x05D00000u)
+        SsDbgPokeVdp1FbByte(address - 0x05C80000u, value);
 #else
     (void)address; (void)value;
 #endif
@@ -743,6 +761,7 @@ void SeMednafenFrameHook(void)
         SeExportInit();
         SeExportSetMemWriteHook(SeMdfnWriteByte);
         SeExportSetSoundWriteHook(SeMdfnWriteSoundByte);   /* Sound RAM pokes (v13) */
+        SeExportSetVdpWriteHook(SeMdfnWriteVdpByte);       /* CRAM / VDP1 FB pokes (v23) */
         SeExportSetSaveStateHook(SeMdfnSaveState);         /* rewind savestate ring (v16) */
         SeExportSetLoadStateHook(SeMdfnLoadState);
         SeExportSetEmuSlotHooks(SsDbgEmuSlotInfo, SsDbgEmuLoadSlot);  /* Mednafen's own slots (v17) */
@@ -764,7 +783,7 @@ void SeMednafenEndFrameHook(void) {}   /* stub build: no savestates to take */
 void SeMednafenSuppressUnusedWarnings(void)
 {
     (void)SeMdfnAddExecBp; (void)SeMdfnAddMemBp; (void)SeMdfnClearBps; (void)SeMdfnWriteByte;
-    (void)SeMdfnWriteSoundByte; (void)SeMdfnSetPad;
+    (void)SeMdfnWriteSoundByte; (void)SeMdfnWriteVdpByte; (void)SeMdfnSetPad;
     (void)SeMdfnGetKeyMap; (void)SeMdfnPortDeviceName;
     (void)SeMdfnSetTracepoints; (void)SeRd32LE;
     (void)SeMdfnSaveState; (void)SeMdfnLoadState;

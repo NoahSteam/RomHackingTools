@@ -55,7 +55,14 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      22u   /* +v22 each savestate block carries the number of state loads
+#define SE_LIVE_VERSION      23u   /* +v23 pokes (WRM/WRS) are applied on the emulate thread at the frame
+                                  * gate instead of on the server thread, and the control block
+                                  * grows to 56 bytes: pokes_applied, pokes_dropped and a server
+                                  * capability word. A WRM to the CRAM / VDP1 frame buffer windows
+                                  * (which the emulator's own bus writer ignores: they are not in
+                                  * its fast memory map) is applied through a VDP writer when the
+                                  * capability bit SE_LIVE_CAP_VDP_POKE says one is wired.
+                                  * +v22 each savestate block carries the number of state loads
                                   * the emulator had resolved when the state was captured (24
                                   * bits, in the block header's former padding), so a client that
                                   * has asked for a load can tell a block of the timeline the
@@ -381,7 +388,7 @@
 #define SE_LIVE_WRAM_LOW_LEN    0x100000u
 #define SE_LIVE_WRAM_HIGH_LEN   0x100000u
 #define SE_LIVE_VDP1_FB_LEN     0x40000u   /* VDP1 frame buffer (drawn output) */
-#define SE_LIVE_CONTROL_LEN     44u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
+#define SE_LIVE_CONTROL_LEN     56u       /* paused(u32) + frame(u64) + stop{reason,cpu,pc}(u32 each)
                                            * + (v19) restore_done(u32) + restore_failed(u32). Every
                                            * accepted LST/ELS ends in exactly one: done counts once
                                            * the first frame of the restored timeline is in the
@@ -397,7 +404,20 @@
                                            * (v21) stop_seq(u32 @+40): the sequence number of the
                                            * stop in {reason,cpu,pc}; it advances with every halt
                                            * the emulator publishes and is not reset by a resume
-                                           * (28 bits, wrapping). 0 = no halt yet. */
+                                           * (28 bits, wrapping). 0 = no halt yet.
+                                           * (v23) pokes_applied(u32 @+44): WRM/WRS/LST-edit bytes
+                                           * runs the emulate thread has written, counted per poke
+                                           * request; pokes_dropped(u32 @+48): pokes the server could
+                                           * not apply (mailbox full, no writer wired, or a window
+                                           * the emulator cannot write); caps(u32 @+52): the
+                                           * SE_LIVE_CAP_* bits below. Both counters are monotonic
+                                           * per emulator run and wrap at 2^32. */
+/* Server capability bits (control block +52, v23+). */
+#define SE_LIVE_CAP_VDP_POKE    1u   /* a poke to the CRAM (0x05F00000..) or VDP1 frame buffer
+                                      * (0x05C80000..) window is applied; without it the emulator's bus
+                                      * writer drops those bytes silently, so a client must not offer
+                                      * the edit. Also covers LST edits of type 0 in those windows. */
+#define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
 #define SE_LIVE_SH2_LEN         (2u * SE_LIVE_SH2_REGS_LEN)   /* master + slave */
 
@@ -405,7 +425,7 @@
  *
  * This protocol is a PRIVILEGED LOCAL CONTROL CHANNEL, not a read-only viewer feed. Anything
  * that can connect can, by design: write any bus address through the emulator's debug/cheat
- * path (WRM -- work RAM, VRAM, CRAM, the framebuffer), write sound RAM (WRS), install
+ * path (WRM -- work RAM and VDP VRAM; CRAM and the framebuffer too when the server has a VDP writer, SE_LIVE_CAP_VDP_POKE), write sound RAM (WRS), install
  * breakpoints and tracepoints, pause, step and resume the CPUs, inject controller input, and
  * restore a savestate (LST). That is what a debugger needs, and none of it is authenticated:
  * there is no handshake, no token, and no distinction between a viewer and a controller.

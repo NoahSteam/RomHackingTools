@@ -63,6 +63,7 @@ public:
 
     int64_t SelectionStart() const { return mSelStart; }   // -1 when nothing is selected
     bool    IsEditing() const { return mEditAddr >= 0; }
+    const std::string& WriteError() const { return mWriteError; }   // why the last edit was refused ("" if none)
 
     // One selectable region: a CPU-address span served by the backend. Index 0 is "All".
     struct Region { const char* name; uint32_t base; uint32_t size; };
@@ -104,6 +105,9 @@ private:
     bool    mEditFocus = false;
     bool    mEditFlow = false;         // typed-digit entry: mEditBuf[0] is the pending first digit
     float   mModifiedFlash = 0.0f;
+    bool    mModifiedReachedSource = false;   // the last accepted edit also went to the emulator / replay
+    std::string mWriteError;           // why the last edit was refused; empty when it was not
+    float   mWriteErrorAge = 0.0f;     // seconds left to show it
 
     bool mConnected = false;
     uint64_t mSourceId = 0;            // backend source the edit state and byte cache belong to

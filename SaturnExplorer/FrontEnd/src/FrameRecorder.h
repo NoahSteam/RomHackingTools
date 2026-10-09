@@ -164,6 +164,13 @@ public:
     void TruncateAfter(size_t i);
     // Route edits made against a scrubbed frame to a sink (App) as pending pokes: the sink cb
     // gets (user, isSound, addr/offset, bytes, len). Call once at setup; makes Select writable.
+    // Whether an edit to CRAM or the VDP1 frame buffer may be staged. Play From Here replays staged
+    // edits through the emulator's bus writer, which drops those two windows unless the server has
+    // a VDP writer (SE_LIVE_CAP_VDP_POKE); staging one the replay would lose is worse than refusing
+    // it, because it stays on screen. The App restates it every frame from the connected server.
+    // Defaults to true: a recorder with no live server behind it has nothing to disagree with.
+    void SetVdpBusEditsAccepted(bool accepted) { mVdpBusEdits = accepted; }
+
     void SetEditSink(void* user, void (*cb)(void* user, int isSound, uint32_t addr,
                                             const uint8_t* bytes, size_t len));
 
@@ -214,6 +221,7 @@ private:
     std::atomic<uint64_t> mBlocksReceived{0}, mBlocksInvalid{0}, mBlocksNoFrame{0}, mNewestBlock{0};
 
     // Edit sink (App) for writes made against a scrubbed frame (SetEditSink). UI-thread only.
+    bool  mVdpBusEdits = true;   // see SetVdpBusEditsAccepted
     void* mEditUser = nullptr;
     void (*mEditCb)(void*, int, uint32_t, const uint8_t*, size_t) = nullptr;
     static size_t CbEditMain(void* u, uint32_t address, const void* src, size_t size);

@@ -374,6 +374,14 @@ int se_can_write(se_context* ctx)
     });
 }
 
+int se_has_write_sink(se_context* ctx, se_vram_kind kind)
+{
+    return Guard(0, [&]
+    {
+        return (ctx && Impl(ctx)->HasWriteSink(kind)) ? 1 : 0;
+    });
+}
+
 size_t se_read_cram_colors(se_context* ctx, uint16_t start, uint16_t count,
                            se_palette_entry* out)
 {

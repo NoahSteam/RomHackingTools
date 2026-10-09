@@ -44,9 +44,12 @@ public:
     std::vector<uint8_t> ram = std::vector<uint8_t>(kSize, 0);
 
     uint64_t id = 1;
+    int64_t  refuseOffset = -1;   // a byte the source takes and then rejects (a full queue, a lost connection)
     bool Connected() const override { return true; }
     uint64_t SourceId() const override { return id; }
     bool CanWrite(uint32_t a) const override { return InRange(a, 1); }
+    std::string WriteRefusal(uint32_t) const override { return "the source refused it"; }
+    bool WriteReachesSource(uint32_t) const override { return true; }
 
     std::vector<MemoryReadResult> ReadMemoryBatch(const std::vector<MemoryReadRequest>& rs) override
     {
@@ -68,6 +71,7 @@ public:
     size_t WriteMemory(uint32_t a, const uint8_t* bytes, size_t n) override
     {
         if (!InRange(a, (uint32_t)n)) return 0;
+        if (refuseOffset >= 0 && (int64_t)((a & 0x07FFFFFFu) - kBase) == refuseOffset) return 0;
         for (size_t i = 0; i < n; ++i) ram[(a & 0x07FFFFFFu) - kBase + i] = bytes[i];
         return n;
     }
@@ -207,6 +211,54 @@ void TypingStopsAtTheRegionEnd()
     CHECK(f.backend.ram[kSize - 2] == 0x00);
 }
 
+// A byte the source refuses must not look written: the caret stays on it, the digits queued for
+// the next byte are dropped instead of landing one byte along, and the panel says why.
+void RefusedByteKeepsTheCaretAndSaysWhy(bool oneFramePerChar)
+{
+    Fixture f;
+    f.backend.refuseOffset = 0;
+    f.h.Click(f.Cell(0, 0));
+    f.Type("ABCD", oneFramePerChar);
+    CHECK(f.backend.ram[0] == 0x00);
+    CHECK(f.backend.ram[1] == 0x00);                          // CD did not slide onto the next byte
+    CHECK(f.panel.SelectionStart() == (int64_t)kBase);        // the caret did not move past it
+    CHECK(!f.panel.IsEditing());
+    CHECK(f.panel.WriteError() == "the source refused it");
+
+    f.backend.refuseOffset = -1;                              // the source recovers: the same byte takes it
+    f.Type("EF", false);
+    CHECK(f.backend.ram[0] == 0xEF);
+    CHECK(f.panel.WriteError().empty());
+    CHECK(f.panel.SelectionStart() == (int64_t)kBase + 1);
+}
+
+void RefusedEditBoxKeepsTheCaret()
+{
+    Fixture f;
+    f.backend.refuseOffset = 0;
+    f.h.Click(f.Cell(0, 0));
+    f.DoubleClick(f.Cell(0, 0));
+    f.Type("12", true);
+    f.Key(ImGuiKey_Enter);
+    CHECK(f.backend.ram[0] == 0x00);
+    CHECK(f.panel.SelectionStart() == (int64_t)kBase);        // Enter does not walk on past a refused byte
+    CHECK(!f.panel.WriteError().empty());
+}
+
+// The grid draws and edits the canonical address, so a cache-through address (0x26000000) must be
+// folded when it is navigated to, or the selection matches no cell while typing still writes the
+// folded byte.
+void GoToFoldsMirrorAddresses()
+{
+    Fixture f;
+    f.panel.GoTo(0x26000000u + 0x10);
+    f.h.Settle();
+    CHECK(f.panel.SelectionStart() == (int64_t)kBase + 0x10);
+    f.Type("5A", false);
+    CHECK(f.backend.ram[0x10] == 0x5A);
+    CHECK(f.panel.SelectionStart() == (int64_t)kBase + 0x11);
+}
+
 void DoubleClickOnAPendingDigitOpensTheEditor()
 {
     Fixture f;
@@ -339,6 +391,10 @@ int main()
     DoubleClickEditsEachByteSeparately();
     EscapeAbandonsAPendingDigit();
     TypingStopsAtTheRegionEnd();
+    RefusedByteKeepsTheCaretAndSaysWhy(true);
+    RefusedByteKeepsTheCaretAndSaysWhy(false);
+    RefusedEditBoxKeepsTheCaret();
+    GoToFoldsMirrorAddresses();
     DoubleClickOnAPendingDigitOpensTheEditor();
     ReplacingTheSourceAbandonsAPendingDigit();
     ReplacingTheSourceClosesTheEditor();

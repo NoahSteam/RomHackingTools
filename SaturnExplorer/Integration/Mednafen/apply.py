@@ -425,6 +425,40 @@ SCSP_SLOT_METHOD = """\
 # these accessors (a) fail to resolve `SCSP` inside the hard-coded MDFN_IEN_SS block, and
 # (b) would define the same C-linkage symbols a second time, colliding with the SS core's at
 # link. The SSF player has no use for the SE debug hooks, so it simply skips them.
+# Pokes into the two arrays the emulator's own bus writer (CheatMemWrite) cannot reach (v23). That
+# writer goes through SH7095_FastMap, which only holds the BIOS, work RAM, VDP1/VDP2 VRAM and sound
+# RAM -- see SS_SetPhysMemMap callers in ss.cpp, vdp1.cpp, vdp2.cpp and sound.cpp; the commented-out
+# VDP1 FB mapping and the absent CRAM one are why a CRAM or frame-buffer poke was accepted and
+# dropped. These write the SAME arrays the snapshot accessors expose, byte for byte as a read sees
+# them, so the next frame shows the edit.
+#   * CRAM: 'off' indexes the raw CRAM[] array (SsDbgCram). The write goes through VDP2::Write16_DB,
+#     the bus path, so VDP2REND's own copy of CRAM is updated too -- writing the array alone would
+#     leave the renderer on the old colours. The bus address that reaches raw word w is the inverse
+#     of RW()'s mapping: identity in the RGB555 modes, de-interleaved in RGB888.
+#   * VDP1 FB: the DISPLAYED bank, FB[!FBDrawWhich], exactly what SsDbgVdp1Fb reads (the CPU-visible
+#     window is the draw bank, so a bus write would change a buffer the snapshot never shows).
+VDP2_POKE_ACCESSORS = """\
+/* Saturn Explorer v23: byte poke into the raw CRAM array (see SsDbgCram), through the bus write path. */
+namespace MDFN_IEN_SS { namespace VDP2 {
+extern "C" void SsDbgPokeCramByte(unsigned int off, unsigned char val) {
+   const unsigned w = (off >> 1) & 0x7FF;
+   const unsigned cri = (CRAM_Mode == CRAM_MODE_RGB555_1024 || CRAM_Mode == CRAM_MODE_RGB555_2048)
+                        ? w : (((w & 0x3FF) << 1) | ((w >> 10) & 1));
+   const uint16 cur = CRAM[w];
+   const uint16 nv = (off & 1) ? (uint16)((cur & 0xFF00) | val)
+                               : (uint16)((cur & 0x00FF) | ((uint16)val << 8));
+   Write16_DB(0x100000 | (cri << 1), nv);
+}
+}}"""
+
+VDP1_POKE_ACCESSORS = """\
+/* Saturn Explorer v23: byte poke into the displayed VDP1 frame-buffer bank (see SsDbgVdp1Fb). */
+namespace MDFN_IEN_SS { namespace VDP1 {
+extern "C" void SsDbgPokeVdp1FbByte(unsigned int off, unsigned char val) {
+   ne16_wbo_be<uint8>(FB[!FBDrawWhich], off & 0x3FFFF, val);
+}
+}}"""
+
 SOUND_ACCESSORS = """\
 /* Expose the SCSP instance (sound.cpp's `static SS_SCSP SCSP`) to the glue (C linkage).
    SsDbgSoundRam returns the 262144-word host-order SCSP RAM (the glue SwapU16ToBE's it to
@@ -803,6 +837,8 @@ SMPC_INPUT_UPDATE = """\
 APPEND_EDITS = [
     ("vdp1.cpp", VDP1_ACCESSORS, "SsDbgVdp1Vram"),
     ("vdp2.cpp", VDP2_ACCESSORS, "SsDbgVdp2Vram"),
+    ("vdp1.cpp", VDP1_POKE_ACCESSORS, "SsDbgPokeVdp1FbByte"),
+    ("vdp2.cpp", VDP2_POKE_ACCESSORS, "SsDbgPokeCramByte"),
 ]
 
 # File-scope forward declarations (extern "C" is illegal inside a function body, so
