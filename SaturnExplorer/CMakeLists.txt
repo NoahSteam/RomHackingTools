@@ -484,6 +484,16 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # The compare markers' session / timeline-epoch rules, exact frame lookup, and the slider
+    # geometry they are drawn with (checked against ImGui's own SliderBehavior).
+    add_executable(SaturnExplorerCompareMarkersTests
+        FrontEnd/tests/CompareMarkersTests.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerCompareMarkersTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerCompareMarkersTests COMMAND SaturnExplorerCompareMarkersTests)
+
     # The Memory Compare panel -- the real panel under the app's theme and font, over hand-built
     # snapshots: region and byte selection, GoTo, address parsing, the action capability table.
     add_executable(SaturnExplorerMemoryComparePanelTests
