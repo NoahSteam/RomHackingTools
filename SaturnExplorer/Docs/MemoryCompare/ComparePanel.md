@@ -88,10 +88,15 @@ sound RAM).
   `RegisterImage` regions the row label is region-qualified (`VDP1 FB+1230`, `VDP2 Regs+E0`: hex offset, no padding),
   because those are not bus-addressed memory; the rest of the app keeps using the Memory tab's
   addresses for them. Selection and every action carry a `RegionRef`, not a raw address.
+- The toolbar wraps: each control stays on its line only if it fits in the window, and the Jump to
+  group (label, box, Go) moves as one and shrinks its box rather than running past the edge, so a
+  narrow dock never hides one (the grid's scrollbar does not scroll the toolbar).
 - **Jump to** box (`ParseLocation`): accepts a bus address (mirrors folded) or `Region+offset`, and
   scrolls to the row and selects the byte. When a single region is selected it follows the byte into
   its region; All Memory stays All Memory. If Changes Only elides the row, the panel switches Changes
   Only off for that jump and says so (once, not when there are no differences at all).
+  The text is hex only with no sign; a value wider than 32 bits, or an offset past the region, is
+  refused rather than wrapped into a valid location.
 - Selection is keyed by `RegionRef`, so it survives a region switch or a row-list rebuild, and is
   cleared when a different pair of snapshots is shown. Click selects a byte, shift-click extends
   within the region.
