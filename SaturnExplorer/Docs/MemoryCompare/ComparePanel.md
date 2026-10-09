@@ -122,7 +122,7 @@ The menu asks `MemoryComparePanel::ActionEnabled(action, region)`, which the tes
 | LWRAM, HWRAM | yes | yes | yes | yes (SH-2) |
 | VDP1 RAM, VDP2 RAM, VDP2 CRAM | yes | yes | yes (SH-2 and SCU-DMA writes) | no |
 | VDP1/VDP2 Regs | yes | yes (register image) | yes (SH-2 writes to the register) | no |
-| Sound RAM | yes | yes | **no**: its writer is the 68K, and the emulator's watchpoints see SH-2 instructions and SCU DMA only (`Integration/Mednafen/apply.py` notes) | no: the 68K listing is in the Sound CPU tab, not `AssemblyPanel` (SH-2 cores only) |
+| Sound RAM | yes | yes | yes, **for SH-2 and SCU-DMA writes only**: the SH-2 uploads sound programs and samples there, and the emulator's watchpoint matches every SH-2 effective address and SCU DMA write, but it cannot see the 68K sound CPU's own writes (`Integration/Mednafen/apply.py` notes). The enabled item says so in its tooltip | no: the 68K listing is in the Sound CPU tab, not `AssemblyPanel` (SH-2 cores only) |
 | VDP1 FB | yes | yes (derived image) | **no**: an app-derived image written by VDP1 drawing, not a bus write | no |
 
 A disabled Break on Write or View in Assembly carries a tooltip with the reason (Go to Memory and
@@ -146,7 +146,7 @@ is not captured.
 `MemSnapshot`s, so it needs neither the engine's capture path nor an emulator. Covered:
 
 - address parsing (bus address, `Region+offset`, mirrors, refusals)
-- the action capability table (Sound RAM and VDP1 FB have no Break on Write; View in Assembly only
+- the action capability table (VDP1 FB has no Break on Write; Sound RAM has it; View in Assembly only
   in work RAM)
 - the empty state, the summary and grid tables, and the opening view
 - clicking a summary row selects its region; clicking a byte selects it, on either side, and a

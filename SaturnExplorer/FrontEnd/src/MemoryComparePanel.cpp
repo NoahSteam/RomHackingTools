@@ -88,9 +88,18 @@ std::string RowLabel(const RegionRef& ref)
 
 const char* NoBreakReason(RegionId id)
 {
-    if (id == RegionId::SoundRam) return "Sound RAM is written by the 68K; the emulator's watchpoints only see SH-2 and SCU-DMA writes.";
-    if (id == RegionId::Vdp1Fb)   return "VDP1 FB is an image drawn by VDP1, not written over the bus.";
+    if (id == RegionId::Vdp1Fb) return "VDP1 FB is an image drawn by VDP1, not written over the bus.";
     return "A write watchpoint cannot observe this region.";
+}
+
+// The hint on an enabled Break on Write. Sound RAM is also written by the 68K sound CPU, which the
+// emulator's watchpoint cannot see, so what it catches is spelled out.
+const char* BreakNote(RegionId id)
+{
+    if (id == RegionId::SoundRam)
+        return "Catches SH-2 and SCU-DMA writes to Sound RAM, not the 68K sound CPU's own writes.\n"
+               "Breaks in the running game, not the snapshot.";
+    return "Breaks in the running game, not the snapshot.";
 }
 
 const char* NoAsmReason(RegionId id)
@@ -652,7 +661,7 @@ void MemoryComparePanel::DrawContextMenu(bool aAttached, bool bAttached)
          attached ? nullptr : "That frame is no longer in the rewind history, so the Memory tab\n"
                               "shows the current frame, not the snapshot.");
     item("Add to Watch", Action::AddWatch, nullptr, "Watches the running game, not the snapshot.");
-    item("Break on Write", Action::BreakOnWrite, NoBreakReason(mSelRegion), "Breaks in the running game, not the snapshot.");
+    item("Break on Write", Action::BreakOnWrite, NoBreakReason(mSelRegion), BreakNote(mSelRegion));
     item("View in Assembly", Action::ViewInAssembly, NoAsmReason(mSelRegion), nullptr);
     ImGui::Separator();
     if (ImGui::MenuItem("Export Diff (this region)")) RaiseExport(false, mSelRegion);
