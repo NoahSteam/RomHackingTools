@@ -105,6 +105,12 @@ void LayerPanels::Draw(const LayerPanelFrame& frame, const bool* visible,
     mSnapshotHeld = frame.context && serial == mLastSerial;
     mLastSerial = serial;
 
+    // Before the panels draw, so an export asked for from the Data menu has already left its
+    // status line on the layer's toolbar by the time that toolbar is submitted. 'frame' is the
+    // displayed frame -- the scrubbed one while scrubbing -- which is the whole reason the
+    // request waited for Draw instead of running where the menu command was handled.
+    ServiceExportRequests(frame, platform);
+
     for (const LayerPanelDesc& desc : LayerPanelList())
     {
         if (visible && !visible[desc.id]) continue;
@@ -262,36 +268,75 @@ void LayerPanels::DrawPanel(const LayerPanelDesc& desc, const LayerPanelFrame& f
     ImGui::End();
 }
 
-void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
-                            IPlatform& platform)
+bool LayerPanels::ExportLayer(LayerId layer, const LayerPanelFrame& frame,
+                              IPlatform& platform, std::string& message)
 {
-    View& view = mViews[desc.id];
-    auto fail = [&view](const std::string& why) { view.status = why; view.statusError = true; };
+    // The result is recorded on the layer's own view as well as handed back, so an export
+    // started from the Data menu still shows under that layer's toolbar if its panel is open.
+    View& view = mViews[layer];
+    auto fail = [&view, &message](const std::string& why)
+    {
+        message = why;
+        view.status = why;
+        view.statusError = true;
+        return false;
+    };
     if (!frame.context || !frame.opts)
     {
-        fail("No data is loaded.");
-        return;
+        return fail("No data is loaded.");
     }
     if (!platform.HasHostFilesystem())
     {
-        fail("This build has no filesystem to export to.");
-        return;
+        return fail("This build has no filesystem to export to.");
     }
-    const LayerExport built =
-        BuildLayerExport(frame.context, desc.id, *frame.opts, frame.frame);
+    const LayerExport built = BuildLayerExport(frame.context, layer, *frame.opts, frame.frame);
     std::string dir;
     std::string error;
     if (!WriteLayerExport(ExportRoot(), built, dir, error))
     {
-        fail(error);
-        return;
+        return fail(error);
     }
     char msg[512];
     std::snprintf(msg, sizeof(msg), "Exported %zu file%s to %s", built.files.size(),
                   built.files.size() == 1 ? "" : "s", dir.c_str());
-    view.status = msg;
-    if (!built.note.empty()) view.status += "  (" + built.note + ")";
+    message = msg;
+    if (!built.note.empty()) message += "  (" + built.note + ")";
+    view.status = message;
     view.statusError = false;
+    return true;
+}
+
+void LayerPanels::RunExport(const LayerPanelDesc& desc, const LayerPanelFrame& frame,
+                            IPlatform& platform)
+{
+    std::string message;   // the view already carries it; the panel reads it from there
+    (void)ExportLayer(desc.id, frame, platform, message);
+}
+
+void LayerPanels::RequestExport(LayerId layer)
+{
+    if (layer >= 0 && layer < kLayerCount) mExportRequests.push_back(layer);
+}
+
+void LayerPanels::ServiceExportRequests(const LayerPanelFrame& frame, IPlatform& platform)
+{
+    if (mExportRequests.empty()) return;
+    // Swapped out first: an export cannot queue another, but taking the list by value keeps
+    // that true of any future caller too, instead of iterating a vector being appended to.
+    std::vector<LayerId> requests;
+    requests.swap(mExportRequests);
+    for (size_t i = 0; i < requests.size(); ++i)
+    {
+        ExportResult result;
+        result.error = !ExportLayer(requests[i], frame, platform, result.message);
+        mExportResults.push_back(result);
+    }
+}
+
+void LayerPanels::TakeExportResults(std::vector<ExportResult>& out)
+{
+    out.swap(mExportResults);
+    mExportResults.clear();   // swap left the caller's previous contents here
 }
 
 }  // namespace sfe

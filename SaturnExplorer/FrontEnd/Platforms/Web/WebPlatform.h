@@ -52,7 +52,7 @@ public:
 
     // Web: trigger a browser download of the blob. Native desktop: write it to the
     // current directory under 'suggestedName'.
-    bool SaveFile(const char* suggestedName, const void* data, size_t size) override;
+    SaveOutcome SaveFile(const char* suggestedName, const void* data, size_t size) override;
 
     // Native desktop only (zenity/kdialog/osascript for the folder picker; the OS
     // file manager for reveal). On the web these keep the base "unsupported" default.

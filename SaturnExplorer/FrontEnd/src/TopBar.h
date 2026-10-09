@@ -51,6 +51,10 @@ enum class TopBarCommandType
     // Load one of the emulator's OWN save slots (it performs the load). 'index' is the slot.
     LoadEmulatorState,
     DumpMemory,
+    // Write one layer's textures to the export folder. 'index' carries the LayerId
+    // (sfe::kLayerVdp1 or an se_vdp2_layer); the same export the layer viewer's own
+    // Export button produces.
+    DumpTextures,
     DumpSh2,          // the Assembly listing as text; opens its options dialog
     SetDataDirectory,
     ToggleWindow,

@@ -99,11 +99,40 @@ const char* LayerShortName(LayerId layer);
 LayerExport BuildLayerExport(se_context* ctx, LayerId layer, const se_render_opts& opts,
                              uint64_t frame);
 
-// Write a built export into '<root>/<folder>', creating the directories. On success sets
-// 'outDir' to the folder written and returns true; otherwise fills 'error'. Needs a host
-// filesystem — the panels gate this on IPlatform::HasHostFilesystem().
+// The filesystem an export is written through. Exists so the failure paths can be tested:
+// a write that fails at close, a failure on the third of five files, a publish that cannot
+// rename. The default implementation is FileWrite.h and is what the app uses.
+//
+// Every method answers "is the filesystem now in the state I asked for", with 'true' for a
+// no-op (removing what is not there).
+struct ExportFs
+{
+    virtual ~ExportFs() {}
+    // Must report a failure at close, not just at write -- see FileWrite.h.
+    virtual bool WriteFile(const std::string& path, const void* data, size_t size,
+                           std::string& error);
+    virtual bool MakeDir(const std::string& path);
+    virtual bool RemoveFlatDir(const std::string& path);
+    virtual bool Move(const std::string& from, const std::string& to);
+    virtual bool Exists(const std::string& path);
+};
+
+// Write a built export so that '<root>/<folder>' ends up holding either the whole new export
+// or exactly what it held before -- never a half-written mixture, and never nothing.
+//
+// A texture export is one artifact that happens to be spread over several files, so it is
+// published as one: the files are staged in a sibling directory, every write AND close is
+// checked, and only once all of them are on disk is the staging directory swapped into place.
+// A failure anywhere removes the staging directory and leaves any previous export untouched;
+// this matters because re-exporting the same layer at the same frame targets the same folder,
+// so the old behaviour -- truncate each file in place as you go -- destroyed a good export to
+// produce a broken one.
+//
+// On success sets 'outDir' to the published folder and returns true; otherwise fills 'error'
+// and leaves nothing behind. Needs a host filesystem -- the panels gate this on
+// IPlatform::HasHostFilesystem(). 'fs' defaults to the real one.
 bool WriteLayerExport(const std::string& root, const LayerExport& ex, std::string& outDir,
-                      std::string& error);
+                      std::string& error, ExportFs* fs = nullptr);
 
 // Where exports go unless the user picks somewhere else: an "exports" folder beside the
 // app's own settings, created on demand. Empty if the config directory is unresolvable.

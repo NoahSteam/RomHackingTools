@@ -87,11 +87,14 @@ constexpr UINT ID_PANEL_BASE     = (UINT)kMenuIdPanelBase;
 constexpr UINT ID_SAVESTATE_BASE = (UINT)kMenuIdSaveStateBase;
 constexpr UINT ID_LOADSTATE_BASE = (UINT)kMenuIdLoadStateBase;
 constexpr UINT ID_EMULOAD_BASE   = (UINT)kMenuIdEmuLoadBase;
+constexpr UINT ID_DUMPTEX_BASE   = (UINT)kMenuIdDumpTexBase;
 // Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
 // Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
 // sharing id 0 — so even if one were ever un-grayed, its WM_COMMAND can't be mistaken for id 0
 // or collide with a real command. None of these ids is decoded in OnCommand, by design.
-constexpr UINT ID_PLACEHOLDER_BASE = 0xEB00;
+// (0xEB00 would be kMenuIdSaveStateBase -- placeholders must not share a range with a
+// decoded group, which is the whole point of the paragraph above.)
+constexpr UINT ID_PLACEHOLDER_BASE = 0xEF00;
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
 // native menu groups panels identically and the ToggleWindow index stays the flat PanelList one.
@@ -289,6 +292,8 @@ void Win32MenuBar::RefreshState()
 
     // Data
     EnableById(mMenu, ID_DUMP, s.dumpEnabled);
+    for (int i = 0; i < kNativeMenuTextureLayers; ++i)
+        EnableById(mMenu, ID_DUMPTEX_BASE + (UINT)i, s.dumpTexturesEnabled);
     EnableById(mMenu, ID_DUMP_SH2, s.dumpSh2Enabled);
 
     // Layers
@@ -454,6 +459,16 @@ void Win32MenuBar::Rebuild()
         HMENU data = ::CreatePopupMenu();
         AddItem(data, ID_DUMP, L"Dump Memory\tCtrl+Shift+D");
         AddItem(data, ID_DUMP_SH2, L"Dump SH-2...");
+        // One item per layer, from the shared table. The id is ID_DUMPTEX_BASE + LayerId,
+        // which NativeMenuDecodeIndexedId turns back into the DumpTextures command carrying
+        // that layer -- so the item's position in the submenu is free to change.
+        HMENU dumpTex = ::CreatePopupMenu();
+        const NativeMenuTextureLayer* texLayers = NativeMenuTextureLayerList();
+        for (int i = 0; i < kNativeMenuTextureLayers; ++i)
+            AddItem(dumpTex, ID_DUMPTEX_BASE + (UINT)texLayers[i].layer,
+                    Widen(texLayers[i].label).c_str());
+        AddSub(data, dumpTex, L"Dump Textures");
+        AddSep(data);
         AddItem(data, ID_DATADIR, L"Set Data Directory...");
         AddSub(bar, data, L"&Data");
     }

@@ -826,7 +826,10 @@ bool ControllerPanel::SaveRecording(IPlatform& platform) const
     }
     out << "  ]\n}\n";
     const std::string json = out.str();
-    return platform.SaveFile("saturn-input.json", json.data(), json.size());
+    // Cancelling is not an error, but it is not a save either; the caller only needs to
+    // know whether a file now exists.
+    return platform.SaveFile("saturn-input.json", json.data(), json.size()) ==
+           SaveOutcome::Saved;
 }
 
 bool ControllerPanel::LoadRecording(IPlatform& platform)

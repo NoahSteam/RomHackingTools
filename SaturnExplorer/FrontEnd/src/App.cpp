@@ -560,10 +560,60 @@ ImVec2 AspectFit(const ImVec2& avail, int w, int h, float& outScale)
 // (VRAM/CRAM/work-RAM big-endian as the Saturn stores them; registers as a
 // hardware-offset big-endian image). The section table names each region and gives
 // its Saturn bus address + size + file offset, so a region is trivial to carve out.
+// Called by everything that writes the displayed frame to a file. The output has to come from
+// the context the scrub swap selected, which happens well after commands are dispatched -- so
+// being called during dispatch means someone has wired a save back to where the command
+// arrives and it is now silently exporting the live frame while a past one is on screen.
+// Reported rather than refused: a loud wrong answer beats a feature that quietly stops.
+void App::WarnIfNotFromDisplayedSnapshot(const char* what)
+{
+    if (!mDispatchingCommands) return;
+    char msg[192];
+    std::snprintf(msg, sizeof(msg),
+                  "BUG: %s ran during command dispatch, before the displayed frame was "
+                  "selected. It must be queued and run after the scrub swap.", what);
+    mOperationStatus = msg;
+    mOperationError = true;
+    mLog.Error(msg);
+}
+
+// One place that turns a SaveOutcome into what the user sees, so every save in the app says
+// the same three things -- and so "cancelled" never reads as a failure. 'what' names the
+// artifact ("saturn_frame_42.sedump", "the screenshot").
+bool App::ReportSave(SaveOutcome outcome, const std::string& what)
+{
+    switch (outcome)
+    {
+    case SaveOutcome::Saved:
+        mOperationStatus = "Saved " + what + ".";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        return true;
+    case SaveOutcome::Cancelled:
+        // Not an error: nothing was written because nothing was asked for any more.
+        mOperationStatus = "Save cancelled; " + what + " was not written.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
+        return false;
+    case SaveOutcome::Failed:
+    default:
+        mOperationStatus = "Could not write " + what + ". Nothing was saved.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+        return false;
+    }
+}
+
 void App::DumpMemory(IPlatform& platform)
 {
+    WarnIfNotFromDisplayedSnapshot("Dump Memory");
     if (!mbHasData || !mContext)
     {
+        // Reachable: the dump is queued during command handling and run later in the frame,
+        // so a Close Source queued alongside it lands first and there is nothing left to read.
+        mOperationStatus = "No data is loaded, so there was nothing to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
         return;
     }
 
@@ -613,6 +663,9 @@ void App::DumpMemory(IPlatform& platform)
 
     if (sections.empty())
     {
+        mOperationStatus = "This source provided no memory regions to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
         return;
     }
 
@@ -648,32 +701,68 @@ void App::DumpMemory(IPlatform& platform)
     char name[64];
     std::snprintf(name, sizeof(name), "saturn_frame_%llu.sedump",
                   static_cast<unsigned long long>(se_frame_number(mContext)));
-    platform.SaveFile(name, out.data(), out.size());
+    ReportSave(platform.SaveFile(name, out.data(), out.size()), name);
 }
 
-// Snapshot what a dump needs from the live context and start the job. The panel's own CPU, user
-// notes and registers are taken here, once, so a dump is a consistent picture of one moment even
-// though the writing spans several frames.
+// Data > Dump Textures. The work itself is the layer viewer's export (LayerExport.cpp), so the
+// menu and the panel button write the same files into the same folder -- for VDP1 that is every
+// sprite on screen as its own BMP, for a VDP2 screen its tileset plus the tile-index CSV.
+//
+// Only queued here, never run here. Toolbar and menu commands are executed near the top of
+// BuildUI, before the scrub swap picks the context the panels will show, so exporting on the
+// spot would write the live frame while the user is looking at a past one. LayerPanels::Draw
+// runs the request against the frame it draws, the same way a screenshot waits for the
+// displayed context (see mScreenshotRequested).
+void App::RequestTextureDump(int layer)
+{
+    if (layer < 0 || layer >= kLayerCount)
+    {
+        return;   // a stale menu id; the decoder bounds the range, so this is belt-and-braces
+    }
+    mLayerPanels.RequestExport(static_cast<LayerId>(layer));
+}
+
+// Snapshot what a dump needs and start the job. Everything is taken here, once, so a dump is a
+// consistent picture of one moment even though the writing spans several frames -- and so the
+// job holds no se_context*, which matters because the source can be closed while it runs.
+//
+// "One moment" means the frame on screen. This is reached from the options dialog, which
+// DrawDumpSh2Modal draws after the scrub swap, so mContext is the displayed context and
+// mMemBackend -- which holds se_context** rather than a context -- follows it. The guard below
+// is what notices if that ever stops being true.
 void App::BeginDumpSh2()
 {
-    if (!mbHasData || !mContext) return;
+    WarnIfNotFromDisplayedSnapshot("Dump SH-2");
+    if (!mbHasData || !mContext)
+    {
+        mOperationStatus = "No data is loaded, so there was nothing to dump.";
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+        return;
+    }
 
     Sh2DumpInput in;
     in.opt = mDumpSh2Options;
     in.cpu = mDumpSh2Cpu;
     in.haveRegs = se_get_sh2_regs(mContext, mDumpSh2Cpu, &in.regs) == SE_OK;
     in.userComments = mAssemblyPanel.UserComments();
-    // Every region is read, selected or not: a generated comment resolves literal-pool loads
-    // from any of them.
+    // An unselected region is still read when generated comments are on, because one resolves
+    // literal-pool loads from any region -- but only then. Each region is a megabyte, read and
+    // copied twice on the way in, so reading one nothing can consult is a hitch in the frame the
+    // user clicked Dump for no gain.
     // (ReadRegionBytes, not one big request: a single read is capped at 64 KiB.)
+    const bool poolsNeeded = in.opt.comments && in.opt.autoComments && in.haveRegs;
     for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
-        ReadRegionBytes(mMemBackend, Sh2DumpRegionAt(i).base, Sh2DumpRegionAt(i).size, in.memory[i]);
+        if (in.opt.regions[i] || poolsNeeded)
+            ReadRegionBytes(mMemBackend, Sh2DumpRegionAt(i).base, Sh2DumpRegionAt(i).size,
+                            in.memory[i]);
 
     char name[64];
     std::snprintf(name, sizeof(name), "saturn_sh2_%s_frame_%llu.txt", mDumpSh2Cpu ? "slave" : "master",
                   static_cast<unsigned long long>(se_frame_number(mContext)));
     mDumpSh2FileName = name;
     mDumpSh2Job.reset(new Sh2DumpJob(std::move(in)));
+    mOpenDumpSh2Progress = true;
 }
 
 void App::DrawDumpSh2Modal(IPlatform& platform)
@@ -685,13 +774,11 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
     {
         mOpenDumpSh2Modal = false;
         mDumpSh2Cpu = mAssemblyPanel.Cpu();   // default to the CPU the panel is showing
-        // Which regions this source can actually read: a probe of the first word of each.
+        // Which regions this source can actually read, for the checkbox state and the estimate.
+        // Cosmetic and allowed to go stale while the dialog is open: what actually gets written
+        // is decided by the read in BeginDumpSh2.
         for (size_t i = 0; i < kSh2DumpRegionCount; ++i)
-        {
-            const auto r = mbHasData ? mMemBackend.ReadMemoryBatch({ { Sh2DumpRegionAt(i).base, 2 } })
-                                     : std::vector<MemoryReadResult>();
-            mDumpSh2Available[i] = !r.empty() && r[0].success;
-        }
+            mDumpSh2Available[i] = mbHasData && IsReadableAddress(&mMemBackend, Sh2DumpRegionAt(i).base);
         ImGui::OpenPopup(kOptionsTitle);
     }
 
@@ -745,7 +832,7 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         {
             const Sh2DumpRegion& r = Sh2DumpRegionAt(i);
             char label[96];
-            std::snprintf(label, sizeof(label), "%s   %08X-%08X", i ? "High work RAM" : "Low work RAM",
+            std::snprintf(label, sizeof(label), "%s   %08X-%08X", r.label,
                           r.base, r.base + r.size - 1u);
             ImGui::BeginDisabled(!mDumpSh2Available[i]);
             ImGui::Checkbox(label, &o.regions[i]);
@@ -768,8 +855,12 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         ImGui::BeginDisabled(!valid);
         if (ImGui::Button("Dump...", ImVec2(110, 0)))
         {
-            // A region not provided cannot be dumped, whatever the checkbox remembers.
-            for (size_t i = 0; i < kSh2DumpRegionCount; ++i) o.regions[i] = o.regions[i] && mDumpSh2Available[i];
+            // The selection is NOT filtered against the probe here. It used to be, which edited
+            // the user's remembered checkboxes from a transient fact about one source -- open a
+            // source without HWRAM and that box stayed off afterwards -- and it hid the case the
+            // job is built to report: a selected region whose bytes do not come through is named
+            // in the dump's header as skipped. Availability is a property of the read, and the
+            // read reports it.
             BeginDumpSh2();
             ImGui::CloseCurrentPopup();   // the progress modal opens next frame, from outside this popup
         }
@@ -779,34 +870,54 @@ void App::DrawDumpSh2Modal(IPlatform& platform)
         ImGui::EndPopup();
     }
 
-    // Opened at the top level, not from inside the options popup: a popup opened from within another
-    // is its child and goes with it when that one closes.
-    if (mDumpSh2Job && !ImGui::IsPopupOpen(kProgressTitle)) ImGui::OpenPopup(kProgressTitle);
+    // The work is stepped HERE, not inside the progress popup below, and the distinction
+    // matters: a popup that loses its slot (another OpenPopup at the same level -- several
+    // modals are drawn right after this one) would stop a job that is holding ~50 MB of text
+    // and never finish it. Driven from the frame instead, a displaced popup costs the progress
+    // bar and nothing else. Safe from anywhere in the frame because the job owns its snapshot
+    // and holds no se_context.
+    //
+    // A slice a frame keeps the window responsive; 20000 rows is a few milliseconds, so a full
+    // dump takes about a second.
+    if (mDumpSh2Job && mDumpSh2Job->Step(20000))
+    {
+        const std::string text = mDumpSh2Job->TakeText();
+        const std::string name = mDumpSh2FileName;
+        mDumpSh2Job.reset();
+        // A dump is a second of work, so staying silent about where it went -- or about its not
+        // going anywhere -- is the worst of the save paths to leave unreported. ReportSave also
+        // keeps "cancelled at the file dialog" from reading as a failure.
+        ReportSave(platform.SaveFile(name.c_str(), text.data(), text.size()), name);
+    }
+
+    // Opened once when the job starts, from outside the options popup: a popup opened from
+    // within another is its child and goes with it when that one closes.
+    if (mOpenDumpSh2Progress)
+    {
+        mOpenDumpSh2Progress = false;
+        ImGui::OpenPopup(kProgressTitle);
+    }
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     if (ImGui::BeginPopupModal(kProgressTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        // Draw-only. The job finishing above is what closes this, which is also what happens
+        // when it was cancelled or never started.
         if (!mDumpSh2Job)
         {
             ImGui::CloseCurrentPopup();
         }
         else
         {
-            // A slice a frame keeps the window alive and the bar moving; 20000 rows is a few
-            // milliseconds, so a full dump takes a second or so.
-            const bool done = mDumpSh2Job->Step(20000);
             ImGui::Text("Writing %s", mDumpSh2FileName.c_str());
             ImGui::ProgressBar(mDumpSh2Job->Progress(), ImVec2(360, 0));
-            if (done)
+            if (ImGui::Button("Cancel", ImVec2(90, 0)))
             {
-                const std::string text = mDumpSh2Job->TakeText();
+                // Dropped before any file is opened, so there is nothing written to clean up.
                 mDumpSh2Job.reset();
                 ImGui::CloseCurrentPopup();
-                platform.SaveFile(mDumpSh2FileName.c_str(), text.data(), text.size());
-            }
-            else if (ImGui::Button("Cancel", ImVec2(90, 0)))
-            {
-                mDumpSh2Job.reset();
-                ImGui::CloseCurrentPopup();
+                mOperationStatus = "SH-2 dump cancelled; nothing was written.";
+                mOperationError = false;
+                mLog.Info(mOperationStatus);
             }
         }
         ImGui::EndPopup();
@@ -1438,8 +1549,16 @@ void App::BuildUI(IPlatform& platform)
 #else
     DrawToolbar(topBarCommands);
 #endif
-    for (const TopBarCommand& command : topBarCommands)
-        ExecuteTopBarCommand(command, platform);
+    {
+        // Marked for the guard in WarnIfNotFromDisplayedSnapshot: anything that turns the
+        // frame on screen into a file must not run in here, because the context that decides
+        // which frame that is has not been chosen yet. App's frame loop has no test harness,
+        // so this is what catches the mistake being reintroduced.
+        mDispatchingCommands = true;
+        for (const TopBarCommand& command : topBarCommands)
+            ExecuteTopBarCommand(command, platform);
+        mDispatchingCommands = false;
+    }
     // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
     // effect this frame. Reads the hotkey/menu requests set during DrawToolbar above.
     UpdateDemo(platform);
@@ -1490,10 +1609,23 @@ void App::BuildUI(IPlatform& platform)
     }
 #endif
 
+    // Everything that turns the displayed frame into a file runs HERE, after the swap above
+    // chose which context that is, and never where the command arrived. A toolbar or menu
+    // command is handled near the top of this function, where mContext is still the live
+    // context, so a dump taken there wrote frame 3000 while the user was looking at 2800.
+    //
+    // Both are flags rather than captured contexts on purpose: Close Source is a command too,
+    // so it can be handled in the same batch and destroy the context before this point. A
+    // retained se_context* would dangle; a flag just finds mContext null and says so.
     if (mScreenshotRequested)
     {
         mScreenshotRequested = false;
         SaveScreenshot(platform);   // mContext is the context on screen (scrubbed frame or live)
+    }
+    if (mDumpMemoryRequested)
+    {
+        mDumpMemoryRequested = false;
+        DumpMemory(platform);       // likewise: the bytes AND the filename are the shown frame's
     }
 
     const ImGuiID dockId = ImGui::DockSpaceOverViewport(
@@ -4378,6 +4510,18 @@ void App::DrawLayerPanels(IPlatform& platform)
     visible[kLayerRbg0] = mPanels.layerRbg0;
     mLayerPanels.Draw(frame, visible, platform);
     if (mLayerPanels.ConsumeSettingsDirty()) mSettingsDirty = true;
+    // A Data > Dump Textures request has no panel status line of its own to land in, so its
+    // result is reported here instead -- every one of them, in case more than one was queued.
+    // The banner has room for one, so it ends up showing the last; the log keeps them all.
+    std::vector<LayerPanels::ExportResult> exports;
+    mLayerPanels.TakeExportResults(exports);
+    for (size_t i = 0; i < exports.size(); ++i)
+    {
+        mOperationStatus = exports[i].message;
+        mOperationError = exports[i].error;
+        if (exports[i].error) mLog.Error(exports[i].message);
+        else                  mLog.Info(exports[i].message);
+    }
 }
 
 void App::DrawWorldView(IPlatform& platform)
@@ -4927,7 +5071,7 @@ void App::ExportTexture(IPlatform& platform, const se_command& cmd, int w, int h
         bmp = BuildBmp(w, h, mTexBuffer, 0, nullptr);
     }
 
-    platform.SaveFile(name, bmp.data(), bmp.size());
+    ReportSave(platform.SaveFile(name, bmp.data(), bmp.size()), name);
 }
 
 // Kick a "find this texture in the game data" search. The needle is the texture's
@@ -5449,15 +5593,21 @@ void App::DoSaveProject(IPlatform& platform)
     // IPlatform::SaveFile prompts (desktop Save-As / web download); emit the project text
     // through it under a suggested name.
     const std::string text = mPatchLib.Serialize();
-    if (platform.SaveFile("patches.seproj", text.data(), text.size()))
+    const SaveOutcome saved = platform.SaveFile("patches.seproj", text.data(), text.size());
+    if (saved == SaveOutcome::Saved)
     {
         mPatchLib.ClearDirty();
         mPatchResultText = "Saved the patch project (" + std::to_string(mPatchLib.Count()) +
                            " location(s)).";
     }
+    else if (saved == SaveOutcome::Cancelled)
+    {
+        // Still dirty, but nothing went wrong -- say so without crying failure.
+        mPatchResultText = "Project save was cancelled; nothing was written.";
+    }
     else
     {
-        mPatchResultText = "Project save was cancelled or failed.";
+        mPatchResultText = "Could not write the patch project. The file was not saved.";
     }
     mShowPatchResults = true;
 }
@@ -6187,6 +6337,26 @@ TopBarViewModel App::BuildTopBarViewModel() const
     return vm;
 }
 
+void App::DrawDumpTexturesMenu(const TopBarViewModel& state,
+                               std::vector<TopBarCommand>& commands)
+{
+    const bool enabled = TopBarCommandEnabled(TopBarCommandType::DumpTextures, state);
+    ImGui::BeginDisabled(!enabled);
+    if (ImGui::Button("Dump Textures")) ImGui::OpenPopup("##dump_textures_menu");
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip(
+        "Write a layer's graphics to the export folder: for VDP1, every sprite on screen as "
+        "its own BMP; for a scroll screen, its tileset and tile-index CSV.");
+    if (!ImGui::BeginPopup("##dump_textures_menu")) return;
+
+    // Driven off LayerPanelList so this menu, the panel tabs and the Windows menu cannot
+    // disagree about which layers exist or what they are called.
+    for (const LayerPanelDesc& layer : LayerPanelList())
+        if (ImGui::MenuItem(layer.title))
+            commands.emplace_back(TopBarCommandType::DumpTextures, static_cast<int>(layer.id));
+    ImGui::EndPopup();
+}
+
 void App::DrawWindowsMenu(std::vector<TopBarCommand>& commands)
 {
     if (ImGui::Button("Windows")) ImGui::OpenPopup("##windows_menu");
@@ -6284,6 +6454,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
         if (ImGui::Button("Dump Memory")) commands.emplace_back(TopBarCommandType::DumpMemory);
         ImGui::SetItemTooltip("Save the current memory and registers to a .sedump file");
         ImGui::EndDisabled();
+
+        ImGui::SameLine();
+        DrawDumpTexturesMenu(state, commands);
 
         ImGui::SameLine();
         ImGui::BeginDisabled(!TopBarCommandEnabled(TopBarCommandType::DumpSh2, state));
@@ -7265,7 +7438,12 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mStepHalt.BeginSettle();   // re-capture briefly so the stepped frame shows
         break;
     case TopBarCommandType::DumpMemory:
-        DumpMemory(platform);
+        // Queued, not run: see the dispatch point in BuildUI. Running it here would dump the
+        // live frame while a scrubbed one is on screen.
+        mDumpMemoryRequested = true;
+        break;
+    case TopBarCommandType::DumpTextures:
+        RequestTextureDump(command.index);
         break;
     case TopBarCommandType::DumpSh2:
         mOpenDumpSh2Modal = true;
@@ -7362,6 +7540,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.togglePauseEnabled = TopBarCommandEnabled(TopBarCommandType::TogglePause, s);
     m.stepEnabled = TopBarCommandEnabled(TopBarCommandType::StepFrame, s);
     m.dumpEnabled = TopBarCommandEnabled(TopBarCommandType::DumpMemory, s);
+    m.dumpTexturesEnabled = TopBarCommandEnabled(TopBarCommandType::DumpTextures, s);
     m.dumpSh2Enabled = TopBarCommandEnabled(TopBarCommandType::DumpSh2, s);
 #ifdef SE_ENABLE_LIVE
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
@@ -7633,6 +7812,7 @@ void App::DrawUpdateModal(IPlatform& platform)
 
 void App::SaveScreenshot(IPlatform& platform)
 {
+    WarnIfNotFromDisplayedSnapshot("Screenshot");
     RenderFrameToTexture(platform);   // free when VDP Output already drew this frame
     if (!mbHasData || mFrameBuffer.empty() || mFrameWidth <= 0 || mFrameHeight <= 0)
     {
@@ -7642,17 +7822,8 @@ void App::SaveScreenshot(IPlatform& platform)
         return;
     }
     const std::vector<uint8_t> bmp = BuildBmpRgba(mFrameWidth, mFrameHeight, mFrameBuffer);
-    if (platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()))
-    {
-        mOperationStatus = "Screenshot saved.";
-        mOperationError = false;
-        mLog.Info(mOperationStatus);
-    }
-    else
-    {
-        mOperationStatus = "Screenshot was not saved.";
-        mOperationError = true;
-    }
+    ReportSave(platform.SaveFile("saturn-screenshot.bmp", bmp.data(), bmp.size()),
+               "saturn-screenshot.bmp");
 }
 
 // Launch Settings: a compact card for each emulator, with the common fields prominent
@@ -8972,7 +9143,10 @@ void App::ExportSound(IPlatform& platform, int slot)
         BuildWav(pcm.data(), static_cast<size_t>(frames), static_cast<int>(rate), 1);
     char name[32];
     std::snprintf(name, sizeof(name), "sound_slot%02d.wav", slot);
-    platform.SaveFile(name, wav.data(), wav.size());
+    if (!ReportSave(platform.SaveFile(name, wav.data(), wav.size()), name))
+    {
+        return;   // nothing on disk, so nothing to describe
+    }
     // The .wav itself cannot carry the caveat, and the tooltip is gone by the time the file is
     // in a folder, so the log keeps the record of what was exported.
     char note[224];

@@ -40,8 +40,28 @@ enum : int
     kMenuIdPanelBase     = 0xEA00,   // + PanelList index
     kMenuIdSaveStateBase = 0xEB00,   // + save-state slot
     kMenuIdLoadStateBase = 0xEC00,   // + save-state slot
-    kMenuIdEmuLoadBase   = 0xED00    // + the emulator's own save-state slot
+    kMenuIdEmuLoadBase   = 0xED00,   // + the emulator's own save-state slot
+    kMenuIdDumpTexBase   = 0xEE00    // + LayerId (Data > Dump Textures)
 };
+
+// How many layers "Data > Dump Textures" offers: the VDP1 sprite layer plus the five VDP2
+// scroll screens. This is sfe::kLayerCount, but spelled again here so NativeMenu.h stays free
+// of LayerExport.h (and so of the core headers it pulls in). NativeMenu.cpp static_asserts the
+// two agree, so adding a layer breaks the build rather than silently truncating the submenu.
+constexpr int kNativeMenuTextureLayers = 6;
+
+// One "Dump Textures" item: its label and the LayerId its menu id carries. Returned as a table
+// rather than each menu bar spelling the six out, so the submenu's order and labels live in one
+// place -- and so the platform files need no core header to name a layer.
+struct NativeMenuTextureLayer
+{
+    const char* label;
+    int         layer;   // sfe::LayerId, the index DumpTextures carries
+};
+
+// kNativeMenuTextureLayers entries, in display order (the sprite layer first, matching the
+// layer viewer tabs).
+const NativeMenuTextureLayer* NativeMenuTextureLayerList();
 
 // VDP layer/overlay toggles, in the order the ImGui "Layers" menu lists them. Carried as
 // the index of a NativeMenuAction whose command is LayerToggle; App maps each to the matching
@@ -94,6 +114,7 @@ enum class MenuCommand
     LoadEmulatorState,    // uses index (slot); the emulator's own slots
     // Data
     DumpMemory,
+    DumpTextures,         // uses index (LayerId)
     DumpSh2,
     SetDataDirectory,
     // Patch
@@ -129,7 +150,7 @@ enum class MenuCommand
 };
 
 // One menu selection reported back to App. `index` is meaningful only for the commands
-// noted above (SelectEmulator, SelectRecentRom, ToggleWindow, LayerToggle).
+// noted above (SelectEmulator, SelectRecentRom, ToggleWindow, LayerToggle, DumpTextures).
 struct NativeMenuAction
 {
     MenuCommand command = MenuCommand::None;
@@ -167,6 +188,7 @@ struct NativeMenuState
 
     // --- Data ---
     bool dumpEnabled = false;
+    bool dumpTexturesEnabled = false;
     bool dumpSh2Enabled = false;
 
     // --- Layers (indexed by NativeMenuLayer) ---

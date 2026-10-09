@@ -2,6 +2,8 @@
 
 #include "WebPlatform.h"
 
+#include "FileWrite.h"   // checked, staged writes -- see the SaveFile contract
+
 #include <cstdio>
 #include <cstdlib>   // system() for RevealPath (native desktop)
 #include <cstring>   // strchr/strlen for the file-dialog filter (native desktop)
@@ -328,12 +330,15 @@ bool WebPlatform::OpenFileDialog(std::string& outPath)
 #endif
 }
 
-bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+SaveOutcome WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
 {
     const char* name = suggestedName ? suggestedName : "dump.bin";
 #ifdef __EMSCRIPTEN__
+    // A browser download: the bytes are handed to the page and the user's browser decides
+    // where they land, so there is no write outcome to report back and nothing on a host
+    // filesystem that a failure could damage.
     SeWebDownload(name, static_cast<const uint8_t*>(data), static_cast<int>(size));
-    return true;
+    return SaveOutcome::Saved;
 #else
     // Ask the desktop's native save dialog for a destination (macOS osascript / Linux zenity /
     // kdialog). A cancelled dialog aborts the save; only when no chooser exists at all (e.g. a
@@ -346,13 +351,14 @@ bool WebPlatform::SaveFile(const char* suggestedName, const void* data, size_t s
     cmds.push_back("zenity --file-selection --save --confirm-overwrite --filename=" +
                    ShellQuote(name) + " 2>/dev/null");
     cmds.push_back("kdialog --getsavefilename . " + ShellQuote(name) + " 2>/dev/null");
-    if (RunChooser(cmds, path) == ChooserResult::Cancelled) return false;   // user dismissed
+    if (RunChooser(cmds, path) == ChooserResult::Cancelled) return SaveOutcome::Cancelled;
 
-    FILE* f = std::fopen(path.c_str(), "wb");
-    if (!f) return false;
-    const size_t wrote = std::fwrite(data, 1, size, f);
-    std::fclose(f);
-    return wrote == size;
+    // Staged and close-checked by WriteFileAtomically: a short write, a failed open and a
+    // failure at the flush inside close are all reported, and the previous contents of 'path'
+    // survive a failure instead of being truncated before the first byte is written.
+    std::string error;
+    return WriteFileAtomically(path, data, size, error) ? SaveOutcome::Saved
+                                                        : SaveOutcome::Failed;
 #endif
 }
 

@@ -25,6 +25,7 @@
 #include "FakeVdpSource.h"
 
 #include "BinaryWriter.h"
+#include "FileWrite.h"
 #include "LayerExport.h"
 #include "RenderKey.h"
 
@@ -667,8 +668,8 @@ void TestWriteExport()
             const std::vector<uint8_t> got((std::istreambuf_iterator<char>(f)),
                                            std::istreambuf_iterator<char>());
             CHECK(got == ex.files[i].bytes);
-            std::remove(path.c_str());
         }
+        RemoveFlatDirectory(dir);
     }
 
     // An export with nothing in it reports the reason instead of writing an empty folder.
@@ -680,6 +681,355 @@ void TestWriteExport()
     CHECK(dir.empty());
 
     se_destroy(ctx);
+}
+
+// --- Publishing: the guarantee is that <root>/<folder> holds either the whole new export or
+// exactly what it held before. These drive it through ExportFs so the failures that matter --
+// a close that fails on the third of five files, a rename that will not go through -- can be
+// produced without a full disk.
+
+const char* kRoot = "se_layer_export_test";
+
+// A built export with 'count' small named files, so the tests do not depend on a renderer.
+LayerExport MakeExport(const std::string& folder, int count, char fill)
+{
+    LayerExport ex;
+    ex.folder = folder;
+    for (int i = 0; i < count; ++i)
+    {
+        ExportFile f;
+        char name[32];
+        std::snprintf(name, sizeof(name), "file%d.bin", i);
+        f.name = name;
+        f.bytes.assign(4, static_cast<uint8_t>(fill));
+        ex.files.push_back(f);
+    }
+    return ex;
+}
+
+std::string Join(const std::string& a, const std::string& b)
+{
+    return a + PathSeparator() + b;
+}
+
+bool ReadFile(const std::string& path, std::vector<uint8_t>& out)
+{
+    out.clear();
+    std::ifstream f(path.c_str(), std::ios::binary);
+    if (!f) return false;
+    out.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    return true;
+}
+
+// The real filesystem, with one injected fault.
+struct FaultyFs : ExportFs
+{
+    int  failWriteAt = -1;     // fail the Nth WriteFile (0-based); -1 = never
+    bool failPublish = false;  // refuse the staging -> destination rename
+    int  writes = 0;
+
+    bool WriteFile(const std::string& path, const void* data, size_t size,
+                   std::string& error) override
+    {
+        const int n = writes++;
+        if (n == failWriteAt)
+        {
+            // Shaped like the real close-time failure: the bytes looked fine going in.
+            error = "could not finish writing " + path + ": No space left on device";
+            return false;
+        }
+        return ExportFs::WriteFile(path, data, size, error);
+    }
+
+    bool Move(const std::string& from, const std::string& to) override
+    {
+        // Only the publish is refused; the step-aside and the roll-back must still work or
+        // the test would not be testing recovery.
+        if (failPublish && from.find(".separt") != std::string::npos) return false;
+        return ExportFs::Move(from, to);
+    }
+};
+
+// Everything present under <root>/<folder>, plus whether any staging or backup debris is
+// left beside it.
+struct Published
+{
+    std::vector<std::string> names;
+    bool debris = false;
+};
+
+Published Inspect(const std::string& folder)
+{
+    Published p;
+    ListDirectory(Join(kRoot, folder), p.names);
+    std::sort(p.names.begin(), p.names.end());
+    p.debris = FileOrDirectoryExists(Join(kRoot, folder + ".separt")) ||
+               FileOrDirectoryExists(Join(kRoot, folder + ".seold"));
+    return p;
+}
+
+void TestExportPublishesAllFilesAtOnce()
+{
+    const std::string folder = "publish_ok";
+    RemoveFlatDirectory(Join(kRoot, folder));
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 3, 'A'), dir, error));
+    CHECK(error.empty());
+    CHECK(dir == Join(kRoot, folder));
+
+    const Published p = Inspect(folder);
+    CHECK(p.names.size() == 3);
+    CHECK(!p.debris);   // the staging directory is gone, not left beside the result
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(dir, "file1.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'A'));
+
+    RemoveFlatDirectory(dir);
+}
+
+// The finding: a failure partway through used to leave a half-written folder where a good
+// export had been. Now the previous export is still there, whole, and nothing is staged.
+void TestFailureAfterTheFirstFileKeepsThePreviousExport()
+{
+    const std::string folder = "publish_keep";
+    RemoveFlatDirectory(Join(kRoot, folder));
+
+    // A good export of five files lands first -- this is what must survive.
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 5, 'O'), dir, error));
+    const Published before = Inspect(folder);
+    CHECK(before.names.size() == 5);
+
+    // Re-exporting the same layer at the same frame targets the same folder, and this one
+    // fails on its third file.
+    FaultyFs fs;
+    fs.failWriteAt = 2;
+    std::string failDir = "untouched";
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 5, 'N'), failDir, error, &fs));
+    CHECK(failDir.empty());                                  // no folder to point the user at
+    CHECK(error.find("No space left") != std::string::npos); // and the real reason survives
+
+    const Published after = Inspect(folder);
+    CHECK(after.names == before.names);
+    CHECK(!after.debris);
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(Join(kRoot, folder), "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'O'));   // the OLD bytes, not the failed export's
+
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
+// The same, for a failure on the very first file: there is no previous export here, so what
+// must not happen is an empty folder appearing as if something had been written.
+void TestFailureOnTheFirstFilePublishesNothing()
+{
+    const std::string folder = "publish_first";
+    RemoveFlatDirectory(Join(kRoot, folder));
+
+    FaultyFs fs;
+    fs.failWriteAt = 0;
+    std::string dir;
+    std::string error;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 3, 'X'), dir, error, &fs));
+    CHECK(dir.empty());
+    CHECK(!FileOrDirectoryExists(Join(kRoot, folder)));
+    CHECK(!Inspect(folder).debris);
+}
+
+// If the swap itself cannot go through, the previous export is put back rather than lost
+// between the two renames.
+void TestFailedPublishRestoresThePreviousExport()
+{
+    const std::string folder = "publish_rollback";
+    RemoveFlatDirectory(Join(kRoot, folder));
+
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'O'), dir, error));
+    const Published before = Inspect(folder);
+    CHECK(before.names.size() == 2);
+
+    FaultyFs fs;
+    fs.failPublish = true;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error, &fs));
+    CHECK(error.find("publish") != std::string::npos);
+
+    const Published after = Inspect(folder);
+    CHECK(after.names == before.names);
+    CHECK(!after.debris);
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(Join(kRoot, folder), "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'O'));
+
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
+// A successful re-export replaces the previous one outright. A sprite layer can export fewer
+// files than last time (fewer sprites on screen), and a stale file left among the new ones
+// would read as part of this export.
+void TestSuccessfulExportLeavesNoStaleFiles()
+{
+    const std::string folder = "publish_replace";
+    RemoveFlatDirectory(Join(kRoot, folder));
+
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 4, 'O'), dir, error));
+    CHECK(Inspect(folder).names.size() == 4);
+
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error));
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 2);     // not 4, and not 2 new beside 2 old
+    CHECK(!after.debris);
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(dir, "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'N'));
+
+    RemoveFlatDirectory(dir);
+}
+
+// Put the filesystem into the state a crash between the two publish renames leaves: the
+// previous export sits in <folder>.seold and there is no <folder> at all.
+void StageInterruptedPublish(const std::string& folder, int files, char fill)
+{
+    const std::string dir = Join(kRoot, folder);
+    RemoveFlatDirectory(dir);
+    RemoveFlatDirectory(dir + ".seold");
+    std::string ignored;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, files, fill), ignored, ignored));
+    CHECK(MovePath(dir, dir + ".seold"));          // the first rename landed...
+    CHECK(!FileOrDirectoryExists(dir));            // ...and the second never ran
+}
+
+// THE P1. A crash between the two renames leaves the previous export as the only copy, in
+// .seold. The next attempt used to delete .seold before writing anything -- so if that
+// attempt then failed, both the old export and the new one were gone. Now the interrupted
+// publish is finished first, and a failure afterwards costs nothing.
+void TestInterruptedPublishIsRecoveredNotDeleted()
+{
+    const std::string folder = "publish_interrupted";
+    StageInterruptedPublish(folder, 3, 'O');
+
+    // The next attempt fails on its second file -- the reproduction from the review.
+    FaultyFs fs;
+    fs.failWriteAt = 1;
+    std::string dir;
+    std::string error;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 3, 'N'), dir, error, &fs));
+    CHECK(dir.empty());
+
+    // The previous export survived, in the place the user looks for it.
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 3);
+    CHECK(!after.debris);                    // and the backup is no longer hanging around
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(Join(kRoot, folder), "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'O'));   // the OLD bytes
+
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
+// The same starting state, but this attempt succeeds: the recovered export is replaced
+// properly rather than ending up beside the new one.
+void TestInterruptedPublishThenASuccessfulExport()
+{
+    const std::string folder = "publish_interrupted_ok";
+    StageInterruptedPublish(folder, 4, 'O');
+
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error));
+    CHECK(error.empty());
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 2);      // not 4, and not 2 new beside 4 recovered
+    CHECK(!after.debris);
+    std::vector<uint8_t> got;
+    CHECK(ReadFile(Join(dir, "file0.bin"), got));
+    CHECK(got == std::vector<uint8_t>(4, 'N'));
+
+    RemoveFlatDirectory(dir);
+}
+
+// If the interrupted copy cannot be put back, nothing is written and the message says where
+// it is -- the alternative is deleting it and reporting a tidy failure.
+void TestUnrecoverableBackupRefusesToExport()
+{
+    const std::string folder = "publish_stuck";
+    StageInterruptedPublish(folder, 2, 'O');
+
+    struct NoRestoreFs : ExportFs
+    {
+        bool Move(const std::string& from, const std::string& to) override
+        {
+            if (from.find(".seold") != std::string::npos) return false;   // the restore fails
+            return ExportFs::Move(from, to);
+        }
+    } fs;
+
+    std::string dir;
+    std::string error;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error, &fs));
+    CHECK(dir.empty());
+    CHECK(error.find(".seold") != std::string::npos);   // names where the old copy is
+    // Still there, untouched, for the next attempt to recover.
+    std::vector<std::string> names;
+    CHECK(ListDirectory(Join(kRoot, folder + ".seold"), names));
+    CHECK(names.size() == 2);
+
+    RemoveFlatDirectory(Join(kRoot, folder + ".seold"));
+}
+
+// A failed publish that also cannot roll back says so, rather than reporting a plain
+// "could not publish" while the previous export sits under a name nobody would look in.
+void TestFailedRollbackIsReported()
+{
+    const std::string folder = "publish_norollback";
+    RemoveFlatDirectory(Join(kRoot, folder));
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'O'), dir, error));
+
+    // The publish fails AND the roll-back fails.
+    struct NoPublishNoRollbackFs : ExportFs
+    {
+        bool Move(const std::string& from, const std::string& to) override
+        {
+            if (from.find(".separt") != std::string::npos) return false;   // publish refused
+            if (from.find(".seold") != std::string::npos) return false;    // roll-back refused
+            return ExportFs::Move(from, to);
+        }
+    } fs;
+    CHECK(!WriteLayerExport(kRoot, MakeExport(folder, 2, 'N'), dir, error, &fs));
+    CHECK(error.find("could not be put back") != std::string::npos);
+    CHECK(error.find(".seold") != std::string::npos);
+
+    RemoveFlatDirectory(Join(kRoot, folder + ".seold"));
+    RemoveFlatDirectory(Join(kRoot, folder));
+}
+
+// Debris from a crashed run must not be mistaken for state to keep, nor confuse the renames.
+void TestStaleStagingDebrisIsCleared()
+{
+    const std::string folder = "publish_debris";
+    RemoveFlatDirectory(Join(kRoot, folder));
+    CHECK(MakeDirectory(kRoot));
+    CHECK(MakeDirectory(Join(kRoot, folder + ".separt")));
+    CHECK(MakeDirectory(Join(kRoot, folder + ".seold")));
+    std::string junk = "junk";
+    std::string ignored;
+    CHECK(WriteFileAtomically(Join(Join(kRoot, folder + ".separt"), "old.bin"),
+                              junk.data(), junk.size(), ignored));
+
+    std::string dir;
+    std::string error;
+    CHECK(WriteLayerExport(kRoot, MakeExport(folder, 2, 'A'), dir, error));
+    const Published after = Inspect(folder);
+    CHECK(after.names.size() == 2);   // the stale old.bin did not come along
+    CHECK(!after.debris);
+
+    RemoveFlatDirectory(dir);
 }
 
 }  // namespace
@@ -700,6 +1050,17 @@ int main()
     TestVdp1Export();
     TestBmpEncoders();
     TestWriteExport();
+    TestExportPublishesAllFilesAtOnce();
+    TestFailureAfterTheFirstFileKeepsThePreviousExport();
+    TestFailureOnTheFirstFilePublishesNothing();
+    TestFailedPublishRestoresThePreviousExport();
+    TestSuccessfulExportLeavesNoStaleFiles();
+    TestStaleStagingDebrisIsCleared();
+    TestInterruptedPublishIsRecoveredNotDeleted();
+    TestInterruptedPublishThenASuccessfulExport();
+    TestUnrecoverableBackupRefusesToExport();
+    TestFailedRollbackIsReported();
+    RemoveEmptyDirectory("se_layer_export_test");   // leave nothing behind
 
     if (gFailures)
     {

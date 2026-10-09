@@ -14,6 +14,15 @@
 namespace sfe
 {
 
+// What came of a save. Saved and Cancelled are both "nothing is wrong"; only Failed is worth
+// an error. See IPlatform::SaveFile.
+enum class SaveOutcome
+{
+    Saved,
+    Cancelled,   // the user dismissed the dialog; nothing was written and nothing is broken
+    Failed       // the bytes did not reach the disk
+};
+
 struct PlatformConfig
 {
     const char* mTitle  = "Saturn Explorer";
@@ -69,9 +78,18 @@ public:
 
     // Save a blob to disk. 'suggestedName' seeds the save dialog / download name.
     // Windows shows a Save-As dialog; the web build triggers a browser download;
-    // the native desktop build writes to the current directory. Returns false if
-    // cancelled or on write error.
-    virtual bool SaveFile(const char* suggestedName, const void* data, size_t size) = 0;
+    // the native desktop build asks the OS chooser and falls back to the current directory.
+    //
+    // The result is three-valued on purpose. It used to be a bool, which made "the user
+    // changed their mind" and "the disk is full" the same answer -- so callers either stayed
+    // silent about both (reporting a success that never happened) or shouted about both
+    // (an error box for pressing Cancel). Every caller now says which it was.
+    //
+    // An implementation must report Failed for anything that stopped the bytes reaching the
+    // disk, INCLUDING a failure at close: a write smaller than the stdio buffer does not
+    // touch the device until the flush inside fclose, so an unchecked close reports success
+    // for a file that was never written. FileWrite.h does this correctly; use it.
+    virtual SaveOutcome SaveFile(const char* suggestedName, const void* data, size_t size) = 0;
 
     // --- Optional capabilities (default: unsupported). Used by the game-data
     // search: pick the data folder, and reveal a found file in the OS file

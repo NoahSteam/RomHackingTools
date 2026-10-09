@@ -4,11 +4,32 @@
 // runtime behavior is identical to the inline versions they replaced.
 #include "NativeMenu.h"
 
+#include "LayerExport.h"   // kLayerCount, which kNativeMenuTextureLayers mirrors
 #include "TopBar.h"
 #include "saturnexplorer/SeTypes.h"
 
 namespace sfe
 {
+
+// The Dump Textures submenu offers one item per layer. If a layer is ever added, this fires
+// instead of the new layer quietly falling outside the id range and decoding as nothing.
+static_assert(kNativeMenuTextureLayers == kLayerCount,
+              "kNativeMenuTextureLayers must match sfe::kLayerCount");
+
+const NativeMenuTextureLayer* NativeMenuTextureLayerList()
+{
+    // Same order and the same names as LayerPanelList, which is what the panel tabs and the
+    // Windows menu show; written out here because LayerPanelList lives behind IPlatform.
+    static const NativeMenuTextureLayer kLayers[kNativeMenuTextureLayers] = {
+        { "VDP1 Sprites", kLayerVdp1 },
+        { "NBG0",         kLayerNbg0 },
+        { "NBG1",         kLayerNbg1 },
+        { "NBG2",         kLayerNbg2 },
+        { "NBG3",         kLayerNbg3 },
+        { "RBG0",         kLayerRbg0 },
+    };
+    return kLayers;
+}
 
 std::string BuildNativeMenuStructureKey(const NativeMenuState& state)
 {
@@ -36,6 +57,7 @@ bool NativeMenuDecodeIndexedId(int id, size_t emulatorCount, size_t recentRomCou
         { kMenuIdSaveStateBase, kNativeStateSlots,         MenuCommand::SaveState },
         { kMenuIdLoadStateBase, kNativeStateSlots,         MenuCommand::LoadState },
         { kMenuIdEmuLoadBase,   kNativeStateSlots,         MenuCommand::LoadEmulatorState },
+        { kMenuIdDumpTexBase,   kNativeMenuTextureLayers,  MenuCommand::DumpTextures },
     };
     for (const Group& g : groups)
     {
@@ -74,6 +96,7 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::LoadState:         out = TopBarCommand(TopBarCommandType::LoadState, a.index); return true;
     case MenuCommand::LoadEmulatorState: out = TopBarCommand(TopBarCommandType::LoadEmulatorState, a.index); return true;
     case MenuCommand::DumpMemory:        out = TopBarCommand(TopBarCommandType::DumpMemory); return true;
+    case MenuCommand::DumpTextures:      out = TopBarCommand(TopBarCommandType::DumpTextures, a.index); return true;
     case MenuCommand::DumpSh2:           out = TopBarCommand(TopBarCommandType::DumpSh2); return true;
     case MenuCommand::SetDataDirectory:  out = TopBarCommand(TopBarCommandType::SetDataDirectory); return true;
     case MenuCommand::ApplyChangesToDisc: out = TopBarCommand(TopBarCommandType::ApplyChangesToDisc); return true;

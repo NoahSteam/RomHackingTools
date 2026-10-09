@@ -15,6 +15,7 @@
 #include "backends/imgui_impl_win32.h"
 #include "backends/imgui_impl_dx11.h"
 
+#include "FileWrite.h"   // checked, staged writes -- see the SaveFile contract
 #include "Theme.h"
 #include "Resource.h"
 
@@ -328,7 +329,7 @@ bool WindowsPlatform::OpenFileDialogFiltered(std::string& outPath, const char* f
     return true;
 }
 
-bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
+SaveOutcome WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size_t size)
 {
     char file[MAX_PATH] = {};
     if (suggestedName)
@@ -345,18 +346,17 @@ bool WindowsPlatform::SaveFile(const char* suggestedName, const void* data, size
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
 
+    // GetSaveFileName returning zero is a dismissed dialog unless CommDlg has an error to
+    // report, which is the one case here that is not the user's choice.
     if (!::GetSaveFileNameA(&ofn))
     {
-        return false;
+        return (::CommDlgExtendedError() == 0) ? SaveOutcome::Cancelled : SaveOutcome::Failed;
     }
-    FILE* f = std::fopen(file, "wb");
-    if (!f)
-    {
-        return false;
-    }
-    const size_t wrote = std::fwrite(data, 1, size, f);
-    std::fclose(f);
-    return wrote == size;
+    // Staged and close-checked by WriteFileAtomically, so a save that runs out of disk
+    // reports it and leaves whatever was at that path intact.
+    std::string error;
+    return WriteFileAtomically(file, data, size, error) ? SaveOutcome::Saved
+                                                        : SaveOutcome::Failed;
 }
 
 bool WindowsPlatform::PickDirectory(std::string& outPath)

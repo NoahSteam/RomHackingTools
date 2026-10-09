@@ -614,9 +614,19 @@ if(BUILD_TESTING)
     # Per-layer viewers: the isolated layer render, the tile map/tileset extraction, and
     # the export artifacts (tileset BMP, tile-index CSV, per-sprite images). Links the core
     # against a synthetic VDP2 snapshot -- no renderer, no window.
+    # The write/close/publish layer every save and export ends in. Uses /dev/full for the
+    # close-time failure, which is the one fault that needs no mock.
+    add_executable(SaturnExplorerFileWriteTests
+        FrontEnd/tests/FileWriteTests.cpp
+        FrontEnd/src/FileWrite.cpp
+    )
+    target_include_directories(SaturnExplorerFileWriteTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerFileWriteTests COMMAND SaturnExplorerFileWriteTests)
+
     add_executable(SaturnExplorerLayerExportTests
         FrontEnd/tests/LayerExportTests.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Settings.cpp
     )
@@ -631,12 +641,13 @@ if(BUILD_TESTING)
         FrontEnd/tests/LayerPanelTests.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Settings.cpp
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerLayerPanelTests
-        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+        PRIVATE FrontEnd/src FrontEnd/tests Core/tests ${SE_IMGUI_DIR}
                 ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(SaturnExplorerLayerPanelTests PRIVATE SaturnExplorerCore)
     add_test(NAME SaturnExplorerLayerPanelTests COMMAND SaturnExplorerLayerPanelTests)
@@ -879,6 +890,7 @@ if(WIN32)
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
@@ -967,6 +979,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
         FrontEnd/src/LayerExport.cpp
+        FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
@@ -1072,6 +1085,7 @@ else()
             FrontEnd/src/LogPanel.cpp
             FrontEnd/src/LayerPanels.cpp
             FrontEnd/src/LayerExport.cpp
+            FrontEnd/src/FileWrite.cpp
             FrontEnd/src/BinaryWriter.cpp
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp

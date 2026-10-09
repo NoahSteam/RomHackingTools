@@ -93,6 +93,16 @@ private:
     // Read every available memory region from the current source and hand a single
     // self-describing dump blob (.sedump) to the platform to save / download.
     void DumpMemory(IPlatform& platform);
+    // Turn a SaveOutcome into the operation banner + log line. Returns true only for a real
+    // save, so a caller can skip whatever it would have said about the file afterwards.
+    bool ReportSave(SaveOutcome outcome, const std::string& what);
+    // Complain loudly if a save of the displayed frame is running before that frame has been
+    // chosen. See the definition; 'what' names the feature for the message.
+    void WarnIfNotFromDisplayedSnapshot(const char* what);
+    // Queue Data > Dump Textures for the layer 'layer' (a LayerId). Run by LayerPanels::Draw,
+    // not here, so it exports the frame on screen rather than the live one -- see the comment
+    // on the definition.
+    void RequestTextureDump(int layer);
     // Data > Dump SH-2: write the SH-2 disassembly the Assembly panel shows to a text file. The
     // dialog picks the columns and memory; the job then runs a slice per frame under a progress
     // modal, and the finished text goes to the platform's save dialog.
@@ -102,6 +112,10 @@ private:
     void BuildDefaultLayout(unsigned int dockspaceId);
     void DrawToolbar(std::vector<TopBarCommand>& commands);
     void DrawWindowsMenu(std::vector<TopBarCommand>& commands);
+    // The ImGui toolbar's stand-in for the native bar's Data > Dump Textures submenu. The SDL
+    // backends draw the toolbar instead of an OS menu bar, so without this the feature would
+    // be reachable on Windows and macOS only.
+    void DrawDumpTexturesMenu(const TopBarViewModel& state, std::vector<TopBarCommand>& commands);
     void DrawStatusBar();
     void RefreshLaunchValidation();
     TopBarViewModel BuildTopBarViewModel() const;
@@ -123,6 +137,8 @@ private:
     void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
     void SaveScreenshot(IPlatform& platform);
     bool mScreenshotRequested = false;   // taken once the displayed context is selected
+    bool mDumpMemoryRequested = false;   // likewise -- a dump of the frame on screen
+    bool mDispatchingCommands = false;   // inside the toolbar/menu command loop (see the guard)
     void DrawLayersMenu();   // toolbar "Layers" dropdown (VDP1/VDP2 visibility toggles)
     void DrawVdpOutput(IPlatform& platform);
     void AdoptNewPanels(ImGuiID dockId);
@@ -638,6 +654,7 @@ private:
     bool                 mOpenDataDirModal = false;   // request to open the modal
     // Data > Dump SH-2.
     bool                 mOpenDumpSh2Modal = false;   // request to open the options dialog
+    bool                 mOpenDumpSh2Progress = false;  // ...and the progress modal, once a job starts
     Sh2DumpOptions       mDumpSh2Options;             // kept between uses
     int                  mDumpSh2Cpu = 0;             // whose registers resolve the generated comments
     bool                 mDumpSh2Available[kSh2DumpRegionCount] = {};   // which regions the source can read
