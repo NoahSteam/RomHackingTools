@@ -269,9 +269,14 @@ void TestLoadStateRefusedWithoutANegotiatedVersion()
 void TestUndeliveredPokesAreCounted()
 {
     auto lostOf = [](const se_data_source& ds) {
-        uint32_t applied = 0, dropped = 0, lost = 0, caps = 0;
-        se_live_poke_info(&ds, &applied, &dropped, &lost, &caps);
+        uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0;
+        se_live_poke_info(&ds, &applied, &dropped, &lost, &unconfirmed, &caps);
         return lost;
+    };
+    auto unconfirmedOf = [](const se_data_source& ds) {
+        uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0;
+        se_live_poke_info(&ds, &applied, &dropped, &lost, &unconfirmed, &caps);
+        return unconfirmed;
     };
     const uint8_t byte = 0x42;
 
@@ -318,6 +323,40 @@ void TestUndeliveredPokesAreCounted()
         CHECK(ds.write_main_ram(ds.user, 0x06000001u, &byte, 1) == 1);
         queued = true;
         CHECK(WaitFor([&] { return lostOf(ds) >= 2; }));
+        CHECK(unconfirmedOf(ds) == 0);   // never sent: those are definite losses
+    }
+
+    // The peer receives a complete WRM -- it has the bytes and applies them -- and the connection
+    // closes before the reply. Whether the emulator has the edit is unknowable from here, so it is
+    // counted as unconfirmed and NOT as lost: telling the user it "never reached the emulator"
+    // would be false.
+    {
+        std::atomic<bool> applied{false};
+        LiveFixture live([&](int fd, int)
+        {
+            AnswerOnce(fd, Reply());
+            Request r;
+            while (fakelive::ReadRequest(fd, r))
+            {
+                if (std::memcmp(r.verb, SE_LIVE_VERB_WRITE, 4) == 0)
+                {
+                    std::vector<uint8_t> body(4 + r.arg);
+                    if (!fakelive::ReadExact(fd, body.data(), body.size())) return;
+                    applied = true;
+                    return;   // applied, and the reply is never sent
+                }
+                const std::vector<uint8_t> bytes = fakelive::Build(Reply());
+                if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+            }
+        });
+        CHECK(live.Ok());
+        if (!live.Ok()) return;
+        se_data_source& ds = live.Source();
+        CHECK(WaitFor([&] { return se_live_connection_generation(&ds) >= 1u; }));
+        CHECK(ds.write_main_ram(ds.user, 0x06000000u, &byte, 1) == 1);
+        CHECK(WaitFor([&] { return applied.load(); }));
+        CHECK(WaitFor([&] { return unconfirmedOf(ds) == 1; }));
+        CHECK(lostOf(ds) == 0);
     }
 }
 

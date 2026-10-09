@@ -105,7 +105,7 @@ private:
     bool    mEditFocus = false;
     bool    mEditFlow = false;         // typed-digit entry: mEditBuf[0] is the pending first digit
     float   mModifiedFlash = 0.0f;
-    bool    mModifiedReachedSource = false;   // the last accepted edit also went to the emulator / replay
+    IMemoryBackend::WriteDest mModifiedDest = IMemoryBackend::WriteDest::ViewOnly;   // where the last accepted edit went
     std::string mWriteError;           // why the last edit was refused; empty when it was not
     float   mWriteErrorAge = 0.0f;     // seconds left to show it
 

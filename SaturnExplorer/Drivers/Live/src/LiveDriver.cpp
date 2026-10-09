@@ -307,6 +307,10 @@ struct LiveState
     // the last value it reported never misses one). A restore discarding the queue is not a loss:
     // the state those pokes were made against is being replaced.
     std::atomic<uint32_t> pokesLost{0};
+    // Pokes whose outcome is unknown: the request was on its way (or already applied) when the
+    // connection failed before the reply came back. The emulator may have them; there is no request
+    // identity to ask it. Kept apart from pokesLost, which are only the ones that were never sent.
+    std::atomic<uint32_t> pokesUnconfirmed{0};
     // What the server last reported (control block, v23+): pokes its emulate thread applied and
     // dropped, and its capability word. Reset with the connection, since the counters belong to
     // one emulator run.
@@ -1451,11 +1455,13 @@ void PollLoop(LiveState* st)
                           snap, paused, frame, sver, stop, events, callStacks, keyMap,
                           logLines, stateBlocks, emuSlots))
         {
-            // Whatever was queued belonged to this connection, and it is gone -- and so is the
-            // poke that was on its way out, which the queue no longer holds.
+            // Whatever was queued belonged to this connection, and it is gone (ForgetConnection counts
+            // those as lost: they were never sent). The poke that was on its way out is different: the
+            // emulator may have received and applied it before the connection failed, and nothing here
+            // can tell, so it is unconfirmed rather than lost.
             if (std::memcmp(verb, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0 ||
                 std::memcmp(verb, SE_LIVE_VERB_WRITESND, SE_LIVE_VERB_LEN) == 0)
-                st->pokesLost.fetch_add(1);
+                st->pokesUnconfirmed.fetch_add(1);
             ForgetConnection(st);
             ConnClose(conn);   // will reconnect next iteration
             SleepWhileRunning(st, 100);
@@ -2044,13 +2050,14 @@ extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, u
 }
 
 extern "C" int se_live_poke_info(const se_data_source* ds, uint32_t* applied, uint32_t* dropped,
-                                  uint32_t* lost, uint32_t* caps)
+                                  uint32_t* lost, uint32_t* unconfirmed, uint32_t* caps)
 {
     if (!ds || !ds->user || ds->close != CbClose) { return 0; }
     return se::Guard(0, [&]() -> int
     {
         const LiveState* st = St(ds->user);
         if (lost) *lost = st->pokesLost.load();
+        if (unconfirmed) *unconfirmed = st->pokesUnconfirmed.load();
         const bool known = st->srvHasPokeInfo.load();
         if (applied) *applied = known ? st->srvPokesApplied.load() : 0;
         if (dropped) *dropped = known ? st->srvPokesDropped.load() : 0;

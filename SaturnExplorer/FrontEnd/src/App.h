@@ -596,6 +596,7 @@ private:
     void ReconcilePokes();
     uint32_t         mPokeDroppedSeen = 0;     // the emulator's dropped-poke count already reported
     uint32_t         mPokeLostSeen = 0;        // the driver's lost-poke count already reported
+    uint32_t         mPokeUnconfirmedSeen = 0; // ...and its unconfirmed-poke count
     int              mRecordSeconds = 5;       // ring-buffer window (5..30 s)
     bool             mbRecording = false;      // explicit recording state
     double           mRecordingStartedAt = 0.0;

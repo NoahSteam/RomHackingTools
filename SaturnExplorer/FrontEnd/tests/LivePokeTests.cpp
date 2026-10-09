@@ -8,10 +8,17 @@
 //  - the server counts what it applied and what it could not, and the driver counts what it
 //    accepted and never delivered;
 //  - a state load discards the pokes still queued against the state it replaces, instead of
-//    shipping them after it.
+//    shipping them after it -- including pokes the server already holds, and ones it is still
+//    receiving, when the load is accepted;
+//  - the server's byte accounting for the poke queue survives a drain that overlaps a receive.
 #if defined(_WIN32)
 #error "LivePokeTests is POSIX-only: it listens on a unix socket. CMake builds it only where that exists."
 #endif
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -71,6 +78,22 @@ extern "C" size_t FakeSave(unsigned char* buf, size_t cap)
     return 64;
 }
 extern "C" int FakeLoad(const unsigned char*, size_t) { Log('L', 0, 0); return 0; }
+extern "C" int FakeSlotInfo(unsigned int, unsigned long long* mtime) { *mtime = 1; return 1; }
+extern "C" int FakeSlotLoad(unsigned int) { Log('L', 0, 0); return 0; }
+
+// Lets a test stop the emulate thread INSIDE the gate's breakpoint-install step -- after the gate
+// has looked at the poke mailbox, before it looks at the load mailbox -- which is exactly the window
+// a poke and a load can both arrive in.
+std::atomic<bool> gBlockInClear{ false };
+std::atomic<bool> gInClear{ false };
+std::atomic<bool> gRelease{ false };
+extern "C" void HookAddBp(int, unsigned int) {}
+extern "C" void HookClearBps()
+{
+    if (!gBlockInClear) return;
+    gInClear = true;
+    while (!gRelease) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+}
 
 size_t Count(char kind)
 {
@@ -88,12 +111,85 @@ void EmulatorTick()
                      nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-struct Info { uint32_t applied = 0, dropped = 0, lost = 0, caps = 0; bool known = false; };
+struct Info { uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0; bool known = false; };
 Info Poll(const se_data_source& ds)
 {
     Info i;
-    i.known = se_live_poke_info(&ds, &i.applied, &i.dropped, &i.lost, &i.caps) != 0;
+    i.known = se_live_poke_info(&ds, &i.applied, &i.dropped, &i.lost, &i.unconfirmed, &i.caps) != 0;
     return i;
+}
+
+// A second client over the exporter's TCP port, to put requests in front of the gate in an order and
+// at a moment the driver would not.
+class RawClient
+{
+public:
+    bool Connect()
+    {
+        for (int i = 0; i < 400; ++i)
+        {
+            mFd = ::socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a = {};
+            a.sin_family = AF_INET;
+            a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            a.sin_port = htons(SE_LIVE_DEFAULT_TCP_PORT);
+            if (mFd >= 0 && ::connect(mFd, reinterpret_cast<sockaddr*>(&a), sizeof(a)) == 0)
+            {
+                mDrain = std::thread([this] {
+                    char sink[65536];
+                    while (::recv(mFd, sink, sizeof(sink), 0) > 0) { }
+                });
+                return true;
+            }
+            if (mFd >= 0) { ::close(mFd); mFd = -1; }
+            Sleep(5);
+        }
+        return false;
+    }
+    void Close()
+    {
+        if (mFd >= 0) ::shutdown(mFd, SHUT_RDWR);
+        if (mDrain.joinable()) mDrain.join();
+        if (mFd >= 0) { ::close(mFd); mFd = -1; }
+    }
+    ~RawClient() { Close(); }
+    void Send(const void* d, size_t n)
+    {
+        const uint8_t* p = static_cast<const uint8_t*>(d);
+        while (n)
+        {
+            const ssize_t w = ::send(mFd, p, n, MSG_NOSIGNAL);
+            if (w <= 0) return;
+            p += w; n -= static_cast<size_t>(w);
+        }
+    }
+    // 'arg' is what the header claims; 'payload' is what is actually sent (a test can send less).
+    void Request(const char* verb, uint32_t arg, const std::vector<uint8_t>& payload = {})
+    {
+        uint8_t h[8] = { uint8_t(verb[0]), uint8_t(verb[1]), uint8_t(verb[2]), uint8_t(verb[3]),
+                         uint8_t(arg), uint8_t(arg >> 8), uint8_t(arg >> 16), uint8_t(arg >> 24) };
+        Send(h, sizeof(h));
+        if (!payload.empty()) Send(payload.data(), payload.size());
+    }
+    void SendMore(const std::vector<uint8_t>& payload) { Send(payload.data(), payload.size()); }
+private:
+    int         mFd = -1;
+    std::thread mDrain;
+};
+
+// WRM payload: destination(4 LE) + bytes.
+std::vector<uint8_t> PokePayload(uint32_t dest, size_t bytes, uint8_t fill)
+{
+    std::vector<uint8_t> p(4 + bytes, fill);
+    for (int i = 0; i < 4; ++i) p[i] = uint8_t(dest >> (8 * i));
+    return p;
+}
+// LST payload: frame(4) + edits_len(4) + state.
+std::vector<uint8_t> LoadPayload(uint32_t frame)
+{
+    std::vector<uint8_t> p(8 + 64, 0x5A);
+    for (int i = 0; i < 4; ++i) { p[i] = uint8_t(frame >> (8 * i)); p[4 + i] = 0; }
+    return p;
 }
 
 template <typename Pred>
@@ -116,6 +212,8 @@ int main()
     SeExportSetSoundWriteHook(HookSound);
     SeExportSetSaveStateHook(FakeSave);
     SeExportSetLoadStateHook(FakeLoad);
+    SeExportSetEmuSlotHooks(FakeSlotInfo, FakeSlotLoad);
+    SeExportSetBreakpointHooks(HookAddBp, HookClearBps);
 
     se_data_source ds{};
     se_result r = SE_ERR_IO;
@@ -212,6 +310,93 @@ int main()
         }
         Check(afterLoad == 0, "no queued poke is applied after the load that replaced its state");
         Check(Count('P') - before < kPokes, "the load discarded the queue instead of draining it first");
+    }
+
+
+    // A poke the server already holds when a restore is accepted must not run on the restored state.
+    // The gate has looked at the poke mailbox (empty) and is parked inside its breakpoint-install
+    // step; a WRM and then the restore arrive; the gate resumes, applies the restore, and its closing
+    // install check would -- without the fix -- apply the old poke on top of it. Covers LST and ELS.
+    for (int els = 0; els < 2; ++els)
+    {
+        RawClient raw;
+        Check(raw.Connect(), "raw client attached over TCP");
+        gBlockInClear = true; gInClear = false; gRelease = false;
+        raw.Request(SE_LIVE_VERB_BKPTS, 0);          // publishes a (empty) breakpoint set: the gate will install it
+        Sleep(200);
+        const size_t loadsBefore = Count('L');
+        std::thread racer([&] {
+            while (!gInClear) Sleep(1);               // the gate is inside the install step
+            raw.Request(SE_LIVE_VERB_WRITE, 1, PokePayload(0x06000200u, 1, 0x42));
+            if (els) raw.Request(SE_LIVE_VERB_EMULOAD, 1);
+            else     raw.Request(SE_LIVE_VERB_LOADSTATE, 72, LoadPayload(31));
+            Sleep(400);                               // both have been received and accepted
+            gRelease = true;
+        });
+        EmulatorTick();                               // blocks in the install step until released
+        racer.join();
+        gBlockInClear = false;
+        Check(Until([&] { return Count('L') == loadsBefore + 1; }), els ? "the slot load is applied" : "the load is applied");
+        for (int i = 0; i < 40; ++i) { EmulatorTick(); Sleep(5); }
+        bool oldPokeAfterLoad = false;
+        {
+            std::lock_guard<std::mutex> lk(gMtx);
+            size_t loadAt = 0;
+            for (size_t i = 0; i < gEvents.size(); ++i) if (gEvents[i].kind == 'L') loadAt = i;
+            for (size_t i = loadAt + 1; i < gEvents.size(); ++i)
+                if (gEvents[i].kind == 'P' && gEvents[i].addr == 0x06000200u) oldPokeAfterLoad = true;
+        }
+        Check(!oldPokeAfterLoad, els ? "a poke received before a slot load does not run after it"
+                                     : "a poke received before a state load does not run after it");
+    }
+
+    // The mailbox's byte accounting when a drain overlaps a receive. B reserves room and is part-way
+    // through its payload when the emulate thread drains A. Zeroing the total on the drain made B's
+    // later failure subtract bytes that were no longer counted, wrapping the total, after which every
+    // small poke was refused.
+    for (int disconnect = 0; disconnect < 2; ++disconnect)
+    {
+        // (The exporter serves one client per listener, so A comes in over the driver's socket and B
+        // over TCP.)
+        RawClient b;
+        Check(b.Connect(), "raw client attached");
+        const uint32_t addrA = 0x06000300u, addrB = 0x06000400u;
+        const uint8_t pokeA = 0x11;
+        Check(ds.write_main_ram(ds.user, addrA, &pokeA, 1) == 1, "A is accepted");   // A: complete, queued
+        Sleep(300);
+        b.Request(SE_LIVE_VERB_WRITE, 4096, PokePayload(addrB, 2048, 0x22));   // B: half of its payload
+        Sleep(200);
+        EmulatorTick();                                                       // drains A while B is mid-receive
+        Check(Until([&] {
+                  std::lock_guard<std::mutex> lk(gMtx);
+                  for (const Event& e : gEvents) if (e.kind == 'P' && e.addr == addrA && e.val == 0x11) return true;
+                  return false; }), "A is applied");
+        const size_t dropsBefore = Poll(ds).dropped;
+        if (disconnect)
+        {
+            b.Close();                                                        // B fails part-way
+            Sleep(300);
+        }
+        else
+        {
+            b.SendMore(std::vector<uint8_t>(2048, 0x22));                      // B completes after the drain
+            Sleep(300);
+            Check(Until([&] {
+                      std::lock_guard<std::mutex> lk(gMtx);
+                      for (const Event& e : gEvents) if (e.kind == 'P' && e.addr == addrB + 4095) return true;
+                      return false; }), "B is applied when it completes");
+        }
+        // A distinct address and value per pass, so the first pass's event cannot satisfy the second.
+        const uint32_t addrC = 0x06000500u + (uint32_t)disconnect;
+        const uint8_t c = (uint8_t)(0x33 + disconnect);
+        Check(ds.write_main_ram(ds.user, addrC, &c, 1) == 1, "a later edit is accepted");
+        Check(Until([&] {
+                  std::lock_guard<std::mutex> lk(gMtx);
+                  for (const Event& e : gEvents) if (e.kind == 'P' && e.addr == addrC && e.val == c) return true;
+                  return false; }, 200), disconnect ? "and applied after a receive failed part-way"
+                                                    : "and applied after an overlapping receive completed");
+        Sleep(100);
+        Check(Poll(ds).dropped == dropsBefore, "nothing was refused for lack of room");
     }
 
     se_destroy(ctx);

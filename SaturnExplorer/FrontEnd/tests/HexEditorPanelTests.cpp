@@ -49,7 +49,7 @@ public:
     uint64_t SourceId() const override { return id; }
     bool CanWrite(uint32_t a) const override { return InRange(a, 1); }
     std::string WriteRefusal(uint32_t) const override { return "the source refused it"; }
-    bool WriteReachesSource(uint32_t) const override { return true; }
+    WriteDest WriteDestination(uint32_t) const override { return WriteDest::Emulator; }
 
     std::vector<MemoryReadResult> ReadMemoryBatch(const std::vector<MemoryReadRequest>& rs) override
     {

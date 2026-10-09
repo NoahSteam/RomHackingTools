@@ -971,6 +971,7 @@ static SePokeNode*  sPokeHead;
 static SePokeNode*  sPokeTail;
 static size_t       sPokeBoxBytes;
 static volatile int sPokePending;
+static unsigned int sPokeEpoch;      /* bumped (state lock) every time a restore is accepted */
 static unsigned int sPokesApplied;   /* guarded by the state lock */
 static unsigned int sPokesDropped;
 
@@ -981,16 +982,45 @@ static void SeCountPokeDropped(void)
     SE_SUNLOCK();
 }
 
+/* A restore (LST, ELS) was accepted: every poke queued so far was made against the state it
+ * replaces, and must not run on the restored one. The queued ones are dropped here, and the epoch
+ * moves so a poke still being received when this runs -- it reserved room, but is not in the box
+ * yet -- is discarded when it finishes instead of joining the queue behind the restore. Takes the
+ * state lock; the caller must not hold it. */
+static void SePokesInvalidate(void)
+{
+    SePokeNode* n;
+    SE_SLOCK();
+    n = sPokeHead;
+    sPokeHead = sPokeTail = 0;
+    SeAtStore(&sPokePending, 0);
+    ++sPokeEpoch;
+    while (n)
+    {
+        SePokeNode* next = n->next;
+        sPokeBoxBytes -= n->len;
+        free(n);
+        n = next;
+    }
+    SE_SUNLOCK();
+}
+
 /* EMULATE thread: apply every queued poke. */
 static void SeApplyPendingPokes(void)
 {
     SePokeNode* list;
+    SePokeNode* n;
+    size_t taken = 0;
     unsigned int applied = 0, dropped = 0;
     if (!SeAtLoad(&sPokePending)) return;
     SE_SLOCK();
     list = sPokeHead;
     sPokeHead = sPokeTail = 0;
-    sPokeBoxBytes = 0;
+    /* Only what was detached: a poke that has reserved room but is still receiving its payload is
+     * accounted for too, and zeroing the total here made its later completion (or failure)
+     * subtract bytes that were no longer there. */
+    for (n = list; n; n = n->next) taken += n->len;
+    sPokeBoxBytes -= taken;
     SeAtStore(&sPokePending, 0);   /* inside the lock: a poke queued after this take sets it again */
     SE_SUNLOCK();
     while (list)
@@ -1682,7 +1712,7 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
 {
     unsigned char destb[4];
     unsigned char block[16u * 1024u];
-    unsigned int dest, done = 0;
+    unsigned int dest, done = 0, epoch = 0;
     SePokeNode* node = 0;
     const unsigned int keep = count > cap ? cap : count;
     if (SeRecv(cl, destb, 4) != 0) return -1;
@@ -1694,6 +1724,7 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
         SE_SLOCK();
         room = sPokeBoxBytes + keep <= SE_POKE_BOX_BYTES;
         if (room) sPokeBoxBytes += keep;   /* reserved now, so concurrent servers cannot overfill it */
+        epoch = sPokeEpoch;                /* a restore accepted after this point voids the poke */
         SE_SUNLOCK();
         if (room)
         {
@@ -1725,6 +1756,15 @@ static int SeRecvPokeStream(SeConn cl, int sound, unsigned int count, unsigned i
             done += take;
         }
         SE_SLOCK();
+        if (epoch != sPokeEpoch)
+        {
+            /* A restore was accepted while this payload was arriving: the poke belongs to the state
+             * it replaced. Not an error and not counted. */
+            sPokeBoxBytes -= keep;
+            SE_SUNLOCK();
+            free(node);
+            return SeDrainWith(cl, count - keep, block, (unsigned int)sizeof(block));
+        }
         if (sPokeTail) sPokeTail->next = node; else sPokeHead = node;
         sPokeTail = node;
         SeAtStore(&sPokePending, 1);
@@ -1880,6 +1920,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 unsigned char* replaced; int superseded;
                 if (SeRecv(cl, staging, payload) != 0) { free(staging); return; }
                 SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
+                SePokesInvalidate();   /* pokes queued so far were made against the state being replaced */
                 SE_SLOCK();
                 superseded = SeAtLoad(&sLoadPending);   /* an earlier load the gate never reached */
                 replaced = sLoadBuf;
@@ -1899,6 +1940,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             if (sEmuSlotLoad && arg < SE_LIVE_EMU_SLOTS)
             {
                 SE_LOCK(); SeAtStore(&sPaused, 1); SeCancelSteps(); SeStopClear(); SE_UNLOCK();
+                SePokesInvalidate();   /* as for LST: they belong to the state this replaces */
                 /* A slot load the gate has not reached yet is replaced, and ends as refused: every
                  * accepted load ends in exactly one counter. */
                 if (SeAtXchg(&sEmuLoadPending, (int)arg + 1) != 0) SeRestoreFailed();
@@ -2391,6 +2433,7 @@ int SeExportInit(void)
     sStateWorkerStarted = 0; SeAtStore(&sStateWorkerRun, 0); sStateCap = 0;
     sFreeCount = sRawHead = sRawCount = sOutHead = sOutCount = 0;
     SeAtStore(&sLoadPending, 0); SeAtStore(&sEmuLoadPending, 0);
+    sPokesApplied = sPokesDropped = 0;
     sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
     SeAtStore(&sRunning, 1);
 #if defined(_WIN32)
@@ -2461,4 +2504,12 @@ void SeExportDeinit(void)
         for (i = 0; i < SE_RING; ++i) { free(sRing[i]); sRing[i] = NULL; sRingFrame[i] = 0; }
     }
     sRingWrite = 0;
+    {
+        /* The threads are joined: pokes nobody applied are just memory now. */
+        SePokeNode* n = sPokeHead;
+        while (n) { SePokeNode* next = n->next; free(n); n = next; }
+        sPokeHead = sPokeTail = 0;
+        sPokeBoxBytes = 0;
+        SeAtStore(&sPokePending, 0);
+    }
 }

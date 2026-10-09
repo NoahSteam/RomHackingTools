@@ -321,7 +321,7 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         mPrevByte[addr] = byte;
         mChangeAge[addr] = 1.0f;
         mModifiedFlash = 1.5f;
-        mModifiedReachedSource = backend.WriteReachesSource(addr);
+        mModifiedDest = backend.WriteDestination(addr);
         mWriteError.clear();
         return true;
     };
@@ -778,10 +778,14 @@ void HexEditorPanel::Draw(IMemoryBackend& backend, bool live, float dt)
         {
             ImGui::SameLine();
             // "Queued" is as far as the panel can know for a live source: the emulator applies the poke
-            // at its next frame gate and does not confirm it here. An edit the source never sees
-            // changes this view only, and says so.
+            // at its next frame gate and does not confirm it here. A scrubbed frame's edit is held for
+            // Play From Here and no emulator has it yet; one the source never sees changes this view
+            // only. Each says which.
+            using Dest = IMemoryBackend::WriteDest;
             ImGui::TextColored(ImVec4(0.92f, 0.35f, 0.30f, 1.0f),
-                               mModifiedReachedSource ? "Sent to emulator" : "Modified (this view only)");
+                               mModifiedDest == Dest::Emulator ? "Queued for emulator"
+                             : mModifiedDest == Dest::Staged   ? "Staged for Play From Here"
+                                                               : "Modified (this view only)");
         }
         if (!mWriteError.empty())
             ImGui::TextColored(ImVec4(0.95f, 0.45f, 0.35f, 1.0f), "Not written: %s", mWriteError.c_str());

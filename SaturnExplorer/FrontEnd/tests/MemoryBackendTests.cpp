@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Debug/MemoryBackend.h"
+#include "Debug/PokeReport.h"
 #include "FakeVdpSource.h"
 
 using namespace sfe;
@@ -104,8 +105,12 @@ int main()
         se_test::State st;
         se_context* ctx = Make(st, true);
         ContextBackend b(&ctx);
-        Check(b.WriteReachesSource(kVdp1), "a region with a sink reaches the source");
-        Check(!b.WriteReachesSource(0x05F80000u), "a register edit never does");
+        Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Emulator, "a region with a sink reaches the emulator");
+        Check(b.WriteDestination(0x05F80000u) == IMemoryBackend::WriteDest::ViewOnly, "a register edit never does");
+        b.SetEditsStaged(true);
+        Check(b.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::Staged,
+              "on a scrubbed frame the sink is the replay list: staged, not sent");
+        b.SetEditsStaged(false);
         b.SetReadOnly(true, "state load in flight");
         Check(b.WriteRefusal(kVdp1) == "state load in flight", "a forced read-only carries the reason it was given");
         b.SetReadOnly(false);
@@ -118,10 +123,28 @@ int main()
         se_test::State st2;
         se_context* snap = Make(st2, false);
         ContextBackend b2(&snap);
-        Check(!b2.WriteReachesSource(kVdp1), "with no sink an edit changes the snapshot only");
+        Check(b2.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::ViewOnly, "with no sink an edit changes the snapshot only");
         se_destroy(snap);
         ContextBackend none(nullptr);
-        Check(!none.WriteRefusal(kVdp1).empty() && !none.WriteReachesSource(kVdp1), "no source: refused, and says so");
+        Check(!none.WriteRefusal(kVdp1).empty() && none.WriteDestination(kVdp1) == IMemoryBackend::WriteDest::ViewOnly,
+              "no source: refused, and says so");
+    }
+
+    // What the user is told when an emulator edit may not have landed. An edit whose reply was lost
+    // may well have been applied, so it is reported as uncertain -- never as "never reached".
+    {
+        Check(DescribePokeLoss(0, 0, 0).empty(), "nothing lost, nothing said");
+        const std::string unsure = DescribePokeLoss(0, 0, 1);
+        Check(unsure.find("could not be confirmed") != std::string::npos, "an unconfirmed edit says it is unconfirmed");
+        Check(unsure.find("may or may not") != std::string::npos, "and that the emulator may have it");
+        Check(unsure.find("never reached") == std::string::npos && unsure.find("does not have") == std::string::npos,
+              "and does not claim it is missing");
+        const std::string sure = DescribePokeLoss(1, 2, 0);
+        Check(sure.find("2 never reached") != std::string::npos && sure.find("1 could not be written") != std::string::npos &&
+                  sure.find("does not have it") != std::string::npos, "definite losses are said as such");
+        const std::string both = DescribePokeLoss(0, 1, 1);
+        Check(both.find("1 never reached") != std::string::npos && both.find("1 could not be confirmed") != std::string::npos &&
+                  both.find("apart from the unconfirmed") != std::string::npos, "a mix keeps the two apart");
     }
 
     // SourceId follows the context, and NoteSourceChanged covers a reused address / reloaded frame.

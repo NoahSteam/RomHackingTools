@@ -99,6 +99,10 @@ emulator); the Mednafen-side writers by `SaturnExplorerMednafenVdpPoke` (stubs).
 - paused at a breakpoint, edit work RAM: the byte lands (pokes are applied at the gate, also while
   the CPU is halted), and the game never sees a half-written multi-byte poke mid-frame
 - edit a byte and quit the emulator before resuming: the status bar reports the edit never reached it
+  (if the connection dies with the edit already on the wire, it says the edit could not be confirmed
+  instead -- the emulator may have applied it)
+- the readout after an edit says "Queued for emulator" on a live source, "Staged for Play From Here" on
+  a scrubbed frame, and "Modified (this view only)" on a loaded dump
 - type `ABCD` into a byte the source refuses: the caret stays on that byte and the reason is shown
   under the grid; nothing lands on the next byte
 - the VDP1 / VDP2 register tabs are read-only on a live emulator and on a scrubbed frame (the

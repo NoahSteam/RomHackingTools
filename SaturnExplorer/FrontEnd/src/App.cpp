@@ -29,6 +29,7 @@
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
 #include "BinaryWriter.h"         // PushU16/PushU32 + the shared BMP encoders
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
+#include "Debug/PokeReport.h"     // the words for an emulator edit that may not have landed
 #include "Debug/ConditionEval.h"  // conditional-breakpoint / gated-tracepoint guards
 #include "Debug/Sh2Disasm.h"      // disassemble the accessing instruction in the Access Log
 #include "Debug/Sh2RegInfo.h"     // SH-2 register names / meanings + the SR decode
@@ -1615,6 +1616,8 @@ void App::BuildUI(IPlatform& platform)
     // emulator nor a replay: on a live emulator or a recorded frame an edit there would show for a
     // moment and be undone by the next capture. Only a loaded dump or savestate keeps it.
     mMemBackend.SetRegistersReadOnly(mbLiveSource || mbScrubbing);
+    // A scrubbed frame's edits go to the replay list (Play From Here), not to the emulator.
+    mMemBackend.SetEditsStaged(mbScrubbing);
 #endif
     ScopedContextSwap contextSwap(&mContext, view);
 #ifdef SE_ENABLE_LIVE
@@ -7566,23 +7569,22 @@ void App::BeginRestoreWait(const RestoreBaseline& before)
 // failed send). Either way the view now shows a byte the emulator does not have.
 void App::ReconcilePokes()
 {
-    uint32_t applied = 0, dropped = 0, lost = 0, caps = 0;
-    se_live_poke_info(&mDataSource, &applied, &dropped, &lost, &caps);
+    uint32_t applied = 0, dropped = 0, lost = 0, unconfirmed = 0, caps = 0;
+    se_live_poke_info(&mDataSource, &applied, &dropped, &lost, &unconfirmed, &caps);
     mRecorder.SetVdpBusEditsAccepted((caps & SE_LIVE_CAP_VDP_POKE) != 0);
     // Both counters belong to something that can start over: the emulator's to one run of it, the
     // driver's to the source. A smaller value than the one reported is a new baseline, not a debt.
     if (dropped < mPokeDroppedSeen) mPokeDroppedSeen = dropped;
     if (lost < mPokeLostSeen) mPokeLostSeen = lost;
+    if (unconfirmed < mPokeUnconfirmedSeen) mPokeUnconfirmedSeen = unconfirmed;
     const uint32_t refused = dropped - mPokeDroppedSeen;
     const uint32_t undelivered = lost - mPokeLostSeen;
+    const uint32_t uncertain = unconfirmed - mPokeUnconfirmedSeen;
     mPokeDroppedSeen = dropped;
     mPokeLostSeen = lost;
-    if (refused + undelivered == 0) return;
-    std::string what = "Emulator edit not applied: ";
-    if (undelivered) what += std::to_string(undelivered) + " never reached the emulator";
-    if (undelivered && refused) what += ", ";
-    if (refused) what += std::to_string(refused) + " could not be written by it";
-    what += ". The view still shows the edit; the emulator's memory does not have it.";
+    mPokeUnconfirmedSeen = unconfirmed;
+    const std::string what = DescribePokeLoss(refused, undelivered, uncertain);
+    if (what.empty()) return;
     mOperationStatus = what;
     mOperationError = true;
     mLog.Error(what);

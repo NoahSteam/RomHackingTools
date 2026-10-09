@@ -185,13 +185,14 @@ std::string ContextBackend::WriteRefusal(uint32_t address) const
     return "The source did not take the edit (it is not connected, or its poke queue is full).";
 }
 
-bool ContextBackend::WriteReachesSource(uint32_t address) const
+IMemoryBackend::WriteDest ContextBackend::WriteDestination(uint32_t address) const
 {
-    if (!Connected()) return false;
+    if (!Connected()) return WriteDest::ViewOnly;
     const uint32_t a = Canonical(address);
-    if (InRegisterWindow(a)) return false;   // register setters touch the snapshot only
+    if (InRegisterWindow(a)) return WriteDest::ViewOnly;   // register setters touch the snapshot only
     const Region* reg = RegionAt(a);
-    return reg && se_has_write_sink(*mContext, reg->kind) != 0;
+    if (!reg || !se_has_write_sink(*mContext, reg->kind)) return WriteDest::ViewOnly;
+    return mEditsStaged ? WriteDest::Staged : WriteDest::Emulator;
 }
 
 size_t ContextBackend::WriteMemory(uint32_t address, const uint8_t* bytes, size_t size)

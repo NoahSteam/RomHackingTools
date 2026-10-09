@@ -65,10 +65,15 @@ public:
     // when the backend has nothing to add.
     virtual std::string WriteRefusal(uint32_t address) const { (void)address; return std::string(); }
 
-    // Whether an accepted edit at 'address' is also handed to the source behind the backend (a
-    // live emulator's poke queue, a scrubbed frame's replay list) rather than changing only the
-    // loaded snapshot. Lets the UI say "sent to the emulator" or "this view only".
-    virtual bool WriteReachesSource(uint32_t address) const { (void)address; return false; }
+    // Where an accepted edit at 'address' goes beyond the displayed snapshot, so the UI can say
+    // which it was.
+    enum class WriteDest
+    {
+        ViewOnly,   // only the loaded snapshot changes (a dump, a savestate, a register image)
+        Emulator,   // queued for the running emulator, which applies it at its next frame gate
+        Staged      // kept on a scrubbed frame for Play From Here to replay; the emulator is untouched
+    };
+    virtual WriteDest WriteDestination(uint32_t address) const { (void)address; return WriteDest::ViewOnly; }
 };
 
 // Backend over an se_context. Holds a pointer-to-pointer so it always follows the
@@ -115,7 +120,7 @@ public:
     bool CanWrite(uint32_t address) const override;
     size_t WriteMemory(uint32_t address, const uint8_t* bytes, size_t size) override;
     std::string WriteRefusal(uint32_t address) const override;
-    bool WriteReachesSource(uint32_t address) const override;
+    WriteDest WriteDestination(uint32_t address) const override;
 
     // Force the backend read-only regardless of the context (e.g. while scrubbing a recorded
     // frame on a server that can't rewind, so edits that would go nowhere are disabled). 'why' is
@@ -132,6 +137,10 @@ public:
     // editable there; on a live emulator or a scrubbed frame they are not offered at all.
     void SetRegistersReadOnly(bool readOnly) { mRegistersReadOnly = readOnly; }
 
+    // The source's write sink is a scrubbed frame's replay list rather than a live emulator: its
+    // edits are staged for Play From Here, and no emulator has them until then.
+    void SetEditsStaged(bool staged) { mEditsStaged = staged; }
+
     // Call when the data behind the context changes without the context pointer changing
     // (a different scrubbed frame loaded in place, or a destroyed context's address reused), so
     // SourceId() moves and a panel drops its in-flight edit.
@@ -146,6 +155,7 @@ private:
     bool         mForceReadOnly = false;
     const char*  mReadOnlyWhy = nullptr;
     bool         mRegistersReadOnly = false;
+    bool         mEditsStaged = false;
     uint64_t     mGeneration = 0;
 };
 
