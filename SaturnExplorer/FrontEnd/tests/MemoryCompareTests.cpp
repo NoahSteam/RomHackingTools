@@ -2,7 +2,6 @@
 // (rows, CSV) that must stay exact even where the stored range list is capped.
 #include "Debug/MemoryCompare.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -98,15 +97,13 @@ public:
         for (const MemoryReadRequest& q : reqs)
         {
             MemoryReadResult r;
-            const int idx = SaturnRegionIndex(q.address);
-            if (idx >= 0 && idx != failRegion)
+            RegionRef ref;
+            if (Resolve(q.address, &ref) && static_cast<int>(ref.id) != failRegion &&
+                ref.offset + q.size <= mem[static_cast<size_t>(ref.id)].size())
             {
-                const uint32_t off = (q.address & 0x07FFFFFFu) - Traits(RegionId(idx)).busBase;
-                if (off + q.size <= mem[idx].size())
-                {
-                    r.success = true;
-                    r.bytes.assign(mem[idx].begin() + off, mem[idx].begin() + off + q.size);
-                }
+                const std::vector<uint8_t>& m = mem[static_cast<size_t>(ref.id)];
+                r.success = true;
+                r.bytes.assign(m.begin() + ref.offset, m.begin() + ref.offset + q.size);
             }
             out.push_back(std::move(r));
         }
@@ -132,6 +129,14 @@ void TestTraits()
         Check(std::strcmp(t.name, regions[i].name) == 0, "traits name comes from SaturnRegions()");
         Check((t.caps & kCapNavigate) && (t.caps & kCapWatch), "every region can be navigated to and watched");
     }
+    // The extras table is positional, so a reorder of SaturnRegions() must show up here: pin the
+    // name each id is expected to carry.
+    const char* const expected[kRegionCount] = { "LWRAM", "HWRAM", "Sound RAM", "VDP1 RAM", "VDP1 FB",
+                                                 "VDP1 Regs", "VDP2 RAM", "VDP2 CRAM", "VDP2 Regs" };
+    for (size_t i = 0; i < kRegionCount; ++i)
+        Check(std::strcmp(Traits(static_cast<RegionId>(i)).name, expected[i]) == 0, "each RegionId keeps its region");
+    Check(HasBusAddress(Traits(RegionId::Hwram)) && !HasBusAddress(Traits(RegionId::Vdp1Fb)),
+          "only the VDP1 FB has no bus address");
     Check(!(Traits(RegionId::SoundRam).caps & kCapBreakWrite), "Sound RAM: the 68K writes it, no SH-2 write break");
     Check(!(Traits(RegionId::Vdp1Fb).caps & kCapBreakWrite), "VDP1 FB: not a bus write, no write break");
     Check(Traits(RegionId::Vdp1Fb).space == AddressSpace::DeviceImage, "VDP1 FB is a device image");
@@ -154,7 +159,7 @@ void TestIdentical()
     DiffResult d = MakeDiff(a, b);
     Check(d.TotalChangedBytes() == 0, "identical snapshots: no changes");
     for (const RegionDiff& r : d.regions)
-        Check(r.changedBytes == 0 && r.rangeCount == 0 && r.ranges.empty() && !r.rangesTruncated,
+        Check(r.changedBytes == 0 && r.rangeCount == 0 && r.ranges.empty() && !r.RangesTruncated(),
               "identical: empty region diff");
     Check(BuildRows(d, RegionId::Hwram, DiffOptions()).empty(), "identical: no rows in Changes Only");
 }
@@ -292,11 +297,12 @@ void TestTruncationStaysExact()
     const RegionDiff& r = d.regions[Ix(RegionId::Hwram)];
     const uint32_t expect = static_cast<uint32_t>(bytes.size() / 2);
     Check(r.changedBytes == expect && r.rangeCount == expect, "counts are exact past the cap");
-    Check(r.ranges.size() == kMaxStoredRanges && r.rangesTruncated, "only the stored list is capped");
+    Check(r.ranges.size() == kMaxStoredRanges && r.RangesTruncated(), "only the stored list is capped");
 
     const std::vector<uint32_t> truth = Oracle(*a, *b, RegionId::Hwram);
     std::vector<DiffRow> rows = BuildRows(d, RegionId::Hwram, o);
     std::vector<uint32_t> fromRows;
+    fromRows.reserve(truth.size());
     for (const DiffRow& row : rows)
         for (uint32_t k = 0; k < 16; ++k)
             if (row.changedMask & (1u << k)) fromRows.push_back(row.ref.offset + k);
@@ -358,11 +364,11 @@ void TestCapture()
 
     for (size_t fail = 0; fail < kRegionCount; ++fail)
     {
-        MockBackend be2;
-        be2.failRegion = static_cast<int>(fail);
-        Check(CaptureSnapshot(be2, origin, nullptr, &err) == nullptr && !err.empty(),
+        be.failRegion = static_cast<int>(fail);
+        Check(CaptureSnapshot(be, origin, nullptr, &err) == nullptr && !err.empty(),
               "a region that cannot be read fails the capture, never leaves it partial");
     }
+    be.failRegion = -1;
 
     SnapshotOrigin zero = origin;
     zero.frameNo = 0;

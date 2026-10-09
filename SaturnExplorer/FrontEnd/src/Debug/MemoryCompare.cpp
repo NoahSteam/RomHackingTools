@@ -52,27 +52,17 @@ uint16_t MaskOfFirst(uint32_t n)   // n in 0..16
     return n >= kRowBytes ? 0xFFFFu : static_cast<uint16_t>((1u << n) - 1u);
 }
 
-// Byte differences of one region, with a word fast path that only drops to bytes when a word
-// differs. Calls onByte(offset) for every differing byte in ascending order.
+// Byte differences of one region, in ascending order, with a word compare to skip identical
+// stretches. onByte(offset) returns false to stop the scan early.
 template <class F>
 void ScanDifferences(const uint8_t* a, const uint8_t* b, size_t n, F onByte)
 {
-    size_t i = 0;
-    while (i < n)
+    for (size_t i = 0; i < n; i += 8)
     {
-        if (i + 8 <= n)
-        {
-            uint64_t wa, wb;
-            std::memcpy(&wa, a + i, 8);
-            std::memcpy(&wb, b + i, 8);
-            if (wa == wb) { i += 8; continue; }
-            for (size_t k = 0; k < 8; ++k)
-                if (a[i + k] != b[i + k]) onByte(i + k);
-            i += 8;
-            continue;
-        }
-        if (a[i] != b[i]) onByte(i);
-        ++i;
+        const size_t m = std::min<size_t>(8, n - i);
+        if (m == 8 && std::memcmp(a + i, b + i, 8) == 0) continue;
+        for (size_t k = 0; k < m; ++k)
+            if (a[i + k] != b[i + k] && !onByte(i + k)) return;
     }
 }
 }  // namespace
@@ -123,7 +113,7 @@ std::shared_ptr<const MemSnapshot> CaptureSnapshot(
         MemRegionImage& img = snap->regions[i];
         img.id = t.id;
         // ReadRegionBytes clears its output on any failure, so a half-read region is never kept.
-        if (!ReadRegionBytes(backend, t.busBase, t.size, img.bytes) || img.bytes.size() != t.size)
+        if (!ReadRegionBytes(backend, t.busBase, t.size, img.bytes))
             return fail("a memory region could not be read");
     }
 
@@ -186,14 +176,14 @@ DiffStatus Diff(const std::shared_ptr<const MemSnapshot>& a,
         {
             const uint32_t o = static_cast<uint32_t>(off);
             ++rd.changedBytes;
-            if (open && o - end <= maxGap) { end = o + 1; return; }
+            if (open && o - end <= maxGap) { end = o + 1; return true; }
             close();
             open = true;
             start = o;
             end = o + 1;
+            return true;
         });
         close();
-        rd.rangesTruncated = rd.rangeCount > rd.ranges.size();
     }
     return DiffStatus::Ok;
 }
@@ -204,6 +194,9 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
 {
     std::vector<DiffRow> rows;
     if (!diff.a || !diff.b) return rows;
+    // Nothing to show, and nothing worth scanning two 1 MiB buffers for.
+    if (opts.changesOnly && diff.regions.size() == kRegionCount && diff.regions[Index(region)].changedBytes == 0)
+        return rows;
     const std::vector<uint8_t>& A = diff.a->regions[Index(region)].bytes;
     const std::vector<uint8_t>& B = diff.b->regions[Index(region)].bytes;
     const size_t n = A.size();
@@ -213,22 +206,24 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
     ScanDifferences(A.data(), B.data(), n, [&](size_t off)
     {
         changed[off / kRowBytes] |= static_cast<uint16_t>(1u << (off % kRowBytes));
+        return true;
     });
 
     std::vector<uint8_t> keep(rowCount, opts.changesOnly ? 0 : 1);
     if (opts.changesOnly)
     {
+        size_t marked = 0;   // rows below this are already kept, so each row is marked once
         for (size_t r = 0; r < rowCount; ++r)
         {
             if (!changed[r]) continue;
-            const size_t lo = r >= opts.contextRows ? r - opts.contextRows : 0;
+            const size_t lo = std::max(marked, r >= opts.contextRows ? r - opts.contextRows : 0);
             const size_t hi = std::min(rowCount - 1, r + static_cast<size_t>(opts.contextRows));
             for (size_t k = lo; k <= hi; ++k) keep[k] = 1;
+            marked = hi + 1;
         }
     }
 
-    bool havePrev = false;
-    size_t prev = 0;
+    if (!opts.changesOnly) rows.reserve(rowCount);
     for (size_t r = 0; r < rowCount; ++r)
     {
         if (!keep[r]) continue;
@@ -237,10 +232,9 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
         row.validMask = MaskOfFirst(static_cast<uint32_t>(std::min<size_t>(kRowBytes, n - r * kRowBytes)));
         row.changedMask = changed[r];
         row.isContext = changed[r] == 0;
-        row.gapBefore = havePrev ? r != prev + 1 : r != 0;
+        // The previous kept row is rows.back(): a gap is any distance other than the next row.
+        row.gapBefore = rows.empty() ? r != 0 : r != rows.back().ref.offset / kRowBytes + 1;
         rows.push_back(row);
-        havePrev = true;
-        prev = r;
     }
     return rows;
 }
@@ -249,15 +243,17 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
 
 CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
 {
-    if (!diff.a || !diff.b) return CsvResult::IntegrityError;
+    // Without every region's count there is nothing to check the output against, and an export
+    // that cannot be checked must not pass for a complete one.
+    if (!diff.a || !diff.b || diff.regions.size() != kRegionCount) return CsvResult::IntegrityError;
 
+    constexpr size_t kFlushBytes = 1u << 16;
     std::string buf;
-    buf.reserve(1u << 16);
+    buf.reserve(kFlushBytes + 256);
     bool cancelled = false;
     auto flush = [&]()
     {
-        if (buf.empty()) return;
-        if (!sink.Write(buf.data(), buf.size())) cancelled = true;
+        if (!buf.empty() && !sink.Write(buf.data(), buf.size())) cancelled = true;
         buf.clear();
     };
 
@@ -285,22 +281,19 @@ CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
         uint64_t written = 0;
         ScanDifferences(A.data(), B.data(), A.size(), [&](size_t off)
         {
-            if (cancelled) return;
-            int n;
-            if (t.space == AddressSpace::DeviceImage)
-                n = std::snprintf(line, sizeof(line), "%s,0x%08X,,0x%02X,0x%02X\n", t.name,
-                                  static_cast<unsigned>(off), A[off], B[off]);
-            else
-                n = std::snprintf(line, sizeof(line), "%s,0x%08X,0x%08X,0x%02X,0x%02X\n", t.name,
-                                  static_cast<unsigned>(off),
-                                  static_cast<unsigned>(t.busBase + off), A[off], B[off]);
+            char bus[16] = "";   // empty for a region with no bus address
+            if (HasBusAddress(t))
+                std::snprintf(bus, sizeof(bus), "0x%08X", static_cast<unsigned>(t.busBase + off));
+            const int n = std::snprintf(line, sizeof(line), "%s,0x%08X,%s,0x%02X,0x%02X\n", t.name,
+                                        static_cast<unsigned>(off), bus, A[off], B[off]);
             buf.append(line, static_cast<size_t>(n));
             ++written;
-            if (buf.size() >= (1u << 16)) flush();
+            if (buf.size() >= kFlushBytes) flush();
+            return !cancelled;
         });
         if (cancelled) break;
         // A short file must never pass for a complete export.
-        if (diff.regions.size() > i && written != diff.regions[i].changedBytes)
+        if (written != diff.regions[i].changedBytes)
         {
             flush();
             return CsvResult::IntegrityError;
