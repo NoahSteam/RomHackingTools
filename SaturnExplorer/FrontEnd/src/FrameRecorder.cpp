@@ -247,6 +247,7 @@ void FrameRecorder::Clear()
     mWaitingBytes = 0;
     mBytes = 0;
     mLastCaptured = 0;
+    mSelFrameNumber = 0;   // the frame it described is gone
     mBlocksReceived = mBlocksInvalid = mBlocksNoFrame = mNewestBlock = 0;
 }
 
@@ -270,6 +271,9 @@ size_t FrameRecorder::BytesUsed() const
 
 bool FrameRecorder::Select(size_t i, se_data_source* out)
 {
+    // Cleared first so every refusal below leaves "nothing selected": the scratch may be half
+    // decoded, and a caller must not be told it still holds the previous frame.
+    mSelFrameNumber = 0;
     if (!out)
     {
         return false;
@@ -285,6 +289,7 @@ bool FrameRecorder::Select(size_t i, se_data_source* out)
         {
             return false;
         }
+        mSelFrameNumber = f.frameNumber;
         mSelVdp1Regs = f.vdp1Regs;
         mSelVdp2Regs = f.vdp2Regs;
         mSelSh2[0] = f.sh2[0]; mSelSh2[1] = f.sh2[1];
