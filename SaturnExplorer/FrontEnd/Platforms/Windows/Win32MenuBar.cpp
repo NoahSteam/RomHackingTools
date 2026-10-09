@@ -288,7 +288,7 @@ void Win32MenuBar::RefreshState()
     for (int i = 0; i < kNativeStateSlots; ++i)
     {
         EnableById(mMenu, ID_SAVESTATE_BASE + (UINT)i, s.saveStateEnabled);
-        EnableById(mMenu, ID_LOADSTATE_BASE + (UINT)i, s.saveStateEnabled && s.slotOccupied[i]);
+        EnableById(mMenu, ID_LOADSTATE_BASE + (UINT)i, s.loadStateEnabled && s.slotOccupied[i]);
         EnableById(mMenu, ID_EMULOAD_BASE + (UINT)i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
     }
 

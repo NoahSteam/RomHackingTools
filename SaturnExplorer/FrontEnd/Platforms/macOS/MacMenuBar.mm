@@ -551,7 +551,7 @@ struct MacMenuBarImpl
         for (int i = 0; i < kNativeStateSlots; ++i)
         {
             EnableTag(ID_SAVESTATE_BASE + i, s.saveStateEnabled);
-            EnableTag(ID_LOADSTATE_BASE + i, s.saveStateEnabled && s.slotOccupied[i]);
+            EnableTag(ID_LOADSTATE_BASE + i, s.loadStateEnabled && s.slotOccupied[i]);
             EnableTag(ID_EMULOAD_BASE + i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
         }
 

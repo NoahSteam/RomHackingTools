@@ -1578,6 +1578,11 @@ void App::BuildUI(IPlatform& platform)
     std::vector<TopBarCommand> topBarCommands;
     // Keyboard shortcuts run on every platform, whether or not the ImGui toolbar is drawn, so
     // hotkeys keep working under the native Win32 menu bar (which replaces that toolbar).
+#ifdef SE_ENABLE_LIVE
+    // The native Run menu has no "menu opened" event to refresh on, so without this a restart
+    // showed every slot saved in the previous run as empty, and Load stayed greyed out.
+    if (mLauncher.Rom() != mSlotCacheRom) RefreshSlotCache();
+#endif
     const TopBarViewModel topBarState = BuildTopBarViewModel();
     CollectToolbarShortcuts(topBarCommands, topBarState);
 #ifdef SE_NATIVE_MENUBAR
@@ -6848,6 +6853,10 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.canPause = LiveHas(SE_LIVE_CAP_FRAME_GATE);
     vm.canSaveState = vm.canSaveState && LiveHas(SE_LIVE_CAP_FRAME_GATE) &&
                       LiveHas(SE_LIVE_CAP_STATE_REWIND);
+    // Loading a slot sends the file's own state, so unlike Save it does not wait for one to be
+    // streamed: right after a restart nothing has arrived yet, and the slots on disk still load.
+    vm.canLoadState = se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0 &&
+                      LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
 #endif
     vm.launchValid = mLaunchValidation.valid;
@@ -7434,7 +7443,8 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
     }
     // Load offers the emulator's own slots too, so it opens even when Saturn Explorer has
     // no state of its own to save.
-    if (ImGui::BeginMenu("Load State", enabled || state.hasEmulatorStates))
+    if (ImGui::BeginMenu("Load State", TopBarCommandEnabled(TopBarCommandType::LoadState, state) ||
+                                       state.hasEmulatorStates))
     {
         ImGui::TextDisabled("Saturn Explorer");
         bool any = false;
@@ -7742,6 +7752,7 @@ void App::ResolveRestoreWait(uint32_t done, uint32_t failed)
 // is filesystem traffic nobody reads until a menu actually opens.
 void App::RefreshSlotCache()
 {
+    mSlotCacheRom = mLauncher.Rom();
     for (int i = 0; i < SavestateSlots::kSlotCount; ++i)
     {
         mSlotOccupied[i] = SavestateSlots::SlotExists(mLauncher.Rom(), i);
@@ -8140,6 +8151,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.dumpSh2Enabled = TopBarCommandEnabled(TopBarCommandType::DumpSh2, s);
 #ifdef SE_ENABLE_LIVE
     m.saveStateEnabled = TopBarCommandEnabled(TopBarCommandType::SaveState, s);
+    m.loadStateEnabled = TopBarCommandEnabled(TopBarCommandType::LoadState, s);
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)
         m.slotOccupied[i] = mSlotOccupied[i];
     m.emuSlotsOffered = s.hasEmulatorStates;

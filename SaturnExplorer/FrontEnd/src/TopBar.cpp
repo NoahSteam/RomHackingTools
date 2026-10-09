@@ -31,8 +31,9 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     // in, and never at all if its rewind support is off); Load only needs a slot on disk,
     // which is checked per-slot where the menu is built.
     case TopBarCommandType::SaveState:
-    case TopBarCommandType::LoadState:
         return state.connected && state.canSaveState;
+    case TopBarCommandType::LoadState:
+        return state.connected && state.canLoadState;
     // The emulator's own slots do not depend on a savestate having reached us -- it loads
     // them itself -- only on its having reported that it has them.
     case TopBarCommandType::LoadEmulatorState:

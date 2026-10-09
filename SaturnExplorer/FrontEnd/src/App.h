@@ -561,8 +561,10 @@ private:
     // Which of SE's own slots hold a state. Cached rather than stat()ed per frame: the
     // native menu bar rebuilds this view model every frame but only shows it when a menu
     // opens, so polling the filesystem at 60 Hz bought nothing. Refreshed on the events
-    // that can change it -- a save, a load, and opening the State menu.
+    // that can change it -- a save, opening the State menu, and the game changing (which is
+    // also how the slots saved in an earlier run are first found).
     bool             mSlotOccupied[SavestateSlots::kSlotCount] = {};
+    std::string      mSlotCacheRom;   // the game mSlotOccupied/mSlotLabel were read for
     // Slot labels, snapshotted when the State menu opens (each one reads a file header).
     std::string      mSlotLabel[SavestateSlots::kSlotCount];
     void RefreshSlotCache();

@@ -242,22 +242,29 @@ static void TestMenuCategoryOrder()
 
 static void TestSaveStateEnablement()
 {
-    // Save states need a live connection *and* a state actually received -- an emulator
-    // built without rewind support streams none, so canSaveState stays false and the slots
-    // must not look usable.
+    // Save needs a live connection *and* a state actually received -- an emulator built without
+    // rewind support streams none, so canSaveState stays false and Save must not look usable.
     TopBarViewModel state;
     CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
 
     state.canSaveState = true;      // a state arrived, but nothing is connected
+    state.canLoadState = true;
     CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
 
     state.source = SourceType::Live;
     state.connected = true;
     state.canSaveState = false;     // connected, but no state yet (or rewind unsupported)
+    state.canLoadState = false;
     CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
     CHECK(!TopBarCommandEnabled(TopBarCommandType::LoadState, state));
+
+    // Just restarted: nothing streamed yet, but the emulator can restore a state. A slot saved
+    // in the earlier run carries its own state, so Load must not wait for one to arrive.
+    state.canLoadState = true;
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+    CHECK(TopBarCommandEnabled(TopBarCommandType::LoadState, state));
 
     state.canSaveState = true;
     CHECK(TopBarCommandEnabled(TopBarCommandType::SaveState, state));

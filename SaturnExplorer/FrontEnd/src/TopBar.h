@@ -103,6 +103,8 @@ struct TopBarViewModel
     // A savestate has been received and the emulator can restore one, so the save-state
     // slots are usable. False when rewind support is missing from the emulator build.
     bool canSaveState = false;
+    // The emulator can restore a state. Needs no state received: a slot carries its own.
+    bool canLoadState = false;
     // The emulator reports its own numbered save slots, so they can be offered too.
     bool hasEmulatorStates = false;
     std::string launchValidationMessage;

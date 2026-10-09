@@ -182,6 +182,7 @@ struct NativeMenuState
     bool stepEnabled = false;
     // Save states: usable at all, and which of the numbered slots currently hold one.
     bool saveStateEnabled = false;
+    bool loadStateEnabled = false;   // separate: Load needs no streamed state, Save does
     bool slotOccupied[kNativeStateSlots] = {};
     // The emulator's own slots, reported by it (see LiveDriver's se_live_emu_slots).
     bool emuSlotsOffered = false;
