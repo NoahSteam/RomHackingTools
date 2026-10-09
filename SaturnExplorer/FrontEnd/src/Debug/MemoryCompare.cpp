@@ -54,16 +54,16 @@ uint16_t MaskOfFirst(uint32_t n)   // n in 0..16
 }
 
 // Byte differences of one region, in ascending order, with a word compare to skip identical
-// stretches. onByte(offset) returns false to stop the scan early.
+// stretches. onByte(offset) returns false to stop the scan early; 'from' resumes a stopped scan.
 template <class F>
-void ScanDifferences(const uint8_t* a, const uint8_t* b, size_t n, F onByte)
+void ScanDifferences(const uint8_t* a, const uint8_t* b, size_t n, size_t from, F onByte)
 {
-    for (size_t i = 0; i < n; i += 8)
+    for (size_t i = from & ~size_t(7); i < n; i += 8)
     {
         const size_t m = std::min<size_t>(8, n - i);
         if (m == 8 && std::memcmp(a + i, b + i, 8) == 0) continue;
         for (size_t k = 0; k < m; ++k)
-            if (a[i + k] != b[i + k] && !onByte(i + k)) return;
+            if (i + k >= from && a[i + k] != b[i + k] && !onByte(i + k)) return;
     }
 }
 }  // namespace
@@ -165,7 +165,7 @@ DiffStatus Diff(const std::shared_ptr<const MemSnapshot>& a,
         bool open = false;
         uint32_t end = 0;   // one past the last differing byte of the run in progress
         ScanDifferences(a->regions[i].bytes.data(), b->regions[i].bytes.data(),
-                        a->regions[i].bytes.size(), [&](size_t off)
+                        a->regions[i].bytes.size(), 0, [&](size_t off)
         {
             const uint32_t o = static_cast<uint32_t>(off);
             ++rd.changedBytes;
@@ -193,7 +193,7 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
     const size_t rowCount = (n + kDiffRowBytes - 1) / kDiffRowBytes;
 
     std::vector<uint16_t> changed(rowCount, 0);
-    ScanDifferences(A.data(), B.data(), n, [&](size_t off)
+    ScanDifferences(A.data(), B.data(), n, 0, [&](size_t off)
     {
         changed[off / kDiffRowBytes] |= static_cast<uint16_t>(1u << (off % kDiffRowBytes));
         return true;
@@ -231,11 +231,58 @@ std::vector<DiffRow> BuildRows(const DiffResult& diff, RegionId region, const Di
 
 // ---- CSV ---------------------------------------------------------------------------------------
 
-CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
+namespace
 {
+// Bytes of one CSV line of region 't': "name,0x%08X,[0x%08X],0x%02X,0x%02X\n".
+size_t CsvLineBytes(const RegionTraits& t)
+{
+    return std::strlen(t.name) + 23 + (HasBusAddress(t) ? 10 : 0);
+}
+
+void AppendCsvHeader(std::string& out, const DiffResult& diff)
+{
+    char line[160];
+    auto origin = [&](const char* tag, const SnapshotOrigin& o)
+    {
+        const int n = std::snprintf(line, sizeof(line),
+            "# %s: frame %llu, session %llu, timeline %llu, %s\n", tag,
+            static_cast<unsigned long long>(o.frameNo), static_cast<unsigned long long>(o.sessionId),
+            static_cast<unsigned long long>(o.timelineEpoch), o.liveHead ? "live head" : "rewind frame");
+        out.append(line, static_cast<size_t>(n));
+    };
+    out += "# Saturn Explorer memory diff\n";
+    origin("A", diff.a->origin);
+    origin("B", diff.b->origin);
+    out += "region,offset,bus_address,old,new\n";
+}
+}  // namespace
+
+CsvExport::CsvExport(const DiffResult& diff, const RegionId* only) : mDiff(diff)
+{
+    mHasOnly = only != nullptr;
+    if (only) mOnly = *only;
     // Without every region's count there is nothing to check the output against, and an export
     // that cannot be checked must not pass for a complete one.
-    if (!diff.a || !diff.b || diff.regions.size() != kRegionCount) return CsvResult::IntegrityError;
+    if (!diff.a || !diff.b || diff.regions.size() != kRegionCount)
+    {
+        mResult = CsvResult::IntegrityError;
+        mFinished = true;
+        return;
+    }
+    std::string header;
+    AppendCsvHeader(header, diff);
+    mTotalBytes = header.size();
+    for (size_t i = 0; i < kRegionCount; ++i)
+    {
+        if (mHasOnly && mOnly != static_cast<RegionId>(i)) continue;
+        mTotalLines += diff.regions[i].changedBytes;
+        mTotalBytes += static_cast<uint64_t>(diff.regions[i].changedBytes) * CsvLineBytes(Traits(static_cast<RegionId>(i)));
+    }
+}
+
+bool CsvExport::Step(CsvSink& sink, uint32_t maxLines)
+{
+    if (mFinished) return true;
 
     constexpr size_t kFlushBytes = 1u << 16;
     std::string buf;
@@ -246,31 +293,24 @@ CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
         if (!buf.empty() && !sink.Write(buf.data(), buf.size())) cancelled = true;
         buf.clear();
     };
+    if (!mHeaderWritten)
+    {
+        AppendCsvHeader(buf, mDiff);
+        mHeaderWritten = true;
+    }
 
+    uint32_t budget = maxLines;
+    bool paused = false;
     char line[160];
-    auto origin = [&](const char* tag, const SnapshotOrigin& o)
+    while (mRegion < kRegionCount && !cancelled && !paused)
     {
-        const int n = std::snprintf(line, sizeof(line),
-            "# %s: frame %llu, session %llu, timeline %llu, %s\n", tag,
-            static_cast<unsigned long long>(o.frameNo), static_cast<unsigned long long>(o.sessionId),
-            static_cast<unsigned long long>(o.timelineEpoch), o.liveHead ? "live head" : "rewind frame");
-        buf.append(line, static_cast<size_t>(n));
-    };
-    buf += "# Saturn Explorer memory diff\n";
-    origin("A", diff.a->origin);
-    origin("B", diff.b->origin);
-    buf += "region,offset,bus_address,old,new\n";
-
-    for (size_t i = 0; i < kRegionCount && !cancelled; ++i)
-    {
-        const RegionId id = static_cast<RegionId>(i);
-        if (only && *only != id) continue;
+        const RegionId id = static_cast<RegionId>(mRegion);
+        if (mHasOnly && mOnly != id) { ++mRegion; continue; }
         const RegionTraits& t = Traits(id);
-        const std::vector<uint8_t>& A = diff.a->regions[i].bytes;
-        const std::vector<uint8_t>& B = diff.b->regions[i].bytes;
-        uint64_t written = 0;
+        const std::vector<uint8_t>& A = mDiff.a->regions[mRegion].bytes;
+        const std::vector<uint8_t>& B = mDiff.b->regions[mRegion].bytes;
         const bool hasBus = HasBusAddress(t);
-        ScanDifferences(A.data(), B.data(), A.size(), [&](size_t off)
+        ScanDifferences(A.data(), B.data(), A.size(), mOffset, [&](size_t off)
         {
             char bus[16] = "";   // empty for a region with no bus address
             if (hasBus)
@@ -278,20 +318,37 @@ CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
             const int n = std::snprintf(line, sizeof(line), "%s,0x%08X,%s,0x%02X,0x%02X\n", t.name,
                                         static_cast<unsigned>(off), bus, A[off], B[off]);
             buf.append(line, static_cast<size_t>(n));
-            ++written;
+            ++mRegionLines;
+            ++mLines;
+            mOffset = off + 1;   // where the next step resumes
             if (buf.size() >= kFlushBytes) flush();
-            return !cancelled;
+            if (budget && --budget == 0) paused = true;
+            return !cancelled && !paused;
         });
-        if (cancelled) break;
+        if (cancelled || paused) break;
         // A short file must never pass for a complete export.
-        if (written != diff.regions[i].changedBytes)
+        if (mRegionLines != mDiff.regions[mRegion].changedBytes)
         {
             flush();
-            return CsvResult::IntegrityError;
+            mResult = CsvResult::IntegrityError;
+            mFinished = true;
+            return true;
         }
+        ++mRegion;
+        mOffset = 0;
+        mRegionLines = 0;
     }
     flush();
-    return cancelled ? CsvResult::Cancelled : CsvResult::Ok;
+    if (cancelled) { mResult = CsvResult::Cancelled; mFinished = true; }
+    else if (!paused) mFinished = true;   // mResult stays Ok
+    return mFinished;
+}
+
+CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink)
+{
+    CsvExport out(diff, only);
+    out.Step(sink, 0);
+    return out.Result();
 }
 
 std::string CsvFileName(const DiffResult& diff, const RegionId* only)

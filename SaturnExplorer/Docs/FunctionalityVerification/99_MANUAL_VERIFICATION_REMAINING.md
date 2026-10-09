@@ -57,7 +57,10 @@ reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
   frame by navigating or scrubbing (Play From Here replays only the edits made on the frame it resumes)
 - edit a byte on the shown frame, then choose Go to that same frame: the byte keeps its edited value (it is
   still staged); seek away and back: the recorded value returns and Play From Here replays nothing
-- **Export...** writes a CSV whose line count equals the changed-byte total for what was exported
+- **Export...** writes a CSV whose line count equals the changed-byte total for what was exported; on a
+  large diff (All Memory with the VDP1 FB and VDP2 VRAM busy) the UI keeps drawing behind an
+  "Exporting Memory Diff" progress popup, **Cancel** writes nothing, and the save dialog appears only
+  when the export finishes
 
 ## Supported platform UI
 

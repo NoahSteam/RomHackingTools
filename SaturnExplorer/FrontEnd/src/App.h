@@ -313,7 +313,9 @@ private:
     void ResetCompareSession();                         // a different emulator run or source
     int  CompareMarkerIndex(CompareMarkers::Slot slot) const;     // a marker's place on the timeline, or -1
     uint64_t CompareDiffSideFrame(CompareMarkers::Slot slot) const;   // the shown comparison's frame if it is on the timeline, else 0
-    void ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform);
+    void ExportCompareDiff(const MemoryComparePanel::Request& req);
+    void PumpCompareExport(IPlatform& platform);
+    void CancelCompareExport();
     bool CompareRowVisible() const;
     void DrawCompareMarkers(const ImVec2& sliderMin, const ImVec2& sliderMax, int frameCount);
     void DrawCompareRow();
@@ -420,6 +422,10 @@ private:
     MemoryComparePanel       mMemoryCompare;
     DiffResult               mCompareDiff;              // what the panel shows (a == null: none); holds both snapshots
     std::string              mCompareStatus;            // why the last mark or compare did not happen
+    std::unique_ptr<CsvExport> mCompareExport;          // the CSV export in progress, written a slice per frame
+    StringCsvSink            mCompareExportSink;        // ...into this buffer, saved when it is complete
+    std::string              mCompareExportName;
+    bool                     mOpenCompareExport = false;
     ControllerPanel          mController;
     unsigned int             mInputMask = 0;    // last pad mask sent to the live emulator
     int                      mInputPort = 0;    // ...and the port it went to

@@ -115,7 +115,7 @@ side was clicked. `App` polls `TakeRequest()` once after `Draw` and calls the ex
 | Add to Watch | `AddAddressWatch("diff", BusAddress(ref), type)` (which calls `mWatchPanel.AddWatch`), type from the selection length. A watch tracks the running game, not frame A or B. |
 | Break on Write | `mBreakpoints.AddMemory(BusAddress(ref), size, BpKind::MemWrite)` |
 | View in Assembly | `mAssemblyPanel.GoTo(mAssemblyPanel.Cpu(), BusAddress(ref)); mPanels.assembly = true;` |
-| Export Diff | `WriteCsv` into the existing export path. The menu item exports the clicked byte's region; the toolbar **Export...** button exports the region selected in the summary, or every region on All Memory (`Request::allRegions` / `exportRegion`). |
+| Export Diff | `CsvExport` (see the engine doc), stepped a slice per UI frame behind a progress popup with a Cancel button, then one `SaveFile` call. The menu item exports the clicked byte's region; the toolbar **Export...** button exports the region selected in the summary, or every region on All Memory (`Request::allRegions` / `exportRegion`). |
 
 Watch and Break on Write act on the running emulator, so their tooltips say so; they do not depend
 on which snapshot the byte was clicked in.

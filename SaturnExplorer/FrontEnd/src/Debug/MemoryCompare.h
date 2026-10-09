@@ -175,8 +175,38 @@ struct StringCsvSink : CsvSink
 
 enum class CsvResult { Ok, Cancelled, IntegrityError };
 
-// One line per changed byte: region,offset,bus_address,old,new. 'only' null means every region.
-// Streams in chunks, because an all-bytes-differ export is millions of lines.
+// One line per changed byte: region,offset,bus_address,old,new, preceded by a header naming both
+// frames. 'only' null means every region. A worst case (every byte differs) is millions of lines, so
+// the export is a job that runs in slices: a caller that must stay responsive calls Step() with a line
+// budget each UI frame and can drop the job at any point. Counts per region are checked against the
+// diff, so a short file is an IntegrityError, never a silent success.
+class CsvExport
+{
+public:
+    CsvExport(const DiffResult& diff, const RegionId* only);
+
+    // Appends up to maxLines more lines (0: no limit) to the sink. Returns true once the export has
+    // finished, successfully or not; Result() then says which.
+    bool Step(CsvSink& sink, uint32_t maxLines);
+
+    CsvResult Result() const { return mResult; }
+    uint64_t  TotalLines() const { return mTotalLines; }
+    uint64_t  LinesWritten() const { return mLines; }
+    uint64_t  TotalBytes() const { return mTotalBytes; }   // the exact size of the finished CSV
+    float     Progress() const { return mTotalLines ? static_cast<float>(static_cast<double>(mLines) / static_cast<double>(mTotalLines)) : 1.0f; }
+
+private:
+    DiffResult mDiff;           // keeps both snapshots alive however the shown comparison changes
+    bool       mHasOnly = false;
+    RegionId   mOnly = RegionId::Lwram;
+    size_t     mRegion = 0;     // where the next step resumes: region...
+    size_t     mOffset = 0;     // ...and byte offset in it
+    uint64_t   mRegionLines = 0, mLines = 0, mTotalLines = 0, mTotalBytes = 0;
+    bool       mHeaderWritten = false, mFinished = false;
+    CsvResult  mResult = CsvResult::Ok;
+};
+
+// The whole export in one call (tests, small diffs).
 CsvResult WriteCsv(const DiffResult& diff, const RegionId* only, CsvSink& sink);
 
 // The file name an export of 'only' (null: every region) is saved under.

@@ -180,7 +180,15 @@ std::vector<DiffRow> BuildRows(const DiffResult&, RegionId, const DiffOptions&);
 struct CsvSink { virtual bool Write(const char* data, size_t len) = 0; };   // false: stop/cancel
 struct StringCsvSink : CsvSink { std::string text; /* Write appends */ };    // what an export uses
 enum class CsvResult { Ok, Cancelled, IntegrityError };
-CsvResult   WriteCsv(const DiffResult&, const RegionId* only /*null = all*/, CsvSink&);
+class CsvExport {                                  // the export as a job that runs in slices
+public:
+    CsvExport(const DiffResult&, const RegionId* only /*null = all*/);
+    bool Step(CsvSink&, uint32_t maxLines);        // true once finished; Result() says how
+    CsvResult Result() const;
+    uint64_t TotalLines() const, LinesWritten() const, TotalBytes() const;  // TotalBytes: exact final size
+    float Progress() const;
+};
+CsvResult   WriteCsv(const DiffResult&, const RegionId* only, CsvSink&);   // one pass: tests, small diffs
 std::string CsvFileName(const DiffResult&, const RegionId* only);   // saturn_memory_diff_<a>_<b>[_<region>].csv
 ```
 
@@ -188,11 +196,14 @@ std::string CsvFileName(const DiffResult&, const RegionId* only);   // saturn_me
   `changesOnly`; with it off, every row. Adjacent context windows merge; an elided run sets
   `gapBefore`. One pass over at most 1 MiB, so it is cheap enough to run on demand per selected
   region. The worst case (every byte differs) is 65,536 rows for a 1 MiB region.
-- `WriteCsv` **streams** through a sink instead of building one string: an all-bytes-differ export
-  is millions of lines. One line per changed byte: `region,offset,bus_address,old,new`. Header: both
+- `CsvExport` **streams** through a sink and runs a slice at a time (`Step(sink, maxLines)`, resuming from
+  a region and byte offset): an all-bytes-differ export is millions of lines (~150 MiB, ~0.9 s of work in
+  one go), so `App` steps it for a few milliseconds per UI frame behind a cancellable progress popup.
+  `TotalBytes()` is exact (it comes from the per-region counts), so the buffer is reserved once at its
+  final size. `WriteCsv` is the same job run to completion. One line per changed byte: `region,offset,bus_address,old,new`. Header: both
   frame numbers, both session ids and the timeline epochs. `bus_address` is empty for regions with
-  no bus address meaning (`DeviceImage`). It returns `Cancelled` if the sink stops it.
-- Integrity check: `WriteCsv` counts the lines it wrote per region and compares with
+  no bus address meaning (`DeviceImage`). The result is `Cancelled` if the sink stops it.
+- Integrity check: the export counts the lines it wrote per region and compares with
   `RegionDiff::changedBytes`. A mismatch (or a `DiffResult` without every region's count) is
   `IntegrityError`, never a silent short file.
 - "All Memory" in the panel is a sequence of per-region sections (`BuildRows` per region, built
@@ -223,3 +234,6 @@ New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
 - region table: ids, address spaces and capability flags match the table above (`TestTraits`; the
   `static_assert` covers a region added without an entry)
 - CSV golden output for a small fixture, `CsvFileName`; a sink that cancels stops cleanly
+- sliced CSV (`TestSlicedCsv`): every slice size produces the single-pass bytes, `TotalBytes()` is the
+  real size, a slice never exceeds its budget, and pausing on a region's last byte, a cancelled sink
+  and a count mismatch found mid-way all end correctly

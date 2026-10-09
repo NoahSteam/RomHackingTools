@@ -431,6 +431,69 @@ void TestCsv()
     StringSink bad;
     Check(WriteCsv(tampered, nullptr, bad) == CsvResult::IntegrityError, "a count mismatch is an error, not a short file");
 }
+
+void TestSlicedCsv()
+{
+    // The export runs a slice at a time so the UI stays responsive: any slice size must produce
+    // exactly the bytes a single pass does, and the size it announces up front must be the real size.
+    auto a = Blank(1), b = Blank(2);
+    auto mutate = [&](RegionId id, size_t step)
+    {
+        auto& bytes = b->regions[Ix(id)].bytes;
+        for (size_t i = 0; i < bytes.size(); i += step) bytes[i] = 0xEE;
+    };
+    mutate(RegionId::Lwram, 5);
+    mutate(RegionId::Hwram, 3);
+    mutate(RegionId::Vdp2Regs, 1);   // every byte, ending mid-row
+    b->regions[Ix(RegionId::Vdp1Regs)].bytes.back() = 0x11;   // the last byte of a region
+    DiffResult d = MakeDiff(a, b);
+
+    StringSink whole;
+    Check(WriteCsv(d, nullptr, whole) == CsvResult::Ok, "one pass writes the export");
+    for (uint32_t budget : { 1u, 7u, 4096u, 1000000u })
+    {
+        CsvExport job(d, nullptr);
+        Check(job.TotalBytes() == whole.text.size(), "the announced size is the exact size");
+        Check(job.TotalLines() == d.TotalChangedBytes(), "the announced line count is the diff's");
+        StringSink sink;
+        uint64_t steps = 1, before = 0;   // the last, finishing call is a step too
+        bool sliceTooBig = false;
+        while (!job.Step(sink, budget))
+        {
+            ++steps;
+            sliceTooBig |= job.LinesWritten() - before > budget;
+            before = job.LinesWritten();
+        }
+        Check(job.Result() == CsvResult::Ok && sink.text == whole.text, "sliced output equals the single pass");
+        Check(job.LinesWritten() == job.TotalLines() && job.Progress() == 1.0f, "progress ends complete");
+        Check(!sliceTooBig && steps >= job.TotalLines() / budget, "a step writes no more than its budget");
+    }
+
+    RegionId only = RegionId::Vdp1Regs;
+    CsvExport last(d, &only);
+    StringSink lastOut;
+    while (!last.Step(lastOut, 1)) {}
+    Check(last.Result() == CsvResult::Ok && lastOut.text.size() == last.TotalBytes() && last.TotalLines() == 1,
+          "pausing on the last changed byte of a region still finishes cleanly");
+
+    CsvExport cancelled(d, nullptr);
+    StringSink stops;
+    stops.limit = 1;
+    Check(cancelled.Step(stops, 0) && cancelled.Result() == CsvResult::Cancelled, "a sink that stops it cancels the job");
+    Check(cancelled.Step(stops, 0), "and a finished job stays finished");
+
+    DiffResult tampered = d;
+    tampered.regions[Ix(RegionId::Hwram)].changedBytes += 1;
+    CsvExport bad(tampered, nullptr);
+    StringSink badOut;
+    while (!bad.Step(badOut, 100)) {}
+    Check(bad.Result() == CsvResult::IntegrityError, "a count mismatch found mid-way is still an error");
+
+    CsvExport empty(DiffResult(), nullptr);
+    StringSink none;
+    Check(empty.Step(none, 10) && empty.Result() == CsvResult::IntegrityError && none.text.empty(),
+          "a diff that cannot be checked writes nothing");
+}
 }  // namespace
 
 int main()
@@ -447,6 +510,7 @@ int main()
     TestSwapMirrors();
     TestCapture();
     TestCsv();
+    TestSlicedCsv();
     if (gFail == 0) std::printf("MemoryCompareTests: all passed\n");
     return gFail == 0 ? 0 : 1;
 }

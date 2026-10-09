@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <new>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -1688,6 +1690,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.assembly)        DrawAssembly();
     if (mPanels.hexEditor)       DrawHexEditor();
     if (mPanels.memoryCompare)   DrawMemoryCompare(platform);
+    PumpCompareExport(platform);
     if (mPanels.controller)      DrawController(platform);
     else
     {
@@ -2200,6 +2203,7 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 // A different emulator run or loaded source: nothing marked on the old one is comparable with the new.
 void App::ResetCompareSession()
 {
+    CancelCompareExport();
     mCompare.NewSession();
     ClearCompare();
 }
@@ -2441,27 +2445,93 @@ void App::DrawMemoryCompare(IPlatform& platform)
     if (mMemoryCompare.TakeRequest(req)) HandleCompareRequest(req, platform);
 }
 
-// Write the shown comparison as CSV: the selected region, or every region. The CSV is gathered in
-// memory because IPlatform::SaveFile takes one buffer; a worst case of every byte differing is large,
-// so the reserve is capped rather than trusted.
-void App::ExportCompareDiff(const MemoryComparePanel::Request& req, IPlatform& platform)
+// Start writing the shown comparison as CSV: the selected region, or every region. A worst case of
+// every byte differing is millions of lines (~150 MiB), so the text is produced a slice per UI frame
+// by PumpCompareExport behind a progress popup the user can cancel, into a buffer reserved at its exact
+// final size (IPlatform::SaveFile takes one buffer, and the web build needs one for the download).
+void App::ExportCompareDiff(const MemoryComparePanel::Request& req)
 {
     if (!mCompareDiff.a) return;
-    StringCsvSink sink;
     const RegionId region = req.exportRegion;
-    const RegionId* only = req.allRegions ? nullptr : &region;
-    const uint64_t lines = only ? mCompareDiff.regions[static_cast<size_t>(region)].changedBytes
-                                : mCompareDiff.TotalChangedBytes();
-    sink.text.reserve(static_cast<size_t>(std::min<uint64_t>(lines * 44 + 256, 64u << 20)));
-    if (WriteCsv(mCompareDiff, only, sink) != CsvResult::Ok)
+    mCompareExport.reset(new CsvExport(mCompareDiff, req.allRegions ? nullptr : &region));
+    mCompareExportSink.text = std::string();
+    try
     {
-        mOperationStatus = "Could not export the memory diff.";
+        mCompareExportSink.text.reserve(static_cast<size_t>(mCompareExport->TotalBytes()));
+    }
+    catch (const std::bad_alloc&)
+    {
+        mCompareExport.reset();
+        mOperationStatus = "Not enough memory to export the memory diff.";
         mOperationError = true;
-        mLog.Error(mOperationStatus + " The written line count did not match the diff.");
+        mLog.Error(mOperationStatus);
         return;
     }
-    const std::string name = CsvFileName(mCompareDiff, only);
-    ReportSave(platform.SaveFile(name.c_str(), sink.text.data(), sink.text.size()), name);
+    mCompareExportName = CsvFileName(mCompareDiff, req.allRegions ? nullptr : &region);
+    mOpenCompareExport = true;
+}
+
+void App::CancelCompareExport()
+{
+    mCompareExport.reset();
+    mCompareExportSink.text = std::string();
+}
+
+// Advance the export for a few milliseconds, draw its progress, and save the file once it is done.
+// Runs every frame (not only while the panel is open) so closing the panel cannot strand a job.
+void App::PumpCompareExport(IPlatform& platform)
+{
+    static const char* kTitle = "Exporting Memory Diff";
+    if (mOpenCompareExport)
+    {
+        mOpenCompareExport = false;
+        ImGui::OpenPopup(kTitle);
+    }
+    if (mCompareExport)
+    {
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(8);
+        bool done = false;
+        do { done = mCompareExport->Step(mCompareExportSink, 8192); }
+        while (!done && std::chrono::steady_clock::now() < until);
+        if (done)
+        {
+            const CsvResult result = mCompareExport->Result();
+            mCompareExport.reset();
+            if (result == CsvResult::Ok)
+                ReportSave(platform.SaveFile(mCompareExportName.c_str(), mCompareExportSink.text.data(),
+                                             mCompareExportSink.text.size()), mCompareExportName);
+            else
+            {
+                mOperationStatus = "Could not export the memory diff.";
+                mOperationError = true;
+                mLog.Error(mOperationStatus + " The written line count did not match the diff.");
+            }
+            mCompareExportSink.text = std::string();
+        }
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        // Draw-only: the job finishing (or being dropped by a session reset) is what closes this.
+        if (!mCompareExport)
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        else
+        {
+            ImGui::Text("Writing %s", mCompareExportName.c_str());
+            ImGui::ProgressBar(mCompareExport->Progress(), ImVec2(360, 0));
+            if (ImGui::Button("Cancel", ImVec2(90, 0)))
+            {
+                CancelCompareExport();
+                ImGui::CloseCurrentPopup();
+                mOperationStatus = "Memory diff export cancelled; nothing was written.";
+                mOperationError = false;
+                mLog.Info(mOperationStatus);
+            }
+        }
+        ImGui::EndPopup();
+    }
 }
 
 // Carry out what a context-menu choice in the Memory Compare panel asked for, through the same
@@ -2494,7 +2564,7 @@ void App::HandleCompareRequest(const MemoryComparePanel::Request& req, IPlatform
         mPanels.assembly = true;
         break;
     case Action::ExportDiff:
-        ExportCompareDiff(req, platform);
+        ExportCompareDiff(req);
         break;
     }
 }
