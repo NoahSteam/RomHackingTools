@@ -118,15 +118,23 @@ bool EqualsNoCase(const char* a, size_t alen, const char* b)
     return b[bi] == '\0';
 }
 
+// Hex digits only, optionally after 0x and surrounded by spaces. No sign, and nothing wider than 32
+// bits: strtoul would wrap "106034F20" into a valid address on a 64-bit unsigned long, and accepts a
+// leading '-'.
 bool ParseHex(const char* s, uint32_t* out)
 {
     while (*s == ' ') ++s;
     if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) s += 2;
-    if (!*s) return false;
-    char* end = nullptr;
-    const unsigned long v = std::strtoul(s, &end, 16);
-    while (end && *end == ' ') ++end;
-    if (!end || *end != '\0') return false;
+    uint64_t v = 0;
+    size_t digits = 0;
+    for (; std::isxdigit(static_cast<unsigned char>(*s)); ++s, ++digits)
+    {
+        const char c = *s;
+        v = v * 16 + static_cast<uint64_t>(c <= '9' ? c - '0' : (c | 0x20) - 'a' + 10);
+        if (v > 0xFFFFFFFFull) return false;
+    }
+    while (*s == ' ') ++s;
+    if (digits == 0 || *s != '\0') return false;
     *out = static_cast<uint32_t>(v);
     return true;
 }
@@ -397,31 +405,48 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool 
 
 void MemoryComparePanel::DrawToolbar(bool aAttached, bool bAttached)
 {
+    // The controls wrap: each stays on the line only if it fits in the window, so a narrow dock
+    // never pushes one out of reach (the grid's own scrollbar does not scroll the toolbar).
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float right = ImGui::GetCurrentWindow()->WorkRect.Max.x;
+    auto buttonW = [&](const char* label) { return ImGui::CalcTextSize(label).x + style.FramePadding.x * 2.0f; };
+    auto checkW = [&](const char* label) { return ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(label).x; };
+    auto place = [&](float width)
+    {
+        if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width <= right) ImGui::SameLine();
+    };
+
     ImGui::Checkbox("Changes Only", &mChangesOnly);
-    ImGui::SameLine();
     char ctx[40];
     std::snprintf(ctx, sizeof(ctx), "Show Context (%u lines)", DiffOptions().contextRows);
+    place(checkW(ctx));
     ImGui::Checkbox(ctx, &mShowContext);
-    ImGui::SameLine();
     // The region the summary has selected, or every region when it is on All Memory.
+    place(buttonW("Export..."));
     if (ImGui::Button("Export..."))
         RaiseExport(mRegionSel < 0, mRegionSel < 0 ? RegionId::Lwram : static_cast<RegionId>(mRegionSel));
     for (int s = 0; s < 2; ++s)
     {
         const bool attached = s == 0 ? aAttached : bAttached;
-        ImGui::SameLine();
+        const char* label = s == 0 ? "Go to A" : "Go to B";
+        place(buttonW(label));
         ImGui::BeginDisabled(!attached);
-        if (ImGui::Button(s == 0 ? "Go to A" : "Go to B")) Raise(Action::GoToFrame, s == 0 ? Side::A : Side::B);
+        if (ImGui::Button(label)) Raise(Action::GoToFrame, s == 0 ? Side::A : Side::B);
         ImGui::EndDisabled();
         if (!attached && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
             ImGui::SetTooltip("That frame is no longer in the rewind history.");
     }
 
-    ImGui::SameLine();
+    // The jump controls move together: label, box and Go start a new line as a group, and the box
+    // shrinks to what is left rather than running past the edge.
+    const float labelW = ImGui::CalcTextSize("Jump to:").x, goW = buttonW("Go");
+    const float gap = style.ItemSpacing.x;
+    place(labelW + gap + 60.0f + gap + goW);
     ImGui::TextUnformatted("Jump to:");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(150.0f);
-    bool go = ImGui::InputText("##cmpjump", mJumpBuf, sizeof(mJumpBuf), ImGuiInputTextFlags_EnterReturnsTrue);
+    const float room = right - ImGui::GetCursorScreenPos().x - gap - goW;
+    ImGui::SetNextItemWidth(std::max(60.0f, std::min(150.0f, room)));
+        bool go = ImGui::InputText("##cmpjump", mJumpBuf, sizeof(mJumpBuf), ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();
     go |= ImGui::Button("Go");
     if (go)
