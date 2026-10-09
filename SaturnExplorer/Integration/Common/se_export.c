@@ -1025,20 +1025,20 @@ static void SeApplyPendingPokes(void)
     SE_SUNLOCK();
     while (list)
     {
-        SePokeNode* n = list;
+        SePokeNode* node = list;
         unsigned int i, ok = 1;
-        list = n->next;
-        for (i = 0; i < n->len; ++i)
+        list = node->next;
+        for (i = 0; i < node->len; ++i)
         {
-            if (n->sound)
+            if (node->sound)
             {
                 if (!sWriteSoundByte) { ok = 0; break; }
-                sWriteSoundByte(n->dest + i, n->data[i]);
+                sWriteSoundByte(node->dest + i, node->data[i]);
             }
-            else if (!SeBusPokeByte(n->dest + i, n->data[i])) { ok = 0; break; }
+            else if (!SeBusPokeByte(node->dest + i, node->data[i])) { ok = 0; break; }
         }
         if (ok) ++applied; else ++dropped;
-        free(n);
+        free(node);
     }
     SE_SLOCK();
     sPokesApplied += applied;
