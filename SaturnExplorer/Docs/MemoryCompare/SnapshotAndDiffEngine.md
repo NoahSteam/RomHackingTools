@@ -161,7 +161,7 @@ uint64_t   DiffResult::TotalChangedBytes() const;
 - Ranges are maximal runs of differing bytes, merged when the gap is below `mergeGap` (default 4;
   0 and 1 both mean contiguous bytes only).
   `kMaxStoredRanges` is 100,000 per region. Past that, ranges stop being stored but
-  `changedBytes` and `rangeCount` stay exact and `rangesTruncated` is set.
+  `changedBytes` and `rangeCount` stay exact and `RangesTruncated()` is true.
 - **`ranges` is a summary for display and nothing else.** It feeds the "Changed Ranges" column. No
   other function reads it.
 
@@ -211,7 +211,7 @@ New `FrontEnd/tests/MemoryCompareTests.cpp`, registered in `CMakeLists.txt` like
   byte-at-a-time tail path is not reachable through the public API; the 0x18-byte register region
   covers the partial *row* case instead (`validMask`)
 - **truncation**: more than `kMaxStoredRanges` isolated changes in one region.
-  `rangesTruncated` is set, `rangeCount` and `changedBytes` are exact, and **the union of
+  `RangesTruncated()` is true, `rangeCount` and `changedBytes` are exact, and **the union of
   `BuildRows` masks and the CSV lines each equal the true set of differing bytes** (compared against
   a brute-force oracle)
 - context windows merge, `gapBefore` appears exactly where rows are elided, windows clip at region

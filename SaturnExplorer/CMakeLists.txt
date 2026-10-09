@@ -484,6 +484,19 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
 
+    # The Memory Compare panel -- the real panel under the app's theme and font, over hand-built
+    # snapshots: region and byte selection, GoTo, address parsing, the action capability table.
+    add_executable(SaturnExplorerMemoryComparePanelTests
+        FrontEnd/tests/MemoryComparePanelTests.cpp
+        FrontEnd/src/MemoryComparePanel.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+        FrontEnd/src/Theme.cpp
+        ${SE_IMGUI_CORE}
+    )
+    target_include_directories(SaturnExplorerMemoryComparePanelTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerMemoryComparePanelTests COMMAND SaturnExplorerMemoryComparePanelTests)
+
     # The SH-2 Assembly panel itself -- links the real panel (an unoptimized C++14 build catches an
     # ODR-use of a class-static constant) and pins that its virtual list's row height does not
     # change while a comment is being edited, which would shift every jump.
@@ -895,6 +908,7 @@ if(WIN32)
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
         FrontEnd/src/HexEditorPanel.cpp
+        FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
@@ -910,6 +924,7 @@ if(WIN32)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
@@ -984,6 +999,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
         FrontEnd/src/HexEditorPanel.cpp
+        FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/LogPanel.cpp
         FrontEnd/src/LayerPanels.cpp
@@ -999,6 +1015,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Debug/FormatString.cpp
         FrontEnd/src/Debug/ConditionEval.cpp
         FrontEnd/src/Debug/MemorySearch.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
         FrontEnd/src/Debug/MemorySearchRunner.cpp
         FrontEnd/src/Debug/BytePatternSearch.cpp
         FrontEnd/src/Debug/AccessLog.cpp
@@ -1090,6 +1107,7 @@ else()
             FrontEnd/src/Sh2Operands.cpp
             FrontEnd/src/Sh2Dump.cpp
             FrontEnd/src/HexEditorPanel.cpp
+            FrontEnd/src/MemoryComparePanel.cpp
             FrontEnd/src/ControllerPanel.cpp
             FrontEnd/src/LogPanel.cpp
             FrontEnd/src/LayerPanels.cpp
@@ -1105,6 +1123,7 @@ else()
             FrontEnd/src/Debug/FormatString.cpp
             FrontEnd/src/Debug/ConditionEval.cpp
             FrontEnd/src/Debug/MemorySearch.cpp
+            FrontEnd/src/Debug/MemoryCompare.cpp
             FrontEnd/src/Debug/MemorySearchRunner.cpp
             FrontEnd/src/Debug/BytePatternSearch.cpp
             FrontEnd/src/Debug/AccessLog.cpp

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,9 +35,10 @@ public:
     {
         Action    action = Action::GoToMemory;
         Side      side = Side::A;
-        RegionRef ref;                 // the selected byte (meaningless for ExportDiff/GoToFrame)
+        RegionRef ref;                 // the selected byte (unused by ExportDiff and GoToFrame)
         uint32_t  size = 1;            // selection length rounded down to 1, 2 or 4 (watch/breakpoint)
-        bool      allRegions = false;  // ExportDiff
+        bool      allRegions = false;  // ExportDiff: every region, else exportRegion
+        RegionId  exportRegion = RegionId::Lwram;
     };
 
     // Draw the window. 'diff' null means no comparison is set up yet. A side is "attached" while
@@ -80,19 +82,32 @@ private:
     {
         enum Kind : uint8_t { Header, Gap, Row } kind = Row;
         RegionId region = RegionId::Lwram;
-        uint32_t skipped = 0;     // Gap: identical rows elided
-        uint32_t changed = 0;     // Header: changed bytes in the region
+        uint32_t count = 0;       // Gap: identical rows elided; Header: changed bytes in the region
         DiffRow  row;             // Row
     };
 
-    void Rebuild(const DiffResult& diff);
+    // What the line list is built from, besides the snapshot pair: one comparison per key.
+    struct BuildKey
+    {
+        int  region = -1;
+        bool changesOnly = true;
+        bool context = true;     // only meaningful while Changes Only is on; otherwise every row shows
+        bool operator==(const BuildKey& o) const
+        { return region == o.region && changesOnly == o.changesOnly && context == o.context; }
+    };
+    BuildKey Key() const { return { mRegionSel, mChangesOnly, mChangesOnly && mShowContext }; }
+
+    void DrawBody(const DiffResult* diff, bool aAttached, bool bAttached);
+    void EnsureLines(const DiffResult& diff);
     void SelectByte(const RegionRef& ref, bool extend);
+    bool InSelection(RegionId region, uint32_t offset) const;
     void DrawCards(const DiffResult& diff, bool aAttached, bool bAttached);
-    void DrawToolbar(const DiffResult& diff, bool aAttached, bool bAttached);
+    void DrawToolbar(bool aAttached, bool bAttached);
     void DrawSummary(const DiffResult& diff, float height);
     void DrawGrid(const DiffResult& diff, bool aAttached, bool bAttached);
     void DrawContextMenu(bool aAttached, bool bAttached);
-    void Raise(Action action, Side side, bool allRegions);
+    void Raise(Action action, Side side);
+    void RaiseExport(bool allRegions, RegionId region);
     int  FindLine(const RegionRef& ref) const;
 
     int      mRegionSel = -1;            // -1 = All Memory, else a RegionId
@@ -100,12 +115,11 @@ private:
     bool     mShowContext = true;
     bool     mFocusRequested = false;
 
-    // What the line list was built from, so it is rebuilt exactly when one of these moves.
-    const MemSnapshot* mBuiltA = nullptr;
-    const MemSnapshot* mBuiltB = nullptr;
-    int      mBuiltRegion = -2;
-    bool     mBuiltChangesOnly = true;
-    bool     mBuiltShowContext = true;
+    // Which pair the view belongs to. Held weakly: identity without ownership, and unlike a raw
+    // address it cannot be mistaken for a later snapshot allocated in the same place.
+    std::weak_ptr<const MemSnapshot> mPairA, mPairB;
+    BuildKey  mBuilt;
+    bool      mLinesValid = false;
     std::vector<Line> mLines;
 
     bool      mSelValid = false;
@@ -114,7 +128,7 @@ private:
     uint32_t  mSelAnchor = 0;
     Side      mSelSide = Side::A;
 
-    int       mScrollLine = -1;          // line to bring to the top on the next draw
+    int       mScrollLine = -1;          // line to bring to the top on the next grid draw
     RegionRef mPendingJump;              // a GoTo waiting for its region's lines to be built
     bool      mHavePendingJump = false;
     float     mSplitTop = 0.0f;          // height of the summary section; 0 until first drawn

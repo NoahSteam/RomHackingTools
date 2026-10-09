@@ -66,6 +66,11 @@ std::string FormatTime(uint64_t frame)
     return b;
 }
 
+ImU32 ByteColor(const DiffRow& r, int k)
+{
+    return (r.changedMask & (1u << k)) ? kColHot : (r.isContext ? kColDim : kColByte);
+}
+
 // Address label for a row. Bus-addressed regions show the address the rest of the app uses; an
 // image or register file has no bus address worth showing, so it is region-qualified instead.
 std::string RowLabel(const RegionRef& ref)
@@ -172,23 +177,30 @@ bool MemoryComparePanel::TakeRequest(Request& out)
     return true;
 }
 
-void MemoryComparePanel::Raise(Action action, Side side, bool allRegions)
+void MemoryComparePanel::Raise(Action action, Side side)
 {
     mRequest = Request();
     mRequest.action = action;
     mRequest.side = side;
-    mRequest.allRegions = allRegions;
     if (mSelValid)
     {
         mRequest.ref = { mSelRegion, mSelLo };
         const uint32_t len = mSelHi - mSelLo + 1;
         mRequest.size = len >= 4 ? 4u : len >= 2 ? 2u : 1u;
     }
-    else if (mRegionSel >= 0)
-    {
-        mRequest.ref = { static_cast<RegionId>(mRegionSel), 0 };
-    }
     mRequested = true;
+}
+
+void MemoryComparePanel::RaiseExport(bool allRegions, RegionId region)
+{
+    Raise(Action::ExportDiff, Side::A);
+    mRequest.allRegions = allRegions;
+    mRequest.exportRegion = region;
+}
+
+bool MemoryComparePanel::InSelection(RegionId region, uint32_t offset) const
+{
+    return mSelValid && mSelRegion == region && offset >= mSelLo && offset <= mSelHi;
 }
 
 int MemoryComparePanel::FindLine(const RegionRef& ref) const
@@ -203,11 +215,9 @@ int MemoryComparePanel::FindLine(const RegionRef& ref) const
 void MemoryComparePanel::GoTo(const RegionRef& ref)
 {
     mStatus.clear();
-    if (mRegionSel >= 0 && mRegionSel != static_cast<int>(ref.id)) mRegionSel = static_cast<int>(ref.id);
-    mSelValid = true;
-    mSelRegion = ref.id;
-    mSelLo = mSelHi = mSelAnchor = ref.offset;
-    mScrollLine = -2;   // resolved in Draw, after the line list has been rebuilt for the new region
+    if (mRegionSel >= 0) mRegionSel = static_cast<int>(ref.id);   // follow into the region, but leave All alone
+    SelectByte(ref, false);
+    // Resolved in Draw: the lines of the byte's region may not exist until then.
     mPendingJump = ref;
     mHavePendingJump = true;
 }
@@ -225,12 +235,15 @@ void MemoryComparePanel::SelectByte(const RegionRef& ref, bool extend)
     mSelLo = mSelHi = mSelAnchor = ref.offset;
 }
 
-void MemoryComparePanel::Rebuild(const DiffResult& diff)
+void MemoryComparePanel::EnsureLines(const DiffResult& diff)
 {
+    const BuildKey key = Key();
+    if (mLinesValid && key == mBuilt) return;
+
     mLines.clear();
     DiffOptions o;
     o.changesOnly = mChangesOnly;
-    o.contextRows = mShowContext ? 2u : 0u;
+    if (!mShowContext) o.contextRows = 0;
     const bool all = mRegionSel < 0;
     for (size_t i = 0; i < kRegionCount; ++i)
     {
@@ -238,12 +251,13 @@ void MemoryComparePanel::Rebuild(const DiffResult& diff)
         const RegionId id = static_cast<RegionId>(i);
         const std::vector<DiffRow> rows = BuildRows(diff, id, o);
         if (rows.empty()) continue;
+        mLines.reserve(mLines.size() + rows.size() + 1);
         if (all)
         {
             Line h;
             h.kind = Line::Header;
             h.region = id;
-            h.changed = diff.regions[i].changedBytes;
+            h.count = diff.regions[i].changedBytes;
             mLines.push_back(h);
         }
         uint32_t nextRow = 0;   // the row index just past the previous kept row
@@ -255,7 +269,7 @@ void MemoryComparePanel::Rebuild(const DiffResult& diff)
                 Line g;
                 g.kind = Line::Gap;
                 g.region = id;
-                g.skipped = idx - nextRow;
+                g.count = idx - nextRow;
                 mLines.push_back(g);
             }
             Line l;
@@ -266,62 +280,45 @@ void MemoryComparePanel::Rebuild(const DiffResult& diff)
             nextRow = idx + 1;
         }
     }
-    mBuiltA = diff.a.get();
-    mBuiltB = diff.b.get();
-    mBuiltRegion = mRegionSel;
-    mBuiltChangesOnly = mChangesOnly;
-    mBuiltShowContext = mShowContext;
+    mBuilt = key;
+    mLinesValid = true;
 }
 
 void MemoryComparePanel::Draw(const DiffResult* diff, bool aAttached, bool bAttached)
 {
     if (mFocusRequested) { ImGui::SetNextWindowFocus(); mFocusRequested = false; }
-    if (!ImGui::Begin("Memory Compare"))
-    {
-        ImGui::End();
-        return;
-    }
+    const bool open = ImGui::Begin("Memory Compare");
+    if (open) DrawBody(diff, aAttached, bAttached);
+    ImGui::End();
+}
+
+void MemoryComparePanel::DrawBody(const DiffResult* diff, bool aAttached, bool bAttached)
+{
     if (!diff || !diff->a || !diff->b)
     {
         ImGui::TextDisabled("Right-click the rewind timeline to set Compare Frame A and Compare Frame B,\n"
                             "then click Compare Memory...");
-        ImGui::End();
         return;
     }
 
-    // A new comparison starts from a clean view: nothing selected carries over between two
-    // different pairs of snapshots.
-    if (diff->a.get() != mBuiltA || diff->b.get() != mBuiltB)
+    // A new comparison starts from a clean view: neither the selection nor a jump still waiting
+    // for its rows carries over onto different bytes. Identity is the shared_ptr control block
+    // (weak_ptr::owner_before), not an address, which a freed snapshot's replacement can reuse.
+    if (mPairA.owner_before(diff->a) || diff->a.owner_before(mPairA) ||
+        mPairB.owner_before(diff->b) || diff->b.owner_before(mPairB))
     {
-        mBuiltA = diff->a.get();
-        mBuiltB = diff->b.get();
+        mPairA = diff->a;
+        mPairB = diff->b;
         mSelValid = false;
         mRegionSel = -1;
+        mHavePendingJump = false;
+        mScrollLine = -1;
         mStatus.clear();
-        mBuiltRegion = -2;   // force a rebuild below
+        mLinesValid = false;
     }
 
     DrawCards(*diff, aAttached, bAttached);
-    DrawToolbar(*diff, aAttached, bAttached);
-
-    if (mBuiltRegion != mRegionSel || mBuiltChangesOnly != mChangesOnly || mBuiltShowContext != mShowContext)
-        Rebuild(*diff);
-
-    // A GoTo waits here for the lines of its region to exist.
-    if (mHavePendingJump)
-    {
-        mHavePendingJump = false;
-        Rebuild(*diff);
-        int line = FindLine(mPendingJump);
-        if (line < 0 && mChangesOnly)
-        {
-            mChangesOnly = false;
-            mStatus = "Changes Only turned off to show that row.";
-            Rebuild(*diff);
-            line = FindLine(mPendingJump);
-        }
-        mScrollLine = line;
-    }
+    DrawToolbar(aAttached, bAttached);
 
     if (diff->TotalChangedBytes() == 0)
     {
@@ -329,7 +326,6 @@ void MemoryComparePanel::Draw(const DiffResult* diff, bool aAttached, bool bAtta
         ImGui::TextDisabled("No differences between frame %llu and frame %llu.",
                             static_cast<unsigned long long>(diff->a->origin.frameNo),
                             static_cast<unsigned long long>(diff->b->origin.frameNo));
-        ImGui::End();
         return;
     }
 
@@ -345,8 +341,23 @@ void MemoryComparePanel::Draw(const DiffResult* diff, bool aAttached, bool bAtta
         DrawSummary(*diff, topH);
         HorizontalSplitter("##cmpsplit", mSplitTop, avail, minTop, minBottom);
     }
+
+    // After the summary, so a click there shows its region's lines this frame, not the next.
+    EnsureLines(*diff);
+    if (mHavePendingJump)
+    {
+        mHavePendingJump = false;
+        int line = FindLine(mPendingJump);
+        if (line < 0 && mChangesOnly)
+        {
+            mChangesOnly = false;
+            mStatus = "Changes Only turned off to show that row.";
+            EnsureLines(*diff);
+            line = FindLine(mPendingJump);
+        }
+        mScrollLine = line;
+    }
     DrawGrid(*diff, aAttached, bAttached);
-    ImGui::End();
 }
 
 void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool bAttached)
@@ -357,7 +368,8 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool 
         const MemSnapshot& snap = s == 0 ? *diff.a : *diff.b;
         const bool attached = s == 0 ? aAttached : bAttached;
         ImGui::TableNextColumn();
-        ImGui::TextColored(s == 0 ? kColA : kColB, s == 0 ? "Frame A (baseline)" : "Frame B (compare)");
+        const bool isA = s == 0;
+        ImGui::TextColored(isA ? kColA : kColB, isA ? "Frame A (baseline)" : "Frame B (compare)");
         ImGui::Text("%llu", static_cast<unsigned long long>(snap.origin.frameNo));
         ImGui::SameLine();
         ImGui::TextDisabled("%s  -  %s", FormatTime(snap.origin.frameNo).c_str(),
@@ -374,27 +386,27 @@ void MemoryComparePanel::DrawCards(const DiffResult& diff, bool aAttached, bool 
     ImGui::EndTable();
 }
 
-void MemoryComparePanel::DrawToolbar(const DiffResult& diff, bool aAttached, bool bAttached)
+void MemoryComparePanel::DrawToolbar(bool aAttached, bool bAttached)
 {
-    (void)diff;
     ImGui::Checkbox("Changes Only", &mChangesOnly);
     ImGui::SameLine();
-    ImGui::Checkbox("Show Context (2 lines)", &mShowContext);
+    char ctx[40];
+    std::snprintf(ctx, sizeof(ctx), "Show Context (%u lines)", DiffOptions().contextRows);
+    ImGui::Checkbox(ctx, &mShowContext);
     ImGui::SameLine();
+    // The region the summary has selected, or every region when it is on All Memory.
     if (ImGui::Button("Export..."))
-        Raise(Action::ExportDiff, Side::A, mRegionSel < 0);
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!aAttached);
-    if (ImGui::Button("Go to A")) Raise(Action::GoToFrame, Side::A, false);
-    ImGui::EndDisabled();
-    if (!aAttached && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Frame A is no longer in the rewind history.");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!bAttached);
-    if (ImGui::Button("Go to B")) Raise(Action::GoToFrame, Side::B, false);
-    ImGui::EndDisabled();
-    if (!bAttached && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Frame B is no longer in the rewind history.");
+        RaiseExport(mRegionSel < 0, mRegionSel < 0 ? RegionId::Lwram : static_cast<RegionId>(mRegionSel));
+    for (int s = 0; s < 2; ++s)
+    {
+        const bool attached = s == 0 ? aAttached : bAttached;
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!attached);
+        if (ImGui::Button(s == 0 ? "Go to A" : "Go to B")) Raise(Action::GoToFrame, s == 0 ? Side::A : Side::B);
+        ImGui::EndDisabled();
+        if (!attached && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("That frame is no longer in the rewind history.");
+    }
 
     ImGui::SameLine();
     ImGui::TextUnformatted("Jump to:");
@@ -424,7 +436,7 @@ void MemoryComparePanel::DrawSummary(const DiffResult& diff, float height)
     ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableHeadersRow();
 
-    auto row = [&](int sel, const char* name, const std::string& size, uint64_t bytes, uint64_t ranges, bool showRanges)
+    auto row = [&](int sel, const char* name, const std::string& size, uint64_t bytes, uint64_t ranges)
     {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
@@ -449,21 +461,21 @@ void MemoryComparePanel::DrawSummary(const DiffResult& diff, float height)
         ImGui::TableSetColumnIndex(2);
         ImGui::TextUnformatted(Group(bytes).c_str());
         ImGui::TableSetColumnIndex(3);
-        if (showRanges) ImGui::TextUnformatted(ranges ? Group(ranges).c_str() : "-");
+        ImGui::TextUnformatted(ranges ? Group(ranges).c_str() : "-");
         if (none) ImGui::PopStyleColor();
         ImGui::PopID();
     };
 
-    uint64_t total = 0, totalRanges = 0, totalSize = 0;
+    uint64_t total = 0, totalRanges = 0;
+    uint32_t totalSize = 0;
     for (const RegionDiff& r : diff.regions) { total += r.changedBytes; totalRanges += r.rangeCount; }
     for (size_t i = 0; i < kRegionCount; ++i) totalSize += Traits(static_cast<RegionId>(i)).size;
-    row(-1, "All Memory", FormatSize(static_cast<uint32_t>(std::min<uint64_t>(totalSize, 0xFFFFFFFFu))),
-        total, totalRanges, true);
+    row(-1, "All Memory", FormatSize(totalSize), total, totalRanges);
     for (size_t i = 0; i < kRegionCount; ++i)
     {
         const RegionTraits& t = Traits(static_cast<RegionId>(i));
         row(static_cast<int>(i), t.name, FormatSize(t.size), diff.regions[i].changedBytes,
-            diff.regions[i].rangeCount, true);
+            diff.regions[i].rangeCount);
     }
     ImGui::EndTable();
 }
@@ -504,8 +516,7 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const float lineH = ImGui::GetTextLineHeight();
-        const bool gridHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-        (void)gridHovered;
+        static const char kHex[] = "0123456789ABCDEF";
 
         ImGuiListClipper clip;
         clip.Begin(static_cast<int>(mLines.size()), gm.rowH);
@@ -515,30 +526,26 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
             {
                 const Line& line = mLines[static_cast<size_t>(li)];
                 ImGui::TableNextRow(0, gm.rowH);
-                ImGui::PushID(li);
 
                 if (line.kind == Line::Header)
                 {
                     ImGui::TableSetColumnIndex(0);
                     ImGui::TextColored(ImVec4(0.8f, 0.85f, 0.95f, 1.0f), "%s", Traits(line.region).name);
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextDisabled("%s changed bytes", Group(line.changed).c_str());
+                    ImGui::TextDisabled("%s changed bytes", Group(line.count).c_str());
                     ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(60, 70, 90, 90));
-                    ImGui::PopID();
                     continue;
                 }
                 if (line.kind == Line::Gap)
                 {
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextDisabled("... %s identical rows", Group(line.skipped).c_str());
-                    ImGui::PopID();
+                    ImGui::TextDisabled("... %s identical rows", Group(line.count).c_str());
                     continue;
                 }
 
                 const DiffRow& r = line.row;
                 const size_t ri = static_cast<size_t>(r.ref.id);
-                const std::vector<uint8_t>& A = diff.a->regions[ri].bytes;
-                const std::vector<uint8_t>& B = diff.b->regions[ri].bytes;
+                ImGui::PushID(li);
 
                 ImGui::TableSetColumnIndex(0);
                 ImGui::PushStyleColor(ImGuiCol_Text, kColAddr);
@@ -547,18 +554,17 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
 
                 for (int side = 0; side < 2; ++side)
                 {
-                    const std::vector<uint8_t>& bytes = side == 0 ? A : B;
-                    const ImU32 tint = side == 0 ? kTintA : kTintB;
+                    const Side thisSide = side == 0 ? Side::A : Side::B;
+                    const std::vector<uint8_t>& bytes = (side == 0 ? diff.a : diff.b)->regions[ri].bytes;
 
                     // Hex cell: one invisible button over the 16 bytes, so one click target per
-                    // side and the byte under the pointer is worked out from its x.
+                    // side, with the byte under the pointer worked out from its x.
                     ImGui::TableSetColumnIndex(1 + side);
                     const ImVec2 p = ImGui::GetCursorScreenPos();
                     ImGui::PushID(side);
                     ImGui::InvisibleButton("##hex", ImVec2(gm.byteW * 16.0f, lineH));
-                    const bool hov = ImGui::IsItemHovered();
                     int hovByte = -1;
-                    if (hov)
+                    if (ImGui::IsItemHovered())
                     {
                         hovByte = std::min(15, std::max(0, static_cast<int>((ImGui::GetIO().MousePos.x - p.x) / gm.byteW)));
                         if (!(r.validMask & (1u << hovByte))) hovByte = -1;
@@ -569,13 +575,12 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
                         {
                             SelectByte(clicked, ImGui::GetIO().KeyShift);
-                            mSelSide = side == 0 ? Side::A : Side::B;
+                            mSelSide = thisSide;
                         }
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
                         {
-                            if (!(mSelValid && mSelRegion == clicked.id && clicked.offset >= mSelLo && clicked.offset <= mSelHi))
-                                SelectByte(clicked, false);
-                            mSelSide = side == 0 ? Side::A : Side::B;
+                            if (!InSelection(clicked.id, clicked.offset)) SelectByte(clicked, false);
+                            mSelSide = thisSide;
                             openPopup = true;
                         }
                     }
@@ -584,41 +589,32 @@ void MemoryComparePanel::DrawGrid(const DiffResult& diff, bool aAttached, bool b
                         if (!(r.validMask & (1u << k))) continue;
                         const uint32_t off = r.ref.offset + static_cast<uint32_t>(k);
                         const ImVec2 bp(p.x + k * gm.byteW, p.y);
-                        const bool changed = (r.changedMask & (1u << k)) != 0;
-                        const bool selected = mSelValid && mSelRegion == r.ref.id && off >= mSelLo && off <= mSelHi;
-                        if (changed)
-                            dl->AddRectFilled(bp, ImVec2(bp.x + gm.byteW - 1.0f, bp.y + lineH), tint);
-                        if (selected)
-                            dl->AddRectFilled(bp, ImVec2(bp.x + gm.byteW - 1.0f, bp.y + lineH), kColSel);
-                        else if (k == hovByte)
-                            dl->AddRectFilled(bp, ImVec2(bp.x + gm.byteW - 1.0f, bp.y + lineH), kColHover);
-                        char t[3];
-                        std::snprintf(t, sizeof(t), "%02X", bytes[off]);
-                        dl->AddText(ImVec2(bp.x + kByteGap * 0.5f, bp.y),
-                                    changed ? kColHot : (r.isContext ? kColDim : kColByte), t);
+                        const ImVec2 be(bp.x + gm.byteW - 1.0f, bp.y + lineH);
+                        if (r.changedMask & (1u << k)) dl->AddRectFilled(bp, be, side == 0 ? kTintA : kTintB);
+                        if (InSelection(r.ref.id, off)) dl->AddRectFilled(bp, be, kColSel);
+                        else if (k == hovByte)          dl->AddRectFilled(bp, be, kColHover);
+                        const char digits[2] = { kHex[bytes[off] >> 4], kHex[bytes[off] & 15] };
+                        dl->AddText(ImVec2(bp.x + kByteGap * 0.5f, bp.y), ByteColor(r, k), digits, digits + 2);
                     }
                     ImGui::PopID();
                 }
 
                 for (int side = 0; side < 2; ++side)
                 {
-                    const std::vector<uint8_t>& bytes = side == 0 ? A : B;
+                    const std::vector<uint8_t>& bytes = (side == 0 ? diff.a : diff.b)->regions[ri].bytes;
                     ImGui::TableSetColumnIndex(3 + side);
                     const ImVec2 p = ImGui::GetCursorScreenPos();
                     ImGui::Dummy(ImVec2(gm.asciiW * 16.0f, lineH));
                     for (int k = 0; k < 16; ++k)
                     {
                         if (!(r.validMask & (1u << k))) continue;
-                        const uint32_t off = r.ref.offset + static_cast<uint32_t>(k);
-                        const bool changed = (r.changedMask & (1u << k)) != 0;
                         const ImVec2 cp(p.x + k * gm.asciiW, p.y);
-                        if (changed)
+                        if (r.changedMask & (1u << k))
                             dl->AddRectFilled(cp, ImVec2(cp.x + gm.asciiW, cp.y + lineH), side == 0 ? kTintA : kTintB);
-                        const uint8_t c = bytes[off];
-                        const char ch[2] = { (c >= 0x20 && c < 0x7F) ? static_cast<char>(c) : '.', 0 };
-                        const float w = ImGui::CalcTextSize(ch).x;
-                        dl->AddText(ImVec2(cp.x + (gm.asciiW - w) * 0.5f, cp.y),
-                                    changed ? kColHot : (r.isContext ? kColDim : kColByte), ch);
+                        const uint8_t c = bytes[r.ref.offset + static_cast<uint32_t>(k)];
+                        const char ch = (c >= 0x20 && c < 0x7F) ? static_cast<char>(c) : '.';
+                        const float w = ImGui::CalcTextSize(&ch, &ch + 1).x;
+                        dl->AddText(ImVec2(cp.x + (gm.asciiW - w) * 0.5f, cp.y), ByteColor(r, k), &ch, &ch + 1);
                     }
                 }
                 ImGui::PopID();
@@ -634,34 +630,28 @@ void MemoryComparePanel::DrawContextMenu(bool aAttached, bool bAttached)
 {
     if (!ImGui::BeginPopup("cmpctx")) return;
     if (!mSelValid) { ImGui::EndPopup(); return; }
-    const RegionTraits& t = Traits(mSelRegion);
-    const bool attached = mSelSide == Side::A ? aAttached : bAttached;
-    char head[64];
-    const RegionRef ref = { mSelRegion, mSelLo };
-    std::snprintf(head, sizeof(head), "%s  %s  (frame %c)", t.name, RowLabel(ref).c_str(), mSelSide == Side::A ? 'A' : 'B');
-    ImGui::TextDisabled("%s", head);
+    const bool isA = mSelSide == Side::A;
+    const bool attached = isA ? aAttached : bAttached;
+    ImGui::TextDisabled("%s  %s  (frame %c)", Traits(mSelRegion).name,
+                        RowLabel({ mSelRegion, mSelLo }).c_str(), isA ? 'A' : 'B');
     ImGui::Separator();
 
-    auto item = [&](const char* label, bool enabled, const char* why, Action a)
+    // 'why' explains a disabled item; 'note' is a hint shown while it is enabled.
+    auto item = [&](const char* label, Action a, const char* why, const char* note)
     {
-        if (ImGui::MenuItem(label, nullptr, false, enabled)) Raise(a, mSelSide, false);
-        if (!enabled && why && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", why);
+        const bool enabled = ActionEnabled(a, mSelRegion);
+        if (ImGui::MenuItem(label, nullptr, false, enabled)) Raise(a, mSelSide);
+        const char* tip = enabled ? note : why;
+        if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", tip);
     };
-    item(attached ? "Go to Memory" : "Go to Memory (current view)", ActionEnabled(Action::GoToMemory, mSelRegion), nullptr, Action::GoToMemory);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !attached)
-        ImGui::SetTooltip("That frame is no longer in the rewind history, so the Memory tab\nshows the current frame, not the snapshot.");
-    item("Add to Watch", ActionEnabled(Action::AddWatch, mSelRegion), nullptr, Action::AddWatch);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Watches the running game, not the snapshot.");
-    item("Break on Write", ActionEnabled(Action::BreakOnWrite, mSelRegion), NoBreakReason(mSelRegion), Action::BreakOnWrite);
-    item("View in Assembly", ActionEnabled(Action::ViewInAssembly, mSelRegion), NoAsmReason(mSelRegion), Action::ViewInAssembly);
+    item(attached ? "Go to Memory" : "Go to Memory (current view)", Action::GoToMemory, nullptr,
+         attached ? nullptr : "That frame is no longer in the rewind history, so the Memory tab\n"
+                              "shows the current frame, not the snapshot.");
+    item("Add to Watch", Action::AddWatch, nullptr, "Watches the running game, not the snapshot.");
+    item("Break on Write", Action::BreakOnWrite, NoBreakReason(mSelRegion), "Breaks in the running game, not the snapshot.");
+    item("View in Assembly", Action::ViewInAssembly, NoAsmReason(mSelRegion), nullptr);
     ImGui::Separator();
-    if (ImGui::MenuItem("Export Diff (this region)"))
-    {
-        Raise(Action::ExportDiff, mSelSide, false);
-        mRequest.ref = { mSelRegion, 0 };
-    }
+    if (ImGui::MenuItem("Export Diff (this region)")) RaiseExport(false, mSelRegion);
     ImGui::EndPopup();
 }
 
