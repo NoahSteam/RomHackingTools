@@ -56,6 +56,10 @@ struct RegionTraits
 
 const RegionTraits& Traits(RegionId id);
 
+// Whether offsets in the region correspond to a bus address worth showing or navigating by. The
+// VDP1 frame buffer is an app-derived image, so it has none.
+inline bool HasBusAddress(const RegionTraits& t) { return t.space != AddressSpace::DeviceImage; }
+
 // A location inside a region. Rows, selection and every action carry one of these instead of a
 // bare address, which cannot say whether it names bus memory, an image or a register.
 struct RegionRef
@@ -116,7 +120,7 @@ std::shared_ptr<const MemSnapshot> CaptureSnapshot(
 
 struct DiffOptions
 {
-    uint32_t mergeGap = 4;       // changed runs separated by fewer identical bytes are merged
+    uint32_t mergeGap = 4;       // runs separated by fewer identical bytes merge (0 and 1: contiguous only)
     uint32_t contextRows = 2;    // identical rows kept either side of a change
     bool     changesOnly = true;
 };
@@ -131,7 +135,7 @@ struct RegionDiff
     uint32_t                  changedBytes = 0;     // EXACT
     uint32_t                  rangeCount = 0;       // EXACT count of merged ranges
     std::vector<ChangedRange> ranges;               // SUMMARY ONLY: the first kMaxStoredRanges
-    bool                      rangesTruncated = false;
+    bool RangesTruncated() const { return rangeCount > ranges.size(); }
 };
 
 struct DiffResult
