@@ -4874,7 +4874,7 @@ void App::DrawVdpOutput(IPlatform& platform)
             };
 
             // Only walk the sprite list when an overlay actually needs it.
-            const bool wantOverlays = mRenderOpts.show_bounding_boxes ||
+            const bool wantOverlays = mRenderOpts.show_bounding_boxes || mRenderOpts.show_wireframe ||
                                       mRenderOpts.show_object_numbers || !mSelection.empty();
             const size_t spriteCount = wantOverlays ? se_sprite_count(mContext) : 0;
             for (size_t i = 0; i < spriteCount; ++i)
@@ -4904,6 +4904,20 @@ void App::DrawVdpOutput(IPlatform& platform)
                     {
                         dl->AddQuad(c0, c1, c2, c3, IM_COL32(230, 210, 60, 130), 1.0f);
                     }
+                }
+                if (mRenderOpts.show_wireframe && !selected)
+                {
+                    // The geometry rather than the picture: the sprite's edges in the order the
+                    // command lists its vertices, with each vertex marked and A (the first) set
+                    // apart so a flipped or rotated sprite's orientation can be read off it. The
+                    // bounding box above is drawn in yellow; this is a different colour so the two
+                    // can be on together. Works with the Sprites layer off, which is the point.
+                    const ImVec2 c[4] = { toScreen(sprite.corners[0]), toScreen(sprite.corners[1]),
+                                          toScreen(sprite.corners[2]), toScreen(sprite.corners[3]) };
+                    const ImU32 wire = IM_COL32(70, 215, 255, 230);
+                    for (int e = 0; e < 4; ++e) dl->AddLine(c[e], c[(e + 1) % 4], wire, 1.0f);
+                    for (int v = 1; v < 4; ++v) dl->AddCircleFilled(c[v], 2.5f, wire);
+                    dl->AddCircleFilled(c[0], 3.5f, IM_COL32(255, 90, 200, 240));
                 }
                 if (mRenderOpts.show_object_numbers)
                 {
