@@ -819,15 +819,29 @@ se_result ParseMednafenBuffer(const std::vector<uint8_t>& file, se_data_source* 
             }
             if (FindMednafenField(file, secData, secSize, "CRAM", off, sz) && sz >= kYssCramSize)
             {
-                // CRAM entries are host-endian: 16-bit words in the RGB555 modes,
-                // 32-bit in RGB888 (mode 2). Copy raw, then byte-swap to Saturn-native
-                // big-endian at the width the CRAM mode dictates (from RAMCTL). A
-                // fixed 16-bit swap would corrupt RGB888 colors.
-                state->mCram.assign(file.begin() + off, file.begin() + off + kYssCramSize);
-                if (swap)
+                // Mednafen's CRAM is uint16[2048] in the file's byte order, in its own
+                // layout rather than the bus's: in RGB888 (CRMD 2, and the illegal 3, which
+                // vdp2.cpp's RW() treats alike) the first half holds every entry's high word
+                // and the second half every low word. Decode the words, then put each where
+                // the CPU sees it at 0x05F00000 -- the same mapping the live tap's
+                // SsDbgCramWire uses, so a savestate and a live capture agree. Reversing
+                // 4-byte groups instead paired the halves of two different colors.
+                std::vector<uint8_t> words;
+                CopyMednafenU16BE(file, off, kYssCramSize, words, swap);
+                const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
+                if (((ramctl >> 12) & 0x3) >= 2)
                 {
-                    const uint16_t ramctl = ReadReg16(state->mVdp2Regs, 0x0E);
-                    NormalizeCramToBigEndian(state->mCram, (ramctl >> 12) & 0x3);
+                    state->mCram.assign(kYssCramSize, 0);
+                    for (uint32_t cri = 0; cri < kYssCramSize / 2; ++cri)
+                    {
+                        const uint32_t raw = ((cri >> 1) & 0x3FF) | ((cri & 1) << 10);
+                        state->mCram[cri * 2]     = words[raw * 2];
+                        state->mCram[cri * 2 + 1] = words[raw * 2 + 1];
+                    }
+                }
+                else
+                {
+                    state->mCram = std::move(words);
                 }
             }
         }

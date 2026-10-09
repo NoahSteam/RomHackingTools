@@ -156,6 +156,41 @@ void TestOddLengthMednafenU16FieldRefused()
 }
 
 
+// Mednafen keeps RGB888 CRAM split: CRAM[k] is entry k's high word, CRAM[0x400 + k] its low word.
+// The import must hand the core the bus layout, entry k at bytes 4k..4k+3 -- in either byte order
+// the state was written in. Reversing 4-byte groups paired two colors' halves instead.
+void TestMednafenRgb888CramInterleaved()
+{
+    for (int bigEndian = 0; bigEndian < 2; ++bigEndian)
+    {
+        auto put16 = [&](std::vector<uint8_t>& v, size_t at, uint16_t x) {
+            v[at]     = static_cast<uint8_t>(bigEndian ? x >> 8 : x);
+            v[at + 1] = static_cast<uint8_t>(bigEndian ? x : x >> 8);
+        };
+        std::vector<uint8_t> regs(0x200, 0);
+        put16(regs, 0x0E, 0x2000);   // RAMCTL CRMD = 2: RGB888
+        std::vector<uint8_t> cram(0x1000, 0);
+        put16(cram, 0 * 2, 0x8011);             // entry 0 high: MSB + B
+        put16(cram, (0x400 + 0) * 2, 0x2233);   // entry 0 low:  G, R
+        put16(cram, 1 * 2, 0x0044);             // entry 1 high
+        put16(cram, (0x400 + 1) * 2, 0x5566);   // entry 1 low
+        std::vector<uint8_t> sec;
+        AddMdfnField(sec, "RawRegs", regs);
+        AddMdfnField(sec, "CRAM", cram);
+        std::vector<uint8_t> file = MdfnHeader();
+        if (bigEndian) file[23] = 0x80;   // header word at 20, bit 31: written big-endian
+        AddMdfnSection(file, "VDP2", sec);
+
+        se_data_source ds{};
+        CHECK(se_savestate_open_buffer(file.data(), file.size(), &ds) == SE_OK);
+        uint8_t got[8] = {};
+        CHECK(ds.read_cram && ds.read_cram(ds.user, 0, got, sizeof got) == sizeof got);
+        const uint8_t want[8] = { 0x80, 0x11, 0x22, 0x33, 0x00, 0x44, 0x55, 0x66 };
+        CHECK(std::memcmp(got, want, sizeof want) == 0);
+        if (ds.close) ds.close(ds.user);
+    }
+}
+
 // A section whose header promises more bytes than the file holds is a damaged state. It used
 // to stop the walk and accept whatever had been recovered before it, so a VDP2-only prefix of
 // a cut-off file loaded as if it were the whole machine.
@@ -378,6 +413,7 @@ int main()
     TestOddLengthMednafenU16FieldRefused();
     TestTruncatedMednafenSectionRefused();
     TestMalformedMednafenStructureRefused();
+    TestMednafenRgb888CramInterleaved();
     TestWorkRamOnlyFullDumpOpens();
     TestDumpCoveringNoRegionRefused();
     TestBigEndianYssRefused();

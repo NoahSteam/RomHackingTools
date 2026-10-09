@@ -727,9 +727,9 @@ void TestBankPaletteReportsItsCramAddress()
         State state = MakeNbg3State();
         SetReg(state, 0x00E, 0x2000);   // RAMCTL bits 12-13 = 2: RGB888, 1024 colours
         const uint32_t expected = 0x300u * 4u;
-        state.cram[expected + 1] = 0x33;   // [pad][R][G][B]
+        state.cram[expected + 1] = 0x11;   // [pad][B][G][R], as the bus holds it
         state.cram[expected + 2] = 0x22;
-        state.cram[expected + 3] = 0x11;
+        state.cram[expected + 3] = 0x33;
         se_context* context = se_test::CreateContext(state);
         CHECK(context != nullptr);
         CHECK(se_begin_frame(context) == SE_OK);

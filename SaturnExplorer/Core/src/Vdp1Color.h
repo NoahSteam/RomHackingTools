@@ -63,9 +63,11 @@ inline Rgba CramColor(const std::vector<uint8_t>& cram, se_cram_mode mode, uint3
             return { 0, 0, 0, 255 };
         }
         const uint32_t off = CramWrap(index, words) * 4;
-        const uint8_t r = (off + 3 < cram.size()) ? cram[off + 1] : 0;
+        // The entry is [MSB/pad][B][G][R] on the bus: Mednafen's CacheCRE puts the high word's low
+        // byte in bits 16-23 of its 0xBBGGRR color, and the VDP2 RGB888 bitmap dot has the same order.
+        const uint8_t b = (off + 3 < cram.size()) ? cram[off + 1] : 0;
         const uint8_t g = (off + 3 < cram.size()) ? cram[off + 2] : 0;
-        const uint8_t b = (off + 3 < cram.size()) ? cram[off + 3] : 0;
+        const uint8_t r = (off + 3 < cram.size()) ? cram[off + 3] : 0;
         return { r, g, b, 255 };
     }
 
