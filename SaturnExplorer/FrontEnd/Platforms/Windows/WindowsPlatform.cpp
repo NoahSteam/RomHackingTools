@@ -460,6 +460,29 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const ch
     return true;
 }
 
+bool WindowsPlatform::LaunchTool(const char* path, const char* args, const char* workingDir)
+{
+    if (!path || !*path) return false;
+    std::string derived;
+    if (!(workingDir && *workingDir))
+    {
+        const std::string p = path;
+        const size_t slash = p.find_last_of("/\\");
+        if (slash != std::string::npos) derived = p.substr(0, slash);
+        workingDir = derived.empty() ? nullptr : derived.c_str();
+    }
+    // No SEE_MASK_NOCLOSEPROCESS: the handle is not kept, so the tool is never terminated by a
+    // relaunch and the emulator's handle in mLaunchedProcess is not replaced.
+    SHELLEXECUTEINFOA sei = {};
+    sei.cbSize = sizeof(sei);
+    sei.lpVerb = "open";
+    sei.lpFile = path;
+    sei.lpParameters = (args && *args) ? args : nullptr;
+    sei.lpDirectory = workingDir;
+    sei.nShow = SW_SHOWNORMAL;
+    return ::ShellExecuteExA(&sei) != FALSE;
+}
+
 void WindowsPlatform::TerminateLaunchedProcess()
 {
     if (!mLaunchedProcess) return;

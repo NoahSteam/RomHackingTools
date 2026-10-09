@@ -497,6 +497,48 @@ bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* 
     return true;
 }
 
+bool WebPlatform::LaunchTool(const char* path, const char* args, const char* workingDir)
+{
+    if (!path || !*path) return false;
+    const std::string exe = path;
+    const std::string dir = (workingDir && *workingDir) ? std::string(workingDir) : ParentDir(exe);
+    // A macOS application bundle is a folder, not something to exec: hand it to LaunchServices.
+    // `open --args` passes the rest to the app as its argv.
+    const bool bundle = exe.size() > 4 && exe.compare(exe.size() - 4, 4, ".app") == 0;
+    std::string cmd = "cd " + ShellQuote(dir) + " && exec ";
+    if (bundle)
+    {
+        cmd += "/usr/bin/open -a " + ShellQuote(exe);
+        if (args && *args) { cmd += " --args "; cmd += args; }
+    }
+    else
+    {
+        cmd += ShellQuote(exe);
+        if (args && *args) { cmd += ' '; cmd += args; }
+    }
+
+    // Fork twice so the tool is reparented to init: nothing here ever waits on it, and a single
+    // fork would leave a zombie behind for as long as this program runs.
+    const pid_t first = ::fork();
+    if (first < 0) return false;
+    if (first == 0)
+    {
+        ::setsid();
+        if (::fork() != 0) ::_exit(0);
+        const int devnull = ::open("/dev/null", O_RDWR);
+        if (devnull >= 0)
+        {
+            ::dup2(devnull, 0); ::dup2(devnull, 1); ::dup2(devnull, 2);
+            if (devnull > 2) ::close(devnull);
+        }
+        ::execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+    int status = 0;
+    ::waitpid(first, &status, 0);
+    return true;
+}
+
 void WebPlatform::TerminateLaunchedProcess()
 {
     if (mLaunchedPid <= 0) return;

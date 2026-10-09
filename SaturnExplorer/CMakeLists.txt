@@ -584,6 +584,18 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerSh2OperandHoverTests
              COMMAND SaturnExplorerSh2OperandHoverTests)
 
+    # Settings > Diff...: the argument template, and the folders of raw region files the external
+    # diff tool is handed.
+    add_executable(SaturnExplorerDiffToolTests
+        FrontEnd/tests/DiffToolTests.cpp
+        FrontEnd/src/DiffTool.cpp
+        FrontEnd/src/FileWrite.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+    )
+    target_include_directories(SaturnExplorerDiffToolTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerDiffToolTests COMMAND SaturnExplorerDiffToolTests)
+
     # Data > Dump SH-2: the text the command writes -- columns, user notes over generated ones,
     # block-boundary-independent decoding, unavailable regions skipped.
     add_executable(SaturnExplorerSh2DumpTests
@@ -987,6 +999,7 @@ if(WIN32)
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
+        FrontEnd/src/DiffTool.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
@@ -1078,6 +1091,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/AssemblyPanel.cpp
         FrontEnd/src/Sh2Operands.cpp
         FrontEnd/src/Sh2Dump.cpp
+        FrontEnd/src/DiffTool.cpp
         FrontEnd/src/HexEditorPanel.cpp
         FrontEnd/src/MemoryComparePanel.cpp
         FrontEnd/src/ControllerPanel.cpp
@@ -1186,6 +1200,7 @@ else()
             FrontEnd/src/AssemblyPanel.cpp
             FrontEnd/src/Sh2Operands.cpp
             FrontEnd/src/Sh2Dump.cpp
+            FrontEnd/src/DiffTool.cpp
             FrontEnd/src/HexEditorPanel.cpp
             FrontEnd/src/MemoryComparePanel.cpp
             FrontEnd/src/ControllerPanel.cpp

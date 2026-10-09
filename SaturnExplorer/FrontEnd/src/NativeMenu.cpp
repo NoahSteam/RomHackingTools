@@ -108,7 +108,7 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::ResetLayout:       out = TopBarCommand(TopBarCommandType::ResetLayout); return true;
     case MenuCommand::SaveLayout:        out = TopBarCommand(TopBarCommandType::SaveLayout); return true;
     case MenuCommand::TakeScreenshot:    out = TopBarCommand(TopBarCommandType::TakeScreenshot); return true;
-    case MenuCommand::OpenSettings:      out = TopBarCommand(TopBarCommandType::OpenSettings); return true;
+    case MenuCommand::OpenDiffSettings:  out = TopBarCommand(TopBarCommandType::OpenDiffSettings); return true;
     case MenuCommand::ShowInputSettings: out = TopBarCommand(TopBarCommandType::ShowWindow, kControllerPanel); return true;
     case MenuCommand::OpenHelp:          out = TopBarCommand(TopBarCommandType::OpenHelp); return true;
     case MenuCommand::OpenGuides:        out = TopBarCommand(TopBarCommandType::OpenGuides); return true;

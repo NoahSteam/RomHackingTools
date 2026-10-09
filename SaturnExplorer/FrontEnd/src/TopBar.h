@@ -62,7 +62,7 @@ enum class TopBarCommandType
     ResetLayout,
     SaveLayout,
     TakeScreenshot,
-    OpenSettings,
+    OpenDiffSettings,   // the external diff tool dialog
     OpenHelp,
     OpenAbout,
     OpenGuides,

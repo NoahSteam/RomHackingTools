@@ -174,9 +174,14 @@ static void TestNativeMenuActionMapping()
     CHECK(NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ShowInputSettings), cmd));
     CHECK(cmd.type == TopBarCommandType::ShowWindow && cmd.value == kControllerPanel);
 
+    // Settings > Diff... opens the external diff tool dialog.
+    CHECK(NativeMenuActionToCommand(NativeMenuAction(MenuCommand::OpenDiffSettings), cmd));
+    CHECK(cmd.type == TopBarCommandType::OpenDiffSettings);
+
     // View-only toggles are not command-backed.
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::LayerToggle, NM_LAYER_NBG0), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ToggleTooltips), cmd));
+    CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::ToggleRewind), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::DemoToggle), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::DemoNext), cmd));
     CHECK(!NativeMenuActionToCommand(NativeMenuAction(MenuCommand::DemoPrev), cmd));

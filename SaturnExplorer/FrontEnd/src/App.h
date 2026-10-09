@@ -134,7 +134,8 @@ private:
     void DispatchNativeMenuAction(const NativeMenuAction& action, std::vector<TopBarCommand>& commands);
     void ToggleMenuLayer(int layer);   // flip one se_render_opts field by NativeMenuLayer index
     void DrawRecordingSettingsModal();
-    void DrawSettingsModal();
+    void DrawDiffSettingsModal(IPlatform& platform);   // Settings > Diff...: the external diff tool
+    void LaunchExternalDiff(IPlatform& platform);      // frames A and B -> folders -> the tool
     void DrawHelpModal();
     void DrawAboutModal();
     void DrawUpdateModal(IPlatform& platform);   // "Check for Updates" result (polls mUpdateChecker)
@@ -785,7 +786,12 @@ private:
     bool             mOpenLaunchSettings = false;    // request to open the Launch Settings modal
     bool             mLaunchSettingsInit = false;    // (re)load edit buffers on modal open
     bool             mOpenRecordingSettings = false;
-    bool             mOpenSettings = false;
+    bool             mOpenDiffSettings = false;      // request to open the Diff Tool modal
+    bool             mLaunchDiffRequested = false;   // Compare Memory chose the external tool; run it this frame
+    std::string      mDiffExe;                       // "" = the built-in Memory Compare panel
+    std::string      mDiffArgs;                      // template with {a}/{b}; see DiffTool.h
+    char             mDiffExeEdit[512] = {};         // edit buffers for the modal
+    char             mDiffArgsEdit[256] = {};
     bool             mOpenHelp = false;
     bool             mOpenAbout = false;
     bool             mOpenUpdate = false;   // request to open the "Check for Updates" modal

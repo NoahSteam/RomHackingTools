@@ -56,10 +56,11 @@ enum : UINT
     ID_COMPARE,
 
     // Settings
-    ID_SETTINGS,
+    ID_DIFF_SETTINGS,
     ID_EMU_PATHS,
     ID_INPUT_SETTINGS,
     ID_TOOLTIPS,
+    ID_REWIND,
 
     // Help
     ID_HELP,
@@ -206,10 +207,11 @@ bool Win32MenuBar::OnCommand(int id)
         case ID_RESET_LAYOUT:      c = MenuCommand::ResetLayout; break;
         case ID_SAVE_LAYOUT:       c = MenuCommand::SaveLayout; break;
         case ID_SCREENSHOT:        c = MenuCommand::TakeScreenshot; break;
-        case ID_SETTINGS:          c = MenuCommand::OpenSettings; break;
+        case ID_DIFF_SETTINGS:     c = MenuCommand::OpenDiffSettings; break;
         case ID_EMU_PATHS:         c = MenuCommand::OpenLaunchSettings; break;
         case ID_INPUT_SETTINGS:    c = MenuCommand::ShowInputSettings; break;
         case ID_TOOLTIPS:          c = MenuCommand::ToggleTooltips; break;
+        case ID_REWIND:            c = MenuCommand::ToggleRewind; break;
         case ID_HELP:              c = MenuCommand::OpenHelp; break;
         case ID_GUIDES:            c = MenuCommand::OpenGuides; break;
         case ID_UPDATES:           c = MenuCommand::CheckForUpdates; break;
@@ -312,6 +314,7 @@ void Win32MenuBar::RefreshState()
 
     // Settings
     CheckById(mMenu, ID_TOOLTIPS, s.tooltips);
+    CheckById(mMenu, ID_REWIND, s.rewind);
 
     // Demo
     TextById(mMenu, ID_DEMO_TOGGLE, s.demoPlaying ? L"Stop\tF7" : L"Play\tF7");
@@ -543,11 +546,12 @@ void Win32MenuBar::Rebuild()
     // ---- Settings ----
     {
         HMENU settings = ::CreatePopupMenu();
-        AddItem(settings, ID_SETTINGS, L"Settings...\tCtrl+,");
+        AddItem(settings, ID_DIFF_SETTINGS, L"Diff...");
         AddItem(settings, ID_EMU_PATHS, L"Emulator Paths...");
         AddItem(settings, ID_INPUT_SETTINGS, L"Input Settings...");
         AddSep(settings);
         AddItem(settings, ID_TOOLTIPS, L"Tooltips");
+        AddItem(settings, ID_REWIND, L"Rewind (save a state every frame)");
         AddSub(bar, settings, L"Se&ttings");
     }
 

@@ -27,6 +27,7 @@
 #include "Disc/IsoBuilder.h"      // rebuild the data track's ISO-9660 filesystem
 #include "Disc/DiscBuilder.h"     // Build Disc Image: BIN/CUE (+ audio tracks) or ISO
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
+#include "DiffTool.h"             // hand the two compared frames to an external diff program
 #include "BinaryWriter.h"         // PushU16/PushU32 + the shared BMP encoders
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
 #include "Debug/PokeReport.h"     // the words for an emulator edit that may not have landed
@@ -227,6 +228,33 @@ const char* DrawModeName(se_draw_mode mode)
 // frame so the free-function panel helpers don't have to thread a bool through every call.
 bool g_tooltipsEnabled = false;
 
+// What the Rewind menu item does and what it costs. Unconditional, not gated on the "hover help"
+// preference: this is the only place the feature is explained, and it is the one setting with a
+// cost worth stating.
+const char* const kRewindHelp =
+    "Lets you scrub back to an earlier frame, change memory, and press Play to re-run the "
+    "game from there with your change in effect.\n\n"
+    "To do that the emulator has to save its entire state every frame, which costs frame "
+    "rate. Turn this off if the game runs slowly; everything else keeps working, and you "
+    "can still step back through recorded frames to look at them.";
+
+// The executable as typed: surrounding spaces and quotes dropped, since "Copy as path" in Explorer
+// puts the path in quotes.
+std::string CleanDiffExe(const char* text)
+{
+    std::string s = text;
+    const char* skip = " \t\"";
+    const size_t first = s.find_first_not_of(skip);
+    if (first == std::string::npos) return std::string();
+    return s.substr(first, s.find_last_not_of(skip) - first + 1);
+}
+
+// A path that is not there. A bare program name (meld) is left to the OS to find on PATH.
+bool DiffExeMissing(const std::string& exe)
+{
+    return exe.find_first_of("/\\") != std::string::npos && !PathExists(exe);
+}
+
 // Attach a hover explanation to the item just drawn, when tooltips are on. SetItemTooltip
 // already gates on hover (with the standard delay), so this is the whole gesture.
 void HoverHelp(const char* desc)
@@ -354,6 +382,9 @@ void App::LoadSettings()
     mLayerPanels.Load(mSettings);   // export folder + per-layer tile-grid toggles
     mShowTooltips = mSettings.GetBool("ui", "tooltips", false);
     mRewindEnabled = mSettings.GetBool("debug", "rewind", true);
+    mDiffExe  = mSettings.Get("diff", "exe", "");
+    mDiffArgs = mSettings.Get("diff", "args", kDefaultDiffArgs);
+    PurgeDiffFolders(Settings::ConfigSubDir("diff", false));   // the frames an earlier run handed the tool
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
@@ -376,6 +407,8 @@ void App::SaveSettings()
     mSettings.Set("data", "dir", mDataDir);
     mSettings.SetBool("ui", "tooltips", mShowTooltips);
     mSettings.SetBool("debug", "rewind", mRewindEnabled);
+    mSettings.Set("diff", "exe", mDiffExe);
+    mSettings.Set("diff", "args", mDiffArgs);
     mSettings.SetFloat("callstack", "split", mCallStackSplit);
     mLayerPanels.Save(mSettings);
     SaveSearchOptions();
@@ -1729,6 +1762,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.hexEditor)       DrawHexEditor();
     if (mPanels.memoryCompare)   DrawMemoryCompare(platform);
     PumpCompareExport(platform);
+    if (mLaunchDiffRequested) LaunchExternalDiff(platform);
     if (mPanels.controller)      DrawController(platform);
     else
     {
@@ -1774,7 +1808,7 @@ void App::BuildUI(IPlatform& platform)
     DrawSearchOptionsModal(platform);    // modal; no-op until the texture menu requests it
     DrawLaunchSettingsModal(platform);   // modal; no-op until the menu requests it
     DrawRecordingSettingsModal();
-    DrawSettingsModal();
+    DrawDiffSettingsModal(platform);
     DrawHelpModal();
     DrawAboutModal();
     DrawUpdateModal(platform);
@@ -2319,6 +2353,13 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
 // Diff the two markers and bring the panel forward. Synchronous: it is a few MB of compare.
 void App::OpenCompare()
 {
+    // A configured diff tool replaces the built-in panel. It needs the platform to start, which
+    // the draw code that raises this does not have, so the launch waits for the frame's pump.
+    if (!mDiffExe.empty())
+    {
+        mLaunchDiffRequested = true;
+        return;
+    }
     DiffResult diff;
     const DiffStatus st = Diff(mCompare.Snapshot(CompareMarkers::A), mCompare.Snapshot(CompareMarkers::B),
                                DiffOptions(), &diff);
@@ -2464,6 +2505,7 @@ void App::DrawCompareRow()
     place(2);
     ImGui::BeginDisabled(!mCompare.HasBoth());
     if (ImGui::Button("Compare Memory...")) OpenCompare();
+    if (!mDiffExe.empty()) ImGui::SetItemTooltip("Opens frames A and B in %s (Settings > Diff...)", PathBasename(mDiffExe).c_str());
     ImGui::EndDisabled();
     if (!mCompareStatus.empty())
     {
@@ -6831,8 +6873,6 @@ void App::CollectToolbarShortcuts(std::vector<TopBarCommand>& commands, const To
         TopBarCommandEnabled(TopBarCommandType::DumpMemory, state))
         commands.emplace_back(TopBarCommandType::DumpMemory);
     if (AppShortcut(ImGuiKey_F12)) commands.emplace_back(TopBarCommandType::TakeScreenshot);
-    if (AppShortcut(ImGuiMod_Ctrl | ImGuiKey_Comma))
-        commands.emplace_back(TopBarCommandType::OpenSettings);
     // Demo Mode: F7 start/stop, F8 next beat, Shift+F8 previous beat. Applied in UpdateDemo.
     if (AppShortcut(ImGuiKey_F7)) mDemoReqToggle = true;
     if (AppShortcut(ImGuiMod_Shift | ImGuiKey_F8)) mDemoReqPrev = true;
@@ -6918,7 +6958,8 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 ImGui::Separator();
                 if (ImGui::BeginMenu("Settings"))
                 {
-                    if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
+                    if (ImGui::MenuItem("Diff...")) commands.emplace_back(TopBarCommandType::OpenDiffSettings);
+                    ImGui::SetItemTooltip("Choose the program Compare Memory opens the two marked frames in");
                     if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                     if (ImGui::MenuItem("Input Settings..."))
                         commands.emplace_back(TopBarCommandType::ShowWindow, std::string(kControllerPanel));
@@ -6926,6 +6967,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                     if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
                     { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
                     ImGui::SetItemTooltip("Show a short hover explanation on field, register, and column labels");
+                    if (ImGui::MenuItem("Rewind (save a state every frame)", nullptr, mRewindEnabled))
+                    { mRewindEnabled = !mRewindEnabled; mSettingsDirty = true; }
+                    ImGui::SetItemTooltip("%s", kRewindHelp);
                     ImGui::EndMenu();
                 }
                 if (ImGui::BeginMenu("Help"))
@@ -6952,7 +6996,8 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
             if (ImGui::Button("Settings")) ImGui::OpenPopup("##settings_menu");
             if (ImGui::BeginPopup("##settings_menu"))
             {
-                if (ImGui::MenuItem("Settings...", "Ctrl+,")) commands.emplace_back(TopBarCommandType::OpenSettings);
+                if (ImGui::MenuItem("Diff...")) commands.emplace_back(TopBarCommandType::OpenDiffSettings);
+                ImGui::SetItemTooltip("Choose the program Compare Memory opens the two marked frames in");
                 if (ImGui::MenuItem("Emulator Paths...")) commands.emplace_back(TopBarCommandType::OpenLaunchSettings);
                 if (ImGui::MenuItem("Input Settings..."))
                     commands.emplace_back(TopBarCommandType::ShowWindow, std::string(kControllerPanel));
@@ -6960,6 +7005,9 @@ void App::DrawToolbar(std::vector<TopBarCommand>& commands)
                 if (ImGui::MenuItem("Tooltips", nullptr, mShowTooltips))
                 { mShowTooltips = !mShowTooltips; mSettingsDirty = true; }
                 ImGui::SetItemTooltip("Show a short hover explanation on field, register, and column labels");
+                if (ImGui::MenuItem("Rewind (save a state every frame)", nullptr, mRewindEnabled))
+                { mRewindEnabled = !mRewindEnabled; mSettingsDirty = true; }
+                ImGui::SetItemTooltip("%s", kRewindHelp);
                 ImGui::EndPopup();
             }
             ImGui::SameLine();
@@ -7883,8 +7931,8 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
         mOpenLaunchSettings = true;
         mLaunchSettingsInit = true;
         break;
-    case TopBarCommandType::OpenSettings:
-        mOpenSettings = true;
+    case TopBarCommandType::OpenDiffSettings:
+        mOpenDiffSettings = true;
         break;
     case TopBarCommandType::TogglePause:
         if (mbPaused)
@@ -8031,6 +8079,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     m.layer[NM_LAYER_SHADOW]   = mRenderOpts.show_shadow_highlight != 0;
 
     m.tooltips = mShowTooltips;
+    m.rewind = mRewindEnabled;
 
     // Patch (the Win32 build always has the live/patch feature compiled in). Enablement goes
     // through the same TopBarCommandEnabled policy the ImGui Patch menu uses, so the two front
@@ -8111,6 +8160,7 @@ void App::DispatchNativeMenuAction(const NativeMenuAction& a, std::vector<TopBar
     // --- View-only toggles the ImGui toolbar performs inline (no command queue). ---
     case MenuCommand::LayerToggle:       ToggleMenuLayer(a.index); break;
     case MenuCommand::ToggleTooltips:    mShowTooltips = !mShowTooltips; mSettingsDirty = true; break;
+    case MenuCommand::ToggleRewind:      mRewindEnabled = !mRewindEnabled; mSettingsDirty = true; break;
     case MenuCommand::DemoToggle:        mDemoReqToggle = true; break;
     case MenuCommand::DemoNext:          mDemoReqNext = true; break;
     case MenuCommand::DemoPrev:          mDemoReqPrev = true; break;
@@ -8147,46 +8197,102 @@ void App::DrawRecordingSettingsModal()
     ImGui::EndPopup();
 }
 
-void App::DrawSettingsModal()
+void App::DrawDiffSettingsModal(IPlatform& platform)
 {
-    if (mOpenSettings)
+    static const char* kTitle = "Diff Tool";
+    if (mOpenDiffSettings)
     {
-        ImGui::OpenPopup("Settings");
-        mOpenSettings = false;
+        std::snprintf(mDiffExeEdit, sizeof(mDiffExeEdit), "%s", mDiffExe.c_str());
+        std::snprintf(mDiffArgsEdit, sizeof(mDiffArgsEdit), "%s", mDiffArgs.c_str());
+        ImGui::OpenPopup(kTitle);
+        mOpenDiffSettings = false;
     }
-    if (!ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
-    ImGui::TextUnformatted("Global application settings");
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
+    ImGui::TextUnformatted("Compare Memory opens the two marked frames in this program, such as Beyond "
+                           "Compare, WinMerge or Meld, instead of the built-in Memory Compare panel. "
+                           "Leave the executable empty to keep using the panel.");
+    ImGui::PopTextWrapPos();
     ImGui::Separator();
-    if (ImGui::Button("Emulator Paths and Launch Settings..."))
+
+    ImGui::TextUnformatted("Executable");
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 30.0f);
+    ImGui::InputText("##diff_exe", mDiffExeEdit, sizeof(mDiffExeEdit));
+    ImGui::SameLine();
+    if (ImGui::Button("Browse..."))
     {
-        ImGui::CloseCurrentPopup();
-        mOpenLaunchSettings = true;
-        mLaunchSettingsInit = true;
+        std::string p;
+        if (platform.OpenFileDialog(p)) std::snprintf(mDiffExeEdit, sizeof(mDiffExeEdit), "%s", p.c_str());
     }
-    if (ImGui::Button("Input Settings..."))
+    const std::string exe = CleanDiffExe(mDiffExeEdit);
+    if (!exe.empty() && DiffExeMissing(exe))
+        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "That file was not found.");
+
+    ImGui::TextUnformatted("Arguments");
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 30.0f);
+    ImGui::InputTextWithHint("##diff_args", kDefaultDiffArgs, mDiffArgsEdit, sizeof(mDiffArgsEdit));
+    ImGui::SetItemTooltip("{a} and {b} are replaced with the folder holding frame A's and frame B's memory. "
+                          "Keep them in quotes so paths containing spaces are passed correctly. "
+                          "Empty means %s.", kDefaultDiffArgs);
+    if (mDiffArgsEdit[0] && !DiffArgsUseFrames(mDiffArgsEdit))
+        ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.35f, 1.0f), "The arguments use neither {a} nor {b}, so the tool is not given the frames.");
+
+    ImGui::Spacing();
+    ImGui::TextDisabled("{a}  Folder with frame A's memory, one .bin file per region");
+    ImGui::TextDisabled("{b}  Folder with frame B's memory, one .bin file per region");
+
+    const std::string sep(1, Settings::PathSeparator());
+    const std::string example = BuildDiffArgs(mDiffArgsEdit, "<folder>" + sep + "A_frame_N", "<folder>" + sep + "B_frame_N");
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Command");
+    ImGui::TextDisabled("%s %s", exe.empty() ? "(built-in Memory Compare)" : PathBasename(exe).c_str(),
+                        exe.empty() ? "" : example.c_str());
+
+    ImGui::Separator();
+    if (ImGui::Button("Save"))
     {
-        for (const PanelInfo& panel : PanelList())
-            if (std::strcmp(panel.label, kControllerPanel) == 0) mPanels.*(panel.flag) = true;
+        mDiffExe = exe;
+        mDiffArgs = mDiffArgsEdit;
         mSettingsDirty = true;
-        ImGui::SetWindowFocus(kControllerPanel);
         ImGui::CloseCurrentPopup();
     }
-    ImGui::Separator();
-    if (ImGui::Checkbox("Rewind (save a state every frame)", &mRewindEnabled))
-    {
-        mSettingsDirty = true;   // pushed to the emulator by the per-frame live sync
-    }
-    // Unconditional, not gated on the "hover help" preference: this is the only place the
-    // feature is explained, and it is the one setting here with a cost worth stating.
-    ImGui::SetItemTooltip(
-        "Lets you scrub back to an earlier frame, change memory, and press Play to re-run the "
-        "game from there with your change in effect.\n\n"
-        "To do that the emulator has to save its entire state every frame, which costs frame "
-        "rate. Turn this off if the game runs slowly; everything else keeps working, and you "
-        "can still step back through recorded frames to look at them.");
-    ImGui::Separator();
-    if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
+}
+
+// Write the two marked frames out as folders of raw region files and start the diff tool on them.
+// Synchronous like OpenCompare: it is a few MB of files.
+void App::LaunchExternalDiff(IPlatform& platform)
+{
+    mLaunchDiffRequested = false;
+    auto fail = [this](const std::string& why)
+    {
+        mCompareStatus = why;
+        mLog.Error(why);
+    };
+    const std::shared_ptr<const MemSnapshot> a = mCompare.Snapshot(CompareMarkers::A);
+    const std::shared_ptr<const MemSnapshot> b = mCompare.Snapshot(CompareMarkers::B);
+    if (!a || !b) return fail("Mark both frames first.");
+    if (DiffExeMissing(mDiffExe))
+        return fail("The diff tool was not found: " + mDiffExe + ". Change it under Settings > Diff...");
+
+    const std::string root = Settings::ConfigSubDir("diff", true);
+    if (root.empty()) return fail("There is nowhere to write the frames for the diff tool.");
+    const std::string sep(1, Settings::PathSeparator());
+    const std::string folderA = root + sep + DiffSideFolderName('A', a->origin.frameNo);
+    const std::string folderB = root + sep + DiffSideFolderName('B', b->origin.frameNo);
+    std::string error;
+    if (!WriteSnapshotFolder(*a, folderA, error) || !WriteSnapshotFolder(*b, folderB, error))
+        return fail("Could not write the frames for the diff tool. " + error);
+
+    const std::string args = BuildDiffArgs(mDiffArgs, folderA, folderB);
+    if (!platform.LaunchTool(mDiffExe.c_str(), args.c_str(), nullptr))
+        return fail("Could not start the diff tool " + mDiffExe + ".");
+    mCompareStatus.clear();
+    mLog.Info("Opened frames A and B in " + PathBasename(mDiffExe));
 }
 
 void App::DrawHelpModal()

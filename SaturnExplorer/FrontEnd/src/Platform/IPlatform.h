@@ -142,6 +142,19 @@ public:
         return false;
     }
 
+    // Start an auxiliary program (a diff tool) and leave it alone: unlike LaunchProcess the child
+    // is not remembered, so TerminateLaunchedProcess never stops it and starting one never
+    // forgets the emulator. Same `args` rules; a NULL workingDir is the exe's folder. On macOS
+    // `path` may be an application bundle (Foo.app). Returns false if unsupported or it failed
+    // to start.
+    virtual bool LaunchTool(const char* path, const char* args, const char* workingDir)
+    {
+        (void)path;
+        (void)args;
+        (void)workingDir;
+        return false;
+    }
+
     // Stop the emulator most recently started by LaunchProcess, if it is still running.
     // Used to *relaunch* — start a fresh emulator with a different game rather than leaving
     // the old one running and stacking a second instance. Only affects a process this app

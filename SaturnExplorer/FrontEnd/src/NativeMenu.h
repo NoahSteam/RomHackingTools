@@ -130,7 +130,7 @@ enum class MenuCommand
     // Tools
     TakeScreenshot,
     // Settings
-    OpenSettings,
+    OpenDiffSettings,
     ShowInputSettings,
     // Help
     OpenHelp,
@@ -140,6 +140,7 @@ enum class MenuCommand
     // View-only toggles (handled directly by App, not via the command queue)
     LayerToggle,          // uses index (NativeMenuLayer)
     ToggleTooltips,
+    ToggleRewind,
     DemoToggle,
     DemoNext,
     DemoPrev,
@@ -196,6 +197,7 @@ struct NativeMenuState
 
     // --- Settings ---
     bool tooltips = false;
+    bool rewind = false;
 
     // --- Patch (the Win32 build always compiles the live/patch feature) ---
     bool patchApplyEnabled = false;

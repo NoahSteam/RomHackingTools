@@ -73,10 +73,11 @@ enum : int
     ID_COMPARE,
 
     // Settings
-    ID_SETTINGS,
+    ID_DIFF_SETTINGS,
     ID_EMU_PATHS,
     ID_INPUT_SETTINGS,
     ID_TOOLTIPS,
+    ID_REWIND,
 
     // Help
     ID_HELP,
@@ -247,10 +248,11 @@ struct MacMenuBarImpl
             case ID_RESET_LAYOUT:      c = MenuCommand::ResetLayout; break;
             case ID_SAVE_LAYOUT:       c = MenuCommand::SaveLayout; break;
             case ID_SCREENSHOT:        c = MenuCommand::TakeScreenshot; break;
-            case ID_SETTINGS:          c = MenuCommand::OpenSettings; break;
+            case ID_DIFF_SETTINGS:     c = MenuCommand::OpenDiffSettings; break;
             case ID_EMU_PATHS:         c = MenuCommand::OpenLaunchSettings; break;
             case ID_INPUT_SETTINGS:    c = MenuCommand::ShowInputSettings; break;
             case ID_TOOLTIPS:          c = MenuCommand::ToggleTooltips; break;
+            case ID_REWIND:            c = MenuCommand::ToggleRewind; break;
             case ID_HELP:              c = MenuCommand::OpenHelp; break;
             case ID_GUIDES:            c = MenuCommand::OpenGuides; break;
             case ID_UPDATES:           c = MenuCommand::CheckForUpdates; break;
@@ -313,17 +315,6 @@ struct MacMenuBarImpl
         {
             NSMenu* app = AddSub(bar, @"App");   // title ignored by AppKit for the app menu
             AddItem(app, ID_ABOUT, [@"About " stringByAppendingString:appName]);
-            AddSep(app);
-            // Standard ⌘, for Settings. Built manually (not via AddItem) for two reasons: it needs a
-            // key-equivalent, and it shares tag ID_SETTINGS with the top-level Settings menu item, so
-            // it must stay out of the tag->item map (mItems, last-writer-wins) — neither is refreshed,
-            // and both route through onMenuItem:. ⌘, is distinct from the ImGui Ctrl+, shortcut, so
-            // there is no double-dispatch.
-            NSMenuItem* prefs = [[NSMenuItem alloc] initWithTitle:@"Settings…"
-                                                           action:@selector(onMenuItem:) keyEquivalent:@","];
-            prefs.target = mTarget;
-            prefs.tag = ID_SETTINGS;
-            [app addItem:prefs];
             AddSep(app);
             // Standard app-menu items handled by AppKit itself (not our command path).
             NSMenuItem* hide = [[NSMenuItem alloc] initWithTitle:[@"Hide " stringByAppendingString:appName]
@@ -502,11 +493,12 @@ struct MacMenuBarImpl
         // ---- Settings ----
         {
             NSMenu* settings = AddSub(bar, @"Settings");
-            AddItem(settings, ID_SETTINGS, @"Settings…\tCtrl+,");
+            AddItem(settings, ID_DIFF_SETTINGS, @"Diff…");
             AddItem(settings, ID_EMU_PATHS, @"Emulator Paths…");
             AddItem(settings, ID_INPUT_SETTINGS, @"Input Settings…");
             AddSep(settings);
             AddItem(settings, ID_TOOLTIPS, @"Tooltips");
+            AddItem(settings, ID_REWIND, @"Rewind (save a state every frame)");
         }
 
         // ---- Help ----
@@ -585,6 +577,7 @@ struct MacMenuBarImpl
 
         // Settings
         CheckTag(ID_TOOLTIPS, s.tooltips);
+        CheckTag(ID_REWIND, s.rewind);
 
         // Demo
         TitleTag(ID_DEMO_TOGGLE, s.demoPlaying ? @"Stop\tF7" : @"Play\tF7");
