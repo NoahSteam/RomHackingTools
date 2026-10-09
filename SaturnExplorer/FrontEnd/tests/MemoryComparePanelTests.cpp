@@ -55,6 +55,7 @@ struct Fixture
     std::shared_ptr<MemSnapshot> a = Blank(1800), b = Blank(1884);
     DiffResult diff;
     bool hasDiff = true, aAttached = true, bAttached = true;
+    float width = 1100.0f;
     ImGuiHarness h;
 
     Fixture() : h([this] { Ui(); })
@@ -79,7 +80,7 @@ struct Fixture
     void Ui()
     {
         ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(1100, 650), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(width, 650), ImGuiCond_Always);
         panel.Draw(hasDiff ? &diff : nullptr, aAttached, bAttached);
     }
 
@@ -128,6 +129,22 @@ void TestParseLocation()
     Check(!MemoryComparePanel::ParseLocation("nonsense", &r), "text is refused");
     Check(!MemoryComparePanel::ParseLocation("NOPE+10", &r), "an unknown region is refused");
     Check(!MemoryComparePanel::ParseLocation("", &r), "empty is refused");
+
+    // Nothing wider than 32 bits may wrap into a valid location (strtoul on a 64-bit long would).
+    Check(!MemoryComparePanel::ParseLocation("106034F20", &r), "a 33-bit address is refused, not wrapped to 06034F20");
+    Check(!MemoryComparePanel::ParseLocation("100000000", &r), "2^32 is refused, not wrapped to 0");
+    Check(!MemoryComparePanel::ParseLocation("FFFFFFFFFFFFFFFF", &r), "64 bits of F is refused");
+    Check(!MemoryComparePanel::ParseLocation("0x106034F20", &r), "with a 0x prefix too");
+    Check(!MemoryComparePanel::ParseLocation("HWRAM+100000000", &r), "an offset of 2^32 is refused, not wrapped to 0");
+    Check(!MemoryComparePanel::ParseLocation("HWRAM+100034F20", &r), "an oversized offset is refused, not wrapped to 34F20");
+    Check(!MemoryComparePanel::ParseLocation("HWRAM+FFFFFFFFFFFFFFFFF", &r), "a very long offset is refused");
+    Check(!MemoryComparePanel::ParseLocation("-1", &r) && !MemoryComparePanel::ParseLocation("+10", &r), "signs are refused");
+    Check(!MemoryComparePanel::ParseLocation("HWRAM+-1", &r), "a negative offset is refused");
+    Check(!MemoryComparePanel::ParseLocation("0x", &r) && !MemoryComparePanel::ParseLocation("HWRAM+", &r), "no digits is refused");
+    Check(!MemoryComparePanel::ParseLocation("06034F2G", &r), "a non-hex digit is refused");
+    Check(MemoryComparePanel::ParseLocation("00000000006034F20", &r) && r.id == RegionId::Hwram && r.offset == 0x34F20u,
+          "leading zeros are fine however many there are");
+    Check(MemoryComparePanel::ParseLocation("  06034F20  ", &r), "surrounding spaces are fine");
 }
 
 void TestActionTable()
@@ -250,6 +267,22 @@ void TestPendingJumpDoesNotCrossComparisons()
     Check(!f.panel.HasSelection(), "and so is the selection it made");
 }
 
+// A control placed past the window's right edge cannot be reached: the toolbar does not scroll, and
+// the grid's horizontal scrollbar belongs to the grid. Content wider than the window is the symptom.
+void TestToolbarWrapsInNarrowWindows()
+{
+    Fixture f;
+    for (float w : { 1100.0f, 900.0f, 600.0f, 420.0f, 320.0f })
+    {
+        f.width = w;
+        f.h.Settle();
+        ImGuiWindow* win = ImGui::FindWindowByName("Memory Compare");
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "every control fits inside a %.0f px window", w);
+        Check(win && win->ContentSize.x <= win->InnerRect.GetWidth() + 1.0f, msg);
+    }
+}
+
 void TestNoDifferences()
 {
     Fixture f;
@@ -271,6 +304,7 @@ int main()
     TestGoTo();
     TestNewComparisonStartsClean();
     TestPendingJumpDoesNotCrossComparisons();
+    TestToolbarWrapsInNarrowWindows();
     TestNoDifferences();
     if (gFail == 0) std::printf("MemoryComparePanelTests: all passed\n");
     return gFail == 0 ? 0 : 1;
