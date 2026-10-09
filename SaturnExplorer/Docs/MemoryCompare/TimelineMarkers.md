@@ -7,19 +7,25 @@ The capture rules it relies on are in
 
 ## State
 
-```cpp
-struct CompareMarker {
-    bool                               set = false;
-    bool                               attached = false;   // frame still locatable on the timeline
-    std::shared_ptr<const MemSnapshot> snap;               // owned copy; origin.frameNo is the key
-};
-CompareMarker markerA, markerB;
-uint64_t      mCompareSession = 1;   // bumped when the emulator run / source changes
-uint64_t      mTimelineEpoch  = 1;   // bumped when the recorded history is replaced
-```
+The marker state and the identity rules live in `FrontEnd/src/CompareMarkers.h`, a header-only class
+with no ImGui, App or recorder dependency so the rules are unit-tested
+(`CompareMarkersTests.cpp`). `App` holds one `CompareMarkers mCompare` (wired in by the App-integration change).
 
-A marker is keyed by frame number, never by slider index (indexes shift as the ring evicts), and
-owns its snapshot, so ring eviction cannot change or invalidate it.
+- `Set(slot, snapshot)` adopts a snapshot as marker A or B. It is **refused** unless the snapshot
+  carries the current session and epoch (`Origin(frameNo, liveHead)` builds that stamp), so a capture
+  begun before a reset can never become a marker after it.
+- `NewSession()` bumps the session and drops both markers. `ReplaceTimeline()` bumps the epoch.
+  `TruncateAfter(keptFrame)` bumps the epoch and keeps attached only the markers at or before the
+  resume frame.
+- `IndexOf(slot, count, frameAt)` finds a marker on the timeline: `-1` when it is detached (an older
+  epoch) or its frame has left the ring; otherwise the exact index by binary search
+  (`FindFrameIndex`), never a nearest match.
+- `SliderGrabCenterX(...)` is where ImGui draws the grab of an integer `SliderInt`, so a marker is
+  drawn exactly over its frame. It mirrors ImGui's `SliderBehaviorT`, which is not exposed, and the
+  tests compare it with ImGui's own result so an ImGui update that moves the grab fails a test.
+
+A marker is keyed by frame number, never by slider index (indexes shift as the ring evicts), and owns
+its snapshot, so ring eviction cannot change or invalidate it.
 
 ## Marking
 
@@ -42,7 +48,7 @@ Available only while paused, like the scrub slider.
    is active, so it reads the context the user is looking at. Any failure (a region fails to read,
    `se_derive_serial` or the source id moves, frame number 0) leaves the marker unchanged and shows
    a short inline reason. A marker is therefore always backed by a complete snapshot.
-4. The snapshot is stamped with `{mCompareSession, mTimelineEpoch, frameNo, liveHead}`.
+4. The snapshot is stamped with `mCompare.Origin(frameNo, liveHead)` (the current session and epoch).
 5. Marking A and B at the same frame is allowed; the diff is empty and says so.
 6. **Clear Compare Markers** drops both snapshots.
 
@@ -51,16 +57,16 @@ Available only while paused, like the scrub slider.
 Two counters, because two different things can be replaced. They must be bumped in the places the
 app already handles those events, not detected by a new mechanism.
 
-| Event | Where it is handled today | Effect on markers |
+| Event | Where `App` already handles it | Effect on markers |
 |---|---|---|
-| Emulator restarted, replaced by another process, or its connection replaced (reconnect, new game or ROM launched from the Session menu) | `AdoptNewEmulatorInstance` (`se_live_captured_generation` changed) | `mCompareSession++`; **both markers cleared** |
-| Source unloaded, a different state/dump/disc loaded, disconnect | the `se_destroy(mContext)` / `mContext = ...` paths in `App.cpp` (teardown near `:482`, loaders near `:1051`-`:1247`) | `mCompareSession++`; both cleared |
-| Rewind history replaced: load-state jump, `DropRecordedHistory`, `FrameRecorder::Clear` | `DropRecordedHistory` | `mTimelineEpoch++`; markers become **detached** (kept) |
-| Play From Here (`TruncateAfter(K)`) | `PlayFromScrubbedFrame` | `mTimelineEpoch++`; markers with `frameNo <= K` stay attached; with `frameNo > K` become detached. Frame numbers above K will be reused by the new timeline with different content, so a stale marker must never be located by number. |
+| Emulator restarted, replaced by another process, or its connection replaced (reconnect, new game or ROM launched from the Session menu) | `AdoptNewEmulatorInstance` (`se_live_captured_generation` changed) | `mCompare.NewSession()`; **both markers cleared** |
+| Source unloaded, a different state/dump/disc loaded, disconnect | the `se_destroy(mContext)` / `mContext = ...` paths in `App.cpp` (teardown near `:482`, loaders near `:1051`-`:1247`) | `mCompare.NewSession()`; both cleared |
+| Rewind history replaced: load-state jump, `DropRecordedHistory`, `FrameRecorder::Clear` | `DropRecordedHistory` | `mCompare.ReplaceTimeline()`; markers become **detached** (kept) |
+| Play From Here (`TruncateAfter(K)`) | `PlayFromScrubbedFrame` | `mCompare.TruncateAfter(K)`; markers with `frameNo <= K` keep their state (one already detached stays detached); with `frameNo > K` become detached. Frame numbers above K will be reused by the new timeline with different content, so a stale marker must never be located by number. |
 | Recording length changed (ring reconfigured) | Recording Settings modal | none; eviction is handled by locatability below |
 
 The protocol does not identify the ROM, so a ROM change is observable only as a new emulator process
-or a new loaded source, both covered by `mCompareSession`. Use the same `mLiveConnGeneration`
+or a new loaded source, both covered by the session. Use the same `mLiveConnGeneration`
 bookkeeping as `AdoptNewEmulatorInstance`; do not add a second detector. `Diff` independently
 refuses mismatched `sessionId`, so a missed bump cannot produce a mixed comparison in the engine,
 only a stale marker in the UI.
@@ -75,7 +81,7 @@ their snapshot, still compare, and can't be located or scrubbed to.
   Compare Frame A, Set as Compare Frame B, a separator, Compare A <-> B (disabled until both are
   set), Clear Compare Markers (disabled when none are set).
 - Attached markers are drawn with the window draw list over the slider's frame rect, using the same
-  index-to-x mapping as the slider (index `0..n-1` across the rect minus the grab width).
+  grab position as the slider (`SliderGrabCenterX`, given the slider's frame rect).
 - Detached markers are drawn hollow, pinned at the left edge, with a tooltip ("not in rewind
   history; snapshot kept").
 - Labels beneath the slider: `Frame A: 1800`, `Frame B: 1884`, plus a **Compare Memory...** button
@@ -84,7 +90,7 @@ their snapshot, still compare, and can't be located or scrubbed to.
 
 ## Opening the panel
 
-The button and the menu item do the same thing: run `Diff(markerA.snap, markerB.snap)`, hand the
+The button and the menu item do the same thing: run `Diff(mCompare.Snapshot(A), mCompare.Snapshot(B))`, hand the
 result to the panel, set `mPanels.memoryCompare = true` and focus the window. Registration is listed
 in [ComparePanel.md](ComparePanel.md#registration-done-in-the-hook-up-pass). A `Diff` error
 (session mismatch) shows inline and opens nothing.
@@ -94,12 +100,11 @@ in [ComparePanel.md](ComparePanel.md#registration-done-in-the-hook-up-pass). A `
 The transport bar is part of `App` and is not unit-testable in isolation. Coverage comes from:
 
 - engine tests for capture, immutability, identity and truncation (see the engine doc)
-- pure helpers, unit-tested: frame-number to slider-x mapping (empty ring, single frame, exact-match
-  location, evicted frame) and the epoch/attached rules (including `TruncateAfter(K)` on both sides
-  of K)
+- `CompareMarkersTests.cpp`: the session/epoch rules (including `TruncateAfter(K)` on both sides of
+  K and a detached marker staying detached), exact frame lookup (sparse ring, evicted frame), and
+  `SliderGrabCenterX` against ImGui's own `SliderBehavior`
 - a recorder test for `SelectedFrameNumber()`: tracks the decompressed frame after eviction shifts
   indexes, and is 0 after a refused `Select`
-- a `PanelInteractionTests`-style headless test of the context menu if `ImGuiHarness` can host the
-  slider; otherwise an entry in `Docs/FunctionalityVerification/` for manual checks of: marking at
-  the live head while paused, marking a scrubbed frame, marking refused with pending edits,
-  emulator restart, and Play From Here
+- the transport bar and its context menu live in `App` and are checked by hand (an entry in
+  `Docs/FunctionalityVerification/`): marking at the live head while paused, marking a scrubbed
+  frame, marking refused with pending edits, emulator restart, and Play From Here
