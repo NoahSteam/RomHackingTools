@@ -165,6 +165,24 @@ inline void CenterInCell(float width)
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
 }
 
+// ImGui::TableHeadersRow() left-aligns every label. This is the same row with each name
+// centred over its column, for tables whose cells are centred too -- a left-aligned header
+// over centred values reads as misaligned. Hidden columns are skipped, so it stays correct
+// when the user turns one off from the context menu.
+inline void CenteredTableHeadersRow()
+{
+    ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+    const int cols = ImGui::TableGetColumnCount();
+    for (int col = 0; col < cols; ++col)
+    {
+        if (!ImGui::TableSetColumnIndex(col))
+            continue;
+        const char* name = ImGui::TableGetColumnName(col);
+        CenterInCell(ImGui::CalcTextSize(name).x);
+        ImGui::TableHeader(name);
+    }
+}
+
 // Draw a checkerboard behind an image rect so transparent texels read clearly. Shared by
 // every panel that shows an image with alpha (Texture Viewer, the per-layer viewers).
 inline void Checkerboard(ImVec2 topLeft, ImVec2 size, float cell)

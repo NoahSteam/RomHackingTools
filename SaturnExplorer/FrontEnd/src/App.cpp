@@ -4638,7 +4638,7 @@ void App::DrawCommandList()
                 ImGui::TableSetupColumn("Position");
                 ImGui::TableSetupColumn("Color");
                 ImGui::TableSetupColumn("Tex Addr");
-                ImGui::TableHeadersRow();
+                CenteredTableHeadersRow();
 
                 // If the selection was changed by another panel, scroll its row into
                 // view once. IncludeItemByIndex keeps that row laid out even when the
