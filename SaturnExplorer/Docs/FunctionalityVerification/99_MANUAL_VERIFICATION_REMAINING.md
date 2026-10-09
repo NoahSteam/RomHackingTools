@@ -33,7 +33,9 @@ reachable headlessly. See `Docs/MemoryCompare/`. With a live game and Rewind on:
   frame with an unapplied hex edit is refused with a message
 - **Go to A / Go to B** scrub the timeline to that frame; right-click a changed byte: Go to Memory,
   Add to Watch, Break on Write, View in Assembly and Export land where expected, and the disabled
-  items (Break on Write on Sound RAM and VDP1 FB, View in Assembly outside work RAM) say why
+  items (Break on Write on VDP1 FB, View in Assembly outside work RAM) say why
+- Break on Write on a changed Sound RAM byte: the item is enabled and its tooltip says 68K writes are
+  not caught; it halts when the SH-2 (or SCU DMA) writes that byte
 - let the ring evict a marked frame: its caret goes hollow and pinned left, the label says
   `(detached)`, **Go to** is disabled, and the comparison still works
 - Play From Here: a marker past the resume frame detaches; one at or before it stays attached
