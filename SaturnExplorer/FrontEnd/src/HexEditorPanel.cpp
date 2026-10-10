@@ -151,7 +151,7 @@ void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int
 {
     mFindHits.clear();
     mFindUnreadBase.clear();
-    mFindTruncated = false;
+    mFindMore = 0;
     mFindError.clear();
     mFindOrigin = (uint32_t)lo;
     mFindLength = (uint32_t)(hi - lo + 1);
@@ -183,14 +183,34 @@ void HexEditorPanel::FindSelectionInRam(IMemoryBackend& backend, int64_t lo, int
         regions.push_back({ all[i].base, all[i].size });
     }
 
+    // One over the cap, so dropping the selection itself below still leaves a full list.
     const BytePatternSearchResult res =
-        FindBytePattern(backend, regions, pattern, kMaxFindHits);
-    mFindTruncated = res.truncated;
+        FindBytePattern(backend, regions, pattern, kMaxFindHits + 1);
     for (const SearchRegion& r : res.unread) mFindUnreadBase.push_back(r.base);
     // Drop the selection itself: the question is where ELSE these bytes are. An overlapping
     // match a byte or two away is a different occurrence and stays.
+    bool selfCounted = false;
     for (uint32_t addr : res.addresses)
-        if (addr != mFindOrigin) mFindHits.push_back(addr);
+    {
+        if (addr == mFindOrigin) selfCounted = true;
+        else mFindHits.push_back(addr);
+    }
+    // The selection may also sit past the listed matches, among the ones only counted. It
+    // matches wherever it was read from, so it is among them if its region was searched.
+    if (!selfCounted && res.truncated)
+    {
+        for (const SearchRegion& r : regions)
+        {
+            const bool unread = std::find_if(res.unread.begin(), res.unread.end(),
+                [&](const SearchRegion& u) { return u.base == r.base; }) != res.unread.end();
+            if (!unread && mFindOrigin >= r.base &&
+                uint64_t(mFindOrigin) + mFindLength <= uint64_t(r.base) + r.size)
+                selfCounted = true;
+        }
+    }
+    const std::size_t others = res.total - (selfCounted ? 1 : 0);
+    if (mFindHits.size() > kMaxFindHits) mFindHits.resize(kMaxFindHits);
+    mFindMore = others - mFindHits.size();
 }
 
 void HexEditorPanel::CancelEdit()
@@ -836,8 +856,9 @@ void HexEditorPanel::DrawFindResultsPopup()
     }
     else
     {
+        const std::size_t others = mFindHits.size() + mFindMore;
         ImGui::Text("%zu other location%s -- double-click to go there:",
-                    mFindHits.size(), mFindHits.size() == 1 ? "" : "s");
+                    others, others == 1 ? "" : "s");
         // Leave room for the notes + button below, whatever the list length.
         const float footer = ImGui::GetFrameHeightWithSpacing() * 3.0f;
         if (ImGui::BeginChild("hits", ImVec2(0.0f, -footer), ImGuiChildFlags_None))
@@ -854,13 +875,13 @@ void HexEditorPanel::DrawFindResultsPopup()
                     ImGui::CloseCurrentPopup();
                 }
             }
+            if (mFindMore)
+                ImGui::TextDisabled("plus %zu more", mFindMore);
         }
         ImGui::EndChild();
     }
 
-    // Both of these would otherwise make the list above look like the whole truth.
-    if (mFindTruncated)
-        ImGui::TextDisabled("Stopped at %zu matches; there are more.", kMaxFindHits);
+    // Would otherwise make the list above look like the whole truth.
     if (!mFindUnreadBase.empty())
         ImGui::TextDisabled("%zu region(s) could not be read and were not searched.",
                             mFindUnreadBase.size());

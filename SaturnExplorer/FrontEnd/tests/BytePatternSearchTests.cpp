@@ -149,10 +149,15 @@ void TestHitCapTruncates()
     const BytePatternSearchResult res = FindBytePattern(be, BothRegions(), pat, 10);
     CHECK(res.addresses.size() == 10);
     CHECK(res.truncated);
+    CHECK(res.total == 50);   // the matches past the cap are still counted
 
     const BytePatternSearchResult all = FindBytePattern(be, BothRegions(), pat, 0);
     CHECK(all.addresses.size() == 50);
     CHECK(!all.truncated);
+    CHECK(all.total == 50);
+
+    const BytePatternSearchResult exact = FindBytePattern(be, BothRegions(), pat, 50);
+    CHECK(exact.addresses.size() == 50 && !exact.truncated && exact.total == 50);
 }
 
 // An empty pattern matches nothing. Matching at every address would be the literal reading and

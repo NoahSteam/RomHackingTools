@@ -35,7 +35,8 @@ BytePatternSearchResult FindBytePattern(IMemoryBackend& backend,
     // over RAM full of AA) makes a naive matcher re-compare almost the whole pattern at almost
     // every address, which measured 1.83 s for a single MiB. KMP never re-examines a buffer
     // byte, so the scan is linear in the bytes searched regardless of what the pattern looks
-    // like. The hit cap cannot help here -- it bounds the output, not the work.
+    // like. The hit cap cannot help here -- it bounds the output, not the work -- and the scan
+    // runs to the end regardless, so the caller can say how many matches it did not list.
     const std::vector<std::size_t> fail = BuildFailureTable(pattern);
 
     std::vector<uint8_t> buf;
@@ -55,12 +56,11 @@ BytePatternSearchResult FindBytePattern(IMemoryBackend& backend,
             if (buf[i] == pattern[k]) ++k;
             if (k == pattern.size())
             {
-                out.addresses.push_back(r.base + static_cast<uint32_t>(i + 1 - k));
-                if (maxHits != 0 && out.addresses.size() >= maxHits)
-                {
-                    out.truncated = true;
-                    return out;
-                }
+                ++out.total;
+                if (maxHits == 0 || out.addresses.size() < maxHits)
+                    out.addresses.push_back(r.base + static_cast<uint32_t>(i + 1 - k));
+                else
+                    out.truncated = true;   // counted, not listed
                 // Resume as if the longest prefix-suffix were already matched, which is what
                 // lets an overlapping occurrence start inside the one just reported.
                 k = fail[k - 1];

@@ -28,13 +28,17 @@ struct BytePatternSearchResult
     // "no matches" without mentioning these is reporting a result it cannot stand behind --
     // the same distinction MemorySearch::UnreadRegions exists to preserve.
     std::vector<SearchRegion> unread;
-    // True when the scan stopped at 'maxHits' and later matches were never collected.
+    // True when there were more than 'maxHits' matches, so 'addresses' is not all of them.
     bool                      truncated = false;
+    // Every match in the regions read, including those past 'maxHits' that were counted but
+    // not collected.
+    std::size_t               total = 0;
 };
 
 // Scan each region for 'pattern'. An empty pattern matches nothing (rather than everything).
-// A region shorter than the pattern simply yields no matches. 'maxHits' bounds the result so
-// a one-byte pattern over megabytes of RAM can't build an unbounded list; 0 means unbounded.
+// A region shorter than the pattern simply yields no matches. 'maxHits' bounds the address list
+// so a one-byte pattern over megabytes of RAM can't build an unbounded one; 0 means unbounded.
+// The scan still runs to the end so 'total' is exact.
 BytePatternSearchResult FindBytePattern(IMemoryBackend& backend,
                                         const std::vector<SearchRegion>& regions,
                                         const std::vector<uint8_t>& pattern,

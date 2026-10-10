@@ -70,8 +70,8 @@ public:
 
     // Cap on "find these bytes in RAM" results. A one- or two-byte selection can occur tens of
     // thousands of times across 3 MB of RAM, and a list that long is neither useful nor cheap
-    // to build; the popup says when it was reached so the number shown is never passed off as
-    // the total.
+    // to build. Past the cap the popup says how many more there are, so the list is never passed
+    // off as the whole result.
     static const std::size_t kMaxFindHits = 500;
 
 private:
@@ -146,7 +146,7 @@ private:
     std::vector<uint32_t> mFindUnreadBase;         // regions that could not be read at all
     uint32_t              mFindOrigin = 0;         // where the selection itself lives
     uint32_t              mFindLength = 0;         // pattern length, for the popup text
-    bool                  mFindTruncated = false;
+    std::size_t           mFindMore = 0;           // matches past the listed kMaxFindHits
     // Why no search happened, when that is the reason the hit list is empty. Kept apart from
     // "searched and found nothing" because the popup must not report one as the other.
     std::string           mFindError;
