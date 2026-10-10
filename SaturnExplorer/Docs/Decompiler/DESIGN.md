@@ -1,6 +1,6 @@
 # SH-2 pseudocode panel — design
 
-> Status: **design, awaiting review.** Implementation steps are in [PLAN.md](PLAN.md). The feasibility gate the design depends on has been passed
+> Status: **design, revised after review.** Implementation steps and the binding contracts (A1–A7) are in [PLAN.md](PLAN.md); where this document and PLAN.md §A differ, PLAN.md wins. The feasibility gate the design depends on has been passed
 > (see [SPIKE_RESULTS.md](SPIKE_RESULTS.md)): Ghidra's native C++ decompiler, built as a plain static
 > library, decompiles real SH-2 bytes at real Saturn addresses from a SaturnExplorer memory capture,
 > with no Java, no Ghidra installation, no subprocess. No production UI has been written.
@@ -171,12 +171,14 @@ button on Call Stack rows, both calling `ShowFunctionContaining`.
   registers and on-chip space are absent, so `loadFill` throws for them and flow stops there. A
   function that reaches such an address is reported `truncated` and the panel says where
   ("flows into uncaptured memory at 0x000xxxxx (BIOS)").
-- **Folding.** `MemorySnapshot::Canonical` masks bits 29–31 (cache-through/purge/address-array
-  mirrors) and folds the HWRAM 1 MiB repeat across `0x06000000–0x07FFFFFF`
-  (`Docs/Saturn/MemoryLayout.txt`). The spike's `fold()` is this function. Note that
-  `ContextBackend::Canonical` folds only bits 27–31 and not the HWRAM repeat; the snapshot folds
-  once at capture so the decompiler is right regardless, and the discrepancy is logged as a
-  follow-up for `MemoryBackend.cpp`.
+- **Folding classifies first.** Bits 31–29 of an SH-2 address select a partition; only `000`
+  (cached) and `001` (cache-through) are bus accesses. Associative purge (`010`), the cache
+  address array (`011`), the cache data array (`110`), on-chip space (`111`) and the reserved
+  partitions are rejected as "not memory", never treated as RAM mirrors. Within the bus map only
+  documented aliases are folded: the HWRAM 1 MiB repeat across `0x06000000–0x07FFFFFF`; LWRAM is
+  not assumed to repeat. The spike's `fold()` masked bits 29–31 unconditionally and is superseded
+  by this rule (PLAN.md A2). `ContextBackend::Canonical`'s broader `& 0x07FFFFFF` is a panel
+  convenience and is not reused; its discrepancy is a logged follow-up for `MemoryBackend.cpp`.
 - **Entry addresses are canonicalised** before anything else, so caches, names and
   `FunctionNames` keys agree whichever mirror the user typed. Navigation hands the canonical
   address to `AssemblyPanel::GoTo`, which already accepts any mirror.
@@ -193,12 +195,19 @@ place) and does not say whether the source is live, paused, a dump or a scrub fr
 therefore keys everything on `SnapshotKey = {SourceId, se_derive_serial, se_frame_number}`, the
 same triple `MemoryCompare`'s `CaptureGuard` uses, and reads the App flags for policy:
 
+A result is valid only under the exact key it was produced with, whatever the source kind: a
+Hex Editor write to a savestate bumps `se_derive_serial` without touching `SourceId`, so
+"cache until SourceId changes" would leave pseudocode permanently outdated (PLAN.md A1). The key
+also carries a hash of the region set, so adding or removing the optional BIOS image is a new
+snapshot. Renames re-run the request (names are engine input); comments are a display overlay;
+an entry correction replaces the request for that function.
+
 | Source | When a snapshot is taken | Result lifetime |
 |---|---|---|
-| Static dump / savestate (`SourceType::Dump`) | On first request after open | Until `SourceId` changes (close, other file). Results cached per entry. |
-| Live, **paused** or halted at a breakpoint/step | On request; re-taken when `deriveSerial` moves (hex-editor write, state load) or the frame number changes | Until resume. Follow-PC selects the function containing the halted CPU's PC. |
-| Live, **running** | Only on explicit Refresh, or on the opt-in auto-refresh (debounced: at most every N frames and only when the followed PC leaves the current function) | Shown with a "frame N — stale" badge once `se_frame_number` has moved; never silently replaced by a frame it did not come from. |
-| Scrubbed history | Each scrub frame is a new `SourceId` (`RefreshScrubContext` → `NoteSourceChanged`); snapshot per frame, LRU of a few frames so stepping back and forth is instant | Discarded when the scrub context is dropped. |
+| Static dump / savestate (`SourceType::Dump`) | On first request, and again whenever the key moves (an in-place edit bumps the derive serial) | Until the key moves; cached per entry under that key. |
+| Live, **paused** or halted at a breakpoint/step | On request; re-taken when the key moves (write, state load, frame change) | Until resume. Follow-PC selects the function containing the halted CPU's PC. |
+| Live, **running** | Only on explicit Refresh, or on the opt-in auto-refresh (debounced: at most every N frames and only when the followed PC leaves the current function) | Shown with a "frame N — stale" badge as soon as the key moves; never silently replaced by a result from a different key. |
+| Scrubbed history | Each scrub frame is a new `SourceId` (`RefreshScrubContext` → `NoteSourceChanged`); snapshot per frame, LRU of a few frames keyed by the full key | Discarded when the scrub context is dropped. |
 
 ### 6.3 Off the UI thread, no stale results
 - One worker thread owns the engine. The decompiler library has process-global state
@@ -207,13 +216,19 @@ same triple `MemoryCompare`'s `CaptureGuard` uses, and reads the App flags for p
   `generation` is the newest the panel issued **and** its key equals the key of the snapshot
   currently displayed; otherwise it is dropped. Requests queued behind a newer one for the same
   panel are coalesced away before they run.
-- `ResetSessionDebugState` (source change) calls `Stop()`, like `mRamSearchRunner`.
+- A source change, close or reconnect bumps the runner's session **epoch** and clears the queue;
+  it never joins. Results and queued requests from an older epoch are dropped. The UI therefore
+  never waits on obsolete work (PLAN.md A4).
 - A fresh `SaturnArchitecture` is built per snapshot (1 ms), so function bodies, symbols and
   read-only ranges from an earlier memory image never leak into a later one.
-- Ghidra's actions are not interruptible mid-function; the `maxinstructions` option bounds the
-  worst case, and results of a run that outlived its request are simply dropped. Any
-  `LowlevelError` becomes a `warnings` entry; a `std::bad_alloc` or a second consecutive failure
-  tears the engine down and rebuilds it.
+- Cancellation: `max_instructions` bounds `followFlow`, and a root `ActionGroup` of our own,
+  registered through `ActionDatabase::registerAction` and wrapping the universal action, returns
+  the partial-completion code when a cancel flag is set, so `Action::perform` stops between
+  actions. Whether this holds on the real action tree is the first thing Step 2 tests; if it does
+  not, the runner's orphan-and-replace path (abandon a worker that ignores cancellation for more
+  than a few seconds, start a fresh one, leak the old engine deliberately) is the mechanism.
+  Application exit waits a bounded time and then detaches. Any `LowlevelError` becomes a
+  `warnings` entry; a `std::bad_alloc` or a second consecutive failure rebuilds the engine.
 - Emscripten has no thread here and no Ghidra: `SE_ENABLE_DECOMPILER` is forced off and the panel
   is compiled out (`#if SE_ENABLE_DECOMPILER`), the same way `SE_ENABLE_LIVE` gates live-only code.
 
@@ -229,11 +244,16 @@ same triple `MemoryCompare`'s `CaptureGuard` uses, and reads the App flags for p
   shared tails are handled by the engine, not by us.
 - **Delay slots** are the SLEIGH spec's job (`delayslot(1)`); the spike shows `bf/s`, `bt/s`,
   `jsr`+slot and `rts`+slot decompiling correctly. A token from a delay-slot instruction maps to
-  the slot's own address. One known gap to test: the spec computes PC-relative loads from
-  `inst_start + 4` unconditionally, while `Sh2DecodeAfterBranch` encodes the hardware rule for a
-  PC-relative load sitting *in* a delay slot. Compilers do not emit that; the fixture suite will
-  include one so the discrepancy is visible, and it can be fixed with a small SLEIGH patch if it
-  ever matters.
+  the slot's own address. **One construct the spec gets wrong:** a PC-relative load or `mova`
+  executing in the delay slot of a taken branch sees `PC = branch target + 2`
+  (`Sh2DecodeAfterBranch` models this), while the spec computes `inst_start + 4`. Policy
+  (PLAN.md A3): Step 2 detects the construct from the function's instruction stream, refuses to
+  fold that literal, marks the result `unsupported` with the address and shows a banner; Step 4
+  patches the spec so static-target branches (`bra`, `bsr`, constant `jsr`/`jmp`) publish their
+  target through a context register and the slot computes the right address, while conditional
+  and register-target slots stay flagged. A synthetic fixture with different literals at the two
+  candidate addresses pins both stages. Nothing in this area is shown as trustworthy on the
+  strength of a matching disassembly listing alone.
 - **Indirect calls.** `jsr @rN` through a literal pool resolves to a direct, named call (spike).
   Computed targets (function-pointer tables, `braf`/`bsrf`) stay `(*pfn)(...)`; Ghidra's jump-table
   recovery handles the common `switch` shapes. With a paused CPU, the panel can offer the register's
@@ -264,10 +284,13 @@ same triple `MemoryCompare`'s `CaptureGuard` uses, and reads the App flags for p
 - `se-sleighc` host executable from the same library, run as a custom command to turn
   `sh-2.slaspec` into `sh-2.sla` at build time (the spike measured 13 KB, milliseconds).
 - **Spec files at runtime.** The engine opens `.ldefs/.pspec/.cspec/.sla` by path. To keep the
-  Windows build a single executable and the macOS build a self-contained bundle without patching
-  Ghidra, the five files are embedded as byte arrays (the same mechanism as the fonts in
-  `third_party/fonts`) and materialised on first use into the per-user config directory
-  (`<config>/decompiler/<ghidra-version>/`), which `startDecompilerLibrary(paths)` is pointed at.
+  Windows build a single executable and the macOS bundle untouched at runtime without patching
+  Ghidra, the five files are embedded as byte arrays (the fonts' mechanism) and materialised on
+  first use into `ConfigDir()/decompiler/<content hash>/` via temp-directory-and-rename with a
+  verified manifest; a mismatch repairs once, then the decompiler reports itself unavailable.
+  The freshness test covers the `.slaspec` → checked-in `.sla` → embedded bytes chain, and the
+  Step 1 smoke test loads through the materialised directory, so CI exercises what users run
+  (PLAN.md A5).
 - **zlib** is required when the decompiler is on (`.sla` files are compressed). It is already an
   optional dependency of the savestate driver; the decompiler makes it required for desktop
   builds. On Windows, vendor zlib the way Ghidra's own build does (`LOCAL_ZLIB`), on macOS use the
@@ -297,7 +320,7 @@ Each phase ends with its tests green on Windows and macOS; the UI starts only in
 | Phase | Deliverable | Gate |
 |---|---|---|
 | 0 ✅ | Feasibility spike, Capstone-verified fixtures, this design | Reviewed |
-| 1 | Vendored tree + CMake (`SaturnExplorerGhidraDecomp`, `se-sleighc`, embedded specs, zlib), **MSVC and Apple clang builds**, `Sh2DecompilerTests` running fixture 1 as a ctest | Library and spike test build and pass on Windows and macOS CI |
+| 1 | Vendored tree + CMake (`SaturnExplorerGhidraDecomp`, `se-sleighc`, embedded specs with hashed materialisation, zlib), **MSVC and Apple clang builds**, the CI jobs of PLAN.md A7, `Sh2DecompilerEngineTests` through the materialised spec path | All A7 jobs green on Windows and macOS |
 | 2 | `MemorySnapshot`, `CaptureLoadImage`, `SaturnArchitecture`, `Sh2Decompiler` (two-pass, literal pools, callees, markup → tokens), `Sh2FunctionFinder`, `DecompilerRunner`; headless tests incl. the `.yss` fixture test | Golden outputs for fixtures 1/1b/2a/2b; runner stale-drop and coalescing tests |
 | 3 | `DecompilerPanel`, App wiring (PanelList, layouts, menus, Assembly/Call Stack entry points, settings), source-kind handling (§6.2) | `ImGuiHarness` interaction tests; manual pass on live Mednafen paused/running/scrub |
 | 4 | Quality: `FunctionNames` round-trip (rename in either panel), Saturn hardware-register symbols (VDP1/VDP2/SCU/SMPC/SCSP maps as named globals), optional BIOS image, register hints at a halt, user comments carried into the C view | Fixture golden updates reviewed |
@@ -328,4 +351,4 @@ Each phase ends with its tests green on Windows and macOS; the UI starts only in
 ## 11. Out of scope / later
 User-defined structs and types, a type editor, cross-function data-flow (Ghidra's Java-side
 analyzers), decompiling the 68000 sound CPU (a `68000` SLEIGH spec exists; same engine, later),
-and patching SLEIGH semantics.
+and SLEIGH changes beyond the one delay-slot context patch in PLAN.md A3.

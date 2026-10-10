@@ -288,8 +288,10 @@ adopts. Arguments at the call sites were recovered from the caller side.
 ### Mirrored address
 
 Decompiling the same function via its cache-through mirror `0x26031598` produces identical code;
-the load image folds bits 29–31 and the 1 MiB HWRAM repeat, while the function keeps the address
-the user asked for:
+the spike's load image folds bits 29–31 and the 1 MiB HWRAM repeat, while the function keeps the
+address the user asked for. (That fold is deliberately simplified for the spike: it would also
+alias the cache purge/address-array partitions. The design classifies the partition first; see
+PLAN.md A2.)
 
 ```
 ; function func_0x26031598: 286 bytes of body
