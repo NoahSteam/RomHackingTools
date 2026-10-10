@@ -49,8 +49,34 @@ enum class StopResult
 
 // Stop a child started by SpawnChild: SIGTERM, wait up to 'termGraceMs', then SIGKILL and wait up to
 // 'killGraceMs' more. The wait is polled, never open-ended, so a hung emulator cannot hold the caller
-// (the UI thread, on relaunch) forever.
+// (the UI thread, on relaunch) forever. Stuck means it is STILL RUNNING: the caller keeps the pid and
+// must not behave as if it were gone (a later call reaps it once it dies).
 StopResult StopChild(int pid, int termGraceMs, int killGraceMs);
+
+// The one child this program owns (the emulator). Kept apart from the platform so the rule that matters
+// can be tested without starting anything: a replacement is only launched once the previous child is
+// really gone, and a child that would not stop stays owned.
+class OwnedChild
+{
+public:
+    using StopFn  = std::function<StopResult(int pid)>;
+    using SpawnFn = std::function<bool(int& pid, std::string& error)>;
+
+    bool Owns() const { return mPid > 0; }
+    int  Pid() const { return mPid; }
+
+    // Stop the owned child, if any. True when none is owned any more; false -- with 'error' filled and
+    // the pid RETAINED -- when it would not die.
+    bool Stop(const StopFn& stop, std::string& error);
+
+    // Stop the previous child, then start a new one with 'spawn' and own it. False, with 'error', when
+    // the previous one could not be stopped (nothing is spawned, ownership is unchanged) or the spawn
+    // failed (nothing is owned).
+    bool Replace(const StopFn& stop, const SpawnFn& spawn, std::string& error);
+
+private:
+    int mPid = -1;
+};
 
 // The two system calls whose failure paths a test cannot otherwise reach (a second fork() that fails,
 // a wait interrupted by a signal). SpawnDetached passes the real ones; a test substitutes its own.

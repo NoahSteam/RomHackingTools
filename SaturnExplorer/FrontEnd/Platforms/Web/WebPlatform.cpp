@@ -468,9 +468,6 @@ bool WebPlatform::LaunchEmulator(const char* path, const std::vector<std::string
         if (error) *error = "No program was given.";
         return false;
     }
-    // One owned emulator at a time: a second launch must not orphan the first.
-    TerminateLaunchedProcess();
-
     // The folder the emulator lives in. A relative path is made absolute first (SpawnChild does the same
     // for the program itself) so "emu/mednafen" names a folder that exists from here, not one inside the
     // working directory we are about to enter.
@@ -493,14 +490,14 @@ bool WebPlatform::LaunchEmulator(const char* path, const std::vector<std::string
     std::vector<sfe::EnvVar> env;
     if (!home.empty()) env.push_back({ "MEDNAFEN_HOME", home });
 
-    int pid = -1;
-    if (!sfe::SpawnChild(exe, args, dir, env, pid, why))
-    {
-        if (error) *error = why;
-        return false;
-    }
-    mLaunchedPid = pid;   // remember it so a relaunch can stop it first
-    return true;
+    // One owned emulator at a time: the previous one is stopped first, and if it will not die nothing is
+    // started (a second emulator beside it would leave the old one holding the live endpoint).
+    const bool ok = mEmulator.Replace(
+        [](int pid) { return sfe::StopChild(pid, 1500, 1000); },
+        [&](int& pid, std::string& err) { return sfe::SpawnChild(exe, args, dir, env, pid, err); },
+        why);
+    if (!ok && error) *error = why;
+    return ok;
 }
 
 bool WebPlatform::LaunchTool(const char* path, const std::vector<std::string>& args,
@@ -524,11 +521,19 @@ bool WebPlatform::LaunchTool(const char* path, const std::vector<std::string>& a
 
 void WebPlatform::TerminateLaunchedProcess()
 {
-    if (mLaunchedPid <= 0) return;
+    std::string ignored;
+    StopEmulator(&ignored);
+}
+
+bool WebPlatform::StopEmulator(std::string* error)
+{
     // SIGTERM, a short grace, then SIGKILL: an emulator that ignores the request cannot freeze the UI
-    // (which calls this on a relaunch) for longer than the two waits below.
-    sfe::StopChild(mLaunchedPid, 1500, 1000);
-    mLaunchedPid = -1;
+    // (which calls this on a relaunch) for longer than the two waits below. One that survives both stays
+    // owned, and the failure is reported.
+    std::string why;
+    const bool gone = mEmulator.Stop([](int pid) { return sfe::StopChild(pid, 1500, 1000); }, why);
+    if (!gone && error) *error = why;
+    return gone;
 }
 #endif  // !__EMSCRIPTEN__
 

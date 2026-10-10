@@ -321,6 +321,39 @@ void TestStopChildIsBounded(const std::string& dir)
     CHECK(StopChild(pid, 100, 100) == StopResult::AlreadyGone);
     CHECK(StopChild(-1, 100, 100) == StopResult::AlreadyGone);
 }
+
+// The ownership rule: an emulator that will not stop stays owned, and no replacement starts beside it.
+// (A stop that reported "done" for a child still running let a second emulator launch while the first
+// still held the live endpoint.)
+void TestStuckChildBlocksTheReplacement()
+{
+    OwnedChild slot;
+    std::string error;
+    int spawned = 0;
+    auto spawn = [&](int& pid, std::string&) { pid = 4000 + ++spawned; return true; };
+    auto stops = [](int) { return StopResult::Terminated; };
+    auto stuck = [](int) { return StopResult::Stuck; };
+
+    CHECK(slot.Replace(stops, spawn, error));              // nothing owned yet: just starts
+    CHECK(slot.Owns() && slot.Pid() == 4001 && spawned == 1);
+
+    CHECK(!slot.Replace(stuck, spawn, error));             // it would not die
+    CHECK(spawned == 1);                                   // so no second child was started
+    CHECK(slot.Owns() && slot.Pid() == 4001);              // and the first is still the owned one
+    CHECK(!error.empty());
+    CHECK(!slot.Stop(stuck, error) && slot.Pid() == 4001); // a plain stop reports it too
+
+    error.clear();
+    CHECK(slot.Replace(stops, spawn, error));              // once it does exit, the replacement goes ahead
+    CHECK(slot.Pid() == 4002 && spawned == 2 && error.empty());
+
+    // A replacement that fails to start leaves nothing owned (the old one is already gone).
+    auto failing = [](int&, std::string& e) { e = "no such program"; return false; };
+    CHECK(!slot.Replace(stops, failing, error));
+    CHECK(!slot.Owns() && error == "no such program");
+
+    CHECK(slot.Stop(stuck, error));                        // nothing owned: stopping is trivially done
+}
 }  // namespace
 
 // An application bundle that ships a command-line helper (Beyond Compare's bcomp) is run through the
@@ -357,6 +390,7 @@ int main()
     TestSpawnChildFailuresAreReported(dir);
     TestSpawnChildResolvesRelativePaths(dir);
     TestStopChildIsBounded(dir);
+    TestStuckChildBlocksTheReplacement();
     std::system(("rm -rf '" + dir + "'").c_str());
     if (gFailures == 0) std::printf("PosixSpawn: all checks passed\n");
     return gFailures == 0 ? 0 : 1;

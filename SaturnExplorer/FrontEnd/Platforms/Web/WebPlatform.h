@@ -10,6 +10,10 @@
 
 #include <string>
 
+#ifndef __EMSCRIPTEN__
+#include "PosixSpawn.h"   // OwnedChild
+#endif
+
 #include "Platform/IPlatform.h"
 
 #if defined(SE_NATIVE_MENUBAR)
@@ -72,6 +76,7 @@ public:
     bool LaunchTool(const char* path, const std::vector<std::string>& args, const char* workingDir,
                     std::string* error) override;
     void TerminateLaunchedProcess() override;
+    bool StopEmulator(std::string* error) override;
 #endif
 
     // HTTPS GET via libcurl on native desktop when SE_HAVE_CURL is defined (macOS/Linux);
@@ -106,7 +111,7 @@ private:
     int           mAudioRate = 0;        // spec of the currently-open device
     int           mAudioChannels = 0;
 #ifndef __EMSCRIPTEN__
-    int           mLaunchedPid = -1;     // pid of the emulator we last launched (-1 = none)
+    sfe::OwnedChild mEmulator;           // the emulator we launched and still own
 #endif
 #if defined(SE_NATIVE_MENUBAR)
     MacMenuBar    mMenuBar;              // native macOS menu bar attached to [NSApp mainMenu]

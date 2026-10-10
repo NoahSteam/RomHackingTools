@@ -366,10 +366,31 @@ StopResult StopChild(int pid, int termGraceMs, int killGraceMs)
     if (WaitUntilReaped(pid, termGraceMs)) return StopResult::Terminated;
     ::kill(pid, SIGKILL);
     if (WaitUntilReaped(pid, killGraceMs)) return StopResult::Killed;
-    // Not even SIGKILL took it (stuck in the kernel). Leave the reaping to a thread so the caller is
-    // not held and no zombie is left once it does go.
-    std::thread([pid] { int status = 0; while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {} }).detach();
+    // Not even SIGKILL took it (stuck in the kernel). Still ours, still running: say so.
     return StopResult::Stuck;
+}
+
+bool OwnedChild::Stop(const StopFn& stop, std::string& error)
+{
+    error.clear();
+    if (mPid <= 0) return true;
+    if (stop(mPid) == StopResult::Stuck)
+    {
+        error = "The emulator did not exit when asked to (process " + std::to_string(mPid) +
+                "). Close it yourself, then try again.";
+        return false;
+    }
+    mPid = -1;
+    return true;
+}
+
+bool OwnedChild::Replace(const StopFn& stop, const SpawnFn& spawn, std::string& error)
+{
+    if (!Stop(stop, error)) return false;
+    int pid = -1;
+    if (!spawn(pid, error)) return false;
+    mPid = pid;
+    return true;
 }
 
 }  // namespace sfe

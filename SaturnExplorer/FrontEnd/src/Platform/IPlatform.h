@@ -189,6 +189,17 @@ public:
     // already exited, or the backend has no process control (web/headless).
     virtual void TerminateLaunchedProcess() {}
 
+    // Stop the owned emulator and say whether it is GONE. False, with the reason in `error`, when it would
+    // not exit: it is still running and still owned, so the caller must not start a replacement (two
+    // emulators, the old one still holding the live endpoint). The default stops it the way
+    // TerminateLaunchedProcess does and reports success.
+    virtual bool StopEmulator(std::string* error)
+    {
+        (void)error;
+        TerminateLaunchedProcess();
+        return true;
+    }
+
     // --- HTTPS GET (Seam C, optional). The one network primitive the portable app
     // needs — currently only the update check (UpdateChecker) uses it. Kept minimal and
     // synchronous on purpose: the caller runs it on a worker thread, so each platform only

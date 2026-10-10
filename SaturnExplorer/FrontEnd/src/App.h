@@ -258,7 +258,7 @@ private:
     void DrawLaunchSettingsModal(IPlatform& platform);
     // Start the selected emulator. With a non-empty romOverride, launch THAT disc instead of the
     // selected ROM without changing the user's selection (used by Build & Launch ISO).
-    void StopOwnedEmulator(IPlatform& platform);
+    bool StopOwnedEmulator(IPlatform& platform);
     bool LaunchSession(IPlatform& platform, const std::string& romOverride = std::string());
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
     // Which window a search's results land in. Travels with the request through the runner

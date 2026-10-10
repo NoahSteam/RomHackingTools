@@ -72,6 +72,11 @@ leaves these to do in `WindowsPlatform.cpp`:
   starting another. Windows `LaunchProcess` only closes the old handle (`CloseHandle`), so a second launch
   orphans the first. `App::StopOwnedEmulator` covers the app's own call sites, but the invariant belongs in
   the platform: call `TerminateLaunchedProcess()` at the top of the override.
+- **A stop that fails must block the replacement.** `IPlatform::StopEmulator(error)` is the contract: false
+  means the emulator is still running and still owned, and the app then refuses to launch another
+  (`App::StopOwnedEmulator`). The macOS side implements it (`OwnedChild`); Windows inherits the default,
+  which calls `TerminateLaunchedProcess` and always reports success. Override it: `TerminateProcess`, then
+  `WaitForSingleObject(handle, ~2000)`; on timeout keep the handle and return false with a message.
 - `sei.hProcess` can be NULL when the target reused an existing process; then nothing is tracked and a
   relaunch cannot stop it. Decide what that should mean (probably: report "already running").
 - Windows `TerminateLaunchedProcess` calls `TerminateProcess` directly and does not wait. That cannot hang,
@@ -132,4 +137,8 @@ For reference, from the same review, done in the macOS/cross-platform pass:
 7. macOS relaunch can no longer block forever: `StopChild` is SIGTERM, a bounded wait, then SIGKILL.
 8. Native menu selections are ignored behind a modal and re-checked for enablement when they run (the
    greying-out is item 4 above).
+10. Relative ROM and BIOS paths are made absolute against SE's directory before they reach the emulator
+   (`AbsolutePath`, used by Launch and Test Launch), since the emulator starts in its own folder.
+11. A stop that fails keeps the emulator owned and blocks the replacement launch (`OwnedChild`,
+    `IPlatform::StopEmulator`).
 9. macOS packaging fails the install when `codesign` fails and verifies the signature afterwards.

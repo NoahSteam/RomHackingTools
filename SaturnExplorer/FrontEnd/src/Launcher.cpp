@@ -3,6 +3,12 @@
 #include <algorithm>
 #include <fstream>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "Settings.h"
 #include "DataSearch.h"
 #include "ArgSplit.h"
@@ -130,6 +136,23 @@ std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const 
     return out;
 }
 
+std::string AbsolutePath(const std::string& path)
+{
+    if (path.empty()) return path;
+    const bool absolute = path[0] == '/' || path[0] == '\\' ||
+                          (path.size() > 1 && path[1] == ':');   // "/x", "\\server\\x", "C:..."
+    if (absolute) return path;
+    char cwd[4096];
+#ifdef _WIN32
+    if (!_getcwd(cwd, sizeof(cwd))) return path;
+    const char sep = '\\';
+#else
+    if (!getcwd(cwd, sizeof(cwd))) return path;
+    const char sep = '/';
+#endif
+    return std::string(cwd) + sep + path;
+}
+
 std::string PathBasename(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
@@ -220,12 +243,6 @@ std::string Launcher::CurrentArgs() const
 {
     const EmulatorSpec* e = Selected();
     return e ? BuildLaunchArgs(e->argsTemplate, mRom, e->biosPath) : std::string();
-}
-
-std::vector<std::string> Launcher::CurrentArgv() const
-{
-    const EmulatorSpec* e = Selected();
-    return e ? BuildLaunchArgv(e->argsTemplate, mRom, e->biosPath) : std::vector<std::string>();
 }
 
 LaunchValidation Launcher::Validate() const

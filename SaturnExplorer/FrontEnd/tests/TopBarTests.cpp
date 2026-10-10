@@ -5,6 +5,9 @@
 #include "Launcher.h"
 #include "NativeMenu.h"
 #include "Settings.h"
+#ifndef _WIN32
+#include <unistd.h>   // getcwd, for the AbsolutePath case
+#endif
 #include "TopBar.h"
 #include "saturnexplorer/SeTypes.h"
 
@@ -62,6 +65,20 @@ static void TestLaunchModel()
     CHECK(BuildLaunchArgs("-a -i \"{rom}\"", "C:\\Games\\Saturn Disc.cue") ==
           "-a -i \"C:\\Games\\Saturn Disc.cue\"");
     CHECK(BuildLaunchArgs("--bios {bios} \"{rom}\"", "game.cue", "") == "--bios \"game.cue\"");
+
+    // A relative ROM is resolved against this program's directory (where it was validated), not left for
+    // the emulator to resolve against its own.
+#ifndef _WIN32
+    {
+        char cwd[4096] = {};
+        CHECK(getcwd(cwd, sizeof(cwd)) != nullptr);
+        CHECK(AbsolutePath("disc.cue") == std::string(cwd) + "/disc.cue");
+        CHECK(AbsolutePath("games/a b.cue") == std::string(cwd) + "/games/a b.cue");
+        CHECK(AbsolutePath("/abs/disc.cue") == "/abs/disc.cue");
+        CHECK(AbsolutePath("C:\\Games\\x.cue") == "C:\\Games\\x.cue");
+        CHECK(AbsolutePath("").empty());
+    }
+#endif
 
     // The argv form: the template is split first and the ROM filled in after, so what a ROM's name
     // holds can neither end an argument early nor reach a shell.

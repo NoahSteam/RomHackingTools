@@ -55,6 +55,12 @@ std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& 
 std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const std::string& rom,
                                          const std::string& bios = std::string());
 
+// 'path' made absolute against the current directory when it is relative; empty, absolute ("/x",
+// "C:\\x", "\\\\server\\x") and unresolvable paths come back unchanged. Launch validation checks a ROM against
+// THIS program's directory, but the emulator is started in its own folder, so a relative ROM or BIOS
+// path has to be resolved here, before it is handed over.
+std::string AbsolutePath(const std::string& path);
+
 // Basename of a path (component after the last '/' or '\\'), for display.
 std::string PathBasename(const std::string& path);
 
@@ -94,7 +100,6 @@ public:
     // The resolved argument string for the selected emulator + current ROM (empty if
     // no emulator is selected). What the App passes to LaunchProcess.
     std::string CurrentArgs() const;
-    std::vector<std::string> CurrentArgv() const;   // the same, as BuildLaunchArgv
 
     // Validate the complete configuration used by the primary Launch action.
     // This deliberately lives in the model so the toolbar, menu, and launch

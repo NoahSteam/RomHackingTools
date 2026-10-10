@@ -8817,11 +8817,12 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
                     const char* wd = mLaunchEdits[i].workDir[0] ? mLaunchEdits[i].workDir : nullptr;
                     // A test launch is a launch: it replaces the emulator SE owns (and drops its connection)
                     // and becomes the owned one, so a later Launch stops it instead of starting a second.
-                    StopOwnedEmulator(platform);
                     std::string testError;
-                    const bool ok = platform.LaunchEmulator(
-                        mLaunchEdits[i].exe, BuildLaunchArgv(mLaunchEdits[i].args, mLauncher.Rom(), emus[i].biosPath),
-                        wd, &testError);
+                    const bool ok = StopOwnedEmulator(platform) &&
+                        platform.LaunchEmulator(
+                            mLaunchEdits[i].exe,
+                            BuildLaunchArgv(mLaunchEdits[i].args, AbsolutePath(mLauncher.Rom()), AbsolutePath(emus[i].biosPath)),
+                            wd, &testError);
                     if (ok) { mbLaunchedEmulator = true; mLog.Info("Test-launched " + emus[i].label); }
                     else    mLog.Error("Failed to test-launch " + std::string(mLaunchEdits[i].exe) +
                                        (testError.empty() ? std::string() : ": " + testError));
@@ -8904,11 +8905,20 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
 
 // Stop the emulator SE started, if any, and -- when it was the live source -- drop the (now-dead)
 // connection so the next launch reconnects to the new game. Shared by Launch and Test Launch, so every
-// way of starting an emulator hands ownership over the same way.
-void App::StopOwnedEmulator(IPlatform& platform)
+// way of starting an emulator hands ownership over the same way. False, with the reason in the status
+// line, when the emulator would not exit: it is still running and still ours, so nothing is torn down and
+// the caller must not launch a replacement.
+bool App::StopOwnedEmulator(IPlatform& platform)
 {
-    if (!mbLaunchedEmulator) return;
-    platform.TerminateLaunchedProcess();
+    if (!mbLaunchedEmulator) return true;
+    std::string error;
+    if (!platform.StopEmulator(&error))
+    {
+        mOperationStatus = error;
+        mOperationError = true;
+        mLog.Error(error);
+        return false;
+    }
     if (mSource.type == SourceType::Live)
     {
         mController.ClearAll();
@@ -8916,6 +8926,7 @@ void App::StopOwnedEmulator(IPlatform& platform)
         CloseData();
     }
     mbLaunchedEmulator = false;
+    return true;
 }
 
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
@@ -8938,12 +8949,13 @@ bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
 
     // Relaunch: if SE already started an emulator, stop it before launching again so the new
     // game replaces it instead of leaving the old emulator running beside a second instance.
-    StopOwnedEmulator(platform);
+    if (!StopOwnedEmulator(platform)) return false;
 
     // The arguments go to the emulator as an argv, never through a shell: the template is split first and
-    // the ROM path filled in after, so a title with a quote or a `$` in it is still one argument.
-    std::vector<std::string> argv = romOverride.empty() ? mLauncher.CurrentArgv()
-                                                          : BuildLaunchArgv(sel->argsTemplate, rom, sel->biosPath);
+    // the ROM path filled in after, so a title with a quote or a `$` in it is still one argument. The ROM
+    // and BIOS are made absolute here, against the directory they were validated in: the emulator starts
+    // in its own folder, where a relative "disc.cue" would name a different file.
+    std::vector<std::string> argv = BuildLaunchArgv(sel->argsTemplate, AbsolutePath(rom), AbsolutePath(sel->biosPath));
     // Force the Saturn control pad + SE's own key bindings onto Mednafen at launch, so its
     // input matches SE without anyone touching Mednafen's remap UI. Prepended (not baked
     // into the user-editable args template) and passed as command-line setting overrides,
