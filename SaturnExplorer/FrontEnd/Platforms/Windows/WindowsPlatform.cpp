@@ -16,6 +16,7 @@
 #include "backends/imgui_impl_dx11.h"
 
 #include "FileWrite.h"   // checked, staged writes -- see the SaveFile contract
+#include "Platform/CommandLine.h"   // LaunchTool: arguments -> one correctly quoted command line
 #include "Theme.h"
 #include "Resource.h"
 
@@ -460,9 +461,14 @@ bool WindowsPlatform::LaunchProcess(const char* path, const char* args, const ch
     return true;
 }
 
-bool WindowsPlatform::LaunchTool(const char* path, const char* args, const char* workingDir)
+bool WindowsPlatform::LaunchTool(const char* path, const std::vector<std::string>& args,
+                                 const char* workingDir, std::string* error)
 {
-    if (!path || !*path) return false;
+    if (!path || !*path)
+    {
+        if (error) *error = "No program was given.";
+        return false;
+    }
     std::string derived;
     if (!(workingDir && *workingDir))
     {
@@ -473,14 +479,18 @@ bool WindowsPlatform::LaunchTool(const char* path, const char* args, const char*
     }
     // No SEE_MASK_NOCLOSEPROCESS: the handle is not kept, so the tool is never terminated by a
     // relaunch and the emulator's handle in mLaunchedProcess is not replaced.
+    // Each argument is quoted for the Windows command-line parser, so a path arrives as one value.
+    const std::string params = sfe::JoinWindowsCommandLine(args);
     SHELLEXECUTEINFOA sei = {};
     sei.cbSize = sizeof(sei);
     sei.lpVerb = "open";
     sei.lpFile = path;
-    sei.lpParameters = (args && *args) ? args : nullptr;
+    sei.lpParameters = params.empty() ? nullptr : params.c_str();
     sei.lpDirectory = workingDir;
     sei.nShow = SW_SHOWNORMAL;
-    return ::ShellExecuteExA(&sei) != FALSE;
+    if (::ShellExecuteExA(&sei)) return true;
+    if (error) *error = std::string(path) + ": ShellExecute failed (error " + std::to_string(::GetLastError()) + ").";
+    return false;
 }
 
 void WindowsPlatform::TerminateLaunchedProcess()

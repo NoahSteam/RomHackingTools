@@ -2,6 +2,8 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <random>
 #include <vector>
 
 #include "FileWrite.h"
@@ -11,19 +13,61 @@ namespace sfe
 
 const char* const kDefaultDiffArgs = "\"{a}\" \"{b}\"";
 
-std::string BuildDiffArgs(const std::string& tmpl, const std::string& folderA, const std::string& folderB)
+namespace
 {
-    const std::string t = tmpl.empty() ? std::string(kDefaultDiffArgs) : tmpl;
-    // One pass over the template, not two replaces over the result: a folder path that happens to
-    // contain the other token must not be expanded again.
-    std::string result;
-    for (size_t i = 0; i < t.size();)
+// Split on whitespace outside quotes; "..." and '...' group and are removed; nothing is escaped (a
+// backslash is just a character, so a Windows path survives). A quote left open runs to the end. An
+// empty quoted pair is an empty argument.
+std::vector<std::string> SplitTemplate(const std::string& t)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    bool have = false;   // 'cur' is an argument even if empty (it held a quote pair)
+    char quote = 0;
+    for (const char c : t)
     {
-        if (t.compare(i, 3, "{a}") == 0) { result += folderA; i += 3; }
-        else if (t.compare(i, 3, "{b}") == 0) { result += folderB; i += 3; }
-        else result += t[i++];
+        if (quote)
+        {
+            if (c == quote) quote = 0; else cur += c;
+        }
+        else if (c == '"' || c == '\'')
+        {
+            quote = c;
+            have = true;
+        }
+        else if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
+        {
+            if (have) { out.push_back(cur); cur.clear(); have = false; }
+        }
+        else
+        {
+            cur += c;
+            have = true;
+        }
     }
-    return result;
+    if (have) out.push_back(cur);
+    return out;
+}
+}  // namespace
+
+std::vector<std::string> BuildDiffArgv(const std::string& tmpl, const std::string& folderA,
+                                       const std::string& folderB)
+{
+    std::vector<std::string> args = SplitTemplate(tmpl.empty() ? std::string(kDefaultDiffArgs) : tmpl);
+    for (std::string& arg : args)
+    {
+        // One pass over the argument, not two replaces over the result: a folder path that happens to
+        // contain the other token must not be expanded again.
+        std::string result;
+        for (size_t i = 0; i < arg.size();)
+        {
+            if (arg.compare(i, 3, "{a}") == 0) { result += folderA; i += 3; }
+            else if (arg.compare(i, 3, "{b}") == 0) { result += folderB; i += 3; }
+            else result += arg[i++];
+        }
+        arg = std::move(result);
+    }
+    return args;
 }
 
 bool DiffArgsUseFrames(const std::string& tmpl)
@@ -46,9 +90,18 @@ std::string DiffRegionFileName(RegionId id)
     return name + ".bin";
 }
 
-std::string DiffSideFolderName(char side, uint64_t frameNo)
+std::string NewDiffComparisonId(uint64_t nowSeconds)
 {
-    return std::string(1, side) + "_frame_" + std::to_string(static_cast<unsigned long long>(frameNo));
+    static std::mt19937 rng{ std::random_device{}() };
+    char id[48];
+    std::snprintf(id, sizeof(id), "cmp%llu-%08x", static_cast<unsigned long long>(nowSeconds),
+                  static_cast<unsigned>(rng()));
+    return id;
+}
+
+std::string DiffSideFolderName(const std::string& comparisonId, char side, uint64_t frameNo)
+{
+    return comparisonId + "_" + std::string(1, side) + "_frame_" + std::to_string(static_cast<unsigned long long>(frameNo));
 }
 
 bool WriteSnapshotFolder(const MemSnapshot& snap, const std::string& dir, std::string& error)
@@ -67,12 +120,55 @@ bool WriteSnapshotFolder(const MemSnapshot& snap, const std::string& dir, std::s
     return true;
 }
 
-void PurgeDiffFolders(const std::string& root)
+namespace
+{
+bool AllDigits(const std::string& s, size_t from, size_t to)
+{
+    if (from >= to || to > s.size()) return false;
+    for (size_t i = from; i < to; ++i)
+        if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+    return true;
+}
+
+// "cmp<seconds>-<8 hex>_<A|B>_frame_<digits>" -> the seconds. False for anything else.
+bool ParseComparisonFolder(const std::string& name, uint64_t& seconds)
+{
+    if (name.compare(0, 3, "cmp") != 0) return false;
+    const size_t dash = name.find('-', 3);
+    if (dash == std::string::npos || !AllDigits(name, 3, dash) || dash - 3 > 19) return false;
+    if (name.size() < dash + 9 + 9 || name.compare(dash + 9, 1, "_") != 0) return false;
+    for (size_t i = dash + 1; i < dash + 9; ++i)
+        if (!std::isxdigit(static_cast<unsigned char>(name[i]))) return false;
+    const std::string rest = name.substr(dash + 10);   // "A_frame_1234"
+    if (rest.size() < 9 || (rest[0] != 'A' && rest[0] != 'B') || rest.compare(1, 7, "_frame_") != 0 ||
+        !AllDigits(rest, 8, rest.size()))
+        return false;
+    seconds = std::strtoull(name.c_str() + 3, nullptr, 10);
+    return true;
+}
+
+// The folders earlier versions wrote, "A_frame_1234": one per side, replaced by the next comparison.
+bool IsLegacyFolder(const std::string& name)
+{
+    return name.size() >= 9 && (name[0] == 'A' || name[0] == 'B') && name.compare(1, 7, "_frame_") == 0 &&
+           AllDigits(name, 8, name.size());
+}
+}  // namespace
+
+void PurgeDiffFolders(const std::string& root, uint64_t nowSeconds, uint64_t keepSeconds)
 {
     std::vector<std::string> names;
     if (!ListDirectory(root, names)) return;
     for (const std::string& name : names)
-        RemoveFlatDirectory(root + PathSeparator() + name);
+    {
+        uint64_t made = 0;
+        bool remove = false;
+        if (ParseComparisonFolder(name, made))
+            remove = keepSeconds == 0 || (made <= nowSeconds && nowSeconds - made >= keepSeconds);
+        else if (IsLegacyFolder(name))
+            remove = keepSeconds == 0;   // no date in the name to age it by, so only an explicit cleanup removes it
+        if (remove) RemoveFlatDirectory(root + PathSeparator() + name);
+    }
 }
 
 }  // namespace sfe

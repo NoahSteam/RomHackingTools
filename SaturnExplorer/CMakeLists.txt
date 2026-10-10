@@ -596,6 +596,17 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerDiffToolTests COMMAND SaturnExplorerDiffToolTests)
 
+    # LaunchTool's launcher on macOS/Linux: arguments reach the program literally, and a launch that
+    # failed is reported as one. Needs fork/exec, so POSIX only.
+    if(NOT WIN32 AND NOT EMSCRIPTEN)
+        add_executable(SaturnExplorerPosixSpawnTests
+            FrontEnd/tests/PosixSpawnTests.cpp
+            FrontEnd/src/PosixSpawn.cpp
+        )
+        target_include_directories(SaturnExplorerPosixSpawnTests PRIVATE FrontEnd/src)
+        add_test(NAME SaturnExplorerPosixSpawnTests COMMAND SaturnExplorerPosixSpawnTests)
+    endif()
+
     # Data > Dump SH-2: the text the command writes -- columns, user notes over generated ones,
     # block-boundary-independent decoding, unavailable regions skipped.
     add_executable(SaturnExplorerSh2DumpTests
@@ -1125,6 +1136,7 @@ elseif(EMSCRIPTEN)
         FrontEnd/src/Demo/DemoScript.cpp
         FrontEnd/src/Demo/DemoPlayer.cpp
         FrontEnd/src/UpdateChecker.cpp
+        FrontEnd/src/PosixSpawn.cpp
         FrontEnd/Platforms/Web/WebPlatform.cpp
         FrontEnd/Platforms/Web/WebMain.cpp
         ${SE_IMGUI_CORE}
@@ -1239,6 +1251,7 @@ else()
             FrontEnd/src/Demo/DemoScript.cpp
             FrontEnd/src/Demo/DemoPlayer.cpp
             FrontEnd/src/UpdateChecker.cpp
+            FrontEnd/src/PosixSpawn.cpp
             FrontEnd/Platforms/Web/WebPlatform.cpp
             FrontEnd/Platforms/Web/WebMain.cpp
             ${SE_IMGUI_CORE}

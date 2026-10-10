@@ -144,14 +144,19 @@ public:
 
     // Start an auxiliary program (a diff tool) and leave it alone: unlike LaunchProcess the child
     // is not remembered, so TerminateLaunchedProcess never stops it and starting one never
-    // forgets the emulator. Same `args` rules; a NULL workingDir is the exe's folder. On macOS
-    // `path` may be an application bundle (Foo.app). Returns false if unsupported or it failed
-    // to start.
-    virtual bool LaunchTool(const char* path, const char* args, const char* workingDir)
+    // forgets the emulator. `args` are the program's arguments, one literal value each -- nothing
+    // is parsed, split or expanded by a shell, so a path holding spaces, quotes or `$` arrives
+    // unchanged. A NULL workingDir is the exe's folder. On macOS `path` may be an application
+    // bundle (Foo.app). Returns false if unsupported or it did not start, with the reason in
+    // `error` (when given) -- a missing program, a permission failure, an unusable working
+    // directory -- rather than reporting success for a launch that never happened.
+    virtual bool LaunchTool(const char* path, const std::vector<std::string>& args,
+                            const char* workingDir, std::string* error)
     {
         (void)path;
         (void)args;
         (void)workingDir;
+        if (error) *error = "This build cannot start other programs.";
         return false;
     }
 

@@ -43,7 +43,8 @@ public:
     bool RevealPath(const char* path) override;
     bool OpenURL(const char* url) override;
     bool LaunchProcess(const char* path, const char* args, const char* workingDir) override;
-    bool LaunchTool(const char* path, const char* args, const char* workingDir) override;
+    bool LaunchTool(const char* path, const std::vector<std::string>& args, const char* workingDir,
+                    std::string* error) override;
     void TerminateLaunchedProcess() override;
     bool HttpsGet(const std::string& url, const std::string& userAgent,
                   HttpResponse& out) override;
