@@ -47,17 +47,19 @@ Assembly, Watch and Breakpoint tools.
 - **Counts are exact, outputs are complete.** The diff keeps only per-region counts. The hex rows
   and the CSV export rescan the immutable snapshots, so no changed byte is ever omitted.
 - **Regions are not just address ranges.** Every location is a `RegionRef` with an explicit region
-  id, address space and capability set. VDP1 FB (a derived image), the VDP register images and Sound
-  RAM (also written by the 68K, which watchpoints cannot see) are not plain SH-2 bus memory, so
-  navigation, watches, breakpoints and the assembly view are enabled per region rather than assumed.
+  id, address space and capability set. VDP1 FB (a derived image) and the VDP register images are
+  not plain SH-2 bus memory, so navigation, watches, breakpoints and the assembly view are enabled per region rather than assumed.
 - **Pending scrub edits are never captured.** Marking is refused while the shown frame has pending
   edits, because the context serves them without them being part of the recorded frame.
 - **Snapshot diff only.** A byte that changed and changed back between A and B does not appear. The
   UI says so, and points at the Access Log ("find what accesses") for write history rather than
   duplicating it.
-- **Only captured regions.** The rewind recorder captures LWRAM, HWRAM, Sound RAM, VDP1 RAM,
-  VDP1 frame buffer, VDP2 RAM, CRAM and the VDP1/VDP2 register images. BIOS and cartridge space are
-  not captured, so they are not in the summary and "Find in ROM" is not offered.
+- **Only captured regions, and not Sound RAM.** The rewind recorder captures LWRAM, HWRAM, Sound RAM,
+  VDP1 RAM, VDP1 frame buffer, VDP2 RAM, CRAM and the VDP1/VDP2 register images; a comparison uses
+  all of them except Sound RAM. The 68K sound CPU and the SCSP rewrite it constantly, so it differed
+  in nearly every pair of frames and buried the changes that mattered. A snapshot holds no bytes for
+  it, and it is in neither the summary, the CSV nor the external diff folders. BIOS and cartridge
+  space are not captured, so "Find in ROM" is not offered.
 - **No emulator or protocol change.** Everything reads through `IMemoryBackend`, which already
   follows the live context or the scrubbed frame.
 - **Pure logic is separate from ImGui.** The engine has no UI dependency and is unit-tested. The
@@ -73,8 +75,7 @@ Assembly, Watch and Breakpoint tools.
 - The frame cards have no VDP thumbnails in v1. They need a per-snapshot composited render; this is
   a possible later addition.
 - The region table lists the regions we capture, including VDP1 FB and register images, and has no
-  BIOS row. Context-menu actions are enabled per region (for example, no Break on Write on VDP1 FB,
-  and Sound RAM's carries a note that 68K writes are not caught).
+  BIOS row. Context-menu actions are enabled per region (for example, no Break on Write on VDP1 FB).
 - There is a single hex table with both columns inside it, so "synchronised scrolling" is free
   rather than a feature to build.
 - Time is shown as `frame / 60` (NTSC). PAL titles will read slightly off until the video standard

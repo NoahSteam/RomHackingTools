@@ -60,6 +60,7 @@ bool WriteSnapshotFolder(const MemSnapshot& snap, const std::string& dir, std::s
     }
     for (const MemRegionImage& region : snap.regions)
     {
+        if (!InCompare(region.id)) continue;   // no bytes held for it, so no empty file for the tool to list
         const std::string path = dir + PathSeparator() + DiffRegionFileName(region.id);
         if (!WriteFileAtomically(path, region.bytes.data(), region.bytes.size(), error)) return false;
     }

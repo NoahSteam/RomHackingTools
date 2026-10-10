@@ -27,6 +27,13 @@ enum class RegionId : uint8_t
 };
 constexpr size_t kRegionCount = static_cast<size_t>(RegionId::Count);
 
+// Whether a region takes part in a comparison. Sound RAM does not: the 68K sound CPU and the SCSP
+// rewrite it constantly (samples, streaming buffers, voice state), so it differed in nearly every
+// pair of frames and buried the changes the user was looking for. An excluded region keeps its
+// RegionId and traits -- an address still resolves to it -- but a snapshot holds no bytes for it, a
+// diff reports nothing for it, and neither the panel, the CSV nor the external diff folders list it.
+inline bool InCompare(RegionId id) { return id != RegionId::SoundRam; }
+
 // The captured regions are not all the same kind of thing, and the difference decides what the UI
 // may offer: a watchpoint can never fire on the VDP1 frame buffer, which VDP1 drawing writes.
 enum class AddressSpace : uint8_t
@@ -55,6 +62,9 @@ struct RegionTraits
 };
 
 const RegionTraits& Traits(RegionId id);
+
+// Bytes a snapshot holds for 'id': the region's size, or none for one left out of comparisons.
+inline uint32_t SnapshotSize(RegionId id) { return InCompare(id) ? Traits(id).size : 0; }
 
 // Whether offsets in the region correspond to a bus address worth showing or navigating by. The
 // VDP1 frame buffer is an app-derived image, so it has none.
@@ -89,7 +99,7 @@ struct SnapshotOrigin
 struct MemRegionImage
 {
     RegionId             id = RegionId::Lwram;
-    std::vector<uint8_t> bytes;   // exactly Traits(id).size, big-endian Saturn bytes
+    std::vector<uint8_t> bytes;   // exactly SnapshotSize(id), big-endian Saturn bytes
 };
 
 // Immutable once built: share it as shared_ptr<const MemSnapshot>. A deep copy -- nothing in it

@@ -30,7 +30,7 @@ std::shared_ptr<MemSnapshot> Blank(uint64_t frame, uint64_t session = 1, uint64_
     {
         MemRegionImage img;
         img.id = static_cast<RegionId>(i);
-        img.bytes.assign(Traits(img.id).size, 0);
+        img.bytes.assign(SnapshotSize(img.id), 0);
         s->regions.push_back(std::move(img));
     }
     return s;
@@ -357,7 +357,12 @@ void TestCapture()
           "the snapshot carries its origin");
     Check(snap->regions.size() == kRegionCount, "every region is captured");
     for (size_t i = 0; i < kRegionCount; ++i)
-        Check(snap->regions[i].bytes == be.mem[i], "region bytes match the source");
+    {
+        if (InCompare(static_cast<RegionId>(i)))
+            Check(snap->regions[i].bytes == be.mem[i], "region bytes match the source");
+        else
+            Check(snap->regions[i].bytes.empty(), "a region left out of comparisons holds no bytes");
+    }
 
     // Immutability: changing the source afterwards does not touch the snapshot.
     const uint8_t before = snap->regions[Ix(RegionId::Hwram)].bytes[100];
@@ -367,6 +372,12 @@ void TestCapture()
     for (size_t fail = 0; fail < kRegionCount; ++fail)
     {
         be.failRegion = static_cast<int>(fail);
+        if (!InCompare(static_cast<RegionId>(fail)))
+        {
+            Check(CaptureSnapshot(be, origin, nullptr, &err) != nullptr,
+                  "a region left out of comparisons is never read, so its failure cannot fail the capture");
+            continue;
+        }
         Check(CaptureSnapshot(be, origin, nullptr, &err) == nullptr && !err.empty(),
               "a region that cannot be read fails the capture, never leaves it partial");
     }
@@ -390,6 +401,36 @@ void TestCapture()
     int n = 0;
     auto sourceMoves = [&]() { return CaptureGuard{ 5, static_cast<uint64_t>(n++) }; };
     Check(CaptureSnapshot(be, origin, sourceMoves, &err) == nullptr, "a changed source id discards the snapshot");
+}
+
+// Sound RAM is left out of comparisons: nothing is read for it, a diff has nothing to say about it,
+// and neither the CSV nor the rows mention it. A snapshot that DOES hold Sound RAM bytes was built by
+// something that disagrees about what is compared, so Diff refuses it instead of comparing a region
+// the rest of the pipeline does not list.
+void TestSoundRamIsLeftOut()
+{
+    Check(!InCompare(RegionId::SoundRam), "Sound RAM is not compared");
+    for (size_t i = 0; i < kRegionCount; ++i)
+        if (static_cast<RegionId>(i) != RegionId::SoundRam)
+            Check(InCompare(static_cast<RegionId>(i)), "every other region is");
+    Check(SnapshotSize(RegionId::SoundRam) == 0 && SnapshotSize(RegionId::Hwram) == Traits(RegionId::Hwram).size,
+          "a snapshot holds no bytes for it");
+
+    auto a = Blank(1), b = Blank(2);
+    Check(a->regions[Ix(RegionId::SoundRam)].bytes.empty(), "the fixture holds none");
+    b->regions[Ix(RegionId::Hwram)].bytes[0x10] = 0x55;
+    DiffResult d = MakeDiff(a, b);
+    Check(d.regions[Ix(RegionId::SoundRam)].changedBytes == 0 && d.TotalChangedBytes() == 1, "the diff counts nothing for it");
+    Check(BuildRows(d, RegionId::SoundRam, DiffOptions()).empty(), "and has no rows for it");
+    StringCsvSink csv;
+    Check(WriteCsv(d, nullptr, csv) == CsvResult::Ok && csv.text.find("Sound RAM") == std::string::npos,
+          "the CSV never mentions it");
+
+    auto withSound = Blank(3);
+    withSound->regions[Ix(RegionId::SoundRam)].bytes.assign(Traits(RegionId::SoundRam).size, 0);
+    DiffResult refused;
+    Check(Diff(a, withSound, DiffOptions(), &refused) == DiffStatus::RegionMismatch,
+          "a snapshot that holds Sound RAM bytes is refused");
 }
 
 void TestCsv()
@@ -509,6 +550,7 @@ int main()
     TestIdentityRules();
     TestSwapMirrors();
     TestCapture();
+    TestSoundRamIsLeftOut();
     TestCsv();
     TestSlicedCsv();
     if (gFail == 0) std::printf("MemoryCompareTests: all passed\n");

@@ -85,20 +85,10 @@ const char* NoBreakReason(RegionId id)
     return "A write watchpoint cannot observe this region.";
 }
 
-// The hint on an enabled Break on Write. Sound RAM is also written by the 68K sound CPU, which the
-// emulator's watchpoint cannot see, so what it catches is spelled out.
-const char* BreakNote(RegionId id)
+// The hint on an enabled Break on Write.
+const char* BreakNote()
 {
-    if (id == RegionId::SoundRam)
-        return "Catches SH-2 and SCU-DMA writes to Sound RAM, not the 68K sound CPU's own writes.\n"
-               "Breaks in the running game, not the snapshot.";
     return "Breaks in the running game, not the snapshot.";
-}
-
-const char* NoAsmReason(RegionId id)
-{
-    if (id == RegionId::SoundRam) return "68K code is shown in the Sound CPU tab, not the SH-2 listing.";
-    return "Only work RAM holds SH-2 code.";
 }
 
 bool EqualsNoCase(const char* a, size_t alen, const char* b)
@@ -143,10 +133,11 @@ bool MemoryComparePanel::ParseLocation(const char* text, RegionRef* out)
     const char* plus = std::strchr(text, '+');
     uint32_t v = 0;
     if (!plus)
-        return ParseHex(text, &v) && Resolve(v, out);
+        return ParseHex(text, &v) && Resolve(v, out) && InCompare(out->id);
     for (size_t i = 0; i < kRegionCount; ++i)
     {
         const RegionTraits& t = Traits(static_cast<RegionId>(i));
+        if (!InCompare(t.id)) continue;
         if (!EqualsNoCase(text, static_cast<size_t>(plus - text), t.name)) continue;
         if (!ParseHex(plus + 1, &v) || v >= t.size) return false;
         *out = { t.id, v };
@@ -519,11 +510,12 @@ void MemoryComparePanel::DrawSummary(const DiffResult& diff, float height)
     uint64_t total = 0, totalRanges = 0;
     uint32_t totalSize = 0;
     for (const RegionDiff& r : diff.regions) { total += r.changedBytes; totalRanges += r.rangeCount; }
-    for (size_t i = 0; i < kRegionCount; ++i) totalSize += Traits(static_cast<RegionId>(i)).size;
+    for (size_t i = 0; i < kRegionCount; ++i) totalSize += SnapshotSize(static_cast<RegionId>(i));
     row(-1, "All Memory", FormatSize(totalSize), total, totalRanges);
     for (size_t i = 0; i < kRegionCount; ++i)
     {
         const RegionTraits& t = Traits(static_cast<RegionId>(i));
+        if (!InCompare(t.id)) continue;
         row(static_cast<int>(i), t.name, FormatSize(t.size), diff.regions[i].changedBytes,
             diff.regions[i].rangeCount);
     }
@@ -700,8 +692,8 @@ void MemoryComparePanel::DrawContextMenu()
          attached ? nullptr : "That frame is no longer in the rewind history, so the Memory tab\n"
                               "shows the current frame, not the snapshot.");
     item("Add to Watch", Action::AddWatch, nullptr, "Watches the running game, not the snapshot.");
-    item("Break on Write", Action::BreakOnWrite, NoBreakReason(mSelRegion), BreakNote(mSelRegion));
-    item("View in Assembly", Action::ViewInAssembly, NoAsmReason(mSelRegion), nullptr);
+    item("Break on Write", Action::BreakOnWrite, NoBreakReason(mSelRegion), BreakNote());
+    item("View in Assembly", Action::ViewInAssembly, "Only work RAM holds SH-2 code.", nullptr);
     ImGui::Separator();
     if (ImGui::MenuItem("Export Diff (this region)")) RaiseExport(false, mSelRegion);
     ImGui::EndPopup();
