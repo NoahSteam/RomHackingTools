@@ -3,7 +3,8 @@
 #include "WebPlatform.h"
 
 #include "FileWrite.h"   // checked, staged writes -- see the SaveFile contract
-#include "PosixSpawn.h"  // LaunchTool: argv launch that reports a start that failed
+#include "ArgSplit.h"    // LaunchProcess: split a command-line string into an argv
+#include "PosixSpawn.h"  // LaunchEmulator/LaunchTool: argv launch that reports a start that failed
 
 #include <cstdio>
 #include <cstdlib>   // system() for RevealPath (native desktop)
@@ -453,48 +454,52 @@ bool WebPlatform::OpenURL(const char* url)
 
 bool WebPlatform::LaunchProcess(const char* path, const char* args, const char* workingDir)
 {
+    // The string form, kept for callers that still have one: split the way a launch template is and
+    // started as an argv -- never handed to a shell.
+    return LaunchEmulator(path, sfe::SplitCommandLine(args ? args : ""), workingDir, nullptr);
+}
+
+bool WebPlatform::LaunchEmulator(const char* path, const std::vector<std::string>& args,
+                                 const char* workingDir, std::string* error)
+{
+    std::string why;
     if (!path || !*path)
     {
+        if (error) *error = "No program was given.";
         return false;
     }
-    const std::string dir = (workingDir && *workingDir) ? std::string(workingDir)
-                                                        : ParentDir(path);
-    // The exe is shell-quoted; `args` is passed through verbatim (it already carries its
-    // own quoting around a "<rom>" path, matching how ShellExecute treats the param string
-    // on Windows), so the child sees the same argv on both platforms. `exec` so the shell
-    // replaces itself with the emulator — then the forked pid *is* the emulator, and we can
-    // stop it later (TerminateLaunchedProcess) to relaunch a different game.
-    // Pin Mednafen's base directory (config, firmware/, saves) to the exe's own folder,
-    // independent of the ambient HOME — the POSIX counterpart of the MEDNAFEN_HOME set in
-    // WindowsPlatform::LaunchProcess. It matters more here: Mednafen's GetBaseDirectory uses
-    // MEDNAFEN_HOME if set, else $HOME/.mednafen (drivers/main.cpp), and HOME is essentially
-    // always set on macOS/Linux — so without this it would ALWAYS root at ~/.mednafen rather
-    // than the patched checkout that holds the Saturn BIOS, and fail to boot the disc.
-    // Exported into the child's environment via the shell (kept in the pre-fork-built cmd so
-    // nothing allocates after fork); ParentDir(path), not dir, so a custom working directory
-    // can't move the base off its firmware. Inert for other emulators, which don't read it.
-    std::string cmd = "cd " + ShellQuote(dir)
-                    + " && export MEDNAFEN_HOME=" + ShellQuote(ParentDir(path))
-                    + " && exec " + ShellQuote(path);
-    if (args && *args) { cmd += ' '; cmd += args; }
+    // One owned emulator at a time: a second launch must not orphan the first.
+    TerminateLaunchedProcess();
 
-    const pid_t pid = ::fork();
-    if (pid < 0) return false;
-    if (pid == 0)
+    // The folder the emulator lives in. A relative path is made absolute first (SpawnChild does the same
+    // for the program itself) so "emu/mednafen" names a folder that exists from here, not one inside the
+    // working directory we are about to enter.
+    std::string exe = path;
+    if (exe.find('/') != std::string::npos && exe[0] != '/')
     {
-        // Child: new session (survives independent of SE, and terminal signals to SE don't
-        // reach it), stdio to /dev/null, then become the emulator via a shell.
-        ::setsid();
-        const int devnull = ::open("/dev/null", O_RDWR);
-        if (devnull >= 0)
-        {
-            ::dup2(devnull, 0); ::dup2(devnull, 1); ::dup2(devnull, 2);
-            if (devnull > 2) ::close(devnull);
-        }
-        ::execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
-        ::_exit(127);   // exec failed
+        char cwd[4096];
+        if (::getcwd(cwd, sizeof(cwd))) exe = std::string(cwd) + "/" + exe;
     }
-    mLaunchedPid = pid;   // parent: remember it so a relaunch can stop it first
+    const bool hasFolder = exe.find('/') != std::string::npos;
+    const std::string home = hasFolder ? ParentDir(exe) : std::string();
+    const std::string dir = (workingDir && *workingDir) ? std::string(workingDir) : home;
+    // Pin Mednafen's base directory (config, firmware/, saves) to the exe's own folder, independent of the
+    // ambient HOME -- the POSIX counterpart of the MEDNAFEN_HOME set in WindowsPlatform::LaunchProcess.
+    // Mednafen's GetBaseDirectory uses MEDNAFEN_HOME if set, else $HOME/.mednafen (drivers/main.cpp), and
+    // HOME is essentially always set on macOS/Linux, so without this it would ALWAYS root at ~/.mednafen
+    // rather than the patched checkout that holds the Saturn BIOS, and fail to boot the disc. The exe's
+    // folder, not the working directory, so a custom working directory can't move the base off its
+    // firmware. Inert for other emulators, which don't read it.
+    std::vector<sfe::EnvVar> env;
+    if (!home.empty()) env.push_back({ "MEDNAFEN_HOME", home });
+
+    int pid = -1;
+    if (!sfe::SpawnChild(exe, args, dir, env, pid, why))
+    {
+        if (error) *error = why;
+        return false;
+    }
+    mLaunchedPid = pid;   // remember it so a relaunch can stop it first
     return true;
 }
 
@@ -520,14 +525,9 @@ bool WebPlatform::LaunchTool(const char* path, const std::vector<std::string>& a
 void WebPlatform::TerminateLaunchedProcess()
 {
     if (mLaunchedPid <= 0) return;
-    int status = 0;
-    // Reap first without blocking: if the emulator already exited it's a zombie holding the
-    // pid, so this collects it and we skip the kill (never signal a recycled pid).
-    if (::waitpid(mLaunchedPid, &status, WNOHANG) == 0)
-    {
-        ::kill(mLaunchedPid, SIGTERM);        // still running — ask it to quit
-        ::waitpid(mLaunchedPid, &status, 0);  // then reap so we don't leave a zombie
-    }
+    // SIGTERM, a short grace, then SIGKILL: an emulator that ignores the request cannot freeze the UI
+    // (which calls this on a relaunch) for longer than the two waits below.
+    sfe::StopChild(mLaunchedPid, 1500, 1000);
     mLaunchedPid = -1;
 }
 #endif  // !__EMSCRIPTEN__

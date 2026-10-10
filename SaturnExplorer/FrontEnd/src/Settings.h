@@ -59,7 +59,12 @@ public:
     static char PathSeparator();
 
     void Load();        // read FilePath(); silent no-op if it doesn't exist
-    bool Save() const;  // write FilePath(), creating the config dir first
+    // Write FilePath(), creating the config dir first. All-or-nothing: the new file is staged beside the
+    // old one and renamed over it once it is safely on disk, so a full disk, a failed flush or a
+    // read-only folder leaves the previous settings in place instead of an empty file. False, with
+    // 'error' filled, when it could not be saved -- the caller must keep its changes pending.
+    bool Save(std::string* error = nullptr) const;
+    bool SaveTo(const std::string& path, std::string* error = nullptr) const;   // the same, to 'path'
 
     bool Has(const std::string& section, const std::string& key) const;
     std::string Get(const std::string& section, const std::string& key,

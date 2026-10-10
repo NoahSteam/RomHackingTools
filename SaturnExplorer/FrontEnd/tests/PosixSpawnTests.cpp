@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <csignal>
 #include <fstream>
 #include <string>
 #include <thread>
@@ -203,6 +204,123 @@ void TestSyscallFailures(const std::string& dir)
         CHECK(error.find("could not wait") != std::string::npos);
     }
 }
+
+// The emulator launcher: a child this program keeps, started without a shell. A ROM called
+// Game$(touch marker).cue used to be expanded by /bin/sh; and a launch that could not happen (not
+// executable, no such working directory, a relative program path) was reported as started.
+void TestSpawnChildIsLiteralAndOwned(const std::string& dir)
+{
+    const std::string out = dir + "/child_argv.txt", marker = dir + "/injected";
+    const std::string tool = dir + "/emu.sh";
+    WriteFile(tool, "#!/bin/sh\nexec > \"" + out + ".tmp\"\npwd\nprintf '%s\\n' \"$MEDNAFEN_HOME\"\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\nprintf 'END\\n'\nmv \"" + out + ".tmp\" \"" + out + "\"\n", 0755);
+    const std::vector<std::string> args = { "Game$(touch " + marker + ").cue", "`touch " + marker + "`", "it's \"x\"", "a b", "" };
+    int pid = -1;
+    std::string error;
+    CHECK(SpawnChild(tool, args, dir, { { "MEDNAFEN_HOME", "/some/home dir" } }, pid, error));
+    CHECK(error.empty());
+    CHECK(pid > 0);
+    std::vector<std::string> lines;
+    CHECK(WaitForLines(out, args.size() + 3, lines));
+    if (lines.size() == args.size() + 3)
+    {
+        CHECK(lines[1] == "/some/home dir");                       // the environment override arrived
+        for (size_t i = 0; i < args.size(); ++i) CHECK(lines[2 + i] == args[i]);
+        CHECK(lines.back() == "END");
+    }
+    CHECK(::access(marker.c_str(), F_OK) != 0);                    // nothing was run through a shell
+    // It is OUR child: it can be waited on (a detached grandchild could not be).
+    int status = 0;
+    CHECK(::waitpid(pid, &status, 0) == pid);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0);
+}
+
+void TestSpawnChildFailuresAreReported(const std::string& dir)
+{
+    int pid = 0;
+    std::string error;
+    CHECK(!SpawnChild(dir + "/no/such/emulator", {}, "", {}, pid, error));
+    CHECK(error.find("no/such/emulator") != std::string::npos);
+    CHECK(error.find(std::strerror(ENOENT)) != std::string::npos);
+    CHECK(pid == -1);
+
+    const std::string plain = dir + "/child_plain";
+    WriteFile(plain, "#!/bin/sh\n", 0644);
+    error.clear();
+    CHECK(!SpawnChild(plain, {}, "", {}, pid, error));
+    CHECK(error.find(std::strerror(EACCES)) != std::string::npos);
+
+    const std::string ok = dir + "/child_ok.sh";
+    WriteFile(ok, "#!/bin/sh\nexit 0\n", 0755);
+    error.clear();
+    CHECK(!SpawnChild(ok, {}, dir + "/no_such_folder", {}, pid, error));
+    CHECK(error.find("working directory") != std::string::npos);
+    error.clear();
+    CHECK(!SpawnChild(ok, {}, plain, {}, pid, error));              // a file is not a directory
+    CHECK(error.find("working directory") != std::string::npos);
+
+    CHECK(!SpawnChild("", {}, "", {}, pid, error) && !error.empty());
+}
+
+// "tools/emu" with a working directory of its own folder used to look for tools/tools/emu.
+void TestSpawnChildResolvesRelativePaths(const std::string& dir)
+{
+    const std::string tools = dir + "/rel_tools", out = dir + "/rel_out.txt";
+    std::system(("mkdir -p '" + tools + "'").c_str());
+    WriteFile(tools + "/emu.sh", "#!/bin/sh\nprintf 'ran\\n' > \"" + out + "\"\n", 0755);
+    char* here = ::getcwd(nullptr, 0);
+    CHECK(::chdir(dir.c_str()) == 0);
+    int pid = -1;
+    std::string error;
+    const bool ok = SpawnChild("rel_tools/emu.sh", {}, tools, {}, pid, error);   // working dir is the program's own
+    CHECK(::chdir(here) == 0);
+    std::free(here);
+    CHECK(ok);
+    CHECK(error.empty());
+    std::vector<std::string> lines;
+    CHECK(WaitForLines(out, 1, lines));
+    if (pid > 0) { int st = 0; ::waitpid(pid, &st, 0); }
+}
+
+// A child that ignores SIGTERM used to hold the caller in a blocking waitpid for as long as it lived.
+void TestStopChildIsBounded(const std::string& dir)
+{
+    const std::string ready = dir + "/stubborn_ready";
+    const std::string tool = dir + "/stubborn.sh";
+    WriteFile(tool, "#!/bin/sh\ntrap '' TERM\n: > \"" + ready + "\"\nwhile :; do sleep 1; done\n", 0755);
+    int pid = -1;
+    std::string error;
+    CHECK(SpawnChild(tool, {}, dir, {}, pid, error));
+    std::vector<std::string> lines;
+    for (int i = 0; i < 500 && ::access(ready.c_str(), F_OK) != 0; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CHECK(::access(ready.c_str(), F_OK) == 0);                      // the trap is installed
+    const auto t0 = std::chrono::steady_clock::now();
+    const StopResult r = StopChild(pid, 150, 1000);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+    CHECK(r == StopResult::Killed);
+    CHECK(ms >= 140 && ms < 1500);                                  // waited the grace period, then forced it
+    CHECK(::kill(pid, 0) != 0);                                     // gone and reaped
+
+    // One that leaves when asked.
+    const std::string polite = dir + "/polite.sh";
+    WriteFile(polite, "#!/bin/sh\nwhile :; do sleep 1; done\n", 0755);
+    CHECK(SpawnChild(polite, {}, dir, {}, pid, error));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(StopChild(pid, 2000, 1000) == StopResult::Terminated);
+
+    // One that had already exited, and a pid that was never ours.
+    CHECK(SpawnChild(dir + "/ok2.sh", {}, dir, {}, pid, error));
+    // Wait for it to be a zombie without reaping it -- the first run of a new script can take a while on a
+    // loaded machine, so a fixed sleep is not a guarantee it has exited.
+    for (int i = 0; i < 1000; ++i)
+    {
+        siginfo_t info = {};
+        if (::waitid(P_PID, static_cast<id_t>(pid), &info, WEXITED | WNOWAIT | WNOHANG) == 0 && info.si_pid == pid) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    CHECK(StopChild(pid, 100, 100) == StopResult::AlreadyGone);
+    CHECK(StopChild(-1, 100, 100) == StopResult::AlreadyGone);
+}
 }  // namespace
 
 // An application bundle that ships a command-line helper (Beyond Compare's bcomp) is run through the
@@ -235,6 +353,10 @@ int main()
     TestNoZombie(dir);
     TestSyscallFailures(dir);
     TestBundleUsesItsCommandLineHelper(dir);
+    TestSpawnChildIsLiteralAndOwned(dir);
+    TestSpawnChildFailuresAreReported(dir);
+    TestSpawnChildResolvesRelativePaths(dir);
+    TestStopChildIsBounded(dir);
     std::system(("rm -rf '" + dir + "'").c_str());
     if (gFailures == 0) std::printf("PosixSpawn: all checks passed\n");
     return gFailures == 0 ? 0 : 1;

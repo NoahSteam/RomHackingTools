@@ -62,6 +62,26 @@ static void TestLaunchModel()
     CHECK(BuildLaunchArgs("-a -i \"{rom}\"", "C:\\Games\\Saturn Disc.cue") ==
           "-a -i \"C:\\Games\\Saturn Disc.cue\"");
     CHECK(BuildLaunchArgs("--bios {bios} \"{rom}\"", "game.cue", "") == "--bios \"game.cue\"");
+
+    // The argv form: the template is split first and the ROM filled in after, so what a ROM's name
+    // holds can neither end an argument early nor reach a shell.
+    {
+        const std::vector<std::string> plain = BuildLaunchArgv("-a -i \"{rom}\"", "C:\\Games\\Saturn Disc.cue");
+        CHECK(plain.size() == 3 && plain[0] == "-a" && plain[1] == "-i" && plain[2] == "C:\\Games\\Saturn Disc.cue");
+        for (const char* nasty : { "Game$(printf x > marker).cue", "`id`.cue", "it's \"quoted\".cue", "a;b&c|d.cue", "$HOME/x.cue", "two  spaces.cue" })
+        {
+            const std::vector<std::string> v = BuildLaunchArgv("\"{rom}\"", nasty);
+            CHECK(v.size() == 1 && v[0] == nasty);
+        }
+        CHECK(BuildLaunchArgv("\"{rom}\"", "").empty());                       // no ROM: launch bare
+        const std::vector<std::string> bios = BuildLaunchArgv("--bios {bios} \"{rom}\"", "game.cue", "");
+        CHECK(bios.size() == 2 && bios[0] == "--bios" && bios[1] == "game.cue");   // an empty {bios} vanishes
+        const std::vector<std::string> both = BuildLaunchArgv("--bios=\"{bios}\" {rom}", "g.cue", "/b i/os.bin");
+        CHECK(both.size() == 2 && both[0] == "--bios=/b i/os.bin" && both[1] == "g.cue");
+        // A path that spells a token is not expanded a second time.
+        const std::vector<std::string> self = BuildLaunchArgv("{bios} {rom}", "{bios}.cue", "/x");
+        CHECK(self.size() == 2 && self[0] == "/x" && self[1] == "{bios}.cue");
+    }
     CHECK(PathBasename("C:\\Games\\disc.cue") == "disc.cue");
 
     Settings settings;

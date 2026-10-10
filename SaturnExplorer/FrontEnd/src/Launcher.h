@@ -5,7 +5,7 @@
 //
 // Pure data + logic: no ImGui, no platform calls. The App owns one Launcher, draws the
 // nested Launch menu / Launch Settings dialog around it, and hands the resolved
-// (exe, args, workdir) to IPlatform::LaunchProcess. That split keeps the arg templating,
+// (exe, args, workdir) to IPlatform::LaunchEmulator. That split keeps the arg templating,
 // recent-list, and load/save logic unit-testable.
 #pragma once
 
@@ -47,6 +47,14 @@ struct LaunchValidation
 std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& rom,
                             const std::string& bios = std::string());
 
+// The same template as an argument VECTOR, for launching without a shell: the template is split into
+// arguments first (whitespace separates, "..." / '...' group), then {rom} and {bios} are filled in as
+// literal text. A ROM called  Game$(rm x).cue  or  it's.cue  is therefore one argument, whatever it
+// holds -- the string form above substitutes first, so a quote in the path changes where the arguments
+// end. No ROM -> no arguments. A token that is only {bios} vanishes when there is no BIOS.
+std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const std::string& rom,
+                                         const std::string& bios = std::string());
+
 // Basename of a path (component after the last '/' or '\\'), for display.
 std::string PathBasename(const std::string& path);
 
@@ -86,6 +94,7 @@ public:
     // The resolved argument string for the selected emulator + current ROM (empty if
     // no emulator is selected). What the App passes to LaunchProcess.
     std::string CurrentArgs() const;
+    std::vector<std::string> CurrentArgv() const;   // the same, as BuildLaunchArgv
 
     // Validate the complete configuration used by the primary Launch action.
     // This deliberately lives in the model so the toolbar, menu, and launch

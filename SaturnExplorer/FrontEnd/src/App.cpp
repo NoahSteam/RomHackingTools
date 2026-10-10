@@ -1,4 +1,5 @@
 #include "App.h"
+#include "ArgSplit.h"
 
 #include <algorithm>
 #include <cfloat>
@@ -424,8 +425,24 @@ void App::SaveSettings()
 #ifdef SE_ENABLE_LIVE
     mSettings.Set("recording", "maximumseconds", std::to_string(mRecordSeconds));
 #endif
-    mSettings.Save();
-    mSettingsDirty = false;
+    std::string error;
+    if (mSettings.Save(&error))
+    {
+        mSettingsDirty = false;
+        mSettingsSaveFailed = false;
+        return;
+    }
+    // Keep the changes pending and try again shortly -- the previous file is still intact -- but say so
+    // once, not every attempt.
+    mSettingsDirty = true;
+    mSettingsRetryAt = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    if (!mSettingsSaveFailed)
+    {
+        mSettingsSaveFailed = true;
+        mOperationStatus = "Could not save settings: " + error;
+        mOperationError = true;
+        mLog.Error(mOperationStatus);
+    }
 }
 
 // "Search Options..." persistence: compression type + the file/folder list (joined with
@@ -1595,8 +1612,13 @@ void App::BuildUI(IPlatform& platform)
     platform.SyncNativeMenu(BuildNativeMenuState(topBarState));
     std::vector<NativeMenuAction> menuActions;
     platform.DrainNativeMenu(menuActions);
+    // An open modal owns the app, exactly as it does for the ImGui toolbar (whose menus cannot be
+    // clicked through it) and for the keyboard shortcuts (AppShortcut). The OS menu bar is outside
+    // ImGui, so it has to be held back here: a selection made behind a dialog is dropped, not queued
+    // to run when the dialog closes, by which time what it was chosen against may be gone.
+    const bool modalOpen = ImGui::GetTopMostAndVisiblePopupModal() != nullptr;
     for (const NativeMenuAction& action : menuActions)
-        DispatchNativeMenuAction(action, topBarCommands);
+        if (!modalOpen) DispatchNativeMenuAction(action, topBarCommands);
 #else
     DrawToolbar(topBarCommands);
 #endif
@@ -1607,7 +1629,14 @@ void App::BuildUI(IPlatform& platform)
         // so this is what catches the mistake being reintroduced.
         mDispatchingCommands = true;
         for (const TopBarCommand& command : topBarCommands)
+        {
+            // Enablement was decided when the command was queued -- from a menu, or a shortcut -- and an
+            // earlier command in this same batch can have changed it since (Disconnect, then Pause). The
+            // policy is re-applied against the state as it is now, so a command never runs on a source or
+            // session that no longer qualifies.
+            if (!TopBarCommandEnabled(command.type, BuildTopBarViewModel())) continue;
             ExecuteTopBarCommand(command, platform);
+        }
         mDispatchingCommands = false;
     }
     // Service Demo Mode before the frame renders, so a beat's layer/selection changes take
@@ -1853,12 +1882,8 @@ void App::BuildUI(IPlatform& platform)
 
     // Persist any preference the user changed this frame (panel visibility, data
     // dir). Dock-layout changes are saved separately by ImGui into imgui.ini.
-    if (mSettingsDirty) SaveSettings();
-    if (mController.ConsumeSettingsDirty())
-    {
-        mSettingsDirty = true;
-        SaveSettings();
-    }
+    if (mController.ConsumeSettingsDirty()) mSettingsDirty = true;
+    if (mSettingsDirty && std::chrono::steady_clock::now() >= mSettingsRetryAt) SaveSettings();
 }
 
 // Programmatic default dock layout: a left inspector column (Texture/Palette live
@@ -6087,17 +6112,14 @@ void App::ApplyChangesToDisc(IPlatform& platform)
     bool launched = false;
     if (wrote && changed > 0)
     {
+        // An auxiliary program, not the emulator: LaunchTool leaves the emulator SE owns alone (starting
+        // this through the emulator launcher would have replaced its pid and stranded the real one).
+        std::string err;
 #ifdef _WIN32
-        std::string args = "-3 \"" + scriptPath + "\"";
-        launched = platform.LaunchProcess("py", args.c_str(), mDataDir.c_str());
-        if (!launched)
-        {
-            std::string a2 = "\"" + scriptPath + "\"";
-            launched = platform.LaunchProcess("python", a2.c_str(), mDataDir.c_str());
-        }
+        launched = platform.LaunchTool("py", { "-3", scriptPath }, mDataDir.c_str(), &err)
+                || platform.LaunchTool("python", { scriptPath }, mDataDir.c_str(), &err);
 #else
-        std::string args = "\"" + scriptPath + "\"";
-        launched = platform.LaunchProcess("python3", args.c_str(), mDataDir.c_str());
+        launched = platform.LaunchTool("python3", { scriptPath }, mDataDir.c_str(), &err);
 #endif
     }
 
@@ -8760,10 +8782,16 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
                                          ImVec2(testWidth, testHeight)))
                 {
                     const char* wd = mLaunchEdits[i].workDir[0] ? mLaunchEdits[i].workDir : nullptr;
-                    const bool ok = platform.LaunchProcess(mLaunchEdits[i].exe,
-                                                           preview.empty() ? nullptr : preview.c_str(), wd);
-                    if (ok) mLog.Info("Test-launched " + emus[i].label);
-                    else    mLog.Error("Failed to test-launch " + std::string(mLaunchEdits[i].exe));
+                    // A test launch is a launch: it replaces the emulator SE owns (and drops its connection)
+                    // and becomes the owned one, so a later Launch stops it instead of starting a second.
+                    StopOwnedEmulator(platform);
+                    std::string testError;
+                    const bool ok = platform.LaunchEmulator(
+                        mLaunchEdits[i].exe, BuildLaunchArgv(mLaunchEdits[i].args, mLauncher.Rom(), emus[i].biosPath),
+                        wd, &testError);
+                    if (ok) { mbLaunchedEmulator = true; mLog.Info("Test-launched " + emus[i].label); }
+                    else    mLog.Error("Failed to test-launch " + std::string(mLaunchEdits[i].exe) +
+                                       (testError.empty() ? std::string() : ": " + testError));
                 }
                 ImGui::EndDisabled();
                 ImGui::EndTable();
@@ -8841,6 +8869,22 @@ void App::DrawLaunchSettingsModal(IPlatform& platform)
     ImGui::PopStyleVar(4);
 }
 
+// Stop the emulator SE started, if any, and -- when it was the live source -- drop the (now-dead)
+// connection so the next launch reconnects to the new game. Shared by Launch and Test Launch, so every
+// way of starting an emulator hands ownership over the same way.
+void App::StopOwnedEmulator(IPlatform& platform)
+{
+    if (!mbLaunchedEmulator) return;
+    platform.TerminateLaunchedProcess();
+    if (mSource.type == SourceType::Live)
+    {
+        mController.ClearAll();
+        SendInput(0);
+        CloseData();
+    }
+    mbLaunchedEmulator = false;
+}
+
 // Start the current emulator + ROM: resolve exe + args (+ working dir) and hand them to
 // the platform, auto-connecting live so the app latches on once the emulator is up.
 bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
@@ -8861,38 +8905,29 @@ bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
 
     // Relaunch: if SE already started an emulator, stop it before launching again so the new
     // game replaces it instead of leaving the old emulator running beside a second instance.
-    // When that emulator was our live source, drop the (now-dead) connection so the fresh
-    // launch reconnects to the new game.
-    if (mbLaunchedEmulator)
-    {
-        platform.TerminateLaunchedProcess();
-        if (mSource.type == SourceType::Live)
-        {
-            mController.ClearAll();
-            SendInput(0);
-            CloseData();
-        }
-        mbLaunchedEmulator = false;
-    }
+    StopOwnedEmulator(platform);
 
-    std::string args = romOverride.empty() ? mLauncher.CurrentArgs()
-                                            : BuildLaunchArgs(sel->argsTemplate, rom, sel->biosPath);
+    // The arguments go to the emulator as an argv, never through a shell: the template is split first and
+    // the ROM path filled in after, so a title with a quote or a `$` in it is still one argument.
+    std::vector<std::string> argv = romOverride.empty() ? mLauncher.CurrentArgv()
+                                                          : BuildLaunchArgv(sel->argsTemplate, rom, sel->biosPath);
     // Force the Saturn control pad + SE's own key bindings onto Mednafen at launch, so its
     // input matches SE without anyone touching Mednafen's remap UI. Prepended (not baked
     // into the user-editable args template) and passed as command-line setting overrides,
     // which take precedence over mednafen.cfg — so it also survives a config wipe.
     if (sel->key == "mednafen")
     {
-        const std::string overrides = mController.MednafenPort1Args();
-        args = overrides + (args.empty() ? std::string() : " " + args);
+        const std::vector<std::string> overrides = SplitCommandLine(mController.MednafenPort1Args());
+        argv.insert(argv.begin(), overrides.begin(), overrides.end());
     }
     const char* wd = sel->workDir.empty() ? nullptr : sel->workDir.c_str();
-    const bool ok = platform.LaunchProcess(sel->exePath.c_str(),
-                                           args.empty() ? nullptr : args.c_str(), wd);
+    std::string launchError;
+    const bool ok = platform.LaunchEmulator(sel->exePath.c_str(), argv, wd, &launchError);
     if (!ok)
     {
-        mLog.Error("Failed to launch " + sel->exePath);
-        mOperationStatus = "Failed to launch " + sel->label + ".";
+        mLog.Error("Failed to launch " + sel->exePath + (launchError.empty() ? std::string() : ": " + launchError));
+        mOperationStatus = "Failed to launch " + sel->label + "."
+                           + (launchError.empty() ? std::string() : " " + launchError);
         mOperationError = true;
         return false;
     }

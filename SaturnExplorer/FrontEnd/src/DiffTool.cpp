@@ -6,6 +6,7 @@
 #include <random>
 #include <vector>
 
+#include "ArgSplit.h"
 #include "FileWrite.h"
 
 namespace sfe
@@ -13,60 +14,14 @@ namespace sfe
 
 const char* const kDefaultDiffArgs = "\"{a}\" \"{b}\"";
 
-namespace
-{
-// Split on whitespace outside quotes; "..." and '...' group and are removed; nothing is escaped (a
-// backslash is just a character, so a Windows path survives). A quote left open runs to the end. An
-// empty quoted pair is an empty argument.
-std::vector<std::string> SplitTemplate(const std::string& t)
-{
-    std::vector<std::string> out;
-    std::string cur;
-    bool have = false;   // 'cur' is an argument even if empty (it held a quote pair)
-    char quote = 0;
-    for (const char c : t)
-    {
-        if (quote)
-        {
-            if (c == quote) quote = 0; else cur += c;
-        }
-        else if (c == '"' || c == '\'')
-        {
-            quote = c;
-            have = true;
-        }
-        else if (c == ' ' || c == '\t' || c == '\n' || c == '\r')
-        {
-            if (have) { out.push_back(cur); cur.clear(); have = false; }
-        }
-        else
-        {
-            cur += c;
-            have = true;
-        }
-    }
-    if (have) out.push_back(cur);
-    return out;
-}
-}  // namespace
-
 std::vector<std::string> BuildDiffArgv(const std::string& tmpl, const std::string& folderA,
                                        const std::string& folderB)
 {
-    std::vector<std::string> args = SplitTemplate(tmpl.empty() ? std::string(kDefaultDiffArgs) : tmpl);
-    for (std::string& arg : args)
-    {
-        // One pass over the argument, not two replaces over the result: a folder path that happens to
-        // contain the other token must not be expanded again.
-        std::string result;
-        for (size_t i = 0; i < arg.size();)
-        {
-            if (arg.compare(i, 3, "{a}") == 0) { result += folderA; i += 3; }
-            else if (arg.compare(i, 3, "{b}") == 0) { result += folderB; i += 3; }
-            else result += arg[i++];
-        }
-        arg = std::move(result);
-    }
+    std::vector<std::string> args = SplitCommandLine(tmpl.empty() ? std::string(kDefaultDiffArgs) : tmpl);
+    // One pass over each argument, not two replaces over the result: a folder path that happens to
+    // contain the other token must not be expanded again.
+    const std::vector<std::pair<std::string, std::string>> tokens = { { "{a}", folderA }, { "{b}", folderB } };
+    for (std::string& arg : args) arg = SubstituteTokens(arg, tokens);
     return args;
 }
 

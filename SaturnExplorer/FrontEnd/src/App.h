@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <chrono>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -256,6 +257,7 @@ private:
     void DrawLaunchSettingsModal(IPlatform& platform);
     // Start the selected emulator. With a non-empty romOverride, launch THAT disc instead of the
     // selected ROM without changing the user's selection (used by Build & Launch ISO).
+    void StopOwnedEmulator(IPlatform& platform);
     bool LaunchSession(IPlatform& platform, const std::string& romOverride = std::string());
     void BeginTextureSearch(IPlatform& platform, const se_command& cmd);
     // Which window a search's results land in. Travels with the request through the runner
@@ -778,6 +780,8 @@ private:
     Settings         mSettings;
     std::string      mIniPath;
     bool             mSettingsDirty = false;
+    bool             mSettingsSaveFailed = false;   // the last save failed (reported once, retried below)
+    std::chrono::steady_clock::time_point mSettingsRetryAt;   // no save attempt before this (a failure backs off)
     // "Launch Session": which emulator + ROM the toolbar's Launch menu starts. Exe
     // paths come from the installer ([emulators] in settings) and are user-overridable
     // in Launch Settings. Owns the recent-ROM list + the set-data-dir coupling.

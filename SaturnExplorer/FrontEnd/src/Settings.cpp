@@ -1,5 +1,7 @@
 #include "Settings.h"
 
+#include "FileWrite.h"
+
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -160,24 +162,35 @@ void Settings::Load()
     }
 }
 
-bool Settings::Save() const
+bool Settings::Save(std::string* error) const
 {
     // Resolve the dir once (creating it), then derive the file path from it, rather
     // than re-resolving ConfigDir via FilePath().
     const std::string path = JoinConfig(EnsureConfigDir(), "settings.ini");
-    if (path.empty()) return false;
-    std::ofstream f(path, std::ios::trunc);
-    if (!f) return false;
+    if (path.empty())
+    {
+        if (error) *error = "The settings folder could not be found or created.";
+        return false;
+    }
+    return SaveTo(path, error);
+}
+
+bool Settings::SaveTo(const std::string& path, std::string* error) const
+{
+    std::string text;
     for (const auto& sec : mData)
     {
-        f << '[' << sec.first << "]\n";
+        text += '[' + sec.first + "]\n";
         for (const auto& kv : sec.second)
-        {
-            f << kv.first << " = " << kv.second << '\n';
-        }
-        f << '\n';
+            text += kv.first + " = " + kv.second + '\n';
+        text += '\n';
     }
-    return static_cast<bool>(f);
+    // Not an ofstream: it truncates the file on open and flushes in its destructor, after any check the
+    // caller could make, so a failed write both lost the old settings and reported success.
+    std::string why;
+    if (WriteFileAtomically(path, text.data(), text.size(), why)) return true;
+    if (error) *error = path + ": " + why;
+    return false;
 }
 
 bool Settings::Has(const std::string& section, const std::string& key) const

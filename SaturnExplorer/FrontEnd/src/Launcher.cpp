@@ -5,6 +5,7 @@
 
 #include "Settings.h"
 #include "DataSearch.h"
+#include "ArgSplit.h"
 
 namespace sfe
 {
@@ -113,6 +114,22 @@ std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& 
     return out;
 }
 
+std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const std::string& rom,
+                                         const std::string& bios)
+{
+    std::vector<std::string> out;
+    if (rom.empty()) return out;   // no ROM -> launch bare
+    const std::vector<std::pair<std::string, std::string>> tokens = { { kRomToken, rom }, { kBiosToken, bios } };
+    for (const std::string& arg : SplitCommandLine(argsTemplate))
+    {
+        bool touched = false;
+        std::string value = SubstituteTokens(arg, tokens, &touched);
+        if (touched && value.empty()) continue;   // "{bios}" with no BIOS
+        out.push_back(std::move(value));
+    }
+    return out;
+}
+
 std::string PathBasename(const std::string& path)
 {
     const size_t slash = path.find_last_of("/\\");
@@ -203,6 +220,12 @@ std::string Launcher::CurrentArgs() const
 {
     const EmulatorSpec* e = Selected();
     return e ? BuildLaunchArgs(e->argsTemplate, mRom, e->biosPath) : std::string();
+}
+
+std::vector<std::string> Launcher::CurrentArgv() const
+{
+    const EmulatorSpec* e = Selected();
+    return e ? BuildLaunchArgv(e->argsTemplate, mRom, e->biosPath) : std::vector<std::string>();
 }
 
 LaunchValidation Launcher::Validate() const

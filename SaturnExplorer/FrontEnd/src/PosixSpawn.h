@@ -27,6 +27,31 @@ namespace sfe
 bool SpawnDetached(const std::string& path, const std::vector<std::string>& args,
                    const std::string& workingDir, std::string& error);
 
+// Start 'path' as a child this program KEEPS: the emulator, which a later relaunch must be able to stop.
+// Unlike SpawnDetached it is not reparented, so 'pid' can be waited on and signalled (StopChild). The
+// arguments reach it as an argv -- nothing is run through a shell -- with 'env' added to (or replacing
+// entries in) the inherited environment as NAME=VALUE pairs. A path with a '/' is made absolute against
+// the CURRENT directory before the working directory is applied, so "tools/emu" means the file the user
+// meant and not one inside the child's folder; a bare name is looked up on PATH. The child gets its own
+// session and stdio on /dev/null. False, with 'error' naming the program and the reason, when it did
+// not start (missing or non-executable file, an unusable working directory).
+struct EnvVar { std::string name, value; };
+bool SpawnChild(const std::string& path, const std::vector<std::string>& args, const std::string& workingDir,
+                const std::vector<EnvVar>& env, int& pid, std::string& error);
+
+enum class StopResult
+{
+    AlreadyGone,   // it had exited (and is reaped now) before any signal was sent
+    Terminated,    // it left after SIGTERM
+    Killed,        // it ignored SIGTERM past the grace period and SIGKILL ended it
+    Stuck,         // it would not die; a background thread will reap it whenever it does
+};
+
+// Stop a child started by SpawnChild: SIGTERM, wait up to 'termGraceMs', then SIGKILL and wait up to
+// 'killGraceMs' more. The wait is polled, never open-ended, so a hung emulator cannot hold the caller
+// (the UI thread, on relaunch) forever.
+StopResult StopChild(int pid, int termGraceMs, int killGraceMs);
+
 // The two system calls whose failure paths a test cannot otherwise reach (a second fork() that fails,
 // a wait interrupted by a signal). SpawnDetached passes the real ones; a test substitutes its own.
 struct SpawnSyscalls

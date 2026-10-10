@@ -295,7 +295,7 @@ std::string ControllerPanel::MednafenPort1Args() const
         }
     };
     // Force the standard digital pad, then each bound button. Values are double-quoted so
-    // WebPlatform::LaunchProcess's shell keeps "keyboard 0x0 <sc>" as a single argv token.
+    // SplitCommandLine keeps "keyboard 0x0 <sc>" as a single argv token.
     std::string out = "-ss.input.port1 gamepad";
     for (int i = 0; i < kNumButtons; ++i)
     {

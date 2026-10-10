@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "imgui.h"  // ImTextureID — ImGui is portable and shared by all platforms.
+#include "CommandLine.h"  // JoinWindowsCommandLine: LaunchEmulator's default
 #include "NativeMenu.h"  // NativeMenuState / NativeMenuAction (native OS menu bar bridge)
 
 namespace sfe
@@ -142,6 +143,25 @@ public:
         return false;
     }
 
+    // Start the emulator, the process this app OWNS: it is remembered, so TerminateLaunchedProcess can stop
+    // it before a relaunch, and at most one is owned at a time -- starting another stops the previous
+    // one first. `args` are the emulator's arguments, one literal value each (see LaunchTool): a ROM
+    // called  Game$(x).cue  or  it's.cue  arrives unchanged, which a command-line string cannot promise.
+    // A NULL workingDir is the exe's folder, and MEDNAFEN_HOME is pointed at it. `path` is resolved against
+    // the current directory BEFORE the working directory is applied. Returns false, with the reason in
+    // `error` (when given), when nothing started.
+    //
+    // The default forwards to the string form of LaunchProcess with the arguments quoted for the Windows
+    // command-line parser, which is what that platform consumes; a POSIX backend overrides this.
+    virtual bool LaunchEmulator(const char* path, const std::vector<std::string>& args,
+                                const char* workingDir, std::string* error)
+    {
+        const std::string line = sfe::JoinWindowsCommandLine(args);
+        if (LaunchProcess(path, line.empty() ? nullptr : line.c_str(), workingDir)) return true;
+        if (error) *error = std::string("Could not start ") + (path ? path : "(no program)") + ".";
+        return false;
+    }
+
     // Start an auxiliary program (a diff tool) and leave it alone: unlike LaunchProcess the child
     // is not remembered, so TerminateLaunchedProcess never stops it and starting one never
     // forgets the emulator. `args` are the program's arguments, one literal value each -- nothing
@@ -160,7 +180,9 @@ public:
         return false;
     }
 
-    // Stop the emulator most recently started by LaunchProcess, if it is still running.
+    // Stop the emulator most recently started by LaunchEmulator/LaunchProcess, if it is still running.
+    // Bounded: a process that ignores the polite request is forced down after a short grace period, and
+    // a hung one cannot hold the UI thread.
     // Used to *relaunch* — start a fresh emulator with a different game rather than leaving
     // the old one running and stacking a second instance. Only affects a process this app
     // launched (a user-started emulator is never touched). No-op if none was launched, it

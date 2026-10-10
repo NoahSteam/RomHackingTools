@@ -224,6 +224,7 @@ if(BUILD_TESTING)
         FrontEnd/src/NativeMenu.cpp
         FrontEnd/src/Launcher.cpp
         FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically
         FrontEnd/src/DataSearch.cpp
         FrontEnd/src/DataSearchRunner.cpp
         FrontEnd/src/Prs.cpp
@@ -449,6 +450,7 @@ if(BUILD_TESTING)
         FrontEnd/tests/ControllerPanelTests.cpp
         FrontEnd/src/ControllerPanel.cpp
         FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerControllerPanelTests
@@ -459,7 +461,8 @@ if(BUILD_TESTING)
     # Guards the row/cell click behaviour the panels depend on; see PanelWidgets.h.
     add_executable(SaturnExplorerPanelInteractionTests
         FrontEnd/tests/PanelInteractionTests.cpp
-        FrontEnd/src/Settings.cpp      # the Call Stack split height's persistence
+        FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically      # the Call Stack split height's persistence
         ${SE_IMGUI_CORE}
     )
     target_include_directories(SaturnExplorerPanelInteractionTests
@@ -604,7 +607,20 @@ if(BUILD_TESTING)
             FrontEnd/src/PosixSpawn.cpp
         )
         target_include_directories(SaturnExplorerPosixSpawnTests PRIVATE FrontEnd/src)
+        find_package(Threads REQUIRED)   # StopChild hands a stuck child to a reaper thread
+        target_link_libraries(SaturnExplorerPosixSpawnTests PRIVATE Threads::Threads)
         add_test(NAME SaturnExplorerPosixSpawnTests COMMAND SaturnExplorerPosixSpawnTests)
+    endif()
+
+    # Settings::Save is all-or-nothing and reports a failed write (POSIX paths: it uses chmod and /dev/full).
+    if(NOT WIN32 AND NOT EMSCRIPTEN)
+        add_executable(SaturnExplorerSettingsTests
+            FrontEnd/tests/SettingsTests.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+        )
+        target_include_directories(SaturnExplorerSettingsTests PRIVATE FrontEnd/src)
+        add_test(NAME SaturnExplorerSettingsTests COMMAND SaturnExplorerSettingsTests)
     endif()
 
     # Data > Dump SH-2: the text the command writes -- columns, user notes over generated ones,
@@ -626,6 +642,7 @@ if(BUILD_TESTING)
         FrontEnd/tests/SavestateSlotsTests.cpp
         FrontEnd/src/SavestateSlots.cpp
         FrontEnd/src/Settings.cpp
+        FrontEnd/src/FileWrite.cpp   # Settings::Save stages through WriteFileAtomically
     )
     target_include_directories(SaturnExplorerSavestateSlotsTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
@@ -1341,8 +1358,22 @@ else()
                     fixup_bundle(\"${SE_APP_PATH}\" \"\" \"/opt/homebrew/lib;/usr/local/lib\")
                 ")
                 if(SE_MACOS_SIGN_IDENTITY)
-                    install(CODE "execute_process(COMMAND codesign --force --deep --timestamp
-                        --options runtime --sign \"${SE_MACOS_SIGN_IDENTITY}\" \"${SE_APP_PATH}\")")
+                    # A requested signature that was not produced must fail the install (and so the
+                    # package): an unsigned bundle shipped as signed is worse than no bundle. The result
+                    # is checked, then the signature is verified rather than assumed.
+                    install(CODE "
+                        execute_process(COMMAND codesign --force --deep --timestamp
+                                --options runtime --sign \"${SE_MACOS_SIGN_IDENTITY}\" \"${SE_APP_PATH}\"
+                            RESULT_VARIABLE se_sign_rc ERROR_VARIABLE se_sign_err)
+                        if(NOT se_sign_rc EQUAL 0)
+                            message(FATAL_ERROR \"codesign failed (\${se_sign_rc}): \${se_sign_err}\")
+                        endif()
+                        execute_process(COMMAND codesign --verify --deep --strict \"${SE_APP_PATH}\"
+                            RESULT_VARIABLE se_verify_rc ERROR_VARIABLE se_verify_err)
+                        if(NOT se_verify_rc EQUAL 0)
+                            message(FATAL_ERROR \"The signed bundle does not verify (\${se_verify_rc}): \${se_verify_err}\")
+                        endif()
+                    ")
                 endif()
                 # `cpack -G DragNDrop` then produces a .dmg of the finished bundle.
                 set(CPACK_GENERATOR "DragNDrop")
