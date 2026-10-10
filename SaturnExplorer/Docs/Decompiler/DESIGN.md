@@ -1,6 +1,6 @@
 # SH-2 pseudocode panel — design
 
-> Status: **design, awaiting review.** The feasibility gate the design depends on has been passed
+> Status: **design, awaiting review.** Implementation steps are in [PLAN.md](PLAN.md). The feasibility gate the design depends on has been passed
 > (see [SPIKE_RESULTS.md](SPIKE_RESULTS.md)): Ghidra's native C++ decompiler, built as a plain static
 > library, decompiles real SH-2 bytes at real Saturn addresses from a SaturnExplorer memory capture,
 > with no Java, no Ghidra installation, no subprocess. No production UI has been written.
@@ -297,7 +297,7 @@ Each phase ends with its tests green on Windows and macOS; the UI starts only in
 | Phase | Deliverable | Gate |
 |---|---|---|
 | 0 ✅ | Feasibility spike, Capstone-verified fixtures, this design | Reviewed |
-| 1 | Vendored tree + CMake (`SaturnExplorerGhidraDecomp`, `se-sleighc`, embedded specs, zlib), **MSVC and Apple clang builds**, `Sh2DecompilerTests` running fixture 1 as a ctest | Library and spike test build and pass on Windows, macOS, Linux |
+| 1 | Vendored tree + CMake (`SaturnExplorerGhidraDecomp`, `se-sleighc`, embedded specs, zlib), **MSVC and Apple clang builds**, `Sh2DecompilerTests` running fixture 1 as a ctest | Library and spike test build and pass on Windows and macOS CI |
 | 2 | `MemorySnapshot`, `CaptureLoadImage`, `SaturnArchitecture`, `Sh2Decompiler` (two-pass, literal pools, callees, markup → tokens), `Sh2FunctionFinder`, `DecompilerRunner`; headless tests incl. the `.yss` fixture test | Golden outputs for fixtures 1/1b/2a/2b; runner stale-drop and coalescing tests |
 | 3 | `DecompilerPanel`, App wiring (PanelList, layouts, menus, Assembly/Call Stack entry points, settings), source-kind handling (§6.2) | `ImGuiHarness` interaction tests; manual pass on live Mednafen paused/running/scrub |
 | 4 | Quality: `FunctionNames` round-trip (rename in either panel), Saturn hardware-register symbols (VDP1/VDP2/SCU/SMPC/SCSP maps as named globals), optional BIOS image, register hints at a halt, user comments carried into the C view | Fixture golden updates reviewed |
