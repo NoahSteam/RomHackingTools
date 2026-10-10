@@ -53,6 +53,12 @@ struct PatchOutcome
 // On failure, fills `why` (when given) with a message fit for the UI.
 bool PatchLocationValid(const PatchLocation& loc, std::string* why = nullptr);
 
+// 'path' as a '/'-separated path relative to directory 'root', for PatchLocation::file. False
+// when 'path' is not strictly inside 'root': a location is only meaningful against the
+// directory it was found in, and a bare file name would quietly re-point it at whatever
+// happens to share that name in another directory.
+bool RelativePathUnder(const std::string& root, const std::string& path, std::string& rel);
+
 class PatchLibrary
 {
 public:

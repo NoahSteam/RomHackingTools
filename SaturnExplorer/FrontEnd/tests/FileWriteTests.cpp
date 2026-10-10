@@ -15,6 +15,8 @@
 #include <vector>
 
 #ifndef _WIN32
+#include <csignal>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #endif
 
@@ -131,28 +133,85 @@ void TestCloseFailureIsReported()
 }
 
 // A staged write that fails must leave the destination holding its previous contents. The
-// staging path is made unopenable (a directory sits where the temporary file would go), which
-// is the one fault that is reachable without a full disk or a permission trick.
+// write is made to fail with a file-size limit: it holds even for root, where a permission
+// trick would not, and it fails the staging file rather than the open.
 void TestFailedWriteKeepsThePreviousFile()
 {
+#ifdef _WIN32
+    std::cout << "FileWriteTests: no RLIMIT_FSIZE here, skipping the failed-write case\n";
+#else
     CHECK(MakeDirectory(kDir));
     const std::string target = P("precious.bin");
     const std::string good = "the original contents";
     CHECK(Put(target, good));
 
-    const std::string blocker = target + ".separt";
-    CHECK(MakeDirectory(blocker));   // fopen(blocker, "wb") now fails with EISDIR
+    // Past the limit write() fails with EFBIG instead of raising SIGXFSZ.
+    void (*oldHandler)(int) = std::signal(SIGXFSZ, SIG_IGN);
+    struct rlimit old;
+    CHECK(::getrlimit(RLIMIT_FSIZE, &old) == 0);
+    struct rlimit tight = old;
+    tight.rlim_cur = 4;
 
     const std::string replacement = "this must never land";
     std::string error;
-    CHECK(!WriteFileAtomically(target, replacement.data(), replacement.size(), error));
+    CHECK(::setrlimit(RLIMIT_FSIZE, &tight) == 0);
+    const bool wrote = WriteFileAtomically(target, replacement.data(), replacement.size(), error);
+    CHECK(::setrlimit(RLIMIT_FSIZE, &old) == 0);
+    std::signal(SIGXFSZ, oldHandler);
+    CHECK(!wrote);
     CHECK(!error.empty());
 
     std::string got;
     CHECK(Slurp(target, got));
     CHECK(got == good);   // untouched, where "wb" would have emptied it first
 
-    CHECK(RemoveEmptyDirectory(blocker));
+    // And the failed staging file was cleaned up.
+    std::vector<std::string> names;
+    CHECK(ListDirectory(kDir, names));
+    for (size_t i = 0; i < names.size(); ++i)
+        CHECK(names[i].find(".separt") == std::string::npos);
+    CHECK(RemoveFile(target));
+#endif
+}
+
+// A file that merely has the staging-looking name belongs to somebody else. The old fixed
+// "<path>.separt" was deleted before every save; a staging name is now created exclusively,
+// so a pre-existing sibling survives both a successful save and a failed one.
+void TestStagingNeverTouchesAnUnrelatedSibling()
+{
+    CHECK(MakeDirectory(kDir));
+    const std::string target = P("save.bin");
+    const std::string sibling = target + ".separt";
+    CHECK(Put(sibling, "not yours"));
+
+    std::string error;
+    const std::string body = "saved";
+    CHECK(WriteFileAtomically(target, body.data(), body.size(), error));
+    std::string got;
+    CHECK(Slurp(target, got));
+    CHECK(got == body);
+    CHECK(Slurp(sibling, got));
+    CHECK(got == "not yours");
+
+#ifndef _WIN32
+    void (*oldHandler)(int) = std::signal(SIGXFSZ, SIG_IGN);
+    struct rlimit old;
+    CHECK(::getrlimit(RLIMIT_FSIZE, &old) == 0);
+    struct rlimit tight = old;
+    tight.rlim_cur = 2;
+    const std::string longer = "longer than the limit";
+    CHECK(::setrlimit(RLIMIT_FSIZE, &tight) == 0);
+    const bool wrote = WriteFileAtomically(target, longer.data(), longer.size(), error);
+    CHECK(::setrlimit(RLIMIT_FSIZE, &old) == 0);
+    std::signal(SIGXFSZ, oldHandler);
+    CHECK(!wrote);
+    CHECK(Slurp(sibling, got));
+    CHECK(got == "not yours");
+    CHECK(Slurp(target, got));
+    CHECK(got == body);
+#endif
+
+    CHECK(RemoveFile(sibling));
     CHECK(RemoveFile(target));
 }
 
@@ -222,6 +281,7 @@ int main()
     TestWriteAndReadBack();
     TestCloseFailureIsReported();
     TestFailedWriteKeepsThePreviousFile();
+    TestStagingNeverTouchesAnUnrelatedSibling();
     TestOpenFailureIsReported();
     TestDirectoryHelpers();
     TestMovePath();

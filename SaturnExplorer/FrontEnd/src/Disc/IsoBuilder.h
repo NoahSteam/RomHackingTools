@@ -36,6 +36,9 @@ struct IsoBuildOptions
     // names, the selected ROM basename, etc. Both match case-insensitively.
     std::vector<std::string> skipExtensions; // additional extensions to skip, e.g. {".xyz"}
     std::vector<std::string> skipNames;      // additional exact basenames to skip
+    // Write the single-track .cue beside the image. DiscBuilder turns it off: it writes its own
+    // cue, and the image it hands in is a staging file whose sibling cue would be litter.
+    bool writeCue = true;
 };
 
 struct IsoBuildResult
@@ -53,7 +56,10 @@ struct IsoBuildResult
 };
 
 // Build the image described by 'opts'. Never throws; on any error returns a result with ok=false
-// and a filled 'error'. Writes both the .iso and its .cue on success.
+// and a filled 'error'. Writes both the .iso and its .cue on success. Anything under 'rootDir'
+// that cannot be packed -- a directory that cannot be listed, an entry that cannot be examined,
+// a file too large for an ISO extent, a tree deeper than the scan limit -- fails the build
+// rather than leaving the file silently off the disc.
 IsoBuildResult IsoBuild(const IsoBuildOptions& opts);
 
 }  // namespace sfe

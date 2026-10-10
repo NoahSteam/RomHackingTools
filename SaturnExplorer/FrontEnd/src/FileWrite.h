@@ -71,4 +71,29 @@ bool RemoveFlatDirectory(const std::string& path);
 // The platform's path separator, so callers need not repeat the #ifdef.
 char PathSeparator();
 
+// Move the file 'from' over 'path', replacing what is there in one step (rename on POSIX,
+// MoveFileEx with REPLACE_EXISTING on Windows), so 'path' holds one complete file or the other.
+// A symlink at 'path' is itself replaced; the file it pointed to is left alone.
+bool PublishFile(const std::string& from, const std::string& path, std::string& error);
+
+// Create a new, empty file beside 'path' whose name did not exist before this call, and return
+// its name ("" on failure, with 'error' filled). Exclusive creation is what makes it safe to
+// delete later: a name chosen by convention alone may belong to somebody else.
+std::string CreateStagingFile(const std::string& path, std::string& error);
+
+// 'path' resolved to an absolute path with every symlink, "." and ".." removed (realpath; on
+// Windows the full path). "" when it does not exist or cannot be resolved.
+std::string CanonicalPath(const std::string& path);
+
+// True when 'path' exists and is not a regular file (a directory, device, FIFO or socket).
+bool ExistsAsNonRegularFile(const std::string& path);
+
+// True when both paths exist and name the same file -- through a symlink, a hard link or a
+// different spelling. False when either is missing.
+bool SameFile(const std::string& a, const std::string& b);
+
+// True when 'inner' is 'outer' itself or lies beneath it, after both are resolved with
+// CanonicalPath. False when either does not exist.
+bool PathIsWithin(const std::string& inner, const std::string& outer);
+
 }  // namespace sfe

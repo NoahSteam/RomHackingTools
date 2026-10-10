@@ -81,6 +81,7 @@ void DataSearchRunner::Launch(DataSearchRequest request)
         mOutcome.hits = std::move(results);
         mOutcome.summary = sum;
         mOutcome.destination = request.destination;
+        mOutcome.roots = request.roots;
         mOutcome.cancelled = cancelled;
         mDone.store(true);   // reaped by Poll() on the caller's thread
     };

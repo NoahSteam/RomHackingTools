@@ -118,6 +118,35 @@ int main()
     CueSheet ci = ParseCueText("FILE \"g.iso\" BINARY\n TRACK 01 MODE1/2048\n  INDEX 01 00:00:00\n", "");
     Check(ci.ok && ci.tracks[0].sectorSize == 2048, "mode1/2048 sector size");
 
+    // FILE types are recorded, and a range that is not a whole number of sectors says so
+    // instead of being floored.
+    {
+        CueSheet s = ParseCueText("FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX 01 00:00:00\n"
+                                  "FILE \"b.wav\" wave\n TRACK 02 AUDIO\n  INDEX 01 00:00:00\n"
+                                  "FILE c.bin BINARY\n TRACK 03 AUDIO\n  INDEX 01 00:00:00\n", "d/");
+        Check(s.ok, "multi-file cue parses");
+        Check(s.tracks[0].fileType == "BINARY", "quoted FILE type");
+        Check(s.tracks[1].fileType == "WAVE", "FILE type is upper-cased");
+        Check(s.tracks[2].fileType == "BINARY" && s.tracks[2].file == "d/c.bin", "unquoted FILE type");
+
+        auto sizes = [](const std::string& p) -> uint64_t {
+            if (p == "d/a.bin") return 2352 * 10;
+            if (p == "d/b.wav") return 2353;          // one byte past a sector
+            if (p == "d/c.bin") return 2351;          // one byte short of a sector
+            return 0;
+        };
+        const std::vector<CueTrackRange> r = CueTrackRanges(s, sizes);
+        Check(r[0].problem.empty() && r[0].length == 2352 * 10, "whole sectors are exact");
+        Check(!r[1].problem.empty(), "a partial trailing sector is a problem, not dropped");
+        Check(!r[2].problem.empty(), "a file shorter than a sector is a problem");
+
+        CueSheet o = ParseCueText("FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX 01 00:00:00\n"
+                                  " TRACK 02 AUDIO\n  INDEX 00 00:05:00\n  INDEX 01 00:04:00\n", "");
+        const std::vector<CueTrackRange> ro =
+            CueTrackRanges(o, [](const std::string&) -> uint64_t { return 2352 * 600; });
+        Check(!ro[1].problem.empty(), "indices out of order are a problem");
+    }
+
     if (gFail == 0) std::printf("All CueSheet tests passed.\n");
     return gFail ? 1 : 0;
 }

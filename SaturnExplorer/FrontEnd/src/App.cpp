@@ -5828,13 +5828,27 @@ void App::PollSearchWorker()
     // accepted-row flags once, so the per-frame draw doesn't recompute them.
     if (outcome.destination == kSearchToLocateResults)
     {
+        // The hits are paths under the directory the search was given. If the Data Directory
+        // has moved since, a path made relative to the NEW one falls back to something that
+        // names a different file, and an accepted match would patch that file instead.
+        const std::string root = outcome.roots.size() == 1 ? outcome.roots[0] : std::string();
+        if (root.empty() || root != mDataDir)
+        {
+            ClearLocateResults("The Data Directory changed while this search ran, so its matches "
+                               "are not offered. Search again.");
+            mShowLocateResults = true;
+            mShowSearchResults = false;
+            return;
+        }
+        mLocateRoot = root;
         mLocateResults = std::move(outcome.hits);
         mLocateSummary = std::move(outcome.summary);
         mLocateRel.clear();
         size_t rows = 0;
         for (const DataSearchHit& h : mLocateResults)
         {
-            mLocateRel.push_back(RelativeToDataDir(h.path));
+            std::string rel;
+            mLocateRel.push_back(RelativePathUnder(root, h.path, rel) ? rel : std::string());
             rows += h.offsets.size();
         }
         mLocateRowAdded.assign(rows, 0);
@@ -5854,15 +5868,13 @@ void App::PollSearchWorker()
 // those files. Desktop only (needs a real filesystem + a Python interpreter on PATH).
 // ===========================================================================================
 
-std::string App::RelativeToDataDir(const std::string& absPath) const
+void App::ClearLocateResults(const std::string& summary)
 {
-    std::string d = mDataDir, p = absPath;
-    for (char& c : d) if (c == '\\') c = '/';
-    for (char& c : p) if (c == '\\') c = '/';
-    if (!d.empty() && d.back() == '/') d.pop_back();
-    if (p.size() > d.size() + 1 && p.compare(0, d.size(), d) == 0 && p[d.size()] == '/')
-        return p.substr(d.size() + 1);
-    return PathBasename(absPath);   // outside the data dir: fall back to the file name
+    mLocateResults.clear();
+    mLocateRel.clear();
+    mLocateRowAdded.clear();
+    mLocateRoot.clear();
+    mLocateSummary = summary;
 }
 
 // The context-bytes chooser opened from the Hex editor's "Find in game files". The user picks
@@ -5986,6 +5998,10 @@ void App::DrawLocateResults()
                 {
                     ImGui::TextDisabled("Added");
                 }
+                else if (rel.empty())
+                {
+                    ImGui::TextDisabled("Outside the Data Directory");
+                }
                 else if (ImGui::SmallButton("Accept"))
                 {
                     AcceptLocateMatch(rel, selOffset);
@@ -6006,6 +6022,14 @@ void App::DrawLocateResults()
 // The label/offset arithmetic is model work kept out of the draw loop.
 void App::AcceptLocateMatch(const std::string& rel, uint64_t selOffset)
 {
+    // 'rel' only means something against the directory it was found in.
+    if (rel.empty() || mLocateRoot.empty() || mLocateRoot != mDataDir)
+    {
+        mPatchResultText = "Couldn't record that location: the Data Directory changed since the "
+                           "search ran. Search again.";
+        mShowPatchResults = true;
+        return;
+    }
     PatchLocation loc;
     char l[192];
     std::snprintf(l, sizeof(l), "%s -> %s @ %llu", mLocateLabel.c_str(), rel.c_str(),
@@ -6121,16 +6145,15 @@ void App::ApplyChangesToDisc(IPlatform& platform)
     };
     const std::string script = mPatchLib.EmitPython(readMem, outcomes);
 
-    std::string scriptPath = mDataDir;
+    // Absolute: python is started with the Data Directory as its working directory, so a
+    // relative "data/se_patch.py" would be looked up as data/data/se_patch.py.
+    std::string scriptPath = AbsolutePath(mDataDir);
     if (!scriptPath.empty() && scriptPath.back() != '/' && scriptPath.back() != '\\')
         scriptPath += '/';
     scriptPath += "se_patch.py";
 
-    bool wrote = false;
-    {
-        std::ofstream f(scriptPath, std::ios::binary | std::ios::trunc);
-        if (f) { f.write(script.data(), (std::streamsize)script.size()); wrote = (bool)f; }
-    }
+    std::string writeError;
+    const bool wrote = WriteFileAtomically(scriptPath, script.data(), script.size(), writeError);
 
     int changed = 0, unchanged = 0, failed = 0;
     std::string detail;
@@ -6155,11 +6178,12 @@ void App::ApplyChangesToDisc(IPlatform& platform)
         // An auxiliary program, not the emulator: LaunchTool leaves the emulator SE owns alone (starting
         // this through the emulator launcher would have replaced its pid and stranded the real one).
         std::string err;
+        const std::string workDir = AbsolutePath(mDataDir);
 #ifdef _WIN32
-        launched = platform.LaunchTool("py", { "-3", scriptPath }, mDataDir.c_str(), &err)
-                || platform.LaunchTool("python", { scriptPath }, mDataDir.c_str(), &err);
+        launched = platform.LaunchTool("py", { "-3", scriptPath }, workDir.c_str(), &err)
+                || platform.LaunchTool("python", { scriptPath }, workDir.c_str(), &err);
 #else
-        launched = platform.LaunchTool("python3", { scriptPath }, mDataDir.c_str(), &err);
+        launched = platform.LaunchTool("python3", { scriptPath }, workDir.c_str(), &err);
 #endif
     }
 
@@ -6167,7 +6191,7 @@ void App::ApplyChangesToDisc(IPlatform& platform)
     std::snprintf(hdr, sizeof(hdr),
                   "%s\n\n%d location(s) changed, %d unchanged, %d unreadable.\n"
                   "Script: %s\n%s\n\n",
-                  !wrote ? "FAILED to write the patch script." :
+                  !wrote ? ("FAILED to write the patch script: " + writeError).c_str() :
                   changed == 0 ? "Nothing to patch - no known location differs from its baseline."
                                : (launched ? "Running the patch script (python)..."
                                            : "Wrote the patch script, but couldn't launch python. "
@@ -6363,13 +6387,25 @@ void App::BuildDisc(IPlatform& platform, bool launch)
     const bool binCue = mBuildFormatBinCue != 0;
     const std::string rom = mLauncher.Rom();
 
+    // Resolved, so its parent is a real directory: the parent of a bare relative "data" is ""
+    // and the output landed inside the tree being packed, where the next build packed it.
+    const std::string dataDir = CanonicalPath(mDataDir);
+    if (dataDir.empty()) { report("The Data Directory could not be resolved:\n" + mDataDir); return; }
+
+    // One source disc supplies both the track layout and the boot header: the selected ROM if
+    // there is one, else the disc open in Disc Explorer. Taking the header from one and the
+    // tracks from the other built game B's boot sector onto game A's disc.
+    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.Path() : std::string());
+    const bool sourceIsOpenDisc = mDisc.IsOpen() &&
+        (rom.empty() || mDisc.Path() == rom || SameFile(mDisc.Path(), rom));
+
     IsoBuildOptions iso;
-    iso.rootDir = mDataDir;
+    iso.rootDir = dataDir;
 
     // Boot header + PVD ids: an IP.BIN file in the Data Directory wins; otherwise take the 32 KB
     // system area and the reader's PVD ids from the source disc (open Disc Explorer, else ROM).
     std::string ipSource;
-    const std::string ipPath = mDataDir + "/IP.BIN";
+    const std::string ipPath = dataDir + "/IP.BIN";
     if (PathExists(ipPath))
     {
         std::ifstream f(ipPath, std::ios::binary);
@@ -6392,7 +6428,7 @@ void App::BuildDisc(IPlatform& platform, bool launch)
             return true;
         };
         DiscImage src;
-        if (mDisc.IsOpen() && grab(mDisc, mDiscFs))
+        if (sourceIsOpenDisc && grab(mDisc, mDiscFs))
             ipSource = "the open disc image (" + PathBasename(mDisc.Path()) + ")";
         else if (!rom.empty() && src.Open(rom) && grab(src, IsoParse(src.Reader())))
             ipSource = "the selected ROM (" + PathBasename(rom) + ")";
@@ -6403,14 +6439,21 @@ void App::BuildDisc(IPlatform& platform, bool launch)
     std::string stem = "saturn";
     if (!rom.empty()) { stem = PathBasename(rom); const size_t d = stem.find_last_of('.'); if (d != std::string::npos) stem.resize(d); }
     else if (!iso.volumeId.empty()) stem = iso.volumeId;
-    const std::string parent = PathDirectory(mDataDir);
-    const std::string outDir = parent.empty() ? mDataDir : parent;
+    std::string outDir = PathDirectory(dataDir);
+    if (outDir.empty() && !dataDir.empty() && (dataDir[0] == '/' || dataDir[0] == '\\'))
+        outDir = dataDir.substr(0, 1);   // "/game": the parent is the filesystem root
+    if (outDir.empty() || PathIsWithin(outDir, dataDir))
+    {
+        report("The Data Directory has no parent folder to write the rebuilt disc into:\n" + dataDir);
+        return;
+    }
+    if (outDir.back() != '/' && outDir.back() != '\\') outDir += '/';
 
     DiscBuildOptions d;
     d.iso = iso;
-    d.sourceImage = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.Path() : std::string());
+    d.sourceImage = source;
     d.binCue = binCue;
-    d.outPath = outDir + "/" + stem + "_rebuilt" + (binCue ? ".cue" : ".iso");
+    d.outPath = outDir + stem + "_rebuilt" + (binCue ? ".cue" : ".iso");
 
     const DiscBuildResult res = BuildDiscImage(d);
     if (!res.ok) { report("Build failed:\n" + res.error); return; }
@@ -6491,6 +6534,15 @@ void App::DrawDataDirModal(IPlatform& platform)
         ImGui::BeginDisabled(!valid);
         if (ImGui::Button("OK", ImVec2(90, 0)))
         {
+#ifdef SE_ENABLE_LIVE
+            if (mDataDir != buf)
+            {
+                // Locate results are relative to the old directory; accepting one now would
+                // record a path that names a different file.
+                ClearLocateResults(mSearchRunner.Running() ? std::string()
+                                   : "The Data Directory changed. Search again.");
+            }
+#endif
             mDataDir = buf;
             mSettingsDirty = true;   // remember the data dir across runs
             ImGui::CloseCurrentPopup();
@@ -8991,6 +9043,9 @@ bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
     if (mLauncher.SetDataDirOnLaunch() && mDataDir.empty() && !rom.empty())
     {
         mDataDir = PathDirectory(rom);
+#ifdef SE_ENABLE_LIVE
+        ClearLocateResults(std::string());
+#endif
         mLog.Info("Data Directory set to the ROM folder: " + mDataDir);
     }
     if (ShouldAutoConnectAfterLaunch(sel->key, mSource.type) &&

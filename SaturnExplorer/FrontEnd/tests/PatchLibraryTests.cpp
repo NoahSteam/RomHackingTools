@@ -12,6 +12,29 @@
 #if !defined(_WIN32)
 #include <unistd.h>   // mkdtemp — declared here on macOS/clang; the python e2e block is POSIX-only
 #endif
+#if defined(__linux__)
+#include <cerrno>
+#include <cstring>
+#include <dlfcn.h>
+
+// read() fault injection for the project loader. While armed, the next read hands back
+// 'gReadPrefix' and the one after fails with EIO -- the shape of a disk error part way through
+// a file, landing exactly on a record boundary so the prefix parses on its own.
+static bool        gReadArmed = false;
+static bool        gReadServed = false;
+static std::string gReadPrefix;
+extern "C" ssize_t read(int fd, void* buf, size_t n)
+{
+    using ReadFn = ssize_t (*)(int, void*, size_t);
+    static ReadFn real = reinterpret_cast<ReadFn>(dlsym(RTLD_NEXT, "read"));
+    if (!gReadArmed) return real(fd, buf, n);
+    if (gReadServed) { errno = EIO; return -1; }
+    gReadServed = true;
+    const size_t k = gReadPrefix.size() < n ? gReadPrefix.size() : n;
+    std::memcpy(buf, gReadPrefix.data(), k);
+    return ssize_t(k);
+}
+#endif
 
 using namespace sfe;
 
@@ -479,6 +502,105 @@ int main()
         Check(lib.Deserialize("SEPATCH 1\r\n00200000\t2\t0\t1122\tA.BIN\tok\r\n"),
               "a CRLF project file loads");
         Check(lib.Count() == 1, "and its record is kept");
+    }
+
+    // --- Numeric fields must be whole, in range and unsigned ---
+    // strtoul stopped at the first bad character and wrapped on overflow, so each of these
+    // loaded as a plausible mapping (the first became 0x00200000, length 1, offset 0).
+    {
+        PatchLibrary lib;
+        Check(lib.AddOrUpdate(Loc("keep", 0x200000, 1, "KEEP.BIN", 4, {0x11})), "seed entry");
+        const char* bad[] = {
+            "SEPATCH 1\n100200000\t1junk\t0garbage\t00\tMAIN.BIN\tbad\n",   // the review's case
+            "SEPATCH 1\n100200000\t1\t0\t00\tMAIN.BIN\tbad\n",              // address > 32 bits
+            "SEPATCH 1\n00200000\t1junk\t0\t00\tMAIN.BIN\tbad\n",           // trailing text
+            "SEPATCH 1\n00200000\t1\t0garbage\t00\tMAIN.BIN\tbad\n",
+            "SEPATCH 1\n00200000\t-1\t0\t00\tMAIN.BIN\tbad\n",              // a sign
+            "SEPATCH 1\n00200000\t1\t-0\t00\tMAIN.BIN\tbad\n",
+            "SEPATCH 1\n0x200000\t1\t0\t00\tMAIN.BIN\tbad\n",
+            "SEPATCH 1\n00200000\t4294967297\t0\t00\tMAIN.BIN\tbad\n",      // length wraps to 1
+            "SEPATCH 1\n00200000\t\t0\t\tMAIN.BIN\tbad\n",                  // empty number
+            "SEPATCH 1\nFFFFFFFF\t2\t0\t0000\tMAIN.BIN\tbad\n",            // past 4 GiB
+        };
+        for (const char* text : bad)
+        {
+            std::string why;
+            Check(!lib.Deserialize(text, &why), text);
+            Check(!why.empty(), "a refused record says why");
+        }
+        Check(lib.Count() == 1 && lib.Entries()[0].file == "KEEP.BIN",
+              "a refused project leaves the current one in place");
+        Check(lib.Dirty(), "and leaves it dirty");
+        Check(lib.Deserialize("SEPATCH 1\nFFFFFFFF\t1\t18446744073709551\tAB\tM.BIN\tok\n"),
+              "the largest valid address and a large offset still load");
+    }
+
+    // --- A NUL in a path cannot reach the script (Python refuses NUL in source) ---
+    {
+        PatchLibrary lib;
+        PatchLocation nul = Loc("n", 0x200000, 1, "A.BIN", 0, {0x00});
+        nul.file = std::string("A\0B.BIN", 7);
+        std::string why;
+        Check(!lib.AddOrUpdate(nul, &why) && !why.empty(), "a NUL in the file path is refused");
+        Check(lib.Count() == 0, "and nothing is recorded");
+        const std::string text = std::string("SEPATCH 1\n00200000\t1\t0\t00\tA") + '\0' +
+                                 "B.BIN\tx\n";
+        Check(!lib.Deserialize(text), "a NUL in a loaded path is refused");
+    }
+
+    // --- A read error is not a short project ---
+    // 'ss << rdbuf()' stopped quietly at a read error, so a project cut off on a record boundary
+    // replaced the loaded one with part of itself and cleared the dirty flag. A directory is the
+    // portable way to make the read itself fail (EISDIR).
+    {
+        PatchLibrary lib;
+        lib.AddOrUpdate(Loc("a", 0x200000, 1, "A.BIN", 0, {0x01}));
+        lib.AddOrUpdate(Loc("b", 0x200004, 1, "B.BIN", 0, {0x02}));
+        std::string why;
+        Check(!lib.LoadProject(".", &why), "a project that cannot be read fails to load");
+        Check(!why.empty(), "and says why");
+        Check(lib.Count() == 2 && lib.Dirty(), "the current project and its dirty flag survive");
+    }
+
+#if defined(__linux__)
+    {
+        const std::string path = "se_patchlib_eio.seproj";
+        const std::string full = "SEPATCH 1\n00200000\t1\t0\t01\tA.BIN\ta\n"
+                                 "00200004\t1\t0\t02\tB.BIN\tb\n";
+        { std::ofstream f(path, std::ios::binary); f << full; }
+        PatchLibrary lib;
+        lib.AddOrUpdate(Loc("x", 0x200100, 1, "X.BIN", 0, {0x0A}));
+        lib.AddOrUpdate(Loc("y", 0x200104, 1, "Y.BIN", 0, {0x0B}));
+        gReadPrefix = "SEPATCH 1\n00200000\t1\t0\t01\tA.BIN\ta\n";   // header + first record
+        gReadServed = false;
+        gReadArmed = true;
+        std::string why;
+        const bool loaded = lib.LoadProject(path, &why);
+        gReadArmed = false;
+        Check(!loaded, "a read error after a complete record fails the load");
+        Check(lib.Count() == 2 && lib.Entries()[0].file == "X.BIN", "the previous entries survive");
+        Check(lib.Dirty(), "and the project is still dirty");
+        Check(lib.LoadProject(path) && lib.Count() == 2 && !lib.Dirty(),
+              "the same file loads whole without the fault");
+        std::remove(path.c_str());
+    }
+#endif
+
+    // --- RelativePathUnder: a match is only recorded against the root it was found in ---
+    {
+        std::string rel;
+        Check(RelativePathUnder("/a/data", "/a/data/sub/target.bin", rel) && rel == "sub/target.bin",
+              "a nested match keeps its directory");
+        Check(RelativePathUnder("/a/data/", "/a/data/x.bin", rel) && rel == "x.bin",
+              "a trailing separator on the root is fine");
+        Check(RelativePathUnder("C:\\g\\data", "C:\\g\\data\\x.bin", rel) && rel == "x.bin",
+              "Windows separators");
+        Check(!RelativePathUnder("/b/data", "/a/data/sub/target.bin", rel),
+              "a path outside the root is refused, not reduced to its file name");
+        Check(!RelativePathUnder("/a/data", "/a/database/x.bin", rel), "a sibling prefix is not inside");
+        Check(!RelativePathUnder("/a/data", "/a/data", rel), "the root itself is not a file in it");
+        Check(!RelativePathUnder("/a/data", "/a/data/../x.bin", rel), "'..' is refused");
+        Check(!RelativePathUnder("", "/x.bin", rel), "no root, no relative path");
     }
 
     if (gFail == 0) std::printf("All PatchLibrary tests passed.\n");

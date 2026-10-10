@@ -226,6 +226,82 @@ int main()
         }
     }
 
+    // Nothing under the root is left off the disc silently: a tree deeper than the scan limit,
+    // or an entry that is neither a file nor a directory, fails the build and names it.
+    {
+        const std::string dbase = "isobuild_depth_test_tmp";
+        MKDIR(dbase.c_str());
+        std::string dir = dbase + "/disc";
+        MKDIR(dir.c_str());
+        const std::string root = dir;
+        for (int i = 0; i < 26; ++i) { dir += "/D"; MKDIR(dir.c_str()); }
+        WriteFile(dir + "/DEEP.BIN", 'Q', 8);
+        IsoBuildOptions o;
+        o.rootDir = root;
+        o.outIso = dbase + "/deep.iso";
+        const IsoBuildResult r = IsoBuild(o);
+        Check(!r.ok, "a file below the depth limit fails the build instead of vanishing");
+        Check(r.error.find("deeper") != std::string::npos, "the error names the depth limit");
+
+        // Exactly at the limit still builds.
+        const std::string sbase = "isobuild_depthok_test_tmp";
+        MKDIR(sbase.c_str());
+        std::string sdir = sbase + "/disc";
+        MKDIR(sdir.c_str());
+        const std::string sroot = sdir;
+        for (int i = 0; i < 24; ++i) { sdir += "/D"; MKDIR(sdir.c_str()); }
+        WriteFile(sdir + "/DEEP.BIN", 'Q', 8);
+        o.rootDir = sroot;
+        o.outIso = sbase + "/ok.iso";
+        const IsoBuildResult r2 = IsoBuild(o);
+        Check(r2.ok && r2.fileCount == 1, r2.ok ? "a tree at the depth limit builds" : r2.error.c_str());
+
+        o.rootDir = dbase + "/does_not_exist";
+        o.outIso = dbase + "/missing.iso";
+        Check(!IsoBuild(o).ok, "a root that cannot be listed fails the build");
+
+#ifndef _WIN32
+        const std::string fbase = "isobuild_fifo_test_tmp";
+        MKDIR(fbase.c_str());
+        MKDIR((fbase + "/disc").c_str());
+        WriteFile(fbase + "/disc/A.BIN", 'A', 8);
+        ::mkfifo((fbase + "/disc/PIPE").c_str(), 0600);
+        o.rootDir = fbase + "/disc";
+        o.outIso = fbase + "/fifo.iso";
+        const IsoBuildResult rf = IsoBuild(o);
+        Check(!rf.ok && rf.error.find("PIPE") != std::string::npos,
+              "an entry that is not a regular file is reported, not skipped");
+
+        // A cue that cannot be written is a failed build, not a silent omission.
+        const std::string cbase = "isobuild_cue_test_tmp";
+        MKDIR(cbase.c_str());
+        MKDIR((cbase + "/blocked.cue").c_str());   // a directory where the cue goes
+        IsoBuildOptions oc;
+        oc.rootDir = disc;
+        oc.outIso = cbase + "/blocked.iso";
+        Check(!IsoBuild(oc).ok, "an unwritable cue fails the build");
+#endif
+    }
+
+    // Empty files do not share an LBA with a file that has data: the reader resolves the data
+    // file's sector to the data file.
+    {
+        const std::string ebase = "isobuild_empty_test_tmp";
+        MKDIR(ebase.c_str());
+        MKDIR((ebase + "/disc").c_str());
+        WriteFile(ebase + "/disc/AEMPTY.BIN", 'E', 0);
+        WriteFile(ebase + "/disc/BFILE.BIN", 'F', 7);
+        IsoBuildOptions eo;
+        eo.rootDir = ebase + "/disc";
+        eo.outIso = ebase + "/empty.iso";
+        Check(IsoBuild(eo).ok, "empty-file image builds");
+        DiscImage ei;
+        Check(ei.Open(eo.outIso), "open empty-file image");
+        const IsoFs efs = IsoParse(ei.Reader());
+        const IsoEntry* b = Find(efs, "/BFILE.BIN");
+        Check(b && efs.FileAt(b->lba) == b, "the data file's sector resolves to the data file");
+    }
+
     if (gFail == 0) std::printf("All IsoBuilder tests passed.\n");
     return gFail ? 1 : 0;
 }

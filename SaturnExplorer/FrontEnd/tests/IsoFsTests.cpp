@@ -111,6 +111,20 @@ int main()
     Check(fs.FileAt(88) && fs.FileAt(88)->path == "/SOUND/BGM01.PCM", "FileAt within big file");
     Check(fs.FileAt(500) == nullptr, "FileAt unmapped sector");
 
+    // An empty file owns no sectors. The builder records it at the next file's LBA, so giving
+    // it a one-sector span made it claim that file's first sector.
+    {
+        IsoFs shared;
+        shared.entries.push_back({ "/AEMPTY.BIN", 21, 0, false });
+        shared.entries.push_back({ "/BFILE.BIN", 21, 7, false });
+        shared.entries.push_back({ "/HUGE.BIN", 0xFFFFFFF0u, 0xFFFFFFFFu, false });
+        Check(shared.FileAt(21) && shared.FileAt(21)->path == "/BFILE.BIN",
+              "an empty file does not claim the next file's sector");
+        Check(shared.FileAt(0xFFFFFFFFu) && shared.FileAt(0xFFFFFFFFu)->path == "/HUGE.BIN",
+              "an extent near the top of the LBA range does not wrap");
+        Check(shared.FileAt(5) == nullptr, "a wrapped extent does not claim low sectors");
+    }
+
     // A non-ISO image reports a clean failure rather than crashing.
     IsoFs bad = IsoParse([](uint32_t, uint8_t* out) { std::memset(out, 0, kSector); return true; });
     Check(!bad.ok && !bad.error.empty(), "non-ISO image fails cleanly");

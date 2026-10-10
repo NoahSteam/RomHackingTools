@@ -432,6 +432,7 @@ if(BUILD_TESTING)
         FrontEnd/src/Disc/CueSheet.cpp
         FrontEnd/src/Disc/DiscImage.cpp
         FrontEnd/src/Disc/IsoFs.cpp
+        FrontEnd/src/FileWrite.cpp
     )
     target_include_directories(SaturnExplorerDiscBuilderTests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerDiscBuilderTests COMMAND SaturnExplorerDiscBuilderTests)

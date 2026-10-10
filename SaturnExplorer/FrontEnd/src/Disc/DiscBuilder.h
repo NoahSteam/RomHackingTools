@@ -11,6 +11,12 @@
 // file I/O; no ImGui. The App fills in the data-track contents + IP.BIN + PVD ids and picks the
 // format; a plain full-filesystem rebuild of the data track is fine here (files may grow/shrink),
 // because nothing about the surrounding disc structure is regenerated.
+//
+// Supported layouts, refused before anything is written otherwise: a MODE1 first track with a
+// single INDEX 01 (a PREGAP is carried over), and later tracks stored as raw BINARY whole
+// sectors. Every output is staged and only moved into place once the whole set is built, so a
+// failed build leaves any previous output untouched. The output folder must lie outside the
+// packed Data Directory, and no output may be (a link to) a source file.
 #pragma once
 
 #include <cstdint>

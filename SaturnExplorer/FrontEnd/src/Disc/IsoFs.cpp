@@ -35,9 +35,10 @@ const IsoEntry* IsoFs::FileAt(uint32_t lba) const
 {
     for (const IsoEntry& e : entries)
     {
-        if (e.isDir) continue;
-        const uint32_t span = e.size ? SectorSpan(e.size) : 1;
-        if (lba >= e.lba && lba < e.lba + span) return &e;
+        // An empty file owns no sectors. Its recorded LBA is commonly the next file's first
+        // sector, so giving it a one-sector span made it claim that file's data.
+        if (e.isDir || e.size == 0) continue;
+        if (lba >= e.lba && uint64_t(lba) < uint64_t(e.lba) + SectorSpan(e.size)) return &e;
     }
     return nullptr;
 }

@@ -1,6 +1,7 @@
 #include "Disc/IsoBuilder.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <fstream>
 
@@ -187,37 +188,64 @@ bool ShouldSkip(const std::string& name, const IsoBuildOptions& o)
 
 // Recursively scan 'diskPath' into dirs[dirIndex]. Enumerates children (Win32 / POSIX), applying
 // the skip lists, and recurses into subdirectories. Bounded so a runaway tree can't hang.
-void ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
-             uint32_t& fileCount, int depth)
+//
+// Every way an entry can fail to reach the image is an error, not a skip: a disc that builds
+// "successfully" without one of its files fails only later, on the console, with nothing to
+// say which file went missing.
+constexpr int kMaxScanDepth = 24;
+bool ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
+             uint32_t& fileCount, int depth, std::string& error)
 {
-    if (depth > 24) return;
     const std::string base = dirs[dirIndex].diskPath;
+    if (depth > kMaxScanDepth)
+    {
+        error = "Directory nesting is deeper than " + std::to_string(kMaxScanDepth) +
+                " levels: " + base;
+        return false;
+    }
 #ifdef _WIN32
     WIN32_FIND_DATAA fd;
     HANDLE h = ::FindFirstFileA((base + "\\*").c_str(), &fd);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) { error = "Could not list directory: " + base; return false; }
+    bool ok = true;
     do {
         const std::string name = fd.cFileName;
         if (name == "." || name == "..") continue;
+        if (name.empty() || name[0] == '.') continue;   // skip dotfiles
         const std::string full = base + "\\" + name;
         const bool isDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        const bool isFile = !isDir;
         // Size is already in the enumeration record; > 4 GiB won't fit an ISO extent field.
-        const bool fileOk = !isDir && fd.nFileSizeHigh == 0;
+        const bool tooBig = fd.nFileSizeHigh != 0;
         const uint32_t fileSize = fd.nFileSizeLow;
 #else
     DIR* d = ::opendir(base.c_str());
-    if (!d) return;
-    while (struct dirent* e = ::readdir(d)) {
+    if (!d) { error = "Could not list directory: " + base; return false; }
+    bool ok = true;
+    for (;;) {
+        errno = 0;
+        struct dirent* e = ::readdir(d);
+        if (!e)
+        {
+            if (errno != 0) { error = "Error while listing directory: " + base; ok = false; }
+            break;
+        }
         const std::string name = e->d_name;
         if (name == "." || name == "..") continue;
+        if (name.empty() || name[0] == '.') continue;   // skip dotfiles
         const std::string full = base + "/" + name;
         struct stat st;
-        if (::stat(full.c_str(), &st) != 0) continue;   // the one metadata query per entry
+        if (::stat(full.c_str(), &st) != 0)   // the one metadata query per entry
+        {
+            error = "Could not examine " + full;
+            ok = false;
+            break;
+        }
         const bool isDir = S_ISDIR(st.st_mode);
-        const bool fileOk = S_ISREG(st.st_mode) && st.st_size <= 0xFFFFFFFFll;
+        const bool isFile = S_ISREG(st.st_mode);
+        const bool tooBig = st.st_size > 0xFFFFFFFFll;
         const uint32_t fileSize = uint32_t(st.st_size);
 #endif
-        if (name.empty() || name[0] == '.') continue;   // skip dotfiles
         if (isDir)
         {
             Dir sub;
@@ -227,21 +255,41 @@ void ScanDir(std::vector<Dir>& dirs, int dirIndex, const IsoBuildOptions& o,
             const int idx = int(dirs.size());
             dirs.push_back(sub);
             dirs[dirIndex].subdirs.push_back(idx);
-            ScanDir(dirs, idx, o, fileCount, depth + 1);
+            if (!ScanDir(dirs, idx, o, fileCount, depth + 1, error)) { ok = false; break; }
         }
-        else if (fileOk && !ShouldSkip(name, o))
+        else if (isFile && !ShouldSkip(name, o))
         {
+            if (tooBig)
+            {
+                error = "File is too large for an ISO 9660 extent (4 GiB limit): " + full;
+                ok = false;
+                break;
+            }
             File f; f.identifier = FileIdentifier(name); f.diskPath = full; f.size = fileSize; f.lba = 0;
             dirs[dirIndex].files.push_back(f);
             ++fileCount;
         }
+        else if (!isFile)
+        {
+            // A device, FIFO or socket has no contents to pack. Reading one would block or
+            // produce garbage, so it is left out -- but not silently.
+            error = "Not a regular file or directory: " + full;
+            ok = false;
+            break;
+        }
 #ifdef _WIN32
     } while (::FindNextFileA(h, &fd));
+    if (ok && ::GetLastError() != ERROR_NO_MORE_FILES)
+    {
+        error = "Error while listing directory: " + base;
+        ok = false;
+    }
     ::FindClose(h);
 #else
     }
     ::closedir(d);
 #endif
+    return ok;
 }
 
 std::string CuePathFor(const std::string& iso)
@@ -265,7 +313,12 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
     Dir root; root.identifier = ""; root.diskPath = o.rootDir; root.parent = 0;
     dirs.push_back(root);
     uint32_t fileCount = 0;
-    ScanDir(dirs, 0, o, fileCount, 0);
+    std::string scanError;
+    if (!ScanDir(dirs, 0, o, fileCount, 0, scanError))
+    {
+        r.error = scanError;
+        return r;
+    }
     r.dirCount = uint32_t(dirs.size() - 1);
     r.fileCount = fileCount;
 
@@ -550,6 +603,7 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
         {
             std::ifstream in(f.diskPath, std::ios::binary);
             if (!in) { r.error = "Could not read game file: " + f.diskPath; return r; }
+            if (!out) { r.error = "Write error while producing " + o.outIso; return r; }
             uint32_t remaining = f.size;
             while (remaining > 0)
             {
@@ -562,17 +616,27 @@ IsoBuildResult IsoBuild(const IsoBuildOptions& o)
                 remaining -= n;
             }
         }
-    if (!out) { r.error = "Write error while producing " + o.outIso; return r; }
+    // The close flushes the tail of the image; a full disk reports itself here, not before.
     out.close();
+    if (!out) { r.error = "Write error while producing " + o.outIso; return r; }
     r.imageBytes = uint64_t(totalSectors) * kSector;
 
     // 8) A single-track MODE1/2048 cue beside the image.
-    std::ofstream cue(r.cuePath, std::ios::trunc);
-    if (cue)
+    if (o.writeCue)
     {
-        cue << "FILE \"" << BaseName(o.outIso) << "\" BINARY\n"
-            << "  TRACK 01 MODE1/2048\n"
-            << "    INDEX 01 00:00:00\n";
+        std::ofstream cue(r.cuePath, std::ios::trunc);
+        if (cue)
+        {
+            cue << "FILE \"" << BaseName(o.outIso) << "\" BINARY\n"
+                << "  TRACK 01 MODE1/2048\n"
+                << "    INDEX 01 00:00:00\n";
+            cue.close();
+        }
+        if (!cue) { r.error = "Could not write the cue sheet: " + r.cuePath; return r; }
+    }
+    else
+    {
+        r.cuePath.clear();
     }
 
     r.ok = true;

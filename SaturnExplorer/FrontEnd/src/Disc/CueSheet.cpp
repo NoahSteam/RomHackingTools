@@ -27,17 +27,27 @@ uint32_t SectorSizeOf(const std::string& type)
 }
 
 // Extract the quoted name from a FILE line, else the first whitespace-delimited token after FILE.
-std::string CueFileName(const std::string& line)
+// 'type' receives the token after the name (BINARY, MOTOROLA, WAVE, ...), upper-cased.
+std::string CueFileName(const std::string& line, std::string& type)
 {
+    std::string name;
+    std::string rest;
     const size_t q1 = line.find('"');
-    if (q1 != std::string::npos)
+    const size_t q2 = q1 == std::string::npos ? std::string::npos : line.find('"', q1 + 1);
+    if (q2 != std::string::npos)
     {
-        const size_t q2 = line.find('"', q1 + 1);
-        if (q2 != std::string::npos) return line.substr(q1 + 1, q2 - q1 - 1);
+        name = line.substr(q1 + 1, q2 - q1 - 1);
+        rest = line.substr(q2 + 1);
+        std::istringstream is(rest);
+        is >> type;
     }
-    std::istringstream is(line);
-    std::string kw, name;
-    is >> kw >> name;
+    else
+    {
+        std::istringstream is(line);
+        std::string kw;
+        is >> kw >> name >> type;
+    }
+    type = UpperTok(type);
     return name;
 }
 }  // namespace
@@ -92,6 +102,7 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
     std::istringstream in(text);
     std::string line;
     std::string currentFile;
+    std::string currentType;
     while (std::getline(in, line))
     {
         // Trim leading whitespace and a trailing CR.
@@ -106,7 +117,7 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
 
         if (KW == "FILE")
         {
-            currentFile = baseDir + CueFileName(trimmed);
+            currentFile = baseDir + CueFileName(trimmed, currentType);
         }
         else if (KW == "TRACK")
         {
@@ -134,6 +145,7 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
             }
             t.isData = UpperTok(typeTok).compare(0, 4, "MODE") == 0;
             t.file = currentFile;
+            t.fileType = currentType;
             sheet.tracks.push_back(t);
         }
         else if (KW == "INDEX" && !sheet.tracks.empty())
@@ -192,15 +204,34 @@ std::vector<CueTrackRange> CueTrackRanges(
         uint32_t end = 0; bool haveEnd = false;
         for (size_t j = i + 1; j < sheet.tracks.size(); ++j)
             if (sheet.tracks[j].file == t.file) { end = TrackStartFrame(sheet.tracks[j]); haveEnd = true; break; }
-        if (!haveEnd)
+        uint64_t endBytes = 0;
+        if (haveEnd)
         {
-            const uint64_t bytes = fileSize ? fileSize(t.file) : 0;
-            end = uint32_t(bytes / t.sectorSize);
+            endBytes = uint64_t(end) * t.sectorSize;
         }
+        else
+        {
+            endBytes = fileSize ? fileSize(t.file) : 0;
+            if (endBytes % t.sectorSize != 0)
+                out[i].problem = "its file is not a whole number of " +
+                                 std::to_string(t.sectorSize) + "-byte sectors";
+        }
+        for (size_t k = 1; k < t.indices.size(); ++k)
+            if (t.indices[k].frames < t.indices[k - 1].frames ||
+                t.indices[k].number <= t.indices[k - 1].number)
+                out[i].problem = "its indices are out of order";
         out[i].file = t.file;
         out[i].sectorSize = t.sectorSize;
         out[i].offset = uint64_t(start) * t.sectorSize;
-        out[i].length = end > start ? uint64_t(end - start) * t.sectorSize : 0;
+        if (endBytes <= out[i].offset)
+        {
+            out[i].length = 0;
+            if (out[i].problem.empty()) out[i].problem = "it has no sectors";
+        }
+        else
+        {
+            out[i].length = (endBytes - out[i].offset) / t.sectorSize * t.sectorSize;
+        }
     }
     return out;
 }

@@ -66,6 +66,24 @@ std::string PyStr(const std::string& s)
     o.push_back('"');
     return o;
 }
+
+// Parse an entire field as an unsigned number in 'base', no larger than 'max'. strtoul alone
+// stops at the first bad character, wraps on overflow and accepts a sign, which turns
+// "1junk" or "-1" into a plausible-looking mapping instead of a refused record.
+bool ParseUnsigned(const std::string& s, int base, uint64_t max, uint64_t& out)
+{
+    if (s.empty()) return false;
+    uint64_t v = 0;
+    for (char c : s)
+    {
+        const int d = HexNib(c);
+        if (d < 0 || d >= base) return false;
+        if (v > (max - uint64_t(d)) / uint64_t(base)) return false;
+        v = v * uint64_t(base) + uint64_t(d);
+    }
+    out = v;
+    return true;
+}
 }  // namespace
 
 bool PatchLocationValid(const PatchLocation& loc, std::string* why)
@@ -78,6 +96,36 @@ bool PatchLocationValid(const PatchLocation& loc, std::string* why)
     if (loc.file.find_first_of("\t\r\n") != std::string::npos)
         return fail("patch file path contains a tab or newline, which the project format cannot "
                     "represent");
+    // No filesystem path can hold a NUL, and Python refuses to compile a source that does, so
+    // the generated script would not run at all.
+    if (loc.file.find('\0') != std::string::npos)
+        return fail("patch file path contains a NUL byte");
+    if (uint64_t(loc.cpuAddr) + loc.length > 0x100000000ull)
+        return fail("patch range runs past the end of the address space");
+    return true;
+}
+
+bool RelativePathUnder(const std::string& root, const std::string& path, std::string& rel)
+{
+    std::string d = root, p = path;
+    for (char& c : d) if (c == '\\') c = '/';
+    for (char& c : p) if (c == '\\') c = '/';
+    while (!d.empty() && d.back() == '/') d.pop_back();
+    if (d.empty() || p.size() <= d.size() + 1 || p.compare(0, d.size(), d) != 0 ||
+        p[d.size()] != '/')
+        return false;
+    rel = p.substr(d.size() + 1);
+    // Every component must be a real name: the script refuses "..", "." and empty ones too.
+    size_t start = 0;
+    for (;;)
+    {
+        const size_t slash = rel.find('/', start);
+        const std::string part = rel.substr(start, slash == std::string::npos ? std::string::npos
+                                                                               : slash - start);
+        if (part.empty() || part == "." || part == "..") return false;
+        if (slash == std::string::npos) break;
+        start = slash + 1;
+    }
     return true;
 }
 
@@ -161,9 +209,16 @@ bool PatchLibrary::Deserialize(const std::string& text, std::string* error)
         field[5] = line.substr(start);   // label = remainder
 
         PatchLocation e;
-        e.cpuAddr = static_cast<uint32_t>(std::strtoul(field[0].c_str(), nullptr, 16));
-        e.length = static_cast<uint32_t>(std::strtoul(field[1].c_str(), nullptr, 10));
-        e.fileOffset = static_cast<uint64_t>(std::strtoull(field[2].c_str(), nullptr, 10));
+        uint64_t addr = 0, len = 0, off = 0;
+        if (!ParseUnsigned(field[0], 16, 0xFFFFFFFFull, addr))
+            return fail("record's address is not a 32-bit hex number: " + line);
+        if (!ParseUnsigned(field[1], 10, 0xFFFFFFFFull, len))
+            return fail("record's length is not a 32-bit decimal number: " + line);
+        if (!ParseUnsigned(field[2], 10, 0x7FFFFFFFFFFFFFFFull, off))
+            return fail("record's file offset is not a decimal number: " + line);
+        e.cpuAddr = static_cast<uint32_t>(addr);
+        e.length = static_cast<uint32_t>(len);
+        e.fileOffset = off;
         if (!FromHex(field[3], e.expected)) return fail("record's baseline is not hex: " + line);
         e.file = field[4];
         e.label = field[5];
@@ -188,9 +243,23 @@ bool PatchLibrary::LoadProject(const std::string& path, std::string* error)
         if (error) *error = "cannot open " + path;
         return false;
     }
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    return Deserialize(ss.str(), error);
+    // Read explicitly and check for a stream error before parsing: 'ss << f.rdbuf()' stops
+    // quietly at a read error, and a prefix that ends on a record boundary parses cleanly --
+    // replacing the project with part of itself and clearing the dirty flag.
+    std::string text;
+    char buf[64 * 1024];
+    for (;;)
+    {
+        f.read(buf, sizeof buf);
+        text.append(buf, size_t(f.gcount()));
+        if (f.bad())
+        {
+            if (error) *error = "read error on " + path;
+            return false;
+        }
+        if (f.eof()) break;
+    }
+    return Deserialize(text, error);
 }
 
 std::string PatchLibrary::EmitPython(

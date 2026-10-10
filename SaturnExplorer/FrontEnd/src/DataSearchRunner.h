@@ -48,6 +48,9 @@ struct DataSearchOutcome
     std::string                summary;      // ready to display
     int                        destination = 0;
     bool                       cancelled = false;
+    // The request's roots, so a caller can tell which directory these hits are relative to --
+    // the user may have pointed the app somewhere else while the search ran.
+    std::vector<std::string>   roots;
 };
 
 class DataSearchRunner

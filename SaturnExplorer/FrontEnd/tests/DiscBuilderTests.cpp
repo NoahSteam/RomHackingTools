@@ -19,7 +19,9 @@
 #include <direct.h>
 #define MKDIR(p) ::_mkdir(p)
 #else
+#include <dirent.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #define MKDIR(p) ::mkdir(p, 0777)
 #endif
 
@@ -272,6 +274,163 @@ int main()
     Check(img2.Open(base + "/out.iso") && img2.SectorSize() == 2048, "iso opens as 2048");
     IsoFs fs2 = IsoParse(img2.Reader());
     Check(fs2.ok && Find(fs2, "/MAIN.BIN") != nullptr, "iso data-track parses");
+
+    Check(ri.cuePath == base + "/out.cue" && Contains(ReadText(ri.cuePath), "\"out.iso\""),
+          "iso build writes its one-track cue");
+
+    // --- Rebuilding over a previous build that then fails leaves the previous build whole ---
+    // Outputs are staged and only published once every track is in hand, so a failure on a
+    // later track no longer deletes the earlier track files of the build it was replacing.
+    {
+        DiscBuildOptions keep = opt;
+        keep.outPath = base + "/keep.cue";
+        Check(BuildDiscImage(keep).ok, "first build of keep.cue");
+        const std::vector<uint8_t> t1 = ReadBytes(base + "/keep (Track 01).bin");
+        const std::vector<uint8_t> t2 = ReadBytes(base + "/keep (Track 02).bin");
+        const std::string c = ReadText(base + "/keep.cue");
+        keep.sourceImage = base + "/broken.cue";   // its track 02 file is missing
+        const DiscBuildResult rk = BuildDiscImage(keep);
+        Check(!rk.ok, "the rebuild with a missing track fails");
+        Check(ReadBytes(base + "/keep (Track 01).bin") == t1 && !t1.empty(),
+              "the previous Track 01 survives a failed rebuild");
+        Check(ReadBytes(base + "/keep (Track 02).bin") == t2 && !t2.empty(),
+              "the previous Track 02 survives a failed rebuild");
+        Check(ReadText(base + "/keep.cue") == c, "the previous cue survives a failed rebuild");
+    }
+
+    // --- The output folder may not be inside the tree being packed ---
+    // Otherwise the second build packs the first one's raw track into the data track.
+    {
+        DiscBuildOptions inner = opt;
+        inner.outPath = disc + "/inner.cue";
+        const DiscBuildResult rin = BuildDiscImage(inner);
+        Check(!rin.ok && !rin.error.empty(), "an output inside the Data Directory is refused");
+        Check(!FileExists(disc + "/inner.cue") && !FileExists(disc + "/inner (Track 01).bin"),
+              "nothing is written into the Data Directory");
+    }
+
+    // --- Layouts the builder would silently get wrong are refused before writing ---
+    {
+        // An audio track one byte past a whole sector: the old range floored it and copied
+        // 2352 of its 2353 bytes, reporting success.
+        { std::vector<uint8_t> a(2353, 0x33); WriteBytes(base + "/odd.bin", a); }
+        WriteText(base + "/odd.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "FILE \"odd.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n");
+        DiscBuildOptions o = opt;
+        o.sourceImage = base + "/odd.cue";
+        o.outPath = base + "/odd_out.cue";
+        const DiscBuildResult ro = BuildDiscImage(o);
+        Check(!ro.ok && Contains(ro.error, "whole number"), "a truncated audio track is refused");
+        Check(!FileExists(base + "/odd_out.cue"), "nothing is written for it");
+
+        { std::vector<uint8_t> a(2352 * 2, 0x33); WriteBytes(base + "/even.bin", a); }
+        WriteText(base + "/even.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "FILE \"even.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n");
+        o.sourceImage = base + "/even.cue";
+        o.outPath = base + "/even_out.cue";
+        const DiscBuildResult re = BuildDiscImage(o);
+        Check(re.ok && ReadBytes(base + "/even_out (Track 02).bin").size() == 2352 * 2,
+              "a whole-sector audio track still copies");
+
+        // A WAVE file would be copied with its RIFF header, minus its last samples, and
+        // relabelled BINARY.
+        { std::vector<uint8_t> w(44 + 2352, 0); w[0] = 'R'; w[1] = 'I'; w[2] = 'F'; w[3] = 'F';
+          WriteBytes(base + "/a.wav", w); }
+        WriteText(base + "/wave.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "FILE \"a.wav\" WAVE\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n");
+        o.sourceImage = base + "/wave.cue";
+        o.outPath = base + "/wave_out.cue";
+        const DiscBuildResult rw = BuildDiscImage(o);
+        Check(!rw.ok && Contains(rw.error, "WAVE"), "a WAVE-backed track is refused");
+        Check(!FileExists(base + "/wave_out.cue"), "nothing is written for it");
+
+        // The first track's PREGAP is carried into the rebuilt cue.
+        WriteText(base + "/pregap.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    PREGAP 00:02:00\n"
+            "    INDEX 01 00:00:00\n");
+        o.sourceImage = base + "/pregap.cue";
+        o.outPath = base + "/pregap_out.cue";
+        const DiscBuildResult rp = BuildDiscImage(o);
+        Check(rp.ok, rp.ok ? "first-track pregap build ok" : rp.error.c_str());
+        const std::string pc = ReadText(base + "/pregap_out.cue");
+        Check(Contains(pc, "PREGAP 00:02:00") &&
+              pc.find("PREGAP") < pc.find("INDEX 01"), "the first track's PREGAP is preserved");
+
+        // An INDEX 00 in the first track describes in-file pregap sectors the rebuilt track
+        // does not have.
+        WriteText(base + "/idx0.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 00 00:00:00\n"
+            "    INDEX 01 00:02:00\n");
+        o.sourceImage = base + "/idx0.cue";
+        o.outPath = base + "/idx0_out.cue";
+        Check(!BuildDiscImage(o).ok, "a first track with INDEX 00 is refused");
+    }
+
+#ifndef _WIN32
+    // --- An output name that is (a link to) a source file is refused, and the source is intact ---
+    {
+        const std::vector<uint8_t> before = ReadBytes(base + "/src.bin");
+        std::remove((base + "/alias (Track 01).bin").c_str());
+        Check(::symlink("src.bin", (base + "/alias (Track 01).bin").c_str()) == 0, "make symlink");
+        DiscBuildOptions o = opt;
+        o.outPath = base + "/alias.cue";
+        const DiscBuildResult ra = BuildDiscImage(o);
+        Check(!ra.ok && Contains(ra.error, "same file"), "a symlinked output onto the source is refused");
+        Check(ReadBytes(base + "/src.bin") == before, "the source is unchanged");
+        std::remove((base + "/alias (Track 01).bin").c_str());
+
+        std::remove((base + "/hard (Track 02).bin").c_str());
+        Check(::link((base + "/src.bin").c_str(), (base + "/hard (Track 02).bin").c_str()) == 0,
+              "make hard link");
+        o.outPath = base + "/hard.cue";
+        const DiscBuildResult rh = BuildDiscImage(o);
+        Check(!rh.ok, "a hard-linked output onto the source is refused");
+        Check(ReadBytes(base + "/src.bin") == before, "the source is unchanged");
+        std::remove((base + "/hard (Track 02).bin").c_str());
+
+        // A link to a packed game file is replaced, not written through.
+        const std::vector<uint8_t> mainBefore = ReadBytes(disc + "/MAIN.BIN");
+        std::remove((base + "/game (Track 01).bin").c_str());
+        Check(::symlink("disc/MAIN.BIN", (base + "/game (Track 01).bin").c_str()) == 0, "make symlink");
+        o.outPath = base + "/game.cue";
+        const DiscBuildResult rg = BuildDiscImage(o);
+        Check(rg.ok, rg.ok ? "build over a link to a game file" : rg.error.c_str());
+        Check(ReadBytes(disc + "/MAIN.BIN") == mainBefore, "the packed game file is unchanged");
+        struct stat st;
+        Check(::lstat((base + "/game (Track 01).bin").c_str(), &st) == 0 && S_ISREG(st.st_mode),
+              "the link was replaced by the new track");
+    }
+
+    // --- A device as the output is refused rather than renamed over ---
+    {
+        struct stat st;
+        if (::stat("/dev/full", &st) == 0 && S_ISCHR(st.st_mode))
+        {
+            DiscBuildOptions o = opt;
+            o.binCue = false;
+            o.outPath = "/dev/full";
+            Check(!BuildDiscImage(o).ok, "a device output path is refused");
+            Check(::stat("/dev/full", &st) == 0 && S_ISCHR(st.st_mode), "/dev/full is still a device");
+        }
+    }
+
+    // --- No staging debris is left by any of the builds above ---
+    {
+        DIR* d = ::opendir(base.c_str());
+        bool debris = false;
+        while (d)
+        {
+            struct dirent* e = ::readdir(d);
+            if (!e) break;
+            if (std::string(e->d_name).find(".separt") != std::string::npos) debris = true;
+        }
+        if (d) ::closedir(d);
+        Check(!debris, "no staging files are left behind");
+    }
+#endif
 
     if (gFail == 0) std::printf("All DiscBuilder tests passed.\n");
     return gFail ? 1 : 0;

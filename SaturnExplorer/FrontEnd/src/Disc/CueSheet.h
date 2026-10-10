@@ -34,6 +34,7 @@ struct CueTrack
     uint32_t    sectorSize = 2352;  // bytes per sector for this track (2048 / 2336 / 2352)
     bool        isData = false;     // a MODE1/MODE2 track (the rebuild candidate) vs AUDIO
     std::string file;         // resolved path to the BIN/IMG this track lives in
+    std::string fileType;     // the FILE line's type token, upper-cased ("BINARY", "WAVE", ...)
     std::vector<CueIndex> indices;
     int         pregapFrames = 0;   // PREGAP command (a gap NOT present in the file), else 0
 };
@@ -60,10 +61,15 @@ struct CueTrackRange
     uint64_t    offset = 0;     // byte offset of the track's first sector in 'file'
     uint64_t    length = 0;     // byte length of the track
     uint32_t    sectorSize = 2352;
+    // Why this range cannot be taken as the track's exact extent, else empty: an index list out
+    // of order, a track that ends before it starts, or a file that is not a whole number of
+    // sectors (the range would floor it and silently drop the tail).
+    std::string problem;
 };
 
 // Compute every track's byte range. 'fileSize(path)' returns the byte size of a track file (0 if
-// unknown) — used to bound the last track in each file. Handles single-BIN (tracks share a file,
+// unknown) — used to bound the last track in each file. A range that is not exact carries a
+// 'problem' rather than being quietly rounded. Handles single-BIN (tracks share a file,
 // split at index boundaries) and one-BIN-per-track layouts.
 std::vector<CueTrackRange> CueTrackRanges(
     const CueSheet& sheet, const std::function<uint64_t(const std::string&)>& fileSize);

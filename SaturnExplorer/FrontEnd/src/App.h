@@ -659,7 +659,8 @@ private:
     // parallel to the flattened (hit, offset) rows and are built once when results arrive.
     bool                 mShowLocateResults = false;
     std::vector<DataSearchHit> mLocateResults;
-    std::vector<std::string>   mLocateRel;                         // rel path per result FILE
+    std::vector<std::string>   mLocateRel;                         // rel path per result FILE ("" = not under the root)
+    std::string          mLocateRoot;                              // the directory those results were found in
     std::string          mLocateSummary;
     std::vector<uint8_t> mLocateRowAdded;                          // 1 = row accepted
 
@@ -680,7 +681,7 @@ private:
     void ApplyChangesToDisc(IPlatform& platform);
     void DoSaveProject(IPlatform& platform);
     void DoOpenProject(IPlatform& platform);
-    std::string RelativeToDataDir(const std::string& absPath) const;
+    void ClearLocateResults(const std::string& summary);
     // Rebuild a disc image from the Data Directory: Track 01 from the modified filesystem (with
     // the original IP.BIN + PVD ids), audio/extra tracks copied from the source disc. Output is
     // BIN/CUE (default) or a data-only ISO; 'launch' then runs it. Result shown in a modal.
