@@ -55,10 +55,12 @@ std::string BuildLaunchArgs(const std::string& argsTemplate, const std::string& 
 std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const std::string& rom,
                                          const std::string& bios = std::string());
 
-// 'path' made absolute against the current directory when it is relative; empty, absolute ("/x",
-// "C:\\x", "\\\\server\\x") and unresolvable paths come back unchanged. Launch validation checks a ROM against
-// THIS program's directory, but the emulator is started in its own folder, so a relative ROM or BIOS
-// path has to be resolved here, before it is handed over.
+// 'path' made absolute against the current directory when it is relative. POSIX: absolute means a leading
+// '/', nothing else -- a backslash or "C:" is part of a filename. Windows: resolved by the OS (_fullpath),
+// which also handles rooted "\\x" and drive-relative "C:x". Empty and unresolvable paths come back
+// unchanged. Launch validation checks a ROM against THIS program's directory, but the emulator is
+// started in its own folder, so a relative ROM or BIOS path has to be resolved here, before it is
+// handed over.
 std::string AbsolutePath(const std::string& path);
 
 // Basename of a path (component after the last '/' or '\\'), for display.

@@ -118,6 +118,9 @@ Pause is skipped.
   rename-over-existing path in `FileWrite.cpp` is what replaces `settings.ini`; confirm it succeeds while
   the installer (`Integration/install.py`) is not holding the file, and that a read-only `settings.ini`
   produces the "Could not save settings" message rather than data loss.
+- `AbsolutePath` (`Launcher.cpp`) uses `_fullpath` on Windows, which has never been compiled or run there.
+  Check rooted (`\\x`), drive-relative (`C:x`), UNC and long paths launch the file that was picked. The
+  complete-launch test (`LaunchPathTests.cpp`) is POSIX-only; a Windows version needs a `.bat`/`.exe` stand-in.
 - CMake: four existing test targets (`TopBar`, `ControllerPanel`, `PanelInteraction`, `SavestateSlots`)
   gained `FileWrite.cpp`. The new `SaturnExplorerSettingsTests` target is POSIX-only (it uses `chmod` and
   `/dev/full`); a Windows version would need an equivalent for the read-only-folder case.

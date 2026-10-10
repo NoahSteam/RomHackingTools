@@ -612,6 +612,26 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerPosixSpawnTests COMMAND SaturnExplorerPosixSpawnTests)
     endif()
 
+    # A whole launch with a relative ROM (argument builder + AbsolutePath + the real spawn): the emulator
+    # starts in its own folder, so the ROM it is handed must already be absolute -- including POSIX names
+    # that look like Windows paths.
+    if(NOT WIN32 AND NOT EMSCRIPTEN)
+        add_executable(SaturnExplorerLaunchPathTests
+            FrontEnd/tests/LaunchPathTests.cpp
+            FrontEnd/src/Launcher.cpp
+            FrontEnd/src/PosixSpawn.cpp
+            FrontEnd/src/Settings.cpp
+            FrontEnd/src/FileWrite.cpp
+            FrontEnd/src/DataSearch.cpp
+            FrontEnd/src/DataSearchRunner.cpp
+            FrontEnd/src/Prs.cpp
+        )
+        target_include_directories(SaturnExplorerLaunchPathTests PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        find_package(Threads REQUIRED)
+        target_link_libraries(SaturnExplorerLaunchPathTests PRIVATE Threads::Threads)
+        add_test(NAME SaturnExplorerLaunchPathTests COMMAND SaturnExplorerLaunchPathTests)
+    endif()
+
     # Settings::Save is all-or-nothing and reports a failed write (POSIX paths: it uses chmod and /dev/full).
     if(NOT WIN32 AND NOT EMSCRIPTEN)
         add_executable(SaturnExplorerSettingsTests

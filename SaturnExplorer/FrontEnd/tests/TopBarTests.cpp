@@ -75,7 +75,10 @@ static void TestLaunchModel()
         CHECK(AbsolutePath("disc.cue") == std::string(cwd) + "/disc.cue");
         CHECK(AbsolutePath("games/a b.cue") == std::string(cwd) + "/games/a b.cue");
         CHECK(AbsolutePath("/abs/disc.cue") == "/abs/disc.cue");
-        CHECK(AbsolutePath("C:\\Games\\x.cue") == "C:\\Games\\x.cue");
+        // Not Windows path syntax: on POSIX these are ordinary relative filenames.
+        CHECK(AbsolutePath("\\disc.cue") == std::string(cwd) + "/\\disc.cue");
+        CHECK(AbsolutePath("C:disc.cue") == std::string(cwd) + "/C:disc.cue");
+        CHECK(AbsolutePath("C:\\Games\\x.cue") == std::string(cwd) + "/C:\\Games\\x.cue");
         CHECK(AbsolutePath("").empty());
     }
 #endif

@@ -139,18 +139,19 @@ std::vector<std::string> BuildLaunchArgv(const std::string& argsTemplate, const 
 std::string AbsolutePath(const std::string& path)
 {
     if (path.empty()) return path;
-    const bool absolute = path[0] == '/' || path[0] == '\\' ||
-                          (path.size() > 1 && path[1] == ':');   // "/x", "\\server\\x", "C:..."
-    if (absolute) return path;
-    char cwd[4096];
 #ifdef _WIN32
-    if (!_getcwd(cwd, sizeof(cwd))) return path;
-    const char sep = '\\';
+    // Windows has more shapes than "starts with a separator": "\\x" is rooted on the CURRENT drive and
+    // "C:x" is relative to the current directory ON drive C. The OS resolver knows them all.
+    char full[4096];
+    return _fullpath(full, path.c_str(), sizeof(full)) ? std::string(full) : path;
 #else
+    // Only a leading '/' is absolute. A backslash is an ordinary filename character here, so "\\disc.cue"
+    // and "C:disc.cue" are relative names and belong under the current directory.
+    if (path[0] == '/') return path;
+    char cwd[4096];
     if (!getcwd(cwd, sizeof(cwd))) return path;
-    const char sep = '/';
+    return std::string(cwd) + "/" + path;
 #endif
-    return std::string(cwd) + sep + path;
 }
 
 std::string PathBasename(const std::string& path)
