@@ -883,6 +883,22 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
 namespace
 {
 
+// The colour a solid polygon or line is shown in, or false when it is not shown: its CMDCOLR is a
+// framebuffer word, which the sprite type and CRAM resolve to what VDP2 displays, and a word VDP2
+// reads as transparent draws nothing. Rendering and picking both ask this, so a click never lands on
+// a primitive that was not drawn.
+bool SolidShown(const SpriteRender& r, const SpritePriorityTable& prios,
+                const std::vector<uint8_t>& cram, se_cram_mode cramMode, Rgba& color)
+{
+    if (r.primKind == 0 && !r.solid)
+    {
+        return true;   // textured: its texels decide, pixel by pixel
+    }
+    const SpritePriorityTable::Pixel px = prios.Resolve(r.color, cram, cramMode);
+    color = px.color;
+    return px.visible;
+}
+
 // One triangle of a layer plane: nearest-texel sampling of the layer's RGBA image, depth-tested
 // like a sprite. A texel the layer did not draw (alpha below half) neither shows nor writes depth,
 // so what lies behind it comes through.
@@ -997,12 +1013,7 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
         // A solid primitive is a framebuffer word, not an RGB colour: the sprite type and CRAM say
         // what VDP2 shows for it, and a word it reads as transparent shows nothing.
         Rgba solidCol{};
-        if (r.primKind != 0 || r.solid)
-        {
-            const SpritePriorityTable::Pixel px = prios.Resolve(r.color, cram, cramMode);
-            if (!px.visible) continue;
-            solidCol = px.color;
-        }
+        if (!SolidShown(r, prios, cram, cramMode, solidCol)) continue;
         if (r.primKind != 0)
         {
             // Lines and polylines are part of the VDP1 list, so the exploded view has to show
@@ -1024,8 +1035,9 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
     }
 }
 
-bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera,
-                               int x, int y, uint32_t* outCmd)
+bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const std::vector<uint8_t>& cram,
+                               se_cram_mode cramMode, const SpritePriorityTable& prios,
+                               const se_camera3d& camera, int x, int y, uint32_t* outCmd)
 {
     const float cosYaw = std::cos(camera.yaw);
     const float sinYaw = std::sin(camera.yaw);
@@ -1040,6 +1052,11 @@ bool Vdp1Rasterizer::HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
         const se_sprite_3d& g = scene.sprites3d[i];
+        Rgba shown{};
+        if (!SolidShown(scene.render[i], prios, cram, cramMode, shown))
+        {
+            continue;   // Render3D drew nothing for it
+        }
         const RVert v[4] = {
             Project(g.corners[0], camera, cosYaw, sinYaw, cosPitch, sinPitch),
             Project(g.corners[1], camera, cosYaw, sinYaw, cosPitch, sinPitch),

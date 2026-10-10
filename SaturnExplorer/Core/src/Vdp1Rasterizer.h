@@ -67,9 +67,11 @@ public:
 
     // Pick the topmost 3D sprite under screen point (x,y) for 'camera', using the
     // exact same projection as Render3D. Returns true and writes the winning
-    // sprite's command index to *outCmd; false if the point hits no sprite.
-    static bool HitTest3D(const Vdp1Scene& scene, const se_camera3d& camera,
-                          int x, int y, uint32_t* outCmd);
+    // sprite's command index to *outCmd; false if the point hits no sprite. A solid primitive that
+    // Render3D skips as transparent (see 'prios' there) is skipped here too.
+    static bool HitTest3D(const Vdp1Scene& scene, const std::vector<uint8_t>& cram,
+                          se_cram_mode cramMode, const SpritePriorityTable& prios,
+                          const se_camera3d& camera, int x, int y, uint32_t* outCmd);
 };
 
 // True if screen point (px,py) falls inside the sprite's quad (either triangle).

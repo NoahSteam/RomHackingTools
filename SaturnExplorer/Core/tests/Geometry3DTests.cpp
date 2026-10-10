@@ -495,6 +495,84 @@ void TestTransparentPolygonIsNotAWallInFrontOfThePlanes()
     se_destroy(context);
 }
 
+// Equal-priority screens stack in the hardware's order -- NBG0 in front of NBG3 -- in the 3D view as
+// in the composite. Registering them in index order and stacking later ones nearer put NBG3 on top.
+void TestEqualPriorityScreensStackLikeTheComposite()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    se_test::SetReg(state, 0x020, 0x0009);   // BGON: NBG0 and NBG3
+    se_test::SetReg(state, 0x030, 0x8000);   // PNCN0: one-word names
+    se_test::SetReg(state, 0x040, 0x0002);   // MPABN0: plane A map number 2 (names at 0x4000)
+    se_test::SetReg(state, 0x0F8, 0x0001);   // PRINA: NBG0 priority 1, the same as NBG3
+    for (uint32_t a = 0x4000; a < 0x6000; a += 2) PutBE16(state.vdp2, a, 0x0002);
+    for (uint32_t a = 0x40; a < 0x60; ++a) state.vdp2[a] = 0x22;   // character 2: colour index 2
+    PutBE16(state.cram, 4, 0x001F);                                  // entry 2: red
+    PutBE16(state.vdp1, 0x20, 0x8000);
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    CHECK(composite.pixels[(60 * kFrameWidth + 80) * 4 + 0] > 200);   // red ...
+    CHECK(composite.pixels[(60 * kFrameWidth + 80) * 4 + 1] < 60);    // ... NBG0 over NBG3
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(view.pixels[(60 * kFrameWidth + 80) * 4 + 0] > 200);
+    CHECK(view.pixels[(60 * kFrameWidth + 80) * 4 + 1] < 60);
+
+    se_destroy(context);
+}
+
+// A screen at priority 0 is not displayed -- unless the special priority function lifts its dots to
+// priority 1, which is the compositor's own rule for drawing it. The 3D view asks the compositor
+// which screens are drawn instead of repeating a priority > 0 test that drops this one.
+void TestSpecialPriorityScreenAtPriorityZeroIsAPlane()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    se_test::SetReg(state, 0x0FA, 0x0000);   // PRINB: NBG3 priority 0
+    se_test::SetReg(state, 0x036, 0x8200);   // PNCN3: one-word names, supplementary special priority = 1
+    se_test::SetReg(state, 0x0EA, 0x0040);   // SFPRMD: NBG3 lifts per character
+    PutBE16(state.vdp1, 0x20, 0x8000);
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    CHECK(IsWhiteish(composite, 80, 60));   // drawn: the lift makes it priority 1
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(IsWhiteish(view, 80, 60));
+
+    se_destroy(context);
+}
+
+// Picking follows drawing: the transparent full-screen polygon is not drawn, so a click on the
+// ground behind it is not the polygon -- which, being first in the list and the farthest sprite, used
+// to be what every click on empty ground selected.
+void TestTransparentPolygonIsNotPickable()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    AddQuadPrim(state, 0x20, 0x0004, 0x0000, 0, 0, kFrameWidth - 1, kFrameHeight - 1);   // polygon, colour 0
+    AddSprite(state, 0x40, 0x1000, kBlue, 16, 24, 32, 32);
+    PutBE16(state.vdp1, 0x60, 0x8000);
+
+    se_context* context = Open(state);
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    size_t hit = 0;
+    CHECK(se_hit_test_3d(context, &front, 120, 90, &hit) == SE_ERR_NO_DATA);   // ground only
+    CHECK(se_hit_test_3d(context, &front, 30, 40, &hit) == SE_OK);             // the sprite
+    CHECK(hit == 2);   // command 0 is the system clip, 1 the polygon
+
+    se_destroy(context);
+}
+
 // The other way the two walks can disagree about what is on screen: a quad that has
 // collapsed to a point or a line. RasterTriangle drops a zero-area triangle, so such a
 // primitive has no area to hit, but every edge function of it is 0 — so an
@@ -552,6 +630,9 @@ int main()
     TestHitTestSkipsCollapsedQuads();
     TestVdp2ScreenIsAPlaneBehindTheSprites();
     TestTransparentPolygonIsNotAWallInFrontOfThePlanes();
+    TestEqualPriorityScreensStackLikeTheComposite();
+    TestSpecialPriorityScreenAtPriorityZeroIsAPlane();
+    TestTransparentPolygonIsNotPickable();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " check(s) failed\n";

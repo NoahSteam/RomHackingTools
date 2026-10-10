@@ -98,6 +98,21 @@ public:
     // 4bpp characters (16384), so a real screen is never truncated.
     static const uint32_t kMaxTiles = 32768;
 
+    // A screen the compositor draws, as the 3D view needs to order it: which layer toggle shows it
+    // (RBG1 answers to NBG0's), its base priority, and the hardware's rank among equal priorities
+    // (kRank* in PixelMixer.h; a higher rank is in front). 'liftsToOne' marks a screen whose base
+    // priority is 0 and which is drawn only because the special priority function can raise some of
+    // its pixels to 1. The set is exactly the one EmitLayers draws.
+    struct DisplayedScreen
+    {
+        int     toggle = 0;
+        uint8_t priority = 0;
+        uint8_t rank = 0;
+        bool    liftsToOne = false;
+    };
+    static void DisplayedScreens(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                 std::vector<DisplayedScreen>& out);
+
     // Emit every enabled NBG/RBG0 layer into 'cols' (one PixColumn per pixel, sized
     // width*height) at its VDP2 priority. Layers are emitted back-to-front (ascending
     // priority, higher-numbered NBG first on ties) so a same-priority sprite emitted

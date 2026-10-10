@@ -649,7 +649,8 @@ public:
                         size_t* outCommandIndex) const
     {
         uint32_t cmd = 0;
-        if (Vdp1Rasterizer::HitTest3D(mScene, camera, x, y, &cmd))
+        if (Vdp1Rasterizer::HitTest3D(mScene, mSnapshot.Cram(), mSnapshot.CramMode(), mSpritePrios,
+                                      camera, x, y, &cmd))
         {
             *outCommandIndex = cmd;
             return SE_OK;
@@ -1037,28 +1038,31 @@ private:
     void CollectLayerPlanes(const se_render_opts& opts, std::vector<LayerPlane>& planes)
     {
         if (!mSnapshot.HasVdp2Regs()) return;
-        const uint16_t bgon = mSnapshot.Vdp2Reg(0x020);
-        const uint16_t prina = mSnapshot.Vdp2Reg(0x0F8);
-        const uint16_t prinb = mSnapshot.Vdp2Reg(0x0FA);
-        const uint16_t prir = mSnapshot.Vdp2Reg(0x0FC);
-        const int prio[SE_LAYER_COUNT] = { prina & 7, (prina >> 8) & 7, prinb & 7, (prinb >> 8) & 7,
-                                           prir & 7 };
+        // The screens the compositor itself draws -- BGON, the layer toggles, RBG1 in NBG0's slot, a
+        // screen at priority 0 that the special priority function can lift -- ordered by priority and
+        // then by the hardware's screen rank, so an equal-priority NBG0 is in front of NBG3 here as
+        // it is in the composite. Nearer the camera is later in the list.
+        std::vector<Vdp2Compositor::DisplayedScreen> screens;
+        Vdp2Compositor::DisplayedScreens(mSnapshot, opts, screens);
+        auto effective = [](const Vdp2Compositor::DisplayedScreen& d)
+        {
+            return d.liftsToOne ? 1 : static_cast<int>(d.priority);
+        };
+        std::stable_sort(screens.begin(), screens.end(),
+                         [&](const Vdp2Compositor::DisplayedScreen& a,
+                             const Vdp2Compositor::DisplayedScreen& b)
+                         {
+                             if (effective(a) != effective(b)) return effective(a) < effective(b);
+                             return a.rank < b.rank;
+                         });
+        const int count = static_cast<int>(screens.size());
 
+        // What the planes depend on: the screens drawn (derived from the snapshot, so covered by the
+        // serial) and the options a screen's own render reads.
         uint32_t key = (opts.show_window ? 1u : 0u) | (opts.show_color_calculation ? 2u : 0u) |
                        (opts.show_shadow_highlight ? 4u : 0u);
-        int order[SE_LAYER_COUNT];
-        int count = 0;
         for (int l = 0; l < SE_LAYER_COUNT; ++l)
-        {
-            if (!opts.show_layer[l] || !((bgon >> l) & 1) || prio[l] == 0) continue;
-            key |= 8u << l;
-            order[count++] = l;
-        }
-        // Insertion sort: five entries, stable on the layer index.
-        for (int i = 1; i < count; ++i)
-            for (int j = i; j > 0 && prio[order[j]] < prio[order[j - 1]]; --j)
-                std::swap(order[j], order[j - 1]);
-
+            if (opts.show_layer[l]) key |= 8u << l;
         if (mPlaneSerial != mDeriveSerial || mPlaneKey != key)
         {
             mPlaneSerial = mDeriveSerial;
@@ -1069,7 +1073,7 @@ private:
         const int vh = mScene.vdp1Height > 0 ? mScene.vdp1Height : mScene.screenHeight;
         for (int rank = 0; rank < count; ++rank)
         {
-            const int l = order[rank];
+            const int l = screens[static_cast<size_t>(rank)].toggle;
             if (!mPlaneValid[l])
             {
                 se_render_opts one = opts;

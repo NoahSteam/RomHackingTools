@@ -1477,33 +1477,24 @@ bool ResolveTileMapShape(const HardwareSnapshot& snapshot, int layer, Vdp2TileMa
     return true;
 }
 
-}  // namespace
-
-void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
-                               int width, int height, std::vector<PixColumn>& cols,
-                               const EmitExtras& extras)
+// One screen the compositor draws: an NBG, RBG0, or RBG1 (which sits in NBG0's place).
+enum class ScreenKind { Nbg, Rbg0, Rbg1 };
+struct ScreenEntry
 {
-    if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
-    {
-        return;
-    }
+    ScreenKind kind;
+    int index;      // NBG number; 4 for RBG0; 0 for RBG1, which sits in NBG0's place
+    NbgConfig config;
+};
 
-    const EmitExtras ex = ValidatedExtras(extras, static_cast<size_t>(width) * height);
+// The screens EmitLayers draws, and the one place that decides it (DisplayedScreens exposes the
+// same list to the 3D view, so the two cannot disagree about what is on screen). A screen is drawn
+// only if BGON enables it, the host toggle is on, and it can reach a priority above zero.
+void CollectScreens(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                    std::vector<ScreenEntry>& layers)
+{
     const uint16_t bgon = Reg(snapshot, kBGON);
-
-    // Resolve the enabled screens first (no rendering yet). A layer is drawn only if
-    // BGON enables it, the host toggle is on, and its priority is non-zero
-    // (priority 0 = not displayed on hardware).
-    enum class Kind { Nbg, Rbg0, Rbg1 };
-    struct Layer
-    {
-        Kind kind;
-        int index;      // NBG number; 4 for RBG0; 0 for RBG1, which sits in NBG0's place
-        NbgConfig config;
-    };
-    std::vector<Layer> layers;
     layers.reserve(SE_LAYER_COUNT + 1);   // at most one per VDP2 screen; avoids the 1->2->4 regrow
-    auto consider = [&](const Layer& layer)
+    auto consider = [&](const ScreenEntry& layer)
     {
         // Priority 0 = not displayed -- unless the special priority function can lift individual
         // characters or dots to priority 1.
@@ -1524,34 +1515,74 @@ void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_rende
         {
             continue;
         }
-        consider({ Kind::Nbg, n, ReadNbgConfig(snapshot, n) });
+        consider({ ScreenKind::Nbg, n, ReadNbgConfig(snapshot, n) });
     }
     // RBG0 (rotation) occupies BGON bit 4. RPMD selects the rotation parameter set, which
     // can vary per dot; RenderRbg resolves that itself. Priority and colour calculation
     // come from RBG0's own registers either way, so set A's config orders the layer.
     if (rbg0On && opts.show_layer[SE_LAYER_RBG0])
     {
-        consider({ Kind::Rbg0, 4, ReadRbgConfig(snapshot, false) });
+        consider({ ScreenKind::Rbg0, 4, ReadRbgConfig(snapshot, false) });
     }
     // RBG1 (BGON bit 5) is the NBG0 screen drawn as a rotation screen, so the NBG0 toggle shows it.
     if (rbg1Drawn && opts.show_layer[SE_LAYER_NBG0])
     {
-        consider({ Kind::Rbg1, 0, ReadRbgConfig(snapshot, true, true) });
+        consider({ ScreenKind::Rbg1, 0, ReadRbgConfig(snapshot, true, true) });
     }
+}
+
+}  // namespace
+
+void Vdp2Compositor::EmitLayers(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                               int width, int height, std::vector<PixColumn>& cols,
+                               const EmitExtras& extras)
+{
+    if (width <= 0 || height <= 0 || !snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty())
+    {
+        return;
+    }
+
+    const EmitExtras ex = ValidatedExtras(extras, static_cast<size_t>(width) * height);
+    const uint16_t bgon = Reg(snapshot, kBGON);
+
+    // The screens that are drawn (see CollectScreens), resolved first so nothing renders until the
+    // set is known.
+    std::vector<ScreenEntry> layers;
+    CollectScreens(snapshot, opts, layers);
+    const bool rbg0On = (bgon & (1u << 4)) != 0;
+    const bool rbg1On = (bgon & (1u << 5)) != 0;
 
     // Emission order does not matter: every contribution carries its priority and its rank, which
     // together decide the stacking (an equal priority is broken by the hardware's screen order).
-    for (const Layer& layer : layers)
+    for (const ScreenEntry& layer : layers)
     {
-        if (layer.kind == Kind::Nbg)
+        if (layer.kind == ScreenKind::Nbg)
         {
             RenderLayer(snapshot, opts, layer.config, layer.index, width, height, cols, ex);
         }
         else
         {
-            RenderRbg(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, layer.kind == Kind::Rbg1,
+            RenderRbg(snapshot, opts, Reg(snapshot, kRPMD) & 0x3, layer.kind == ScreenKind::Rbg1,
                       rbg0On && rbg1On, width, height, cols, ex);
         }
+    }
+}
+
+void Vdp2Compositor::DisplayedScreens(const HardwareSnapshot& snapshot, const se_render_opts& opts,
+                                      std::vector<DisplayedScreen>& out)
+{
+    out.clear();
+    if (!snapshot.HasVdp2Regs() || snapshot.Vdp2Vram().empty()) return;
+    std::vector<ScreenEntry> screens;
+    CollectScreens(snapshot, opts, screens);
+    for (const ScreenEntry& e : screens)
+    {
+        DisplayedScreen d;
+        d.toggle = e.kind == ScreenKind::Rbg0 ? SE_LAYER_RBG0 : e.index;   // RBG1 answers to NBG0's
+        d.priority = e.config.priority;
+        d.rank = e.config.rank;
+        d.liftsToOne = e.config.priority == 0;
+        out.push_back(d);
     }
 }
 
