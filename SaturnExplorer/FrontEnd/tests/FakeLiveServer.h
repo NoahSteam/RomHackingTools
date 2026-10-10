@@ -42,6 +42,9 @@ struct Reply
     uint8_t  fill = 0;           // every byte of VDP1 and VDP2 VRAM carries this value
     uint32_t vramLen = 16;
     uint32_t events = 0;         // tracepoint events to attach (zero-filled records)
+    uint32_t vdp2StructLen = SE_LIVE_VDP2_STRUCT_LEN;   // 0 = section unavailable
+    uint32_t vdp1RegsLen = SE_LIVE_VDP1_REGS_LEN;
+    std::vector<uint8_t> cram;   // CRAM section bytes (empty = none)
 };
 
 inline void Put32(std::vector<uint8_t>& o, uint32_t v)
@@ -56,16 +59,18 @@ inline std::vector<uint8_t> Build(const Reply& r)
     o.push_back(SE_LIVE_MAGIC2); o.push_back(SE_LIVE_MAGIC3);
     Put32(o, r.version);
     const uint32_t ct = r.version >= 21 ? 44u : (r.version >= 20 ? 40u : (r.version >= 19 ? 32u : 24u));
-    const uint32_t vs = SE_LIVE_VDP2_STRUCT_LEN;
-    const uint32_t vr = SE_LIVE_VDP1_REGS_LEN;
+    const uint32_t vs = r.vdp2StructLen;
+    const uint32_t vr = r.vdp1RegsLen;
     // Section lengths: v1 v2 cram vdp2struct vdp1regs wramLow wramHigh [fb] ctl [sh2]
-    Put32(o, r.vramLen); Put32(o, r.vramLen); Put32(o, 0); Put32(o, vs); Put32(o, vr);
+    Put32(o, r.vramLen); Put32(o, r.vramLen); Put32(o, static_cast<uint32_t>(r.cram.size()));
+    Put32(o, vs); Put32(o, vr);
     Put32(o, 0); Put32(o, 0);
     if (r.version >= 4) Put32(o, 0);
     Put32(o, ct);
     if (r.version >= 5) Put32(o, 0);
     o.insert(o.end(), r.vramLen, r.fill);
     o.insert(o.end(), r.vramLen, r.fill);
+    o.insert(o.end(), r.cram.begin(), r.cram.end());
     o.insert(o.end(), vs, 0);
     o.insert(o.end(), vr, 0);
     // control block

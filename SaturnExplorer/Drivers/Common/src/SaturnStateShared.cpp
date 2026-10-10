@@ -68,9 +68,15 @@ void BuildVdp2RegImage(const std::vector<uint8_t>& src, size_t structBase,
     }
 }
 
-void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
+bool NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
 {
     const size_t step = (crmd == 2) ? 4 : 2;   // mode 2 = RGB888 (32-bit entries)
+    // A partial last entry would stay in host order behind normalized ones -- refuse, as
+    // Bswap16 does, rather than publish a palette that is right up to a point.
+    if (cram.size() % step != 0)
+    {
+        return false;
+    }
     for (size_t i = 0; i + step <= cram.size(); i += step)
     {
         for (size_t a = 0, b = step - 1; a < b; ++a, --b)
@@ -80,6 +86,7 @@ void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd)
             cram[i + b] = t;
         }
     }
+    return true;
 }
 
 bool Bswap16(uint8_t* p, size_t len)

@@ -123,6 +123,13 @@ typedef struct se_data_source {
            may be NULL (sources that cannot change mid-capture, e.g. a savestate). --- */
     void (*begin_capture)(void* user);
     void (*end_capture)(void* user);
+
+    /* --- Optional: whether the current capture carries the VDP1 ('vdp' = 1) or VDP2 (2)
+           register file. A capability bit says a driver CAN supply registers; a live reply may
+           still arrive without them, and read_vdp*_reg would then answer 0 for every register,
+           which reads as a real (blank) display configuration. Returns 1 if present, 0 if not.
+           NULL means present whenever the capability bit is set. --- */
+    int (*has_regs)(void* user, int vdp);
 } se_data_source;
 
 #ifdef __cplusplus

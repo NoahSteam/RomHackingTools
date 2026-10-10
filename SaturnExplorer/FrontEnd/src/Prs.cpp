@@ -62,8 +62,10 @@ int FetchShort(PrsDecCxt* c)
 // Grow dst to hold at least one more byte, honoring the hard cap.
 bool EnsureRoom(PrsDecCxt* c)
 {
-    if (c->dst_pos < c->dst_len) return true;
+    // The cap first: a reused decoder keeps the capacity an earlier, larger call grew, so
+    // spare capacity says nothing about what this call may write.
     if (c->dst_pos >= c->dst_max) return false;                 // hit the cap
+    if (c->dst_pos < c->dst_len) return true;
     size_t next = c->dst_len ? c->dst_len * 2 : 4096;
     if (next > c->dst_max) next = c->dst_max;
     void* tmp = std::realloc(c->dst, next);

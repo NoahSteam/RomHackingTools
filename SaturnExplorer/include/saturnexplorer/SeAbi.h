@@ -23,8 +23,10 @@ extern "C" {
  * 6: dropped the never-implemented se_rom_search_* / se_history_for exports
  *    (see ARCHITECTURE.md) and added SE_ERR_NO_MEMORY.
  * 7: se_data_source gained begin_capture / end_capture, which bracket one snapshot so a driver
- *    whose state changes underneath the core can serve every region from the same instant. */
-#define SE_ABI_VERSION 7u
+ *    whose state changes underneath the core can serve every region from the same instant.
+ * 8: se_data_source gained has_regs, so a driver can say a capture carries no register file even
+ *    though it advertises the capability (a live reply with that section empty). */
+#define SE_ABI_VERSION 8u
 
 /* Result codes. 0 == success; negatives are errors. */
 typedef enum se_result {

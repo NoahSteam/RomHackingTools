@@ -288,6 +288,29 @@ void TestDumpCoveringNoRegionRefused()
 }
 
 
+// The disk entry points refuse a file at or past the size cap before reading it all; the buffer
+// entry points used to copy the whole input and parse it anyway. The same bytes must get the
+// same answer either way.
+void TestOversizedInputRefusedFromDiskAndBuffer()
+{
+    std::vector<uint8_t> file = YssHeader();
+    AddYssSection(file, "JUNK", std::vector<uint8_t>(64u * 1024u * 1024u, 0));
+    AddYssSection(file, "MSH2", std::vector<uint8_t>(92, 0));
+    se_data_source ds{};
+    CHECK(se_savestate_open_buffer(file.data(), file.size(), &ds) == SE_ERR_IO);
+    CHECK(se_savestate_open_full_dump_buffer(file.data(), file.size(), 0x00200000u, &ds) == SE_ERR_IO);
+
+    const char* path = "savestate_oversized_tmp.yss";
+    if (FILE* f = std::fopen(path, "wb"))
+    {
+        std::fwrite(file.data(), 1, file.size(), f);
+        std::fclose(f);
+        CHECK(se_savestate_open(path, &ds) == SE_ERR_IO);
+        CHECK(se_savestate_open_full_dump(path, 0x00200000u, &ds) == SE_ERR_IO);
+        std::remove(path);
+    }
+}
+
 // --- OFF-01: a layout we do not decode has to be refused, not decoded anyway ---
 
 // A big-endian-host .yss. Every multi-byte read in the parser is little-endian, so this would
@@ -416,6 +439,7 @@ int main()
     TestMednafenRgb888CramInterleaved();
     TestWorkRamOnlyFullDumpOpens();
     TestDumpCoveringNoRegionRefused();
+    TestOversizedInputRefusedFromDiskAndBuffer();
     TestBigEndianYssRefused();
     TestUnknownEndiannessByteRefused();
     TestDesynchronizedChainRefused();

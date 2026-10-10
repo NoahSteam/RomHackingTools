@@ -7,6 +7,7 @@
 //  - Frame steps granted from the server thread and consumed on the emulate thread must add up.
 //  - The driver can tell when a step has been run AND published, rather than counting UI frames.
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -166,6 +167,58 @@ void TestVanishingClientDoesNotKillTheEmulator()
           magic[2] == SE_LIVE_MAGIC2 && magic[3] == SE_LIVE_MAGIC3,
           "and it still answers with a snapshot");
     ::close(fd);
+}
+
+// BKP and TRC carry 'count' descriptors. A count whose byte length wraps 32 bits (count * 12 or
+// count * 16) used to drain only the wrapped remainder, answer as if the request were complete,
+// and then read the rest of the payload as requests. Past the protocol maximum the client is
+// now dropped before any reply, and nothing is installed.
+std::atomic<int> gExecBpAdds{0};
+std::atomic<int> gTpInstalls{0};
+void CountExecBp(int, unsigned) { ++gExecBpAdds; }
+void ClearBps() {}
+void CountTps(unsigned count, const unsigned char*) { if (count) ++gTpInstalls; }
+
+void TestOverCapDescriptorCountDropsTheClient()
+{
+    SeExportSetBreakpointHooks(CountExecBp, ClearBps);
+    SeExportSetTracepointHook(CountTps);
+    struct Case { const char* verb; uint32_t count; uint32_t sent; uint32_t descLen; };
+    const Case cases[] = {
+        { SE_LIVE_VERB_BKPTS, 1073742848u, SE_LIVE_MAX_BKPT_DESCS, SE_LIVE_BKPT_DESC_LEN },
+        { SE_LIVE_VERB_TRACE, 268435712u, SE_LIVE_MAX_TRACE_DESCS, SE_LIVE_TRACE_DESC_LEN },
+        { SE_LIVE_VERB_BKPTS, SE_LIVE_MAX_BKPT_DESCS + 1, SE_LIVE_MAX_BKPT_DESCS, SE_LIVE_BKPT_DESC_LEN },
+    };
+    for (const Case& c : cases)
+    {
+        const int fd = ConnectRawRetry();
+        if (fd < 0) { Check(false, "could not connect a raw client"); return; }
+        std::vector<uint8_t> msg(SE_LIVE_REQUEST_LEN);
+        std::memcpy(msg.data(), c.verb, SE_LIVE_VERB_LEN);
+        for (int i = 0; i < 4; ++i) msg[4 + i] = uint8_t(c.count >> (8 * i));
+        // Enabled descriptors, then a GET the old decoder would have taken as the next request.
+        std::vector<uint8_t> desc(c.descLen, 0);
+        desc[8] = 0xFF;
+        for (uint32_t i = 0; i < c.sent; ++i) msg.insert(msg.end(), desc.begin(), desc.end());
+        const uint8_t get[SE_LIVE_REQUEST_LEN] = { 'G', 'E', 'T', ' ', 0, 0, 0, 0 };
+        msg.insert(msg.end(), get, get + sizeof(get));
+        ::send(fd, msg.data(), msg.size(), MSG_NOSIGNAL);
+
+        timeval tv{ 5, 0 };
+        ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+        uint8_t b[4] = {};
+        const ssize_t n = ::recv(fd, b, sizeof(b), 0);
+        // A close with our unread bytes still queued arrives as a reset rather than EOF.
+        Check(n == 0 || (n < 0 && errno == ECONNRESET),
+              "an over-cap descriptor count closes the connection without a reply");
+        ::close(fd);
+    }
+    Sleep(50);
+    SeExportApplyInstalls();
+    Check(gExecBpAdds.load() == 0, "no breakpoint from an over-cap BKP is installed");
+    Check(gTpInstalls.load() == 0, "no tracepoint from an over-cap TRC is installed");
+    SeExportSetBreakpointHooks(nullptr, nullptr);
+    SeExportSetTracepointHook(nullptr);
 }
 
 // Frame steps arrive on the server thread and are consumed on the emulate thread. Every
@@ -357,6 +410,7 @@ int main()
     SeExportSetInputHook(PadHook);
 
     TestVanishingClientDoesNotKillTheEmulator();
+    TestOverCapDescriptorCountDropsTheClient();
 
     se_data_source ds{};
     se_result r = SE_ERR_IO;

@@ -80,6 +80,25 @@ int main()
               "and round-trips to the original bytes");
     }
 
+    // A reused decoder keeps the buffer an earlier call grew. Each call's own cap still has to
+    // hold: the retained capacity used to be checked first, so a later, smaller cap was ignored.
+    {
+        const std::vector<uint8_t> as(1024, 'A');
+        const std::vector<uint8_t> z = Compress(as);
+        const std::vector<uint8_t> cut(z.begin(), z.end() - 2);   // no end-of-stream marker
+        PRSDecompressor dec;
+        Check(dec.UncompressData(z.data(), unsigned(z.size()), 1024) && dec.mUncompressedDataSize == 1024,
+              "1024 A bytes decode under a 1024-byte cap");
+        Check(!dec.UncompressData(z.data(), unsigned(z.size()), 1) && dec.mLastOutputBytes <= 1,
+              "a reused decoder refuses the same stream under a 1-byte cap");
+        Check(!dec.UncompressData(z.data(), unsigned(z.size()), 100) && dec.mLastOutputBytes <= 100,
+              "and writes no more than a 100-byte cap");
+        Check(!dec.UncompressData(cut.data(), unsigned(cut.size()), 1) && dec.mLastOutputBytes <= 1,
+              "a truncated stream stays within the cap too");
+        PRSDecompressor fresh;
+        Check(!fresh.UncompressData(z.data(), unsigned(z.size()), 1), "a fresh decoder refuses it as well");
+    }
+
     // --- The search finds the needle inside the compressed block, at the block's offset. ---
     {
         std::vector<uint8_t> file;

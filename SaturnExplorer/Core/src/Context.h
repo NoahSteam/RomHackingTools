@@ -284,6 +284,21 @@ public:
         const std::vector<uint8_t>& cram = mSnapshot.Cram();
         const se_cram_mode cm = mSnapshot.CramMode();
 
+        // A CLUT outside the captured VDP1 VRAM -- none captured at all, or a table running off
+        // its end -- is missing data. Read as zeros it would be a believable all-black palette.
+        if (uint64_t(clutAddress) + 32u > vram.size())
+        {
+            return SE_ERR_NO_DATA;
+        }
+        for (uint16_t i = 0; i < 16; ++i)
+        {
+            // Likewise an entry that names a CRAM color when no CRAM was captured.
+            if ((ReadBE16(vram, clutAddress + i * 2) & 0x8000) && cram.empty())
+            {
+                return SE_ERR_NO_DATA;
+            }
+        }
+
         out->clut_address = clutAddress;
         out->mode = cm;
         out->count = 16;

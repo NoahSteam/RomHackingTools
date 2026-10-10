@@ -42,8 +42,9 @@ void BuildVdp2RegImage(const std::vector<uint8_t>& src, size_t structBase,
 // Normalize host-endian VDP2 color RAM to Saturn-native big-endian, in place.
 // Yabause keeps CRAM in host byte order (T2 access); the core (like hardware and
 // VRAM) expects big-endian. 'crmd' is RAMCTL bits 12-13 (2 = RGB888 => 32-bit
-// entries, otherwise 16-bit).
-void NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd);
+// entries, otherwise 16-bit). Returns false, leaving 'cram' untouched, when its length is not a
+// whole number of entries.
+bool NormalizeCramToBigEndian(std::vector<uint8_t>& cram, unsigned crmd);
 
 }  // namespace sedrv
 

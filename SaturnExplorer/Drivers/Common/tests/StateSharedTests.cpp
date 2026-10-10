@@ -46,19 +46,22 @@ void TestBswap16RejectsOddLength()
     CHECK(one[0] == 0xAB);
 }
 
-// CRAM mode 2 is RGB888 (4-byte entries); every other mode is 16-bit. A trailing partial
-// entry is left alone rather than swapped as if it were whole.
-void TestCramNormalizationHandlesPartialTail()
+// CRAM mode 2 is RGB888 (4-byte entries); every other mode is 16-bit. A length that is not a
+// whole number of entries is refused and left untouched: swapping the whole entries and leaving
+// the tail raw published a palette that was right up to a point.
+void TestCramNormalizationRefusesPartialEntries()
 {
-    std::vector<uint8_t> cram{ 0x01, 0x02, 0x03, 0x04, 0x05 };
-    sedrv::NormalizeCramToBigEndian(cram, 2);
-    CHECK(cram[0] == 0x04 && cram[1] == 0x03 && cram[2] == 0x02 && cram[3] == 0x01);
-    CHECK(cram[4] == 0x05);   // the odd tail byte is not reversed into a neighbour
+    std::vector<uint8_t> whole{ 0x01, 0x02, 0x03, 0x04 };
+    CHECK(sedrv::NormalizeCramToBigEndian(whole, 2));
+    CHECK(whole[0] == 0x04 && whole[1] == 0x03 && whole[2] == 0x02 && whole[3] == 0x01);
 
-    std::vector<uint8_t> rgb555{ 0xAA, 0xBB, 0xCC };
-    sedrv::NormalizeCramToBigEndian(rgb555, 0);
-    CHECK(rgb555[0] == 0xBB && rgb555[1] == 0xAA);
-    CHECK(rgb555[2] == 0xCC);
+    std::vector<uint8_t> rgb888{ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 };
+    CHECK(!sedrv::NormalizeCramToBigEndian(rgb888, 2));
+    CHECK(rgb888 == (std::vector<uint8_t>{ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 }));
+
+    std::vector<uint8_t> rgb555{ 0x11, 0x22, 0x33 };
+    CHECK(!sedrv::NormalizeCramToBigEndian(rgb555, 0));
+    CHECK(rgb555 == (std::vector<uint8_t>{ 0x11, 0x22, 0x33 }));
 }
 
 }  // namespace
@@ -67,7 +70,7 @@ int main()
 {
     TestBswap16SwapsWholeWords();
     TestBswap16RejectsOddLength();
-    TestCramNormalizationHandlesPartialTail();
+    TestCramNormalizationRefusesPartialEntries();
     if (gFailures)
     {
         std::printf("StateSharedTests: %d check(s) failed\n", gFailures);

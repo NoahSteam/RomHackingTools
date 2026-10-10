@@ -91,6 +91,7 @@ int main()
 
     IsoFs fs = IsoParse(read);
     Check(fs.ok, "parsed the volume");
+    Check(fs.complete && fs.incomplete.empty(), "a well-formed tree parses completely");
     Check(fs.volumeId == "SATURNTEST", "volume id trimmed");
 
     const IsoEntry* f = Find(fs, "/TEST.PCM");
@@ -112,6 +113,82 @@ int main()
     // A non-ISO image reports a clean failure rather than crashing.
     IsoFs bad = IsoParse([](uint32_t, uint8_t* out) { std::memset(out, 0, kSector); return true; });
     Check(!bad.ok && !bad.error.empty(), "non-ISO image fails cleanly");
+
+    // --- Malformed trees: each still finds the volume, but none may report a complete walk. ---
+    // 'root' replaces the root directory's sector; 'rootSize' its declared extent size.
+    auto parseWith = [&](const std::vector<uint8_t>& root, uint32_t rootSize, uint32_t readable,
+                         uint32_t* reads = nullptr) {
+        std::vector<uint8_t> im(img.begin(), img.begin() + 20 * kSector);
+        std::vector<uint8_t> rr;
+        AppendRec(rr, 18, rootSize, 0x02, std::string(1, '\0'));
+        std::memcpy(im.data() + 16 * kSector + 156, rr.data(), rr.size());
+        std::memset(im.data() + 18 * kSector, 0, kSector);
+        if (!root.empty()) std::memcpy(im.data() + 18 * kSector, root.data(), root.size());
+        return IsoParse([&, im](uint32_t lba, uint8_t* out) -> bool {
+            if (reads) ++*reads;
+            if (lba >= readable) return false;
+            if (lba < 20) std::memcpy(out, im.data() + (size_t)lba * kSector, kSector);
+            else std::memset(out, 0, kSector);
+            return true;
+        });
+    };
+    {
+        // Root declares two sectors; the second cannot be read.
+        std::vector<uint8_t> dir;
+        AppendRec(dir, 30, 5000, 0x00, "TEST.PCM;1");
+        IsoFs r = parseWith(dir, 2 * kSector, 19);
+        Check(r.ok && !r.complete && !r.incomplete.empty(), "a truncated root extent is incomplete");
+        Check(Find(r, "/TEST.PCM") != nullptr, "the readable part is still listed");
+    }
+    {
+        // A 33-byte record: no room for an identifier.
+        std::vector<uint8_t> dir;
+        AppendRec(dir, 30, 5000, 0x00, "A");
+        dir[0] = 33;
+        IsoFs r = parseWith(dir, kSector, 20);
+        Check(r.ok && !r.complete, "a 33-byte record is malformed");
+    }
+    {
+        // Extent size 0xFFFFFFFF used to wrap to zero sectors and an empty, "valid" tree.
+        IsoFs r = parseWith({}, 0xFFFFFFFFu, 20);
+        Check(r.ok && !r.complete, "an extent size that wraps is not a complete empty tree");
+    }
+    {
+        // lenDR 34 with nameLen 20: the name would run on into the next record.
+        std::vector<uint8_t> dir;
+        AppendRec(dir, 30, 5000, 0x00, "A");
+        dir[32] = 20;
+        std::memcpy(dir.data() + 33, "ABCDEFGHIJKLMNOPQRST", 1);
+        std::vector<uint8_t> next;
+        AppendRec(next, 31, 10, 0x00, "BCDEFGHIJKLMNOPQRST;1");
+        dir.insert(dir.end(), next.begin(), next.end());
+        IsoFs r = parseWith(dir, kSector, 20);
+        Check(r.ok && !r.complete, "a name past its record is malformed");
+        for (const IsoEntry& e : r.entries)
+            Check(e.path.size() < 20 || e.path == "/BCDEFGHIJKLMNOPQRST", "no name stitched from two records");
+        Check(Find(r, "/BCDEFGHIJKLMNOPQRST") != nullptr, "the following valid record is still read");
+    }
+    {
+        // 60 directory records naming one blank 4 MiB extent: each alias used to rescan it.
+        std::vector<uint8_t> dir;
+        for (int i = 0; i < 60; ++i)
+        {
+            char nm[8]; std::snprintf(nm, sizeof nm, "D%02d", i);
+            AppendRec(dir, 1000, 4u * 1024u * 1024u, 0x02, nm);
+        }
+        uint32_t reads = 0;
+        IsoFs r = parseWith(dir, kSector, 0xFFFFFFFFu, &reads);
+        Check(r.ok, "aliased directories still parse");
+        Check(reads < 2048 + 64, "an aliased extent is read once");
+    }
+    {
+        // A directory that lists its own extent as a subdirectory is a cycle.
+        std::vector<uint8_t> dir;
+        AppendRec(dir, 18, kSector, 0x02, "LOOP");
+        uint32_t reads = 0;
+        IsoFs r = parseWith(dir, kSector, 20, &reads);
+        Check(r.ok && reads < 16, "a directory cycle is walked once");
+    }
 
     if (gFail == 0) std::printf("All IsoFs tests passed.\n");
     return gFail == 0 ? 0 : 1;

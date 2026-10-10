@@ -39,6 +39,11 @@ struct IsoFs
     std::string           preparerId;   // PVD data-preparer identifier (trimmed)
     std::string           applicationId;// PVD application identifier (trimmed)
     std::string           error;        // reason when !ok
+    // ok but !complete: the volume was found but part of the directory tree could not be walked
+    // (a malformed record, an unreadable sector, an exhausted limit), so 'entries' is missing
+    // files. 'incomplete' says what stopped the walk first.
+    bool                  complete = false;
+    std::string           incomplete;
     std::vector<IsoEntry> entries;      // files + directories, directory-first walk order
 
     // Return the file whose extent contains logical block 'lba' (nullptr if none). Ignores
@@ -46,9 +51,10 @@ struct IsoFs
     const IsoEntry* FileAt(uint32_t lba) const;
 };
 
-// Parse the ISO 9660 volume reachable through 'read'. Never throws; on any structural problem
-// it returns an IsoFs with ok=false and a filled 'error'. Bounded in directory depth and total
-// entries so a malformed image can't run away.
+// Parse the ISO 9660 volume reachable through 'read'. Never throws. Without a primary volume
+// descriptor it returns ok=false and a filled 'error'; a damaged directory tree under a valid one
+// returns ok=true, complete=false. Bounded in directory depth, total entries and total directory
+// sectors read, and each directory extent is walked once, so a malformed image can't run away.
 IsoFs IsoParse(const SectorReader& read);
 
 }  // namespace sfe

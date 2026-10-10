@@ -83,6 +83,7 @@ int main()
     Check(img.SectorSize() == 2048, "image is 2048-byte sectors");
     IsoFs fs = IsoParse(img.Reader());
     Check(fs.ok, fs.ok ? "parse ok" : fs.error.c_str());
+    Check(fs.complete, fs.complete ? "parse complete" : fs.incomplete.c_str());
     Check(fs.volumeId == "TESTVOL", "volume id preserved");
     Check(fs.systemId == "SEGA SEGASATURN", "system id preserved");
     Check(fs.publisherId == "SEGA ENTERPRISES", "publisher id preserved");

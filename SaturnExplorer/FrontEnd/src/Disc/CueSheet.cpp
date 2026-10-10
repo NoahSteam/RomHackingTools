@@ -15,12 +15,15 @@ std::string UpperTok(const std::string& s)
 }
 
 // The bytes-per-sector implied by a track type token.
+// 0 for a type this parser does not model: guessing a sector size for it would mis-split
+// every track that follows in the same file.
 uint32_t SectorSizeOf(const std::string& type)
 {
     const std::string t = UpperTok(type);
     if (t == "MODE1/2048") return 2048;
     if (t == "MODE2/2336") return 2336;
-    return 2352;   // AUDIO, MODE1/2352, MODE2/2352, and anything else raw
+    if (t == "AUDIO" || t == "MODE1/2352" || t == "MODE2/2352") return 2352;
+    return 0;
 }
 
 // Extract the quoted name from a FILE line, else the first whitespace-delimited token after FILE.
@@ -109,9 +112,26 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
         {
             CueTrack t;
             std::string typeTok;
-            ls >> t.number >> typeTok;
+            if (!(ls >> t.number >> typeTok))
+            {
+                sheet.error = "incomplete TRACK line: " + trimmed;
+                return sheet;
+            }
+            // Track numbers name the output files, so a repeated or out-of-order number would
+            // overwrite an earlier track's output (track 01 included) instead of failing.
+            if (t.number < 1 || t.number > 99 ||
+                (!sheet.tracks.empty() && t.number <= sheet.tracks.back().number))
+            {
+                sheet.error = "invalid or out-of-order TRACK number: " + trimmed;
+                return sheet;
+            }
             t.typeStr = typeTok;
             t.sectorSize = SectorSizeOf(typeTok);
+            if (t.sectorSize == 0)
+            {
+                sheet.error = "unsupported TRACK type: " + typeTok;
+                return sheet;
+            }
             t.isData = UpperTok(typeTok).compare(0, 4, "MODE") == 0;
             t.file = currentFile;
             sheet.tracks.push_back(t);
@@ -120,7 +140,11 @@ CueSheet ParseCueText(const std::string& text, const std::string& baseDir)
         {
             CueIndex idx;
             std::string msf;
-            ls >> idx.number >> msf;
+            if (!(ls >> idx.number >> msf) || idx.number < 0 || idx.number > 99)
+            {
+                sheet.error = "invalid INDEX line: " + trimmed;
+                return sheet;
+            }
             if (!ParseMsf(msf, idx.frames))
             {
                 sheet.error = "invalid INDEX timestamp: " + msf;

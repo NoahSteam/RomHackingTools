@@ -940,6 +940,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
     }
     const uint32_t version = Rd32LE(head + 4);
     outVersion = version;
+    // Each version fixes the reply's layout, so one this client does not know cannot be read:
+    // a newer server may have added a section, and the bytes would be taken for the wrong ones.
+    if (version < 3u || version > SE_LIVE_VERSION)
+    {
+        return false;
+    }
     const int hasFb = (version >= 4u) ? 1 : 0;    // FB section added in v4
     const int hasSh2 = (version >= 5u) ? 1 : 0;   // SH-2 state added in v5
     const int numLen = 8 + hasFb + hasSh2;        // section-length entries
@@ -963,6 +969,12 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
     if (v1 > 0x100000u || v2 > 0x100000u || cr > 0x4000u || vs > 4096u ||
         vr > 256u || wl > 0x100000u || wh > 0x100000u || fb > 0x40000u ||
         ct > 64u || sh > 256u)
+    {
+        return false;
+    }
+    // The register sections are fixed-shape images, or 0 for "not available". Any other length
+    // would build a register file from a struct the decoder does not know.
+    if ((vs != 0 && vs != SE_LIVE_VDP2_STRUCT_LEN) || (vr != 0 && vr != SE_LIVE_VDP1_REGS_LEN))
     {
         return false;
     }
@@ -1240,9 +1252,15 @@ bool ReadSnapshot(Conn& c, const char* verb, int32_t arg,
 
     // VRAM is already big-endian; build the VDP2 register image and use RAMCTL's
     // CRAM mode to normalize CRAM — exactly like the savestate path.
-    sedrv::BuildVdp2RegImage(vdp2Struct, 0, snap.vdp2Regs);
+    // An empty VDP2 section stays an empty image: building one would publish a zero-filled
+    // register file indistinguishable from a real blank display (see CbHasRegs).
+    if (!vdp2Struct.empty()) sedrv::BuildVdp2RegImage(vdp2Struct, 0, snap.vdp2Regs);
+    else snap.vdp2Regs.clear();
     const uint16_t ramctl = sedrv::ReadReg16(snap.vdp2Regs, 0x0E);
-    sedrv::NormalizeCramToBigEndian(snap.cram, (ramctl >> 12) & 0x3u);
+    if (!sedrv::NormalizeCramToBigEndian(snap.cram, (ramctl >> 12) & 0x3u))
+    {
+        return false;
+    }
     snap.valid = true;
     return true;
 }
@@ -1896,6 +1914,12 @@ uint16_t CbVdp2Reg(void* u, uint32_t reg)
     SnapshotPtr s = CurrentSnapshot(St(u));
     return s ? sedrv::ReadReg16(s->vdp2Regs, reg) : 0;
 }
+int CbHasRegs(void* u, int vdp)
+{
+    SnapshotPtr s = CurrentSnapshot(St(u));
+    if (!s) { return 0; }
+    return vdp == 1 ? !s->vdp1Regs.empty() : vdp == 2 ? !s->vdp2Regs.empty() : 0;
+}
 
 // ---- Frame control. The UI thread posts a command; the poll thread sends it
 //      over the shared connection on its next cycle (see PollLoop). ----
@@ -2034,6 +2058,7 @@ extern "C" se_result se_live_open(const char* endpoint, se_data_source* out)
         out->read_vdp1_fb   = CbVdp1Fb;
         out->read_vdp1_reg  = CbVdp1Reg;
         out->read_vdp2_reg  = CbVdp2Reg;
+        out->has_regs       = CbHasRegs;
         out->read_sh2_regs  = CbSh2Regs;
         out->frame_pause    = CbFramePause;
         out->frame_step     = CbFrameStep;

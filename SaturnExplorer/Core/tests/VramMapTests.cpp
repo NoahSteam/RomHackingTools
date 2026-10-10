@@ -125,11 +125,56 @@ void OwnersAreNotDuplicated()
 }
 }  // namespace
 
+// A LUT-mode palette needs the 32-byte CLUT in VDP1 VRAM, and CRAM for any entry that names a
+// color bank. Missing either is "no data", not a black palette: a real all-zero CLUT and an
+// absent one must stay distinguishable.
+void PaletteNeedsItsMemory()
+{
+    se_palette pal {};
+    {
+        State st(0x40);
+        se_data_source src = se_test::MakeSource(st);
+        src.capabilities &= ~(SE_CAP_VDP1_VRAM | SE_CAP_VDP1_FB);
+        src.read_vdp1_vram = nullptr;
+        st.vdp2.assign(16, 0);   // something else, so the capture itself is valid
+        se_context* ctx = se_test::CreateContext(src);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        CHECK(se_decode_palette(ctx, 0, &pal) == SE_ERR_NO_DATA);
+        se_destroy(ctx);
+    }
+    {
+        State st(0x40);
+        se_context* ctx = se_test::CreateContext(st);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_OK);          // exactly fits
+        CHECK(pal.count == 16 && pal.entries[0].raw == 0);           // a real all-zero CLUT
+        CHECK(se_decode_palette(ctx, 0x22, &pal) == SE_ERR_NO_DATA); // runs off the end
+        CHECK(se_decode_palette(ctx, 0xFFFFFFF0u, &pal) == SE_ERR_NO_DATA);
+        se_destroy(ctx);
+    }
+    {
+        State st(0x40);
+        PutBE16(st.vdp1, 0x20, 0x8001);   // a color-bank entry
+        st.cram.clear();
+        se_context* ctx = se_test::CreateContext(st);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_ERR_NO_DATA);
+        se_destroy(ctx);
+    }
+}
+
 int main()
 {
     PolygonsListTheirTables();
     SharedTexturesKeepTheirExtentAndOwners();
     OwnersAreNotDuplicated();
+    PaletteNeedsItsMemory();
     if (gFailures) { std::cerr << gFailures << " failure(s)\n"; return 1; }
     std::cout << "VramMap tests passed\n";
     return 0;

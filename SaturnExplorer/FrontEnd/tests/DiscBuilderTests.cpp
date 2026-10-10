@@ -239,6 +239,27 @@ int main()
         const DiscBuildResult r2 = BuildDiscImage(o);
         Check(!r2.ok, "a MODE2 data track is refused");
         Check(!FileExists(base + "/mode2_out.cue"), "no cue is written for a refused MODE2 source");
+
+        // A repeated TRACK number would name the same output file twice, so the copied track
+        // overwrites the rebuilt data track. A bare TRACK has no number or type at all.
+        const char* malformed[] = {
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n",
+            "FILE \"src.bin\" BINARY\n  TRACK\n    INDEX 01 00:00:00\n",
+        };
+        for (const char* text : malformed)
+        {
+            WriteText(base + "/malformed.cue", text);
+            o.sourceImage = base + "/malformed.cue";
+            o.outPath = base + "/malformed_out.cue";
+            std::remove((base + "/malformed_out.cue").c_str());
+            std::remove((base + "/malformed_out (Track 01).bin").c_str());
+            const DiscBuildResult rmf = BuildDiscImage(o);
+            Check(!rmf.ok && !rmf.error.empty(), "a cue with a duplicate or incomplete TRACK fails");
+            Check(!FileExists(base + "/malformed_out.cue") &&
+                  !FileExists(base + "/malformed_out (Track 01).bin"),
+                  "nothing is written for a malformed TRACK");
+        }
     }
 
     // ISO (data-only) output.

@@ -41,6 +41,31 @@ int main()
     }
     Check(FramesToMsf(22650) == "05:02:00", "22650 -> 05:02:00");
 
+    // Malformed TRACK / INDEX lines are errors, not a track with a default number or type.
+    {
+        const char* bad[] = {
+            "FILE \"a.bin\" BINARY\n TRACK\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 01\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK xx MODE1/2352\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 00 MODE1/2352\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 100 AUDIO\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 01 BOGUS/1234\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX 01 00:00:00\n"
+            " TRACK 01 AUDIO\n  INDEX 01 00:00:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 02 MODE1/2352\n  INDEX 01 00:00:00\n"
+            " TRACK 01 AUDIO\n  INDEX 01 00:01:00\n",
+            "FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX\n",
+            "FILE \"a.bin\" BINARY\n TRACK 01 MODE1/2352\n  INDEX x 00:00:00\n",
+        };
+        for (const char* text : bad)
+        {
+            const CueSheet cs = ParseCueText(text, "");
+            Check(!cs.ok && !cs.error.empty(), text);
+        }
+        Check(ParseCueText("FILE \"a.bin\" BINARY\n track 01 mode1/2048\n  INDEX 01 00:00:00\n", "").ok,
+              "lower-case track types still parse");
+    }
+
     // --- Single-BIN cue: data track + two audio tracks. ---
     const std::string single =
         "FILE \"game.bin\" BINARY\r\n"

@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <deque>
+#include <unordered_set>
 
 namespace sfe
 {
@@ -14,8 +15,8 @@ uint32_t Le32(const uint8_t* p)
     return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
 }
 
-// Sectors an extent of 'bytes' spans.
-uint32_t SectorSpan(uint32_t bytes) { return (bytes + kSector - 1) / kSector; }
+// Sectors an extent of 'bytes' spans. Widened: bytes + 2047 wraps for sizes near 4 GiB.
+uint32_t SectorSpan(uint32_t bytes) { return uint32_t((uint64_t(bytes) + kSector - 1) / kSector); }
 
 // ISO file identifier -> readable name: strip the ";version" suffix; keep the (upper-case)
 // 8.3 name as stored. '.' / '..' records use single 0x00 / 0x01 bytes (handled by the caller).
@@ -82,27 +83,42 @@ IsoFs IsoParse(const SectorReader& read)
     std::deque<Dir> queue;
     queue.push_back({ rootLba, rootSize, std::string(), 0 });
 
-    constexpr int      kMaxDepth   = 32;
-    constexpr size_t   kMaxEntries = 200000;
-    constexpr uint32_t kMaxDirSect = 2048;   // cap a single directory's extent
+    constexpr int      kMaxDepth     = 32;
+    constexpr size_t   kMaxEntries   = 200000;
+    constexpr uint32_t kMaxDirSect   = 2048;    // cap a single directory's extent
+    constexpr uint32_t kMaxTotalSect = 32768;   // cap all directory reads (64 MiB)
 
-    while (!queue.empty() && fs.entries.size() < kMaxEntries)
+    // The first problem wins; the walk carries on past it where it safely can.
+    auto stop = [&](const std::string& why) { if (fs.incomplete.empty()) fs.incomplete = why; };
+
+    // Each extent is expanded once. Two records naming one extent -- an alias, or a cycle back to
+    // an ancestor -- would otherwise re-read it once per path to it.
+    std::unordered_set<uint32_t> visited;
+    uint32_t totalSect = 0;
+
+    while (!queue.empty())
     {
         const Dir d = queue.front();
         queue.pop_front();
+        if (!visited.insert(d.lba).second) continue;
         const uint32_t sectors = d.size ? SectorSpan(d.size) : 1;
+        if (sectors > kMaxDirSect) { stop("directory extent too large: " + (d.prefix.empty() ? "/" : d.prefix)); continue; }
 
-        for (uint32_t s = 0; s < sectors && s < kMaxDirSect; ++s)
+        for (uint32_t s = 0; s < sectors; ++s)
         {
+            if (totalSect >= kMaxTotalSect) { stop("directory read budget exhausted"); queue.clear(); break; }
+            ++totalSect;
             uint8_t buf[kSector];
-            if (!read(d.lba + s, buf)) break;
+            if (!read(d.lba + s, buf)) { stop("unreadable directory sector " + std::to_string(d.lba + s)); break; }
 
             uint32_t off = 0;
             while (off + 33 <= kSector)
             {
                 const uint8_t lenDR = buf[off];
                 if (lenDR == 0) break;                       // rest of the sector is padding
-                if (off + lenDR > kSector || lenDR < 34) break;   // malformed record
+                // A record is at least 33 fixed bytes plus a one-byte identifier, and never
+                // crosses a sector.
+                if (off + lenDR > kSector || lenDR < 34) { stop("malformed directory record"); break; }
 
                 const uint8_t* rec = buf + off;
                 const uint32_t exLba = Le32(rec + 2);
@@ -111,7 +127,13 @@ IsoFs IsoParse(const SectorReader& read)
                 const uint8_t  nameLen = rec[32];
                 off += lenDR;
 
-                if (nameLen == 0 || off - lenDR + 33 + nameLen > kSector) continue;
+                // The identifier, and the pad byte an even-length one is followed by, belong to
+                // this record; past lenDR they would be read out of the next record.
+                if (nameLen == 0 || 33u + nameLen + ((nameLen & 1) ? 0u : 1u) > lenDR)
+                {
+                    stop("malformed directory record");
+                    continue;
+                }
                 // Skip the "." (0x00) and ".." (0x01) self/parent records.
                 if (nameLen == 1 && (rec[33] == 0x00 || rec[33] == 0x01)) continue;
 
@@ -119,6 +141,7 @@ IsoFs IsoParse(const SectorReader& read)
                 const std::string name = CleanName(rec + 33, nameLen);
                 if (name.empty()) continue;
 
+                if (fs.entries.size() >= kMaxEntries) { stop("too many entries"); queue.clear(); break; }
                 IsoEntry e;
                 e.path = d.prefix + "/" + name;
                 e.lba = exLba;
@@ -126,12 +149,17 @@ IsoFs IsoParse(const SectorReader& read)
                 e.isDir = isDir;
                 fs.entries.push_back(e);
 
-                if (isDir && d.depth + 1 < kMaxDepth)
-                    queue.push_back({ exLba, exSize, e.path, d.depth + 1 });
+                if (isDir)
+                {
+                    if (d.depth + 1 < kMaxDepth) queue.push_back({ exLba, exSize, e.path, d.depth + 1 });
+                    else stop("directory tree too deep");
+                }
             }
+            if (!fs.incomplete.empty() && fs.entries.size() >= kMaxEntries) break;
         }
     }
 
+    fs.complete = fs.incomplete.empty();
     fs.ok = true;
     return fs;
 }

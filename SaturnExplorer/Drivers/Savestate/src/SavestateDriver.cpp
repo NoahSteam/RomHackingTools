@@ -166,6 +166,10 @@ void CbClose(void* user)
 // memory before anything looks at it.
 const size_t kMaxSavestateBytes = 64u * 1024u * 1024u;
 
+// The buffer entry points take the same cap as LoadFile (which stops short of it), checked
+// before the input is copied: the copy is the allocation the cap exists to bound.
+bool OverSavestateCap(size_t size) { return size >= kMaxSavestateBytes; }
+
 // File helpers.
 //
 // Read to EOF in chunks rather than sizing the file with fseek/ftell first. ftell returns a
@@ -1144,6 +1148,10 @@ se_result se_savestate_open_buffer(const uint8_t* data, size_t size, se_data_sou
     // Copy into an owned buffer so the parsers (which retain slices) don't depend
     // on the caller's memory outliving the context. The host may free 'data' as
     // soon as this returns.
+    if (OverSavestateCap(size))
+    {
+        return SE_ERR_IO;   // what se_savestate_open returns for the same bytes on disk
+    }
     return Guard(SE_ERR_NO_MEMORY, [&]
     {
         std::vector<uint8_t> file(data, data + size);
@@ -1179,6 +1187,10 @@ se_result se_savestate_open_full_dump_buffer(const uint8_t* data, size_t size,
         return SE_ERR_INVALID_ARG;
     }
     std::memset(out, 0, sizeof(*out));
+    if (OverSavestateCap(size))
+    {
+        return SE_ERR_IO;
+    }
     return Guard(SE_ERR_NO_MEMORY, [&]
     {
         std::vector<uint8_t> dump(data, data + size);

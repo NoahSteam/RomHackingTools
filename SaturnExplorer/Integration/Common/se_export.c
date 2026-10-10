@@ -1954,21 +1954,23 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_BKPTS, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Read all 'arg' 12-byte descriptors (every one is consumed to keep the
-             * stream aligned) and install the enabled execution breakpoints. Past the protocol
-             * maximum the descriptors are still consumed but not installed: without the cap a
-             * request claiming 0xFFFFFFFF descriptors had the emulator installing breakpoints
-             * for as long as a client kept feeding it. */
-            /* Every descriptor is received before anything is installed, and installing is not done
-             * here at all: the set is published whole and the emulate thread installs it (see the
-             * mailbox above). The buffer is the thread's own, not a static: two server threads can be
-             * serving at once. */
+            /* Read all 'arg' 12-byte descriptors and publish the set. Every descriptor is
+             * received before anything is installed, and installing is not done here at all: the
+             * set is published whole and the emulate thread installs it (see the mailbox above).
+             * The buffer is the thread's own, not a static: two server threads can be serving at
+             * once.
+             *
+             * A count past the protocol maximum drops the client. The driver never sends one, and
+             * the bytes it claims cannot be drained either: count * 12 wraps in 32 bits, so a
+             * drain would stop short and read the rest of the payload as requests. */
             unsigned char descs[SE_LIVE_MAX_BKPT_DESCS * SE_LIVE_BKPT_DESC_LEN];
-            const unsigned int keep = arg > SE_LIVE_MAX_BKPT_DESCS ? SE_LIVE_MAX_BKPT_DESCS : arg;
-            if (keep && SeRecv(cl, descs, keep * SE_LIVE_BKPT_DESC_LEN) != 0) return;
-            SePublishBreakpoints(descs, keep);
-            /* Descriptors past the cap are consumed without being decoded. */
-            if (SeDrain(cl, (arg - keep) * SE_LIVE_BKPT_DESC_LEN) != 0) return;
+            if (arg > SE_LIVE_MAX_BKPT_DESCS)
+            {
+                SeExportLog("breakpoints: descriptor count over the protocol maximum, client dropped");
+                return;
+            }
+            if (arg && SeRecv(cl, descs, arg * SE_LIVE_BKPT_DESC_LEN) != 0) return;
+            SePublishBreakpoints(descs, arg);
         }
         else if (memcmp(req, SE_LIVE_VERB_WRITE, SE_LIVE_VERB_LEN) == 0)
         {
@@ -2068,13 +2070,16 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         }
         else if (memcmp(req, SE_LIVE_VERB_TRACE, SE_LIVE_VERB_LEN) == 0)
         {
-            /* Install tracepoints: 'arg' 16-byte descriptors. Buffer up to a cap and
-             * publish them for the emulate thread; consume any beyond the cap to stay stream-aligned. */
+            /* Install tracepoints: 'arg' 16-byte descriptors, published for the emulate thread.
+             * Over the cap the client is dropped, for the reason BKP gives. */
             unsigned char tbuf[SE_LIVE_TRACE_DESC_LEN * SE_LIVE_MAX_TRACE_DESCS];   /* not static: two server threads */
-            const unsigned int keep = arg > SE_LIVE_MAX_TRACE_DESCS ? SE_LIVE_MAX_TRACE_DESCS : arg;
-            if (keep && SeRecv(cl, tbuf, keep * SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            if (SeDrain(cl, (arg - keep) * SE_LIVE_TRACE_DESC_LEN) != 0) return;
-            SePublishTracepoints(tbuf, keep);   /* installed by the emulate thread */
+            if (arg > SE_LIVE_MAX_TRACE_DESCS)
+            {
+                SeExportLog("tracepoints: descriptor count over the protocol maximum, client dropped");
+                return;
+            }
+            if (arg && SeRecv(cl, tbuf, arg * SE_LIVE_TRACE_DESC_LEN) != 0) return;
+            SePublishTracepoints(tbuf, arg);   /* installed by the emulate thread */
         }
 
         /* Which ring frame to serve: a GET carries the client's last-seen frame (arg) and

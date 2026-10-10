@@ -358,7 +358,8 @@ affect either seam.
 ## 9. Versioning & compatibility
 
 - `SE_ABI_VERSION` is a single integer bumped on any breaking change to either seam. It is at
-  **7**: 7 appended `begin_capture` / `end_capture` to `se_data_source`, which bracket one
+  **8**: 8 appended `has_regs` to `se_data_source`, so a capture without a register file
+  (a live reply whose register section is empty) is not mistaken for all-zero registers. 7 appended `begin_capture` / `end_capture` to `se_data_source`, which bracket one
   snapshot so a driver whose state advances on another thread (the live tap) answers every read
   of a capture from the same instant -- optional, signalled by a non-NULL pointer rather than a
   capability bit, since there is nothing for the core to adapt to. 6 dropped the

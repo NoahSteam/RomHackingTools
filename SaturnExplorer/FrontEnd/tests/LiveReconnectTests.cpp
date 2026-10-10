@@ -596,6 +596,80 @@ void TestFrameNumberIsTheCapturedFrame()
     live.Source() = se_data_source{};
 }
 
+// A reply with every section empty: zero-length sections mean "unavailable", so the register
+// files are absent -- not a zero-filled image that reads as a real blank display -- and they
+// cannot make an otherwise empty capture count as valid.
+void TestEmptyRegisterSectionsAreUnavailable()
+{
+    LiveFixture live([](int fd, int)
+    {
+        Request r;
+        while (fakelive::ReadRequest(fd, r))
+        {
+            Reply rep; rep.vramLen = 0; rep.vdp2StructLen = 0; rep.vdp1RegsLen = 0;
+            const std::vector<uint8_t> bytes = fakelive::Build(rep);
+            if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+        }
+    });
+    CHECK(live.Ok());
+    if (!live.Ok()) return;
+    se_data_source& ds = live.Source();
+    CHECK(WaitFor([&] { return ds.frame_number(ds.user) >= 1u; }));
+    CHECK(ds.has_regs != nullptr);
+    if (ds.has_regs)
+    {
+        CHECK(ds.has_regs(ds.user, 1) == 0);
+        CHECK(ds.has_regs(ds.user, 2) == 0);
+    }
+
+    se_config cfg;
+    cfg.abi_version = SE_ABI_VERSION;
+    cfg.reserved = 0;
+    se_context* ctx = se_create(&ds, &cfg);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_begin_frame(ctx) != SE_OK);
+    CHECK(se_has_vdp1_registers(ctx) == 0);
+    CHECK(se_has_vdp2_registers(ctx) == 0);
+    se_destroy(ctx);
+    live.Source() = se_data_source{};
+}
+
+// Replies the driver must refuse rather than publish: a CRAM section that is not a whole number
+// of entries (it would be byte-swapped up to the last whole entry and raw after it), a register
+// section of a shape the decoder does not know, and a protocol version it does not speak.
+void TestMalformedRepliesAreNotPublished()
+{
+    std::vector<Reply> bad(5);
+    bad[0].cram = { 0x11, 0x22, 0x33 };
+    bad[1].vdp2StructLen = SE_LIVE_VDP2_STRUCT_LEN - 2;
+    bad[2].vdp1RegsLen = 4;
+    bad[3].version = 0;
+    bad[4].version = 999;
+    for (const Reply& rep : bad)
+    {
+        std::atomic<int> answered{0};
+        LiveFixture live([&rep, &answered](int fd, int)
+        {
+            Request r;
+            while (fakelive::ReadRequest(fd, r))
+            {
+                const std::vector<uint8_t> bytes = fakelive::Build(rep);
+                if (!fakelive::WriteExact(fd, bytes.data(), bytes.size())) return;
+                ++answered;
+            }
+        });
+        CHECK(live.Ok());
+        if (!live.Ok()) continue;
+        se_data_source& ds = live.Source();
+        CHECK(WaitFor([&] { return answered.load() >= 2; }));
+        uint8_t buf[16];
+        CHECK(ds.read_vdp2_vram(ds.user, 0, buf, sizeof(buf)) == 0);
+        CHECK(ds.read_cram(ds.user, 0, buf, 3) == 0);
+        CHECK(ds.frame_number(ds.user) == 0u);
+    }
+}
+
 // The stop's sequence number rides with the stop, from the same displayed frame, so a client can
 // tell a NEW halt from a re-report of the one it has -- including a second halt at the same PC. A
 // server older than v21 numbers nothing, and the driver says so rather than inventing a zero.
@@ -880,6 +954,8 @@ int main()
     TestCaptureIsPinnedToOneSnapshot();
     TestFrameNumberIsTheCapturedFrame();
     TestStopCarriesItsSequenceNumber();
+    TestEmptyRegisterSectionsAreUnavailable();
+    TestMalformedRepliesAreNotPublished();
     TestCloseDoesNotWaitForASilentEmulator();
     TestPeerHangUpDuringSendDoesNotKillTheProcess();
     TestEditFromTheOldDisplayIsRefused();

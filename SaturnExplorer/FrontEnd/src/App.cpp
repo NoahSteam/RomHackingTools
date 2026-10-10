@@ -4048,6 +4048,10 @@ void App::DrawDiscExplorer(IPlatform& platform)
                               mDiscFs.ok ? (std::to_string(mDiscFs.entries.size()) + " entries").c_str()
                                          : mDiscFs.error.c_str());
                 mDiscStatus = buf;
+                // A damaged tree still browses, but the list is short: say so rather than let a
+                // missing file look like one the disc does not have.
+                if (mDiscFs.ok && !mDiscFs.complete)
+                    mDiscStatus += "  \xc2\xb7  incomplete (" + mDiscFs.incomplete + ")";
             }
             else
             {

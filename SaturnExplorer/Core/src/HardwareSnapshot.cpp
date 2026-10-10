@@ -145,7 +145,10 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     }
 
     // Capture the VDP1 register file (0x00..0x1E) if the driver supplies it.
-    if ((dataSource.capabilities & SE_CAP_VDP1_REGS) && dataSource.read_vdp1_reg)
+    auto hasRegs = [&](int vdp) {
+        return !dataSource.has_regs || dataSource.has_regs(dataSource.user, vdp) != 0;
+    };
+    if ((dataSource.capabilities & SE_CAP_VDP1_REGS) && dataSource.read_vdp1_reg && hasRegs(1))
     {
         constexpr uint32_t kVdp1RegMax = 0x1E;
         mVdp1Regs.resize((kVdp1RegMax >> 1) + 1);
@@ -160,7 +163,7 @@ bool HardwareSnapshot::Capture(const se_data_source& dataSource)
     // Capture the VDP2 register file (0x000..0x11E) into an immutable copy, so
     // the compositor reads a consistent snapshot rather than re-hitting the
     // driver per pixel.
-    if ((dataSource.capabilities & SE_CAP_VDP2_REGS) && dataSource.read_vdp2_reg)
+    if ((dataSource.capabilities & SE_CAP_VDP2_REGS) && dataSource.read_vdp2_reg && hasRegs(2))
     {
         constexpr uint32_t kVdp2RegMax = 0x11E;
         mVdp2Regs.resize((kVdp2RegMax >> 1) + 1);
