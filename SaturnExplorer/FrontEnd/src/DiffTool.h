@@ -1,5 +1,5 @@
 // DiffTool — hand two compared frames to an external diff program (Beyond Compare, WinMerge,
-// Meld, ...) instead of the built-in Memory Compare panel.
+// Meld, ...) as well as in the built-in Memory Compare panel.
 //
 // The tool is given two FOLDERS, one per frame, each holding that frame's memory as one raw file
 // per captured region (HWRAM_06000000.bin, ...). A folder compare lists the regions that differ

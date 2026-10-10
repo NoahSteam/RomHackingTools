@@ -2368,13 +2368,6 @@ bool App::MarkCompareFrame(CompareMarkers::Slot slot)
 // Diff the two markers and bring the panel forward. Synchronous: it is a few MB of compare.
 void App::OpenCompare()
 {
-    // A configured diff tool replaces the built-in panel. It needs the platform to start, which
-    // the draw code that raises this does not have, so the launch waits for the frame's pump.
-    if (!mDiffExe.empty())
-    {
-        mLaunchDiffRequested = true;
-        return;
-    }
     DiffResult diff;
     const DiffStatus st = Diff(mCompare.Snapshot(CompareMarkers::A), mCompare.Snapshot(CompareMarkers::B),
                                DiffOptions(), &diff);
@@ -2388,6 +2381,10 @@ void App::OpenCompare()
     mCompareStatus.clear();
     mPanels.memoryCompare = true;
     mMemoryCompare.RequestFocus();
+    // A configured diff tool gets the same two frames as well. It needs the platform to start, which
+    // the draw code that raises this does not have, so the launch waits for the frame's pump. After
+    // the status is cleared above, so a tool that fails to start is what the row ends up saying.
+    if (!mDiffExe.empty()) mLaunchDiffRequested = true;
 }
 
 bool App::CompareRowVisible() const
@@ -2520,7 +2517,7 @@ void App::DrawCompareRow()
     place(2);
     ImGui::BeginDisabled(!mCompare.HasBoth());
     if (ImGui::Button("Compare Memory...")) OpenCompare();
-    if (!mDiffExe.empty()) ImGui::SetItemTooltip("Opens frames A and B in %s (Settings > Diff...)", PathBasename(mDiffExe).c_str());
+    if (!mDiffExe.empty()) ImGui::SetItemTooltip("Shows the comparison here and opens frames A and B in %s (Settings > Diff...)", PathBasename(mDiffExe).c_str());
     ImGui::EndDisabled();
     if (!mCompareStatus.empty())
     {
@@ -8365,9 +8362,9 @@ void App::DrawDiffSettingsModal(IPlatform& platform)
     if (!ImGui::BeginPopupModal(kTitle, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
     ImGui::PushTextWrapPos(ImGui::GetFontSize() * 36.0f);
-    ImGui::TextUnformatted("Compare Memory opens the two marked frames in this program, such as Beyond "
-                           "Compare, WinMerge or Meld, instead of the built-in Memory Compare panel. "
-                           "Leave the executable empty to keep using the panel.");
+    ImGui::TextUnformatted("Compare Memory also opens the two marked frames in this program, such as Beyond "
+                           "Compare, WinMerge or Meld, alongside the built-in Memory Compare panel. "
+                           "Leave the executable empty to use the panel alone.");
     ImGui::PopTextWrapPos();
     ImGui::Separator();
 
