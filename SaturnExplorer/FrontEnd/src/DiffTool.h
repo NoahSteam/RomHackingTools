@@ -61,8 +61,11 @@ bool WriteSnapshotFolder(const MemSnapshot& snap, const std::string& dir, std::s
 // deleted); a week is long past any diff window left open on purpose.
 constexpr uint64_t kDiffKeepSeconds = 7u * 24u * 3600u;
 
-// Remove the comparison folders under 'root' made 'keepSeconds' or more before 'nowSeconds' (0 =
-// all of them), and the single un-numbered folders earlier versions wrote. Folders whose names are not
+// Remove the comparison folders under 'root' made 'keepSeconds' or more before 'nowSeconds'. With
+// keepSeconds 0 -- the explicit "delete saved comparison files" -- remove all of them, and the
+// un-numbered folders earlier versions wrote too: those have no date in their name to age them by,
+// and an upgrade must not delete the inputs of a diff window opened before it, so the automatic cleanup
+// leaves them. Folders whose names are not
 // ours are never touched, and a folder that holds anything but plain files is left alone
 // (RemoveFlatDirectory refuses it), so a root the user pointed at something else is not emptied.
 // Best effort: a folder the diff tool still has open on Windows stays.

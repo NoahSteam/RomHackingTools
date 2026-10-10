@@ -50,6 +50,15 @@ bool IsBundle(const std::string& p)
 bool SpawnDetached(const std::string& path, const std::vector<std::string>& args,
                    const std::string& workingDir, std::string& error)
 {
+    SpawnSyscalls real;
+    real.fork = [] { return static_cast<int>(::fork()); };
+    real.waitpid = [](int pid, int* status, int options) { return static_cast<int>(::waitpid(pid, status, options)); };
+    return SpawnDetachedWith(real, path, args, workingDir, error);
+}
+
+bool SpawnDetachedWith(const SpawnSyscalls& sys, const std::string& path, const std::vector<std::string>& args,
+                       const std::string& workingDir, std::string& error)
+{
     error.clear();
     if (path.empty())
     {
@@ -84,7 +93,7 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
     {
         // `open` hands the application to LaunchServices and exits straight away, so it is waited on
         // and its exit status is the answer.
-        const pid_t pid = ::fork();
+        const pid_t pid = sys.fork();
         if (pid < 0)
         {
             error = std::string("fork failed: ") + std::strerror(errno);
@@ -97,8 +106,16 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
             ::execv(program, argv.data());
             ::_exit(127);
         }
+        // A signal can interrupt the wait: retry. Any other failure means the outcome is unknown, and
+        // an unknown outcome is not a success (status would still be 0, which reads as one).
         int status = 0;
-        ::waitpid(pid, &status, 0);
+        pid_t waited;
+        do { waited = sys.waitpid(pid, &status, 0); } while (waited < 0 && errno == EINTR);
+        if (waited != pid)
+        {
+            error = path + ": could not wait for `open`: " + std::strerror(errno);
+            return false;
+        }
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) return true;
         error = path + ": `open` could not start the application"
                 + (WIFEXITED(status) ? " (exit " + std::to_string(WEXITSTATUS(status)) + ")" : std::string());
@@ -118,7 +135,7 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
 
     // Fork twice so the tool is reparented to init: nothing here waits on it, and a single fork would
     // leave a zombie for as long as this program runs.
-    const pid_t first = ::fork();
+    const pid_t first = sys.fork();
     if (first < 0)
     {
         error = std::string("fork failed: ") + std::strerror(errno);
@@ -129,13 +146,22 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
     if (first == 0)
     {
         ::setsid();
-        if (::fork() != 0) ::_exit(0);
+        int report[2];
+        const pid_t second = sys.fork();
+        if (second < 0)
+        {
+            // Not the success path: nothing was started. Tell the parent, which would otherwise read
+            // this exit as "the program is running".
+            report[0] = 3; report[1] = errno;
+            (void)!::write(fds[1], report, sizeof(report));
+            ::_exit(127);
+        }
+        if (second != 0) ::_exit(0);
         // The grandchild. A failure from here on is written as {stage, errno} and the pipe closes on
         // exit; a successful exec closes it (close-on-exec) without a byte, which the parent reads as
         // "it started".
         ::close(fds[0]);
         StdioToDevNull();
-        int report[2];
         if (dir && ::chdir(dir) != 0)
         {
             report[0] = 1; report[1] = errno;
@@ -149,8 +175,12 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
     }
 
     ::close(fds[1]);
+    // The intermediate child exits at once; this only reaps it. A failed wait still falls through to the
+    // pipe, which is the real answer: a pending read below blocks until every writer has gone.
     int status = 0;
-    ::waitpid(first, &status, 0);   // the intermediate child exits at once; this only reaps it
+    pid_t waited;
+    do { waited = sys.waitpid(first, &status, 0); } while (waited < 0 && errno == EINTR);
+    (void)waited;
     int report[2] = { 0, 0 };
     size_t got = 0;
     while (got < sizeof(report))
@@ -165,6 +195,8 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
 
     if (report[0] == 1)
         error = "Could not use " + workingDir + " as the working directory: " + std::strerror(report[1]);
+    else if (report[0] == 3)
+        error = path + ": could not start it (fork failed: " + std::strerror(report[1]) + ")";
     else
         error = path + ": " + std::strerror(report[1]);
     return false;

@@ -166,7 +166,7 @@ void PurgeDiffFolders(const std::string& root, uint64_t nowSeconds, uint64_t kee
         if (ParseComparisonFolder(name, made))
             remove = keepSeconds == 0 || (made <= nowSeconds && nowSeconds - made >= keepSeconds);
         else if (IsLegacyFolder(name))
-            remove = true;
+            remove = keepSeconds == 0;   // no date in the name to age it by, so only an explicit cleanup removes it
         if (remove) RemoveFlatDirectory(root + PathSeparator() + name);
     }
 }

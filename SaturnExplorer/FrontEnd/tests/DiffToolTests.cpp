@@ -160,13 +160,18 @@ void TestWriteAndPurge()
     PurgeDiffFolders(root, 1000001, 0);
     CHECK(!FileOrDirectoryExists(a));
 
-    // The un-numbered folders earlier versions wrote are removed; a folder named like neither is not ours.
+    // The un-numbered folders earlier versions wrote carry no date, and a diff window opened before an
+    // upgrade may still be showing one: the automatic cleanup leaves them, an explicit one removes them.
+    // A folder named like neither is not ours either way.
     const std::string legacy = root + PathSeparator() + "A_frame_7";
     const std::string foreign = root + PathSeparator() + "my_notes";
     CHECK(MakeDirectory(legacy));
     CHECK(MakeDirectory(foreign));
     CHECK(WriteFileAtomically(foreign + PathSeparator() + "f.txt", "x", 1, error));
-    PurgeDiffFolders(root, 2000000, kDiffKeepSeconds);
+    PurgeDiffFolders(root, 2000000000, kDiffKeepSeconds);
+    CHECK(FileOrDirectoryExists(legacy));
+    CHECK(FileOrDirectoryExists(foreign + PathSeparator() + "f.txt"));
+    PurgeDiffFolders(root, 2000000000, 0);
     CHECK(!FileOrDirectoryExists(legacy));
     CHECK(FileOrDirectoryExists(foreign + PathSeparator() + "f.txt"));
 

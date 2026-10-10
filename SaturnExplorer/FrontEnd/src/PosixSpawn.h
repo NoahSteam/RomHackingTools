@@ -12,6 +12,7 @@
 // Free of ImGui and the platform layer so it can be tested; compiles to nothing off POSIX.
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,5 +26,15 @@ namespace sfe
 // filled -- naming the program and the reason -- when it did not.
 bool SpawnDetached(const std::string& path, const std::vector<std::string>& args,
                    const std::string& workingDir, std::string& error);
+
+// The two system calls whose failure paths a test cannot otherwise reach (a second fork() that fails,
+// a wait interrupted by a signal). SpawnDetached passes the real ones; a test substitutes its own.
+struct SpawnSyscalls
+{
+    std::function<int()>                fork;      // fork(): the child's pid, 0 in the child, -1 + errno
+    std::function<int(int, int*, int)>  waitpid;   // waitpid(pid, &status, options)
+};
+bool SpawnDetachedWith(const SpawnSyscalls& sys, const std::string& path, const std::vector<std::string>& args,
+                       const std::string& workingDir, std::string& error);
 
 }  // namespace sfe

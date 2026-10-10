@@ -130,6 +130,79 @@ void TestNoZombie(const std::string& dir)
     errno = 0;
     CHECK(::waitpid(-1, &status, WNOHANG) == -1 && errno == ECHILD);   // no child of ours, running or zombie
 }
+// The failure paths a real run cannot reach. A second fork() that fails used to take the same exit as a
+// second fork that worked, and an interrupted wait left status at 0, which reads as "exited cleanly";
+// both reported a launch that never happened as a success.
+void TestSyscallFailures(const std::string& dir)
+{
+    const std::string tool = dir + "/ok2.sh";
+    WriteFile(tool, "#!/bin/sh\nexit 0\n", 0755);
+    std::string error;
+
+    // The second fork (made by the first child) fails. The count is bumped before the call, so the
+    // child that inherits it sees 2 on its own call.
+    {
+        static int forks;
+        forks = 0;
+        SpawnSyscalls sys;
+        sys.fork = [] {
+            if (++forks == 2) { errno = EAGAIN; return -1; }
+            return static_cast<int>(::fork());
+        };
+        sys.waitpid = [](int pid, int* status, int options) { return static_cast<int>(::waitpid(pid, status, options)); };
+        CHECK(!SpawnDetachedWith(sys, tool, {}, dir, error));
+        CHECK(error.find("fork failed") != std::string::npos);
+        CHECK(error.find(std::strerror(EAGAIN)) != std::string::npos);
+        // Nothing may be left running or unreaped by the failed attempt.
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        int status = 0;
+        errno = 0;
+        CHECK(::waitpid(-1, &status, WNOHANG) == -1 && errno == ECHILD);
+    }
+
+    // The first fork fails.
+    {
+        SpawnSyscalls sys;
+        sys.fork = [] { errno = EAGAIN; return -1; };
+        sys.waitpid = [](int, int*, int) { return -1; };
+        error.clear();
+        CHECK(!SpawnDetachedWith(sys, tool, {}, dir, error));
+        CHECK(error.find("fork failed") != std::string::npos);
+    }
+
+    // A bundle launch: `open` is stood in for by a program that exits 0 (a fake /usr/bin/open is not
+    // available, so the child exec fails and exits 127 -- which is what makes the EINTR case
+    // meaningful: a retried wait must still see the real status, not the zero it started as).
+    {
+        static int waits;
+        waits = 0;
+        SpawnSyscalls sys;
+        sys.fork = [] { return static_cast<int>(::fork()); };
+        sys.waitpid = [](int pid, int* status, int options) {
+            if (++waits == 1) { errno = EINTR; return -1; }   // interrupted once, then the real wait
+            return static_cast<int>(::waitpid(pid, status, options));
+        };
+        error.clear();
+        const bool hasOpen = ::access("/usr/bin/open", X_OK) == 0;
+        const bool ok = SpawnDetachedWith(sys, dir + "/Some.app", {}, "", error);
+        CHECK(waits >= 2);                      // the interrupted wait was retried
+        if (!hasOpen) CHECK(!ok && !error.empty());   // and the real status (127) was seen, not a stale 0
+    }
+
+    // A wait that fails for any other reason is not a success.
+    {
+        SpawnSyscalls sys;
+        sys.fork = [] { return static_cast<int>(::fork()); };
+        sys.waitpid = [](int pid, int* status, int options) {
+            ::waitpid(pid, status, options);   // reap it so nothing leaks, then report failure
+            errno = ECHILD;
+            return -1;
+        };
+        error.clear();
+        CHECK(!SpawnDetachedWith(sys, dir + "/Some.app", {}, "", error));
+        CHECK(error.find("could not wait") != std::string::npos);
+    }
+}
 }  // namespace
 
 int main()
@@ -139,6 +212,7 @@ int main()
     TestArgumentsArriveLiterally(dir);
     TestFailuresAreReported(dir);
     TestNoZombie(dir);
+    TestSyscallFailures(dir);
     std::system(("rm -rf '" + dir + "'").c_str());
     if (gFailures == 0) std::printf("PosixSpawn: all checks passed\n");
     return gFailures == 0 ? 0 : 1;
