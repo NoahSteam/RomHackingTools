@@ -6859,9 +6859,12 @@ TopBarViewModel App::BuildTopBarViewModel() const
                       LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
     // Explicit version check: LiveHas answers yes for a pre-v24 server, which has no ESV at all.
+    // Not while halted at a breakpoint: the save is written at a frame boundary, which a halt never
+    // reaches, so it would save whatever state the resume runs into instead of the one shown.
     vm.canSaveEmulatorState = mEmuSlotCount > 0 &&
                               se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_EMUSAVE &&
-                              LiveHas(SE_LIVE_CAP_EMU_SAVE);
+                              LiveHas(SE_LIVE_CAP_EMU_SAVE) &&
+                              !se_live_get_stop(&mDataSource, nullptr, nullptr, nullptr);
 #endif
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
@@ -7823,9 +7826,15 @@ void App::DoSaveEmulatorState(int slot)
     // The emulator writes the file itself, at its next frame boundary, and keeps running: nothing
     // is restored, so the recorded history and any pending edits all stay. The slot inventory that
     // rides on every reply shows the new file once it is written.
-    if (se_live_emu_save_slot(&mDataSource, static_cast<uint32_t>(slot)) != 0)
+    const int rc = se_live_emu_save_slot(&mDataSource, static_cast<uint32_t>(slot));
+    if (rc != 0)
     {
-        mStateStatus = "The emulator slot save was not sent.";
+        mStateStatus = rc == SE_LIVE_EMUSAVE_HALTED
+            ? "Cannot save to an emulator slot while halted at a breakpoint: the emulator saves only "
+              "between frames. Resume or step to the next frame first."
+            : rc == SE_LIVE_EMUSAVE_LOADING
+                ? "Cannot save to an emulator slot while a state load is still being applied."
+                : "The emulator slot save was not sent.";
         mLog.Error(mStateStatus, se_frame_number(mContext));
         return;
     }

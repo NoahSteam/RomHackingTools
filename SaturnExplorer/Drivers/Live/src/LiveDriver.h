@@ -130,8 +130,13 @@ uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
 int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
 /* Have the emulator save one of its own slots (v25+, SE_LIVE_CAP_EMU_SAVE), the one its save
  * hotkey for that slot writes. It is written at the emulator's next frame boundary and the game
- * carries on; the slot inventory above shows it once written (present, newer mtime). Returns 0
- * when queued, nonzero when refused (same reasons as a load, or a server older than v25). */
+ * carries on; the slot inventory above shows it once written (present, newer mtime). Saves to
+ * different slots before that boundary are each written. Returns 0 when queued;
+ * SE_LIVE_EMUSAVE_HALTED while halted at a breakpoint (a halt reaches no frame boundary);
+ * SE_LIVE_EMUSAVE_LOADING while a state load has not yet been applied (it would be overwritten
+ * first); -1 for the rest (same reasons as a load, or a server older than v25). */
+#define SE_LIVE_EMUSAVE_HALTED  1
+#define SE_LIVE_EMUSAVE_LOADING 2
 int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot);
 
 /* Turn rewind capture on or off in the emulator (v18+). The emulator saves a FULL state every

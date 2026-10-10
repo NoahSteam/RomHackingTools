@@ -48,7 +48,8 @@ extern "C" int FakeSlotInfo(unsigned int, unsigned long long* mtime) { *mtime = 
 extern "C" int FakeSlotLoad(unsigned int) { ++gLoads; return gLoadResult.load(); }
 std::atomic<int> gSaves{ 0 };
 std::atomic<int> gSavedSlot{ -1 };
-extern "C" int FakeSlotSave(unsigned int slot) { gSavedSlot = int(slot); ++gSaves; return 0; }
+std::atomic<unsigned> gSavedMask{ 0 };   // every slot written since last cleared
+extern "C" int FakeSlotSave(unsigned int slot) { gSavedSlot = int(slot); gSavedMask |= 1u << slot; ++gSaves; return 0; }
 
 void Frame()
 {
@@ -274,6 +275,46 @@ int main()
         Check(gSaves.load() == 2 && gSavedSlot.load() == 6, "the end of a frame writes the slot too");
         SeExportEndFrame();
         Check(gSaves.load() == 2, "and only once");
+
+        // Two saves to different slots before the boundary are two files. One mailbox kept only
+        // the last, though both had been accepted.
+        gSavedMask = 0;
+        raw.Request(SE_LIVE_VERB_EMUSAVE, 7);
+        raw.Request(SE_LIVE_VERB_EMUSAVE, 8);
+        Sleep(300);   // both in the mailbox; no boundary yet
+        SeExportEndFrame();
+        Check(gSavedMask.load() == ((1u << 7) | (1u << 8)), "saves to slots 7 and 8 both written");
+        gSavedMask = 0;
+        Check(se_live_emu_save_slot(&ds, 1) == 0 && se_live_emu_save_slot(&ds, 2) == 0, "the driver accepts two slots");
+        for (int i = 0; i < 400 && gSavedMask.load() != 6u; ++i) { SeExportEndFrame(); Sleep(5); }
+        Check(gSavedMask.load() == 6u, "and both are written");
+
+        // Load slot 6, then save slot 6, both before the boundary: the save is serviced first, so it
+        // would overwrite the file the load is about to read. Refused at both ends.
+        gLoadResult = 0;
+        const int savesBefore = gSaves.load();
+        Check(se_live_emu_load_slot(&ds, 6) == 0, "a slot load is queued");
+        Check(se_live_emu_save_slot(&ds, 6) == SE_LIVE_EMUSAVE_LOADING, "the driver refuses a save while it is outstanding");
+        raw.Request(SE_LIVE_VERB_EMULOAD, 5);
+        raw.Request(SE_LIVE_VERB_EMUSAVE, 5);
+        Sleep(300);
+        for (int i = 0; i < 40; ++i) { EmulatorTick(); Sleep(5); }   // the loads land at the gate
+        Check(gSaves.load() == savesBefore, "nor does the emulator take a save that arrived behind a load");
+
+        // Halted at a breakpoint: no frame boundary until the resume, so the save would write a
+        // later state than the one shown. Refused at both ends.
+        SeExportNotifyStop(0, 0x06004000u);
+        Frame();   // publish the halt
+        bool shown = false;
+        for (int i = 0; i < 400 && !shown; ++i) { se_begin_frame(ctx); shown = se_live_get_stop(&ds, nullptr, nullptr, nullptr) != 0; if (!shown) Sleep(5); }
+        Check(shown, "the halt reached the client");
+        Check(se_live_emu_save_slot(&ds, 3) == SE_LIVE_EMUSAVE_HALTED, "the driver refuses a save while halted");
+        raw.Request(SE_LIVE_VERB_EMUSAVE, 3);
+        Sleep(300);
+        SeExportGateHalt();
+        SeExportGateFrame();
+        Check(gSaves.load() == savesBefore, "nor does the emulator queue one for after the resume");
+        se_frame_resume(ctx);
     }
 
     se_destroy(ctx);

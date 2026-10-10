@@ -831,13 +831,15 @@ static SeEmuSlotLoadFn sEmuSlotLoad;
 /* Latched by the ELS verb, applied by the gate on the emulate thread (0 = none pending,
  * else slot + 1) so the emulator's own loader never runs underneath a mid-frame CPU. */
 static volatile int sEmuLoadPending;
-/* The save half (v25, ESV). Latched the same way; taken at the next frame boundary -- whichever
- * comes first of the end of the running frame and the frame gate -- because the emulator's state
- * is only whole between frames. The end-of-frame half is what makes it work on a build without
- * the gate; the gate half is what makes it work while paused, when no frame ends. */
+/* The save half (v25, ESV). Taken at the next frame boundary -- whichever comes first of the end
+ * of the running frame and the frame gate -- because the emulator's state is only whole between
+ * frames. The end-of-frame half is what makes it work on a build without the gate; the gate half
+ * is what makes it work while paused, when no frame ends. A bit per slot rather than one pending
+ * slot: two saves to different slots before the boundary are two files, and a single mailbox
+ * dropped the first while both were reported accepted. */
 typedef int (*SeEmuSlotSaveFn)(unsigned int slot);
 static SeEmuSlotSaveFn sEmuSlotSave;
-static volatile int sEmuSavePending;
+static volatile int sEmuSavePending;   /* bit n = slot n */
 
 void SeExportSetEmuSlotHooks(SeEmuSlotInfoFn info, SeEmuSlotLoadFn load)
 {
@@ -854,9 +856,13 @@ void SeExportSetEmuSlotSaveHook(SeEmuSlotSaveFn save)
 static void SeServiceEmuSave(void)
 {
     const int pending = SeAtXchg(&sEmuSavePending, 0);
-    if (pending == 0) return;
-    if (!sEmuSlotSave || sEmuSlotSave((unsigned int)(pending - 1)) != 0)
-        SeExportLog("save slot: the emulator could not write it");
+    unsigned int slot;
+    for (slot = 0; slot < SE_LIVE_EMU_SLOTS; ++slot)
+    {
+        if (!(pending & (1 << slot))) continue;
+        if (!sEmuSlotSave || sEmuSlotSave(slot) != 0)
+            SeExportLog("save slot: the emulator could not write it");
+    }
 }
 
 /* ---- Port device-type hook (v12+). apply.py wires this to the emulator's port map so
@@ -2035,9 +2041,24 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
         else if (memcmp(req, SE_LIVE_VERB_EMUSAVE, SE_LIVE_VERB_LEN) == 0)
         {
             /* Save one of the emulator's own slots (v25). No payload, no pause: the emulate
-             * thread writes it at the next frame boundary and the game carries on. A second save
-             * before then just retargets the first -- there is only one state to write. */
-            if (sEmuSlotSave && arg < SE_LIVE_EMU_SLOTS) SeAtStore(&sEmuSavePending, (int)arg + 1);
+             * thread writes it at the next frame boundary and the game carries on.
+             *
+             * Refused while a load is waiting for that boundary: the save is serviced first, so a
+             * load-then-save of one slot would overwrite the file before the load read it. And
+             * refused while halted at a breakpoint: a halt reaches no frame boundary, so the save
+             * would wait for the resume and write a later state than the one on screen. The client
+             * refuses both first; this is the backstop for a request that crossed the halt. */
+            const int halted = SE_STOP_REASON(SeAtLoad64(&sStopWord)) != SE_LIVE_STOP_NONE;
+            if (!sEmuSlotSave || arg >= SE_LIVE_EMU_SLOTS) { }
+            else if (SeAtLoad(&sLoadPending) || SeAtLoad(&sEmuLoadPending))
+                SeExportLog("save slot: refused, a state load is still being applied");
+            else if (halted)
+                SeExportLog("save slot: refused while halted at a breakpoint (needs a frame boundary)");
+            else
+            {
+                int cur = SeAtLoad(&sEmuSavePending);
+                while (!SeAtCas(&sEmuSavePending, &cur, cur | (1 << arg))) { }
+            }
         }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
         {
