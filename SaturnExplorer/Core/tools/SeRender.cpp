@@ -183,12 +183,12 @@ int main(int argc, char** argv)
             "                 [--reference golden.ppm [--diff diff.ppm] [--tolerance N]]\n");
         return 2;
     }
-    // --3d draws VDP1 sprite geometry and never consults VDP2, so the 2D-only flags do not
-    // compose with it: Render3D bails out the moment show_vdp1_sprites is clear, which is
-    // exactly what --layer sets on a VDP2 screen. Say so rather than writing a black frame.
+    // --layer and --tile-grid are 2D renders of one screen (what the layer viewer panels show).
+    // The 3D view draws every screen as a plane plus the sprite stack, so they do not compose with
+    // it; say so rather than writing a frame that is not what was asked for.
     if (view3d && (layer >= 0 || tileGrid))
     {
-        std::fprintf(stderr, "se-render: --3d renders the VDP1 sprite geometry; "
+        std::fprintf(stderr, "se-render: --3d renders the exploded scene; "
                              "--layer and --tile-grid are 2D-only\n");
         return 2;
     }

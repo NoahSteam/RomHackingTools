@@ -14,6 +14,19 @@
 namespace se
 {
 
+// One VDP2 scroll screen as a flat textured plane in the exploded 3D view: its isolated render
+// (RGBA, alpha 0 where the screen draws nothing) hung at world depth 'z', spanning
+// worldWidth x worldHeight centred on the origin, the same space the sprites' quads sit in.
+struct LayerPlane
+{
+    const uint8_t* rgba = nullptr;
+    int   width = 0;        // image size in pixels
+    int   height = 0;
+    float worldWidth = 0;   // extent in world units (the VDP1 coordinate space)
+    float worldHeight = 0;
+    float z = 0;
+};
+
 class Vdp1Rasterizer
 {
 public:
@@ -39,11 +52,17 @@ public:
                                  const SpritePriorityTable& prios, std::vector<SpritePixel>& layer);
 
     // Render the exploded 3D view (scene.sprites3d) from 'camera' into 'outRgba'
-    // (resized to viewport). 'depth' is a caller-owned scratch depth buffer,
-    // reused across frames so the camera can orbit without per-frame allocation.
+    // (resized to viewport). 'planes' are the VDP2 screens, drawn first and depth-tested like the
+    // sprites, so the caller hangs them behind the sprites' Z range. 'depth' is a caller-owned
+    // scratch depth buffer, reused across frames so the camera can orbit without per-frame
+    // allocation. 'prios' turns a solid polygon's or line's framebuffer word into the colour VDP2
+    // would show for it, which is none at all for a word VDP2 reads as transparent: the full-screen
+    // colour-0 polygon many games open their list with draws nothing in the composite, and must not
+    // be a black wall in front of the VDP2 planes here.
     static void Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                          const std::vector<uint8_t>& cram, se_cram_mode cramMode,
                          const se_camera3d& camera, const se_render_opts& opts,
+                         const std::vector<LayerPlane>& planes, const SpritePriorityTable& prios,
                          std::vector<uint8_t>& outRgba, std::vector<float>& depth);
 
     // Pick the topmost 3D sprite under screen point (x,y) for 'camera', using the

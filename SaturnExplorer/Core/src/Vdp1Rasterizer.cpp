@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "Vdp1Rasterizer.h"
 
 #include <algorithm>
@@ -879,15 +880,84 @@ bool Vdp1Rasterizer::BuildSpriteLayer(const Vdp1Scene& scene, const std::vector<
     return any;
 }
 
+namespace
+{
+
+// One triangle of a layer plane: nearest-texel sampling of the layer's RGBA image, depth-tested
+// like a sprite. A texel the layer did not draw (alpha below half) neither shows nor writes depth,
+// so what lies behind it comes through.
+void RasterPlaneTriangle(const RVert& p0, const RVert& p1, const RVert& p2,
+                         const se_vec2& t0, const se_vec2& t1, const se_vec2& t2,
+                         const LayerPlane& plane, bool dropP0P1Edge, int width, int height,
+                         std::vector<float>& depth, std::vector<uint8_t>& outRgba)
+{
+    const float area = Edge(p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+    if (std::fabs(area) < 1e-6f)
+    {
+        return;
+    }
+    const float invArea = 1.0f / area;
+    const int minX = ClampInt(static_cast<int>(std::floor(std::min({ p0.x, p1.x, p2.x }))), 0, width - 1);
+    const int maxX = ClampInt(static_cast<int>(std::ceil(std::max({ p0.x, p1.x, p2.x }))), 0, width - 1);
+    const int minY = ClampInt(static_cast<int>(std::floor(std::min({ p0.y, p1.y, p2.y }))), 0, height - 1);
+    const int maxY = ClampInt(static_cast<int>(std::ceil(std::max({ p0.y, p1.y, p2.y }))), 0, height - 1);
+    for (int y = minY; y <= maxY; ++y)
+    {
+        for (int x = minX; x <= maxX; ++x)
+        {
+            const float px = x + 0.5f;
+            const float py = y + 0.5f;
+            const float w0 = Edge(p1.x, p1.y, p2.x, p2.y, px, py) * invArea;
+            const float w1 = Edge(p2.x, p2.y, p0.x, p0.y, px, py) * invArea;
+            const float w2 = Edge(p0.x, p0.y, p1.x, p1.y, px, py) * invArea;
+            if (w0 < 0.0f || w1 < 0.0f || w2 < 0.0f) continue;
+            if (dropP0P1Edge && w2 <= 0.0f) continue;   // the sibling triangle owns the diagonal
+            const size_t idx = static_cast<size_t>(y) * width + x;
+            const float d = w0 * p0.depth + w1 * p1.depth + w2 * p2.depth;
+            if (d >= depth[idx]) continue;
+            const int tx = ClampInt(static_cast<int>(w0 * t0.x + w1 * t1.x + w2 * t2.x), 0, plane.width - 1);
+            const int ty = ClampInt(static_cast<int>(w0 * t0.y + w1 * t1.y + w2 * t2.y), 0, plane.height - 1);
+            const uint8_t* texel = plane.rgba + (static_cast<size_t>(ty) * plane.width + tx) * 4;
+            if (texel[3] < 128) continue;
+            depth[idx] = d;
+            const size_t o = idx * 4;
+            outRgba[o + 0] = texel[0]; outRgba[o + 1] = texel[1]; outRgba[o + 2] = texel[2];
+            outRgba[o + 3] = 255;
+        }
+    }
+}
+
+// A VDP2 screen as a flat quad at its depth, corners in the same A,B,C,D order as a sprite's.
+void DrawPlane(const LayerPlane& plane, const se_camera3d& camera, float cosYaw, float sinYaw,
+               float cosPitch, float sinPitch, int width, int height,
+               std::vector<float>& depth, std::vector<uint8_t>& outRgba)
+{
+    if (!plane.rgba || plane.width <= 0 || plane.height <= 0) return;
+    const float hx = plane.worldWidth * 0.5f;
+    const float hy = plane.worldHeight * 0.5f;
+    const se_vec3 corner[4] = { { -hx, hy, plane.z }, { hx, hy, plane.z },
+                                { hx, -hy, plane.z }, { -hx, -hy, plane.z } };
+    const se_vec2 w = { static_cast<float>(plane.width), static_cast<float>(plane.height) };
+    const se_vec2 uv[4] = { { 0, 0 }, { w.x, 0 }, { w.x, w.y }, { 0, w.y } };
+    RVert v[4];
+    for (int k = 0; k < 4; ++k)
+        v[k] = Project(corner[k], camera, cosYaw, sinYaw, cosPitch, sinPitch);
+    RasterPlaneTriangle(v[0], v[1], v[2], uv[0], uv[1], uv[2], plane, false, width, height, depth, outRgba);
+    RasterPlaneTriangle(v[0], v[2], v[3], uv[0], uv[2], uv[3], plane, true, width, height, depth, outRgba);
+}
+
+}  // namespace
+
 void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>& vram,
                               const std::vector<uint8_t>& cram, se_cram_mode cramMode,
                               const se_camera3d& camera, const se_render_opts& opts,
+                              const std::vector<LayerPlane>& planes, const SpritePriorityTable& prios,
                               std::vector<uint8_t>& outRgba, std::vector<float>& depth)
 {
     const int width = static_cast<int>(camera.viewport_width);
     const int height = static_cast<int>(camera.viewport_height);
     outRgba.assign(static_cast<size_t>(width) * height * 4, 0);
-    if (width <= 0 || height <= 0 || !opts.show_vdp1_sprites)
+    if (width <= 0 || height <= 0)
     {
         return;
     }
@@ -897,6 +967,15 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
     const float sinYaw = std::sin(camera.yaw);
     const float cosPitch = std::cos(camera.pitch);
     const float sinPitch = std::sin(camera.pitch);
+
+    for (const LayerPlane& plane : planes)
+    {
+        DrawPlane(plane, camera, cosYaw, sinYaw, cosPitch, sinPitch, width, height, depth, outRgba);
+    }
+    if (!opts.show_vdp1_sprites)
+    {
+        return;
+    }
 
     for (size_t i = 0; i < scene.sprites3d.size(); ++i)
     {
@@ -915,6 +994,15 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             const size_t o = idx * 4;
             outRgba[o + 0] = cr; outRgba[o + 1] = cg; outRgba[o + 2] = cb; outRgba[o + 3] = 255;
         };
+        // A solid primitive is a framebuffer word, not an RGB colour: the sprite type and CRAM say
+        // what VDP2 shows for it, and a word it reads as transparent shows nothing.
+        Rgba solidCol{};
+        if (r.primKind != 0 || r.solid)
+        {
+            const SpritePriorityTable::Pixel px = prios.Resolve(r.color, cram, cramMode);
+            if (!px.visible) continue;
+            solidCol = px.color;
+        }
         if (r.primKind != 0)
         {
             // Lines and polylines are part of the VDP1 list, so the exploded view has to show
@@ -922,12 +1010,11 @@ void Vdp1Rasterizer::Render3D(const Vdp1Scene& scene, const std::vector<uint8_t>
             // with line commands would simply be absent, and the user has no way to tell that
             // from the game not having drawn it. No corner expansion: that exists to close the
             // seams between abutting quad strips, and a line has no interior to widen.
-            DrawEdges(width, height, v, r.primKind, Rgb555ToRgba(r.color), r.color, DrawFx{},
+            DrawEdges(width, height, v, r.primKind, solidCol, r.color, DrawFx{},
                       r.gouraud, nullptr, &depth, lineSink);
             continue;
         }
         ExpandQuadInclusive(v);
-        const Rgba solidCol = r.solid ? Rgb555ToRgba(r.color) : Rgba{};
         // The exploded 3D view keeps sprites opaque (no shadow/half-transparency against
         // the depth-sorted stack); only Gouraud and solid polygon fills carry over. The
         // depth test in RasterTriangle has already run by the time the sink sees a pixel.

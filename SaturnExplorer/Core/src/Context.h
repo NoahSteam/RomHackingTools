@@ -128,52 +128,60 @@ public:
     {
         const int w = mScene.screenWidth;
         const int h = mScene.screenHeight;
-        return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed, [&]
+        return FillImage(static_cast<uint32_t>(w), static_cast<uint32_t>(h), out, needed,
+                         [&] { ComposeFrame(opts); });
+    }
+
+    // Composite the frame for 'opts' into mRenderBuffer (screenWidth x screenHeight RGBA).
+    void ComposeFrame(const se_render_opts& opts)
+    {
+        const int w = mScene.screenWidth;
+        const int h = mScene.screenHeight;
         {
-            const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
-            mColumns.assign(n, PixColumn{});
-            // Emit every source into the columns, back to front, then resolve the whole
-            // buffer to RGBA; untouched columns stay transparent for FillBackdrop.
-            // transparent_background leaves both the back screen and the backdrop out, so
-            // what a chosen set of layers covers is all that comes back — that is what the
-            // per-layer viewers render with.
-            if (!opts.transparent_background)
-            {
-                Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
-            }
-            // The sprite layer is built first: its pixels' window bits are an input to every VDP2
-            // layer's window logic. It is emitted last, so a sprite wins a priority tie.
-            const bool sprites = opts.show_vdp1_sprites != 0 &&
-                                 Vdp1Rasterizer::BuildSpriteLayer(mScene, mSnapshot.Vdp1Vram(),
-                                                                  mSnapshot.Cram(),
-                                                                  mSnapshot.CramMode(),
-                                                                  mSpritePrios, mSpriteLayer);
-            // Side buffers the emitters fill: the gradation screen's colours, and RBG0's coefficient-
-            // table line colour bits (0xFF = none). Reused across frames like the columns.
-            // Only when something can use them: gradation needs CCCTL BOKEN, and the line colour bits
-            // come from an enabled rotation screen's coefficient table.
-            const bool regs = mSnapshot.HasVdp2Regs();
-            const bool wantGradation = regs && (mSnapshot.Vdp2Reg(0x0EC) & 0x8000) != 0;
-            const bool wantLineOverride = regs && (mSnapshot.Vdp2Reg(0x020) & 0x30) != 0;
-            if (wantGradation) mGradation.assign(n, Rgba{ 0, 0, 0, 255 }); else mGradation.clear();
-            if (wantLineOverride) mLineOverride.assign(n, 0xFF); else mLineOverride.clear();
-            EmitExtras extras;
-            extras.sprites = sprites ? &mSpriteLayer : nullptr;
-            extras.gradation = &mGradation;
-            extras.lineOverride = &mLineOverride;
-            Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns, extras);
-            if (sprites)
-            {
-                Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
-                                            mColumns, extras);
-            }
-            ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h, extras),
-                           mRenderBuffer);
-            if (!opts.transparent_background)
-            {
-                FillBackdrop();
-            }
-        });
+        const size_t n = static_cast<size_t>(w) * static_cast<size_t>(h);
+        mColumns.assign(n, PixColumn{});
+        // Emit every source into the columns, back to front, then resolve the whole
+        // buffer to RGBA; untouched columns stay transparent for FillBackdrop.
+        // transparent_background leaves both the back screen and the backdrop out, so
+        // what a chosen set of layers covers is all that comes back — that is what the
+        // per-layer viewers render with.
+        if (!opts.transparent_background)
+        {
+            Vdp2Compositor::SeedBackScreen(mSnapshot, w, h, mColumns);
+        }
+        // The sprite layer is built first: its pixels' window bits are an input to every VDP2
+        // layer's window logic. It is emitted last, so a sprite wins a priority tie.
+        const bool sprites = opts.show_vdp1_sprites != 0 &&
+                             Vdp1Rasterizer::BuildSpriteLayer(mScene, mSnapshot.Vdp1Vram(),
+                                                              mSnapshot.Cram(),
+                                                              mSnapshot.CramMode(),
+                                                              mSpritePrios, mSpriteLayer);
+        // Side buffers the emitters fill: the gradation screen's colours, and RBG0's coefficient-
+        // table line colour bits (0xFF = none). Reused across frames like the columns.
+        // Only when something can use them: gradation needs CCCTL BOKEN, and the line colour bits
+        // come from an enabled rotation screen's coefficient table.
+        const bool regs = mSnapshot.HasVdp2Regs();
+        const bool wantGradation = regs && (mSnapshot.Vdp2Reg(0x0EC) & 0x8000) != 0;
+        const bool wantLineOverride = regs && (mSnapshot.Vdp2Reg(0x020) & 0x30) != 0;
+        if (wantGradation) mGradation.assign(n, Rgba{ 0, 0, 0, 255 }); else mGradation.clear();
+        if (wantLineOverride) mLineOverride.assign(n, 0xFF); else mLineOverride.clear();
+        EmitExtras extras;
+        extras.sprites = sprites ? &mSpriteLayer : nullptr;
+        extras.gradation = &mGradation;
+        extras.lineOverride = &mLineOverride;
+        Vdp2Compositor::EmitLayers(mSnapshot, opts, w, h, mColumns, extras);
+        if (sprites)
+        {
+            Vdp2Compositor::EmitSprites(mSnapshot, opts, w, h, mSpriteLayer, mSpritePrios,
+                                        mColumns, extras);
+        }
+        ResolveColumns(mColumns, Vdp2Compositor::ReadMixState(mSnapshot, opts, w, h, extras),
+                       mRenderBuffer);
+        if (!opts.transparent_background)
+        {
+            FillBackdrop();
+        }
+        }
     }
 
     // A scroll screen's tile map, counted tiles included. Counting walks the whole plane
@@ -229,14 +237,18 @@ public:
         });
     }
 
-    // Render the exploded 3D view from 'camera' into a viewport-sized image.
+    // Render the exploded 3D view from 'camera' into a viewport-sized image: the VDP2 screens as
+    // planes behind the VDP1 sprites' stack.
     se_result Render3D(const se_camera3d& camera, const se_render_opts& opts,
                        se_image* out, size_t* needed)
     {
+        std::vector<LayerPlane> planes;
+        if (out && out->pixels) CollectLayerPlanes(opts, planes);   // not for a size query
         return FillImage(camera.viewport_width, camera.viewport_height, out, needed, [&]
         {
             Vdp1Rasterizer::Render3D(mScene, mSnapshot.Vdp1Vram(), mSnapshot.Cram(),
-                                     mSnapshot.CramMode(), camera, opts, mRenderBuffer,
+                                     mSnapshot.CramMode(), camera, opts, planes, mSpritePrios,
+                                     mRenderBuffer,
                                      mDepthBuffer);
         });
     }
@@ -1011,6 +1023,74 @@ private:
     // convention: with out->pixels == NULL, report the required byte size in
     // *needed; otherwise run 'render' (which fills mRenderBuffer with exactly
     // w*h*4 bytes) and copy it out.
+    // The VDP2 screens the 3D view shows, as planes ordered by their VDP2 priority and hung behind
+    // the sprites (whose stack starts at Z 0), the lowest priority farthest back. Each is that
+    // screen rendered alone, so it carries the same window, colour calculation and colour offset
+    // the per-layer viewer shows. A screen that is off, or at priority 0, is not drawn.
+    //
+    // Where a screen really sits relative to the sprites is per pixel (a sprite pixel names its own
+    // priority), which a flat stack cannot say; behind is the reading that keeps every sprite
+    // clickable and visible.
+    //
+    // The renders are cached until the snapshot is re-derived or a layer-affecting option changes,
+    // because the 3D view asks for a frame every time the camera moves.
+    void CollectLayerPlanes(const se_render_opts& opts, std::vector<LayerPlane>& planes)
+    {
+        if (!mSnapshot.HasVdp2Regs()) return;
+        const uint16_t bgon = mSnapshot.Vdp2Reg(0x020);
+        const uint16_t prina = mSnapshot.Vdp2Reg(0x0F8);
+        const uint16_t prinb = mSnapshot.Vdp2Reg(0x0FA);
+        const uint16_t prir = mSnapshot.Vdp2Reg(0x0FC);
+        const int prio[SE_LAYER_COUNT] = { prina & 7, (prina >> 8) & 7, prinb & 7, (prinb >> 8) & 7,
+                                           prir & 7 };
+
+        uint32_t key = (opts.show_window ? 1u : 0u) | (opts.show_color_calculation ? 2u : 0u) |
+                       (opts.show_shadow_highlight ? 4u : 0u);
+        int order[SE_LAYER_COUNT];
+        int count = 0;
+        for (int l = 0; l < SE_LAYER_COUNT; ++l)
+        {
+            if (!opts.show_layer[l] || !((bgon >> l) & 1) || prio[l] == 0) continue;
+            key |= 8u << l;
+            order[count++] = l;
+        }
+        // Insertion sort: five entries, stable on the layer index.
+        for (int i = 1; i < count; ++i)
+            for (int j = i; j > 0 && prio[order[j]] < prio[order[j - 1]]; --j)
+                std::swap(order[j], order[j - 1]);
+
+        if (mPlaneSerial != mDeriveSerial || mPlaneKey != key)
+        {
+            mPlaneSerial = mDeriveSerial;
+            mPlaneKey = key;
+            for (int l = 0; l < SE_LAYER_COUNT; ++l) mPlaneValid[l] = false;
+        }
+        const int vw = mScene.vdp1Width > 0 ? mScene.vdp1Width : mScene.screenWidth;
+        const int vh = mScene.vdp1Height > 0 ? mScene.vdp1Height : mScene.screenHeight;
+        for (int rank = 0; rank < count; ++rank)
+        {
+            const int l = order[rank];
+            if (!mPlaneValid[l])
+            {
+                se_render_opts one = opts;
+                for (int k = 0; k < SE_LAYER_COUNT; ++k) one.show_layer[k] = (k == l) ? 1 : 0;
+                one.show_vdp1_sprites = 0;
+                one.transparent_background = 1;
+                ComposeFrame(one);
+                mPlanes[l] = mRenderBuffer;
+                mPlaneValid[l] = true;
+            }
+            LayerPlane plane;
+            plane.rgba = mPlanes[l].data();
+            plane.width = mScene.screenWidth;
+            plane.height = mScene.screenHeight;
+            plane.worldWidth = static_cast<float>(vw);
+            plane.worldHeight = static_cast<float>(vh);
+            plane.z = -static_cast<float>(count - rank) * kPlaneSpacing;
+            planes.push_back(plane);
+        }
+    }
+
     template <typename Render>
     se_result FillImage(uint32_t w, uint32_t h, se_image* out, size_t* needed, Render&& render)
     {
@@ -1056,6 +1136,13 @@ private:
     std::vector<Rgba>       mGradation;     // gradation screen colours (per frame)
     std::vector<uint8_t>    mLineOverride;  // coefficient-table line colour bits (per frame)
     std::vector<float>      mDepthBuffer;
+    // The 3D view's VDP2 planes: each screen's isolated render, valid for one derive serial and
+    // one set of layer options (CollectLayerPlanes).
+    static constexpr float  kPlaneSpacing = 6.0f;   // GeometryBuilder's kZSpacing, so a plane reads as one more layer
+    std::vector<uint8_t>    mPlanes[SE_LAYER_COUNT];
+    bool                    mPlaneValid[SE_LAYER_COUNT] = {};
+    uint64_t                mPlaneSerial = ~0ull;
+    uint32_t                mPlaneKey = 0;
     std::vector<se_vram_region> mVramRegions;
     Vdp2TileMap             mTileMaps[SE_LAYER_COUNT];        // lazily built; see TileMap()
     bool                    mbTileMapValid[SE_LAYER_COUNT] = {};

@@ -408,6 +408,93 @@ void TestPolylinesRenderAndPickInTheExplodedView()
     se_destroy(context);
 }
 
+// An NBG3 filling the frame with solid white (CRAM entry 1), priority 1: the smallest VDP2 screen
+// that covers every pixel. Layered under whatever VDP1 the caller put in the state.
+void AddWhiteNbg3(State& state)
+{
+    se_test::SetReg(state, 0x020, 0x0008);   // BGON: NBG3
+    se_test::SetReg(state, 0x036, 0x8000);   // PNCN3: one-word names
+    se_test::SetReg(state, 0x04C, 0x0001);   // MPABN3: plane A map number 1 (names at 0x2000)
+    se_test::SetReg(state, 0x0FA, 0x0100);   // PRINB: NBG3 priority 1
+    for (uint32_t a = 0x2000; a < 0x4000; a += 2) PutBE16(state.vdp2, a, 0x0001);
+    for (uint32_t a = 0x20; a < 0x40; ++a) state.vdp2[a] = 0x11;   // character 1: colour index 1
+    PutBE16(state.cram, 2, 0x7FFF);
+}
+
+bool IsWhiteish(const Image& image, int x, int y)
+{
+    const size_t o = (static_cast<size_t>(y) * image.width + static_cast<size_t>(x)) * 4;
+    return image.pixels[o] > 200 && image.pixels[o + 1] > 200 && image.pixels[o + 2] > 200 &&
+           image.pixels[o + 3] == 255;
+}
+
+// A VDP2 screen is part of the exploded view: a plane behind the sprites, so the 3D view is not a
+// black void wherever VDP1 drew nothing (Dragon Force's ground is RBG0, which has no VDP1
+// sprite at all). The sprites keep their place in front of it.
+void TestVdp2ScreenIsAPlaneBehindTheSprites()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    AddSprite(state, 0x20, 0x1000, kBlue, 16, 24, 32, 32);
+    PutBE16(state.vdp1, 0x40, 0x8000);
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    CHECK(IsWhiteish(composite, 120, 90));   // ground truth: white outside the sprite
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(IsWhiteish(view, 120, 90));
+    CHECK(IsWhiteish(view, 5, 5));
+    // The sprite is still in front of the plane, where the composite has it.
+    const Blob want = Find(composite, 0, 0, 255);
+    const Blob got = Find(view, 0, 0, 255);
+    CHECK(got.count > 100);
+    CHECK(Near(got.x, want.x, 4.0f));
+    CHECK(Near(got.y, want.y, 4.0f));
+
+    // A screen switched off in the options is not drawn.
+    se_render_opts off = {};
+    for (int i = 0; i < SE_LAYER_COUNT; ++i) off.show_layer[i] = 1;
+    off.show_layer[SE_LAYER_NBG3] = 0;
+    off.show_vdp1_sprites = 1;
+    se_image image = {};
+    size_t needed = 0;
+    CHECK(se_render_3d(context, &front, &off, &image, &needed) == SE_OK);
+    std::vector<uint8_t> pixels(needed);
+    image.pixels = pixels.data();
+    image.capacity = pixels.size();
+    CHECK(se_render_3d(context, &front, &off, &image, &needed) == SE_OK);
+    CHECK(pixels[(5 * kFrameWidth + 5) * 4 + 0] == 0);
+
+    se_destroy(context);
+}
+
+// A solid polygon is a framebuffer word, and a word VDP2 reads as transparent shows nothing in the
+// composite. Many games open their command list with a full-screen colour-0 polygon; drawn as
+// opaque black in the 3D view it hid every VDP2 plane behind it.
+void TestTransparentPolygonIsNotAWallInFrontOfThePlanes()
+{
+    State state(kVdp1Size);
+    se_test::WriteSystemClip(state, kFrameWidth, kFrameHeight);
+    SpritesInFront(state);
+    AddWhiteNbg3(state);
+    AddQuadPrim(state, 0x20, 0x0004, 0x0000, 0, 0, kFrameWidth - 1, kFrameHeight - 1);   // polygon, colour 0
+    PutBE16(state.vdp1, 0x40, 0x8000);
+
+    se_context* context = Open(state);
+    const Image composite = Render(context, nullptr);
+    CHECK(IsWhiteish(composite, 80, 60));   // the polygon draws nothing there
+
+    const se_camera3d front = Camera(0.0f, 0.0f);
+    const Image view = Render(context, &front);
+    CHECK(IsWhiteish(view, 80, 60));
+
+    se_destroy(context);
+}
+
 // The other way the two walks can disagree about what is on screen: a quad that has
 // collapsed to a point or a line. RasterTriangle drops a zero-area triangle, so such a
 // primitive has no area to hit, but every edge function of it is 0 — so an
@@ -463,6 +550,8 @@ int main()
     TestOrbitSense();
     TestPolylinesRenderAndPickInTheExplodedView();
     TestHitTestSkipsCollapsedQuads();
+    TestVdp2ScreenIsAPlaneBehindTheSprites();
+    TestTransparentPolygonIsNotAWallInFrontOfThePlanes();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " check(s) failed\n";

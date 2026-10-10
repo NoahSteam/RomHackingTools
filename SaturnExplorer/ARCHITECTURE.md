@@ -326,8 +326,14 @@ any layer, window, shadow, or effect on demand. Toggling VDP1, an individual VDP
 toggles work against a static memory dump. (This is why Seam A has no layer-control
 capability.)
 
-**VDP2 backgrounds** fold into the same model: each active layer is a textured plane, placed
-under/over the VDP1 sprites by priority in both the 2D composite and the 3D scene.
+**VDP2 backgrounds** fold into the same model: each active layer is a textured plane. In the 2D
+composite a screen sits under or over the sprites per pixel, by priority. In the 3D scene each
+screen is that screen rendered alone (the layer viewer's image) hung as a flat plane *behind* the
+sprite stack, ordered among themselves by VDP2 priority with the lowest farthest back. A screen
+that really draws over sprites (a HUD on NBG0) is therefore behind them there: a flat stack
+cannot express a per-pixel order, and behind keeps every sprite visible and clickable. Planes are
+not pickable. A solid VDP1 polygon or line is shown as the colour VDP2 resolves its framebuffer
+word to, and not at all when VDP2 reads that word as transparent, as in the composite.
 
 **Driver framebuffer (optional).** When a driver advertises `SE_CAP_FRAMEBUFFER`, the host can
 show the emulator's real output side-by-side with the core's software render to validate
