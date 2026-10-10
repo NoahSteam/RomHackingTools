@@ -10,7 +10,9 @@
 // Free of ImGui and of the platform, so the templating and the files it writes are unit-testable.
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "Debug/MemoryCompare.h"
 
@@ -21,9 +23,16 @@ namespace sfe
 // spaces survives.
 extern const char* const kDefaultDiffArgs;
 
-// Substitute {a} and {b} (frame A's and frame B's folders) into 'tmpl'. An empty template means
-// kDefaultDiffArgs. Every occurrence is replaced; text that merely looks like a token is not.
-std::string BuildDiffArgs(const std::string& tmpl, const std::string& folderA, const std::string& folderB);
+// The tool's arguments, one string per argument, for 'tmpl' with {a} and {b} (frame A's and frame B's
+// folders) filled in. An empty template means kDefaultDiffArgs.
+//
+// The template is split FIRST -- whitespace separates arguments, "..." or '...' group them (so a
+// quoted {a} stays one argument), nothing is escaped or expanded -- and the folders are substituted
+// afterwards as literal text. The result goes to the program as an argv, so a folder path holding
+// `$`, a backtick, a quote or a space reaches it unchanged; it is never handed to a shell. Every
+// occurrence of a token is replaced, and text that merely looks like one is not.
+std::vector<std::string> BuildDiffArgv(const std::string& tmpl, const std::string& folderA,
+                                       const std::string& folderB);
 
 // True when 'tmpl' mentions {a} or {b}; a template with neither would run the tool on nothing.
 bool DiffArgsUseFrames(const std::string& tmpl);
@@ -32,16 +41,31 @@ bool DiffArgsUseFrames(const std::string& tmpl);
 // (the VDP1 frame buffer is an app-derived image with none).
 std::string DiffRegionFileName(RegionId id);
 
-// "A_frame_1234": the folder one side of a comparison is written to, under the diff root.
-std::string DiffSideFolderName(char side, uint64_t frameNo);
+// Every comparison gets folders of its own, so opening a new one never replaces files an earlier diff
+// window is still showing (frame numbers are reused after a state load, a branch of history or a
+// reconnect, and the same pair of numbers can then name different memory). The id carries the time
+// it was made, which is what retention goes by, and a random part so two instances never collide:
+// "cmp1760000000-9f3a07c1".
+std::string NewDiffComparisonId(uint64_t nowSeconds);
+
+// "cmp1760000000-9f3a07c1_A_frame_1234": the folder one side of a comparison is written to, a sibling
+// of the other comparisons' folders under the diff root.
+std::string DiffSideFolderName(const std::string& comparisonId, char side, uint64_t frameNo);
 
 // Write every region of 'snap' into 'dir' (created if missing) as DiffRegionFileName files. False,
 // with 'error' filled, on the first failure.
 bool WriteSnapshotFolder(const MemSnapshot& snap, const std::string& dir, std::string& error);
 
-// Remove the folders an earlier run left under 'root'. Anything that is not a folder of plain
-// files is left alone (RemoveFlatDirectory refuses it), so a root the user pointed at something
-// else is not emptied. Best effort: a folder the diff tool still has open stays.
-void PurgeDiffFolders(const std::string& root);
+// How long a comparison's folders are kept. The diff program is deliberately left running when this
+// one exits, so a restart must not take away files it has open (on POSIX an open file can still be
+// deleted); a week is long past any diff window left open on purpose.
+constexpr uint64_t kDiffKeepSeconds = 7u * 24u * 3600u;
+
+// Remove the comparison folders under 'root' made 'keepSeconds' or more before 'nowSeconds' (0 =
+// all of them), and the single un-numbered folders earlier versions wrote. Folders whose names are not
+// ours are never touched, and a folder that holds anything but plain files is left alone
+// (RemoveFlatDirectory refuses it), so a root the user pointed at something else is not emptied.
+// Best effort: a folder the diff tool still has open on Windows stays.
+void PurgeDiffFolders(const std::string& root, uint64_t nowSeconds, uint64_t keepSeconds);
 
 }  // namespace sfe

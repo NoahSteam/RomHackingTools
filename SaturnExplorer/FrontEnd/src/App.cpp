@@ -27,6 +27,7 @@
 #include "Disc/IsoBuilder.h"      // rebuild the data track's ISO-9660 filesystem
 #include "Disc/DiscBuilder.h"     // Build Disc Image: BIN/CUE (+ audio tracks) or ISO
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
+#include "FileWrite.h"          // FileOrDirectoryExists: an unused folder for each diff comparison
 #include "DiffTool.h"             // hand the two compared frames to an external diff program
 #include "BinaryWriter.h"         // PushU16/PushU32 + the shared BMP encoders
 #include "Debug/FormatString.h"   // tracepoint output mini-syntax
@@ -384,7 +385,10 @@ void App::LoadSettings()
     mRewindEnabled = mSettings.GetBool("debug", "rewind", true);
     mDiffExe  = mSettings.Get("diff", "exe", "");
     mDiffArgs = mSettings.Get("diff", "args", kDefaultDiffArgs);
-    PurgeDiffFolders(Settings::ConfigSubDir("diff", false));   // the frames an earlier run handed the tool
+    // Frames handed to the diff tool by earlier runs. Only the old ones: the tool outlives this program on
+    // purpose, so a restart must not delete the folders of a comparison still open in it.
+    PurgeDiffFolders(Settings::ConfigSubDir("diff", false), static_cast<uint64_t>(std::time(nullptr)),
+                     kDiffKeepSeconds);
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
@@ -8390,11 +8394,23 @@ void App::DrawDiffSettingsModal(IPlatform& platform)
     ImGui::TextDisabled("{b}  Folder with frame B's memory, one .bin file per region");
 
     const std::string sep(1, Settings::PathSeparator());
-    const std::string example = BuildDiffArgs(mDiffArgsEdit, "<folder>" + sep + "A_frame_N", "<folder>" + sep + "B_frame_N");
+    // The arguments as the program will receive them, one per argument, quoted only to show the split.
+    std::string example;
+    for (const std::string& arg : BuildDiffArgv(mDiffArgsEdit, "<folder>" + sep + "A_frame_N", "<folder>" + sep + "B_frame_N"))
+        example += (example.empty() ? "\"" : " \"") + arg + "\"";
     ImGui::Spacing();
     ImGui::TextUnformatted("Command");
     ImGui::TextDisabled("%s %s", exe.empty() ? "(built-in Memory Compare)" : PathBasename(exe).c_str(),
                         exe.empty() ? "" : example.c_str());
+    ImGui::Spacing();
+    // The frames of earlier comparisons stay on disk for a week so a diff window left open keeps its
+    // files; this removes them all now (a Windows diff window that still has one open keeps that one).
+    if (ImGui::Button("Delete saved comparison files"))
+    {
+        PurgeDiffFolders(Settings::ConfigSubDir("diff", false), static_cast<uint64_t>(std::time(nullptr)), 0);
+        mLog.Info("Deleted the saved diff comparison files.");
+    }
+    ImGui::SetItemTooltip("Comparison folders are kept for 7 days, so a diff window you leave open keeps its files.");
 
     ImGui::Separator();
     if (ImGui::Button("Save"))
@@ -8428,15 +8444,24 @@ void App::LaunchExternalDiff(IPlatform& platform)
     const std::string root = Settings::ConfigSubDir("diff", true);
     if (root.empty()) return fail("There is nowhere to write the frames for the diff tool.");
     const std::string sep(1, Settings::PathSeparator());
-    const std::string folderA = root + sep + DiffSideFolderName('A', a->origin.frameNo);
-    const std::string folderB = root + sep + DiffSideFolderName('B', b->origin.frameNo);
+    // Folders of this comparison's own: a frame number can name different memory after a state load or
+    // a reconnect, and an earlier diff window may still be showing the folders it was given.
+    std::string folderA, folderB;
+    for (int attempt = 0; attempt < 8; ++attempt)
+    {
+        const std::string id = NewDiffComparisonId(static_cast<uint64_t>(std::time(nullptr)));
+        folderA = root + sep + DiffSideFolderName(id, 'A', a->origin.frameNo);
+        folderB = root + sep + DiffSideFolderName(id, 'B', b->origin.frameNo);
+        if (!FileOrDirectoryExists(folderA) && !FileOrDirectoryExists(folderB)) break;
+        folderA.clear();   // an id that is already taken: try another, never write into it
+    }
+    if (folderA.empty()) return fail("Could not find an unused folder for the diff tool's frames.");
     std::string error;
     if (!WriteSnapshotFolder(*a, folderA, error) || !WriteSnapshotFolder(*b, folderB, error))
         return fail("Could not write the frames for the diff tool. " + error);
 
-    const std::string args = BuildDiffArgs(mDiffArgs, folderA, folderB);
-    if (!platform.LaunchTool(mDiffExe.c_str(), args.c_str(), nullptr))
-        return fail("Could not start the diff tool " + mDiffExe + ".");
+    if (!platform.LaunchTool(mDiffExe.c_str(), BuildDiffArgv(mDiffArgs, folderA, folderB), nullptr, &error))
+        return fail("Could not start the diff tool " + mDiffExe + ". " + error);
     mCompareStatus.clear();
     mLog.Info("Opened frames A and B in " + PathBasename(mDiffExe));
 }
