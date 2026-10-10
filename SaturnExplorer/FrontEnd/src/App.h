@@ -226,6 +226,7 @@ private:
     // and write it back to VDP1 VRAM (which pokes a live emulator). Returns true if it changed.
     bool EditCommandSize(const se_command& cmd);
     bool EditCommandPosition(const se_command& cmd);
+    void DrawCommandScaleCell(const se_command& cmd);
     void PushCommandEditId(const se_command& cmd);   // pushes two IDs; pop both
     void WriteCommandWord(const se_command& cmd, uint32_t fieldOffset, uint16_t value);
     void DrawSelectedObject();

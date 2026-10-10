@@ -218,6 +218,51 @@ void PaletteAgreesWithTextureDecode()
     se_destroy(ctx);
 }
 
+// A scaled sprite reports its on-screen size over its texture size, for each zoom-point mode
+// the renderer draws, and a negative factor when it is drawn mirrored.
+void ScaledSpriteReportsItsScale()
+{
+    struct Case { uint16_t zp; int16_t xa, ya, xb, yb, xc, yc; float sx, sy; };
+    const Case cases[] = {
+        { 0x0, 10, 10, 0, 0, 73, 41,  2.0f, 2.0f },   // two-point: A..C spans 64x32
+        { 0x5, 10, 10, 15, 7, 0, 0,   0.5f, 0.5f },   // near-edge anchor: B is 16x8 inclusive
+        { 0xA, 100, 100, 63, 31, 0, 0, 2.0f, 2.0f },  // centred anchor
+        { 0x0, 50, 0, 0, 0, 19, 15,  -1.0f, 1.0f },   // C left of A: mirrored horizontally
+    };
+    for (const Case& c : cases)
+    {
+        State st(0x80);
+        PutBE16(st.vdp1, 0x00, uint16_t(0x0001 | (c.zp << 8)));   // scaled sprite
+        PutBE16(st.vdp1, 0x0A, 0x0410);                            // 32x16 texture
+        PutBE16(st.vdp1, 0x0C, uint16_t(c.xa)); PutBE16(st.vdp1, 0x0E, uint16_t(c.ya));
+        PutBE16(st.vdp1, 0x10, uint16_t(c.xb)); PutBE16(st.vdp1, 0x12, uint16_t(c.yb));
+        PutBE16(st.vdp1, 0x14, uint16_t(c.xc)); PutBE16(st.vdp1, 0x16, uint16_t(c.yc));
+        PutBE16(st.vdp1, 0x20, 0x8000);                            // END
+        se_context* ctx = se_test::CreateContext(st);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        se_command cmd {};
+        CHECK(se_get_command(ctx, 0, &cmd) == SE_OK);
+        CHECK(cmd.type == SE_CMD_SCALED_SPRITE);
+        CHECK(cmd.scale_x == c.sx && cmd.scale_y == c.sy);
+        se_destroy(ctx);
+    }
+
+    // A normal sprite is unscaled.
+    State st(0x80);
+    PutBE16(st.vdp1, 0x0A, 0x0410);
+    PutBE16(st.vdp1, 0x20, 0x8000);
+    se_context* ctx = se_test::CreateContext(st);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    CHECK(se_begin_frame(ctx) == SE_OK);
+    se_command cmd {};
+    CHECK(se_get_command(ctx, 0, &cmd) == SE_OK);
+    CHECK(cmd.scale_x == 1.0f && cmd.scale_y == 1.0f);
+    se_destroy(ctx);
+}
+
 int main()
 {
     PolygonsListTheirTables();
@@ -225,6 +270,7 @@ int main()
     OwnersAreNotDuplicated();
     PaletteNeedsItsMemory();
     PaletteAgreesWithTextureDecode();
+    ScaledSpriteReportsItsScale();
     if (gFailures) { std::cerr << gFailures << " failure(s)\n"; return 1; }
     std::cout << "VramMap tests passed\n";
     return 0;

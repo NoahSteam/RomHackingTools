@@ -200,8 +200,8 @@ typedef struct se_command {
     int16_t           x;               /* primary position (vertex A / CMDXA) */
     int16_t           y;               /* CMDYA */
 
-    float             scale_x;
-    float             scale_y;
+    float             scale_x;         /* scaled sprite: on-screen / texture size (<0 = mirrored); */
+    float             scale_y;         /* 1 for every other command */
     float             rotation_deg;    /* derived from the 4 corners */
 
     uint8_t           flip_x;          /* 0/1 */

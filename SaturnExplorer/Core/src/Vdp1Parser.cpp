@@ -1,6 +1,7 @@
 #include "Vdp1Parser.h"
 
 #include "ByteOrder.h"
+#include "Vdp1ScaledSprite.h"
 
 namespace se
 {
@@ -117,8 +118,22 @@ void DecodeCommand(const std::vector<uint8_t>& vram, uint32_t address,
     cmd.x = ReadBE16Sx(vram, address + 0x0C, coordBits);
     cmd.y = ReadBE16Sx(vram, address + 0x0E, coordBits);
 
-    cmd.scale_x = 1.0f;   // resolved for scaled/distorted sprites in M3
+    // A scaled sprite's scale is its on-screen size over its texture size, from the same
+    // corners the renderer draws (negative when drawn mirrored). Every other command stays at
+    // 1: a normal sprite is unscaled, and a distorted sprite's four free corners do not reduce
+    // to one factor per axis.
+    cmd.scale_x = 1.0f;
     cmd.scale_y = 1.0f;
+    if (comm == 0x1 && cmd.width != 0 && cmd.height != 0)
+    {
+        int32_t X[4], Y[4];
+        ScaledSpriteCorners(ctrl, cmd.x, cmd.y,
+                            ReadBE16Sx(vram, address + 0x14, 13), ReadBE16Sx(vram, address + 0x16, 13),
+                            ReadBE16Sx(vram, address + 0x10, 13), ReadBE16Sx(vram, address + 0x12, 13),
+                            X, Y);
+        cmd.scale_x = float(ScaledSpan(X[0], X[1])) / float(cmd.width);
+        cmd.scale_y = float(ScaledSpan(Y[0], Y[3])) / float(cmd.height);
+    }
     cmd.rotation_deg = 0.0f;
 
     cmd.flip_x = (ctrl >> 4) & 0x1;

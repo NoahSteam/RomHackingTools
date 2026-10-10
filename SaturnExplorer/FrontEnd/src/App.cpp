@@ -5182,12 +5182,13 @@ void App::DrawCommandList()
 
             const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                                           ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable;
-            if (ImGui::BeginTable("commands", 6, flags))
+            if (ImGui::BeginTable("commands", 7, flags))
             {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("#");
                 ImGui::TableSetupColumn("Type");
                 ImGui::TableSetupColumn("Size");
+                ImGui::TableSetupColumn("Scale");
                 ImGui::TableSetupColumn("Position");
                 ImGui::TableSetupColumn("Color");
                 ImGui::TableSetupColumn("Tex Addr");
@@ -5264,6 +5265,9 @@ void App::DrawCommandList()
                                 TextCenteredInCell("%ux%u", cmd.width, cmd.height);
                         }
                         ImGui::TableNextColumn();
+                        if (editable) ImGui::AlignTextToFramePadding();
+                        DrawCommandScaleCell(cmd);
+                        ImGui::TableNextColumn();
                         if (editable)
                         {
                             EditCommandPosition(cmd);
@@ -5285,6 +5289,35 @@ void App::DrawCommandList()
         }
     }
     ImGui::End();
+}
+
+// The Command List's Scale cell. Blank for an unscaled command, so the scaled ones stand out;
+// a distorted sprite has no single factor per axis, so it says so instead of showing one.
+void App::DrawCommandScaleCell(const se_command& cmd)
+{
+    if (cmd.type == SE_CMD_DISTORTED_SPRITE)
+    {
+        ImGui::TextDisabled("distorted");
+        return;
+    }
+    if (cmd.type != SE_CMD_SCALED_SPRITE) return;
+    const int shownW = int(std::lround(std::fabs(cmd.scale_x) * cmd.width));
+    const int shownH = int(std::lround(std::fabs(cmd.scale_y) * cmd.height));
+    if (cmd.scale_x == 1.0f && cmd.scale_y == 1.0f)
+        TextCenteredInCell("1:1");
+    else
+        TextCenteredInCell("\xc3\x97%.2f \xc3\x97%.2f (%dx%d)", cmd.scale_x, cmd.scale_y, shownW, shownH);
+    if (ImGui::IsItemHovered())
+    {
+        static const char* kZoom[4] = { "two-point (vertex C)", "near edge", "centre", "far edge" };
+        const unsigned zp = (cmd.raw_cmdctrl >> 8) & 0xF;
+        ImGui::BeginTooltip();
+        ImGui::Text("Texture %ux%u drawn at %dx%d", cmd.width, cmd.height, shownW, shownH);
+        ImGui::Text("Zoom point: horizontal %s, vertical %s", kZoom[zp & 3], kZoom[zp >> 2]);
+        if (cmd.scale_x < 0 || cmd.scale_y < 0)
+            ImGui::TextUnformatted("A negative factor is drawn mirrored on that axis.");
+        ImGui::EndTooltip();
+    }
 }
 
 // VDP1 command-table field offsets (bytes from the table base). See Vdp1Parser::DecodeCommand.
