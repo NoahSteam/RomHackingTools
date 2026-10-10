@@ -11,6 +11,7 @@ front end, and a patched Mednafen that talks to it over a local socket.
 | Building (CMake, three ImGui backends, web) | `BUILD.md` |
 | VDP1 / VDP2 rendering semantics | `VDP1_GUIDE.md`, `VDP2_GUIDE.md` |
 | Log panel, tracepoints, execution actions | `EXECUTION_ACTIONS.md` |
+| SH-2 decompiler panel (design + feasibility spike) | `Docs/Decompiler/DESIGN.md`, `Docs/Decompiler/SPIKE_RESULTS.md` |
 
 `_emu/mednafen` is a working checkout of Mednafen that `Integration/Mednafen/apply.py`
 patches. It is untracked on purpose — do not commit it. It is also the best available
