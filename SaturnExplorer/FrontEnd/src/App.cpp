@@ -5301,12 +5301,17 @@ void App::DrawCommandScaleCell(const se_command& cmd)
         return;
     }
     if (cmd.type != SE_CMD_SCALED_SPRITE) return;
-    const int shownW = int(std::lround(std::fabs(cmd.scale_x) * cmd.width));
-    const int shownH = int(std::lround(std::fabs(cmd.scale_y) * cmd.height));
-    if (cmd.scale_x == 1.0f && cmd.scale_y == 1.0f)
-        TextCenteredInCell("1:1");
+    // Magnitudes only: the scale's sign is corner order, which the flip bits can cancel, so
+    // mirroring is reported from the two combined.
+    const float sx = std::fabs(cmd.scale_x), sy = std::fabs(cmd.scale_y);
+    const int shownW = int(std::lround(sx * cmd.width));
+    const int shownH = int(std::lround(sy * cmd.height));
+    const bool mirX = se_command_mirrored_x(&cmd) != 0, mirY = se_command_mirrored_y(&cmd) != 0;
+    const char* mirror = mirX && mirY ? ", mirrored X+Y" : mirX ? ", mirrored X" : mirY ? ", mirrored Y" : "";
+    if (sx == 1.0f && sy == 1.0f)
+        TextCenteredInCell("1:1%s", mirror);
     else
-        TextCenteredInCell("\xc3\x97%.2f \xc3\x97%.2f (%dx%d)", cmd.scale_x, cmd.scale_y, shownW, shownH);
+        TextCenteredInCell("\xc3\x97%.2f \xc3\x97%.2f (%dx%d)%s", sx, sy, shownW, shownH, mirror);
     if (ImGui::IsItemHovered())
     {
         static const char* kZoom[4] = { "two-point (vertex C)", "near edge", "centre", "far edge" };
@@ -5314,8 +5319,10 @@ void App::DrawCommandScaleCell(const se_command& cmd)
         ImGui::BeginTooltip();
         ImGui::Text("Texture %ux%u drawn at %dx%d", cmd.width, cmd.height, shownW, shownH);
         ImGui::Text("Zoom point: horizontal %s, vertical %s", kZoom[zp & 3], kZoom[zp >> 2]);
-        if (cmd.scale_x < 0 || cmd.scale_y < 0)
-            ImGui::TextUnformatted("A negative factor is drawn mirrored on that axis.");
+        if (cmd.scale_x < 0 || cmd.scale_y < 0 || cmd.flip_x || cmd.flip_y)
+            ImGui::Text("Corners reversed: %s%s; flip bits: %s%s", cmd.scale_x < 0 ? "X" : "",
+                        cmd.scale_y < 0 ? "Y" : (cmd.scale_x < 0 ? "" : "none"),
+                        cmd.flip_x ? "X" : "", cmd.flip_y ? "Y" : (cmd.flip_x ? "" : "none"));
         ImGui::EndTooltip();
     }
 }

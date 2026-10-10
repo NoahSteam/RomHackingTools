@@ -263,6 +263,61 @@ void ScaledSpriteReportsItsScale()
     se_destroy(ctx);
 }
 
+// Reversed corners and the CMDCTRL flip bits each mirror a scaled sprite, so together they cancel.
+// se_command_mirrored_x/y must say what the renderer actually draws: an asymmetric 8x2 texture
+// (row 0 red|green, row 1 blue|white) is drawn 1:1, and the top-left screen pixel tells which
+// texel landed there, for every combination of corner order and flip on both axes.
+void MirrorMatchesTheRender()
+{
+    const uint16_t kTex[2][2] = { { 0x801F, 0x83E0 }, { 0xFC00, 0xFFFF } };   // [row][half]
+    for (int combo = 0; combo < 16; ++combo)
+    {
+        const bool revX = combo & 1, revY = combo & 2, flipX = combo & 4, flipY = combo & 8;
+        State st(0x100);
+        se_test::SpritesInFront(st);
+        se_test::WriteSystemClip(st, 64, 32);
+        const uint32_t c = 0x20;
+        PutBE16(st.vdp1, c + 0x00, uint16_t(0x0001 | (flipX ? 0x10 : 0) | (flipY ? 0x20 : 0)));
+        PutBE16(st.vdp1, c + 0x04, 0x0068);        // RGB555, transparent pixels off
+        PutBE16(st.vdp1, c + 0x08, 0x0080 / 8);    // texture at 0x80
+        PutBE16(st.vdp1, c + 0x0A, 0x0102);        // 8x2
+        PutBE16(st.vdp1, c + 0x0C, uint16_t(revX ? 27 : 20));
+        PutBE16(st.vdp1, c + 0x0E, uint16_t(revY ? 11 : 10));
+        PutBE16(st.vdp1, c + 0x14, uint16_t(revX ? 20 : 27));
+        PutBE16(st.vdp1, c + 0x16, uint16_t(revY ? 10 : 11));
+        PutBE16(st.vdp1, 0x40, 0x8000);            // END
+        for (uint32_t y = 0; y < 2; ++y)
+            for (uint32_t x = 0; x < 8; ++x)
+                PutBE16(st.vdp1, 0x80 + (y * 8 + x) * 2, kTex[y][x / 4]);
+
+        se_context* ctx = se_test::CreateContext(st);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
+        CHECK(se_begin_frame(ctx) == SE_OK);
+        se_command cmd {};
+        CHECK(se_get_command(ctx, 1, &cmd) == SE_OK && cmd.type == SE_CMD_SCALED_SPRITE);
+        const bool mx = se_command_mirrored_x(&cmd) != 0, my = se_command_mirrored_y(&cmd) != 0;
+        CHECK(mx == (revX != flipX) && my == (revY != flipY));
+
+        se_render_opts opts {};
+        opts.show_vdp1_sprites = 1;
+        opts.highlight_command = -1;
+        opts.transparent_background = 1;
+        size_t needed = 0;
+        se_image img {};
+        se_render_frame(ctx, &opts, &img, &needed);
+        std::vector<uint8_t> px(needed);
+        img.pixels = px.data(); img.capacity = px.size();
+        CHECK(se_render_frame(ctx, &opts, &img, &needed) == SE_OK);
+        const uint8_t* p = px.data() + size_t(10) * img.stride + 20 * 4;   // screen (20,10)
+        const uint16_t want = kTex[my ? 1 : 0][mx ? 1 : 0];
+        const bool r = p[0] > 128, g = p[1] > 128, b = p[2] > 128;
+        const bool wr = want & 0x1F, wg = (want >> 5) & 0x1F, wb = (want >> 10) & 0x1F;
+        CHECK(p[3] != 0 && r == wr && g == wg && b == wb);
+        se_destroy(ctx);
+    }
+}
+
 int main()
 {
     PolygonsListTheirTables();
@@ -271,6 +326,7 @@ int main()
     PaletteNeedsItsMemory();
     PaletteAgreesWithTextureDecode();
     ScaledSpriteReportsItsScale();
+    MirrorMatchesTheRender();
     if (gFailures) { std::cerr << gFailures << " failure(s)\n"; return 1; }
     std::cout << "VramMap tests passed\n";
     return 0;

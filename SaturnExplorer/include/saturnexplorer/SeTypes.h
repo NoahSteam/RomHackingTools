@@ -200,8 +200,12 @@ typedef struct se_command {
     int16_t           x;               /* primary position (vertex A / CMDXA) */
     int16_t           y;               /* CMDYA */
 
-    float             scale_x;         /* scaled sprite: on-screen / texture size (<0 = mirrored); */
-    float             scale_y;         /* 1 for every other command */
+    /* Scaled sprite: on-screen / texture size; 1 for every other command. The sign is the
+       GEOMETRIC direction (negative when the far corner lies before the near one), not whether
+       the texture appears mirrored: flip_x/flip_y reverse it again. se_command_mirrored_x/y
+       combine the two. */
+    float             scale_x;
+    float             scale_y;
     float             rotation_deg;    /* derived from the 4 corners */
 
     uint8_t           flip_x;          /* 0/1 */
@@ -220,6 +224,17 @@ typedef struct se_command {
 
     char              description[64]; /* optional label ("Sakura (Body)"); may be empty */
 } se_command;
+
+/* Whether a command's texture is drawn mirrored on screen: reversed corners and a flip bit
+   each mirror it, so the two together cancel. */
+static inline int se_command_mirrored_x(const se_command* c)
+{
+    return (c->scale_x < 0.0f) != (c->flip_x != 0);
+}
+static inline int se_command_mirrored_y(const se_command* c)
+{
+    return (c->scale_y < 0.0f) != (c->flip_y != 0);
+}
 
 /* Same sprite in 2D screen space: the four corners exactly where the Saturn
  * places them. Rasterizing these in priority order reproduces the frame; the
