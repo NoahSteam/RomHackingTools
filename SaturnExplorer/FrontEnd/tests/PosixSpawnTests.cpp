@@ -205,6 +205,27 @@ void TestSyscallFailures(const std::string& dir)
 }
 }  // namespace
 
+// An application bundle that ships a command-line helper (Beyond Compare's bcomp) is run through the
+// helper: `open -a --args` hands nothing to an instance that is already running. The path as a file
+// dialog returns it ends in a slash, which used to hide the bundle and make the folder itself the
+// program ("Permission denied").
+void TestBundleUsesItsCommandLineHelper(const std::string& dir)
+{
+    const std::string bundle = dir + "/Tool.app", macos = bundle + "/Contents/MacOS", out = dir + "/bundle_argv.txt";
+    std::system(("mkdir -p '" + macos + "'").c_str());
+    WriteFile(macos + "/bcomp", "#!/bin/sh\nexec > \"" + out + ".tmp\"\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done\nmv \"" + out + ".tmp\" \"" + out + "\"\n", 0755);
+    for (const std::string& given : { bundle, bundle + "/" })
+    {
+        std::remove(out.c_str());
+        std::string error;
+        CHECK(SpawnDetached(given, { "left folder", "right" }, "", error));
+        CHECK(error.empty());
+        std::vector<std::string> lines;
+        CHECK(WaitForLines(out, 2, lines));
+        if (lines.size() == 2) CHECK(lines[0] == "left folder" && lines[1] == "right");
+    }
+}
+
 int main()
 {
     const std::string dir = MakeTempDir();
@@ -213,6 +234,7 @@ int main()
     TestFailuresAreReported(dir);
     TestNoZombie(dir);
     TestSyscallFailures(dir);
+    TestBundleUsesItsCommandLineHelper(dir);
     std::system(("rm -rf '" + dir + "'").c_str());
     if (gFailures == 0) std::printf("PosixSpawn: all checks passed\n");
     return gFailures == 0 ? 0 : 1;

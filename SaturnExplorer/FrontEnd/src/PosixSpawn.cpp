@@ -41,9 +41,32 @@ void StdioToDevNull()
     }
 }
 
+// A folder picked in a file dialog arrives as "Foo.app/"; the slash must not hide the bundle.
+std::string TrimTrailingSlashes(std::string p)
+{
+    while (p.size() > 1 && p.back() == '/') p.pop_back();
+    return p;
+}
+
 bool IsBundle(const std::string& p)
 {
     return p.size() > 4 && p.compare(p.size() - 4, 4, ".app") == 0;
+}
+
+// The command-line launcher some applications ship inside their bundle. `open -a Foo --args ...` only
+// delivers its arguments to a fresh instance -- an application that is already running ignores
+// them, which for a diff tool means "opens, and shows nothing" -- and the bundle's main executable
+// is not a way in either (Beyond Compare's does not forward them). The helper is what talks to the
+// running instance. Empty when the bundle has none.
+std::string BundleCliHelper(const std::string& bundle)
+{
+    static const char* const kHelpers[] = { "bcomp" };   // Beyond Compare
+    for (const char* name : kHelpers)
+    {
+        const std::string candidate = bundle + "/Contents/MacOS/" + name;
+        if (::access(candidate.c_str(), X_OK) == 0) return candidate;
+    }
+    return std::string();
 }
 }  // namespace
 
@@ -56,16 +79,26 @@ bool SpawnDetached(const std::string& path, const std::vector<std::string>& args
     return SpawnDetachedWith(real, path, args, workingDir, error);
 }
 
-bool SpawnDetachedWith(const SpawnSyscalls& sys, const std::string& path, const std::vector<std::string>& args,
+bool SpawnDetachedWith(const SpawnSyscalls& sys, const std::string& pathGiven, const std::vector<std::string>& args,
                        const std::string& workingDir, std::string& error)
 {
     error.clear();
-    if (path.empty())
+    if (pathGiven.empty())
     {
         error = "No program was given.";
         return false;
     }
-    const bool bundle = IsBundle(path);
+    std::string path = TrimTrailingSlashes(pathGiven);
+    bool bundle = IsBundle(path);
+    if (bundle)
+    {
+        const std::string helper = BundleCliHelper(path);
+        if (!helper.empty())
+        {
+            path = helper;   // run it as the plain program it is
+            bundle = false;
+        }
+    }
 
     // Everything the child needs is built before the fork: nothing allocates after it.
     std::vector<std::string> words;
