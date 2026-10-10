@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -178,7 +179,7 @@ int main()
         }
         uint32_t reads = 0;
         IsoFs r = parseWith(dir, kSector, 0xFFFFFFFFu, &reads);
-        Check(r.ok, "aliased directories still parse");
+        Check(r.ok && !r.complete, "aliased directories parse, but their copies are not listed");
         Check(reads < 2048 + 64, "an aliased extent is read once");
     }
     {
@@ -188,6 +189,49 @@ int main()
         uint32_t reads = 0;
         IsoFs r = parseWith(dir, kSector, 20, &reads);
         Check(r.ok && reads < 16, "a directory cycle is walked once");
+        Check(!r.complete, "and the skipped expansion makes the walk incomplete");
+    }
+
+    // A sparse image: the PVD at 16 with the given root, plus whatever sectors 'sectors' holds.
+    // Every requested LBA is logged.
+    auto parseSparse = [&](uint32_t rootLba, uint32_t rootSize,
+                           const std::map<uint32_t, std::vector<uint8_t>>& sectors,
+                           std::vector<uint32_t>& reads) {
+        std::vector<uint8_t> pv(pvd, pvd + kSector);
+        std::vector<uint8_t> rr;
+        AppendRec(rr, rootLba, rootSize, 0x02, std::string(1, '\0'));
+        std::memcpy(pv.data() + 156, rr.data(), rr.size());
+        return IsoParse([&, pv](uint32_t lba, uint8_t* out) -> bool {
+            reads.push_back(lba);
+            std::memset(out, 0, kSector);
+            if (lba == 16) { std::memcpy(out, pv.data(), kSector); return true; }
+            if (lba < 16) return true;
+            auto it = sectors.find(lba);
+            if (it == sectors.end()) return lba != 17;   // 17: end of the descriptor scan
+            if (!it->second.empty()) std::memcpy(out, it->second.data(), it->second.size());
+            return true;
+        });
+    };
+    {
+        // /A and /B name one extent with different sizes: only B's reaches F.
+        std::vector<uint8_t> root, b2;
+        AppendRec(root, 19, kSector, 0x02, "A");
+        AppendRec(root, 19, 2 * kSector, 0x02, "B");
+        AppendRec(b2, 40, 10, 0x00, "F;1");
+        std::vector<uint32_t> reads;
+        IsoFs r = parseSparse(18, kSector, { { 18, root }, { 19, {} }, { 20, b2 } }, reads);
+        Check(r.ok && !r.complete, "conflicting aliases of one extent are not a complete walk");
+    }
+    {
+        // A root extent starting at the last LBA used to wrap its second sector to LBA 0.
+        std::vector<uint8_t> zero;
+        AppendRec(zero, 40, 10, 0x00, "WRAPPED;1");
+        std::vector<uint32_t> reads;
+        IsoFs r = parseSparse(0xFFFFFFFFu, 2 * kSector, { { 0, zero } }, reads);
+        Check(r.ok && !r.complete, "an extent that wraps the LBA space is incomplete");
+        bool readZero = false;
+        for (uint32_t lba : reads) if (lba == 0) readZero = true;
+        Check(!readZero && Find(r, "/WRAPPED") == nullptr, "and sector 0 is never read as its continuation");
     }
 
     if (gFail == 0) std::printf("All IsoFs tests passed.\n");

@@ -126,8 +126,15 @@ void OwnersAreNotDuplicated()
 }  // namespace
 
 // A LUT-mode palette needs the 32-byte CLUT in VDP1 VRAM, and CRAM for any entry that names a
-// color bank. Missing either is "no data", not a black palette: a real all-zero CLUT and an
-// absent one must stay distinguishable.
+// color bank (MSB clear; MSB set is a direct RGB555 color). Missing data is "no data", not a black
+// palette: a real all-zero CLUT and an absent one must stay distinguishable.
+se_context* Captured(State& st)
+{
+    se_context* ctx = se_test::CreateContext(st);
+    if (ctx && se_begin_frame(ctx) != SE_OK) { se_destroy(ctx); return nullptr; }
+    return ctx;
+}
+
 void PaletteNeedsItsMemory()
 {
     se_palette pal {};
@@ -136,7 +143,6 @@ void PaletteNeedsItsMemory()
         se_data_source src = se_test::MakeSource(st);
         src.capabilities &= ~(SE_CAP_VDP1_VRAM | SE_CAP_VDP1_FB);
         src.read_vdp1_vram = nullptr;
-        st.vdp2.assign(16, 0);   // something else, so the capture itself is valid
         se_context* ctx = se_test::CreateContext(src);
         CHECK(ctx != nullptr);
         if (!ctx) return;
@@ -146,10 +152,9 @@ void PaletteNeedsItsMemory()
     }
     {
         State st(0x40);
-        se_context* ctx = se_test::CreateContext(st);
+        se_context* ctx = Captured(st);
         CHECK(ctx != nullptr);
         if (!ctx) return;
-        CHECK(se_begin_frame(ctx) == SE_OK);
         CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_OK);          // exactly fits
         CHECK(pal.count == 16 && pal.entries[0].raw == 0);           // a real all-zero CLUT
         CHECK(se_decode_palette(ctx, 0x22, &pal) == SE_ERR_NO_DATA); // runs off the end
@@ -157,16 +162,60 @@ void PaletteNeedsItsMemory()
         se_destroy(ctx);
     }
     {
+        // Direct RGB entries need no CRAM.
         State st(0x40);
-        PutBE16(st.vdp1, 0x20, 0x8001);   // a color-bank entry
+        for (uint32_t i = 0; i < 16; ++i) PutBE16(st.vdp1, 0x20 + i * 2, 0x801F);
         st.cram.clear();
-        se_context* ctx = se_test::CreateContext(st);
+        se_context* ctx = Captured(st);
         CHECK(ctx != nullptr);
         if (!ctx) return;
-        CHECK(se_begin_frame(ctx) == SE_OK);
+        CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_OK);
+        CHECK(pal.entries[0].r == 255 && pal.entries[0].g == 0 && pal.entries[0].b == 0);
+        se_destroy(ctx);
+    }
+    {
+        // A color-bank entry does.
+        State st(0x40);
+        for (uint32_t i = 0; i < 16; ++i) PutBE16(st.vdp1, 0x20 + i * 2, 0x801F);
+        PutBE16(st.vdp1, 0x24, 0x0001);
+        st.cram.clear();
+        se_context* ctx = Captured(st);
+        CHECK(ctx != nullptr);
+        if (!ctx) return;
         CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_ERR_NO_DATA);
         se_destroy(ctx);
     }
+}
+
+// The palette viewer and the texture decoder must agree on every entry: a 16x1 4bpp LUT texture
+// whose pixel p is index p decodes to exactly the palette's entries.
+void PaletteAgreesWithTextureDecode()
+{
+    State st(0x80);
+    const uint16_t clut[16] = { 0x8000, 0x801F, 0x83E0, 0xFC00, 0x0001, 0x0002, 0x0010, 0x8421,
+                                0x7FFF, 0x0000, 0x9999, 0x0123, 0xFFFF, 0x0040, 0x8001, 0x0005 };
+    for (uint32_t i = 0; i < 16; ++i) PutBE16(st.vdp1, 0x20 + i * 2, clut[i]);
+    for (uint32_t i = 0; i < 8; ++i) st.vdp1[0x40 + i] = uint8_t(((2 * i) << 4) | (2 * i + 1));
+    for (uint32_t i = 0; i < 64; ++i) PutBE16(st.cram, i * 2, uint16_t(0x8000 | (i * 0x0421)));
+    se_context* ctx = Captured(st);
+    CHECK(ctx != nullptr);
+    if (!ctx) return;
+    se_palette pal {};
+    CHECK(se_decode_palette(ctx, 0x20, &pal) == SE_OK);
+    se_texture_ref ref {};
+    ref.vram_address = 0x40; ref.width = 16; ref.height = 1;
+    ref.color_mode = SE_COLOR_LUT_16; ref.clut_address = 0x20;
+    std::vector<uint8_t> px(16 * 4);
+    se_image img {};
+    img.pixels = px.data(); img.capacity = px.size();
+    size_t needed = 0;
+    CHECK(se_decode_texture(ctx, &ref, &img, &needed) == SE_OK);
+    for (uint32_t p = 1; p < 16; ++p)   // pixel 0 may be transparent
+    {
+        CHECK(px[p * 4 + 0] == pal.entries[p].r && px[p * 4 + 1] == pal.entries[p].g &&
+              px[p * 4 + 2] == pal.entries[p].b);
+    }
+    se_destroy(ctx);
 }
 
 int main()
@@ -175,6 +224,7 @@ int main()
     SharedTexturesKeepTheirExtentAndOwners();
     OwnersAreNotDuplicated();
     PaletteNeedsItsMemory();
+    PaletteAgreesWithTextureDecode();
     if (gFailures) { std::cerr << gFailures << " failure(s)\n"; return 1; }
     std::cout << "VramMap tests passed\n";
     return 0;

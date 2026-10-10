@@ -276,7 +276,7 @@ public:
     }
 
     // Decode a 16-entry VDP1 color-lookup table (LUT mode) at 'clutAddress' into a
-    // palette. Each entry is either a literal RGB555 color or, with bit 15 set, a
+    // palette. Each entry is a literal RGB555 color with bit 15 set, or with it clear a
     // VDP2 color-bank code resolved through CRAM (same rule as the texel decoder).
     se_result DecodePalette(uint32_t clutAddress, se_palette* out) const
     {
@@ -292,8 +292,8 @@ public:
         }
         for (uint16_t i = 0; i < 16; ++i)
         {
-            // Likewise an entry that names a CRAM color when no CRAM was captured.
-            if ((ReadBE16(vram, clutAddress + i * 2) & 0x8000) && cram.empty())
+            // Likewise an entry that names a CRAM color (MSB clear) when no CRAM was captured.
+            if (!(ReadBE16(vram, clutAddress + i * 2) & 0x8000) && cram.empty())
             {
                 return SE_ERR_NO_DATA;
             }
@@ -305,8 +305,9 @@ public:
         for (uint16_t i = 0; i < 16; ++i)
         {
             const uint16_t raw = ReadBE16(vram, clutAddress + i * 2);
-            const Rgba c = (raw & 0x8000) ? CramColor(cram, cm, raw & 0x7FF)
-                                          : Rgb555ToRgba(raw);
+            // The texel decoder's rule (Vdp1Color.h): MSB set = direct RGB555, clear = a CRAM
+            // color-bank index.
+            const Rgba c = (raw & 0x8000) ? Rgb555ToRgba(raw) : CramColor(cram, cm, raw);
             se_palette_entry& e = out->entries[i];
             e.r = c.r;
             e.g = c.g;

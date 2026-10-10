@@ -137,15 +137,23 @@ void FrameRecorder::Capture(se_context* ctx, uint64_t frameNumber)
     // scrubbing (0 when the source has no v14 sound tap).
     raw.slotCount = se_get_scsp_slots(ctx, raw.slots);
 
-    raw.vdp1Regs.resize(kVdp1RegBytes / 2);
-    for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
+    // A register file the capture did not have stays empty: recorded as zeros it would replay
+    // as a real (blank) display configuration. CbHasRegs reports the absence.
+    if (se_has_vdp1_registers(ctx))
     {
-        raw.vdp1Regs[o / 2] = se_get_vdp1_register(ctx, o);
+        raw.vdp1Regs.resize(kVdp1RegBytes / 2);
+        for (uint32_t o = 0; o < kVdp1RegBytes; o += 2)
+        {
+            raw.vdp1Regs[o / 2] = se_get_vdp1_register(ctx, o);
+        }
     }
-    raw.vdp2Regs.resize(kVdp2RegBytes / 2);
-    for (uint32_t o = 0; o < kVdp2RegBytes; o += 2)
+    if (se_has_vdp2_registers(ctx))
     {
-        raw.vdp2Regs[o / 2] = se_get_vdp2_register(ctx, o);
+        raw.vdp2Regs.resize(kVdp2RegBytes / 2);
+        for (uint32_t o = 0; o < kVdp2RegBytes; o += 2)
+        {
+            raw.vdp2Regs[o / 2] = se_get_vdp2_register(ctx, o);
+        }
     }
 
     // SH-2 registers, so the Assembly panel (and status-bar PC) keep working while
@@ -348,6 +356,7 @@ bool FrameRecorder::SelectImpl(const uint64_t* wantFrame, size_t i, size_t* outI
     out->read_sound_ram = CbSoundRam;
     out->read_vdp1_reg  = CbVdp1Reg;
     out->read_vdp2_reg  = CbVdp2Reg;
+    out->has_regs       = CbHasRegs;   // the caps stay set for the session; this is per frame
     out->read_sh2_regs  = CbSh2Regs;
     out->read_scsp_slots = CbScspSlots;
     // When an edit sink is set (rewind supported), make the scrub source writable: edits to
@@ -708,6 +717,11 @@ uint16_t FrameRecorder::CbVdp1Reg(void* u, uint32_t reg)
     const std::vector<uint16_t>& v = static_cast<FrameRecorder*>(u)->mSelVdp1Regs;
     const size_t i = reg >> 1;
     return i < v.size() ? v[i] : 0;
+}
+int FrameRecorder::CbHasRegs(void* u, int vdp)
+{
+    const FrameRecorder* r = static_cast<FrameRecorder*>(u);
+    return vdp == 1 ? !r->mSelVdp1Regs.empty() : vdp == 2 ? !r->mSelVdp2Regs.empty() : 0;
 }
 uint16_t FrameRecorder::CbVdp2Reg(void* u, uint32_t reg)
 {

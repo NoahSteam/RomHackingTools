@@ -702,6 +702,60 @@ int main()
     }
 
     se_destroy(ctx);
+    // Register availability is per frame. A frame captured without register files must replay
+    // without them -- not as all-zero registers -- and a later frame with them must bring them
+    // back, all through one scrub context (whose capabilities are fixed at se_create).
+    {
+        struct Src { bool regs = true; std::vector<uint8_t> vram = std::vector<uint8_t>(64, 0x11); };
+        static Src src;
+        se_data_source ds{};
+        ds.abi_version = SE_ABI_VERSION;
+        ds.capabilities = SE_CAP_VDP1_VRAM | SE_CAP_VDP1_REGS | SE_CAP_VDP2_REGS;
+        ds.user = &src;
+        ds.read_vdp1_vram = [](void* u, uint32_t o, void* d, size_t n) -> size_t {
+            const std::vector<uint8_t>& v = static_cast<Src*>(u)->vram;
+            if (o >= v.size()) return 0;
+            n = std::min(n, v.size() - o);
+            std::memcpy(d, v.data() + o, n);
+            return n;
+        };
+        ds.read_vdp1_reg = [](void*, uint32_t) -> uint16_t { return 0x1234; };
+        ds.read_vdp2_reg = [](void*, uint32_t) -> uint16_t { return 0x8000; };
+        ds.has_regs = [](void* u, int) { return static_cast<Src*>(u)->regs ? 1 : 0; };
+        se_config cfg{};
+        cfg.abi_version = SE_ABI_VERSION;
+        se_context* live = se_create(&ds, &cfg);
+        Check(live != nullptr, "register-availability source created");
+
+        FrameRecorder rr;
+        const bool present[3] = { true, false, true };
+        for (int i = 0; i < 3; ++i)
+        {
+            src.regs = present[i];
+            se_begin_frame(live);
+            Check(CaptureFrame(rr, live, uint64_t(i + 1)), "captured a register-availability frame");
+        }
+        se_destroy(live);
+
+        se_context* scrub = nullptr;
+        for (int i = 0; i < 3; ++i)
+        {
+            se_data_source sel{};
+            Check(rr.Select(size_t(i), &sel), "selected a register-availability frame");
+            if (!scrub) scrub = se_create(&sel, &cfg);
+            Check(scrub != nullptr && se_begin_frame(scrub) == SE_OK, "scrub capture");
+            if (!scrub) break;
+            const int want = present[i] ? 1 : 0;
+            Check(se_has_vdp1_registers(scrub) == want && se_has_vdp2_registers(scrub) == want,
+                  present[i] ? "a frame recorded with registers replays them"
+                             : "a frame recorded without registers replays without them");
+            if (present[i])
+                Check(se_get_vdp1_register(scrub, 0) == 0x1234 && se_get_vdp2_register(scrub, 0) == 0x8000,
+                      "and their values round-trip");
+        }
+        if (scrub) se_destroy(scrub);
+    }
+
     if (gFail == 0) std::printf("All FrameRecorder tests passed.\n");
     return gFail == 0 ? 0 : 1;
 }

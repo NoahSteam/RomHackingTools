@@ -45,7 +45,7 @@ public:
     {
         uint64_t frameNumber = 0;
         Region   vdp1Vram, vdp2Vram, cram, wramLow, wramHigh, vdp1Fb, soundRam;
-        std::vector<uint16_t> vdp1Regs;   // by hw offset >> 1
+        std::vector<uint16_t> vdp1Regs;   // by hw offset >> 1; empty = the frame had none
         std::vector<uint16_t> vdp2Regs;
         se_sh2_regs sh2[2] = {};          // [0] master, [1] slave (Assembly panel)
         bool        hasSh2[2] = { false, false };
@@ -271,6 +271,7 @@ private:
     static size_t CbSoundRam(void* u, uint32_t off, void* dst, size_t size);
     static uint16_t CbVdp1Reg(void* u, uint32_t reg);
     static uint16_t CbVdp2Reg(void* u, uint32_t reg);
+    static int      CbHasRegs(void* u, int vdp);
     static int      CbSh2Regs(void* u, int cpu, se_sh2_regs* out);
     static int      CbScspSlots(void* u, se_scsp_slot out[SE_SCSP_SLOT_COUNT]);
 };

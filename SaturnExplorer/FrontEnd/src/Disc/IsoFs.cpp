@@ -92,7 +92,8 @@ IsoFs IsoParse(const SectorReader& read)
     auto stop = [&](const std::string& why) { if (fs.incomplete.empty()) fs.incomplete = why; };
 
     // Each extent is expanded once. Two records naming one extent -- an alias, or a cycle back to
-    // an ancestor -- would otherwise re-read it once per path to it.
+    // an ancestor -- would otherwise re-read it once per path to it. The second path's children
+    // are then not listed under it, so the walk is incomplete rather than silently short.
     std::unordered_set<uint32_t> visited;
     uint32_t totalSect = 0;
 
@@ -100,9 +101,12 @@ IsoFs IsoParse(const SectorReader& read)
     {
         const Dir d = queue.front();
         queue.pop_front();
-        if (!visited.insert(d.lba).second) continue;
+        const std::string where = d.prefix.empty() ? "/" : d.prefix;
+        if (!visited.insert(d.lba).second) { stop("directory extent shared or cyclic: " + where); continue; }
         const uint32_t sectors = d.size ? SectorSpan(d.size) : 1;
-        if (sectors > kMaxDirSect) { stop("directory extent too large: " + (d.prefix.empty() ? "/" : d.prefix)); continue; }
+        if (sectors > kMaxDirSect) { stop("directory extent too large: " + where); continue; }
+        // d.lba + s must not wrap past sector 0xFFFFFFFF into the start of the disc.
+        if (uint64_t(d.lba) + sectors - 1 > 0xFFFFFFFFull) { stop("directory extent past the end of the address space: " + where); continue; }
 
         for (uint32_t s = 0; s < sectors; ++s)
         {
