@@ -23,7 +23,10 @@ public:
     void Close();
     bool IsOpen() const { return mFile.is_open(); }
 
+    // Path() is the file holding the data track (a .cue's first FILE); ImagePath() is what
+    // Open() was given. A rebuild needs the latter: the .cue is what describes the audio tracks.
     const std::string& Path()      const { return mPath; }
+    const std::string& ImagePath() const { return mImagePath; }
     uint32_t           SectorSize() const { return mSectorSize; }   // 2048 or 2352
     uint32_t           SectorCount() const { return mSectorCount; } // total logical sectors
 
@@ -49,6 +52,7 @@ private:
 
     std::ifstream mFile;
     std::string   mPath;
+    std::string   mImagePath;
     uint64_t      mFileSize = 0;
     uint32_t      mSectorSize = 2048;
     uint32_t      mHeaderOffset = 0;    // user data offset within a raw sector (0/16/24)

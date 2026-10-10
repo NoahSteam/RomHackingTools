@@ -108,8 +108,12 @@ bool PatchLocationValid(const PatchLocation& loc, std::string* why)
 bool RelativePathUnder(const std::string& root, const std::string& path, std::string& rel)
 {
     std::string d = root, p = path;
+#ifdef _WIN32
+    // Only Windows treats a backslash as a separator. On POSIX it is an ordinary filename byte:
+    // folding it would turn the file "foo\\bar.bin" into the path foo/bar.bin, a different file.
     for (char& c : d) if (c == '\\') c = '/';
     for (char& c : p) if (c == '\\') c = '/';
+#endif
     while (!d.empty() && d.back() == '/') d.pop_back();
     if (d.empty() || p.size() <= d.size() + 1 || p.compare(0, d.size(), d) != 0 ||
         p[d.size()] != '/')

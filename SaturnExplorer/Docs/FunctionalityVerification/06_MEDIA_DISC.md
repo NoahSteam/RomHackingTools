@@ -16,11 +16,14 @@ Covered by `IsoFsTests` (synthetic shared LBA) and `IsoBuilderTests` (built imag
 ## Fixed — DISC-01 transactional build
 A later-track copy failure fails the build (since the earlier fix), and every output is now
 staged in exclusively created files and only moved into place once the whole set is built, so
-a failed rebuild leaves the previous outputs intact. Output names that are (links to) a source
+a failed rebuild leaves the previous outputs intact. Publication itself is all-or-nothing:
+previous outputs are moved aside first, and a failure at any rename puts every one of them back
+(tested by failing each rename in turn). Output names that are (links to) a source
 file, outputs inside the packed Data Directory, and device/directory output paths are refused
 before anything is written. `DiscBuilderTests` covers each case.
 
 ## Refused layouts
 Rather than produce a wrong image, the builder refuses: a MODE2 first track, a first track with
 INDEX 00 or extra indices (a PREGAP is carried over), non-BINARY track files (WAVE, MOTOROLA,
-...), and track files that are not a whole number of sectors or whose indices are out of order.
+...), track files that are not a whole number of sectors, and indices that are out of order or lie at
+or past the end of their track (including the next track's start in a shared file).

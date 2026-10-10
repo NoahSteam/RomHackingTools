@@ -25,6 +25,39 @@
 #define MKDIR(p) ::mkdir(p, 0777)
 #endif
 
+#if defined(__linux__)
+#include <cerrno>
+#include <cstring>
+#include <dlfcn.h>
+
+// Fault injection. rename(): while armed, the Nth call fails with EACCES (every other call goes
+// through), so a test can fail each publication step in turn. read(): while armed, the first
+// call hands back 'gReadPrefix' and the next fails with EIO.
+static int         gRenameFailAt = 0;
+static int         gRenameCalls = 0;
+extern "C" int rename(const char* from, const char* to)
+{
+    using RenameFn = int (*)(const char*, const char*);
+    static RenameFn real = reinterpret_cast<RenameFn>(dlsym(RTLD_NEXT, "rename"));
+    if (gRenameFailAt > 0 && ++gRenameCalls == gRenameFailAt) { errno = EACCES; return -1; }
+    return real(from, to);
+}
+static bool        gReadArmed = false;
+static bool        gReadServed = false;
+static std::string gReadPrefix;
+extern "C" ssize_t read(int fd, void* buf, size_t n)
+{
+    using ReadFn = ssize_t (*)(int, void*, size_t);
+    static ReadFn real = reinterpret_cast<ReadFn>(dlsym(RTLD_NEXT, "read"));
+    if (!gReadArmed) return real(fd, buf, n);
+    if (gReadServed) { errno = EIO; return -1; }
+    gReadServed = true;
+    const size_t k = gReadPrefix.size() < n ? gReadPrefix.size() : n;
+    std::memcpy(buf, gReadPrefix.data(), k);
+    return ssize_t(k);
+}
+#endif
+
 using namespace sfe;
 
 namespace
@@ -77,10 +110,11 @@ int main()
     { std::vector<uint8_t> d(4000, 'A'); WriteBytes(disc + "/MAIN.BIN", d); }
     { std::vector<uint8_t> d(50, 'B'); WriteBytes(disc + "/DATA.DAT", d); }
 
-    // Synthetic source disc: 300 sectors of 2352. Track 2 (audio) occupies frames [225, 300),
-    // filled with a recognizable pattern so we can prove it's copied verbatim.
+    // Synthetic source disc: 450 sectors of 2352. Track 2 (audio) occupies frames [225, 450),
+    // its INDEX 01 at 375 inside that, filled with a recognizable pattern so we can prove it's
+    // copied verbatim.
     constexpr uint32_t S = 2352;
-    std::vector<uint8_t> src(size_t(300) * S, 0xAA);
+    std::vector<uint8_t> src(size_t(450) * S, 0xAA);
     for (size_t i = size_t(225) * S; i < src.size(); ++i) src[i] = uint8_t((i * 13 + 7) & 0xFF);
     WriteBytes(base + "/src.bin", src);
     WriteText(base + "/src.cue",
@@ -128,8 +162,8 @@ int main()
 
     // Track 02 is the source's audio track copied verbatim.
     std::vector<uint8_t> t2 = ReadBytes(track02);
-    Check(t2.size() == size_t(75) * S, "Track 02 is 75 sectors");
-    bool verbatim = t2.size() == size_t(75) * S;
+    Check(t2.size() == size_t(225) * S, "Track 02 is 225 sectors");
+    bool verbatim = t2.size() == size_t(225) * S;
     for (size_t i = 0; verbatim && i < t2.size(); ++i)
         if (t2[i] != src[size_t(225) * S + i]) verbatim = false;
     Check(verbatim, "Track 02 copied byte-for-byte");
@@ -320,6 +354,7 @@ int main()
         DiscBuildOptions o = opt;
         o.sourceImage = base + "/odd.cue";
         o.outPath = base + "/odd_out.cue";
+        std::remove((base + "/odd_out.cue").c_str());
         const DiscBuildResult ro = BuildDiscImage(o);
         Check(!ro.ok && Contains(ro.error, "whole number"), "a truncated audio track is refused");
         Check(!FileExists(base + "/odd_out.cue"), "nothing is written for it");
@@ -343,6 +378,7 @@ int main()
             "FILE \"a.wav\" WAVE\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n");
         o.sourceImage = base + "/wave.cue";
         o.outPath = base + "/wave_out.cue";
+        std::remove((base + "/wave_out.cue").c_str());
         const DiscBuildResult rw = BuildDiscImage(o);
         Check(!rw.ok && Contains(rw.error, "WAVE"), "a WAVE-backed track is refused");
         Check(!FileExists(base + "/wave_out.cue"), "nothing is written for it");
@@ -415,6 +451,129 @@ int main()
             Check(!BuildDiscImage(o).ok, "a device output path is refused");
             Check(::stat("/dev/full", &st) == 0 && S_ISCHR(st.st_mode), "/dev/full is still a device");
         }
+    }
+
+#if defined(__linux__)
+    // --- A failure at any publication step leaves the whole previous output set as it was ---
+    // Fail the 1st, 2nd, ... rename of a rebuild over an existing build until one gets through.
+    // Every failed attempt must leave all three previous files byte-for-byte unchanged -- in
+    // particular not the new tracks beside the old cue.
+    {
+        DiscBuildOptions pub = opt;
+        pub.outPath = base + "/pub.cue";
+        Check(BuildDiscImage(pub).ok, "first build of pub.cue");
+        const std::string p1 = base + "/pub (Track 01).bin", p2 = base + "/pub (Track 02).bin",
+                          pc = base + "/pub.cue";
+        // Make the previous set distinguishable from a fresh build of the same inputs.
+        WriteText(pc, ReadText(pc) + "REM previous\n");
+        { std::vector<uint8_t> t = ReadBytes(p1); t.push_back(0x99); WriteBytes(p1, t); }
+        const std::vector<uint8_t> b1 = ReadBytes(p1), b2 = ReadBytes(p2);
+        const std::string bc = ReadText(pc);
+
+        bool succeeded = false;
+        int failures = 0;
+        for (int n = 1; n <= 20 && !succeeded; ++n)
+        {
+            gRenameCalls = 0;
+            gRenameFailAt = n;
+            const DiscBuildResult rp = BuildDiscImage(pub);
+            const bool hit = gRenameCalls >= n;
+            gRenameFailAt = 0;
+            if (!hit) { Check(rp.ok, rp.ok ? "the unfaulted build succeeds" : rp.error.c_str()); succeeded = rp.ok; break; }
+            ++failures;
+            Check(!rp.ok, "a failed publication step fails the build");
+            Check(ReadBytes(p1) == b1, "previous Track 01 restored after a publication failure");
+            Check(ReadBytes(p2) == b2, "previous Track 02 restored after a publication failure");
+            Check(ReadText(pc) == bc, "previous cue restored after a publication failure");
+        }
+        Check(failures >= 6, "each publication step (3 moves aside, 3 publishes) was failed in turn");
+        Check(succeeded, "the build finally publishes");
+        Check(!Contains(ReadText(pc), "REM previous"), "and then the new cue is in place");
+    }
+
+    // --- A read error in the source cue is a failed build, not an exception ---
+    {
+        DiscBuildOptions rd = opt;
+        rd.outPath = base + "/keep.cue";   // a complete previous build exists here
+        const std::vector<uint8_t> k1 = ReadBytes(base + "/keep (Track 01).bin");
+        const std::string kc = ReadText(base + "/keep.cue");
+        const std::string full = ReadText(base + "/src.cue");
+        const std::string prefixes[] = {
+            full.substr(0, full.find("  TRACK 02")),   // ends on a line boundary
+            full.substr(0, full.find("AUDIO") + 2),     // ends mid-line
+        };
+        for (const std::string& prefix : prefixes)
+        {
+            gReadPrefix = prefix;
+            gReadServed = false;
+            gReadArmed = true;
+            bool threw = false;
+            DiscBuildResult rr;
+            try { rr = BuildDiscImage(rd); } catch (...) { threw = true; }
+            gReadArmed = false;
+            Check(!threw, "a cue read error does not throw");
+            Check(!rr.ok && !rr.error.empty(), "a cue read error fails the build");
+            Check(ReadBytes(base + "/keep (Track 01).bin") == k1 && ReadText(base + "/keep.cue") == kc,
+                  "and the previous outputs are untouched");
+        }
+    }
+#endif
+
+    // --- A disc opened from its .cue still rebuilds with its audio ---
+    // DiscImage::Path() is the data-track file the .cue names. The app used it as the rebuild
+    // source when no ROM was selected, which built a one-track disc from a two-track one.
+    {
+        const std::string kcue = base + "/keep.cue";   // a BIN/CUE build with its audio track
+        DiscImage opened;
+        Check(opened.Open(kcue), "open a two-track disc by its cue");
+        Check(opened.ImagePath() == kcue, "ImagePath is the cue that was opened");
+        Check(opened.Path() == base + "/keep (Track 01).bin", "Path is the data-track file");
+        DiscBuildOptions o = opt;
+        o.sourceImage = opened.ImagePath();
+        o.outPath = base + "/fromopen.cue";
+        const DiscBuildResult rfo = BuildDiscImage(o);
+        Check(rfo.ok && rfo.trackCount == 2 && rfo.audioTracksCopied == 1,
+              rfo.ok ? "rebuilding from the opened disc keeps its audio track" : rfo.error.c_str());
+        Check(ReadBytes(base + "/fromopen (Track 02).bin") == ReadBytes(base + "/keep (Track 02).bin"),
+              "and the audio bytes match");
+    }
+
+    // --- An index past the end of its track is refused ---
+    {
+        { std::vector<uint8_t> a(2352 * 2, 0x44); WriteBytes(base + "/short.bin", a); }
+        DiscBuildOptions o = opt;
+        const char* layouts[] = {
+            "    INDEX 01 00:00:00\n    INDEX 02 00:02:00\n",   // sector 150 of a 2-sector track
+            "    INDEX 01 00:00:00\n    INDEX 02 00:00:02\n",   // exactly at the end
+        };
+        for (const char* idx : layouts)
+        {
+            WriteText(base + "/farindex.cue",
+                std::string("FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+                            "FILE \"short.bin\" BINARY\n  TRACK 02 AUDIO\n") + idx);
+            o.sourceImage = base + "/farindex.cue";
+            o.outPath = base + "/farindex_out.cue";
+            std::remove((base + "/farindex_out.cue").c_str());
+            const DiscBuildResult rf = BuildDiscImage(o);
+            Check(!rf.ok && Contains(rf.error, "beyond"), "an index at or past the track end is refused");
+            Check(!FileExists(base + "/farindex_out.cue"), "nothing is written for it");
+        }
+        WriteText(base + "/nearindex.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "FILE \"short.bin\" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n    INDEX 02 00:00:01\n");
+        o.sourceImage = base + "/nearindex.cue";
+        o.outPath = base + "/nearindex_out.cue";
+        const DiscBuildResult rn = BuildDiscImage(o);
+        Check(rn.ok, rn.ok ? "an index on the last sector is fine" : rn.error.c_str());
+
+        // Shared file: track 02's index may not reach into track 03.
+        WriteText(base + "/sharedindex.cue",
+            "FILE \"src.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n"
+            "  TRACK 02 AUDIO\n    INDEX 01 00:03:00\n    INDEX 02 00:03:40\n"
+            "  TRACK 03 AUDIO\n    INDEX 01 00:03:30\n");
+        o.sourceImage = base + "/sharedindex.cue";
+        o.outPath = base + "/sharedindex_out.cue";
+        Check(!BuildDiscImage(o).ok, "an index past the next shared-file track is refused");
     }
 
     // --- No staging debris is left by any of the builds above ---

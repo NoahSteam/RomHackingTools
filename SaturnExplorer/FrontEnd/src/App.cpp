@@ -27,6 +27,7 @@
 #include "Theme.h"
 #include "Disc/IsoBuilder.h"      // rebuild the data track's ISO-9660 filesystem
 #include "Disc/DiscBuilder.h"     // Build Disc Image: BIN/CUE (+ audio tracks) or ISO
+#include "Disc/PathUtil.h"        // ReadWholeFile: a checked read of IP.BIN
 #include "DataSearch.h"           // IsDirectory / PathExists for the disc build
 #include "FileWrite.h"          // FileOrDirectoryExists: an unused folder for each diff comparison
 #include "DiffTool.h"             // hand the two compared frames to an external diff program
@@ -6319,7 +6320,7 @@ void App::DrawBuildDiscModal(IPlatform& platform)
     ImGui::TextDisabled("Data Directory: %s", mDataDir.c_str());
     const std::string rom = mLauncher.Rom();
     if (!rom.empty()) ImGui::TextDisabled("Source disc:    %s", PathBasename(rom).c_str());
-    else if (mDisc.IsOpen()) ImGui::TextDisabled("Source disc:    %s", PathBasename(mDisc.Path()).c_str());
+    else if (mDisc.IsOpen()) ImGui::TextDisabled("Source disc:    %s", PathBasename(mDisc.ImagePath()).c_str());
     else ImGui::TextDisabled("Source disc:    (none — no IP.BIN / audio tracks available)");
 
     ImGui::Separator();
@@ -6346,7 +6347,7 @@ void App::VerifyEncoder()
 {
     auto report = [&](const std::string& msg) { mBuildResultText = msg; mShowBuildResult = true; };
     const std::string rom = mLauncher.Rom();
-    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.Path() : std::string());
+    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.ImagePath() : std::string());
     if (source.empty()) { report("No source disc — open a disc image or select the game ROM first."); return; }
 
     const VerifyEncodeResult v = VerifyDataTrackEncoding(source);
@@ -6395,9 +6396,9 @@ void App::BuildDisc(IPlatform& platform, bool launch)
     // One source disc supplies both the track layout and the boot header: the selected ROM if
     // there is one, else the disc open in Disc Explorer. Taking the header from one and the
     // tracks from the other built game B's boot sector onto game A's disc.
-    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.Path() : std::string());
+    const std::string source = !rom.empty() ? rom : (mDisc.IsOpen() ? mDisc.ImagePath() : std::string());
     const bool sourceIsOpenDisc = mDisc.IsOpen() &&
-        (rom.empty() || mDisc.Path() == rom || SameFile(mDisc.Path(), rom));
+        (rom.empty() || mDisc.ImagePath() == rom || SameFile(mDisc.ImagePath(), rom));
 
     IsoBuildOptions iso;
     iso.rootDir = dataDir;
@@ -6408,8 +6409,9 @@ void App::BuildDisc(IPlatform& platform, bool launch)
     const std::string ipPath = dataDir + "/IP.BIN";
     if (PathExists(ipPath))
     {
-        std::ifstream f(ipPath, std::ios::binary);
-        iso.ipBin.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        std::string bytes;
+        if (!ReadWholeFile(ipPath, bytes)) { report("Could not read " + ipPath); return; }
+        iso.ipBin.assign(bytes.begin(), bytes.end());
         if (iso.ipBin.size() > 32768) iso.ipBin.resize(32768);
         ipSource = "IP.BIN in the Data Directory";
     }
@@ -6429,7 +6431,7 @@ void App::BuildDisc(IPlatform& platform, bool launch)
         };
         DiscImage src;
         if (sourceIsOpenDisc && grab(mDisc, mDiscFs))
-            ipSource = "the open disc image (" + PathBasename(mDisc.Path()) + ")";
+            ipSource = "the open disc image (" + PathBasename(mDisc.ImagePath()) + ")";
         else if (!rom.empty() && src.Open(rom) && grab(src, IsoParse(src.Reader())))
             ipSource = "the selected ROM (" + PathBasename(rom) + ")";
     }

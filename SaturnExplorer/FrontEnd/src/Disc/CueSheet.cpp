@@ -231,6 +231,14 @@ std::vector<CueTrackRange> CueTrackRanges(
         else
         {
             out[i].length = (endBytes - out[i].offset) / t.sectorSize * t.sectorSize;
+            // Every index has to land on a sector the track actually has. One at or past the
+            // end (the file's last sector, or the next track's start in a shared file) would be
+            // written into a cue that points outside the copied track.
+            const uint64_t endFrame = endBytes / t.sectorSize;
+            for (const CueIndex& idx : t.indices)
+                if (idx.frames >= endFrame && out[i].problem.empty())
+                    out[i].problem = "its INDEX " + std::to_string(idx.number) +
+                                     " lies beyond the end of the track";
         }
     }
     return out;

@@ -504,6 +504,47 @@ int main()
         Check(lib.Count() == 1, "and its record is kept");
     }
 
+    // --- A backslash in a POSIX file name is part of the name, not a separator ---
+    // RelativePathUnder used to fold it to '/', so a match in "foo\\bar.bin" was recorded as
+    // foo/bar.bin and the script patched that other file instead.
+#ifndef _WIN32
+    {
+        std::string rel;
+        Check(RelativePathUnder("/d", "/d/foo\\bar.bin", rel) && rel == "foo\\bar.bin",
+              "a POSIX backslash survives into the relative path");
+
+        const char* py3 = std::getenv("SE_PYTHON");
+        const std::string python = py3 ? py3 : "python3";
+        if (std::system((python + " --version >/dev/null 2>&1").c_str()) == 0)
+        {
+            char tmpl[] = "/tmp/se_patch_bsXXXXXX";
+            const char* dir = mkdtemp(tmpl);
+            Check(dir != nullptr, "made scratch data dir");
+            const std::string root = dir ? dir : "";
+            Check(std::system(("mkdir -p '" + root + "/foo'").c_str()) == 0, "made foo/");
+            const std::string literal = root + "/foo\\bar.bin";   // one file, backslash in its name
+            const std::string nested = root + "/foo/bar.bin";
+            { std::ofstream f(literal, std::ios::binary); f << "AAAA"; }
+            { std::ofstream f(nested, std::ios::binary); f << "AAAA"; }
+
+            Check(RelativePathUnder(root, literal, rel), "the literal file is under the root");
+            PatchLibrary lib;
+            Check(lib.AddOrUpdate(Loc("bs", 0x200000, 2, rel.c_str(), 1, {'A', 'A'})),
+                  "the backslash location is recorded");
+            MemStub mem; mem.mem.push_back({0x200000, {'Z', 'Z'}});
+            std::vector<PatchOutcome> oc;
+            const std::string script = lib.EmitPython(
+                [&](uint32_t a, uint32_t l, std::vector<uint8_t>& o) { return mem.Read(a, l, o); }, oc);
+            { std::ofstream f(root + "/se_patch.py", std::ios::binary); f << script; }
+            Check(std::system((python + " '" + root + "/se_patch.py' >/dev/null 2>&1").c_str()) == 0,
+                  "the script runs");
+            Check(ReadFile(literal) == "AZZA", "the matched file is patched");
+            Check(ReadFile(nested) == "AAAA", "the look-alike nested file is untouched");
+            BestEffort("rm -rf '" + root + "'");
+        }
+    }
+#endif
+
     // --- Numeric fields must be whole, in range and unsigned ---
     // strtoul stopped at the first bad character and wrapped on overflow, so each of these
     // loaded as a plausible mapping (the first became 0x00200000, length 1, offset 0).
@@ -593,8 +634,10 @@ int main()
               "a nested match keeps its directory");
         Check(RelativePathUnder("/a/data/", "/a/data/x.bin", rel) && rel == "x.bin",
               "a trailing separator on the root is fine");
+#ifdef _WIN32
         Check(RelativePathUnder("C:\\g\\data", "C:\\g\\data\\x.bin", rel) && rel == "x.bin",
               "Windows separators");
+#endif
         Check(!RelativePathUnder("/b/data", "/a/data/sub/target.bin", rel),
               "a path outside the root is refused, not reduced to its file name");
         Check(!RelativePathUnder("/a/data", "/a/database/x.bin", rel), "a sibling prefix is not inside");

@@ -85,6 +85,10 @@ std::string CreateStagingFile(const std::string& path, std::string& error);
 // Windows the full path). "" when it does not exist or cannot be resolved.
 std::string CanonicalPath(const std::string& path);
 
+// True when something exists at 'path' itself -- a dangling symlink included, which
+// FileOrDirectoryExists (it follows links) would report as absent.
+bool PathEntryExists(const std::string& path);
+
 // True when 'path' exists and is not a regular file (a directory, device, FIFO or socket).
 bool ExistsAsNonRegularFile(const std::string& path);
 

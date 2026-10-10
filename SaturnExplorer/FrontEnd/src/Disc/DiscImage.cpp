@@ -45,14 +45,14 @@ bool DiscImage::Open(const std::string& path)
 {
     Close();
     mPath = path;
+    mImagePath = path;
 
     // A .cue just names the real image; open the first FILE it references (raw 2352 track).
     std::string dataPath = path;
     if (Lower(path).size() >= 4 && Lower(path).substr(Lower(path).size() - 4) == ".cue")
     {
-        std::ifstream cue(path, std::ios::binary);
-        if (!cue) return false;
-        std::string text((std::istreambuf_iterator<char>(cue)), std::istreambuf_iterator<char>());
+        std::string text;
+        if (!ReadWholeFile(path, text)) return false;
         const std::string file = CueFirstFile(text);
         if (file.empty()) return false;
         dataPath = DirOf(path) + file;

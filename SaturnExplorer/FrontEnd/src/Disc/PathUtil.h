@@ -4,6 +4,7 @@
 // each translation unit's anonymous namespace.
 #pragma once
 
+#include <fstream>
 #include <string>
 
 namespace sfe
@@ -50,6 +51,25 @@ inline bool IEqualsExt(const std::string& name, const std::string& suffix)
 inline bool IEquals(const std::string& a, const std::string& b)
 {
     return a.size() == b.size() && IEqualsExt(a, b);
+}
+
+// Read a whole file into 'out'. False when it cannot be opened or a read fails part way.
+// istreambuf_iterator is not usable for this: libstdc++ throws from inside it on a read error
+// (basic_filebuf::underflow), and before that a prefix is all the caller would have seen.
+// istream::read catches that and sets badbit, which is what is checked here.
+inline bool ReadWholeFile(const std::string& path, std::string& out)
+{
+    out.clear();
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    char buf[64 * 1024];
+    for (;;)
+    {
+        f.read(buf, sizeof buf);
+        if (f.bad()) return false;
+        out.append(buf, size_t(f.gcount()));
+        if (f.eof()) return true;
+    }
 }
 
 }  // namespace sfe

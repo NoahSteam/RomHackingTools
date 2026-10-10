@@ -308,6 +308,17 @@ char PathSeparator()
     return kSep;
 }
 
+bool PathEntryExists(const std::string& path)
+{
+    if (path.empty()) return false;
+#ifdef _WIN32
+    return ::GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES;
+#else
+    struct stat st;
+    return ::lstat(path.c_str(), &st) == 0;
+#endif
+}
+
 // Staging must not be used for these; see WriteFileAtomically in the header.
 bool ExistsAsNonRegularFile(const std::string& path)
 {

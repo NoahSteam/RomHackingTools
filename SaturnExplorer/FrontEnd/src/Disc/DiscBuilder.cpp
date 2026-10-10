@@ -126,20 +126,68 @@ struct Staging
         return temp;
     }
     // Move every staged file into place, the cue last so it never names a track that is not
-    // there yet. Stops at the first failure.
+    // there yet. All or nothing: each previous output is first moved aside, and if any step
+    // fails every published file is taken back out and the previous ones are put back, so a
+    // failure here cannot leave new tracks beside an old cue.
     bool Publish(std::string& error)
     {
+        struct Saved { std::string final, backup; };
+        std::vector<Saved> saved;
+        std::vector<std::string> published;
+        bool failed = false;
+
+        for (const StagedOutput& o : outputs)
+        {
+            if (!PathEntryExists(o.final)) continue;
+            std::string why;
+            const std::string backup = CreateStagingFile(o.final, why);
+            if (backup.empty() || !PublishFile(o.final, backup, why))
+            {
+                if (!backup.empty()) RemoveFile(backup);
+                error = "Could not move the previous " + o.final + " aside: " + why;
+                failed = true;
+                break;
+            }
+            saved.push_back({ o.final, backup });
+        }
         for (StagedOutput& o : outputs)
         {
+            if (failed) break;
             std::string why;
             if (!PublishFile(o.temp, o.final, why))
             {
                 error = "Could not move the finished output into place: " + why;
-                return false;
+                failed = true;
+                break;
             }
+            published.push_back(o.final);
             o.temp.clear();
         }
-        return true;
+
+        if (!failed)
+        {
+            for (const Saved& b : saved) RemoveFile(b.backup);
+            return true;
+        }
+
+        // Roll back: new files out, previous ones back in.
+        std::string stuck;
+        for (const std::string& f : published)
+        {
+            bool hadPrevious = false;
+            for (const Saved& b : saved) if (b.final == f) hadPrevious = true;
+            if (!hadPrevious) RemoveFile(f);
+        }
+        for (const Saved& b : saved)
+        {
+            std::string why;
+            if (!PublishFile(b.backup, b.final, why)) stuck += "\n  " + b.backup + " (was " + b.final + ")";
+        }
+        if (!stuck.empty())
+            error += "\nThe previous output could not be fully restored; it is kept as:" + stuck;
+        else
+            error += "\nThe previous output was restored unchanged.";
+        return false;
     }
 };
 
@@ -165,16 +213,10 @@ DiscBuildResult BuildDiscImage(const DiscBuildOptions& opt)
     if (!opt.sourceImage.empty()) sources.push_back(opt.sourceImage);
     if (opt.binCue && IEqualsExt(opt.sourceImage, ".cue"))
     {
-        std::ifstream cf(opt.sourceImage, std::ios::binary);
-        if (!cf)
+        std::string text;
+        if (!ReadWholeFile(opt.sourceImage, text))
         {
             r.error = "Could not read the source CUE: " + opt.sourceImage;
-            return r;
-        }
-        std::string text((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
-        if (cf.bad())
-        {
-            r.error = "Read error on the source CUE: " + opt.sourceImage;
             return r;
         }
         sheet = ParseCueText(text, DirOf(opt.sourceImage));
@@ -382,8 +424,8 @@ VerifyEncodeResult VerifyDataTrackEncoding(const std::string& sourceImage)
     uint32_t    startLba = 0;
     if (IEqualsExt(sourceImage, ".cue"))
     {
-        std::ifstream cf(sourceImage, std::ios::binary);
-        std::string text((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+        std::string text;
+        if (!ReadWholeFile(sourceImage, text)) { v.error = "Could not read the source cue."; return v; }
         const CueSheet sheet = ParseCueText(text, DirOf(sourceImage));
         if (!sheet.ok) { v.error = "Could not parse the source cue: " + sheet.error; return v; }
         const CueTrack& t1 = sheet.tracks[0];
