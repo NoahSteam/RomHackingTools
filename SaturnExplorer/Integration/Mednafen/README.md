@@ -51,6 +51,12 @@ lists the rest in its Log on connect:
 
 `Integration/install.py` sets all three.
 
+Saving to one of Mednafen's own numbered slots (Run → Save Emulator State, protocol v25, `ESV`)
+needs none of them: the emulator writes the slot F5 would, by path, at its next frame boundary --
+the end of the running frame, or the frame gate while paused -- and keeps running. It is the
+counterpart of the emulator-slot load (`ELS`), which does need the gate, and like any load leaves
+the emulator running.
+
 `apply.py` copies the portable server (`../Common/se_export.{c,h}` + `SeLiveProtocol.h`)
 and the glue (`se_mednafen_glue.c`, with `SE_MEDNAFEN_WIRED` defined) into `src/ss/`,
 appends the accessors (§"Accessors") to `vdp1.cpp`/`vdp2.cpp`/`ss.cpp`, injects one

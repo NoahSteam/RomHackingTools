@@ -167,6 +167,7 @@ int SsDbgQueryKeyMap(unsigned int, int out[13]) { for (int i = 0; i < 13; ++i) o
 const char* SsDbgPortDeviceName(unsigned int) { return ""; }
 int SsDbgEmuSlotInfo(unsigned, unsigned long long*) { return 0; }
 int SsDbgEmuLoadSlot(unsigned) { return -1; }
+int SsDbgEmuSaveSlot(unsigned) { return -1; }
 
 // A full state: every array this test models, in a fixed order.
 struct Blob { void* p; size_t n; };

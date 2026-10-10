@@ -634,8 +634,10 @@ static unsigned           sPendingStateEpoch;
  * applied at the top of the next frame, and the state at the end of this one IS the state at the
  * top of that one. Taken part-way through the frame it would not be, and the game would resume
  * subtly off its original course (found by replaying a restored frame against the original run). */
+static void SeServiceEmuSave(void);
 void SeExportEndFrame(void)
 {
+    SeServiceEmuSave();   /* a frame just ended: the state is whole */
     if (!sPendingState) return;
     sPendingState = 0;
     SeStateCapture(sPendingStateFrame, sPendingStateEpoch);
@@ -829,11 +831,32 @@ static SeEmuSlotLoadFn sEmuSlotLoad;
 /* Latched by the ELS verb, applied by the gate on the emulate thread (0 = none pending,
  * else slot + 1) so the emulator's own loader never runs underneath a mid-frame CPU. */
 static volatile int sEmuLoadPending;
+/* The save half (v25, ESV). Latched the same way; taken at the next frame boundary -- whichever
+ * comes first of the end of the running frame and the frame gate -- because the emulator's state
+ * is only whole between frames. The end-of-frame half is what makes it work on a build without
+ * the gate; the gate half is what makes it work while paused, when no frame ends. */
+typedef int (*SeEmuSlotSaveFn)(unsigned int slot);
+static SeEmuSlotSaveFn sEmuSlotSave;
+static volatile int sEmuSavePending;
 
 void SeExportSetEmuSlotHooks(SeEmuSlotInfoFn info, SeEmuSlotLoadFn load)
 {
     sEmuSlotInfo = info;
     sEmuSlotLoad = load;
+}
+
+void SeExportSetEmuSlotSaveHook(SeEmuSlotSaveFn save)
+{
+    sEmuSlotSave = save;
+}
+
+/* Emulate thread, between frames only. */
+static void SeServiceEmuSave(void)
+{
+    const int pending = SeAtXchg(&sEmuSavePending, 0);
+    if (pending == 0) return;
+    if (!sEmuSlotSave || sEmuSlotSave((unsigned int)(pending - 1)) != 0)
+        SeExportLog("save slot: the emulator could not write it");
 }
 
 /* ---- Port device-type hook (v12+). apply.py wires this to the emulator's port map so
@@ -1263,6 +1286,8 @@ static int SeGateDecide(int frameBoundary)
     else
     {
         SeAtStore(&sGateSeen, 1);   /* the frame gate is wired: pause, frame step and loads work */
+        /* Before the loads: a save asked for before a load is of the state the load replaces. */
+        SeServiceEmuSave();
     }
     /* Apply a pending rewind (LST) here, on the emulate thread at a frame boundary,
      * before honoring the pause: a load always leaves the emulator paused on frame N. */
@@ -2007,6 +2032,13 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
                 SeRestoreFailed();   /* no slot hook in this build, or no such slot */
             }
         }
+        else if (memcmp(req, SE_LIVE_VERB_EMUSAVE, SE_LIVE_VERB_LEN) == 0)
+        {
+            /* Save one of the emulator's own slots (v25). No payload, no pause: the emulate
+             * thread writes it at the next frame boundary and the game carries on. A second save
+             * before then just retargets the first -- there is only one state to write. */
+            if (sEmuSlotSave && arg < SE_LIVE_EMU_SLOTS) SeAtStore(&sEmuSavePending, (int)arg + 1);
+        }
         else if (memcmp(req, SE_LIVE_VERB_INPUT, SE_LIVE_VERB_LEN) == 0)
         {
             /* Inject controller state: arg packs port (high 16) + SE_PAD_* mask (low
@@ -2085,6 +2117,7 @@ static void SeServeClientLoop(SeConn cl, SeFrame* snap)
             unsigned int caps = SeAtLoad(&sDebugCaps);
             if (sWriteVdpByte)       caps |= SE_LIVE_CAP_VDP_POKE;
             if (SeAtLoad(&sGateSeen)) caps |= SE_LIVE_CAP_FRAME_GATE;
+            if (sEmuSlotSave)        caps |= SE_LIVE_CAP_EMU_SAVE;
             SE_SLOCK();
             if (sStateCap && sLoadState) caps |= SE_LIVE_CAP_STATE_REWIND;   /* the worker sized a real state */
             SE_SUNLOCK();
@@ -2505,7 +2538,7 @@ int SeExportInit(void)
      * wired (SeExportSetSaveStateHook); here we only reset the bookkeeping for a fresh session. */
     sStateWorkerStarted = 0; SeAtStore(&sStateWorkerRun, 0); sStateCap = 0;
     sFreeCount = sRawHead = sRawCount = sOutHead = sOutCount = 0;
-    SeAtStore(&sLoadPending, 0); SeAtStore(&sEmuLoadPending, 0);
+    SeAtStore(&sLoadPending, 0); SeAtStore(&sEmuLoadPending, 0); SeAtStore(&sEmuSavePending, 0);
     sPokesApplied = sPokesDropped = 0;
     sStateGen = 1; sKeyGen = 0; sKeyLen = 0; sSinceKeyframe = 0;
     SeAtStore(&sRunning, 1);

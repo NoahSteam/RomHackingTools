@@ -201,6 +201,10 @@ void SeExportSetLoadStateHook(int (*load)(const unsigned char* buf, size_t len))
  * no-op. Call once after SeExportInit. */
 void SeExportSetEmuSlotHooks(int (*info)(unsigned int slot, unsigned long long* mtime),
                              int (*load)(unsigned int slot));
+/* The save half (v25, ESV): save(slot) has the emulator write its own slot; return 0 on success.
+ * Runs on the emulate thread between frames (SeExportEndFrame, or the frame gate while paused).
+ * NULL = not offered (no SE_LIVE_CAP_EMU_SAVE). Call once after SeExportInit. */
+void SeExportSetEmuSlotSaveHook(int (*save)(unsigned int slot));
 
 /* Wire controller input injection (v7+), so the Saturn Explorer controller panel can
  * drive the running game directly. set(port, buttons) receives the emulator-agnostic

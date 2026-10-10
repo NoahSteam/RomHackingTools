@@ -41,6 +41,7 @@ enum : int
     kMenuIdSaveStateBase = 0xEB00,   // + save-state slot
     kMenuIdLoadStateBase = 0xEC00,   // + save-state slot
     kMenuIdEmuLoadBase   = 0xED00,   // + the emulator's own save-state slot
+    kMenuIdEmuSaveBase   = 0xED80,   // + the emulator's own save-state slot (save)
     kMenuIdDumpTexBase   = 0xEE00    // + LayerId (Data > Dump Textures)
 };
 
@@ -112,6 +113,7 @@ enum class MenuCommand
     SaveState,            // uses index (slot)
     LoadState,            // uses index (slot)
     LoadEmulatorState,    // uses index (slot); the emulator's own slots
+    SaveEmulatorState,    // uses index (slot); the emulator writes its own slot
     // Data
     DumpMemory,
     DumpTextures,         // uses index (LayerId)
@@ -186,6 +188,7 @@ struct NativeMenuState
     bool slotOccupied[kNativeStateSlots] = {};
     // The emulator's own slots, reported by it (see LiveDriver's se_live_emu_slots).
     bool emuSlotsOffered = false;
+    bool emuSaveEnabled = false;     // the emulator can write its own slots (v25)
     bool emuSlotOccupied[kNativeStateSlots] = {};
 
     // --- Data ---

@@ -249,6 +249,7 @@ private:
     void DoSaveState(int slot);
     void DoLoadState(int slot);
     void DoLoadEmulatorState(int slot);
+    void DoSaveEmulatorState(int slot);
     // Refresh the emulator's own save-slot inventory from the live driver. Cheap; polled
     // each frame so the menu reflects a state saved in the emulator while SE is attached.
     void RefreshEmulatorSlots();

@@ -273,6 +273,14 @@ static void TestSaveStateEnablement()
     // Unlike Step, save states do not require the emulator to be paused.
     CHECK(!state.paused);
     CHECK(TopBarCommandEnabled(TopBarCommandType::SaveState, state));
+
+    // Saving to the emulator's own slot needs only the emulator's say-so, not a streamed state.
+    state.canSaveState = false;
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveEmulatorState, state));
+    state.canSaveEmulatorState = true;
+    CHECK(TopBarCommandEnabled(TopBarCommandType::SaveEmulatorState, state));
+    state.connected = false;
+    CHECK(!TopBarCommandEnabled(TopBarCommandType::SaveEmulatorState, state));
 }
 
 static void TestNativeMenuIdDecoding()
@@ -306,15 +314,17 @@ static void TestNativeMenuIdDecoding()
     // A fixed (non-indexed) id is left for the platform's own switch.
     CHECK(!NativeMenuDecodeIndexedId(0x1000, 4, 4, 4, a));
     CHECK(!NativeMenuDecodeIndexedId(kMenuIdEmuLoadBase + kNativeStateSlots, 4, 4, 4, a));
+    CHECK(NativeMenuDecodeIndexedId(kMenuIdEmuSaveBase + 3, 2, 2, 2, a));
+    CHECK(a.command == MenuCommand::SaveEmulatorState && a.index == 3);
 
     // No two indexed groups overlap, and no group reaches the Win32 placeholder range (0xEF00)
     // or the system SC_* range (0xF000). The placeholder ids are deliberately NOT decoded, so an
     // overlap would silently turn a disabled caption into a real command.
     const int kBases[] = { kMenuIdLayerBase, kMenuIdEmulatorBase, kMenuIdRecentRomBase,
                            kMenuIdPanelBase, kMenuIdSaveStateBase, kMenuIdLoadStateBase,
-                           kMenuIdEmuLoadBase, kMenuIdDumpTexBase };
+                           kMenuIdEmuLoadBase, kMenuIdEmuSaveBase, kMenuIdDumpTexBase };
     const int kCounts[] = { NM_LAYER_COUNT, 64, 64, 128, kNativeStateSlots, kNativeStateSlots,
-                            kNativeStateSlots, kNativeMenuTextureLayers };
+                            kNativeStateSlots, kNativeStateSlots, kNativeMenuTextureLayers };
     for (size_t i = 0; i < sizeof(kBases) / sizeof(kBases[0]); ++i)
     {
         CHECK(kBases[i] + kCounts[i] <= 0xEF00);

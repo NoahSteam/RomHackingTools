@@ -104,6 +104,7 @@ constexpr int ID_PANEL_BASE     = kMenuIdPanelBase;
 constexpr int ID_SAVESTATE_BASE = kMenuIdSaveStateBase;
 constexpr int ID_LOADSTATE_BASE = kMenuIdLoadStateBase;
 constexpr int ID_EMULOAD_BASE   = kMenuIdEmuLoadBase;
+constexpr int ID_EMUSAVE_BASE   = kMenuIdEmuSaveBase;
 constexpr int ID_DUMPTEX_BASE   = kMenuIdDumpTexBase;
 
 // The Windows-menu categories, in the same fixed display order as App::DrawWindowsMenu, so the
@@ -408,12 +409,14 @@ struct MacMenuBarImpl
             [run addItem:[NSMenuItem separatorItem]];
             NSMenu* save = AddSub(run, @"Save State");
             NSMenu* load = AddSub(run, @"Load State");
+            NSMenu* emuSave = AddSub(run, @"Save Emulator State");
             NSMenu* emu = AddSub(run, @"Load Emulator State");
             for (int i = 0; i < kNativeStateSlots; ++i)
             {
                 AddItem(save, ID_SAVESTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
                 AddItem(load, ID_LOADSTATE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
                 AddItem(emu, ID_EMULOAD_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
+                AddItem(emuSave, ID_EMUSAVE_BASE + i, [NSString stringWithFormat:@"Slot %d", i]);
             }
         }
 
@@ -553,6 +556,7 @@ struct MacMenuBarImpl
             EnableTag(ID_SAVESTATE_BASE + i, s.saveStateEnabled);
             EnableTag(ID_LOADSTATE_BASE + i, s.loadStateEnabled && s.slotOccupied[i]);
             EnableTag(ID_EMULOAD_BASE + i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
+            EnableTag(ID_EMUSAVE_BASE + i, s.emuSaveEnabled);
         }
 
         // Data

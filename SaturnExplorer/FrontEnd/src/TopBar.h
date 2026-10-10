@@ -50,6 +50,8 @@ enum class TopBarCommandType
     LoadState,
     // Load one of the emulator's OWN save slots (it performs the load). 'index' is the slot.
     LoadEmulatorState,
+    // Have the emulator save to one of its OWN slots (it writes the file). 'index' is the slot.
+    SaveEmulatorState,
     DumpMemory,
     // Write one layer's textures to the export folder. 'index' carries the LayerId
     // (sfe::kLayerVdp1 or an se_vdp2_layer); the same export the layer viewer's own
@@ -107,6 +109,8 @@ struct TopBarViewModel
     bool canLoadState = false;
     // The emulator reports its own numbered save slots, so they can be offered too.
     bool hasEmulatorStates = false;
+    // The emulator can write its own slots (v25, SE_LIVE_CAP_EMU_SAVE).
+    bool canSaveEmulatorState = false;
     std::string launchValidationMessage;
     // Patch feature (desktop only): the number of recorded patch locations and whether a Data
     // Directory is set. Both the ImGui Patch menu and the native menu bar read these through

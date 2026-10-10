@@ -88,6 +88,7 @@ constexpr UINT ID_PANEL_BASE     = (UINT)kMenuIdPanelBase;
 constexpr UINT ID_SAVESTATE_BASE = (UINT)kMenuIdSaveStateBase;
 constexpr UINT ID_LOADSTATE_BASE = (UINT)kMenuIdLoadStateBase;
 constexpr UINT ID_EMULOAD_BASE   = (UINT)kMenuIdEmuLoadBase;
+constexpr UINT ID_EMUSAVE_BASE   = (UINT)kMenuIdEmuSaveBase;
 constexpr UINT ID_DUMPTEX_BASE   = (UINT)kMenuIdDumpTexBase;
 // Disabled captions / placeholders (VDP group headings, empty-list "(none)", the Bookmarks /
 // Compare stubs). Each gets a unique id from this range, handed out at rebuild time, rather than
@@ -290,6 +291,7 @@ void Win32MenuBar::RefreshState()
         EnableById(mMenu, ID_SAVESTATE_BASE + (UINT)i, s.saveStateEnabled);
         EnableById(mMenu, ID_LOADSTATE_BASE + (UINT)i, s.loadStateEnabled && s.slotOccupied[i]);
         EnableById(mMenu, ID_EMULOAD_BASE + (UINT)i, s.emuSlotsOffered && s.emuSlotOccupied[i]);
+        EnableById(mMenu, ID_EMUSAVE_BASE + (UINT)i, s.emuSaveEnabled);
     }
 
     // Data
@@ -443,6 +445,7 @@ void Win32MenuBar::Rebuild()
         HMENU save = ::CreatePopupMenu();
         HMENU load = ::CreatePopupMenu();
         HMENU emu = ::CreatePopupMenu();
+        HMENU emuSave = ::CreatePopupMenu();
         for (int i = 0; i < kNativeStateSlots; ++i)
         {
             wchar_t label[16];
@@ -450,9 +453,11 @@ void Win32MenuBar::Rebuild()
             AddItem(save, ID_SAVESTATE_BASE + (UINT)i, label);
             AddItem(load, ID_LOADSTATE_BASE + (UINT)i, label);
             AddItem(emu, ID_EMULOAD_BASE + (UINT)i, label);
+            AddItem(emuSave, ID_EMUSAVE_BASE + (UINT)i, label);
         }
         AddSub(run, save, L"Save State");
         AddSub(run, load, L"Load State");
+        AddSub(run, emuSave, L"Save Emulator State");
         AddSub(run, emu, L"Load Emulator State");
         AddSub(bar, run, L"&Run");
     }

@@ -46,6 +46,9 @@ extern "C" size_t FakeSave(unsigned char* buf, size_t cap)
 extern "C" int FakeLoad(const unsigned char*, size_t) { ++gLoads; return gLoadResult.load(); }
 extern "C" int FakeSlotInfo(unsigned int, unsigned long long* mtime) { *mtime = 1; return 1; }
 extern "C" int FakeSlotLoad(unsigned int) { ++gLoads; return gLoadResult.load(); }
+std::atomic<int> gSaves{ 0 };
+std::atomic<int> gSavedSlot{ -1 };
+extern "C" int FakeSlotSave(unsigned int slot) { gSavedSlot = int(slot); ++gSaves; return 0; }
 
 void Frame()
 {
@@ -151,6 +154,7 @@ int main()
     SeExportSetSaveStateHook(FakeSave);
     SeExportSetLoadStateHook(FakeLoad);
     SeExportSetEmuSlotHooks(FakeSlotInfo, FakeSlotLoad);
+    SeExportSetEmuSlotSaveHook(FakeSlotSave);
 
     se_data_source ds{};
     se_result r = SE_ERR_IO;
@@ -247,6 +251,29 @@ int main()
         Check(Until([&](const Counters& x) { return x.done == b.done + 2; }, ds),
               "two applied restores are two completions");
         Check(Read(ds).failed == b.failed, "and neither is counted as refused");
+    }
+
+    // Saving to the emulator's own slot (v25): advertised, written at a frame boundary, and not a
+    // restore -- neither counter moves, since nothing was loaded and nobody waits on it.
+    {
+        uint32_t caps = 0;
+        se_live_poke_info(&ds, nullptr, nullptr, nullptr, nullptr, &caps);
+        Check((caps & SE_LIVE_CAP_EMU_SAVE) != 0, "a build with the save hook advertises EMU_SAVE");
+        const Counters b = Read(ds);
+        Check(se_live_emu_save_slot(&ds, 4) == 0, "an emulator slot save is accepted");
+        Check(Until([](const Counters&) { return gSaves.load() == 1; }, ds), "the gate writes the slot");
+        Check(gSavedSlot.load() == 4, "the slot asked for");
+        Check(Read(ds).done == b.done && Read(ds).failed == b.failed, "a save is not counted as a restore");
+        Check(se_live_emu_save_slot(&ds, SE_LIVE_EMU_SLOTS) != 0, "a slot past the end is refused");
+
+        // Without the gate (a build without --with-pause), the end of the running frame writes it.
+        RawClient raw;
+        Check(raw.Connect(), "raw client attached for the end-of-frame save");
+        raw.Request(SE_LIVE_VERB_EMUSAVE, 6);
+        for (int i = 0; i < 400 && gSaves.load() < 2; ++i) { SeExportEndFrame(); Sleep(5); }
+        Check(gSaves.load() == 2 && gSavedSlot.load() == 6, "the end of a frame writes the slot too");
+        SeExportEndFrame();
+        Check(gSaves.load() == 2, "and only once");
     }
 
     se_destroy(ctx);

@@ -57,6 +57,7 @@ bool NativeMenuDecodeIndexedId(int id, size_t emulatorCount, size_t recentRomCou
         { kMenuIdSaveStateBase, kNativeStateSlots,         MenuCommand::SaveState },
         { kMenuIdLoadStateBase, kNativeStateSlots,         MenuCommand::LoadState },
         { kMenuIdEmuLoadBase,   kNativeStateSlots,         MenuCommand::LoadEmulatorState },
+        { kMenuIdEmuSaveBase,   kNativeStateSlots,         MenuCommand::SaveEmulatorState },
         { kMenuIdDumpTexBase,   kNativeMenuTextureLayers,  MenuCommand::DumpTextures },
     };
     for (const Group& g : groups)
@@ -95,6 +96,7 @@ bool NativeMenuActionToCommand(const NativeMenuAction& a, TopBarCommand& out)
     case MenuCommand::SaveState:         out = TopBarCommand(TopBarCommandType::SaveState, a.index); return true;
     case MenuCommand::LoadState:         out = TopBarCommand(TopBarCommandType::LoadState, a.index); return true;
     case MenuCommand::LoadEmulatorState: out = TopBarCommand(TopBarCommandType::LoadEmulatorState, a.index); return true;
+    case MenuCommand::SaveEmulatorState: out = TopBarCommand(TopBarCommandType::SaveEmulatorState, a.index); return true;
     case MenuCommand::DumpMemory:        out = TopBarCommand(TopBarCommandType::DumpMemory); return true;
     case MenuCommand::DumpTextures:      out = TopBarCommand(TopBarCommandType::DumpTextures, a.index); return true;
     case MenuCommand::DumpSh2:           out = TopBarCommand(TopBarCommandType::DumpSh2); return true;

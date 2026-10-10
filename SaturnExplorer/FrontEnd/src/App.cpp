@@ -6858,6 +6858,10 @@ TopBarViewModel App::BuildTopBarViewModel() const
     vm.canLoadState = se_supports_state_rewind(mLiveCtx ? mLiveCtx : mContext) != 0 &&
                       LiveHas(SE_LIVE_CAP_FRAME_GATE) && LiveHas(SE_LIVE_CAP_STATE_REWIND);
     vm.hasEmulatorStates = vm.hasEmulatorStates && LiveHas(SE_LIVE_CAP_FRAME_GATE);
+    // Explicit version check: LiveHas answers yes for a pre-v24 server, which has no ESV at all.
+    vm.canSaveEmulatorState = mEmuSlotCount > 0 &&
+                              se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_EMUSAVE &&
+                              LiveHas(SE_LIVE_CAP_EMU_SAVE);
 #endif
     vm.launchValid = mLaunchValidation.valid;
     vm.launchValidationMessage = mLaunchValidation.message;
@@ -7441,6 +7445,25 @@ void App::DrawStateMenu(const TopBarViewModel& state, std::vector<TopBarCommand>
         }
         ImGui::EndMenu();
     }
+    // The emulator's own slots, written by the emulator -- the ones its save-state hotkeys use, so
+    // a state saved here also loads from inside the emulator and survives without Saturn Explorer.
+    if (ImGui::BeginMenu("Save to Emulator Slot",
+                         TopBarCommandEnabled(TopBarCommandType::SaveEmulatorState, state)))
+    {
+        for (uint32_t i = 0; i < mEmuSlotCount; ++i)
+        {
+            char label[64];
+            std::snprintf(label, sizeof(label), "Slot %u%s", i, mEmuSlotPresent[i] ? "" : "  (empty)");
+            if (ImGui::MenuItem(label))
+                commands.emplace_back(TopBarCommandType::SaveEmulatorState, static_cast<int>(i));
+            if (mEmuSlotPresent[i])
+            {
+                ImGui::SameLine();
+                ImGui::TextDisabled("  %s", FormatLocalTime(mEmuSlotMtime[i]).c_str());
+            }
+        }
+        ImGui::EndMenu();
+    }
     // Load offers the emulator's own slots too, so it opens even when Saturn Explorer has
     // no state of its own to save.
     if (ImGui::BeginMenu("Load State", TopBarCommandEnabled(TopBarCommandType::LoadState, state) ||
@@ -7794,6 +7817,23 @@ void App::DoLoadEmulatorState(int slot)
     mStateStatus = msg;
     mLog.Info(mStateStatus, se_frame_number(mContext));
 }
+
+void App::DoSaveEmulatorState(int slot)
+{
+    // The emulator writes the file itself, at its next frame boundary, and keeps running: nothing
+    // is restored, so the recorded history and any pending edits all stay. The slot inventory that
+    // rides on every reply shows the new file once it is written.
+    if (se_live_emu_save_slot(&mDataSource, static_cast<uint32_t>(slot)) != 0)
+    {
+        mStateStatus = "The emulator slot save was not sent.";
+        mLog.Error(mStateStatus, se_frame_number(mContext));
+        return;
+    }
+    char msg[96];
+    std::snprintf(msg, sizeof(msg), "Saving emulator slot %d.", slot);
+    mStateStatus = msg;
+    mLog.Info(mStateStatus, se_frame_number(mContext));
+}
 #endif  // SE_ENABLE_LIVE
 
 // "Launch Session" — the nested toolbar menu. One "Launch" button + a down-arrow open
@@ -8059,6 +8099,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
     case TopBarCommandType::SaveState: DoSaveState(command.index); break;
     case TopBarCommandType::LoadState: DoLoadState(command.index); break;
     case TopBarCommandType::LoadEmulatorState: DoLoadEmulatorState(command.index); break;
+    case TopBarCommandType::SaveEmulatorState: DoSaveEmulatorState(command.index); break;
 #endif
     case TopBarCommandType::SetDataDirectory:
         mOpenDataDirModal = true;
@@ -8155,6 +8196,7 @@ NativeMenuState App::BuildNativeMenuState(const TopBarViewModel& s) const
     for (int i = 0; i < kNativeStateSlots && i < SavestateSlots::kSlotCount; ++i)
         m.slotOccupied[i] = mSlotOccupied[i];
     m.emuSlotsOffered = s.hasEmulatorStates;
+    m.emuSaveEnabled = TopBarCommandEnabled(TopBarCommandType::SaveEmulatorState, s);
     for (int i = 0; i < kNativeStateSlots && i < static_cast<int>(mEmuSlotCount); ++i)
         m.emuSlotOccupied[i] = mEmuSlotPresent[i] != 0;
 #endif

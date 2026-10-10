@@ -221,6 +221,7 @@ static uint32_t MinVerFor(const char* verb)
     if (is(SE_LIVE_VERB_WRITESND))  return SE_LIVE_MINVER_WRITESND;
     if (is(SE_LIVE_VERB_TRACE))     return SE_LIVE_MINVER_TRACE;
     if (is(SE_LIVE_VERB_REWIND))    return SE_LIVE_MINVER_REWIND;
+    if (is(SE_LIVE_VERB_EMUSAVE))   return SE_LIVE_MINVER_EMUSAVE;
     return 0u;
 }
 
@@ -369,6 +370,8 @@ struct LiveState
     bool                  emuSlotsValid = false;
     // Pending ELS (v17): slot + 1, or 0 for none. Guarded by ctlMtx.
     int                   emuLoadSlot = 0;
+    // Pending ESV (v25): slot + 1, or 0 for none. Guarded by ctlMtx.
+    int                   emuSaveSlot = 0;
     // State loads (LST or ELS) accepted and not yet seen settled. Pokes are refused while any is
     // outstanding: one queued before the load ships is cleared with the queue, and one sent after
     // it would land on the restored state it was never made against. Settled means the server's
@@ -1273,6 +1276,7 @@ void ForgetConnection(LiveState* st)
         st->loadPayload.clear();
         st->loadDirty = false;
         st->emuLoadSlot = 0;
+        st->emuSaveSlot = 0;
         st->pending = Ctl::None;
         st->stepFrames = 0;
         st->stepInsns = 0;
@@ -1333,7 +1337,15 @@ void PollLoop(LiveState* st)
         if (handshaken)
         {
             std::lock_guard<std::mutex> lk(st->ctlMtx);
-            if (st->loadDirty)
+            if (st->emuSaveSlot != 0)
+            {
+                // Emulator-native slot save (v25). Ahead of the loads so a save the user made
+                // before loading writes the state the load is about to replace.
+                verb = SE_LIVE_VERB_EMUSAVE;
+                arg = st->emuSaveSlot - 1;
+                st->emuSaveSlot = 0;
+            }
+            else if (st->loadDirty)
             {
                 // Rewind (v16) takes top priority: one atomic LST (restore + edits + resume).
                 verb = SE_LIVE_VERB_LOADSTATE;
@@ -2249,6 +2261,22 @@ extern "C" int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot)
         if (!st->connected || !EditTargetIsCurrent(st) || st->emuLoadSlot != 0) { return -1; }
         st->emuLoadSlot = static_cast<int>(slot) + 1;   // poll thread ships ELS next cycle
         NoteRestoreSubmitted(st);
+        return 0;
+    });
+}
+
+extern "C" int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot)
+{
+    if (!ds || !ds->user || ds->close != CbClose || slot >= SE_LIVE_EMU_SLOTS) { return -1; }
+    return se::Guard(-1, [&]() -> int
+    {
+        LiveState* st = St(ds->user);
+        std::lock_guard<std::mutex> lk(st->ctlMtx);
+        // Aimed at the emulator on screen, like a load: a save meant for one run must not land in
+        // the slots of the process that replaced it. Nothing is restored, so no restore wait.
+        if (!st->connected || !EditTargetIsCurrent(st) ||
+            st->serverVersion.load() < SE_LIVE_MINVER_EMUSAVE) { return -1; }
+        st->emuSaveSlot = static_cast<int>(slot) + 1;   // poll thread ships ESV next cycle
         return 0;
     });
 }

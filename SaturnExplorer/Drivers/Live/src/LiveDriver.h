@@ -128,6 +128,11 @@ void se_live_set_tracepoints(const se_data_source* ds, const uint8_t* descs, uin
 uint32_t se_live_emu_slots(const se_data_source* ds, uint8_t* present,
                            uint64_t* mtime, uint32_t max);
 int se_live_emu_load_slot(const se_data_source* ds, uint32_t slot);
+/* Have the emulator save one of its own slots (v25+, SE_LIVE_CAP_EMU_SAVE), the one its save
+ * hotkey for that slot writes. It is written at the emulator's next frame boundary and the game
+ * carries on; the slot inventory above shows it once written (present, newer mtime). Returns 0
+ * when queued, nonzero when refused (same reasons as a load, or a server older than v25). */
+int se_live_emu_save_slot(const se_data_source* ds, uint32_t slot);
 
 /* Turn rewind capture on or off in the emulator (v18+). The emulator saves a FULL state every
  * frame to feed the rewind timeline, which is the most expensive thing the live tap asks of its

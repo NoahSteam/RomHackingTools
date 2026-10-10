@@ -38,6 +38,9 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
     // them itself -- only on its having reported that it has them.
     case TopBarCommandType::LoadEmulatorState:
         return state.connected && state.hasEmulatorStates;
+    // Saving needs no state received either: the emulator writes its own, at its next frame.
+    case TopBarCommandType::SaveEmulatorState:
+        return state.connected && state.canSaveEmulatorState;
     // Both dumps read the loaded snapshot, so both need a source and an idle app. A layer
     // being switched off in the Layers menu is not a reason to gray its export: the export
     // renders that layer on its own regardless of the composite's toggles.

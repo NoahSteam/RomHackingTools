@@ -618,7 +618,7 @@ extern "C" size_t SsDbgSaveState(unsigned char* buf, size_t cap) { (void)buf; (v
 extern "C" int    SsDbgLoadState(const unsigned char* buf, size_t len) { (void)buf; (void)len; return -1; }
 #endif"""
 
-# Emulator-native save slots (v17). Lets Saturn Explorer list and load Mednafen's OWN numbered
+# Emulator-native save slots (v17; saving them v25). Lets Saturn Explorer list, load and save Mednafen's OWN numbered
 # save slots -- the ones F5/F7 use -- which it cannot find itself: the path depends on the base
 # directory, the filesys.path_state setting and an MD5 of the disc. MDFN_MakeFName builds it,
 # and MDFNI_LoadState is given that path explicitly rather than going through MDFNI_SelectState,
@@ -642,6 +642,12 @@ extern "C" int SsDbgEmuSlotInfo(unsigned slot, unsigned long long* mtime) {
 extern "C" int SsDbgEmuLoadSlot(unsigned slot) {
  try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);
        return Mednafen::MDFNI_LoadState(p.c_str(), NULL) ? 0 : -1;
+ } catch(...) { return -1; } }
+/* v25: write the slot F5 would, by path for the same reason as the load. No preview image: the
+   frame's surface is not reachable from the frame boundary, and MDFNSS_SaveSM accepts none. */
+extern "C" int SsDbgEmuSaveSlot(unsigned slot) {
+ try { const std::string p = Mednafen::MDFN_MakeFName(Mednafen::MDFNMKF_STATE, (int)slot, NULL);
+       return Mednafen::MDFNI_SaveState(p.c_str(), NULL, NULL, NULL, NULL) ? 0 : -1;
  } catch(...) { return -1; } }"""
 
 SMPC_INPUT_DECL = """\

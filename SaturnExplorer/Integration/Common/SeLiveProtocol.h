@@ -55,7 +55,9 @@
 #define SE_LIVE_MAGIC1 'E'
 #define SE_LIVE_MAGIC2 'X'
 #define SE_LIVE_MAGIC3 'P'
-#define SE_LIVE_VERSION      24u   /* +v24 the capability word reports what this build really has:
+#define SE_LIVE_VERSION      25u   /* +v25 ESV: have the emulator save one of its own numbered slots
+                                  * (SE_LIVE_CAP_EMU_SAVE says the build can).
+                                  * +v24 the capability word reports what this build really has:
                                   * the frame gate, rewind save/load, and the debugger hooks
                                   * (SE_LIVE_CAP_* below). A client gates those controls on the bits
                                   * from SE_LIVE_MINVER_CAPS on; older servers report only VDP_POKE.
@@ -146,6 +148,13 @@
                                         * save-state hotkeys use, through its own code. So the
                                         * client cannot know the frame it lands on and must
                                         * treat its recorded history as gone. No payload. */
+#define SE_LIVE_VERB_EMUSAVE "ESV\n" /* save to an emulator-native slot (v25+, SE_LIVE_CAP_EMU_SAVE):
+                                        * arg = slot index. The counterpart of ELS: the emulator
+                                        * writes its OWN numbered slot through its own code, at the
+                                        * next frame boundary (the end of the running frame, or the
+                                        * frame gate while paused). Nothing is restored, so the
+                                        * session and its history carry on. No payload; the result
+                                        * shows up in the slot inventory's mtime. */
 #define SE_LIVE_VERB_REWIND  "REW\n" /* enable/disable rewind capture (v18+): arg 1 captures a
                                         * savestate per frame, arg 0 stops. No payload.
                                         *
@@ -333,6 +342,7 @@
 #define SE_LIVE_MINVER_WRITESND  13u    /* WRS */
 #define SE_LIVE_MINVER_LOADSTATE 16u    /* LST */
 #define SE_LIVE_MINVER_REWIND    18u    /* REW */
+#define SE_LIVE_MINVER_EMUSAVE   25u    /* ESV (no payload, but an older server would read it as a GET) */
 
 #define SE_LIVE_MAX_BKPT_DESCS   1024u              /* BKP: descriptors in one install */
 #define SE_LIVE_MAX_TRACE_DESCS  256u               /* TRACE: descriptors in one install */
@@ -431,6 +441,7 @@
 #define SE_LIVE_CAP_MEM_WATCH   16u  /* data (read/write) watchpoints halt */
 #define SE_LIVE_CAP_INSN_STEP   32u  /* IST single-steps the halted CPU */
 #define SE_LIVE_CAP_TRACEPOINTS 64u  /* TRC tracepoints fire */
+#define SE_LIVE_CAP_EMU_SAVE   128u  /* ESV saves the emulator's own slots (v25+) */
 #define SE_LIVE_MINVER_CAPS     24u  /* servers older than this report only SE_LIVE_CAP_VDP_POKE */
 #define SE_LIVE_MINVER_POKEINFO 23u  /* servers older than this send no poke counters or caps */
 #define SE_LIVE_SH2_REGS_LEN    92u        /* one CPU: 23 u32 (R[16],SR,GBR,VBR,MACH,MACL,PR,PC) */
