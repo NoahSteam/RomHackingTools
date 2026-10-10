@@ -31,7 +31,7 @@ std::shared_ptr<MemSnapshot> Blank(uint64_t frame)
     {
         MemRegionImage img;
         img.id = static_cast<RegionId>(i);
-        img.bytes.assign(Traits(img.id).size, 0);
+        img.bytes.assign(SnapshotSize(img.id), 0);
         s->regions.push_back(std::move(img));
     }
     return s;
@@ -48,7 +48,7 @@ ImGuiTable* FindTable(int columns)
     return nullptr;
 }
 
-// A comparison with HWRAM changed at 0x10 (row 1) and 0x4000, and Sound RAM at 0x20.
+// A comparison with HWRAM changed at 0x10 (row 1) and 0x4000, and VDP2 CRAM at 0x20.
 struct Fixture
 {
     MemoryComparePanel panel;
@@ -62,7 +62,7 @@ struct Fixture
     {
         b->regions[Ix(RegionId::Hwram)].bytes[0x10] = 0x5A;
         b->regions[Ix(RegionId::Hwram)].bytes[0x4000] = 0x01;
-        b->regions[Ix(RegionId::SoundRam)].bytes[0x20] = 0x77;
+        b->regions[Ix(RegionId::Vdp2Cram)].bytes[0x20] = 0x77;
         Diff(a, b, DiffOptions(), &diff);
         ApplyTheme(ImGui::GetStyle());
         LoadFonts(ImGui::GetIO());
@@ -88,17 +88,31 @@ struct Fixture
     // plus the table's cell padding, so the last row's bottom edge anchors the count back.
     ImVec2 SummaryRow(int i) const
     {
-        const int rows = 1 + static_cast<int>(kRegionCount);
+        const int rows = 1 + ComparedRegions();
         const ImGuiTable* t = FindTable(4);
         const float rowH = MemoryComparePanel::Metrics().rowH;
         const ImGuiTableColumn& c = t->Columns[0];
         return ImVec2(c.MinX + 40.0f, t->RowPosY2 - (rows - 1 - i) * rowH - rowH * 0.5f);
     }
 
+    static int ComparedRegions()
+    {
+        int n = 0;
+        for (size_t i = 0; i < kRegionCount; ++i) n += InCompare(static_cast<RegionId>(i));
+        return n;
+    }
+    // The summary row of a region: rows are listed in region order, minus the ones left out of comparisons.
+    static int SummaryIndex(int region)
+    {
+        int row = 1;   // 0 is All Memory
+        for (int i = 0; i < region; ++i) row += InCompare(static_cast<RegionId>(i));
+        return row;
+    }
+
     // Click a region's summary row (or All Memory for -1) and let the view rebuild.
     void ClickRegion(int region)
     {
-        h.Click(SummaryRow(region + 1));
+        h.Click(SummaryRow(region < 0 ? 0 : SummaryIndex(region)));
         h.Settle();
     }
 
@@ -129,6 +143,9 @@ void TestParseLocation()
     Check(!MemoryComparePanel::ParseLocation("nonsense", &r), "text is refused");
     Check(!MemoryComparePanel::ParseLocation("NOPE+10", &r), "an unknown region is refused");
     Check(!MemoryComparePanel::ParseLocation("", &r), "empty is refused");
+    // Sound RAM is left out of comparisons, so there is no row to jump to.
+    Check(!MemoryComparePanel::ParseLocation("05A00010", &r), "a Sound RAM address is refused");
+    Check(!MemoryComparePanel::ParseLocation("Sound RAM+10", &r), "and so is Sound RAM+offset");
 
     // Nothing wider than 32 bits may wrap into a valid location (strtoul on a 64-bit long would).
     Check(!MemoryComparePanel::ParseLocation("106034F20", &r), "a 33-bit address is refused, not wrapped to 06034F20");
@@ -147,6 +164,22 @@ void TestParseLocation()
     Check(MemoryComparePanel::ParseLocation("  06034F20  ", &r), "surrounding spaces are fine");
 }
 
+// Sound RAM is rewritten constantly by the 68K and the SCSP, so it is not part of a comparison: no row
+// in the summary, and All Memory counts and sizes without it.
+void TestSoundRamIsNotListed()
+{
+    Fixture f;
+    const ImGuiTable* t = FindTable(4);
+    Check(t != nullptr, "the summary is drawn");
+    if (!t) return;
+    // One row per compared region plus All Memory, by the height of the table's rows.
+    const float rowH = MemoryComparePanel::Metrics().rowH;
+    const int rows = static_cast<int>((t->RowPosY2 - t->InnerRect.Min.y) / rowH + 0.5f) - 1;   // minus the header
+    Check(rows == 1 + Fixture::ComparedRegions(), "the summary lists All Memory and the compared regions only");
+    Check(Fixture::ComparedRegions() == static_cast<int>(kRegionCount) - 1, "exactly one region is left out");
+    Check(!InCompare(RegionId::SoundRam), "and it is Sound RAM");
+}
+
 void TestActionTable()
 {
     using A = MemoryComparePanel::Action;
@@ -158,10 +191,8 @@ void TestActionTable()
     }
     Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Hwram), "HWRAM can break on write");
     Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Vdp2Ram), "VDP2 RAM can break on write");
-    Check(MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::SoundRam), "Sound RAM can (the SH-2 writes it; the 68K's writes just are not seen)");
     Check(!MemoryComparePanel::ActionEnabled(A::BreakOnWrite, RegionId::Vdp1Fb), "VDP1 FB cannot (not a bus write)");
     Check(MemoryComparePanel::ActionEnabled(A::ViewInAssembly, RegionId::Lwram), "LWRAM can show SH-2 code");
-    Check(!MemoryComparePanel::ActionEnabled(A::ViewInAssembly, RegionId::SoundRam), "Sound RAM is not SH-2 code");
     Check(!MemoryComparePanel::ActionEnabled(A::ViewInAssembly, RegionId::Vdp1Ram), "VDP1 RAM is not SH-2 code");
 }
 
@@ -236,9 +267,9 @@ void TestGoTo()
     Check(f.panel.LineCount() > before, "and lists the whole region");
 
     // GoTo into another region while one region is selected follows it there.
-    f.panel.GoTo({ RegionId::SoundRam, 0x20 });
+    f.panel.GoTo({ RegionId::Vdp2Cram, 0x20 });
     f.h.Settle();
-    Check(f.panel.SelectedRegion() == static_cast<int>(RegionId::SoundRam), "GoTo switches to the byte's region");
+    Check(f.panel.SelectedRegion() == static_cast<int>(RegionId::Vdp2Cram), "GoTo switches to the byte's region");
 }
 
 void TestNewComparisonStartsClean()
@@ -298,6 +329,7 @@ int main()
 {
     TestParseLocation();
     TestActionTable();
+    TestSoundRamIsNotListed();
     TestStates();
     TestRegionSelection();
     TestByteSelection();

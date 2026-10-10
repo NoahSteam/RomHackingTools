@@ -113,6 +113,7 @@ std::shared_ptr<const MemSnapshot> CaptureSnapshot(
         const RegionTraits& t = Traits(static_cast<RegionId>(i));
         MemRegionImage& img = snap->regions[i];
         img.id = t.id;
+        if (!InCompare(t.id)) continue;   // not compared: nothing to read, nothing to keep
         // ReadRegionBytes clears its output on any failure, so a half-read region is never kept.
         if (!ReadRegionBytes(backend, t.busBase, t.size, img.bytes))
             return fail("a memory region could not be read");
@@ -149,7 +150,7 @@ DiffStatus Diff(const std::shared_ptr<const MemSnapshot>& a,
         const MemRegionImage& ra = a->regions[i];
         const MemRegionImage& rb = b->regions[i];
         if (ra.id != static_cast<RegionId>(i) || rb.id != ra.id ||
-            ra.bytes.size() != rb.bytes.size() || ra.bytes.size() != Traits(ra.id).size)
+            ra.bytes.size() != rb.bytes.size() || ra.bytes.size() != SnapshotSize(ra.id))
             return DiffStatus::RegionMismatch;
     }
 

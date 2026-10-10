@@ -27,7 +27,11 @@ of thing:
 - **Sound RAM** is visible to the SH-2 at `0x05A00000`, and both CPUs write it: the SH-2 uploads sound
   programs and samples, and the 68K sound CPU runs from it and updates it. The 68K sees the same bytes
   at offset 0. The emulator's write watchpoint matches SH-2 effective addresses and SCU DMA writes, so
-  it catches the first and cannot see the second.
+  it catches the first and cannot see the second. It is described here because an address still
+  resolves to it, but it is **left out of comparisons** (`InCompare`): both CPUs rewrite it every
+  frame, so it differed in nearly every pair of snapshots and drowned the real changes. A snapshot
+  holds no bytes for it (`SnapshotSize(id) == 0`), `Diff` counts nothing for it and refuses a snapshot
+  that does hold some, and `BuildRows`, `WriteCsv` and the external-diff folders skip it.
 
 So every region carries an explicit id, space and capability set, and every location is a
 `RegionRef`, never a bare `uint32_t`:

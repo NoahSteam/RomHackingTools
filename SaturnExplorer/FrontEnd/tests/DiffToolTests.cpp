@@ -43,9 +43,12 @@ MemSnapshot Snapshot(uint64_t frame)
     {
         MemRegionImage img;
         img.id = static_cast<RegionId>(i);
-        img.bytes.assign(Traits(img.id).size, 0);
-        img.bytes[0] = static_cast<uint8_t>(i + 1);
-        img.bytes.back() = 0xEE;
+        img.bytes.assign(SnapshotSize(img.id), 0);
+        if (!img.bytes.empty())
+        {
+            img.bytes[0] = static_cast<uint8_t>(i + 1);
+            img.bytes.back() = 0xEE;
+        }
         s.regions.push_back(std::move(img));
     }
     return s;
@@ -135,6 +138,12 @@ void TestWriteAndPurge()
     {
         const RegionId rid = static_cast<RegionId>(i);
         std::vector<uint8_t> got;
+        if (!InCompare(rid))
+        {
+            // Left out of comparisons: no file, rather than an empty one for the tool to list.
+            CHECK(!Read(a + PathSeparator() + DiffRegionFileName(rid), got));
+            continue;
+        }
         CHECK(Read(a + PathSeparator() + DiffRegionFileName(rid), got));
         CHECK(got == sa.regions[i].bytes);
         CHECK(got.size() == Traits(rid).size);
