@@ -48,3 +48,8 @@ if(SE_BUILD)
       ${SE_BUILD}/lib/libSaturnExplorerCore.a
       ${SE_BUILD}/lib/libSaturnExplorerDriverCommon.a ZLIB::ZLIB)
 endif()
+
+# Cancellation spike (PLAN.md A4). Needs patches/0001-cancel-flag.patch applied to the Ghidra tree.
+find_package(Threads REQUIRED)
+add_executable(cancel_spike cancel_spike.cpp)
+target_link_libraries(cancel_spike PRIVATE ghidra_decomp Threads::Threads)

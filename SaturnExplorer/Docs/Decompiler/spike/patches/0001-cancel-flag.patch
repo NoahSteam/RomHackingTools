@@ -1,0 +1,94 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+index 0ac6895..220ea52 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+@@ -300,6 +300,9 @@ int4 Action::perform(Funcdata &data)
+ {
+   int4 res;
+ 
++  if (data.getArch()->isCancelRequested())
++    throw CancelError("Decompilation cancelled");
++
+   do {
+     switch(status) {
+     case status_start:
+@@ -869,8 +872,12 @@ int4 ActionPool::apply(Funcdata &data)
+     op_state = data.beginOpMain();	// Initialize the derived action
+     rule_index = 0;
+   }
+-  for(;op_state!=data.endOpMain();)
++  int4 cancelcheck = 0;
++  for(;op_state!=data.endOpMain();) {
++    if ((++cancelcheck & 0x3ff) == 0 && data.getArch()->isCancelRequested())
++      throw CancelError("Decompilation cancelled");
+     if (0!=processOp((*op_state).second,data)) return -1;
++  }
+ 
+   return 0;			// Indicate successful completion
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+index ac7d261..f2fe67b 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+@@ -172,6 +172,7 @@ Architecture::Architecture(void)
+   printlist.push_back(print);
+   options = new OptionDatabase(this);
+   loadersymbols_parsed = false;
++  cancelRequested = (std::atomic<bool> *)0;
+ #ifdef CPUI_STATISTICS
+   stats = new Statistics();
+ #endif
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+index a27f842..960e4a1 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+@@ -30,6 +30,7 @@
+ #include "comment.hh"
+ #include "stringmanage.hh"
+ #include "userop.hh"
++#include <atomic>
+ #include "options.hh"
+ #include "transform.hh"
+ #include "prefersplit.hh"
+@@ -183,6 +184,8 @@ public:
+   int4 funcptr_align;		///< How many bits of alignment a function ptr has
+   uint4 flowoptions;            ///< options passed to flow following engine
+   uint4 max_instructions;	///< Maximum instructions that can be processed in one function
++  std::atomic<bool> *cancelRequested;	///< Host-owned flag; when set, analysis throws CancelError at its next check-point
++  bool isCancelRequested(void) const { return cancelRequested != (std::atomic<bool> *)0 && cancelRequested->load(std::memory_order_relaxed); }
+   uint4 max_baddata;		///< Maximum number of bad instructions that one function can encounter
+   int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
+   uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+index d294a99..dcb2cad 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+@@ -86,6 +86,11 @@ struct LowlevelError {
+ /// This error is the most basic form of recoverable error,
+ /// meaning there is some problem that the user did not take
+ /// into account.
++/// \brief Thrown when the host asked for the current analysis to stop (see Architecture::isCancelRequested)
++struct CancelError : public LowlevelError {
++  CancelError(const string &s) : LowlevelError(s) {}	///< Initialize the error with an explanatory string
++};
++
+ struct RecovError : public LowlevelError {
+   /// Initialize the error with an explanatory string
+   RecovError(const string &s) : LowlevelError(s) {}
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+index 337b6c8..b2f09e1 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+@@ -789,8 +789,11 @@ void FlowInfo::generateOps(void)
+   vector<PcodeOp *> notreached;	// indirect ops that are not reachable
+   clearProperties();
+   addrlist.push_back(data.getAddress());
+-  while(!addrlist.empty())	// Recovering as much as possible except jumptables
++  while(!addrlist.empty()) {	// Recovering as much as possible except jumptables
++    if (glb->isCancelRequested())
++      throw CancelError("Decompilation cancelled");
+     fallthru();
++  }
+   if (hasInject())
+     injectPcode();
+   do {

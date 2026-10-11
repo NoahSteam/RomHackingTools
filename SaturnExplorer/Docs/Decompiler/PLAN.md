@@ -1,6 +1,6 @@
 # SH-2 pseudocode panel — implementation plan (Windows + macOS)
 
-Companion to [DESIGN.md](DESIGN.md). Revision 2, after review of `dfe6d61`: the review found the
+Companion to [DESIGN.md](DESIGN.md). Revision 3, after reviews of `dfe6d61` and `b6b5956`: the review found the
 main risks in correctness and lifecycle behaviour rather than in MSVC compilation, and this
 revision turns those into explicit contracts (§A) that the steps (§B) implement and test.
 
@@ -9,9 +9,10 @@ Linux stays a development convenience and the web build is untouched; neither ga
 
 Rules that hold throughout:
 - No change to `include/saturnexplorer/*.h`, `SE_ABI_VERSION`, Core, or the drivers.
-- Ghidra sources are vendored **unmodified**, with one planned exception: the delay-slot
-  SLEIGH fix in contract A3, kept as a patch file in `third_party/ghidra-decompiler/patches/`
-  and recorded in `VENDOR.md`. Everything else is a subclass or wrapper in `FrontEnd/src/Decompiler/`.
+- Ghidra sources are vendored with exactly two small patches, kept in
+  `third_party/ghidra-decompiler/patches/` and recorded in `VENDOR.md`: the cancellation flag
+  (A4, 21 lines, demonstrated in `spike/cancel_spike.cpp`) and the delay-slot SLEIGH fix (A3).
+  Everything else is a subclass or wrapper in `FrontEnd/src/Decompiler/`.
 - Everything decompiler-related compiles only when `SE_ENABLE_DECOMPILER` is on (default on
   desktop, forced off under Emscripten).
 - Commit to master after each step, as the repo does.
@@ -30,8 +31,9 @@ A savestate or dump is editable in place (Hex Editor writes land in the context 
 So a result's validity is never tied to the source kind.
 
 - **Key.** `SnapshotKey = {sourceId, deriveSerial, frameNumber, regionSetHash}`.
-  `regionSetHash` covers which regions are present and, for the optional BIOS image, its path
-  and size, so adding or removing the BIOS image is a new snapshot.
+  `regionSetHash` covers which regions are present and, for the optional BIOS image, a hash of
+  its **contents** computed once when the image is loaded or reloaded (never per frame), so
+  replacing the file at the same path with another image of the same size is a new snapshot.
 - **Rule.** Before drawing, the panel recomputes the key from the displayed context. If it
   differs from the key of the shown result, the result is marked stale; on a dump, savestate or
   paused source it is re-requested immediately, on a running live source only per the refresh
@@ -43,11 +45,13 @@ So a result's validity is never tied to the source kind.
   - User comments (`AssemblyPanel::UserComments`): display-layer only; no re-run.
   - Function-boundary correction: the entry is part of the request; the old result for that
     entry is dropped and the new entry requested.
-  - BIOS image change: new `regionSetHash`, everything stale.
+  - BIOS image change (path, reload, or different bytes at the same path): new
+    `regionSetHash`, everything stale.
 - **Tests.** `Sh2DecompilerTests`: decompile fixture 1, overwrite the `add #1,r0` word with
   `add #2,r0` in the snapshot, re-key, assert the new output says `+ 2`. Same with the literal
-  pool word changed to point at a different registered callee. `DecompilerPanelTests`: a Hex
-  Editor write through the mock backend bumps the mock's serial and the panel re-requests.
+  pool word changed to point at a different registered callee; a BIOS image replaced by a
+  same-size, same-path file with different bytes yields a different key. `DecompilerPanelTests`:
+  a Hex Editor write through the mock backend bumps the mock's serial and the panel re-requests.
 
 ### A2. Address folding classifies the SH-2 partition before aliasing anything
 
@@ -94,48 +98,67 @@ establish correct semantics, and a ROM-hacking tool meets hand-written assembly.
   (so it is not folded to a possibly wrong constant), and the panel shows a banner: "PC-relative
   load in a delay slot at 0x…: pseudocode for this function is not trustworthy." The result is
   still shown, greyed, because the rest of the function is usually fine.
-- **Step 4 fix.** A SLEIGH patch in `patches/` makes the branch constructors publish their
-  static target through a context register (`globalset` on the delay-slot address) and the
-  `disppc2`/`disppc4` sub-constructors use it when set. This corrects `bra`/`bsr` and
-  constant-target `jsr`/`jmp` slots; conditional `bt/s`/`bf/s` and register-target slots stay
-  flagged as `unsupported` (the value depends on whether the branch is taken). The patch is
-  reviewed against the manual, applied by the vendoring script, and the `sh-2.sla` regenerated.
+- **Step 4 fix.** A SLEIGH patch in `patches/` makes `bra` and `bsr` (the only delayed branches
+  whose target is encoded in the instruction) publish that target through a context register
+  (`globalset` on the delay-slot address), and the `disppc2`/`disppc4` sub-constructors use it
+  when set. Everything else stays `unsupported`: `jsr`/`jmp`/`braf`/`bsrf` take a register, and
+  a target recovered later by literal propagation is not available when SLEIGH builds the slot's
+  p-code; `bt/s`/`bf/s` depend on whether the branch is taken. The patch is reviewed against the
+  manual, applied by the vendoring script, and `sh-2.sla` regenerated.
 - **Tests.** Synthetic fixture 3 (`spike/tools/fixture3.py`, Capstone-checked like fixture 1):
   `bra target` with `mov.l @(disp,PC),r1` in the slot, where the direct and slot-relative
   addresses hold **different** literals, plus a `bf/s` variant. Step 2 asserts `unsupported`,
-  the address, and that neither literal was folded. Step 4 asserts the `bra` case decompiles to
-  the slot-relative literal's value and the `bf/s` case remains flagged.
+  the address, and that neither literal was folded. Step 4 asserts the `bra` and `bsr` cases
+  decompile to the slot-relative literal's value, the `bf/s` and `jsr` cases remain flagged, and
+  (context leak check) a PC-relative load immediately *after* a `bra` + slot pair, and one at
+  the branch target, still use their own `inst_start + 4`.
 
-### A4. Session changes never wait on the worker; shutdown is bounded
+### A4. One engine thread, cancellation through a small upstream patch, no orphaned workers
 
-`Stop()`-and-join on every source change would block the UI for as long as the current
-decompilation takes, and Ghidra's `max_instructions` bounds instruction count, not time.
+The bare library offers no cancellation hook: `ActionDatabase::registerAction` is private,
+`ActionGroup::apply` calls each child's `perform()` synchronously, and Ghidra itself cancels by
+killing its decompiler process. Two further facts from the pinned sources rule out the
+"orphan-and-replace" idea of revision 2: `SleighArchitecture::buildTranslator` reuses one
+process-global `Sleigh` per language and calls `reset(loader, context)` on it for every new
+`Architecture`, so a second engine would reset the translator underneath an abandoned one; and a
+thread detached at exit would run while static objects are destroyed.
 
-- **Session epoch.** `DecompilerRunner` has an atomic `epoch`. A source change, close or
-  reconnect bumps it and clears the queue; it does not join. Every request and result carries
-  the epoch it was issued under; `Poll()` drops results from an older epoch, and the worker
-  skips queued requests from an older epoch before starting them.
-- **Cancellation at action granularity.** Ghidra's `ActionDatabase::registerAction` accepts a
-  root `ActionGroup` of our own. `CancellableRoot : ActionGroup` wraps the universal action
-  and its `apply()` returns the "partial completion" code when an atomic cancel flag is set;
-  `Action::perform` then returns `-1` and the worker abandons that `Funcdata` and its
-  `Architecture`. Individual actions are small, so cancellation latency is milliseconds for
-  normal functions. `followFlow` (before actions) is bounded by `max_instructions`. Validating
-  this wrapper on the real action tree is the first task of Step 2; if it does not hold, the
-  fallback below is the mechanism.
-- **Fallback for a wedged worker.** If a request has not finished `T` seconds (default 5)
-  after being cancelled, the runner spawns a replacement worker thread and orphans the old one
-  with its engine (leaked on purpose, logged once, the entry recorded as "blocked this session"
-  so it is not retried automatically). The panel shows "decompiler restarted".
-- **Application exit.** `~DecompilerRunner` sets cancel + epoch, waits up to 2 s for the worker,
-  then detaches it. Engine objects owned by a detached worker are leaked intentionally; nothing
-  in the engine touches process state that matters at exit.
-- **Tests** (`DecompilerRunnerTests`): a mock engine that blocks on a latch; bump the epoch while
-  it is blocked and assert `Poll()` returns within one frame and the later result is dropped;
-  a cancelled request on a real engine completes with "cancelled" and no result installed;
-  the orphan path is exercised with `T` set to 50 ms; the destructor with a blocked worker
-  returns within the bound. Unload/reconnect during a blocked worker is the manual check in
-  Step 3.
+- **Mechanism: `patches/0001-cancel-flag.patch`** (21 lines, 5 files, demonstrated in
+  `spike/cancel_spike.cpp`, results in SPIKE_RESULTS.md). It adds a host-owned
+  `std::atomic<bool>* cancelRequested` to `Architecture`, a `CancelError : LowlevelError`, and
+  check-points in `Action::perform` (before every action, so every level of the nested tree),
+  `ActionPool::apply` (every 1024 ops) and `FlowInfo::generateOps` (every flow run). Setting the
+  flag from another thread after processing has started throws `CancelError` out of
+  `followFlow`/`perform` on the engine thread; measured flag-to-catch latency is 1–8 ms for
+  functions of normal size, 68 ms at 6k instructions, and 749 ms (one long action) at 18k. A
+  rerun after cancellation on the same translator is byte-identical to an uncancelled run.
+- **One engine thread, for the life of the process.** It alone constructs, uses and destroys
+  every `Architecture`, `Funcdata` and the translator. Nothing else ever touches engine objects.
+- **Session change** (source change, close, reconnect): bump the runner's epoch, clear the
+  queue, set the cancel flag if a request is running. No join. The worker catches `CancelError`,
+  tears the abandoned function down (2–126 ms measured), and takes the next request. Results and
+  queued requests from an older epoch are dropped by `Poll()` and by the worker respectively.
+- **Wall-clock budget.** Each request runs with a budget (default 10 s; `max_instructions`
+  lowered to 20 000, both in settings). The UI thread sets the same cancel flag when the budget
+  expires, the result is reported as "too large to decompile within N s", and that entry is not
+  retried automatically for this session. Pathological functions therefore cost at most the
+  budget plus the longest single action, never the 20 s the spike measured.
+- **If cancellation ever fails** (the worker has not acknowledged a cancel within 5 s): the
+  panel disables further decompilation for the session with a visible message and a log line
+  naming the entry. No replacement worker is started; the single engine thread remains the only
+  one and is still joined at exit. This is the honest fallback for an in-process engine; process
+  isolation is excluded by requirement.
+- **Application exit.** Set cancel and epoch, **join unconditionally**, then call
+  `SleighArchitecture::shutdown()` to free the global translators. Bounded in practice by the
+  measured latency and the budget; never a detach.
+- **Tests** (`DecompilerRunnerTests`, real engine, no mocks for the cancellation path): start the
+  spike's synthetic function (1000 blocks), cancel from the test thread at 50 ms, assert the
+  worker reports `cancelled` within 500 ms and that a following request completes with correct
+  output; the wall-clock budget set to 100 ms cancels the 3000-block function and the entry is
+  marked not-retried; an epoch bump while a request is running makes `Poll()` return within one
+  frame and the late result is dropped; the destructor with a request in flight returns after the
+  join and `shutdown()`. The vendoring step fails if the patch does not apply cleanly, and the
+  engine test suite fails to compile without it (it references `CancelError`).
 
 ### A5. Spec freshness covers what the application actually loads
 
@@ -184,7 +207,7 @@ packaging, or both Mac architectures.
 | `build-release-msbuild.bat` (checked-in solution) | New Windows job running it, asserting the exe exists; this is also what proves A6's project wiring compiles |
 | macOS x86_64 | New job on the arm64 runner with `-DCMAKE_OSX_ARCHITECTURES=x86_64` building `SaturnExplorerGhidraDecomp` and the decompiler tests only (they need no SDL2) and running them under Rosetta; the full x86_64 app is a manual, recorded build until an Intel runner is available |
 | macOS bundle + DMG | New job: `-DSE_MACOS_BUNDLE_LIBS=ON`, `cmake --install`, `cpack -G DragNDrop`, assert the `.app` and `.dmg` exist and `codesign --verify --deep --strict` passes **ad-hoc signed**; Developer ID signing and notarisation stay a manual, recorded step since they need a certificate |
-| The macOS frontend exists | The existing existence check is extended from `se-render` to `SaturnExplorerFrontEnd.app` |
+| The macOS frontend exists | The existing existence check is extended from `se-render` to `SaturnExplorer.app` (the target's `OUTPUT_NAME`, not the CMake target name) |
 | Timing | No hard millisecond gate. Decompiler tests get a generous ctest `TIMEOUT` (60 s) and print their elapsed times, which the step record copies into `Docs/FunctionalityVerification/` |
 
 ---
@@ -199,9 +222,9 @@ decompiles fixture 1 through the materialised spec path (A5).
 1. Vendor `FrontEnd/third_party/ghidra-decompiler/` from Ghidra 12.3 (commit `918d44e`):
    `cpp/` (the 84 CORE + DECCORE + SLEIGH sources plus `sleigh_arch`, `inject_sleigh`,
    `libdecomp`, and the compiler files `slgh_compile`, `slghparse`, `slghscan`),
-   `processors/SuperH/` (five spec files), `LICENSE`, `NOTICE`, `VENDOR.md`, an empty
-   `patches/` with a README, and `vendor.py` that copies the file list from a Ghidra tree and
-   applies `patches/`.
+   `processors/SuperH/` (five spec files), `LICENSE`, `NOTICE`, `VENDOR.md`, `patches/` holding
+   `0001-cancel-flag.patch` (A4) with a README, and `vendor.py` that copies the file list from a
+   Ghidra tree and applies `patches/`, failing loudly if a patch does not apply.
 2. Vendor zlib 1.3.x as `FrontEnd/third_party/zlib/` with a `SaturnExplorerZlib` static target
    that replaces `find_package(ZLIB)` on desktop; the savestate driver gets `SE_HAVE_ZLIB`
    unconditionally on desktop.
@@ -234,13 +257,10 @@ Files in `FrontEnd/src/Decompiler/` (Win32 and desktop source lists, not the web
 |---|---|
 | `MemorySnapshot.{h,cpp}` | `SnapshotKey` per A1; regions via `ReadRegionBytes` (LWRAM, HWRAM, optional BIOS); both register files; `Classify()` and `Canonical()` per A2. |
 | `CaptureLoadImage.{h,cpp}` | `LoadImage` over a snapshot; `DataUnavailError` with partition name; read-only ranges. |
-| `SaturnArchitecture.{h,cpp}` | `SleighArchitecture` subclass: language id, `readonlypropagate`, `max_instructions`, loader injection, `CancellableRoot` registration (A4), spec dir from `SpecBundle`. |
+| `SaturnArchitecture.{h,cpp}` | `SleighArchitecture` subclass: language id, `readonlypropagate`, `max_instructions`, loader injection, the cancel flag from A4, spec dir from `SpecBundle`. |
 | `Sh2Decompiler.{h,cpp}` | Two-pass decompile (names, known functions, `followFlow`, literal pools from raw p-code, delay-slot detection per A3, callee harvest and registration, `perform`, markup → `Line`/`Token` with addresses). All `LowlevelError`s become warnings; engine rebuilt after a hard failure. |
 | `Sh2FunctionFinder.{h,cpp}` | Entry ladder (user → `FunctionNames` → call-site target → `rts` back-scan validated by `Sh2Decode` → callee) with `EntryGuess{entry, source, confidence}`; persistence in `saturn_function_bounds.txt`. |
-| `DecompilerRunner.{h,cpp}` | Worker thread, epoch, cancel flag, coalescing, orphan fallback, bounded destructor, all per A4. |
-
-First task of the step: prove or disprove `CancellableRoot` on the real action tree with a
-test; record the outcome in `DESIGN.md` §6.3.
+| `DecompilerRunner.{h,cpp}` | The single engine thread, epoch, cancel flag, wall-clock budget, coalescing, disable-on-failed-cancel, join-at-exit, all per A4. |
 
 Tests: `MemorySnapshotTests` (A2), `Sh2DecompilerTests` (fixtures 1, 1b, 3 per A3, unmapped,
 mirror, `mov.w` fold, token addresses, A1 edit cases), `Sh2DecompilerFixtureTests` (the `.yss`
@@ -269,7 +289,9 @@ skips without game data), `Sh2FunctionFinderTests`, `DecompilerRunnerTests` (A4)
 6. Native menus pick the panel up through `PanelList`; verify on macOS.
 
 Tests: `DecompilerPanelTests` on `ImGuiHarness` — click → `jumpAssembly` with the line's first
-address; CPU switch keeps the result; stale key never shown; Hex Editor write re-requests (A1);
+address; CPU switch keeps the result; a result arriving for an obsolete request (older epoch or
+a key that is not the displayed snapshot's) is never installed, while the previously shown
+output is retained and carries the stale badge; Hex Editor write re-requests (A1);
 `RowSelectable` in use.
 
 Manual pass on both OSes, recorded in `Docs/FunctionalityVerification/`: `.yss` open and edit;
@@ -281,8 +303,8 @@ rejected cache-array address (A2); the fixture-3 delay-slot banner (A3) on a pat
 
 ### Step 4 — Quality
 
-- A3 SLEIGH patch for static-target branch slots; fixture 3 goldens flip from `unsupported` to
-  correct for `bra`/`bsr`; `VENDOR.md` documents the patch and `vendor.py` applies it.
+- A3 SLEIGH patch for `bra`/`bsr` slots; fixture 3 goldens flip from `unsupported` to correct
+  for those two, the rest stay flagged; `VENDOR.md` documents the patch and `vendor.py` applies it.
 - Callee prototypes from cached callee decompiles.
 - Saturn hardware map as named globals (VDP1/VDP2/SCU/SMPC/SCSP register blocks).
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).
@@ -307,7 +329,7 @@ rejected cache-array address (A2); the fixture-3 delay-slot banner (A3) on a pat
 | Step | Rough size | Depends on |
 |---|---|---|
 | 1 Vendor, build, spec bundle, CI jobs | 2–3 days | — |
-| 2 Engine, snapshot, finder, runner + tests | 4–5 days (A3 detection and A4 validation add about a day over revision 1) | 1 |
+| 2 Engine, snapshot, finder, runner + tests | 4–5 days (A3 detection and the A4 budget/disable paths add about a day over revision 1) | 1 |
 | 3 Panel + wiring | 3–4 days | 2 |
 | 4 Quality incl. the SLEIGH patch | 3–4 days, divisible | 3 |
 | 5 Release | 1 day | 3 |
@@ -320,7 +342,7 @@ written until Step 3, after the engine is proven on both platforms by CI.
 | Risk | Fallback |
 |---|---|
 | An MSVC compile error inside a vendored Ghidra file | A `patches/` entry and a `VENDOR.md` note; Ghidra builds these files with MSVC, so expect zero or one. |
-| `CancellableRoot` does not interrupt the real action tree | A4's orphan-and-replace path is the mechanism; the UI never blocks either way. |
+| A Ghidra bump changes the five patched call sites | `vendor.py` fails on patch application; the patch is re-based by hand and `cancel_spike.cpp` / `DecompilerRunnerTests` re-prove it. |
 | The A3 SLEIGH context patch proves awkward | The function stays flagged `unsupported`; the Step 2 detection already guarantees nothing wrong is shown as trustworthy. |
 | `filemanage.cc` directory scan on Windows paths | `startDecompilerLibrary` is pointed at the exact materialised directory; no tree scanning. |
 | `/bigobj` or link-time size on MSVC Debug | The Ghidra library is built `/O2` in every configuration. |

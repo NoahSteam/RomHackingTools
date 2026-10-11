@@ -142,8 +142,8 @@ class DecompilerRunner {
 public:
     uint64_t Submit(std::shared_ptr<const MemorySnapshot>, DecompileRequest);  // returns generation; coalesces per panel
     bool Poll(DecompileResult& out);              // UI thread; true at most once per completed job
-    void Stop();                                  // joins; called from ResetSessionDebugState
-    bool Busy() const;
+    void InvalidateSession();                     // epoch bump + cancel flag; never joins (PLAN.md A4)
+    bool Busy() const;                            // ~DecompilerRunner cancels, joins, then SleighArchitecture::shutdown()
 };
 
 // DecompilerPanel.h
@@ -221,14 +221,15 @@ an entry correction replaces the request for that function.
   never waits on obsolete work (PLAN.md A4).
 - A fresh `SaturnArchitecture` is built per snapshot (1 ms), so function bodies, symbols and
   read-only ranges from an earlier memory image never leak into a later one.
-- Cancellation: `max_instructions` bounds `followFlow`, and a root `ActionGroup` of our own,
-  registered through `ActionDatabase::registerAction` and wrapping the universal action, returns
-  the partial-completion code when a cancel flag is set, so `Action::perform` stops between
-  actions. Whether this holds on the real action tree is the first thing Step 2 tests; if it does
-  not, the runner's orphan-and-replace path (abandon a worker that ignores cancellation for more
-  than a few seconds, start a fresh one, leak the old engine deliberately) is the mechanism.
-  Application exit waits a bounded time and then detaches. Any `LowlevelError` becomes a
-  `warnings` entry; a `std::bad_alloc` or a second consecutive failure rebuilds the engine.
+- Cancellation: the bare library has none (`registerAction` is private and the action tree is
+  synchronous), so a 21-line upstream patch adds a host-owned atomic flag checked before every
+  action, every 1024 ops in rule pools, and every flow run; it is demonstrated on the real engine
+  in SPIKE_RESULTS.md "Cancellation spike". A wall-clock budget per request uses the same flag.
+  There is exactly one engine thread for the life of the process, because the SLEIGH translator
+  is a process-global object that every new `Architecture` resets; no replacement worker is ever
+  started, and exit cancels, joins, then calls `SleighArchitecture::shutdown()`. Any
+  `LowlevelError` becomes a `warnings` entry; a `std::bad_alloc` or a second consecutive failure
+  rebuilds the engine on that same thread (PLAN.md A4).
 - Emscripten has no thread here and no Ghidra: `SE_ENABLE_DECOMPILER` is forced off and the panel
   is compiled out (`#if SE_ENABLE_DECOMPILER`), the same way `SE_ENABLE_LIVE` gates live-only code.
 
@@ -266,7 +267,7 @@ an entry correction replaces the request for that function.
 ## 7. Build and dependencies
 
 ### 7.1 Vendoring
-`FrontEnd/third_party/ghidra-decompiler/` holds, unmodified:
+`FrontEnd/third_party/ghidra-decompiler/` holds, unmodified except for the two patches in `patches/` (PLAN.md A3, A4):
 - `cpp/`: the 84 sources + headers from the Makefile's CORE, DECCORE and SLEIGH groups plus
   `sleigh_arch`, `inject_sleigh`, `libdecomp`, and the three `sleigh` compiler files
   (`slgh_compile`, `slghparse`, `slghscan`; the generated parsers are checked in upstream, so no
@@ -291,10 +292,10 @@ an entry correction replaces the request for that function.
   The freshness test covers the `.slaspec` → checked-in `.sla` → embedded bytes chain, and the
   Step 1 smoke test loads through the materialised directory, so CI exercises what users run
   (PLAN.md A5).
-- **zlib** is required when the decompiler is on (`.sla` files are compressed). It is already an
-  optional dependency of the savestate driver; the decompiler makes it required for desktop
-  builds. On Windows, vendor zlib the way Ghidra's own build does (`LOCAL_ZLIB`), on macOS use the
-  system library.
+- **zlib** is required when the decompiler is on (`.sla` files are compressed). It is vendored
+  (`FrontEnd/third_party/zlib`, the way Ghidra's own build does with `LOCAL_ZLIB`) and used on
+  both platforms, replacing the optional `find_package(ZLIB)`; the savestate driver's gzip path
+  becomes unconditional on desktop as a result (PLAN.md A6).
 - The FrontEnd source list appears three times in `CMakeLists.txt` (Win32, web, desktop) and once
   as a wildcard in `FrontEnd.vcxproj`; the new `Decompiler/*.cpp` files go in the two desktop
   lists and the test targets, not the web list.
@@ -304,7 +305,8 @@ an entry correction replaces the request for that function.
 - Ghidra decompiler and the SuperH spec: **Apache License 2.0** (NSA; portions US Government work,
   per Ghidra's `NOTICE`). RomHackingTools is GPLv3; Apache-2.0 code may be incorporated into a
   GPLv3 work. Obligations: keep `LICENSE` and `NOTICE` in the vendored tree and in distributions,
-  state that the files are unmodified (or mark any patch), and attribute. The About dialog
+  mark the modified files (the two patches carry prominent notices, as §4 of the license asks),
+  and attribute. The About dialog
   (`App::DrawAboutModal`) gains a "Third-party" section listing Dear ImGui (MIT), IPA and Liberation
   fonts, zlib, and "Ghidra decompiler and SuperH SLEIGH specification — Apache-2.0, National
   Security Agency"; `DISTRIBUTION.md` lists the files that must ship.
@@ -340,8 +342,10 @@ Each phase ends with its tests green on Windows and macOS; the UI starts only in
   Ghidra bump.
 - **Finder tests**: rts-scan over hand-built byte vectors with literal pools and `nop` padding
   between functions; call-site extraction for `bsr` and `jsr`-via-literal.
-- **Runner tests**: a result whose key or generation is stale is never installed; two submissions
-  coalesce to one run; `Stop()` joins.
+- **Runner tests**: a result whose key or epoch is stale is never installed; two submissions
+  coalesce to one run; a running request is cancelled from the test thread on the real engine
+  and the next request completes; the wall-clock budget cancels an oversized function; the
+  destructor joins (PLAN.md A4).
 - **Panel tests** (`ImGuiHarness`): clicking a line raises `Request.jumpAssembly` with that line's
   first address; switching CPU keeps the result (same RAM) and changes only the Follow-PC function;
   whole-row selection goes through `RowSelectable`.

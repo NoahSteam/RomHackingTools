@@ -12,5 +12,7 @@ is not the production design; see `../DESIGN.md` for that.
 | `tools/scan.py` | Finds the function containing an address in a HWRAM dump (back-scan to `rts`) and lists it with Capstone. |
 | `tools/compare.py` | Compares the spike's SLEIGH listing with Capstone instruction by instruction. |
 | `real_06031598_listing.txt` | The 143-instruction SLEIGH listing of the real-game fixture that Capstone agreed with. |
+| `cancel_spike.cpp` | Cancels an in-flight decompilation from another thread with `patches/0001-cancel-flag.patch` applied; measures latency and checks the engine is consistent afterwards. |
+| `patches/` | The upstream patches the design depends on, with their reasons. |
 
 Reproduction steps are at the end of `../SPIKE_RESULTS.md`.

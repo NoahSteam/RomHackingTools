@@ -359,3 +359,37 @@ spike-build/sh2_decomp_spike specs 06031598 06000000=st2_hwram.bin 00200000=st2_
 Flags: `--asm N` prints N instructions of SLEIGH disassembly; `--auto-ro` marks literal pools
 read-only; `--known ADDR` pre-registers a function; `--ro BASE:SIZE` marks a range read-only;
 `--xml` prints XML markup and the line → address table; `--pcode` dumps raw p-code.
+
+## Cancellation spike (added for PLAN.md A4)
+
+**Question.** The bare library has no cancellation hook: `ActionDatabase::registerAction` is
+private, `ActionGroup::apply` calls each child's `perform()` synchronously, and Ghidra itself
+cancels by killing its decompiler process. Can a small upstream patch give an in-process host
+bounded, safe cancellation of a decompilation that is already running?
+
+**Answer: yes, with a 21-line patch** (`spike/patches/0001-cancel-flag.patch`): a host-owned
+`std::atomic<bool>*` on `Architecture`, a `CancelError` exception, and check-points in
+`Action::perform` (before every action), `ActionPool::apply` (every 1024 ops) and
+`FlowInfo::generateOps` (every flow run). `spike/cancel_spike.cpp` builds a synthetic function
+of N diamond-shaped blocks (6 instructions each), decompiles it on a worker thread, sets the flag
+from the main thread at three points, and then decompiles again on the same process-global SLEIGH
+translator.
+
+| Blocks (instructions) | Uncancelled | Cancel during flow following: flag → caught | Cancel during actions: flag → caught | Teardown of the abandoned function | Rerun identical to baseline |
+|---|---|---|---|---|---|
+| 300 (1.8k) | 70 ms | 7.7 ms | 1.3–3.0 ms | 2–3 ms | yes |
+| 1000 (6k) | 1.23 s | 25.8 ms | 0.7–67.8 ms | 7–12 ms | yes |
+| 3000 (18k) | 20.3 s | 74–90 ms | 749 ms | 75–126 ms | yes |
+
+Observations that shaped A4:
+- Cancellation requested *after* processing started is honoured in both phases; nothing is
+  pre-cancelled or mocked. The engine thread owns construction and destruction of the
+  `Architecture`; the main thread only touches the atomic.
+- After a cancelled run, a fresh `Architecture` on the same translator produces byte-identical
+  output to the uncancelled baseline, and an unrelated small function decompiles normally.
+- Latency is dominated by the longest single action (the 749 ms case is one action in an
+  18k-instruction function) plus the teardown of the abandoned `Funcdata`. Saturn game functions
+  are two orders of magnitude smaller (the real 286-byte function takes 5 ms), so the plan lowers
+  `max_instructions` and adds a wall-clock budget that uses this same flag.
+- The 3000-block baseline of 20 s shows that `max_instructions` alone is not a time bound, as
+  the review said.
