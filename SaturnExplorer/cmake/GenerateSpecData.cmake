@@ -62,5 +62,11 @@ static const size_t kSh2SpecFileCount = sizeof(kSh2SpecFiles) / sizeof(kSh2SpecF
 ")
 # Only replace the header when it changed, so an unchanged regeneration does not rebuild
 # everything that includes it.
-execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OUT_FILE}.tmp" "${OUT_FILE}")
+execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different "${OUT_FILE}.tmp" "${OUT_FILE}"
+                RESULT_VARIABLE copy_result)
+if(NOT copy_result EQUAL 0)
+    # Left in place for inspection: reporting success here would leave the old spec embedded.
+    message(FATAL_ERROR "GenerateSpecData: could not write ${OUT_FILE} (${copy_result}); "
+                        "the new contents are in ${OUT_FILE}.tmp")
+endif()
 file(REMOVE "${OUT_FILE}.tmp")

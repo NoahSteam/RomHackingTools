@@ -1487,3 +1487,32 @@ if(TARGET SaturnExplorerFrontEnd AND SE_ENABLE_DECOMPILER)
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_DECOMPILER=1)
     target_link_libraries(SaturnExplorerFrontEnd PRIVATE SaturnExplorerGhidraDecomp)
 endif()
+
+# Licence texts that must travel with the binary: Apache-2.0 requires Ghidra's LICENSE and NOTICE
+# in every distribution of the engine, and zlib's licence asks for its notice too. In the macOS
+# bundle they are resources (so the signature seals them); beside the Windows exe, a folder.
+if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
+    set(SE_LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/zlib/LICENSE|zlib")
+    if(SE_ENABLE_DECOMPILER)
+        list(APPEND SE_LICENSE_FILES
+            "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/ghidra-decompiler/LICENSE|ghidra-decompiler"
+            "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/ghidra-decompiler/NOTICE|ghidra-decompiler")
+    endif()
+    foreach(entry ${SE_LICENSE_FILES})
+        string(REPLACE "|" ";" parts "${entry}")
+        list(GET parts 0 file)
+        list(GET parts 1 folder)
+        if(APPLE)
+            target_sources(SaturnExplorerFrontEnd PRIVATE "${file}")
+            set_source_files_properties("${file}" PROPERTIES
+                MACOSX_PACKAGE_LOCATION "Resources/licenses/${folder}")
+        else()
+            get_filename_component(name "${file}" NAME)
+            add_custom_command(TARGET SaturnExplorerFrontEnd POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:SaturnExplorerFrontEnd>/licenses/${folder}"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${file}"
+                        "$<TARGET_FILE_DIR:SaturnExplorerFrontEnd>/licenses/${folder}/${name}"
+                VERBATIM)
+        endif()
+    endforeach()
+endif()

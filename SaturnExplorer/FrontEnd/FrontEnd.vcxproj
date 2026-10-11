@@ -148,6 +148,16 @@
   <ItemGroup>
     <ResourceCompile Include="Platforms\Windows\SaturnExplorer.rc" />
   </ItemGroup>
+  <!-- Licence texts that travel with the exe, as in the CMake build: Apache-2.0 requires Ghidra's
+       LICENSE and NOTICE in every distribution of the decompiler engine; zlib asks for its notice. -->
+  <ItemGroup>
+    <CopyFileToFolders Include="third_party\ghidra-decompiler\LICENSE;third_party\ghidra-decompiler\NOTICE">
+      <DestinationFolders>$(OutDir)licenses\ghidra-decompiler</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="third_party\zlib\LICENSE">
+      <DestinationFolders>$(OutDir)licenses\zlib</DestinationFolders>
+    </CopyFileToFolders>
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Core\SaturnExplorer.vcxproj">
       <Project>{a7837fc2-49bc-4f6a-bc7b-880a100d074e}</Project>
