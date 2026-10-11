@@ -50,7 +50,7 @@ Highlights of what the tests pin:
   with no server, and a capture against itself; `unknown` for different sessions, epochs and connections
   (a reconnect), a capture with no tracking, a server older than v23, a ledger that is incomplete, does
   not cover the captures, belongs to another session or connection, or has a hole; a state load in the
-  interval; capture order contradicting ledger position. **Server counters**: a rise the ledger does not
+  interval; capture order contradicting ledger position, or two different checkpoints claiming one capture serial. **Server counters**: a rise the ledger does not
   explain (applied or dropped) is a gap even with an empty ledger; a fall or a u32 wrap is a reset; a rise
   the ledger does explain is `detected`. **A/B symmetry**: every case runs in both argument orders and must
   agree, plus a sweep of 768 combinations. The sweep found a real asymmetry in the first draft (the
@@ -81,8 +81,8 @@ Highlights of what the tests pin:
   `payload_sha256` equals the SHA-256 of the canonical re-serialisation and ignores key order and spacing;
   same ids with another payload is a conflict, a re-import is not; the preview.
 * **Manifest** (`PackageManifestTests`): layout constants, `<yyyymmdd-hhmmss>-<preset>-<short id>` names,
-  23 rejected path shapes (absolute, drive, traversal, backslash, empty segment, trailing dot/space, outside
-  `attachments/` and `source/`, ...), 44 consistency faults each detected (provenance by source, a
+  28 rejected path shapes (absolute, drive, traversal, backslash, empty segment, trailing dot/space, Windows
+  device names such as `NUL` and `com1.bin`, outside `attachments/` and `source/`, ...), 44 consistency faults each detected (provenance by source, a
   configuration item naming no capture and carrying its own stamp, attachment size/hash agreement, code
   ranges), strict JSON round trip, evidence-reference resolution.
 

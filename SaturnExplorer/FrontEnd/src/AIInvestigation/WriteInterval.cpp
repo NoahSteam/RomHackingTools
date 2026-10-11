@@ -79,6 +79,14 @@ IntervalResult Classify(const WriteCheckpoint& e, const WriteCheckpoint& l, cons
                   "complete tracking found no accepted write between the captures");
 }
 
+bool Same(const WriteCheckpoint& a, const WriteCheckpoint& b)
+{
+    return a.valid == b.valid && a.captureSerial == b.captureSerial && a.sessionId == b.sessionId && a.timelineEpoch == b.timelineEpoch &&
+           a.connectionGeneration == b.connectionGeneration && a.ledgerPosition == b.ledgerPosition && a.pendingWrites == b.pendingWrites &&
+           a.unconfirmedWrites == b.unconfirmedWrites && a.serverCounters == b.serverCounters && a.serverPokesApplied == b.serverPokesApplied &&
+           a.serverPokesDropped == b.serverPokesDropped && a.stateLoads == b.stateLoads;
+}
+
 }  // namespace
 
 const char* WriteStatusName(WriteStatus s)
@@ -131,7 +139,11 @@ IntervalResult ClassifyWriteInterval(const WriteCheckpoint& x, const WriteCheckp
         return Result(WriteStatus::Detected, WriteReason::UnconfirmedWrites, 0,
                       "a capture holds writes whose outcome is unknown");
     if (!x.valid || !y.valid) return Unknown(WriteReason::NoTracking, "a capture recorded no write tracking");
-    // Order by the serial the process gave each capture. The same serial is the same capture.
+    // Order by the serial the process gave each capture. The same serial is the same capture, so two
+    // checkpoints sharing one must be identical; if they are not, the order is unknowable and the answer
+    // must not depend on which was passed first.
+    if (x.captureSerial == y.captureSerial && !Same(x, y))
+        return Unknown(WriteReason::OrderInconsistent, "two different checkpoints claim the same capture serial");
     const bool xFirst = x.captureSerial <= y.captureSerial;
     const WriteCheckpoint& e = xFirst ? x : y;
     const WriteCheckpoint& l = xFirst ? y : x;

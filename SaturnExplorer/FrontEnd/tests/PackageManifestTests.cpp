@@ -55,7 +55,7 @@ void TestPaths()
 {
     std::string why;
     for (const char* p : { "prompt.md", "evidence.json", "response.schema.json", "attachments/a.bin", "attachments/diff/x-1.bin",
-                           "source/lwram.bin", "source/a/b/c" })
+                           "source/lwram.bin", "source/a/b/c", "attachments/console.bin", "attachments/com10.bin", "attachments/nulls" })
         Check(IsValidPackagePath(p), (std::string("valid path ") + p).c_str());
     struct Bad { const char* path; const char* why; };
     const Bad bad[] = {
@@ -65,6 +65,8 @@ void TestPaths()
         { "other.txt", "fixed files" }, { "notes/x.bin", "outside" }, { "prompt.md/x", "outside" }, { "attachments/a\nb", "control" },
         { "attachments/a:b", "':'" }, { "attachments/a\x7F", "control" }, { "ATTACHMENTS/x", "outside" }, { "/attachments/x", "absolute" },
         { "attachments/..", "'..'" }, { ".", "'.'" },
+        { "attachments/NUL", "device name" }, { "attachments/con.bin", "device name" }, { "source/Com1", "device name" },
+        { "attachments/LPT9.txt", "device name" }, { "attachments/aux/x.bin", "device name" },
     };
     for (const Bad& b : bad)
     {

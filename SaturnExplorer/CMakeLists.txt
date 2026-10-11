@@ -985,8 +985,9 @@ if(BUILD_TESTING)
     add_test(NAME SaturnExplorerAIInvestigationEndToEndTests COMMAND SaturnExplorerAIInvestigationEndToEndTests)
 
     # Static rules for FrontEnd/src/AIInvestigation: no AI, no network, no ImGui or platform, no file I/O,
-    # C++14, in both build systems, and not yet called from the application. POSIX only (it walks the tree).
-    if(NOT WIN32)
+    # C++14, in both build systems, and not yet called from the application. POSIX hosts only (it walks the
+    # source tree).
+    if(NOT WIN32 AND NOT EMSCRIPTEN)
         add_executable(SaturnExplorerAIInvestigationLintTests FrontEnd/tests/AIInvestigationLintTests.cpp)
         add_test(NAME SaturnExplorerAIInvestigationLintTests
                  COMMAND SaturnExplorerAIInvestigationLintTests ${CMAKE_CURRENT_SOURCE_DIR})

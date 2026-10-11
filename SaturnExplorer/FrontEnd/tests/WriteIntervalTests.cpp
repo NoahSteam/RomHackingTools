@@ -290,6 +290,19 @@ void TestUnknown()
         Expect(Both(s.early, s.late, s.ledger, "restore"), WriteStatus::Unknown, WriteReason::StateLoadInInterval, "a state load between the captures");
     }
     {
+        // Two different checkpoints that both claim one capture serial: the order is unknowable, and the
+        // answer is the same whichever is passed first.
+        Scene s = MakeScene(3, 0);
+        s.late.captureSerial = s.early.captureSerial;
+        s.late.serverPokesApplied += 1;
+        Expect(Both(s.early, s.late, s.ledger, "same serial"), WriteStatus::Unknown, WriteReason::OrderInconsistent, "different checkpoints with one serial");
+        s = MakeScene(3, 0);
+        s.late.captureSerial = s.early.captureSerial;
+        s.late.ledgerPosition = 4;
+        Expect(Both(s.early, s.late, s.ledger, "same serial, other position"), WriteStatus::Unknown, WriteReason::OrderInconsistent,
+               "even when one position is later");
+    }
+    {
         // Capture order and ledger position contradict each other.
         Scene s = MakeScene(3, 0);
         s.early.ledgerPosition = 4;

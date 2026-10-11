@@ -1,6 +1,7 @@
 #include "AIInvestigation/PackageManifest.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <set>
 
@@ -81,6 +82,19 @@ std::string PackageFolderName(const UtcTime& t, const std::string& preset, const
     return std::string(b) + preset + "-" + ShortEvidenceId(evidenceId);
 }
 
+namespace
+{
+// CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without an extension, in any case: opening one on Windows
+// reaches a device, not a file in the package.
+bool IsWindowsDeviceName(const std::string& segment)
+{
+    std::string stem = segment.substr(0, segment.find('.'));
+    for (char& c : stem) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL") return true;
+    return stem.size() == 4 && (stem.compare(0, 3, "COM") == 0 || stem.compare(0, 3, "LPT") == 0) && stem[3] >= '1' && stem[3] <= '9';
+}
+}  // namespace
+
 bool IsValidPackagePath(const std::string& path, std::string* why)
 {
     auto fail = [&](const char* m) { if (why) *why = m; return false; };
@@ -106,6 +120,7 @@ bool IsValidPackagePath(const std::string& path, std::string* why)
             if (seg == "." || seg == "..") return fail("'.' or '..' in path");
             // A trailing dot or space is silently dropped by Windows, so "x." and "x" would be one file.
             if (seg.back() == '.' || seg.back() == ' ') return fail("path segment ends in '.' or space");
+            if (IsWindowsDeviceName(seg)) return fail("path segment is a Windows device name");
             segments.push_back(seg);
             start = i + 1;
         }
