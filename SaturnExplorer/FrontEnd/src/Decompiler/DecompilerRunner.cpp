@@ -15,6 +15,8 @@ namespace
 // born disabled rather than starting a second thread.
 std::atomic<bool> gEngineOwned(false);
 
+void (*gRecordHook)() = nullptr;
+
 }  // namespace
 
 DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
@@ -238,6 +240,11 @@ uint64_t DecompilerRunner::RunsStarted() const
     return mRunsStarted;
 }
 
+void DecompilerRunner::SetRecordHookForTests(void (*hook)())
+{
+    gRecordHook = hook;
+}
+
 void DecompilerRunner::SetPhaseObserverForTests(std::function<void(DecompilePhase)> observer)
 {
     std::lock_guard<std::mutex> lock(mMutex);
@@ -303,6 +310,7 @@ void DecompilerRunner::WorkerMain()
             r.generation = job.generation;
             r.slot = job.slot;
             job.snapshot.reset();   // the snapshot's memory goes now, not when the next job replaces it
+            if (gRecordHook) gRecordHook();
 
             std::lock_guard<std::mutex> lock(mMutex);
             const CancelReason reason = mCancelReason;

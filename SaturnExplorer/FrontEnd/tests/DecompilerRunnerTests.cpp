@@ -611,39 +611,41 @@ void TestWorkerAllocationFailure(const char* self, const std::string& scratch)
     CHECK(rc == 0);
 }
 
-// Persistent allocation failure while a request finishes, with another request queued: recording
-// the result fails, so the worker's own boundary must disable the session -- without allocating,
-// since nothing can be -- and the queued request must never start; its snapshot is released.
+// Recording a finished result fails, and memory stays exhausted while the session is disabled,
+// with another request queued: the worker's boundary must disable the session without allocating
+// -- nothing can be -- and the queued request must never start; its snapshot is released.
+// (Recording is made to fail by a hook rather than by counting allocations: whether appending to
+// the result queue allocates at all depends on the standard library's deque.)
+void FailRecording()
+{
+    dts::FailAlways() = true;   // every allocation from here fails, the disable path's included
+    throw std::bad_alloc();
+}
+
 int DisableOomChild()
 {
     DecompilerRunner runner(gConfig, Generous());
     DecompileResult r;
     runner.Submit(0, gSnap, Small());
     CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);   // worker up, engine warm
-    // A is held as its Architecture is torn down, its engine work done (one pass, so there is one
-    // teardown): the failures then land in finishing and recording the result, which is the path
-    // under test. (Persistent failure inside Ghidra's own action pipeline is not survivable: its
-    // objects are not exception-safe, and their teardown crashes -- which is why an engine-side
-    // failure marks the engine damaged, see Sh2Decompiler.h.)
     PhaseGate gate;
     runner.SetPhaseObserverForTests(gate.Observer());
-    gate.Reset(DecompilePhase::Teardown);
-    DecompileRequest a = Small();
-    a.registerCallees = false;
-    runner.Submit(0, gSnap, a);              // A
+    gate.Reset(DecompilePhase::Init);
+    runner.Submit(0, gSnap, Small());        // A: held before it starts, so B queues behind it
     CHECK(gate.WaitHolding(60));
     std::vector<uint8_t> hw;
     dts::PlaceFixture1(hw);
     std::shared_ptr<const MemorySnapshot> queued = dts::MakeSnapshot(hw, 9);
-    runner.Submit(1, queued, Small());       // B: queued behind A
+    runner.Submit(1, queued, Small());       // B
     const long queuedRefs = queued.use_count();
-    dts::FailAlways() = true;                // from here every allocation fails...
+    DecompilerRunner::SetRecordHookForTests(FailRecording);
     gate.Release();
     const auto t0 = Clock::now();
     while (!runner.Disabled() && MsSince(t0) < 60000)
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));   // (polling Poll would allocate nothing either)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));   // allocates nothing
+    dts::FailAlways() = false;
+    DecompilerRunner::SetRecordHookForTests(nullptr);
     CHECK(WaitIdle(runner));
-    dts::FailAlways() = false;               // ...until here
     std::printf("  child (disable): disabled %d, runs started %llu, queued snapshot references %ld -> %ld\n",
                 int(runner.Disabled()), static_cast<unsigned long long>(runner.RunsStarted()), queuedRefs,
                 long(queued.use_count()));
@@ -651,7 +653,7 @@ int DisableOomChild()
     CHECK(runner.RunsStarted() == 2);        // the warm-up and A; B never started
     CHECK(queued.use_count() == 1);          // B dropped from the queue, its snapshot released
     std::fflush(stdout);
-    std::_Exit(dts::Failures() ? 1 : 0);     // the engine ran out of memory too: skip its teardown
+    std::_Exit(dts::Failures() ? 1 : 0);
 }
 
 // Out of memory inside Sleigh::reset, on the runner: the request fails, the next is refused, and

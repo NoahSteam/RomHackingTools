@@ -145,7 +145,7 @@ reset children return normally instead of `_Exit`, so they also prove normal shu
 |---|---|---|
 | 1 Shutdown after an engine OOM double-frees | Vendor patch `0002-sleigh-reset-null-caches.patch`: `Sleigh::clearForDelete` nulls the caches it deletes. Testing it found a second path, fixed by `0003-translator-ownership-on-init-failure.patch`: `restoreFromSpec` no longer holds the shared translator in a `unique_ptr` across `initialize()` | `Sh2DecompilerTests` reset children (+0: in `Sleigh::reset`; +1: in `Sleigh::initialize`), each returning normally through static destruction; `DecompilerRunnerTests` `--reset-oom` (also destroys the runner first) |
 | 2 `Disassemble` bypassed the damage guard | Checked first; any non-engine exception there also marks the engine damaged | reset children: disassembly answers `<unavailable: …>` |
-| 3 Disabling could allocate before clearing the queue | `DisableLocked(const char*) noexcept`: disabled flag, epoch and queue clearing first, reason best effort; the worker never dequeues while disabled | `DecompilerRunnerTests` `--disable-oom`: persistent failure while a request is being recorded, another queued -- disabled, the queued request never starts, its snapshot released |
+| 3 Disabling could allocate before clearing the queue | `DisableLocked(const char*) noexcept`: disabled flag, epoch and queue clearing first, reason best effort; the worker never dequeues while disabled | `DecompilerRunnerTests` `--disable-oom`: recording a result fails (a test hook throws -- whether appending to the result deque allocates differs between libstdc++, libc++ and MSVC, which the first CI run showed) and every allocation fails from then on, with another request queued -- disabled, the queued request never starts, its snapshot released |
 | 4 `SetError(r, e.what())` allocated outside the guard | `const char*` and `const std::string&` overloads, both `noexcept` | `Sh2DecompilerTests` observer child: a throwing observer plus a failed message copy → Failed, nothing escapes |
 | Gap: worker OOM test raced the scheduler | The worker is held at the start of the engine's work before the failure is armed | `--worker-oom` child |
 | Gap: `fixture3.py` checked only mnemonics and slot addresses | Compares every decoded instruction in full -- registers, immediates, branch targets, PC-relative addresses | a wrong target, register or immediate each make it exit 1 |
@@ -153,7 +153,7 @@ reset children return normally instead of `_Exit`, so they also prove normal shu
 
 Not survivable, and so not tested as such: persistent allocation failure inside Ghidra's action
 pipeline leaves its objects inconsistent, and their own destructors crash (seen while writing the
-`--disable-oom` test, which therefore starts the failure after the engine's work). The host's
+`--disable-oom` test, which therefore fails only the recording step). The host's
 policy -- engine marked damaged, never touched again -- limits what follows; it cannot make
 Ghidra's teardown exception-safe.
 

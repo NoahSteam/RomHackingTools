@@ -93,6 +93,9 @@ public:
     // observer before submitting.
     uint64_t RunsStarted() const;
     void SetPhaseObserverForTests(std::function<void(DecompilePhase)> observer);
+    // Tests only: called on the worker just before it records a finished request's result, so a
+    // test can make recording fail (throw) whatever the standard library's containers allocate.
+    static void SetRecordHookForTests(void (*hook)());
 
 private:
     using Clock = std::chrono::steady_clock;
