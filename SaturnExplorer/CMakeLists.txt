@@ -969,6 +969,29 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src FrontEnd/tests ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
     add_test(NAME SaturnExplorerPackageManifestTests COMMAND SaturnExplorerPackageManifestTests)
 
+    # Captures -> manifest -> response -> validation -> preview, with the existing models under observation.
+    add_executable(SaturnExplorerAIInvestigationEndToEndTests
+        FrontEnd/tests/AIInvestigationEndToEndTests.cpp
+        FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
+        FrontEnd/src/AIInvestigation/WriteInterval.cpp
+        ${SE_AI_CORE_SOURCES}
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+    )
+    target_include_directories(SaturnExplorerAIInvestigationEndToEndTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
+    add_test(NAME SaturnExplorerAIInvestigationEndToEndTests COMMAND SaturnExplorerAIInvestigationEndToEndTests)
+
+    # Static rules for FrontEnd/src/AIInvestigation: no AI, no network, no ImGui or platform, no file I/O,
+    # C++14, in both build systems, and not yet called from the application. POSIX only (it walks the tree).
+    if(NOT WIN32)
+        add_executable(SaturnExplorerAIInvestigationLintTests FrontEnd/tests/AIInvestigationLintTests.cpp)
+        add_test(NAME SaturnExplorerAIInvestigationLintTests
+                 COMMAND SaturnExplorerAIInvestigationLintTests ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
