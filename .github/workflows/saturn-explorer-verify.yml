@@ -56,7 +56,7 @@ jobs:
       # Passing tests print nothing above; the decompiler tests' own output (timings, the
       # decompiled fixture) is what the verification record copies (A7), so show it.
       - name: Decompiler test output
-        run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine)Tests"
+        run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner)Tests"
 
       - name: Verify macOS headless renderer and frontend exist
         if: runner.os == 'macOS'
@@ -128,15 +128,18 @@ jobs:
         run: >
           cmake --build build-x86_64 --parallel 4 --target
           SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
-          SaturnExplorerSavestateShapeTests
+          SaturnExplorerSavestateShapeTests SaturnExplorerMemorySnapshotTests
+          SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerTests
+          SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerRunnerTests
       - name: Verify the binaries are x86_64
         run: |
           lipo -archs build-x86_64/bin/SaturnExplorerSh2DecompilerEngineTests | grep -qx x86_64
           lipo -archs build-x86_64/bin/se-sleighc | grep -qx x86_64
+          lipo -archs build-x86_64/bin/SaturnExplorerDecompilerRunnerTests | grep -qx x86_64
       - name: Run the decompiler tests under Rosetta
         run: >
-          ctest --test-dir build-x86_64 --output-on-failure
-          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape)Tests'
+          ctest --test-dir build-x86_64 --output-on-failure -V
+          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner)Tests'
 
   # The distributable macOS bundle and DMG, ad-hoc signed. Developer ID signing and
   # notarisation need a certificate and stay a manual, recorded release step.
