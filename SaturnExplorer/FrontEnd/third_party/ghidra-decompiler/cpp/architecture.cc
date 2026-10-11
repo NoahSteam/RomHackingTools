@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+ * Modified for SaturnExplorer: translator owned by the Architecture before initialize (patches/0003-translator-ownership-on-init-failure.patch).
  */
 // Set up decompiler for specific architectures
 
@@ -629,10 +630,11 @@ void Architecture::postSpecFile(void)
 void Architecture::restoreFromSpec(DocumentStorage &store)
 
 {
-  unique_ptr<Translate> utrans(buildTranslator(store)); // Once language is described we can build translator
-  utrans->initialize(store);
-  Translate *newtrans = utrans.release();
+  // Owned per the Architecture's own rules from the start, so a failing initialize() neither leaks
+  // it nor deletes a translator SleighArchitecture shares (its destructor clears translate first).
+  Translate *newtrans = buildTranslator(store); // Once language is described we can build translator
   translate = newtrans;
+  newtrans->initialize(store);
   modifySpaces(newtrans);	// Give architecture chance to modify spaces, before copying
   copySpaces(newtrans);
   insertSpace( new FspecSpace(this,translate,numSpaces()));

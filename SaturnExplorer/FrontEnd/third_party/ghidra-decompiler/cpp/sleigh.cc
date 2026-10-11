@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
  */
 #include "sleigh.hh"
 #include "loadimage.hh"
@@ -525,8 +527,10 @@ void Sleigh::clearForDelete(void)
 
 {
   delete cache;
+  cache = (ContextCache *)0;	// reset() may throw before replacing them; never delete twice
   if (discache != (DisassemblyCache *)0)
     delete discache;
+  discache = (DisassemblyCache *)0;
 }
 
 Sleigh::~Sleigh(void)
