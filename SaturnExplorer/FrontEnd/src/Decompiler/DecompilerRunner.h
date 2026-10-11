@@ -23,7 +23,8 @@
 //     session.
 //   - If a cancel is not acknowledged within the limit (default 5 s), decompilation is disabled
 //     for the session, with a reason naming the entry. No replacement worker is started: a second
-//     engine thread would reset the translator under the stuck one.
+//     engine thread would reset the translator under the stuck one. A later session (after
+//     InvalidateSession) decompiles again on the same worker once the stuck request has ended.
 //   - The destructor sets cancel and the epoch, joins unconditionally, then calls
 //     SleighArchitecture::shutdown(). Exit therefore waits for the next check-point; a detached
 //     worker would still be running while static objects are destroyed.
@@ -110,6 +111,7 @@ private:
     void WorkerMain();
     void RequestCancelLocked(CancelReason reason);
     void DisableLocked(const std::string& reason);
+    void RecoverLocked();
 
     const std::string mConfigDir;
     const RunnerOptions mOptions;
@@ -124,6 +126,8 @@ private:
     uint64_t mEpoch = 1;
     bool mStopping = false;
     bool mDisabled = false;
+    uint64_t mDisabledEpoch = 0;                // the session it was disabled in
+    bool mWorkerGone = false;                   // the worker could not start: disabled for good
     std::string mDisabledReason;
     uint64_t mRunsStarted = 0;
 

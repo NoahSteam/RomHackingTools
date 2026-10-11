@@ -26,8 +26,18 @@ DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
         mDisabledReason = "another decompiler engine thread is already running in this process";
         return;
     }
-    mOwnsEngine = true;
-    mThread = std::thread(&DecompilerRunner::WorkerMain, this);
+    mOwnsEngine = true;   // before the worker starts: it reads this
+    try
+    {
+        mThread = std::thread(&DecompilerRunner::WorkerMain, this);
+    }
+    catch (...)
+    {
+        // No worker, so no destructor will release the claim: release it here, or every later
+        // runner would be born disabled with no engine thread anywhere.
+        gEngineOwned = false;
+        throw;
+    }
 }
 
 DecompilerRunner::~DecompilerRunner()
@@ -58,6 +68,11 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
     const uint64_t generation = mNextGeneration++;
     mLatest[slot] = generation;
 
+    // Whatever this slot asked before is obsolete now, whether or not this request runs.
+    for (auto it = mQueue.begin(); it != mQueue.end();)
+        it = it->slot == slot ? mQueue.erase(it) : it + 1;   // coalesced: never run
+    if (mRunning && mRunningJob.slot == slot) RequestCancelLocked(CancelReason::Superseded);
+
     uint32_t entry = 0;
     if (CanonicalAddress(request.entry, entry) && mTooLarge.count(entry) && !retryTooLarge)
     {
@@ -72,10 +87,6 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
         mDone.push_back(std::make_pair(mEpoch, std::move(r)));
         return generation;
     }
-
-    for (auto it = mQueue.begin(); it != mQueue.end();)
-        it = it->slot == slot ? mQueue.erase(it) : it + 1;   // coalesced: never run
-    if (mRunning && mRunningJob.slot == slot) RequestCancelLocked(CancelReason::Superseded);
 
     Job job;
     job.generation = generation;
@@ -122,9 +133,23 @@ void DecompilerRunner::RequestCancelLocked(CancelReason reason)
 void DecompilerRunner::DisableLocked(const std::string& reason)
 {
     mDisabled = true;
+    mDisabledEpoch = mEpoch;
     mDisabledReason = reason;
     mQueue.clear();
     std::fprintf(stderr, "SH-2 decompiler: %s\n", reason.c_str());
+}
+
+// Disabled "for the session": a new session (epoch) on the same worker may decompile again once
+// the request that would not stop has stopped. While it still runs nothing is re-enabled -- a
+// new request would only queue behind it -- and no second worker is ever started. A runner that
+// never owned the engine stays disabled.
+void DecompilerRunner::RecoverLocked()
+{
+    if (mDisabled && mOwnsEngine && !mWorkerGone && mEpoch != mDisabledEpoch && !mRunning)
+    {
+        mDisabled = false;
+        mDisabledReason.clear();
+    }
 }
 
 bool DecompilerRunner::Poll(DecompileResult& out)
@@ -170,6 +195,7 @@ void DecompilerRunner::InvalidateSession()
     mDone.clear();
     mTooLarge.clear();
     RequestCancelLocked(CancelReason::Session);
+    RecoverLocked();
 }
 
 bool DecompilerRunner::Busy() const
@@ -213,7 +239,28 @@ void DecompilerRunner::WorkerMain()
     // Every engine object is created, used and destroyed on this thread. Each request builds a
     // fresh Architecture (and with it resets the shared translator), so a failed or cancelled
     // request leaves nothing behind for the next one.
-    Sh2Decompiler engine(mConfigDir);
+    std::unique_ptr<Sh2Decompiler> enginePtr;
+    try
+    {
+        enginePtr.reset(new Sh2Decompiler(mConfigDir));
+    }
+    catch (...)
+    {
+        // The worker could not even start: decompilation is off for good (no session can bring
+        // back a worker that never ran), and the thread ends -- the destructor still joins it.
+        std::lock_guard<std::mutex> lock(mMutex);
+        mWorkerGone = true;
+        try
+        {
+            DisableLocked("the decompiler could not start (out of memory)");
+        }
+        catch (...)
+        {
+            mDisabled = true;
+        }
+        return;
+    }
+    Sh2Decompiler& engine = *enginePtr;
     for (;;)
     {
         Job job;
@@ -232,28 +279,59 @@ void DecompilerRunner::WorkerMain()
             mCancelReason = CancelReason::None;
             mCancel = false;
             ++mRunsStarted;
-            engine.SetPhaseObserver(mObserver);
+            std::function<void(DecompilePhase)> observer;
+            try
+            {
+                observer = mObserver;   // tests only; a failed copy just means no observer
+            }
+            catch (...)
+            {
+            }
+            engine.SetPhaseObserver(std::move(observer));
         }
 
-        DecompileResult r = engine.Decompile(job.snapshot, job.request, &mCancel);
-        r.generation = job.generation;
-        r.slot = job.slot;
-        job.snapshot.reset();   // the snapshot's memory goes now, not when the next job replaces it
-
-        std::lock_guard<std::mutex> lock(mMutex);
-        const CancelReason reason = mCancelReason;
-        mRunning = false;
-        mCancel = false;
-        mCancelReason = CancelReason::None;
-        if (r.status == DecompileStatus::Cancelled && reason == CancelReason::Budget)
+        // Decompile never throws, but recording its result allocates. Should anything here
+        // throw, the request is finished as failed and decompilation disabled for the session;
+        // the worker itself never dies with an exception, which would end the process.
+        try
         {
-            char b[120];
-            std::snprintf(b, sizeof b, "too large to decompile within %g s", mOptions.budgetSeconds);
-            r.status = DecompileStatus::TooLarge;
-            r.error = b;
-            if (job.epoch == mEpoch) mTooLarge.insert(r.entry);
+            DecompileResult r = engine.Decompile(job.snapshot, job.request, &mCancel);
+            r.generation = job.generation;
+            r.slot = job.slot;
+            job.snapshot.reset();   // the snapshot's memory goes now, not when the next job replaces it
+
+            std::lock_guard<std::mutex> lock(mMutex);
+            const CancelReason reason = mCancelReason;
+            mRunning = false;
+            mCancel = false;
+            mCancelReason = CancelReason::None;
+            if (r.status == DecompileStatus::Cancelled && reason == CancelReason::Budget)
+            {
+                char b[120];
+                std::snprintf(b, sizeof b, "too large to decompile within %g s", mOptions.budgetSeconds);
+                r.status = DecompileStatus::TooLarge;
+                r.error = b;
+                if (job.epoch == mEpoch) mTooLarge.insert(r.entry);
+            }
+            mDone.push_back(std::make_pair(job.epoch, std::move(r)));
+            RecoverLocked();
         }
-        mDone.push_back(std::make_pair(job.epoch, std::move(r)));
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            mRunning = false;
+            mCancel = false;
+            mCancelReason = CancelReason::None;
+            try
+            {
+                DisableLocked("the decompiler failed internally (out of memory?); decompilation is disabled for this session");
+            }
+            catch (...)
+            {
+                mDisabled = true;
+                mDisabledEpoch = mEpoch;
+            }
+        }
     }
 }
 

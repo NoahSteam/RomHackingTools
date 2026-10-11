@@ -230,8 +230,11 @@ an entry correction replaces the request for that function.
   There is exactly one engine thread for the life of the process, because the SLEIGH translator
   is a process-global object that every new `Architecture` resets; no replacement worker is ever
   started, and exit cancels, joins, then calls `SleighArchitecture::shutdown()`. Any
-  `LowlevelError` becomes a `warnings` entry; a `std::bad_alloc` or a second consecutive failure
-  rebuilds the engine on that same thread (PLAN.md A4).
+  `LowlevelError` becomes a `warnings` entry. Each request builds and destroys its own
+  `Architecture`, so an ordinary failure leaves nothing behind. Running out of memory *inside* the
+  engine is different: Ghidra is not exception-safe there and can leave the shared translator
+  half-reset, which cannot be rebuilt (the translator map is private to `SleighArchitecture`), so
+  the decompiler then reports itself unavailable for the rest of the process (PLAN.md A4).
 - Emscripten has no thread here and no Ghidra: `SE_ENABLE_DECOMPILER` is forced off and the panel
   is compiled out (`#if SE_ENABLE_DECOMPILER`), the same way `SE_ENABLE_LIVE` gates live-only code.
 
@@ -240,9 +243,13 @@ an entry correction replaces the request for that function.
   `FunctionNames`/imported symbols → call-site target from the call stack (`DecodeCallTarget`,
   extended to `jsr` through a literal) → backward scan from the address to the previous `rts` +
   delay slot, skipping `nop` padding and literal-pool words, validated by decoding the first few
-  instructions with `Sh2Decode` → callee discovered while decompiling a caller. The panel shows the
-  source ("entry guessed from rts scan") and offers "Set function start here". User corrections
-  persist in `saturn_function_bounds.txt` next to `saturn_functions.txt`.
+  instructions with `Sh2Decode` → callee discovered while decompiling a caller. The ladder ranks
+  sources for the same entry; it is applied to the nearest known entry at or below the address,
+  because every known entry is a function start: a nearer one, from any source, begins a later
+  function, and an older user entry further back does not claim it. A user entry does win over
+  the rts scan (an early return looks like an end). The panel shows the source ("entry guessed
+  from rts scan") and offers "Set function start here". User corrections persist in
+  `saturn_function_bounds.txt` next to `saturn_functions.txt`.
 - **Function end** is Ghidra's: flow following from the entry, so interleaved literal pools and
   shared tails are handled by the engine, not by us.
 - **Delay slots** are the SLEIGH spec's job (`delayslot(1)`); the spike shows `bf/s`, `bt/s`,

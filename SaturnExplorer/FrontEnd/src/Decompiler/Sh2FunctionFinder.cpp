@@ -97,18 +97,23 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
 
     // The previous return: rts/rte at p, its delay slot at p+2, so the next function can start
     // at p+4. An rts whose slot is the address itself still belongs to the address's function.
-    uint32_t p = a;
+    // Candidates p run from a - 4 (so the slot at p + 2 is still before the address) down to the
+    // floor itself, inclusive.
+    uint32_t p = 0;
     bool found = false;
-    while (p >= floor + 4)
+    if (a - floor >= 4)
     {
-        p -= 2;
-        if (p + 4 > a) continue;
-        uint16_t w = 0;
-        if (!snap.ReadU16(p, w)) break;
-        if (w == kRts || w == kRte)
+        for (uint32_t q = a - 4;; q -= 2)
         {
-            found = true;
-            break;
+            uint16_t w = 0;
+            if (!snap.ReadU16(q, w)) break;
+            if (w == kRts || w == kRte)
+            {
+                p = q;
+                found = true;
+                break;
+            }
+            if (q < floor + 2) break;
         }
     }
     if (!found)
@@ -168,11 +173,13 @@ bool CallTargetAt(const MemorySnapshot& snap, uint32_t site, uint32_t& target)
         t = call.BranchTarget;
     else if ((op & 0xF0FFu) == 0x400Bu)   // jsr @rN
     {
-        // Walk back to the mov.l @(disp,PC),rN that loaded rN. Every SH-2 form that writes a
-        // general register names it in bits 8-11, so an instruction in between with that field
-        // equal to N may have changed rN; give up there rather than guess. (Compares and stores
-        // through rN, and opcodes whose bits 8-11 are not a register at all, are given up on
-        // too: rare in this position, and a missed name costs nothing.)
+        // Walk back to the mov.l @(disp,PC),rN that loaded rN, believing it only when every
+        // instruction in between provably leaves rN alone. SH-2 encodes its register operands in
+        // bits 8-11 and 4-7, so one naming rN in either may change it (a destination, or @rN+ /
+        // @-rN); r0 is also written implicitly by mova, the GBR-relative and #imm-to-r0 forms
+        // (0xCxxx) and mov.b/mov.w @(disp,rM),r0 (0x8xxx); and a branch or call in between means
+        // the load may not even have run. Anything of that kind ends the search with no answer:
+        // a missed name costs nothing, a wrong one sends the user to the wrong function.
         const unsigned n = (op >> 8) & 0xF;
         bool found = false;
         for (int back = 1; back <= 8 && !found; ++back)
@@ -180,11 +187,18 @@ bool CallTargetAt(const MemorySnapshot& snap, uint32_t site, uint32_t& target)
             const uint32_t q = site - 2 * back;
             uint16_t prev = 0;
             if (!snap.ReadU16(q, prev)) return false;
-            if (((prev >> 8) & 0xF) != n) continue;
             uint32_t lit = 0, size = 0;
-            if ((prev & 0xF000u) != 0xD000u || !PcRelLiteral(q, prev, lit, size)) return false;
-            if (!snap.ReadU32(lit, t)) return false;
-            found = true;
+            if ((prev & 0xF000u) == 0xD000u && ((prev >> 8) & 0xF) == n && PcRelLiteral(q, prev, lit, size))
+            {
+                if (!snap.ReadU32(lit, t)) return false;
+                found = true;
+                break;
+            }
+            const DisassembledInstruction ins = Sh2Decode(q, prev);
+            if (!ins.IsValid || ins.IsBranch || ins.HasDelaySlot) return false;
+            if (((prev >> 8) & 0xF) == n || ((prev >> 4) & 0xF) == n) return false;
+            const unsigned hi = prev >> 12;
+            if (n == 0 && (hi == 0x8 || hi == 0xC)) return false;
         }
         if (!found) return false;
     }

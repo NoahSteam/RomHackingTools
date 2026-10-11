@@ -21,7 +21,9 @@
 // Never throws: every engine error becomes a warning or a Failed status. Each call builds a fresh
 // Architecture and destroys it before returning, so a failed or cancelled decompilation leaves
 // no engine state behind for the next one: the "rebuild after a hard failure" of PLAN.md Step 2
-// happens on every request. No Ghidra type appears in this header. Engine thread only.
+// happens on every request. The exception is running out of memory inside the engine, which is
+// not exception-safe there and can damage the process-global translator; after that, every
+// request is answered Unavailable for the life of the process. No Ghidra type appears in this header. Engine thread only.
 #pragma once
 
 #include <atomic>
@@ -136,6 +138,8 @@ public:
     void SetPhaseObserver(std::function<void(DecompilePhase)> observer) { mObserver = std::move(observer); }
 
 private:
+    void DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
+                       std::atomic<bool>* cancel, DecompileResult& r);
     void Enter(DecompilePhase phase);
 
     std::string mConfigDir;

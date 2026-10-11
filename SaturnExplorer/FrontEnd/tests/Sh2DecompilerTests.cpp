@@ -12,9 +12,12 @@
 // usage: SaturnExplorerSh2DecompilerTests <scratch dir>
 #include "DecompilerTestSupport.h"
 
+#include "AllocFailure.h"
+#include "Decompiler/SaturnArchitecture.h"
 #include "Decompiler/Sh2Decompiler.h"
 
 #include <cstring>
+#include <sstream>
 
 using namespace sfe::decomp;
 using dts::MakeSnapshot;
@@ -177,6 +180,19 @@ void TestDelaySlotPcRelative()
         for (const std::string& w : r.warnings) warned |= Has(w, "delay slot");
         CHECK(warned);
     }
+    // Every other delayed-branch kind, and mov.w and mova in the slot: flagged at the slot, and
+    // no literal word marked read-only.
+    for (const dts::Fixture3Case& c : dts::kFixture3Others)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(c.entry));
+        std::printf("  %-13s status %d, unsupported %d at %08X\n", c.name, int(r.status), r.unsupported, r.unsupportedAt);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.unsupported);
+        CHECK(r.unsupportedAt == c.slot);
+        CHECK(r.literalPools.empty());
+        CHECK(!Has(r.Text(), "0x1234") && !Has(r.Text(), "4660"));
+        CHECK(!Has(r.Text(), "0x44444444") && !Has(r.Text(), "0x55555555"));
+    }
 }
 
 // A1: a result belongs to the bytes it was made from. An edit moves the key, and decompiling the
@@ -292,10 +308,240 @@ void TestCancelledBeforeStart()
     CHECK(d.Decompile(Fixture1Snapshot(), Request(dts::kFixture1Caller), &cancel).status == DecompileStatus::Ok);
 }
 
+// Five branches into uncaptured memory: each is a halt in the flow, and the function is still
+// decompiled and reported truncated -- Ghidra's default bad-data allowance of four would fail it.
+void TestManyUncapturedBranches()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> none;
+    auto snap = MakeSnapshot(none);
+    auto* lw = const_cast<MemoryRegion*>(snap->RegionAt(MemorySnapshot::kLwramBase));
+    const uint32_t f = 0x002FFFE0u;
+    uint32_t a = f;
+    auto put = [&](uint16_t w) { lw->bytes[a - lw->base] = uint8_t(w >> 8); lw->bytes[a - lw->base + 1] = uint8_t(w); a += 2; };
+    for (int i = 0; i < 5; ++i)
+    {
+        put(0x4415);                                                    // cmp/pl r4
+        const uint32_t target = 0x00300000u + 4u * uint32_t(i);         // past LWRAM, distinct
+        put(uint16_t(0x8900 | ((target - (a + 4)) / 2)));               // bt target
+    }
+    put(0xE000);   // mov #0,r0
+    put(0x000B);   // rts
+    put(0x0009);
+    const DecompileResult r = d.Decompile(snap, Request(f));
+    Print("five uncaptured branches", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(r.truncated);
+    CHECK(r.truncatedAt == 0x00300000u || (r.truncatedAt >= 0x00300000u && r.truncatedAt <= 0x00300010u));
+    CHECK(!r.lines.empty());
+}
+
+// Callees: a direct bsr is harvested (its target lives in the call's spec, not the CALL's
+// address input), a callee already known is still listed, and a call through a mirror of the
+// callee is named and navigates to the canonical entry.
+void TestCalleeHarvest()
+{
+    Sh2Decompiler d(gConfig);
+    // Fixture 1 with the jsr replaced by bsr 0x06005000 (0x0600400E + 4 + 2 * 0x7F8).
+    std::vector<uint8_t> hw;
+    dts::PlaceFixture1(hw);
+    dts::Put16(hw, dts::kFixture1Jsr - 0x06000000u, uint16_t(0xB000 | ((dts::kFixture1Callee - (dts::kFixture1Jsr + 4)) / 2)));
+    auto direct = MakeSnapshot(hw, 4);
+    const DecompileResult r = d.Decompile(direct, Request(dts::kFixture1Caller));
+    Print("bsr", r);
+    CHECK(Has(r.Text(), "func_0x06005000("));
+    CHECK(r.callees == std::vector<uint32_t>{ dts::kFixture1Callee });
+
+    DecompileRequest known = Request(dts::kFixture1Caller);
+    known.knownFunctions.push_back(dts::kFixture1Callee);
+    const DecompileResult rk = d.Decompile(Fixture1Snapshot(), known);
+    CHECK(rk.callees == std::vector<uint32_t>{ dts::kFixture1Callee });
+
+    for (uint32_t mirror : { 0x26005000u, 0x06105000u })
+    {
+        const DecompileResult rm = d.Decompile(Fixture1Snapshot(mirror, 5), Request(dts::kFixture1Caller));
+        Print("call through a mirror", rm);
+        CHECK(Has(rm.Text(), "func_0x06005000(param_1)"));
+        CHECK(!Has(rm.Text(), "(*(code *)"));
+        CHECK(rm.callees == std::vector<uint32_t>{ dts::kFixture1Callee });
+        bool target = false;
+        for (const Line& l : rm.lines)
+            for (const Token& t : l.tokens)
+                if (t.kind == TokenKind::FuncName && t.target == dts::kFixture1Callee) target = true;
+        CHECK(target);
+    }
+}
+
+// Out of memory anywhere before the engine starts -- preparing the request, the name map --
+// comes back as a failed result, never as an exception; the next request is unaffected.
+void TestAllocationFailureIsReported()
+{
+    Sh2Decompiler d(gConfig);
+    auto snap = Fixture1Snapshot();
+    DecompileRequest q = Request(dts::kFixture1Caller);
+    q.names.emplace_back(dts::kFixture1Callee, "ReadCounter");
+    q.names.emplace_back(dts::kFixture1Caller, "Tick");
+    // How many allocations happen before the engine's first phase: the window swept.
+    long before = 0;
+    d.SetPhaseObserver([&](DecompilePhase p) {
+        if (p == DecompilePhase::Init && before == 0) before = dts::AllocCount().load();
+    });
+    dts::AllocCount() = 0;
+    CHECK(d.Decompile(snap, q).status == DecompileStatus::Ok);
+    d.SetPhaseObserver(nullptr);
+    std::printf("  %ld allocations before the engine starts; failing each in turn\n", before);
+    CHECK(before > 0);
+    int failed = 0;
+    for (long k = 0; k < before; ++k)
+    {
+        DecompileResult r;
+        bool escaped = false;
+        dts::FailAfter() = k;
+        try
+        {
+            r = d.Decompile(snap, q);
+        }
+        catch (...)
+        {
+            escaped = true;
+        }
+        dts::FailAfter() = -1;
+        CHECK(!escaped);
+        if (r.status == DecompileStatus::Failed) ++failed;
+        else CHECK(r.status == DecompileStatus::Ok);   // an allocation the result did not need
+    }
+    std::printf("  %d of %ld injected failures reported as Failed, none escaped\n", failed, before);
+    CHECK(failed > 0);
+
+    const DecompileResult after = d.Decompile(snap, q);
+    CHECK(after.status == DecompileStatus::Ok && Has(after.Text(), "ReadCounter(param_1)"));
+}
+
+
+// The two refusals, by who asks rather than by how much: the Architecture's own loader (values:
+// literals, jump tables, strings) refuses with DataUnavailError whatever the size -- 16 bytes
+// included -- and never zero-fills; the translator's (instruction fetches) refuses with
+// BadDataError, so flow halts there instead of aborting.
+void TestFetchAndDataRefusals()
+{
+    Sh2Decompiler d(gConfig);
+    auto snap = Fixture1Snapshot();
+    CHECK(d.Decompile(snap, Request(dts::kFixture1Caller)).status == DecompileStatus::Ok);   // library started
+    std::ostringstream errors;
+    SaturnArchitecture arch(snap, &errors);
+    arch.Initialise(20000, nullptr);
+    ghidra::AddrSpace* ram = arch.getDefaultCodeSpace();
+    ghidra::uint1 buf[16];
+    for (int size : { 4, 16 })
+    {
+        bool data = false;
+        try
+        {
+            arch.loader->loadFill(buf, size, ghidra::Address(ram, 0x00300000u - uint32_t(size) / 2));   // straddles LWRAM's end
+        }
+        catch (ghidra::DataUnavailError&)
+        {
+            data = true;
+        }
+        catch (ghidra::LowlevelError&)
+        {
+        }
+        std::printf("  data read of %d bytes across LWRAM's end: %s\n", size, data ? "DataUnavailError" : "WRONG");
+        CHECK(data);
+    }
+    bool fetch = false;
+    struct Ignore : ghidra::AssemblyEmit
+    {
+        void dump(const ghidra::Address&, const std::string&, const std::string&) override {}
+    } ignore;
+    try
+    {
+        arch.translate->printAssembly(ignore, ghidra::Address(ram, 0x00000600u));
+    }
+    catch (ghidra::BadDataError&)
+    {
+        fetch = true;
+    }
+    catch (ghidra::LowlevelError&)
+    {
+    }
+    std::printf("  instruction fetch from the BIOS: %s\n", fetch ? "BadDataError" : "WRONG");
+    CHECK(fetch);
+    CHECK(arch.FetchImage().HadUnavailable() && arch.FetchImage().UnavailableAddress() == 0x00000600u);
+}
+
+
+// Out of memory inside the engine, in a child process (this one's engine must stay usable, and
+// the damaged one's static teardown is not run): the failure is reported, and every later
+// request is refused as Unavailable rather than built on a translator that may be half-reset.
+int EngineOomChild(const std::string& scratch, const std::string& where, long offset)
+{
+    dts::PrepareProcess();
+    gConfig = dts::Join(scratch, "config");
+    sfe::MakeDirectory(scratch);
+    sfe::MakeDirectory(gConfig);
+    Sh2Decompiler d(gConfig);
+    auto snap = Fixture1Snapshot();
+    DecompileRequest q = Request(dts::kFixture1Caller);
+    // Counted on a warm run: the first builds the translator, so it allocates far more.
+    CHECK(d.Decompile(snap, q).status == DecompileStatus::Ok);
+    const DecompilePhase phase = where == "construct" ? DecompilePhase::Init : DecompilePhase::Flow;
+    long at = -1;
+    d.SetPhaseObserver([&](DecompilePhase p) {
+        if (p == phase && at < 0) at = dts::AllocCount().load();
+    });
+    dts::AllocCount() = 0;
+    CHECK(d.Decompile(snap, q).status == DecompileStatus::Ok);
+    d.SetPhaseObserver(nullptr);
+    const long useCount = snap.use_count();
+    dts::FailAfter() = at + offset;   // 'construct': the Architecture and its load images; 'flow': flow following
+    DecompileResult r;
+    bool escaped = false;
+    try
+    {
+        r = d.Decompile(snap, q);
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    dts::FailAfter() = -1;
+    std::printf("  child (%s +%ld): allocation %ld fails -> status %d (%s); snapshot references %ld -> %ld\n",
+                where.c_str(), offset, at + offset, int(r.status), r.error.c_str(), useCount, long(snap.use_count()));
+    CHECK(!escaped);
+    CHECK(r.status == DecompileStatus::Failed);
+    CHECK(snap.use_count() == useCount);   // nothing built on the snapshot was leaked
+    const DecompileResult after = d.Decompile(snap, q);
+    std::printf("  child: next request -> status %d (%s)\n", int(after.status), after.error.c_str());
+    CHECK(after.status == DecompileStatus::Unavailable);
+    CHECK(Has(after.error, "out of memory"));
+    std::fflush(stdout);
+    std::_Exit(dts::Failures() ? 1 : 0);   // skip static teardown of the damaged engine
+}
+
+void TestEngineAllocationFailureInChild(const char* self, const std::string& scratch)
+{
+    // Inside flow following, and each of the first allocations of building an Architecture (the
+    // Architecture itself, then its two load images).
+    const char* where[] = { "flow", "construct", "construct", "construct", "construct" };
+    const long offset[] = { 10, 0, 1, 2, 3 };
+    for (int i = 0; i < 5; ++i)
+    {
+        std::string cmd = std::string("\"") + self + "\" --engine-oom " + where[i] + " " + std::to_string(offset[i]) +
+                          " \"" + dts::Join(scratch, "oom") + "\"";
+#ifdef _WIN32
+        cmd = "\"" + cmd + "\"";   // cmd.exe strips the outer pair
+#endif
+        const int rc = std::system(cmd.c_str());
+        CHECK(rc == 0);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
 {
+    if (argc == 5 && std::string(argv[1]) == "--engine-oom") return EngineOomChild(argv[4], argv[2], std::atol(argv[3]));
     if (argc != 2)
     {
         std::printf("usage: %s <scratch dir>\n", argv[0]);
@@ -318,6 +564,11 @@ int main(int argc, char** argv)
         RUN(TestMovWFold());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
+        RUN(TestManyUncapturedBranches());
+        RUN(TestCalleeHarvest());
+        RUN(TestFetchAndDataRefusals());
+        RUN(TestAllocationFailureIsReported());
+        RUN(TestEngineAllocationFailureInChild(argv[0], scratch));
     }
     catch (std::exception& e)
     {

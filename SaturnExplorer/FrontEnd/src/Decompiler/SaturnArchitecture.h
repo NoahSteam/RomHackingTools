@@ -17,6 +17,7 @@
 #include "sleigh_arch.hh"
 
 #include <atomic>
+#include <memory>
 #include <ostream>
 #include <string>
 
@@ -28,13 +29,13 @@ namespace decomp
 class SaturnArchitecture : public ghidra::SleighArchitecture
 {
 public:
-    // 'image' is owned by the Architecture once init() has run (Ghidra deletes its loader).
-    SaturnArchitecture(CaptureLoadImage* image, std::ostream* errors);
+    SaturnArchitecture(std::shared_ptr<const MemorySnapshot> snapshot, std::ostream* errors);
 
     // init() plus the options that init would otherwise reset. Throws ghidra::LowlevelError.
     void Initialise(ghidra::uint4 maxInstructions, std::atomic<bool>* cancel);
 
-    CaptureLoadImage* Image() const { return mImage; }
+    // The translator's load image: where flow ran into memory that is not captured.
+    const CaptureLoadImage& FetchImage() const { return *mFetchImage; }
 
     // Materialise the embedded spec bundle under 'configDir' (SpecBundle, PLAN.md A5) and point
     // the engine's process-global spec search path at it. Once per process: later calls return
@@ -44,10 +45,16 @@ public:
 
 private:
     void buildLoader(ghidra::DocumentStorage& store) override;
+    ghidra::Translate* buildTranslator(ghidra::DocumentStorage& store) override;
     void resolveArchitecture() override;
     void postSpecFile() override;
 
-    CaptureLoadImage* mImage;
+    // Ours until buildLoader hands it to Architecture::loader, which deletes it; so an init that
+    // fails earlier frees it here.
+    std::unique_ptr<CaptureLoadImage> mDataImage;
+    // Ours for the Architecture's life. The process-global translator keeps a pointer to it
+    // until the next Architecture resets it, exactly as it does to a stock loader.
+    std::unique_ptr<CaptureLoadImage> mFetchImage;
 };
 
 }  // namespace decomp

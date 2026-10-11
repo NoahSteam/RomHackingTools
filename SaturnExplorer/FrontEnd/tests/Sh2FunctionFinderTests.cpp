@@ -44,6 +44,16 @@ std::shared_ptr<MemorySnapshot> Functions()
     put(0x06009000u, { 0xD102, 0x7104, 0x410B, 0x0009, 0x420B, 0x0009 });
     // After an rts, words that are not SH-2 instructions.
     put(0x0600A000u, { 0x000B, 0x0009, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF });
+    // Jsrs whose register the literal load no longer holds by the call (the old literal still
+    // points at f2): mova overwrites r0 implicitly; a postincrement through r1 changes r1; a
+    // branch in between means the load may not have run.
+    put(0x0600B000u, { 0xD007, 0xC711, 0x400B, 0x0009 });   // mov.l @(28,pc),r0 ; mova @(68,pc),r0 ; jsr @r0
+    // (mova's operand fields hold 1 and 1: only its implicit write of r0 says it changes r0)
+    put(0x0600B008u, { 0xD106, 0x6216, 0x410B, 0x0009 });   // mov.l @(24,pc),r1 ; mov.l @r1+,r2 ; jsr @r1
+    put(0x0600B010u, { 0xD105, 0x8B00, 0x410B, 0x0009 });   // mov.l @(20,pc),r1 ; bf .+4 ; jsr @r1
+    dts::Put32(hw, 0x0600B020u - 0x06000000u, kF2);   // their literals: 0x0600B020, 24, 28
+    dts::Put32(hw, 0x0600B024u - 0x06000000u, kF2);
+    dts::Put32(hw, 0x0600B028u - 0x06000000u, kF2);
     return dts::MakeSnapshot(hw);
 }
 
@@ -86,7 +96,19 @@ void TestLadder()
     g = FindFunctionContaining(*s, kF1 + 6, sym);
     CHECK(g.ok && g.entry == kF1 && g.source == EntrySource::Symbol);
 
-    // A user-set entry wins even across an rts: an early return looks just like an end, and the
+    // A known entry is a function start: a nearer symbol is a later function, which an older
+    // user entry further back does not claim (the ladder is per entry, not "user beats all").
+    FinderHints mixed;
+    mixed.userEntries.insert(kF1);
+    mixed.symbols.insert(kF2);
+    g = FindFunctionContaining(*s, kF2 + 4, mixed);
+    CHECK(g.ok && g.entry == kF2 && g.source == EntrySource::Symbol);
+    mixed.symbols.clear();
+    mixed.callees.insert(kF3);
+    g = FindFunctionContaining(*s, kF3 + 2, mixed);
+    CHECK(g.ok && g.entry == kF3 && g.source == EntrySource::Callee);
+
+    // A user-set entry wins across an rts: an early return looks just like an end, and the
     // user's correction is for exactly that.
     FinderHints user;
     user.userEntries.insert(kF1);
@@ -129,7 +151,42 @@ void TestCallTargets()
     CHECK(!CallTargetAt(*s, 0x06009004u, t));           // r1 changed after the load
     CHECK(!CallTargetAt(*s, 0x06009008u, t));           // r2 never loaded
     CHECK(!CallTargetAt(*s, kF1, t));                   // not a call
+    CHECK(!CallTargetAt(*s, 0x0600B004u, t));           // mova overwrote r0 after the load
+    CHECK(!CallTargetAt(*s, 0x0600B00Cu, t));           // @r1+ changed r1 after the load
+    CHECK(!CallTargetAt(*s, 0x0600B014u, t));           // a branch between load and call
     CHECK(CallTargetsFromListing(*s, kF1, kF3 + 4) == (std::vector<uint32_t>{ kF2, kF3 }));
+}
+
+// The returns at the bottom of the scan window are candidates too: at the region's base, and at
+// a span-limited floor.
+void TestScanFloor()
+{
+    std::vector<uint8_t> hw;
+    auto put = [&](uint32_t a, std::initializer_list<uint16_t> words) {
+        size_t off = a - 0x06000000u;
+        for (uint16_t w : words) { dts::Put16(hw, off, w); off += 2; }
+    };
+    put(0x06000000u, { 0x000B, 0x0009, 0x6043, 0x7001, 0x000B, 0x0009 });   // rts at the base
+    auto s = dts::MakeSnapshot(hw);
+    uint32_t e = 0;
+    CHECK(RtsScanEntry(*s, 0x06000006u, e) && e == 0x06000004u);
+    CHECK(RtsScanEntry(*s, 0x06000004u, e) && e == 0x06000004u);
+
+    // An rts exactly kMaxFunctionSpan below the address, and one at floor + 2.
+    std::vector<uint8_t> hw2;
+    const uint32_t a = 0x06020000u;
+    for (uint32_t rts : { a - kMaxFunctionSpan, a - kMaxFunctionSpan + 2 })
+    {
+        hw2.assign(0x30000, 0);
+        for (uint32_t x = rts + 4; x < a + 8; x += 2) dts::Put16(hw2, x - 0x06000000u, 0x7001);   // add #1,r0
+        dts::Put16(hw2, rts - 0x06000000u, 0x000B);
+        dts::Put16(hw2, rts + 2 - 0x06000000u, 0x0009);
+        auto s2 = dts::MakeSnapshot(hw2);
+        std::string why;
+        const bool ok = RtsScanEntry(*s2, a, e, &why);
+        std::printf("  rts at floor%s: %s\n", rts == a - kMaxFunctionSpan ? "" : " + 2", ok ? "found" : why.c_str());
+        CHECK(ok && e == rts + 4);
+    }
 }
 
 void TestBoundsPersistence(const std::string& scratch)
@@ -166,6 +223,7 @@ int main(int argc, char** argv)
     RUN(TestRtsScan());
     RUN(TestLadder());
     RUN(TestCallTargets());
+    RUN(TestScanFloor());
     RUN(TestBoundsPersistence(scratch));
     dts::RemoveTree(scratch);
     return dts::Finish("Sh2FunctionFinderTests", start);

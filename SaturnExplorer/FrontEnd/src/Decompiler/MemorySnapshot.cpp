@@ -117,25 +117,31 @@ const MemoryRegion* MemorySnapshot::RegionAt(uint32_t canonical) const
 
 bool MemorySnapshot::Read(uint32_t address, uint8_t* out, size_t size, std::string* why) const
 {
-    size_t done = 0;
-    while (done < size)
+    // Two walks: every span is checked before any byte is copied, so a read that fails part-way
+    // leaves 'out' exactly as it was (the contract callers rely on, e.g. the load image's
+    // partial instruction fetch).
+    for (int copy = 0; copy < 2; ++copy)
     {
-        // Folded per run, not once: a read may straddle the end of one HWRAM repeat into the
-        // next, which on the bus is the start of the same 1 MiB again.
-        const uint32_t a = address + static_cast<uint32_t>(done);
-        uint32_t c = 0;
-        if (!CanonicalAddress(a, c, why)) return false;
-        const MemoryRegion* r = RegionAt(c);
-        if (!r)
+        size_t done = 0;
+        while (done < size)
         {
-            if (why) *why = "uncaptured memory at " + Hex8(c) + " (" + BusAreaName(c) + ")";
-            return false;
+            // Folded per run, not once: a read may straddle the end of one HWRAM repeat into the
+            // next, which on the bus is the start of the same 1 MiB again.
+            const uint32_t a = address + static_cast<uint32_t>(done);
+            uint32_t c = 0;
+            if (!CanonicalAddress(a, c, why)) return false;
+            const MemoryRegion* r = RegionAt(c);
+            if (!r)
+            {
+                if (why) *why = "uncaptured memory at " + Hex8(c) + " (" + BusAreaName(c) + ")";
+                return false;
+            }
+            const size_t off = c - r->base;
+            size_t n = r->bytes.size() - off;
+            if (n > size - done) n = size - done;
+            if (copy) std::memcpy(out + done, r->bytes.data() + off, n);
+            done += n;
         }
-        const size_t off = c - r->base;
-        size_t n = r->bytes.size() - off;
-        if (n > size - done) n = size - done;
-        std::memcpy(out + done, r->bytes.data() + off, n);
-        done += n;
     }
     return true;
 }

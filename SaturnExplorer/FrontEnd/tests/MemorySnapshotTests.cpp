@@ -89,6 +89,7 @@ void TestFolding()
     std::memset(b, 0xEE, sizeof b);
     CHECK(!s->Read(0x002FFFFEu, b, 4, &why));
     CHECK(why.find("0x00300000") != std::string::npos);
+    CHECK(b[0] == 0xEE && b[1] == 0xEE && b[2] == 0xEE && b[3] == 0xEE);   // all or nothing
 
     // The BIOS area is named when it is not captured.
     CHECK(!s->Read(0x00000600u, b, 2, &why));

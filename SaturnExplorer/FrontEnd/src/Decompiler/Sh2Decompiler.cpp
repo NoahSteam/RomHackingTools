@@ -40,24 +40,37 @@ std::string Hex8(uint32_t v)
     return b;
 }
 
-// Builds an Architecture over 'snapshot'. If init fails before the Architecture took ownership
-// of the loader, the loader is ours to delete.
 std::unique_ptr<SaturnArchitecture> BuildArchitecture(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                       uint32_t maxInstructions, std::atomic<bool>* cancel,
                                                       std::ostream& errors)
 {
-    auto* image = new CaptureLoadImage(snapshot);
-    std::unique_ptr<SaturnArchitecture> arch(new SaturnArchitecture(image, &errors));
+    std::unique_ptr<SaturnArchitecture> arch(new SaturnArchitecture(snapshot, &errors));
+    arch->Initialise(maxInstructions, cancel);
+    return arch;
+}
+
+// Set once an allocation failure (or any non-engine exception) has escaped from inside the
+// engine. Ghidra is not exception-safe there: the process-global SLEIGH translator can be left
+// half-reset, and the next Architecture built on it crashes. It cannot be rebuilt either (the
+// translator map is private to SleighArchitecture), so from then on the decompiler reports
+// itself unavailable for the life of the process instead of touching the engine again.
+std::atomic<bool> gEngineDamaged(false);
+
+// Canonical call target -> the addresses the code actually calls it through (itself, or mirrors).
+using CalleeAliases = std::map<uint32_t, std::set<uint32_t>>;
+
+// Fills the error text of a failed result. Itself guarded: the failure being reported may be an
+// allocation failure, and the result must still leave the boundary with its status set.
+void SetError(DecompileResult& r, const std::string& text)
+{
     try
     {
-        arch->Initialise(maxInstructions, cancel);
+        r.error = text;
     }
     catch (...)
     {
-        if (arch->loader == nullptr) delete image;
-        throw;
+        r.error.clear();
     }
-    return arch;
 }
 
 // What one pass learned from a function's raw p-code, before any action has run.
@@ -244,8 +257,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 if (t.kind == TokenKind::FuncName)
                 {
                     const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(op);
-                    if (cs && !cs->getEntryAddress().isInvalid())
-                        t.target = static_cast<uint32_t>(cs->getEntryAddress().getOffset());
+                    uint32_t c = 0;
+                    if (cs && !cs->getEntryAddress().isInvalid() &&
+                        CanonicalAddress(static_cast<uint32_t>(cs->getEntryAddress().getOffset()), c))
+                        t.target = c;   // navigation goes to the canonical entry, whichever mirror was called
                 }
             }
             line.tokens.push_back(t);
@@ -317,14 +332,61 @@ Sh2Decompiler::Sh2Decompiler(std::string configDir) : mConfigDir(std::move(confi
 {
 }
 
+// The one exception boundary: nothing thrown while decompiling -- an engine error, a cancel, an
+// allocation failure anywhere, including preparing the request -- leaves this function.
 DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                          const DecompileRequest& request, std::atomic<bool>* cancel)
 {
     const Clock::time_point t0 = Clock::now();
     DecompileResult r;
-    r.key = snapshot->key;
-    r.requestedEntry = request.entry;
+    try
+    {
+        r.key = snapshot->key;
+        r.requestedEntry = request.entry;
+        DecompileInto(snapshot, request, cancel, r);
+    }
+    catch (ghidra::CancelError&)
+    {
+        r.status = DecompileStatus::Cancelled;
+        r.cancelledIn = mWorkPhase;
+        r.lines.clear();
+        SetError(r, "cancelled");
+    }
+    catch (ghidra::LowlevelError& e)
+    {
+        r.status = DecompileStatus::Failed;
+        r.lines.clear();
+        SetError(r, e.explain);
+    }
+    catch (std::bad_alloc&)
+    {
+        r.status = DecompileStatus::Failed;
+        r.lines.clear();
+        if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;   // inside the engine
+        SetError(r, "out of memory");
+    }
+    catch (std::exception& e)
+    {
+        r.status = DecompileStatus::Failed;
+        r.lines.clear();
+        if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;
+        SetError(r, e.what());
+    }
+    catch (...)
+    {
+        r.status = DecompileStatus::Failed;
+        r.lines.clear();
+        if (mWorkPhase != DecompilePhase::Idle) gEngineDamaged = true;
+        SetError(r, "unexpected exception");
+    }
+    mWorkPhase = DecompilePhase::Idle;
+    r.elapsedMs = MsSince(t0);
+    return r;
+}
 
+void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot,
+                                  const DecompileRequest& request, std::atomic<bool>* cancel, DecompileResult& r)
+{
     std::string why;
     uint32_t entry = 0;
     uint8_t probe[2];
@@ -333,16 +395,20 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         r.status = DecompileStatus::NoCode;
         r.entry = entry;
         r.error = "no code at " + Hex8(request.entry) + ": " + why;
-        r.elapsedMs = MsSince(t0);
-        return r;
+        return;
     }
     r.entry = entry;
 
+    if (gEngineDamaged)
+    {
+        r.status = DecompileStatus::Unavailable;
+        r.error = "the decompiler ran out of memory earlier and its engine may be damaged; restart Saturn Explorer to decompile again";
+        return;
+    }
     if (!SaturnArchitecture::StartLibrary(mConfigDir, r.error))
     {
         r.status = DecompileStatus::Unavailable;
-        r.elapsedMs = MsSince(t0);
-        return r;
+        return;
     }
 
     // Names first, so a FunctionNames rename shows; then the other known entries.
@@ -365,7 +431,7 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
 
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output.
-    auto runPass = [&](const std::set<uint32_t>& callees, bool print, std::set<uint32_t>* targets) {
+    auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, request.maxInstructions, cancel, errors);
@@ -374,13 +440,24 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         struct TeardownNote
         {
             Sh2Decompiler* self;
-            ~TeardownNote() { self->Enter(DecompilePhase::Teardown); }
+            ~TeardownNote()
+            {
+                // A destructor, run while an exception may be unwinding: an observer that throws
+                // here must not terminate the process.
+                try
+                {
+                    self->Enter(DecompilePhase::Teardown);
+                }
+                catch (...)
+                {
+                }
+            }
         } teardownNote{ this };
         ghidra::AddrSpace* ram = arch->getDefaultCodeSpace();
         ghidra::Scope* global = arch->symboltab->getGlobalScope();
 
         std::set<uint32_t> all(known);
-        all.insert(callees.begin(), callees.end());
+        for (const auto& c : callees) all.insert(c.first);
         for (const auto& n : named) all.insert(n.first);
         all.insert(entry);
         ghidra::Funcdata* fd = nullptr;
@@ -391,6 +468,22 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
             auto f = named.find(a);
             if (f != named.end()) name = f->second;
             else arch->nameFunction(addr, name);
+            // A call through a mirror (0x26005000 for 0x06005000) resolves to the address it
+            // names, so the function is registered there too, under the canonical name.
+            auto aliases = callees.find(a);
+            if (aliases != callees.end())
+                for (uint32_t alias : aliases->second)
+                {
+                    if (alias == a) continue;
+                    try
+                    {
+                        global->addFunction(ghidra::Address(ram, alias), name);
+                    }
+                    catch (ghidra::LowlevelError& e)
+                    {
+                        r.warnings.push_back("could not register the mirror " + Hex8(alias) + " of " + Hex8(a) + ": " + e.explain);
+                    }
+                }
             try
             {
                 ghidra::Funcdata* f2 = global->addFunction(addr, name)->getFunction();
@@ -429,23 +522,28 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
 
         if (targets)
         {
-            // Direct calls (bsr) carry their target; a jsr @rN through a literal pool becomes a
-            // CALLIND on a constant once the literal is folded -- the engine leaves it indirect,
-            // which is why the second pass registers it.
-            for (auto it = fd->beginOpAlive(); it != fd->endOpAlive(); ++it)
+            // Every call the function makes. A direct call's target is in its call spec (flow
+            // following replaces the CALL's address input with a spec annotation); a jsr @rN
+            // through a literal pool is a CALLIND on a constant once the literal is folded -- the
+            // engine leaves it indirect, which is why the second pass registers it.
+            for (int i = 0; i < fd->numCalls(); ++i)
             {
-                const ghidra::PcodeOp* op = *it;
-                const ghidra::Varnode* in0 = op->numInput() > 0 ? op->getIn(0) : nullptr;
+                const ghidra::FuncCallSpecs* cs = fd->getCallSpecs(i);
+                const ghidra::PcodeOp* op = cs->getOp();
                 uint64_t t = 0;
-                if (op->code() == ghidra::CPUI_CALL && in0 && in0->getSpace() == ram) t = in0->getOffset();
-                else if (op->code() == ghidra::CPUI_CALLIND && in0 && in0->isConstant()) t = in0->getOffset();
-                else continue;
+                if (!cs->getEntryAddress().isInvalid() && cs->getEntryAddress().getSpace() == ram)
+                    t = cs->getEntryAddress().getOffset();
+                else if (op && op->code() == ghidra::CPUI_CALLIND && op->getIn(0)->isConstant())
+                    t = op->getIn(0)->getOffset();
+                else
+                    continue;
                 // Only targets whose code was captured are registered: a call into the BIOS
                 // (never captured) stays an opaque pointer rather than naming a function nothing
                 // can show.
                 uint32_t c = 0;
                 uint8_t code[2];
-                if (CanonicalAddress(static_cast<uint32_t>(t), c) && snapshot->Read(c, code, 2)) targets->insert(c);
+                if (CanonicalAddress(static_cast<uint32_t>(t), c) && snapshot->Read(c, code, 2))
+                    (*targets)[c].insert(static_cast<uint32_t>(t));
             }
         }
         if (!print) return std::string();
@@ -457,10 +555,10 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         r.unimplemented = fd->hasUnimplemented();
         r.unsupported = scan.unsupported;
         r.unsupportedAt = scan.unsupportedAt;
-        const CaptureLoadImage* image = arch->Image();
-        r.truncated = fd->hasBadData() && image->HadUnavailable();
-        r.truncatedAt = image->UnavailableAddress();
-        r.truncatedWhy = image->UnavailableWhy();
+        const CaptureLoadImage& image = arch->FetchImage();
+        r.truncated = fd->hasBadData() && image.HadUnavailable();
+        r.truncatedAt = image.UnavailableAddress();
+        r.truncatedWhy = image.UnavailableWhy();
         r.literalPools.assign(scan.literalWords.begin(), scan.literalWords.end());
         r.literalLoads = scan.literalLoads;
         if (scan.unsupported)
@@ -482,52 +580,25 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         return std::string("ok");
     };
 
-    try
+    CalleeAliases callees;
+    std::string printed;
+    if (request.registerCallees)
     {
-        std::set<uint32_t> callees;
-        std::string printed;
-        if (request.registerCallees)
-        {
-            runPass(std::set<uint32_t>(), false, &callees);
-            printed = runPass(callees, true, nullptr);
-        }
-        else
-        {
-            printed = runPass(std::set<uint32_t>(), true, &callees);
-        }
-        if (printed.empty())
-        {
-            r.status = DecompileStatus::NoCode;
-            r.error = "no code at " + Hex8(entry);
-        }
-        else
-        {
-            r.status = DecompileStatus::Ok;
-            r.callees.assign(callees.begin(), callees.end());
-        }
+        runPass(CalleeAliases(), false, &callees);
+        printed = runPass(callees, true, nullptr);
     }
-    catch (ghidra::CancelError&)
+    else
     {
-        r.status = DecompileStatus::Cancelled;
-        r.error = "cancelled";
-        r.cancelledIn = mWorkPhase;
-        r.lines.clear();
+        printed = runPass(CalleeAliases(), true, &callees);
     }
-    catch (ghidra::LowlevelError& e)
+    if (printed.empty())
     {
-        r.status = DecompileStatus::Failed;
-        r.error = e.explain;
-        r.lines.clear();
+        r.status = DecompileStatus::NoCode;
+        r.error = "no code at " + Hex8(entry);
+        return;
     }
-    catch (std::bad_alloc&)
-    {
-        r.status = DecompileStatus::Failed;
-        r.error = "out of memory";
-        r.lines.clear();
-    }
-    mWorkPhase = DecompilePhase::Idle;
-    r.elapsedMs = MsSince(t0);
-    return r;
+    r.status = DecompileStatus::Ok;
+    for (const auto& c : callees) r.callees.push_back(c.first);
 }
 
 std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,

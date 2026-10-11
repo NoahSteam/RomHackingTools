@@ -11,10 +11,13 @@
 //             that what follows decodes as instructions
 //   Callee    a call target found while decompiling another function
 //
-// The nearest known entry at or below the address wins unless an rts lies between it and the
-// address -- then the address is in a later function and the rts scan's answer is used -- except
-// that a user-set entry always wins: user corrections exist precisely for the functions the scan
-// gets wrong (an early return in the middle of a function looks just like an end).
+// The nearest known entry at or below the address wins, the more trusted source naming it when
+// several know the same entry. A known entry is a function start, so a nearer one -- of any
+// source -- marks a later function and is never overridden by an older entry further back. An
+// rts between the nearest known entry and the address normally means the address is in a later,
+// unknown function, and the rts scan answers instead -- unless that nearest entry is user-set:
+// user corrections exist precisely for the functions the scan gets wrong (an early return in the
+// middle of a function looks just like an end).
 //
 // Pure functions over a MemorySnapshot: no engine, no ImGui, testable with byte vectors.
 #pragma once

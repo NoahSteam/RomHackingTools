@@ -20,6 +20,7 @@
 // usage: SaturnExplorerDecompilerRunnerTests <scratch dir>
 #include "DecompilerTestSupport.h"
 
+#include "AllocFailure.h"
 #include "Decompiler/DecompilerRunner.h"
 
 #include <algorithm>
@@ -384,6 +385,38 @@ void TestBudget()
     CHECK(WaitResult(runner, again));
     CHECK(again.status == DecompileStatus::TooLarge);
     CHECK(runner.RunsStarted() == runs + 1);
+
+    // The immediate TooLarge answer still supersedes what the same requester had queued.
+    PhaseGate gate;
+    runner.SetPhaseObserverForTests(gate.Observer());
+    gate.Reset(DecompilePhase::Flow);
+    const uint64_t before = runner.RunsStarted();
+    runner.Submit(0, gSnap, Small());          // holds the worker
+    CHECK(gate.WaitHolding(60));
+    runner.Submit(1, gSnap, Small());          // queued for requester 1...
+    const uint64_t tooLarge = runner.Submit(1, gSnap, Big(dts::kDiamondsBase));   // ...then replaced
+    gate.Release();
+    std::vector<DecompileResult> got;   // collected by polling, as the UI would (WaitIdle discards)
+    const auto t2 = Clock::now();
+    while ((runner.Busy() || got.size() < 2) && MsSince(t2) < 60000)
+    {
+        if (runner.Poll(again)) got.push_back(again);
+        else std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    std::printf("  queued request replaced by an immediate TooLarge: %llu run(s), %zu result(s)\n",
+                static_cast<unsigned long long>(runner.RunsStarted() - before), got.size());
+    CHECK(runner.RunsStarted() == before + 1);   // only the held request ran
+    bool sawTooLarge = false;
+    int slot1 = 0;
+    for (const DecompileResult& g : got)
+        if (g.slot == 1)
+        {
+            ++slot1;
+            sawTooLarge = g.generation == tooLarge && g.status == DecompileStatus::TooLarge;
+        }
+    CHECK(slot1 == 1);
+    CHECK(sawTooLarge);
+    runner.SetPhaseObserverForTests(nullptr);
     CheckFollowingRequest(runner, "the budget");
 }
 
@@ -403,7 +436,10 @@ void TestEpochBump()
     const double pollMs = MsSince(t0);
     std::printf("  epoch bump during actions: InvalidateSession + Poll returned in %.3f ms\n", pollMs);
     CHECK(!got);
-    CHECK(pollMs < 16.0);   // within one frame: nothing waits on the worker
+    // Within a frame: nothing waits on the worker, so this is two short lock holds. The bound is
+    // loose (50 ms, not one 60 Hz frame) because a loaded CI runner can deschedule this thread;
+    // blocking on the worker would take the rest of a ~500 ms action instead.
+    CHECK(pollMs < 50.0);
     CHECK(runner.Epoch() == epoch + 1);
     // The abandoned request ends at its next check-point; its result never comes back.
     t0 = Clock::now();
@@ -486,10 +522,123 @@ void TestDisableOnUnacknowledgedCancel()
     CHECK(runner.DisabledReason().find("0x06010000") != std::string::npos);
     CHECK(runner.DisabledReason().find("disabled") != std::string::npos);
     CHECK(runner.Submit(0, gSnap, Small()) == 0);
+    // A new session while the stuck request still runs: still disabled -- a request now would
+    // only queue behind it, and no second worker is ever started.
+    runner.InvalidateSession();
+    CHECK(runner.Disabled());
     gate.Release();   // the stuck request ends at its next check-point...
     CHECK(WaitIdle(runner));
     CHECK(!runner.Poll(r));   // ...and nothing it produced is installed
     CHECK(runner.RunsStarted() == 1);   // no replacement worker, no further run
+    // Disabled for the session, not for good: with the stuck request gone, the new session
+    // decompiles on the same worker.
+    std::printf("  after the stuck request ended in a later session: %s\n", runner.Disabled() ? "STILL DISABLED" : "enabled again");
+    CHECK(!runner.Disabled());
+    runner.SetPhaseObserverForTests(nullptr);
+    CheckFollowingRequest(runner, "re-enabling in a new session");
+
+    // Disabled and idle, then a new session: enabled at once.
+    gate.Reset(DecompilePhase::Flow);
+    runner.SetPhaseObserverForTests(gate.Observer());
+    runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
+    CHECK(gate.WaitHolding(60));
+    const auto t1 = Clock::now();
+    while (!runner.Disabled() && MsSince(t1) < 10000)
+    {
+        runner.Poll(r);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(runner.Disabled());
+    gate.Release();
+    CHECK(WaitIdle(runner));
+    CHECK(runner.Disabled());   // same session: stays disabled
+    runner.InvalidateSession();
+    CHECK(!runner.Disabled());
+    runner.SetPhaseObserverForTests(nullptr);
+    CheckFollowingRequest(runner, "a new session after the stuck request ended");
+}
+
+// Out of memory while the worker handles a request: the process survives and every request is
+// answered (Failed, then Unavailable once the engine may be damaged -- see Sh2Decompiler.h) or the
+// session is disabled and recoverable. Run in a child process: an injected failure inside the
+// engine marks it damaged for the rest of that process, which the other cases here must not see.
+int WorkerOomChild()
+{
+    DecompilerRunner runner(gConfig, Generous());
+    runner.Submit(0, gSnap, Small());   // the worker is up and the engine warm before injecting
+    DecompileResult r;
+    CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);
+    int answered = 0, disabled = 0, unavailable = 0;
+    for (long k = 0; k < 40; k += 3)
+    {
+        runner.Submit(0, gSnap, Small());
+        dts::FailAfter() = k;   // the worker's allocations: this thread only polls now
+        const auto t0 = Clock::now();
+        bool got = false;
+        while (!got && !runner.Disabled() && MsSince(t0) < 60000)
+        {
+            got = runner.Poll(r);
+            if (!got) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        dts::FailAfter() = -1;
+        CHECK(got || runner.Disabled());
+        CHECK(WaitIdle(runner));
+        if (runner.Disabled()) ++disabled;
+        else if (r.status == DecompileStatus::Unavailable) ++unavailable;
+        else ++answered;
+        runner.InvalidateSession();
+        CHECK(!runner.Disabled());
+    }
+    // Still serving: the next request is answered.
+    runner.Submit(0, gSnap, Small());
+    const bool last = WaitResult(runner, r);
+    std::printf("  child: %d answered, %d Unavailable (engine marked damaged), %d disabled the session;"
+                " afterwards: %s\n", answered, unavailable, disabled, last ? "answered" : "NO ANSWER");
+    CHECK(last);
+    std::fflush(stdout);
+    std::_Exit(dts::Failures() ? 1 : 0);   // skip static teardown of a possibly damaged engine
+}
+
+void TestWorkerAllocationFailure(const char* self, const std::string& scratch)
+{
+    std::string cmd = std::string("\"") + self + "\" --worker-oom \"" + dts::Join(scratch, "oom") + "\"";
+#ifdef _WIN32
+    cmd = "\"" + cmd + "\"";   // cmd.exe strips the outer pair
+#endif
+    const int rc = std::system(cmd.c_str());
+    std::printf("  child exit status %d\n", rc);
+    CHECK(rc == 0);
+}
+
+// The engine-thread claim is released if the runner cannot be constructed, so the next one is
+// not born disabled with no worker anywhere.
+void TestConstructionFailureReleasesEngine()
+{
+    int threw = 0;
+    for (long k = 0; k < 50; ++k)
+    {
+        bool failed = false;
+        dts::FailAfter() = k;
+        try
+        {
+            DecompilerRunner r(gConfig, Generous());
+            dts::FailAfter() = -1;
+        }
+        catch (std::bad_alloc&)
+        {
+            failed = true;
+        }
+        dts::FailAfter() = -1;
+        // Constructed: every allocation of the constructor has been failed in turn. (The pending
+        // injection may have landed on the new worker instead, which then disables that runner:
+        // the case the worker guards against.)
+        if (!failed) break;
+        ++threw;
+        DecompilerRunner next(gConfig, Generous());
+        CHECK(!next.Disabled());
+    }
+    std::printf("  runner construction failed at %d allocation point(s); the engine claim was released each time\n", threw);
+    CHECK(threw > 0);
 }
 
 // A second runner while one is alive would be a second engine thread on the shared translator.
@@ -526,6 +675,16 @@ void TestDestructorJoins()
 
 int main(int argc, char** argv)
 {
+    if (argc == 3 && std::string(argv[1]) == "--worker-oom")
+    {
+        dts::PrepareProcess();
+        const std::string dir = argv[2];
+        sfe::MakeDirectory(dir);
+        gConfig = dts::Join(dir, "config");
+        sfe::MakeDirectory(gConfig);
+        gSnap = BuildSnapshot();
+        return WorkerOomChild();
+    }
     if (argc != 2)
     {
         std::printf("usage: %s <scratch dir>\n", argv[0]);
@@ -552,6 +711,8 @@ int main(int argc, char** argv)
         RUN(TestCoalescing());
         RUN(TestDisableOnUnacknowledgedCancel());
         RUN(TestOneEngineThread());
+        RUN(TestWorkerAllocationFailure(argv[0], scratch));
+        RUN(TestConstructionFailureReleasesEngine());
         RUN(TestDestructorJoins());
     }
     catch (std::exception& e)

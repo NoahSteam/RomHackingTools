@@ -12,8 +12,10 @@ namespace sfe
 namespace decomp
 {
 
-SaturnArchitecture::SaturnArchitecture(CaptureLoadImage* image, std::ostream* errors)
-    : ghidra::SleighArchitecture("saturn-capture", "SuperH:BE:32:SH-2:default", errors), mImage(image)
+SaturnArchitecture::SaturnArchitecture(std::shared_ptr<const MemorySnapshot> snapshot, std::ostream* errors)
+    : ghidra::SleighArchitecture("saturn-capture", "SuperH:BE:32:SH-2:default", errors),
+      mDataImage(new CaptureLoadImage(snapshot, CaptureLoadImage::Use::Data)),
+      mFetchImage(new CaptureLoadImage(snapshot, CaptureLoadImage::Use::Fetch))
 {
 }
 
@@ -24,13 +26,38 @@ void SaturnArchitecture::Initialise(ghidra::uint4 maxInstructions, std::atomic<b
     // After init: init resets the options to their defaults.
     readonlypropagate = true;
     max_instructions = maxInstructions;
+    // Every fetch from memory that is not captured costs one "bad data" halt, and Ghidra's
+    // default allowance of four fails the whole function on the fifth. Flow is already bounded by
+    // max_instructions, so the allowance is too: each such halt ends one path, it never runs on.
+    max_baddata = maxInstructions;
     cancelRequested = cancel;
 }
 
 void SaturnArchitecture::buildLoader(ghidra::DocumentStorage&)
 {
     collectSpecFiles(*errorstream);
-    loader = mImage;
+    loader = mDataImage.release();
+}
+
+// The translator decodes instructions through the loader it is built with. Building it with the
+// fetch image (and restoring the data image as the Architecture's own loader) is what gives
+// instruction fetches and data reads their different refusals -- see CaptureLoadImage.h.
+ghidra::Translate* SaturnArchitecture::buildTranslator(ghidra::DocumentStorage& store)
+{
+    ghidra::LoadImage* data = loader;
+    loader = mFetchImage.get();
+    ghidra::Translate* t = nullptr;
+    try
+    {
+        t = ghidra::SleighArchitecture::buildTranslator(store);
+    }
+    catch (...)
+    {
+        loader = data;
+        throw;
+    }
+    loader = data;
+    return t;
 }
 
 void SaturnArchitecture::resolveArchitecture()

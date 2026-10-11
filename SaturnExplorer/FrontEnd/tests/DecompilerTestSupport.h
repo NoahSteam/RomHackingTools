@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -208,34 +209,41 @@ const uint32_t kFixture3BfsSlot = 0x06006104u;
 const uint32_t kFixture3Direct = 0x11111111u;   // at the address the spec computes
 const uint32_t kFixture3Slot = 0x22222222u;     // at the address the hardware reads
 
+// The other delayed-branch kinds, each with a PC-relative slot instruction; all unsupported.
+struct Fixture3Case { const char* name; uint32_t entry, slot; };
+const Fixture3Case kFixture3Others[] = {
+    { "rts + mov.w", 0x06006200u, 0x06006202u },
+    { "bsr + mova", 0x06006300u, 0x06006302u },
+    { "jmp + mov.l", 0x06006400u, 0x06006402u },
+    { "braf + mov.l", 0x06006500u, 0x06006502u },
+};
+
 inline void PlaceFixture3(std::vector<uint8_t>& hw)
 {
-    static const uint16_t bra[] = {
-        0xA002,   // bra 0x06006008
-        0xD103,   //   mov.l @(12,pc),r1   (slot: spec reads 0x06006010, hardware 0x06006014)
-        0x0009, 0x0009,
-        0x000B,   // rts                    <- target
-        0x6013,   //   mov r1,r0
-        0x0009, 0x0009,
+    auto put = [&](uint32_t a, std::initializer_list<uint16_t> words) {
+        size_t off = a - 0x06000000u;
+        for (uint16_t w : words) { Put16(hw, off, w); off += 2; }
     };
-    static const uint16_t bfs[] = {
-        0x4415,   // cmp/pl r4
-        0x8F02,   // bf/s 0x0600610A
-        0xD102,   //   mov.l @(8,pc),r1    (slot: spec reads 0x06006110, hardware when taken 0x06006114)
-        0x7101,   // add #1,r1
-        0x0009,
-        0x000B,   // rts                    <- target
-        0x6013,   //   mov r1,r0
-        0x0009,
-    };
-    size_t off = kFixture3Bra - 0x06000000u;
-    for (uint16_t w : bra) { Put16(hw, off, w); off += 2; }
-    Put32(hw, off, kFixture3Direct);
-    Put32(hw, off + 4, kFixture3Slot);
-    off = kFixture3Bfs - 0x06000000u;
-    for (uint16_t w : bfs) { Put16(hw, off, w); off += 2; }
-    Put32(hw, off, kFixture3Direct);
-    Put32(hw, off + 4, kFixture3Slot);
+    // bra 0x06006008 ; mov.l @(12,pc),r1 (slot: spec reads 0x06006010, hardware 0x06006014) ;
+    // nop ; nop ; rts (<- target) ; mov r1,r0 ; nop ; nop
+    put(kFixture3Bra, { 0xA002, 0xD103, 0x0009, 0x0009, 0x000B, 0x6013, 0x0009, 0x0009 });
+    Put32(hw, 0x06006010u - 0x06000000u, kFixture3Direct);
+    Put32(hw, 0x06006014u - 0x06000000u, kFixture3Slot);
+    // cmp/pl r4 ; bf/s 0x0600610A ; mov.l @(8,pc),r1 (slot: spec 0x06006110, hardware when taken
+    // 0x06006114) ; add #1,r1 ; nop ; rts (<- target) ; mov r1,r0 ; nop
+    put(kFixture3Bfs, { 0x4415, 0x8F02, 0xD102, 0x7101, 0x0009, 0x000B, 0x6013, 0x0009 });
+    Put32(hw, 0x06006110u - 0x06000000u, kFixture3Direct);
+    Put32(hw, 0x06006114u - 0x06000000u, kFixture3Slot);
+    // rts ; mov.w @(2,pc),r0 (slot) ; nop ; nop ; .word 0x1234
+    put(0x06006200u, { 0x000B, 0x9001, 0x0009, 0x0009, 0x1234 });
+    // bsr 0x06006308 ; mova @(4,pc),r0 (slot) ; rts ; nop ; rts (the bsr's target) ; nop
+    put(0x06006300u, { 0xB002, 0xC701, 0x000B, 0x0009, 0x000B, 0x0009 });
+    // jmp @r1 ; mov.l @(4,pc),r1 (slot) ; nop ; nop ; .long 0x44444444
+    put(0x06006400u, { 0x412B, 0xD101, 0x0009, 0x0009 });
+    Put32(hw, 0x06006408u - 0x06000000u, 0x44444444u);
+    // braf r1 ; mov.l @(4,pc),r1 (slot) ; nop ; nop ; .long 0x55555555
+    put(0x06006500u, { 0x0123, 0xD101, 0x0009, 0x0009 });
+    Put32(hw, 0x06006508u - 0x06000000u, 0x55555555u);
 }
 
 // ---- The cancellation spike's fixtures (Docs/Decompiler/spike/cancel_spike.cpp) ---------------
