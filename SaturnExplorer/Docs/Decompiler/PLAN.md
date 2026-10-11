@@ -1,6 +1,6 @@
 # SH-2 pseudocode panel — implementation plan (Windows + macOS)
 
-Companion to [DESIGN.md](DESIGN.md). Revision 3, after reviews of `dfe6d61` and `b6b5956`: the review found the
+Companion to [DESIGN.md](DESIGN.md). Revision 4, after reviews of `dfe6d61`, `b6b5956` and `5a7a5fa`: the review found the
 main risks in correctness and lifecycle behaviour rather than in MSVC compilation, and this
 revision turns those into explicit contracts (§A) that the steps (§B) implement and test.
 
@@ -113,7 +113,7 @@ establish correct semantics, and a ROM-hacking tool meets hand-written assembly.
   (context leak check) a PC-relative load immediately *after* a `bra` + slot pair, and one at
   the branch target, still use their own `inst_start + 4`.
 
-### A4. One engine thread, cancellation through a small upstream patch, no orphaned workers
+### A4. One engine thread, cooperative cancellation through a small upstream patch, no orphaned workers
 
 The bare library offers no cancellation hook: `ActionDatabase::registerAction` is private,
 `ActionGroup::apply` calls each child's `perform()` synchronously, and Ghidra itself cancels by
@@ -123,42 +123,47 @@ process-global `Sleigh` per language and calls `reset(loader, context)` on it fo
 `Architecture`, so a second engine would reset the translator underneath an abandoned one; and a
 thread detached at exit would run while static objects are destroyed.
 
-- **Mechanism: `patches/0001-cancel-flag.patch`** (21 lines, 5 files, demonstrated in
-  `spike/cancel_spike.cpp`, results in SPIKE_RESULTS.md). It adds a host-owned
-  `std::atomic<bool>* cancelRequested` to `Architecture`, a `CancelError : LowlevelError`, and
-  check-points in `Action::perform` (before every action, so every level of the nested tree),
-  `ActionPool::apply` (every 1024 ops) and `FlowInfo::generateOps` (every flow run). Setting the
-  flag from another thread after processing has started throws `CancelError` out of
-  `followFlow`/`perform` on the engine thread; measured flag-to-catch latency is 1–8 ms for
-  functions of normal size, 68 ms at 6k instructions, and 749 ms (one long action) at 18k. A
-  rerun after cancellation on the same translator is byte-identical to an uncancelled run.
+- **Mechanism: `patches/0001-cancel-flag.patch`** (21 lines, 5 files). A host-owned
+  `std::atomic<bool>* cancelRequested` on `Architecture`, a `CancelError : LowlevelError`, and
+  check-points in `FlowInfo::fallthru` (per instruction: covers both worklist loops and
+  straight-line runs), the jump-table loop of `FlowInfo::generateOps`, `Action::perform` (every
+  action at every level) and `ActionPool::apply` (every 1024 ops). Demonstrated by
+  `spike/cancel_spike.cpp`, a self-checking program with a synchronized phase handshake and a
+  non-zero exit on failure, on branchy, straight-line and jump-table fixtures (SPIKE_RESULTS.md
+  "Cancellation spike"). A rerun after cancellation on the same translator is byte-identical.
+- **What "cancel" means.** It is a cooperative request, honoured at the next check-point, not a
+  hard execution limit. The segments without a check-point are `Architecture` construction
+  (milliseconds), the body of one action (up to 143 ms measured at 15k instructions, 749 ms at
+  18k), printing (≤ 5 ms measured) and teardown of the abandoned analysis (≤ 26 ms measured).
+  These grow with function size, which is why `max_instructions` is lowered to 20 000 (setting).
+  Every latency figure in this plan is "time to the next check-point plus the current
+  uncheckable segment".
 - **One engine thread, for the life of the process.** It alone constructs, uses and destroys
   every `Architecture`, `Funcdata` and the translator. Nothing else ever touches engine objects.
 - **Session change** (source change, close, reconnect): bump the runner's epoch, clear the
   queue, set the cancel flag if a request is running. No join. The worker catches `CancelError`,
-  tears the abandoned function down (2–126 ms measured), and takes the next request. Results and
-  queued requests from an older epoch are dropped by `Poll()` and by the worker respectively.
-- **Wall-clock budget.** Each request runs with a budget (default 10 s; `max_instructions`
-  lowered to 20 000, both in settings). The UI thread sets the same cancel flag when the budget
-  expires, the result is reported as "too large to decompile within N s", and that entry is not
-  retried automatically for this session. Pathological functions therefore cost at most the
-  budget plus the longest single action, never the 20 s the spike measured.
-- **If cancellation ever fails** (the worker has not acknowledged a cancel within 5 s): the
-  panel disables further decompilation for the session with a visible message and a log line
-  naming the entry. No replacement worker is started; the single engine thread remains the only
-  one and is still joined at exit. This is the honest fallback for an in-process engine; process
-  isolation is excluded by requirement.
-- **Application exit.** Set cancel and epoch, **join unconditionally**, then call
-  `SleighArchitecture::shutdown()` to free the global translators. Bounded in practice by the
-  measured latency and the budget; never a detach.
-- **Tests** (`DecompilerRunnerTests`, real engine, no mocks for the cancellation path): start the
-  spike's synthetic function (1000 blocks), cancel from the test thread at 50 ms, assert the
-  worker reports `cancelled` within 500 ms and that a following request completes with correct
-  output; the wall-clock budget set to 100 ms cancels the 3000-block function and the entry is
-  marked not-retried; an epoch bump while a request is running makes `Poll()` return within one
-  frame and the late result is dropped; the destructor with a request in flight returns after the
-  join and `shutdown()`. The vendoring step fails if the patch does not apply cleanly, and the
-  engine test suite fails to compile without it (it references `CancelError`).
+  tears the abandoned function down, and takes the next request. Results and queued requests
+  from an older epoch are dropped by `Poll()` and by the worker respectively.
+- **Wall-clock budget.** Each request has a budget (default 10 s, setting). When it expires the
+  UI thread sets the same cancel flag; the result is reported as "too large to decompile within
+  N s" and the entry is not retried automatically this session. The budget is a cancellation
+  request like any other and ends at the next check-point.
+- **If a cancel is not acknowledged within 5 s** the panel disables further decompilation for
+  the session, with a visible message and a log line naming the entry. No replacement worker is
+  started. This limits damage; it does not bound the running request.
+- **Application exit.** Set cancel and epoch, **join unconditionally**, then
+  `SleighArchitecture::shutdown()`. Exit therefore waits for the worker to reach its next
+  check-point and finish the current uncheckable segment; with the 20 000-instruction cap that is
+  well under a second in every measurement, but it is not a guarantee, and the plan says so
+  rather than promising a detach that would be unsafe.
+- **Tests** (`DecompilerRunnerTests`, real engine, the spike's three fixtures, 120 s ctest
+  timeout): a cancel requested while the worker is provably in flow following is caught there;
+  the same for actions; a cancel during print completes normally with unchanged output; a
+  wall-clock budget of 100 ms cancels the 6k-instruction fixture and marks the entry not-retried;
+  an epoch bump while a request runs makes `Poll()` return within one frame and the late result
+  is dropped; the destructor with a request in flight returns after the join and `shutdown()`;
+  a following request after each of these completes with correct output. The vendoring step
+  fails if the patch does not apply.
 
 ### A5. Spec freshness covers what the application actually loads
 
@@ -276,7 +281,7 @@ skips without game data), `Sh2FunctionFinderTests`, `DecompilerRunnerTests` (A4)
    Refresh, status: source kind, frame, stale/decompiling/unsupported, entry source), clipped
    line list with per-`TokenKind` colours, `RowSelectable` rows, click → `Request.jumpAssembly`,
    right-click: Rename, Set function start here, View in Hex, Copy. A3's banner and A4's
-   "restarted" notice live here.
+   "too large to decompile within N s" and "decompiler disabled for this session" states live here.
 2. `App`: `Panels::decompiler`, `PanelList()` row, `BuildDefaultLayout` + `AdoptNewPanels` beside
    "SH-2 Assembly", draw after `ScopedContextSwap`, `DecompilerRunner` member, key computation
    per A1 every frame, `ResetSessionDebugState` → epoch bump (not join).

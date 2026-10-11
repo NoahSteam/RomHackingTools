@@ -360,36 +360,56 @@ Flags: `--asm N` prints N instructions of SLEIGH disassembly; `--auto-ro` marks 
 read-only; `--known ADDR` pre-registers a function; `--ro BASE:SIZE` marks a range read-only;
 `--xml` prints XML markup and the line → address table; `--pcode` dumps raw p-code.
 
-## Cancellation spike (added for PLAN.md A4)
+## Cancellation spike (PLAN.md A4)
 
 **Question.** The bare library has no cancellation hook: `ActionDatabase::registerAction` is
 private, `ActionGroup::apply` calls each child's `perform()` synchronously, and Ghidra itself
 cancels by killing its decompiler process. Can a small upstream patch give an in-process host
-bounded, safe cancellation of a decompilation that is already running?
+cooperative cancellation of a decompilation that is already running, and what parts remain
+uninterruptible?
 
 **Answer: yes, with a 21-line patch** (`spike/patches/0001-cancel-flag.patch`): a host-owned
-`std::atomic<bool>*` on `Architecture`, a `CancelError` exception, and check-points in
-`Action::perform` (before every action), `ActionPool::apply` (every 1024 ops) and
-`FlowInfo::generateOps` (every flow run). `spike/cancel_spike.cpp` builds a synthetic function
-of N diamond-shaped blocks (6 instructions each), decompiles it on a worker thread, sets the flag
-from the main thread at three points, and then decompiles again on the same process-global SLEIGH
-translator.
+`std::atomic<bool>*` on `Architecture`, a `CancelError` exception, and check-points at
+- `FlowInfo::fallthru`, once per instruction, which covers both worklist loops in
+  `generateOps` and straight-line runs;
+- the jump-table loop in `FlowInfo::generateOps`, before each `recoverJumpTables` round;
+- `Action::perform`, before every action at every level of the nested tree;
+- `ActionPool::apply`, every 1024 ops inside a rule pool.
 
-| Blocks (instructions) | Uncancelled | Cancel during flow following: flag → caught | Cancel during actions: flag → caught | Teardown of the abandoned function | Rerun identical to baseline |
+`spike/cancel_spike.cpp` is a self-checking program (non-zero exit on any failure, run under an
+external 600 s timeout). The engine thread publishes its phase (init, followFlow, actions,
+print, teardown) through a mutex/condition-variable signal; the main thread waits for a phase,
+optionally sleeps a fraction of that phase's measured baseline, reads the phase, sets the flag,
+reads the phase again, and only counts a run as proof when both reads agree. A cancellation
+requested during phase X must be caught in phase X. Three fixtures:
+
+| Fixture | Shape | Size |
+|---|---|---|
+| diamonds | 1000 × (load, add, store, `cmp/pl`, `bt .+4`, add) | 6k instructions, 12 KB |
+| straight | 5000 × (load, add, store), no branches: one flow run | 15k instructions, 30 KB |
+| jumptable | GCC-style `switch`: bounds check, `shll2`, `mova`, `mov.l @(r0,r1)`, `jmp`, 16-entry table, 300-instruction case bodies | 14.5k instructions, 29 KB; recovered as a `switch` |
+
+Results (Linux x86-64, GCC 13 `-O2`, one run; the program asserts the booleans, the times are
+informational):
+
+| Fixture | Baseline: flow / actions / print / teardown | Cancel in flow: flag → caught | Cancel in actions, at start / at 50 % | Print, cancel requested | Rerun identical |
 |---|---|---|---|---|---|
-| 300 (1.8k) | 70 ms | 7.7 ms | 1.3–3.0 ms | 2–3 ms | yes |
-| 1000 (6k) | 1.23 s | 25.8 ms | 0.7–67.8 ms | 7–12 ms | yes |
-| 3000 (18k) | 20.3 s | 74–90 ms | 749 ms | 75–126 ms | yes |
+| diamonds | 31 / 1245 / 1.0 / 6.6 ms | 0.1, 0.5 ms | 0.4 ms / 93.8 ms | completes, not cancelled | yes |
+| straight | 35 / 573 / 5.0 / 21.4 ms | 0.0, 0.8 ms | 2.3 ms / 112.3 ms | completes, not cancelled | yes |
+| jumptable | 31 / 497 / 4.7 / 21.3 ms | 0.0, 0.8 ms | 1.7 ms / 143.0 ms | completes, not cancelled | yes |
 
-Observations that shaped A4:
-- Cancellation requested *after* processing started is honoured in both phases; nothing is
-  pre-cancelled or mocked. The engine thread owns construction and destruction of the
-  `Architecture`; the main thread only touches the atomic.
-- After a cancelled run, a fresh `Architecture` on the same translator produces byte-identical
-  output to the uncancelled baseline, and an unrelated small function decompiles normally.
-- Latency is dominated by the longest single action (the 749 ms case is one action in an
-  18k-instruction function) plus the teardown of the abandoned `Funcdata`. Saturn game functions
-  are two orders of magnitude smaller (the real 286-byte function takes 5 ms), so the plan lowers
-  `max_instructions` and adds a wall-clock budget that uses this same flag.
-- The 3000-block baseline of 20 s shows that `max_instructions` alone is not a time bound, as
-  the review said.
+An unrelated small function decompiles correctly after all of the above, on the same
+process-global translator.
+
+What this does and does not establish:
+- Cancellation requested after processing has begun is honoured inside flow following and
+  inside the action tree, for branchy, straight-line and jump-table code. It is cooperative: the
+  request is noticed at the next check-point.
+- The segments **without** a check-point are `Architecture` construction (0–4 ms), the body of a
+  single action (the "at 50 %" column: up to 143 ms here; 749 ms was measured earlier on an
+  18k-instruction function), printing (≤ 5 ms for 135 KB of output) and the teardown of the
+  abandoned analysis (≤ 26 ms here). A cancel issued during one of them completes that segment
+  first. These are the latency floor the plan has to state, and the reason `max_instructions` is
+  lowered: the segment lengths grow with function size.
+- The earlier claim that `max_instructions` bounds time is false; an 18k-instruction function
+  took 20 s uncancelled.

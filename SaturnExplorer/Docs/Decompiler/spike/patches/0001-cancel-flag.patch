@@ -76,19 +76,24 @@ index d294a99..dcb2cad 100644
    /// Initialize the error with an explanatory string
    RecovError(const string &s) : LowlevelError(s) {}
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
-index 337b6c8..b2f09e1 100644
+index 337b6c8..90353ef 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
-@@ -789,8 +789,11 @@ void FlowInfo::generateOps(void)
-   vector<PcodeOp *> notreached;	// indirect ops that are not reachable
-   clearProperties();
-   addrlist.push_back(data.getAddress());
--  while(!addrlist.empty())	// Recovering as much as possible except jumptables
-+  while(!addrlist.empty()) {	// Recovering as much as possible except jumptables
+@@ -568,6 +568,8 @@ void FlowInfo::fallthru(void)
+   bool fallthruflag;
+   
+   for(;;) {
 +    if (glb->isCancelRequested())
 +      throw CancelError("Decompilation cancelled");
-     fallthru();
-+  }
-   if (hasInject())
+     curaddr = addrlist.back();
+     addrlist.pop_back();
+     fallthruflag = processInstruction(curaddr,startbasic);
+@@ -795,6 +797,8 @@ void FlowInfo::generateOps(void)
      injectPcode();
    do {
+     while(!tablelist.empty()) {	// For each jumptable found
++      if (glb->isCancelRequested())
++	throw CancelError("Decompilation cancelled");
+       vector<JumpTable *> newTables;
+       recoverJumpTables(newTables, notreached);
+       tablelist.clear();
