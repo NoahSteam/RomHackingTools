@@ -100,6 +100,12 @@ equals the Capstone-verified one, 143 of 143.
 
 ## External review, round 1 (at `08dbb10`)
 
+**Fixes verified by:** https://github.com/NoahSteam/RomHackingTools/actions/runs/38151578818 at
+`5ccc5c0` — all six jobs green. In the Windows Release step the injection cases ran in full
+(6 of 6 pre-engine failures reported; engine failures in child processes → Failed, then
+Unavailable, snapshot references unchanged; runner construction failed at 6 points with the
+engine claim released each time); in the Windows Debug step they print SKIPPED, as intended.
+
 Every fix below has a test that was run with the fix reverted and failed.
 
 | Finding | Fix | Test that fails without it |
