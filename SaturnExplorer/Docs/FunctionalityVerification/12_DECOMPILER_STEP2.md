@@ -11,7 +11,7 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 2, contracts A1�
 | File (`FrontEnd/src/Decompiler/`) | Role |
 |---|---|
 | `MemorySnapshot.{h,cpp}` | Immutable LWRAM/HWRAM (+ optional BIOS) copy, both register files, `SnapshotKey` (A1). The A2 partition/fold rule itself now lives in `FrontEnd/src/Sh2Address` (moved there by `29931a2` so AI investigation shares it). |
-| `CaptureLoadImage.{h,cpp}` | `ghidra::LoadImage` over a snapshot; an uncaptured instruction fetch raises `BadDataError` (flow halts there, function `truncated`), data reads `DataUnavailError`. |
+| `CaptureLoadImage.{h,cpp}` | `ghidra::LoadImage` over a snapshot, two per Architecture: the translator's (instruction fetches) refuses uncaptured memory with `BadDataError` (flow halts there, function `truncated`); the Architecture's own (values) with `DataUnavailError`. |
 | `SaturnArchitecture.{h,cpp}` | `SleighArchitecture` for `SuperH:BE:32:SH-2`, `readonlypropagate`, `max_instructions`, the cancel flag; spec directory from `SpecBundle`, once per process. |
 | `Sh2Decompiler.{h,cpp}` | Two passes, literal pools from raw p-code, A3 detection, callee registration, packed markup → lines and tokens with instruction addresses. Phase observer for tests. |
 | `Sh2FunctionFinder.{h,cpp}` | Entry ladder (user → symbol → call site → rts scan → callee), `CallTargetAt` (bsr, jsr through a literal), `FunctionBounds` (`saturn_function_bounds.txt`). |
@@ -74,18 +74,55 @@ equals the Capstone-verified one, 143 of 143.
 
 - **Uncaptured code → `BadDataError`, not `DataUnavailError`.** Flow following does not catch
   `DataUnavailError` (it would abort the whole function), and a bounded `followFlow` leaves the
-  branch without a target op. PLAN.md A2 and DESIGN.md are reworded to match. The load image tells
-  an instruction fetch from a data read by size (`Sleigh::resolve` always fetches 16 bytes).
+  branch without a target op. PLAN.md A2 and DESIGN.md are reworded to match. Fetches and data
+  reads are told apart by *who asks*: `SaturnArchitecture::buildTranslator` hands the SLEIGH
+  translator its own fetch-only load image. (The first version went by request size, 16 bytes,
+  which a data read can also be — review finding below.) Ghidra's bad-data allowance
+  (`max_baddata`, default 4) is raised to the instruction cap, since each uncaptured branch target
+  costs one.
 - **Calls into uncaptured memory stay opaque** (fixture 1b: `(*(code *)0x600)(param_1)`); only
   callees whose code is captured are registered.
 - **Engine "rebuild after a hard failure"** is per request: each decompilation builds and destroys
-  its own Architecture (resetting the shared translator), so nothing survives a failure.
+  its own Architecture (resetting the shared translator), so nothing survives an ordinary failure.
+  Out of memory *inside* the engine is the exception: Ghidra is not exception-safe there (an
+  injected failure left the shared translator half-reset and the next request crashed in
+  `Sleigh::reset`), and the translator cannot be rebuilt from outside, so after that the
+  decompiler answers Unavailable for the rest of the process.
+- **Entry ladder** ranks sources for the same entry and is applied to the nearest known entry: a
+  nearer symbol/call-site/callee entry starts a later function, so an older user entry further
+  back does not claim it (DESIGN.md 6.4 now says so; review finding 3 was not taken).
 - **Phase-boundary check-points** of our own (after flow following, after actions) so a cancel set
   late in a phase is honoured there — the engine's last check-point can come well before the
   phase ends, and the raw-p-code scan has none.
 - **Windows Debug fixtures.** The Debug CRT's checked iterators make the engine ~20× slower there
   (22 s for diamonds), so the Debug runner test uses a tenth of each fixture; CI runs the same test
   at full size in Release on Windows.
+
+## External review, round 1 (at `08dbb10`)
+
+Every fix below has a test that was run with the fix reverted and failed.
+
+| Finding | Fix | Test that fails without it |
+|---|---|---|
+| 1 Allocation failure escapes the worker | One exception boundary around the whole of `Sh2Decompiler::Decompile`, request preparation included; the worker records results inside its own boundary (a failure there disables the session); the worker's own start-up is guarded | `Sh2DecompilerTests` TestAllocationFailureIsReported (every allocation before the engine, failed in turn) and TestEngineAllocationFailureInChild; `DecompilerRunnerTests` TestWorkerAllocationFailure (child process) |
+| 2 Stale register in `CallTargetAt` | Accepts only intervening instructions proven not to touch rN: no register field naming it, no implicit r0 write (0x8xxx/0xCxxx), no branch | `Sh2FunctionFinderTests` TestCallTargets (mova, `@r1+`, branch between load and call) |
+| 3 Nearer symbol beats an older user entry | Not changed: by design (see Decisions); pinned | TestLadder (older user entry + nearer symbol / callee) |
+| 4 Five uncaptured branches fail the function | `max_baddata` = instruction cap | TestManyUncapturedBranches |
+| 5 Timeout disable is permanent | Disable is per session: a later session re-enables once the stuck request has ended, on the same worker | TestDisableOnUnacknowledgedCancel (both orders) |
+| 6 Direct CALL targets not harvested | Targets from each call spec's entry address | TestCalleeHarvest (bsr; already-known callee) |
+| 7 Call through a mirror stays opaque | The callee is also registered at each alias it is called through; tokens navigate to the canonical entry | TestCalleeHarvest (0x26005000, 0x06105000) |
+| 8 Immediate TooLarge skips coalescing | Same-slot queue removal and cancel happen before the early answer | TestBudget (queued request replaced by a TooLarge answer) |
+| 9 Thread start failure keeps the engine claim | Claim released if `std::thread` throws | TestConstructionFailureReleasesEngine |
+| 10 Architecture construction failure leaks the loader | `SaturnArchitecture` owns both load images from construction (`unique_ptr` until `buildLoader`) | (covered by ASan with the allocation sweeps; no leak reported) |
+| 11 Back-scan skips the bottom candidates | Scan runs from `a - 4` down to the floor inclusive | TestScanFloor (rts at the region base, at the span floor and floor + 2) |
+| 12 Failed read writes part of the buffer | Two walks: validate every span, then copy | `MemorySnapshotTests` (buffer unchanged) |
+| Risk: size 16 is not only a fetch | Separate fetch and data load images (above) | TestFetchAndDataRefusals (16- and 4-byte data reads → `DataUnavailError`; fetch → `BadDataError`) |
+| Gap: A3 only bra/bf/s with mov.l | `rts`+mov.w, `bsr`+mova, `jmp`+mov.l, `braf`+mov.l added | TestDelaySlotPcRelative |
+| Gap: `fixture3.py` not self-checking | Checks each mnemonic and each slot load's address against Capstone; exits non-zero on any mismatch | (a deliberately wrong word makes it exit 1) |
+
+Also: the epoch-bump timing assertion is 50 ms (it measured scheduler noise as well as
+non-blocking behaviour); a throwing phase observer can no longer terminate from the teardown
+destructor.
 
 ## Not done / outstanding
 
