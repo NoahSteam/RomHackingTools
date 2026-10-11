@@ -59,9 +59,11 @@ std::atomic<bool> gEngineDamaged(false);
 // Canonical call target -> the addresses the code actually calls it through (itself, or mirrors).
 using CalleeAliases = std::map<uint32_t, std::set<uint32_t>>;
 
-// Fills the error text of a failed result. Itself guarded: the failure being reported may be an
-// allocation failure, and the result must still leave the boundary with its status set.
-void SetError(DecompileResult& r, const std::string& text)
+// Fills the error text of a failed result. Never throws: the failure being reported may be an
+// allocation failure, and the result must still leave the boundary with its status set. The
+// const char* overload matters -- converting e.what() to a std::string argument would allocate
+// before any guard could catch it.
+void SetError(DecompileResult& r, const char* text) noexcept
 {
     try
     {
@@ -72,6 +74,21 @@ void SetError(DecompileResult& r, const std::string& text)
         r.error.clear();
     }
 }
+
+void SetError(DecompileResult& r, const std::string& text) noexcept
+{
+    try
+    {
+        r.error = text;
+    }
+    catch (...)
+    {
+        r.error.clear();
+    }
+}
+
+const char* const kEngineDamaged =
+    "the decompiler ran out of memory earlier and its engine may be damaged; restart Saturn Explorer to decompile again";
 
 // What one pass learned from a function's raw p-code, before any action has run.
 struct RawScan
@@ -402,7 +419,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     if (gEngineDamaged)
     {
         r.status = DecompileStatus::Unavailable;
-        r.error = "the decompiler ran out of memory earlier and its engine may be damaged; restart Saturn Explorer to decompile again";
+        r.error = kEngineDamaged;
         return;
     }
     if (!SaturnArchitecture::StartLibrary(mConfigDir, r.error))
@@ -604,6 +621,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                     uint32_t address, int count)
 {
+    // Every way into the engine checks this: disassembly builds an Architecture too, which would
+    // reset the same possibly half-reset translator.
+    if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };
     std::string error;
     if (!SaturnArchitecture::StartLibrary(mConfigDir, error)) return std::vector<std::string>{ "<" + error + ">" };
     AsmLines em;
@@ -620,7 +640,19 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
     }
     catch (ghidra::LowlevelError& e)
     {
-        em.lines.push_back("<" + e.explain + ">");
+        try
+        {
+            em.lines.push_back("<" + e.explain + ">");
+        }
+        catch (...)
+        {
+        }
+    }
+    catch (...)
+    {
+        // Out of memory inside the engine (or anything else not its own): treated as Decompile
+        // treats it -- the engine may be damaged, so nothing touches it again.
+        gEngineDamaged = true;
     }
     return em.lines;
 }

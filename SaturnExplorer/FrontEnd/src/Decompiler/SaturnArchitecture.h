@@ -43,6 +43,10 @@ public:
     // decompiler is unavailable.
     static bool StartLibrary(const std::string& configDir, std::string& error);
 
+    // Tests only: called just before the translator is built (or reset, when reused), so a test
+    // can fail an allocation inside Sleigh::reset precisely. Null, the default, everywhere else.
+    static void SetBuildTranslatorHookForTests(void (*hook)());
+
 private:
     void buildLoader(ghidra::DocumentStorage& store) override;
     ghidra::Translate* buildTranslator(ghidra::DocumentStorage& store) override;

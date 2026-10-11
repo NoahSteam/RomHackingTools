@@ -16,7 +16,9 @@
 #include "Decompiler/SaturnArchitecture.h"
 #include "Decompiler/Sh2Decompiler.h"
 
+#include <atomic>
 #include <cstring>
+#include <stdexcept>
 #include <sstream>
 
 using namespace sfe::decomp;
@@ -480,6 +482,99 @@ void TestFetchAndDataRefusals()
 // Out of memory inside the engine, in a child process (this one's engine must stay usable, and
 // the damaged one's static teardown is not run): the failure is reported, and every later
 // request is refused as Unavailable rather than built on a translator that may be half-reset.
+// Fails the next allocation, once, when the translator is about to be built or reset: the first
+// allocation there is Sleigh::reset's replacement cache, after it has deleted the old ones.
+// 'gResetOffset' picks which: 0 is Sleigh::reset's replacement cache; 1 is the next one, inside
+// Sleigh::initialize on the reused translator.
+std::atomic<bool> gFailInReset(false);
+long gResetOffset = 0;
+void FailNextAllocationInReset()
+{
+    if (gFailInReset.exchange(false)) dts::FailAfter() = gResetOffset;
+}
+
+// Out of memory inside Sleigh::reset on the reused translator: reported, every later request and
+// disassembly refused without touching the engine, and then -- unlike the other children -- the
+// process exits normally, through static destruction of that translator (patch 0002: reset no
+// longer leaves deleted cache pointers behind for the destructor to delete again).
+int ResetOomChild(const std::string& scratch, long offset)
+{
+    gResetOffset = offset;
+    dts::PrepareProcess();
+    gConfig = dts::Join(scratch, "config");
+    sfe::MakeDirectory(scratch);
+    sfe::MakeDirectory(gConfig);
+    {
+        Sh2Decompiler d(gConfig);
+        auto snap = Fixture1Snapshot();
+        const DecompileRequest q = Request(dts::kFixture1Caller);
+        CHECK(d.Decompile(snap, q).status == DecompileStatus::Ok);   // the translator exists: reused below
+        SaturnArchitecture::SetBuildTranslatorHookForTests(FailNextAllocationInReset);
+        gFailInReset = true;
+        DecompileResult r;
+        bool escaped = false;
+        try
+        {
+            r = d.Decompile(snap, q);
+        }
+        catch (...)
+        {
+            escaped = true;
+        }
+        dts::FailAfter() = -1;
+        SaturnArchitecture::SetBuildTranslatorHookForTests(nullptr);
+        std::printf("  child (reset +%ld): allocation %s fails -> status %d (%s)\n", offset,
+                    offset == 0 ? "in Sleigh::reset" : "in Sleigh::initialize", int(r.status), r.error.c_str());
+        CHECK(!escaped);
+        CHECK(r.status == DecompileStatus::Failed);
+        const DecompileResult after = d.Decompile(snap, q);
+        CHECK(after.status == DecompileStatus::Unavailable);
+        const std::vector<std::string> listing = d.Disassemble(snap, dts::kFixture1Caller, 4);
+        std::printf("  child (reset): then decompile -> status %d, disassemble -> %s\n", int(after.status),
+                    listing.empty() ? "(nothing)" : listing[0].c_str());
+        CHECK(listing.size() == 1 && Has(listing[0], "unavailable"));
+    }
+    std::printf("  child (reset): returning normally, through static destruction\n");
+    std::fflush(stdout);
+    return dts::Failures() ? 1 : 0;
+}
+
+// A phase observer that throws an exception with a long message while the allocation that would
+// copy that message fails: still a Failed result, nothing escapes.
+int ObserverOomChild(const std::string& scratch)
+{
+    dts::PrepareProcess();
+    gConfig = dts::Join(scratch, "config");
+    sfe::MakeDirectory(scratch);
+    sfe::MakeDirectory(gConfig);
+    Sh2Decompiler d(gConfig);
+    auto snap = Fixture1Snapshot();
+    CHECK(d.Decompile(snap, Request(dts::kFixture1Caller)).status == DecompileStatus::Ok);
+    static const std::runtime_error kLong(std::string(300, 'x'));
+    d.SetPhaseObserver([](DecompilePhase p) {
+        if (p != DecompilePhase::Flow) return;
+        dts::FailAfter() = 0;   // the next allocation: copying the message into the result
+        throw kLong;
+    });
+    DecompileResult r;
+    bool escaped = false;
+    try
+    {
+        r = d.Decompile(snap, Request(dts::kFixture1Caller));
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    dts::FailAfter() = -1;
+    std::printf("  child (observer): throwing observer + failed message copy -> status %d, error '%.20s'\n",
+                int(r.status), r.error.c_str());
+    CHECK(!escaped);
+    CHECK(r.status == DecompileStatus::Failed);
+    std::fflush(stdout);
+    std::_Exit(dts::Failures() ? 1 : 0);
+}
+
 int EngineOomChild(const std::string& scratch, const std::string& where, long offset)
 {
     dts::PrepareProcess();
@@ -535,9 +630,9 @@ void TestEngineAllocationFailureInChild(const char* self, const std::string& scr
     }
     // Inside flow following, and each of the first allocations of building an Architecture (the
     // Architecture itself, then its two load images).
-    const char* where[] = { "flow", "construct", "construct", "construct", "construct" };
-    const long offset[] = { 10, 0, 1, 2, 3 };
-    for (int i = 0; i < 5; ++i)
+    const char* where[] = { "flow", "construct", "construct", "construct", "construct", "reset", "reset", "observer" };
+    const long offset[] = { 10, 0, 1, 2, 3, 0, 1, 0 };
+    for (int i = 0; i < 8; ++i)
     {
         std::string cmd = std::string("\"") + self + "\" --engine-oom " + where[i] + " " + std::to_string(offset[i]) +
                           " \"" + dts::Join(scratch, "oom") + "\"";
@@ -553,7 +648,13 @@ void TestEngineAllocationFailureInChild(const char* self, const std::string& scr
 
 int main(int argc, char** argv)
 {
-    if (argc == 5 && std::string(argv[1]) == "--engine-oom") return EngineOomChild(argv[4], argv[2], std::atol(argv[3]));
+    if (argc == 5 && std::string(argv[1]) == "--engine-oom")
+    {
+        const std::string where = argv[2];
+        if (where == "reset") return ResetOomChild(argv[4], std::atol(argv[3]));
+        if (where == "observer") return ObserverOomChild(argv[4]);
+        return EngineOomChild(argv[4], where, std::atol(argv[3]));
+    }
     if (argc != 2)
     {
         std::printf("usage: %s <scratch dir>\n", argv[0]);

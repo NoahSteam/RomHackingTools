@@ -22,6 +22,7 @@
 
 #include "AllocFailure.h"
 #include "Decompiler/DecompilerRunner.h"
+#include "Decompiler/SaturnArchitecture.h"
 
 #include <algorithm>
 #include <condition_variable>
@@ -558,43 +559,37 @@ void TestDisableOnUnacknowledgedCancel()
     CheckFollowingRequest(runner, "a new session after the stuck request ended");
 }
 
-// Out of memory while the worker handles a request: the process survives and every request is
-// answered (Failed, then Unavailable once the engine may be damaged -- see Sh2Decompiler.h) or the
-// session is disabled and recoverable. Run in a child process: an injected failure inside the
-// engine marks it damaged for the rest of that process, which the other cases here must not see.
+// Out of memory on the worker inside the engine: the request is answered Failed, the worker
+// survives and answers the next one (Unavailable: the engine may be damaged, see Sh2Decompiler.h).
+// The result-recording path is DisableOomChild's. Run in a child process: an injected failure
+// inside the engine marks it damaged for the rest of that process.
 int WorkerOomChild()
 {
     DecompilerRunner runner(gConfig, Generous());
     runner.Submit(0, gSnap, Small());   // the worker is up and the engine warm before injecting
     DecompileResult r;
     CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);
-    int answered = 0, disabled = 0, unavailable = 0;
-    for (long k = 0; k < 40; k += 3)
-    {
-        runner.Submit(0, gSnap, Small());
-        dts::FailAfter() = k;   // the worker's allocations: this thread only polls now
-        const auto t0 = Clock::now();
-        bool got = false;
-        while (!got && !runner.Disabled() && MsSince(t0) < 60000)
-        {
-            got = runner.Poll(r);
-            if (!got) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-        dts::FailAfter() = -1;
-        CHECK(got || runner.Disabled());
-        CHECK(WaitIdle(runner));
-        if (runner.Disabled()) ++disabled;
-        else if (r.status == DecompileStatus::Unavailable) ++unavailable;
-        else ++answered;
-        runner.InvalidateSession();
-        CHECK(!runner.Disabled());
-    }
-    // Still serving: the next request is answered.
+    // Held at the start of the engine's work, so the injection lands there -- on the worker,
+    // deterministically -- and not wherever the scheduler happens to be.
+    PhaseGate gate;
+    runner.SetPhaseObserverForTests(gate.Observer());
+    gate.Reset(DecompilePhase::Init);
     runner.Submit(0, gSnap, Small());
-    const bool last = WaitResult(runner, r);
-    std::printf("  child: %d answered, %d Unavailable (engine marked damaged), %d disabled the session;"
-                " afterwards: %s\n", answered, unavailable, disabled, last ? "answered" : "NO ANSWER");
-    CHECK(last);
+    CHECK(gate.WaitHolding(60));
+    dts::FailAfter() = 0;   // the worker's next allocation: building the Architecture
+    gate.Release();
+    CHECK(WaitResult(runner, r));
+    dts::FailAfter() = -1;
+    runner.SetPhaseObserverForTests(nullptr);
+    std::printf("  child: out of memory building the Architecture -> status %d (%s)\n", int(r.status), r.error.c_str());
+    CHECK(r.status == DecompileStatus::Failed);
+    // The worker survived and still answers; the engine is treated as damaged from here on.
+    runner.Submit(0, gSnap, Small());
+    DecompileResult after;
+    CHECK(WaitResult(runner, after));
+    std::printf("  child: next request -> status %d\n", int(after.status));
+    CHECK(after.status == DecompileStatus::Unavailable);
+    CHECK(!runner.Disabled());
     std::fflush(stdout);
     std::_Exit(dts::Failures() ? 1 : 0);   // skip static teardown of a possibly damaged engine
 }
@@ -614,6 +609,107 @@ void TestWorkerAllocationFailure(const char* self, const std::string& scratch)
     const int rc = std::system(cmd.c_str());
     std::printf("  child exit status %d\n", rc);
     CHECK(rc == 0);
+}
+
+// Persistent allocation failure while a request finishes, with another request queued: recording
+// the result fails, so the worker's own boundary must disable the session -- without allocating,
+// since nothing can be -- and the queued request must never start; its snapshot is released.
+int DisableOomChild()
+{
+    DecompilerRunner runner(gConfig, Generous());
+    DecompileResult r;
+    runner.Submit(0, gSnap, Small());
+    CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);   // worker up, engine warm
+    // A is held as its Architecture is torn down, its engine work done (one pass, so there is one
+    // teardown): the failures then land in finishing and recording the result, which is the path
+    // under test. (Persistent failure inside Ghidra's own action pipeline is not survivable: its
+    // objects are not exception-safe, and their teardown crashes -- which is why an engine-side
+    // failure marks the engine damaged, see Sh2Decompiler.h.)
+    PhaseGate gate;
+    runner.SetPhaseObserverForTests(gate.Observer());
+    gate.Reset(DecompilePhase::Teardown);
+    DecompileRequest a = Small();
+    a.registerCallees = false;
+    runner.Submit(0, gSnap, a);              // A
+    CHECK(gate.WaitHolding(60));
+    std::vector<uint8_t> hw;
+    dts::PlaceFixture1(hw);
+    std::shared_ptr<const MemorySnapshot> queued = dts::MakeSnapshot(hw, 9);
+    runner.Submit(1, queued, Small());       // B: queued behind A
+    const long queuedRefs = queued.use_count();
+    dts::FailAlways() = true;                // from here every allocation fails...
+    gate.Release();
+    const auto t0 = Clock::now();
+    while (!runner.Disabled() && MsSince(t0) < 60000)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));   // (polling Poll would allocate nothing either)
+    CHECK(WaitIdle(runner));
+    dts::FailAlways() = false;               // ...until here
+    std::printf("  child (disable): disabled %d, runs started %llu, queued snapshot references %ld -> %ld\n",
+                int(runner.Disabled()), static_cast<unsigned long long>(runner.RunsStarted()), queuedRefs,
+                long(queued.use_count()));
+    CHECK(runner.Disabled());                // the disable branch ran
+    CHECK(runner.RunsStarted() == 2);        // the warm-up and A; B never started
+    CHECK(queued.use_count() == 1);          // B dropped from the queue, its snapshot released
+    std::fflush(stdout);
+    std::_Exit(dts::Failures() ? 1 : 0);     // the engine ran out of memory too: skip its teardown
+}
+
+// Out of memory inside Sleigh::reset, on the runner: the request fails, the next is refused, and
+// then the runner is destroyed (join + shutdown) and the process exits normally -- through the
+// static destruction of the translator the failure left behind (patch 0002).
+std::atomic<bool> gFailInReset(false);
+void FailNextAllocationInReset()
+{
+    if (gFailInReset.exchange(false)) dts::FailAfter() = 0;
+}
+
+int ResetOomChild()
+{
+    {
+        DecompilerRunner runner(gConfig, Generous());
+        DecompileResult r;
+        runner.Submit(0, gSnap, Small());
+        CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);
+        SaturnArchitecture::SetBuildTranslatorHookForTests(FailNextAllocationInReset);
+        gFailInReset = true;
+        runner.Submit(0, gSnap, Small());
+        CHECK(WaitResult(runner, r));
+        SaturnArchitecture::SetBuildTranslatorHookForTests(nullptr);
+        dts::FailAfter() = -1;
+        CHECK(r.status == DecompileStatus::Failed);
+        runner.Submit(0, gSnap, Small());
+        DecompileResult after;
+        CHECK(WaitResult(runner, after));
+        CHECK(after.status == DecompileStatus::Unavailable);
+        std::printf("  child (reset): failed in Sleigh::reset -> status %d; next -> status %d; destroying the runner\n",
+                    int(r.status), int(after.status));
+    }
+    std::printf("  child (reset): runner joined; returning normally, through static destruction\n");
+    std::fflush(stdout);
+    return dts::Failures() ? 1 : 0;
+}
+
+void RunChild(const char* self, const char* mode, const std::string& scratch)
+{
+    std::string cmd = std::string("\"") + self + "\" " + mode + " \"" + dts::Join(scratch, "oom") + "\"";
+#ifdef _WIN32
+    cmd = "\"" + cmd + "\"";   // cmd.exe strips the outer pair
+#endif
+    const int rc = std::system(cmd.c_str());
+    std::printf("  child %s exit status %d\n", mode, rc);
+    CHECK(rc == 0);
+}
+
+void TestOutOfMemoryEdges(const char* self, const std::string& scratch)
+{
+    if (!dts::kInjectionUsable)
+    {
+        std::printf("  SKIPPED in an MSVC Debug build: its STL allocates inside noexcept moves, so an\n"
+                    "  injected failure there terminates by design (the Windows Release run covers this)\n");
+        return;
+    }
+    RunChild(self, "--disable-oom", scratch);
+    RunChild(self, "--reset-oom", scratch);
 }
 
 // The engine-thread claim is released if the runner cannot be constructed, so the next one is
@@ -697,6 +793,16 @@ int main(int argc, char** argv)
         gSnap = BuildSnapshot();
         return WorkerOomChild();
     }
+    if (argc == 3 && (std::string(argv[1]) == "--disable-oom" || std::string(argv[1]) == "--reset-oom"))
+    {
+        dts::PrepareProcess();
+        const std::string dir = argv[2];
+        sfe::MakeDirectory(dir);
+        gConfig = dts::Join(dir, "config");
+        sfe::MakeDirectory(gConfig);
+        gSnap = BuildSnapshot();
+        return std::string(argv[1]) == "--disable-oom" ? DisableOomChild() : ResetOomChild();
+    }
     if (argc != 2)
     {
         std::printf("usage: %s <scratch dir>\n", argv[0]);
@@ -725,6 +831,7 @@ int main(int argc, char** argv)
         RUN(TestOneEngineThread());
         RUN(TestWorkerAllocationFailure(argv[0], scratch));
         RUN(TestConstructionFailureReleasesEngine());
+        RUN(TestOutOfMemoryEdges(argv[0], scratch));
         RUN(TestDestructorJoins());
     }
     catch (std::exception& e)

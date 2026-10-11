@@ -35,9 +35,17 @@ inline std::atomic<long>& AllocCount()
     return n;
 }
 
+// While true, every allocation fails (persistent pressure, for the paths that report a failure).
+inline std::atomic<bool>& FailAlways()
+{
+    static std::atomic<bool> on(false);
+    return on;
+}
+
 inline void* Allocate(std::size_t size)
 {
     AllocCount().fetch_add(1, std::memory_order_relaxed);
+    if (FailAlways().load()) throw std::bad_alloc();
     long k = FailAfter().load();
     while (k >= 0)
     {

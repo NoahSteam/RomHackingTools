@@ -42,8 +42,19 @@ void SaturnArchitecture::buildLoader(ghidra::DocumentStorage&)
 // The translator decodes instructions through the loader it is built with. Building it with the
 // fetch image (and restoring the data image as the Architecture's own loader) is what gives
 // instruction fetches and data reads their different refusals -- see CaptureLoadImage.h.
+namespace
+{
+void (*gBuildTranslatorHook)() = nullptr;
+}  // namespace
+
+void SaturnArchitecture::SetBuildTranslatorHookForTests(void (*hook)())
+{
+    gBuildTranslatorHook = hook;
+}
+
 ghidra::Translate* SaturnArchitecture::buildTranslator(ghidra::DocumentStorage& store)
 {
+    if (gBuildTranslatorHook) gBuildTranslatorHook();
     ghidra::LoadImage* data = loader;
     loader = mFetchImage.get();
     ghidra::Translate* t = nullptr;

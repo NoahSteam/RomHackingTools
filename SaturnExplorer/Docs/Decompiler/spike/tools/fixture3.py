@@ -8,9 +8,10 @@
 # PC-relative form (mov.w, mov.l, mova) in a slot, which Step 2 must flag as unsupported.
 #
 # Encodings from the Hitachi SH-1/SH-2 Programming Manual opcode tables. This script checks each
-# one with Capstone's SH module (which shares no code with Ghidra's SLEIGH): the mnemonic must be
-# the intended one and, for a PC-relative slot instruction, the address Capstone computes must be
-# the one the test expects the spec to load. It exits non-zero on any disagreement.
+# one with Capstone's SH module (which shares no code with Ghidra's SLEIGH): the whole decoded
+# instruction -- mnemonic, registers, immediates, branch targets, PC-relative addresses -- must be
+# the intended one, and a PC-relative slot instruction's address must be the one the test expects
+# the spec to load. It exits non-zero on any disagreement.
 # Sh2DecompilerTests.cpp (DecompilerTestSupport.h, PlaceFixture3) embeds the same words.
 #   python3 -I fixture3.py
 import re, struct, sys
@@ -82,16 +83,34 @@ cases.append(("braf + mov.l", G, [
 ], G + 0x02, G + 0x08, {G + 0x08: (0x55555555, 4)}))
 
 md = Cs(CS_ARCH_SH, CS_MODE_SH2 | CS_MODE_BIG_ENDIAN)
+
+def normalise(text):
+    # Lower case, no spaces, every number (hex or decimal, after '#' or not) as decimal.
+    text = text.lower().replace(" ", "")
+    return re.sub(r"0x[0-9a-f]+|\d+", lambda m: str(int(m.group(0), 0)), text)
+
+def resolve(addr, mnem, intent):
+    # The intended text in Capstone's spelling: @(disp,pc) becomes the absolute address the
+    # instruction reads from its own PC (word: pc + 4 + disp; long and mova: (pc + 4) & ~3 + disp).
+    text = intent.split(";")[0].strip()
+    m = re.search(r"@\((\d+),pc\)", text)
+    if m:
+        base = addr + 4 if mnem == "mov.w" else (addr + 4) & ~3
+        text = text.replace(m.group(0), hex(base + int(m.group(1))))
+    return text
+
 failures = 0
 for name, base, words, slot, literal, lits in cases:
     print(f"{name} @{base:08X} (capstone SH2 BE):")
     for addr, w, mnem, intent in words:
         ins = list(md.disasm(struct.pack(">H", w), addr))
         got = f"{ins[0].mnemonic} {ins[0].op_str}".strip() if ins else "<capstone: invalid>"
-        ok = bool(ins) and ins[0].mnemonic == mnem
+        # Every word must decode to exactly the intended instruction: mnemonic, registers,
+        # immediates, branch targets and PC-relative addresses all compared.
+        ok = bool(ins) and normalise(got) == normalise(resolve(addr, mnem, intent))
         if ok and addr == slot and literal is not None:
-            # Capstone resolves @(disp,pc) to an absolute address from the instruction's own PC:
-            # exactly the address the spec loads, which the test must see left unfolded.
+            # Capstone resolves @(disp,pc) from the instruction's own PC: exactly the address the
+            # spec loads, which the test must see left unfolded.
             m = re.search(r"0x[0-9a-f]+", ins[0].op_str)
             ok = m is not None and int(m.group(0), 16) == literal
         print(f"  {addr:08X}  {w:04X}  {got:28s} ; intended: {intent}{'' if ok else '   <-- MISMATCH'}")
@@ -104,5 +123,6 @@ for name, base, words, slot, literal, lits in cases:
         if slotaddr != literal + 4:
             print(f"  hardware's slot-relative address {slotaddr:08X} is not {literal + 4:08X}  <-- MISMATCH")
             failures += 1
-print("all encodings verified" if failures == 0 else f"{failures} MISMATCH(ES)")
+print("every word decodes to its intended instruction, operands and targets included" if failures == 0
+      else f"{failures} MISMATCH(ES)")
 sys.exit(1 if failures else 0)

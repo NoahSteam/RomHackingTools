@@ -9,10 +9,16 @@ Linux stays a development convenience and the web build is untouched; neither ga
 
 Rules that hold throughout:
 - No change to `include/saturnexplorer/*.h`, `SE_ABI_VERSION`, Core, or the drivers.
-- Ghidra sources are vendored with exactly two small patches, kept in
+- Ghidra sources are vendored with small patches only, kept in
   `third_party/ghidra-decompiler/patches/` and recorded in `VENDOR.md`: the cancellation flag
-  (A4, 25 lines, demonstrated in `spike/cancel_spike.cpp`) and the delay-slot SLEIGH fix (A3).
-  Everything else is a subclass or wrapper in `FrontEnd/src/Decompiler/`.
+  (A4, 25 lines, demonstrated in `spike/cancel_spike.cpp`), the delay-slot SLEIGH fix (A3, Step 4),
+  and -- added in Step 2's review -- `0002-sleigh-reset-null-caches.patch` and
+  `0003-translator-ownership-on-init-failure.patch`, two and three lines, so that an allocation
+  failure while the shared translator is reset or re-initialised neither leaves deleted cache
+  pointers for its destructor nor makes `restoreFromSpec` delete the process-global translator:
+  after an out-of-memory in the engine the process still exits normally. Each has a reason and a
+  regression test in `patches/README.md`. Everything else is a subclass or wrapper in
+  `FrontEnd/src/Decompiler/`.
 - Everything decompiler-related compiles only when `SE_ENABLE_DECOMPILER` is on (default on
   desktop, forced off under Emscripten).
 - Commit to master after each step, as the repo does.
@@ -277,8 +283,8 @@ Files in `FrontEnd/src/Decompiler/` (Win32 and desktop source lists, not the web
 | `MemorySnapshot.{h,cpp}` | `SnapshotKey` per A1; regions via `ReadRegionBytes` (LWRAM, HWRAM, optional BIOS); both register files; `Classify()` and `Canonical()` per A2. |
 | `CaptureLoadImage.{h,cpp}` | `LoadImage` over a snapshot; `DataUnavailError` with partition name; read-only ranges. |
 | `SaturnArchitecture.{h,cpp}` | `SleighArchitecture` subclass: language id, `readonlypropagate`, `max_instructions`, loader injection, the cancel flag from A4, spec dir from `SpecBundle`. |
-| `Sh2Decompiler.{h,cpp}` | Two-pass decompile (names, known functions, `followFlow`, literal pools from raw p-code, delay-slot detection per A3, callee harvest and registration, `perform`, markup → `Line`/`Token` with addresses). All `LowlevelError`s become warnings; engine rebuilt after a hard failure. |
-| `Sh2FunctionFinder.{h,cpp}` | Entry ladder (user → `FunctionNames` → call-site target → `rts` back-scan validated by `Sh2Decode` → callee) with `EntryGuess{entry, source, confidence}`; persistence in `saturn_function_bounds.txt`. |
+| `Sh2Decompiler.{h,cpp}` | Two-pass decompile (names, known functions, `followFlow`, literal pools from raw p-code, delay-slot detection per A3, callee harvest and registration, `perform`, markup → `Line`/`Token` with addresses). All `LowlevelError`s become warnings. *Deviation (Step 2 review):* no engine rebuild -- each request builds and destroys its own Architecture, so an ordinary failure leaves nothing behind; but out of memory inside the engine can leave the process-global translator half-reset, which cannot be rebuilt (the translator map is private to `SleighArchitecture`), so from then on every request and disassembly is answered Unavailable for the rest of the process. |
+| `Sh2FunctionFinder.{h,cpp}` | Entry ladder (user → `FunctionNames` → call-site target → `rts` back-scan validated by `Sh2Decode` → callee) with `EntryGuess{entry, source, confidence}`; persistence in `saturn_function_bounds.txt`. *Clarified (Step 2 review):* the ladder ranks the sources of the same entry and is applied to the nearest known entry at or below the address -- every known entry is a function start, so a nearer one from any source begins a later function and an older user entry further back does not claim it; a user entry does beat the `rts` scan. |
 | `DecompilerRunner.{h,cpp}` | The single engine thread, epoch, cancel flag, wall-clock budget, coalescing, disable-on-failed-cancel, join-at-exit, all per A4. |
 
 Tests: `MemorySnapshotTests` (A2), `Sh2DecompilerTests` (fixtures 1, 1b, 3 per A3, unmapped,

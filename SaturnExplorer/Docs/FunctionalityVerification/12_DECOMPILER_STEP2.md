@@ -22,7 +22,7 @@ Targets: `SaturnExplorerMemorySnapshotTests`, `SaturnExplorerSh2FunctionFinderTe
 `SaturnExplorerDecompilerRunnerTests` (120 s; the others 60 s). The desktop frontends and
 `FrontEnd.vcxproj` (glob) compile the new sources; the vcxproj gained the engine and zlib include
 paths and `_WINDOWS`. Fixture 3 generator: `Docs/Decompiler/spike/tools/fixture3.py` (Capstone-checked).
-No patch beyond `0001-cancel-flag.patch`; no change to `include/`, `SE_ABI_VERSION`, Core or drivers.
+Patches: `0001-cancel-flag.patch` (Step 1), and from the round-2 review `0002-sleigh-reset-null-caches.patch` and `0003-translator-ownership-on-init-failure.patch` (below); no change to `include/`, `SE_ABI_VERSION`, Core or drivers.
 
 ## Contracts and the tests that pin them
 
@@ -110,7 +110,7 @@ Every fix below has a test that was run with the fix reverted and failed.
 
 | Finding | Fix | Test that fails without it |
 |---|---|---|
-| 1 Allocation failure escapes the worker | One exception boundary around the whole of `Sh2Decompiler::Decompile`, request preparation included; the worker records results inside its own boundary (a failure there disables the session); the worker's own start-up is guarded | `Sh2DecompilerTests` TestAllocationFailureIsReported (every allocation before the engine, failed in turn) and TestEngineAllocationFailureInChild; `DecompilerRunnerTests` TestWorkerAllocationFailure (child process) |
+| 1 Allocation failure escapes the worker | One exception boundary around the whole of `Sh2Decompiler::Decompile`, request preparation included; the worker records results inside its own boundary (a failure there disables the session); the worker's own start-up is guarded | `Sh2DecompilerTests` TestAllocationFailureIsReported (every allocation before the engine, failed in turn) and TestEngineAllocationFailureInChild; `DecompilerRunnerTests` TestWorkerAllocationFailure (child process; engine-side only -- the recording path is round 2's `--disable-oom`) |
 | 2 Stale register in `CallTargetAt` | Accepts only intervening instructions proven not to touch rN: no register field naming it, no implicit r0 write (0x8xxx/0xCxxx), no branch | `Sh2FunctionFinderTests` TestCallTargets (mova, `@r1+`, branch between load and call) |
 | 3 Nearer symbol beats an older user entry | Not changed: by design (see Decisions); pinned | TestLadder (older user entry + nearer symbol / callee) |
 | 4 Five uncaptured branches fail the function | `max_baddata` = instruction cap | TestManyUncapturedBranches |
@@ -134,6 +134,28 @@ the Release step, with the full-size runner fixtures.
 Also: the epoch-bump timing assertion is 50 ms (it measured scheduler noise as well as
 non-blocking behaviour); a throwing phase observer can no longer terminate from the teardown
 destructor.
+
+## External review, round 2 (at `01d12b4`)
+
+The round-1 fixes were confirmed; finding #1 was incomplete. Each fix has a test that fails with
+the fix reverted (all four run as child processes, since they leave the engine damaged; the two
+reset children return normally instead of `_Exit`, so they also prove normal shutdown).
+
+| Finding | Fix | Test that fails without it |
+|---|---|---|
+| 1 Shutdown after an engine OOM double-frees | Vendor patch `0002-sleigh-reset-null-caches.patch`: `Sleigh::clearForDelete` nulls the caches it deletes. Testing it found a second path, fixed by `0003-translator-ownership-on-init-failure.patch`: `restoreFromSpec` no longer holds the shared translator in a `unique_ptr` across `initialize()` | `Sh2DecompilerTests` reset children (+0: in `Sleigh::reset`; +1: in `Sleigh::initialize`), each returning normally through static destruction; `DecompilerRunnerTests` `--reset-oom` (also destroys the runner first) |
+| 2 `Disassemble` bypassed the damage guard | Checked first; any non-engine exception there also marks the engine damaged | reset children: disassembly answers `<unavailable: …>` |
+| 3 Disabling could allocate before clearing the queue | `DisableLocked(const char*) noexcept`: disabled flag, epoch and queue clearing first, reason best effort; the worker never dequeues while disabled | `DecompilerRunnerTests` `--disable-oom`: persistent failure while a request is being recorded, another queued -- disabled, the queued request never starts, its snapshot released |
+| 4 `SetError(r, e.what())` allocated outside the guard | `const char*` and `const std::string&` overloads, both `noexcept` | `Sh2DecompilerTests` observer child: a throwing observer plus a failed message copy → Failed, nothing escapes |
+| Gap: worker OOM test raced the scheduler | The worker is held at the start of the engine's work before the failure is armed | `--worker-oom` child |
+| Gap: `fixture3.py` checked only mnemonics and slot addresses | Compares every decoded instruction in full -- registers, immediates, branch targets, PC-relative addresses | a wrong target, register or immediate each make it exit 1 |
+| PLAN.md still promised an engine rebuild and the original ladder | PLAN.md §B Step 2 states both deviations; its patch rule lists 0002 and 0003 | — |
+
+Not survivable, and so not tested as such: persistent allocation failure inside Ghidra's action
+pipeline leaves its objects inconsistent, and their own destructors crash (seen while writing the
+`--disable-oom` test, which therefore starts the failure after the engine's work). The host's
+policy -- engine marked damaged, never touched again -- limits what follows; it cannot make
+Ghidra's teardown exception-safe.
 
 ## Not done / outstanding
 

@@ -130,13 +130,23 @@ void DecompilerRunner::RequestCancelLocked(CancelReason reason)
     mCancel = true;
 }
 
-void DecompilerRunner::DisableLocked(const std::string& reason)
+// The essential transition allocates nothing -- it may run because an allocation just failed --
+// and happens first: disabled, and every queued request (with its snapshot) dropped. The reason
+// is best effort.
+void DecompilerRunner::DisableLocked(const char* reason) noexcept
 {
     mDisabled = true;
     mDisabledEpoch = mEpoch;
-    mDisabledReason = reason;
     mQueue.clear();
-    std::fprintf(stderr, "SH-2 decompiler: %s\n", reason.c_str());
+    try
+    {
+        mDisabledReason = reason;
+    }
+    catch (...)
+    {
+        mDisabledReason.clear();
+    }
+    std::fprintf(stderr, "SH-2 decompiler: %s\n", reason);
 }
 
 // Disabled "for the session": a new session (epoch) on the same worker may decompile again once
@@ -250,14 +260,7 @@ void DecompilerRunner::WorkerMain()
         // back a worker that never ran), and the thread ends -- the destructor still joins it.
         std::lock_guard<std::mutex> lock(mMutex);
         mWorkerGone = true;
-        try
-        {
-            DisableLocked("the decompiler could not start (out of memory)");
-        }
-        catch (...)
-        {
-            mDisabled = true;
-        }
+        DisableLocked("the decompiler could not start (out of memory)");
         return;
     }
     Sh2Decompiler& engine = *enginePtr;
@@ -266,7 +269,8 @@ void DecompilerRunner::WorkerMain()
         Job job;
         {
             std::unique_lock<std::mutex> lock(mMutex);
-            mWake.wait(lock, [&] { return mStopping || !mQueue.empty(); });
+            // Never a new request while disabled, whatever is left in the queue.
+            mWake.wait(lock, [&] { return mStopping || (!mQueue.empty() && !mDisabled); });
             if (mStopping) return;
             job = std::move(mQueue.front());
             mQueue.pop_front();
@@ -322,15 +326,7 @@ void DecompilerRunner::WorkerMain()
             mRunning = false;
             mCancel = false;
             mCancelReason = CancelReason::None;
-            try
-            {
-                DisableLocked("the decompiler failed internally (out of memory?); decompilation is disabled for this session");
-            }
-            catch (...)
-            {
-                mDisabled = true;
-                mDisabledEpoch = mEpoch;
-            }
+            DisableLocked("the decompiler failed internally (out of memory?); decompilation is disabled for this session");
         }
     }
 }

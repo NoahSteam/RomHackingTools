@@ -110,7 +110,7 @@ private:
 
     void WorkerMain();
     void RequestCancelLocked(CancelReason reason);
-    void DisableLocked(const std::string& reason);
+    void DisableLocked(const char* reason) noexcept;
     void RecoverLocked();
 
     const std::string mConfigDir;
