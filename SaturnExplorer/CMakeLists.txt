@@ -241,6 +241,7 @@ if(SE_ENABLE_DECOMPILER)
         # Every test links the same production sources the frontends compile.
         set(SE_DECOMPILER_TEST_SOURCES
             ${SE_DECOMPILER_SOURCES}
+            FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp)
         foreach(name Sh2Decompiler DecompilerRunner)
@@ -269,7 +270,7 @@ if(SE_ENABLE_DECOMPILER)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp
                 FrontEnd/src/Decompiler/MemorySnapshot.cpp
                 FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
-                FrontEnd/src/Decompiler/SpecBundle.cpp   # Sha256Hex: the BIOS image's content hash
+                FrontEnd/src/Sha256.cpp   # the BIOS image's content hash
                 FrontEnd/src/FileWrite.cpp
                 FrontEnd/src/Debug/Sh2Disasm.cpp)
             target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)

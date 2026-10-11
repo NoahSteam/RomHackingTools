@@ -1,7 +1,7 @@
 #include "Decompiler/MemorySnapshot.h"
 
 #include "Debug/MemoryBackend.h"
-#include "Decompiler/SpecBundle.h"   // Sha256Hex
+#include "Sha256.h"
 
 #include <cstdio>
 #include <cstdlib>
