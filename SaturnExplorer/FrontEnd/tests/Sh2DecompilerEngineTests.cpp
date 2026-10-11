@@ -35,6 +35,7 @@
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -517,28 +518,120 @@ void TestForeignHashUntouched(const std::string& config)
     CHECK(sfe::ListDirectory(foreign, names) && names.size() == 1);
 }
 
+// Something sitting where the bundle directory should be is a link to another directory --
+// planted, or left by a user's tidy-up. Verification fails, and the repair must remove the link
+// itself: following it would delete the files of whatever it points at. POSIX only (creating a
+// symlink on Windows needs a privilege CI lacks; FileWriteTests covers RemoveFlatDirectory).
+void TestLinkInPlaceOfBundle(const std::string& config)
+{
+#ifndef _WIN32
+    const sfe::decomp::SpecBundleResult first = sfe::decomp::MaterialiseSh2SpecBundle(config);
+    CHECK(first.ok);
+    if (!first.ok) return;
+    const std::string victim = Join(config, "unrelated");
+    CHECK(sfe::MakeDirectory(victim));
+    CHECK(WriteFile(Join(victim, "keep.txt"), "keep", 4));
+    RemoveTree(first.dir);
+    CHECK(::symlink(victim.c_str(), first.dir.c_str()) == 0);
+
+    const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(config);
+    CHECK(b.ok && b.repaired);
+    CHECK(!sfe::IsLink(first.dir));
+    CHECK(MatchesEmbedded(first.dir));
+    std::vector<std::string> names;
+    CHECK(sfe::ListDirectory(victim, names) && names.size() == 1);
+    CHECK(sfe::FileOrDirectoryExists(Join(victim, "keep.txt")));
+    RemoveTree(victim);
+#else
+    (void)config;
+#endif
+}
+
+// Several instances find the same damaged bundle at once. Under the bundle lock exactly one
+// repairs it and the rest see a valid directory; without it, a slow instance acting on its
+// stale "damaged" verdict deletes the copy another has just verified and handed to its engine.
+// Threads stand in for processes: flock and LockFileEx lock per open file, so they exclude
+// each other within one process exactly as across processes.
+void TestConcurrentRepair(const std::string& config)
+{
+    const sfe::decomp::SpecBundleResult first = sfe::decomp::MaterialiseSh2SpecBundle(config);
+    CHECK(first.ok);
+    if (!first.ok) return;
+    CHECK(sfe::RemoveFile(Join(first.dir, "sh-2.sla")));
+
+    const int n = 8;
+    std::atomic<int> ready(0);
+    std::vector<sfe::decomp::SpecBundleResult> results(n);
+    std::vector<int> valid(n, 0);
+    std::vector<std::thread> threads;
+    for (int i = 0; i < n; ++i)
+        threads.emplace_back([&, i] {
+            ++ready;
+            while (ready.load() < n) std::this_thread::yield();
+            results[i] = sfe::decomp::MaterialiseSh2SpecBundle(config);
+            valid[i] = results[i].ok && MatchesEmbedded(results[i].dir);   // still there on return
+        });
+    for (std::thread& t : threads) t.join();
+
+    int repairs = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        CHECK(results[i].ok);
+        CHECK(valid[i]);
+        if (results[i].repaired) ++repairs;
+    }
+    std::printf("concurrent repair: %d of %d instances repaired\n", repairs, n);
+    CHECK(repairs == 1);
+    CHECK(MatchesEmbedded(first.dir));
+}
+
+// Deny writes into 'path' (and, on Windows, everything below it) the way a locked-down config
+// dir would: mode 0500 on POSIX, a deny-write ACE for Everyone on Windows. Undone by
+// AllowWrites. Root ignores mode bits, which the caller detects by probing.
+void DenyWrites(const std::string& path)
+{
+#ifdef _WIN32
+    const std::string cmd = "icacls \"" + path + "\" /deny \"*S-1-1-0:(OI)(CI)(WD,AD,DC)\" >nul 2>&1";
+    CHECK(std::system(cmd.c_str()) == 0);
+#else
+    ::chmod(path.c_str(), 0500);
+#endif
+}
+
+void AllowWrites(const std::string& path)
+{
+#ifdef _WIN32
+    const std::string cmd = "icacls \"" + path + "\" /remove:d \"*S-1-1-0\" >nul 2>&1";
+    CHECK(std::system(cmd.c_str()) == 0);
+#else
+    ::chmod(path.c_str(), 0700);
+#endif
+}
+
 // A config directory nothing can be written into: "unavailable" naming the path, not a crash.
+// One that was materialised while writable is still used; a damaged one cannot be repaired
+// and says so, naming the directory.
 void TestUnwritableConfigDir(const std::string& scratch)
 {
     const std::string config = Join(scratch, "readonly-config");
     RemoveTree(config);
     CHECK(sfe::MakeDirectory(config));
 
-    bool readOnlyDir = false;
-#ifndef _WIN32
-    // A permission-bit read-only directory, unless we are root (which ignores the bits).
-    if (::chmod(config.c_str(), 0500) == 0 && ::access(config.c_str(), W_OK) != 0) readOnlyDir = true;
-#endif
+    DenyWrites(config);
+    const std::string probe = Join(config, "probe");
+    const bool enforced = !sfe::MakeDirectory(probe);
+    if (!enforced) sfe::RemoveEmptyDirectory(probe);
     std::string target = config;
-    if (!readOnlyDir)
+    if (!enforced)
     {
-        // Windows does not enforce a read-only directory attribute, and root ignores mode bits;
-        // a config "directory" whose parent is a regular file is unwritable everywhere.
+        // Running as root: mode bits are not enforced. A config "directory" whose parent is a
+        // regular file is unwritable for anyone.
+        AllowWrites(config);
         const std::string file = Join(scratch, "not-a-directory");
         CHECK(WriteFile(file, "x", 1));
         target = Join(file, "config");
     }
-    std::printf("unwritable config dir: %s\n", readOnlyDir ? "read-only directory (mode 0500)" : "path below a regular file");
+    std::printf("unwritable config dir: %s\n", enforced ? "writes denied on the directory" : "path below a regular file");
 
     const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(target);
     std::printf("  -> %s\n", b.error.c_str());
@@ -547,32 +640,29 @@ void TestUnwritableConfigDir(const std::string& scratch)
     CHECK(b.error.find("unavailable") != std::string::npos);
     CHECK(b.error.find(target) != std::string::npos);
 
-#ifndef _WIN32
-    if (readOnlyDir)
+    if (enforced)
     {
-        // Materialised while writable, then the config dir became read-only: still usable,
-        // since the engine only reads it. A damaged one cannot be repaired and says so.
-        ::chmod(config.c_str(), 0700);
-        sfe::decomp::SpecBundleResult ok = sfe::decomp::MaterialiseSh2SpecBundle(config);
+        AllowWrites(config);
+        const sfe::decomp::SpecBundleResult ok = sfe::decomp::MaterialiseSh2SpecBundle(config);
         CHECK(ok.ok);
-        const std::string root = Join(config, "decompiler");
-        ::chmod(root.c_str(), 0500);
-        ::chmod(config.c_str(), 0500);
-        sfe::decomp::SpecBundleResult again = sfe::decomp::MaterialiseSh2SpecBundle(config);
-        CHECK(again.ok && !again.extracted);
+        if (ok.ok)
+        {
+            const std::string root = Join(config, "decompiler");
+            const std::string all[] = { config, root, ok.dir };
+            for (const std::string& p : all) DenyWrites(p);
+            const sfe::decomp::SpecBundleResult again = sfe::decomp::MaterialiseSh2SpecBundle(config);
+            CHECK(again.ok && !again.extracted);
+            for (int i = 2; i >= 0; --i) AllowWrites(all[i]);
 
-        ::chmod(root.c_str(), 0700);
-        CHECK(sfe::RemoveFile(Join(ok.dir, "sh-2.sla")));
-        ::chmod(root.c_str(), 0500);
-        ::chmod(ok.dir.c_str(), 0500);
-        sfe::decomp::SpecBundleResult broken = sfe::decomp::MaterialiseSh2SpecBundle(config);
-        std::printf("  damaged and read-only -> %s\n", broken.error.c_str());
-        CHECK(!broken.ok);
-        CHECK(broken.error.find(ok.dir) != std::string::npos);
-        ::chmod(ok.dir.c_str(), 0700);
-        ::chmod(root.c_str(), 0700);
+            CHECK(sfe::RemoveFile(Join(ok.dir, "sh-2.sla")));
+            for (const std::string& p : all) DenyWrites(p);
+            const sfe::decomp::SpecBundleResult broken = sfe::decomp::MaterialiseSh2SpecBundle(config);
+            std::printf("  damaged and read-only -> %s\n", broken.error.c_str());
+            CHECK(!broken.ok);
+            CHECK(broken.error.find(ok.dir) != std::string::npos);
+            for (int i = 2; i >= 0; --i) AllowWrites(all[i]);
+        }
     }
-#endif
     RemoveTree(config);
 }
 
@@ -612,6 +702,8 @@ int main(int argc, char** argv)
         RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));
+        RUN(TestLinkInPlaceOfBundle(config));
+        RUN(TestConcurrentRepair(config));
         RUN(TestUnwritableConfigDir(scratch));
     }
     catch (ghidra::LowlevelError& e)

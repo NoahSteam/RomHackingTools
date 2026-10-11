@@ -65,8 +65,17 @@ bool ListDirectory(const std::string& path, std::vector<std::string>& names);
 // Delete a directory of plain files and then the directory itself. Refuses -- and changes
 // nothing -- if it holds anything that is not a regular file, because every directory this
 // is used on is flat by construction, so a subdirectory means something unexpected is there
-// and deleting it blind is how a tool eats somebody's work.
+// and deleting it blind is how a tool eats somebody's work. It also refuses when 'path' itself
+// is a link (IsLink): listing through a directory symlink or junction would empty whatever
+// directory it points at.
 bool RemoveFlatDirectory(const std::string& path);
+
+// True when 'path' itself is a symbolic link -- on Windows, any reparse point, which covers
+// directory symlinks and junctions. Not followed: a dangling link is still a link.
+bool IsLink(const std::string& path);
+
+// Delete the link at 'path' and nothing it points to. True if it is now gone.
+bool RemoveLink(const std::string& path);
 
 // The platform's path separator, so callers need not repeat the #ifdef.
 char PathSeparator();

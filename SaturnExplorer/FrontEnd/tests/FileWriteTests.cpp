@@ -18,6 +18,7 @@
 #include <csignal>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include "FileWrite.h"
@@ -258,6 +259,31 @@ void TestDirectoryHelpers()
     CHECK(RemoveEmptyDirectory(dir));
 }
 
+// A directory reached through a symlink is not emptied: listing through the link would delete
+// the files of whatever directory it points at. The link itself goes with RemoveLink, and the
+// target is untouched. POSIX only -- creating a symlink on Windows needs a privilege CI lacks.
+void TestLinkedDirectoryIsNotEmptied()
+{
+#ifndef _WIN32
+    CHECK(MakeDirectory(kDir));
+    const std::string target = P("link-target");
+    const std::string link = P("link");
+    CHECK(MakeDirectory(target));
+    CHECK(Put(target + PathSeparator() + "keep.txt", "keep"));
+    RemoveLink(link);
+    CHECK(::symlink("link-target", link.c_str()) == 0);
+
+    CHECK(IsLink(link));
+    CHECK(!IsLink(target));
+    CHECK(!RemoveFlatDirectory(link));
+    CHECK(FileOrDirectoryExists(target + PathSeparator() + "keep.txt"));
+    CHECK(RemoveLink(link));
+    CHECK(!PathEntryExists(link));
+    CHECK(FileOrDirectoryExists(target + PathSeparator() + "keep.txt"));
+    CHECK(RemoveFlatDirectory(target));
+#endif
+}
+
 void TestMovePath()
 {
     CHECK(MakeDirectory(kDir));
@@ -285,6 +311,7 @@ int main()
     TestOpenFailureIsReported();
     TestDirectoryHelpers();
     TestMovePath();
+    TestLinkedDirectoryIsNotEmptied();
     RemoveFlatDirectory(kDir);
 
     if (gFailures != 0)

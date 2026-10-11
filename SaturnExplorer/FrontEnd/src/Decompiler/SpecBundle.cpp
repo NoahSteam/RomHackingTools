@@ -4,8 +4,19 @@
 #include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileWrite.h"
 
+#include <cerrno>
 #include <cstdint>
 #include <cstring>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
 
 namespace sfe
 {
@@ -145,17 +156,67 @@ std::string Verify(const std::string& dir, const std::string& manifest,
     return std::string();
 }
 
-// Delete whatever sits at 'path': the flat directory this module writes, or a stray file.
+// Delete whatever sits at 'path': the flat directory this module writes, a stray file, or a
+// link -- which is removed itself, never followed, so a planted symlink cannot point the
+// repair at somebody else's directory.
 bool RemoveEntry(const std::string& path)
 {
     if (!PathEntryExists(path)) return true;
+    if (IsLink(path)) return RemoveLink(path);
     if (ExistsAsNonRegularFile(path)) return RemoveFlatDirectory(path);
     return RemoveFile(path);
 }
 
-// Write every file into a fresh '<dir>.tmp-<pid>', then move the whole directory to 'dir'.
-// Empty on success, else the reason. The caller verifies the published directory, which is
-// what the engine will read, so the staged copy is not read back here.
+// An exclusive advisory lock on '<root>/<hash>.lock', held while a bundle is verified,
+// repaired and published. Two instances repairing the same damaged directory would otherwise
+// race: the slower one, acting on its stale verdict, deletes the copy the faster one has just
+// verified and handed to its engine. The OS releases the lock if the process dies, so a crash
+// never leaves it held. The lock file itself stays; it is empty.
+class BundleLock
+{
+public:
+    explicit BundleLock(const std::string& path)
+    {
+#ifdef _WIN32
+        mHandle = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (mHandle == INVALID_HANDLE_VALUE) return;
+        OVERLAPPED whole = {};
+        mHeld = ::LockFileEx(mHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+#else
+        mFd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
+        if (mFd < 0) return;
+        int rc;
+        do rc = ::flock(mFd, LOCK_EX); while (rc != 0 && errno == EINTR);
+        mHeld = rc == 0;
+#endif
+    }
+    ~BundleLock()
+    {
+#ifdef _WIN32
+        if (mHandle != INVALID_HANDLE_VALUE) ::CloseHandle(mHandle);   // releases the lock
+#else
+        if (mFd >= 0) ::close(mFd);
+#endif
+    }
+    BundleLock(const BundleLock&) = delete;
+    BundleLock& operator=(const BundleLock&) = delete;
+    bool Held() const { return mHeld; }
+
+private:
+    bool mHeld = false;
+#ifdef _WIN32
+    HANDLE mHandle = INVALID_HANDLE_VALUE;
+#else
+    int mFd = -1;
+#endif
+};
+
+// Write every file into a fresh '<dir>.tmp-<pid>', verify the staged copy, then move the whole
+// directory to 'dir', so nothing unverified is ever published under the real name. Empty on
+// success, else the reason. The caller verifies the published directory again: that is the
+// copy the engine will read.
 std::string Extract(const std::string& dir, const std::string& manifest,
                     const std::vector<SpecFileData>& files)
 {
@@ -178,13 +239,16 @@ std::string Extract(const std::string& dir, const std::string& manifest,
         RemoveEntry(tmp);
         return "cannot write the manifest in " + tmp + ": " + error;
     }
-
+    const std::string problem = Verify(tmp, manifest, files);
+    if (!problem.empty())
+    {
+        RemoveEntry(tmp);
+        return tmp + " did not verify after writing (" + problem + ")";
+    }
     if (!MovePath(tmp, dir))
     {
-        // Another instance published the same bundle between our check and our rename. Its
-        // copy is as good as ours if it verifies, which the caller checks next.
         RemoveEntry(tmp);
-        if (!PathEntryExists(dir)) return "cannot move " + tmp + " to " + dir;
+        return "cannot move " + tmp + " to " + dir;
     }
     return std::string();
 }
@@ -235,8 +299,12 @@ SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
     const std::string dir = Join(root, hash);
     const std::string manifest = ManifestText(hash, files);
 
-    // A valid directory is used as it is, even in a config dir that has since become
-    // read-only: reading it is all the engine needs.
+    const bool haveRoot = MakeDirectory(configDir) && MakeDirectory(root);
+    BundleLock lock(Join(root, hash + ".lock"));
+
+    // Verified under the lock, so the verdict cannot be overtaken by another instance's repair.
+    // Without the lock (a config dir that cannot be written) a valid directory is still used --
+    // reading it is all the engine needs -- but a damaged one cannot be repaired.
     std::string problem = "not extracted yet";
     if (PathEntryExists(dir))
     {
@@ -248,16 +316,22 @@ SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
             return r;
         }
         r.repaired = true;
-        if (!RemoveEntry(dir))
-        {
-            r.error = "Decompiler unavailable: " + dir + " is damaged (" + problem + ") and cannot be removed";
-            return r;
-        }
     }
-
-    if (!MakeDirectory(configDir) || !MakeDirectory(root))
+    if (!haveRoot)
     {
         r.error = "Decompiler unavailable: cannot create " + root;
+        return r;
+    }
+    if (!lock.Held())
+    {
+        r.error = "Decompiler unavailable: " + dir + " cannot be " +
+                  (r.repaired ? "repaired (" + problem + ")" : "created") +
+                  ": the lock file in " + root + " cannot be opened";
+        return r;
+    }
+    if (r.repaired && !RemoveEntry(dir))
+    {
+        r.error = "Decompiler unavailable: " + dir + " is damaged (" + problem + ") and cannot be removed";
         return r;
     }
     const std::string failure = Extract(dir, manifest, files);

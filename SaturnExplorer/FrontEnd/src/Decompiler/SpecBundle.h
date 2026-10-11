@@ -10,11 +10,14 @@
 //
 // The directory is named by content, so any change to the embedded files -- a Ghidra bump, a
 // SLEIGH patch -- lands in a new directory and can never be served stale bytes from an older
-// one. It is written as <dir>.tmp-<pid>, every file re-read and hashed, then renamed into
-// place, so a crash or a second instance mid-write never leaves a half-written directory
-// under the real name. Every open re-verifies the files against the embedded hashes: a
-// mismatch or a missing file deletes the directory and extracts once more, and if that also
-// fails the decompiler is reported unavailable, naming the path, rather than run on bad specs.
+// one. It is written as <dir>.tmp-<pid>, verified, then renamed into place, so a crash never
+// leaves a half-written directory under the real name. Every open re-verifies the files
+// against the embedded bytes: a mismatch or a missing file deletes the directory and extracts
+// once more, and if that also fails the decompiler is reported unavailable, naming the path,
+// rather than run on bad specs. Verification, repair and publication happen under an
+// exclusive lock on <hash>.lock, so two instances cannot repair the same directory at once
+// and delete each other's freshly verified copy. A link found where the directory should be
+// is removed, never followed.
 //
 // Directories for other hashes (other builds sharing the config dir) are never touched.
 //

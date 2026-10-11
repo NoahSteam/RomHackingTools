@@ -292,9 +292,36 @@ bool ListDirectory(const std::string& path, std::vector<std::string>& names)
 #endif
 }
 
+bool IsLink(const std::string& path)
+{
+    if (path.empty()) return false;
+#ifdef _WIN32
+    const DWORD attrs = ::GetFileAttributesA(path.c_str());
+    return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    struct stat st;
+    return ::lstat(path.c_str(), &st) == 0 && S_ISLNK(st.st_mode);
+#endif
+}
+
+bool RemoveLink(const std::string& path)
+{
+    if (!IsLink(path)) return !PathEntryExists(path);
+#ifdef _WIN32
+    // A directory symlink or junction is removed with RemoveDirectory, which deletes the reparse
+    // point itself and leaves the target alone; a file symlink with DeleteFile.
+    const DWORD attrs = ::GetFileAttributesA(path.c_str());
+    if (attrs & FILE_ATTRIBUTE_DIRECTORY) return ::RemoveDirectoryA(path.c_str()) != 0;
+    return ::DeleteFileA(path.c_str()) != 0;
+#else
+    return ::unlink(path.c_str()) == 0;
+#endif
+}
+
 bool RemoveFlatDirectory(const std::string& path)
 {
     if (path.empty()) return false;
+    if (IsLink(path)) return false;
     if (!FileOrDirectoryExists(path)) return true;
     std::vector<std::string> names;
     if (!ListDirectory(path, names)) return false;

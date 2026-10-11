@@ -211,7 +211,9 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/src/Decompiler/SpecBundle.cpp
             FrontEnd/src/FileWrite.cpp)
         target_include_directories(SaturnExplorerSh2DecompilerEngineTests PRIVATE FrontEnd/src)
-        target_link_libraries(SaturnExplorerSh2DecompilerEngineTests PRIVATE SaturnExplorerGhidraDecomp)
+        find_package(Threads REQUIRED)   # the concurrent-repair case
+        target_link_libraries(SaturnExplorerSh2DecompilerEngineTests PRIVATE
+            SaturnExplorerGhidraDecomp Threads::Threads)
         add_test(NAME SaturnExplorerSh2DecompilerEngineTests
                  COMMAND SaturnExplorerSh2DecompilerEngineTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_engine_test)
 
