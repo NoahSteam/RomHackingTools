@@ -1,0 +1,870 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SaturnExplorer AI investigation response, schema v1",
+  "description": "Return exactly one JSON document matching this schema, either bare or in a single fenced code block labelled json. Unknown fields are rejected except inside \"extensions\". Addresses, offsets and lengths are \"0x\"-prefixed upper-case hex strings; IDs are lower-case UUIDs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "investigation_id",
+    "evidence_id",
+    "response_id",
+    "hypotheses",
+    "actions"
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "handle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "hex": {
+      "type": "string",
+      "pattern": "^0x[0-9A-F]{1,8}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "description": "an evidence item id from manifest.json, or \"<item id>/<range id>\""
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Namespaced extension data, kept as-is and never acted on. Keys look like \"com.example.tool\".",
+      "patternProperties": {
+        "^[a-z0-9][a-z0-9_-]*(\\.[a-z0-9][a-z0-9_-]*)+$": {}
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bus_address": {
+          "$ref": "#/$defs/hex"
+        },
+        "region": {
+          "enum": [
+            "lwram",
+            "hwram",
+            "soundram",
+            "vdp1ram",
+            "vdp1fb",
+            "vdp1regs",
+            "vdp2ram",
+            "vdp2cram",
+            "vdp2regs"
+          ]
+        },
+        "offset": {
+          "$ref": "#/$defs/hex"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "bus_address"
+          ]
+        },
+        {
+          "required": [
+            "region",
+            "offset"
+          ]
+        }
+      ],
+      "description": "A location: bus_address, or region and offset, or both (they must agree). The VDP1 frame buffer (vdp1fb) has no bus address and is addressed by region and offset only."
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "investigation_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "evidence_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "response_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    },
+    "hypotheses": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "claim",
+          "confidence",
+          "evidence_refs",
+          "prediction"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/handle"
+          },
+          "claim": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "description": "your own assessment, not a probability"
+          },
+          "evidence_refs": {
+            "$ref": "#/$defs/evidence_refs"
+          },
+          "prediction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000,
+            "description": "what would be observed if the claim is true"
+          },
+          "extensions": {
+            "$ref": "#/$defs/extensions"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_address_label"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "a data location in a bus-addressable region"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                    "description": "the label"
+                  },
+                  "size": {
+                    "type": "string",
+                    "pattern": "^0x[0-9A-F]{1,8}$",
+                    "description": "bytes covered by the label"
+                  },
+                  "data_type": {
+                    "type": "string",
+                    "enum": [
+                      "u8",
+                      "u16",
+                      "u32",
+                      "s8",
+                      "s16",
+                      "s32"
+                    ],
+                    "description": "element type"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4096,
+                    "description": "element count; more than 1 makes it an array (needs data_type)"
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256,
+                    "description": "one-line note"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Name a data address, optionally with its size and type."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "rename_function"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "the even address of the function entry, in a region that can hold SH-2 code"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                    "description": "the function name"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Name a function entry point."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_comment"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "any bus-addressable location"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "text"
+                ],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "one line, no control characters"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Attach a one-line comment to an address."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_watch"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "a bus-addressable location"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "data_type"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+                    "description": "the watch name"
+                  },
+                  "data_type": {
+                    "type": "string",
+                    "enum": [
+                      "u8",
+                      "s8",
+                      "u16",
+                      "s16",
+                      "u32",
+                      "s32",
+                      "rgb555",
+                      "pointer"
+                    ],
+                    "description": "how to read the value"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "defaults to true"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Add a Watch window entry for an address (big-endian)."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_execution_breakpoint"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "the even address of an instruction, in a region that can hold SH-2 code"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "condition": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256,
+                    "description": "optional guard, evaluated when the emulator halts here"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "defaults to true"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Break when an SH-2 executes the instruction at an address (either CPU)."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_memory_watchpoint"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "a bus-addressable location; for the write kinds, a region the emulator can watch for writes"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "size"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "read",
+                      "write",
+                      "read_write"
+                    ],
+                    "description": "which accesses halt"
+                  },
+                  "size": {
+                    "type": "string",
+                    "enum": [
+                      "0x1",
+                      "0x2",
+                      "0x4"
+                    ],
+                    "description": "bytes watched"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "defaults to true"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Break when an SH-2 (or SCU DMA) reads or writes a memory range."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "add_log_tracepoint"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "the even address of an instruction, in a region that can hold SH-2 code"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "cpu",
+                  "format"
+                ],
+                "properties": {
+                  "cpu": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "0 master, 1 slave"
+                  },
+                  "format": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256,
+                    "description": "output template; {value[:spec]} substitutions"
+                  },
+                  "condition": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 256,
+                    "description": "optional guard; the tracepoint then forwards every execution"
+                  },
+                  "repeat": {
+                    "type": "string",
+                    "enum": [
+                      "every_time",
+                      "once",
+                      "every_n"
+                    ],
+                    "description": "defaults to every_time"
+                  },
+                  "repeat_n": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 16777215,
+                    "description": "act on every Nth execution (with repeat every_n)"
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "defaults to true"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Log registers or memory each time an SH-2 executes an address, without halting."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "request_evidence"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source",
+                  "ranges",
+                  "representation",
+                  "max_bytes",
+                  "reason"
+                ],
+                "properties": {
+                  "evidence_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "description": "the package holding the source; defaults to this response's evidence_id"
+                  },
+                  "source": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+                    "description": "the source's id in that package's manifest"
+                  },
+                  "ranges": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "region",
+                        "offset",
+                        "length"
+                      ],
+                      "properties": {
+                        "region": {
+                          "enum": [
+                            "lwram",
+                            "hwram",
+                            "soundram",
+                            "vdp1ram",
+                            "vdp1fb",
+                            "vdp1regs",
+                            "vdp2ram",
+                            "vdp2cram",
+                            "vdp2regs"
+                          ]
+                        },
+                        "offset": {
+                          "type": "string",
+                          "pattern": "^0x[0-9A-F]{1,8}$"
+                        },
+                        "length": {
+                          "type": "string",
+                          "pattern": "^0x[0-9A-F]{1,8}$"
+                        }
+                      }
+                    },
+                    "description": "[{region, offset, length}], at most 64"
+                  },
+                  "representation": {
+                    "type": "string",
+                    "enum": [
+                      "binary",
+                      "hex_text"
+                    ],
+                    "description": "how the bytes should come back"
+                  },
+                  "max_bytes": {
+                    "type": "string",
+                    "pattern": "^0x[0-9A-F]{1,8}$",
+                    "description": "upper bound on the total returned"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "why this evidence is needed"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Ask for more bytes of a source from an earlier package (read-only)."
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "type",
+              "hypothesis_id",
+              "target",
+              "parameters"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/handle"
+              },
+              "type": {
+                "const": "request_code_evidence"
+              },
+              "hypothesis_id": {
+                "$ref": "#/$defs/handle"
+              },
+              "target": {
+                "$ref": "#/$defs/target",
+                "description": "the even address of the function entry, in a region that can hold SH-2 code"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "source",
+                  "representation",
+                  "max_bytes",
+                  "reason"
+                ],
+                "properties": {
+                  "evidence_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "description": "the package holding the source; defaults to this response's evidence_id"
+                  },
+                  "source": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+                    "description": "the source's id in that package's manifest"
+                  },
+                  "representation": {
+                    "type": "string",
+                    "enum": [
+                      "disassembly",
+                      "binary"
+                    ],
+                    "description": "how the code should come back"
+                  },
+                  "max_bytes": {
+                    "type": "string",
+                    "pattern": "^0x[0-9A-F]{1,8}$",
+                    "description": "upper bound on the total returned"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "description": "why this evidence is needed"
+                  }
+                }
+              },
+              "depends_on": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "$ref": "#/$defs/handle"
+                }
+              },
+              "evidence_refs": {
+                "$ref": "#/$defs/evidence_refs"
+              },
+              "expected_code_sha256": {
+                "$ref": "#/$defs/sha256",
+                "description": "optional; must equal the fingerprint SE derives from the cited evidence"
+              },
+              "extensions": {
+                "$ref": "#/$defs/extensions"
+              }
+            },
+            "description": "Ask for the code around a function entry from an earlier package (read-only)."
+          }
+        ]
+      }
+    }
+  }
+}

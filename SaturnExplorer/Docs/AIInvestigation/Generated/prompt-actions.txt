@@ -1,0 +1,83 @@
+Allowed action types (schema v1). Any other type is rejected. Each action has: id, type, hypothesis_id,
+target (where the type takes one), parameters, and optionally depends_on, evidence_refs and expected_code_sha256.
+A target is a bus_address, or a region and offset, or both (they must name the same place). Regions: lwram, hwram, soundram, vdp1ram, vdp1fb, vdp1regs, vdp2ram, vdp2cram, vdp2regs.
+The VDP1 frame buffer (vdp1fb) is an image with no bus address: use region and offset, and only where nothing
+below asks for a bus-addressable location.
+
+- add_address_label: Name a data address, optionally with its size and type.
+  target: a data location in a bus-addressable region
+  parameter name (required): identifier [A-Za-z_][A-Za-z0-9_]{0,63} -- the label
+  parameter size (optional): hex string "0x..." (upper-case digits), 0x1 to 0x100000 -- bytes covered by the label
+  parameter data_type (optional): one of u8, u16, u32, s8, s16, s32 -- element type
+  parameter count (optional): number 1..4096 -- element count; more than 1 makes it an array (needs data_type)
+  parameter note (optional): one line of text, at most 256 characters -- one-line note
+  rules: size, when given with data_type, must equal count * the type's size; count needs data_type; the range must fit the region
+
+- rename_function: Name a function entry point.
+  target: the even address of the function entry, in a region that can hold SH-2 code
+  parameter name (required): identifier [A-Za-z_][A-Za-z0-9_]{0,63} -- the function name
+  code-specific: cite an evidence item or range that covers the target in evidence_refs
+  rules: must cite evidence covering the entry (code-specific, PLAN.md §6.4)
+
+- add_comment: Attach a one-line comment to an address.
+  target: any bus-addressable location
+  parameter text (required): one line of text, at most 256 characters -- one line, no control characters
+  code-specific: cite an evidence item or range that covers the target in evidence_refs (when the target is in a code region)
+  rules: code-specific (must cite covering evidence) when the target is in a region with kCapSh2Code
+
+- add_watch: Add a Watch window entry for an address (big-endian).
+  target: a bus-addressable location
+  parameter name (required): identifier [A-Za-z_][A-Za-z0-9_]{0,63} -- the watch name
+  parameter data_type (required): one of u8, s8, u16, s16, u32, s32, rgb555, pointer -- how to read the value
+  parameter enabled (optional): true or false -- defaults to true
+  not accepted: byte_order -- watches are always big-endian; there is no byte-order field
+
+- add_execution_breakpoint: Break when an SH-2 executes the instruction at an address (either CPU).
+  target: the even address of an instruction, in a region that can hold SH-2 code
+  parameter condition (optional): condition expression, at most 256 characters -- optional guard, evaluated when the emulator halts here
+  parameter enabled (optional): true or false -- defaults to true
+  not accepted: cpu -- an execution breakpoint halts whichever SH-2 reaches the address; there is no cpu field
+  code-specific: cite an evidence item or range that covers the target in evidence_refs
+  rules: must cite evidence covering the address (code-specific); the condition must parse as a ConditionEval expression
+
+- add_memory_watchpoint: Break when an SH-2 (or SCU DMA) reads or writes a memory range.
+  target: a bus-addressable location; for the write kinds, a region the emulator can watch for writes
+  parameter kind (required): one of read, write, read_write -- which accesses halt
+  parameter size (required): one of 0x1, 0x2, 0x4 (hex strings) -- bytes watched
+  parameter enabled (optional): true or false -- defaults to true
+  not accepted: cpu -- the emulator ignores cpu for data watchpoints
+  not accepted: condition -- memory watchpoints take no condition: the halt PC is the accessing instruction, not the watched address
+
+- add_log_tracepoint: Log registers or memory each time an SH-2 executes an address, without halting.
+  target: the even address of an instruction, in a region that can hold SH-2 code
+  parameter cpu (required): number 0..1 -- 0 master, 1 slave
+  parameter format (required): format template, at most 256 characters -- output template; {value[:spec]} substitutions
+  parameter condition (optional): condition expression, at most 256 characters -- optional guard; the tracepoint then forwards every execution
+  parameter repeat (optional): one of every_time, once, every_n -- defaults to every_time
+  parameter repeat_n (optional): number 2..16777215 -- act on every Nth execution (with repeat every_n)
+  parameter enabled (optional): true or false -- defaults to true
+  not accepted: effects -- tracepoints here only write to the log; no other effect (pause, screenshot, script, ...) can be requested
+  not accepted: pause -- tracepoints here only write to the log
+  not accepted: script -- scripts are never run
+  code-specific: cite an evidence item or range that covers the target in evidence_refs
+  rules: repeat_n is required with, and only with, repeat every_n; format and condition must parse; at most 256 per response; must cite evidence covering the address (code-specific)
+
+- request_evidence: Ask for more bytes of a source from an earlier package (read-only).
+  target: none (none: the ranges are parameters)
+  parameter evidence_id (optional): UUID string -- the package holding the source; defaults to this response's evidence_id
+  parameter source (required): id string -- the source's id in that package's manifest
+  parameter ranges (required): array of {region, offset, length} (1 to 64) -- [{region, offset, length}], at most 64
+  parameter representation (required): one of binary, hex_text -- how the bytes should come back
+  parameter max_bytes (required): hex string "0x..." (upper-case digits), 0x1 to 0x1000000 -- upper bound on the total returned
+  parameter reason (required): one line of text, at most 256 characters -- why this evidence is needed
+  rules: each range must fit its region; the source must exist in the package named by evidence_id (checked when that package is the one validated against)
+
+- request_code_evidence: Ask for the code around a function entry from an earlier package (read-only).
+  target: the even address of the function entry, in a region that can hold SH-2 code
+  parameter evidence_id (optional): UUID string -- the package holding the source; defaults to this response's evidence_id
+  parameter source (required): id string -- the source's id in that package's manifest
+  parameter representation (required): one of disassembly, binary -- how the code should come back
+  parameter max_bytes (required): hex string "0x..." (upper-case digits), 0x1 to 0x100000 -- upper bound on the total returned
+  parameter reason (required): one line of text, at most 256 characters -- why this evidence is needed
+  rules: a read-only request, so it is not code-specific in the sense of PLAN.md §6.4
+

@@ -921,6 +921,54 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
     add_test(NAME SaturnExplorerSourceKeyTests COMMAND SaturnExplorerSourceKeyTests)
 
+    # The response validator links NO application model (no WatchList, BreakpointManager, FunctionNames,
+    # ...): that it builds and passes without them is part of "no side effects".
+    set(SE_AI_CORE_SOURCES
+        FrontEnd/src/AIInvestigation/ActionRegistry.cpp
+        FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
+        FrontEnd/src/AIInvestigation/Encoding.cpp
+        FrontEnd/src/AIInvestigation/JsonReader.cpp
+        FrontEnd/src/AIInvestigation/JsonWriter.cpp
+        FrontEnd/src/AIInvestigation/PackageManifest.cpp
+        FrontEnd/src/AIInvestigation/ResponseValidator.cpp
+        FrontEnd/src/AIInvestigation/SourceKey.cpp
+        FrontEnd/src/Debug/ConditionEval.cpp
+        FrontEnd/src/Debug/FormatString.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+        FrontEnd/src/Sh2Address.cpp
+        FrontEnd/src/Sha256.cpp)
+    add_executable(SaturnExplorerResponseValidatorTests
+        FrontEnd/tests/ResponseValidatorTests.cpp
+        ${SE_AI_CORE_SOURCES}
+    )
+    target_include_directories(SaturnExplorerResponseValidatorTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
+    add_test(NAME SaturnExplorerResponseValidatorTests COMMAND SaturnExplorerResponseValidatorTests)
+
+    # The registry against the existing models: signatures at compile time, behaviour at run time. Also
+    # checks the generated reference files in Docs/AIInvestigation/Generated against the registry.
+    add_executable(SaturnExplorerActionRegistryTests
+        FrontEnd/tests/ActionRegistryTests.cpp
+        ${SE_AI_CORE_SOURCES}
+        FrontEnd/src/Debug/BreakpointManager.cpp
+        FrontEnd/src/Debug/CallStack.cpp
+        FrontEnd/src/Debug/ExecutionActions.cpp
+        FrontEnd/src/Debug/WatchList.cpp
+    )
+    target_include_directories(SaturnExplorerActionRegistryTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+    add_test(NAME SaturnExplorerActionRegistryTests
+             COMMAND SaturnExplorerActionRegistryTests ${CMAKE_CURRENT_SOURCE_DIR}/Docs/AIInvestigation/Generated)
+
+    add_executable(SaturnExplorerPackageManifestTests
+        FrontEnd/tests/PackageManifestTests.cpp
+        ${SE_AI_CORE_SOURCES}
+    )
+    target_include_directories(SaturnExplorerPackageManifestTests
+        PRIVATE FrontEnd/src FrontEnd/tests ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
+    add_test(NAME SaturnExplorerPackageManifestTests COMMAND SaturnExplorerPackageManifestTests)
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
@@ -1243,13 +1291,19 @@ add_custom_target(SaturnExplorerBuildInfo
 set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sha256.cpp
     FrontEnd/src/Sh2Address.cpp
-    FrontEnd/src/AIInvestigation/Encoding.cpp
+    # AI investigation contracts and logic (Docs/AIInvestigation/PLAN.md). ImGui-free; nothing in the
+    # application calls them until M1. Debug/ConditionEval, Debug/FormatString and Debug/MemoryCompare,
+    # which they also use, are already in the frontend lists.
+    FrontEnd/src/AIInvestigation/ActionRegistry.cpp
     FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
-    FrontEnd/src/AIInvestigation/SourceKey.cpp
+    FrontEnd/src/AIInvestigation/Encoding.cpp
     FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
-    FrontEnd/src/AIInvestigation/WriteInterval.cpp
     FrontEnd/src/AIInvestigation/JsonReader.cpp
     FrontEnd/src/AIInvestigation/JsonWriter.cpp
+    FrontEnd/src/AIInvestigation/PackageManifest.cpp
+    FrontEnd/src/AIInvestigation/ResponseValidator.cpp
+    FrontEnd/src/AIInvestigation/SourceKey.cpp
+    FrontEnd/src/AIInvestigation/WriteInterval.cpp
 )
 
 if(WIN32)
