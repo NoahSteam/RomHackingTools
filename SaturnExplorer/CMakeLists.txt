@@ -48,6 +48,9 @@ if(EMSCRIPTEN AND SE_ENABLE_DECOMPILER)
     set(SE_ENABLE_DECOMPILER OFF CACHE BOOL "Build the SH-2 decompiler engine (desktop)" FORCE)
 endif()
 
+# Header-only JSON tokenizer for the AI investigation formats (FrontEnd/third_party/nlohmann-json).
+set(SE_NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/nlohmann-json/include)
+
 # Vendored zlib (FrontEnd/third_party/zlib), on every desktop build. The decompiler's .sla
 # files are deflate-compressed, and the savestate driver inflates gzip Mednafen states; neither
 # may depend on whether the build machine happens to have zlib installed. The web build uses
@@ -852,6 +855,18 @@ if(BUILD_TESTING)
     target_include_directories(SaturnExplorerSha256Tests PRIVATE FrontEnd/src)
     add_test(NAME SaturnExplorerSha256Tests COMMAND SaturnExplorerSha256Tests)
 
+    # The strict JSON reader/writer behind the AI investigation formats: duplicate keys, exact
+    # 64-bit integers and the size limits (FrontEnd/third_party/nlohmann-json/VENDOR.md says why
+    # the tokenizer is nlohmann/json).
+    add_executable(SaturnExplorerJsonTests
+        FrontEnd/tests/JsonTests.cpp
+        FrontEnd/src/AIInvestigation/JsonReader.cpp
+        FrontEnd/src/AIInvestigation/JsonWriter.cpp
+    )
+    target_include_directories(SaturnExplorerJsonTests
+        PRIVATE FrontEnd/src ${SE_NLOHMANN_JSON_DIR})
+    add_test(NAME SaturnExplorerJsonTests COMMAND SaturnExplorerJsonTests)
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
@@ -1173,6 +1188,8 @@ add_custom_target(SaturnExplorerBuildInfo
 # matching list; its include path and licence copy are in FrontEnd.vcxproj.
 set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sha256.cpp
+    FrontEnd/src/AIInvestigation/JsonReader.cpp
+    FrontEnd/src/AIInvestigation/JsonWriter.cpp
 )
 
 if(WIN32)
@@ -1557,6 +1574,9 @@ endif()
 
 # Every frontend target consumes the generated BuildInfo.h and must be (re)generated
 # before it compiles UpdateChecker.cpp.
+if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
+    target_include_directories(SaturnExplorerFrontEnd PRIVATE ${SE_NLOHMANN_JSON_DIR})
+endif()
 if(TARGET SaturnExplorerFrontEnd)
     add_dependencies(SaturnExplorerFrontEnd SaturnExplorerBuildInfo)
     target_include_directories(SaturnExplorerFrontEnd PRIVATE ${SE_BUILDINFO_DIR})
@@ -1575,7 +1595,9 @@ endif()
 # in every distribution of the engine, and zlib's licence asks for its notice too. In the macOS
 # bundle they are resources (so the signature seals them); beside the Windows exe, a folder.
 if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
-    set(SE_LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/zlib/LICENSE|zlib")
+    set(SE_LICENSE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/zlib/LICENSE|zlib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/nlohmann-json/LICENSE.MIT|nlohmann-json")
     if(SE_ENABLE_DECOMPILER)
         list(APPEND SE_LICENSE_FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/ghidra-decompiler/LICENSE|ghidra-decompiler"

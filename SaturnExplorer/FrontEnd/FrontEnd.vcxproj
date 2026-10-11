@@ -76,7 +76,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;$(ProjectDir)third_party\nlohmann-json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- _WINDOWS: Ghidra's types.h picks its integer types from it; src\Decompiler includes the engine's headers and must see the ones the library was built with. -->
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_ENABLE_DECOMPILER=1;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -150,13 +150,17 @@
     <ResourceCompile Include="Platforms\Windows\SaturnExplorer.rc" />
   </ItemGroup>
   <!-- Licence texts that travel with the exe, as in the CMake build: Apache-2.0 requires Ghidra's
-       LICENSE and NOTICE in every distribution of the decompiler engine; zlib asks for its notice. -->
+       LICENSE and NOTICE in every distribution of the decompiler engine; zlib asks for its notice; nlohmann/json's MIT
+       licence requires its notice with copies of the header's code. -->
   <ItemGroup>
     <CopyFileToFolders Include="third_party\ghidra-decompiler\LICENSE;third_party\ghidra-decompiler\NOTICE">
       <DestinationFolders>$(OutDir)licenses\ghidra-decompiler</DestinationFolders>
     </CopyFileToFolders>
     <CopyFileToFolders Include="third_party\zlib\LICENSE">
       <DestinationFolders>$(OutDir)licenses\zlib</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="third_party\nlohmann-json\LICENSE.MIT">
+      <DestinationFolders>$(OutDir)licenses\nlohmann-json</DestinationFolders>
     </CopyFileToFolders>
   </ItemGroup>
   <ItemGroup>
