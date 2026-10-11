@@ -110,9 +110,9 @@ void TestLadder()
     CHECK(g.ok && g.entry == kF3 && g.source == EntrySource::Callee);
 
     // No rts to scan back to: a known entry still answers; nothing at all is an honest failure.
-    FinderHints far;
-    far.symbols.insert(0x06040000u);
-    g = FindFunctionContaining(*s, 0x06040010u, far);
+    FinderHints distant;   // not 'far': <windows.h> defines it away
+    distant.symbols.insert(0x06040000u);
+    g = FindFunctionContaining(*s, 0x06040010u, distant);
     CHECK(g.ok && g.entry == 0x06040000u && g.source == EntrySource::Symbol);
     g = FindFunctionContaining(*s, 0x06040010u, none);
     CHECK(!g.ok && !g.why.empty());

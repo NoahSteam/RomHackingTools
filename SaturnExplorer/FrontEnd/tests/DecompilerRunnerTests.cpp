@@ -248,13 +248,17 @@ void CancelHeldAt(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
 // before and after setting the flag is 'phase'. Returns false when no attempt was conclusive.
 bool CancelMidway(DecompilerRunner& runner, PhaseGate& gate, int fixture, DecompilePhase phase, DecompileResult& r)
 {
-    for (int attempt = 1; attempt <= 5; ++attempt)
+    for (int attempt = 1; attempt <= 10; ++attempt)
     {
         gate.Reset();
         runner.Submit(0, gSnap, Big(kFixtures[fixture].entry));
         CHECK(gate.WaitEntered(phase, 60));
         const double half = gBaseline[fixture].phaseMs[int(phase)] * 0.5;
-        std::this_thread::sleep_until(gate.EnteredAt(phase) + std::chrono::duration<double, std::milli>(half));
+        // Spun, not slept: followFlow lasts ~60 ms, and a sleep on a loaded CI VM (macOS under
+        // Rosetta) overshoots by more than half of that, landing every attempt in the next phase.
+        const auto until = gate.EnteredAt(phase) + std::chrono::duration_cast<Clock::duration>(
+                                                       std::chrono::duration<double, std::milli>(half));
+        while (Clock::now() < until) {}
         const DecompilePhase before = gate.Current();
         const auto t0 = Clock::now();
         runner.Cancel(0);
