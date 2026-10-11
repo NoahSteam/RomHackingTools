@@ -109,3 +109,8 @@ emulator); the Mednafen-side writers by `SaturnExplorerMednafenVdpPoke` (stubs).
   selection line says why), and editable on a loaded dump or savestate
 - go to `0x26000000` (a cache-through address): the byte is selected and typing edits it
 - queue edits, then load a state (rewind / slot) right away: the edits do not appear on the restored state
+
+## SH-2 decompiler, Step 1 (see 11_DECOMPILER_STEP1.md)
+- the `build-release-msbuild.bat` exe opens a real gzip Mednafen `.mcs` state
+- a full x86_64 macOS app build launches (no Intel CI runner)
+- Developer ID signing and notarisation of the DMG
