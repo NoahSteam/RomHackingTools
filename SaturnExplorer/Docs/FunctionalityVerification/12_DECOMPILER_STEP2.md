@@ -137,6 +137,10 @@ destructor.
 
 ## External review, round 2 (at `01d12b4`)
 
+**Fixes verified by:** https://github.com/NoahSteam/RomHackingTools/actions/runs/38161615309 at
+`72b29e5` -- all six jobs green, the out-of-memory children passing on macOS arm64, Rosetta and
+Windows Release (skipped, as intended, in Windows Debug).
+
 The round-1 fixes were confirmed; finding #1 was incomplete. Each fix has a test that fails with
 the fix reverted (all four run as child processes, since they leave the engine damaged; the two
 reset children return normally instead of `_Exit`, so they also prove normal shutdown).
