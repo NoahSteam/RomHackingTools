@@ -12,8 +12,12 @@ Core (portable): `imgui.{h,cpp}`, `imgui_draw.cpp`, `imgui_tables.cpp`,
 `imgui_widgets.cpp`, `imgui_demo.cpp`, `imgui_internal.h`, `imconfig.h`,
 `imstb_*.h`.
 
-Backends (platform-specific, used only by the Windows platform): `backends/`
-`imgui_impl_win32.{h,cpp}`, `imgui_impl_dx11.{h,cpp}`.
+Backends (`backends/`), one pair per frontend backend (see BUILD.md):
+
+| Files | Used by |
+|---|---|
+| `imgui_impl_win32.{h,cpp}`, `imgui_impl_dx11.{h,cpp}` | the Windows build (Win32 + Direct3D 11) |
+| `imgui_impl_sdl2.{h,cpp}`, `imgui_impl_opengl3.{h,cpp}`, `imgui_impl_opengl3_loader.h` | the web build (SDL2 + WebGL2) and the desktop SDL2 + OpenGL build on macOS and Linux |
 
 ## Updating
 

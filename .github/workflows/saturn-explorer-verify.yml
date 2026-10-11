@@ -5,17 +5,20 @@ on:
     branches: [master]
     paths:
       - 'SaturnExplorer/**'
+      - 'RomHackingTools.sln'
       - '.github/workflows/saturn-explorer-verify.yml'
   pull_request:
     branches: [master]
     paths:
       - 'SaturnExplorer/**'
+      - 'RomHackingTools.sln'
       - '.github/workflows/saturn-explorer-verify.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# The gates each job proves are listed in SaturnExplorer/Docs/Decompiler/PLAN.md, contract A7.
 jobs:
   native:
     name: Supported platform build + tests (${{ matrix.os }})
@@ -37,13 +40,125 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
 
+      # Built on its own first only so its build time is visible in the log (A7 "Timing").
+      - name: Build decompiler engine (timed)
+        shell: bash
+        run: time cmake --build build --config Debug --parallel --target SaturnExplorerGhidraDecomp
+
       - name: Build
         run: cmake --build build --config Debug --parallel
 
       - name: Run CTest
         run: ctest --test-dir build -C Debug --output-on-failure
 
-      - name: Verify macOS headless renderer exists
+      - name: Verify macOS headless renderer and frontend exist
         if: runner.os == 'macOS'
         shell: bash
-        run: test -x build/bin/se-render
+        run: |
+          test -x build/bin/se-render
+          # The frontend target's OUTPUT_NAME, not its CMake target name.
+          test -d build/bin/SaturnExplorer.app
+          test -x build/bin/SaturnExplorer.app/Contents/MacOS/SaturnExplorer
+
+  # build-release.bat: the documented CMake + VS 2022 Release build.
+  windows-release-batch:
+    name: build-release.bat (Windows, CMake Release)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run build-release.bat
+        shell: cmd
+        run: call build-release.bat
+      - name: Verify the exe exists
+        shell: bash
+        run: test -f build/bin/Release/SaturnExplorerFrontEnd.exe
+
+  # build-release-msbuild.bat: the checked-in solution, no CMake. This is what proves the
+  # hand-written .vcxproj wiring (zlib into the savestate driver, the decompiler projects) builds.
+  windows-msbuild-batch:
+    name: build-release-msbuild.bat (Windows, checked-in solution)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run build-release-msbuild.bat
+        shell: cmd
+        run: call build-release-msbuild.bat
+      - name: Verify the exe exists
+        shell: bash
+        run: test -f ../x64/Release/SaturnExplorer.exe
+
+  # No Intel macOS runner: the engine and its tests are built for x86_64 on the arm64 runner
+  # and run under Rosetta. They need no SDL2, so the frontend is not configured here.
+  macos-x86_64-decompiler:
+    name: Decompiler engine + tests (macOS x86_64 under Rosetta)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (x86_64)
+        run: >
+          cmake -S . -B build-x86_64 -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+          -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+      - name: Build decompiler engine (timed)
+        run: time cmake --build build-x86_64 --parallel --target SaturnExplorerGhidraDecomp
+      - name: Build decompiler tests
+        run: >
+          cmake --build build-x86_64 --parallel --target
+          SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
+          SaturnExplorerSavestateShapeTests
+      - name: Verify the binaries are x86_64
+        run: |
+          lipo -archs build-x86_64/bin/SaturnExplorerSh2DecompilerEngineTests | grep -qx x86_64
+          lipo -archs build-x86_64/bin/se-sleighc | grep -qx x86_64
+      - name: Run the decompiler tests under Rosetta
+        run: >
+          ctest --test-dir build-x86_64 --output-on-failure
+          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape)Tests'
+
+  # The distributable macOS bundle and DMG, ad-hoc signed. Developer ID signing and
+  # notarisation need a certificate and stay a manual, recorded release step.
+  macos-bundle-dmg:
+    name: macOS bundle + DMG (ad-hoc signed)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install macOS frontend dependencies
+        run: brew install sdl2
+      - name: Configure
+        run: >
+          cmake -S . -B build-bundle -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          -DSE_MACOS_BUNDLE_LIBS=ON -DSE_MACOS_SIGN_IDENTITY=-
+      - name: Build
+        run: cmake --build build-bundle --parallel
+      - name: Install the bundle
+        run: cmake --install build-bundle --prefix "$PWD/stage"
+      - name: Verify the installed bundle
+        run: |
+          test -d stage/SaturnExplorer.app
+          test -x stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer
+          codesign --verify --deep --strict --verbose=2 stage/SaturnExplorer.app
+          # Self-contained: nothing may still point into Homebrew.
+          ! otool -L stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer | grep -E '/opt/homebrew|/usr/local/'
+      - name: Package the DMG
+        working-directory: SaturnExplorer/build-bundle
+        run: cpack -G DragNDrop
+      - name: Verify the DMG and the bundle inside it
+        working-directory: SaturnExplorer/build-bundle
+        run: |
+          test -f SaturnExplorer-macos.dmg
+          mkdir -p dmg-mount
+          hdiutil attach -nobrowse -readonly -mountpoint dmg-mount SaturnExplorer-macos.dmg
+          test -d dmg-mount/SaturnExplorer.app
+          codesign --verify --deep --strict --verbose=2 dmg-mount/SaturnExplorer.app
+          hdiutil detach dmg-mount

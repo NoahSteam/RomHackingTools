@@ -95,11 +95,25 @@ a game, then launch Saturn Explorer with `--live` (or use **Open ▸ Connect to
 Yabause**). Every panel then tracks the live game. (The web build is savestate-only
 — live mode needs sockets/threads.)
 
+### Decompiler — Ghidra's SH-2 engine (desktop builds)
+The desktop builds (Windows and SDL2) compile Ghidra's native decompiler, vendored with the
+SuperH SLEIGH spec in [`FrontEnd/third_party/ghidra-decompiler/`](FrontEnd/third_party/ghidra-decompiler/VENDOR.md),
+as the static library `SaturnExplorerGhidraDecomp`. It is on by default and needs nothing
+installed: zlib, which it and the savestate driver's gzip path use, is vendored too
+(`FrontEnd/third_party/zlib`, target `SaturnExplorerZlib`). `-DSE_ENABLE_DECOMPILER=OFF`
+leaves it out; the web build forces it off. The library is compiled optimised in every
+configuration, Debug included, so expect a few minutes for its first build. The SH-2 language
+files are embedded in the app (`FrontEnd/src/Decompiler/Sh2SpecData.h`) and written to
+`<config dir>/decompiler/<hash>/` on first use. After a Ghidra bump or a change to the
+`.slaspec`, `cmake --build build --target se-regen-sla` regenerates the checked-in `sh-2.sla`
+and that header; `SaturnExplorerSlaFreshnessTests` fails until you do. The design and plan are
+in [`Docs/Decompiler/`](Docs/Decompiler/PLAN.md).
+
 ---
 
 ## Option 2 — the checked-in Visual Studio solution
 
-If you just want to open it in Visual Studio without CMake, double-click **`../RomHackingTools.sln`** at the repository root (it includes the three Saturn Explorer projects), set **FrontEnd** as the startup project, choose **Debug / x64**, and press **F5**.
+If you just want to open it in Visual Studio without CMake, double-click **`../RomHackingTools.sln`** at the repository root (it includes the Saturn Explorer projects, the vendored zlib and the decompiler library), set **FrontEnd** as the startup project, choose **Debug / x64**, and press **F5**.
 
 ---
 
