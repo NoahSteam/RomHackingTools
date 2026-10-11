@@ -1,8 +1,17 @@
 # SaturnExplorer AI Investigation Interface — Implementation Plan
 
-Date: 2026-10-11. Revision 4. Status: proposed implementation specification, not implemented.
+Date: 2026-10-11. Revision 5. Status: proposed implementation specification, not implemented.
 
-Code baseline inspected: `fbb01b65e2eb36476a8020739b0e32cc7422cd07`. Re-check the cited APIs before implementing; file references are relative to `SaturnExplorer/`.
+Code baseline inspected: `f1d78e32deadd8a22079f487acf9ff74715ce98d`. Re-check the cited APIs before implementing; file references are relative to `SaturnExplorer/`.
+
+Revision 5 changes, from the Revision 4 review:
+- Collectors read only from owned immutable `EvidenceCapture`s acquired under one capture boundary.
+- Debugger-write status moves from a snapshot's identity to the comparison interval, and counts accepted local edits whether or not the emulator has confirmed them.
+- Code-specific actions require a fingerprint SE derives from the referenced evidence.
+- Undo records before-images and compares authoring fields only; application is a recoverable transaction.
+- Trace events must identify their installation generation.
+- M0/M1 gates are aligned with the milestone order.
+- Smaller corrections: server counter reset, prompt order, explicit evidence rebinding, disc-hash provenance, retained data inside budgets.
 
 Revision 4 changes, from the Revision 3 review: evidence is bound to explicit per-snapshot source identities before any action work; Generate publishes the package before Copy is possible; checklist rows have defined states; canonical targets and one encoding; persistence, ownership and visible names become a milestone of their own; data labels are specified; response schema v1 excludes experiments; the runner is gated on named protocol additions; ZIP, scope presets and text-friendly mode are deferred.
 
@@ -22,14 +31,15 @@ Supported on the Windows and macOS desktop builds (Linux SDL2 builds may follow 
 | --- | --- | --- |
 | Immutable A/B memory | `Debug/MemoryCompare` (`MemSnapshot`, `SnapshotOrigin{sessionId, timelineEpoch, frameNo, liveHead}`), `CompareMarkers` | Snapshots hold region bytes only — no registers, call stack, derive serial or edit status (`MemoryCompare.h:91-111`). Session/epoch are per-process counters. Sound RAM is excluded from comparisons (`InCompare`). |
 | Per-frame registers | `FrameRecorder::Frame::sh2[2]`, `hasSh2[2]` (`FrameRecorder.h:51-52`) | Lives in the evictable ring, not in a compare snapshot. |
-| Debugger-write evidence | Server `pokes_applied/dropped` (v23); client `pokesLost/pokesUnconfirmed` | Server counters reset with each connection (`LiveDriver.cpp:316-320`); no per-snapshot record; scrub edits are refused at capture but live-head pokes are not recorded. |
+| Debugger-write evidence | Server `pokes_applied/dropped` (v23, reset only at server start, `se_export.c:2568`); the client's cached copies reset with each connection (`LiveDriver.cpp:315-321`); client `pokesLost/pokesUnconfirmed` | An accepted Hex Editor write changes the displayed snapshot before the emulator confirms it (`Core/src/Context.h:526-550`), so applied counters cannot describe edited evidence. No ordered write ledger; no per-capture record. |
+| Capture bracketing | `HardwareSnapshot::Capture` pins one driver snapshot via `begin_capture/end_capture` (`Core/src/HardwareSnapshot.cpp:55-67`, `LiveDriver.cpp:1744-1765`); `CaptureSnapshot` checks a guard before and after (`MemoryCompare.cpp:105-126`) | Evidence collectors must build on these, not read the current App context. |
 | SH-2 code text | `Sh2Dump` / `Sh2DumpJob` | Whole 1 MiB LWRAM/HWRAM only; input has no source identity; file name uses `se_frame_number`, which is 0 on a scrubbed frame (`App.cpp:822-823`); no function names. |
 | Function names | `FunctionNames` (`Debug/CallStack.h:63-82`) | Raw-address keys (no mirror folding); `saturn_functions.txt` in the working directory; unchecked non-atomic save; shown only in the Call Stack. |
 | Comments | `AssemblyPanel::mComments` | `assembly_comments.txt` in the working directory; one line per note, so an embedded newline corrupts the file. |
 | Data labels | none | New `AddressSymbols` (§8). |
 | Watches | `WatchList` (JSON v1), always big-endian; client-side, never installed in the emulator | Session file in the working directory; no dedup; expressions are `0xADDR [+/- N]` only. |
 | Breakpoints | `BreakpointManager` | Not persisted; process-local IDs; `ToggleExecution` removes an existing breakpoint; `AddMemory` dedups and returns the existing (possibly user-owned) ID; memory breakpoints take no condition; `cpu` is ignored by the emulator for both execution and data breakpoints (`Integration/Mednafen/apply.py:339-360`). |
-| Tracepoints | `ExecutionActions` (Log only; `writeToLog` the only implemented effect) | Not persisted; no dedup; 256 installed maximum, excess dropped with a log warning; guarded tracepoints forward every execution; memory dereferences in format/condition read the latest snapshot, not hit-time memory (`App.cpp:3101-3104`). |
+| Tracepoints | `ExecutionActions` (Log only; `writeToLog` the only implemented effect) | Not persisted; no dedup; 256 installed maximum, excess dropped with a log warning; guarded tracepoints forward every execution; memory dereferences in format/condition read the latest snapshot, not hit-time memory (`App.cpp:3101-3104`); events carry id, cpu, frame and registers only, with no installation generation (`SeLiveProtocol.h:195-204`); runtime counters (`hits`, `seen`, `rearm`) live beside configuration. |
 | Live protocol | `SeLiveProtocol.h` v25; caps word; `stop_seq`; `restore_done/failed`; `step_pending` | No per-install acknowledgement; stop report has no breakpoint identity (watchpoint hits arrive as `EXEC_BP` with the accessor PC); dropped tracepoint events are counted server-side but never sent (`se_export.c:323,1468`); last-client disconnect drops all breakpoints/tracepoints and resumes (`se_export.c:917-942`); client close sends RUN. |
 | Halt policy | `App.cpp:1424-1530` with `StepHaltMachine` | Lives in `App`; auto-resumes on logging watchpoints and false guards. |
 | Files and exports | `IPlatform::SaveFile/PickDirectory`, `FileWrite` (`WriteFileAtomically`, `MovePath`), `DiscImage`/`IsoFs`, `DataSearch` | No ZIP writer; no reusable JSON parser (the watch parser is private to `WatchList.cpp`); `Sha256Hex` exists but is compiled only with the decompiler (`Decompiler/SpecBundle.h:70`, `CMakeLists.txt:1491-1495`). |
@@ -75,7 +85,7 @@ Rules:
 
 Generate:
 
-1. Re-verifies every bound source key (§5.1). On mismatch it refuses and publishes nothing.
+1. Acquires an owned immutable `EvidenceCapture` for each bound source (§5.1), validating identity before and after acquisition. On any mismatch it refuses and publishes nothing. Every collector then reads only from these captures; nothing the user does afterwards (stepping, resuming, editing) can reach the package.
 2. Collects into a fresh staging directory under the chosen investigations folder (default `ConfigSubDir("investigations")`), streaming large files.
 3. Writes `manifest.json` last, then publishes by renaming the staging directory to its final name. Cancellation or any failure publishes nothing and removes the staging directory.
 4. Assigns a new `evidence_id`. Earlier packages and responses to them remain valid.
@@ -84,8 +94,12 @@ Only after publication succeeds are Copy Prompt and the attachment list enabled.
 
 - **Copy Prompt** copies the exact bytes of `prompt.md`, and the UI shows "Attach these files with this prompt" with the required filenames and the folder location.
 - **Copy Package To…** copies the finished directory elsewhere; it never re-collects.
-- The prompt always begins with an identity block (`investigation_id`, `evidence_id`, package folder name), whether or not the response instructions are included, so any response can be matched on import.
-- The final text is: the user's edited prompt verbatim, then deterministic evidence and attachment sections, then (if enabled) the response contract. Generation never rewrites the user's request.
+- The final text has a fixed order:
+  1. identity block (`investigation_id`, `evidence_id`, package folder name), always present, so any response can be matched on import;
+  2. the user's edited prompt text, verbatim;
+  3. deterministic evidence and attachment sections;
+  4. the response contract, if enabled.
+- Generation never rewrites the user's request.
 
 ### 3.4 Investigation panel
 
@@ -115,9 +129,18 @@ Code evidence is a **bounded range adapter** over the existing disassembler (not
 
 ## 5. Evidence identity and package contracts
 
-### 5.1 Source identities
+### 5.1 Evidence captures and source identities
 
-Every collected item records the identity of the source it was read from. A package may contain several sources; each item names exactly one.
+**EvidenceCapture.** Evidence is never read from the current App context or the driver's newest snapshot. At Generate, SE acquires one owned, immutable `EvidenceCapture` per bound source and every collector reads only from it.
+
+- **Memory sources** (paused live head, recorder frame): memory, both SH-2 register files with validity, frame identity and the available control metadata (stop reason/CPU/PC/`stop_seq`, call stacks, write-tracking state) are read under one capture boundary, built on `begin_capture/end_capture` (`HardwareSnapshot.cpp:55-67`, `LiveDriver.cpp:1744-1765`). The identity guard is checked before and after acquisition, as `CaptureSnapshot` does (`MemoryCompare.cpp:105-126`); a change rejects the capture.
+- **Recorder frames** are bound by frame identity under the recorder's lock, never by a separately sampled ring index.
+- **Compare snapshots** are already owned and immutable. M1 extends compare capture to acquire register files, frame identity and write-tracking state inside the same boundary as the memory.
+- **File and disc-file sources** use an owned byte copy of the selected ranges, or a stable read validated by size, modification time and hash before and after reading.
+- **Attachments inherit provenance from their owning capture.** A collector cannot assign a frame or source on its own.
+- **Configuration items** (current watch, breakpoint, tracepoint, name and comment definitions) are recorded as *configuration at generation time*, with their own timestamp, never as if they existed at frame A or B.
+
+**SourceKey** (identity of one capture; immutable once taken):
 
 ```
 SourceKey {
@@ -128,27 +151,36 @@ SourceKey {
   frame:           decimal string; from FrameRecorder on a scrubbed frame, never se_frame_number's 0
   connection_generation                                 (live only)
   content_sha256:  of the captured bytes, per region/file (persistent)
-  debugger_writes: "detected" | "none_detected" | "unknown"   (memory sources only)
 }
 ```
 
-- **A comparison has two sources.** A and B each carry their own `SourceKey`. Per-snapshot attachments name their own snapshot; the diff item references both. No item is labelled with a frame it was not read from.
-- **Registers and call stacks come only from what was retained with that source.** M1 extends compare capture to retain both SH-2 register files and their validity alongside `MemSnapshot`. A snapshot captured without them reports those items Unavailable; they are never filled from the live head or a later frame.
-- **Debugger-write status is three-state.**
-  - *detected*: SE recorded a poke, LST edit or Hex Editor write to that source between the two captures (or since load, for a single source).
-  - *none_detected*: SE's write tracking was complete for the whole interval — one connection generation, no `pokesUnconfirmed`/`pokesLost` change, no restore, tracking active throughout.
-  - *unknown*: anything else, including a reconnect, counter reset, an older server without poke counters, or history SE did not observe.
-  The diff item carries the status; the prompt states it verbatim.
-- **Generate is refused** while a bound source is a running live head, or when any bound key no longer matches. Collectors that read live state require a paused live head or a retained snapshot.
-- Process-local fields are diagnostic only. After a restart, only content hashes and the package's own files bind evidence.
+Each memory capture also stores a **write-tracking checkpoint**: the position in SE's debugger-write ledger, the client's pending and unconfirmed write state, the cached server counters and connection generation at capture time.
+
+- **A comparison has two sources.** A and B each carry their own `SourceKey`; per-snapshot attachments name their own snapshot; the diff item references both. No item is labelled with a frame it was not read from.
+- **Registers and call stacks come only from the capture.** A capture taken without them reports those items Unavailable; they are never filled from the live head or a later frame.
+
+**Debugger-write status belongs to the comparison interval, not to a SourceKey.** Marking the same snapshot against a different partner never changes its key.
+
+- SE keeps an ordered **debugger-write ledger** (M1): every write request it *accepts* — Hex Editor writes, pokes, LST edits — with sequence number, target range and later application outcome. An accepted write is recorded when the local snapshot changes (`Core/src/Context.h:526-550`), before and regardless of emulator confirmation.
+- The interval is evaluated in capture order (earlier capture to later), whichever marker is A.
+- `detected`: the ledger holds at least one accepted write to the source between the two checkpoints, or either capture holds pending or unconfirmed writes.
+- `none_detected`: both checkpoints lie in one complete, ordered ledger segment (same session, epoch and connection generation), with no pending or unconfirmed writes, no counter reset, no restore and no tracking gap.
+- `unknown`: anything else, including captures from different sessions or epochs (which `Diff` already refuses), an older server without poke counters, or history SE did not observe.
+- Application outcome (applied, dropped, unconfirmed) is exported separately from the status.
+- For a single-source package, the interval is "since this source was loaded or connected".
+
+Generate is refused while a bound source is a running live head. Process-local fields are diagnostic only. After a restart, only content hashes and the package's own files bind evidence.
 
 ### 5.2 Game identity
 
 Three layers, so patched-disc rebuilds do not orphan the user's work:
 
-1. **Scope** (decides which names, labels and saved instrumentation apply): the disc header's product number and version when SE knows the disc, otherwise `unscoped`. A rebuilt patched disc keeps its scope.
-2. **Provenance** (recorded, not used for matching): SHA-256 of the disc image, cached by path, size and modification time. A different hash under the same scope shows a "different build" notice, not a separate store.
-3. **Per-item code fingerprints** (warnings only): function names and code-specific actions store a hash of the bytes at their entry/range. A mismatch marks the item "code changed here (overlay or patch?)". A short prefix is a warning signal, not proof that a routine is unchanged. Data labels are not fingerprinted; their values change by design.
+1. **Scope** (decides which names, labels and saved instrumentation apply): by default the disc header's product number and version when SE knows the disc, otherwise `unscoped`. A rebuilt patched disc keeps its scope. The user can create named **profiles** under a product (for divergent mods) and choose which profile is active.
+2. **Provenance** (recorded, not used for matching): a list of SHA-256 hashes, one per file the disc image consists of (the `.cue` text and every file it references, in cue order; or the single `.iso`/`.bin`). The cache keyed by path, size and modification time is a heuristic: each record states whether its hashes were freshly computed or taken from cache, and a Rehash command recomputes them. A different hash under the same scope shows a "different build" notice, not a separate store.
+3. **Per-item code fingerprints:** function names and code-specific items store a hash of the bytes over an explicit covered range.
+   - On *existing* annotations a mismatch is a warning: "code changed here (overlay or patch?)". A short prefix is a signal, not proof that a routine is unchanged.
+   - On *imported code-specific actions* a verified fingerprint is a precondition for applying (§6.4).
+   - Data labels have no value fingerprint, since their values change by design. A label's location can still become stale (a patch moves a structure); labels record the build provenance they were created under and show "created under a different build" when it differs.
 
 Unknown identity is shown as unknown; a filename alone never establishes identity.
 
@@ -177,7 +209,7 @@ The reader rejects absolute paths, traversal, links escaping the package and has
 ### 5.5 Large datasets
 
 - Default inline limit: 64 KiB of UTF-8 in `prompt.md`, configurable. Above it, a bounded overview stays inline and the selected data goes to attachments.
-- Default budgets (configurable): 8 MiB structured JSON, 32 MiB attachments, 2,000 diff ranges, 512 instructions, 64 KiB per surrounding memory selection.
+- Default budgets (configurable): 8 MiB structured JSON, 32 MiB attachments, 2,000 diff ranges, 512 instructions, 64 KiB per surrounding memory selection. Retained source data (§5.6) has its own budget (default 16 MiB) and counts toward the package total shown before Generate.
 - Binary stays binary. Each memory attachment is one contiguous range of one region of one snapshot; the manifest records region, base bus address (when it has one), offset, length, SourceKey and hash. There is no concatenation.
 - `changes.json` lists changed ranges with bounded typed interpretations and references the binary slices instead of repeating bytes as hex.
 - File samplers record exact offsets and omitted ranges. A whole large file is opt-in. A selected full artifact is never silently truncated: Generate asks for a smaller selection or a larger budget.
@@ -212,7 +244,7 @@ Required: `schema_version` (1), `investigation_id`, `evidence_id`, `response_id`
 
 Hypotheses: `id`, `claim`, `confidence` (`low|medium|high`, the agent's assessment, not a probability), `evidence_refs` (each resolving to a manifest item/range), `prediction`.
 
-Actions: `id` (unique in the response), `type` (allowlisted), `hypothesis_id`, `target`, typed `parameters`, optional `depends_on`, optional `expected_code_sha256` for code-specific actions.
+Actions: `id` (unique in the response), `type` (allowlisted), `hypothesis_id`, `target`, typed `parameters`, optional `depends_on`, optional `evidence_refs`, optional `expected_code_sha256` (checked if present; the authoritative fingerprint comes from the referenced evidence, §6.4).
 
 ```json
 {
@@ -240,9 +272,11 @@ Grammar: names match `[A-Za-z_][A-Za-z0-9_]{0,63}`; comments are one line of at 
 
 ### 6.4 Matching, duplicates and staleness
 
-- `evidence_id` locates the package in History. If it is unknown (for example mistyped by the agent), the user picks the package or the import is rejected.
+- `evidence_id` locates the package in History. An unknown ID (for example mistyped by the agent) is never fixed silently: the import stops, and the user may explicitly **rebind** the response to a chosen package. Rebinding is recorded, and every target and evidence reference is re-validated against that package before preview.
 - Action identity is `(investigation_id, response_id, action_id)` plus `payload_sha256`, the SHA-256 of the action object re-serialised with sorted keys and no insignificant whitespace. The same identity with a different payload is an error. A re-import shows already-applied actions as such and changes nothing.
-- A response is stale for code-specific actions whose `expected_code_sha256` no longer matches the bytes at the target. Changed data bytes do not invalidate a watch or label. Stale actions remain viewable and are never automatically rebound; rebinding creates a new validated application record.
+- **Code-specific actions** are `rename_function`, `add_execution_breakpoint`, `add_log_tracepoint`, and `add_comment` on a `kCapSh2Code` region. Each must cite evidence that covers its target (an `evidence_refs` entry on the action or its hypothesis). SE derives the expected fingerprint and covered range from that evidence itself; it does not depend on the agent supplying a hash. If the agent does supply `expected_code_sha256`, it must agree.
+- Applying a code-specific action requires the live or static bytes over the covered range to match that fingerprint. Missing evidence coverage or a mismatch blocks the action until the user explicitly rebinds it to new evidence and it re-validates. An experiment re-checks fingerprints immediately before execution.
+- Changed data bytes do not invalidate a watch, label or memory watchpoint. Stale actions remain viewable and are never automatically rebound; rebinding creates a new validated application record.
 
 ## 7. Actions and application semantics
 
@@ -268,11 +302,38 @@ Never: shell execution, script effects, URL fetching, disc writes, process launc
 
 ### 7.3 Ownership, transactions and undo
 
-- Apply is one local transaction: preflight every selected action and its dependencies, construct changes, then commit through the existing models. Any preflight failure applies nothing.
-- If the semantic key already exists, the action is recorded as *already present, not owned*. The existing item is not modified unless the user explicitly chooses Replace for that conflict.
-- Every item SE creates from an import carries a **persistent owner record**: a persisted item UUID (new field on `Breakpoint`, `WatchEntry`, `ExecutionAction`, labels, names and comments), the application ID and the values written.
-- Undo removes or restores an item only when its UUID still exists and its current values equal the recorded values. An item the user deleted and recreated has a new UUID and is never touched. Undo across restarts uses the same rule.
-- Committing to the model and installing in the emulator are separate states, shown as *pending / installed / failed / unconfirmed*. Until the M4 protocol additions exist, emulator installation is *unconfirmed* except for what the caps word proves.
+**Identity.** Every item in every affected store carries a persisted UUID: a new field on `Breakpoint`, `WatchEntry` and `ExecutionAction`, and new record types replacing the bare `map<uint32_t,string>` in `FunctionNames` (`Debug/CallStack.h:80-81`) and the address/text comment records (`AssemblyPanel.cpp:607-629`). UUIDs are assigned on **every** creation path: user creation, import, symbol-file import and the one-time legacy migration.
+
+**Authoring fields.** Ownership and undo compare only the persisted fields a person or an import sets. Runtime and transport state is excluded.
+
+| Store | Authoring fields | Excluded |
+| --- | --- | --- |
+| Watch | name, expression, type, enabled | resolved address, last value |
+| Breakpoint | kind, address, size, enabled, condition, logAccess | install state |
+| Tracepoint | cpu, address, enabled, format, condition, repeat, repeatN, effects | hits, seen, rearm |
+| Function name / label / comment | address, name or text, size, type, note | display caches |
+
+**Mutation records.** Every mutation an application makes records: operation (create, replace, unchanged-already-present), scope, item UUID, before-image (authoring fields, or absent), after-image, and prior ownership (user, import X, symbol file).
+
+- If the semantic key already exists, the action is recorded as *already present, not owned*, and nothing changes unless the user explicitly chooses **Replace** for that conflict.
+- **Replace** keeps the existing item's UUID, records its before-image and prior owner, and writes the after-image.
+- **Undo** acts on an item only when its UUID still exists and its current authoring fields equal the recorded after-image. A created item is removed; a replaced item gets its before-image and prior owner back. An item the user deleted and recreated has a new UUID and is never touched. Undo across restarts follows the same rule.
+
+**Recoverable commit.** One application is one transaction across all affected stores:
+
+1. Preflight every selected action and dependency; build every after-image. Any failure applies nothing.
+2. Write a journal record in state *prepared*, holding all mutation records (atomic write).
+3. Write each affected store file atomically with its new contents.
+4. Mark the journal record *committed* (atomic write).
+5. Only then update the in-memory models and mark instrumentation for emulator sync.
+
+- If step 3 fails, restore the stores already written from their before-images, mark the record *aborted*, report the failure, and leave models and emulator unchanged.
+- On startup, before any panel loads, a *prepared* record without *committed* or *aborted* is rolled forward from its after-images, then marked *committed*. Every store therefore reflects either the old state or the completed transaction.
+- Nothing reports success, or syncs instrumentation, for an uncommitted transaction.
+
+**Other rules.**
+
+- Committing to the model and installing in the emulator are separate states: *pending / installed / failed / unconfirmed*. Until the M4 protocol additions exist, emulator installation is *unconfirmed* except for what the caps word proves.
 - An "Apply all valid actions on import" preference may be offered for annotation and configuration actions. It never starts execution.
 - Annotation actions may be applied to a matching scope without a live connection. Live instrumentation requires an explicitly bound, connected session.
 
@@ -299,10 +360,13 @@ Decompiler-local variable rename/type actions remain deferred until the engine s
 
 1. Control block gains `bkp_applied_gen` and `trc_applied_gen`: the descriptor-set generation the emulate thread actually installed. BKP/TRC carry the generation they send.
 2. Stop report gains the installed generation it was evaluated against and a matched-descriptor bitmap, or explicit `ambiguous`/`unknown` when the emulator cannot tell, for example overlapping watchpoints or SCU DMA.
-3. Control block gains `events_dropped` (monotonic per emulator run).
-4. Results never treat tracepoint memory dereferences as hit-time values unless a later protocol revision captures them at the hit.
+3. Each trace event carries the trace-set generation that was installed when it fired, plus a server run epoch (a value that changes whenever the server starts). The runner accepts only events from its own run's generation and epoch, so events queued under an earlier configuration are never taken as experiment evidence.
+4. Control block gains `events_dropped` (monotonic per server run). The runner reports server-side drops and client-side queue losses over the run interval.
+5. Results never treat tracepoint memory dereferences as hit-time values unless a later protocol revision captures them at the hit.
 
 Unattended Run is disabled unless the connected server reports these. Setup can still be imported and applied manually without them.
+
+These additions bound what the *client* does and observes. They cannot guarantee that the emulator stops after a lost connection; the server's own disconnect behaviour (§9.2) governs that.
 
 ### 9.2 Runner rules
 
@@ -311,10 +375,10 @@ Unattended Run is disabled unless the connected server reports these. Setup can 
 - Preconditions (session, epoch, connection generation, target code hashes) are re-checked at the point of execution, not only at import.
 - Steps allowed in v2: require a paused live head; install runner-owned instruments; resume until a designated halt, frame limit, wall-time limit or event limit; bounded instruction/frame stepping where supported; capture designated evidence; evaluate simple assertions; clean up and export.
 - **Limits** record both "stop requested at frame N / time T" and "paused at frame M / time U". A pause takes effect at the next frame gate, so overshoot is expected and reported. Wall-time limits apply even when the frame counter stalls. Counter resets are distinguished from progress.
-- **Halt attribution:** a halt is the runner's only when the stop report names a runner-owned descriptor. A user-owned descriptor, `ambiguous` or `unknown` stops the run with that cause.
+- **Halt attribution:** a halt is the runner's only when the stop report names runner-owned descriptors exclusively. A halt matching both user-owned and runner-owned descriptors is *mixed* and is never runner success. A user-owned descriptor, `mixed`, `ambiguous` or `unknown` stops the run with that cause.
 - **Disconnect** aborts the run as Interrupted – emulator resumed by server (the server drops all instruments and resumes when its last client leaves). Before any reconnect resync, the runner removes its owned items from the models, so they are never reinstalled into a later session. It never resumes on a new connection.
 - **Cancel** requests a pause, waits a bounded time for confirmation, then cleans up. It never resumes to restore a previous running state. Closing or replacing the source cancels the run.
-- Cleanup removes only runner-owned instruments, matched by owner UUID. User instruments are preserved.
+- Cleanup removes only runner-owned instruments, matched by owner UUID. User instruments are preserved. Cleanup is *complete* only once the server acknowledges the removal generation; otherwise it is reported as *unconfirmed*.
 - Defaults: 10 s wall time, 300 frames, 100 trace events, 8 MiB captured data.
 - Results distinguish observation from assertion (a watchpoint firing does not prove HP identity). Record step status, halt reasons, CPU/PC, `stop_seq`, both limit timestamps, values, fingerprints, dropped events, timeouts and cleanup outcome. Export `results.json` plus a new evidence package, linked to the parent response and run IDs.
 
@@ -351,24 +415,29 @@ Persistence (M2):
 
 ### M0 — Contracts and foundations
 
-- Freeze `SourceKey`, `CanonicalTarget`, encoding rules, package layout, schema v1 and the action registry.
+- Freeze `EvidenceCapture`, `SourceKey`, the write-ledger and interval rules, `CanonicalTarget`, encoding rules, package layout, schema v1 and the action registry.
 - Choose the JSON parser and prove duplicate-key rejection and lossless integers; move `Sha256Hex`.
 - Write the protocol-gap specification for §9.1.
 
-Done when a synthetic response validates and previews with no side effects, every v1 action maps to an existing model call and capability, and `CanonicalTarget` agrees with the decompiler's A2 rule in tests.
+Done when:
+- a synthetic response validates and previews with no side effects;
+- every v1 action has a specified adapter, required capability and implementation milestone. Adapters onto existing models are verified against the code; models that do not exist yet (`AddressSymbols`, the UUID-bearing stores) are listed as such, with the milestone that adds them;
+- `CanonicalTarget` agrees with the decompiler's A2 rule in tests.
 
 ### M1 — Prompt builder and package export
 
 - Tools → AI Prompts; **Find gameplay value**, **Identify file structure** and **Custom**.
 - Prompt Builder with the §3.2 states; bound sources (compare pair, paused live head, recorder frame, file/disc file).
-- Compare capture retains register files; debugger-write status.
-- Collectors: diff/changed ranges, memory ranges, file samples, watch/label/comment definitions.
+- `EvidenceCapture` for every source kind; compare capture acquires register files, frame identity and write-tracking state inside its capture boundary.
+- The debugger-write ledger and interval status (§5.1).
+- Collectors: diff/changed ranges, memory ranges, file samples, and configuration-at-generation-time definitions of watches, comments and function names. Data-label export is unavailable until M2.
 - Publish-then-copy; the retain-source option; budgets and inline limit.
 
 Done when:
 - the user can open a preset, edit its text, uncheck a default, check another item, generate, copy, and hand the folder to an external agent;
 - Custom supports the same flow;
-- every manifest item's SourceKey equals the source it was read from;
+- every manifest item references the capture or captures it was actually read from (a comparison item references both A and B; configuration items carry generation-time provenance);
+- stepping, resuming or editing during a sliced Generate cannot change any published byte;
 - unselected data never appears;
 - all hashes verify.
 
@@ -418,10 +487,13 @@ Later, separately scoped: decompiler-local names, bounded batch experiments, ZIP
 
 - **Identity:**
   - live source changing between collectors (Generate refuses, nothing published);
+  - the user steps, resumes or edits while a sliced Generate is running (published bytes unchanged);
+  - a recorder frame evicted or reordered during binding (bound by frame identity, never by ring index);
   - evicted A/B frames;
   - scrubbed frame with staged edits;
   - registers missing from a snapshot (Unavailable, never back-filled);
-  - debugger-write status across reconnect (`unknown`), with a recorded poke (`detected`), and with complete tracking (`none_detected`);
+  - debugger-write status across reconnect (`unknown`), with a recorded poke (`detected`), with a queued edit visible in B but not yet confirmed (`detected`), with complete tracking (`none_detected`), and with A and B swapped (same interval result);
+  - the same snapshot compared against two partners keeps one SourceKey;
   - mirror versus canonical addresses.
 - **Package:**
   - exact filenames and range metadata;
@@ -446,10 +518,17 @@ Later, separately scoped: decompiler-local names, bounded batch experiments, ZIP
   - pre-existing user watchpoint plus imported duplicate, then undo (user's remains);
   - user deletes and recreates an applied item, then undo (untouched);
   - `ToggleExecution` never reachable from the applier;
-  - restart between apply and undo.
+  - restart between apply and undo;
+  - Replace of a user's function name, then undo (the user's name and ownership return);
+  - tracepoint hit counters changing after apply, then undo (still undoable);
+  - a store write failing mid-transaction (stores rolled back, journal *aborted*, nothing synced);
+  - a crash after *prepared* (startup rolls forward to the completed state);
+  - a code-specific action without covering evidence, or with a mismatched fingerprint (blocked).
 - **Runner** (fake transport, then real server in-process on POSIX):
   - generations acknowledged late, out of order, missing or from a replaced connection;
-  - ambiguous stop reports;
+  - ambiguous and mixed (user plus runner) stop reports;
+  - trace events queued under an earlier generation (rejected);
+  - cleanup removal not acknowledged (reported *unconfirmed*);
   - `events_dropped`;
   - cancel in every state;
   - disconnect followed by reconnect resync containing no runner-owned descriptors.
@@ -476,6 +555,6 @@ The AI replies with an explanation and a JSON list of suggestions. SE checks it 
 
 The AI can ask for a smaller follow-up dataset; SE fills it from the data you chose to retain, never from whatever the game is doing now.
 
-Later, once the emulator can confirm what it installed and which breakpoint fired, SE can run a small approved experiment with hard limits and a Cancel button, and export the results for the next round.
+Later, once the emulator can confirm what it installed and which breakpoint fired, SE can run a small approved experiment with limits and a Cancel button. Limits bound what SE collects and when it asks the emulator to stop; the emulator pauses at its next frame boundary, and a lost connection lets it run on, which SE reports, and export the results for the next round.
 
 Build order: trustworthy evidence export first, then reliable names and labels, then importing suggestions, then experiments.
