@@ -2,8 +2,10 @@
 
 Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 1, contracts A4–A7.
 
-**Verified commit:** `47eba3e` (code), on top of the Step 1 series from `6610253`  
-**Actions run (all six A7 jobs green):** https://github.com/NoahSteam/RomHackingTools/actions/runs/38136040106  
+**Verified commit:** `eff869e` (code), on top of the Step 1 series from `6610253`  
+**Actions run (all six A7 jobs green):** https://github.com/NoahSteam/RomHackingTools/actions/runs/38137643238  
+(Timings below are from the previous green run, 38136040106 at `47eba3e`; the engine and the
+measured paths are unchanged since.)  
 **Windows image:** windows-2025-vs2026 (Visual Studio 18 2026, MSVC 19.51) · **macOS:** macos-latest (arm64)
 
 ## Gates (A7)
@@ -46,11 +48,19 @@ Earlier runs measured the macOS engine build at 37 min before CI builds were bou
 
 ## Review fixes verified by this run
 
-From the external review of `f4ef3d5..fe132d6`: CancelError swallowed by jump-table recovery
-(patch 0001), spec-bundle repair following a symlink, concurrent repair deleting another
-instance's verified copy, publication before verification, licence texts missing from the
-shipped app, and `GenerateSpecData.cmake` ignoring a failed write. Each code fix has a test
-that fails without it (see the commit messages of `c061215`, `27aa5cd`, `47eba3e`).
+Two rounds of external review (`f4ef3d5..fe132d6`, then `..3d494d4`). Each code fix below has
+a regression test that was run against the code with that fix reverted and failed:
+
+| Fix | Commit | Test that fails without it |
+|---|---|---|
+| CancelError swallowed by jump-table recovery (patch 0001) | `c061215` | `Sh2DecompilerEngineTests` — TestCancelDuringJumpTableRecovery |
+| Repair followed a symlink and emptied its target | `27aa5cd` | TestLinkInPlaceOfBundle; `FileWriteTests` — TestLinkedDirectoryIsNotEmptied |
+| Concurrent repair deleted another instance's verified copy | `27aa5cd` | TestConcurrentRepair (8 threads, exactly one repair) |
+| Staged copy published before verification | `27aa5cd` | TestStagedCopyVerifiedBeforePublishing (`eff869e`) |
+| Bundle lock inherited by spawned children | `eff869e` | `FileWriteTests` — TestFileLock |
+| Header regeneration reported success without writing | `47eba3e`, `eff869e` | `SaturnExplorerGenerateSpecDataFailureTests` |
+| Denied-write coverage could silently fall back | `eff869e` | TestUnwritableConfigDir (fallback only for POSIX root) |
+| Licence texts missing from the shipped app | `47eba3e` | CI checks beside both Windows exes, in the bundle and in the DMG |
 
 ## Outstanding (manual, not done in Step 1)
 
