@@ -22,6 +22,7 @@
 
 #include "Decompiler/DecompilerRunner.h"
 
+#include <algorithm>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -42,13 +43,24 @@ const Fixture kFixtures[] = {
     { "jumptable", dts::kJumpTableBase },
 };
 
+// The spike's sizes, except in an MSVC Debug build. There the Debug CRT's checked iterators run
+// inside every STL call the engine inlines -- the engine is built /O2, but _ITERATOR_DEBUG_LEVEL
+// must match across the whole executable -- and the 6k-instruction fixture takes over 20 s
+// instead of about one. A tenth of each fixture keeps every phase long enough to cancel inside
+// (followFlow tens of ms, actions over a second there) within the ctest timeout.
+#if defined(_MSC_VER) && defined(_DEBUG)
+const int kFixtureDivisor = 10;
+#else
+const int kFixtureDivisor = 1;
+#endif
+
 std::shared_ptr<const MemorySnapshot> BuildSnapshot()
 {
     std::vector<uint8_t> hw;
     dts::PlaceFixture1(hw);
-    dts::PlaceDiamonds(hw, 1000);
-    dts::PlaceStraight(hw, 5000);
-    dts::PlaceJumpTable(hw, 16, 300);
+    dts::PlaceDiamonds(hw, 1000 / kFixtureDivisor);
+    dts::PlaceStraight(hw, 5000 / kFixtureDivisor);
+    dts::PlaceJumpTable(hw, 16, 300 / kFixtureDivisor);
     return dts::MakeSnapshot(hw);
 }
 
@@ -58,6 +70,7 @@ RunnerOptions Generous()
 {
     RunnerOptions o;
     o.budgetSeconds = 120;
+    o.cancelAckSeconds = 60;   // one action's body alone can outlast 5 s in a slow build
     return o;
 }
 
@@ -199,29 +212,42 @@ void TestBaselines()
         std::lock_guard<std::mutex> lock(m);
         seen.emplace_back(p, Clock::now());
     });
+    // Each fixture twice: the first, cold run is the slow one, and the midway cancels below time
+    // themselves against a warm run like theirs. Both runs must give the same text.
     for (int i = 0; i < 3; ++i)
     {
+        std::string coldText;
+        for (int run = 0; run < 2; ++run)
         {
-            std::lock_guard<std::mutex> lock(m);
-            seen.clear();
-        }
-        const auto t0 = Clock::now();
-        runner.Submit(0, gSnap, Big(kFixtures[i].entry));
-        DecompileResult r;
-        CHECK(WaitResult(runner, r));
-        gBaseline[i].totalMs = MsSince(t0);
-        gBaseline[i].text = r.Text();
-        {
-            std::lock_guard<std::mutex> lock(m);
-            for (size_t k = 0; k + 1 < seen.size(); ++k)
-                gBaseline[i].phaseMs[int(seen[k].first)] +=
-                    std::chrono::duration<double, std::milli>(seen[k + 1].second - seen[k].second).count();
+            {
+                std::lock_guard<std::mutex> lock(m);
+                seen.clear();
+            }
+            const auto t0 = Clock::now();
+            runner.Submit(0, gSnap, Big(kFixtures[i].entry));
+            DecompileResult r;
+            CHECK(WaitResult(runner, r));
+            CHECK(r.status == DecompileStatus::Ok);
+            if (run == 0)
+            {
+                coldText = r.Text();
+                continue;
+            }
+            gBaseline[i] = Baseline();
+            gBaseline[i].totalMs = MsSince(t0);
+            gBaseline[i].text = r.Text();
+            CHECK(gBaseline[i].text == coldText);
+            {
+                std::lock_guard<std::mutex> lock(m);
+                for (size_t k = 0; k + 1 < seen.size(); ++k)
+                    gBaseline[i].phaseMs[int(seen[k].first)] +=
+                        std::chrono::duration<double, std::milli>(seen[k + 1].second - seen[k].second).count();
+            }
         }
         const double* p = gBaseline[i].phaseMs;
         std::printf("  %-9s baseline %7.1f ms: init %.1f  followFlow %.1f  actions %.1f  print %.1f ms, %zu bytes of C\n",
                     kFixtures[i].name, gBaseline[i].totalMs, p[int(DecompilePhase::Init)], p[int(DecompilePhase::Flow)],
                     p[int(DecompilePhase::Actions)], p[int(DecompilePhase::Print)], gBaseline[i].text.size());
-        CHECK(r.status == DecompileStatus::Ok);
         CHECK(gBaseline[i].text.size() > 100);
     }
     CHECK(gBaseline[2].text.find("switch") != std::string::npos);   // the jump table was recovered
@@ -329,17 +355,22 @@ void TestCancelDuringPrint()
 
 void TestBudget()
 {
+    // 100 ms against the 6k-instruction fixture (PLAN.md A4); a scaled-down fixture gets a tenth of
+    // its own measured baseline instead (at least 50 ms, so fixture 1 afterwards fits), so the
+    // budget still expires mid-decompilation.
     RunnerOptions options;
-    options.budgetSeconds = 0.1;
+    options.budgetSeconds = kFixtureDivisor == 1 ? 0.1 : std::max(0.05, gBaseline[0].totalMs / 10000.0);
     DecompilerRunner runner(gConfig, options);
     const auto t0 = Clock::now();
     runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
     DecompileResult r;
     CHECK(WaitResult(runner, r));
-    std::printf("  diamonds under a 100 ms budget: %s after %.1f ms (%s)\n",
+    std::printf("  diamonds under a %.0f ms budget: %s after %.1f ms (%s)\n", options.budgetSeconds * 1000,
                 r.status == DecompileStatus::TooLarge ? "too large" : "NOT CANCELLED", MsSince(t0), r.error.c_str());
     CHECK(r.status == DecompileStatus::TooLarge);
-    CHECK(r.error.find("too large to decompile within 0.1 s") != std::string::npos);
+    char expected[80];
+    std::snprintf(expected, sizeof expected, "too large to decompile within %g s", options.budgetSeconds);
+    CHECK(r.error.find(expected) != std::string::npos);
 
     // Not retried automatically this session...
     const uint64_t runs = runner.RunsStarted();
@@ -508,6 +539,9 @@ int main(int argc, char** argv)
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
     gSnap = BuildSnapshot();
+    std::printf("fixtures: diamonds %d, straight %d, jumptable 16 x %d%s\n", 1000 / kFixtureDivisor,
+                5000 / kFixtureDivisor, 300 / kFixtureDivisor,
+                kFixtureDivisor > 1 ? " (a tenth: MSVC Debug CRT)" : " (the cancellation spike's sizes)");
     try
     {
         RUN(TestBaselines());
