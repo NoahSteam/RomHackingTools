@@ -158,12 +158,15 @@ thread detached at exit would run while static objects are destroyed.
   rather than promising a detach that would be unsafe.
 - **Tests** (`DecompilerRunnerTests`, real engine, the spike's three fixtures, 120 s ctest
   timeout): a cancel requested while the worker is provably in flow following is caught there;
-  the same for actions; a cancel during print completes normally with unchanged output; a
+  the same for actions; a cancel provably requested during print (phase read before and after
+  setting the flag both say print, else the attempt is inconclusive and retried) completes
+  normally with unchanged output; a
   wall-clock budget of 100 ms cancels the 6k-instruction fixture and marks the entry not-retried;
   an epoch bump while a request runs makes `Poll()` return within one frame and the late result
   is dropped; the destructor with a request in flight returns after the join and `shutdown()`;
   a following request after each of these completes with correct output. The vendoring step
-  fails if the patch does not apply.
+  fails if the patch does not apply. Step 2 is accepted only once these tests have passed in the
+  Windows and macOS CI jobs, not on Linux alone.
 
 ### A5. Spec freshness covers what the application actually loads
 
@@ -213,7 +216,7 @@ packaging, or both Mac architectures.
 | macOS x86_64 | New job on the arm64 runner with `-DCMAKE_OSX_ARCHITECTURES=x86_64` building `SaturnExplorerGhidraDecomp` and the decompiler tests only (they need no SDL2) and running them under Rosetta; the full x86_64 app is a manual, recorded build until an Intel runner is available |
 | macOS bundle + DMG | New job: `-DSE_MACOS_BUNDLE_LIBS=ON`, `cmake --install`, `cpack -G DragNDrop`, assert the `.app` and `.dmg` exist and `codesign --verify --deep --strict` passes **ad-hoc signed**; Developer ID signing and notarisation stay a manual, recorded step since they need a certificate |
 | The macOS frontend exists | The existing existence check is extended from `se-render` to `SaturnExplorer.app` (the target's `OUTPUT_NAME`, not the CMake target name) |
-| Timing | No hard millisecond gate. Decompiler tests get a generous ctest `TIMEOUT` (60 s) and print their elapsed times, which the step record copies into `Docs/FunctionalityVerification/` |
+| Timing | No hard millisecond gate. Decompiler tests get a ctest `TIMEOUT` of 60 s, except `DecompilerRunnerTests`, which decompiles the spike's large synthetic fixtures several times and gets 120 s (A4). All of them print their elapsed times, which the step record copies into `Docs/FunctionalityVerification/` |
 
 ---
 
@@ -270,10 +273,10 @@ Files in `FrontEnd/src/Decompiler/` (Win32 and desktop source lists, not the web
 Tests: `MemorySnapshotTests` (A2), `Sh2DecompilerTests` (fixtures 1, 1b, 3 per A3, unmapped,
 mirror, `mov.w` fold, token addresses, A1 edit cases), `Sh2DecompilerFixtureTests` (the `.yss`
 real-code fixture: 13 literal pools, callee set, listing equal to the Capstone-verified file;
-skips without game data), `Sh2FunctionFinderTests`, `DecompilerRunnerTests` (A4). All with a
-60 s ctest timeout and printed timings.
+skips without game data), `Sh2FunctionFinderTests`, `DecompilerRunnerTests` (A4). A 60 s ctest
+timeout and printed timings for all of them, except `DecompilerRunnerTests` at 120 s (A4, A7).
 
-**Gate:** CI green on both OSes; timings recorded.
+**Gate:** CI green on both OSes, including `DecompilerRunnerTests` (A4) on Windows and macOS; timings recorded.
 
 ### Step 3 — The panel and App wiring
 

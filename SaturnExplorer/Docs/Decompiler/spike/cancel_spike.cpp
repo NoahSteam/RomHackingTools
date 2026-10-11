@@ -172,9 +172,19 @@ int main(int argc, char** argv) {
     }
     CHECK(provenIn[P_FLOW] > 0, "%s: no run proved cancellation inside followFlow", fx.name.c_str());
     CHECK(provenIn[P_ACTIONS] > 0, "%s: no run proved cancellation inside actions", fx.name.c_str());
-    // Printing has no check-point: the request must complete normally, and the time is the latency floor there.
-    { Outcome o = cancelIn(fx, P_PRINT, 0.0, base, flag);
-      CHECK(!o.cancelled && o.done && o.text == base.text, "%s: cancel during print changed the outcome", fx.name.c_str()); }
+    // Printing has no check-point: a cancel provably requested during print must complete normally
+    // with unchanged output. If the flag landed on a phase boundary the attempt proves nothing and is
+    // retried; after 5 inconclusive attempts the case is reported as such and fails.
+    {
+      bool conclusive = false;
+      for (int attempt = 0; attempt < 5 && !conclusive; ++attempt) {
+        Outcome o = cancelIn(fx, P_PRINT, 0.0, base, flag);
+        if (o.flagPhase != P_PRINT) { printf("  (print attempt %d inconclusive: flag not provably set during print)\n", attempt + 1); continue; }
+        conclusive = true;
+        CHECK(!o.cancelled && o.done && o.text == base.text, "%s: cancel during print changed the outcome", fx.name.c_str());
+      }
+      CHECK(conclusive, "%s: could not provably request a cancel during print in 5 attempts", fx.name.c_str());
+    }
 
     // Engine reuse after cancellation on the same process-global translator.
     PhaseSignal sig2; flag.store(false);

@@ -381,7 +381,9 @@ external 600 s timeout). The engine thread publishes its phase (init, followFlow
 print, teardown) through a mutex/condition-variable signal; the main thread waits for a phase,
 optionally sleeps a fraction of that phase's measured baseline, reads the phase, sets the flag,
 reads the phase again, and only counts a run as proof when both reads agree. A cancellation
-requested during phase X must be caught in phase X. Three fixtures:
+requested during phase X must be caught in phase X; for print, where no check-point exists, the
+attempt counts only if both reads say print, and then the request must complete with unchanged
+output (an inconclusive attempt is retried, up to five times). Three fixtures:
 
 | Fixture | Shape | Size |
 |---|---|---|
