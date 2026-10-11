@@ -120,6 +120,11 @@ Every fix below has a test that was run with the fix reverted and failed.
 | Gap: A3 only bra/bf/s with mov.l | `rts`+mov.w, `bsr`+mova, `jmp`+mov.l, `braf`+mov.l added | TestDelaySlotPcRelative |
 | Gap: `fixture3.py` not self-checking | Checks each mnemonic and each slot load's address against Capstone; exits non-zero on any mismatch | (a deliberately wrong word makes it exit 1) |
 
+The allocation-failure cases skip themselves in an MSVC Debug build: its STL allocates
+iterator-debugging proxies inside `noexcept` container moves, so an injected failure there is
+`std::terminate` by that library's design (the first CI run showed it). CI runs them on Windows in
+the Release step, with the full-size runner fixtures.
+
 Also: the epoch-bump timing assertion is 50 ms (it measured scheduler noise as well as
 non-blocking behaviour); a throwing phase observer can no longer terminate from the teardown
 destructor.

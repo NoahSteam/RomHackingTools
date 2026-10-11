@@ -11,6 +11,16 @@
 namespace dts
 {
 
+// MSVC's Debug STL allocates its iterator-debugging proxies even inside noexcept operations
+// (container moves), so a failure injected there is std::terminate by design of that library,
+// not a defect of the code under test. The injection cases skip themselves in that build; the
+// Windows Release run covers them.
+#if defined(_MSC_VER) && defined(_DEBUG)
+const bool kInjectionUsable = false;
+#else
+const bool kInjectionUsable = true;
+#endif
+
 // -1: off. N >= 0: the allocation after N more succeed throws, and injection turns off.
 inline std::atomic<long>& FailAfter()
 {

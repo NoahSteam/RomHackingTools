@@ -601,6 +601,12 @@ int WorkerOomChild()
 
 void TestWorkerAllocationFailure(const char* self, const std::string& scratch)
 {
+    if (!dts::kInjectionUsable)
+    {
+        std::printf("  SKIPPED in an MSVC Debug build: its STL allocates inside noexcept moves, so an\n"
+                    "  injected failure there terminates by design (the Windows Release run covers this)\n");
+        return;
+    }
     std::string cmd = std::string("\"") + self + "\" --worker-oom \"" + dts::Join(scratch, "oom") + "\"";
 #ifdef _WIN32
     cmd = "\"" + cmd + "\"";   // cmd.exe strips the outer pair
@@ -614,6 +620,12 @@ void TestWorkerAllocationFailure(const char* self, const std::string& scratch)
 // not born disabled with no worker anywhere.
 void TestConstructionFailureReleasesEngine()
 {
+    if (!dts::kInjectionUsable)
+    {
+        std::printf("  SKIPPED in an MSVC Debug build: its STL allocates inside noexcept moves, so an\n"
+                    "  injected failure there terminates by design (the Windows Release run covers this)\n");
+        return;
+    }
     int threw = 0;
     for (long k = 0; k < 50; ++k)
     {

@@ -59,13 +59,14 @@ jobs:
         run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner)Tests"
 
       # The Debug runner test above uses a tenth of each cancellation fixture on Windows (the Debug
-      # CRT's checked iterators make the engine ~20x slower there); Release runs them at full size.
-      - name: DecompilerRunnerTests at full size (Windows Release)
+      # CRT's checked iterators make the engine ~20x slower there), and the allocation-failure cases
+      # skip themselves there (its STL allocates inside noexcept moves); Release runs both in full.
+      - name: Decompiler tests in Release (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          cmake --build build --config Release --parallel 4 --target SaturnExplorerDecompilerRunnerTests
-          ctest --test-dir build -C Release -V -R "SaturnExplorerDecompilerRunnerTests"
+          cmake --build build --config Release --parallel 4 --target SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerTests
+          ctest --test-dir build -C Release -V -R "SaturnExplorer(DecompilerRunner|Sh2Decompiler)Tests"
 
       - name: Verify macOS headless renderer and frontend exist
         if: runner.os == 'macOS'

@@ -376,6 +376,12 @@ void TestCalleeHarvest()
 // comes back as a failed result, never as an exception; the next request is unaffected.
 void TestAllocationFailureIsReported()
 {
+    if (!dts::kInjectionUsable)
+    {
+        std::printf("  SKIPPED in an MSVC Debug build: its STL allocates inside noexcept moves, so an\n"
+                    "  injected failure there terminates by design (the Windows Release run covers this)\n");
+        return;
+    }
     Sh2Decompiler d(gConfig);
     auto snap = Fixture1Snapshot();
     DecompileRequest q = Request(dts::kFixture1Caller);
@@ -521,6 +527,12 @@ int EngineOomChild(const std::string& scratch, const std::string& where, long of
 
 void TestEngineAllocationFailureInChild(const char* self, const std::string& scratch)
 {
+    if (!dts::kInjectionUsable)
+    {
+        std::printf("  SKIPPED in an MSVC Debug build: its STL allocates inside noexcept moves, so an\n"
+                    "  injected failure there terminates by design (the Windows Release run covers this)\n");
+        return;
+    }
     // Inside flow following, and each of the first allocations of building an Architecture (the
     // Architecture itself, then its two load images).
     const char* where[] = { "flow", "construct", "construct", "construct", "construct" };
