@@ -4,7 +4,7 @@ Date: 2026-10-11. Revision 5. Status: proposed implementation specification, not
 
 Code baseline inspected: `f1d78e32deadd8a22079f487acf9ff74715ce98d`. Re-check the cited APIs before implementing; file references are relative to `SaturnExplorer/`.
 
-Revision 5 changes, from the Revision 4 review:
+Revision 5 changes, from the Revision 4 review (approved for M0/M1; the unexplained-counter and failed-rollback rules were added at sign-off):
 - Collectors read only from owned immutable `EvidenceCapture`s acquired under one capture boundary.
 - Debugger-write status moves from a snapshot's identity to the comparison interval, and counts accepted local edits whether or not the emulator has confirmed them.
 - Code-specific actions require a fingerprint SE derives from the referenced evidence.
@@ -164,7 +164,7 @@ Each memory capture also stores a **write-tracking checkpoint**: the position in
 - SE keeps an ordered **debugger-write ledger** (M1): every write request it *accepts* — Hex Editor writes, pokes, LST edits — with sequence number, target range and later application outcome. An accepted write is recorded when the local snapshot changes (`Core/src/Context.h:526-550`), before and regardless of emulator confirmation.
 - The interval is evaluated in capture order (earlier capture to later), whichever marker is A.
 - `detected`: the ledger holds at least one accepted write to the source between the two checkpoints, or either capture holds pending or unconfirmed writes.
-- `none_detected`: both checkpoints lie in one complete, ordered ledger segment (same session, epoch and connection generation), with no pending or unconfirmed writes, no counter reset, no restore and no tracking gap.
+- `none_detected`: both checkpoints lie in one complete, ordered ledger segment (same session, epoch and connection generation), with no pending or unconfirmed writes, no counter reset, no restore and no tracking gap. A server `pokes_applied`/`pokes_dropped` increase that SE's ledger does not explain (for example another client's writes) is a tracking gap: it prevents `none_detected` even when the ledger holds no edit.
 - `unknown`: anything else, including captures from different sessions or epochs (which `Diff` already refuses), an older server without poke counters, or history SE did not observe.
 - Application outcome (applied, dropped, unconfirmed) is exported separately from the status.
 - For a single-source package, the interval is "since this source was loaded or connected".
@@ -328,6 +328,7 @@ Never: shell execution, script effects, URL fetching, disc writes, process launc
 5. Only then update the in-memory models and mark instrumentation for emulator sync.
 
 - If step 3 fails, restore the stores already written from their before-images, mark the record *aborted*, report the failure, and leave models and emulator unchanged.
+- If that rollback itself fails, the record stays *prepared* (recoverable), the failure is reported, and further store writes are blocked until recovery succeeds. A transaction that was not completely restored is never marked *aborted*.
 - On startup, before any panel loads, a *prepared* record without *committed* or *aborted* is rolled forward from its after-images, then marked *committed*. Every store therefore reflects either the old state or the completed transaction.
 - Nothing reports success, or syncs instrumentation, for an uncommitted transaction.
 
