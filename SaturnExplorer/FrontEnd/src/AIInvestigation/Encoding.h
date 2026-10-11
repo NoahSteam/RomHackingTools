@@ -47,9 +47,6 @@ bool IsIdentifierName(const std::string& s);
 // its range in an evidence reference ("diff/range-12").
 bool IsHandle(const std::string& s);
 
-// Number of Unicode code points in well-formed UTF-8 (a lone invalid byte counts as one).
-size_t CountCodePoints(const std::string& utf8);
-
 // One line of text of at most 'maxChars' characters with no control characters: C0 (including tab,
 // CR and LF), DEL, C1, and the Unicode line and paragraph separators U+2028 / U+2029. Empty text is
 // allowed here; callers that need non-empty text check that themselves.

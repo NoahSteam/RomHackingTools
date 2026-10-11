@@ -198,7 +198,7 @@ void TestPinnedToThePlan()
 
     // Limits the schema and prompt quote.
     Check(kMaxLogTracepoints == SE_LIVE_MAX_TRACE_DESCS, "256 tracepoints is the protocol's SE_LIVE_MAX_TRACE_DESCS");
-    Check(kMaxNameChars == 64 && kMaxCommentChars == 256, "name and comment limits are §6.3's");
+    Check(kMaxCommentChars == 256, "the comment limit is §6.3's");
 }
 
 // ---- The adapters, against the code -------------------------------------------------------------
@@ -268,7 +268,6 @@ void TestAdapterBehaviour()
             std::snprintf(buf, sizeof buf, "{\"id\":\"w\",\"type\":\"add_watch\",\"hypothesis_id\":\"h1\",\"target\":{\"bus_address\":\"0x%08X\"},"
                                           "\"parameters\":{\"name\":\"W\",\"data_type\":\"%s\"}}", address, name.c_str());
             std::string doc = Replace(ValidResponse(), "\"actions\": [", std::string("\"actions\": [") + buf + ",");
-            // Drop the other actions' watch of this type at the same place by validating only for this action's own range issue.
             return ValidateResponse(doc, MakeManifest(), ValidateOptions());
         };
         const ValidationResult fits = at(0x06100000u - size);
@@ -388,7 +387,6 @@ void TestEveryEntryValidates()
             pp.Set(p.name, SampleParam(p));
             if (std::string(spec.type) == "add_address_label" && std::string(p.name) == "count") pp.Set("data_type", JsonValue::String("u8"));
             if (std::string(spec.type) == "add_log_tracepoint" && std::string(p.name) == "repeat_n") pp.Set("repeat", JsonValue::String("every_n"));
-            if (std::string(spec.type) == "add_log_tracepoint" && std::string(p.name) == "repeat") pp.Set("repeat", JsonValue::String("every_time"));
             action.Set("parameters", pp);
             const ValidationResult r = ValidateSample(action);
             Check(r.ok, (std::string(spec.type) + ": parameter " + p.name + " is accepted by the validator").c_str());

@@ -130,7 +130,6 @@ std::string SemanticKey(const ActionSpec& spec, const CanonicalTarget* target, c
 
 // Limits the response contract states and the validator enforces. Kept beside the table because the
 // schema and the prompt quote them.
-constexpr size_t kMaxNameChars = 64;
 constexpr size_t kMaxCommentChars = 256;
 constexpr size_t kMaxConditionChars = 256;
 constexpr size_t kMaxFormatChars = 256;
@@ -138,14 +137,20 @@ constexpr size_t kMaxFormatChars = 256;
 // ask for more in one go. A test pins it to the protocol constant.
 constexpr size_t kMaxLogTracepoints = 256;
 constexpr size_t kMaxRequestRanges = 64;
+// Response-wide counts the schema quotes and ResponseLimits defaults to.
+constexpr size_t kMaxHypotheses = 64;
+constexpr size_t kMaxActions = 256;
+constexpr size_t kMaxEvidenceRefs = 32;
+constexpr size_t kMaxDependsOn = 16;
+constexpr size_t kMaxClaimChars = 1000;
 
 // response.schema.json: a JSON Schema (draft 2020-12) describing the whole response, generated from the
 // table. SE validates with its own code, not a schema engine; this is the agent's copy of the contract.
 JsonValue BuildResponseSchema();
-std::string BuildResponseSchemaText();   // indented
+const std::string& BuildResponseSchemaText();   // indented; built once
 
 // The plain-text action list for the prompt's response contract (§3.3 item 4).
-std::string BuildPromptActionList();
+const std::string& BuildPromptActionList();   // built once
 
 }  // namespace ai
 }  // namespace sfe

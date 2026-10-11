@@ -1,6 +1,5 @@
 #include "AIInvestigation/PackageManifest.h"
 
-#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <set>
@@ -240,7 +239,7 @@ std::vector<std::string> ValidateManifest(const Manifest& m)
             CanonicalTarget start;
             start.region = r.region;
             start.offset = r.offset;
-            if (r.length == 0 || !RangeFits(start, r.length)) bad(rat + "does not fit inside " + RegionApiName(r.region));
+            if (!RangeFits(start, r.length)) bad(rat + "does not fit inside " + RegionApiName(r.region));
             if (!r.file.empty() || !r.sha256.empty())
             {
                 if (r.sources.size() != 1) bad(rat + "an attached range comes from exactly one source");
@@ -534,7 +533,7 @@ bool ResolveEvidenceRef(const Manifest& m, const std::string& ref, ResolvedRef* 
     const size_t slash = ref.find('/');
     const std::string itemId = ref.substr(0, slash);
     const std::string rangeId = slash == std::string::npos ? std::string() : ref.substr(slash + 1);
-    if (ref.empty() || !IsHandle(itemId) || (slash != std::string::npos && !IsHandle(rangeId)))
+    if (!IsHandle(itemId) || (slash != std::string::npos && !IsHandle(rangeId)))
         return fail("\"" + ref + "\" is not an evidence reference (use \"<item id>\" or \"<item id>/<range id>\")");
     const ManifestItem* item = m.FindItem(itemId);
     if (!item) return fail("evidence item \"" + itemId + "\" is not in this package");

@@ -156,17 +156,6 @@ size_t Decode(const std::string& s, size_t i, uint32_t* cp)
 }
 }  // namespace
 
-size_t CountCodePoints(const std::string& utf8)
-{
-    size_t n = 0;
-    for (size_t i = 0; i < utf8.size(); ++n)
-    {
-        uint32_t cp;
-        i += Decode(utf8, i, &cp);
-    }
-    return n;
-}
-
 bool IsSingleLineText(const std::string& s, size_t maxChars, std::string* why)
 {
     size_t n = 0;

@@ -62,7 +62,7 @@ void TestHexValidator()
     Check(!IsSha256Hex(good + "0"), "65 digits are rejected");
     std::string upper = good;
     for (char& c : upper) if (c >= 'a' && c <= 'f') c = static_cast<char>(c - 32);
-    Check(upper == good || !IsSha256Hex(upper), "upper case is not the canonical spelling");
+    Check(!IsSha256Hex(upper), "upper case is not the canonical spelling");
     std::string bad = good;
     bad[10] = 'g';
     Check(!IsSha256Hex(bad), "a non-hex digit is rejected");

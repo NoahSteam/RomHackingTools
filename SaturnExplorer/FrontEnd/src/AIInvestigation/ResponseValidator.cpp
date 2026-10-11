@@ -183,6 +183,13 @@ uint32_t DataTypeSize(const std::string& t)
     return 0;
 }
 
+// A string parameter's text, or "" when it is absent or not a string.
+std::string StringParam(const JsonValue& params, const char* key)
+{
+    const JsonValue* v = params.Find(key);
+    return v && v->IsString() ? v->AsString() : std::string();
+}
+
 bool IsNamespacedKey(const std::string& k)
 {
     // [a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)+
@@ -576,7 +583,7 @@ void Checker::CheckCrossRules(const ActionSpec& spec, ValidatedAction& act, cons
 {
     const std::string type = spec.type;
     const JsonValue& p = act.parameters;
-    auto str = [&](const char* k) -> std::string { const JsonValue* v = p.Find(k); return v && v->IsString() ? v->AsString() : std::string(); };
+    auto str = [&](const char* k) { return StringParam(p, k); };
     auto num = [&](const char* k, uint64_t* out) { const JsonValue* v = p.Find(k); return v && v->ToUint64(out); };
 
     if (type == "add_address_label" && act.hasTarget)
@@ -631,8 +638,7 @@ void Checker::CheckCrossRules(const ActionSpec& spec, ValidatedAction& act, cons
     {
         uint64_t total = 0, cap = 0;
         const JsonValue* ranges = p.Find("ranges");
-        bool allOk = ranges && ranges->IsArray();
-        if (allOk)
+        if (ranges && ranges->IsArray())
             for (const JsonValue& r : ranges->items())
             {
                 uint32_t len = 0;
@@ -669,7 +675,7 @@ void Checker::DeriveFingerprint(const JsonValue& obj, ValidatedAction& act, cons
     std::vector<std::string> refs = act.evidenceRefs;
     if (const ValidatedHypothesis* h = FindHypothesis(act.hypothesisId))
         refs.insert(refs.end(), h->evidenceRefs.begin(), h->evidenceRefs.end());
-    const uint32_t span = std::string(act.type) == "add_comment" ? 1u : 2u;
+    const uint32_t span = act.type == "add_comment" ? 1u : 2u;
     for (const std::string& ref : refs)
     {
         ResolvedRef r;
@@ -837,8 +843,8 @@ void Checker::CheckAction(const JsonValue& a, size_t index)
 void Checker::CheckDependencies()
 {
     const size_t n = mResult->actions.size();
-    std::map<std::string, size_t> index;
-    for (size_t i = 0; i < n; ++i) index[mResult->actions[i].id] = i;
+    std::set<std::string> index;
+    for (size_t i = 0; i < n; ++i) index.insert(mResult->actions[i].id);
     auto at = [&](size_t i) { return "$.actions[" + std::to_string(mResult->actions[i].index) + "].depends_on"; };
     for (size_t i = 0; i < n; ++i)
         for (const std::string& d : mResult->actions[i].dependsOn)
@@ -946,7 +952,7 @@ void Checker::Run(const JsonValue& doc)
         ValidatedAction& a = mResult->actions[i];
         if (!a.spec) continue;
         const std::string where = "$.actions[" + std::to_string(a.index) + "]";
-        if (std::string(a.type) == "add_log_tracepoint" && ++tracepoints == kMaxLogTracepoints + 1)
+        if (a.type == "add_log_tracepoint" && ++tracepoints == kMaxLogTracepoints + 1)
             IssueOn(i, IssueCode::TooManyTracepoints, where, "more than " + std::to_string(kMaxLogTracepoints) + " tracepoints in one response (the emulator installs at most that many)");
         if (!a.semanticKey.empty())
         {
@@ -954,7 +960,7 @@ void Checker::Run(const JsonValue& doc)
             if (it == keys.end()) keys[a.semanticKey] = a.id;
             else IssueOn(i, IssueCode::DuplicateSemanticKey, where, "action \"" + a.id + "\" and \"" + it->second + "\" are the same item (" + a.semanticKey + ")");
         }
-        if (std::string(a.type) == "add_address_label")
+        if (a.type == "add_address_label")
         {
             const JsonValue* n = a.parameters.Find("name");
             if (n && n->IsString())
@@ -1038,7 +1044,7 @@ namespace
 std::string Describe(const ValidatedAction& a)
 {
     const std::string where = a.hasTarget ? TargetToString(a.target) : std::string();
-    auto str = [&](const char* k) -> std::string { const JsonValue* v = a.parameters.Find(k); return v && v->IsString() ? v->AsString() : std::string(); };
+    auto str = [&](const char* k) { return StringParam(a.parameters, k); };
     const std::string t = a.type;
     if (t == "add_address_label") return "Label " + where + " as " + str("name") + (str("data_type").empty() ? "" : " (" + str("data_type") + ")");
     if (t == "rename_function") return "Name the function at " + where + " " + str("name");

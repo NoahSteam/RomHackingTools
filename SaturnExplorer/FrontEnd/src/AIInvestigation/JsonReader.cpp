@@ -1,8 +1,6 @@
 #include "AIInvestigation/Json.h"
 
 #include <algorithm>
-#include <cstdio>
-#include <set>
 
 // The only translation unit that includes the library: it is large, and nothing else needs it.
 #include <nlohmann/json.hpp>
@@ -31,7 +29,7 @@ JsonValue JsonValue::Int(int64_t i)
 
 bool JsonValue::ToUint64(uint64_t* out) const
 {
-    if (mType != Type::Integer || (mNegative && mMagnitude != 0)) return false;
+    if (mType != Type::Integer || mNegative) return false;
     if (out) *out = mMagnitude;
     return true;
 }
@@ -78,7 +76,7 @@ bool JsonValue::Equals(const JsonValue& o) const
     {
     case Type::Null:    return true;
     case Type::Bool:    return mBool == o.mBool;
-    case Type::Integer: return mMagnitude == o.mMagnitude && (mNegative && mMagnitude != 0) == (o.mNegative && o.mMagnitude != 0);
+    case Type::Integer: return mMagnitude == o.mMagnitude && mNegative == o.mNegative;
     case Type::String:  return mString == o.mString;
     case Type::Array:
         if (mItems.size() != o.mItems.size()) return false;
@@ -137,14 +135,14 @@ public:
     {
         if (v.size() > mLimits.maxStringBytes)
             return Fail("string longer than " + std::to_string(mLimits.maxStringBytes) + " bytes");
-        return Add(JsonValue::String(v));
+        return Add(JsonValue::String(std::move(v)));   // the tokenizer clears its buffer on the next token
     }
 
     bool binary(Json::binary_t&) override { return Fail("binary values are not JSON"); }
 
-    bool start_object(std::size_t) override { return Open(JsonValue::Object(), false); }
+    bool start_object(std::size_t) override { return Open(JsonValue::Object()); }
     bool end_object() override { return Close(); }
-    bool start_array(std::size_t) override { return Open(JsonValue::Array(), true); }
+    bool start_array(std::size_t) override { return Open(JsonValue::Array()); }
     bool end_array() override { return Close(); }
 
     bool key(Json::string_t& k) override
@@ -155,7 +153,7 @@ public:
             return Fail("object key longer than " + std::to_string(mLimits.maxStringBytes) + " bytes");
         if (f.value->members().size() >= mLimits.maxObjectMembers)
             return Fail("object with more than " + std::to_string(mLimits.maxObjectMembers) + " members");
-        if (!f.keys.insert(k).second)
+        if (f.value->Has(k))   // objects here are small (maxObjectMembers), so a scan is cheaper than a set
             return Fail("duplicate object key \"" + k + "\"");
         return true;
     }
@@ -171,8 +169,6 @@ private:
     struct Frame
     {
         JsonValue* value;
-        bool isArray;
-        std::set<std::string> keys;   // objects: names seen so far
         std::string pendingKey;       // objects: the member being read
     };
 
@@ -188,7 +184,7 @@ private:
         for (size_t i = 0; i < mFrames.size(); ++i)
         {
             const Frame& f = mFrames[i];
-            if (f.isArray)
+            if (f.value->IsArray())
             {
                 // An enclosing array is positioned on the element that holds the next frame; the
                 // innermost one on the element about to be added.
@@ -214,7 +210,7 @@ private:
             return mRoot;
         }
         Frame& f = mFrames.back();
-        if (f.isArray)
+        if (f.value->IsArray())
         {
             if (f.value->items().size() >= mLimits.maxArrayLength)
             {
@@ -229,7 +225,7 @@ private:
 
     bool Add(JsonValue v) { return Place(std::move(v)) != nullptr; }
 
-    bool Open(JsonValue container, bool isArray)
+    bool Open(JsonValue container)
     {
         if (mFrames.size() + 1 > mLimits.maxDepth)
             return Fail("nesting deeper than " + std::to_string(mLimits.maxDepth) + " levels");
@@ -239,7 +235,6 @@ private:
         if (!where) return false;
         Frame f;
         f.value = where;
-        f.isArray = isArray;
         mFrames.push_back(std::move(f));
         return true;
     }

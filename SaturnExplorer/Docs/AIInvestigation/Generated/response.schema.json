@@ -212,7 +212,7 @@
                   },
                   "note": {
                     "type": "string",
-                    "minLength": 0,
+                    "minLength": 1,
                     "maxLength": 256,
                     "description": "one-line note"
                   }
@@ -462,7 +462,7 @@
                 "properties": {
                   "condition": {
                     "type": "string",
-                    "minLength": 0,
+                    "minLength": 1,
                     "maxLength": 256,
                     "description": "optional guard, evaluated when the emulator halts here"
                   },
@@ -608,13 +608,13 @@
                   },
                   "format": {
                     "type": "string",
-                    "minLength": 0,
+                    "minLength": 1,
                     "maxLength": 256,
                     "description": "output template; {value[:spec]} substitutions"
                   },
                   "condition": {
                     "type": "string",
-                    "minLength": 0,
+                    "minLength": 1,
                     "maxLength": 256,
                     "description": "optional guard; the tracepoint then forwards every execution"
                   },

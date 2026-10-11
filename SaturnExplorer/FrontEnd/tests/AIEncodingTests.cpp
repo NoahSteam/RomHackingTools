@@ -113,8 +113,8 @@ void TestSingleLineText()
     Check(!IsSingleLineText(e + "\xC3\xA9", 256), "257 characters of two bytes do not");
     std::string cjk;
     for (int i = 0; i < 100; ++i) cjk += "\xE3\x81\x82";
-    Check(IsSingleLineText(cjk, 100) && CountCodePoints(cjk) == 100, "three-byte characters count once");
-    Check(CountCodePoints("\xF0\x9F\x98\x80") == 1, "a four-byte character counts once");
+    Check(IsSingleLineText(cjk, 100) && !IsSingleLineText(cjk + "\xE3\x81\x82", 100), "three-byte characters count once");
+    Check(IsSingleLineText("\xF0\x9F\x98\x80", 1) && !IsSingleLineText("\xF0\x9F\x98\x80\xF0\x9F\x98\x80", 1), "a four-byte character counts once");
 
     for (const char* bad : { "a\nb", "a\rb", "a\tb", "a\x01" "b", "a\x1F" "b", "a\x7F" "b", "a\xC2\x85" "b", "a\xC2\x9F" "b",
                              "a\xE2\x80\xA8" "b", "a\xE2\x80\xA9" "b" })

@@ -51,11 +51,11 @@ struct ResponseLimits
     size_t maxArrayLength = 512;
     size_t maxObjectMembers = 64;
     size_t maxStringBytes = 4096;
-    size_t maxHypotheses = 64;
-    size_t maxActions = 256;
-    size_t maxEvidenceRefs = 32;
-    size_t maxDependsOn = 16;
-    size_t maxClaimChars = 1000;
+    size_t maxHypotheses = kMaxHypotheses;
+    size_t maxActions = kMaxActions;
+    size_t maxEvidenceRefs = kMaxEvidenceRefs;
+    size_t maxDependsOn = kMaxDependsOn;
+    size_t maxClaimChars = kMaxClaimChars;
 };
 
 // ---- Step 1 -------------------------------------------------------------------------------------

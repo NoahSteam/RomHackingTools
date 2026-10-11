@@ -67,24 +67,31 @@ bool RegionFromApiName(const std::string& name, RegionId* out)
     return false;
 }
 
+std::string RegionApiNameList(const char* sep)
+{
+    std::string out;
+    for (size_t i = 0; i < kRegionCount; ++i) out += (i ? sep : "") + ApiName(i);
+    return out;
+}
+
 TargetResult CanonicalizeBusAddress(uint32_t busAddress)
 {
     uint32_t canonical = 0;
     std::string why;
     if (!CanonicalAddress(busAddress, canonical, &why)) return Fail(TargetError::NotMemory, why);
 
-    for (size_t i = 0; i < kRegionCount; ++i)
+    RegionRef ref;
+    if (Resolve(canonical, &ref))
     {
-        const RegionTraits& t = Traits(static_cast<RegionId>(i));
-        if (canonical < t.busBase || canonical - t.busBase >= t.size) continue;
+        const RegionTraits& t = Traits(ref.id);
         if (!HasBusAddress(t))
             return Fail(TargetError::NoBusAddress,
                         FormatAddress(busAddress) + " is in the " + RegionApiName(t.id) +
                         " window, which is an app-derived image with no bus address; use {\"region\": \"" +
                         RegionApiName(t.id) + "\", \"offset\": ...}");
         CanonicalTarget c;
-        c.region = t.id;
-        c.offset = canonical - t.busBase;
+        c.region = ref.id;
+        c.offset = ref.offset;
         c.hasBus = true;
         c.bus = canonical;
         return Ok(c);
@@ -161,7 +168,7 @@ TargetResult ResolveTargetJson(const JsonValue& target)
     {
         if (!RegionFromApiName(v->AsString(), &in.region))
             return Fail(TargetError::UnknownRegion, "unknown region \"" + v->AsString() +
-                        "\" (regions are lower case: lwram, hwram, soundram, vdp1ram, vdp1fb, vdp1regs, vdp2ram, vdp2cram, vdp2regs)");
+                        "\" (regions are lower case: " + RegionApiNameList(", ") + ")");
         in.hasRegion = true;
     }
     return ResolveTarget(in);

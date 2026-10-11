@@ -59,8 +59,7 @@ std::string ValidateSourceKey(const SourceKey& k)
     if (IsMemorySource(k.kind))
     {
         uint64_t frame = 0;
-        std::string why;
-        if (k.frame.empty() || !ParseDecimal64(k.frame, &frame, &why)) return "frame must be a decimal string";
+        if (!ParseDecimal64(k.frame, &frame)) return "frame must be a decimal string";
         if (frame == 0) return "frame is 0: the capture could not say which frame it is from";
         if (k.kind == SourceKind::PausedLiveHead && !k.hasConnectionGeneration)
             return "a paused live head needs its connection_generation";
@@ -128,18 +127,17 @@ bool SourceKeyFromJson(const JsonValue& v, SourceKey* out, std::string* error)
     const JsonValue* kind = v.Find("kind");
     if (!kind || !kind->IsString() || !SourceKindFromName(kind->AsString(), &k.kind)) return fail("\"kind\" is missing or unknown");
 
-    auto counter = [&](const char* name, uint64_t* dst, bool required) {
+    // A counter that must be present and be a decimal string.
+    auto counter = [&](const char* name, uint64_t* dst) {
         const JsonValue* c = v.Find(name);
-        if (!c) return !required;
-        std::string why;
-        return c->IsString() && ParseDecimal64(c->AsString(), dst, &why);
+        return c && c->IsString() && ParseDecimal64(c->AsString(), dst);
     };
-    if (!counter("source_id", &k.sourceId, true) || !counter("derive_serial", &k.deriveSerial, true) ||
-        !counter("session_id", &k.sessionId, true) || !counter("timeline_epoch", &k.timelineEpoch, true))
+    if (!counter("source_id", &k.sourceId) || !counter("derive_serial", &k.deriveSerial) ||
+        !counter("session_id", &k.sessionId) || !counter("timeline_epoch", &k.timelineEpoch))
         return fail("a counter is missing or is not a decimal string");
     if (v.Has("connection_generation"))
     {
-        if (!counter("connection_generation", &k.connectionGeneration, true)) return fail("connection_generation is not a decimal string");
+        if (!counter("connection_generation", &k.connectionGeneration)) return fail("connection_generation is not a decimal string");
         k.hasConnectionGeneration = true;
     }
     if (const JsonValue* f = v.Find("frame"))

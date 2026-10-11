@@ -221,7 +221,7 @@ int main(int argc, char** argv)
         if (Read(path).find("AIInvestigation/") != std::string::npos)
             Check(false, path + " includes the AIInvestigation module: M0 changes no application behaviour");
     }
-    const std::set<std::string> intended = { "Sha256.h", "Sh2Address.h", "Debug/MemoryCompare.h", "Debug/ConditionEval.h", "Debug/FormatString.h", "Debug/MemoryBackend.h" };
+    const std::set<std::string> intended = { "Sha256.h", "Sh2Address.h", "Debug/MemoryCompare.h", "Debug/ConditionEval.h", "Debug/FormatString.h", "Debug/CallStack.h" };
     std::set<std::string> seen;
     for (const std::string& path : moduleFiles)
     {
@@ -236,7 +236,7 @@ int main(int argc, char** argv)
         }
     }
     for (const std::string& t : seen)
-        Check(intended.count(t) != 0 || t == "saturnexplorer/SaturnExplorer.h", "the module includes only the intended shared headers (unexpected: " + t + ")");
+        Check(intended.count(t) != 0, "the module includes only the intended shared headers (unexpected: " + t + ")");
 
     // The vendored JSON header is included in exactly one translation unit.
     int jsonIncluders = 0;

@@ -31,7 +31,7 @@ bool LedgerIsWellFormed(const LedgerSegment& l)
 }
 
 // 'e' is the earlier state and 'l' the later; both already known to be valid trackers (the caller
-// supplies the ordering). 'sinceStart' marks 'e' as the segment's origin rather than a capture.
+// supplies the ordering). For a single-source package 'e' is the ledger segment's origin.
 IntervalResult Classify(const WriteCheckpoint& e, const WriteCheckpoint& l, const LedgerSegment& ledger)
 {
     // Positive evidence first. It does not depend on the rest of the tracking being sound.

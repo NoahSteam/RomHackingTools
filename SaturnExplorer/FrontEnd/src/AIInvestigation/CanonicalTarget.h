@@ -41,6 +41,9 @@ namespace ai
 // removed), so a region added there gets one automatically; a test pins the nine current ones.
 const char* RegionApiName(RegionId id);
 bool RegionFromApiName(const std::string& name, RegionId* out);
+// Every wire name, in RegionId order, joined by 'sep' -- for messages and the prompt, so none of them
+// carries a hand-copied list that goes stale when the region table grows.
+std::string RegionApiNameList(const char* sep);
 
 struct CanonicalTarget
 {

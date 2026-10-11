@@ -55,7 +55,6 @@ public:
 
     // Integers keep their sign and magnitude, so the whole of int64 and uint64 is representable
     // and neither conversion ever rounds. A conversion that does not fit returns false.
-    bool IsNegative() const { return mType == Type::Integer && mNegative; }
     bool ToUint64(uint64_t* out) const;
     bool ToInt64(int64_t* out) const;
 
@@ -79,7 +78,7 @@ private:
     Type mType = Type::Null;
     bool mBool = false;
     bool mNegative = false;
-    uint64_t mMagnitude = 0;   // |value|; at most 2^63 when mNegative
+    uint64_t mMagnitude = 0;   // |value|; at most 2^63 when mNegative, and never negative zero
     std::string mString;
     std::vector<JsonValue> mItems;
     std::vector<Member> mMembers;

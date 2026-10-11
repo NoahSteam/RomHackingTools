@@ -71,7 +71,7 @@ void TestMirrorFolding()
         const TargetResult r = CanonicalizeBusAddress(0x00300000u);
         Check(!r.ok && r.error == TargetError::Unmapped, "0x00300000 is not an LWRAM repeat");
     }
-    Check(CanonicalizeBusAddress(0x002FFFFFu).ok && !CanonicalizeBusAddress(0x00300000u).ok, "LWRAM ends at 0x002FFFFF");
+    Check(CanonicalizeBusAddress(0x002FFFFFu).ok, "LWRAM ends at 0x002FFFFF (the next byte is the unmapped case above)");
 
     // The first and last byte of HWRAM's window, and the byte after it.
     Check(Is(CanonicalizeBusAddress(0x06000000u), RegionId::Hwram, 0, 0x06000000u), "HWRAM first byte");

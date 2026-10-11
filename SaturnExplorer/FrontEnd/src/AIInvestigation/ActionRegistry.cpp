@@ -1,7 +1,5 @@
 #include "AIInvestigation/ActionRegistry.h"
 
-#include <algorithm>
-
 #include "AIInvestigation/Encoding.h"
 
 namespace sfe
@@ -70,8 +68,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "canonical address";
         a.adapter = { "AddressSymbols::Add", AdapterStatus::Planned, 2,
                       "new Debug/AddressSymbols model, ImGui-free, with persisted UUIDs and a per-scope file; refuses an address that already has a function name" };
-        a.codeSpecific = false;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "size, when given with data_type, must equal count * the type's size; count needs data_type; the range must fit the region";
         t.push_back(a);
@@ -89,7 +85,6 @@ std::vector<ActionSpec> Build()
         a.adapter = { "FunctionNames::Rename", AdapterStatus::Existing, 0,
                       "keyed by the raw address today (std::map<uint32_t, std::string>): M2 re-keys by canonical entry, replaces it with UUID records and moves it to a per-scope file" };
         a.codeSpecific = true;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "must cite evidence covering the entry (code-specific, PLAN.md §6.4)";
         t.push_back(a);
@@ -104,7 +99,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "canonical address";
         a.adapter = { "comment store", AdapterStatus::Planned, 2,
                       "no model class exists: the map is private to AssemblyPanel (mComments) and edited inline, one line per note in assembly_comments.txt; M2 extracts a record store keyed by canonical address with UUIDs" };
-        a.codeSpecific = false;
         a.codeSpecificOnCodeRegion = true;
         a.implementedIn = 3;
         a.notes = "code-specific (must cite covering evidence) when the target is in a region with kCapSh2Code";
@@ -127,8 +121,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "(canonical address, data_type)";
         a.adapter = { "WatchList::Add", AdapterStatus::Existing, 0,
                       "WatchEntry has a session-local id but no persisted UUID, and the list is a working-directory session file (M2); the expression is 0xADDR [+/- N] until labels exist (M2)" };
-        a.codeSpecific = false;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "";
         t.push_back(a);
@@ -150,7 +142,6 @@ std::vector<ActionSpec> Build()
         a.adapter = { "BreakpointManager::EnableExecution (then SetCondition)", AdapterStatus::Existing, 0,
                       "never ToggleExecution, which removes an existing breakpoint; Breakpoint has process-local ids and no UUID or persistence (M2)" };
         a.codeSpecific = true;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "must cite evidence covering the address (code-specific); the condition must parse as a ConditionEval expression";
         t.push_back(a);
@@ -174,8 +165,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "(canonical address, kind, size)";
         a.adapter = { "BreakpointManager::AddMemory", AdapterStatus::Existing, 0,
                       "dedups by (address, kind, size) and returns an existing, possibly user-owned id, so M3 must check ownership first; no UUID or persistence (M2)" };
-        a.codeSpecific = false;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "";
         t.push_back(a);
@@ -205,7 +194,6 @@ std::vector<ActionSpec> Build()
         a.adapter = { "ExecutionActions::Add (after a LogAt key check)", AdapterStatus::Existing, 0,
                       "Add does not dedup, so M3 checks (cpu, address) first; at most 256 are installable; no UUID or persistence (M2); memory in the format reads the next snapshot, not the value at the hit" };
         a.codeSpecific = true;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "repeat_n is required with, and only with, repeat every_n; format and condition must parse; at most 256 per response; "
                   "must cite evidence covering the address (code-specific)";
@@ -229,8 +217,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "none (read-only)";
         a.adapter = { "Prompt Builder follow-up", AdapterStatus::Planned, 3,
                       "opens a pre-filled Prompt Builder (M1); fulfilment from the parent package's retained source/ is M3, and never from live RAM" };
-        a.codeSpecific = false;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "each range must fit its region; the source must exist in the package named by evidence_id (checked when that package is the one validated against)";
         t.push_back(a);
@@ -253,8 +239,6 @@ std::vector<ActionSpec> Build()
         a.semanticKey = "none (read-only)";
         a.adapter = { "Prompt Builder follow-up", AdapterStatus::Planned, 3,
                       "opens a pre-filled Prompt Builder (M1) using the bounded SH-2 code adapter (M3); never reads live RAM" };
-        a.codeSpecific = false;
-        a.codeSpecificOnCodeRegion = false;
         a.implementedIn = 3;
         a.notes = "a read-only request, so it is not code-specific in the sense of PLAN.md §6.4";
         t.push_back(a);
@@ -264,6 +248,13 @@ std::vector<ActionSpec> Build()
 
 JsonValue Str(const std::string& s) { return JsonValue::String(s); }
 JsonValue Num64(uint64_t v) { return JsonValue::UInt(v); }
+
+JsonValue RegionNameArray()
+{
+    JsonValue a = JsonValue::Array();
+    for (size_t i = 0; i < kRegionCount; ++i) a.Append(JsonValue::String(RegionApiName(static_cast<RegionId>(i))));
+    return a;
+}
 
 JsonValue StringArray(const std::vector<const char*>& values)
 {
@@ -302,7 +293,7 @@ JsonValue ParamSchema(const ParamSpec& p)
     case ParamType::Condition:
     case ParamType::Format:
         s.Set("type", Str("string"));
-        s.Set("minLength", Num64(p.required && p.type == ParamType::Text ? 1 : 0));
+        s.Set("minLength", Num64(1));   // the validator refuses an empty string for every one of these
         s.Set("maxLength", Num64(p.maxChars));
         break;
     case ParamType::Hex:
@@ -344,10 +335,8 @@ JsonValue ParamSchema(const ParamSpec& p)
         req.Append(Str("length"));
         item.Set("required", std::move(req));
         JsonValue props = JsonValue::Object();
-        JsonValue regionNames = JsonValue::Array();
-        for (size_t i = 0; i < kRegionCount; ++i) regionNames.Append(Str(RegionApiName(static_cast<RegionId>(i))));
         JsonValue region = JsonValue::Object();
-        region.Set("enum", std::move(regionNames));
+        region.Set("enum", RegionNameArray());
         props.Set("region", std::move(region));
         JsonValue hex = JsonValue::Object();
         hex.Set("type", Str("string"));
@@ -467,7 +456,7 @@ JsonValue BuildResponseSchema()
 
         JsonValue refList = JsonValue::Object();
         refList.Set("type", Str("array"));
-        refList.Set("maxItems", Num64(32));
+        refList.Set("maxItems", Num64(kMaxEvidenceRefs));
         JsonValue refItem = JsonValue::Object();
         refItem.Set("type", Str("string"));
         refItem.Set("description", Str("an evidence item id from manifest.json, or \"<item id>/<range id>\""));
@@ -490,10 +479,8 @@ JsonValue BuildResponseSchema()
         JsonValue busRef = JsonValue::Object();
         busRef.Set("$ref", Str("#/$defs/hex"));
         tp.Set("bus_address", busRef);
-        JsonValue regionNames = JsonValue::Array();
-        for (size_t i = 0; i < kRegionCount; ++i) regionNames.Append(Str(RegionApiName(static_cast<RegionId>(i))));
         JsonValue region = JsonValue::Object();
-        region.Set("enum", std::move(regionNames));
+        region.Set("enum", RegionNameArray());
         tp.Set("region", std::move(region));
         tp.Set("offset", busRef);
         target.Set("properties", std::move(tp));
@@ -535,7 +522,7 @@ JsonValue BuildResponseSchema()
 
         JsonValue hyps = JsonValue::Object();
         hyps.Set("type", Str("array"));
-        hyps.Set("maxItems", Num64(64));
+        hyps.Set("maxItems", Num64(kMaxHypotheses));
         JsonValue h = JsonValue::Object();
         h.Set("type", Str("object"));
         h.Set("additionalProperties", JsonValue::Bool(false));
@@ -549,7 +536,7 @@ JsonValue BuildResponseSchema()
         JsonValue claim = JsonValue::Object();
         claim.Set("type", Str("string"));
         claim.Set("minLength", Num64(1));
-        claim.Set("maxLength", Num64(1000));
+        claim.Set("maxLength", Num64(kMaxClaimChars));
         hp.Set("claim", std::move(claim));
         JsonValue conf = JsonValue::Object();
         conf.Set("enum", StringArray({ "low", "medium", "high" }));
@@ -561,7 +548,7 @@ JsonValue BuildResponseSchema()
         JsonValue pred = JsonValue::Object();
         pred.Set("type", Str("string"));
         pred.Set("minLength", Num64(1));
-        pred.Set("maxLength", Num64(1000));
+        pred.Set("maxLength", Num64(kMaxClaimChars));
         pred.Set("description", Str("what would be observed if the claim is true"));
         hp.Set("prediction", std::move(pred));
         JsonValue hext = JsonValue::Object();
@@ -573,7 +560,7 @@ JsonValue BuildResponseSchema()
 
         JsonValue actions = JsonValue::Object();
         actions.Set("type", Str("array"));
-        actions.Set("maxItems", Num64(256));
+        actions.Set("maxItems", Num64(kMaxActions));
         JsonValue oneOf = JsonValue::Array();
         for (const ActionSpec& spec : ActionRegistry())
         {
@@ -613,7 +600,7 @@ JsonValue BuildResponseSchema()
             ap.Set("parameters", std::move(params));
             JsonValue dep = JsonValue::Object();
             dep.Set("type", Str("array"));
-            dep.Set("maxItems", Num64(16));
+            dep.Set("maxItems", Num64(kMaxDependsOn));
             JsonValue depItem = JsonValue::Object();
             depItem.Set("$ref", Str("#/$defs/handle"));
             dep.Set("items", std::move(depItem));
@@ -639,20 +626,31 @@ JsonValue BuildResponseSchema()
     return root;
 }
 
-std::string BuildResponseSchemaText()
+const std::string& BuildResponseSchemaText()
 {
-    JsonWriteOptions o;
-    o.indent = 2;
-    return WriteJson(BuildResponseSchema(), o) + "\n";
+    static const std::string text = [] {
+        JsonWriteOptions o;
+        o.indent = 2;
+        return WriteJson(BuildResponseSchema(), o) + "\n";
+    }();
+    return text;
 }
 
-std::string BuildPromptActionList()
+static std::string BuildPromptActionListUncached();
+
+const std::string& BuildPromptActionList()
+{
+    static const std::string text = BuildPromptActionListUncached();
+    return text;
+}
+
+static std::string BuildPromptActionListUncached()
 {
     std::string out;
     out += "Allowed action types (schema v1). Any other type is rejected. Each action has: id, type, hypothesis_id,\n"
            "target (where the type takes one), parameters, and optionally depends_on, evidence_refs and expected_code_sha256.\n"
            "A target is a bus_address, or a region and offset, or both (they must name the same place). Regions: ";
-    for (size_t i = 0; i < kRegionCount; ++i) out += std::string(i ? ", " : "") + RegionApiName(static_cast<RegionId>(i));
+    out += RegionApiNameList(", ");
     out += ".\nThe VDP1 frame buffer (vdp1fb) is an image with no bus address: use region and offset, and only where nothing\n"
            "below asks for a bus-addressable location.\n\n";
     for (const ActionSpec& a : ActionRegistry())

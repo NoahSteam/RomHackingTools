@@ -51,6 +51,28 @@ endif()
 # Header-only JSON tokenizer for the AI investigation formats (FrontEnd/third_party/nlohmann-json).
 set(SE_NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/nlohmann-json/include)
 
+# The AI investigation module (Docs/AIInvestigation/PLAN.md): ImGui-free contracts and logic, listed once.
+# The desktop frontends compile all of it; SE_AI_CORE_SOURCES adds what the module itself calls, for the
+# test programs. Nothing in the application calls it until M1.
+set(SE_AI_SOURCES
+    FrontEnd/src/AIInvestigation/ActionRegistry.cpp
+    FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
+    FrontEnd/src/AIInvestigation/Encoding.cpp
+    FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
+    FrontEnd/src/AIInvestigation/JsonReader.cpp
+    FrontEnd/src/AIInvestigation/JsonWriter.cpp
+    FrontEnd/src/AIInvestigation/PackageManifest.cpp
+    FrontEnd/src/AIInvestigation/ResponseValidator.cpp
+    FrontEnd/src/AIInvestigation/SourceKey.cpp
+    FrontEnd/src/AIInvestigation/WriteInterval.cpp)
+set(SE_AI_CORE_SOURCES
+    ${SE_AI_SOURCES}
+    FrontEnd/src/Debug/ConditionEval.cpp
+    FrontEnd/src/Debug/FormatString.cpp
+    FrontEnd/src/Debug/MemoryCompare.cpp
+    FrontEnd/src/Sh2Address.cpp
+    FrontEnd/src/Sha256.cpp)
+
 # Vendored zlib (FrontEnd/third_party/zlib), on every desktop build. The decompiler's .sla
 # files are deflate-compressed, and the savestate driver inflates gzip Mednafen states; neither
 # may depend on whether the build machine happens to have zlib installed. The web build uses
@@ -906,16 +928,7 @@ if(BUILD_TESTING)
 
     add_executable(SaturnExplorerSourceKeyTests
         FrontEnd/tests/SourceKeyTests.cpp
-        FrontEnd/src/AIInvestigation/SourceKey.cpp
-        FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
-        FrontEnd/src/AIInvestigation/WriteInterval.cpp
-        FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
-        FrontEnd/src/AIInvestigation/Encoding.cpp
-        FrontEnd/src/AIInvestigation/JsonReader.cpp
-        FrontEnd/src/AIInvestigation/JsonWriter.cpp
-        FrontEnd/src/Debug/MemoryCompare.cpp
-        FrontEnd/src/Sh2Address.cpp
-        FrontEnd/src/Sha256.cpp
+        ${SE_AI_CORE_SOURCES}
     )
     target_include_directories(SaturnExplorerSourceKeyTests
         PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
@@ -923,20 +936,6 @@ if(BUILD_TESTING)
 
     # The response validator links NO application model (no WatchList, BreakpointManager, FunctionNames,
     # ...): that it builds and passes without them is part of "no side effects".
-    set(SE_AI_CORE_SOURCES
-        FrontEnd/src/AIInvestigation/ActionRegistry.cpp
-        FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
-        FrontEnd/src/AIInvestigation/Encoding.cpp
-        FrontEnd/src/AIInvestigation/JsonReader.cpp
-        FrontEnd/src/AIInvestigation/JsonWriter.cpp
-        FrontEnd/src/AIInvestigation/PackageManifest.cpp
-        FrontEnd/src/AIInvestigation/ResponseValidator.cpp
-        FrontEnd/src/AIInvestigation/SourceKey.cpp
-        FrontEnd/src/Debug/ConditionEval.cpp
-        FrontEnd/src/Debug/FormatString.cpp
-        FrontEnd/src/Debug/MemoryCompare.cpp
-        FrontEnd/src/Sh2Address.cpp
-        FrontEnd/src/Sha256.cpp)
     add_executable(SaturnExplorerResponseValidatorTests
         FrontEnd/tests/ResponseValidatorTests.cpp
         ${SE_AI_CORE_SOURCES}
@@ -972,8 +971,6 @@ if(BUILD_TESTING)
     # Captures -> manifest -> response -> validation -> preview, with the existing models under observation.
     add_executable(SaturnExplorerAIInvestigationEndToEndTests
         FrontEnd/tests/AIInvestigationEndToEndTests.cpp
-        FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
-        FrontEnd/src/AIInvestigation/WriteInterval.cpp
         ${SE_AI_CORE_SOURCES}
         FrontEnd/src/Debug/BreakpointManager.cpp
         FrontEnd/src/Debug/CallStack.cpp
@@ -1315,19 +1312,7 @@ add_custom_target(SaturnExplorerBuildInfo
 set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sha256.cpp
     FrontEnd/src/Sh2Address.cpp
-    # AI investigation contracts and logic (Docs/AIInvestigation/PLAN.md). ImGui-free; nothing in the
-    # application calls them until M1. Debug/ConditionEval, Debug/FormatString and Debug/MemoryCompare,
-    # which they also use, are already in the frontend lists.
-    FrontEnd/src/AIInvestigation/ActionRegistry.cpp
-    FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
-    FrontEnd/src/AIInvestigation/Encoding.cpp
-    FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
-    FrontEnd/src/AIInvestigation/JsonReader.cpp
-    FrontEnd/src/AIInvestigation/JsonWriter.cpp
-    FrontEnd/src/AIInvestigation/PackageManifest.cpp
-    FrontEnd/src/AIInvestigation/ResponseValidator.cpp
-    FrontEnd/src/AIInvestigation/SourceKey.cpp
-    FrontEnd/src/AIInvestigation/WriteInterval.cpp
+    ${SE_AI_SOURCES}
 )
 
 if(WIN32)

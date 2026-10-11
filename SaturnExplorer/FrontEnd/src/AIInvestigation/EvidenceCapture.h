@@ -27,6 +27,7 @@
 
 #include "AIInvestigation/SourceKey.h"
 #include "AIInvestigation/WriteInterval.h"
+#include "Debug/CallStack.h"      // FrameConfidence
 #include "Debug/MemoryCompare.h"
 
 namespace sfe
@@ -57,8 +58,6 @@ struct CaptureStop
     uint32_t pc = 0;
     uint32_t stopSeq = 0;
 };
-
-enum class FrameConfidence : uint8_t { Confirmed, Probable, Heuristic };
 
 struct CaptureCallFrame
 {
