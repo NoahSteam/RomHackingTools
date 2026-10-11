@@ -520,17 +520,36 @@ int main(int argc, char** argv)
     const std::string config = Join(scratch, "config");
     CHECK(sfe::MakeDirectory(config));
 
-    std::printf("-- %s\n", "TestSha256KnownAnswers");
-    TestSha256KnownAnswers();
-    std::printf("-- %s\n", "TestDecompileThroughBundle");
-    TestDecompileThroughBundle(config);
-    std::printf("-- %s\n", "TestReuseAndRepair");
-    TestReuseAndRepair(config);
-    std::printf("-- %s\n", "TestForeignHashUntouched");
-    TestForeignHashUntouched(config);
-    std::printf("-- %s\n", "TestUnwritableConfigDir");
-    TestUnwritableConfigDir(scratch);
-
+    // C++ exceptions are caught here rather than left to terminate: on Windows the unhandled-
+    // exception filter above sees them first, as an opaque 0xE06D7363, without the message.
+    try
+    {
+        std::printf("-- %s\n", "TestSha256KnownAnswers");
+        TestSha256KnownAnswers();
+        std::printf("-- %s\n", "TestDecompileThroughBundle");
+        TestDecompileThroughBundle(config);
+        std::printf("-- %s\n", "TestReuseAndRepair");
+        TestReuseAndRepair(config);
+        std::printf("-- %s\n", "TestForeignHashUntouched");
+        TestForeignHashUntouched(config);
+        std::printf("-- %s\n", "TestUnwritableConfigDir");
+        TestUnwritableConfigDir(scratch);
+    }
+    catch (ghidra::LowlevelError& e)
+    {
+        std::printf("FATAL: uncaught ghidra::LowlevelError: %s\n", e.explain.c_str());
+        return 3;
+    }
+    catch (std::exception& e)
+    {
+        std::printf("FATAL: uncaught std::exception: %s\n", e.what());
+        return 3;
+    }
+    catch (...)
+    {
+        std::printf("FATAL: uncaught exception of unknown type\n");
+        return 3;
+    }
     ghidra::shutdownDecompilerLibrary();
     RemoveTree(scratch);
     std::printf("Sh2DecompilerEngineTests: %.1f ms total\n", MsSince(start));
