@@ -367,6 +367,8 @@ Decompiler-local variable rename/type actions remain deferred until the engine s
 
 Unattended Run is disabled unless the connected server reports these. Setup can still be imported and applied manually without them.
 
+Verified against v25: the client rejects any reply whose control block is longer than 64 bytes (`Drivers/Live/src/LiveDriver.cpp:969-972`, `ct > 64u`) and v25's is 56, so items 1 and 4 cannot ship without raising that cap in the same change. The wire specification is `PROTOCOL_GAPS.md`.
+
 These additions bound what the *client* does and observes. They cannot guarantee that the emulator stops after a lost connection; the server's own disconnect behaviour (§9.2) governs that.
 
 ### 9.2 Runner rules
