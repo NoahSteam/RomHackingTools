@@ -40,6 +40,10 @@ patch beyond these.
 - MSBuild: `SaturnExplorerGhidraDecomp.vcxproj`, referenced by `FrontEnd.vcxproj`. It globs
   `cpp\*.cc` minus the three compiler files, which works because `vendor.py` puts nothing else
   there.
+- Both link the library whole (`/WHOLEARCHIVE`, `-force_load`, `--whole-archive`; MSBuild's
+  `UseLibraryDependencyInputs`). The engine's print languages and other capabilities register
+  through static objects nothing references by name, so an ordinary library link may drop
+  them, and the first `Architecture` then throws "No print languages registered".
 - Both: C++14, optimised in every configuration, MSVC `/EHsc /W3 /bigobj` with `_WINDOWS`
   (upstream's own Windows define), clang/gcc with the sign-compare and similar warnings off.
 

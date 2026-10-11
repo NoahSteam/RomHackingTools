@@ -163,8 +163,12 @@
     </ProjectReference>
     <!-- The SH-2 decompiler engine (Docs/Decompiler/PLAN.md) and the zlib it and the savestate
          driver's gzip path need; linked here because static libraries do not carry each other. -->
+    <!-- UseLibraryDependencyInputs links the engine's object files rather than its .lib, so every
+         one is kept: the print languages register through static objects nothing names, which
+         a library link drops ("No print languages registered"). Ghidra's own build links objects too. -->
     <ProjectReference Include="third_party\ghidra-decompiler\SaturnExplorerGhidraDecomp.vcxproj">
       <Project>{418d5c1c-ac6a-493b-ada6-ef72ea4534d5}</Project>
+      <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
     </ProjectReference>
     <ProjectReference Include="third_party\zlib\SaturnExplorerZlib.vcxproj">
       <Project>{d96631e4-4701-4061-aa61-b3ee897b22e2}</Project>

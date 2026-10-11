@@ -26,6 +26,21 @@ add_library(SaturnExplorerGhidraDecomp STATIC ${SE_GHIDRA_DECOMP_SOURCES})
 target_include_directories(SaturnExplorerGhidraDecomp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp)
 # .sla files are zlib-compressed (slaformat/compression); se-sleighc writes them, the engine reads them.
 target_link_libraries(SaturnExplorerGhidraDecomp PUBLIC SaturnExplorerZlib)
+# Linked whole into every consumer, as Ghidra's own build links its objects. The engine finds
+# its print languages (and other capabilities) through static objects that register
+# themselves; nothing references printc.obj by name, so a linker taking only the archive
+# members it needs drops it, and the first Architecture then throws "No print languages
+# registered". MSVC did exactly that on Windows; ld64 and GNU ld happened to keep it.
+if(MSVC)
+    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
+        "/WHOLEARCHIVE:$<TARGET_FILE:SaturnExplorerGhidraDecomp>")
+elseif(APPLE)
+    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
+        "LINKER:-force_load,$<TARGET_FILE:SaturnExplorerGhidraDecomp>")
+else()
+    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
+        "LINKER:--whole-archive,$<TARGET_FILE:SaturnExplorerGhidraDecomp>,--no-whole-archive")
+endif()
 # Upstream requires C++11; the project's C++14 compiles it unchanged.
 set_target_properties(SaturnExplorerGhidraDecomp PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
 
