@@ -869,6 +869,34 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src ${SE_NLOHMANN_JSON_DIR})
     add_test(NAME SaturnExplorerJsonTests COMMAND SaturnExplorerJsonTests)
 
+    # AI investigation contracts (FrontEnd/src/AIInvestigation, Docs/AIInvestigation/PLAN.md §5):
+    # encodings, then CanonicalTarget against the shared A2 rule.
+    add_executable(SaturnExplorerAIEncodingTests
+        FrontEnd/tests/AIEncodingTests.cpp
+        FrontEnd/src/AIInvestigation/Encoding.cpp
+    )
+    target_include_directories(SaturnExplorerAIEncodingTests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerAIEncodingTests COMMAND SaturnExplorerAIEncodingTests)
+
+    add_executable(SaturnExplorerCanonicalTargetTests
+        FrontEnd/tests/CanonicalTargetTests.cpp
+        FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
+        FrontEnd/src/AIInvestigation/Encoding.cpp
+        FrontEnd/src/AIInvestigation/JsonReader.cpp
+        FrontEnd/src/AIInvestigation/JsonWriter.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+        FrontEnd/src/Sh2Address.cpp
+    )
+    target_include_directories(SaturnExplorerCanonicalTargetTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
+    if(SE_ENABLE_DECOMPILER)
+        # Also check the decompiler's own spelling of the A2 rule is the shared function.
+        target_sources(SaturnExplorerCanonicalTargetTests PRIVATE
+            FrontEnd/src/Decompiler/MemorySnapshot.cpp FrontEnd/src/Sha256.cpp)
+        target_compile_definitions(SaturnExplorerCanonicalTargetTests PRIVATE SE_TEST_WITH_DECOMPILER)
+    endif()
+    add_test(NAME SaturnExplorerCanonicalTargetTests COMMAND SaturnExplorerCanonicalTargetTests)
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
@@ -1191,6 +1219,8 @@ add_custom_target(SaturnExplorerBuildInfo
 set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sha256.cpp
     FrontEnd/src/Sh2Address.cpp
+    FrontEnd/src/AIInvestigation/Encoding.cpp
+    FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
     FrontEnd/src/AIInvestigation/JsonReader.cpp
     FrontEnd/src/AIInvestigation/JsonWriter.cpp
 )
