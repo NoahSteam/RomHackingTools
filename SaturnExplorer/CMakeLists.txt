@@ -40,6 +40,14 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # on a cross-origin-isolated server (see Integration/Yabause/README.md "Web live").
 option(SE_WEB_LIVE "Emscripten: include the live driver (needs pthreads + a COOP/COEP host)" OFF)
 
+# The SH-2 decompiler (Ghidra's native engine, FrontEnd/third_party/ghidra-decompiler; see
+# Docs/Decompiler/PLAN.md). Desktop only: the web build has neither the threads nor the
+# filesystem it needs, so it is forced off under Emscripten whatever the cache says.
+option(SE_ENABLE_DECOMPILER "Build the SH-2 decompiler engine (desktop)" ON)
+if(EMSCRIPTEN AND SE_ENABLE_DECOMPILER)
+    set(SE_ENABLE_DECOMPILER OFF CACHE BOOL "Build the SH-2 decompiler engine (desktop)" FORCE)
+endif()
+
 # Vendored zlib (FrontEnd/third_party/zlib), on every desktop build. The decompiler's .sla
 # files are deflate-compressed, and the savestate driver inflates gzip Mednafen states; neither
 # may depend on whether the build machine happens to have zlib installed. The web build uses
@@ -181,6 +189,37 @@ else()
     target_link_libraries(SaturnExplorerSavestateDriver PUBLIC SaturnExplorerZlib)
 endif()
 target_compile_definitions(SaturnExplorerSavestateDriver PUBLIC SE_HAVE_ZLIB)
+
+if(SE_ENABLE_DECOMPILER)
+    add_subdirectory(FrontEnd/third_party/ghidra-decompiler)
+
+    if(BUILD_TESTING)
+        # The .slaspec sources, the checked-in sh-2.sla and the copy embedded in Sh2SpecData.h
+        # must be one spec (PLAN.md A5): compiles the .slaspec afresh and compares all three.
+        add_executable(SaturnExplorerSlaFreshnessTests FrontEnd/tests/SlaFreshnessTests.cpp)
+        target_include_directories(SaturnExplorerSlaFreshnessTests PRIVATE FrontEnd/src)
+        target_compile_definitions(SaturnExplorerSlaFreshnessTests PRIVATE
+            SE_SPEC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/ghidra-decompiler/processors/SuperH")
+        add_dependencies(SaturnExplorerSlaFreshnessTests se-sleighc)
+        add_test(NAME SaturnExplorerSlaFreshnessTests
+                 COMMAND SaturnExplorerSlaFreshnessTests $<TARGET_FILE:se-sleighc> ${CMAKE_CURRENT_BINARY_DIR})
+
+        # The engine end to end, with its language files materialised by SpecBundle exactly as
+        # the app does it, plus SpecBundle's repair / foreign-hash / unwritable-dir rules (A5).
+        add_executable(SaturnExplorerSh2DecompilerEngineTests
+            FrontEnd/tests/Sh2DecompilerEngineTests.cpp
+            FrontEnd/src/Decompiler/SpecBundle.cpp
+            FrontEnd/src/FileWrite.cpp)
+        target_include_directories(SaturnExplorerSh2DecompilerEngineTests PRIVATE FrontEnd/src)
+        target_link_libraries(SaturnExplorerSh2DecompilerEngineTests PRIVATE SaturnExplorerGhidraDecomp)
+        add_test(NAME SaturnExplorerSh2DecompilerEngineTests
+                 COMMAND SaturnExplorerSh2DecompilerEngineTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_engine_test)
+
+        # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
+        set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
+                             PROPERTIES TIMEOUT 60)
+    endif()
+endif()
 
 # Dear ImGui sources. Defined here rather than with the FrontEnd target because the
 # headless panel interaction tests link the same core (no backend, no window).
@@ -1436,4 +1475,13 @@ endif()
 if(TARGET SaturnExplorerFrontEnd)
     add_dependencies(SaturnExplorerFrontEnd SaturnExplorerBuildInfo)
     target_include_directories(SaturnExplorerFrontEnd PRIVATE ${SE_BUILDINFO_DIR})
+endif()
+
+# The decompiler's sources join the two desktop frontends (Win32 and SDL2), never the web one,
+# where SE_ENABLE_DECOMPILER is forced off. SE_ENABLE_DECOMPILER=1 is what later steps compile
+# the panel under; FrontEnd.vcxproj defines the same for the MSBuild path.
+if(TARGET SaturnExplorerFrontEnd AND SE_ENABLE_DECOMPILER)
+    target_sources(SaturnExplorerFrontEnd PRIVATE FrontEnd/src/Decompiler/SpecBundle.cpp)
+    target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_DECOMPILER=1)
+    target_link_libraries(SaturnExplorerFrontEnd PRIVATE SaturnExplorerGhidraDecomp)
 endif()
