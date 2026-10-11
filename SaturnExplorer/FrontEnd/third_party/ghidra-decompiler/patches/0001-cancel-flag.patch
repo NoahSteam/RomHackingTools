@@ -142,3 +142,27 @@ index 337b6c87..785d52ae 100644
        vector<JumpTable *> newTables;
        recoverJumpTables(newTables, notreached);
        tablelist.clear();
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+index cad42f18..c2f94208 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -530,6 +532,10 @@ JumpTable::RecoveryMode Funcdata::stageJumpTable(Funcdata &partial,JumpTable *jt
+ #endif
+       glb->allacts.setCurrent(oldactname); // Restore old action
+     }
++    catch(CancelError &err) {	// Not a recovery failure: the host wants the whole analysis stopped
++      glb->allacts.setCurrent(oldactname);
++      throw;
++    }
+     catch(LowlevelError &err) {
+       glb->allacts.setCurrent(oldactname);
+       warning(err.explain,op->getAddr());

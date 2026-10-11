@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -529,6 +531,10 @@ JumpTable::RecoveryMode Funcdata::stageJumpTable(Funcdata &partial,JumpTable *jt
       }
 #endif
       glb->allacts.setCurrent(oldactname); // Restore old action
+    }
+    catch(CancelError &err) {	// Not a recovery failure: the host wants the whole analysis stopped
+      glb->allacts.setCurrent(oldactname);
+      throw;
     }
     catch(LowlevelError &err) {
       glb->allacts.setCurrent(oldactname);

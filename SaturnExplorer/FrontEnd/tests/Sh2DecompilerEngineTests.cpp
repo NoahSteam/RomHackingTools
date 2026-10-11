@@ -28,6 +28,7 @@
 #include "loadimage.hh"
 #include "sleigh_arch.hh"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -113,9 +114,21 @@ public:
 
     ghidra::RangeList readonly;   // the literal-pool words the engine may fold to constants
 
+    // When the engine reads exactly 'trapSize' bytes at 'trapAddr', 'trapFlag' is set: a way to
+    // request cancellation at a precise point inside the analysis rather than on a timer.
+    uint64_t trapAddr = 0;
+    int trapSize = 0;
+    std::atomic<bool>* trapFlag = nullptr;
+    bool trapped = false;
+
     void loadFill(ghidra::uint1* ptr, ghidra::int4 size, const ghidra::Address& addr) override
     {
         const uint64_t a = addr.getOffset();
+        if (trapFlag && a == trapAddr && size == trapSize)
+        {
+            trapFlag->store(true);
+            trapped = true;
+        }
         if (a < mBase || a + size > mBase + mBytes.size())
         {
             std::ostringstream e;
@@ -202,6 +215,113 @@ std::string DecompileFixture1()
         return std::string();
     }
     return out.str();
+}
+
+// ---- Cancellation inside jump-table recovery (patches/0001-cancel-flag.patch) --------------
+
+// The spike's GCC-style switch, except the table base comes from a literal-pool word rather
+// than mova. Marked read-only, that word is folded by the "jumptable" simplification that
+// FlowInfo runs on a partial copy of the function -- so a trap on reading it requests
+// cancellation from inside that nested perform(), the one place where Ghidra used to catch
+// the resulting CancelError as an ordinary recovery failure and carry on.
+const uint32_t kSwitchBase = 0x06020000u;
+const uint32_t kSwitchLiteral = kSwitchBase + 0x14;
+
+std::vector<uint8_t> SwitchFixture()
+{
+    const int n = 4;
+    const uint32_t table = kSwitchBase + 0x18, deflt = table + 4 * n, cases = deflt + 6;
+    std::vector<uint8_t> b;
+    auto put = [&](uint16_t w) { b.push_back(uint8_t(w >> 8)); b.push_back(uint8_t(w)); };
+    auto put32 = [&](uint32_t w) { put(uint16_t(w >> 16)); put(uint16_t(w)); };
+    put(0x6143);                                          // 00 mov r4,r1
+    put(0xE200 | (n - 1));                                // 02 mov #n-1,r2
+    put(0x3126);                                          // 04 cmp/hi r2,r1
+    put(uint16_t(0x8900 | ((deflt - (kSwitchBase + 0x06 + 4)) / 2)));   // 06 bt default
+    put(0x4108);                                          // 08 shll2 r1
+    put(0xD002);                                          // 0A mov.l @(8,pc),r0 -> literal at 0x14
+    put(0x031E);                                          // 0C mov.l @(r0,r1),r3
+    put(0x432B);                                          // 0E jmp @r3
+    put(0x0009); put(0x0009);                             // 10 nop (slot), 12 nop (align)
+    put32(table);                                         // 14 literal: the table's address
+    for (int i = 0; i < n; ++i) put32(cases + 6 * i);     // 18 table
+    put(0xE0FF); put(0x000B); put(0x0009);                // default: mov #-1,r0 ; rts ; nop
+    for (int i = 0; i < n; ++i) { put(uint16_t(0xE000 | i)); put(0x000B); put(0x0009); }
+    b.resize(b.size() + 16, 0);   // the decoder fetches up to 16 bytes ahead of the last insn
+    return b;
+}
+
+// One followFlow of the switch fixture with the trap armed. Its own scope: the engine's SLEIGH
+// translator is process-global and every Architecture resets it, so two must not overlap.
+void FollowSwitchWithTrap(bool& trapped, bool& cancelled)
+{
+    std::atomic<bool> cancel(false);
+    auto* image = new RegionLoadImage(kSwitchBase, SwitchFixture());
+    image->trapAddr = kSwitchLiteral;
+    image->trapSize = 4;
+    image->trapFlag = &cancel;
+    std::ostringstream errs;
+    TestArchitecture arch(image, &errs);
+    ghidra::DocumentStorage store;
+    arch.readonlypropagate = true;
+    try { arch.init(store); }
+    catch (ghidra::LowlevelError& e) { std::printf("  init failed: %s\n", e.explain.c_str()); trapped = cancelled = false; return; }
+    arch.cancelRequested = &cancel;
+    ghidra::AddrSpace* ram = arch.getDefaultCodeSpace();
+    arch.symboltab->setPropertyRange(ghidra::Varnode::readonly, ghidra::Range(ram, kSwitchLiteral, kSwitchLiteral + 3));
+
+    const ghidra::Address entry(ram, kSwitchBase);
+    std::string name;
+    arch.nameFunction(entry, name);
+    ghidra::Funcdata* fd = arch.symboltab->getGlobalScope()->addFunction(entry, name)->getFunction();
+    cancelled = false;
+    try
+    {
+        fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
+    }
+    catch (ghidra::CancelError&) { cancelled = true; }
+    catch (ghidra::LowlevelError& e) { std::printf("  followFlow: %s\n", e.explain.c_str()); }
+    trapped = image->trapped;
+}
+
+void TestCancelDuringJumpTableRecovery()
+{
+    bool trapped = false, cancelled = false;
+    FollowSwitchWithTrap(trapped, cancelled);
+    std::printf("jump-table cancel: literal read during recovery %s, CancelError %s\n",
+                trapped ? "yes" : "no", cancelled ? "reached the host" : "was swallowed");
+    CHECK(trapped);   // else the fixture no longer reaches the nested simplification
+    CHECK(cancelled);
+
+    // The same function with no cancellation still recovers the switch, so the trap is what
+    // made the difference, not a fixture the engine cannot decompile.
+    const std::string c = [&] {
+        auto* again = new RegionLoadImage(kSwitchBase, SwitchFixture());
+        std::ostringstream e2;
+        TestArchitecture a2(again, &e2);
+        ghidra::DocumentStorage st;
+        a2.readonlypropagate = true;
+        std::ostringstream out;
+        try
+        {
+            a2.init(st);
+            ghidra::AddrSpace* r = a2.getDefaultCodeSpace();
+            a2.symboltab->setPropertyRange(ghidra::Varnode::readonly, ghidra::Range(r, kSwitchLiteral, kSwitchLiteral + 3));
+            const ghidra::Address en(r, kSwitchBase);
+            std::string nm;
+            a2.nameFunction(en, nm);
+            ghidra::Funcdata* f = a2.symboltab->getGlobalScope()->addFunction(en, nm)->getFunction();
+            f->followFlow(ghidra::Address(r, 0), ghidra::Address(r, r->getHighest()));
+            a2.allacts.getCurrent()->reset(*f);
+            a2.allacts.getCurrent()->perform(*f);
+            a2.print->setOutputStream(&out);
+            a2.print->docFunction(f);
+        }
+        catch (ghidra::LowlevelError& e) { out << "error: " << e.explain; }
+        return out.str();
+    }();
+    CHECK(c.find("switch") != std::string::npos);
+    if (c.find("switch") == std::string::npos) std::printf("control decompile:\n%s\n", c.c_str());
 }
 
 // ---- Filesystem helpers -----------------------------------------------------------------
@@ -489,6 +609,7 @@ int main(int argc, char** argv)
     {
         RUN(TestSha256KnownAnswers());
         RUN(TestDecompileThroughBundle(config));
+        RUN(TestCancelDuringJumpTableRecovery());
         RUN(TestReuseAndRepair(config));
         RUN(TestForeignHashUntouched(config));
         RUN(TestUnwritableConfigDir(scratch));
