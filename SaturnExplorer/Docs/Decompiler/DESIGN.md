@@ -146,23 +146,35 @@ public:
     bool Busy() const;                            // ~DecompilerRunner cancels, joins, then SleighArchitecture::shutdown()
 };
 
-// DecompilerPanel.h
+// DecompilerPanel.h (as built in Step 3)
+struct DecompilerView {                            // the context on screen, after ScopedContextSwap
+    IMemoryBackend* backend; DecompViewKind kind;  // None, Static, LivePaused, LiveRunning, Scrub
+    uint64_t sourceId, deriveSerial, frameNumber;  // with the BIOS hash: the view's identity (A1)
+    se_sh2_regs regs[2]; bool haveRegs[2]; std::shared_ptr<const BiosImage> bios;
+};
 class DecompilerPanel {
 public:
-    struct Request { bool jumpAssembly; int cpu; uint32_t addr; bool jumpHex; uint32_t hexAddr;
-                     bool rename; uint32_t renameAddr; std::string newName; };
-    void Draw(se_context*, IMemoryBackend&, DecompilerRunner&, FunctionNames&, bool live, bool paused, Request&);
-    void ShowFunctionContaining(int cpu, uint32_t addr);   // from AssemblyPanel context menu / call stack
+    struct Request { bool jumpAssembly; int cpu; uint32_t addr; bool viewHex; uint32_t hexAddr;
+                     bool rename; uint32_t renameAddr; bool boundsChanged, settingsChanged;
+                     bool chooseBios, reloadBios, clearBios; };
+    void Update(const DecompilerView&, DecompilerRunner&, const DecompilerInputs&, bool visible); // every frame
+    void Draw(bool* open, const DecompilerView&, const DecompilerRunner&, const DecompilerInputs&, Request&);
+    void ShowFunctionContaining(int cpu, uint32_t addr);   // Assembly / Call Stack / Registers "Decompile"
+    void ResetSession();                                   // after DecompilerRunner::InvalidateSession
+    bool Accept(DecompileResult&, uint64_t runnerEpoch);   // the install rule (generation, epoch, key, entry)
     int  Cpu() const; void SetCpu(int);
 };
 ```
 
 App wiring (all existing idioms): `mPanels.decompiler` + `PanelList()` row
 `{"decompiler", "SH-2 Pseudocode", &Panels::decompiler, "Debugger"}`; `BuildDefaultLayout` and
-`AdoptNewPanels` dock it beside "SH-2 Assembly"; `BuildUI` draws it after the `ScopedContextSwap`;
+`AdoptNewPanels` dock it beside "SH-2 Assembly"; `BuildUI` updates it every frame (results, the
+budget) and draws it when shown, after the `ScopedContextSwap`;
 `Request.jumpAssembly` → `mAssemblyPanel.GoTo(cpu, addr); mPanels.assembly = true;`. The reverse
-direction is a new "Decompile here" item in the Assembly panel's context menu and a "Decompile"
-button on Call Stack rows, both calling `ShowFunctionContaining`.
+direction is a "Decompile Here" item in the Assembly panel's row menu, a "Decompile" item in the
+Call Stack row menu and in the Registers panel's PC menu, all calling `ShowFunctionContaining`.
+The Rename Function modal is drawn at app level, so the panel's "Rename Function..." opens it
+whether or not the Call Stack is shown.
 
 ## 6. Semantics
 
@@ -207,7 +219,7 @@ an entry correction replaces the request for that function.
 | Static dump / savestate (`SourceType::Dump`) | On first request, and again whenever the key moves (an in-place edit bumps the derive serial) | Until the key moves; cached per entry under that key. |
 | Live, **paused** or halted at a breakpoint/step | On request; re-taken when the key moves (write, state load, frame change) | Until resume. Follow-PC selects the function containing the halted CPU's PC. |
 | Live, **running** | Only on explicit Refresh, or on the opt-in auto-refresh (debounced: at most every N frames and only when the followed PC leaves the current function) | Shown with a "frame N — stale" badge as soon as the key moves; never silently replaced by a result from a different key. |
-| Scrubbed history | Each scrub frame is a new `SourceId` (`RefreshScrubContext` → `NoteSourceChanged`); snapshot per frame, LRU of a few frames keyed by the full key | Discarded when the scrub context is dropped. |
+| Scrubbed history | `ContextBackend::SourceId` moves on every rebuild of the scrub context, so revisiting a frame would never hit a cache keyed by it. App therefore gives the panel a recorded frame's own identity: a source id per *recording* (moved when the history is cleared or truncated by Play From Here, so a re-simulated frame number is a new key), the frame number, and a derive serial of 0 for the frame as recorded or a fresh value per edit. Snapshot per frame; the panel's LRU (8 results, full key + entry + names) serves a revisit without asking the engine | Discarded with the session (`ResetSession`); bounded by the LRU otherwise. |
 
 ### 6.3 Off the UI thread, no stale results
 - One worker thread owns the engine. The decompiler library has process-global state

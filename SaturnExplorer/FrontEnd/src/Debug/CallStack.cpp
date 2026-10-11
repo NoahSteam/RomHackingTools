@@ -109,6 +109,7 @@ void FunctionNames::Rename(uint32_t address, const std::string& name)
 {
     if (name.empty()) mNames.erase(address);
     else              mNames[address] = name;
+    ++mGeneration;
 }
 
 void FunctionNames::Load()
@@ -116,6 +117,7 @@ void FunctionNames::Load()
     std::ifstream f(kFunctionFile);
     if (!f) return;
     mNames.clear();
+    ++mGeneration;
     std::string line, name;
     uint32_t addr = 0;
     while (std::getline(f, line))
@@ -139,6 +141,7 @@ size_t FunctionNames::Import(const char* path)
     uint32_t addr = 0;
     while (std::getline(f, line))
         if (ParseSymbolLine(line, addr, name)) { mNames[addr] = name; ++n; }
+    if (n) ++mGeneration;
     return n;
 }
 

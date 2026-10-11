@@ -77,8 +77,16 @@ public:
     // Lets a user bring in a disassembler / map-file symbol table to name functions.
     size_t Import(const char* path);
 
+    // Every stored name (address -> name). The decompiler hands them to the engine as input.
+    const std::map<uint32_t, std::string>& All() const { return mNames; }
+    // Moves whenever the stored names may have changed (rename, load, import). Names are engine
+    // input, not a display overlay, so the decompiler panel re-runs its request when this moves
+    // (PLAN.md A1) -- without diffing the map every frame.
+    uint64_t Generation() const { return mGeneration; }
+
 private:
     std::map<uint32_t, std::string> mNames;
+    uint64_t mGeneration = 0;
 };
 
 class CallStack

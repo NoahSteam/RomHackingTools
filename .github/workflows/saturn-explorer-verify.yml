@@ -56,7 +56,7 @@ jobs:
       # Passing tests print nothing above; the decompiler tests' own output (timings, the
       # decompiled fixture) is what the verification record copies (A7), so show it.
       - name: Decompiler test output
-        run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner)Tests"
+        run: ctest --test-dir build -C Debug -V -R "SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests"
 
       # The Debug runner test above uses a tenth of each cancellation fixture on Windows (the Debug
       # CRT's checked iterators make the engine ~20x slower there), and the allocation-failure cases
@@ -65,8 +65,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          cmake --build build --config Release --parallel 4 --target SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerTests
-          ctest --test-dir build -C Release -V -R "SaturnExplorer(DecompilerRunner|Sh2Decompiler)Tests"
+          cmake --build build --config Release --parallel 4 --target SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2DecompilerTests SaturnExplorerDecompilerPanelTests
+          ctest --test-dir build -C Release -V -R "SaturnExplorer(DecompilerRunner|Sh2Decompiler|DecompilerPanel)Tests"
 
       - name: Verify macOS headless renderer and frontend exist
         if: runner.os == 'macOS'
@@ -141,6 +141,7 @@ jobs:
           SaturnExplorerSavestateShapeTests SaturnExplorerMemorySnapshotTests
           SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerTests
           SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerRunnerTests
+          SaturnExplorerDecompilerPanelTests
       - name: Verify the binaries are x86_64
         run: |
           lipo -archs build-x86_64/bin/SaturnExplorerSh2DecompilerEngineTests | grep -qx x86_64
@@ -149,7 +150,7 @@ jobs:
       - name: Run the decompiler tests under Rosetta
         run: >
           ctest --test-dir build-x86_64 --output-on-failure -V
-          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner)Tests'
+          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests'
 
   # The distributable macOS bundle and DMG, ad-hoc signed. Developer ID signing and
   # notarisation need a certificate and stay a manual, recorded release step.

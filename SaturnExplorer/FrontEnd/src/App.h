@@ -46,6 +46,10 @@
 #include "Debug/BreakpointManager.h"
 #include "Debug/StepHaltMachine.h"
 
+#if SE_ENABLE_DECOMPILER
+#include "DecompilerPanel.h"     // SH-2 Pseudocode (Docs/Decompiler/PLAN.md Step 3)
+#endif
+
 #ifdef SE_ENABLE_LIVE
 #include "FrameRecorder.h"
 #include "SavestateSlots.h" // numbered save states (native only)
@@ -476,6 +480,33 @@ private:
     bool                     mRenameOpen = false;
     uint32_t                 mRenameAddr = 0;
     char                     mRenameBuf[64] = {};
+    // Rename Function, shared by the Call Stack and the SH-2 Pseudocode panel. Drawn every frame,
+    // not inside either panel, so it opens whichever is showing (or neither).
+    void DrawRenameFunctionModal();
+
+#if SE_ENABLE_DECOMPILER
+    // SH-2 Pseudocode (Docs/Decompiler/PLAN.md Step 3). The runner owns the process's one engine
+    // thread; it is created in Initialize and released in Shutdown, which joins it (PLAN.md A4).
+    std::unique_ptr<decomp::DecompilerRunner> mDecompilerRunner;
+    DecompilerPanel          mDecompilerPanel;
+    decomp::FunctionBounds   mFunctionBounds;     // "Set Function Start Here" (saturn_function_bounds.txt)
+    std::shared_ptr<const decomp::BiosImage> mBiosImage;   // hashed once, when loaded
+    std::string              mBiosPath;           // [decompiler] bios
+    // The view the panel decompiles: the context on screen, after ScopedContextSwap.
+    DecompilerView BuildDecompilerView();
+    void UpdateDecompiler(IPlatform& platform);
+    bool LoadBiosImage(const std::string& path);
+    // A recorded frame's identity for the decompiler's cache: stable while the recording it came
+    // from is unchanged (mScrubTimeline moves when it is cleared or truncated by Play From Here),
+    // and a fresh value for every edit made to the frame on screen, so two different edits never
+    // share a key. ContextBackend::SourceId moves on every rebuild of the scrub context instead,
+    // which would make revisiting a frame a cache miss every time.
+    uint64_t                 mScrubTimeline = 1;
+    uint64_t                 mScrubBaseSerial = 0;   // the scrub context's serial as rebuilt
+    uint64_t                 mScrubSeenSerial = 0;
+    uint64_t                 mScrubViewSerial = 0;   // 0 = the frame as recorded
+    uint64_t                 mScrubEditCounter = 0;
+#endif
 
     se_render_opts   mRenderOpts {};
     bool             mbLiveSource = false;    // data comes from a running emulator
@@ -764,6 +795,7 @@ private:
         bool soundCpu = true;     // SCSP 68000 sound-CPU disassembly
         bool discExplorer = true; // disc image ISO 9660 browser (sector -> file)
         bool memoryCompare = false; // Frame Memory Compare: hidden until a comparison is opened
+        bool decompiler = true;   // SH-2 Pseudocode (listed only in builds with the decompiler)
     };
     Panels           mPanels;
 

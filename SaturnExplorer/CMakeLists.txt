@@ -229,6 +229,8 @@ if(SE_ENABLE_DECOMPILER)
         FrontEnd/src/Decompiler/Sh2Decompiler.cpp
         FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
         FrontEnd/src/Decompiler/DecompilerRunner.cpp)
+    # The panel is UI: it joins the frontends, not the headless engine tests.
+    set(SE_DECOMPILER_UI_SOURCES FrontEnd/src/DecompilerPanel.cpp)
 
     if(BUILD_TESTING)
         # The .slaspec sources, the checked-in sh-2.sla and the copy embedded in Sh2SpecData.h
@@ -640,6 +642,30 @@ if(BUILD_TESTING)
         PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME SaturnExplorerHexEditorPanelTests
              COMMAND SaturnExplorerHexEditorPanelTests)
+
+    # The SH-2 Pseudocode panel (PLAN.md Step 3) -- the real panel, the real engine and runner, and
+    # the real Memory panel typing into a mock backend: navigation, CPU retention, the install rule,
+    # stale retention and the A1 refresh policy.
+    if(SE_ENABLE_DECOMPILER)
+        add_executable(SaturnExplorerDecompilerPanelTests
+            FrontEnd/tests/DecompilerPanelTests.cpp
+            FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/HexEditorPanel.cpp
+            FrontEnd/src/Theme.cpp
+            FrontEnd/src/Debug/BytePatternSearch.cpp
+            FrontEnd/src/Debug/MemorySearch.cpp
+            FrontEnd/src/Debug/WatchList.cpp
+            FrontEnd/src/Debug/ShiftJis.cpp
+            ${SE_DECOMPILER_TEST_SOURCES}
+            ${SE_IMGUI_CORE}
+        )
+        target_include_directories(SaturnExplorerDecompilerPanelTests
+            PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerDecompilerPanelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        add_test(NAME SaturnExplorerDecompilerPanelTests
+                 COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
+        set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT 60)
+    endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
     # edits belong to. Pure logic against a ring that evicts like FrameRecorder's.
@@ -1709,7 +1735,7 @@ endif()
 # where SE_ENABLE_DECOMPILER is forced off. SE_ENABLE_DECOMPILER=1 is what later steps compile
 # the panel under; FrontEnd.vcxproj defines the same for the MSBuild path.
 if(TARGET SaturnExplorerFrontEnd AND SE_ENABLE_DECOMPILER)
-    target_sources(SaturnExplorerFrontEnd PRIVATE ${SE_DECOMPILER_SOURCES})
+    target_sources(SaturnExplorerFrontEnd PRIVATE ${SE_DECOMPILER_SOURCES} ${SE_DECOMPILER_UI_SOURCES})
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_DECOMPILER=1)
     target_link_libraries(SaturnExplorerFrontEnd PRIVATE SaturnExplorerGhidraDecomp)
 endif()

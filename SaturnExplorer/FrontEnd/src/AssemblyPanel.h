@@ -48,9 +48,14 @@ public:
         bool     stepInto = false;
         bool     stepOver = false;
         bool     stepOut = false;
+        bool     decompile = false;       // show the function containing decompileAddr in SH-2 Pseudocode
+        uint32_t decompileAddr = 0;
     };
     void Draw(se_context* ctx, IMemoryBackend& backend, BreakpointManager& bps,
               ExecutionActions& actions, WatchPanel& watch, bool live, Request& req);
+
+    // Offer "Decompile Here" in the row menu: only builds with the decompiler have the panel it opens.
+    void SetOfferDecompile(bool offer) { mOfferDecompile = offer; }
 
     // The CPU the panel is currently viewing (0 master, 1 slave) — used by the App
     // to target run-control (Run to Here) at the right core.
@@ -93,6 +98,7 @@ private:
     void Navigate(uint32_t addr, bool pushHistory);
 
     int      mCpu = 0;                 // 0 master, 1 slave
+    bool     mOfferDecompile = false;
     bool     mFollowPc = true;
 
     // Live breakpoint-hit state (set by SetBreakpointStop): tint the halted row red.

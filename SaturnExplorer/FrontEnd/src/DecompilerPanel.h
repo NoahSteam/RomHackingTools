@@ -1,0 +1,284 @@
+// DecompilerPanel — the "SH-2 Pseudocode" window (Docs/Decompiler/PLAN.md Step 3).
+//
+// The panel draws what the engine (Step 2) produced; it does no analysis of its own. Each frame
+// App hands it the context on screen -- after ScopedContextSwap, so a scrubbed frame is what it
+// sees, never the live one behind it -- as a DecompilerView, and the app's one DecompilerRunner.
+//
+// What it decompiles is an immutable MemorySnapshot it captured from that view. Which snapshot
+// that is, and when it is replaced, is the A1 refresh policy:
+//
+//   * Every frame the view's identity {source, derive serial, frame, BIOS hash} is recomputed. It
+//     is cheap -- four integers; the BIOS hash was computed once when the image was loaded. When
+//     it differs from the captured snapshot's, the snapshot no longer shows what is on screen.
+//   * A dump, savestate, paused emulator or recorded (scrubbed) frame is then captured again at
+//     once and the request re-run: those only move when the user did something.
+//   * A running emulator moves every frame. Its snapshot is kept, and the output shown with a
+//     stale badge, until Refresh -- or, opt in, an auto-refresh at most every kAutoRefreshFrames
+//     frames and only once the followed PC has left the function shown.
+//
+// A result is installed only when it still answers the question being asked: the request the
+// panel has outstanding (generation), made in the current session (runner epoch), for the snapshot
+// the panel holds now (key), and for the entry it now wants. The runner's own filtering covers the
+// first two; the panel checks all four itself, because the runner cannot know which snapshot or
+// entry the panel has since moved on to. Anything else is discarded, and whatever was on screen
+// stays there, labelled stale, until its replacement arrives -- the panel never blanks while it
+// waits, and never shows output for memory other than what the badge says.
+//
+// A request is submitted once per {snapshot key, entry, names}: a failure is shown, not retried
+// every frame. Results are kept in a small LRU under that same full key, which is what makes
+// scrubbing back and forth through recorded frames cheap (App gives a recorded frame a stable
+// identity for as long as the recording it came from is unchanged).
+#pragma once
+
+#include <cstdint>
+#include <functional>
+#include <list>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "imgui.h"
+#include "saturnexplorer/SaturnExplorer.h"
+
+#include "Decompiler/DecompilerRunner.h"
+#include "Decompiler/MemorySnapshot.h"
+#include "Decompiler/Sh2Decompiler.h"
+#include "Decompiler/Sh2FunctionFinder.h"
+
+namespace sfe
+{
+
+class IMemoryBackend;
+
+// How the context on screen is refreshed, which decides when the panel re-requests (A1).
+enum class DecompViewKind : uint8_t
+{
+    None,          // no source
+    Static,        // a dump or a savestate: changes only on an edit
+    LivePaused,    // a live emulator, paused or halted
+    LiveRunning,   // a live emulator, running: changes every frame
+    Scrub,         // a recorded frame from the rewind history
+};
+
+// The context on screen this frame, as App sees it after ScopedContextSwap.
+struct DecompilerView
+{
+    IMemoryBackend* backend = nullptr;
+    DecompViewKind kind = DecompViewKind::None;
+    const char* sourceLabel = "";    // "savestate", "live, paused", "recorded frame", ...
+    uint64_t sourceId = 0;           // what App vouches is the same source (stable per recorded frame)
+    uint64_t deriveSerial = 0;
+    uint64_t frameNumber = 0;
+    se_sh2_regs regs[2] = {};
+    bool haveRegs[2] = { false, false };
+    std::shared_ptr<const decomp::BiosImage> bios;   // content hashed once, at load
+};
+
+// What the panel reads from the rest of the app.
+struct DecompilerInputs
+{
+    const std::map<uint32_t, std::string>* names = nullptr;   // FunctionNames::All
+    uint64_t namesGeneration = 0;                               // FunctionNames::Generation
+    decomp::FunctionBounds* bounds = nullptr;                   // user function starts
+    // Entries the call stack knows (the finder's call-site rung). Called only when an entry is
+    // being resolved, never per frame.
+    std::function<void(std::set<uint32_t>&)> callSites;
+};
+
+class DecompilerPanel
+{
+public:
+    static const char* const kTitle;          // "SH-2 Pseudocode"; the dock layout names it
+    static const int kSlot = 1;               // this panel's requester id at the runner
+    static const int kAutoRefreshFrames = 30; // the auto-refresh debounce
+    static const size_t kCacheSize = 8;       // results kept per full key (scrub frames, entries)
+
+    // Things App acts on after Draw.
+    struct Request
+    {
+        bool jumpAssembly = false;   // show 'addr' on 'cpu' in SH-2 Assembly
+        int cpu = 0;
+        uint32_t addr = 0;
+        bool viewHex = false;        // show 'hexAddr' in Memory
+        uint32_t hexAddr = 0;
+        bool rename = false;         // open Rename Function for 'renameAddr'
+        uint32_t renameAddr = 0;
+        bool boundsChanged = false;  // a function start was set in DecompilerInputs::bounds: save it
+        bool settingsChanged = false;// auto-refresh toggled: save settings
+        bool chooseBios = false;     // pick a BIOS image file
+        bool reloadBios = false;     // read the BIOS image again from its path
+        bool clearBios = false;      // stop using a BIOS image
+    };
+
+    // Every frame, whether or not the window is shown: collects results (the runner's Poll also
+    // enforces the budget and the cancel deadline), recomputes the view's identity, and -- when
+    // 'visible' -- captures and submits per the policy above. A hidden panel does no work.
+    void Update(const DecompilerView& view, decomp::DecompilerRunner& runner, const DecompilerInputs& inputs,
+                bool visible);
+
+    // The window. User actions take effect at the next Update.
+    void Draw(bool* open, const DecompilerView& view, const decomp::DecompilerRunner& runner,
+              const DecompilerInputs& inputs, Request& req);
+
+    // "Decompile" from Assembly, Call Stack and Registers: the function containing 'addr' on
+    // 'cpu'. Turns Follow PC off and brings the window forward.
+    void ShowFunctionContaining(int cpu, uint32_t addr);
+
+    // The session ended (source closed or replaced, emulator reconnected). App has already bumped
+    // the runner's epoch; this forgets what belonged to the old session. Shown output stays, stale.
+    void ResetSession();
+
+    int Cpu() const { return mCpu; }
+    void SetCpu(int cpu);
+    bool FollowPc() const { return mTarget.kind == TargetKind::FollowPc; }
+    bool AutoRefresh() const { return mAutoRefresh; }
+    void SetAutoRefresh(bool on) { mAutoRefresh = on; }
+
+    // The install decision for one polled result (called by Update; public so tests can offer a
+    // result the runner would never deliver, which is how the panel's own checks are pinned
+    // independently of the runner's). True when installed.
+    bool Accept(decomp::DecompileResult& result, uint64_t runnerEpoch);
+
+    // ---- State, for App's status and for tests -------------------------------------------
+    const decomp::DecompileResult* Shown() const { return mShownValid ? &mShown : nullptr; }
+    bool ShownStale() const;                  // shown output is not the answer for the view now
+    bool ShownOutdatedByView() const;         // ...because the memory on screen moved on
+    bool Pending() const { return mPending.active; }
+    uint64_t PendingGeneration() const { return mPending.generation; }
+    const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
+    uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }
+    const std::string& EntryError() const { return mEntryError; }
+    uint64_t Captures() const { return mCaptures; }
+    uint64_t Submissions() const { return mSubmissions; }
+    uint64_t Discarded() const { return mDiscarded; }
+    uint64_t CacheHits() const { return mCacheHits; }
+    // Screen rectangle of displayed line 'index' in the last Draw (tests click it). False when the
+    // line was not drawn (clipped, or no output).
+    bool LineRect(int index, ImVec2& min, ImVec2& max) const;
+    // ...and of a named control in the last Draw: "cpu", "entry", "refresh", "stop", or a line
+    // context-menu item by its label ("Set Function Start Here", "View in Memory", ...).
+    bool ItemRect(const char* name, ImVec2& min, ImVec2& max) const;
+
+private:
+    enum class TargetKind : uint8_t { FollowPc, Containing, Entry };
+    struct Target
+    {
+        TargetKind kind = TargetKind::FollowPc;
+        uint32_t address = 0;   // Containing: the address asked about; Entry: the entry itself
+        decomp::EntrySource source = decomp::EntrySource::User;   // Entry: why it is an entry
+    };
+
+    // The view's identity: what a snapshot must match to show what is on screen.
+    struct ViewId
+    {
+        bool valid = false;
+        uint64_t sourceId = 0, deriveSerial = 0, frameNumber = 0, biosHash = 0;
+        bool operator==(const ViewId& o) const
+        {
+            return valid == o.valid && sourceId == o.sourceId && deriveSerial == o.deriveSerial &&
+                   frameNumber == o.frameNumber && biosHash == o.biosHash;
+        }
+        bool operator!=(const ViewId& o) const { return !(*this == o); }
+    };
+    static ViewId IdOf(const DecompilerView& view);
+
+    struct Outstanding
+    {
+        bool active = false;
+        uint64_t generation = 0;
+        uint64_t epoch = 0;
+        decomp::SnapshotKey key;
+        uint32_t entry = 0;
+        ViewId snapId;
+        uint64_t namesGeneration = 0;
+    };
+
+    // What the panel last submitted (or served from the cache): the same question is never asked
+    // twice in a row, so a failure is shown rather than retried every frame.
+    struct Question
+    {
+        bool valid = false;
+        decomp::SnapshotKey key;
+        uint32_t entry = 0;
+        uint64_t namesGeneration = 0;
+        bool operator==(const Question& o) const
+        {
+            return valid == o.valid && key == o.key && entry == o.entry && namesGeneration == o.namesGeneration;
+        }
+    };
+
+    struct CacheEntry
+    {
+        Question question;
+        decomp::DecompileResult result;
+        ViewId snapId;
+    };
+
+    void SetTarget(const Target& target);
+    void Resolve(const DecompilerInputs& inputs);
+    void Install(decomp::DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration);
+    const CacheEntry* CacheFind(const Question& q);
+    void CachePut(const Question& q, const decomp::DecompileResult& r, const ViewId& snapId);
+    void CacheDropEntry(uint32_t entry);
+    void DrawHeader(const DecompilerView& view, const decomp::DecompilerRunner& runner, Request& req);
+    void DrawStatus(const DecompilerView& view, const decomp::DecompilerRunner& runner);
+    void DrawLines(const DecompilerInputs& inputs, Request& req);
+
+    int mCpu = 0;
+    Target mTarget;
+    bool mAutoRefresh = false;
+    bool mFocus = false;
+
+    // Set by a user action (a new target, Refresh): capture now even on a running emulator.
+    bool mExplicit = false;
+    bool mForceSubmit = false;       // Refresh: ask again even if the question is unchanged
+    bool mRetryTooLarge = false;     // Refresh: including an entry that ran out of budget
+    bool mCancelRequested = false;   // Stop
+
+    ViewId mViewId;                  // the view this frame
+    uint32_t mViewPc[2] = { 0, 0 };
+    bool mViewHavePc[2] = { false, false };
+    std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds
+    ViewId mSnapId;
+    uint64_t mTick = 0, mCaptureTick = 0;
+
+    // The entry wanted for mSnap, resolved once per snapshot and target.
+    bool mResolved = false;
+    bool mEntryOk = false;
+    uint32_t mEntry = 0;
+    decomp::EntrySource mEntrySource = decomp::EntrySource::None;
+    int mEntryConfidence = 0;
+    std::string mEntryError;
+
+    uint64_t mNamesGeneration = 0;
+    std::set<uint32_t> mCallees;     // found by results this session: the finder's last rung
+
+    Question mAsked;
+    Outstanding mPending;
+    std::string mNote;               // "cancelled", ... (the last request's fate when not installed)
+
+    decomp::DecompileResult mShown;
+    bool mShownValid = false;
+    ViewId mShownSnapId;
+    uint64_t mShownNamesGeneration = 0;
+    std::string mShownEntrySource;
+    float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
+    int mSelectedLine = -1;
+
+    std::list<CacheEntry> mCache;    // most recent first
+
+    char mEntryBuf[16] = {};
+    int mContextLine = -1;           // the line the context menu was opened on
+
+    struct DrawnLine { int index; ImVec2 min, max; };
+    std::vector<DrawnLine> mDrawn;
+    struct DrawnItem { std::string name; ImVec2 min, max; };
+    std::vector<DrawnItem> mItems;
+    void Remember(const char* name);
+
+    uint64_t mCaptures = 0, mSubmissions = 0, mDiscarded = 0, mCacheHits = 0;
+};
+
+}  // namespace sfe

@@ -506,6 +506,8 @@ void AssemblyPanel::Draw(se_context* ctx, IMemoryBackend& backend, BreakpointMan
                 { req.runTo = true; req.runToAddr = ln.addr; }
                 if (ImGui::MenuItem("Follow Branch", nullptr, false, ln.readable && ln.ins.HasBranchTarget))
                     Navigate(ln.ins.BranchTarget, true);
+                if (mOfferDecompile && ImGui::MenuItem("Decompile Here"))
+                { req.decompile = true; req.decompileAddr = ln.addr; }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Add Operand to Watch", nullptr, false, hasMem))
                 {

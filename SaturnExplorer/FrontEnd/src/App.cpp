@@ -308,6 +308,12 @@ void App::Initialize()
     mAssemblyPanel.LoadComments(); // restore the session's assembly comments
     mFunctionNames.Load();         // restore user-renamed function names (call stack)
     mFunctionNames.Import("saturn_symbols.txt");  // merge a symbol map if present
+#if SE_ENABLE_DECOMPILER
+    mFunctionBounds.Load();        // the user's function-start corrections (next to saturn_functions.txt)
+    // The process's one engine thread (PLAN.md A4). An unwritable config dir is reported by the
+    // panel as "unavailable" on the first request; the rest of the app is unaffected.
+    mDecompilerRunner.reset(new decomp::DecompilerRunner(Settings::EnsureConfigDir()));
+#endif
     mLog.Info("Saturn Explorer started");
 }
 
@@ -315,6 +321,12 @@ void App::Shutdown()
 {
     // Stop and join any in-flight data search before tearing down.
     mSearchRunner.Stop();
+#if SE_ENABLE_DECOMPILER
+    // Cancel, join the engine thread and shut the engine down (PLAN.md A4), first and explicitly:
+    // the worker reads only its own snapshot copies, so nothing below has to outlive it, but it
+    // must be gone before static destruction -- not left to whenever App's members are destroyed.
+    mDecompilerRunner.reset();
+#endif
     SaveSettings();
     mWatchPanel.SaveSession();
     mAssemblyPanel.SaveComments();
@@ -344,6 +356,9 @@ const std::vector<App::PanelInfo>& App::PanelList()
         {"selectedObject",  "Selected Object",    &Panels::selectedObject,  "Graphics"},
         {"watch",           "Watch",              &Panels::watch,           "Debugger"},
         {"assembly",        "SH-2 Assembly",      &Panels::assembly,        "Debugger"},
+#if SE_ENABLE_DECOMPILER
+        {"decompiler",      "SH-2 Pseudocode",    &Panels::decompiler,      "Debugger"},
+#endif
         {"hexEditor",       "Memory",             &Panels::hexEditor,       "Memory & Data"},
         {"controller",      kControllerPanel,     &Panels::controller,      "Files & Input"},
         {"log",             "Log",                &Panels::log,             "Files & Input"},
@@ -392,6 +407,12 @@ void App::LoadSettings()
     PurgeDiffFolders(Settings::ConfigSubDir("diff", false), static_cast<uint64_t>(std::time(nullptr)),
                      kDiffKeepSeconds);
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
+#if SE_ENABLE_DECOMPILER
+    mDecompilerPanel.SetAutoRefresh(mSettings.GetBool("decompiler", "autorefresh", false));
+    mBiosPath = mSettings.Get("decompiler", "bios", "");
+    mBiosImage.reset();
+    if (!mBiosPath.empty()) LoadBiosImage(mBiosPath);
+#endif
     LoadSearchOptions();
     // Launch Session: emulator specs (exe from the installer's [emulators]), selection,
     // recent ROMs, and the set-data-dir coupling.
@@ -416,6 +437,10 @@ void App::SaveSettings()
     mSettings.Set("diff", "exe", mDiffExe);
     mSettings.Set("diff", "args", mDiffArgs);
     mSettings.SetFloat("callstack", "split", mCallStackSplit);
+#if SE_ENABLE_DECOMPILER
+    mSettings.SetBool("decompiler", "autorefresh", mDecompilerPanel.AutoRefresh());
+    mSettings.Set("decompiler", "bios", mBiosPath);
+#endif
     mLayerPanels.Save(mSettings);
     SaveSearchOptions();
     // Launch Session: emulator overrides (exe/args/workdir), selection, recent ROMs,
@@ -502,6 +527,13 @@ void App::ResetSessionDebugState()
     mAccessSelected = -1;
     mLastTpGeneration = mActions.Generation() - 1;
     mActions.ResetCounts();
+#if SE_ENABLE_DECOMPILER
+    // A new session: bump the runner's epoch -- never a join; a decompilation still running is
+    // cancelled and its answer dropped -- and forget what the panel held for the old one.
+    if (mDecompilerRunner) mDecompilerRunner->InvalidateSession();
+    mDecompilerPanel.ResetSession();
+    ++mScrubTimeline;
+#endif
 }
 
 void App::CloseData(bool cancelAutoConnect)
@@ -1799,6 +1831,9 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.selectedObject)  DrawSelectedObject();
     if (mPanels.watch)           DrawWatch(platform);
     if (mPanels.assembly)        DrawAssembly();
+#if SE_ENABLE_DECOMPILER
+    UpdateDecompiler(platform);   // every frame (results, budget); draws when the panel is shown
+#endif
     if (mPanels.hexEditor)       DrawHexEditor();
     if (mPanels.memoryCompare)   DrawMemoryCompare(platform);
     PumpCompareExport(platform);
@@ -1840,6 +1875,7 @@ void App::BuildUI(IPlatform& platform)
     if (mPanels.soundCpu)        DrawSoundCpu();
     if (mPanels.sound)           DrawSound(platform);
     if (mPanels.discExplorer)    DrawDiscExplorer(platform);
+    DrawRenameFunctionModal();    // Call Stack and SH-2 Pseudocode both open it
 
     // Game-data-directory modal + texture search results (both floating, drawn last
     // so they overlay the docked panels).
@@ -1979,6 +2015,9 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
     ImGui::DockBuilderDockWindow("Macros", bWatch);
     ImGui::DockBuilderDockWindow("Statistics", bWatch);
     ImGui::DockBuilderDockWindow("SH-2 Assembly", bAsm);
+#if SE_ENABLE_DECOMPILER
+    ImGui::DockBuilderDockWindow(DecompilerPanel::kTitle, bAsm);   // beside SH-2 Assembly
+#endif
     ImGui::DockBuilderDockWindow("Memory", bAsm);          // tabs beside SH-2 Assembly
     ImGui::DockBuilderDockWindow("Memory Compare", bAsm);  // hidden until a comparison is opened
     ImGui::DockBuilderDockWindow("Sound CPU (68K)", bAsm); // disassembly views tab together
@@ -2295,6 +2334,9 @@ void App::PlayFromScrubbedFrame(se_context* ctl)
 
     mRecorder.TruncateAfter(index);
     mCompare.TruncateAfter(frameNo);   // frames after this one will be re-simulated and reuse their numbers
+#if SE_ENABLE_DECOMPILER
+    ++mScrubTimeline;                  // ...so a cached result for one of those numbers is not theirs
+#endif
     DiscardPendingEdits();
     mbScrubbing = false;
     mbPaused = false;
@@ -2766,6 +2808,11 @@ bool App::RefreshScrubContext()
         }
     }
     se_begin_frame(mScrubContext);
+#if SE_ENABLE_DECOMPILER
+    // The frame as recorded: what the decompiler's view of it is keyed as, until it is edited.
+    mScrubBaseSerial = mScrubSeenSerial = se_derive_serial(mScrubContext);
+    mScrubViewSerial = 0;
+#endif
     mScrubShownIndex = mScrubIndex;
     mScrubShownFrame = mRecorder.SelectedFrameNumber();
     mMemBackend.NoteSourceChanged();   // same context, different frame: in-flight edits are void
@@ -2863,6 +2910,9 @@ void App::DrawWatch(IPlatform& platform)
 void App::DrawAssembly()
 {
     AssemblyPanel::Request req;
+#if SE_ENABLE_DECOMPILER
+    mAssemblyPanel.SetOfferDecompile(true);
+#endif
     mAssemblyPanel.SetBreakpointStop(mStepHalt.HaltActive(), mStepHalt.HaltCpu(), mStepHalt.HaltPc());
     mAssemblyPanel.Draw(mContext, mMemBackend, mBreakpoints, mActions, mWatchPanel, mbLiveSource, req);
 
@@ -2887,7 +2937,128 @@ void App::DrawAssembly()
 
     if (req.viewHex) { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }   // "View Address in Memory"
     if (req.findInData) BeginByteSearch(std::move(req.findBytes), req.findLabel);
+#if SE_ENABLE_DECOMPILER
+    if (req.decompile)
+    {
+        mDecompilerPanel.ShowFunctionContaining(mAssemblyPanel.Cpu(), req.decompileAddr);
+        mPanels.decompiler = true;
+    }
+#endif
 }
+
+#if SE_ENABLE_DECOMPILER
+// The context on screen, for the SH-2 Pseudocode panel. Called after ScopedContextSwap, so on a
+// scrubbed frame mContext IS that frame: its bytes, registers and frame number, never the live
+// emulator's behind it.
+DecompilerView App::BuildDecompilerView()
+{
+    DecompilerView v;
+    if (!mbHasData || !mContext) return v;
+    v.backend = &mMemBackend;
+    v.bios = mBiosImage;
+    v.deriveSerial = se_derive_serial(mContext);
+    v.frameNumber = se_frame_number(mContext);
+    v.sourceId = mMemBackend.SourceId();
+    for (int cpu = 0; cpu < 2; ++cpu) v.haveRegs[cpu] = se_get_sh2_regs(mContext, cpu, &v.regs[cpu]) == SE_OK;
+#ifdef SE_ENABLE_LIVE
+    if (mbScrubbing && mScrubContext && mContext == mScrubContext)
+    {
+        v.kind = DecompViewKind::Scrub;
+        v.sourceLabel = "recorded frame";
+        v.frameNumber = mScrubShownFrame;
+        // Stable per recording, so returning to a frame finds its cached result (see App.h).
+        v.sourceId = 0x5343525542000000ull ^ mScrubTimeline;
+        if (v.deriveSerial != mScrubSeenSerial)
+        {
+            mScrubSeenSerial = v.deriveSerial;
+            mScrubViewSerial = v.deriveSerial == mScrubBaseSerial ? 0 : ++mScrubEditCounter;
+        }
+        v.deriveSerial = mScrubViewSerial;
+        return v;
+    }
+#endif
+    if (mbLiveSource)
+    {
+        const bool still = mbPaused || mStepHalt.HaltActive();
+        v.kind = still ? DecompViewKind::LivePaused : DecompViewKind::LiveRunning;
+        v.sourceLabel = still ? "live, paused" : "live, running";
+    }
+    else
+    {
+        v.kind = DecompViewKind::Static;
+        v.sourceLabel = "dump / savestate";
+    }
+    return v;
+}
+
+void App::UpdateDecompiler(IPlatform& platform)
+{
+    if (!mDecompilerRunner) return;
+    const DecompilerView view = BuildDecompilerView();
+    DecompilerInputs in;
+    in.names = &mFunctionNames.All();
+    in.namesGeneration = mFunctionNames.Generation();
+    in.bounds = &mFunctionBounds;
+    in.callSites = [this](std::set<uint32_t>& out) {
+        for (int cpu = 0; cpu < 2; ++cpu)
+            for (const CallStackFrame& fr : mCallStack.Frames(cpu))
+                if (fr.functionKnown) out.insert(fr.functionAddress);
+    };
+    mDecompilerPanel.Update(view, *mDecompilerRunner, in, mPanels.decompiler);
+    if (!mPanels.decompiler) return;
+
+    DecompilerPanel::Request req;
+    mDecompilerPanel.Draw(&mPanels.decompiler, view, *mDecompilerRunner, in, req);
+    if (req.jumpAssembly) { mAssemblyPanel.GoTo(req.cpu, req.addr); mPanels.assembly = true; }
+    if (req.viewHex) { mHexEditor.GoTo(req.hexAddr); mPanels.hexEditor = true; }
+    if (req.rename)
+    {
+        mRenameAddr = req.renameAddr;
+        std::snprintf(mRenameBuf, sizeof(mRenameBuf), "%s",
+                      mFunctionNames.HasName(req.renameAddr) ? mFunctionNames.NameOf(req.renameAddr).c_str() : "");
+        mRenameOpen = true;
+    }
+    if (req.boundsChanged && !mFunctionBounds.Save())
+        mLog.Error(std::string("Could not save ") + decomp::FunctionBounds::kDefaultFile);
+    if (req.settingsChanged) mSettingsDirty = true;
+    if (req.chooseBios)
+    {
+        std::string path;
+        if (platform.OpenFileDialogFiltered(path, "Saturn BIOS image", "bin,rom") && LoadBiosImage(path))
+        {
+            mBiosPath = path;
+            mSettingsDirty = true;
+        }
+    }
+    if (req.reloadBios) LoadBiosImage(mBiosPath);   // same path, possibly other bytes: hashed again
+    if (req.clearBios)
+    {
+        mBiosImage.reset();
+        mBiosPath.clear();
+        mSettingsDirty = true;
+    }
+}
+
+// Read and hash a BIOS image once, here; the panel's per-frame key uses the stored hash (A1).
+bool App::LoadBiosImage(const std::string& path)
+{
+    std::string bytes;
+    if (!ReadWholeFile(path, bytes) || bytes.empty())
+    {
+        mLog.Error("Decompiler: could not read the BIOS image " + path);
+        return false;
+    }
+    // The BIOS occupies 512 KiB at 0x00000000; anything larger is not a Saturn BIOS image.
+    if (bytes.size() > 0x80000)
+    {
+        mLog.Error("Decompiler: " + path + " is larger than a Saturn BIOS (512 KiB); not used");
+        return false;
+    }
+    mBiosImage = decomp::BiosImage::Make(std::vector<uint8_t>(bytes.begin(), bytes.end()));
+    mLog.Info("Decompiler: BIOS image " + path + " mapped at 0x00000000");
+    return true;
+}
+#endif
 
 // --- Tracepoints / structured Log (Execution Actions, Phase 1) -------------------
 
@@ -4478,6 +4649,16 @@ void App::DrawCallStack(IPlatform& platform)
                 { mAssemblyPanel.GoTo(fr.cpu, fr.functionAddress); mPanels.assembly = true; }
                 if (ImGui::MenuItem("Go to Return Address"))
                 { mAssemblyPanel.GoTo(fr.cpu, fr.returnAddress); mPanels.assembly = true; }
+#if SE_ENABLE_DECOMPILER
+                // The frame's entry when it is known; otherwise an address inside the function, from
+                // which the panel finds the entry itself and says how it did.
+                if (ImGui::MenuItem("Decompile"))
+                {
+                    mDecompilerPanel.ShowFunctionContaining(fr.cpu, fr.functionKnown ? fr.functionAddress
+                                                                                     : fr.currentAddress);
+                    mPanels.decompiler = true;
+                }
+#endif
                 // The "Go to ..." items drive the Assembly panel (code); the "View ..." items
                 // drive the Memory panel: this frame's code bytes, and its stack image.
                 if (ImGui::MenuItem("View in Memory"))
@@ -4593,7 +4774,12 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::EndChild();
     }
 
-    // Rename Function modal.
+    ImGui::End();
+}
+
+// Rename Function modal: one for the whole app (Call Stack, SH-2 Pseudocode).
+void App::DrawRenameFunctionModal()
+{
     if (mRenameOpen) { ImGui::OpenPopup("Rename Function"); mRenameOpen = false; }
     if (ImGui::BeginPopupModal("Rename Function", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -4611,8 +4797,6 @@ void App::DrawCallStack(IPlatform& platform)
         if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
-
-    ImGui::End();
 }
 
 // Hex Editor — raw memory view/edit over the shared backend (same source as Watch).
@@ -5041,6 +5225,15 @@ void App::AdoptNewPanels(ImGuiID dockId)
     for (const LayerPanelDesc& layer : LayerPanelList())
         if (ImGui::FindWindowSettingsByID(ImHashStr(layer.title)) == nullptr)
             ImGui::DockBuilderDockWindow(layer.title, central->ID);
+#if SE_ENABLE_DECOMPILER
+    // SH-2 Pseudocode joins SH-2 Assembly's dock node, where the default layout puts it.
+    if (ImGui::FindWindowSettingsByID(ImHashStr(DecompilerPanel::kTitle)) == nullptr)
+    {
+        const ImGuiWindowSettings* assembly = ImGui::FindWindowSettingsByID(ImHashStr("SH-2 Assembly"));
+        ImGui::DockBuilderDockWindow(DecompilerPanel::kTitle,
+                                     assembly && assembly->DockId ? assembly->DockId : central->ID);
+    }
+#endif
     // Memory Compare joins the Memory tab's dock node, where the default layout puts it.
     if (ImGui::FindWindowSettingsByID(ImHashStr("Memory Compare")) == nullptr)
     {
@@ -7771,6 +7964,9 @@ void App::DiscardPendingEdits()
 void App::ClearRecordedFrames()
 {
     mRecorder.Clear();
+#if SE_ENABLE_DECOMPILER
+    ++mScrubTimeline;   // frame numbers may be reused by whatever is recorded next
+#endif
     mCompare.ReplaceTimeline();
 }
 
@@ -9896,6 +10092,13 @@ void App::DrawSh2Registers()
             { mHexEditor.GoTo(value); mPanels.hexEditor = true; }
             if (ImGui::MenuItem("Go to in Disassembly"))
             { mAssemblyPanel.GoTo(mRegSh2Cpu, value); mPanels.assembly = true; }
+#if SE_ENABLE_DECOMPILER
+            if (i == kSh2RegPc && ImGui::MenuItem("Decompile"))
+            {
+                mDecompilerPanel.ShowFunctionContaining(mRegSh2Cpu, value);
+                mPanels.decompiler = true;
+            }
+#endif
             if (ImGui::MenuItem("Add to Watch"))
                 AddAddressWatch(table[i].name, value, WatchType::Pointer);
             ImGui::EndPopup();

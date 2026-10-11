@@ -324,6 +324,26 @@ live Mednafen paused, running, after a Hex Editor write, while scrubbing; unload
 while a long decompile is in flight (A4); master and slave; BIOS call; a hand-typed mirror and a
 rejected cache-array address (A2); the fixture-3 delay-slot banner (A3) on a patched savestate.
 
+*As built (Step 3):* the panel is `FrontEnd/src/DecompilerPanel.{h,cpp}`; the record is
+`Docs/FunctionalityVerification/13_DECOMPILER_STEP3.md`. Clarifications and deviations, each pinned
+by `DecompilerPanelTests`:
+- *Install rule.* A result is installed only when it answers the panel's outstanding request
+  (generation), in the current session (epoch), for the snapshot the panel holds now (key), and for
+  the entry it now wants. The runner's filtering covers the first two; the panel checks all four.
+- *Running live: the snapshot shown is the one captured.* A Refresh result installs although the
+  emulator has moved on since; it is shown labelled "stale: frame N" -- the frame it describes.
+  A panel holding no snapshot at all (first look after connecting) captures once.
+- *Auto-refresh* follows the PC only with Follow PC on, never while a request is still running,
+  and at most every 30 frames.
+- *Scrub identity.* A recorded frame is keyed by a per-recording source id, its frame number and a
+  per-edit serial (DESIGN.md 6.2), because `ContextBackend::SourceId` moves on every scrub rebuild
+  and would make the LRU useless. A revisit still copies the snapshot (the key needs the region
+  set) but does not ask the engine.
+- *One request per question.* `{key, entry, names}` is submitted once; a failure is shown and not
+  retried until Refresh or a change of any of the three.
+- *Call Stack "Decompile"* is a row context-menu item (the rows already carry their actions there),
+  and Registers offers it on PC only.
+
 **Gate:** CI green; manual checklist complete on Windows and macOS.
 
 ### Step 4 — Quality
