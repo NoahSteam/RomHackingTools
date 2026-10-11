@@ -40,6 +40,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FrontEnd", "SaturnExplorer\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorerZlib", "SaturnExplorer\FrontEnd\third_party\zlib\SaturnExplorerZlib.vcxproj", "{D96631E4-4701-4061-AA61-B3EE897B22E2}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SaturnExplorerGhidraDecomp", "SaturnExplorer\FrontEnd\third_party\ghidra-decompiler\SaturnExplorerGhidraDecomp.vcxproj", "{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -155,6 +157,14 @@ Global
 		{D96631E4-4701-4061-AA61-B3EE897B22E2}.Release|x64.Build.0 = Release|x64
 		{D96631E4-4701-4061-AA61-B3EE897B22E2}.Release|x86.ActiveCfg = Release|Win32
 		{D96631E4-4701-4061-AA61-B3EE897B22E2}.Release|x86.Build.0 = Release|Win32
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Debug|x64.ActiveCfg = Debug|x64
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Debug|x64.Build.0 = Debug|x64
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Debug|x86.ActiveCfg = Debug|Win32
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Debug|x86.Build.0 = Debug|Win32
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Release|x64.ActiveCfg = Release|x64
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Release|x64.Build.0 = Release|x64
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Release|x86.ActiveCfg = Release|Win32
+		{418D5C1C-AC6A-493B-ADA6-EF72EA4534D5}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
