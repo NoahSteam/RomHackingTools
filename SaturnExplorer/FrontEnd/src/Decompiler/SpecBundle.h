@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#include "Sha256.h"
+
 namespace sfe
 {
 namespace decomp
@@ -65,9 +67,10 @@ std::string SpecBundleHash(const std::vector<SpecFileData>& files);
 // published. Null, the default, everywhere else.
 void SetSpecBundleStagingHookForTests(void (*hook)(const std::string& stagingDir));
 
-// Lower-case hex SHA-256 (FIPS 180-4). Names the directory and fills the manifest; exposed for
-// the tests' known-answer check.
-std::string Sha256Hex(const void* data, size_t size);
+// Lower-case hex SHA-256 (FIPS 180-4). Names the directory and fills the manifest. The
+// implementation moved to Sha256.h so it builds without the decompiler; the name stays here for
+// the known-answer test.
+using sfe::Sha256Hex;
 
 }  // namespace decomp
 }  // namespace sfe

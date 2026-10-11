@@ -209,6 +209,7 @@ if(SE_ENABLE_DECOMPILER)
         add_executable(SaturnExplorerSh2DecompilerEngineTests
             FrontEnd/tests/Sh2DecompilerEngineTests.cpp
             FrontEnd/src/Decompiler/SpecBundle.cpp
+            FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp)
         target_include_directories(SaturnExplorerSh2DecompilerEngineTests PRIVATE FrontEnd/src)
         find_package(Threads REQUIRED)   # the concurrent-repair case
@@ -787,6 +788,14 @@ if(BUILD_TESTING)
     # against a synthetic VDP2 snapshot -- no renderer, no window.
     # The write/close/publish layer every save and export ends in. Uses /dev/full for the
     # close-time failure, which is the one fault that needs no mock.
+    # Shared SHA-256 (FrontEnd/src/Sha256.cpp): known answers and streaming-equals-one-shot.
+    add_executable(SaturnExplorerSha256Tests
+        FrontEnd/tests/Sha256Tests.cpp
+        FrontEnd/src/Sha256.cpp
+    )
+    target_include_directories(SaturnExplorerSha256Tests PRIVATE FrontEnd/src)
+    add_test(NAME SaturnExplorerSha256Tests COMMAND SaturnExplorerSha256Tests)
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
@@ -1102,6 +1111,14 @@ add_custom_target(SaturnExplorerBuildInfo
     COMMENT "Resolving build commit -> BuildInfo.h"
     VERBATIM)
 
+# Portable, platform-free sources both desktop frontends (Win32 and SDL2) compile and the web one
+# does not: nothing in the web build uses them (the AI Prompts menu is hidden when
+# IPlatform::HasHostFilesystem() is false). The MSBuild project globs src/**, so it needs no
+# matching list; its include path and licence copy are in FrontEnd.vcxproj.
+set(SE_DESKTOP_SHARED_SRC
+    FrontEnd/src/Sha256.cpp
+)
+
 if(WIN32)
     add_executable(SaturnExplorerFrontEnd WIN32
         FrontEnd/src/App.cpp
@@ -1126,6 +1143,7 @@ if(WIN32)
         FrontEnd/src/LayerExport.cpp
         FrontEnd/src/FileWrite.cpp
         FrontEnd/src/BinaryWriter.cpp
+        ${SE_DESKTOP_SHARED_SRC}
         FrontEnd/src/Debug/WatchList.cpp
         FrontEnd/src/Debug/MemoryBackend.cpp
         FrontEnd/src/Debug/Sh2Disasm.cpp
@@ -1328,6 +1346,7 @@ else()
             FrontEnd/src/LayerExport.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/BinaryWriter.cpp
+            ${SE_DESKTOP_SHARED_SRC}
             FrontEnd/src/Debug/WatchList.cpp
             FrontEnd/src/Debug/MemoryBackend.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp
