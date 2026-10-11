@@ -9,6 +9,7 @@
 // Usage: ActionRegistryTests [<generated docs dir> [--write]]
 //   With a directory it also checks that the checked-in response.schema.json and prompt-actions.txt are
 //   exactly what the registry generates; --write regenerates them instead.
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -395,12 +396,16 @@ void TestEveryEntryValidates()
     }
 }
 
+// Read without carriage returns: a Windows checkout may have converted the checked-in file's line endings,
+// and the generator writes '\n'.
 std::string ReadFile(const std::string& path)
 {
     std::ifstream f(path.c_str(), std::ios::binary);
     std::ostringstream ss;
     ss << f.rdbuf();
-    return ss.str();
+    std::string text = ss.str();
+    text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
+    return text;
 }
 bool WriteFile(const std::string& path, const std::string& text)
 {

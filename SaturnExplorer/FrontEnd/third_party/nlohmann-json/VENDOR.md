@@ -5,7 +5,8 @@
   copied verbatim to `include/nlohmann/json.hpp`.
 - **SHA-256 of that file:** `9bea4c8066ef4a1c206b2be5a36302f8926f7fdc6087af5d20b417d0cf103ea6`.
   The tag's `single_include/` file and the release asset `json.hpp` were downloaded separately and
-  hash identically.
+  hash identically. The hash is of the file with LF line endings, as committed (the repository
+  normalises text files, so a Windows checkout with CRLF hashes differently).
 - **License:** MIT — `LICENSE.MIT` is upstream's, copied verbatim, and travels with the binary
   (`licenses/nlohmann-json/` beside the exe, `Resources/licenses/` in the macOS bundle).
 - **Modified:** not at all. Update by replacing the header and the hash above together.
