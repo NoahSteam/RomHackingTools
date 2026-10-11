@@ -201,6 +201,7 @@ if(SE_ENABLE_DECOMPILER)
     set(SE_DECOMPILER_SOURCES
         FrontEnd/src/Decompiler/SpecBundle.cpp
         FrontEnd/src/Decompiler/MemorySnapshot.cpp
+        FrontEnd/src/Sh2Address.cpp   # the A2 partition/fold rule MemorySnapshot shares with the AI investigation
         FrontEnd/src/Decompiler/CaptureLoadImage.cpp
         FrontEnd/src/Decompiler/SaturnArchitecture.cpp
         FrontEnd/src/Decompiler/Sh2Decompiler.cpp
@@ -273,6 +274,7 @@ if(SE_ENABLE_DECOMPILER)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp
                 FrontEnd/src/Decompiler/MemorySnapshot.cpp
                 FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Sh2Address.cpp
                 FrontEnd/src/Sha256.cpp   # the BIOS image's content hash
                 FrontEnd/src/FileWrite.cpp
                 FrontEnd/src/Debug/Sh2Disasm.cpp)
@@ -1188,6 +1190,7 @@ add_custom_target(SaturnExplorerBuildInfo
 # matching list; its include path and licence copy are in FrontEnd.vcxproj.
 set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sha256.cpp
+    FrontEnd/src/Sh2Address.cpp
     FrontEnd/src/AIInvestigation/JsonReader.cpp
     FrontEnd/src/AIInvestigation/JsonWriter.cpp
 )

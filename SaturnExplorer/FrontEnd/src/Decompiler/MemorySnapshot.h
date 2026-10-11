@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "Sh2Address.h"
 #include "saturnexplorer/SaturnExplorer.h"   // se_sh2_regs
 
 namespace sfe
@@ -51,25 +52,12 @@ struct SnapshotKey
     bool operator!=(const SnapshotKey& o) const { return !(*this == o); }
 };
 
-// SH-2 address partitions, selected by bits 31-29.
-enum class Sh2Partition : uint8_t
-{
-    Cached,              // 000: bus access through the cache
-    CacheThrough,        // 001: the same bus, uncached
-    AssociativePurge,    // 010
-    CacheAddressArray,   // 011
-    Reserved,            // 100, 101
-    CacheDataArray,      // 110
-    OnChip,              // 111: on-chip peripherals
-};
-
-Sh2Partition ClassifyPartition(uint32_t address);
-const char* PartitionName(Sh2Partition partition);
-
-// The bus address 'address' reaches, with documented aliases folded. False, with 'why' naming
-// the partition, for an address that is not a bus access at all. A bus address that is simply
-// not captured still folds (and is caught by the read); this only answers "which bytes".
-bool CanonicalAddress(uint32_t address, uint32_t& canonical, std::string* why = nullptr);
+// The partition classification and the bus fold are shared with the AI investigation's
+// CanonicalTarget, so both sides apply one rule (Sh2Address.h). The names stay available here.
+using sfe::Sh2Partition;
+using sfe::ClassifyPartition;
+using sfe::PartitionName;
+using sfe::CanonicalAddress;
 
 // What lives at a canonical bus address, for messages about memory the snapshot does not hold
 // ("BIOS", "VDP2", ...).
