@@ -90,8 +90,10 @@
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6).
+           _CRT_SECURE_NO_WARNINGS: the driver is portable C++14 (it builds for the web too) and uses std::fopen
+           on purpose; /sdl would otherwise turn MSVC's fopen_s suggestion (C4996) into an error. -->
+      <PreprocessorDefinitions>SE_HAVE_ZLIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -101,8 +103,10 @@
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6).
+           _CRT_SECURE_NO_WARNINGS: the driver is portable C++14 (it builds for the web too) and uses std::fopen
+           on purpose; /sdl would otherwise turn MSVC's fopen_s suggestion (C4996) into an error. -->
+      <PreprocessorDefinitions>SE_HAVE_ZLIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -114,8 +118,10 @@
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6).
+           _CRT_SECURE_NO_WARNINGS: the driver is portable C++14 (it builds for the web too) and uses std::fopen
+           on purpose; /sdl would otherwise turn MSVC's fopen_s suggestion (C4996) into an error. -->
+      <PreprocessorDefinitions>SE_HAVE_ZLIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -131,8 +137,10 @@
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpp14</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6).
+           _CRT_SECURE_NO_WARNINGS: the driver is portable C++14 (it builds for the web too) and uses std::fopen
+           on purpose; /sdl would otherwise turn MSVC's fopen_s suggestion (C4996) into an error. -->
+      <PreprocessorDefinitions>SE_HAVE_ZLIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

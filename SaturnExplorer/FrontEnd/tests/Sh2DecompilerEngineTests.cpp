@@ -26,7 +26,13 @@
 #include <string>
 #include <vector>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <crtdbg.h>
+#include <cstdlib>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -420,6 +426,21 @@ int main(int argc, char** argv)
         std::printf("usage: %s <scratch dir>\n", argv[0]);
         return 2;
     }
+    // Under ctest stdout is a pipe and fully buffered, so a test killed by its timeout shows
+    // nothing at all; unbuffered, the last line printed says how far it got. On Windows a
+    // Debug-CRT assertion or abort() otherwise opens a message box and waits for a click
+    // that never comes on CI -- the test then "times out" with no clue why. Send those
+    // reports to stderr and fail instead.
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+#ifdef _WIN32
+    ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    for (int type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+    {
+        _CrtSetReportMode(type, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+        _CrtSetReportFile(type, _CRTDBG_FILE_STDERR);
+    }
+#endif
     const auto start = std::chrono::steady_clock::now();
     const std::string scratch = argv[1];
     RemoveTree(scratch);
@@ -427,10 +448,15 @@ int main(int argc, char** argv)
     const std::string config = Join(scratch, "config");
     CHECK(sfe::MakeDirectory(config));
 
+    std::printf("-- %s\n", "TestSha256KnownAnswers");
     TestSha256KnownAnswers();
+    std::printf("-- %s\n", "TestDecompileThroughBundle");
     TestDecompileThroughBundle(config);
+    std::printf("-- %s\n", "TestReuseAndRepair");
     TestReuseAndRepair(config);
+    std::printf("-- %s\n", "TestForeignHashUntouched");
     TestForeignHashUntouched(config);
+    std::printf("-- %s\n", "TestUnwritableConfigDir");
     TestUnwritableConfigDir(scratch);
 
     ghidra::shutdownDecompilerLibrary();
