@@ -246,6 +246,7 @@ SaturnExplorer: AI investigation end-to-end and static-rule tests
 SaturnExplorer: wire specification for the AI experiment runner's protocol additions
 SaturnExplorer: AI plan records the live client's 64-byte control block cap
 SaturnExplorer: M0 verification record
+SaturnExplorer: AI investigation hardening from the final read
 ```
 
 ## 8. Questions for M1 (none blocks starting)
