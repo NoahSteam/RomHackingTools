@@ -98,7 +98,7 @@ Yabause**). Every panel then tracks the live game. (The web build is savestate-o
 ### Decompiler — Ghidra's SH-2 engine (desktop builds)
 The desktop builds (Windows and SDL2) compile Ghidra's native decompiler, vendored with the
 SuperH SLEIGH spec in [`FrontEnd/third_party/ghidra-decompiler/`](FrontEnd/third_party/ghidra-decompiler/VENDOR.md),
-as the static library `SaturnExplorerGhidraDecomp`. It is on by default and needs nothing
+as the library `SaturnExplorerGhidraDecomp`. It is on by default and needs nothing
 installed: zlib, which it and the savestate driver's gzip path use, is vendored too
 (`FrontEnd/third_party/zlib`, target `SaturnExplorerZlib`). `-DSE_ENABLE_DECOMPILER=OFF`
 leaves it out; the web build forces it off. The library is compiled optimised in every

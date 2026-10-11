@@ -1,17 +1,11 @@
 #include "Decompiler/SpecBundle.h"
 
 #include "Decompiler/Sh2SpecData.h"
+#include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileWrite.h"
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
-
-#ifdef _WIN32
-#include <process.h>   // _getpid
-#else
-#include <unistd.h>    // getpid
-#endif
 
 namespace sfe
 {
@@ -58,10 +52,8 @@ public:
     std::string HexDigest()
     {
         const uint64_t bits = static_cast<uint64_t>(mLength) * 8u;
-        const unsigned char pad = 0x80;
-        Update(&pad, 1);
-        const unsigned char zero = 0;
-        while (mUsed != 56) Update(&zero, 1);
+        static const unsigned char kPad[64] = { 0x80 };
+        Update(kPad, (mUsed < 56 ? 56 : 120) - mUsed);
         unsigned char len[8];
         for (int i = 0; i < 8; ++i) len[i] = static_cast<unsigned char>(bits >> (56 - 8 * i));
         Update(len, 8);
@@ -117,19 +109,6 @@ std::string Join(const std::string& dir, const std::string& name)
     return dir + PathSeparator() + name;
 }
 
-bool ReadWholeFile(const std::string& path, std::vector<unsigned char>& out)
-{
-    out.clear();
-    FILE* f = std::fopen(path.c_str(), "rb");
-    if (!f) return false;
-    unsigned char buf[16384];
-    size_t n;
-    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
-    const bool ok = !std::ferror(f);
-    std::fclose(f);
-    return ok;
-}
-
 // The manifest is a pure function of the embedded files, so verifying it is a byte compare
 // with what this build would write -- no JSON parser, and a manifest from any other build
 // (or a hand-edited one) can never pass.
@@ -148,19 +127,20 @@ std::string ManifestText(const std::string& hash, const std::vector<SpecFileData
 
 const char kManifestName[] = "manifest.json";
 
-// Empty when 'dir' holds exactly what the manifest promises, else what is wrong with it.
+// Empty when 'dir' holds exactly what the manifest promises, else what is wrong with it. The
+// expected bytes are in memory, so each file is compared with them directly; the manifest's
+// hashes are what makes a directory from another build fail the manifest compare first.
 std::string Verify(const std::string& dir, const std::string& manifest,
                    const std::vector<SpecFileData>& files)
 {
-    std::vector<unsigned char> bytes;
+    std::string bytes;
     if (!ReadWholeFile(Join(dir, kManifestName), bytes)) return "manifest.json is missing";
-    if (std::string(bytes.begin(), bytes.end()) != manifest) return "manifest.json does not match this build";
+    if (bytes != manifest) return "manifest.json does not match this build";
     for (const SpecFileData& f : files)
     {
         if (!ReadWholeFile(Join(dir, f.name), bytes)) return f.name + " is missing";
         if (bytes.size() != f.size) return f.name + " has the wrong size";
-        if (Sha256Hex(bytes.data(), bytes.size()) != Sha256Hex(f.data, f.size))
-            return f.name + " does not match its hash";
+        if (std::memcmp(bytes.data(), f.data, f.size) != 0) return f.name + " does not match its contents";
     }
     return std::string();
 }
@@ -173,17 +153,9 @@ bool RemoveEntry(const std::string& path)
     return RemoveFile(path);
 }
 
-unsigned long ProcessId()
-{
-#ifdef _WIN32
-    return static_cast<unsigned long>(_getpid());
-#else
-    return static_cast<unsigned long>(::getpid());
-#endif
-}
-
-// Write every file into a fresh '<dir>.tmp-<pid>', check each by reading it back, then move
-// the whole directory to 'dir'. Empty on success, else the reason.
+// Write every file into a fresh '<dir>.tmp-<pid>', then move the whole directory to 'dir'.
+// Empty on success, else the reason. The caller verifies the published directory, which is
+// what the engine will read, so the staged copy is not read back here.
 std::string Extract(const std::string& dir, const std::string& manifest,
                     const std::vector<SpecFileData>& files)
 {
@@ -192,7 +164,6 @@ std::string Extract(const std::string& dir, const std::string& manifest,
     if (!MakeDirectory(tmp)) return "cannot create " + tmp;
 
     std::string error;
-    std::vector<unsigned char> back;
     for (const SpecFileData& f : files)
     {
         const std::string path = Join(tmp, f.name);
@@ -200,12 +171,6 @@ std::string Extract(const std::string& dir, const std::string& manifest,
         {
             RemoveEntry(tmp);
             return "cannot write " + path + ": " + error;
-        }
-        if (!ReadWholeFile(path, back) || back.size() != f.size ||
-            Sha256Hex(back.data(), back.size()) != Sha256Hex(f.data, f.size))
-        {
-            RemoveEntry(tmp);
-            return path + " did not read back as written";
         }
     }
     if (!WriteFileAtomically(Join(tmp, kManifestName), manifest.data(), manifest.size(), error))
@@ -245,16 +210,20 @@ std::string SpecBundleHash(const std::vector<SpecFileData>& files)
     return h.HexDigest().substr(0, 16);
 }
 
-std::vector<SpecFileData> Sh2SpecFiles()
+const std::vector<SpecFileData>& Sh2SpecFiles()
 {
-    std::vector<SpecFileData> files;
-    for (size_t i = 0; i < kSh2SpecFileCount; ++i)
-        files.push_back(SpecFileData{ kSh2SpecFiles[i].name, kSh2SpecFiles[i].data, kSh2SpecFiles[i].size });
+    static const std::vector<SpecFileData> files = [] {
+        std::vector<SpecFileData> v;
+        for (size_t i = 0; i < kSh2SpecFileCount; ++i)
+            v.push_back(SpecFileData{ kSh2SpecFiles[i].name, kSh2SpecFiles[i].data, kSh2SpecFiles[i].size });
+        return v;
+    }();
     return files;
 }
 
-SpecBundleResult MaterialiseSpecBundle(const std::string& configDir, const std::vector<SpecFileData>& files)
+SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
 {
+    const std::vector<SpecFileData>& files = Sh2SpecFiles();
     SpecBundleResult r;
     if (configDir.empty())
     {
@@ -309,11 +278,6 @@ SpecBundleResult MaterialiseSpecBundle(const std::string& configDir, const std::
     r.ok = true;
     r.dir = dir;
     return r;
-}
-
-SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
-{
-    return MaterialiseSpecBundle(configDir, Sh2SpecFiles());
 }
 
 }  // namespace decomp

@@ -10,6 +10,7 @@
 //
 // usage: SaturnExplorerSlaFreshnessTests <se-sleighc> <scratch dir>
 #include "Decompiler/Sh2SpecData.h"
+#include "Disc/PathUtil.h"   // ReadWholeFile
 
 #include <chrono>
 #include <cstdio>
@@ -35,18 +36,6 @@ void Check(bool ok, const char* what, int line)
 
 #define CHECK(expression) Check(static_cast<bool>(expression), #expression, __LINE__)
 
-bool ReadFile(const std::string& path, std::vector<unsigned char>& out)
-{
-    out.clear();
-    FILE* f = std::fopen(path.c_str(), "rb");
-    if (!f) return false;
-    unsigned char buf[16384];
-    size_t n;
-    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
-    std::fclose(f);
-    return true;
-}
-
 const sfe::decomp::EmbeddedSpecFile* Embedded(const char* name)
 {
     for (size_t i = 0; i < sfe::decomp::kSh2SpecFileCount; ++i)
@@ -54,14 +43,14 @@ const sfe::decomp::EmbeddedSpecFile* Embedded(const char* name)
     return nullptr;
 }
 
-bool SameAsEmbedded(const std::vector<unsigned char>& bytes, const char* name)
+bool SameAsEmbedded(const std::string& bytes, const char* name)
 {
     const sfe::decomp::EmbeddedSpecFile* e = Embedded(name);
     return e && e->size == bytes.size() && std::memcmp(e->data, bytes.data(), bytes.size()) == 0;
 }
 
 // Where the first difference is, so a failure says more than "differs".
-void ReportDifference(const char* what, const std::vector<unsigned char>& a, const std::vector<unsigned char>& b)
+void ReportDifference(const char* what, const std::string& a, const std::string& b)
 {
     size_t i = 0;
     while (i < a.size() && i < b.size() && a[i] == b[i]) ++i;
@@ -100,10 +89,10 @@ int main(int argc, char** argv)
                 std::chrono::duration<double, std::milli>(t1 - t0).count());
     CHECK(rc == 0);
 
-    std::vector<unsigned char> compiled, checkedIn;
-    CHECK(ReadFile(fresh, compiled));
+    std::string compiled, checkedIn;
+    CHECK(sfe::ReadWholeFile(fresh, compiled));
     CHECK(!compiled.empty());
-    CHECK(ReadFile(specDir + "/sh-2.sla", checkedIn));
+    CHECK(sfe::ReadWholeFile(specDir + "/sh-2.sla", checkedIn));
 
     if (compiled != checkedIn)
     {
@@ -118,8 +107,8 @@ int main(int argc, char** argv)
     }
     for (const char* name : { "superh.ldefs", "superh.pspec", "superh.cspec" })
     {
-        std::vector<unsigned char> vendored;
-        const bool read = ReadFile(specDir + "/" + name, vendored);
+        std::string vendored;
+        const bool read = sfe::ReadWholeFile(specDir + "/" + name, vendored);
         CHECK(read);
         if (read && !SameAsEmbedded(vendored, name))
         {

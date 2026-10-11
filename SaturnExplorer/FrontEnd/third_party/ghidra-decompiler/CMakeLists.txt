@@ -1,76 +1,59 @@
-# Ghidra's native decompiler as a static library, and its SLEIGH compiler as a host tool.
+# Ghidra's native decompiler as an object library, and its SLEIGH compiler as a host tool.
 # Added from the SaturnExplorer root only when SE_ENABLE_DECOMPILER is on. A directory of its
-# own so the optimisation override below stays scoped to these targets.
+# own so the flag overrides below stay scoped to these targets.
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/sources.cmake)   # written by vendor.py
 
 # The engine is built optimised in every configuration. Unoptimised, a single decompile of a
 # large function takes many times longer and MSVC Debug objects of the bigger translation
 # units approach the section limit. MSVC rejects /O2 next to the /RTC1 a Debug build carries,
-# so the runtime checks go too -- for these targets only, since this is a directory scope.
-# The runtime library (/MDd in Debug) and with it _ITERATOR_DEBUG_LEVEL are left alone: they
-# have to match every object the library is linked with.
+# so the runtime checks go too. The runtime library (/MDd in Debug) and with it
+# _ITERATOR_DEBUG_LEVEL are left alone: they have to match every object the engine is linked
+# with. Elsewhere Debug keeps line tables only (-g1): full debug info for optimised code is
+# what made these units slow to compile and link on the small macOS runners, and nobody steps
+# through the engine's locals.
 if(MSVC)
     foreach(flags CMAKE_CXX_FLAGS_DEBUG CMAKE_C_FLAGS_DEBUG)
         string(REGEX REPLACE "/RTC[1csu]+" "" ${flags} "${${flags}}")
         string(REPLACE "/Od" "/O2" ${flags} "${${flags}}")
     endforeach()
+    # Ghidra's Windows build flags (/EHsc /W3), plus /bigobj for the largest units.
+    add_compile_options(/EHsc /W3 /bigobj)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
+    string(REGEX REPLACE "(^| )-g( |$)" "\\1-g1\\2" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     string(APPEND CMAKE_CXX_FLAGS_DEBUG " -O2")
+    # The warnings upstream's own Makefile does not enable; nothing here is ours to fix.
+    add_compile_options(-Wno-sign-compare -Wno-unused-variable -Wno-unused-function
+                        -Wno-deprecated-declarations)
 endif()
+# Upstream requires C++11; the project's C++14 compiles it unchanged.
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 list(TRANSFORM SE_GHIDRA_DECOMP_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
 list(TRANSFORM SE_GHIDRA_SLEIGHC_SOURCES PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
 
-add_library(SaturnExplorerGhidraDecomp STATIC ${SE_GHIDRA_DECOMP_SOURCES})
+# An object library, so every consumer links every object, as Ghidra's own build does. The
+# engine finds its print languages (and other capabilities) through static objects that
+# register themselves; nothing references printc.obj by name, so linking a static archive
+# lets the linker drop it, and the first Architecture then throws "No print languages
+# registered" -- which MSVC did. FrontEnd.vcxproj gets the same with UseLibraryDependencyInputs.
+add_library(SaturnExplorerGhidraDecomp OBJECT ${SE_GHIDRA_DECOMP_SOURCES})
 target_include_directories(SaturnExplorerGhidraDecomp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp)
 # .sla files are zlib-compressed (slaformat/compression); se-sleighc writes them, the engine reads them.
 target_link_libraries(SaturnExplorerGhidraDecomp PUBLIC SaturnExplorerZlib)
-# Linked whole into every consumer, as Ghidra's own build links its objects. The engine finds
-# its print languages (and other capabilities) through static objects that register
-# themselves; nothing references printc.obj by name, so a linker taking only the archive
-# members it needs drops it, and the first Architecture then throws "No print languages
-# registered". MSVC did exactly that on Windows; ld64 and GNU ld happened to keep it.
-if(MSVC)
-    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
-        "/WHOLEARCHIVE:$<TARGET_FILE:SaturnExplorerGhidraDecomp>")
-elseif(APPLE)
-    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
-        "LINKER:-force_load,$<TARGET_FILE:SaturnExplorerGhidraDecomp>")
-else()
-    target_link_options(SaturnExplorerGhidraDecomp INTERFACE
-        "LINKER:--whole-archive,$<TARGET_FILE:SaturnExplorerGhidraDecomp>,--no-whole-archive")
-endif()
-# Upstream requires C++11; the project's C++14 compiles it unchanged.
-set_target_properties(SaturnExplorerGhidraDecomp PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
-
 if(WIN32)
     # The upstream sources select their Windows paths (filemanage.cc, the MSVC warning pragmas
     # in types.h) on _WINDOWS, which is what Ghidra's own Windows build defines. PUBLIC because
     # types.h is read by every file that includes an engine header.
     target_compile_definitions(SaturnExplorerGhidraDecomp PUBLIC _WINDOWS)
 endif()
-if(MSVC)
-    # Ghidra's Windows build flags (/EHsc /W3), plus /bigobj for the largest units.
-    target_compile_options(SaturnExplorerGhidraDecomp PRIVATE /EHsc /W3 /bigobj)
-    target_compile_definitions(SaturnExplorerGhidraDecomp PRIVATE _CRT_SECURE_NO_WARNINGS)
-else()
-    # The warnings upstream's own Makefile does not enable; nothing here is ours to fix.
-    target_compile_options(SaturnExplorerGhidraDecomp PRIVATE
-        -Wno-sign-compare -Wno-unused-variable -Wno-deprecated-declarations)
-endif()
 
 # The SLEIGH compiler. Turns sh-2.slaspec into the sh-2.sla that is checked in beside it;
 # the freshness test runs it on every CI build to prove the checked-in file is current.
 add_executable(se-sleighc ${SE_GHIDRA_SLEIGHC_SOURCES})
 target_link_libraries(se-sleighc PRIVATE SaturnExplorerGhidraDecomp)
-set_target_properties(se-sleighc PROPERTIES CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON)
-if(MSVC)
-    target_compile_options(se-sleighc PRIVATE /EHsc /W3 /bigobj)
-    target_compile_definitions(se-sleighc PRIVATE _CRT_SECURE_NO_WARNINGS)
-else()
-    target_compile_options(se-sleighc PRIVATE -Wno-sign-compare -Wno-unused-function)
-endif()
 
 # Regenerate the checked-in spec artifacts after a Ghidra bump or a SLEIGH patch:
 #   cmake --build build --target se-regen-sla

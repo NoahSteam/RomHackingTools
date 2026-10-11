@@ -71,6 +71,10 @@ bool RemoveFlatDirectory(const std::string& path);
 // The platform's path separator, so callers need not repeat the #ifdef.
 char PathSeparator();
 
+// This process's id, for names that must not collide with another instance's (staging files and
+// directories), so callers need not repeat the #ifdef either.
+unsigned long ProcessId();
+
 // Move the file 'from' over 'path', replacing what is there in one step (rename on POSIX,
 // MoveFileEx with REPLACE_EXISTING on Windows), so 'path' holds one complete file or the other.
 // A symlink at 'path' is itself replaced; the file it pointed to is left alone.

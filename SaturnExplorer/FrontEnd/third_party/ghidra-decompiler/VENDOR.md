@@ -35,12 +35,12 @@ patch beyond these.
 
 ## Builds
 
-- CMake: `SaturnExplorerGhidraDecomp` (static), `se-sleighc` (host tool), `se-regen-sla`
+- CMake: `SaturnExplorerGhidraDecomp` (object library), `se-sleighc` (host tool), `se-regen-sla`
   (regenerates the checked-in spec artifacts), all only when `SE_ENABLE_DECOMPILER` is on.
 - MSBuild: `SaturnExplorerGhidraDecomp.vcxproj`, referenced by `FrontEnd.vcxproj`. It globs
   `cpp\*.cc` minus the three compiler files, which works because `vendor.py` puts nothing else
   there.
-- Both link the library whole (`/WHOLEARCHIVE`, `-force_load`, `--whole-archive`; MSBuild's
+- Both link every engine object into the consumer (CMake: an OBJECT library; MSBuild:
   `UseLibraryDependencyInputs`). The engine's print languages and other capabilities register
   through static objects nothing references by name, so an ordinary library link may drop
   them, and the first `Architecture` then throws "No print languages registered".

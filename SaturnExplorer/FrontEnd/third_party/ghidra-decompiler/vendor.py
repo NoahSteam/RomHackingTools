@@ -54,10 +54,6 @@ def fail(msg):
     sys.exit(1)
 
 
-def names(group):
-    return group.split()
-
-
 def header_closure(src_dir, cc_files):
     """Every local header the given sources reach, so only what is compiled is vendored."""
     seen, todo = set(), list(cc_files)
@@ -114,8 +110,8 @@ def main(argv):
 
     src_cpp = os.path.join(tree, UPSTREAM_CPP)
     src_spec = os.path.join(tree, UPSTREAM_SPEC)
-    lib_cc = [n + ".cc" for g in (CORE, DECCORE, SLEIGH, GLUE) for n in names(g)]
-    comp_cc = [n + ".cc" for n in names(SLACOMP)]
+    lib_cc = [n + ".cc" for g in (CORE, DECCORE, SLEIGH, GLUE) for n in g.split()]
+    comp_cc = [n + ".cc" for n in SLACOMP.split()]
     headers = header_closure(src_cpp, lib_cc + comp_cc)
 
     with tempfile.TemporaryDirectory() as tmp:

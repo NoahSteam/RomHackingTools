@@ -19,6 +19,8 @@ permissions:
   contents: read
 
 # The gates each job proves are listed in SaturnExplorer/Docs/Decompiler/PLAN.md, contract A7.
+# Builds use --parallel 4: a bare --parallel gives the Makefile generator (macOS) an unbounded
+# make -j, which swaps the 3-core runners on the decompiler engine's large units.
 jobs:
   native:
     name: Supported platform build + tests (${{ matrix.os }})
@@ -43,10 +45,10 @@ jobs:
       # Built on its own first only so its build time is visible in the log (A7 "Timing").
       - name: Build decompiler engine (timed)
         shell: bash
-        run: time cmake --build build --config Debug --parallel --target SaturnExplorerGhidraDecomp
+        run: time cmake --build build --config Debug --parallel 4 --target SaturnExplorerGhidraDecomp
 
       - name: Build
-        run: cmake --build build --config Debug --parallel
+        run: cmake --build build --config Debug --parallel 4
 
       - name: Run CTest
         run: ctest --test-dir build -C Debug --output-on-failure
@@ -108,10 +110,10 @@ jobs:
           cmake -S . -B build-x86_64 -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
           -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
       - name: Build decompiler engine (timed)
-        run: time cmake --build build-x86_64 --parallel --target SaturnExplorerGhidraDecomp
+        run: time cmake --build build-x86_64 --parallel 4 --target SaturnExplorerGhidraDecomp
       - name: Build decompiler tests
         run: >
-          cmake --build build-x86_64 --parallel --target
+          cmake --build build-x86_64 --parallel 4 --target
           SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
           SaturnExplorerSavestateShapeTests
       - name: Verify the binaries are x86_64
@@ -140,7 +142,7 @@ jobs:
           cmake -S . -B build-bundle -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
           -DSE_MACOS_BUNDLE_LIBS=ON -DSE_MACOS_SIGN_IDENTITY=-
       - name: Build
-        run: cmake --build build-bundle --parallel
+        run: cmake --build build-bundle --parallel 4
       - name: Install the bundle
         run: cmake --install build-bundle --prefix "$PWD/stage"
       - name: Verify the installed bundle

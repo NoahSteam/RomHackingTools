@@ -21,6 +21,7 @@
 #endif
 
 #include "Decompiler/SpecBundle.h"
+#include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileWrite.h"
 
 #include "libdecomp.hh"
@@ -28,9 +29,8 @@
 #include "sleigh_arch.hh"
 
 #include <chrono>
-#include <csignal>
 #include <cstdio>
-#include <exception>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -38,7 +38,6 @@
 
 #ifdef _WIN32
 #include <crtdbg.h>
-#include <cstdlib>
 #else
 #include <sys/stat.h>
 #include <unistd.h>
@@ -165,7 +164,6 @@ std::string DecompileFixture1()
     TestArchitecture arch(image, &errs);
     ghidra::DocumentStorage store;
     arch.readonlypropagate = true;
-    std::printf("   Architecture::init\n");
     try
     {
         arch.init(store);
@@ -191,13 +189,10 @@ std::string DecompileFixture1()
     std::ostringstream out;
     try
     {
-        std::printf("   followFlow\n");
         callee->followFlow(lo, hi);
         fd->followFlow(lo, hi);
-        std::printf("   actions\n");
         arch.allacts.getCurrent()->reset(*fd);
         arch.allacts.getCurrent()->perform(*fd);
-        std::printf("   print\n");
         arch.print->setOutputStream(&out);
         arch.print->docFunction(fd);
     }
@@ -231,18 +226,6 @@ void RemoveTree(const std::string& path)
     sfe::RemoveEmptyDirectory(path);
 }
 
-bool ReadFile(const std::string& path, std::vector<unsigned char>& out)
-{
-    out.clear();
-    FILE* f = std::fopen(path.c_str(), "rb");
-    if (!f) return false;
-    unsigned char buf[16384];
-    size_t n;
-    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) out.insert(out.end(), buf, buf + n);
-    std::fclose(f);
-    return true;
-}
-
 bool WriteFile(const std::string& path, const void* data, size_t size)
 {
     std::string error;
@@ -253,8 +236,8 @@ bool MatchesEmbedded(const std::string& dir)
 {
     for (const sfe::decomp::SpecFileData& f : sfe::decomp::Sh2SpecFiles())
     {
-        std::vector<unsigned char> bytes;
-        if (!ReadFile(Join(dir, f.name), bytes)) return false;
+        std::string bytes;
+        if (!sfe::ReadWholeFile(Join(dir, f.name), bytes)) return false;
         if (bytes.size() != f.size || std::memcmp(bytes.data(), f.data, f.size) != 0) return false;
     }
     return true;
@@ -262,31 +245,10 @@ bool MatchesEmbedded(const std::string& dir)
 
 // ---- Dying loudly ------------------------------------------------------------------------
 
-// A crash, abort, terminate or CRT invalid-parameter stop inside the engine would otherwise end
-// the process with no text at all (or, on Windows, a dialog nobody clicks). Each says what
-// happened on stderr before exiting, so a CI failure names its cause.
-void OnAbort(int)
-{
-    std::fprintf(stderr, "FATAL: SIGABRT\n");
-    std::_Exit(3);
-}
-
-void OnTerminate()
-{
-    const char* what = "no active exception";
-    std::string text;
-    if (std::exception_ptr e = std::current_exception())
-    {
-        try { std::rethrow_exception(e); }
-        catch (ghidra::LowlevelError& l) { text = "ghidra::LowlevelError: " + l.explain; }
-        catch (std::exception& x) { text = std::string("std::exception: ") + x.what(); }
-        catch (...) { text = "unknown exception type"; }
-        what = text.c_str();
-    }
-    std::fprintf(stderr, "FATAL: std::terminate (%s)\n", what);
-    std::_Exit(3);
-}
-
+// On Windows a crash, a Debug-CRT assertion, abort() or a CRT invalid-parameter stop inside the
+// engine otherwise ends the process with no text at all, or opens a dialog nobody clicks on CI.
+// These say what happened on stderr instead, so a CI failure names its cause. (POSIX needs
+// nothing: ctest already reports a signal, and the C++ exceptions are caught in main.)
 #ifdef _WIN32
 void OnInvalidParameter(const wchar_t* expr, const wchar_t* func, const wchar_t* file, unsigned line, uintptr_t)
 {
@@ -313,10 +275,7 @@ LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* info)
 
 void InstallFatalReporters()
 {
-    std::signal(SIGABRT, OnAbort);
-    std::set_terminate(OnTerminate);
 #ifdef _WIN32
-    ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     ::SetUnhandledExceptionFilter(OnUnhandledException);
     _set_invalid_parameter_handler(OnInvalidParameter);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
@@ -351,12 +310,12 @@ void TestDecompileThroughBundle(const std::string& config)
     CHECK(b.extracted);
     CHECK(!b.repaired);
     if (!b.ok) return;
-    CHECK(b.dir == Join(Join(config, "decompiler"), sfe::decomp::SpecBundleHash(sfe::decomp::Sh2SpecFiles())));
-    CHECK(sfe::decomp::SpecBundleHash(sfe::decomp::Sh2SpecFiles()).size() == 16);
+    const std::string hash = sfe::decomp::SpecBundleHash(sfe::decomp::Sh2SpecFiles());
+    CHECK(hash.size() == 16);
+    CHECK(b.dir == Join(Join(config, "decompiler"), hash));
     CHECK(MatchesEmbedded(b.dir));
 
     t0 = std::chrono::steady_clock::now();
-    std::printf("   startDecompilerLibrary\n");
     ghidra::startDecompilerLibrary(std::vector<std::string>{ b.dir });
     const std::string c = DecompileFixture1();
     std::printf("decompile fixture 1 (library start, Architecture init, decompile, print): %.1f ms\n", MsSince(t0));
@@ -380,8 +339,8 @@ void TestReuseAndRepair(const std::string& config)
     const std::string dir = b.dir;
 
     // One flipped byte in the .sla.
-    std::vector<unsigned char> sla;
-    CHECK(ReadFile(Join(dir, "sh-2.sla"), sla));
+    std::string sla;
+    CHECK(sfe::ReadWholeFile(Join(dir, "sh-2.sla"), sla));
     sla[sla.size() / 2] ^= 0x5A;
     CHECK(WriteFile(Join(dir, "sh-2.sla"), sla.data(), sla.size()));
     b = sfe::decomp::MaterialiseSh2SpecBundle(config);
@@ -431,8 +390,8 @@ void TestForeignHashUntouched(const std::string& config)
     const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(config);
     CHECK(b.ok && b.repaired);
 
-    std::vector<unsigned char> bytes;
-    CHECK(ReadFile(Join(foreign, "sh-2.sla"), bytes));
+    std::string bytes;
+    CHECK(sfe::ReadWholeFile(Join(foreign, "sh-2.sla"), bytes));
     CHECK(bytes.size() == sizeof junk && std::memcmp(bytes.data(), junk, sizeof junk) == 0);
     std::vector<std::string> names;
     CHECK(sfe::ListDirectory(foreign, names) && names.size() == 1);
@@ -499,6 +458,10 @@ void TestUnwritableConfigDir(const std::string& scratch)
 
 }  // namespace
 
+// Each case announces itself first; with stdout unbuffered, the last name printed is where a
+// test that never returns got stuck.
+#define RUN(call) (std::printf("-- %s\n", #call), call)
+
 int main(int argc, char** argv)
 {
     if (argc != 2)
@@ -524,16 +487,11 @@ int main(int argc, char** argv)
     // exception filter above sees them first, as an opaque 0xE06D7363, without the message.
     try
     {
-        std::printf("-- %s\n", "TestSha256KnownAnswers");
-        TestSha256KnownAnswers();
-        std::printf("-- %s\n", "TestDecompileThroughBundle");
-        TestDecompileThroughBundle(config);
-        std::printf("-- %s\n", "TestReuseAndRepair");
-        TestReuseAndRepair(config);
-        std::printf("-- %s\n", "TestForeignHashUntouched");
-        TestForeignHashUntouched(config);
-        std::printf("-- %s\n", "TestUnwritableConfigDir");
-        TestUnwritableConfigDir(scratch);
+        RUN(TestSha256KnownAnswers());
+        RUN(TestDecompileThroughBundle(config));
+        RUN(TestReuseAndRepair(config));
+        RUN(TestForeignHashUntouched(config));
+        RUN(TestUnwritableConfigDir(scratch));
     }
     catch (ghidra::LowlevelError& e)
     {

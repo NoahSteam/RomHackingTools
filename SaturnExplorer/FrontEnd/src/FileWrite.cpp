@@ -94,6 +94,20 @@ bool WriteDirect(const std::string& path, const void* data, size_t size, std::st
     return WriteAndClose(f, path, data, size, error);
 }
 
+}  // namespace
+
+unsigned long ProcessId()
+{
+#ifdef _WIN32
+    return (unsigned long)_getpid();
+#else
+    return (unsigned long)::getpid();
+#endif
+}
+
+namespace
+{
+
 // Create a staging file beside 'path' that did not exist before this call, and open it.
 //
 // A fixed name ("<path>.separt") cannot be told apart from somebody else's file of that name,
@@ -102,11 +116,7 @@ bool WriteDirect(const std::string& path, const void* data, size_t size, std::st
 FILE* OpenStagingFile(const std::string& path, std::string& temp, std::string& error)
 {
     static std::atomic<unsigned> counter(0);
-#ifdef _WIN32
-    const unsigned long pid = (unsigned long)_getpid();
-#else
-    const unsigned long pid = (unsigned long)::getpid();
-#endif
+    const unsigned long pid = ProcessId();
     for (int attempt = 0; attempt < 100; ++attempt)
     {
         temp = path + ".separt-" + std::to_string(pid) + "-" + std::to_string(++counter);

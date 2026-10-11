@@ -49,18 +49,15 @@ struct SpecBundleResult
 // The embedded SH-2 bundle under 'configDir' (normally Settings::EnsureConfigDir()).
 SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir);
 
-// The same for an arbitrary file set; what the tests drive.
-SpecBundleResult MaterialiseSpecBundle(const std::string& configDir,
-                                       const std::vector<SpecFileData>& files);
-
 // The embedded SH-2 files, in the order they are written.
-std::vector<SpecFileData> Sh2SpecFiles();
+const std::vector<SpecFileData>& Sh2SpecFiles();
 
 // The directory name for a file set: the first 16 hex digits of the SHA-256 of every file's
 // name, size and bytes, in order.
 std::string SpecBundleHash(const std::vector<SpecFileData>& files);
 
-// Lower-case hex SHA-256 (FIPS 180-4). Exposed for the tests' known-answer check.
+// Lower-case hex SHA-256 (FIPS 180-4). Names the directory and fills the manifest; exposed for
+// the tests' known-answer check.
 std::string Sha256Hex(const void* data, size_t size);
 
 }  // namespace decomp
