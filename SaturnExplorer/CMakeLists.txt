@@ -897,6 +897,30 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME SaturnExplorerCanonicalTargetTests COMMAND SaturnExplorerCanonicalTargetTests)
 
+    add_executable(SaturnExplorerWriteIntervalTests
+        FrontEnd/tests/WriteIntervalTests.cpp
+        FrontEnd/src/AIInvestigation/WriteInterval.cpp
+    )
+    target_include_directories(SaturnExplorerWriteIntervalTests PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_test(NAME SaturnExplorerWriteIntervalTests COMMAND SaturnExplorerWriteIntervalTests)
+
+    add_executable(SaturnExplorerSourceKeyTests
+        FrontEnd/tests/SourceKeyTests.cpp
+        FrontEnd/src/AIInvestigation/SourceKey.cpp
+        FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
+        FrontEnd/src/AIInvestigation/WriteInterval.cpp
+        FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
+        FrontEnd/src/AIInvestigation/Encoding.cpp
+        FrontEnd/src/AIInvestigation/JsonReader.cpp
+        FrontEnd/src/AIInvestigation/JsonWriter.cpp
+        FrontEnd/src/Debug/MemoryCompare.cpp
+        FrontEnd/src/Sh2Address.cpp
+        FrontEnd/src/Sha256.cpp
+    )
+    target_include_directories(SaturnExplorerSourceKeyTests
+        PRIVATE FrontEnd/src ${CMAKE_CURRENT_SOURCE_DIR}/include ${SE_NLOHMANN_JSON_DIR})
+    add_test(NAME SaturnExplorerSourceKeyTests COMMAND SaturnExplorerSourceKeyTests)
+
     add_executable(SaturnExplorerFileWriteTests
         FrontEnd/tests/FileWriteTests.cpp
         FrontEnd/src/FileWrite.cpp
@@ -1221,6 +1245,9 @@ set(SE_DESKTOP_SHARED_SRC
     FrontEnd/src/Sh2Address.cpp
     FrontEnd/src/AIInvestigation/Encoding.cpp
     FrontEnd/src/AIInvestigation/CanonicalTarget.cpp
+    FrontEnd/src/AIInvestigation/SourceKey.cpp
+    FrontEnd/src/AIInvestigation/EvidenceCapture.cpp
+    FrontEnd/src/AIInvestigation/WriteInterval.cpp
     FrontEnd/src/AIInvestigation/JsonReader.cpp
     FrontEnd/src/AIInvestigation/JsonWriter.cpp
 )
