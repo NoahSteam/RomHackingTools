@@ -27,11 +27,9 @@
 #include <vector>
 
 #ifdef _WIN32
+// Not <windows.h>: it #defines LoadImage to LoadImageA, which renames ghidra::LoadImage.
 #include <crtdbg.h>
 #include <cstdlib>
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
 #else
 #include <sys/stat.h>
 #include <unistd.h>
@@ -433,7 +431,6 @@ int main(int argc, char** argv)
     // reports to stderr and fail instead.
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 #ifdef _WIN32
-    ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     for (int type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
     {

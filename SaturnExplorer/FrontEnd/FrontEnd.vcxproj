@@ -81,7 +81,8 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;comdlg32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <!-- winhttp: IPlatform::HttpsGet (update check); winmm: IPlatform::PlayAudio (sound preview). The CMake target links both. -->
+      <AdditionalDependencies>d3d11.lib;dxgi.lib;d3dcompiler.lib;comdlg32.lib;ws2_32.lib;winhttp.lib;winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
