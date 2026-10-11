@@ -21,7 +21,8 @@
 //
 // Directories for other hashes (other builds sharing the config dir) are never touched.
 //
-// Filesystem only: no Ghidra header, no ImGui, no global state, callable from any thread.
+// Filesystem only: no Ghidra header, no ImGui, no global state beyond the test hook below,
+// callable from any thread.
 #pragma once
 
 #include <cstddef>
@@ -58,6 +59,11 @@ const std::vector<SpecFileData>& Sh2SpecFiles();
 // The directory name for a file set: the first 16 hex digits of the SHA-256 of every file's
 // name, size and bytes, in order.
 std::string SpecBundleHash(const std::vector<SpecFileData>& files);
+
+// Tests only: called with the staging directory after its files are written and before it is
+// verified and published, so a test can damage the staged copy and check nothing unverified is
+// published. Null, the default, everywhere else.
+void SetSpecBundleStagingHookForTests(void (*hook)(const std::string& stagingDir));
 
 // Lower-case hex SHA-256 (FIPS 180-4). Names the directory and fills the manifest; exposed for
 // the tests' known-answer check.

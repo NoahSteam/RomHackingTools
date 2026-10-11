@@ -26,6 +26,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/file.h>    // flock
 #include <sys/types.h>
 #include <unistd.h>
 #define SE_MKDIR(p)  ::mkdir((p), 0755)
@@ -315,6 +316,38 @@ bool RemoveLink(const std::string& path)
     return ::DeleteFileA(path.c_str()) != 0;
 #else
     return ::unlink(path.c_str()) == 0;
+#endif
+}
+
+FileLock::FileLock(const std::string& path, bool wait)
+{
+#ifdef _WIN32
+    // A null SECURITY_ATTRIBUTES makes the handle non-inheritable, the counterpart of O_CLOEXEC.
+    const HANDLE h = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
+                                   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                                   OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    mHandle = reinterpret_cast<intptr_t>(h);
+    OVERLAPPED whole = {};
+    const DWORD flags = LOCKFILE_EXCLUSIVE_LOCK | (wait ? 0 : LOCKFILE_FAIL_IMMEDIATELY);
+    mHeld = ::LockFileEx(h, flags, 0, MAXDWORD, MAXDWORD, &whole) != 0;
+#else
+    const int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0) return;
+    mHandle = fd;
+    int rc;
+    do rc = ::flock(fd, LOCK_EX | (wait ? 0 : LOCK_NB)); while (rc != 0 && errno == EINTR);
+    mHeld = rc == 0;
+#endif
+}
+
+FileLock::~FileLock()
+{
+    if (mHandle == -1) return;
+#ifdef _WIN32
+    ::CloseHandle(reinterpret_cast<HANDLE>(mHandle));   // releases the lock
+#else
+    ::close(static_cast<int>(mHandle));
 #endif
 }
 

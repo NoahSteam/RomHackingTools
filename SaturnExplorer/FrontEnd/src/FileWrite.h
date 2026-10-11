@@ -17,6 +17,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -83,6 +84,26 @@ char PathSeparator();
 // This process's id, for names that must not collide with another instance's (staging files and
 // directories), so callers need not repeat the #ifdef either.
 unsigned long ProcessId();
+
+// An exclusive advisory lock on the file at 'path' (created empty if missing), held for the
+// object's lifetime: flock on POSIX, LockFileEx on Windows. It excludes other processes and
+// other FileLocks in this one, and the OS drops it if the process dies, so a crash never
+// leaves it held. The descriptor is close-on-exec (Windows handles are not inheritable by
+// default): an emulator launched while the lock is held must not inherit it, or the lock would
+// stay held until that emulator exits. With wait=false, Held() is false when someone else has it.
+class FileLock
+{
+public:
+    explicit FileLock(const std::string& path, bool wait = true);
+    ~FileLock();
+    FileLock(const FileLock&) = delete;
+    FileLock& operator=(const FileLock&) = delete;
+    bool Held() const { return mHeld; }
+
+private:
+    bool mHeld = false;
+    intptr_t mHandle = -1;   // a POSIX descriptor, or a Windows HANDLE
+};
 
 // Move the file 'from' over 'path', replacing what is there in one step (rename on POSIX,
 // MoveFileEx with REPLACE_EXISTING on Windows), so 'path' holds one complete file or the other.

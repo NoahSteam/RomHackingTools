@@ -4,19 +4,9 @@
 #include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileWrite.h"
 
-#include <cerrno>
+#include <atomic>
 #include <cstdint>
 #include <cstring>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#else
-#include <fcntl.h>
-#include <sys/file.h>
-#include <unistd.h>
-#endif
 
 namespace sfe
 {
@@ -138,6 +128,8 @@ std::string ManifestText(const std::string& hash, const std::vector<SpecFileData
 
 const char kManifestName[] = "manifest.json";
 
+std::atomic<void (*)(const std::string&)> gStagingHook(nullptr);
+
 // Empty when 'dir' holds exactly what the manifest promises, else what is wrong with it. The
 // expected bytes are in memory, so each file is compared with them directly; the manifest's
 // hashes are what makes a directory from another build fail the manifest compare first.
@@ -167,52 +159,6 @@ bool RemoveEntry(const std::string& path)
     return RemoveFile(path);
 }
 
-// An exclusive advisory lock on '<root>/<hash>.lock', held while a bundle is verified,
-// repaired and published. Two instances repairing the same damaged directory would otherwise
-// race: the slower one, acting on its stale verdict, deletes the copy the faster one has just
-// verified and handed to its engine. The OS releases the lock if the process dies, so a crash
-// never leaves it held. The lock file itself stays; it is empty.
-class BundleLock
-{
-public:
-    explicit BundleLock(const std::string& path)
-    {
-#ifdef _WIN32
-        mHandle = ::CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                                OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (mHandle == INVALID_HANDLE_VALUE) return;
-        OVERLAPPED whole = {};
-        mHeld = ::LockFileEx(mHandle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &whole) != 0;
-#else
-        mFd = ::open(path.c_str(), O_RDWR | O_CREAT, 0644);
-        if (mFd < 0) return;
-        int rc;
-        do rc = ::flock(mFd, LOCK_EX); while (rc != 0 && errno == EINTR);
-        mHeld = rc == 0;
-#endif
-    }
-    ~BundleLock()
-    {
-#ifdef _WIN32
-        if (mHandle != INVALID_HANDLE_VALUE) ::CloseHandle(mHandle);   // releases the lock
-#else
-        if (mFd >= 0) ::close(mFd);
-#endif
-    }
-    BundleLock(const BundleLock&) = delete;
-    BundleLock& operator=(const BundleLock&) = delete;
-    bool Held() const { return mHeld; }
-
-private:
-    bool mHeld = false;
-#ifdef _WIN32
-    HANDLE mHandle = INVALID_HANDLE_VALUE;
-#else
-    int mFd = -1;
-#endif
-};
-
 // Write every file into a fresh '<dir>.tmp-<pid>', verify the staged copy, then move the whole
 // directory to 'dir', so nothing unverified is ever published under the real name. Empty on
 // success, else the reason. The caller verifies the published directory again: that is the
@@ -239,6 +185,7 @@ std::string Extract(const std::string& dir, const std::string& manifest,
         RemoveEntry(tmp);
         return "cannot write the manifest in " + tmp + ": " + error;
     }
+    if (void (*hook)(const std::string&) = gStagingHook.load()) hook(tmp);
     const std::string problem = Verify(tmp, manifest, files);
     if (!problem.empty())
     {
@@ -254,6 +201,11 @@ std::string Extract(const std::string& dir, const std::string& manifest,
 }
 
 }  // namespace
+
+void SetSpecBundleStagingHookForTests(void (*hook)(const std::string& stagingDir))
+{
+    gStagingHook.store(hook);
+}
 
 std::string Sha256Hex(const void* data, size_t size)
 {
@@ -300,7 +252,10 @@ SpecBundleResult MaterialiseSh2SpecBundle(const std::string& configDir)
     const std::string manifest = ManifestText(hash, files);
 
     const bool haveRoot = MakeDirectory(configDir) && MakeDirectory(root);
-    BundleLock lock(Join(root, hash + ".lock"));
+    // Verification, repair and publication are serialised across instances: two repairing the
+    // same damaged directory would otherwise race, the slower one acting on its stale verdict
+    // and deleting the copy the faster one has just verified and handed to its engine.
+    FileLock lock(Join(root, hash + ".lock"));
 
     // Verified under the lock, so the verdict cannot be overtaken by another instance's repair.
     // Without the lock (a config dir that cannot be written) a valid directory is still used --

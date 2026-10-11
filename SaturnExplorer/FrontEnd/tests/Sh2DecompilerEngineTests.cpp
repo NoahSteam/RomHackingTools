@@ -585,6 +585,33 @@ void TestConcurrentRepair(const std::string& config)
     CHECK(MatchesEmbedded(first.dir));
 }
 
+// A staged copy that does not verify is never published: the failure is reported and the real
+// directory does not appear. Before the fix the staged files were renamed into place first and
+// only checked afterwards, leaving a bad directory under the real name.
+void DamageStagedSla(const std::string& stagingDir)
+{
+    WriteFile(Join(stagingDir, "sh-2.sla"), "x", 1);
+}
+
+void TestStagedCopyVerifiedBeforePublishing(const std::string& config)
+{
+    const std::string dir = Join(Join(config, "decompiler"), sfe::decomp::SpecBundleHash(sfe::decomp::Sh2SpecFiles()));
+    RemoveTree(dir);
+    sfe::decomp::SetSpecBundleStagingHookForTests(DamageStagedSla);
+    const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(config);
+    sfe::decomp::SetSpecBundleStagingHookForTests(nullptr);
+    std::printf("damaged staging copy -> %s\n", b.error.c_str());
+    CHECK(!b.ok);
+    CHECK(b.error.find("did not verify") != std::string::npos);
+    CHECK(!sfe::PathEntryExists(dir));
+    std::vector<std::string> names;
+    CHECK(sfe::ListDirectory(Join(config, "decompiler"), names));
+    for (const std::string& n : names) CHECK(n.find(".tmp-") == std::string::npos);
+
+    const sfe::decomp::SpecBundleResult again = sfe::decomp::MaterialiseSh2SpecBundle(config);
+    CHECK(again.ok && again.extracted);
+}
+
 // Deny writes into 'path' (and, on Windows, everything below it) the way a locked-down config
 // dir would: mode 0500 on POSIX, a deny-write ACE for Everyone on Windows. Undone by
 // AllowWrites. Root ignores mode bits, which the caller detects by probing.
@@ -621,6 +648,14 @@ void TestUnwritableConfigDir(const std::string& scratch)
     const std::string probe = Join(config, "probe");
     const bool enforced = !sfe::MakeDirectory(probe);
     if (!enforced) sfe::RemoveEmptyDirectory(probe);
+    // Only root may fall back: it bypasses mode bits by design. Anywhere else an unenforced
+    // denial means this test has lost the coverage it exists for, and must say so.
+#ifdef _WIN32
+    const bool mayFallBack = false;
+#else
+    const bool mayFallBack = ::geteuid() == 0;
+#endif
+    CHECK(enforced || mayFallBack);
     std::string target = config;
     if (!enforced)
     {
@@ -704,6 +739,7 @@ int main(int argc, char** argv)
         RUN(TestForeignHashUntouched(config));
         RUN(TestLinkInPlaceOfBundle(config));
         RUN(TestConcurrentRepair(config));
+        RUN(TestStagedCopyVerifiedBeforePublishing(config));
         RUN(TestUnwritableConfigDir(scratch));
     }
     catch (ghidra::LowlevelError& e)

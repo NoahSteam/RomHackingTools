@@ -18,7 +18,10 @@
 #include <csignal>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <spawn.h>
+#include <sys/wait.h>
 #include <unistd.h>
+extern char** environ;
 #endif
 
 #include "FileWrite.h"
@@ -284,6 +287,47 @@ void TestLinkedDirectoryIsNotEmptied()
 #endif
 }
 
+// FileLock excludes a second holder, and a child launched while it is held does not keep it:
+// without close-on-exec the child inherits the descriptor, and the lock -- which belongs to the
+// open file, not the process -- stays held until the child exits, long after its owner let go.
+void TestFileLock()
+{
+    CHECK(MakeDirectory(kDir));
+    const std::string path = P("bundle.lock");
+    {
+        FileLock first(path);
+        CHECK(first.Held());
+        FileLock second(path, false);
+        CHECK(!second.Held());
+    }
+    {
+        FileLock again(path, false);
+        CHECK(again.Held());   // released with its owner
+    }
+#ifndef _WIN32
+    pid_t child = -1;
+    {
+        FileLock owner(path);
+        CHECK(owner.Held());
+        char sleepName[] = "sleep";
+        char seconds[] = "30";
+        char* argv[] = { sleepName, seconds, nullptr };
+        CHECK(::posix_spawnp(&child, "sleep", nullptr, nullptr, argv, environ) == 0);
+    }
+    {
+        FileLock afterOwner(path, false);
+        CHECK(afterOwner.Held());   // the still-running child must not be holding it
+    }
+    if (child > 0)
+    {
+        ::kill(child, SIGKILL);
+        int status = 0;
+        ::waitpid(child, &status, 0);
+    }
+#endif
+    CHECK(RemoveFile(path));
+}
+
 void TestMovePath()
 {
     CHECK(MakeDirectory(kDir));
@@ -312,6 +356,7 @@ int main()
     TestDirectoryHelpers();
     TestMovePath();
     TestLinkedDirectoryIsNotEmptied();
+    TestFileLock();
     RemoveFlatDirectory(kDir);
 
     if (gFailures != 0)

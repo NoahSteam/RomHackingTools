@@ -217,6 +217,14 @@ if(SE_ENABLE_DECOMPILER)
         add_test(NAME SaturnExplorerSh2DecompilerEngineTests
                  COMMAND SaturnExplorerSh2DecompilerEngineTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_engine_test)
 
+        # se-regen-sla's header step must fail, keeping its output, when it cannot publish.
+        add_test(NAME SaturnExplorerGenerateSpecDataFailureTests
+                 COMMAND ${CMAKE_COMMAND}
+                     -DGENERATOR=${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateSpecData.cmake
+                     -DSPEC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/ghidra-decompiler/processors/SuperH
+                     -DWORK=${CMAKE_CURRENT_BINARY_DIR}/generate_spec_data_failure
+                     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests/GenerateSpecDataFailure.cmake)
+
         # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
         set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
                              PROPERTIES TIMEOUT 60)
