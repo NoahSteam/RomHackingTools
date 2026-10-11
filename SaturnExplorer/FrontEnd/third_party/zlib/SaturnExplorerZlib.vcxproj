@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Vendored zlib 1.3.1 (see VENDOR.md): used by the savestate driver's gzip path and by the Ghidra decompiler's .sla reader. The CMake build's SaturnExplorerZlib target. -->
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -20,8 +21,8 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{E5FABA33-9251-4FA8-8046-079BC32EF155}</ProjectGuid>
-    <RootNamespace>SaturnExplorerSavestateDriver</RootNamespace>
+    <ProjectGuid>{D96631E4-4701-4061-AA61-B3EE897B22E2}</ProjectGuid>
+    <RootNamespace>SaturnExplorerZlib</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -86,72 +87,50 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-    </ClCompile>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
-      <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
-      <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Link>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\..\include;$(ProjectDir)src;$(ProjectDir)..\Common\src;$(ProjectDir)..\..\FrontEnd\third_party\zlib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <!-- Mednafen states are gzip-compressed; the vendored zlib makes the inflate path unconditional (PLAN.md A6). -->
-      <PreprocessorDefinitions>SE_HAVE_ZLIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
-    <Link>
-      <EnableCOMDATFolding>true</EnableCOMDATFolding>
-      <OptimizeReferences>true</OptimizeReferences>
-    </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\SavestateDriver.h" />
+    <ClCompile Include="adler32.c" />
+    <ClCompile Include="compress.c" />
+    <ClCompile Include="crc32.c" />
+    <ClCompile Include="deflate.c" />
+    <ClCompile Include="infback.c" />
+    <ClCompile Include="inffast.c" />
+    <ClCompile Include="inflate.c" />
+    <ClCompile Include="inftrees.c" />
+    <ClCompile Include="trees.c" />
+    <ClCompile Include="uncompr.c" />
+    <ClCompile Include="zutil.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\SavestateDriver.cpp" />
-  </ItemGroup>
-  <!-- Build order only: a static library does not absorb another, so whatever links this one
-       (FrontEnd.vcxproj) references SaturnExplorerZlib itself. -->
-  <ItemGroup>
-    <ProjectReference Include="..\..\FrontEnd\third_party\zlib\SaturnExplorerZlib.vcxproj">
-      <Project>{d96631e4-4701-4061-aa61-b3ee897b22e2}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
+    <ClInclude Include="*.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

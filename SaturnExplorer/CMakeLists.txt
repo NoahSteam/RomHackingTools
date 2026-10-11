@@ -40,6 +40,32 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # on a cross-origin-isolated server (see Integration/Yabause/README.md "Web live").
 option(SE_WEB_LIVE "Emscripten: include the live driver (needs pthreads + a COOP/COEP host)" OFF)
 
+# Vendored zlib (FrontEnd/third_party/zlib), on every desktop build. The decompiler's .sla
+# files are deflate-compressed, and the savestate driver inflates gzip Mednafen states; neither
+# may depend on whether the build machine happens to have zlib installed. The web build uses
+# Emscripten's port instead (below).
+if(NOT EMSCRIPTEN)
+    enable_language(C)
+    set(SE_ZLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/zlib)
+    add_library(SaturnExplorerZlib STATIC
+        ${SE_ZLIB_DIR}/adler32.c
+        ${SE_ZLIB_DIR}/compress.c
+        ${SE_ZLIB_DIR}/crc32.c
+        ${SE_ZLIB_DIR}/deflate.c
+        ${SE_ZLIB_DIR}/infback.c
+        ${SE_ZLIB_DIR}/inffast.c
+        ${SE_ZLIB_DIR}/inflate.c
+        ${SE_ZLIB_DIR}/inftrees.c
+        ${SE_ZLIB_DIR}/trees.c
+        ${SE_ZLIB_DIR}/uncompr.c
+        ${SE_ZLIB_DIR}/zutil.c
+    )
+    target_include_directories(SaturnExplorerZlib PUBLIC ${SE_ZLIB_DIR})
+    if(MSVC)
+        target_compile_definitions(SaturnExplorerZlib PRIVATE _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+    endif()
+endif()
+
 # ---------------------------------------------------------------------------
 # Core engine — portable static library (no UI, no OS types in public headers).
 # ---------------------------------------------------------------------------
@@ -144,23 +170,17 @@ target_include_directories(SaturnExplorerSavestateDriver
 )
 target_link_libraries(SaturnExplorerSavestateDriver
     PUBLIC SaturnExplorerCore SaturnExplorerDriverCommon)
-# Real Mednafen mcs/ savestates are gzip-compressed (magic 1f 8b). zlib lets the
-# driver transparently inflate them; without it the driver only reads already-
-# decompressed states. Optional — SE_HAVE_ZLIB gates the inflate path.
+# Real Mednafen mcs/ savestates are gzip-compressed (magic 1f 8b); zlib lets the driver
+# inflate them transparently. Always available: the vendored copy on desktop, Emscripten's
+# port on the web. SE_HAVE_ZLIB is PUBLIC so the savestate tests know the gzip case must pass.
 if(EMSCRIPTEN)
     # Emscripten ships a zlib port; -sUSE_ZLIB makes <zlib.h> + libz available.
     target_compile_options(SaturnExplorerSavestateDriver PUBLIC "-sUSE_ZLIB=1")
     target_link_options(SaturnExplorerSavestateDriver PUBLIC "-sUSE_ZLIB=1")
-    target_compile_definitions(SaturnExplorerSavestateDriver PRIVATE SE_HAVE_ZLIB)
 else()
-    find_package(ZLIB)
-    if(ZLIB_FOUND)
-        target_link_libraries(SaturnExplorerSavestateDriver PUBLIC ZLIB::ZLIB)
-        target_compile_definitions(SaturnExplorerSavestateDriver PRIVATE SE_HAVE_ZLIB)
-    else()
-        message(STATUS "zlib not found — Mednafen gzip savestates will not decompress")
-    endif()
+    target_link_libraries(SaturnExplorerSavestateDriver PUBLIC SaturnExplorerZlib)
 endif()
+target_compile_definitions(SaturnExplorerSavestateDriver PUBLIC SE_HAVE_ZLIB)
 
 # Dear ImGui sources. Defined here rather than with the FrontEnd target because the
 # headless panel interaction tests link the same core (no backend, no window).

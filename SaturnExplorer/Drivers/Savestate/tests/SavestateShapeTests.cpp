@@ -8,6 +8,10 @@
 // synthesize the containers instead, which is the only way to reach the code a user's file does.
 #include "SavestateDriver.h"
 
+#if defined(SE_HAVE_ZLIB)
+#include <zlib.h>
+#endif
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -189,6 +193,60 @@ void TestMednafenRgb888CramInterleaved()
         CHECK(std::memcmp(got, want, sizeof want) == 0);
         if (ds.close) ds.close(ds.user);
     }
+}
+
+// Real Mednafen states are gzip-compressed, and the inflate path is only there when the driver
+// was built with zlib. Every desktop build now carries the vendored zlib (PLAN.md A6), so when
+// SE_HAVE_ZLIB is defined this must decode: a build that defines it but cannot inflate fails
+// here instead of telling users their states are "unsupported". Without the define it is
+// skipped, which is the web build's business, not a desktop one's.
+void TestGzipMednafenContainerOpens()
+{
+#if defined(SE_HAVE_ZLIB)
+    std::vector<uint8_t> regs(0x200, 0);
+    regs[0x0E] = 0x00; regs[0x0F] = 0x20;   // RAMCTL CRMD = 2 (little-endian state): RGB888
+    std::vector<uint8_t> cram(0x1000, 0);
+    cram[0] = 0x11; cram[1] = 0x80;                    // entry 0 high: MSB + B
+    cram[0x800] = 0x33; cram[0x801] = 0x22;            // entry 0 low:  G, R
+    std::vector<uint8_t> sec;
+    AddMdfnField(sec, "RawRegs", regs);
+    AddMdfnField(sec, "CRAM", cram);
+    std::vector<uint8_t> raw = MdfnHeader();
+    AddMdfnSection(raw, "VDP2", sec);
+
+    // gzip-wrap it the way Mednafen's MemoryStream writer does (a gzip header, windowBits 16+).
+    z_stream zs{};
+    CHECK(deflateInit2(&zs, Z_BEST_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY) == Z_OK);
+    std::vector<uint8_t> gz(deflateBound(&zs, static_cast<uLong>(raw.size())) + 32);
+    zs.next_in = raw.data();
+    zs.avail_in = static_cast<uInt>(raw.size());
+    zs.next_out = gz.data();
+    zs.avail_out = static_cast<uInt>(gz.size());
+    CHECK(deflate(&zs, Z_FINISH) == Z_STREAM_END);
+    gz.resize(zs.total_out);
+    deflateEnd(&zs);
+    CHECK(gz.size() > 2 && gz[0] == 0x1F && gz[1] == 0x8B);
+
+    se_data_source ds{};
+    const se_result r = se_savestate_open_buffer(gz.data(), gz.size(), &ds);
+    CHECK(r == SE_OK);
+    if (r == SE_OK)
+    {
+        uint8_t got[4] = {};
+        CHECK(ds.read_cram && ds.read_cram(ds.user, 0, got, sizeof got) == sizeof got);
+        const uint8_t want[4] = { 0x80, 0x11, 0x22, 0x33 };
+        CHECK(std::memcmp(got, want, sizeof want) == 0);
+        if (ds.close) ds.close(ds.user);
+    }
+
+    // A gzip stream cut short is a damaged file, not a state.
+    std::vector<uint8_t> cut(gz.begin(), gz.begin() + gz.size() / 2);
+    se_data_source cds{};
+    CHECK(se_savestate_open_buffer(cut.data(), cut.size(), &cds) != SE_OK);
+    std::printf("SavestateShapeTests: gzip Mednafen container decoded (%zu -> %zu bytes)\n", gz.size(), raw.size());
+#else
+    std::printf("SavestateShapeTests: gzip case skipped (built without SE_HAVE_ZLIB)\n");
+#endif
 }
 
 // A section whose header promises more bytes than the file holds is a damaged state. It used
@@ -437,6 +495,7 @@ int main()
     TestTruncatedMednafenSectionRefused();
     TestMalformedMednafenStructureRefused();
     TestMednafenRgb888CramInterleaved();
+    TestGzipMednafenContainerOpens();
     TestWorkRamOnlyFullDumpOpens();
     TestDumpCoveringNoRegionRefused();
     TestOversizedInputRefusedFromDiskAndBuffer();

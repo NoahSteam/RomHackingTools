@@ -160,6 +160,11 @@
     <ProjectReference Include="..\Drivers\Live\SaturnExplorerLiveDriver.vcxproj">
       <Project>{a1d5e7c9-3b24-4f81-8d06-7c9e1f2a3b4c}</Project>
     </ProjectReference>
+    <!-- The vendored zlib the savestate driver's gzip path needs; linked here because static
+         libraries do not carry each other. -->
+    <ProjectReference Include="third_party\zlib\SaturnExplorerZlib.vcxproj">
+      <Project>{d96631e4-4701-4061-aa61-b3ee897b22e2}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
