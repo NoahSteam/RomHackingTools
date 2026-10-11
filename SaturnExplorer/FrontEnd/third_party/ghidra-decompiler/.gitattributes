@@ -1,0 +1,4 @@
+# The spec files are compared byte for byte with the copies embedded in Sh2SpecData.h
+# (SlaFreshnessTests), so a CRLF checkout on Windows must not rewrite them.
+processors/** -text
+*.sla binary

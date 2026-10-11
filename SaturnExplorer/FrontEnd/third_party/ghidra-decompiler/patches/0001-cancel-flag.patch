@@ -1,0 +1,144 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+index 0ac68953..186e7909 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/action.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ #include "action.hh"
+ #include "funcdata.hh"
+@@ -300,6 +302,9 @@ int4 Action::perform(Funcdata &data)
+ {
+   int4 res;
+ 
++  if (data.getArch()->isCancelRequested())
++    throw CancelError("Decompilation cancelled");
++
+   do {
+     switch(status) {
+     case status_start:
+@@ -869,8 +874,12 @@ int4 ActionPool::apply(Funcdata &data)
+     op_state = data.beginOpMain();	// Initialize the derived action
+     rule_index = 0;
+   }
+-  for(;op_state!=data.endOpMain();)
++  int4 cancelcheck = 0;
++  for(;op_state!=data.endOpMain();) {
++    if ((++cancelcheck & 0x3ff) == 0 && data.getArch()->isCancelRequested())
++      throw CancelError("Decompilation cancelled");
+     if (0!=processOp((*op_state).second,data)) return -1;
++  }
+ 
+   return 0;			// Indicate successful completion
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+index ac7d2610..d5846ea1 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ // Set up decompiler for specific architectures
+ 
+@@ -172,6 +174,7 @@ Architecture::Architecture(void)
+   printlist.push_back(print);
+   options = new OptionDatabase(this);
+   loadersymbols_parsed = false;
++  cancelRequested = (std::atomic<bool> *)0;
+ #ifdef CPUI_STATISTICS
+   stats = new Statistics();
+ #endif
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+index a27f8426..ef2d5430 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ /// \file architecture.hh
+ /// \brief Architecture and associated classes that help manage a single processor architecture and load image
+@@ -30,6 +32,7 @@
+ #include "comment.hh"
+ #include "stringmanage.hh"
+ #include "userop.hh"
++#include <atomic>
+ #include "options.hh"
+ #include "transform.hh"
+ #include "prefersplit.hh"
+@@ -183,6 +186,8 @@ public:
+   int4 funcptr_align;		///< How many bits of alignment a function ptr has
+   uint4 flowoptions;            ///< options passed to flow following engine
+   uint4 max_instructions;	///< Maximum instructions that can be processed in one function
++  std::atomic<bool> *cancelRequested;	///< Host-owned flag; when set, analysis throws CancelError at its next check-point
++  bool isCancelRequested(void) const { return cancelRequested != (std::atomic<bool> *)0 && cancelRequested->load(std::memory_order_relaxed); }
+   uint4 max_baddata;		///< Maximum number of bad instructions that one function can encounter
+   int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
+   uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+index d294a993..ad5305f1 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ /// \file error.hh
+ /// \brief Base class for error handling facilities
+@@ -81,6 +83,11 @@ struct LowlevelError {
+   LowlevelError(const string &s) { explain = s; }
+ };
+ 
++/// \brief Thrown when the host asked for the current analysis to stop (see Architecture::isCancelRequested)
++struct CancelError : public LowlevelError {
++  CancelError(const string &s) : LowlevelError(s) {}	///< Initialize the error with an explanatory string
++};
++
+ /// \brief A generic recoverable error
+ ///
+ /// This error is the most basic form of recoverable error,
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+index 337b6c87..785d52ae 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  */
+ #include "flow.hh"
+ 
+@@ -568,6 +570,8 @@ void FlowInfo::fallthru(void)
+   bool fallthruflag;
+   
+   for(;;) {
++    if (glb->isCancelRequested())
++      throw CancelError("Decompilation cancelled");
+     curaddr = addrlist.back();
+     addrlist.pop_back();
+     fallthruflag = processInstruction(curaddr,startbasic);
+@@ -795,6 +799,8 @@ void FlowInfo::generateOps(void)
+     injectPcode();
+   do {
+     while(!tablelist.empty()) {	// For each jumptable found
++      if (glb->isCancelRequested())
++	throw CancelError("Decompilation cancelled");
+       vector<JumpTable *> newTables;
+       recoverJumpTables(newTables, notreached);
+       tablelist.clear();
