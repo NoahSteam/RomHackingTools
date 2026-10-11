@@ -12,6 +12,14 @@
 // "unavailable" with the path, never a crash.
 //
 // usage: SaturnExplorerSh2DecompilerEngineTests <scratch dir>
+#ifdef _WIN32
+// First, so its LoadImage macro (-> LoadImageA) can be removed before ghidra::LoadImage is seen.
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#undef LoadImage
+#endif
+
 #include "Decompiler/SpecBundle.h"
 #include "FileWrite.h"
 
@@ -20,14 +28,15 @@
 #include "sleigh_arch.hh"
 
 #include <chrono>
+#include <csignal>
 #include <cstdio>
+#include <exception>
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #ifdef _WIN32
-// Not <windows.h>: it #defines LoadImage to LoadImageA, which renames ghidra::LoadImage.
 #include <crtdbg.h>
 #include <cstdlib>
 #else
@@ -156,6 +165,7 @@ std::string DecompileFixture1()
     TestArchitecture arch(image, &errs);
     ghidra::DocumentStorage store;
     arch.readonlypropagate = true;
+    std::printf("   Architecture::init\n");
     try
     {
         arch.init(store);
@@ -181,10 +191,13 @@ std::string DecompileFixture1()
     std::ostringstream out;
     try
     {
+        std::printf("   followFlow\n");
         callee->followFlow(lo, hi);
         fd->followFlow(lo, hi);
+        std::printf("   actions\n");
         arch.allacts.getCurrent()->reset(*fd);
         arch.allacts.getCurrent()->perform(*fd);
+        std::printf("   print\n");
         arch.print->setOutputStream(&out);
         arch.print->docFunction(fd);
     }
@@ -247,6 +260,74 @@ bool MatchesEmbedded(const std::string& dir)
     return true;
 }
 
+// ---- Dying loudly ------------------------------------------------------------------------
+
+// A crash, abort, terminate or CRT invalid-parameter stop inside the engine would otherwise end
+// the process with no text at all (or, on Windows, a dialog nobody clicks). Each says what
+// happened on stderr before exiting, so a CI failure names its cause.
+void OnAbort(int)
+{
+    std::fprintf(stderr, "FATAL: SIGABRT\n");
+    std::_Exit(3);
+}
+
+void OnTerminate()
+{
+    const char* what = "no active exception";
+    std::string text;
+    if (std::exception_ptr e = std::current_exception())
+    {
+        try { std::rethrow_exception(e); }
+        catch (ghidra::LowlevelError& l) { text = "ghidra::LowlevelError: " + l.explain; }
+        catch (std::exception& x) { text = std::string("std::exception: ") + x.what(); }
+        catch (...) { text = "unknown exception type"; }
+        what = text.c_str();
+    }
+    std::fprintf(stderr, "FATAL: std::terminate (%s)\n", what);
+    std::_Exit(3);
+}
+
+#ifdef _WIN32
+void OnInvalidParameter(const wchar_t* expr, const wchar_t* func, const wchar_t* file, unsigned line, uintptr_t)
+{
+    std::fwprintf(stderr, L"FATAL: CRT invalid parameter: %ls in %ls (%ls:%u)\n",
+                  expr ? expr : L"?", func ? func : L"?", file ? file : L"?", line);
+    std::_Exit(3);
+}
+
+LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* info)
+{
+    const EXCEPTION_RECORD* r = info->ExceptionRecord;
+    HMODULE module = nullptr;
+    char name[MAX_PATH] = "?";
+    if (::GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                             static_cast<LPCSTR>(r->ExceptionAddress), &module))
+        ::GetModuleFileNameA(module, name, sizeof name);
+    std::fprintf(stderr, "FATAL: exception 0x%08lX at %p (%s + 0x%llx)\n",
+                 static_cast<unsigned long>(r->ExceptionCode), r->ExceptionAddress, name,
+                 static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(r->ExceptionAddress) -
+                                                 reinterpret_cast<uintptr_t>(module)));
+    std::_Exit(3);
+}
+#endif
+
+void InstallFatalReporters()
+{
+    std::signal(SIGABRT, OnAbort);
+    std::set_terminate(OnTerminate);
+#ifdef _WIN32
+    ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    ::SetUnhandledExceptionFilter(OnUnhandledException);
+    _set_invalid_parameter_handler(OnInvalidParameter);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    for (int type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
+    {
+        _CrtSetReportMode(type, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(type, _CRTDBG_FILE_STDERR);
+    }
+#endif
+}
+
 // ---- Cases --------------------------------------------------------------------------------
 
 void TestSha256KnownAnswers()
@@ -275,6 +356,7 @@ void TestDecompileThroughBundle(const std::string& config)
     CHECK(MatchesEmbedded(b.dir));
 
     t0 = std::chrono::steady_clock::now();
+    std::printf("   startDecompilerLibrary\n");
     ghidra::startDecompilerLibrary(std::vector<std::string>{ b.dir });
     const std::string c = DecompileFixture1();
     std::printf("decompile fixture 1 (library start, Architecture init, decompile, print): %.1f ms\n", MsSince(t0));
@@ -430,14 +512,7 @@ int main(int argc, char** argv)
     // that never comes on CI -- the test then "times out" with no clue why. Send those
     // reports to stderr and fail instead.
     std::setvbuf(stdout, nullptr, _IONBF, 0);
-#ifdef _WIN32
-    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
-    for (int type : { _CRT_WARN, _CRT_ERROR, _CRT_ASSERT })
-    {
-        _CrtSetReportMode(type, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
-        _CrtSetReportFile(type, _CRTDBG_FILE_STDERR);
-    }
-#endif
+    InstallFatalReporters();
     const auto start = std::chrono::steady_clock::now();
     const std::string scratch = argv[1];
     RemoveTree(scratch);
