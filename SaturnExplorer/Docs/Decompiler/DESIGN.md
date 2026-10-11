@@ -222,7 +222,7 @@ an entry correction replaces the request for that function.
 - A fresh `SaturnArchitecture` is built per snapshot (1 ms), so function bodies, symbols and
   read-only ranges from an earlier memory image never leak into a later one.
 - Cancellation: the bare library has none (`registerAction` is private and the action tree is
-  synchronous), so a 21-line upstream patch adds a host-owned atomic flag checked per instruction
+  synchronous), so a 25-line upstream patch adds a host-owned atomic flag checked per instruction
   in flow following, per jump-table round, before every action, and every 1024 ops in rule pools;
   it is demonstrated on the real engine in SPIKE_RESULTS.md "Cancellation spike". It is
   cooperative: construction, one action's body, printing and teardown finish first (measured
