@@ -1,0 +1,147 @@
+// Sh2Decompiler — decompile one SH-2 function from a MemorySnapshot into lines and tokens.
+//
+// The engine wrapper the worker thread calls (DESIGN.md 4, PLAN.md Step 2). Per request it
+// builds a fresh SaturnArchitecture over the snapshot and runs two passes:
+//
+//   1. Follow flow from the entry. Walk the raw p-code: every LOAD through an instruction-local
+//      constant pointer is a literal-pool word, marked read-only so it folds to its value (only
+//      those words: RAM globals stay globals). The same walk decodes each instruction with
+//      Sh2Decode and flags a PC-relative load or mova in a delay slot (A3, below). Decompile, and
+//      collect the constant call targets the folding exposed (jsr @rN through a literal pool).
+//   2. On a fresh Architecture, register those callees as functions -- so calls print as
+//      func_0x06005000(...) rather than (*(code *)0x6005000)(...) -- apply the same read-only
+//      words, decompile again, and print with markup. Each token carries the address of the
+//      SH-2 instruction its p-code came from; that is what clicking a line navigates to.
+//
+// A3, Step 2 policy: on SH-2 a PC-relative load or mova in the delay slot of a taken branch
+// computes its address from the branch target, while the SLEIGH spec uses the slot's own
+// address. The function is marked unsupported with the slot's address, and that load's literal
+// is never marked read-only, so no possibly-wrong constant is folded into the output.
+//
+// Never throws: every engine error becomes a warning or a Failed status. Each call builds a fresh
+// Architecture and destroys it before returning, so a failed or cancelled decompilation leaves
+// no engine state behind for the next one: the "rebuild after a hard failure" of PLAN.md Step 2
+// happens on every request. No Ghidra type appears in this header. Engine thread only.
+#pragma once
+
+#include <atomic>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Decompiler/MemorySnapshot.h"
+
+namespace sfe
+{
+namespace decomp
+{
+
+struct DecompileRequest
+{
+    uint32_t entry = 0;                                       // any mirror; canonicalised first
+    std::vector<std::pair<uint32_t, std::string>> names;      // address -> name (FunctionNames)
+    std::vector<uint32_t> knownFunctions;                     // extra entries to register
+    bool registerCallees = true;                              // run the second pass
+    uint32_t maxInstructions = 20000;                         // A4: bounds the uncheckable segments
+};
+
+enum class TokenKind : uint8_t { Plain, Keyword, Type, FuncName, Variable, Param, Const, Comment, Global, Label, Error };
+
+struct Token
+{
+    uint16_t begin = 0, end = 0;   // byte range in Line::text
+    TokenKind kind = TokenKind::Plain;
+    uint32_t addr = 0;             // the instruction the token came from; 0 = none
+    uint32_t target = 0;           // a called function's entry, for FuncName tokens; 0 = none
+};
+
+struct Line
+{
+    std::string text;
+    std::vector<Token> tokens;
+    uint32_t firstAddr = 0;        // the lowest token address on the line; 0 = none
+};
+
+// Where the engine is within one decompilation. Two passes repeat Init..Actions; only the last
+// prints. The cancel check-points are in Flow and Actions; Init, Print and Teardown have none
+// (PLAN.md A4), so a cancel requested there takes effect at the next check-point, if any.
+enum class DecompilePhase : uint8_t { Idle, Init, Flow, Actions, Print, Teardown };
+const char* PhaseName(DecompilePhase phase);
+
+enum class DecompileStatus : uint8_t
+{
+    Ok,
+    NoCode,        // the entry is not in captured memory, or not memory at all
+    Cancelled,     // the cancel flag was honoured
+    Failed,        // the engine raised an error; see error
+    Unavailable,   // the spec bundle could not be materialised; see error
+    TooLarge,      // DecompilerRunner: the wall-clock budget expired
+    Disabled,      // DecompilerRunner: a cancel was not acknowledged; decompilation is off
+};
+
+struct DecompileResult
+{
+    DecompileStatus status = DecompileStatus::Failed;
+    std::string error;
+
+    SnapshotKey key;
+    uint64_t generation = 0;       // DecompilerRunner's request stamp
+    int slot = 0;                  // DecompilerRunner's requester id
+    uint32_t requestedEntry = 0;
+    uint32_t entry = 0;            // canonical
+    std::string name;
+
+    std::vector<Line> lines;
+    std::vector<uint32_t> callees;        // constant call targets, sorted
+    std::vector<uint32_t> literalPools;   // literal-pool words marked read-only, sorted, unique
+    uint32_t literalLoads = 0;            // PC-relative loads through them (a word may be read twice)
+
+    uint32_t bodyBytes = 0;
+    bool truncated = false;        // flow reached memory that is not captured / not memory
+    uint32_t truncatedAt = 0;
+    std::string truncatedWhy;
+    bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
+    uint32_t unsupportedAt = 0;    // the slot instruction's address
+    bool unimplemented = false;    // the spec has no semantics for an instruction
+    DecompilePhase cancelledIn = DecompilePhase::Idle;   // when Cancelled: the phase it stopped in
+    std::vector<std::string> warnings;
+    double elapsedMs = 0.0;
+
+    std::string Text() const;      // the lines joined with '\n'
+};
+
+class Sh2Decompiler
+{
+public:
+    // 'configDir' is where SpecBundle materialises the language files (Settings::EnsureConfigDir).
+    explicit Sh2Decompiler(std::string configDir);
+
+    // Decompile per the request. 'cancel' may be null; when set during the run the result is
+    // Cancelled at the engine's next check-point.
+    DecompileResult Decompile(const std::shared_ptr<const MemorySnapshot>& snapshot,
+                              const DecompileRequest& request, std::atomic<bool>* cancel = nullptr);
+
+    // SLEIGH disassembly of 'count' instructions from 'address', one "ADDR  mnemonic operands"
+    // line each, in the spec's own spelling (tests and diagnostics: the listing is what the
+    // fixture test compares with the Capstone-verified one). Stops at the first undecodable one.
+    std::vector<std::string> Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,
+                                         uint32_t address, int count);
+
+    // Called on the engine thread as each phase begins (and with Teardown as each pass's
+    // Architecture is destroyed). Tests use it to prove which phase a cancel landed in; it may
+    // block, which holds the engine at the start of that phase.
+    void SetPhaseObserver(std::function<void(DecompilePhase)> observer) { mObserver = std::move(observer); }
+
+private:
+    void Enter(DecompilePhase phase);
+
+    std::string mConfigDir;
+    std::function<void(DecompilePhase)> mObserver;
+    DecompilePhase mWorkPhase = DecompilePhase::Idle;   // the last phase that does work
+};
+
+}  // namespace decomp
+}  // namespace sfe

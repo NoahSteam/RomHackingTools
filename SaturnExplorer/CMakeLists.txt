@@ -193,6 +193,17 @@ target_compile_definitions(SaturnExplorerSavestateDriver PUBLIC SE_HAVE_ZLIB)
 if(SE_ENABLE_DECOMPILER)
     add_subdirectory(FrontEnd/third_party/ghidra-decompiler)
 
+    # The decompiler's own sources (FrontEnd/src/Decompiler), shared by the desktop frontends
+    # and the decompiler tests.
+    set(SE_DECOMPILER_SOURCES
+        FrontEnd/src/Decompiler/SpecBundle.cpp
+        FrontEnd/src/Decompiler/MemorySnapshot.cpp
+        FrontEnd/src/Decompiler/CaptureLoadImage.cpp
+        FrontEnd/src/Decompiler/SaturnArchitecture.cpp
+        FrontEnd/src/Decompiler/Sh2Decompiler.cpp
+        FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+        FrontEnd/src/Decompiler/DecompilerRunner.cpp)
+
     if(BUILD_TESTING)
         # The .slaspec sources, the checked-in sh-2.sla and the copy embedded in Sh2SpecData.h
         # must be one spec (PLAN.md A5): compiles the .slaspec afresh and compares all three.
@@ -226,9 +237,53 @@ if(SE_ENABLE_DECOMPILER)
                      -DWORK=${CMAKE_CURRENT_BINARY_DIR}/generate_spec_data_failure
                      -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/tests/GenerateSpecDataFailure.cmake)
 
+        # Step 2: the engine wrapper, snapshot, function finder and worker (PLAN.md Step 2).
+        # Every test links the same production sources the frontends compile.
+        set(SE_DECOMPILER_TEST_SOURCES
+            ${SE_DECOMPILER_SOURCES}
+            FrontEnd/src/FileWrite.cpp
+            FrontEnd/src/Debug/Sh2Disasm.cpp)
+        foreach(name Sh2Decompiler DecompilerRunner)
+            add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp ${SE_DECOMPILER_TEST_SOURCES})
+            target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
+            target_link_libraries(SaturnExplorer${name}Tests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+            add_test(NAME SaturnExplorer${name}Tests
+                     COMMAND SaturnExplorer${name}Tests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_${name}_test)
+        endforeach()
+
+        # Real game code from the spike's Yabause savestate, through the savestate driver.
+        # Skips itself when the game data is not in the checkout.
+        add_executable(SaturnExplorerSh2DecompilerFixtureTests
+            FrontEnd/tests/Sh2DecompilerFixtureTests.cpp ${SE_DECOMPILER_TEST_SOURCES})
+        target_include_directories(SaturnExplorerSh2DecompilerFixtureTests PRIVATE FrontEnd/src FrontEnd/tests include)
+        target_link_libraries(SaturnExplorerSh2DecompilerFixtureTests PRIVATE
+            SaturnExplorerGhidraDecomp SaturnExplorerSavestateDriver)
+        target_compile_definitions(SaturnExplorerSh2DecompilerFixtureTests PRIVATE
+            SE_YSS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../SakuraTaisen2/Data/SaveFiles/SaveStates/Yabause/OhrimeMiniGame"
+            SE_DECOMPILER_SPIKE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/spike")
+        add_test(NAME SaturnExplorerSh2DecompilerFixtureTests
+                 COMMAND SaturnExplorerSh2DecompilerFixtureTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fixture_test)
+
+        # The snapshot's A2 rules and the function finder are pure: no engine linked.
+        foreach(name MemorySnapshot Sh2FunctionFinder)
+            add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp
+                FrontEnd/src/Decompiler/MemorySnapshot.cpp
+                FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
+                FrontEnd/src/Decompiler/SpecBundle.cpp   # Sha256Hex: the BIOS image's content hash
+                FrontEnd/src/FileWrite.cpp
+                FrontEnd/src/Debug/Sh2Disasm.cpp)
+            target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
+            add_test(NAME SaturnExplorer${name}Tests
+                     COMMAND SaturnExplorer${name}Tests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_${name}_test)
+        endforeach()
+
         # No hard millisecond gate (A7): a generous ceiling, and the tests print their timings.
+        # The runner test decompiles the cancellation spike's large fixtures several times (A4).
         set_tests_properties(SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
+                             SaturnExplorerSh2DecompilerTests SaturnExplorerMemorySnapshotTests
+                             SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT 60)
+        set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
     endif()
 endif()
 
@@ -1510,7 +1565,7 @@ endif()
 # where SE_ENABLE_DECOMPILER is forced off. SE_ENABLE_DECOMPILER=1 is what later steps compile
 # the panel under; FrontEnd.vcxproj defines the same for the MSBuild path.
 if(TARGET SaturnExplorerFrontEnd AND SE_ENABLE_DECOMPILER)
-    target_sources(SaturnExplorerFrontEnd PRIVATE FrontEnd/src/Decompiler/SpecBundle.cpp)
+    target_sources(SaturnExplorerFrontEnd PRIVATE ${SE_DECOMPILER_SOURCES})
     target_compile_definitions(SaturnExplorerFrontEnd PRIVATE SE_ENABLE_DECOMPILER=1)
     target_link_libraries(SaturnExplorerFrontEnd PRIVATE SaturnExplorerGhidraDecomp)
 endif()

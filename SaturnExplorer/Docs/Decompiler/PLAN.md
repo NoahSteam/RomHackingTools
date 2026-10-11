@@ -70,8 +70,11 @@ The SH-2 uses bits 31–29 to select a partition. Only two of them are aliases o
 Within the bus map, the only aliases accepted are the documented ones (`Docs/Saturn/MemoryLayout.txt`,
 `SaturnMemory.txt`): HWRAM repeats every 1 MiB across `0x06000000–0x07FFFFFF`; LWRAM is the
 1 MiB at `0x00200000`. Nothing else is assumed to repeat. Anything that classifies as "reject"
-or lands outside a captured region raises `DataUnavailError` and the function is reported
-`truncated` at that address with the partition name in the warning ("cache address array").
+or lands outside a captured region is refused by the load image and the function is reported
+`truncated` at that address with the partition name in the warning ("cache address array"). An
+instruction fetch is refused with `BadDataError`, which flow following turns into a halt at that
+address; `DataUnavailError`, which it does not catch, would abort the whole function instead (and a
+bounded `followFlow` leaves the branch with no target). Data reads keep `DataUnavailError`.
 
 `MemoryBackend.cpp`'s `& 0x07FFFFFF` is not reused: it exists for panel convenience and is
 broader than the hardware. The discrepancy is logged as a follow-up for that file; it does not
@@ -280,7 +283,7 @@ Files in `FrontEnd/src/Decompiler/` (Win32 and desktop source lists, not the web
 
 Tests: `MemorySnapshotTests` (A2), `Sh2DecompilerTests` (fixtures 1, 1b, 3 per A3, unmapped,
 mirror, `mov.w` fold, token addresses, A1 edit cases), `Sh2DecompilerFixtureTests` (the `.yss`
-real-code fixture: 13 literal pools, callee set, listing equal to the Capstone-verified file;
+real-code fixture: 13 literal-pool loads (11 words), callee set, listing equal to the Capstone-verified file;
 skips without game data), `Sh2FunctionFinderTests`, `DecompilerRunnerTests` (A4). A 60 s ctest
 timeout and printed timings for all of them, except `DecompilerRunnerTests` at 120 s (A4, A7).
 

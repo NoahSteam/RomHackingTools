@@ -76,8 +76,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_ENABLE_DECOMPILER=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- _WINDOWS: Ghidra's types.h picks its integer types from it; src\Decompiler includes the engine's headers and must see the ones the library was built with. -->
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_ENABLE_DECOMPILER=1;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

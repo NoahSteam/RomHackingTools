@@ -82,7 +82,7 @@ New code lives in `FrontEnd/src/Decompiler/` and `FrontEnd/third_party/ghidra-de
 | Component | Responsibility |
 |---|---|
 | `MemorySnapshot` | Immutable copy of the captured regions (the two `Sh2Dump` regions: LWRAM `0x00200000`, HWRAM `0x06000000`, 1 MiB each) plus both SH-2 register files and a `SnapshotKey`. Built on the UI thread with `ReadRegionBytes`, shared by both CPU views. 2 MiB, a few ms to copy. |
-| `CaptureLoadImage : ghidra::LoadImage` | `loadFill` over the snapshot with bus folding (§6.1); `getReadonly` returns the literal-pool ranges; throws `DataUnavailError` for everything else. |
+| `CaptureLoadImage : ghidra::LoadImage` | `loadFill` over the snapshot with bus folding (§6.1); refuses everything else (`BadDataError` for an instruction fetch, so flow halts there; `DataUnavailError` for data, PLAN.md A2). Literal-pool words are marked read-only through the symbol table after flow following. |
 | `SaturnArchitecture : ghidra::SleighArchitecture` | Language `SuperH:BE:32:SH-2:default`, `readonlypropagate = true`, our loader, a `Scope` pre-seeded with `FunctionNames` and Saturn hardware-register symbols. One instance per snapshot (1 ms to build), destroyed with it. |
 | `Sh2Decompiler` | The engine wrapper: `Decompile(snapshot, entry, options) → DecompileResult`. Two passes: follow flow, harvest literal pools and constant call targets, register callees, decompile, emit markup, resolve tokens to addresses. Catches every `LowlevelError`; never throws across the thread boundary. |
 | `Sh2FunctionFinder` | Entry discovery and caching (§6.4). Pure functions over a snapshot; unit-testable without the engine. |
