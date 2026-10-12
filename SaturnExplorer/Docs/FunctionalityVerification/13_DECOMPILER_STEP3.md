@@ -6,6 +6,7 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 3, contracts A1�
 **Actions run:** https://github.com/NoahSteam/RomHackingTools/actions/runs/38166760462 (all six A7 jobs green at `97c496d`)  
 **Gate status: NOT complete.** CI is green (above), but PLAN's manual checklist is still open on
 Windows and macOS (see "Manual checklist"); only a Linux run of the real app was possible here.
+The Windows run (at `0e463ee0`, "Real application run (Windows)") failed the A4 reconnect row.
 
 ## What was added
 
@@ -60,10 +61,10 @@ signed shift inside vendored Ghidra, `address.hh:605`, recorded in Step 2) and u
 
 | | Linux (this container, Debug) | Windows | macOS arm64 | macOS x86_64 (Rosetta) |
 |---|---|---|---|---|
-| `DecompilerPanelTests` total | 0.63 s (2.7 s ASan, 4.1 s TSan) | 1.51 s Debug · 0.39 s Release | 2.28 s · 1.85 s at `b3760496` | 4.80 s |
-| Session change with the engine held (bound: 1 s) | 0.6 ms | 1.82 ms Debug · 0.60 ms Release | 15.8 ms · 11.57 ms at `b3760496` | 44.1 ms |
+| `DecompilerPanelTests` total | 0.63 s (2.7 s ASan, 4.1 s TSan) | 1.51 s Debug · 0.39 s Release (CI) · 2.36 s Debug on a laptop at `0e463ee0` | 2.28 s · 1.85 s at `b3760496` | 4.80 s |
+| Session change with the engine held (bound: 1 s) | 0.6 ms | 1.82 ms Debug · 0.60 ms Release (CI) · 2.15 ms Debug on a laptop at `0e463ee0` | 15.8 ms · 11.57 ms at `b3760496` | 44.1 ms |
 | Auto-refresh captures, 90 frames, PC leaving every other frame | 3 | 3 | 3 | 3 |
-| App exit (SIGTERM → `Shutdown` → runner join → exit 0), real app | 145 ms | — | — | — |
+| App exit (SIGTERM → `Shutdown` → runner join → exit 0), real app | 145 ms | 68 ms Debug (window close button → process gone, timed from after the click returned; no crash event) | — | — |
 
 ## Real application run (Linux, performed)
 
@@ -91,20 +92,21 @@ builds compile) was built here and driven under Xvfb with `xdotool`, on the spik
 
 | Check | Windows | macOS | Notes |
 |---|---|---|---|
-| `.yss` open and edit | pending | **passed** | performed on Linux (above) |
-| Live Mednafen paused | pending | **passed** (second run, below) | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
-| Live Mednafen running (stale badge, Refresh, auto-refresh) | pending | **passed** (second run; the auto-refresh rate cap is only sampled, see below) | automated with a mock (`TestRunningLive`) |
-| Live, after a Hex Editor write | pending | **passed** (second run) | automated with a mock (`TestHexWriteReRequests`) |
-| Live, while scrubbing | pending | **passed** for per-frame output and the cleared timeline; Play From Here **not exercised** (second run) | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
-| Unload and reconnect while a long decompile is in flight (A4) | pending | **unavailable** for the in-flight race (cannot be hit by hand); idle Close Source, Disconnect and reconnect observed: no hang, nothing carried into the new session | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
-| Master and slave | pending | **passed** | performed on Linux |
-| BIOS call | pending | **passed** for add (from settings), replace (Reload) and remove (Stop Using) while the emulator ran; the Choose BIOS Image… file dialog was not driven (second run) | unavailable here (no BIOS image); the key change is automated |
-| Hand-typed mirror; rejected cache-array address (A2) | pending | **passed** | performed on Linux |
-| Fixture-3 delay-slot banner on a patched savestate (A3) | pending | **passed** | automated on fixture 3 |
-| Native menu shows Windows → Debugger → SH-2 Pseudocode | pending | **passed** | menus are built from `PanelList()`; not run here |
-| The MSBuild-linked exe decompiles | pending | — | CI builds and links it (`build-release-msbuild.bat` job); no CLI to load a savestate, so it needs a manual run |
+| `.yss` open and edit | **passed** | **passed** | performed on Linux (above) |
+| Live Mednafen paused | **passed** | **passed** (second run, below) | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
+| Live Mednafen running (stale badge, Refresh, auto-refresh) | **passed** (the auto-refresh rate cap is only sampled, as on macOS) | **passed** (second run; the auto-refresh rate cap is only sampled, see below) | automated with a mock (`TestRunningLive`) |
+| Live, after a Hex Editor write | **passed** (output changed once; the request count is not visible in the GUI) | **passed** (second run) | automated with a mock (`TestHexWriteReRequests`) |
+| Live, while scrubbing | **passed**, Play From Here included (after rebuilding the patched Mednafen to the current tap, v25; the v18 build on the machine refuses it as too old) | **passed** for per-frame output and the cleared timeline; Play From Here **not exercised** (second run) | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
+| Unload and reconnect while a long decompile is in flight (A4) | **failed**: Session → Source → Disconnect (live) hangs the Debug app every time, and Disconnect → Connect crashed the Release (MSBuild) app on the second cycle; the one reconnect that survived kept the previous session's output (see Windows bugs 1 and 2). Close Source on a savestate: no hang. The in-flight race itself is **unavailable** (cannot be hit by hand) | **unavailable** for the in-flight race (cannot be hit by hand); idle Close Source, Disconnect and reconnect observed: no hang, nothing carried into the new session | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
+| Master and slave | **passed** | **passed** | performed on Linux |
+| BIOS call | **passed** for add (through the Choose BIOS Image… dialog), replace (Reload) and remove (Stop Using) while the emulator ran | **passed** for add (from settings), replace (Reload) and remove (Stop Using) while the emulator ran; the Choose BIOS Image… file dialog was not driven (second run) | unavailable here (no BIOS image); the key change is automated |
+| Hand-typed mirror; rejected cache-array address (A2) | **passed** | **passed** | performed on Linux |
+| Fixture-3 delay-slot banner on a patched savestate (A3) | **passed** | **passed** | automated on fixture 3 |
+| Native menu shows Windows → Debugger → SH-2 Pseudocode | **passed** (the Win32/D3D11 frontend draws its menu bar with ImGui; there is no OS menu bar on Windows) | **passed** | menus are built from `PanelList()`; not run here |
+| The MSBuild-linked exe decompiles | **passed** with a deviation: `build-release-msbuild.bat` fails on a VS 2022-only machine (Windows bug 3), so the same solution was built with `/p:PlatformToolset=v143` | — | CI builds and links it (`build-release-msbuild.bat` job); no CLI to load a savestate, so it needs a manual run |
 
-The Step 3 gate ("manual checklist complete on Windows and macOS") is therefore **not met** yet.
+The Step 3 gate ("manual checklist complete on Windows and macOS") is therefore **not met** yet: the
+A4 row failed on Windows (Windows run, below).
 
 ## Real application run (macOS)
 
@@ -183,6 +185,106 @@ Bug 3 (the file dialog) is outside the decompiler and Step 3; left as recorded.
 
 Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38286417743 (all six jobs
 green at `aa17e10`, including the Windows `_beginthreadex` path in Debug and Release).
+
+## Real application run (Windows)
+
+Run at `0e463ee0` (`master`) on a Lenovo 81LK laptop (Intel Core i5-9300HF, 16 GB, GeForce GTX 1650), Windows 11 Home
+10.0.26200, Visual Studio 2022 (MSVC 19.44.35221, Windows SDK 10.0.26100), CMake 4.4.0, by driving the real app with
+computer use, one or more screenshots per check (kept with the run, not committed). Savestate:
+`SakuraTaisen2/.../Yabause/OhrimeMiniGame/GS-9169_007.yss`.
+
+**Build and tests.**
+- (a) `cmake -S SaturnExplorer -B build -DBUILD_TESTING=ON`, `cmake --build build --config Debug`,
+  `ctest --test-dir build -C Debug --output-on-failure`: the build succeeded (only vendored-Ghidra warnings) and **75 of 75
+  tests passed** (91.7 s). Re-run verbosely for their timing lines (`ctest -R "Decompiler(Panel|Runner)Tests" -V`):
+  `SaturnExplorerDecompilerPanelTests` printed `session change with the engine held: 2.15 ms`,
+  `auto-refresh over 90 frames of a PC leaving every other frame: 3 captures` and `DecompilerPanelTests: 2355.4 ms total`
+  (2.55 s in the full run). `SaturnExplorerDecompilerRunnerTests` passed in 9.39 s (`DecompilerRunnerTests: 9390.1 ms total`),
+  printing `worker stack 16384 KiB (asked for 16384 KiB)` -- the `_beginthreadex` path of `aa17e10` -- with baselines of
+  412 / 511 / 512 ms (diamonds / straight / jumptable), `InvalidateSession + Poll returned in 0.016 ms`, and the three
+  injected-failure cases `SKIPPED in an MSVC Debug build` as designed.
+- (b) `SaturnExplorer\build-release-msbuild.bat` **failed** (Windows bug 3: the projects ask for the VS 2019 toolset).
+  For check 15 the same solution and target were built with the installed toolset:
+  `MSBuild RomHackingTools.sln /t:FrontEnd /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /m`, which
+  produced `x64\Release\SaturnExplorer.exe`.
+
+**Emulator.** Live checks used the patched Mednafen in `_emu/mednafen` (Mednafen 1.32.1, Saturn Explorer tap) with the BIOS
+images in `_emu/mednafen/firmware` and the disc *Sakura Wars 2 (English v1.1.0) Disc 1* (`.cue`), started from
+Session → Launch. The build already on the machine (Oct 5) speaks protocol v18; checks 6–8, 10 and the first half of 9 ran
+on it. Play From Here needs v22+, so the tap was rebuilt with `python Integration/install.py --incremental --yes`
+(protocol v25), and Play From Here and the reconnect re-tests ran on that build. Per README → "Rewind", the rebuilt
+binary's real savestate path was checked with `objdump -d`: `SsDbgSaveState` calls `MDFNSS_SaveSM`, and `SsDbgLoadState`
+calls `MemoryStream(unsigned long long, int)` and `MDFNSS_LoadSM`; Play From Here then restored a frame (check 9).
+
+**Checks**
+
+| # | Check | Result | What the screenshot showed |
+|---|---|---|---|
+| 1 | `.yss` open and edit; menu | passed | The menu bar (ImGui-drawn in the Win32/D3D11 frontend) has **Windows** → Debugger → SH-2 Pseudocode, checked while the panel is open; Windows → Reset Layout docks the tab beside SH-2 Assembly. Session → Source → Load Dump → Yabause Save State… (native file dialog) opened the `.yss`. Follow PC, master PC `0603055A`: `func_0x06030548`, `param_1 * 7000`, "entry from rts scan, 60%". Memory panel: `0x06030567` `58` → `0F` changed the output to `param_1 * 0x1b0f` with no other action. |
+| 2 | Entry points | passed | Call Stack frame #1 → "Decompile" → `func_0x06008204`, Follow PC went off, entry box `06008204`. SH-2 Assembly row → "Decompile Here" → `func_0x06030548`, entry box `06030548`. Back to `06008204` from the Call Stack, then Registers → SH-2 → PC value → "Decompile" → `func_0x06030548`, entry box `06008204` → `06030548`, panel brought forward. Clicking the `bVar1 = iVar2 < param_1 * 0x1b0f;` line turned Assembly's Follow PC off and jumped it to `0603054A` (tooltip `0x0603054A`). The entry box followed the shown function after every one of these (the `aa17e10` fix holds on Windows). |
+| 3 | Master and slave | passed | Slave SH-2: "No function found containing 0x003C3000: 0x003C3000 is not in captured memory", previous output kept and badged `[stale]`. |
+| 4 | Typed addresses (A2) | passed | `26031598` → `func_0x06031598`, entry box rewritten to `06031598`. `C6004000` → "0xC6004000 is not code memory: 0xC6004000 is in the cache data array, not memory". `106004000` and `-F9FFC000` → "Type the function's entry as a hex address, e.g. 06004000." Each refusal kept the output, badged `[stale]`. Whether a request was submitted is not visible in the GUI. |
+| 5 | Rename | passed | Context menu on the signature line → Rename Function… → app-level modal "Function at 06030548" → `busy_wait`: `void busy_wait(int4 param_1)`, status `busy_wait @ 0x06030548`. |
+| 13 | Hidden panel | passed (end state only) | Windows → Debugger → SH-2 Pseudocode closed the panel; Memory `0x06030567` `0F` → `58`; reopening showed `param_1 * 7000` at once. As on macOS, the intermediate frame cannot be caught at screenshot latency. |
+| 11 | A3 banner | passed | A copy of the savestate with fixture 3's `bra` case at `06006000` and `bf/s` case at `06006100` written into HWRAM (the `fixture3.py` words, through the `.yss` OTHR section, 16-bit byte-swapped; not committed). Entry `06006000`: amber "PC-relative load in a delay slot at 0x06006002: pseudocode for this function is not trustworthy.", "1 warning", output greyed (`return xRam06006010;`). Entry `06006100`: the same banner for `0x06006104`. |
+| 12 | A4: Close Source, Disconnect, reconnect | **failed** | Close Source (savestate): no hang; "No source", old output kept as `[stale: frame 0]`. **Disconnect (live)**: the Debug app stops responding about 2 s later and never recovers (Windows bug 1; 3 of 3, on the v18 and the v25 emulator). Session → Launch while the emulator is paused at a halt hangs it the same way (3 of 3, also with the SH-2 Pseudocode panel closed); Launch while running does not (1 of 1). The MSBuild Release app survived one Disconnect → Connect, but its panel then kept the previous session's output (Windows bug 2), and the second Disconnect → Connect crashed it (access violation at the same place as the Debug hang). The in-flight race is not reachable by hand (same as macOS). |
+| 6 | Live, paused | passed | Run → Pause at frame 1462: "live, paused · frame 1462", `func_0x0605e538` (entry from rts scan, 60%), PC `0605E554` inside it. |
+| 7 | Live, running | passed | Resume: "live, running · frame 1645" with `[stale: frame 1462]`; still `1462` at frame 1934 (no capture while it ran). **Refresh** recaptured (`stale: frame 1967`; the game was back in the same function). **Auto-refresh** on: 2-second samples showed a new function each time the PC had moved on -- `06060AB0` → `06060C18` → `0605E538` → `0605D1B8` → `060627F0` -- with the stale label 17–20 frames behind each capture (the Debug build's decompile time). As on macOS, "at most every 30 frames" is only bounded from below by the sampling. Pausing recaptured once (`frame 3230`). |
+| 8 | Live, after a Hex Editor write | passed | Paused in `func_0x0605e538`. Memory: `0x0605E555` `01` → `05` (`add #0x1,r2` → `add #0x5,r2`): `iVar1 = iVar1 + 1;` became `iVar1 = iVar1 + 5;` with no other action, and no `decompiling…` badge over the next 4 s. Exactly one re-request cannot be counted from the GUI (`TestHexWriteReRequests` pins it). The byte was restored. |
+| 9 | Live, scrubbing | passed | 102 recorded frames: `#76` → `func_0x0603a4b8`, `#1350` → `func_0x06062918`, `#2056` → `func_0x06000840`, `#720` → `func_0x0606d7ec`; revisits showed their output at once with no `decompiling…` badge. A first visit was just as fast in the screenshots, so a cache hit cannot be told apart by eye (`TestScrubCache`). Recording → Stop, then Start, resume, pause: 10 new frames `#2438`…`#2549`, none of the old timeline. **Play From Here** (v25 emulator): tooltips said "3 of 66 recorded frames can be resumed"; at `#1534` it read "Restore the game to frame #1534 and resume from it. The 1 recorded frame(s) after it are discarded." Pressing it resumed the game ("live, running", `[stale: frame 1534]`). After pausing, the timeline ran `#1513`, `#1534`, then the new `#1536`, `#1542`…; the discarded `#1556` was gone, and each frame showed its own output. |
+| 10 | BIOS | passed | No image: entry `00001D38` → "no code at 0x00001D38: uncaptured memory at 0x00001D38 (BIOS)"; tooltip "No BIOS image: calls into the BIOS stop there." Running with Follow PC: BIOS ▸ **Choose BIOS Image…** (native dialog) on a scratch copy of `mpr-17933.bin` → one recapture (`stale: frame 2614` → `3447`), nothing more over 4 s. File overwritten with `sega_101.bin`, BIOS ▸ **Reload** → one recapture (`decompiling…`, then `stale: frame 4945`), nothing more over 4 s. BIOS ▸ **Stop Using** → one recapture (`stale: frame 5633`), nothing more over 4 s, tooltip back to "No BIOS image". With an image set again, entry `00001D38` decompiled (`func_0x00001d38`). The first Reload attempt did nothing (the menu had not opened under the synthetic click, as on macOS); the retry worked. |
+| 14 | Quit | passed | Window close button with the `.yss` loaded and the panel showing: the process was gone 68 ms after the click returned; no Application Error / WER event. `settings.ini` gained `[decompiler] autorefresh = 0` / `bios = ` and `decompiler = 1` in `[panels]` (besides `[callstack] split`, `[diff]` and `memorycompare = 0`, which are not the decompiler's). `settings.ini` and `imgui.ini` were restored from copies taken before the run. |
+| 15 | MSBuild-linked exe | passed | `x64\Release\SaturnExplorer.exe` (built as in (b)) opened the `.yss` (Ctrl+O): `func_0x06030548`, `param_1 * 7000`; Windows → Debugger lists SH-2 Pseudocode. Closed cleanly (process gone in 468 ms). |
+
+**Bugs and observations** (not fixed, per the brief)
+
+1. **Ending a live session hangs the Debug app (and crashes the Release app).**
+   Repro (Debug, `build\bin\Debug\SaturnExplorerFrontEnd.exe` at `0e463ee0`): Settings point Launch at the patched Mednafen
+   and a game -- here *Sakura Wars 2* (`SAKURA TAISEN2_1.cue`). Session → Launch (F5), wait for "Connected to Emulator",
+   then Session → Source → Disconnect (live). Within about 2 s the window stops responding (`Responding = False`, CPU time
+   flat) and never recovers (watched 10–30 s). The same happens with F6 (pause; the Call Stack shows the halt) followed
+   by F5 (Launch). Seen 3 of 3 for Disconnect (twice on the v18 tap, once on v25) and 3 of 3 for Launch-while-paused
+   (v18; the third with the SH-2 Pseudocode panel closed); Launch while the game runs did not hang (1 of 1, v18).
+   Repro (Release, `x64\Release\SaturnExplorer.exe`): with the emulator running, Session → Source → Disconnect, then
+   Connect to Emulator (live), twice. The first cycle survived; the second crashed: `0xc0000005` at offset `0x1967a0`,
+   which the PDB names as `DisplayedSnapshot+0x140` (`Drivers/Live/src/LiveDriver.cpp:425`).
+   The hung UI thread (stack read with DbgHelp) is blocked in the Live driver, not the decompiler:
+   `App::BuildUI` (App.cpp:1643) → `App::BuildTopBarViewModel` (App.cpp:7185) → `se_live_get_stop` (LiveDriver.cpp:2465) →
+   `DisplayedSnapshot` (:425) → `Newest` (:407) → `std::lock_guard` on `LiveState::mtx`. No other thread is in the Live
+   driver; the decompiler worker sits idle in its `condition_variable::wait` (DecompilerRunner.cpp:364).
+   *Not verified, offered as a lead:* the call at App.cpp:7185 is reached only when
+   `mEmuSlotCount > 0 && se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_EMUSAVE && LiveHas(SE_LIVE_CAP_EMU_SAVE)`.
+   Both `se_live_*` calls read `mDataSource` after the session was closed. If `mDataSource.user` is left pointing at the
+   freed `LiveState`, the MSVC Debug heap's fill (0xDD) would read as a huge version and as a held SRW lock (a hang
+   forever), while the Release heap gives an access violation once the block is reused. Mednafen has a numbered save
+   slot for this game here (`_emu/mednafen/mcs/SAKURA TAISEN2_1.….mc0`), which makes the slot count non-zero; the
+   macOS run, which saw no hang, may simply have had none.
+2. **After reconnecting, the panel kept the previous session's output.** In the Release app, emulator running, Follow PC on:
+   Disconnect, then Connect to Emulator (live). The panel showed "live, running", the red line "This source has no master
+   SH-2 registers to follow." and the old session's `func_0x0605e538` badged `[stale: frame 2169]` (a frame of the earlier
+   connection), unchanged for 6 s of running, although SH-2 Assembly showed PC `0605E556`. Refresh fixed it
+   (`func_0x06000840`, `stale: frame 3847`). Seen once; the next attempt hit bug 1. It looks like the one capture made on
+   connecting came before the first snapshot with SH-2 registers, and a running emulator does not capture again until
+   Refresh.
+3. **`build-release-msbuild.bat` fails on a VS 2022-only machine.** It ends with `MSB8020: The build tools for Visual Studio
+   2019 (Platform Toolset = 'v142') cannot be found` for `Core\SaturnExplorer.vcxproj`, `Drivers\Common`,
+   `Drivers\Live` and `FrontEnd\third_party\zlib`, then "Build FAILED". Repro: run the script on a machine with only VS 2022
+   Community (vswhere finds `...\2022\Community\MSBuild\Current\Bin\MSBuild.exe`). Overriding the toolset on the command line
+   (above) builds and links.
+4. Observations, not decompiler bugs:
+   - Pausing from Run → Pause lands on a "BREAKPOINT HIT" banner in Call Stack with no breakpoint set (as on macOS).
+   - The MSBuild exe draws a different top bar from the CMake build (Session, Layers, ⏸, ⏭, State, Dump Memory…,
+     Windows, Demo, More), and its "Windows"/"Demo"/"More" labels overlap the FPS / "Live connected" status text at a
+     1100-px-wide window.
+   - The first capture after the very first connect (boot) read "No function found containing 0x00000000".
+   - Rename and the Memory panel wrote `saturn_functions.txt`, `assembly_comments.txt` and `saturn_explorer_watches.json`
+     beside the savestate (in the repository's `SakuraTaisen2/...` folder); they were deleted after the run. The name
+     `busy_wait` also stayed in effect after opening the patched copy from another folder.
+   - The decompiler created `%APPDATA%\SaturnExplorer\decompiler\292f3f3507b05dc5` (+ `.lock`) on first use; left in place.
+   - Test-driver effects: the Claude desktop app's window, hidden from the screenshots but on top, swallowed clicks on the
+     right third of the screen, so Saturn Explorer was run in an 1100×830 window at the left; ImGui widgets need a hover
+     frame before a synthetic click lands; one stray click hit Session → Launch and relaunched the emulator while paused,
+     which is how bug 1 was first found.
 
 ## Decisions and deviations
 
