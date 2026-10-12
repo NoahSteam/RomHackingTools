@@ -23,7 +23,8 @@
 // own filtering covers the first two; the panel checks all of them itself, because the runner
 // cannot know which snapshot, entry or names the panel has since moved on to -- and, since a
 // hidden panel takes no new snapshot, that the snapshot it holds is still what is on screen
-// (except on a running emulator, whose held snapshot lags by design). Each Update brings
+// (except on a running emulator, whose held snapshot lags by design -- in frames and writes, not
+// in source or BIOS image). Each Update brings
 // that state up to date with the view BEFORE it looks at results, so an answer that finished while
 // the view moved on is judged against what is on screen now, not against last frame. Anything else is discarded, and whatever was on screen
 // stays there, labelled stale, until its replacement arrives -- the panel never blanks while it

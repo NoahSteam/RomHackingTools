@@ -261,8 +261,13 @@ bool DecompilerPanel::HeldIsOnScreen() const
     // since a hidden panel copies no memory. So the view's identity is checked here as well: a
     // hidden panel must not install an answer for memory that is no longer on screen. A running
     // emulator is the exception by design: its held snapshot lags the view until Refresh, and the
-    // stale badge says so.
-    return mSnap && (mViewKind == DecompViewKind::LiveRunning || mSnapId == mViewId);
+    // stale badge says so. The lag is only the emulator moving on, though -- frames and writes. A
+    // different source or BIOS image changes the region set itself, which no badge excuses.
+    if (!mSnap) return false;
+    if (mViewKind == DecompViewKind::LiveRunning)
+        return mSnapId.valid == mViewId.valid && mSnapId.sourceId == mViewId.sourceId &&
+               mSnapId.biosHash == mViewId.biosHash;
+    return mSnapId == mViewId;
 }
 
 bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)

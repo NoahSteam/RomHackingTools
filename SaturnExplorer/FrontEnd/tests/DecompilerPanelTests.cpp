@@ -949,6 +949,40 @@ void TestCompletedAnswerJudgedAgainstCurrentView()
     f.Idle();
     CHECK(!f.panel.Pending() && f.Shown().generation == g);
     f.visible = true;
+
+    // Review round 3: the lag excuses frames and writes, not a new BIOS image -- that changes the
+    // region set. Adding, replacing and removing the image each discard a hidden finished answer,
+    // keep what is shown, do no hidden work, and ask once again on reopening.
+    const std::shared_ptr<const BiosImage> images[] = { BiosImage::Make(std::vector<uint8_t>(0x1000, 0x11)),
+                                                         BiosImage::Make(std::vector<uint8_t>(0x1000, 0x22)),
+                                                         nullptr };
+    for (const auto& image : images)
+    {
+        const uint64_t shownGen = f.Shown().generation;
+        f.gate.Close();
+        f.ClickItem("refresh");
+        CHECK(f.gate.WaitHeld());
+        f.gate.Open();
+        while (f.runner.Busy()) std::this_thread::yield();
+        f.bios = image;
+        ++f.frame;
+        ++f.fixedSerial;
+        f.visible = false;
+        const uint64_t discarded4 = f.panel.Discarded(), captures4 = f.panel.Captures(),
+                       asked4 = f.panel.Submissions();
+        f.Idle();
+        CHECK(f.Shown().generation == shownGen);               // the old output stays
+        CHECK(f.panel.Discarded() == discarded4 + 1);          // the answer for the old image goes
+        CHECK(!f.panel.Pending());
+        CHECK(f.panel.Captures() == captures4 && f.panel.Submissions() == asked4);   // hidden: no work
+        f.visible = true;
+        f.Idle();
+        CHECK(f.panel.Captures() == captures4 + 1 && f.panel.Submissions() == asked4 + 1);
+        CHECK(f.WaitShown());
+        CHECK(f.Shown().generation != shownGen);
+        f.Idle(3);
+        CHECK(f.panel.Submissions() == asked4 + 1);            // once
+    }
 }
 
 // Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image
