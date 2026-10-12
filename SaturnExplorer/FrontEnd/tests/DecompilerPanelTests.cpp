@@ -1023,6 +1023,42 @@ void TestBiosChangeWhileRunning()
     CHECK(prev == h0);   // no image again: the original region set
 }
 
+// macOS manual run: the entry box showed the last typed entry while another function -- reached
+// from the Call Stack or Registers -- was on screen. It shows the shown function's entry, but
+// never overwrites what the user is typing.
+void TestEntryBoxFollowsShownFunction()
+{
+    Fixture f;
+    CHECK(f.WaitShown("+ 1"));
+    CHECK(std::string(f.panel.EntryText()) == "06004000");
+    f.TypeInto("entry", "26005000");                 // a mirror: shown canonical
+    CHECK(f.WaitShown());
+    f.Idle(2);
+    CHECK(f.Shown().entry == dts::kFixture1Callee);
+    CHECK(std::string(f.panel.EntryText()) == "06005000");
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);   // as Call Stack / Registers do
+    CHECK(f.WaitShown("+ 1"));
+    f.Idle(2);
+    CHECK(std::string(f.panel.EntryText()) == "06004000");
+
+    // A draft being typed survives another function arriving; the box catches up once it is left.
+    ImVec2 a, b;
+    CHECK(f.panel.ItemRect("entry", a, b));
+    f.h.Click(Centre(a, b));
+    f.Idle(2);
+    f.Key(ImGuiKey_End);
+    ImGui::GetIO().AddInputCharacter('7');
+    f.Idle();
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Callee);
+    CHECK(f.WaitShown());
+    f.Idle(2);
+    CHECK(f.Shown().entry == dts::kFixture1Callee);
+    CHECK(std::string(f.panel.EntryText()) == "060040007");
+    f.Key(ImGuiKey_Escape);
+    f.Idle(2);
+    CHECK(std::string(f.panel.EntryText()) == "06005000");
+}
+
 // Review round 1, finding 4: an entry is one to eight hex digits after an optional 0x -- no sign,
 // no overflow that wraps into RAM.
 void TestEntryParsing()
@@ -1109,6 +1145,7 @@ int main(int argc, char** argv)
         RUN(TestCompletedAnswerJudgedAgainstCurrentView());
         RUN(TestBiosChangeWhileRunning());
         RUN(TestEntryParsing());
+        RUN(TestEntryBoxFollowsShownFunction());
         RUN(TestRunnerStartFailure());
     }
     catch (std::exception& e)

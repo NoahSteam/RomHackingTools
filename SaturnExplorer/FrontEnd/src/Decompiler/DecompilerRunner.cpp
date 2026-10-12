@@ -2,8 +2,14 @@
 
 #include "Decompiler/SaturnArchitecture.h"   // SleighArchitecture::shutdown
 
+#include <cerrno>
 #include <cstdio>
+#include <exception>
 #include <system_error>
+
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 namespace sfe
 {
@@ -21,6 +27,43 @@ std::atomic<bool> gFailThreadStart(false);
 
 }  // namespace
 
+const size_t DecompilerRunner::kWorkerStackBytes;
+
+struct DecompilerRunner::WorkerThread
+{
+    // Starts runner->WorkerMain() with kWorkerStackBytes of stack; throws std::system_error as
+    // std::thread would. Defined at the end of the file, after the platform headers.
+    explicit WorkerThread(DecompilerRunner* runner);
+    void Join();
+
+    DecompilerRunner* runner;
+#ifdef _WIN32
+    void* handle = nullptr;
+#else
+    pthread_t id;
+#endif
+    bool joinable = false;
+
+#ifdef _WIN32
+    static unsigned __stdcall Entry(void* self);
+#else
+    static void* Entry(void* self);
+#endif
+    void Run()
+    {
+        // As std::thread: an exception escaping the thread ends the process (WorkerMain catches
+        // everything it can recover from).
+        try
+        {
+            runner->WorkerMain();
+        }
+        catch (...)
+        {
+            std::terminate();
+        }
+    }
+};
+
 DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
     : mConfigDir(std::move(configDir)), mOptions(options)
 {
@@ -36,7 +79,7 @@ DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
         if (gFailThreadStart)
             throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again),
                                     "the worker thread could not be started (test)");
-        mThread = std::thread(&DecompilerRunner::WorkerMain, this);
+        mThread.reset(new WorkerThread(this));
     }
     catch (...)
     {
@@ -95,7 +138,7 @@ DecompilerRunner::~DecompilerRunner()
     mWake.notify_all();
     // Unconditionally: a detached engine thread would still be running while static objects are
     // destroyed. This waits for the next check-point plus the current uncheckable segment.
-    if (mThread.joinable()) mThread.join();
+    if (mThread) mThread->Join();
     if (mOwnsEngine)
     {
         ghidra::SleighArchitecture::shutdown();
@@ -379,6 +422,78 @@ void DecompilerRunner::WorkerMain()
         }
     }
 }
+
+}  // namespace decomp
+}  // namespace sfe
+
+// The platform thread, last: <windows.h> defines macros that must not reach the code above.
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <process.h>
+#endif
+
+namespace sfe
+{
+namespace decomp
+{
+#ifdef _WIN32
+unsigned __stdcall DecompilerRunner::WorkerThread::Entry(void* self)
+{
+    static_cast<WorkerThread*>(self)->Run();
+    return 0;
+}
+
+DecompilerRunner::WorkerThread::WorkerThread(DecompilerRunner* r) : runner(r)
+{
+    const uintptr_t h = _beginthreadex(nullptr, static_cast<unsigned>(kWorkerStackBytes), &Entry, this,
+                                       STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+    if (h == 0)
+        throw std::system_error(errno, std::generic_category(), "the worker thread could not be started");
+    handle = reinterpret_cast<void*>(h);
+    joinable = true;
+}
+
+void DecompilerRunner::WorkerThread::Join()
+{
+    if (!joinable) return;
+    WaitForSingleObject(static_cast<HANDLE>(handle), INFINITE);
+    CloseHandle(static_cast<HANDLE>(handle));
+    joinable = false;
+}
+#else
+void* DecompilerRunner::WorkerThread::Entry(void* self)
+{
+    static_cast<WorkerThread*>(self)->Run();
+    return nullptr;
+}
+
+DecompilerRunner::WorkerThread::WorkerThread(DecompilerRunner* r) : runner(r)
+{
+    pthread_attr_t attr;
+    int err = pthread_attr_init(&attr);
+    if (err == 0)
+    {
+        err = pthread_attr_setstacksize(&attr, kWorkerStackBytes);
+        if (err == 0) err = pthread_create(&id, &attr, &Entry, this);
+        pthread_attr_destroy(&attr);
+    }
+    if (err != 0) throw std::system_error(err, std::generic_category(), "the worker thread could not be started");
+    joinable = true;
+}
+
+void DecompilerRunner::WorkerThread::Join()
+{
+    if (!joinable) return;
+    pthread_join(id, nullptr);
+    joinable = false;
+}
+#endif
 
 }  // namespace decomp
 }  // namespace sfe

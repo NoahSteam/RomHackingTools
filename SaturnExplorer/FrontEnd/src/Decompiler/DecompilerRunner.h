@@ -43,7 +43,6 @@
 #include <mutex>
 #include <set>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "Decompiler/Sh2Decompiler.h"
@@ -106,6 +105,13 @@ public:
     // refuses one (std::system_error).
     static void SetThreadStartFailureForTests(bool fail);
 
+    // The engine thread's stack. Ghidra's analysis recurses over the function's control flow
+    // (Heritage::renameRecurse walks the dominator tree), so its depth grows with the function, and
+    // the platform defaults for a secondary thread differ widely: 8 MiB on Linux, 1 MiB on Windows,
+    // 512 KiB on macOS -- where the 1000-diamond test fixture overflowed it in a Debug build. Only
+    // touched pages are committed, so a generous reservation costs address space, not memory.
+    static const size_t kWorkerStackBytes = 16u << 20;
+
 private:
     using Clock = std::chrono::steady_clock;
 
@@ -154,7 +160,10 @@ private:
     std::function<void(DecompilePhase)> mObserver;
     bool mOwnsEngine = false;                    // false when another runner was alive first
 
-    std::thread mThread;
+    // The engine thread. Not a std::thread: that cannot choose its stack size (see
+    // kWorkerStackBytes). Platform code in the .cpp.
+    struct WorkerThread;
+    std::unique_ptr<WorkerThread> mThread;
 };
 
 }  // namespace decomp

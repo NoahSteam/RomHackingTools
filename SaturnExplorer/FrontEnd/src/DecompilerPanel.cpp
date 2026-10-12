@@ -251,7 +251,11 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     }
     for (uint32_t c : mShown.callees) mCallees.insert(c);
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
-    if (!sameFunction) mSelectedLine = -1;
+    if (!sameFunction)
+    {
+        mSelectedLine = -1;
+        mSyncEntryBox = true;
+    }
     mNote.clear();
 }
 
@@ -543,6 +547,12 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     }
 
     ImGui::SameLine();
+    // Not while the box is being edited: ImGui owns its text then, and would also lose the draft.
+    if (mSyncEntryBox && !mEntryActive && mShownValid)
+    {
+        std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", mShown.entry);
+        mSyncEntryBox = false;
+    }
     ImGui::SetNextItemWidth(ImGui::CalcTextSize("0x00000000").x + ImGui::GetStyle().FramePadding.x * 2.0f);
     if (ImGui::InputTextWithHint("##entry", "entry", mEntryBuf, sizeof mEntryBuf,
                                  ImGuiInputTextFlags_EnterReturnsTrue))
@@ -563,6 +573,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             mEntryError = "Type the function's entry as a hex address, e.g. 06004000.";
         }
     }
+    mEntryActive = ImGui::IsItemActive();
     Remember("entry");   // the input box: nothing in the branch above submits an item
     ImGui::SetItemTooltip("Decompile the function starting at this address (hex; any mirror). Enter to go.");
 

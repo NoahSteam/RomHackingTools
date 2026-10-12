@@ -132,7 +132,7 @@ failure is `SaturnExplorerDecompilerRunnerTests` (see Bug 1). `SaturnExplorerDec
 | 6–9 | Live Mednafen | unavailable | A patched Mednafen is built (`_emu/mednafen/src/mednafen`, Oct 9), but no Saturn BIOS image and no game disc/cue exist anywhere on this Mac, so nothing can be booted. |
 | 10 | BIOS | unavailable | No BIOS image exists. The BIOS button's tooltip reads "No BIOS image: calls into the BIOS stop there." (the unset state). |
 
-**Bugs and observations** (not fixed, per the brief)
+**Bugs and observations** (not fixed by the tester, per the brief; 1 and 2 fixed afterwards -- see "After the macOS run")
 
 1. **`SaturnExplorerDecompilerRunnerTests` crashes on macOS arm64** (consistent, 3 of 3 serial runs; not load-related).
    Repro: `ctest --test-dir build -R DecompilerRunnerTests --output-on-failure`, or
@@ -152,6 +152,15 @@ failure is `SaturnExplorerDecompilerRunnerTests` (see Bug 1). `SaturnExplorerDec
 
 The Step 3 gate is **not** complete: Windows is still pending, and the macOS live checks (6–10) and the in-flight A4 race need a
 Mac with a BIOS image and a disc.
+
+**After the macOS run** (fixed on Linux; needs the macOS rerun of `DecompilerRunnerTests` to confirm on the platform)
+
+| Bug | Fix | Regression test (fails with the fix removed) |
+|---|---|---|
+| 1, worker stack overflow | `DecompilerRunner` starts its engine thread itself (pthread / `_beginthreadex`) with an explicit 16 MiB stack (`kWorkerStackBytes`) instead of `std::thread`, which cannot choose one. Ghidra's analysis recursion grows with the function; secondary-thread defaults are 512 KiB on macOS, 1 MiB on Windows, 8 MiB on Linux. The app's runner is the same class, so the app had the same exposure | `DecompilerRunnerTests` `TestWorkerStack`: reads the stack size from inside the worker (record hook) and requires at least `kWorkerStackBytes`. On Linux the crash reproduces by shrinking the default thread stack (`ulimit -s 128`: segfault in `TestBaselines`); with the fix the whole suite passes there. Mutation: drop `pthread_attr_setstacksize` (the test reports 128 KiB, and the suite then crashes) |
+| 2, entry box | The box shows the entry of each newly installed function, deferred while the box is being edited | `DecompilerPanelTests` `TestEntryBoxFollowsShownFunction`: canonical entry after a typed mirror, the shown entry after an external `ShowFunctionContaining`, a draft kept while typing and replaced once the box is left. Mutations: never sync (fails); sync while editing (fails) |
+
+Bug 3 (the file dialog) is outside the decompiler and Step 3; left as recorded.
 
 ## Decisions and deviations
 

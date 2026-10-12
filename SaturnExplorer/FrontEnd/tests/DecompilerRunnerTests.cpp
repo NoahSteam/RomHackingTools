@@ -29,6 +29,18 @@
 #include <mutex>
 #include <thread>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+
 using namespace sfe::decomp;
 using dts::MsSince;
 using Clock = std::chrono::steady_clock;
@@ -752,6 +764,47 @@ void TestConstructionFailureReleasesEngine()
 }
 
 // A second runner while one is alive would be a second engine thread on the shared translator.
+// The calling thread's stack size, as the platform reports it (0 if it cannot say).
+size_t CurrentThreadStackBytes()
+{
+#if defined(_WIN32)
+    ULONG_PTR lo = 0, hi = 0;
+    GetCurrentThreadStackLimits(&lo, &hi);
+    return static_cast<size_t>(hi - lo);
+#elif defined(__APPLE__)
+    return pthread_get_stacksize_np(pthread_self());
+#else
+    pthread_attr_t attr;
+    size_t size = 0;
+    if (pthread_getattr_np(pthread_self(), &attr) != 0) return 0;
+    pthread_attr_getstacksize(&attr, &size);
+    pthread_attr_destroy(&attr);
+    return size;
+#endif
+}
+
+std::atomic<size_t> gWorkerStack(0);
+void RecordWorkerStack()
+{
+    gWorkerStack = CurrentThreadStackBytes();
+}
+
+// The macOS manual run: the 1000-diamond fixture overflowed the worker's stack (SIGBUS in
+// Heritage::renameRecurse) because a secondary thread there gets 512 KiB by default. The worker
+// must run on the stack it asks for, whatever the platform's default.
+void TestWorkerStack()
+{
+    DecompilerRunner runner(gConfig);
+    DecompilerRunner::SetRecordHookForTests(RecordWorkerStack);
+    DecompileResult r;
+    runner.Submit(0, gSnap, Small());
+    CHECK(WaitResult(runner, r) && r.status == DecompileStatus::Ok);
+    DecompilerRunner::SetRecordHookForTests(nullptr);
+    std::printf("  worker stack %zu KiB (asked for %zu KiB)\n", gWorkerStack.load() >> 10,
+                DecompilerRunner::kWorkerStackBytes >> 10);
+    CHECK(gWorkerStack.load() >= DecompilerRunner::kWorkerStackBytes);
+}
+
 void TestOneEngineThread()
 {
     DecompilerRunner first(gConfig);
@@ -823,6 +876,7 @@ int main(int argc, char** argv)
                 kFixtureDivisor > 1 ? " (a tenth: MSVC Debug CRT)" : " (the cancellation spike's sizes)");
     try
     {
+        RUN(TestWorkerStack());
         RUN(TestBaselines());
         RUN(TestCancelInFlowAndActions());
         RUN(TestCancelDuringPrint());

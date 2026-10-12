@@ -162,6 +162,7 @@ public:
     const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
     uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }
     const std::string& EntryError() const { return mEntryError; }
+    const char* EntryText() const { return mEntryBuf; }
     uint64_t Captures() const { return mCaptures; }
     uint64_t Submissions() const { return mSubmissions; }
     uint64_t Discarded() const { return mDiscarded; }
@@ -284,6 +285,10 @@ private:
     std::list<CacheEntry> mCache;    // most recent first
 
     char mEntryBuf[16] = {};
+    // A new function was installed: the entry box shows its entry once it is not being edited, so
+    // it never names a function other than the one on screen (Follow PC, Call Stack, Registers).
+    bool mSyncEntryBox = false;
+    bool mEntryActive = false;       // the box had keyboard focus last frame
     int mContextLine = -1;           // the line the context menu was opened on
 
     struct DrawnLine { int index; ImVec2 min, max; };
