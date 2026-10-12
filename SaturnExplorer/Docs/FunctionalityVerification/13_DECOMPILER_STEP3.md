@@ -60,8 +60,8 @@ signed shift inside vendored Ghidra, `address.hh:605`, recorded in Step 2) and u
 
 | | Linux (this container, Debug) | Windows | macOS arm64 | macOS x86_64 (Rosetta) |
 |---|---|---|---|---|
-| `DecompilerPanelTests` total | 0.63 s (2.7 s ASan, 4.1 s TSan) | 1.51 s Debug · 0.39 s Release | 2.28 s | 4.80 s |
-| Session change with the engine held (bound: 1 s) | 0.6 ms | 1.82 ms Debug · 0.60 ms Release | 15.8 ms | 44.1 ms |
+| `DecompilerPanelTests` total | 0.63 s (2.7 s ASan, 4.1 s TSan) | 1.51 s Debug · 0.39 s Release | 2.28 s · 1.85 s at `b3760496` | 4.80 s |
+| Session change with the engine held (bound: 1 s) | 0.6 ms | 1.82 ms Debug · 0.60 ms Release | 15.8 ms · 11.57 ms at `b3760496` | 44.1 ms |
 | Auto-refresh captures, 90 frames, PC leaving every other frame | 3 | 3 | 3 | 3 |
 | App exit (SIGTERM → `Shutdown` → runner join → exit 0), real app | 145 ms | — | — | — |
 
@@ -91,20 +91,67 @@ builds compile) was built here and driven under Xvfb with `xdotool`, on the spik
 
 | Check | Windows | macOS | Notes |
 |---|---|---|---|
-| `.yss` open and edit | pending | pending | performed on Linux (above) |
-| Live Mednafen paused | pending | pending | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
-| Live Mednafen running (stale badge, Refresh, auto-refresh) | pending | pending | automated with a mock (`TestRunningLive`) |
-| Live, after a Hex Editor write | pending | pending | automated with a mock (`TestHexWriteReRequests`) |
-| Live, while scrubbing | pending | pending | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
-| Unload and reconnect while a long decompile is in flight (A4) | pending | pending | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
-| Master and slave | pending | pending | performed on Linux |
-| BIOS call | pending | pending | unavailable here (no BIOS image); the key change is automated |
-| Hand-typed mirror; rejected cache-array address (A2) | pending | pending | performed on Linux |
-| Fixture-3 delay-slot banner on a patched savestate (A3) | pending | pending | automated on fixture 3 |
-| Native menu shows Windows → Debugger → SH-2 Pseudocode | pending | pending | menus are built from `PanelList()`; not run here |
+| `.yss` open and edit | pending | **passed** | performed on Linux (above) |
+| Live Mednafen paused | pending | **unavailable** (no BIOS image or game disc on this Mac; see "Real application run (macOS)") | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
+| Live Mednafen running (stale badge, Refresh, auto-refresh) | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestRunningLive`) |
+| Live, after a Hex Editor write | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestHexWriteReRequests`) |
+| Live, while scrubbing | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
+| Unload and reconnect while a long decompile is in flight (A4) | pending | **unavailable** (the in-flight race cannot be hit by hand; only the idle Close Source was observed, no hang) | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
+| Master and slave | pending | **passed** | performed on Linux |
+| BIOS call | pending | **unavailable** (no BIOS image on this Mac) | unavailable here (no BIOS image); the key change is automated |
+| Hand-typed mirror; rejected cache-array address (A2) | pending | **passed** | performed on Linux |
+| Fixture-3 delay-slot banner on a patched savestate (A3) | pending | **passed** | automated on fixture 3 |
+| Native menu shows Windows → Debugger → SH-2 Pseudocode | pending | **passed** | menus are built from `PanelList()`; not run here |
 | The MSBuild-linked exe decompiles | pending | — | CI builds and links it (`build-release-msbuild.bat` job); no CLI to load a savestate, so it needs a manual run |
 
 The Step 3 gate ("manual checklist complete on Windows and macOS") is therefore **not met** yet.
+
+## Real application run (macOS)
+
+Run at `b3760496` (`master`), on an **arm64** Mac (Apple Silicon, native, no Rosetta), macOS 26 (Darwin 25.5.0),
+by driving the real `SaturnExplorer.app` (`cmake -S SaturnExplorer -B build && cmake --build build -j8`) with
+computer use, one screenshot per check. Savestate: `SakuraTaisen2/.../Yabause/OhrimeMiniGame/GS-9169_007.yss`.
+
+**Build and tests.** The build succeeded. `ctest --test-dir build --output-on-failure`: **89 of 90 passed**; the one
+failure is `SaturnExplorerDecompilerRunnerTests` (see Bug 1). `SaturnExplorerDecompilerPanelTests` passed and printed
+`session change with the engine held: 11.57 ms` and `DecompilerPanelTests: 1851.0 ms total` (cells above).
+
+**Checks performed (all on the `.yss`)**
+
+| # | Check | Result | What the screenshot showed |
+|---|---|---|---|
+| 1 | Native menu, open, follow PC, edit | passed | The macOS menu bar has **Windows** → Debugger → SH-2 Pseudocode (the menu is titled "Windows", not "Window"); the item toggles the panel and its check mark follows the panel's visibility. Master PC `0603055A` gave `func_0x06030548` with `param_1 * 7000`. Memory panel: `0x06030567` `58` → `0F` (word `1B 58` → `1B 0F`) changed the output to `param_1 * 0x1b0f` with no other action. |
+| 2 | Entry points | passed | Call Stack frame #1 → "Decompile" → `func_0x06008204` (Follow PC went off). Assembly row → "Decompile Here" → `func_0x06030548`. Registers PC value → "Decompile" → `func_0x06030548` (was `06008204`). Clicking the `if (0 < param_1 * 0x1b0f)` line turned Assembly's Follow PC off and jumped it to `0603054A…`. |
+| 3 | Master and slave | passed | Slave: "No function found containing 0x003C3000: 0x003C3000 is not in captured memory", the previous output kept and badged `[stale]`. |
+| 4 | Typed addresses (A2) | passed | `26031598` → `func_0x06031598` (canonical). `C6004000` → "0xC6004000 is not code memory: … is in the cache data array, not memory". `106004000` and `-F9FFC000` → "Type the function's entry as a hex address, e.g. 06004000." Output unchanged each time. Whether a request was submitted is not visible in the GUI (automated: `TestEntriesAndNoRetryLoops`, `TestEntryParsing`). |
+| 5 | Rename | passed | Context menu → Rename Function… → `busy_wait` re-ran: `void busy_wait(int4 param_1)`, status `busy_wait @ 0x06030548`. |
+| 11 | A3 banner | passed | A copy of the savestate with fixture 3's `bra` + PC-relative `mov.l` slot written into HWRAM at `06006000` (and the `bf/s` case at `06006100`; generated from the `fixture3.py` words, not committed). Entry `06006000` showed, in amber: "PC-relative load in a delay slot at 0x06006002: pseudocode for this function is not trustworthy.", "1 warning", and the output greyed (`return xRam06006010;`). |
+| 13 | Hidden panel | passed (end state only) | With the panel closed, the byte at `0x06030567` was changed `58` → `0F`; reopening from the Windows menu already showed the fresh `0x1b0f`. The intermediate stale frame (one or two frames) cannot be caught at screenshot latency; it is pinned by `TestCompletedAnswerJudgedAgainstCurrentView`. |
+| 14 | Quit | passed | App menu → Quit exited cleanly (no crash report; process gone within 3 s, not timed more precisely). `settings.ini` gained `[decompiler] autorefresh = 0` / `bios = ` and `decompiler = 1` in the panel list; nothing else changed. |
+| 12 | A4 | unavailable | Session → Source → Close Source with the panel showing a small function: the UI did not hang; the status line went to "No source", and the old output stayed on screen badged `[stale: frame 0]`. A decompile that is still running when a session ends cannot be arranged through the GUI (the engine answers in a few milliseconds, the UI step takes seconds), so the race is not exercised here; automated: `TestSessionChangeDoesNotWait`. |
+| 6–9 | Live Mednafen | unavailable | A patched Mednafen is built (`_emu/mednafen/src/mednafen`, Oct 9), but no Saturn BIOS image and no game disc/cue exist anywhere on this Mac, so nothing can be booted. |
+| 10 | BIOS | unavailable | No BIOS image exists. The BIOS button's tooltip reads "No BIOS image: calls into the BIOS stop there." (the unset state). |
+
+**Bugs and observations** (not fixed, per the brief)
+
+1. **`SaturnExplorerDecompilerRunnerTests` crashes on macOS arm64** (consistent, 3 of 3 serial runs; not load-related).
+   Repro: `ctest --test-dir build -R DecompilerRunnerTests --output-on-failure`, or
+   `build/bin/SaturnExplorerDecompilerRunnerTests <scratch dir>`: it prints `-- TestBaselines()` and dies with
+   `SIGBUS` (exit 138) in 0.16 s. The crash report (`~/Library/Logs/DiagnosticReports/SaturnExplorerDecompilerRunnerTests-*.ips`)
+   says `EXC_BAD_ACCESS … KERN_PROTECTION_FAILURE … "Could not determine thread index for stack guard region"`, in
+   `ghidra::Heritage::renameRecurse` (recursion on the 1000-diamond fixture), i.e. a stack overflow on the engine's worker
+   thread. If the app's `DecompilerRunner` thread has the same stack size as the test's, a very large function could
+   crash the app the same way on macOS (default secondary-thread stacks are 512 KiB); not tried in the app.
+2. Cosmetic: after "Decompile" from the Registers panel or the Call Stack, the pseudocode window's **entry box keeps the
+   previously typed text** (it showed `06008204` while the function shown was `06030548`).
+3. While the app's native file dialog (a spawned `osascript … choose file`) is open, **SIGTERM does not end the app**
+   (the UI thread is blocked on the dialog), and the dialog outlives a SIGKILLed app. Not decompiler related; found while
+   trying to open a patched savestate.
+4. Checklist wording: the menu is "Windows". The raw ImGui widgets need a hover frame before a click lands, so the first
+   synthetic click on a widget does nothing unless the pointer is moved onto it first (a test-driver quirk, not an app bug).
+
+The Step 3 gate is **not** complete: Windows is still pending, and the macOS live checks (6–10) and the in-flight A4 race need a
+Mac with a BIOS image and a disc.
 
 ## Decisions and deviations
 
