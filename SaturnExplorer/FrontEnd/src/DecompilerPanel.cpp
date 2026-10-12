@@ -255,6 +255,16 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     mNote.clear();
 }
 
+bool DecompilerPanel::HeldIsOnScreen() const
+{
+    // The held snapshot is replaced as soon as the view moves -- but only while the panel is shown,
+    // since a hidden panel copies no memory. So the view's identity is checked here as well: a
+    // hidden panel must not install an answer for memory that is no longer on screen. A running
+    // emulator is the exception by design: its held snapshot lags the view until Refresh, and the
+    // stale badge says so.
+    return mSnap && (mViewKind == DecompViewKind::LiveRunning || mSnapId == mViewId);
+}
+
 bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
 {
     // The checks of the install rule (header). The runner has already dropped results from
@@ -267,7 +277,8 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mSnap && r.key == mPending.key && r.key == mSnap->key &&   // for the snapshot held now
                          mResolved && mEntryOk && r.requestedEntry == mPending.entry &&
                          mPending.entry == mEntry &&                   // and the entry wanted now,
-                         mPending.namesGeneration == mNamesGeneration; // under the names in force now
+                         mPending.namesGeneration == mNamesGeneration && // under the names in force now,
+                         HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
     {
         ++mDiscarded;
@@ -310,6 +321,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     // The other order would judge a finished answer against last frame's state: an answer for B,
     // completed while the view moved on to C, would be installed before the panel noticed C.
     mViewId = IdOf(view);
+    mViewKind = view.kind;
     for (int cpu = 0; cpu < 2; ++cpu)
     {
         mViewHavePc[cpu] = view.haveRegs[cpu];

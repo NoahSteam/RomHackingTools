@@ -1,0 +1,23 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+index 95fbca92..580502ed 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -195,6 +197,9 @@ Funcdata::~Funcdata(void)
+   clearCallSpecs();
+   for(int4 i=0;i<jumpvec.size();++i) // Delete jumptables
+     delete jumpvec[i];
++  // An analysis abandoned between ActionPrototypeTypes and return recovery (a cancel, an error)
++  // still owns its ParamActive: free it here, as normal completion does.
++  clearActiveOutput();
+   glb = (Architecture *)0;
+ }
+ 

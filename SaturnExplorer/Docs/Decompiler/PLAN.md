@@ -16,8 +16,10 @@ Rules that hold throughout:
   `0003-translator-ownership-on-init-failure.patch`, two and three lines, so that an allocation
   failure while the shared translator is reset or re-initialised neither leaves deleted cache
   pointers for its destructor nor makes `restoreFromSpec` delete the process-global translator:
-  after an out-of-memory in the engine the process still exits normally. Each has a reason and a
-  regression test in `patches/README.md`. Everything else is a subclass or wrapper in
+  after an out-of-memory in the engine the process still exits normally; and -- added in Step 3's
+  review -- `0004-funcdata-frees-active-output.patch`, one line, so that a cancelled analysis does
+  not leak its return-recovery state. Each has a reason and a regression test in
+  `patches/README.md`. Everything else is a subclass or wrapper in
   `FrontEnd/src/Decompiler/`.
 - Everything decompiler-related compiles only when `SE_ENABLE_DECOMPILER` is on (default on
   desktop, forced off under Emscripten).

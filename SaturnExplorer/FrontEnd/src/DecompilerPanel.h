@@ -21,7 +21,9 @@
 // panel has outstanding (generation), made in the current session (runner epoch), for the snapshot
 // the panel holds now (key), for the entry it now wants, under the names in force now. The runner's
 // own filtering covers the first two; the panel checks all of them itself, because the runner
-// cannot know which snapshot, entry or names the panel has since moved on to. Each Update brings
+// cannot know which snapshot, entry or names the panel has since moved on to -- and, since a
+// hidden panel takes no new snapshot, that the snapshot it holds is still what is on screen
+// (except on a running emulator, whose held snapshot lags by design). Each Update brings
 // that state up to date with the view BEFORE it looks at results, so an answer that finished while
 // the view moved on is judged against what is on screen now, not against last frame. Anything else is discarded, and whatever was on screen
 // stays there, labelled stale, until its replacement arrives -- the panel never blanks while it
@@ -247,6 +249,8 @@ private:
     bool mCancelRequested = false;   // Stop
 
     ViewId mViewId;                  // the view this frame
+    DecompViewKind mViewKind = DecompViewKind::None;
+    bool HeldIsOnScreen() const;
     uint32_t mViewPc[2] = { 0, 0 };
     bool mViewHavePc[2] = { false, false };
     std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds

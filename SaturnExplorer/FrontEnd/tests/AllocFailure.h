@@ -42,6 +42,26 @@ inline std::atomic<bool>& FailAlways()
     return on;
 }
 
+// One allocation a test watches: Release reports when it is freed. For proving that an object
+// is destroyed by its owner, without depending on a leak checker.
+inline std::atomic<const void*>& Watched()
+{
+    static std::atomic<const void*> p(nullptr);
+    return p;
+}
+
+inline std::atomic<bool>& WatchedFreed()
+{
+    static std::atomic<bool> freed(false);
+    return freed;
+}
+
+inline void Release(void* p) noexcept
+{
+    if (p && p == Watched().load()) WatchedFreed() = true;
+    std::free(p);
+}
+
 inline void* Allocate(std::size_t size)
 {
     AllocCount().fetch_add(1, std::memory_order_relaxed);
@@ -68,10 +88,10 @@ inline void* Allocate(std::size_t size)
 
 void* operator new(std::size_t size) { return dts::Allocate(size); }
 void* operator new[](std::size_t size) { return dts::Allocate(size); }
-void operator delete(void* p) noexcept { std::free(p); }
-void operator delete[](void* p) noexcept { std::free(p); }
-void operator delete(void* p, std::size_t) noexcept { std::free(p); }
-void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+void operator delete(void* p) noexcept { dts::Release(p); }
+void operator delete[](void* p) noexcept { dts::Release(p); }
+void operator delete(void* p, std::size_t) noexcept { dts::Release(p); }
+void operator delete[](void* p, std::size_t) noexcept { dts::Release(p); }
 // The nothrow forms too: the standard library allocates through them (libstdc++'s stable_sort
 // buffer, which Ghidra's switch printing uses) and frees through the plain delete above, so leaving
 // them to the runtime pairs its allocator with free() -- an alloc-dealloc mismatch under ASan.
@@ -87,5 +107,5 @@ void* operator new(std::size_t size, const std::nothrow_t&) noexcept
     }
 }
 void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept { return operator new(size, tag); }
-void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
-void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { dts::Release(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { dts::Release(p); }

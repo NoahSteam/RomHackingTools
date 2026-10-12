@@ -14,6 +14,7 @@
 
 #include "AllocFailure.h"
 #include "Decompiler/SaturnArchitecture.h"
+#include "funcdata.hh"   // Funcdata, for the 0004 patch test
 #include "Decompiler/Sh2Decompiler.h"
 
 #include <atomic>
@@ -620,6 +621,32 @@ int EngineOomChild(const std::string& scratch, const std::string& where, long of
     std::_Exit(dts::Failures() ? 1 : 0);   // skip static teardown of the damaged engine
 }
 
+// patches/0004-funcdata-frees-active-output.patch: a function destroyed while it still owns its
+// return-recovery state (ActionPrototypeTypes allocated it; an abandoned analysis never reached
+// the normal cleanup) frees it. Deterministic: the state is created directly and its pointer
+// watched through the test allocator, rather than hoping a cancel lands in that window.
+void TestFunctionFreesActiveOutput()
+{
+    Sh2Decompiler d(gConfig);
+    auto snap = Fixture1Snapshot();
+    CHECK(d.Decompile(snap, Request(dts::kFixture1Caller)).status == DecompileStatus::Ok);   // library started
+    dts::WatchedFreed() = false;
+    {
+        std::ostringstream errors;
+        SaturnArchitecture arch(snap, &errors);
+        arch.Initialise(20000, nullptr);
+        const ghidra::Address entry(arch.getDefaultCodeSpace(), dts::kFixture1Caller);
+        ghidra::FunctionSymbol* sym = arch.symboltab->getGlobalScope()->addFunction(entry, "f");
+        ghidra::Funcdata* fd = sym->getFunction();
+        fd->initActiveOutput();
+        CHECK(fd->getActiveOutput() != nullptr);
+        dts::Watched() = fd->getActiveOutput();
+    }   // the Architecture, its scopes, the symbol and the function go here
+    dts::Watched() = nullptr;
+    std::printf("  return-recovery state freed with its function: %s\n", dts::WatchedFreed() ? "yes" : "NO (leaked)");
+    CHECK(dts::WatchedFreed());
+}
+
 void TestEngineAllocationFailureInChild(const char* self, const std::string& scratch)
 {
     if (!dts::kInjectionUsable)
@@ -681,6 +708,7 @@ int main(int argc, char** argv)
         RUN(TestCalleeHarvest());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
+        RUN(TestFunctionFreesActiveOutput());
         RUN(TestEngineAllocationFailureInChild(argv[0], scratch));
     }
     catch (std::exception& e)

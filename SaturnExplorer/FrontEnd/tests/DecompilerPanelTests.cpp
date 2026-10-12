@@ -135,6 +135,7 @@ struct Fixture
     DecompilerPanel panel;
     HexEditorPanel hex;
     bool showHex = false;
+    bool visible = true;       // the SH-2 Pseudocode window is shown (App: mPanels.decompiler)
 
     DecompViewKind kind = DecompViewKind::Static;
     uint64_t sourceId = 7, frame = 1;
@@ -207,11 +208,14 @@ struct Fixture
     {
         const DecompilerView v = View();
         const DecompilerInputs in = Inputs();
-        panel.Update(v, runner, in, true);
-        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(760, 380), ImGuiCond_Always);
+        panel.Update(v, runner, in, visible);
         DecompilerPanel::Request r;
-        panel.Draw(nullptr, v, runner, in, r);
+        if (visible)
+        {
+            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2(760, 380), ImGuiCond_Always);
+            panel.Draw(nullptr, v, runner, in, r);
+        }
         if (r.jumpAssembly) { req.jumpAssembly = true; req.cpu = r.cpu; req.addr = r.addr; }
         if (r.viewHex) { req.viewHex = true; req.hexAddr = r.hexAddr; }
         if (r.rename) { req.rename = true; req.renameAddr = r.renameAddr; }
@@ -894,6 +898,57 @@ void TestCompletedAnswerJudgedAgainstCurrentView()
     f.gate.Open();
     CHECK(f.WaitShown("read_word("));
     CHECK(Has(f.Shown().Text(), "+ 4"));
+
+    // And while the window is hidden (review round 2): a hidden panel takes no snapshot, so the
+    // view's own identity must stop the stale answer. E (+ 5) completes unpolled, the memory moves
+    // to F (+ 6), and a hidden Update discards E -- copying and asking nothing -- so reopening
+    // still shows D, stale, and asks for F.
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x05;   // E
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    const auto t2 = std::chrono::steady_clock::now();
+    while (f.runner.Busy() && dts::MsSince(t2) < 30000.0) std::this_thread::yield();
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x06;   // F
+    ++f.backend.serial;
+    f.visible = false;
+    const uint64_t discarded3 = f.panel.Discarded(), captures3 = f.panel.Captures(), asked3 = f.panel.Submissions();
+    f.Idle();
+    CHECK(Has(f.Shown().Text(), "+ 4"));                     // D kept, E not installed
+    CHECK(f.panel.Discarded() == discarded3 + 1);
+    CHECK(f.panel.Captures() == captures3 && f.panel.Submissions() == asked3);   // hidden: no work
+    CHECK(!f.panel.Pending());
+    f.visible = true;
+    f.Idle();
+    CHECK(f.panel.Captures() == captures3 + 1 && f.panel.Submissions() == asked3 + 1);
+    CHECK(Has(f.Shown().Text(), "+ 4") && f.panel.ShownStale());
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    CHECK(f.WaitShown("+ 6"));
+    CHECK(!Has(f.Shown().Text(), "+ 5"));
+
+    // A running emulator's held snapshot lags by design: hidden, its answer is still installed
+    // (shown with the stale badge), exactly as when visible.
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    f.fixedSerial = 1000;
+    f.ClickItem("refresh");
+    CHECK(f.WaitShown());
+    f.gate.Close();
+    f.ClickItem("refresh");
+    CHECK(f.gate.WaitHeld());
+    const uint64_t g = f.panel.PendingGeneration();
+    f.gate.Open();
+    while (f.runner.Busy()) std::this_thread::yield();
+    ++f.frame;
+    ++f.fixedSerial;
+    f.visible = false;
+    f.Idle();
+    CHECK(!f.panel.Pending() && f.Shown().generation == g);
+    f.visible = true;
 }
 
 // Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image

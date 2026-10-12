@@ -141,6 +141,13 @@ UBSan (apart from the known vendored-Ghidra shift) and ThreadSanitizer. Coverage
 and that stays as stated: App's recorded-frame identity is exercised only by a live run (manual
 checklist); the Step 3 gate remains unmet until the Windows/macOS manual checks are done.
 
+## Review round 2 (ChatGPT, on `8095982`)
+
+| # | Finding | Fix | Regression test (fails with the fix removed) |
+|---|---|---|---|
+| 1 | Round 1's ordering held only while the window was shown: a hidden panel takes no snapshot, so an answer for B, completed unpolled while memory moved on to C, was still installed by a hidden `Update` | The install rule also requires the held snapshot to be what is on screen (`HeldIsOnScreen`: its identity equals the view's), so a hidden panel discards it without copying memory or asking anything. A running emulator is exempt by design: its held snapshot lags the view until Refresh | `TestCompletedAnswerJudgedAgainstCurrentView`, extended: E completes unpolled, memory moves to F, a hidden `Update` keeps D, discards E, captures and asks nothing; reopening asks for F once and shows `+ 6`. And a running emulator's answer is still installed while hidden. Mutations: drop the check; drop the running-live exemption |
+| 2 | Ghidra's `~Funcdata` leaked the return-recovery state of an abandoned analysis | `patches/0004-funcdata-frees-active-output.patch`: `clearActiveOutput()` in the destructor (1 line plus the notice), applied by `vendor.py` -- which reproduces the vendored tree exactly with only `funcdata.cc` changing -- and recorded in `patches/README.md`, `VENDOR.md` and PLAN.md | `Sh2DecompilerTests` `TestFunctionFreesActiveOutput`: creates the state directly, watches its allocation through the test allocator, destroys the Architecture, and requires it freed. Deterministic -- it does not depend on where a cancel lands. Mutation: remove the patch's line (the test then reports it leaked) |
+
 ## Observations (not Step 3)
 
 **Sanitizers on Step 2's runner test.** Re-running `DecompilerRunnerTests` under ASan after the
@@ -149,12 +156,10 @@ round-1 fixes turned up two things that predate Step 3:
   but not the nothrow forms. libstdc++'s `stable_sort` buffer (used by Ghidra's switch printing)
   allocates through nothrow `new` and frees through the replaced `delete`, an alloc-dealloc
   mismatch. The nothrow forms are now replaced too.
-- *Reported, not changed:* vendored Ghidra's `~Funcdata` does not free `activeoutput`
+- *Fixed in round 2 by a vendor patch:* vendored Ghidra's `~Funcdata` did not free `activeoutput`
   (`funcdata_varnode.cc:616`). An analysis abandoned between `ActionPrototypeTypes` and return
-  recovery -- which a cancel can do -- leaks one `ParamActive` (~48 bytes). LeakSanitizer reports it
-  in two of three runs, depending on where the cancel lands. The fix would be a one-line vendor
-  patch (`clearActiveOutput()` in the destructor), with a reason and test per the patch rule; left
-  for a decision rather than added to a UI step.
+  recovery -- which a cancel can do -- leaked one `ParamActive` (~48 bytes); LeakSanitizer reported
+  it in two of three runs, depending on where the cancel landed. See review round 2.
 
 **Runner test under parallel load.** Locally, with `ctest -j8` on a 4-core container, Step 2's `DecompilerRunnerTests` fails "cancel at
 50 % of followFlow" as inconclusive on every attempt (with or without the new test in the set):
