@@ -148,6 +148,11 @@ checklist); the Step 3 gate remains unmet until the Windows/macOS manual checks 
 | 1 | Round 1's ordering held only while the window was shown: a hidden panel takes no snapshot, so an answer for B, completed unpolled while memory moved on to C, was still installed by a hidden `Update` | The install rule also requires the held snapshot to be what is on screen (`HeldIsOnScreen`: its identity equals the view's), so a hidden panel discards it without copying memory or asking anything. A running emulator is exempt by design: its held snapshot lags the view until Refresh | `TestCompletedAnswerJudgedAgainstCurrentView`, extended: E completes unpolled, memory moves to F, a hidden `Update` keeps D, discards E, captures and asks nothing; reopening asks for F once and shows `+ 6`. And a running emulator's answer is still installed while hidden. Mutations: drop the check; drop the running-live exemption |
 | 2 | Ghidra's `~Funcdata` leaked the return-recovery state of an abandoned analysis | `patches/0004-funcdata-frees-active-output.patch`: `clearActiveOutput()` in the destructor (1 line plus the notice), applied by `vendor.py` -- which reproduces the vendored tree exactly with only `funcdata.cc` changing -- and recorded in `patches/README.md`, `VENDOR.md` and PLAN.md | `Sh2DecompilerTests` `TestFunctionFreesActiveOutput`: creates the state directly, watches its allocation through the test allocator, destroys the Architecture, and requires it freed. Deterministic -- it does not depend on where a cancel lands. Mutation: remove the patch's line (the test then reports it leaked) |
 
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38195479662 (all six jobs
+green at `2f82f08`). Locally: `DecompilerRunnerTests` under ASan three times with no leak and no
+error (it had leaked in two of three runs before), the panel and decompiler tests clean, the full
+suite passing.
+
 ## Observations (not Step 3)
 
 **Sanitizers on Step 2's runner test.** Re-running `DecompilerRunnerTests` under ASan after the
