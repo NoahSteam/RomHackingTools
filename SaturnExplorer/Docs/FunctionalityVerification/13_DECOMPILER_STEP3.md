@@ -92,13 +92,13 @@ builds compile) was built here and driven under Xvfb with `xdotool`, on the spik
 | Check | Windows | macOS | Notes |
 |---|---|---|---|
 | `.yss` open and edit | pending | **passed** | performed on Linux (above) |
-| Live Mednafen paused | pending | **unavailable** (no BIOS image or game disc on this Mac; see "Real application run (macOS)") | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
-| Live Mednafen running (stale badge, Refresh, auto-refresh) | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestRunningLive`) |
-| Live, after a Hex Editor write | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestHexWriteReRequests`) |
-| Live, while scrubbing | pending | **unavailable** (no BIOS image or disc) | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
-| Unload and reconnect while a long decompile is in flight (A4) | pending | **unavailable** (the in-flight race cannot be hit by hand; only the idle Close Source was observed, no hang) | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
+| Live Mednafen paused | pending | **passed** (second run, below) | unavailable here (no emulator); automated with a mock (`LivePaused` cases) |
+| Live Mednafen running (stale badge, Refresh, auto-refresh) | pending | **passed** (second run; the auto-refresh rate cap is only sampled, see below) | automated with a mock (`TestRunningLive`) |
+| Live, after a Hex Editor write | pending | **passed** (second run) | automated with a mock (`TestHexWriteReRequests`) |
+| Live, while scrubbing | pending | **passed** for per-frame output and the cleared timeline; Play From Here **not exercised** (second run) | automated with a mock (`TestScrubCache`); App's recorded-frame identity is exercised only by a live run |
+| Unload and reconnect while a long decompile is in flight (A4) | pending | **unavailable** for the in-flight race (cannot be hit by hand); idle Close Source, Disconnect and reconnect observed: no hang, nothing carried into the new session | automated (`TestSessionChangeDoesNotWait`, Step 2 runner tests) |
 | Master and slave | pending | **passed** | performed on Linux |
-| BIOS call | pending | **unavailable** (no BIOS image on this Mac) | unavailable here (no BIOS image); the key change is automated |
+| BIOS call | pending | **passed** for add (from settings), replace (Reload) and remove (Stop Using) while the emulator ran; the Choose BIOS Image… file dialog was not driven (second run) | unavailable here (no BIOS image); the key change is automated |
 | Hand-typed mirror; rejected cache-array address (A2) | pending | **passed** | performed on Linux |
 | Fixture-3 delay-slot banner on a patched savestate (A3) | pending | **passed** | automated on fixture 3 |
 | Native menu shows Windows → Debugger → SH-2 Pseudocode | pending | **passed** | menus are built from `PanelList()`; not run here |
@@ -150,10 +150,29 @@ failure is `SaturnExplorerDecompilerRunnerTests` (see Bug 1). `SaturnExplorerDec
 4. Checklist wording: the menu is "Windows". The raw ImGui widgets need a hover frame before a click lands, so the first
    synthetic click on a widget does nothing unless the pointer is moved onto it first (a test-driver quirk, not an app bug).
 
-The Step 3 gate is **not** complete: Windows is still pending, and the macOS live checks (6–10) and the in-flight A4 race need a
-Mac with a BIOS image and a disc.
+The Step 3 gate is **not** complete: Windows is still pending (see the second run below for the macOS live checks).
 
-**After the macOS run** (fixed on Linux; needs the macOS rerun of `DecompilerRunnerTests` to confirm on the platform)
+### Second run (live), `aa17e104`, same Mac
+
+`git pull` brought `aa17e104`; `ctest --test-dir build -R DecompilerRunnerTests --output-on-failure` now **passes** (33.77 s), so Bug 1
+above is confirmed fixed on macOS arm64. The live checks ran against the patched Mednafen (`_emu/mednafen/src/mednafen`) started with
+Session → Launch on Dragon Force (USA) (`.cue`) and the BIOS images in `~/.mednafen/firmware`. SE's decompiler BIOS (`[decompiler] bios`)
+was empty to start with; for check 10 it was set in `settings.ini` to a scratch copy of a BIOS (see 10).
+
+| # | Check | Result | What was observed |
+|---|---|---|---|
+| 6 | Live, paused | passed | Paused at frame 3857: "live, paused · frame 3857", `func_0x002138e8` at the PC `002138E8` (entry from rts scan), output `return in_r0 + in_r3;`. |
+| 7 | Live, running | passed | Resumed (Run → Resume): "live, running · frame 4010" with the amber badge `[stale: frame 3857]`. **Refresh** recaptured (`func_0x060e8a1a`, then stale from frame 6019 as the emulator moved on). With **Auto-refresh** on, captures appeared only after the PC left the shown function: stale-frame labels 8572 → 8887 (functions `0021EEBC` → `00213850`), and no change between 2-second samples while the function stayed. Samples were 2 s apart, so "at most once per 30 frames" is only bounded from below (consecutive captures were at least 48 frames apart), not measured. |
+| 8 | Live, after a write | passed | Paused at frame 9696 in `func_0x0021f394`. Memory panel: byte `0x0021F8E5` `FF` → `7F` (`cmp/eq #0xFF,r0` → `#0x7F`). The panel showed `decompiling…  [stale: frame 9696]`, then the new output: `if ((iVar1 == -1) || …` became `if ((iVar1 == 0x7f) || …`; no further `decompiling…` over the next seconds. |
+| 9 | Live, scrubbing | passed (partly) | Paused with 300 recorded frames. Scrubbing showed each frame's own header and function: `#5878` → `func_0x002131a0`, `#6980` → `060E8A1A`, `#7957` → `0021EEBC`, `#9035` → `060E8A1A`; the Memory panel showed the recorded frame's bytes (`FF`, not my live `7F`). Revisiting `#5878` showed its output again without a `decompiling…` badge (a cache hit is not directly visible; `TestScrubCache` pins it). Session → Source → Recording → Stop, then Start (clears the frames), resume, pause: 49 new frames (`#9698`…`#10333`) showed only their own functions, none of the old timeline. **Play From Here** could not be tried: for the frames I scrubbed to (`#5878`, `#9358`, `#9466`) its tooltip read "no savestate to restore" (48 of 300 recorded frames can be resumed); at the newest frame it was available but discards nothing, so it would not tell timelines apart. |
+| 10 | BIOS | passed (set from settings, replace, remove) | With the BIOS unset, a PC in the BIOS (`0x00001D3C`) gave "No function found containing 0x00001D3C: … not in captured memory". With `[decompiler] bios` pointing at a scratch copy of `mpr-17933.bin`, the same area decompiled (`func_0x00001d38`). With the emulator running, the file was overwritten with `sega_101.bin` and BIOS ▸ **Reload BIOS Image** chosen: the log gained "Decompiler: BIOS image … mapped at 0x00000000" and the panel recaptured once (stale badge moved from `frame 1` to `frame 4643`). BIOS ▸ **Stop Using BIOS Image**: one more recapture (`stale: frame 5953`), nothing further over the next 4 s while the emulator ran past frame 6300; the BIOS button's tooltip then read "No BIOS image". The "Choose BIOS Image…" dialog (an `osascript choose file` window) cannot be driven by the harness, so adding an image at run time was not done; the initial add was from settings. The first click on **Reload** did nothing (the menu closed without acting, a pointer-timing effect of the test driver); the second worked. |
+| 12 | A4, reconnect | partly | Session → Source → Disconnect (live) emptied the panels ("No data loaded"); Connect to Emulator (live) brought a fresh capture (`func_0x002273b8`, frame 7989), not the output of the previous session. No hang. The in-flight race itself (a decompile still running when the session ends) was not hit. |
+
+Other notes: pausing from Run → Pause lands on a "BREAKPOINT HIT" banner in Call Stack (PC `002138E8`, later `0021F8E0`,
+`00213248`) although this run set no breakpoint (not investigated). My first launch of the emulator also rewrote
+`[controller.keys]` in `settings.ini` with default key codes; I restored it, so `settings.ini` is as it was before the run.
+
+**After the macOS run** (fixed on Linux; `DecompilerRunnerTests` re-run on macOS arm64 at `aa17e104`: **passes**, 33.77 s, see the second run below; the entry-box fix was not re-checked in the app)
 
 | Bug | Fix | Regression test (fails with the fix removed) |
 |---|---|---|
