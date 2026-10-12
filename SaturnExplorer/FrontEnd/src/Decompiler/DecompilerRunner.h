@@ -67,6 +67,12 @@ public:
     DecompilerRunner(const DecompilerRunner&) = delete;
     DecompilerRunner& operator=(const DecompilerRunner&) = delete;
 
+    // The application's way to make its runner: never throws. A runner that cannot be made -- the
+    // worker thread refused, memory exhausted -- returns null with 'why' saying so, and the engine
+    // claim is not left held; the rest of the application runs without the decompiler.
+    static std::unique_ptr<DecompilerRunner> Start(const std::string& configDir, std::string& why,
+                                                   RunnerOptions options = RunnerOptions()) noexcept;
+
     // Returns the request's generation, or 0 when decompilation is disabled. An entry that ran out
     // of budget earlier this session is not run again unless 'retryTooLarge' (an explicit
     // Refresh): Poll hands back its TooLarge result at once.
@@ -96,6 +102,9 @@ public:
     // Tests only: called on the worker just before it records a finished request's result, so a
     // test can make recording fail (throw) whatever the standard library's containers allocate.
     static void SetRecordHookForTests(void (*hook)());
+    // Tests only: while set, starting the worker thread fails as std::thread does when the OS
+    // refuses one (std::system_error).
+    static void SetThreadStartFailureForTests(bool fail);
 
 private:
     using Clock = std::chrono::steady_clock;

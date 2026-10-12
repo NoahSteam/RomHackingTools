@@ -39,6 +39,36 @@ ImVec4 TokenColour(TokenKind kind)
     }
 }
 
+}  // namespace
+
+bool DecompilerPanel::ParseHexAddress(const char* text, uint32_t& out)
+{
+    // Strictly an address: optional 0x, then one to eight hex digits, nothing else. strtoul would
+    // accept a sign and wrap it, and on LP64 take a ninth digit, so -F9FFC000 and 106004000 would
+    // both silently become 06004000 -- a valid RAM address the user never typed.
+    const char* p = text;
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+    uint32_t v = 0;
+    int digits = 0;
+    for (; *p; ++p, ++digits)
+    {
+        const char c = *p;
+        int d;
+        if (c >= '0' && c <= '9') d = c - '0';
+        else if (c >= 'a' && c <= 'f') d = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') d = c - 'A' + 10;
+        else return false;
+        if (digits == 8) return false;   // does not fit 32 bits
+        v = (v << 4) | static_cast<uint32_t>(d);
+    }
+    if (digits == 0) return false;
+    out = v;
+    return true;
+}
+
+namespace
+{
+
 const ImVec4 kAmber(0.95f, 0.75f, 0.30f, 1.0f);
 const ImVec4 kRed(0.95f, 0.42f, 0.42f, 1.0f);
 
@@ -227,7 +257,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
 
 bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
 {
-    // The four checks of the install rule (header). The runner has already dropped results from
+    // The checks of the install rule (header). The runner has already dropped results from
     // an older epoch or an older generation, but it cannot know that this panel has since taken
     // another snapshot or wants another entry -- and a result for memory other than the snapshot
     // held would show code that is not what the badge says it is.
@@ -236,7 +266,8 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mPending.epoch == runnerEpoch &&              // of this session
                          mSnap && r.key == mPending.key && r.key == mSnap->key &&   // for the snapshot held now
                          mResolved && mEntryOk && r.requestedEntry == mPending.entry &&
-                         mPending.entry == mEntry;                     // and the entry wanted now
+                         mPending.entry == mEntry &&                   // and the entry wanted now,
+                         mPending.namesGeneration == mNamesGeneration; // under the names in force now
     if (!current)
     {
         ++mDiscarded;
@@ -274,14 +305,10 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         if (mPending.active) runner.Cancel(kSlot);
     }
 
-    // Results first, against the state the requests were made in.
-    const uint64_t epoch = runner.Epoch();
-    DecompileResult r;
-    while (runner.Poll(r))
-        if (r.slot == kSlot) Accept(r, epoch);
-    // Neither a disabled runner nor an ended session will answer what is outstanding.
-    if (mPending.active && (runner.Disabled() || mPending.epoch != epoch)) mPending.active = false;
-
+    // First bring the panel's own state up to date with what is on screen -- the view's identity,
+    // the names, the snapshot it holds and the entry it wants -- and only then look at results.
+    // The other order would judge a finished answer against last frame's state: an answer for B,
+    // completed while the view moved on to C, would be installed before the panel noticed C.
     mViewId = IdOf(view);
     for (int cpu = 0; cpu < 2; ++cpu)
     {
@@ -289,55 +316,69 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         mViewPc[cpu] = view.regs[cpu].pc;
     }
     mNamesGeneration = inputs.namesGeneration;
-    if (!visible || !mViewId.valid) return;
-
-    // Which snapshot to hold (A1). Recomputed every frame; capturing copies 2 MiB, so it happens
-    // only when the view's identity moved AND the policy says to follow it.
-    const bool snapCurrent = mSnap && mSnapId == mViewId;
-    bool capture = false;
-    if (!snapCurrent)
+    const bool active = visible && mViewId.valid;
+    if (active)
     {
-        switch (view.kind)
+        // Which snapshot to hold (A1). Recomputed every frame; capturing copies 2 MiB, so it happens
+        // only when the view's identity moved AND the policy says to follow it.
+        const bool snapCurrent = mSnap && mSnapId == mViewId;
+        // A BIOS image chosen, reloaded or dropped is the user's doing, not an advancing frame: the
+        // held snapshot's region set is wrong from then on, whatever kind of source is shown.
+        const bool biosChanged = mSnap && mSnapId.biosHash != mViewId.biosHash;
+        bool capture = false;
+        if (!snapCurrent)
         {
-        case DecompViewKind::Static:
-        case DecompViewKind::LivePaused:
-        case DecompViewKind::Scrub:
-            capture = true;   // moves only on a user action: follow it at once
-            break;
-        case DecompViewKind::LiveRunning:
-        {
-            // A running emulator moves every frame: only an explicit action, the first look, or the
-            // opt-in auto-refresh -- debounced, never over a request still running, and only once the
-            // followed PC has left the function.
-            bool autoDue = false;
-            if (mAutoRefresh && mTarget.kind == TargetKind::FollowPc && !mPending.active &&
-                mTick - mCaptureTick >= kAutoRefreshFrames)
+            switch (view.kind)
             {
-                const uint32_t pc = mViewPc[mCpu];
-                uint32_t canonical = 0;
-                const bool known = mViewHavePc[mCpu] && CanonicalAddress(pc, canonical);
-                const uint32_t span = mShownValid ? std::max<uint32_t>(mShown.bodyBytes, 2u) : 0u;
-                autoDue = known && (!mShownValid || canonical < mShown.entry || canonical - mShown.entry >= span);
+            case DecompViewKind::Static:
+            case DecompViewKind::LivePaused:
+            case DecompViewKind::Scrub:
+                capture = true;   // moves only on a user action: follow it at once
+                break;
+            case DecompViewKind::LiveRunning:
+            {
+                // A running emulator moves every frame: only an explicit action, the first look, a
+                // BIOS change, or the opt-in auto-refresh -- debounced, never over a request still
+                // running, and only once the followed PC has left the function.
+                bool autoDue = false;
+                if (mAutoRefresh && mTarget.kind == TargetKind::FollowPc && !mPending.active &&
+                    mTick - mCaptureTick >= kAutoRefreshFrames)
+                {
+                    const uint32_t pc = mViewPc[mCpu];
+                    uint32_t canonical = 0;
+                    const bool known = mViewHavePc[mCpu] && CanonicalAddress(pc, canonical);
+                    const uint32_t span = mShownValid ? std::max<uint32_t>(mShown.bodyBytes, 2u) : 0u;
+                    autoDue = known && (!mShownValid || canonical < mShown.entry || canonical - mShown.entry >= span);
+                }
+                capture = mExplicit || !mSnap || biosChanged || autoDue;
+                break;
             }
-            capture = mExplicit || !mSnap || autoDue;
-            break;
+            case DecompViewKind::None:
+                break;
+            }
         }
-        case DecompViewKind::None:
-            break;
+        mExplicit = false;
+        if (capture)
+        {
+            mSnap = MemorySnapshot::Capture(*view.backend, view.regs, view.haveRegs, view.sourceId,
+                                            view.deriveSerial, view.frameNumber, view.bios);
+            mSnapId = mViewId;
+            mCaptureTick = mTick;
+            ++mCaptures;
+            mResolved = false;
         }
+        if (mSnap && !mResolved) Resolve(inputs);
     }
-    mExplicit = false;
-    if (capture)
-    {
-        mSnap = MemorySnapshot::Capture(*view.backend, view.regs, view.haveRegs, view.sourceId, view.deriveSerial,
-                                        view.frameNumber, view.bios);
-        mSnapId = mViewId;
-        mCaptureTick = mTick;
-        ++mCaptures;
-        mResolved = false;
-    }
-    if (!mSnap) return;
-    if (!mResolved) Resolve(inputs);
+
+    // Results, against the state just brought up to date.
+    const uint64_t epoch = runner.Epoch();
+    DecompileResult r;
+    while (runner.Poll(r))
+        if (r.slot == kSlot) Accept(r, epoch);
+    // Neither a disabled runner nor an ended session will answer what is outstanding.
+    if (mPending.active && (runner.Disabled() || mPending.epoch != epoch)) mPending.active = false;
+
+    if (!active || !mSnap) return;
     const bool force = mForceSubmit, retry = mRetryTooLarge;
     mForceSubmit = mRetryTooLarge = false;
     if (!mEntryOk) return;
@@ -439,6 +480,24 @@ void DecompilerPanel::Draw(bool* open, const DecompilerView& view, const Decompi
     ImGui::End();
 }
 
+void DecompilerPanel::DrawUnavailable(bool* open, const std::string& why)
+{
+    if (mFocus)
+    {
+        ImGui::SetNextWindowFocus();
+        mFocus = false;
+    }
+    mDrawn.clear();
+    mItems.clear();
+    if (ImGui::Begin(kTitle, open))
+    {
+        ImGui::TextColored(kRed, "Decompiler unavailable: %s", why.c_str());
+        Remember("unavailable");
+        ImGui::TextDisabled("The rest of Saturn Explorer is unaffected. Restart to try again.");
+    }
+    ImGui::End();
+}
+
 void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRunner& runner, Request& req)
 {
     (void)runner;
@@ -471,13 +530,12 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     if (ImGui::InputTextWithHint("##entry", "entry", mEntryBuf, sizeof mEntryBuf,
                                  ImGuiInputTextFlags_EnterReturnsTrue))
     {
-        char* end = nullptr;
-        const unsigned long v = std::strtoul(mEntryBuf, &end, 16);
-        if (end != mEntryBuf && end && *end == '\0')
+        uint32_t v = 0;
+        if (ParseHexAddress(mEntryBuf, v))
         {
             Target t;
             t.kind = TargetKind::Entry;
-            t.address = static_cast<uint32_t>(v);
+            t.address = v;
             t.source = EntrySource::User;
             SetTarget(t);
         }

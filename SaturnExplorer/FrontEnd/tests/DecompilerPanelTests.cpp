@@ -841,6 +841,153 @@ void TestDisabledAndBudget()
     }
 }
 
+
+// Review round 1, finding 2: an answer that finished while nobody was looking is judged against
+// what is on screen NOW. Shown A (+ 1); B (+ 2) is asked and completes without a UI frame; the
+// memory moves on to C (+ 3); the next Update must take C first and discard B, keeping A, stale.
+void TestCompletedAnswerJudgedAgainstCurrentView()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown("+ 1"));
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x02;   // B
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    const auto t0 = std::chrono::steady_clock::now();
+    while (f.runner.Busy() && dts::MsSince(t0) < 30000.0) std::this_thread::yield();   // B done, unpolled
+    CHECK(!f.runner.Busy());
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x03;   // C
+    ++f.backend.serial;
+    const uint64_t discarded = f.panel.Discarded();
+    f.Idle();   // one Update
+    CHECK(Has(f.Shown().Text(), "+ 1"));                    // A retained, not replaced by B
+    CHECK(f.panel.ShownStale());
+    CHECK(f.panel.Discarded() == discarded + 1);            // B judged against C, and dropped
+    CHECK(f.panel.Pending());
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    CHECK(f.WaitShown("+ 3"));
+    CHECK(!Has(f.Shown().Text(), "+ 2"));
+
+    // The same with a rename instead of an edit: an answer made under the old names, finished
+    // unpolled, is not installed in the frame the names change (names are engine input, A1).
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x04;   // D
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    const auto t1 = std::chrono::steady_clock::now();
+    while (f.runner.Busy() && dts::MsSince(t1) < 30000.0) std::this_thread::yield();
+    f.gate.Close();
+    f.names[dts::kFixture1Callee] = "read_word";
+    ++f.namesGeneration;
+    const uint64_t discarded2 = f.panel.Discarded();
+    f.Idle();
+    CHECK(Has(f.Shown().Text(), "+ 3"));                     // not D under the old names
+    CHECK(f.panel.Discarded() == discarded2 + 1);
+    CHECK(f.gate.WaitHeld());
+    f.gate.Open();
+    CHECK(f.WaitShown("read_word("));
+    CHECK(Has(f.Shown().Text(), "+ 4"));
+}
+
+// Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image
+// is a user action -- each one captures and asks again, once, with the new region set.
+void TestBiosChangeWhileRunning()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    CHECK(f.WaitShown("+ 1"));   // the first look
+    const uint64_t h0 = f.Held().regionSetHash;
+    tick(10);
+    CHECK(f.panel.Captures() == 1 && f.panel.Submissions() == 1);
+    uint64_t prev = h0;
+    const std::shared_ptr<const BiosImage> images[] = { BiosImage::Make(std::vector<uint8_t>(0x1000, 0x11)),
+                                                         BiosImage::Make(std::vector<uint8_t>(0x1000, 0x22)),
+                                                         nullptr };
+    for (int i = 0; i < 3; ++i)
+    {
+        f.bios = images[i];
+        tick(1);
+        CHECK(f.panel.Captures() == static_cast<uint64_t>(2 + i));
+        CHECK(f.panel.Submissions() == static_cast<uint64_t>(2 + i));
+        CHECK(f.Held().regionSetHash != prev);
+        prev = f.Held().regionSetHash;
+        while (f.panel.Pending()) tick(1);
+        tick(10);   // and nothing more while it keeps running
+        CHECK(f.panel.Captures() == static_cast<uint64_t>(2 + i));
+    }
+    CHECK(prev == h0);   // no image again: the original region set
+}
+
+// Review round 1, finding 4: an entry is one to eight hex digits after an optional 0x -- no sign,
+// no overflow that wraps into RAM.
+void TestEntryParsing()
+{
+    uint32_t v = 0;
+    CHECK(DecompilerPanel::ParseHexAddress("26004000", v) && v == 0x26004000u);
+    CHECK(DecompilerPanel::ParseHexAddress("0x06004000", v) && v == 0x06004000u);
+    CHECK(DecompilerPanel::ParseHexAddress("FFFFFFFF", v) && v == 0xFFFFFFFFu);
+    for (const char* bad : { "106004000", "-F9FFC000", "+6004000", " 6004000", "6004000 ", "", "0x", "6004G00" })
+        CHECK(!DecompilerPanel::ParseHexAddress(bad, v));
+
+    Fixture f;
+    CHECK(f.WaitShown("+ 1"));
+    const uint64_t n = f.panel.Submissions();
+    for (const char* bad : { "106004000", "-F9FFC000" })
+    {
+        f.TypeInto("entry", bad);
+        f.Idle(3);
+        CHECK(Has(f.panel.EntryError(), "hex address"));
+        CHECK(f.panel.Submissions() == n);
+    }
+    f.TypeInto("entry", "26005000");
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().entry == dts::kFixture1Callee; }));
+}
+
+// Review round 1, finding 1: a runner whose worker cannot start does not take the application
+// down: Start returns null with the reason, the engine claim is not left held (the next runner
+// starts normally), and the panel shows the reason instead of nothing.
+void TestRunnerStartFailure()
+{
+    std::string why;
+    DecompilerRunner::SetThreadStartFailureForTests(true);
+    std::unique_ptr<DecompilerRunner> failed = DecompilerRunner::Start(gConfig, why);
+    DecompilerRunner::SetThreadStartFailureForTests(false);
+    CHECK(!failed);
+    CHECK(Has(why, "could not be started"));
+    std::printf("start failure reported as: %s\n", why.c_str());
+    {
+        std::string none;
+        std::unique_ptr<DecompilerRunner> next = DecompilerRunner::Start(gConfig, none);
+        CHECK(next && !next->Disabled() && none.empty());
+    }
+    DecompilerPanel panel;
+    ImGuiHarness h([&] {
+        ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(600, 200), ImGuiCond_Always);
+        panel.DrawUnavailable(nullptr, why);
+    });
+    ApplyTheme(ImGui::GetStyle());
+    LoadFonts(ImGui::GetIO());
+    h.Settle();
+    ImVec2 a, b;
+    CHECK(panel.ItemRect("unavailable", a, b) && b.x > a.x);
+}
 }  // namespace
 
 int main(int argc, char** argv)
@@ -870,6 +1017,10 @@ int main(int argc, char** argv)
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());
+        RUN(TestCompletedAnswerJudgedAgainstCurrentView());
+        RUN(TestBiosChangeWhileRunning());
+        RUN(TestEntryParsing());
+        RUN(TestRunnerStartFailure());
     }
     catch (std::exception& e)
     {

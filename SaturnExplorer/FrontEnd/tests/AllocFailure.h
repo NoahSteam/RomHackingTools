@@ -72,3 +72,20 @@ void operator delete(void* p) noexcept { std::free(p); }
 void operator delete[](void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
+// The nothrow forms too: the standard library allocates through them (libstdc++'s stable_sort
+// buffer, which Ghidra's switch printing uses) and frees through the plain delete above, so leaving
+// them to the runtime pairs its allocator with free() -- an alloc-dealloc mismatch under ASan.
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept
+{
+    try
+    {
+        return dts::Allocate(size);
+    }
+    catch (...)
+    {
+        return nullptr;
+    }
+}
+void* operator new[](std::size_t size, const std::nothrow_t& tag) noexcept { return operator new(size, tag); }
+void operator delete(void* p, const std::nothrow_t&) noexcept { std::free(p); }
+void operator delete[](void* p, const std::nothrow_t&) noexcept { std::free(p); }

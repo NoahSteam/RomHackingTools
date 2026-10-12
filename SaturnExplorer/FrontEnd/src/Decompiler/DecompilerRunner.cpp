@@ -3,6 +3,7 @@
 #include "Decompiler/SaturnArchitecture.h"   // SleighArchitecture::shutdown
 
 #include <cstdio>
+#include <system_error>
 
 namespace sfe
 {
@@ -16,6 +17,7 @@ namespace
 std::atomic<bool> gEngineOwned(false);
 
 void (*gRecordHook)() = nullptr;
+std::atomic<bool> gFailThreadStart(false);
 
 }  // namespace
 
@@ -31,6 +33,9 @@ DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
     mOwnsEngine = true;   // before the worker starts: it reads this
     try
     {
+        if (gFailThreadStart)
+            throw std::system_error(std::make_error_code(std::errc::resource_unavailable_try_again),
+                                    "the worker thread could not be started (test)");
         mThread = std::thread(&DecompilerRunner::WorkerMain, this);
     }
     catch (...)
@@ -40,6 +45,42 @@ DecompilerRunner::DecompilerRunner(std::string configDir, RunnerOptions options)
         gEngineOwned = false;
         throw;
     }
+}
+
+std::unique_ptr<DecompilerRunner> DecompilerRunner::Start(const std::string& configDir, std::string& why,
+                                                         RunnerOptions options) noexcept
+{
+    try
+    {
+        why.clear();
+        return std::unique_ptr<DecompilerRunner>(new DecompilerRunner(configDir, options));
+    }
+    catch (const std::exception& e)
+    {
+        try
+        {
+            why = std::string("its worker could not be started: ") + e.what();
+        }
+        catch (...)
+        {
+        }
+    }
+    catch (...)
+    {
+        try
+        {
+            why = "its worker could not be started";
+        }
+        catch (...)
+        {
+        }
+    }
+    return nullptr;
+}
+
+void DecompilerRunner::SetThreadStartFailureForTests(bool fail)
+{
+    gFailThreadStart = fail;
 }
 
 DecompilerRunner::~DecompilerRunner()

@@ -124,10 +124,39 @@ Recorded in PLAN.md Step 3 ("As built") and DESIGN.md §5 / §6.2:
 - **The Rename modal** is drawn at app level (it lived inside the Call Stack window, so it could not
   open while the Call Stack was hidden).
 
-## Observation (not Step 3)
+## Review round 1 (ChatGPT, on `152bdd2..392cc43`)
 
-Locally, with `ctest -j8` on a 4-core container, Step 2's `DecompilerRunnerTests` fails "cancel at
+| # | Finding | Fix | Regression test (fails with the fix removed) |
+|---|---|---|---|
+| 1 | Failing to start the optional worker thread threw out of `App::Initialize` and ended the app | `DecompilerRunner::Start` never throws: null plus a reason; the claim on the engine is released (already true of the constructor, now pinned); App opens without the decompiler, logs it, and the panel shows "Decompiler unavailable: …". A test-only hook makes the thread start fail as `std::thread` does (`std::system_error`) | `TestRunnerStartFailure`: Start fails with the reason, the next runner starts and is not disabled, the panel draws the unavailable state. Mutation: drop the claim release in the constructor's catch |
+| 2 | `Update` judged finished answers before taking in the current view: an answer for B, completed unpolled while memory moved on to C, replaced A | `Update` now brings the view identity, names, held snapshot and wanted entry up to date first, then polls; `Accept` also requires the names generation the request was made under | `TestCompletedAnswerJudgedAgainstCurrentView`: A shown; B completes unpolled; C arrives; one Update keeps A (stale), discards B, asks for C; then `+ 3`. Same with a rename instead of an edit. Mutations: poll first; drop the names check |
+| 3 | On a running emulator a BIOS change waited for Refresh | A held snapshot whose BIOS hash differs from the view's is recaptured at once on every kind of source; ordinary frame advances still are not | `TestBiosChangeWhileRunning`: add, replace, remove — one capture and one request each, the region-set hash moves each time (and returns to the original), nothing more while it runs. Mutation: drop the BIOS condition |
+| 4 | Entry parsing accepted overflow and signs that wrapped into RAM (`106004000`, `-F9FFC000` → `06004000`) | `ParseHexAddress`: optional `0x`, one to eight hex digits, nothing else | `TestEntryParsing`: direct cases and both inputs typed into the box (error, no submission); `26005000` still decompiles. Mutations: allow a ninth digit; skip non-hex characters |
+
+All 20 mechanisms (the 14 above plus the six round-1 ones) were removed in turn, each rebuilt and
+run, and each made a test fail. After the fixes the panel and runner tests are clean under ASan +
+UBSan (apart from the known vendored-Ghidra shift) and ThreadSanitizer. Coverage the review noted
+and that stays as stated: App's recorded-frame identity is exercised only by a live run (manual
+checklist); the Step 3 gate remains unmet until the Windows/macOS manual checks are done.
+
+## Observations (not Step 3)
+
+**Sanitizers on Step 2's runner test.** Re-running `DecompilerRunnerTests` under ASan after the
+round-1 fixes turned up two things that predate Step 3:
+- *Fixed (test harness only):* `AllocFailure.h` replaced the plain global `operator new`/`delete`
+  but not the nothrow forms. libstdc++'s `stable_sort` buffer (used by Ghidra's switch printing)
+  allocates through nothrow `new` and frees through the replaced `delete`, an alloc-dealloc
+  mismatch. The nothrow forms are now replaced too.
+- *Reported, not changed:* vendored Ghidra's `~Funcdata` does not free `activeoutput`
+  (`funcdata_varnode.cc:616`). An analysis abandoned between `ActionPrototypeTypes` and return
+  recovery -- which a cancel can do -- leaks one `ParamActive` (~48 bytes). LeakSanitizer reports it
+  in two of three runs, depending on where the cancel lands. The fix would be a one-line vendor
+  patch (`clearActiveOutput()` in the destructor), with a reason and test per the patch rule; left
+  for a decision rather than added to a UI step.
+
+**Runner test under parallel load.** Locally, with `ctest -j8` on a 4-core container, Step 2's `DecompilerRunnerTests` fails "cancel at
 50 % of followFlow" as inconclusive on every attempt (with or without the new test in the set):
 the midpoint comes from a baseline measured under the same contention, so the spin overshoots
-the phase. It passes run alone, and CI runs ctest serially. Neither the runner nor the code it
-links changed in Step 3; left as a follow-up for that test.
+the phase. It passes run alone, and CI runs ctest serially. The only runner change in Step 3 is
+round 1's `Start` and its thread-start test hook, which this case does not reach; left as a
+follow-up for that test.

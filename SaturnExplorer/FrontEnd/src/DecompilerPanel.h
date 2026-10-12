@@ -14,13 +14,16 @@
 //     once and the request re-run: those only move when the user did something.
 //   * A running emulator moves every frame. Its snapshot is kept, and the output shown with a
 //     stale badge, until Refresh -- or, opt in, an auto-refresh at most every kAutoRefreshFrames
-//     frames and only once the followed PC has left the function shown.
+//     frames and only once the followed PC has left the function shown. Choosing, reloading or
+//     dropping a BIOS image is a user action: it is followed at once on every kind of source.
 //
 // A result is installed only when it still answers the question being asked: the request the
 // panel has outstanding (generation), made in the current session (runner epoch), for the snapshot
-// the panel holds now (key), and for the entry it now wants. The runner's own filtering covers the
-// first two; the panel checks all four itself, because the runner cannot know which snapshot or
-// entry the panel has since moved on to. Anything else is discarded, and whatever was on screen
+// the panel holds now (key), for the entry it now wants, under the names in force now. The runner's
+// own filtering covers the first two; the panel checks all of them itself, because the runner
+// cannot know which snapshot, entry or names the panel has since moved on to. Each Update brings
+// that state up to date with the view BEFORE it looks at results, so an answer that finished while
+// the view moved on is judged against what is on screen now, not against last frame. Anything else is discarded, and whatever was on screen
 // stays there, labelled stale, until its replacement arrives -- the panel never blanks while it
 // waits, and never shows output for memory other than what the badge says.
 //
@@ -122,6 +125,9 @@ public:
     void Draw(bool* open, const DecompilerView& view, const decomp::DecompilerRunner& runner,
               const DecompilerInputs& inputs, Request& req);
 
+    // The window when the app has no runner (its worker could not be started): says why, and stays.
+    void DrawUnavailable(bool* open, const std::string& why);
+
     // "Decompile" from Assembly, Call Stack and Registers: the function containing 'addr' on
     // 'cpu'. Turns Follow PC off and brings the window forward.
     void ShowFunctionContaining(int cpu, uint32_t addr);
@@ -140,6 +146,9 @@ public:
     // result the runner would never deliver, which is how the panel's own checks are pinned
     // independently of the runner's). True when installed.
     bool Accept(decomp::DecompileResult& result, uint64_t runnerEpoch);
+
+    // The entry box's rule: an optional 0x and one to eight hex digits; no sign, no overflow.
+    static bool ParseHexAddress(const char* text, uint32_t& out);
 
     // ---- State, for App's status and for tests -------------------------------------------
     const decomp::DecompileResult* Shown() const { return mShownValid ? &mShown : nullptr; }

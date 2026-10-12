@@ -488,6 +488,7 @@ private:
     // SH-2 Pseudocode (Docs/Decompiler/PLAN.md Step 3). The runner owns the process's one engine
     // thread; it is created in Initialize and released in Shutdown, which joins it (PLAN.md A4).
     std::unique_ptr<decomp::DecompilerRunner> mDecompilerRunner;
+    std::string              mDecompilerUnavailable;   // why mDecompilerRunner is null, when it is
     DecompilerPanel          mDecompilerPanel;
     decomp::FunctionBounds   mFunctionBounds;     // "Set Function Start Here" (saturn_function_bounds.txt)
     std::shared_ptr<const decomp::BiosImage> mBiosImage;   // hashed once, when loaded

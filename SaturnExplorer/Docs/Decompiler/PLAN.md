@@ -328,8 +328,13 @@ rejected cache-array address (A2); the fixture-3 delay-slot banner (A3) on a pat
 `Docs/FunctionalityVerification/13_DECOMPILER_STEP3.md`. Clarifications and deviations, each pinned
 by `DecompilerPanelTests`:
 - *Install rule.* A result is installed only when it answers the panel's outstanding request
-  (generation), in the current session (epoch), for the snapshot the panel holds now (key), and for
-  the entry it now wants. The runner's filtering covers the first two; the panel checks all four.
+  (generation), in the current session (epoch), for the snapshot the panel holds now (key), for the
+  entry it now wants, under the names in force now. The runner's filtering covers the first two; the
+  panel checks all of them, after first bringing its snapshot, entry and names up to date with the
+  view (review round 1: checking before that judged a finished answer against last frame's state).
+- *BIOS changes* are user actions: followed at once even on a running emulator (review round 1).
+- *The runner is optional:* `DecompilerRunner::Start` never throws; if its worker cannot be started
+  the app opens without it and the panel says why (review round 1).
 - *Running live: the snapshot shown is the one captured.* A Refresh result installs although the
   emulator has moved on since; it is shown labelled "stale: frame N" -- the frame it describes.
   A panel holding no snapshot at all (first look after connecting) captures once.

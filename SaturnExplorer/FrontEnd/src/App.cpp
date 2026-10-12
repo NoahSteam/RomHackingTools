@@ -310,9 +310,12 @@ void App::Initialize()
     mFunctionNames.Import("saturn_symbols.txt");  // merge a symbol map if present
 #if SE_ENABLE_DECOMPILER
     mFunctionBounds.Load();        // the user's function-start corrections (next to saturn_functions.txt)
-    // The process's one engine thread (PLAN.md A4). An unwritable config dir is reported by the
-    // panel as "unavailable" on the first request; the rest of the app is unaffected.
-    mDecompilerRunner.reset(new decomp::DecompilerRunner(Settings::EnsureConfigDir()));
+    // The process's one engine thread (PLAN.md A4). It is optional: if it cannot be started (the OS
+    // refuses the thread, memory runs out) the app opens without it and the panel says why, rather
+    // than an exception ending Initialize. An unwritable config dir is reported by the panel as
+    // "unavailable" on the first request instead.
+    mDecompilerRunner = decomp::DecompilerRunner::Start(Settings::EnsureConfigDir(), mDecompilerUnavailable);
+    if (!mDecompilerRunner) mLog.Error("Decompiler unavailable: " + mDecompilerUnavailable);
 #endif
     mLog.Info("Saturn Explorer started");
 }
@@ -2993,7 +2996,11 @@ DecompilerView App::BuildDecompilerView()
 
 void App::UpdateDecompiler(IPlatform& platform)
 {
-    if (!mDecompilerRunner) return;
+    if (!mDecompilerRunner)
+    {
+        if (mPanels.decompiler) mDecompilerPanel.DrawUnavailable(&mPanels.decompiler, mDecompilerUnavailable);
+        return;
+    }
     const DecompilerView view = BuildDecompilerView();
     DecompilerInputs in;
     in.names = &mFunctionNames.All();
