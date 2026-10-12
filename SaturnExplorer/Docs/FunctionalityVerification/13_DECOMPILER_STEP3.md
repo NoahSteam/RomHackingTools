@@ -133,7 +133,9 @@ Recorded in PLAN.md Step 3 ("As built") and DESIGN.md §5 / §6.2:
 | 3 | On a running emulator a BIOS change waited for Refresh | A held snapshot whose BIOS hash differs from the view's is recaptured at once on every kind of source; ordinary frame advances still are not | `TestBiosChangeWhileRunning`: add, replace, remove — one capture and one request each, the region-set hash moves each time (and returns to the original), nothing more while it runs. Mutation: drop the BIOS condition |
 | 4 | Entry parsing accepted overflow and signs that wrapped into RAM (`106004000`, `-F9FFC000` → `06004000`) | `ParseHexAddress`: optional `0x`, one to eight hex digits, nothing else | `TestEntryParsing`: direct cases and both inputs typed into the box (error, no submission); `26005000` still decompiles. Mutations: allow a ninth digit; skip non-hex characters |
 
-All 20 mechanisms (the 14 above plus the six round-1 ones) were removed in turn, each rebuilt and
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38189199420 (all six jobs
+green at `930f531`, the panel suite now 15 cases). All 20 mechanisms (the 14 above plus the six
+round-1 ones) were removed in turn, each rebuilt and
 run, and each made a test fail. After the fixes the panel and runner tests are clean under ASan +
 UBSan (apart from the known vendored-Ghidra shift) and ThreadSanitizer. Coverage the review noted
 and that stays as stated: App's recorded-frame identity is exercised only by a live run (manual
