@@ -159,7 +159,9 @@ suite passing.
 |---|---|---|---|
 | 1 | Minor: round 2's running-live exemption also excused a BIOS change, so a hidden running panel installed an answer computed for the old BIOS image and showed it, stale, on reopening | The exemption covers only the emulator moving on: on a running emulator the held snapshot must still match the view's source identity and BIOS hash; frame number and derive serial may lag | `TestCompletedAnswerJudgedAgainstCurrentView`, extended: on a running emulator, for BIOS addition, replacement and removal in turn, an answer finished unpolled is discarded by a hidden `Update`, the old output stays, nothing is captured or asked while hidden, and reopening asks once. The plain frame-advance case (installed while hidden) is kept. Mutations: the exemption back to unconditional; drop only the BIOS-hash comparison |
 
-Locally: the panel tests pass in the normal, ASan and TSan builds.
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38200478875 (all six jobs
+green at `40a2020`). Locally: the panel tests pass in the normal, ASan and TSan builds, and the
+full suite passes.
 
 ## Observations (not Step 3)
 
