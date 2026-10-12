@@ -181,6 +181,9 @@ Other notes: pausing from Run → Pause lands on a "BREAKPOINT HIT" banner in Ca
 
 Bug 3 (the file dialog) is outside the decompiler and Step 3; left as recorded.
 
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38286417743 (all six jobs
+green at `aa17e10`, including the Windows `_beginthreadex` path in Debug and Release).
+
 ## Decisions and deviations
 
 Recorded in PLAN.md Step 3 ("As built") and DESIGN.md §5 / §6.2:
