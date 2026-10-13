@@ -45,4 +45,16 @@ for 1–4 and 6; 5 needs live Mednafen.
 | 4 | In SH-2 Assembly, add a note on an instruction inside the shown function | The note appears as `// note` on the matching pseudocode line at once, with no "decompiling…" | | |
 | 5 | Live: set a breakpoint on a `jsr @rN` whose target is computed (pseudocode shows `(*(code *)…)(…)`); let it hit | Amber hint `jsr 0x…: rN = 0x… at the halt` in the status line and on the call's line; gone after Step Into and while running | | |
 | 6 | Decompile a caller, then one of its callees, then the caller again | The caller is decompiled again; its call to that callee shows the callee's argument count and return | | |
-| 7 | Any function with a PC-relative load in a `bra`/`bsr` delay slot (rare; skip if none found) | No "not trustworthy" banner; the literal is the one at the branch-target-relative address | | |
+| 7 | Any function with a PC-relative load in a `bra`/`bsr` delay slot (rare; skip if none found) | No "not trustworthy" banner; the literal is the one at the branch-target-relative address | | **Pass** at `169c8d5` (arm64): fixture 3 written into HWRAM of GS-9169_007.yss. `06006000` (`bra`): no banner, `return 0x22222222;`. `06006100` (`bf/s`): banner at `0x06006104`, body reads `iRam06006110`, unfolded. `06006300` (`bsr` + `mova`): no banner, `xVar1 = func_0x06006308(); return xVar1;` |
+
+## Findings outside the decompiler (macOS run, relayed)
+
+- **Pause banner**: PAUSED, BREAKPOINT HIT and STEPPED read correctly at `1f8f642`. After Step Into,
+  Continue to the same breakpoint read WATCHPOINT HIT with no watchpoint set (2 of 2). Fixed in
+  `efbcb62`: a breakpoint owns a halt at any mirror of its address, and a stop that no breakpoint
+  or armed watchpoint explains reads HALTED. Needs re-test.
+- **Open, live run control:** remove the breakpoint while halted on it, then Continue. The emulator
+  stays at the same frame and PC. Run → Resume then runs it, but the app still says paused: the
+  Call Stack shows PAUSED, the status bar says Paused, and the pseudocode panel says "live, paused"
+  and "decompiling… [stale]". Reproduced at `169c8d5`. Not caused by Step 4, and the root cause is
+  under investigation with the emulator.
