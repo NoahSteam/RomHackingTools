@@ -257,3 +257,41 @@ runtime target, and is kept when there is no such token to compare. (`TestHaltHi
 
 At this point every input-invalidation and SH-2 semantics finding is closed. One hardware-validation
 gap remains: MAC.W setting MACH bit 0 on overflow is confirmed only by Mednafen parity.
+
+## Review of `8639b80`: prototype lending
+
+The review found five ways a lent signature could be wrong. A lent signature is locked in the caller,
+so a wrong one silently drops arguments or invents returns. The engine now lends a signature
+(`DecompileResult::prototype.known`) only when the analysis that recovered it was complete;
+otherwise `prototypeWithheld` says why. All five are pinned by `Sh2DecompilerTests`
+(`TestPrototypeEligibility`), whose 13 checks fail on `8639b80`.
+
+1. **Tentative recovery.** A wrapper forwarding unchanged r4 to a callee with no known signature
+   was recovered as taking no arguments. Every call must now resolve to a callee whose signature was
+   lent. A self-call, an unresolved indirect call, or a callee without a signature withholds it, so
+   mutual recursion is never lent. The wrapper is lent once its callee is, with one argument, and its
+   caller then prints `(0x2a)`.
+2. **Stack arguments past unused registers.** `rts; mov.l @r15,r0` was lent as `(void)`. Any
+   incoming varnode in a parameter location that no parameter covers now withholds it. The fifth and
+   the sixth argument alone are withheld, and the five-argument control is still lent.
+3. **Bad instructions and unrecovered jumps.** `hasBadData()` alone now withholds, not only when
+   combined with uncaptured memory. An unrecovered jump becomes an unresolved indirect call and is
+   withheld by (1).
+4. **64-bit return order.** The cspec join had the halves swapped. Patch 0007 puts R0 as the high
+   half. The callee now prints `0x100000002`, and its lent caller takes the high half from R0.
+5. **Modified PR.** Ghidra's actions replace a RETURN's target with 0, so the check runs on our
+   side: the function's p-code is interpreted per instruction, including internal branches. The
+   domain is PR on entry, a stack offset, a constant, or unknown. Every return must use PR from entry,
+   held in a register or saved and reloaded from the stack. `lds r4,pr; rts` is withheld, and so is
+   PR saved in a `bsr` slot (the continuation). A normal `sts.l pr,@-r15` ... `lds.l @r15+,pr` is
+   still lent. The check makes two assumptions, the same ones the engine's own stack analysis makes:
+   stores through a non-stack pointer do not alias the stack, and a call leaves r8-r15 and gbr
+   unchanged.
+
+One panel test changed contract. `TestPrototypeProvenance` expected B, learned before its callee C,
+to be lent and later dropped. It is now never lent, so A's output matches the bare one until C is
+known.
+
+Cost: a function that calls the BIOS without an image, or through a computed pointer, never lends
+its signature.
+

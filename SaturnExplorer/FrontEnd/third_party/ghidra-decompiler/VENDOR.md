@@ -34,6 +34,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0004-funcdata-frees-active-output.patch` | `Funcdata`'s destructor frees the return-recovery state (`ParamActive`) that an analysis abandoned mid-way -- a cancel -- still owns; it leaked one per such cancel. |
 | `0005-sleigh-delay-slot-pc.patch` | `bra` and `bsr` give their delay slot the PC it executes at (branch target + 2), so a PC-relative load or `mova` there reads the right literal (PLAN.md A3). Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 | `0006-sleigh-sh2-semantics.patch` | Fixes six SH-2 semantics errors in `superh.sinc`, checked against Mednafen's SH-2 core. `bsr`/`bsrf`/`jsr` now write PR before their delay slot. `MAC.L` had a wrong carry; it is rewritten as a 64-bit accumulate with 48-bit saturation. `MAC.W` now does word loads, sign-extends, and saturates at 32 bits. `XOR.B` was an AND. `mov.x Rm,@-Rn` now reads Rm before Rn is decremented. `DIV1` now reads Rm after Rn is shifted. `sh-2.sla` and `Sh2SpecData.h` are regenerated. |
+| `0007-cspec-wide-return-order.patch` | `superh.cspec` put a 64-bit return's high half in r1. Ghidra's `piece1` is the most significant piece, and the big-endian SH ABI returns the high half in r0, so the join is now `piece1="r0" piece2="r1"`. `Sh2SpecData.h` is regenerated. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -55,7 +56,7 @@ MSVC and Apple clang needed no patch beyond these.
 
 Each step's failure stops the bump; nothing is committed until the last step passes. Order
 matters: the spec artifacts are generated from the patched `superh.sinc`, so `vendor.py` (which
-applies 0005 and 0006) must run before `se-regen-sla`.
+applies 0005 to 0007) must run before `se-regen-sla`.
 
 - [ ] **Check out** the new Ghidra commit. A sparse clone is enough:
   ```
@@ -71,7 +72,8 @@ applies 0005 and 0006) must run before `se-regen-sla`.
   - 0002 to 0004: the ASan run of `DecompilerRunnerTests`;
   - 0005: `TestDelaySlotPcRelative`;
   - 0006: `SaturnExplorerSh2SemanticsTests` (runs the instructions on the p-code emulator against a
-    reference model).
+    reference model);
+  - 0007: `TestPrototypeEligibility` (a 64-bit return and its caller).
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

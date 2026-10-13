@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Modified for SaturnExplorer: a 64-bit return has its high half in r0 (patches/0007-cspec-wide-return-order.patch). -->
 
 <compiler_spec>
     <data_organization>  <!-- These tags were taken from https://gcc-renesas.com/manuals/SH-ABI-Specification.html-->
@@ -50,7 +51,7 @@
               <register name="r0"/>
             </pentry>
             <pentry minsize="5" maxsize="8">
-                <addr space="join" piece1="r1" piece2="r0"/>
+                <addr space="join" piece1="r0" piece2="r1"/>
             </pentry>
         </output>
             <unaffected>

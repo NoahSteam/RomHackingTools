@@ -136,8 +136,13 @@ struct DecompileResult
     // mirror it runs in.
     std::vector<uint32_t> calledAt;
     // This function's own signature, for callers to use (DecompileRequest::prototypes). Not known
-    // when the output is not trustworthy enough to lend it: truncated, unsupported, unimplemented.
+    // unless the analysis that recovered it was complete: the output is not truncated, unsupported
+    // or unimplemented, there is no bad instruction, every call resolves to a callee whose
+    // signature was lent (none to itself), every incoming argument read is in the signature, and
+    // every return goes to the caller's PR. A caller decompiled first is lent nothing; it can be
+    // once its callees' signatures are known.
     Prototype prototype;
+    std::string prototypeWithheld;        // why it is not known; empty when it is
     std::vector<uint32_t> literalPools;   // literal-pool words marked read-only, sorted, unique
     uint32_t literalLoads = 0;            // PC-relative loads through them (a word may be read twice)
 

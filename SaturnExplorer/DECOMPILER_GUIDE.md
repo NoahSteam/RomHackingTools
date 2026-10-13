@@ -31,7 +31,7 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
   - **View in Memory**.
   - **Copy Line** and **Copy Function**.
 - **Hardware registers** have names, such as `VDP2_TVMD` and `SCU_D0R`. There are 256 VDP1, VDP2, SCU, SMPC and SCSP registers, at both their cached and cache-through addresses.
-- **Calls into a function already decompiled** this session use its recovered signature: argument count, types and return.
+- **Calls into a function already decompiled** this session use its recovered signature: argument count, types and return. A signature is used only when its recovery was complete. That means no bad instruction or unresolved jump, every function it calls already has a known signature (and it does not call itself), every argument it reads is in the signature, and every return goes back to the caller. So decompile callees first: a caller shown before its callees is decompiled again, with their signatures, the next time it is shown. A function that calls into the BIOS without an image, or through a computed pointer, never lends its signature.
 - **Comments** you add in SH-2 Assembly (right-click → **Edit Comment**) appear as a trailing `// note` on the first line decompiled from that instruction. Editing one never re-runs the decompiler.
 - **At a halt on `jsr @rN`, `jmp @rN`, `braf` or `bsrf`**, the call's line and the status line show where the call goes this time, for example `r2 = 0x06031510 at the halt`. The target is computed, so another call may go elsewhere.
 

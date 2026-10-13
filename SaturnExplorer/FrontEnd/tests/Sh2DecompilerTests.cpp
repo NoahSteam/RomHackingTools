@@ -40,6 +40,7 @@ void Print(const char* label, const DecompileResult& r)
     std::printf("%s: status %d, %.1f ms, %u body bytes%s%s\n", label, int(r.status), r.elapsedMs, r.bodyBytes,
                 r.truncated ? ", truncated" : "", r.unsupported ? ", unsupported" : "");
     if (!r.error.empty()) std::printf("  error: %s\n", r.error.c_str());
+    if (!r.prototypeWithheld.empty()) std::printf("  signature withheld: %s\n", r.prototypeWithheld.c_str());
     for (const std::string& w : r.warnings) std::printf("  warning: %s\n", w.c_str());
     for (const Line& l : r.lines)
     {
@@ -644,6 +645,166 @@ void TestCalleePrototypes()
     CHECK(d.Decompile(snap, self).Text() == c.Text());
 }
 
+// Review of 8639b80: a signature is lent only when the analysis that recovered it is complete.
+// Each fixture below is a function whose recovered signature is plausible but wrong, so it must
+// not be known (lendable); the controls are ones that are right.
+uint16_t Bsr(uint32_t from, uint32_t to) { return uint16_t(0xB000 | (((to - (from + 4)) / 2) & 0x0FFF)); }
+
+void Place(std::vector<uint8_t>& hw, uint32_t at, std::initializer_list<uint16_t> words)
+{
+    size_t off = at - 0x06000000u;
+    for (uint16_t w : words) { dts::Put16(hw, off, w); off += 2; }
+}
+
+void TestPrototypeEligibility()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    // An identity callee, and a wrapper forwarding its unchanged r4 to it.
+    const uint32_t identity = 0x06010000u, wrapper = 0x06010100u, viaWrapper = 0x06010200u;
+    Place(hw, identity, { 0x000B,      // rts
+                          0x6043 });   //   mov r4,r0
+    Place(hw, wrapper, { 0x4F22,                          // sts.l pr,@-r15
+                         Bsr(wrapper + 2, identity),      // bsr identity
+                         0x0009,                          //   nop
+                         0x4F26,                          // lds.l @r15+,pr
+                         0x000B,                          // rts
+                         0x0009 });                       //   nop
+    Place(hw, viaWrapper, { 0x4F22,                       // sts.l pr,@-r15
+                            0xE42A,                       // mov #0x2a,r4
+                            Bsr(viaWrapper + 4, wrapper), // bsr wrapper
+                            0x0009,                       //   nop
+                            0x4F26,                       // lds.l @r15+,pr
+                            0x000B,                       // rts
+                            0x0009 });                    //   nop
+    // Recursion, an unresolved indirect call, and an unrecovered jump.
+    const uint32_t recursive = 0x06010300u, indirect = 0x06010400u, jump = 0x06010500u;
+    Place(hw, recursive, { 0x4F22, Bsr(recursive + 2, recursive), 0x0009, 0x4F26, 0x000B, 0x0009 });
+    Place(hw, indirect, { 0x4F22,      // sts.l pr,@-r15
+                          0x450B,      // jsr @r5
+                          0x0009,      //   nop
+                          0x4F26,      // lds.l @r15+,pr
+                          0x000B,      // rts
+                          0x0009 });   //   nop
+    Place(hw, jump, { 0x442B,          // jmp @r4
+                      0x0009 });       //   nop
+    // The fifth and sixth arguments without the four register ones, and all five.
+    const uint32_t fifth = 0x06010600u, sixth = 0x06010700u, five = 0x06010800u;
+    Place(hw, fifth, { 0x000B,         // rts
+                       0x60F2 });      //   mov.l @r15,r0
+    Place(hw, sixth, { 0x000B,         // rts
+                       0x50F1 });      //   mov.l @(4,r15),r0
+    Place(hw, five, { 0x345C,          // add r5,r4
+                      0x346C,          // add r6,r4
+                      0x347C,          // add r7,r4
+                      0x60F2,          // mov.l @r15,r0
+                      0x000B,          // rts
+                      0x304C });       //   add r4,r0
+    // An invalid instruction.
+    const uint32_t invalid = 0x06010900u;
+    Place(hw, invalid, { 0xE001,       // mov #1,r0
+                         0xFFFF });    // (no such instruction)
+    // A 64-bit return: R0 is the high half, R1 the low.
+    const uint32_t wide = 0x06010A00u, wideCaller = 0x06010B00u;
+    Place(hw, wide, { 0xE001,          // mov #1,r0
+                      0x000B,          // rts
+                      0xE102 });       //   mov #2,r1
+    Place(hw, wideCaller, { 0x4F22,                       // sts.l pr,@-r15
+                            0x6D43,                       // mov r4,r13
+                            Bsr(wideCaller + 4, wide),    // bsr wide
+                            0x6E53,                       //   mov r5,r14
+                            0x2D02,                       // mov.l r0,@r13
+                            0x2E12,                       // mov.l r1,@r14
+                            0x4F26,                       // lds.l @r15+,pr
+                            0x000B,                       // rts
+                            0x0009 });                    //   nop
+    // PR not the caller's: replaced from r4, and saved in a bsr's slot (so it holds the
+    // continuation, and the restore returns into this function's own epilogue).
+    const uint32_t prFromR4 = 0x06010C00u, prInSlot = 0x06010D00u, leaf = 0x06010E00u;
+    Place(hw, prFromR4, { 0x442A,      // lds r4,pr
+                          0x000B,      // rts
+                          0x0009 });   //   nop
+    Place(hw, prInSlot, { Bsr(prInSlot, leaf),   // bsr leaf
+                          0x4F22,                //   sts.l pr,@-r15 (the new PR)
+                          0x4F26,                // lds.l @r15+,pr
+                          0x000B,                // rts
+                          0xE005 });             //   mov #5,r0
+    Place(hw, leaf, { 0x000B, 0x0009 });         // rts; nop
+    // A frame-pointer prologue and epilogue: PR saved below r14, reloaded through the restored r15.
+    const uint32_t framed = 0x06010F00u;
+    Place(hw, framed, { 0x4F22,                  // sts.l pr,@-r15
+                        0x2FE6,                  // mov.l r14,@-r15
+                        0x6EF3,                  // mov r15,r14
+                        0x7FF8,                  // add #-8,r15
+                        Bsr(framed + 8, leaf),   // bsr leaf
+                        0x0009,                  //   nop
+                        0x6FE3,                  // mov r14,r15
+                        0x6EF6,                  // mov.l @r15+,r14
+                        0x4F26,                  // lds.l @r15+,pr
+                        0x000B,                  // rts
+                        0x0009 });               //   nop
+    auto snap = MakeSnapshot(hw);
+
+    auto run = [&](uint32_t entry, std::initializer_list<std::pair<uint32_t, Prototype>> lent, const char* label) {
+        DecompileRequest q = Request(entry);
+        for (const auto& p : lent) q.prototypes.push_back(p);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+
+    // Controls: a leaf, five arguments.
+    const DecompileResult id = run(identity, {}, "identity");
+    CHECK(id.prototype.known && id.prototype.params.size() == 1 && id.prototype.ret.kind != TypeKind::Void);
+    const DecompileResult f5 = run(five, {}, "five arguments");
+    CHECK(f5.prototype.known && f5.prototype.params.size() == 5);
+
+    // 1. The wrapper is tentative until its callee's signature is known, then it takes r4.
+    const DecompileResult w0 = run(wrapper, {}, "wrapper, callee unknown");
+    CHECK(!w0.prototype.known);
+    const DecompileResult w1 = run(wrapper, { { identity, id.prototype } }, "wrapper, callee lent");
+    CHECK(w1.prototype.known && w1.prototype.params.size() == 1);
+    const DecompileResult v = run(viaWrapper, { { wrapper, w1.prototype } }, "caller of the wrapper");
+    CHECK(Has(v.Text(), "(0x2a)"));
+    CHECK(!run(recursive, {}, "recursive").prototype.known);
+    CHECK(!run(indirect, {}, "indirect call").prototype.known);
+
+    // 2. Stack arguments past unused register ones.
+    CHECK(!run(fifth, {}, "fifth argument only").prototype.known);
+    CHECK(!run(sixth, {}, "sixth argument only").prototype.known);
+
+    // 3. Bad instructions and unrecovered jumps.
+    CHECK(!run(invalid, {}, "invalid instruction").prototype.known);
+    CHECK(!run(jump, {}, "unrecovered jump").prototype.known);
+
+    // 4. R0 is the high half of a 64-bit return, in the callee and in a caller lent its signature.
+    const DecompileResult wr = run(wide, {}, "64-bit return");
+    CHECK(Has(wr.Text(), "0x100000002"));
+    CHECK(!Has(wr.Text(), "0x200000001"));
+    CHECK(wr.prototype.known && wr.prototype.ret.size == 8);
+    const DecompileResult wc = run(wideCaller, { { wide, wr.prototype } }, "caller of the 64-bit return");
+    const Line* high = LineWith(wc, "*param_1 =");
+    const Line* low = LineWith(wc, "*param_2 =");
+    // The high half, directly or through the variable the shift is assigned to.
+    const Line* shift = LineWith(wc, ">> 0x20");
+    std::string highHalf = ">> 0x20";
+    if (shift && Has(shift->text, " = "))
+    {
+        const std::string t = shift->text.substr(0, shift->text.find(" = "));
+        highHalf = t.substr(t.find_first_not_of(' '));
+    }
+    CHECK(shift && high && high->text.find(highHalf) != std::string::npos);
+    CHECK(low && !Has(low->text, ">>") && (shift == nullptr || low->text.find(highHalf) == std::string::npos));
+
+    // 5. Returns that do not go to the caller.
+    const DecompileResult lf = run(leaf, {}, "leaf");
+    CHECK(lf.prototype.known);
+    CHECK(run(framed, { { leaf, lf.prototype } }, "frame pointer").prototype.known);
+    CHECK(!run(prFromR4, {}, "PR from r4").prototype.known);
+    CHECK(!run(prInSlot, { { leaf, lf.prototype } }, "PR saved in a bsr slot").prototype.known);
+}
+
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --
 // comes back as a failed result, never as an exception; the next request is unaffected.
 void TestAllocationFailureIsReported()
@@ -979,6 +1140,7 @@ int main(int argc, char** argv)
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
         RUN(TestCalleePrototypes());
+        RUN(TestPrototypeEligibility());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

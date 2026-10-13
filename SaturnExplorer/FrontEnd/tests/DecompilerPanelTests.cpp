@@ -855,9 +855,9 @@ void TestPrototypeProvenance()
     // A with nothing learned passes what it set up; lent B's signature, it knows B takes nothing.
     const std::string bare = show("06007300");
     CHECK(Has(bare, "(1,2,3)"));
-    show("06007380");                       // B, before C is known: returns what C left in r0
+    show("06007380");                       // B, before C is known: a guess, so nothing is lent
     const std::string withOldB = show("06007300");
-    CHECK(Has(withOldB, "= func_0x06007380();"));
+    CHECK(withOldB == bare);                // (review of 8639b80; it used to be lent and dropped later)
     show("06007340");                       // C: void, one argument -- B's signature is now obsolete
     CHECK(Has(f.Shown().Text(), "void func_0x06007340("));
     const std::string afterC = show("06007300");

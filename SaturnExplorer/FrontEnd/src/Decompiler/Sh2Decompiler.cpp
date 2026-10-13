@@ -188,6 +188,317 @@ Prototype PrototypeOf(const ghidra::Funcdata& fd)
     return p;
 }
 
+// Whether every return in the function goes to the caller's return address: PR as it was on entry,
+// kept in a register or saved on the stack and reloaded. The engine cannot say -- its actions
+// replace a RETURN's address with 0 once it is dead -- so each instruction's p-code is interpreted
+// here over a small domain: PR on entry, a stack address (an offset from r15 on entry), a
+// constant, or anything else. Stores through anything but a stack address are taken not to touch
+// the stack, as the engine's own stack analysis takes them; a call leaves r8-r15 and gbr as they
+// were (the ABI's unaffected registers) and anything else unknown.
+class ReturnCheck
+{
+public:
+    ReturnCheck(ghidra::Funcdata& fd, uint32_t exec) : mFd(fd), mExec(exec)
+    {
+        const ghidra::Architecture* arch = fd.getArch();
+        mRam = arch->getDefaultCodeSpace();
+        mPr = arch->translate->getRegister("pr");
+        mSp = arch->translate->getRegister("r15");
+        for (const char* r : { "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "gbr" })
+            mKept.push_back(arch->translate->getRegister(r));
+    }
+
+    // Empty when every return reached goes to the caller, else why not.
+    std::string Run()
+    {
+        State start;
+        start.reached = true;
+        Set(start, mPr, Value::Incoming());
+        Set(start, mSp, Value::Stack(0));
+        std::map<uint32_t, State> in;
+        std::set<uint32_t> work;
+        in[mExec] = start;
+        work.insert(mExec);
+        size_t steps = 0;
+        while (!work.empty())
+        {
+            const uint32_t a = *work.begin();
+            work.erase(work.begin());
+            if (++steps > kMaxSteps) return "a return not proven to go to its caller (too many paths)";
+            std::vector<std::pair<uint32_t, State>> out;
+            const std::string why = Step(a, in[a], out);
+            if (!why.empty()) return why;
+            for (auto& o : out)
+            {
+                auto f = in.find(o.first);
+                if (f == in.end()) in.emplace(o.first, std::move(o.second));
+                else if (!Join(f->second, o.second)) continue;
+                work.insert(o.first);
+            }
+        }
+        return std::string();
+    }
+
+private:
+    static constexpr size_t kMaxSteps = 200000;
+
+    struct Value
+    {
+        enum Kind : uint8_t { Other, Pr, Sp, Imm } kind = Other;
+        int64_t v = 0;
+        static Value Incoming() { Value x; x.kind = Pr; return x; }
+        static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
+        static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
+        bool operator==(const Value& o) const { return kind == o.kind && v == o.v; }
+    };
+    using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
+    struct State
+    {
+        bool reached = false;
+        std::map<Key, Value> vars;         // registers and temporaries; absent = Other
+        std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = Other
+    };
+    struct Op
+    {
+        ghidra::OpCode code;
+        bool hasOut = false;
+        ghidra::VarnodeData out;
+        std::vector<ghidra::VarnodeData> in;
+    };
+    struct Collect : public ghidra::PcodeEmit
+    {
+        std::vector<Op> ops;
+        void dump(const ghidra::Address&, ghidra::OpCode opc, ghidra::VarnodeData* outvar, ghidra::VarnodeData* vars,
+                  ghidra::int4 isize) override
+        {
+            Op op;
+            op.code = opc;
+            if (outvar != nullptr)
+            {
+                op.hasOut = true;
+                op.out = *outvar;
+            }
+            op.in.assign(vars, vars + isize);
+            ops.push_back(std::move(op));
+        }
+    };
+
+    static Key KeyOf(const ghidra::VarnodeData& vn) { return Key(vn.space, vn.offset, vn.size); }
+
+    Value Get(const State& s, const ghidra::VarnodeData& vn) const
+    {
+        if (vn.space->getType() == ghidra::IPTR_CONSTANT) return Value::Const(static_cast<int64_t>(vn.offset));
+        auto f = s.vars.find(KeyOf(vn));
+        return f == s.vars.end() ? Value() : f->second;
+    }
+
+    static void Set(State& s, const ghidra::VarnodeData& vn, const Value& v)
+    {
+        for (auto it = s.vars.begin(); it != s.vars.end();)
+        {
+            const bool overlap = std::get<0>(it->first) == vn.space && std::get<1>(it->first) < vn.offset + vn.size &&
+                                 vn.offset < std::get<1>(it->first) + std::get<2>(it->first);
+            it = overlap ? s.vars.erase(it) : std::next(it);
+        }
+        if (v.kind != Value::Other) s.vars[KeyOf(vn)] = v;
+    }
+
+    // Keeps in 'into' only what both states agree on; true when 'into' changed.
+    static bool Join(State& into, const State& from)
+    {
+        bool changed = false;
+        auto meet = [&changed](auto& a, const auto& b) {
+            for (auto it = a.begin(); it != a.end();)
+            {
+                auto f = b.find(it->first);
+                if (f != b.end() && f->second == it->second) ++it;
+                else
+                {
+                    it = a.erase(it);
+                    changed = true;
+                }
+            }
+        };
+        meet(into.vars, from.vars);
+        meet(into.slots, from.slots);
+        return changed;
+    }
+
+    static int64_t Wrap(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v)); }
+
+    // One instruction (with its delay slot, which the engine's p-code for a delayed branch holds):
+    // its own p-code is a small graph of its own when it has internal branches.
+    std::string Step(uint32_t a, const State& entry, std::vector<std::pair<uint32_t, State>>& succ)
+    {
+        Collect c;
+        ghidra::int4 length = 0;
+        try
+        {
+            length = mFd.getArch()->translate->oneInstruction(c, ghidra::Address(mRam, a));
+        }
+        catch (ghidra::LowlevelError&)   // bad data, memory not captured
+        {
+            return "an instruction that does not decode";
+        }
+        const uint32_t next = a + static_cast<uint32_t>(length);
+        const int n = static_cast<int>(c.ops.size());
+        std::vector<State> at(n + 1);   // at[n]: falls off the end
+        at[0] = entry;
+        auto flow = [&](int to, const State& s) {
+            if (to < 0 || to > n) return false;
+            if (!at[to].reached) at[to] = s;
+            else return Join(at[to], s);
+            return true;
+        };
+        std::set<int> work{ 0 };
+        size_t steps = 0;
+        while (!work.empty())
+        {
+            const int i = *work.begin();
+            work.erase(work.begin());
+            if (i == n || ++steps > 4096) continue;
+            State s = at[i];
+            const Op& op = c.ops[i];
+            bool falls = true;
+            switch (op.code)
+            {
+            case ghidra::CPUI_COPY: Set(s, op.out, Get(s, op.in[0])); break;
+            case ghidra::CPUI_INT_ADD:
+            case ghidra::CPUI_INT_SUB:
+            {
+                const Value x = Get(s, op.in[0]), y = Get(s, op.in[1]);
+                const bool sub = op.code == ghidra::CPUI_INT_SUB;
+                Value r;
+                if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
+                else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
+                else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
+                Set(s, op.out, r);
+                break;
+            }
+            case ghidra::CPUI_LOAD:
+            {
+                const Value addr = Get(s, op.in[1]);
+                Value r;
+                if (addr.kind == Value::Sp && op.out.size == 4)
+                {
+                    auto f = s.slots.find(addr.v);
+                    if (f != s.slots.end()) r = f->second;
+                }
+                Set(s, op.out, r);
+                break;
+            }
+            case ghidra::CPUI_STORE:
+            {
+                const Value addr = Get(s, op.in[1]);
+                if (addr.kind != Value::Sp) break;
+                const int64_t lo = addr.v, hi = addr.v + op.in[2].size;
+                for (auto it = s.slots.begin(); it != s.slots.end();)
+                    it = it->first < hi && lo < it->first + 4 ? s.slots.erase(it) : std::next(it);
+                const Value v = Get(s, op.in[2]);
+                if (op.in[2].size == 4 && v.kind != Value::Other) s.slots[lo] = v;
+                break;
+            }
+            case ghidra::CPUI_CALL:
+            case ghidra::CPUI_CALLIND:
+                for (auto it = s.vars.begin(); it != s.vars.end();)
+                {
+                    bool kept = std::get<0>(it->first)->getType() != ghidra::IPTR_PROCESSOR;   // temporaries
+                    for (const ghidra::VarnodeData& k : mKept)
+                        kept = kept || KeyOf(k) == it->first;
+                    it = kept ? std::next(it) : s.vars.erase(it);
+                }
+                break;
+            case ghidra::CPUI_BRANCH:
+            case ghidra::CPUI_CBRANCH:
+                if (op.in[0].space->getType() == ghidra::IPTR_CONSTANT)
+                {
+                    const int to = i + static_cast<int>(static_cast<int64_t>(op.in[0].offset));
+                    if (flow(to, s)) work.insert(to);
+                }
+                else
+                    succ.emplace_back(static_cast<uint32_t>(op.in[0].offset), s);
+                falls = op.code == ghidra::CPUI_CBRANCH;
+                break;
+            case ghidra::CPUI_BRANCHIND:
+            {
+                bool found = false;
+                for (ghidra::int4 t = 0; t < mFd.numJumpTables(); ++t)
+                {
+                    const ghidra::JumpTable* table = mFd.getJumpTable(t);
+                    if (table->getOpAddress().getOffset() != a) continue;
+                    found = true;
+                    for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
+                        succ.emplace_back(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()), s);
+                }
+                if (!found) return "an indirect jump it does not resolve";
+                falls = false;
+                break;
+            }
+            case ghidra::CPUI_RETURN:
+                if (Get(s, op.in[0]).kind != Value::Pr) return "a return not to its caller";
+                falls = false;
+                break;
+            default:
+                if (op.hasOut) Set(s, op.out, Value());
+                break;
+            }
+            if (falls && flow(i + 1, s)) work.insert(i + 1);
+        }
+        if (at[n].reached) succ.emplace_back(next, at[n]);
+        return std::string();
+    }
+
+    ghidra::Funcdata& mFd;
+    uint32_t mExec;
+    ghidra::AddrSpace* mRam = nullptr;
+    ghidra::VarnodeData mPr, mSp;
+    std::vector<ghidra::VarnodeData> mKept;
+};
+
+// Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent
+// signature is locked: the caller's call shows exactly those arguments and that return, and
+// nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
+std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Prototype>& lent, uint32_t exec,
+                           uint32_t entry)
+{
+    if (fd.hasBadData()) return "bad instruction data";
+    const ghidra::FuncProto& fp = fd.getFuncProto();
+    if (fp.isDotdotdot()) return "variadic";
+    ghidra::AddrSpace* ram = fd.getArch()->getDefaultCodeSpace();
+    // A call whose callee's signature is unknown leaves the engine guessing what it consumes: an
+    // argument forwarded to it unchanged can be taken for unused. Recursion is the same guess.
+    // (An unrecovered jump is turned into an indirect call, so it lands here too.)
+    for (ghidra::int4 i = 0; i < fd.numCalls(); ++i)
+    {
+        const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(i);
+        const ghidra::Address at = cs->getEntryAddress();
+        if (at.isInvalid() || at.getSpace() != ram) return "an indirect call it does not resolve";
+        const uint32_t t = static_cast<uint32_t>(at.getOffset());
+        uint32_t c = 0;
+        if (t == entry || (CanonicalAddress(t, c) && c == entry)) return "it calls itself";   // through any mirror
+        if (lent.count(t) == 0) return "it calls " + Hex8(t) + ", whose signature is not known";
+    }
+    // An incoming argument the signature does not hold: the fifth one read with r4-r7 unused is
+    // left a stack local, and a signature without it loses it at every call.
+    for (auto it = fd.beginDef(ghidra::Varnode::input); it != fd.endDef(ghidra::Varnode::input); ++it)
+    {
+        const ghidra::Varnode* vn = *it;
+        if (!fp.possibleInputParam(vn->getAddr(), vn->getSize())) continue;
+        bool held = false;
+        for (ghidra::int4 p = 0; p < fp.numParams() && !held; ++p)
+        {
+            const ghidra::ProtoParameter* param = fp.getParam(p);
+            const ghidra::Address a = param->getAddress();
+            held = a.getSpace() == vn->getSpace() && vn->getOffset() >= a.getOffset() &&
+                   vn->getOffset() + vn->getSize() <= a.getOffset() + param->getSize();
+        }
+        if (!held) return "an incoming argument outside its signature";
+    }
+    // A return that does not go back to the caller (PR replaced, or saved after a call changed it)
+    // is a jump somewhere else, not a return to the call site the signature describes.
+    return ReturnCheck(fd, exec).Run();
+}
+
 // What one pass learned from a function's raw p-code, before any action has run.
 struct RawScan
 {
@@ -755,7 +1066,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (r.truncated)
             r.warnings.push_back("flows into " + r.truncatedWhy);
         if (r.unimplemented) r.warnings.push_back("the SH-2 spec has no semantics for an instruction here");
-        if (!r.truncated && !r.unsupported && !r.unimplemented) r.prototype = PrototypeOf(*fd);
+        if (r.truncated) r.prototypeWithheld = "truncated";
+        else if (r.unsupported) r.prototypeWithheld = "unsupported";
+        else if (r.unimplemented) r.prototypeWithheld = "unimplemented";
+        else r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry);
+        if (r.prototypeWithheld.empty()) r.prototype = PrototypeOf(*fd);
 
         std::ostringstream markup;
         arch->print->setOutputStream(&markup);
