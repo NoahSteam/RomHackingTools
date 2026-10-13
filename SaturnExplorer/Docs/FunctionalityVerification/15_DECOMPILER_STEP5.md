@@ -55,6 +55,37 @@ CI's `codesign --verify` passed on B, so A7 now also launches both bundled binar
 | 1 | Passed, on the patched copy. Six rows, the NSA sentence and "Licence texts: SaturnExplorer.app/Contents/Resources/licenses"; the dialog fits and Close works. |
 | 2 | Passed. Exactly the seven texts, in both staged bundles. |
 | 3 | Passed. Every label exists. The guide's "…" was changed to the app's ASCII "...", and BIOS is now described as a toolbar button. |
-| 4 | Pending a rerun on a bundle built by the fixed recipe. Every step was exercised on the dev build earlier the same day without a disagreement. |
+| 4 | Superseded by run 2. |
 
 No Developer ID certificate was on that Mac, so notarisation was not run.
+
+## macOS run 2 (at `33326d2`, the same Mac, the documented recipe as written, no identity)
+
+The bundle:
+- Configure reported "`/opt/homebrew/lib/libSDL2-2.0.0.dylib` is sdl2-compat; bundling `/opt/homebrew/Cellar/sdl3/3.4.14/lib/libSDL3.0.dylib`".
+- `codesign --verify --deep --strict` gives "valid on disk / satisfies its Designated Requirement". The signature is ad hoc, `flags=0x2(adhoc)`, with no hardened runtime.
+- `Contents/Frameworks` holds `libSDL2-2.0.0.dylib` and `libSDL3.dylib`, and the same seven licence texts are present.
+- `--selftest` prints "selftest ok: SDL 2.32.70".
+- `open` launches the app normally.
+
+Row 4, DEMO.md on this bundle:
+- Steps 1–5 and 10 used a `.yss` savestate.
+- Steps 6–8 used live Mednafen.
+
+| Step | Result |
+|---|---|
+| 1 | Passed. "dump / savestate · frame 0 · func_0x06030548 @ 0x06030548 (entry from rts scan, 60%)" |
+| 2 | Passed. A line click shows its instruction in SH-2 Assembly. |
+| 3 | Passed. `puVar7 = &VDP2_TVMD;` |
+| 4 | Passed. Renaming a callee updates the line at once. After decompiling the callee, the caller's call shows its 4-argument signature. The name does not show in SH-2 Assembly's rows, because that panel has no label column; DEMO.md and the guide now say so. |
+| 5 | Passed. `fill_block(...);  // demo note`, with no re-decompile. |
+| 6 | Passed. The stale badge while running; Refresh; Auto-refresh followed the PC. |
+| 7 | Passed. With a breakpoint on a dispatcher's `jsr @r2`: `(*pcRam060a9460)();  // r2 = 0x0600580C at the halt`, and the status line. DEMO.md now says to use a breakpoint, because "step until" is not reproducible. |
+| 8 | Passed. With Follow PC on, the panel follows the slave's PC. DEMO.md's expected text is corrected: the output stays only with Follow PC off. |
+| 9 | Partial. The BIOS popup has its three items. The OS file picker cannot be driven by the tester; the BIOS paths were covered through `settings.ini` and in the Step 3 record. |
+| 10 | Passed. |
+
+Observation, not a gate: after Reset Layout, the bottom dock is about 175 px tall on a 1470×956 logical
+screen. That is about four lines, until the splitter is dragged. The split is the app-wide default
+layout (`App::BuildDefaultLayout`, 24% bottom), which is not decompiler code, so it is left as a
+follow-up.

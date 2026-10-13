@@ -16,11 +16,11 @@ Before you start:
 | 1 | Open the savestate. In SH-2 Pseudocode, turn on **Follow PC**. | The function the master CPU is in, as C-like pseudocode, in-process, with no Ghidra install. The status line shows the source, frame, name and entry. |
 | 2 | Click a line with a call or an assignment. | SH-2 Assembly jumps to the instruction it came from. Lines map back to addresses. |
 | 3 | Find a line that writes `VDP2_…`, `SCU_…` or `SMPC_…` (most frame loops touch one). | Hardware registers are named, not raw `*(ushort *)0x25f80000`. |
-| 4 | Right-click a callee → **Rename Callee 0x...**, and give it a name. | The name appears at once here, in SH-2 Assembly and in Call Stack. Then **Decompile Here** on that callee in SH-2 Assembly, and come back: the caller's call now carries the callee's recovered signature. |
+| 4 | Right-click a callee → **Rename Callee 0x...**, and give it a name. | The name appears at once here, and anywhere else function names are shown, such as Call Stack. SH-2 Assembly has no label column, so its rows do not show the name. Then **Decompile Here** on that callee in SH-2 Assembly, and come back: the caller's call now carries the callee's recovered signature. |
 | 5 | In SH-2 Assembly, right-click an instruction the pseudocode shows → **Edit Comment**. | It appears as `// note` on that line, and nothing is re-decompiled. |
 | 6 | Go live: connect to Mednafen running the same game. Leave it running. | Follow PC shows the output with **stale: frame N** as the game moves on. It is never silently swapped. Press **Refresh**, then turn on **Auto-refresh**: it follows the PC at most every 30 frames. |
-| 7 | Pause, then step until the PC sits on a `jsr @rN` (Call Stack and SH-2 Assembly help). | The call's line says `rN = 0x… at the halt`, naming the target if it is named. It applies to this call, this time. |
-| 8 | Switch the combo to **Slave SH-2**. | The output stays, because RAM is shared; Follow PC now reads the slave's PC. |
+| 7 | In SH-2 Assembly, set a breakpoint on a `jsr @rN` the game runs often (an interrupt or task dispatcher is a reliable choice), then Continue until it hits. | The call's line says `rN = 0x… at the halt`, naming the target if it is named. It applies to this call, this time. |
+| 8 | Switch the combo to **Slave SH-2**. | With Follow PC on, the panel now follows the slave's PC. With Follow PC off, the output stays: RAM is shared, so the function is the same code either way. |
 | 9 | Optional: the panel's **BIOS** button → **Choose BIOS Image...**, then follow a call into `0x00000…`. | BIOS functions decompile and are named `bios_0x…`. The image is the user's own and is never shipped. |
 | 10 | **Help → About → Third-party**. | Ghidra's engine is Apache-2.0, modified by the listed patches; its licence texts ship with the app. |
 
