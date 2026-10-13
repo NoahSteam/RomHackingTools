@@ -5,8 +5,9 @@
 #include <windows.h>
 
 #include <cstdio>    // snprintf
-#include <cstdlib>   // __argc / __argv
-#include <cstring>
+#include <cstdlib>   // __argc / __wargv
+#include <string>
+#include <vector>
 
 #include "WindowsPlatform.h"
 #include "App.h"
@@ -33,12 +34,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
     // `--live [endpoint]` picks a specific
     // endpoint; otherwise the default socket/pipe is polled. Files open from the
     // toolbar and stop the polling.
-    const char* liveEndpoint = nullptr;
-    for (int i = 1; i < __argc; ++i)
-    {
-        if (std::strcmp(__argv[i], "--live") == 0)
+    //
+    // The arguments come from __wargv: this is a wWinMain program, so the CRT fills only the wide
+    // array and __argv is null -- reading it crashed the app whenever any argument was given. Each
+    // is converted to UTF-8, the encoding the rest of the app uses for paths and endpoints.
+    std::vector<std::string> args;
+    if (__wargv)
+        for (int i = 0; i < __argc; ++i)
         {
-            liveEndpoint = (i + 1 < __argc) ? __argv[i + 1] : nullptr;
+            const wchar_t* w = __wargv[i];
+            const int n = w ? WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr) : 0;
+            std::string a(n > 0 ? static_cast<size_t>(n - 1) : 0, '\0');
+            if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w, -1, &a[0], n, nullptr, nullptr);
+            args.push_back(a);
+        }
+    const char* liveEndpoint = nullptr;
+    for (size_t i = 1; i < args.size(); ++i)
+    {
+        if (args[i] == "--live")
+        {
+            liveEndpoint = (i + 1 < args.size()) ? args[i + 1].c_str() : nullptr;
             break;
         }
     }
