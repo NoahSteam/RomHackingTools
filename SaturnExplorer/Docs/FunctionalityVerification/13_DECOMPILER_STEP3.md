@@ -394,6 +394,17 @@ Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/3820047887
 green at `40a2020`). Locally: the panel tests pass in the normal, ASan and TSan builds, and the
 full suite passes.
 
+## Review round 4 (ChatGPT, on `152bdd2..8deb03f`)
+
+No production-code blocker. Verdict: gate not yet met, pending the items below.
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | Blocking: the bug-4 fix (`8deb03f`) has no real-app check | Targeted Windows re-test requested (pause → Launch, Follow PC on, Auto-refresh off, no decompiler BIOS image): recovery without Refresh, responsive, no further captures once the function is found. Result recorded below when done |
+| 2 | Blocking for sign-off: PLAN/DESIGN's running-live policy did not list the two recovery captures | PLAN.md Step 3 "As built" gains the clarification (registers arriving; an unanswered PC retried after it changes, at most every 30 updates, never over a pending request; Auto-refresh off too), naming both tests; DESIGN.md 6.2's running-live row updated |
+| 3 | Minor: `TestRunningLiveUnansweredFollowRetries` did not protect the debounce | The PC now moves inside the unmapped BIOS on every update for 90 updates: 2–3 captures, no request. Mutations: drop only the debounce (fails: one capture per update); drop the trigger (fails). Production code unchanged |
+| -- | CI at `8deb03f` | All six jobs green: https://github.com/NoahSteam/RomHackingTools/actions/runs/38338646621 |
+
 ## Observations (not Step 3)
 
 **Sanitizers on Step 2's runner test.** Re-running `DecompilerRunnerTests` under ASan after the

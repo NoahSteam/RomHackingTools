@@ -1036,17 +1036,25 @@ void TestRunningLiveUnansweredFollowRetries()
     CHECK(Has(f.panel.EntryError(), "No function found"));
     tick(90);
     CHECK(f.panel.Captures() == 1);                     // the PC has not moved: nothing new to ask
-    f.regs[0].pc = 0x00002000u;
-    tick(DecompilerPanel::kAutoRefreshFrames + 1);
-    CHECK(f.panel.Captures() == 2 && f.panel.Submissions() == 0);   // moved, still in the BIOS
-    tick(5);
-    CHECK(f.panel.Captures() == 2);                     // and not every frame
+    // The PC keeps moving inside the BIOS, every update: one capture per debounce interval, never
+    // one per update (a 2 MiB copy each).
+    const uint64_t c0 = f.panel.Captures();
+    const int n = 3 * DecompilerPanel::kAutoRefreshFrames;
+    for (int i = 0; i < n; ++i)
+    {
+        f.regs[0].pc = 0x00002000u + 2u * static_cast<uint32_t>(i);
+        tick(1);
+    }
+    const uint64_t moved = f.panel.Captures() - c0;
+    CHECK(moved >= 2 && moved <= 3);
+    CHECK(f.panel.Submissions() == 0);
+    const uint64_t c1 = f.panel.Captures();
     f.regs[0].pc = dts::kFixture1AddOne;
     tick(DecompilerPanel::kAutoRefreshFrames + 1);
-    CHECK(f.panel.Captures() == 3);
+    CHECK(f.panel.Captures() == c1 + 1);
     CHECK(f.WaitShown("+ 1"));
     tick(90);
-    CHECK(f.panel.Captures() == 3 && f.panel.Submissions() == 1);   // answered: running-live as usual
+    CHECK(f.panel.Captures() == c1 + 1 && f.panel.Submissions() == 1);   // answered: running-live as usual
 }
 
 // Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image

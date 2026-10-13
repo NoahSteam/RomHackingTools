@@ -340,6 +340,12 @@ by `DecompilerPanelTests`:
 - *Running live: the snapshot shown is the one captured.* A Refresh result installs although the
   emulator has moved on since; it is shown labelled "stale: frame N" -- the frame it describes.
   A panel holding no snapshot at all (first look after connecting) captures once.
+- *Running live: two recovery captures, with Auto-refresh off too* (Windows manual run). With Follow
+  PC on, the panel captures again when the followed CPU's missing registers arrive (the first look
+  can precede the first register frame). If function resolution failed (a PC in an unmapped BIOS at
+  boot), it retries after that PC changes, no more often than every 30 panel updates and never while
+  a request is pending. A held snapshot that answers the question is never replaced this way.
+  `TestRunningLiveRegistersArrive`, `TestRunningLiveUnansweredFollowRetries`.
 - *Auto-refresh* follows the PC only with Follow PC on, never while a request is still running,
   and at most every 30 frames.
 - *Scrub identity.* A recorded frame is keyed by a per-recording source id, its frame number and a
