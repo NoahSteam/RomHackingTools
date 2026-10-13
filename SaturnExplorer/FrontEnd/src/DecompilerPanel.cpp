@@ -376,7 +376,15 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                 // all, not a stale one: capture again once the view has them.
                 const bool regsArrived = mTarget.kind == TargetKind::FollowPc && mSnap &&
                                          !mSnap->haveRegs[mCpu] && view.haveRegs[mCpu];
-                capture = mExplicit || !mSnap || biosChanged || autoDue || regsArrived;
+                // Likewise a followed PC the held snapshot found no function for (at boot it sits in a
+                // BIOS that is not mapped): retried once the PC has moved, on the auto-refresh cadence,
+                // whether or not auto-refresh is on -- there is no shown answer to keep stable.
+                bool unanswered = false;
+                if (mTarget.kind == TargetKind::FollowPc && mSnap && mResolved && !mEntryOk &&
+                    !mPending.active && mSnap->haveRegs[mCpu] && view.haveRegs[mCpu] &&
+                    view.regs[mCpu].pc != mSnap->regs[mCpu].pc && mTick - mCaptureTick >= kAutoRefreshFrames)
+                    unanswered = true;
+                capture = mExplicit || !mSnap || biosChanged || autoDue || regsArrived || unanswered;
                 break;
             }
             case DecompViewKind::None:

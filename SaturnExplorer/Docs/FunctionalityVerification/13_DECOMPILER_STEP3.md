@@ -7,7 +7,9 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 3, contracts A1�
 **Gate status: NOT complete.** CI is green (above), but PLAN's manual checklist is still open on
 Windows and macOS (see "Manual checklist"); only a Linux run of the real app was possible here.
 The Windows run (at `0e463ee0`, "Real application run (Windows)") failed the A4 reconnect row; the
-Windows re-test at `6e8f2d06` ("After the Windows run") passed it, with one residual.
+Windows re-test at `6e8f2d06` ("After the Windows run") passed it, with one residual (bug 4), since fixed.
+Every checklist row is now passed on both platforms or unavailable with a stated reason (the in-flight A4 race,
+automated); whether that meets the gate is the reviewer's call.
 
 ## What was added
 
@@ -326,6 +328,13 @@ the BIOS; not tried.
 
 `settings.ini` and `imgui.ini` were restored from the copies taken before the first run (byte-identical), and nothing was
 written beside the savestate this time.
+
+**Bug 4, fixed after the re-test:** on a running emulator, a followed PC the held snapshot found no function for is now
+retried once the PC has moved, at most every 30 frames (the auto-refresh debounce) whether or not auto-refresh is on --
+an error is not an answer worth keeping stable. The old session's output stays on screen, badged stale, until the new
+answer arrives, as everywhere else. Test: `DecompilerPanelTests` `TestRunningLiveUnansweredFollowRetries` (PC in the
+unmapped BIOS → one capture, no request; the PC unchanged → nothing; moved within the BIOS → one capture per 30 frames;
+moved into code → the function, then no more captures). Mutation: drop the condition (fails). Not re-checked in the app.
 
 ## Decisions and deviations
 

@@ -1015,6 +1015,40 @@ void TestRunningLiveRegistersArrive()
     CHECK(f.panel.Captures() == 2);                                   // then running-live as usual
 }
 
+// Windows re-test: after Launch the new session's first PC was in the (unmapped) BIOS, so Follow PC
+// found no function, and a running emulator never looked again until Refresh.
+void TestRunningLiveUnansweredFollowRetries()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    f.regs[0].pc = 0x00001FF0u;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    tick(3);
+    CHECK(f.panel.Captures() == 1 && f.panel.Submissions() == 0);
+    CHECK(Has(f.panel.EntryError(), "No function found"));
+    tick(90);
+    CHECK(f.panel.Captures() == 1);                     // the PC has not moved: nothing new to ask
+    f.regs[0].pc = 0x00002000u;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == 2 && f.panel.Submissions() == 0);   // moved, still in the BIOS
+    tick(5);
+    CHECK(f.panel.Captures() == 2);                     // and not every frame
+    f.regs[0].pc = dts::kFixture1AddOne;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == 3);
+    CHECK(f.WaitShown("+ 1"));
+    tick(90);
+    CHECK(f.panel.Captures() == 3 && f.panel.Submissions() == 1);   // answered: running-live as usual
+}
+
 // Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image
 // is a user action -- each one captures and asks again, once, with the new region set.
 void TestBiosChangeWhileRunning()
@@ -1175,6 +1209,7 @@ int main(int argc, char** argv)
         RUN(TestCompletedAnswerJudgedAgainstCurrentView());
         RUN(TestBiosChangeWhileRunning());
         RUN(TestRunningLiveRegistersArrive());
+        RUN(TestRunningLiveUnansweredFollowRetries());
         RUN(TestEntryParsing());
         RUN(TestEntryBoxFollowsShownFunction());
         RUN(TestRunnerStartFailure());
