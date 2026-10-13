@@ -6,6 +6,7 @@
 #include "Debug/Sh2Disasm.h"
 
 #include "funcdata.hh"
+#include "jumptable.hh"
 #include "printlanguage.hh"
 #include "marshal.hh"
 #include "prettyprint.hh"
@@ -202,7 +203,7 @@ struct RawScan
 // instruction: fold any op whose inputs are known constants, and a LOAD through a known
 // constant pointer is reading a literal-pool word. (Only the PC-relative forms produce a
 // constant pointer inside one instruction; a load through a register never does.)
-RawScan ScanRawPcode(const ghidra::Funcdata& fd, const MemorySnapshot& snap)
+RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
 {
     RawScan scan;
 
@@ -215,10 +216,10 @@ RawScan ScanRawPcode(const ghidra::Funcdata& fd, const MemorySnapshot& snap)
     std::set<uint32_t> insns;
     for (auto it = fd.beginOpMain(); it != fd.endOpMain(); ++it)
         insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
-    // The patch hands the slot its PC by address, so a slot that some branch in the function
-    // also jumps straight to would get the slot's PC on that path too. Such code is flagged
-    // rather than trusted. (A jump-table entry landing there is not seen here; that shape does
-    // not occur in compiled code.)
+    // The patch hands the slot its PC by address, so a slot that anything in the function also
+    // jumps straight to would get the slot's PC on that path too. Such code is flagged rather than
+    // trusted. Jumps come from immediate branches and from the jump tables flow recovered (a
+    // switch case may enter a slot as well as an ordinary branch can).
     std::set<uint32_t> targets;
     for (uint32_t a : insns)
     {
@@ -226,6 +227,12 @@ RawScan ScanRawPcode(const ghidra::Funcdata& fd, const MemorySnapshot& snap)
         if (!snap.ReadU16(a, op)) continue;
         const DisassembledInstruction ins = Sh2Decode(a, op);
         if (ins.HasBranchTarget) targets.insert(ins.BranchTarget);
+    }
+    for (ghidra::int4 i = 0; i < fd.numJumpTables(); ++i)
+    {
+        const ghidra::JumpTable* table = fd.getJumpTable(i);
+        for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
+            targets.insert(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()));
     }
     std::vector<std::pair<uint32_t, uint32_t>> excluded;   // [lo, hi) literal addresses not to fold
     for (uint32_t a : insns)
@@ -618,7 +625,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     if (alias == a) continue;
                     try
                     {
-                        global->addFunction(ghidra::Address(ram, alias), name);
+                        ghidra::Funcdata* af = global->addFunction(ghidra::Address(ram, alias), name)->getFunction();
+                        // The call resolves to the alias's function object, so it needs the lent
+                        // signature as much as the canonical one does.
+                        auto proto = prototypes.find(a);
+                        if (a != entry && proto != prototypes.end()) ApplyPrototype(*arch, *af, proto->second);
                     }
                     catch (ghidra::LowlevelError& e)
                     {

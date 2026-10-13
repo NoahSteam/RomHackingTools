@@ -225,6 +225,11 @@ const uint32_t kFixture3BsrLoad = 0x06006600u;
 const uint32_t kFixture3BraTarget = 0x06006700u;
 const uint32_t kFixture3SlotJumped = 0x06006900u;
 const uint32_t kFixture3SlotJumpedSlot = 0x06006906u;
+// Review of Step 4: a recovered switch whose case 0 enters a bra normally and whose case 1 enters
+// that bra's delay slot directly. The slot is a jump target too -- through the table, which no
+// immediate branch shows -- so it stays unsupported.
+const uint32_t kFixture3SwitchSlot = 0x06006A00u;
+const uint32_t kFixture3SwitchSlotSlot = 0x06006A1Au;
 
 inline void PlaceFixture3(std::vector<uint8_t>& hw)
 {
@@ -273,6 +278,17 @@ inline void PlaceFixture3(std::vector<uint8_t>& hw)
     put(kFixture3SlotJumped, { 0x4415, 0x8900, 0xA002, 0xD103, 0x0009, 0x0009, 0x000B, 0x6013 });
     Put32(hw, 0x06006914u - 0x06000000u, kFixture3Direct);
     Put32(hw, 0x06006918u - 0x06000000u, kFixture3Slot);
+    // mov #2,r1 ; cmp/hs r1,r4 ; bt 0x06006A24 (default) ; mova 0x06006A10,r0 ; shll2 r4 ;
+    // mov.l @(r0,r4),r1 ; jmp @r1 ; nop ; .long 0x06006A18, 0x06006A1A (the table) ;
+    // 0x06006A18 (case 0): bra 0x06006A20 ; mov.l @(12,pc),r1 (slot, and case 1: 0x06006A28 reached
+    // directly, 0x06006A2C in the slot) ; nop ; nop ; rts (<- target) ; mov r1,r0 ;
+    // 0x06006A24 (default): rts ; mov #0,r0
+    put(kFixture3SwitchSlot, { 0xE102, 0x3412, 0x890E, 0xC702, 0x4408, 0x014E, 0x412B, 0x0009 });
+    Put32(hw, 0x06006A10u - 0x06000000u, 0x06006A18u);
+    Put32(hw, 0x06006A14u - 0x06000000u, 0x06006A1Au);
+    put(0x06006A18u, { 0xA002, 0xD103, 0x0009, 0x0009, 0x000B, 0x6013, 0x000B, 0xE000 });
+    Put32(hw, 0x06006A28u - 0x06000000u, kFixture3Direct);
+    Put32(hw, 0x06006A2Cu - 0x06000000u, kFixture3Slot);
 }
 
 // ---- The cancellation spike's fixtures (Docs/Decompiler/spike/cancel_spike.cpp) ---------------

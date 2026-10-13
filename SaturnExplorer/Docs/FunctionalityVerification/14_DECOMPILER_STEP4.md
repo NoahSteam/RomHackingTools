@@ -5,7 +5,7 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 4, contracts A1 
 **Started from:** `ca327c0` (Step 3 gate met) · **Step 4 commits:** `1f8f642` (A3 patch 0005), `b1f21f7`
 (hardware map), `169c8d5` (BIOS names), `49ab408` (register hint), `ec50e87` (Assembly notes),
 `540b761` (callee prototypes), and the commit adding this record.
-**Gate status: checklist complete on Windows and macOS; review pending.** CI green for each pushed commit except any still running when this was written. The
+**Gate status: checklist complete on Windows and macOS; review round 1 (ChatGPT, at `5178393`) not approved -- findings fixed below, re-review pending.** CI green for each pushed commit except any still running when this was written. The
 manual checklist below is pending on Windows and macOS, and the review has not been done.
 
 Done on the way, outside the decompiler (`b187062`): `build-release-msbuild.bat` passes the toolset of
@@ -97,3 +97,18 @@ GitHub sign-in, so the results are recorded here from its report.
   - `SaturnExplorer.exe foo` starts and keeps running.
   - `--live` connects to Mednafen.
   - `--live nosuchendpoint_xyz` waits on that endpoint, so the argument is actually read.
+
+## Review round 1 (ChatGPT, at `5178393`): not approved
+
+The reviewer reported three blocking findings and two minor ones. All five are fixed, and each fix
+has a regression test that fails when the fix is removed (mutation run per row).
+
+| # | Finding | Fix | Regression |
+|---|---|---|---|
+| 1 (blocking) | Learned callee prototypes had no snapshot key, so an edited callee's old signature was still lent to its caller (A1). | `DecompilerPanel`: each learned signature keeps the `SnapshotKey` it was recovered from. A signature is lent (and hashed into the question) only when that key matches the snapshot held now. A result that cannot vouch for a signature (not Ok, truncated, unsupported) removes the stored one. | `TestCalleePrototypesLent`: learn, edit the callee to use r5, and the on-screen caller is asked again without the old signature (`(1,2,3)`, not `func_0x06007340(1);`). After re-learning it shows `(1,2);`. The same holds after a BIOS image change and a frame change. Mutation (lend regardless of key): 3 checks fail. |
+| 2 (blocking) | A callee reached through a mirror (registered as a separate alias function) did not get the lent prototype. | `Sh2Decompiler`: the prototype is applied to every registered alias of the callee, still never to the function being decompiled. | `TestCalleePrototypes`: the same call through a literal at `06007340`, `26007340` and `06107340` all give `func_0x06007340(1);`. Mutation: the mirrors fail. |
+| 3 (blocking) | The "slot is also a jump target" safeguard ignored recovered jump tables. | `ScanRawPcode` adds every recovered jump-table destination to the target set. | Fixture 3 gains a recovered switch: case 0 enters a `bra` normally and case 1 enters its slot (`06006A00`, Capstone-checked in `fixture3.py`). It is now unsupported at `06006A1A`, neither literal is folded, and no prototype is exported. |
+| 4 (minor) | At a mirrored PC (`2600400E`) the computed-call hint was missing. | The hint matches tokens by the canonical instruction address; the target is still computed from the raw PC. | `TestRegisterHintAtHalt`: cache-through and repeated-HWRAM PCs give the same hint. Mutation: fails. |
+| 5 (minor) | Notes and hints did not extend the horizontal scroll range. | The code view's content width includes each line's trailing hint and notes, recomputed every frame. | `TestUserCommentsOnLines`: a 400-character note raises the horizontal scroll maximum from 0 to 2426 px. Mutation: stays 0. |
+
+Tests: full local suite 90/90, and `Sh2DecompilerTests` and `DecompilerPanelTests` clean under ASan.

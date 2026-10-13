@@ -148,11 +148,11 @@ uint64_t DecompilerPanel::PrototypeHash(uint32_t entry) const
     };
     for (const auto& p : mPrototypes)
     {
-        if (p.first == entry) continue;
+        if (!Lendable(p.second, entry, p.first)) continue;
         mix(p.first);
-        shape(p.second.ret);
-        mix(p.second.params.size());
-        for (const TypeShape& t : p.second.params) shape(t);
+        shape(p.second.proto.ret);
+        mix(p.second.proto.params.size());
+        for (const TypeShape& t : p.second.proto.params) shape(t);
     }
     return h;
 }
@@ -278,7 +278,10 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         mShownEntrySource = b;
     }
     for (uint32_t c : mShown.callees) mCallees.insert(c);
-    if (mShown.status == DecompileStatus::Ok && mShown.prototype.known) mPrototypes[mShown.entry] = mShown.prototype;
+    if (mShown.status == DecompileStatus::Ok && mShown.prototype.known)
+        mPrototypes[mShown.entry] = LearnedPrototype{ mShown.key, mShown.prototype };
+    else
+        mPrototypes.erase(mShown.entry);
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
     if (!sameFunction)
     {
@@ -481,7 +484,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     if (inputs.bounds)
         rq.knownFunctions.assign(inputs.bounds->Entries().begin(), inputs.bounds->Entries().end());
     for (const auto& p : mPrototypes)
-        if (p.first != mEntry) rq.prototypes.push_back(p);
+        if (Lendable(p.second, mEntry, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
     const uint64_t generation = runner.Submit(kSlot, mSnap, std::move(rq), retry);
     ++mSubmissions;
     if (generation == 0)
@@ -768,8 +771,13 @@ RegisterHint DecompilerPanel::HaltHint() const
     if (!mShownValid || !mSnap || ShownStale() || mViewKind == DecompViewKind::LiveRunning ||
         mViewKind == DecompViewKind::None)
         return RegisterHint();
-    const RegisterHint h = RegisterTargetAtHalt(*mSnap, mCpu);
+    RegisterHint h = RegisterTargetAtHalt(*mSnap, mCpu);
     if (!h.valid) return h;
+    // The output's token addresses are canonical; the PC may be any mirror. The target was already
+    // computed from the raw PC (braf/bsrf add to it), so only the match uses the canonical one.
+    uint32_t insn = 0;
+    if (!CanonicalAddress(h.insn, insn)) return RegisterHint();
+    h.insn = insn;
     uint32_t target = 0;
     const bool canonical = CanonicalAddress(h.target, target);
     bool inFunction = false;
@@ -853,7 +861,25 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
         }
     }
 
-    ImGui::SetNextWindowContentSize(ImVec2(mShownWidth + ImGui::GetStyle().WindowPadding.x * 2.0f, 0.0f));
+    // The scroll range covers the trailing comments too (the halt hint, the notes), which are drawn
+    // after a line's text: a long note past the window's edge must be reachable. Recomputed every
+    // frame, since notes and the hint change without a new result.
+    float width = mShownWidth;
+    for (size_t i = 0; i < mShown.lines.size(); ++i)
+    {
+        const Line& l = mShown.lines[i];
+        float trailing = 0.0f;
+        if (mHint.valid)
+            for (const Token& t : l.tokens)
+                if (t.addr == mHint.insn)
+                {
+                    trailing += ImGui::CalcTextSize(("  // " + mHintText).c_str()).x;
+                    break;
+                }
+        if (!mLineNotes[i].empty()) trailing += ImGui::CalcTextSize(("  // " + mLineNotes[i]).c_str()).x;
+        if (trailing > 0.0f) width = std::max(width, ImGui::CalcTextSize(l.text.c_str()).x + trailing);
+    }
+    ImGui::SetNextWindowContentSize(ImVec2(width + ImGui::GetStyle().WindowPadding.x * 2.0f, 0.0f));
     if (!ImGui::BeginChild("##code", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
     {
         ImGui::EndChild();

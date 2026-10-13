@@ -288,11 +288,23 @@ private:
 
     uint64_t mNamesGeneration = 0;
     std::set<uint32_t> mCallees;     // found by results this session: the finder's last rung
-    // Each function's signature from its last decompilation this session, lent to its callers'
-    // requests. Engine input: the question carries a hash of what is lent, so a caller decompiled
-    // before its callee is asked again, with the callee's signature, when it is next shown.
-    std::map<uint32_t, decomp::Prototype> mPrototypes;
-    uint64_t PrototypeHash(uint32_t entry) const;   // over every prototype but the entry's own
+    // Each function's signature from its last decompilation this session, with the snapshot it was
+    // recovered from, lent to its callers' requests. Engine input: the question carries a hash of
+    // what is lent, so a caller decompiled before its callee is asked again, with the callee's
+    // signature, when it is next shown. Only a signature recovered from the snapshot held now is
+    // lent: an edit, another frame or another BIOS image may have changed the callee (A1). A later
+    // decompilation that cannot vouch for a signature removes the old one rather than keeping it.
+    struct LearnedPrototype
+    {
+        decomp::SnapshotKey key;
+        decomp::Prototype proto;
+    };
+    std::map<uint32_t, LearnedPrototype> mPrototypes;
+    bool Lendable(const LearnedPrototype& p, uint32_t entry, uint32_t callee) const
+    {
+        return callee != entry && mSnap && p.key == mSnap->key;
+    }
+    uint64_t PrototypeHash(uint32_t entry) const;   // over the prototypes lent to 'entry' now
 
     Question mAsked;
     Outstanding mPending;

@@ -365,14 +365,17 @@ by `DecompilerPanelTests`:
 - A3 SLEIGH patch for `bra`/`bsr` slots; fixture 3 goldens flip from `unsupported` to correct
   for those two, the rest stay flagged; `VENDOR.md` documents the patch and `vendor.py` applies it.
   *As built:* `0005-sleigh-delay-slot-pc.patch`. One addition to the A3 rule: a `bra`/`bsr` slot
-  that another branch in the function also jumps to stays flagged, because SLEIGH context is per
-  address and the direct path would get the slot's PC too. Fixture 3 gained a `bsr` + `mov.l`
+  that another branch in the function also jumps to (an immediate branch, or a recovered
+  jump-table entry) stays flagged, because SLEIGH context is per address and the direct path
+  would get the slot's PC too. Fixture 3 gained a `bsr` + `mov.l`
   case, a load after a `bsr` pair, a load at a `bra` target, a `jsr` case and that jumped-to slot.
 - Callee prototypes from cached callee decompiles.
   *As built:* each Ok result that is not truncated, unsupported or unimplemented carries its
   function's signature as plain values (`Prototype`, `TypeShape`: base kind and size, one level
-  of pointer). The panel keeps the latest per entry for the session (cleared by `ResetSession`)
-  and lends all but the requested entry's own in `DecompileRequest::prototypes`; the engine
+  of pointer). The panel keeps the latest per entry for the session (cleared by `ResetSession`),
+  with the snapshot key it came from, and lends -- to every mirror the callee is registered at --
+  only those recovered from the snapshot held now, never the requested entry's own; a later
+  untrustworthy result removes the entry's signature in `DecompileRequest::prototypes`; the engine
   locks them on the registered callees (`FuncProto::setPieces`), never on the function being
   decompiled. They are engine input, so the question carries a hash of what is lent (A1): a
   caller shown before its callee is asked again, once, when next shown. The cost is that

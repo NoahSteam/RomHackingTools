@@ -131,9 +131,29 @@ cases.append(("bra slot also jumped to", K, [
     (K + 0x0E, 0x6013, "mov", "mov r1,r0            ; slot"),
 ], K + 0x06, K + 0x14, {K + 0x14: (DIRECT, 4), K + 0x18: (SLOT, 4)}))
 
+L = 0x06006A00
+cases.append(("bra slot is a switch case", L, [
+    (L + 0x00, 0xE102, "mov", "mov #2,r1"),
+    (L + 0x02, 0x3412, "cmp/hs", "cmp/hs r1,r4"),
+    (L + 0x04, 0x890E, "bt", "bt 0x06006A24          ; default"),
+    (L + 0x06, 0xC702, "mova", "mova 0x06006A10,r0     ; the table"),
+    (L + 0x08, 0x4408, "shll2", "shll2 r4"),
+    (L + 0x0A, 0x014E, "mov.l", "mov.l @(r0,r4),r1"),
+    (L + 0x0C, 0x412B, "jmp", "jmp @r1"),
+    (L + 0x0E, 0x0009, "nop", "nop"),
+    (L + 0x18, 0xA002, "bra", "bra 0x06006A20         ; case 0"),
+    (L + 0x1A, 0xD103, "mov.l", "mov.l @(12,pc),r1    ; slot, and case 1"),
+    (L + 0x1C, 0x0009, "nop", "nop"),
+    (L + 0x1E, 0x0009, "nop", "nop"),
+    (L + 0x20, 0x000B, "rts", "rts                  ; <- target"),
+    (L + 0x22, 0x6013, "mov", "mov r1,r0"),
+    (L + 0x24, 0x000B, "rts", "rts"),
+    (L + 0x26, 0xE000, "mov", "mov #0,r0"),
+], L + 0x1A, L + 0x28, {L + 0x10: (L + 0x18, 4), L + 0x14: (L + 0x1A, 4), L + 0x28: (DIRECT, 4), L + 0x2C: (SLOT, 4)}))
+
 # Where the hardware reads each statically-targeted slot's literal (branch target + 2 as PC).
 HARDWARE = {"bra": B + 0x14, "bf/s": C + 0x14, "bsr + mov.l": H + 0x18, "bra + target load": I + 0x14,
-            "bra slot also jumped to": K + 0x18}
+            "bra slot also jumped to": K + 0x18, "bra slot is a switch case": L + 0x2C}
 
 md = Cs(CS_ARCH_SH, CS_MODE_SH2 | CS_MODE_BIG_ENDIAN)
 

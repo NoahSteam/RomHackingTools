@@ -220,6 +220,7 @@ void TestDelaySlotPcRelative()
     struct Case { const char* name; uint32_t entry, slot; } cases[] = {
         { "bf/s", dts::kFixture3Bfs, dts::kFixture3BfsSlot },
         { "bra slot jumped to", dts::kFixture3SlotJumped, dts::kFixture3SlotJumpedSlot },
+        { "bra slot is a switch case", dts::kFixture3SwitchSlot, dts::kFixture3SwitchSlotSlot },
     };
     for (const Case& c : cases)
     {
@@ -235,6 +236,7 @@ void TestDelaySlotPcRelative()
         bool warned = false;
         for (const std::string& w : r.warnings) warned |= Has(w, "delay slot");
         CHECK(warned);
+        CHECK(!r.prototype.known);   // not lent to callers either
     }
     // Every other delayed-branch kind (rts, jmp, braf, jsr), and mov.w in the slot: flagged at the
     // slot, and no literal word marked read-only.
@@ -555,6 +557,34 @@ void TestCalleePrototypes()
     CHECK(r.status == DecompileStatus::Ok);
     CHECK(Has(r.Text(), "func_0x06007340(1);"));
     CHECK(r.Text() != guessed.Text());
+    // Review of Step 4: the same call through a literal, at the canonical address and through the
+    // cache-through and repeated-HWRAM mirrors. The engine registers each mirror as its own function
+    // object, and each must carry the lent signature: same arguments, no return value.
+    const uint32_t viaLiteral = 0x06007380u;
+    for (uint32_t literal : { callee, callee | 0x20000000u, callee + 0x00100000u })
+    {
+        std::vector<uint8_t> hw2 = hw;
+        size_t o = viaLiteral - 0x06000000u;
+        for (uint16_t w : { 0xE401,     // mov #1,r4
+                            0xE502,     // mov #2,r5
+                            0xE603,     // mov #3,r6
+                            0x4F22,     // sts.l pr,@-r15
+                            0xD002,     // mov.l @(8,pc),r0  -> the literal at 0x06007394
+                            0x400B,     // jsr @r0
+                            0x0009,     //   nop
+                            0x4F26,     // lds.l @r15+,pr
+                            0x000B,     // rts
+                            0x0009 })   //   nop
+        { dts::Put16(hw2, o, w); o += 2; }
+        dts::Put32(hw2, 0x06007394u - 0x06000000u, literal);
+        DecompileRequest lentTo = Request(viaLiteral);
+        lentTo.prototypes.emplace_back(callee, c.prototype);
+        const DecompileResult m = d.Decompile(MakeSnapshot(hw2, 7), lentTo);
+        Print("call through a literal, prototype lent", m);
+        CHECK(Has(m.Text(), "func_0x06007340(1);"));
+        CHECK(!Has(m.Text(), "(1,2,3)"));
+    }
+
     // The function being decompiled keeps its own recovery even when a prototype is given for it.
     DecompileRequest self = Request(callee);
     Prototype wrong;

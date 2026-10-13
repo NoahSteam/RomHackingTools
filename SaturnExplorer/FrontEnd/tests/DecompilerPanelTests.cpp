@@ -26,6 +26,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <cstring>
 
 using namespace sfe;
 using namespace sfe::decomp;
@@ -651,6 +652,18 @@ void TestRegisterHintAtHalt()
     f.Idle(2);
     std::printf("hint: %s\n", f.panel.HintText().c_str());
     CHECK(f.panel.HintText() == "r0 = 0x06005000 at the halt (read_word)");
+    // Review of Step 4, finding 4: the same halt at a mirror of the call -- cache-through, or a
+    // repeat of HWRAM -- is the same instruction, and gets the same hint.
+    for (uint32_t pc : { dts::kFixture1Jsr | 0x20000000u, dts::kFixture1Jsr + 0x00100000u })
+    {
+        f.regs[0].pc = pc;
+        ++f.frame;
+        f.Idle();   // the panel sees the new frame
+        CHECK(f.PumpUntil([&] { return !f.panel.ShownStale() && !f.panel.Pending(); }));
+        f.Idle(2);
+        CHECK(f.panel.HintText() == "r0 = 0x06005000 at the halt (read_word)");
+    }
+    f.regs[0].pc = dts::kFixture1Jsr;
 
     // The CPU steps on: no longer stopped on the call.
     f.regs[0].pc = dts::kFixture1AddOne;
@@ -715,6 +728,21 @@ void TestUserCommentsOnLines()
     for (const std::string& u : unplaced) std::printf("  unplaced: %s\n", u.c_str());
     CHECK(unplaced.size() == 1 && unplaced[0] == "0x0600400C: the literal");
 
+    // Review of Step 4, finding 5: a note wider than the window can be scrolled to.
+    auto codeScrollMaxX = [] {
+        for (ImGuiWindow* w : ImGui::GetCurrentContext()->Windows)
+            if (std::strstr(w->Name, "##code")) return w->ScrollMax.x;
+        return -1.0f;
+    };
+    f.comments.erase(dts::kFixture1Jsr - 2);
+    f.Idle(2);
+    const float before = codeScrollMaxX();
+    f.comments[dts::kFixture1AddOne] = std::string(400, 'n');
+    f.Idle(3);
+    const float after = codeScrollMaxX();
+    std::printf("  code scroll max x: %.0f before, %.0f with a 400-character note\n", before, after);
+    CHECK(after > before + 1000.0f);
+
     f.comments.clear();
     f.Idle(2);
     for (const std::string& note : f.panel.LineNotes()) CHECK(note.empty());
@@ -747,6 +775,37 @@ void TestCalleePrototypesLent()
     CHECK(f.WaitShown("func_0x06007340(1);"));
     CHECK(f.panel.Submissions() == n + 1);   // asked again, not served from the cache
     CHECK(f.panel.CacheHits() == 0);
+
+    // Review of Step 4, finding 1: a signature belongs to the memory it was recovered from. Edit the
+    // callee to take r5 as well, and the caller -- on screen, so asked again at once -- must not be
+    // given the old one-argument signature. Shown the edited callee, the caller learns the new one.
+    auto shownCurrent = [&](const char* text) {
+        const bool ok = f.PumpUntil([&] {
+            return !f.panel.Pending() && f.panel.Shown() && f.panel.HeldKey() &&
+                   f.panel.Shown()->key == *f.panel.HeldKey() && Has(f.panel.Shown()->Text(), text);
+        });
+        if (!ok) f.Dump();
+        return ok;
+    };
+    f.PutWord(callee + 6, 0x1151);   // the rts slot: mov.l r5,@(4,r1)
+    ++f.backend.serial;
+    CHECK(shownCurrent("(1,2,3)"));
+    CHECK(!Has(f.Shown().Text(), "func_0x06007340(1);"));
+    f.TypeInto("entry", "06007340");
+    CHECK(shownCurrent("param_2"));
+    f.TypeInto("entry", "06007300");
+    CHECK(shownCurrent("func_0x06007340(1,2);"));
+
+    // Likewise another BIOS image and another frame: a new snapshot, so nothing learned before it
+    // is lent until it is learned again.
+    f.bios = BiosImage::Make(std::vector<uint8_t>(0x1000, 0x5A));
+    CHECK(shownCurrent("(1,2,3)"));
+    f.TypeInto("entry", "06007340");
+    CHECK(shownCurrent("param_2"));
+    f.TypeInto("entry", "06007300");
+    CHECK(shownCurrent("func_0x06007340(1,2);"));
+    ++f.frame;
+    CHECK(shownCurrent("(1,2,3)"));
 
     // A new session forgets them: what was learned belonged to the old source.
     f.panel.ResetSession();

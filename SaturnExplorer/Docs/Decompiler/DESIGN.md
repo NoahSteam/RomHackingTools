@@ -273,7 +273,8 @@ an entry correction replaces the request for that function.
   fold that literal, marks the result `unsupported` with the address and shows a banner; Step 4
   patches the spec so static-target branches (`bra`, `bsr`; patch 0005) publish their target
   through a context register and the slot computes the right address, while conditional and
-  register-target slots stay flagged, as does a slot another branch also jumps to. A synthetic
+  register-target slots stay flagged, as does a slot another branch or a recovered jump table
+  also enters. A synthetic
   fixture with different literals at the two candidate addresses pins both stages. Nothing in this area is shown as trustworthy on the
   strength of a matching disassembly listing alone.
 - **Indirect calls.** `jsr @rN` through a literal pool resolves to a direct, named call (spike).
