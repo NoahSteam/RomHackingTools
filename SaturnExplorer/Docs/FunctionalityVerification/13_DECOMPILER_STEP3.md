@@ -335,6 +335,7 @@ an error is not an answer worth keeping stable. The old session's output stays o
 answer arrives, as everywhere else. Test: `DecompilerPanelTests` `TestRunningLiveUnansweredFollowRetries` (PC in the
 unmapped BIOS → one capture, no request; the PC unchanged → nothing; moved within the BIOS → one capture per 30 frames;
 moved into code → the function, then no more captures). Mutation: drop the condition (fails). Not re-checked in the app.
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38338646621 (all six jobs green at `8deb03f`).
 
 ## Decisions and deviations
 
