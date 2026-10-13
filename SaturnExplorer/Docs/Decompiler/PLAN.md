@@ -414,6 +414,16 @@ by `DecompilerPanelTests`:
   (`vendor.py` → build → `se-regen-sla` → regenerate `Sh2SpecData.h` → `SlaFreshnessTests` →
   review goldens).
 
+*As built (Step 5):*
+- About → "Third-party" (`App::DrawAboutModal`) names six components. Their seven licence texts
+  now all ship: Dear ImGui's and the two fonts' were added to the CMake list, `FrontEnd.vcxproj`
+  and the CI checks, beside zlib's, nlohmann/json's and Ghidra's.
+- `Integration/DISTRIBUTION.md` "Shipping Saturn Explorer itself" covers the licence texts, the
+  four places to update for a new component, and the manual Developer ID / notarisation steps.
+- `DECOMPILER_GUIDE.md` (root), `Docs/Decompiler/DEMO.md`, the `CLAUDE.md` rows, and `VENDOR.md`
+  "Bumping Ghidra — checklist".
+- Record: `Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md`.
+
 ---
 
 ## Effort and order

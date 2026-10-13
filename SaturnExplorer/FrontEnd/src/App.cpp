@@ -8848,6 +8848,49 @@ void App::DrawAboutModal()
     ImGui::TextWrapped("Source selects the debugger's active data provider. Emulator and Game select the next launch configuration.");
     ImGui::Spacing();
     ImGui::TextDisabled("Build: %s", UpdateChecker::BuildCommitShort());
+    ImGui::Spacing();
+
+    // Third-party code compiled or embedded into this binary. Each licence text ships beside it
+    // (the CMake and MSBuild builds copy them; the release checks in CI assert they are there), so
+    // this list and the "licenses" folder must name the same set.
+    if (ImGui::CollapsingHeader("Third-party"))
+    {
+        struct Credit { const char* name; const char* licence; const char* folder; };
+        static const Credit kCredits[] = {
+            { "Dear ImGui (Omar Cornut and contributors)", "MIT", "imgui" },
+            { "IPAGothic font, subset (IPA)", "IPA Font License 1.0", "fonts" },
+            { "Liberation Sans font (Red Hat)", "SIL Open Font License 1.1", "fonts" },
+            { "zlib (Jean-loup Gailly, Mark Adler)", "zlib", "zlib" },
+            { "JSON for Modern C++ (Niels Lohmann)", "MIT", "nlohmann-json" },
+#if SE_ENABLE_DECOMPILER
+            { "Ghidra decompiler and SuperH language spec (NSA), modified", "Apache-2.0", "ghidra-decompiler" },
+#endif
+        };
+        if (ImGui::BeginTable("##credits", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg))
+        {
+            for (const Credit& c : kCredits)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(c.name);
+                ImGui::TableNextColumn();
+                ImGui::TextDisabled("%s  (licenses/%s)", c.licence, c.folder);
+            }
+            ImGui::EndTable();
+        }
+#if SE_ENABLE_DECOMPILER
+        // Ghidra's NOTICE asks that its attribution travel with the product.
+        ImGui::TextWrapped("This product includes software developed at National Security Agency "
+                           "(https://www.nsa.gov). The decompiler engine is modified by the patches listed "
+                           "in its VENDOR.md.");
+#endif
+#if defined(__APPLE__)
+        ImGui::TextDisabled("Licence texts: SaturnExplorer.app/Contents/Resources/licenses");
+#else
+        ImGui::TextDisabled("Licence texts: the \"licenses\" folder beside the executable");
+#endif
+    }
+    ImGui::Spacing();
     if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }

@@ -1743,10 +1743,15 @@ if(TARGET SaturnExplorerFrontEnd AND SE_ENABLE_DECOMPILER)
 endif()
 
 # Licence texts that must travel with the binary: Apache-2.0 requires Ghidra's LICENSE and NOTICE
-# in every distribution of the engine, and zlib's licence asks for its notice too. In the macOS
+# in every distribution of the engine; zlib, Dear ImGui (MIT), nlohmann/json (MIT) and the two
+# embedded fonts (IPA, OFL) ask for their notices too. The About dialog's "Third-party" list names
+# the same set. In the macOS
 # bundle they are resources (so the signature seals them); beside the Windows exe, a folder.
 if(TARGET SaturnExplorerFrontEnd AND NOT EMSCRIPTEN)
     set(SE_LICENSE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/imgui/LICENSE.txt|imgui"
+        "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/fonts/LICENSE-IPAfont.txt|fonts"
+        "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/fonts/LICENSE-Liberation.txt|fonts"
         "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/zlib/LICENSE|zlib"
         "${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/third_party/nlohmann-json/LICENSE.MIT|nlohmann-json")
     if(SE_ENABLE_DECOMPILER)

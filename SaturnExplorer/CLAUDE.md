@@ -11,7 +11,10 @@ front end, and a patched Mednafen that talks to it over a local socket.
 | Building (CMake, three ImGui backends, web) | `BUILD.md` |
 | VDP1 / VDP2 rendering semantics | `VDP1_GUIDE.md`, `VDP2_GUIDE.md` |
 | Log panel, tracepoints, execution actions | `EXECUTION_ACTIONS.md` |
-| SH-2 decompiler panel (design + feasibility spike) | `Docs/Decompiler/DESIGN.md`, `Docs/Decompiler/SPIKE_RESULTS.md` |
+| SH-2 decompiler panel: using it, demo | `DECOMPILER_GUIDE.md`, `Docs/Decompiler/DEMO.md` |
+| SH-2 decompiler: design, plan, spike | `Docs/Decompiler/DESIGN.md`, `Docs/Decompiler/PLAN.md`, `Docs/Decompiler/SPIKE_RESULTS.md` |
+| Bumping the vendored Ghidra decompiler | `FrontEnd/third_party/ghidra-decompiler/VENDOR.md` → "Bumping Ghidra — checklist" |
+| Third-party licences that must ship | `Integration/DISTRIBUTION.md` → "Shipping Saturn Explorer itself" |
 
 `_emu/mednafen` is a working checkout of Mednafen that `Integration/Mednafen/apply.py`
 patches. It is untracked on purpose — do not commit it. It is also the best available

@@ -93,9 +93,10 @@ jobs:
         shell: bash
         run: |
           test -f build/bin/Release/SaturnExplorerFrontEnd.exe
-          test -f build/bin/Release/licenses/ghidra-decompiler/LICENSE
-          test -f build/bin/Release/licenses/ghidra-decompiler/NOTICE
-          test -f build/bin/Release/licenses/zlib/LICENSE
+          # The set the About dialog's "Third-party" list names.
+          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
+            test -f "build/bin/Release/licenses/$f"
+          done
 
   # build-release-msbuild.bat: the checked-in solution, no CMake. This is what proves the
   # hand-written .vcxproj wiring (zlib into the savestate driver, the decompiler projects) builds.
@@ -122,9 +123,10 @@ jobs:
         shell: bash
         run: |
           test -f ../x64/Release/SaturnExplorer.exe
-          test -f ../x64/Release/licenses/ghidra-decompiler/LICENSE
-          test -f ../x64/Release/licenses/ghidra-decompiler/NOTICE
-          test -f ../x64/Release/licenses/zlib/LICENSE
+          # The set the About dialog's "Third-party" list names.
+          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
+            test -f "../x64/Release/licenses/$f"
+          done
 
   # No Intel macOS runner: the engine and its tests are built for x86_64 on the arm64 runner
   # and run under Rosetta. They need no SDL2, so the frontend is not configured here.
@@ -185,8 +187,8 @@ jobs:
           test -d stage/SaturnExplorer.app
           test -x stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer
           codesign --verify --deep --strict --verbose=2 stage/SaturnExplorer.app
-          # Apache-2.0 / zlib: the licence texts ship inside the signed bundle.
-          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE; do
+          # Every third-party licence text ships inside the signed bundle.
+          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
             test -f "stage/SaturnExplorer.app/Contents/Resources/licenses/$f"
           done
           # Self-contained: nothing may still point into Homebrew.
@@ -202,7 +204,7 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint dmg-mount SaturnExplorer-macos.dmg
           test -d dmg-mount/SaturnExplorer.app
           codesign --verify --deep --strict --verbose=2 dmg-mount/SaturnExplorer.app
-          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE; do
+          for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
             test -f "dmg-mount/SaturnExplorer.app/Contents/Resources/licenses/$f"
           done
           hdiutil detach dmg-mount

@@ -92,3 +92,53 @@ Saturn Explorer and **File → Connect to emulator (live)** (or start it with `-
 For **browser** live viewing, see the "Web (browser) live viewing" section in
 `Integration/Yabause/README.md` (build with `-DSE_WEB_LIVE=ON`, serve cross-origin
 isolated, run a WebSocket→TCP relay).
+
+## Shipping Saturn Explorer itself: third-party licences
+
+Saturn Explorer compiles in, or embeds, code under these licences:
+- Dear ImGui (MIT);
+- the IPAGothic subset (IPA Font License);
+- Liberation Sans (OFL 1.1);
+- zlib;
+- nlohmann/json (MIT);
+- the **Ghidra decompiler** with its SuperH language spec (Apache-2.0).
+
+Each licence asks that its notice travel with the binary, so the build puts every licence text into the output:
+
+| Build | Where the texts land |
+|---|---|
+| CMake, Windows / Linux | `licenses/<component>/` beside the executable |
+| `build-release-msbuild.bat` | `x64\Release\licenses\<component>\` |
+| macOS `.app` / DMG | `SaturnExplorer.app/Contents/Resources/licenses/<component>/` (sealed by the signature) |
+
+The CI release jobs fail if any text is missing. **Help → About → Third-party** names the same set.
+
+When you add a third-party component, update all four places:
+1. the CMake `SE_LICENSE_FILES` list;
+2. the `CopyFileToFolders` items in `FrontEnd/FrontEnd.vcxproj`;
+3. the CI checks in `.github/workflows/saturn-explorer-verify.yml`;
+4. the About list in `App::DrawAboutModal`.
+
+Ghidra specifics:
+- **`LICENSE` and `NOTICE` must ship.** Apache-2.0 §4(d) requires the NOTICE. The vendored sources are modified by `FrontEnd/third_party/ghidra-decompiler/patches/`. Each patched file says so in its header (§4(b)), and the About dialog says the engine is modified.
+- **No new runtime dependency.** The engine is compiled into the executable, and its SLEIGH files are embedded (`Sh2SpecData.h`) and written to the config directory at first use. No dynamic libraries were added, so macOS bundling (`SE_MACOS_BUNDLE_LIBS`) and signing are unchanged.
+- **No Java and no Ghidra install** on the user's machine.
+
+### macOS Developer ID signing and notarisation
+
+CI's bundle is not Developer ID signed, so Gatekeeper quarantines a downloaded copy. A release for
+others is signed (hardened runtime, timestamped: the install step does this when
+`SE_MACOS_SIGN_IDENTITY` is set, and fails if the signature does not verify) and notarised by hand
+on a Mac that holds the Developer ID certificate; see also `BUILD.md` "macOS packaging". Record each release in `Docs/FunctionalityVerification/`: the version, the commit, and the
+`spctl` output.
+
+```sh
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DSE_MACOS_BUNDLE_LIBS=ON \
+      -DSE_MACOS_SIGN_IDENTITY="Developer ID Application: <name> (<team>)"
+cmake --build build-release --parallel
+cmake --install build-release --prefix "$PWD/stage"
+(cd build-release && cpack -G DragNDrop)
+xcrun notarytool submit build-release/SaturnExplorer-macos.dmg --keychain-profile <profile> --wait
+xcrun stapler staple build-release/SaturnExplorer-macos.dmg
+spctl -a -vvv -t install build-release/SaturnExplorer-macos.dmg   # expect: accepted, Notarized Developer ID
+```

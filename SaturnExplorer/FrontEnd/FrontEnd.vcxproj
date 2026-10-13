@@ -150,11 +150,17 @@
     <ResourceCompile Include="Platforms\Windows\SaturnExplorer.rc" />
   </ItemGroup>
   <!-- Licence texts that travel with the exe, as in the CMake build: Apache-2.0 requires Ghidra's
-       LICENSE and NOTICE in every distribution of the decompiler engine; zlib asks for its notice; nlohmann/json's MIT
+       LICENSE and NOTICE in every distribution of the decompiler engine; zlib, Dear ImGui and the two embedded fonts ask for their notices; nlohmann/json's MIT
        licence requires its notice with copies of the header's code. -->
   <ItemGroup>
     <CopyFileToFolders Include="third_party\ghidra-decompiler\LICENSE;third_party\ghidra-decompiler\NOTICE">
       <DestinationFolders>$(OutDir)licenses\ghidra-decompiler</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="third_party\imgui\LICENSE.txt">
+      <DestinationFolders>$(OutDir)licenses\imgui</DestinationFolders>
+    </CopyFileToFolders>
+    <CopyFileToFolders Include="third_party\fonts\LICENSE-IPAfont.txt;third_party\fonts\LICENSE-Liberation.txt">
+      <DestinationFolders>$(OutDir)licenses\fonts</DestinationFolders>
     </CopyFileToFolders>
     <CopyFileToFolders Include="third_party\zlib\LICENSE">
       <DestinationFolders>$(OutDir)licenses\zlib</DestinationFolders>

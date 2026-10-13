@@ -50,21 +50,44 @@ MSVC and Apple clang needed no patch beyond these.
 - Both: C++14, optimised in every configuration, MSVC `/EHsc /W3 /bigobj` with `_WINDOWS`
   (upstream's own Windows define), clang/gcc with the sign-compare and similar warnings off.
 
-## Bumping Ghidra
+## Bumping Ghidra — checklist
 
-1. Check out the new Ghidra commit. A sparse clone is enough:
-   ```
-   git clone --filter=blob:none --sparse https://github.com/NationalSecurityAgency/ghidra.git
-   cd ghidra && git sparse-checkout set --no-cone /Ghidra/Features/Decompiler/src/decompile/cpp/ \
-       /Ghidra/Processors/SuperH/data/languages/ /LICENSE /NOTICE
-   git checkout <commit>
-   ```
-2. Update `PINNED_COMMIT` in `vendor.py` and the commit above, then run
-   `python3 -I vendor.py <ghidra-checkout>`. It stops, changing nothing, if a patch no longer
-   applies; re-base the patch by hand against the new tree and re-prove it
-   (`Docs/Decompiler/spike/cancel_spike.cpp`, and `DecompilerRunnerTests` once Step 2 lands).
-3. If the Makefile's source groups changed, update the lists in `vendor.py`.
-4. Build, then `cmake --build build --target se-regen-sla` to regenerate `sh-2.sla` and
-   `Sh2SpecData.h`.
-5. Run `SaturnExplorerSlaFreshnessTests` and `SaturnExplorerSh2DecompilerEngineTests`, then the
-   decompiler golden tests, and review any golden-output change before committing.
+Each step's failure stops the bump; nothing is committed until the last step passes. Order
+matters: the spec artifacts are generated from the patched `superh.sinc`, so `vendor.py` (which
+applies 0005) must run before `se-regen-sla`.
+
+- [ ] **Check out** the new Ghidra commit. A sparse clone is enough:
+  ```
+  git clone --filter=blob:none --sparse https://github.com/NationalSecurityAgency/ghidra.git
+  cd ghidra && git sparse-checkout set --no-cone /Ghidra/Features/Decompiler/src/decompile/cpp/ \
+      /Ghidra/Processors/SuperH/data/languages/ /LICENSE /NOTICE
+  git checkout <commit>
+  ```
+- [ ] **`vendor.py`**: update `PINNED_COMMIT` and the commit at the top of this file, then
+  `python3 -I vendor.py <ghidra-checkout>`. It stops, changing nothing, if a patch no longer
+  applies. Then re-base that patch by hand and re-prove it:
+  - 0001: `Docs/Decompiler/spike/cancel_spike.cpp` and `DecompilerRunnerTests`;
+  - 0002 to 0004: the ASan run of `DecompilerRunnerTests`;
+  - 0005: `TestDelaySlotPcRelative`.
+
+  If upstream's Makefile source groups changed, update the lists in `vendor.py`.
+  If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.
+- [ ] **Build** with `SE_ENABLE_DECOMPILER=ON` on clang/gcc, and MSVC through both
+  `build-release.bat` and `build-release-msbuild.bat`. A new MSVC error inside a vendored file is a
+  new `patches/` entry plus a row above, never an edit in place.
+- [ ] **`se-regen-sla`**: `cmake --build build --target se-regen-sla` regenerates
+  `processors/SuperH/sh-2.sla` and `FrontEnd/src/Decompiler/Sh2SpecData.h` together. Commit both:
+  the app embeds the header, and `SpecBundle` rewrites a user's materialised copy when its hash
+  changes.
+- [ ] **`SaturnExplorerSlaFreshnessTests`**: it proves the checked-in `.sla` and header match what
+  this `se-sleighc` produces from the checked-in spec.
+- [ ] **Engine tests**:
+  - `SaturnExplorerSh2DecompilerEngineTests`;
+  - `SaturnExplorerSh2DecompilerTests` (fixture 3, hardware names, BIOS names, prototypes);
+  - `SaturnExplorerSh2DecompilerFixtureTests`;
+  - `SaturnExplorerDecompilerRunnerTests`;
+  - `SaturnExplorerDecompilerPanelTests`.
+- [ ] **Review goldens**: the decompiler tests print each fixture's pseudocode. Save
+  `ctest -V -R 'Sh2Decompiler|DecompilerPanel'` output before and after the bump and diff it. Accept a change only when it reads as correct for the bytes. A literal changing, or a
+  flagged slot no longer flagged, is a regression even if a test was loosened to pass. Record the
+  bump, with the CI run, in `Docs/FunctionalityVerification/`.
