@@ -69,4 +69,10 @@ bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey, SourceType sou
     return source == SourceType::None && emulatorKey == "mednafen";
 }
 
+bool LiveOpenMayAttach(bool sourceOpen, bool userRequested, uint64_t serialAtRequest, uint64_t serialNow)
+{
+    if (!sourceOpen) return true;
+    return userRequested && serialAtRequest == serialNow;
+}
+
 }  // namespace sfe

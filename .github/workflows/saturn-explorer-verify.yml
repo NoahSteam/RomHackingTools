@@ -123,6 +123,8 @@ jobs:
         shell: bash
         run: |
           test -f ../x64/Release/SaturnExplorer.exe
+          # The solution stamps the commit (About, update check) as the CMake build does.
+          grep -a -q "${GITHUB_SHA:0:10}" ../x64/Release/SaturnExplorer.exe
           # The set the About dialog's "Third-party" list names.
           for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
             test -f "../x64/Release/licenses/$f"

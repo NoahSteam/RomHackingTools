@@ -474,6 +474,16 @@ void TestStoredSplitIsClampedIntoRange()
     CHECK(panel.bottomHeight > panel.minBottom - 0.01f);
 }
 
+void TestBottomDockFraction()
+{
+    // A tall screen keeps the 24% default; a short one gets enough lines to read; never past 45%.
+    CHECK(BottomDockFraction(2000.0f, 17.0f) == 0.24f);
+    const float laptop = BottomDockFraction(930.0f, 17.0f);       // 1470x956 logical, menu bar off
+    CHECK(laptop > 0.24f && laptop * 930.0f >= 18.0f * 17.0f - 0.5f);
+    CHECK(BottomDockFraction(400.0f, 17.0f) == 0.45f);
+    CHECK(BottomDockFraction(0.0f, 17.0f) == 0.24f);
+}
+
 void TestPanelTooShortToSplitDrawsNoSeparator()
 {
     // Shorter than the separator itself: SplitTopHeight returns 0, the caller reads that
@@ -674,6 +684,7 @@ int main()
     TestPanelTooShortToSplitDrawsNoSeparator();
     TestComboWidthFitsItsWidestEntry();
     TestSplitHeightRoundTripsThroughSettings();
+    TestBottomDockFraction();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();

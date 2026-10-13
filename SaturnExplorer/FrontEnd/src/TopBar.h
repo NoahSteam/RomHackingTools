@@ -127,4 +127,10 @@ bool TopBarCommandEnabled(TopBarCommandType command, const TopBarViewModel& stat
 // source.
 bool ShouldAutoConnectAfterLaunch(const std::string& emulatorKey, SourceType source);
 
+// Whether a finished live connection attempt may become the source. With nothing open, always.
+// With something open, only a user's Connect may replace it -- that is what they asked for -- and
+// only if the source is still the one open when they asked ('sourceSerial' counts source changes):
+// a file opened during the attempt was chosen later, so it wins. Auto-connect never replaces.
+bool LiveOpenMayAttach(bool sourceOpen, bool userRequested, uint64_t serialAtRequest, uint64_t serialNow);
+
 }  // namespace sfe

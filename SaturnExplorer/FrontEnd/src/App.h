@@ -539,6 +539,7 @@ private:
         se_data_source     source = {};
         std::string        endpoint;
         bool               reportFailure = false;   // a user asked for this; say so if it fails
+        uint64_t           sourceSerial = 0;        // App::mSourceSerial when it was asked for
 
         // Worker: record the outcome. If the app already abandoned the attempt, nobody will adopt
         // the connection, so close it here.
@@ -612,6 +613,7 @@ private:
     // Notice that the live driver reconnected to a different emulator process and drop
     // everything derived from the run that ended. See the definition.
     void AdoptNewEmulatorInstance();
+    uint64_t         mSourceSerial = 0;          // bumped by CloseData: every source change passes through it
     uint32_t         mLiveConnGeneration = 0;   // se_live_connection_generation last seen
     void ClearRecordedFrames();   // empty the ring and detach the compare markers
     void DropRecordedHistory();

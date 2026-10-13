@@ -126,6 +126,17 @@ static void TestLaunchModel()
     CHECK(!ShouldAutoConnectAfterLaunch("mednafen", SourceType::Live));
 }
 
+// A user's Connect replaces the open savestate (it used to be refused and reported as "No compatible
+// live emulator endpoint"); auto-connect never does; a source opened during the attempt is kept.
+static void TestLiveOpenMayAttach()
+{
+    CHECK(LiveOpenMayAttach(false, false, 0, 7));    // nothing open: even auto-connect attaches
+    CHECK(LiveOpenMayAttach(false, true, 3, 7));
+    CHECK(LiveOpenMayAttach(true, true, 5, 5));      // Connect with a savestate open: replace it
+    CHECK(!LiveOpenMayAttach(true, false, 5, 5));    // auto-connect never displaces
+    CHECK(!LiveOpenMayAttach(true, true, 5, 6));     // a file opened mid-attempt wins
+}
+
 // Patch items are enabled through the same policy as everything else (finding #2): Apply / Manage
 // / Save need a recorded location, Build Disc Image needs a Data Directory, Open Project is always
 // available.
@@ -396,6 +407,7 @@ int main()
     TestNativeMenuIdDecoding();
     TestDumpTextureLayerTable();
     TestLaunchModel();
+    TestLiveOpenMayAttach();
     TestPatchEnablement();
     TestNativeMenuStructureKey();
     TestNativeMenuActionMapping();

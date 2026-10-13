@@ -76,7 +76,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <LanguageStandard>stdcpp14</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;$(ProjectDir)third_party\zlib;$(ProjectDir)third_party\nlohmann-json\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)src;$(ProjectDir)Platforms\Windows;$(ProjectDir)third_party\imgui;$(ProjectDir)third_party\imgui\backends;$(ProjectDir)..\Drivers\Savestate\src;$(ProjectDir)..\Drivers\Live\src;$(ProjectDir)..\Drivers\Common\src;$(ProjectDir)..\Integration\Common;$(ProjectDir)third_party\ghidra-decompiler\cpp;$(ProjectDir)third_party\zlib;$(ProjectDir)third_party\nlohmann-json\include;$(IntDir)generated;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!-- The engine's headers include zlib.h (compression.hh). _WINDOWS: Ghidra's types.h picks its integer types from it; src\Decompiler includes the engine's headers and must see the ones the library was built with. -->
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;SE_ENABLE_LIVE;SE_ENABLE_DECOMPILER=1;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
@@ -196,6 +196,45 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!-- BuildInfo.h: the commit this exe is built from, for About and the update check. The CMake
+       build generates it with cmake/GenerateBuildInfo.cmake; this solution has no CMake, so the same
+       header is written here from git, before every compile. Without it UpdateChecker.cpp falls back
+       to "unknown" and the update check cannot tell this build from any other. No git (a source zip)
+       still yields "unknown" rather than a failed build. Written only when it changes, so an unchanged
+       commit does not recompile anything. -->
+  <Target Name="SeBuildInfo" BeforeTargets="ClCompile">
+    <Exec Command="git rev-parse HEAD" WorkingDirectory="$(ProjectDir).." ConsoleToMSBuild="true"
+          IgnoreExitCode="true" EchoOff="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SeGitHead" />
+      <Output TaskParameter="ExitCode" PropertyName="SeGitHeadExit" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no" WorkingDirectory="$(ProjectDir).." ConsoleToMSBuild="true"
+          IgnoreExitCode="true" EchoOff="true" StandardOutputImportance="low" StandardErrorImportance="low"
+          Condition="'$(SeGitHeadExit)' == '0'">
+      <Output TaskParameter="ConsoleOutput" PropertyName="SeGitDirty" />
+    </Exec>
+    <PropertyGroup>
+      <SeCommit>unknown</SeCommit>
+      <SeCommitShort>unknown</SeCommitShort>
+      <SeCommit Condition="'$(SeGitHeadExit)' == '0' And $(SeGitHead.Length) == 40">$(SeGitHead)</SeCommit>
+      <SeCommitShort Condition="'$(SeCommit)' != 'unknown'">$(SeCommit.Substring(0, 10))</SeCommitShort>
+      <!-- A locally modified tree never claims to match a clean upstream commit. -->
+      <SeCommit Condition="'$(SeCommit)' != 'unknown' And '$(SeGitDirty)' != ''">$(SeCommit)-dirty</SeCommit>
+      <SeCommitShort Condition="'$(SeCommitShort)' != 'unknown' And '$(SeGitDirty)' != ''">$(SeCommitShort)-dirty</SeCommitShort>
+    </PropertyGroup>
+    <ItemGroup>
+      <SeBuildInfoLine Include="// Generated at build time from git by FrontEnd.vcxproj -- do not edit." />
+      <SeBuildInfoLine Include="#pragma once" />
+      <SeBuildInfoLine Include="namespace sfe {" />
+      <SeBuildInfoLine Include="constexpr const char* kBuildCommit = &quot;$(SeCommit)&quot;%3B" />
+      <SeBuildInfoLine Include="constexpr const char* kBuildCommitShort = &quot;$(SeCommitShort)&quot;%3B" />
+      <SeBuildInfoLine Include="constexpr const char* kBuildRepo = &quot;NoahSteam/RomHackingTools&quot;%3B" />
+      <SeBuildInfoLine Include="}" />
+    </ItemGroup>
+    <MakeDir Directories="$(IntDir)generated" />
+    <WriteLinesToFile File="$(IntDir)generated\BuildInfo.h" Lines="@(SeBuildInfoLine)" Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

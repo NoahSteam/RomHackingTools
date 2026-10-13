@@ -109,6 +109,18 @@ inline float SplitTopHeight(float stored, float avail, float minTop, float minBo
     return stored;
 }
 
+// The default layout's bottom debugger strip (SH-2 Assembly, SH-2 Pseudocode, Watch, Breakpoints),
+// as a fraction of the dock's height: 24%, but at least 'minLines' text lines, and never more than
+// 45% so the image views above stay usable. 24% alone left a 1470x956 laptop screen about four
+// lines of assembly and pseudocode after Reset Layout.
+inline float BottomDockFraction(float dockHeight, float lineHeight, float minLines = 18.0f)
+{
+    const float kBase = 0.24f, kMax = 0.45f;
+    if (dockHeight <= 0.0f) return kBase;
+    const float wanted = minLines * lineHeight / dockHeight;
+    return wanted < kBase ? kBase : (wanted > kMax ? kMax : wanted);
+}
+
 // The draggable separator itself, submitted between the two sections. 'height' is the top
 // section's height and follows the pointer every frame of a drag; the return is the
 // *commit* — true once, when a drag that moved something is released. Persisting on that

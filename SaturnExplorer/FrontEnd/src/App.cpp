@@ -542,6 +542,7 @@ void App::ResetSessionDebugState()
 
 void App::CloseData(bool cancelAutoConnect)
 {
+    ++mSourceSerial;
     ResetCompareSession();   // whatever is loaded next is a different run: nothing marked carries over
     if (mbLiveSource && mContext)
     {
@@ -1260,6 +1261,7 @@ void App::StartLiveOpen(const char* endpoint, bool reportFailure)
     auto job = std::make_shared<LiveOpenJob>();
     job->endpoint = endpoint ? endpoint : "";
     job->reportFailure = reportFailure;
+    job->sourceSerial = mSourceSerial;
     try
     {
         // Detached: the attempt may be inside a name lookup that cannot be cancelled, and the
@@ -1294,22 +1296,26 @@ void App::PollLiveOpen()
     se_data_source source = {};
     if (!job->Take(result, source)) { return; }
     bool attached = false;
+    bool declined = false;
     if (result == SE_OK)
     {
-        // Something else may have claimed the source while we were connecting (the user opened
-        // a file): don't displace it, and close the unused connection.
-        if (!mbHasData && !mContext)
+        // A user's Connect replaces what is open; a file opened while connecting, or anything
+        // open under an auto-connect, is kept and the unused connection closed.
+        if (LiveOpenMayAttach(mbHasData || mContext != nullptr, job->reportFailure, job->sourceSerial,
+                              mSourceSerial))
         {
             attached = AttachLiveSource(source, job->endpoint.empty() ? nullptr : job->endpoint.c_str());
         }
-        else if (source.close)
+        else
         {
-            source.close(source.user);
+            declined = true;
+            if (source.close) source.close(source.user);
         }
     }
     if (!attached && job->reportFailure)
     {
-        mOperationStatus = "No compatible live emulator endpoint was found.";
+        mOperationStatus = declined ? "Not connected: another source was opened while connecting."
+                                    : "No compatible live emulator endpoint was found.";
         mOperationError = true;
         mLog.Error(mOperationStatus);
     }
@@ -1971,7 +1977,10 @@ void App::BuildDefaultLayout(unsigned int dockspaceId)
 
     // Carve a full-width debugger strip off the bottom first, then split the top.
     ImGuiID top = dockspaceId;
-    const ImGuiID bottom = ImGui::DockBuilderSplitNode(top, ImGuiDir_Down, 0.24f, nullptr, &top);
+    const ImGuiID bottom = ImGui::DockBuilderSplitNode(
+        top, ImGuiDir_Down,
+        BottomDockFraction(ImGui::GetMainViewport()->WorkSize.y, ImGui::GetTextLineHeightWithSpacing()),
+        nullptr, &top);
 
     ImGuiID center = top;
     const ImGuiID left  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.22f, nullptr, &center);
@@ -4818,8 +4827,12 @@ void App::DrawRenameFunctionModal()
     {
         ImGui::Text("Function at %08X", mRenameAddr);
         ImGui::SetNextItemWidth(280.0f);
+        // Focus the name on open, with the old name selected, so a rename is type + Enter. A modal
+        // takes focus itself but not for an item in it; without this the first keystrokes go nowhere.
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool enter = ImGui::InputText("##rn", mRenameBuf, sizeof(mRenameBuf),
-                                            ImGuiInputTextFlags_EnterReturnsTrue);
+                                            ImGuiInputTextFlags_EnterReturnsTrue |
+                                                ImGuiInputTextFlags_AutoSelectAll);
         if (ImGui::Button("OK", ImVec2(90, 0)) || enter)
         {
             mFunctionNames.Rename(mRenameAddr, mRenameBuf);
@@ -9331,6 +9344,15 @@ bool App::LaunchSession(IPlatform& platform, const std::string& romOverride)
         // Never replace a loaded dump or an existing live connection automatically.
         // A Mednafen launch arms the background connection poll.
         EnableLiveAutoConnect(nullptr);   // no-op off SE_ENABLE_LIVE
+    }
+    else if (ShouldAutoConnectAfterLaunch(sel->key, SourceType::None) && (mbHasData || mContext))
+    {
+        // Not connecting is deliberate (a launch never displaces what is open), but say so: it
+        // otherwise looks like the connection failed.
+        mOperationStatus = "Launched " + sel->label + ". A source is open, so it was not replaced: "
+                           "use Session > Source > Connect to Emulator (live) to switch.";
+        mOperationError = false;
+        mLog.Info(mOperationStatus);
     }
     else
     {

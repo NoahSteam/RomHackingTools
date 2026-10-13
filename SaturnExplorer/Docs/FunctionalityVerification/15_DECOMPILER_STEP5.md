@@ -110,3 +110,11 @@ Observations outside Step 5, left as follow-ups:
 - the MSBuild build's About shows "Build: unknown", because no commit is stamped;
 - with a savestate open, the live Connect reported "No compatible live emulator endpoint was found" until Close Source;
 - the Rename dialog's text box does not take focus on open.
+
+## Follow-ups fixed after the gate
+
+The four follow-ups from the Windows and macOS runs, fixed after the gate was met:
+- **Bottom dock.** Reset Layout gives the debugger strip at least 18 lines, capped at 45% of the window (`BottomDockFraction`, `TestBottomDockFraction`). A tall screen keeps 24%.
+- **"Build: unknown" (MSBuild).** `FrontEnd.vcxproj` writes `BuildInfo.h` from git before compiling, as the CMake build does. CI greps the MSBuild exe for the commit.
+- **Connect with a savestate open.** A user's Connect now replaces the open source. It was refused and reported as "No compatible live emulator endpoint". Auto-connect still never replaces a source. A source opened during the attempt is kept, with its own message (`LiveOpenMayAttach`, `TestLiveOpenMayAttach`, mutation-checked). Launch with a source open now says why it did not connect.
+- **Rename dialog.** The name box takes focus when the dialog opens, with the old name selected.
