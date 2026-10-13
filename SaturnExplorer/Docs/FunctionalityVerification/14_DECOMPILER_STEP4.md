@@ -112,3 +112,4 @@ has a regression test that fails when the fix is removed (mutation run per row).
 | 5 (minor) | Notes and hints did not extend the horizontal scroll range. | The code view's content width includes each line's trailing hint and notes, recomputed every frame. | `TestUserCommentsOnLines`: a 400-character note raises the horizontal scroll maximum from 0 to 2426 px. Mutation: stays 0. |
 
 Tests: full local suite 90/90, and `Sh2DecompilerTests` and `DecompilerPanelTests` clean under ASan.
+CI: all seven A7 jobs green at `63da92e` (run 38401021266).
