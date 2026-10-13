@@ -129,3 +129,9 @@ What passed:
 What was fixed:
 - **Bottom dock.** It showed 12 output lines, not the intended number, because the first version counted the panel's tab bar, toolbar and status line as output. `BottomDockFraction` now asks for 16 output lines plus 5 lines of panel chrome, capped at half the window, and its test uses the Mac's measured line height.
 - **Escape on the rename dialog.** It did not cancel, because the active text field consumes Escape. The dialog body is now `NameDialogBody` in `PanelWidgets.h`, which also treats Escape as Cancel. `TestNameDialogEnterAppliesTypedName` and `TestNameDialogEscapeCancels` cover it. Removing the Escape check, or the focus-on-open, fails them. A redundant AutoSelectAll flag, which no test could tell apart, was dropped: focus set from code already selects the text.
+
+### Follow-up round 3 (macOS at `16a70c0`)
+
+The rename dialog passed: Escape closes it without renaming, and Enter applies. The bottom strip showed
+14 full output lines of the 16 targeted. The panel's chrome measured about 7 lines rather than 5, so
+`BottomDockFraction` now allows 7, which gives about 0.46 of the window on this screen.

@@ -477,11 +477,11 @@ void TestStoredSplitIsClampedIntoRange()
 void TestBottomDockFraction()
 {
     // A tall screen keeps the 24% default; a short one gets 16 output lines *plus* the panel's
-    // tab bar, toolbar and status (5 lines); never past half.
+    // tab bar, toolbar and status (7 lines, measured on the Mac); never past half.
     CHECK(BottomDockFraction(2400.0f, 17.0f) == 0.24f);
-    // The Mac that measured 12 output lines: 1470x956 logical, ~920 of dock, ~20.8 px lines.
-    const float laptop = BottomDockFraction(920.0f, 20.8f);
-    CHECK(laptop * 920.0f - 5.0f * 20.8f >= 16.0f * 20.8f - 0.5f);
+    // The Mac that measured 12, then 14, output lines: 1470x956 logical, ~920 of dock, ~18.6 px lines.
+    const float laptop = BottomDockFraction(920.0f, 18.6f);
+    CHECK(laptop * 920.0f - 7.0f * 18.6f >= 16.0f * 18.6f - 0.5f);
     CHECK(BottomDockFraction(400.0f, 17.0f) == 0.50f);
     CHECK(BottomDockFraction(0.0f, 17.0f) == 0.24f);
 }
