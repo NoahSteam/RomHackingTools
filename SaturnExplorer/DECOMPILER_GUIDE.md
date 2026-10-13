@@ -16,7 +16,7 @@ Design and rationale: `Docs/Decompiler/DESIGN.md`. Build plan and what was built
 | The panel | Turn on **Follow PC**: it shows the function the chosen CPU is in. Or type an entry address (hex, any mirror, e.g. `06004000`) and press Enter. |
 | SH-2 Assembly | Right-click a line → **Decompile Here**. |
 | Call Stack | Right-click a frame → **Decompile**. |
-| Registers | Right-click **PC** → **Decompile**. |
+| Registers | In the **SH-2** tab, right-click the **PC value** (not its label) → **Decompile**. |
 
 The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Follow PC reads. With Follow PC on, switching follows the other CPU. With it off, the output stays, because both CPUs share RAM.
 
@@ -26,7 +26,7 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
 - **Click a line** to jump SH-2 Assembly to the first instruction it came from.
 - **Right-click a line** for these:
   - **Show in SH-2 Assembly**.
-  - **Rename Function...** and **Rename Callee 0x...**: names are shared with Call Stack and every other function-name display. SH-2 Assembly has no label column, so a name does not show on its rows.
+  - **Rename Function...** and **Rename Callee 0x...**: names go into the same store Call Stack uses. Call Stack shows a name only on frames whose function it has identified, not on "Func unknown" frames. SH-2 Assembly has no label column, so a name does not show on its rows.
   - **Set Function Start Here**: use it when the finder guessed the entry wrong.
   - **View in Memory**.
   - **Copy Line** and **Copy Function**.

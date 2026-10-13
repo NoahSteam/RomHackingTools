@@ -1,6 +1,6 @@
 # SH-2 decompiler — Step 5 (Release) verification
 
-**Gate status: open.** Waiting for CI and for the Windows and macOS columns.
+**Gate status: open.** Waiting for a green CI run of the fixed macOS bundle job. The Windows and macOS columns are recorded below.
 
 This record covers PLAN.md Step 5:
 - the About dialog's "Third-party" section;
@@ -89,3 +89,21 @@ Observation, not a gate: after Reset Layout, the bottom dock is about 175 px tal
 screen. That is about four lines, until the splitter is dragged. The split is the app-wide default
 layout (`App::BuildDefaultLayout`, 24% bottom), which is not decompiler code, so it is left as a
 follow-up.
+
+## Windows run (at `9639d2a`, `build-release-msbuild.bat`)
+
+The default build printed "Toolset: v143" and built. `SE_TOOLSET=v142` printed "Toolset: v142" and then
+failed with MSB8020, because this PC has no VS 2019 build tools. CI's v142 job is the proof for VS 2019,
+and it was green on `9639d2a`.
+
+| Row | Result |
+|---|---|
+| 1 | Passed. Six rows, the NSA sentence, and "Licence texts: the "licenses" folder beside the executable"; the dialog fits and Close works. |
+| 2 | Passed. `x64\Release\licenses` holds exactly the seven texts. A clean rebuild recreated them byte-identical to the sources. |
+| 3 | Passed. Registers' Decompile is on the PC value cell in the SH-2 tab, not on the "PC" label; the guide now says so. |
+| 4 | Passed except steps 4 and 8, both of which were wording. Steps 1–3, 5 and 7 passed, as did 9 (`bios_0x00000600()`, and back to `(*(code *)0x600)()` on Stop Using BIOS Image) and 10. Step 4: the rename and the recovered signature work. The name was absent from SH-2 Assembly, which has no label column, and from a Call Stack frame showing "Func unknown". Call Stack reads the same names, but only for frames whose function it has identified. DEMO.md and the guide now say both. Step 8: the same Follow PC wording as macOS, now corrected. |
+
+Observations outside Step 5, left as follow-ups:
+- the MSBuild build's About shows "Build: unknown", because no commit is stamped;
+- with a savestate open, the live Connect reported "No compatible live emulator endpoint was found" until Close Source;
+- the Rename dialog's text box does not take focus on open.
