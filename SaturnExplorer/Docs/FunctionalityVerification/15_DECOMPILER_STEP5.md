@@ -237,3 +237,14 @@ The review's other answers:
   based on tests on a real Saturn.
 - **MAC.W setting MACH bit 0:** matches Mednafen and the manual's prose. The manual's pseudocode
   marks it SH-1 only, so this is Mednafen parity, not independent hardware confirmation.
+
+The re-review at `c426c2e` accepted those four fixes and found two more execution-address checks
+missing in the panel. Both are now fixed:
+
+1. **Auto-refresh did not follow the PC into a mirror.** The PC is still checked against the
+   canonical map, but whether it has left the shown function is now judged against the address the
+   function ran at. Moving from `06004012` to `26004012` therefore asks for the mirror.
+   (`TestAutoRefreshFollowsMirror`)
+2. **A halt hint could attach to output from another mirror.** A hint is now shown only when the
+   halted PC is in the same mirror as the output. (`TestHaltHintMatchesMirror`: output pinned at
+   `06004000` gets no hint for a halt at `2600400E`, and the `26004000` output does get one.)

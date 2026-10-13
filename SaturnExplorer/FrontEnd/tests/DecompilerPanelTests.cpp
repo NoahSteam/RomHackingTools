@@ -1122,6 +1122,63 @@ void TestFunctionStartKeepsMirror()
     CHECK(f.panel.WantedEntry() == (at | 0x20000000u));
 }
 
+// Review of c426c2e, finding 1: with Follow PC and auto-refresh, the PC moving into another mirror
+// of the shown function has left it -- the mirror is another question.
+void TestAutoRefreshFollowsMirror()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    CHECK(f.WaitShown("+ 1"));
+    CHECK(f.Shown().requestedEntry == dts::kFixture1Caller);
+    f.panel.SetAutoRefresh(true);
+    const uint64_t c = f.panel.Captures();
+    f.regs[0].pc = dts::kFixture1AddOne | 0x20000000u;   // the same instruction, cache-through
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == c + 1);
+    while (f.panel.Pending()) tick(1);
+    CHECK(f.panel.WantedEntry() == (dts::kFixture1Caller | 0x20000000u));
+    CHECK(f.Shown().requestedEntry == (dts::kFixture1Caller | 0x20000000u));
+    tick(90);                                              // and stays put there
+    CHECK(f.panel.Captures() == c + 1);
+}
+
+// Review of c426c2e, finding 2: a halt hint belongs to the mirror the output was decompiled at.
+// Output pinned at the canonical entry gets no hint for a halt at the cache-through mirror.
+void TestHaltHintMatchesMirror()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LivePaused;
+    f.PutWord(dts::kFixture1Jsr - 2, 0x6042);   // mov.l @r4,r0: the jsr target is computed
+    ++f.backend.serial;
+    f.regs[0].pc = dts::kFixture1Jsr;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    CHECK(!f.panel.HintText().empty());
+    f.TypeInto("entry", "06004000");             // pinned canonical
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && !f.panel.ShownStale(); }));
+    f.regs[0].pc = dts::kFixture1Jsr | 0x20000000u;
+    ++f.frame;
+    f.Idle();
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && !f.panel.ShownStale(); }));
+    f.Idle(2);
+    CHECK(f.Shown().requestedEntry == dts::kFixture1Caller);
+    CHECK(f.panel.HintText().empty());
+    f.TypeInto("entry", "26004000");             // the output for that mirror: the hint is its own
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == 0x26004000u; }));
+    f.Idle(2);
+    CHECK(!f.panel.HintText().empty());
+}
+
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
 // with other bytes is a new key, a function-start correction asks for the new entry.
 void TestRenameBiosAndBounds()
@@ -1719,6 +1776,8 @@ int main(int argc, char** argv)
         RUN(TestMirrorEntryIsKept());
         RUN(TestPrototypesPerMirror());
         RUN(TestFunctionStartKeepsMirror());
+        RUN(TestAutoRefreshFollowsMirror());
+        RUN(TestHaltHintMatchesMirror());
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());

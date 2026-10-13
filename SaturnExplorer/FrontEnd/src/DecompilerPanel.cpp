@@ -503,11 +503,14 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                 if (mAutoRefresh && mTarget.kind == TargetKind::FollowPc && !mPending.active &&
                     mTick - mCaptureTick >= kAutoRefreshFrames)
                 {
+                    // Validated canonically, but tested against where the shown function ran: the PC
+                    // moving into another mirror of it has left it (its mova values differ).
                     const uint32_t pc = mViewPc[mCpu];
                     uint32_t canonical = 0;
                     const bool known = mViewHavePc[mCpu] && CanonicalAddress(pc, canonical);
                     const uint32_t span = mShownValid ? std::max<uint32_t>(mShown.bodyBytes, 2u) : 0u;
-                    autoDue = known && (!mShownValid || canonical < mShown.entry || canonical - mShown.entry >= span);
+                    autoDue = known && (!mShownValid || pc < mShown.requestedEntry ||
+                                        pc - mShown.requestedEntry >= span);
                 }
                 // Following a PC the held snapshot has no registers for -- the first look after
                 // connecting can land before the emulator's first register frame -- is no answer at
@@ -894,6 +897,9 @@ RegisterHint DecompilerPanel::HaltHint() const
     // computed from the raw PC (braf/bsrf add to it), so only the match uses the canonical one.
     uint32_t insn = 0;
     if (!CanonicalAddress(h.insn, insn)) return RegisterHint();
+    // ...but only when the halt is in the mirror the output was decompiled at: the same
+    // instruction run through another mirror computes other values (a bsrf's target).
+    if (h.insn - insn != mShown.requestedEntry - mShown.entry) return RegisterHint();
     h.insn = insn;
     uint32_t target = 0;
     const bool canonical = CanonicalAddress(h.target, target);
