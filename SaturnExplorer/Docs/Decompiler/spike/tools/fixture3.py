@@ -5,7 +5,8 @@
 # ((slot + 4) & ~3) + disp. Ghidra's SLEIGH spec computes the latter. The bra and bf/s cases put
 # DIFFERENT literals at the two candidate addresses, so a decompiler that folds either one is
 # caught; the others cover every other delayed-branch kind (rts, bsr, jmp, braf) and every
-# PC-relative form (mov.w, mov.l, mova) in a slot, which Step 2 must flag as unsupported.
+# PC-relative form (mov.w, mov.l, mova) in a slot, which Step 2 must flag as unsupported. Step 4
+# (patch 0005) fixes bra and bsr in the spec; the cases added for it are below.
 #
 # Encodings from the Hitachi SH-1/SH-2 Programming Manual opcode tables. This script checks each
 # one with Capstone's SH module (which shares no code with Ghidra's SLEIGH): the whole decoded
@@ -82,6 +83,58 @@ cases.append(("braf + mov.l", G, [
     (G + 0x06, 0x0009, "nop", "nop"),
 ], G + 0x02, G + 0x08, {G + 0x08: (0x55555555, 4)}))
 
+# Step 4 (the 0005 SLEIGH patch): bra and bsr give the slot its real PC. These cases check that
+# a bsr slot gets it, and that it reaches nothing else: the instruction after a bsr + slot pair
+# (reached when the call returns) and the instruction at a bra's target each load from their own
+# PC. A register-target jsr keeps the Step 2 flag.
+H = 0x06006600
+cases.append(("bsr + mov.l", H, [
+    (H + 0x00, 0xB004, "bsr", "bsr 0x0600660C"),
+    (H + 0x02, 0xD403, "mov.l", "mov.l @(12,pc),r4    ; slot"),
+    (H + 0x04, 0xD003, "mov.l", "mov.l @(12,pc),r0    ; after the pair"),
+    (H + 0x06, 0x000B, "rts", "rts"),
+    (H + 0x08, 0x0009, "nop", "nop"),
+    (H + 0x0A, 0x0009, "nop", "nop"),
+    (H + 0x0C, 0x000B, "rts", "rts                  ; <- target"),
+    (H + 0x0E, 0x6043, "mov", "mov r4,r0            ; slot"),
+], H + 0x02, H + 0x10, {H + 0x10: (0x33333333, 4), H + 0x14: (0x35353535, 4), H + 0x18: (0x34343434, 4)}))
+
+I = 0x06006700
+cases.append(("bra + target load", I, [
+    (I + 0x00, 0xA002, "bra", "bra 0x06006708"),
+    (I + 0x02, 0xD103, "mov.l", "mov.l @(12,pc),r1    ; slot"),
+    (I + 0x04, 0x0009, "nop", "nop"),
+    (I + 0x06, 0x0009, "nop", "nop"),
+    (I + 0x08, 0xD003, "mov.l", "mov.l @(12,pc),r0    ; <- target"),
+    (I + 0x0A, 0x000B, "rts", "rts"),
+    (I + 0x0C, 0x301C, "add", "add r1,r0            ; slot"),
+    (I + 0x0E, 0x0009, "nop", "nop"),
+], I + 0x02, I + 0x10, {I + 0x10: (0x33333333, 4), I + 0x14: (0x01000000, 4), I + 0x18: (0x00000234, 4)}))
+
+J = 0x06006800
+cases.append(("jsr + mov.l", J, [
+    (J + 0x00, 0x410B, "jsr", "jsr @r1"),
+    (J + 0x02, 0xD101, "mov.l", "mov.l @(4,pc),r1     ; slot"),
+    (J + 0x04, 0x000B, "rts", "rts"),
+    (J + 0x06, 0x0009, "nop", "nop"),
+], J + 0x02, J + 0x08, {J + 0x08: (0x66666666, 4)}))
+
+K = 0x06006900
+cases.append(("bra slot also jumped to", K, [
+    (K + 0x00, 0x4415, "cmp/pl", "cmp/pl r4"),
+    (K + 0x02, 0x8900, "bt", "bt 0x06006906"),
+    (K + 0x04, 0xA002, "bra", "bra 0x0600690C"),
+    (K + 0x06, 0xD103, "mov.l", "mov.l @(12,pc),r1    ; slot, and where the bt lands"),
+    (K + 0x08, 0x0009, "nop", "nop"),
+    (K + 0x0A, 0x0009, "nop", "nop"),
+    (K + 0x0C, 0x000B, "rts", "rts                  ; <- target"),
+    (K + 0x0E, 0x6013, "mov", "mov r1,r0            ; slot"),
+], K + 0x06, K + 0x14, {K + 0x14: (DIRECT, 4), K + 0x18: (SLOT, 4)}))
+
+# Where the hardware reads each statically-targeted slot's literal (branch target + 2 as PC).
+HARDWARE = {"bra": B + 0x14, "bf/s": C + 0x14, "bsr + mov.l": H + 0x18, "bra + target load": I + 0x14,
+            "bra slot also jumped to": K + 0x18}
+
 md = Cs(CS_ARCH_SH, CS_MODE_SH2 | CS_MODE_BIG_ENDIAN)
 
 def normalise(text):
@@ -117,11 +170,11 @@ for name, base, words, slot, literal, lits in cases:
         failures += 0 if ok else 1
     for a, (v, size) in sorted(lits.items()):
         print(f"  {a:08X}  {v:0{size * 2}X}  .{'long' if size == 4 else 'word'}")
-    if name in ("bra", "bf/s"):
+    if name in HARDWARE:
         target = [a for a, _, _, t in words if "target" in t][0]
         slotaddr = ((target + 2) & ~3) + (literal - ((slot + 4) & ~3))
-        if slotaddr != literal + 4:
-            print(f"  hardware's slot-relative address {slotaddr:08X} is not {literal + 4:08X}  <-- MISMATCH")
+        if slotaddr != HARDWARE[name]:
+            print(f"  hardware's slot-relative address {slotaddr:08X} is not {HARDWARE[name]:08X}  <-- MISMATCH")
             failures += 1
 print("every word decodes to its intended instruction, operands and targets included" if failures == 0
       else f"{failures} MISMATCH(ES)")

@@ -5,7 +5,8 @@
 //   fixture 1   a caller calling through a literal pool, the argument moved in the delay slot:
 //               the callee is found and named, the literal folded, tokens carry addresses
 //   fixture 1b  the same call into BIOS, which is never captured: an opaque call, not truncated
-//   fixture 3   a PC-relative load in a delay slot (A3): unsupported, neither literal folded
+//   fixture 3   a PC-relative load in a delay slot (A3): bra/bsr fold the hardware's literal
+//               (patch 0005), every other delayed branch is unsupported with neither folded
 //   A1          an edited instruction word, an edited literal, a replaced BIOS image: new key,
 //               new output
 //
@@ -155,18 +156,69 @@ void TestNoCodeAndMirror()
     }
 }
 
-// A3: a PC-relative load in a delay slot. The spec computes the slot's own PC-relative address,
-// the hardware reads relative to the branch target; the fixture holds different literals at
-// the two. Step 2 must flag the function and fold neither.
+// A3: a PC-relative load in a delay slot. The hardware reads relative to the branch target, which
+// the unpatched spec does not; the fixture holds different literals at the two candidate addresses.
+// Patch 0005 fixes the spec for bra and bsr, so those fold the hardware's literal; every other
+// delayed branch is flagged with neither literal folded.
 void TestDelaySlotPcRelative()
 {
     Sh2Decompiler d(gConfig);
     std::vector<uint8_t> hw;
     dts::PlaceFixture3(hw);
     auto snap = MakeSnapshot(hw);
+    auto hasValue = [](const std::string& text, const char* hex, const char* dec) {
+        return Has(text, hex) || Has(text, dec);
+    };
+
+    // bra: the slot's load reads the hardware's literal.
+    {
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture3Bra));
+        Print("bra", r);
+        const std::string text = r.Text();
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.unsupported);
+        CHECK(hasValue(text, "0x22222222", "572662306"));
+        CHECK(!hasValue(text, "0x11111111", "286331153"));
+        for (const std::string& w : r.warnings) CHECK(!Has(w, "delay slot"));
+    }
+    // bsr: the slot's load (the call's argument) reads the hardware's literal, and the load after
+    // the bsr + slot pair, reached on return, reads from its own PC: the slot's context does not
+    // flow past the slot.
+    {
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture3BsrLoad));
+        Print("bsr + mov.l", r);
+        const std::string text = r.Text();
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.unsupported);
+        CHECK(hasValue(text, "0x34343434", "875836468"));
+        CHECK(hasValue(text, "0x35353535", "892679477"));
+        CHECK(!hasValue(text, "0x33333333", "858993459"));
+    }
+    // bra again, with a load at the target: 0x01000000 from the slot plus 0x234 from the target's
+    // own PC. Context reaching the target would read 0x01000000 twice (0x2000000).
+    {
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture3BraTarget));
+        Print("bra + target load", r);
+        const std::string text = r.Text();
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.unsupported);
+        CHECK(hasValue(text, "0x1000234", "16777780"));
+        CHECK(!hasValue(text, "0x2000000", "33554432"));
+        CHECK(!hasValue(text, "0x33333333", "858993459"));
+    }
+    // bsr with mova in the slot: no longer flagged.
+    {
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture3BsrMova));
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.unsupported);
+    }
+
+    // bf/s: whether the slot sees the target depends on the branch being taken. Flagged, neither
+    // literal folded. And a bra slot that a bt also jumps straight to: the spec gives that address
+    // the slot's PC on both paths, so it is flagged too.
     struct Case { const char* name; uint32_t entry, slot; } cases[] = {
-        { "bra", dts::kFixture3Bra, dts::kFixture3BraSlot },
         { "bf/s", dts::kFixture3Bfs, dts::kFixture3BfsSlot },
+        { "bra slot jumped to", dts::kFixture3SlotJumped, dts::kFixture3SlotJumpedSlot },
     };
     for (const Case& c : cases)
     {
@@ -176,15 +228,15 @@ void TestDelaySlotPcRelative()
         CHECK(r.status == DecompileStatus::Ok);
         CHECK(r.unsupported);
         CHECK(r.unsupportedAt == c.slot);
-        CHECK(!Has(text, "0x11111111") && !Has(text, "286331153"));   // the spec's literal
-        CHECK(!Has(text, "0x22222222") && !Has(text, "572662306"));   // the hardware's literal
+        CHECK(!hasValue(text, "0x11111111", "286331153"));   // the slot's own-PC literal
+        CHECK(!hasValue(text, "0x22222222", "572662306"));   // the slot-relative literal
         CHECK(r.literalPools.empty());
         bool warned = false;
         for (const std::string& w : r.warnings) warned |= Has(w, "delay slot");
         CHECK(warned);
     }
-    // Every other delayed-branch kind, and mov.w and mova in the slot: flagged at the slot, and
-    // no literal word marked read-only.
+    // Every other delayed-branch kind (rts, jmp, braf, jsr), and mov.w in the slot: flagged at the
+    // slot, and no literal word marked read-only.
     for (const dts::Fixture3Case& c : dts::kFixture3Others)
     {
         const DecompileResult r = d.Decompile(snap, Request(c.entry));
@@ -194,7 +246,7 @@ void TestDelaySlotPcRelative()
         CHECK(r.unsupportedAt == c.slot);
         CHECK(r.literalPools.empty());
         CHECK(!Has(r.Text(), "0x1234") && !Has(r.Text(), "4660"));
-        CHECK(!Has(r.Text(), "0x44444444") && !Has(r.Text(), "0x55555555"));
+        CHECK(!Has(r.Text(), "0x44444444") && !Has(r.Text(), "0x55555555") && !Has(r.Text(), "0x66666666"));
     }
 }
 

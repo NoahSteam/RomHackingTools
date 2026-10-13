@@ -615,7 +615,8 @@ void TestEntriesAndNoRetryLoops()
     CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
 }
 
-// A3: the delay-slot construct is flagged, with its address, and still shown.
+// A3: a delay-slot construct the spec cannot get right (bf/s) is flagged, with its address, and
+// still shown.
 void TestDelaySlotFlagged()
 {
     Fixture f;
@@ -624,9 +625,9 @@ void TestDelaySlotFlagged()
     std::copy(image.begin(), image.end(), f.backend.hw.begin());
     ++f.backend.serial;
     f.Idle(3);
-    f.TypeInto("entry", "06006000");
+    f.TypeInto("entry", "06006100");
     CHECK(f.WaitShown());
-    CHECK(f.Shown().unsupported && f.Shown().unsupportedAt == dts::kFixture3BraSlot);
+    CHECK(f.Shown().unsupported && f.Shown().unsupportedAt == dts::kFixture3BfsSlot);
     CHECK(!f.Shown().lines.empty());
 }
 

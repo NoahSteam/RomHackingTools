@@ -32,9 +32,9 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0002-sleigh-reset-null-caches.patch` | `Sleigh::clearForDelete` nulls the cache pointers it deletes, so a `reset` interrupted by an allocation failure cannot make the translator's destructor delete them again at exit. |
 | `0003-translator-ownership-on-init-failure.patch` | `Architecture::restoreFromSpec` assigns the translator before `initialize()` instead of holding it in a `unique_ptr`, which deleted `SleighArchitecture`'s shared translator when `initialize()` failed. |
 | `0004-funcdata-frees-active-output.patch` | `Funcdata`'s destructor frees the return-recovery state (`ParamActive`) that an analysis abandoned mid-way -- a cancel -- still owns; it leaked one per such cancel. |
+| `0005-sleigh-delay-slot-pc.patch` | `bra` and `bsr` give their delay slot the PC it executes at (branch target + 2), so a PC-relative load or `mova` there reads the right literal (PLAN.md A3). Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 
-PLAN.md A3 adds another, the delay-slot SLEIGH fix, in Step 4. MSVC and Apple clang needed no
-patch beyond these.
+MSVC and Apple clang needed no patch beyond these.
 
 ## Builds
 

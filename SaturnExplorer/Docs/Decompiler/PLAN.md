@@ -11,7 +11,7 @@ Rules that hold throughout:
 - No change to `include/saturnexplorer/*.h`, `SE_ABI_VERSION`, Core, or the drivers.
 - Ghidra sources are vendored with small patches only, kept in
   `third_party/ghidra-decompiler/patches/` and recorded in `VENDOR.md`: the cancellation flag
-  (A4, 25 lines, demonstrated in `spike/cancel_spike.cpp`), the delay-slot SLEIGH fix (A3, Step 4),
+  (A4, 25 lines, demonstrated in `spike/cancel_spike.cpp`), the delay-slot SLEIGH fix (A3, Step 4: `0005-sleigh-delay-slot-pc.patch`),
   and -- added in Step 2's review -- `0002-sleigh-reset-null-caches.patch` and
   `0003-translator-ownership-on-init-failure.patch`, two and three lines, so that an allocation
   failure while the shared translator is reset or re-initialised neither leaves deleted cache
@@ -364,6 +364,10 @@ by `DecompilerPanelTests`:
 
 - A3 SLEIGH patch for `bra`/`bsr` slots; fixture 3 goldens flip from `unsupported` to correct
   for those two, the rest stay flagged; `VENDOR.md` documents the patch and `vendor.py` applies it.
+  *As built:* `0005-sleigh-delay-slot-pc.patch`. One addition to the A3 rule: a `bra`/`bsr` slot
+  that another branch in the function also jumps to stays flagged, because SLEIGH context is per
+  address and the direct path would get the slot's PC too. Fixture 3 gained a `bsr` + `mov.l`
+  case, a load after a `bsr` pair, a load at a `bra` target, a `jsr` case and that jumped-to slot.
 - Callee prototypes from cached callee decompiles.
 - Saturn hardware map as named globals (VDP1/VDP2/SCU/SMPC/SCSP register blocks).
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).

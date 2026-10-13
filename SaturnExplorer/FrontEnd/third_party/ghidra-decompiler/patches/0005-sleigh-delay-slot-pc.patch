@@ -1,0 +1,74 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.sinc b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+index 53c61a46..6b326fba 100644
+--- a/Ghidra/Processors/SuperH/data/languages/superh.sinc
++++ b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+@@ -1,4 +1,5 @@
+ # All assembly defintions taken from: http://www.shared-ptr.com/sh_insns.html
++# Modified for SaturnExplorer: bra/bsr give their delay slot the PC it executes at (patches/0005-sleigh-delay-slot-pc.patch).
+ 
+ define endian=big;
+ 
+@@ -12,6 +13,16 @@ define register offset=0 size=4
+ 
+ define register offset=0x100 size=4 [sr gbr vbr mach macl pr pc];
+ 
++# A PC-relative load or mova in the delay slot of a taken branch sees PC = branch target + 2,
++# not its own address + 4. bra and bsr encode their target, so they hand it to the slot through
++# this context: slot_tgt is (target + 2) >> 1 -- the slot's PC, which is even -- and
++# slot_pc_valid says it is set. Both are noflow, so they hold for the slot's address only.
++define register offset=0x400 size=4 [contextreg];
++define context contextreg
++    slot_pc_valid = (0,0) noflow
++    slot_tgt      = (1,31) noflow
++;
++
+ 
+ @if SH_VERSION == "2A"
+ define register offset=0x180 size=4 [tbr];
+@@ -188,14 +199,22 @@ imm8: "#"^simm_00_07 is simm_00_07 { export *[const]:4 simm_00_07; }
+     rn_08_11 = imm8;
+ }
+ 
+-disppc4: @(disp,pc) is disp_00_07 & pc
++disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0
+     [ disp = (disp_00_07 << 2) + ((inst_start + 4) & 0xfffffffc); ]
+     { local tmp:4 = disp; export tmp; }
+ 
+-disppc2: @(disp,pc) is disp_00_07 & pc
++disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt
++    [ disp = (disp_00_07 << 2) + ((slot_tgt << 1) & 0xfffffffc); ]
++    { local tmp:4 = disp; export tmp; }
++
++disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0
+     [ disp = (disp_00_07 << 1) + (inst_start + 4); ]
+     { local tmp:4 = disp; export tmp; }
+ 
++disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt
++    [ disp = (disp_00_07 << 1) + (slot_tgt << 1); ]
++    { local tmp:4 = disp; export tmp; }
++
+ :mova   disppc4,r0  is r0 & opcode_08_15=0b11000111 & disppc4
+ {
+     r0 = disppc4;
+@@ -1614,7 +1633,9 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ @endif
+ 
+-:bra    target00_11  is opcode_12_15=0b1010 & target00_11  
++:bra    target00_11  is opcode_12_15=0b1010 & target00_11 & sdisp_00_11
++    [ slot_tgt = sdisp_00_11 + ((inst_start + 4) >> 1) + 1; slot_pc_valid = 1;
++      globalset(inst_next, slot_tgt); globalset(inst_next, slot_pc_valid); ]
+ {
+     delayslot(1);
+     goto target00_11;
+@@ -1629,7 +1650,9 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ @endif
+ 
+-:bsr    target00_11  is opcode_12_15=0b1011 & target00_11  
++:bsr    target00_11  is opcode_12_15=0b1011 & target00_11 & sdisp_00_11
++    [ slot_tgt = sdisp_00_11 + ((inst_start + 4) >> 1) + 1; slot_pc_valid = 1;
++      globalset(inst_next, slot_tgt); globalset(inst_next, slot_pc_valid); ]
+ {
+     local _pr:4 = inst_start + 4;
+ 

@@ -209,14 +209,22 @@ const uint32_t kFixture3BfsSlot = 0x06006104u;
 const uint32_t kFixture3Direct = 0x11111111u;   // at the address the spec computes
 const uint32_t kFixture3Slot = 0x22222222u;     // at the address the hardware reads
 
-// The other delayed-branch kinds, each with a PC-relative slot instruction; all unsupported.
+// The other delayed-branch kinds, each with a PC-relative slot instruction. Unsupported unless
+// the branch is bra or bsr, which patch 0005 fixes in the spec.
 struct Fixture3Case { const char* name; uint32_t entry, slot; };
 const Fixture3Case kFixture3Others[] = {
     { "rts + mov.w", 0x06006200u, 0x06006202u },
-    { "bsr + mova", 0x06006300u, 0x06006302u },
     { "jmp + mov.l", 0x06006400u, 0x06006402u },
     { "braf + mov.l", 0x06006500u, 0x06006502u },
+    { "jsr + mov.l", 0x06006800u, 0x06006802u },
 };
+const uint32_t kFixture3BsrMova = 0x06006300u;
+// Step 4 cases: a bsr slot load and the load after the pair; a bra slot load and the load at the
+// bra's target; and a bra slot that a bt also jumps straight to (still unsupported).
+const uint32_t kFixture3BsrLoad = 0x06006600u;
+const uint32_t kFixture3BraTarget = 0x06006700u;
+const uint32_t kFixture3SlotJumped = 0x06006900u;
+const uint32_t kFixture3SlotJumpedSlot = 0x06006906u;
 
 inline void PlaceFixture3(std::vector<uint8_t>& hw)
 {
@@ -244,6 +252,27 @@ inline void PlaceFixture3(std::vector<uint8_t>& hw)
     // braf r1 ; mov.l @(4,pc),r1 (slot) ; nop ; nop ; .long 0x55555555
     put(0x06006500u, { 0x0123, 0xD101, 0x0009, 0x0009 });
     Put32(hw, 0x06006508u - 0x06000000u, 0x55555555u);
+    // bsr 0x0600660C ; mov.l @(12,pc),r4 (slot: spec without 0005 0x06006610, hardware
+    // 0x06006618) ; mov.l @(12,pc),r0 (after the pair: 0x06006614) ; rts ; nop ; nop ;
+    // rts (<- target) ; mov r4,r0
+    put(kFixture3BsrLoad, { 0xB004, 0xD403, 0xD003, 0x000B, 0x0009, 0x0009, 0x000B, 0x6043 });
+    Put32(hw, 0x06006610u - 0x06000000u, 0x33333333u);
+    Put32(hw, 0x06006614u - 0x06000000u, 0x35353535u);
+    Put32(hw, 0x06006618u - 0x06000000u, 0x34343434u);
+    // bra 0x06006708 ; mov.l @(12,pc),r1 (slot: spec without 0005 0x06006710, hardware
+    // 0x06006714) ; nop ; nop ; mov.l @(12,pc),r0 (<- target: 0x06006718) ; rts ; add r1,r0 ; nop
+    put(kFixture3BraTarget, { 0xA002, 0xD103, 0x0009, 0x0009, 0xD003, 0x000B, 0x301C, 0x0009 });
+    Put32(hw, 0x06006710u - 0x06000000u, 0x33333333u);
+    Put32(hw, 0x06006714u - 0x06000000u, 0x01000000u);
+    Put32(hw, 0x06006718u - 0x06000000u, 0x00000234u);
+    // jsr @r1 ; mov.l @(4,pc),r1 (slot) ; rts ; nop ; .long 0x66666666
+    put(0x06006800u, { 0x410B, 0xD101, 0x000B, 0x0009 });
+    Put32(hw, 0x06006808u - 0x06000000u, 0x66666666u);
+    // cmp/pl r4 ; bt 0x06006906 ; bra 0x0600690C ; mov.l @(12,pc),r1 (slot and the bt's target:
+    // 0x06006914 reached directly, 0x06006918 in the slot) ; nop ; nop ; rts (<- target) ; mov r1,r0
+    put(kFixture3SlotJumped, { 0x4415, 0x8900, 0xA002, 0xD103, 0x0009, 0x0009, 0x000B, 0x6013 });
+    Put32(hw, 0x06006914u - 0x06000000u, kFixture3Direct);
+    Put32(hw, 0x06006918u - 0x06000000u, kFixture3Slot);
 }
 
 // ---- The cancellation spike's fixtures (Docs/Decompiler/spike/cancel_spike.cpp) ---------------

@@ -271,10 +271,10 @@ an entry correction replaces the request for that function.
   (`Sh2DecodeAfterBranch` models this), while the spec computes `inst_start + 4`. Policy
   (PLAN.md A3): Step 2 detects the construct from the function's instruction stream, refuses to
   fold that literal, marks the result `unsupported` with the address and shows a banner; Step 4
-  patches the spec so static-target branches (`bra`, `bsr`, constant `jsr`/`jmp`) publish their
-  target through a context register and the slot computes the right address, while conditional
-  and register-target slots stay flagged. A synthetic fixture with different literals at the two
-  candidate addresses pins both stages. Nothing in this area is shown as trustworthy on the
+  patches the spec so static-target branches (`bra`, `bsr`; patch 0005) publish their target
+  through a context register and the slot computes the right address, while conditional and
+  register-target slots stay flagged, as does a slot another branch also jumps to. A synthetic
+  fixture with different literals at the two candidate addresses pins both stages. Nothing in this area is shown as trustworthy on the
   strength of a matching disassembly listing alone.
 - **Indirect calls.** `jsr @rN` through a literal pool resolves to a direct, named call (spike).
   Computed targets (function-pointer tables, `braf`/`bsrf`) stay `(*pfn)(...)`; Ghidra's jump-table

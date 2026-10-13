@@ -110,11 +110,26 @@ RawScan ScanRawPcode(const ghidra::Funcdata& fd, const MemorySnapshot& snap)
     RawScan scan;
 
     // A3: every instruction the flow reached, decoded on our side. A delayed branch followed by
-    // a PC-relative load or mova means the spec's address for that load is wrong whenever the
-    // branch is taken; that literal is excluded from folding.
+    // a PC-relative load or mova reads relative to the branch target when the branch is taken.
+    // The spec (patch 0005) gets that right for bra and bsr, whose target is in the instruction.
+    // Every other delayed branch -- conditional, through a register, rts -- leaves the spec
+    // computing the slot's own address, which is wrong whenever the branch is taken; that
+    // literal is excluded from folding and the function flagged.
     std::set<uint32_t> insns;
     for (auto it = fd.beginOpMain(); it != fd.endOpMain(); ++it)
         insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
+    // The patch hands the slot its PC by address, so a slot that some branch in the function
+    // also jumps straight to would get the slot's PC on that path too. Such code is flagged
+    // rather than trusted. (A jump-table entry landing there is not seen here; that shape does
+    // not occur in compiled code.)
+    std::set<uint32_t> targets;
+    for (uint32_t a : insns)
+    {
+        uint16_t op = 0;
+        if (!snap.ReadU16(a, op)) continue;
+        const DisassembledInstruction ins = Sh2Decode(a, op);
+        if (ins.HasBranchTarget) targets.insert(ins.BranchTarget);
+    }
     std::vector<std::pair<uint32_t, uint32_t>> excluded;   // [lo, hi) literal addresses not to fold
     for (uint32_t a : insns)
     {
@@ -126,14 +141,19 @@ RawScan ScanRawPcode(const ghidra::Funcdata& fd, const MemorySnapshot& snap)
         if (!snap.ReadU16(a + 2, slotOp)) continue;
         const DisassembledInstruction slot = Sh2DecodeAfterBranch(a + 2, slotOp, branch);
         if (slot.PcRel == Sh2PcRel::None) continue;
+        const bool specFixed = branch.HasBranchTarget && !branch.IsConditional;   // bra, bsr
+        if (specFixed && targets.count(a + 2) == 0) continue;
         if (!scan.unsupported || a + 2 < scan.unsupportedAt)
         {
             scan.unsupported = true;
             scan.unsupportedAt = a + 2;
         }
-        // The address SLEIGH computes (the slot's own PC); the slot-relative one is never loaded.
+        // Neither candidate folds: the spec computes the slot-relative address after a bra or bsr
+        // and the slot's own otherwise, and either is wrong on one of the paths.
         const uint32_t size = slot.PcRel == Sh2PcRel::Word ? 2 : 4;
         excluded.emplace_back(slot.PcRelDirectAddress, slot.PcRelDirectAddress + size);
+        if (slot.PcRelHasSlotAddress)
+            excluded.emplace_back(slot.PcRelSlotAddress, slot.PcRelSlotAddress + size);
     }
     auto isExcluded = [&](uint32_t lo, uint32_t hi) {
         for (const auto& e : excluded)
