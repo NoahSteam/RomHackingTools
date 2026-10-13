@@ -7,7 +7,6 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 4, contracts A1 
 `540b761` (callee prototypes), and the commit adding this record.
 **Gate status: MET**: code review approved in round 2 (ChatGPT, at `8e0331b`); CI all seven A7 jobs green at `63da92e`
 (run 38401021266); manual checklist complete on Windows and macOS.
-manual checklist below is pending on Windows and macOS, and the review has not been done.
 
 Done on the way, outside the decompiler (`b187062`): `build-release-msbuild.bat` passes the toolset of
 the Visual Studio it finds (2019: v142, 2022: v143; `SE_TOOLSET` overrides), and CI builds it both
