@@ -3017,6 +3017,7 @@ void App::UpdateDecompiler(IPlatform& platform)
     in.names = &mFunctionNames.All();
     in.namesGeneration = mFunctionNames.Generation();
     in.bounds = &mFunctionBounds;
+    in.comments = &mAssemblyPanel.UserComments();
     in.callSites = [this](std::set<uint32_t>& out) {
         for (int cpu = 0; cpu < 2; ++cpu)
             for (const CallStackFrame& fr : mCallStack.Frames(cpu))

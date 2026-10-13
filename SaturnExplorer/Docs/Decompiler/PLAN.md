@@ -385,6 +385,9 @@ by `DecompilerPanelTests`:
   the target's FunctionNames name when it has one. Not before the instruction (rN may still
   change) and not in its slot. Pinned by `TestRegisterHintAtHalt`.
 - User comments shown on mapped lines (display layer, per A1).
+  *As built:* SH-2 Assembly's notes (`AssemblyPanel::UserComments`, any mirror) are shown as a
+  trailing `// note` on the first line decompiled from their instruction, once each; they never
+  reach the engine, so editing one re-requests nothing. Pinned by `TestUserCommentsOnLines`.
 
 ### Step 5 — Release
 

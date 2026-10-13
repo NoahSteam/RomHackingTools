@@ -43,6 +43,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "imgui.h"
@@ -89,6 +90,10 @@ struct DecompilerInputs
     const std::map<uint32_t, std::string>* names = nullptr;   // FunctionNames::All
     uint64_t namesGeneration = 0;                               // FunctionNames::Generation
     decomp::FunctionBounds* bounds = nullptr;                   // user function starts
+    // The user's notes from SH-2 Assembly, keyed by the address they were written at (any mirror).
+    // A display overlay: shown on the lines decompiled from that instruction, never sent to the
+    // engine, so editing one re-requests nothing (A1).
+    const std::unordered_map<uint32_t, std::string>* comments = nullptr;
     // Entries the call stack knows (the finder's call-site rung). Called only when an entry is
     // being resolved, never per frame.
     std::function<void(std::set<uint32_t>&)> callSites;
@@ -166,6 +171,8 @@ public:
     const char* EntryText() const { return mEntryBuf; }
     // The register hint the last Draw showed for a register-target call at the halt, or "".
     const std::string& HintText() const { return mHintText; }
+    // The user notes the last Draw attached to each shown line ("" for none), by line index.
+    const std::vector<std::string>& LineNotes() const { return mLineNotes; }
     uint64_t Captures() const { return mCaptures; }
     uint64_t Submissions() const { return mSubmissions; }
     uint64_t Discarded() const { return mDiscarded; }
@@ -298,6 +305,7 @@ private:
     int mContextLine = -1;           // the line the context menu was opened on
     decomp::RegisterHint mHint;      // this Draw's HaltHint, and its text
     std::string mHintText;
+    std::vector<std::string> mLineNotes;   // this Draw's user notes per shown line
 
     struct DrawnLine { int index; ImVec2 min, max; };
     std::vector<DrawnLine> mDrawn;

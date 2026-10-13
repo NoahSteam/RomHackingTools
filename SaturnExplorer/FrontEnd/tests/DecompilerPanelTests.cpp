@@ -25,6 +25,7 @@
 #include <map>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 using namespace sfe;
 using namespace sfe::decomp;
@@ -147,6 +148,7 @@ struct Fixture
 
     std::map<uint32_t, std::string> names;
     uint64_t namesGeneration = 1;
+    std::unordered_map<uint32_t, std::string> comments;   // SH-2 Assembly's user notes
     FunctionBounds bounds;
 
     DecompilerPanel::Request req;   // accumulated across frames until Take()
@@ -201,6 +203,7 @@ struct Fixture
         in.names = &names;
         in.namesGeneration = namesGeneration;
         in.bounds = &bounds;
+        in.comments = &comments;
         return in;
     }
 
@@ -675,6 +678,38 @@ void TestRegisterHintAtHalt()
     CHECK(f.WaitShown("read_word("));
     f.Idle(2);
     CHECK(f.panel.HintText().empty());
+}
+
+// Step 4: the user's Assembly notes appear on the lines decompiled from their instructions --
+// once each, whichever mirror they were written at -- and editing one asks the engine nothing.
+void TestUserCommentsOnLines()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown("+ 1"));
+    const uint64_t n = f.panel.Submissions();
+    f.comments[dts::kFixture1AddOne] = "count the hit";
+    f.comments[dts::kFixture1MovZero | 0x20000000u] = "default";   // written at the cache-through mirror
+    f.comments[0x06008000u] = "elsewhere";                          // not in this function
+    f.Idle(2);
+    const DecompileResult& r = f.Shown();
+    const std::vector<std::string>& notes = f.panel.LineNotes();
+    CHECK(notes.size() == r.lines.size());
+    int hit = 0, dflt = 0;
+    for (size_t i = 0; i < notes.size() && i < r.lines.size(); ++i)
+    {
+        if (notes[i].empty()) continue;
+        std::printf("  %-40s // %s\n", r.lines[i].text.c_str(), notes[i].c_str());
+        if (notes[i] == "count the hit") { ++hit; CHECK(Has(r.lines[i].text, "+ 1")); }
+        if (notes[i] == "default") { ++dflt; CHECK(Has(r.lines[i].text, "= 0;")); }
+        CHECK(!Has(notes[i], "elsewhere"));
+    }
+    CHECK(hit == 1 && dflt == 1);
+    CHECK(f.panel.Submissions() == n);   // a display overlay, not engine input
+
+    f.comments.clear();
+    f.Idle(2);
+    for (const std::string& note : f.panel.LineNotes()) CHECK(note.empty());
 }
 
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
@@ -1258,6 +1293,7 @@ int main(int argc, char** argv)
         RUN(TestEntriesAndNoRetryLoops());
         RUN(TestDelaySlotFlagged());
         RUN(TestRegisterHintAtHalt());
+        RUN(TestUserCommentsOnLines());
         RUN(TestRenameBiosAndBounds());
         RUN(TestRunningLive());
         RUN(TestScrubCache());

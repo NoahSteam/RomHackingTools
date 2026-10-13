@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iterator>
+#include <map>
+#include <set>
 
 #include "Debug/MemoryBackend.h"
 #include "PanelWidgets.h"
@@ -768,6 +770,34 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     // A3: shown, because the rest of the function is usually fine, but greyed; stale output dimmed.
     const float alpha = mShown.unsupported ? 0.5f : (ShownStale() ? 0.7f : 1.0f);
 
+    // User notes: each on the first line decompiled from its instruction, so a note shows once
+    // even when the instruction feeds several lines. Notes are written at whatever mirror the
+    // Assembly panel showed; the output's addresses are canonical.
+    mLineNotes.assign(mShown.lines.size(), std::string());
+    if (inputs.comments && !inputs.comments->empty())
+    {
+        std::map<uint32_t, const std::string*> notes;
+        for (const auto& c : *inputs.comments)
+        {
+            uint32_t canonical = 0;
+            if (!c.second.empty() && CanonicalAddress(c.first, canonical)) notes[canonical] = &c.second;
+        }
+        std::set<uint32_t> placed;
+        for (size_t i = 0; i < mShown.lines.size(); ++i)
+        {
+            std::set<uint32_t> here;
+            for (const Token& t : mShown.lines[i].tokens)
+                if (t.addr) here.insert(t.addr);
+            for (uint32_t a : here)
+            {
+                auto it = notes.find(a);
+                if (it == notes.end() || !placed.insert(a).second) continue;
+                if (!mLineNotes[i].empty()) mLineNotes[i] += "; ";
+                mLineNotes[i] += *it->second;
+            }
+        }
+    }
+
     ImGui::SetNextWindowContentSize(ImVec2(mShownWidth + ImGui::GetStyle().WindowPadding.x * 2.0f, 0.0f));
     if (!ImGui::BeginChild("##code", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
     {
@@ -878,17 +908,23 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 pos = e;
             }
             run(pos, ln.text.size(), TokenKind::Plain);
-            // The halt hint on the line the call was decompiled into, as a trailing comment.
+            // Trailing comments: the halt hint on the line the call was decompiled into, then the
+            // user's notes for the line.
+            auto trailing = [&](const std::string& note, ImVec4 c) {
+                const std::string t = "  // " + note;
+                c.w *= alpha;
+                dl->AddText(ImVec2(x, min.y), ImGui::GetColorU32(c), t.c_str());
+                x += ImGui::CalcTextSize(t.c_str()).x;
+            };
             if (mHint.valid)
                 for (const Token& t : ln.tokens)
                     if (t.addr == mHint.insn)
                     {
-                        const std::string note = "  // " + mHintText;
-                        ImVec4 c = kAmber;
-                        c.w *= alpha;
-                        dl->AddText(ImVec2(x, min.y), ImGui::GetColorU32(c), note.c_str());
+                        trailing(mHintText, kAmber);
                         break;
                     }
+            if (!mLineNotes[static_cast<size_t>(i)].empty())
+                trailing(mLineNotes[static_cast<size_t>(i)], TokenColour(TokenKind::Comment));
             ImGui::PopID();
         }
     }
