@@ -1,0 +1,325 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.sinc b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+index 6b326fb..6125a6b 100644
+--- a/Ghidra/Processors/SuperH/data/languages/superh.sinc
++++ b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+@@ -1,5 +1,6 @@
+ # All assembly defintions taken from: http://www.shared-ptr.com/sh_insns.html
+-# Modified for SaturnExplorer: bra/bsr give their delay slot the PC it executes at (patches/0005-sleigh-delay-slot-pc.patch).
++# Modified for SaturnExplorer: bra/bsr give their delay slot the PC it executes at (patches/0005-sleigh-delay-slot-pc.patch);
++# SH-2 semantics corrected: PR before the slot, MAC.L/MAC.W, XOR.B, @-Rn and DIV1 operand order (patches/0006-sleigh-sh2-semantics.patch).
+ 
+ define endian=big;
+ 
+@@ -298,20 +299,24 @@ disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt
+ 
+ :mov.b  rm_04_07,@-rn_08_11  is opcode_12_15=0b0010 & rn_08_11 & rm_04_07 & opcode_00_03=0b0100 
+ {
++    # Rm is read before Rn is decremented: mov.b r1,@-r1 stores r1's old value.
++    local val:1 = rm_04_07:1;
+     rn_08_11 = rn_08_11 -1;
+-    *:1 rn_08_11 = rm_04_07:1;
++    *:1 rn_08_11 = val;
+ }
+ 
+ :mov.w  rm_04_07,@-rn_08_11  is opcode_12_15=0b0010 & rn_08_11 & rm_04_07 & opcode_00_03=0b0101 
+ {
++    local val:2 = rm_04_07:2;
+     rn_08_11 = rn_08_11 -2;
+-    *:2 rn_08_11 = rm_04_07:2;
++    *:2 rn_08_11 = val;
+ }
+ 
+ :mov.l  rm_04_07,@-rn_08_11  is opcode_12_15=0b0010 & rn_08_11 & rm_04_07 & opcode_00_03=0b0110 
+ {
++    local val:4 = rm_04_07;
+     rn_08_11 = rn_08_11 -4;
+-    *:4 rn_08_11 = rm_04_07;
++    *:4 rn_08_11 = val;
+ }
+ 
+ :mov.b  @(disp_00_03,rm_04_07),r0  is r0 & opcode_08_15=0b10000100 & rm_04_07 & disp_00_03  
+@@ -1037,9 +1042,10 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+     
+     old_q = $(Q_FLAG);
+     $(Q_FLAG) = (0x80000000 & rn_08_11) != 0;
+-    tmp2 = rm_04_07;
+     rn_08_11 = rn_08_11 << 1;
+     rn_08_11 = rn_08_11 | zext($(T_FLAG));
++    # The divisor is read after Rn is shifted: div1 r1,r1 divides by the shifted value.
++    tmp2 = rm_04_07;
+     old_q_eq_m = old_q == $(M_FLAG);
+     m_eq_q = $(M_FLAG) == $(Q_FLAG);
+     
+@@ -1123,175 +1129,57 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+ :mac.l  @rm_04_07+,@rn_08_11+  is opcode_12_15=0b0000 & rn_08_11 & rm_04_07 & opcode_00_03=0b1111 
+ {
+-    # FIXME: review this instruction
+-    
+-    local RnL;
+-    local RnH;
+-    local RmL;
+-    local RmH;
+-    local Res0;
+-    local Res1:4;
+-    local Res2:4;
+-    
+-    local temp0;
+-    local temp1:4;
+-    local temp2:4;
+-    local temp3;
+-    
+-    local tempm:4;
+-    local tempn:4;
+-    local fnLmL:4;
+-    
+-    tempn = *:4 rn_08_11;
+-    rn_08_11 = rn_08_11 + 4;
+-    tempm = *:4 rm_04_07;
++    # (Rn) x (Rm) + MAC -> MAC, signed 32 x 32 + 64. With S set, the sum saturates to 48 bits, in
++    # the direction of the product's sign. Rm is read first; when m == n the second read is the
++    # word after the first.
++    local tempm:4 = *:4 rm_04_07;
+     rm_04_07 = rm_04_07 + 4;
++    local tempn:4 = *:4 rn_08_11;
++    rn_08_11 = rn_08_11 + 4;
+ 
+-    fnLmL = -1 * zext((tempn ^ tempm) s<0);
+-    
+-    if( tempn s>= 0) goto <SKIP_TEMPN>;
+-    tempn = 0 - tempn;
+-    
+-    <SKIP_TEMPN>
+-    if( tempm s>= 0) goto <SKIP_TEMPM>;
+-    tempm = 0 - tempm;
+-    
+-    <SKIP_TEMPM>
+-    
+-    temp1 = tempn;
+-    temp2 = tempm;
+-    
+-    RnL = temp1 & 0x0000FFFF;
+-    RnH = (temp1 >> 16) & 0x0000FFFF;
+-    RmL = temp2 & 0x0000FFFF;
+-    RmH = (temp2 >> 16) & 0x0000FFFF;
+-    temp0 = RmL * RnL;
+-    temp1 = RmH * RnL;
+-    temp2 = RmL * RnH;
+-    temp3 = RmH * RnH;
+-
+-    Res2 = 0;
+-    Res1 = temp1 + temp2;
+-    
+-    if(Res2 >= temp1) goto <SKIP_RES2_ADD>;
+-    Res2 = Res2 + 0x00010000;              
+-    <SKIP_RES2_ADD>
+-    
+-    temp1 = (Res1 << 16) & 0xFFFF0000;
++    local sum:8 = ((zext(mach) << 32) | zext(macl)) + (sext(tempn) * sext(tempm));
+ 
+-    Res0 = temp0 + temp1;    
+-    Res2 = Res2 + zext(Res0 < temp0);
+-    
+-    Res2 = Res2 + ((Res1 >> 16) & 0x0000FFFF) + temp3;
++    if ($(S_FLAG) == 0) goto <STORE>;
++    if (sum <= 0x00007FFFFFFFFFFF || sum >= 0xFFFF800000000000) goto <STORE>;
++    sum = 0x00007FFFFFFFFFFF;
++    if ((tempn ^ tempm) s>= 0) goto <STORE>;
++    sum = 0xFFFF800000000000;
+ 
+-    if(fnLmL s>= 0) goto <CHECK_S>;
+-    Res2 = ~Res2;
+-    
+-    if(Res0 == 0) goto <RES0_0>;
+-    Res0 = (~Res0) + 1;
+-    goto <CHECK_S>;
+-    
+-    <RES0_0>
+-    Res2 = Res2 + 1;
+-    
+-    <CHECK_S>
+-    
+-    if($(S_FLAG) != 1) goto <S_0>;
+-    
+-    Res0 = macl + Res0;
+-    Res2 = Res2 + zext(macl > Res0);
+-    
+-    Res2 = Res2 + (mach & 0x0000FFFF);
+-    
+-    if((Res2 s>= 0) || Res2 >= 0xFFFF8000) goto <SKIP_1>;
+-    Res2 = 0xFFFF8000;
+-    Res0 = 0x00000000;
+-    
+-    <SKIP_1>    
+-    if((Res2 s<= 0) || Res2 <= 0x00007FFF) goto <SKIP_2>;
+-    Res2 = 0x00007FFF;
+-    Res0 = 0xFFFFFFFF;
+-    
+-    <SKIP_2>
+-    mach = (Res2 & 0x0000FFFF) | (mach & 0xFFFF0000);
+-    macl = Res0;
+-    
+-    goto <END>;
+-    
+-    <S_0>
+-    Res0 = macl + Res0;
+-    Res2 = Res2 + zext(macl > Res0);
+-    
+-    Res2 = Res2 + mach;
+-    mach = Res2;
+-    macl = Res0;
+-    
+-    <END>
++    <STORE>
++    mach = sum(4);
++    macl = sum:4;
+ }
+ @endif
+ 
+ :mac.w  @rm_04_07+,@rn_08_11+  is opcode_12_15=0b0100 & rn_08_11 & rm_04_07 & opcode_00_03=0b1111 
+ {
+-    # FIXME: review this instruction
+-    
+-    local tempm:4;
+-    local tempn:4;
+-    local dest;
+-    local src:4; 
+-    local ans;
+-    local templ:4;
+-    
+-    tempn = *:2 rn_08_11;
+-    rn_08_11 = rn_08_11 + 2;    
+-    tempm = *:2 rm_04_07;
++    # (Rn) x (Rm) + MAC -> MAC, signed 16 x 16. With S clear it accumulates into all 64 bits of
++    # MAC; with S set, into MACL alone, saturating at 32 bits and setting MACH bit 0 on overflow.
++    local tempm:2 = *:2 rm_04_07;
+     rm_04_07 = rm_04_07 + 2;
+-    
+-    templ = macl;
+-    tempm = sext(tempn:2) * sext(tempm:2);
+-    
+-    dest = (macl s< 0);
+-    
+-    src = zext(1*(tempm s>= 0));
+-    tempn = sext(-1*(tempm s>= 0));
+-
+-    src = src + zext(dest);
+-    macl = macl + tempm;    
+-    
+-    ans = (macl s< 0);
+-    
+-    ans = ans + dest;    
+-    
+-    # if (S == 1)
+-    if($(S_FLAG) != 1) goto <S_0>;
+-    
+-    if(ans != 1) goto <END>;
+-    
+-@if SH_VERSION == "1"
+-    if(src != 0 && src != 2) goto <SKIP_BIT>;
+-    mach = mach | 0x00000001;    
+-    <SKIP_BIT>
+-@endif
++    local tempn:2 = *:2 rn_08_11;
++    rn_08_11 = rn_08_11 + 2;
+ 
+-    if(src == 0) goto <SRC_0>;
+-    if(src == 2) goto <SRC_2>;
+-    goto <END>;
+-    
+-    <SRC_0>
+-    macl = 0x7FFFFFFF;
+-    goto <END>;
+-    
+-    <SRC_2>
+-    macl = 0x80000000;
++    local product:4 = sext(tempn) * sext(tempm);
++    local sum:8;
++
++    if ($(S_FLAG) == 0) goto <S_0>;
++    sum = sext(macl) + sext(product);
++    if (sum <= 0x000000007FFFFFFF || sum >= 0xFFFFFFFF80000000) goto <NO_SAT>;
++    mach = mach | 1;
++    sum = 0x7FFFFFFF;
++    if (product s>= 0) goto <NO_SAT>;
++    sum = 0x80000000;
++    <NO_SAT>
++    macl = sum:4;
+     goto <END>;
+-    
+-    # if (S != 1)
+-    <S_0>
+-    
+-    mach = mach + tempn;
+ 
+-    macl = macl + zext(1*(templ s> macl));
+-    
++    <S_0>
++    sum = ((zext(mach) << 32) | zext(macl)) + sext(product);
++    mach = sum(4);
++    macl = sum:4;
+ @if SH_VERSION == "1"
++    # SH-1's MACH is 10 bits, sign-extended.
+     if((mach & 0x00000200) == 0) goto <ZERO_EXTEND>;
+     mach = mach | 0xFFFFFC00;
+     goto <END>;
+@@ -1299,7 +1187,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+     mach = mach & 0x000003FF;
+ @endif
+ 
+-    <END>    
++    <END>
+ }
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+@@ -1463,7 +1351,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ :xor.b  imm_00_07,@(r0,gbr)  is r0 & gbr & opcode_08_15=0b11001110 & imm_00_07  
+ {
+     local temp = *:1 (gbr + r0);
+-    temp = temp & (imm_00_07 & 0x000000FF);
++    temp = temp ^ (imm_00_07 & 0x000000FF);
+     
+     *:1 (gbr + r0) = temp;
+ }
+@@ -1654,23 +1542,23 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+     [ slot_tgt = sdisp_00_11 + ((inst_start + 4) >> 1) + 1; slot_pc_valid = 1;
+       globalset(inst_next, slot_tgt); globalset(inst_next, slot_pc_valid); ]
+ {
+-    local _pr:4 = inst_start + 4;
++    # PR is written before the delay slot runs: sts pr in the slot reads the new return address,
++    # and lds in the slot overrides it.
++    pr = inst_start + 4;
+ 
+     delayslot(1);
+ 
+-    pr = _pr;
+     call target00_11;
+ }
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+ :bsrf   rm_08_11  is opcode_12_15=0b0000 & rm_08_11 & opcode_00_07=0b00000011 
+ {
+-    local _pr = inst_start + 4;
+     local dest = rm_08_11 + inst_start + 4;
++    pr = inst_start + 4;
+ 
+     delayslot(1);
+ 
+-    pr = _pr;
+     call [dest];
+ }
+ @endif
+@@ -1685,12 +1573,11 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ :jsr    @rm_08_11  is opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00001011 
+ {
+-    local _pr:4 = inst_start + 4;
+     local _pc:4 = rm_08_11;
++    pr = inst_start + 4;
+ 
+     delayslot(1);
+ 
+-    pr = _pr;
+     pc = _pc;
+     call [_pc];
+ }

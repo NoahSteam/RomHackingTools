@@ -13,7 +13,7 @@ Design and rationale: `Docs/Decompiler/DESIGN.md`. Build plan and what was built
 
 | From | How |
 |---|---|
-| The panel | Turn on **Follow PC**: it shows the function the chosen CPU is in. Or type an entry address (hex, any mirror, e.g. `06004000`) and press Enter. |
+| The panel | Turn on **Follow PC**: it shows the function the chosen CPU is in. Or type an entry address (hex, any mirror, e.g. `06004000`) and press Enter. A mirror is decompiled as code running there: `26004000` runs the same bytes through the cache-through area, so a `mova` there yields a `0x26…` pointer. The function keeps its canonical name. |
 | SH-2 Assembly | Right-click a line → **Decompile Here**. |
 | Call Stack | Right-click a frame → **Decompile**. |
 | Registers | In the **SH-2** tab, right-click the **PC value** (not its label) → **Decompile**. |

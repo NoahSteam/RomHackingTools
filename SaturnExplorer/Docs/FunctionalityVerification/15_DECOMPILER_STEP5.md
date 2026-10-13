@@ -179,3 +179,34 @@ before it accepts results. The stack is still read only while resolving, never e
 CI for the follow-ups: run [38416564598](https://github.com/NoahSteam/RomHackingTools/actions/runs/38416564598) at `de8b136`
 passed all seven jobs. That includes the MSBuild jobs, which check that the exe carries the commit,
 and the bundle `--selftest` launch.
+
+### Review: SH-2 semantics (at `6eaa133`)
+
+This review checked the spec's semantics against the Renesas SH-1/SH-2 manual and found seven
+errors. Their pseudocode read as ordinary C, with no unsupported or unimplemented warning. All seven
+are fixed. Mednafen's SH-2 core (`ss/sh7095_ops.inc`) confirmed each expected behaviour.
+
+1. **A mirrored entry was canonicalised before analysis.** A `mova` running at `26004000` yields a
+   `0x26…` pointer. The engine now analyses the function at the address it was asked for, and keeps
+   canonical names, prototypes, token addresses and reported locations. The panel requests the
+   function in the mirror the PC or the typed address is in. The mirror is part of the cache key.
+   (`TestMovaFollowsExecutionAddress`, `TestMirrorEntryIsKept`; two older panel tests that expected
+   a canonical entry were updated.)
+2. **`bsr`/`bsrf`/`jsr` wrote PR after the delay slot.**
+3. **`MAC.L` produced a wrong carry.**
+4. **`MAC.W` had wrong operand widths, sign handling and accumulation.**
+5. **`XOR.B` performed an AND.**
+6. **`mov.x Rm,@-Rn` stored the decremented value when Rm and Rn are the same register.**
+7. **`DIV1` read an aliased divisor too early.**
+
+Findings 2 to 7 are fixed by `patches/0006-sleigh-sh2-semantics.patch`. `sh-2.sla` and
+`Sh2SpecData.h` were regenerated. The patch chain was checked: the upstream file with 0005 and
+then 0006 applied gives the checked-in `superh.sinc`. The new `Sh2SemanticsTests` runs each
+instruction on the vendored p-code emulator through the shipped translator and compares the result
+with a Mednafen-derived reference model. On the old spec, every block fails, 17 checks in all. On
+the new spec, all pass.
+
+Golden review, as `VENDOR.md` requires: the output of `Sh2DecompilerTests` and the real-game
+`Sh2DecompilerFixtureTests` was diffed before and after the change. Nothing changed except the new
+mirror case.
+

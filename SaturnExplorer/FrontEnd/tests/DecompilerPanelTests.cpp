@@ -625,10 +625,10 @@ void TestEntriesAndNoRetryLoops()
     CHECK(f.panel.Submissions() == n);   // refused before the engine
     CHECK(f.panel.ShownStale());
 
-    f.TypeInto("entry", "26004000");     // cache-through mirror of the caller
+    f.TypeInto("entry", "26004000");     // cache-through mirror of the caller: run there, named canonical
     CHECK(f.WaitShown("+ 1"));
     CHECK(f.Shown().entry == dts::kFixture1Caller);
-    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
+    CHECK(f.panel.WantedEntry() == 0x26004000u);
 }
 
 // A3: a delay-slot construct the spec cannot get right (bf/s) is flagged, with its address, and
@@ -1032,6 +1032,30 @@ void TestCallStackHints()
     ++f.stackRevision;
     f.Idle(2);
     CHECK(f.panel.WantedEntry() == 0x06005000u);
+}
+
+// Review at 6eaa133, finding 1: the entry is asked for where the code runs. A PC in the
+// cache-through mirror decompiles its function there (mova sees the mirror), under the canonical
+// identity; the two are different questions, never served from each other's cache.
+void TestMirrorEntryIsKept()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, 0x20000000u | dts::kFixture1AddOne);
+    CHECK(f.WaitShown("func_0x06005000"));
+    CHECK(f.panel.WantedEntry() == (0x20000000u | dts::kFixture1Caller));
+    CHECK(f.Shown().requestedEntry == (0x20000000u | dts::kFixture1Caller));
+    CHECK(f.Shown().entry == dts::kFixture1Caller);
+    CHECK(std::string(f.panel.EntryText()) == "26004000");
+    const uint64_t n = f.panel.Submissions(), hits = f.panel.CacheHits();
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    f.Idle();
+    CHECK(f.WaitShown());
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller && f.Shown().requestedEntry == dts::kFixture1Caller);
+    CHECK(f.panel.Submissions() == n + 1 && f.panel.CacheHits() == hits);
+    f.Idle();
+    f.TypeInto("entry", "26004000");          // typed: kept as typed
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == 0x26004000u; }));
+    CHECK(f.panel.CacheHits() == hits + 1);   // the mirror's own answer, from before
 }
 
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
@@ -1507,11 +1531,11 @@ void TestEntryBoxFollowsShownFunction()
     Fixture f;
     CHECK(f.WaitShown("+ 1"));
     CHECK(std::string(f.panel.EntryText()) == "06004000");
-    f.TypeInto("entry", "26005000");                 // a mirror: shown canonical
+    f.TypeInto("entry", "26005000");                 // a mirror: named canonical, run where typed
     CHECK(f.WaitShown());
     f.Idle(2);
     CHECK(f.Shown().entry == dts::kFixture1Callee);
-    CHECK(std::string(f.panel.EntryText()) == "06005000");
+    CHECK(std::string(f.panel.EntryText()) == "26005000");
     f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);   // as Call Stack / Registers do
     CHECK(f.WaitShown("+ 1"));
     f.Idle(2);
@@ -1628,6 +1652,7 @@ int main(int argc, char** argv)
         RUN(TestRunningAfterScrubCaptures());
         RUN(TestHintsReResolve());
         RUN(TestCallStackHints());
+        RUN(TestMirrorEntryIsKept());
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());

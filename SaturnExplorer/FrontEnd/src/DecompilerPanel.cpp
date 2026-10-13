@@ -256,7 +256,7 @@ bool DecompilerPanel::ShownStale() const
 {
     if (!mShownValid) return false;
     return ShownOutdatedByView() || mPending.active || mShownNamesGeneration != mNamesGeneration ||
-           (mResolved && (!mEntryOk || mShown.entry != mEntry));
+           (mResolved && (!mEntryOk || mShown.requestedEntry != mEntry));
 }
 
 void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
@@ -267,6 +267,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mResolvedCallSites = mCallSitesRevision;
     mEntryOk = false;
     mEntry = 0;
+    mEntryCanonical = 0;
     mEntrySource = EntrySource::None;
     mEntryConfidence = 0;
     mEntryError.clear();
@@ -286,7 +287,8 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
             return;
         }
         mEntryOk = true;
-        mEntry = canonical;
+        mEntry = mTarget.address;   // as typed: a mirror is where the code runs, which mova sees
+        mEntryCanonical = canonical;
         mEntrySource = mTarget.source;
         mEntryConfidence = 100;
         return;
@@ -319,8 +321,13 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         mEntryError = b;
         return;
     }
+    // The finder answers in canonical addresses; the entry is asked for in the mirror the anchor
+    // runs in (a PC in 0x26xxxxxx executes its function there).
+    uint32_t anchorCanonical = anchor;
+    CanonicalAddress(anchor, anchorCanonical);
     mEntryOk = true;
-    mEntry = g.entry;
+    mEntry = g.entry + (anchor - anchorCanonical);
+    mEntryCanonical = g.entry;
     mEntrySource = g.source;
     mEntryConfidence = g.confidence;
 }
@@ -411,7 +418,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mPending.entry == mEntry &&                   // and the entry wanted now,
                          mPending.namesGeneration == mNamesGeneration && // under the names in force now,
                          mPending.functions == mFunctions &&           // registering the functions known now,
-                         mPending.prototypes == PrototypeHash(mEntry) &&   // lending the signatures known now,
+                         mPending.prototypes == PrototypeHash(mEntryCanonical) &&   // lending the signatures known now,
                          HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
     {
@@ -561,7 +568,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.entry = mEntry;
     q.namesGeneration = mNamesGeneration;
     q.functions = mFunctions;
-    q.prototypes = PrototypeHash(mEntry);
+    q.prototypes = PrototypeHash(mEntryCanonical);
     if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
     mNote.clear();
@@ -589,7 +596,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     if (inputs.bounds)
         rq.knownFunctions.assign(inputs.bounds->Entries().begin(), inputs.bounds->Entries().end());
     for (const auto& p : mPrototypes)
-        if (Lendable(p.second, mEntry, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
+        if (Lendable(p.second, mEntryCanonical, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
     const uint64_t generation = runner.Submit(kSlot, mSnap, std::move(rq), retry);
     ++mSubmissions;
     if (generation == 0)
@@ -716,7 +723,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         {
             // Pin the function shown, rather than forgetting what was asked.
             t.kind = TargetKind::Entry;
-            t.address = mEntryOk ? mEntry : (mShownValid ? mShown.entry : 0);
+            t.address = mEntryOk ? mEntry : (mShownValid ? mShown.requestedEntry : 0);
             t.source = mEntryOk ? mEntrySource : EntrySource::User;
         }
         SetTarget(t);
@@ -726,7 +733,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     // Not while the box is being edited: ImGui owns its text then, and would also lose the draft.
     if (mSyncEntryBox && !mEntryActive && mShownValid)
     {
-        std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", mShown.entry);
+        std::snprintf(mEntryBuf, sizeof mEntryBuf, "%08X", mShown.requestedEntry);
         mSyncEntryBox = false;
     }
     ImGui::SetNextItemWidth(ImGui::CalcTextSize("0x00000000").x + ImGui::GetStyle().FramePadding.x * 2.0f);
@@ -802,6 +809,11 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
     {
         ImGui::SameLine();
         ImGui::Text("\xc2\xb7 %s @ 0x%08X", mShown.name.empty() ? "?" : mShown.name.c_str(), mShown.entry);
+        if (mShown.requestedEntry != mShown.entry)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(run at 0x%08X)", mShown.requestedEntry);
+        }
         if (!mShownEntrySource.empty())
         {
             ImGui::SameLine();

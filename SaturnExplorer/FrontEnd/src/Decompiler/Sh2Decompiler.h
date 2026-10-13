@@ -70,7 +70,9 @@ struct Prototype
 
 struct DecompileRequest
 {
-    uint32_t entry = 0;                                       // any mirror; canonicalised first
+    // Where the function executes: any mirror. It is analysed there, since PC-derived values (mova,
+    // PC-relative call targets) follow the address; the result reports the canonical entry.
+    uint32_t entry = 0;
     std::vector<std::pair<uint32_t, std::string>> names;      // address -> name (FunctionNames)
     std::vector<uint32_t> knownFunctions;                     // extra entries to register
     std::vector<std::pair<uint32_t, Prototype>> prototypes;    // callee entry -> its decompiled signature

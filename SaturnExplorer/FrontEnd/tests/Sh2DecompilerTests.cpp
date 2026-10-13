@@ -157,6 +157,45 @@ void TestNoCodeAndMirror()
     }
 }
 
+// Review at 6eaa133, finding 1: a mirror is the same bytes, not the same code. mova yields a
+// pointer in the partition the code runs from, so a function that compares it with a
+// cache-through literal returns 1 when it runs through 0x26xxxxxx and 0 when it runs canonical.
+void TestMovaFollowsExecutionAddress()
+{
+    const uint32_t base = 0x06004800u;
+    std::vector<uint8_t> hw;
+    const size_t o = base - 0x06000000u;
+    dts::Put16(hw, o + 0x0, 0xC702);   // mova @(8,pc),r0     -> base+0xC, in the partition run from
+    dts::Put16(hw, o + 0x2, 0xD102);   // mov.l @(8,pc),r1    -> the literal at base+0xC
+    dts::Put16(hw, o + 0x4, 0x3100);   // cmp/eq r0,r1
+    dts::Put16(hw, o + 0x6, 0x000B);   // rts
+    dts::Put16(hw, o + 0x8, 0x0029);   //  movt r0
+    dts::Put16(hw, o + 0xA, 0x0009);   // nop
+    dts::Put32(hw, o + 0xC, 0x26000000u | (base + 0xC));
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    const DecompileResult through = d.Decompile(snap, Request(0x26004800u));
+    Print("mova via cache-through", through);
+    CHECK(through.status == DecompileStatus::Ok && !through.unsupported);
+    CHECK(Has(through.Text(), "return 1;"));
+    CHECK(through.entry == base && through.requestedEntry == 0x26004800u);
+    CHECK(Has(through.name, "06004800"));   // named by its canonical entry
+    for (const Line& l : through.lines)
+        CHECK(l.firstAddr == 0 || (l.firstAddr >= base && l.firstAddr < base + 0x10));   // canonical
+    const DecompileResult canonical = d.Decompile(snap, Request(base));
+    Print("mova canonical", canonical);
+    CHECK(Has(canonical.Text(), "return 0;"));
+    // Its canonical entry also known and named, as a user's function start and a rename leave it:
+    // the mirror is still what runs, under that name, with nothing registered twice.
+    DecompileRequest q = Request(0x26004800u);
+    q.knownFunctions.push_back(base);
+    q.names.emplace_back(base, "cmp_self");
+    const DecompileResult named = d.Decompile(snap, q);
+    Print("mova via cache-through, named", named);
+    CHECK(Has(named.Text(), "return 1;") && named.name == "cmp_self");
+    CHECK(named.warnings.empty());
+}
+
 // A3: a PC-relative load in a delay slot. The hardware reads relative to the branch target, which
 // the unpatched spec does not; the fixture holds different literals at the two candidate addresses.
 // Patch 0005 fixes the spec for bra and bsr, so those fold the hardware's literal; every other
@@ -919,6 +958,7 @@ int main(int argc, char** argv)
         RUN(TestFixture1());
         RUN(TestFixture1b());
         RUN(TestNoCodeAndMirror());
+        RUN(TestMovaFollowsExecutionAddress());
         RUN(TestDelaySlotPcRelative());
         RUN(TestEditsChangeKeyAndOutput());
         RUN(TestMovWFold());

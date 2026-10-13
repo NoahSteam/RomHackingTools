@@ -274,7 +274,7 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp)
-        foreach(name Sh2Decompiler DecompilerRunner)
+        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp ${SE_DECOMPILER_TEST_SOURCES})
             target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
             target_link_libraries(SaturnExplorer${name}Tests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)

@@ -33,6 +33,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0003-translator-ownership-on-init-failure.patch` | `Architecture::restoreFromSpec` assigns the translator before `initialize()` instead of holding it in a `unique_ptr`, which deleted `SleighArchitecture`'s shared translator when `initialize()` failed. |
 | `0004-funcdata-frees-active-output.patch` | `Funcdata`'s destructor frees the return-recovery state (`ParamActive`) that an analysis abandoned mid-way -- a cancel -- still owns; it leaked one per such cancel. |
 | `0005-sleigh-delay-slot-pc.patch` | `bra` and `bsr` give their delay slot the PC it executes at (branch target + 2), so a PC-relative load or `mova` there reads the right literal (PLAN.md A3). Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
+| `0006-sleigh-sh2-semantics.patch` | Fixes six SH-2 semantics errors in `superh.sinc`, checked against Mednafen's SH-2 core. `bsr`/`bsrf`/`jsr` now write PR before their delay slot. `MAC.L` had a wrong carry; it is rewritten as a 64-bit accumulate with 48-bit saturation. `MAC.W` now does word loads, sign-extends, and saturates at 32 bits. `XOR.B` was an AND. `mov.x Rm,@-Rn` now reads Rm before Rn is decremented. `DIV1` now reads Rm after Rn is shifted. `sh-2.sla` and `Sh2SpecData.h` are regenerated. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -54,7 +55,7 @@ MSVC and Apple clang needed no patch beyond these.
 
 Each step's failure stops the bump; nothing is committed until the last step passes. Order
 matters: the spec artifacts are generated from the patched `superh.sinc`, so `vendor.py` (which
-applies 0005) must run before `se-regen-sla`.
+applies 0005 and 0006) must run before `se-regen-sla`.
 
 - [ ] **Check out** the new Ghidra commit. A sparse clone is enough:
   ```
@@ -68,7 +69,9 @@ applies 0005) must run before `se-regen-sla`.
   applies. Then re-base that patch by hand and re-prove it:
   - 0001: `Docs/Decompiler/spike/cancel_spike.cpp` and `DecompilerRunnerTests`;
   - 0002 to 0004: the ASan run of `DecompilerRunnerTests`;
-  - 0005: `TestDelaySlotPcRelative`.
+  - 0005: `TestDelaySlotPcRelative`;
+  - 0006: `SaturnExplorerSh2SemanticsTests` (runs the instructions on the p-code emulator against a
+    reference model).
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

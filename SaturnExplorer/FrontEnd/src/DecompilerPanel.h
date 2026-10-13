@@ -170,7 +170,7 @@ public:
     bool Pending() const { return mPending.active; }
     uint64_t PendingGeneration() const { return mPending.generation; }
     const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
-    uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }
+    uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }   // as run: a mirror stays one
     const std::string& EntryError() const { return mEntryError; }
     const char* EntryText() const { return mEntryBuf; }
     // The register hint the last Draw showed for a register-target call at the halt, or "".
@@ -289,7 +289,8 @@ private:
     uint64_t mResolvedFunctions = 0, mResolvedCallees = 0, mResolvedCallSites = 0;
     uint64_t mCallSitesRevision = 0;
     bool mEntryOk = false;
-    uint32_t mEntry = 0;
+    uint32_t mEntry = 0;             // where it runs (a mirror, if the code runs there): what is asked
+    uint32_t mEntryCanonical = 0;    // its identity: names, prototypes
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;
     int mEntryConfidence = 0;
     std::string mEntryError;

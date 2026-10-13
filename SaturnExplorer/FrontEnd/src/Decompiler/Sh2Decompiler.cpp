@@ -394,7 +394,11 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
             t.kind = elem == kLabel ? TokenKind::Label : elem == kFuncName ? TokenKind::FuncName : KindForColor(color);
             if (op)
             {
+                // The instruction's canonical address: the function may be analysed at a mirror,
+                // but navigation and notes are keyed by the canonical one.
                 t.addr = static_cast<uint32_t>(op->getAddr().getOffset());
+                uint32_t canonical = 0;
+                if (CanonicalAddress(t.addr, canonical)) t.addr = canonical;
                 if (t.kind == TokenKind::FuncName)
                 {
                     const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(op);
@@ -539,6 +543,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return;
     }
     r.entry = entry;
+    // The function is analysed at the address it executes at, not the canonical one: the bytes are
+    // the same, but PC-derived values are not -- a mova through the cache-through mirror yields a
+    // 0x2xxxxxxx pointer. Its identity (name, prototype, what the result reports) stays canonical.
+    const uint32_t exec = request.entry;
+    auto canonicalOf = [](uint32_t a) {
+        uint32_t c = 0;
+        return CanonicalAddress(a, c) ? c : a;
+    };
 
     if (gEngineDamaged)
     {
@@ -606,23 +618,24 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::set<uint32_t> all(known);
         for (const auto& c : callees) all.insert(c.first);
         for (const auto& n : named) all.insert(n.first);
-        all.insert(entry);
+        all.insert(exec);
         ghidra::Funcdata* fd = nullptr;
         for (uint32_t a : all)
         {
             const ghidra::Address addr(ram, a);
+            const uint32_t key = a == exec ? entry : a;   // every other address here is canonical
             std::string name;
-            auto f = named.find(a);
+            auto f = named.find(key);
             if (f != named.end()) name = f->second;
-            else if (InBios(*snapshot, a)) name = BiosFunctionName(a);
-            else arch->nameFunction(addr, name);
+            else if (InBios(*snapshot, key)) name = BiosFunctionName(key);
+            else arch->nameFunction(ghidra::Address(ram, key), name);
             // A call through a mirror (0x26005000 for 0x06005000) resolves to the address it
             // names, so the function is registered there too, under the canonical name.
             auto aliases = callees.find(a);
             if (aliases != callees.end())
                 for (uint32_t alias : aliases->second)
                 {
-                    if (alias == a) continue;
+                    if (alias == a || alias == exec) continue;   // registered in its own right
                     try
                     {
                         ghidra::Funcdata* af = global->addFunction(ghidra::Address(ram, alias), name)->getFunction();
@@ -639,18 +652,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             try
             {
                 ghidra::Funcdata* f2 = global->addFunction(addr, name)->getFunction();
-                if (a == entry) fd = f2;
+                if (a == exec) fd = f2;
                 // A callee decompiled before lends its signature; the function being decompiled
                 // keeps the engine's own recovery.
-                auto proto = prototypes.find(a);
-                if (a != entry && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
+                auto proto = prototypes.find(key);
+                if (key != entry && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
             }
             catch (ghidra::LowlevelError& e)
             {
                 // A clashing user name, say. The function is still decompiled, under the
                 // engine's own name if need be.
                 r.warnings.push_back("could not register " + Hex8(a) + " as \"" + name + "\": " + e.explain);
-                if (a == entry)
+                if (a == exec)
                 {
                     arch->nameFunction(addr, name);
                     fd = global->addFunction(addr, name)->getFunction();
@@ -722,15 +735,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.bodyBytes = static_cast<uint32_t>(fd->getSize());
         r.unimplemented = fd->hasUnimplemented();
         r.unsupported = scan.unsupported;
-        r.unsupportedAt = scan.unsupportedAt;
+        r.unsupportedAt = canonicalOf(scan.unsupportedAt);
         const CaptureLoadImage& image = arch->FetchImage();
         r.truncated = fd->hasBadData() && image.HadUnavailable();
-        r.truncatedAt = image.UnavailableAddress();
+        r.truncatedAt = canonicalOf(image.UnavailableAddress());
         r.truncatedWhy = image.UnavailableWhy();
-        r.literalPools.assign(scan.literalWords.begin(), scan.literalWords.end());
+        for (uint32_t w : scan.literalWords) r.literalPools.push_back(canonicalOf(w));
+        std::sort(r.literalPools.begin(), r.literalPools.end());
+        r.literalPools.erase(std::unique(r.literalPools.begin(), r.literalPools.end()), r.literalPools.end());
         r.literalLoads = scan.literalLoads;
         if (scan.unsupported)
-            r.warnings.push_back("PC-relative load in a delay slot at " + Hex8(scan.unsupportedAt) +
+            r.warnings.push_back("PC-relative load in a delay slot at " + Hex8(r.unsupportedAt) +
                                  ": pseudocode for this function is not trustworthy");
         if (r.truncated)
             r.warnings.push_back("flows into " + r.truncatedWhy);
