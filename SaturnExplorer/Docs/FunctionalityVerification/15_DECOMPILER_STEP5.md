@@ -210,3 +210,30 @@ Golden review, as `VENDOR.md` requires: the output of `Sh2DecompilerTests` and t
 `Sh2DecompilerFixtureTests` was diffed before and after the change. Nothing changed except the new
 mirror case.
 
+
+The re-review at `37a0535` found four places where the execution mirror was still lost. All four are
+now fixed, and each has a test that fails without its fix:
+
+1. **Learned signatures were shared across mirrors.** The engine took a callee's signature by its
+   canonical address and applied it to every alias. Signatures are now keyed by the address the
+   function ran at, through the panel, the lending, the dependencies and the engine. The result
+   reports `calledAt`, the addresses its calls go to, for the dependency tracking. Names stay
+   canonical. (`TestPrototypesPerMirror`: a mova-dependent callee takes one argument canonically and
+   none through `26004800`; learning the mirror no longer changes the canonical caller. Also
+   `TestCalleePrototypes`: a signature lent for one mirror is not applied to a call through another.)
+2. **Set Function Start Here dropped the mirror.** It records the start canonical and now asks for
+   the new function in the mirror the shown one runs in. (`TestFunctionStartKeepsMirror`)
+3. **The runner's too-large memo used the canonical entry.** It is now keyed by the address asked
+   for, so a time-out at one mirror no longer blocks a first attempt at another. (`TestBudget`)
+4. **The entry box did not update when switching mirrors.** It now updates whenever the address the
+   shown function ran at changes. (`TestMirrorEntryIsKept`)
+
+Behaviour change: because the canonical function and its mirror are now separate functions, a
+canonical function's newly learned signature changes what the mirror's request lends. Switching back
+to a mirror can therefore ask the engine again where it used to hit the cache.
+
+The review's other answers:
+- **MAC.L with S set:** keep Mednafen's behaviour. Mednafen's changelog records a saturation fix
+  based on tests on a real Saturn.
+- **MAC.W setting MACH bit 0:** matches Mednafen and the manual's prose. The manual's pseudocode
+  marks it SH-1 only, so this is Mednafen parity, not independent hardware confirmation.

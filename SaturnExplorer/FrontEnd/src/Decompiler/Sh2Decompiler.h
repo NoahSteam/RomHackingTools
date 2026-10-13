@@ -75,7 +75,9 @@ struct DecompileRequest
     uint32_t entry = 0;
     std::vector<std::pair<uint32_t, std::string>> names;      // address -> name (FunctionNames)
     std::vector<uint32_t> knownFunctions;                     // extra entries to register
-    std::vector<std::pair<uint32_t, Prototype>> prototypes;    // callee entry -> its decompiled signature
+    // Callee -> its decompiled signature, keyed by the address it runs at (as calledAt reports): a
+    // signature learned through one mirror is not applied to calls through another.
+    std::vector<std::pair<uint32_t, Prototype>> prototypes;
     bool registerCallees = true;                              // run the second pass
     uint32_t maxInstructions = 20000;                         // A4: bounds the uncheckable segments
 };
@@ -127,7 +129,11 @@ struct DecompileResult
     std::string name;
 
     std::vector<Line> lines;
-    std::vector<uint32_t> callees;        // constant call targets, sorted
+    std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
+    // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
+    // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the
+    // mirror it runs in.
+    std::vector<uint32_t> calledAt;
     // This function's own signature, for callers to use (DecompileRequest::prototypes). Not known
     // when the output is not trustworthy enough to lend it: truncated, unsupported, unimplemented.
     Prototype prototype;

@@ -160,7 +160,9 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
     if (mRunning && mRunningJob.slot == slot) RequestCancelLocked(CancelReason::Superseded);
 
     uint32_t entry = 0;
-    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(entry) && !retryTooLarge)
+    // By the address asked for, not the canonical one: run through another mirror, PC-derived
+    // values differ and so may the code reached.
+    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(request.entry) && !retryTooLarge)
     {
         DecompileResult r;
         r.status = DecompileStatus::TooLarge;
@@ -407,7 +409,7 @@ void DecompilerRunner::WorkerMain()
                 std::snprintf(b, sizeof b, "too large to decompile within %g s", mOptions.budgetSeconds);
                 r.status = DecompileStatus::TooLarge;
                 r.error = b;
-                if (job.epoch == mEpoch) mTooLarge.insert(r.entry);
+                if (job.epoch == mEpoch) mTooLarge.insert(r.requestedEntry);
             }
             mDone.push_back(std::make_pair(job.epoch, std::move(r)));
             RecoverLocked();

@@ -139,7 +139,7 @@ private:
     std::deque<Job> mQueue;
     std::deque<std::pair<uint64_t, DecompileResult>> mDone;   // (epoch, result)
     std::map<int, uint64_t> mLatest;            // slot -> newest generation submitted
-    std::set<uint32_t> mTooLarge;               // entries that ran out of budget this epoch
+    std::set<uint32_t> mTooLarge;               // entries, as asked (any mirror), that ran out of budget this epoch
     uint64_t mNextGeneration = 1;
     uint64_t mEpoch = 1;
     bool mStopping = false;

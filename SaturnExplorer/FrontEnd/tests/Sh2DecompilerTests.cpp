@@ -19,6 +19,7 @@
 #include "Decompiler/Sh2Decompiler.h"
 #include "Decompiler/SaturnHardwareMap.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <stdexcept>
@@ -616,12 +617,21 @@ void TestCalleePrototypes()
                             0x0009 })   //   nop
         { dts::Put16(hw2, o, w); o += 2; }
         dts::Put32(hw2, 0x06007394u - 0x06000000u, literal);
+        // Lent under the address called: that mirror's function object carries it.
         DecompileRequest lentTo = Request(viaLiteral);
-        lentTo.prototypes.emplace_back(callee, c.prototype);
+        lentTo.prototypes.emplace_back(literal, c.prototype);
         const DecompileResult m = d.Decompile(MakeSnapshot(hw2, 7), lentTo);
         Print("call through a literal, prototype lent", m);
         CHECK(Has(m.Text(), "func_0x06007340(1);"));
         CHECK(!Has(m.Text(), "(1,2,3)"));
+        CHECK(std::find(m.calledAt.begin(), m.calledAt.end(), literal) != m.calledAt.end());
+        if (literal == callee) continue;
+        // Review of 37a0535: a signature learned at another mirror is not this call's. The same
+        // bytes run elsewhere can take other arguments (a mova-derived pointer).
+        DecompileRequest other = Request(viaLiteral);
+        other.prototypes.emplace_back(callee, c.prototype);
+        const DecompileResult n = d.Decompile(MakeSnapshot(hw2, 7), other);
+        CHECK(Has(n.Text(), "(1,2,3)"));
     }
 
     // The function being decompiled keeps its own recovery even when a prototype is given for it.

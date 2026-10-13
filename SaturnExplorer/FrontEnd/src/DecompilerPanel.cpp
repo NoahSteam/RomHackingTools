@@ -187,12 +187,13 @@ void DecompilerPanel::Learn(const DecompileResult& r)
         p.shape = ShapeOf(r.prototype);
         // What it was lent for each function it calls. The result answers the question being asked
         // now (Accept and the cache both check that), so that is what is lendable now.
-        for (uint32_t c : r.callees)
-            if (c != r.entry) p.deps.emplace_back(c, LentShape(c, r.key, mFunctions));
-        mPrototypes[r.entry] = std::move(p);
+        // By the addresses they run at, as lent: a mirror can change a signature.
+        for (uint32_t c : r.calledAt)
+            if (c != r.requestedEntry) p.deps.emplace_back(c, LentShape(c, r.key, mFunctions));
+        mPrototypes[r.requestedEntry] = std::move(p);
     }
     else
-        mPrototypes.erase(r.entry);
+        mPrototypes.erase(r.requestedEntry);
 
     // Drop every signature recovered from a callee signature that is no longer the one known, to a
     // fixed point: dropping one changes what its own callers were lent. Each pass drops at least
@@ -267,7 +268,6 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mResolvedCallSites = mCallSitesRevision;
     mEntryOk = false;
     mEntry = 0;
-    mEntryCanonical = 0;
     mEntrySource = EntrySource::None;
     mEntryConfidence = 0;
     mEntryError.clear();
@@ -288,7 +288,6 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         }
         mEntryOk = true;
         mEntry = mTarget.address;   // as typed: a mirror is where the code runs, which mova sees
-        mEntryCanonical = canonical;
         mEntrySource = mTarget.source;
         mEntryConfidence = 100;
         return;
@@ -327,7 +326,6 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     CanonicalAddress(anchor, anchorCanonical);
     mEntryOk = true;
     mEntry = g.entry + (anchor - anchorCanonical);
-    mEntryCanonical = g.entry;
     mEntrySource = g.source;
     mEntryConfidence = g.confidence;
 }
@@ -357,7 +355,8 @@ void DecompilerPanel::CachePut(const Question& q, const DecompileResult& r, cons
 
 void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration)
 {
-    const bool sameFunction = mShownValid && mShown.entry == result.entry;
+    // The same function run through another mirror is another answer: the entry box follows it.
+    const bool sameFunction = mShownValid && mShown.requestedEntry == result.requestedEntry;
     mShown = std::move(result);
     mShownValid = true;
     mShownSnapId = snapId;
@@ -418,7 +417,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mPending.entry == mEntry &&                   // and the entry wanted now,
                          mPending.namesGeneration == mNamesGeneration && // under the names in force now,
                          mPending.functions == mFunctions &&           // registering the functions known now,
-                         mPending.prototypes == PrototypeHash(mEntryCanonical) &&   // lending the signatures known now,
+                         mPending.prototypes == PrototypeHash(mEntry) &&   // lending the signatures known now,
                          HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
     {
@@ -568,7 +567,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.entry = mEntry;
     q.namesGeneration = mNamesGeneration;
     q.functions = mFunctions;
-    q.prototypes = PrototypeHash(mEntryCanonical);
+    q.prototypes = PrototypeHash(mEntry);
     if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
     mNote.clear();
@@ -596,7 +595,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     if (inputs.bounds)
         rq.knownFunctions.assign(inputs.bounds->Entries().begin(), inputs.bounds->Entries().end());
     for (const auto& p : mPrototypes)
-        if (Lendable(p.second, mEntryCanonical, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
+        if (Lendable(p.second, mEntry, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
     const uint64_t generation = runner.Submit(kSlot, mSnap, std::move(rq), retry);
     ++mSubmissions;
     if (generation == 0)
@@ -1067,11 +1066,13 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 {
                     // A boundary correction. Every question is keyed by the function set, so the
                     // answers it outdates -- this function's and its callers' -- are not found again.
+                    // The start is recorded canonical; the new function is asked for in the
+                    // mirror the shown one runs in.
                     if (inputs.bounds) inputs.bounds->SetEntry(ln.firstAddr);
                     req.boundsChanged = true;
                     Target t;
                     t.kind = TargetKind::Entry;
-                    t.address = ln.firstAddr;
+                    t.address = ln.firstAddr + (mShown.requestedEntry - mShown.entry);
                     t.source = EntrySource::User;
                     SetTarget(t);
                 }

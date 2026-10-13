@@ -404,6 +404,12 @@ void TestBudget()
     CHECK(WaitResult(runner, again));
     CHECK(again.status == DecompileStatus::TooLarge);
     CHECK(runner.RunsStarted() == runs + 1);
+    // Review of 37a0535: the same bytes through the cache-through mirror are another request (its
+    // PC-derived values differ), so it is attempted rather than answered from the memo.
+    runner.Submit(0, gSnap, Big(dts::kDiamondsBase | 0x20000000u));
+    CHECK(WaitResult(runner, again));
+    CHECK(again.status == DecompileStatus::TooLarge);
+    CHECK(runner.RunsStarted() == runs + 2);
 
     // The immediate TooLarge answer still supersedes what the same requester had queued.
     PhaseGate gate;

@@ -1052,10 +1052,74 @@ void TestMirrorEntryIsKept()
     CHECK(f.WaitShown());
     CHECK(f.panel.WantedEntry() == dts::kFixture1Caller && f.Shown().requestedEntry == dts::kFixture1Caller);
     CHECK(f.panel.Submissions() == n + 1 && f.panel.CacheHits() == hits);
+    f.Idle(2);
+    CHECK(std::string(f.panel.EntryText()) == "06004000");   // review of 37a0535: the box follows the mirror
     f.Idle();
     f.TypeInto("entry", "26004000");          // typed: kept as typed
     CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == 0x26004000u; }));
-    CHECK(f.panel.CacheHits() == hits + 1);   // the mirror's own answer, from before
+    CHECK(f.panel.WantedEntry() == 0x26004000u);
+    // Not from the cache: the canonical run's signature is now lent to it, a function of its own.
+    f.Idle(2);
+    CHECK(std::string(f.panel.EntryText()) == "26004000");
+}
+
+// Review of 37a0535, finding 1: a signature belongs to the address its function ran at. This
+// callee's mova sees whether it runs through the cache-through mirror: canonically it stores its
+// argument, through 26004800 it skips the store and takes none. Learning the mirror's signature
+// must not change what a canonical caller is lent.
+void TestPrototypesPerMirror()
+{
+    Fixture f;
+    auto place = [&](uint32_t at, std::initializer_list<uint16_t> words) {
+        for (uint16_t w : words) { f.PutWord(at, w); at += 2; }
+    };
+    const uint32_t C = 0x06004800u, A = 0x06004900u;
+    place(C, { 0xC703,    // mova @(12,pc),r0   -> C+0x10, in the partition run from
+               0xD103,    // mov.l @(12,pc),r1  -> the literal at C+0x10
+               0x3100,    // cmp/eq r0,r1
+               0x8901,    // bt C+0xC
+               0x2142,    // mov.l r4,@r1
+               0x0009,    // nop
+               0x000B,    // rts
+               0x0009 }); //  nop
+    f.PutWord(C + 0x10, 0x2600);
+    f.PutWord(C + 0x12, 0x4810);   // 0x26004810
+    place(A, { 0xE407, 0x4F22, 0xBF7C, 0x0009, 0x4F26, 0x000B, 0x0009 });   // mov #7,r4; bsr C
+    ++f.backend.serial;
+    f.Idle();
+    auto show = [&](const char* entry) {
+        f.TypeInto("entry", entry);
+        const uint32_t want = static_cast<uint32_t>(std::strtoul(entry, nullptr, 16));
+        const bool ok = f.PumpUntil([&] {
+            return !f.panel.Pending() && f.panel.Shown() && f.panel.Shown()->requestedEntry == want &&
+                   !f.panel.ShownStale();
+        });
+        if (!ok) f.Dump();
+        return f.Shown().Text();
+    };
+    CHECK(Has(show("06004800"), "param_1"));      // canonical: takes the argument
+    CHECK(Has(show("06004900"), "func_0x06004800(7);"));
+    show("26004800");                              // through the mirror: takes none
+    CHECK(!Has(f.Shown().Text(), "param_1"));
+    CHECK(Has(show("06004900"), "func_0x06004800(7);"));
+}
+
+// Review of 37a0535, finding 2: Set Function Start Here records the start canonical and asks for
+// the new function in the mirror the shown one runs in.
+void TestFunctionStartKeepsMirror()
+{
+    Fixture f;
+    f.Idle();
+    f.TypeInto("entry", "26004000");
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == 0x26004000u; }));
+    const int line = f.LineContaining("func_0x06005000");
+    CHECK(line >= 0);
+    const uint32_t at = f.Shown().lines[static_cast<size_t>(line)].firstAddr;
+    CHECK(at > dts::kFixture1Caller && at < 0x06005000u);   // canonical
+    f.LineMenu(line, "Set Function Start Here");
+    CHECK(f.bounds.Entries().count(at) == 1);
+    f.Idle();
+    CHECK(f.panel.WantedEntry() == (at | 0x20000000u));
 }
 
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
@@ -1653,6 +1717,8 @@ int main(int argc, char** argv)
         RUN(TestHintsReResolve());
         RUN(TestCallStackHints());
         RUN(TestMirrorEntryIsKept());
+        RUN(TestPrototypesPerMirror());
+        RUN(TestFunctionStartKeepsMirror());
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());

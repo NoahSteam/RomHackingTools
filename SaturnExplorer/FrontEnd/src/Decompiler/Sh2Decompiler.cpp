@@ -571,11 +571,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         uint32_t c = 0;
         if (!n.second.empty() && CanonicalAddress(n.first, c)) named[c] = n.second;
     }
+    // By the address each callee runs at, exactly: the same bytes through another mirror can take
+    // other arguments (a mova-derived pointer), so a signature is not shared across mirrors.
     std::map<uint32_t, Prototype> prototypes;
     for (const auto& p : request.prototypes)
     {
         uint32_t c = 0;
-        if (p.second.known && CanonicalAddress(p.first, c)) prototypes[c] = p.second;
+        if (p.second.known && CanonicalAddress(p.first, c)) prototypes[p.first] = p.second;
     }
     std::set<uint32_t> known;
     for (uint32_t k : request.knownFunctions)
@@ -641,8 +643,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                         ghidra::Funcdata* af = global->addFunction(ghidra::Address(ram, alias), name)->getFunction();
                         // The call resolves to the alias's function object, so it needs the lent
                         // signature as much as the canonical one does.
-                        auto proto = prototypes.find(a);
-                        if (a != entry && proto != prototypes.end()) ApplyPrototype(*arch, *af, proto->second);
+                        auto proto = prototypes.find(alias);
+                        if (proto != prototypes.end()) ApplyPrototype(*arch, *af, proto->second);
                     }
                     catch (ghidra::LowlevelError& e)
                     {
@@ -655,8 +657,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 if (a == exec) fd = f2;
                 // A callee decompiled before lends its signature; the function being decompiled
                 // keeps the engine's own recovery.
-                auto proto = prototypes.find(key);
-                if (key != entry && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
+                auto proto = prototypes.find(a);
+                if (a != exec && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
             }
             catch (ghidra::LowlevelError& e)
             {
@@ -782,7 +784,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return;
     }
     r.status = DecompileStatus::Ok;
-    for (const auto& c : callees) r.callees.push_back(c.first);
+    for (const auto& c : callees)
+    {
+        r.callees.push_back(c.first);
+        r.calledAt.insert(r.calledAt.end(), c.second.begin(), c.second.end());
+    }
+    std::sort(r.calledAt.begin(), r.calledAt.end());
 }
 
 std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,

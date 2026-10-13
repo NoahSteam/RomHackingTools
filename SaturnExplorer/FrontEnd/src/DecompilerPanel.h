@@ -290,7 +290,6 @@ private:
     uint64_t mCallSitesRevision = 0;
     bool mEntryOk = false;
     uint32_t mEntry = 0;             // where it runs (a mirror, if the code runs there): what is asked
-    uint32_t mEntryCanonical = 0;    // its identity: names, prototypes
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;
     int mEntryConfidence = 0;
     std::string mEntryError;
@@ -309,8 +308,8 @@ private:
     std::map<uint32_t, decomp::SnapshotKey> mCallees;
     uint64_t mCalleesGeneration = 0;   // moves when an entry is found for a snapshot
     uint64_t CalleeHash() const;       // over the callees that are hints for mSnap
-    // Each function's signature from its last decompilation this session, lent to its callers'
-    // requests. Engine input: the question carries a hash of what is lent, so a caller decompiled
+    // Each function's signature from its last decompilation this session, keyed by the address it
+    // ran at (a mirror's mova can change what it takes), lent to its callers' requests. Engine input: the question carries a hash of what is lent, so a caller decompiled
     // before its callee is asked again, with the callee's signature, when it is next shown.
     // A signature is a function of everything its decompilation read, so it records all of it: the
     // snapshot, the function set, and the signature it was lent for each function it calls ('deps',
