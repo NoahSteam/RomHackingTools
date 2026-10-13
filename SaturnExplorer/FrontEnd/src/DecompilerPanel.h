@@ -173,6 +173,9 @@ public:
     const std::string& HintText() const { return mHintText; }
     // The user notes the last Draw attached to each shown line ("" for none), by line index.
     const std::vector<std::string>& LineNotes() const { return mLineNotes; }
+    // ...and the notes inside the function's body whose instruction no line came from (a folded
+    // literal load, a delay slot), listed under the code so they are not lost: "0x06008218: note".
+    const std::vector<std::string>& UnplacedNotes() const { return mUnplacedNotes; }
     uint64_t Captures() const { return mCaptures; }
     uint64_t Submissions() const { return mSubmissions; }
     uint64_t Discarded() const { return mDiscarded; }
@@ -314,6 +317,7 @@ private:
     decomp::RegisterHint mHint;      // this Draw's HaltHint, and its text
     std::string mHintText;
     std::vector<std::string> mLineNotes;   // this Draw's user notes per shown line
+    std::vector<std::string> mUnplacedNotes;
 
     struct DrawnLine { int index; ImVec2 min, max; };
     std::vector<DrawnLine> mDrawn;

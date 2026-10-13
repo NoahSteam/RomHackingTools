@@ -707,9 +707,18 @@ void TestUserCommentsOnLines()
     CHECK(hit == 1 && dflt == 1);
     CHECK(f.panel.Submissions() == n);   // a display overlay, not engine input
 
+    // macOS run: a note on the literal load (folded into the call, so no line comes from it) was
+    // shown nowhere. It is listed under the code instead; one outside the function is not.
+    f.comments[dts::kFixture1Jsr - 2] = "the literal";
+    f.Idle(2);
+    const std::vector<std::string>& unplaced = f.panel.UnplacedNotes();
+    for (const std::string& u : unplaced) std::printf("  unplaced: %s\n", u.c_str());
+    CHECK(unplaced.size() == 1 && unplaced[0] == "0x0600400C: the literal");
+
     f.comments.clear();
     f.Idle(2);
     for (const std::string& note : f.panel.LineNotes()) CHECK(note.empty());
+    CHECK(f.panel.UnplacedNotes().empty());
 }
 
 // Step 4: a callee's signature, learned when the panel showed it, is lent to its caller. The

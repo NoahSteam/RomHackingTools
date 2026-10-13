@@ -807,6 +807,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     // even when the instruction feeds several lines. Notes are written at whatever mirror the
     // Assembly panel showed; the output's addresses are canonical.
     mLineNotes.assign(mShown.lines.size(), std::string());
+    mUnplacedNotes.clear();
     if (inputs.comments && !inputs.comments->empty())
     {
         std::map<uint32_t, const std::string*> notes;
@@ -828,6 +829,27 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 if (!mLineNotes[i].empty()) mLineNotes[i] += "; ";
                 mLineNotes[i] += *it->second;
             }
+        }
+        // The rest of the body's notes: their instruction feeds a line (a literal load folded into
+        // a constant, a delay slot) without being one, so they have no line of their own.
+        const uint32_t end = mShown.entry + mShown.bodyBytes;
+        for (auto it = notes.lower_bound(mShown.entry); it != notes.end() && it->first < end; ++it)
+            if (placed.count(it->first) == 0)
+            {
+                char b[16];
+                std::snprintf(b, sizeof b, "0x%08X: ", it->first);
+                mUnplacedNotes.push_back(b + *it->second);
+            }
+    }
+
+    if (!mUnplacedNotes.empty())
+    {
+        ImGui::TextDisabled("%zu note%s on instructions with no line of their own", mUnplacedNotes.size(),
+                            mUnplacedNotes.size() == 1 ? "" : "s");
+        if (ImGui::BeginItemTooltip())
+        {
+            for (const std::string& n : mUnplacedNotes) ImGui::TextUnformatted(n.c_str());
+            ImGui::EndTooltip();
         }
     }
 
