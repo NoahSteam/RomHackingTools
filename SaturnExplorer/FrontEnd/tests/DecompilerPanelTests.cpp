@@ -631,6 +631,52 @@ void TestDelaySlotFlagged()
     CHECK(!f.Shown().lines.empty());
 }
 
+// Step 4: stopped on a register-target call, the panel says where it goes this time -- the
+// register's value, and its name when it has one -- and only while that is true of the output
+// on screen.
+void TestRegisterHintAtHalt()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LivePaused;
+    f.PutWord(dts::kFixture1Jsr - 2, 0x6042);   // mov.l @r4,r0 replaces the literal load: computed
+    ++f.backend.serial;
+    f.regs[0].pc = dts::kFixture1Jsr;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    f.names[dts::kFixture1Callee] = "read_word";
+    ++f.namesGeneration;
+    CHECK(f.WaitShown("(*(code *)"));                   // the output does not name the target
+    f.Idle(2);
+    std::printf("hint: %s\n", f.panel.HintText().c_str());
+    CHECK(f.panel.HintText() == "r0 = 0x06005000 at the halt (read_word)");
+
+    // The CPU steps on: no longer stopped on the call.
+    f.regs[0].pc = dts::kFixture1AddOne;
+    ++f.frame;
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    CHECK(f.panel.HintText().empty());
+
+    // Running: the CPU is no longer where the registers say, even before the frame moves on and
+    // the output goes stale.
+    f.regs[0].pc = dts::kFixture1Jsr;
+    ++f.frame;
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    CHECK(!f.panel.HintText().empty());
+    f.kind = DecompViewKind::LiveRunning;
+    f.Idle(2);
+    CHECK(!f.panel.ShownStale());
+    CHECK(f.panel.HintText().empty());
+
+    // A call the output resolved statically (jsr through a literal) needs no hint.
+    f.kind = DecompViewKind::LivePaused;
+    f.PutWord(dts::kFixture1Jsr - 2, 0xD003);
+    ++f.backend.serial;
+    CHECK(f.WaitShown("read_word("));
+    f.Idle(2);
+    CHECK(f.panel.HintText().empty());
+}
+
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
 // with other bytes is a new key, a function-start correction asks for the new entry.
 void TestRenameBiosAndBounds()
@@ -1211,6 +1257,7 @@ int main(int argc, char** argv)
         RUN(TestSessionChangeDoesNotWait());
         RUN(TestEntriesAndNoRetryLoops());
         RUN(TestDelaySlotFlagged());
+        RUN(TestRegisterHintAtHalt());
         RUN(TestRenameBiosAndBounds());
         RUN(TestRunningLive());
         RUN(TestScrubCache());

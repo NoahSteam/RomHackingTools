@@ -50,6 +50,7 @@
 
 #include "Decompiler/DecompilerRunner.h"
 #include "Decompiler/MemorySnapshot.h"
+#include "Decompiler/RegisterHint.h"
 #include "Decompiler/Sh2Decompiler.h"
 #include "Decompiler/Sh2FunctionFinder.h"
 
@@ -163,6 +164,8 @@ public:
     uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }
     const std::string& EntryError() const { return mEntryError; }
     const char* EntryText() const { return mEntryBuf; }
+    // The register hint the last Draw showed for a register-target call at the halt, or "".
+    const std::string& HintText() const { return mHintText; }
     uint64_t Captures() const { return mCaptures; }
     uint64_t Submissions() const { return mSubmissions; }
     uint64_t Discarded() const { return mDiscarded; }
@@ -238,6 +241,9 @@ private:
     void DrawHeader(const DecompilerView& view, const decomp::DecompilerRunner& runner, Request& req);
     void DrawStatus(const DecompilerView& view, const decomp::DecompilerRunner& runner);
     void DrawLines(const DecompilerInputs& inputs, Request& req);
+    // The hint for the output on screen: the followed CPU stopped on a register-target call or
+    // jump in it whose target the output does not already name. Invalid otherwise.
+    decomp::RegisterHint HaltHint() const;
 
     int mCpu = 0;
     Target mTarget;
@@ -290,6 +296,8 @@ private:
     bool mSyncEntryBox = false;
     bool mEntryActive = false;       // the box had keyboard focus last frame
     int mContextLine = -1;           // the line the context menu was opened on
+    decomp::RegisterHint mHint;      // this Draw's HaltHint, and its text
+    std::string mHintText;
 
     struct DrawnLine { int index; ImVec2 min, max; };
     std::vector<DrawnLine> mDrawn;

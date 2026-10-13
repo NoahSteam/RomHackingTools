@@ -378,6 +378,12 @@ by `DecompilerPanelTests`:
   functions in it `bios_0x%08x` unless the user named them, as callees and as entries; pinned by
   `TestBiosFunctionNames`.
 - Register-value hints at a halt for computed `jsr @rN` targets.
+  *As built:* `Decompiler/RegisterHint.{h,cpp}` and the panel. When the followed CPU is stopped
+  exactly on a `jsr`/`jmp`/`braf`/`bsrf @rN` in the output on screen (a savestate, a paused or a
+  halted emulator, a recorded frame; never running or stale), and the output does not already
+  name the target, the status line and the call's line say "r2 = 0x06031510 at the halt", with
+  the target's FunctionNames name when it has one. Not before the instruction (rN may still
+  change) and not in its slot. Pinned by `TestRegisterHintAtHalt`.
 - User comments shown on mapped lines (display layer, per A1).
 
 ### Step 5 — Release

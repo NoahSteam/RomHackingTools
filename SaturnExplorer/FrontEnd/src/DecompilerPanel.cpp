@@ -508,6 +508,25 @@ void DecompilerPanel::Draw(bool* open, const DecompilerView& view, const Decompi
         ImGui::End();
         return;
     }
+    mHint = HaltHint();
+    mHintText.clear();
+    if (mHint.valid)
+    {
+        char b[160];
+        uint32_t canonical = 0;
+        const char* name = nullptr;
+        if (inputs.names && CanonicalAddress(mHint.target, canonical))
+        {
+            auto it = inputs.names->find(canonical);
+            if (it != inputs.names->end()) name = it->second.c_str();
+        }
+        int len = std::snprintf(b, sizeof b, "r%d = 0x%08X at the halt", mHint.reg, mHint.value);
+        if (mHint.target != mHint.value && len > 0 && len < static_cast<int>(sizeof b))
+            len += std::snprintf(b + len, sizeof b - len, ": %s goes to 0x%08X", mHint.mnemonic, mHint.target);
+        if (name && len > 0 && len < static_cast<int>(sizeof b))
+            std::snprintf(b + len, sizeof b - len, " (%s)", name);
+        mHintText = b;
+    }
     DrawHeader(view, runner, req);
     DrawStatus(view, runner);
     DrawLines(inputs, req);
@@ -690,6 +709,12 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
         ImGui::TextColored(kAmber, "Flows into %s at 0x%08X; the function is cut off there.",
                            mShown.truncatedWhy.empty() ? "uncaptured memory" : mShown.truncatedWhy.c_str(),
                            mShown.truncatedAt);
+    if (!mHintText.empty())
+    {
+        ImGui::TextColored(kAmber, "%s 0x%08X: %s", mHint.mnemonic, mHint.insn, mHintText.c_str());
+        ImGui::SetItemTooltip("Where this call goes this time, read from the register file at the halt. "
+                              "The target is computed, so another call may go elsewhere.");
+    }
     if (!mShown.warnings.empty())
     {
         ImGui::TextDisabled("%zu warning%s", mShown.warnings.size(), mShown.warnings.size() == 1 ? "" : "s");
@@ -699,6 +724,31 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
             ImGui::EndTooltip();
         }
     }
+}
+
+RegisterHint DecompilerPanel::HaltHint() const
+{
+    // Only for registers that belong to the output on screen: a running emulator has moved on
+    // since its snapshot, and stale output is from another snapshot than the registers.
+    if (!mShownValid || !mSnap || ShownStale() || mViewKind == DecompViewKind::LiveRunning ||
+        mViewKind == DecompViewKind::None)
+        return RegisterHint();
+    const RegisterHint h = RegisterTargetAtHalt(*mSnap, mCpu);
+    if (!h.valid) return h;
+    uint32_t target = 0;
+    const bool canonical = CanonicalAddress(h.target, target);
+    bool inFunction = false;
+    for (const Line& l : mShown.lines)
+    {
+        bool here = false;
+        for (const Token& t : l.tokens) here |= t.addr == h.insn;
+        if (!here) continue;
+        inFunction = true;
+        // A call the output already resolved (jsr through a literal) needs no hint.
+        for (const Token& t : l.tokens)
+            if (t.kind == TokenKind::FuncName && canonical && t.target == target) return RegisterHint();
+    }
+    return inFunction ? h : RegisterHint();
 }
 
 void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
@@ -828,6 +878,17 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 pos = e;
             }
             run(pos, ln.text.size(), TokenKind::Plain);
+            // The halt hint on the line the call was decompiled into, as a trailing comment.
+            if (mHint.valid)
+                for (const Token& t : ln.tokens)
+                    if (t.addr == mHint.insn)
+                    {
+                        const std::string note = "  // " + mHintText;
+                        ImVec4 c = kAmber;
+                        c.w *= alpha;
+                        dl->AddText(ImVec2(x, min.y), ImGui::GetColorU32(c), note.c_str());
+                        break;
+                    }
             ImGui::PopID();
         }
     }
