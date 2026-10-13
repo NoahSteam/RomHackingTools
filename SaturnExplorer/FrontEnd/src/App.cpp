@@ -44,6 +44,7 @@
 #include "SeLiveProtocol.h"  // pure protocol constants: SE_LIVE_VERSION, SE_PAD_* masks.
                              // Safe in every build (no threads/sockets); the pad-mask
                              // decode below and ControllerPanel both need it unconditionally.
+#include "Sh2Address.h"       // CanonicalAddress: a breakpoint matches a halt at any mirror
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
 #endif
@@ -1554,7 +1555,22 @@ void App::BuildUI(IPlatform& platform)
             mbPaused = true;   // halted; panel follows the halted PC
             mHaltFromStep = haltFromStep;
             mHaltDmaWatch = report.dmaWatch;
-            mHaltUserBp   = report.userBreakpoint;
+            // A breakpoint at any mirror of the halt PC is the user's: the PC an emulator
+            // reports need not be the spelling the breakpoint was set at.
+            mHaltUserBp = report.userBreakpoint;
+            mHaltWatchArmed = false;
+            {
+                uint32_t haltCanon = 0;
+                const bool canon = sfe::CanonicalAddress(report.pc, haltCanon);
+                for (const sfe::Breakpoint& b : mBreakpoints.All())
+                {
+                    if (!b.enabled) continue;
+                    if (b.kind != sfe::BpKind::Execution) { mHaltWatchArmed = true; continue; }
+                    uint32_t bpCanon = 0;
+                    if (canon && sfe::CanonicalAddress(b.address, bpCanon) && bpCanon == haltCanon)
+                        mHaltUserBp = true;
+                }
+            }
             // A transient step breakpoint (Step Over / Step Out) has done its job once we
             // halt at it — retire it so it doesn't linger as a stray breakpoint.
             // ...and a halt shown anywhere else ends a step that has not finished: its transient goes
@@ -4502,7 +4518,8 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::BeginChild("bphit", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * 2.0f + 6.0f),
                           ImGuiChildFlags_None);
         ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s",
-                           sfe::StopBannerLabel(mStepHalt.HaltActive(), mHaltFromStep, mHaltDmaWatch, mHaltUserBp));
+                           sfe::StopBannerLabel(mStepHalt.HaltActive(), mHaltFromStep, mHaltDmaWatch, mHaltUserBp,
+                                                mHaltWatchArmed));
         ImGui::SameLine();
         ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
         if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }

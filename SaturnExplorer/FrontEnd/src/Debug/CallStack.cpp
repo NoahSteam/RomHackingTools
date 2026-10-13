@@ -282,15 +282,18 @@ void CallStack::Select(int cpu, int frame)
     if (frame >= 0 && frame < static_cast<int>(mFrames[idx].size())) mSelected[idx] = frame;
 }
 
-const char* StopBannerLabel(bool haltActive, bool fromStep, bool dmaWatch, bool userBreakpoint)
+const char* StopBannerLabel(bool haltActive, bool fromStep, bool dmaWatch, bool userBreakpoint,
+                            bool watchpointArmed)
 {
-    if (!haltActive)    return "PAUSED";
-    if (fromStep)       return "STEPPED";
-    if (dmaWatch)       return "DMA WATCH HIT";
-    if (userBreakpoint) return "BREAKPOINT HIT";
-    // An execution stop with no user breakpoint at the PC is a halting data watchpoint, which
-    // reports the accessing instruction through the same path.
-    return "WATCHPOINT HIT";
+    if (!haltActive)      return "PAUSED";
+    if (fromStep)         return "STEPPED";
+    if (dmaWatch)         return "DMA WATCH HIT";
+    if (userBreakpoint)   return "BREAKPOINT HIT";
+    // A halting data watchpoint reports the accessing instruction through the execution-stop path,
+    // so a stop with no breakpoint at the PC is one -- if one is set at all.
+    if (watchpointArmed)  return "WATCHPOINT HIT";
+    // Nothing the app has set explains the stop. Naming a cause would be a guess.
+    return "HALTED";
 }
 
 StepOutTarget ChooseStepOutTarget(const std::vector<CallStackFrame>& frames, const se_sh2_regs& regs)

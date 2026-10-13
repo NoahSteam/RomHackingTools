@@ -273,12 +273,18 @@ void TestStepOutRefusesTheReconstructorsFrameZero()
 // A pause is named for what caused it: only a halt at a user breakpoint is a "BREAKPOINT HIT".
 static void TestStopBannerNamesTheCause()
 {
-    CHECK(std::string(sfe::StopBannerLabel(false, false, false, false)) == "PAUSED");
-    CHECK(std::string(sfe::StopBannerLabel(false, true,  true,  true))  == "PAUSED");   // stale flags ignored
-    CHECK(std::string(sfe::StopBannerLabel(true,  true,  false, true))  == "STEPPED");
-    CHECK(std::string(sfe::StopBannerLabel(true,  false, true,  false)) == "DMA WATCH HIT");
-    CHECK(std::string(sfe::StopBannerLabel(true,  false, false, true))  == "BREAKPOINT HIT");
-    CHECK(std::string(sfe::StopBannerLabel(true,  false, false, false)) == "WATCHPOINT HIT");
+    auto label = [](bool halt, bool step, bool dma, bool bp, bool watch) {
+        return std::string(sfe::StopBannerLabel(halt, step, dma, bp, watch));
+    };
+    CHECK(label(false, false, false, false, false) == "PAUSED");
+    CHECK(label(false, true,  true,  true,  true)  == "PAUSED");   // stale flags ignored
+    CHECK(label(true,  true,  false, true,  false) == "STEPPED");
+    CHECK(label(true,  false, true,  false, false) == "DMA WATCH HIT");
+    CHECK(label(true,  false, false, true,  true)  == "BREAKPOINT HIT");
+    CHECK(label(true,  false, false, false, true)  == "WATCHPOINT HIT");
+    // macOS run: a re-hit after a step read WATCHPOINT HIT with no watchpoint set. With none set,
+    // a stop nothing explains is not called one.
+    CHECK(label(true,  false, false, false, false) == "HALTED");
 }
 
 int main()

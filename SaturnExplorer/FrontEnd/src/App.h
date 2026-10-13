@@ -469,6 +469,7 @@ private:
     bool                     mHaltFromStep = false;
     bool                     mHaltDmaWatch = false;
     bool                     mHaltUserBp   = false;
+    bool                     mHaltWatchArmed = false;
     bool                     mFocusRegisters = false;   // ditto, for the SH-2 register file
     bool                     mSelectSh2RegTab = false;  // and select its SH-2 tab, not a VDP one
     bool                     mFocusBreakpoints = false; // ditto, for the breakpoint list

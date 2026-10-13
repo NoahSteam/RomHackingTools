@@ -150,7 +150,9 @@ StepOutTarget ChooseStepOutTarget(const std::vector<CallStackFrame>& frames, con
 // from the toolbar, a finished step and a watchpoint all leave the CPU paused too, and calling every
 // one of them "BREAKPOINT HIT" sends the user looking for a breakpoint that does not exist.
 // 'haltActive' is an instruction-level halt the emulator reported; without one the pause is the user's.
-const char* StopBannerLabel(bool haltActive, bool fromStep, bool dmaWatch, bool userBreakpoint);
+// 'watchpointArmed': an enabled memory watchpoint existed at the halt.
+const char* StopBannerLabel(bool haltActive, bool fromStep, bool dmaWatch, bool userBreakpoint,
+                            bool watchpointArmed);
 
 // True when 'addr' points into a region SH-2 code plausibly lives in (HWRAM / LWRAM /
 // boot ROM), even-aligned. Exposed for the reconstructor + tests.
