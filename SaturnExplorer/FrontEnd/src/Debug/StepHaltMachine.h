@@ -81,6 +81,14 @@ public:
     // which one it was so that its re-reports (outcome.declinedEcho) are recognised.
     void SuppressHalt();
 
+    // The user resumed the CPU from the halt on screen (Continue, Resume, Play, a step). The emulator
+    // keeps reporting that halt for a frame or two while the resume crosses the socket; those
+    // re-reports are echoes (outcome.declinedEcho), not a new stop. Without this the app paused
+    // again on the echo -- and when the emulator then ran, nothing un-paused it, so the UI said
+    // "paused" over a running emulator (macOS run, Step 4). A later halt has a new number and is
+    // presented as usual. Needs numbered halts; an emulator that numbers none is unaffected.
+    void Resumed();
+
     // The caller is surfacing this halt. 'atStepTarget' is the outcome's flag. If a step's transient
     // is installed and this halt is not its arrival, the step is over: the transient is retired.
     void HaltPresented(bool atStepTarget);

@@ -459,6 +459,71 @@ void TestSettleWindowCountsDownAndStops()
     CHECK(!m.Settling());
 }
 
+// macOS run (Step 4): Continue from a halt, and the emulator re-reports that halt for a frame or two
+// while the resume crosses the socket. The re-report is an echo, not a stop to pause on; the next
+// halt -- a new number, even at the same PC, as a breakpoint in a loop gives -- is presented.
+void TestAUserResumeTurnsTheLeftHaltIntoAnEcho()
+{
+    StepHaltMachine m;
+    m.Observe(Numbered(5, 0x06000840));
+    CHECK(m.HaltActive());
+    m.Resumed();
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        const StepOutcome echo = m.Observe(Numbered(5, 0x06000840));
+        CHECK(echo.declinedEcho);
+        CHECK(!m.HaltActive());
+    }
+    m.Observe(Running());
+    CHECK(!m.HaltActive());
+    const StepOutcome hit = m.Observe(Numbered(6, 0x06000840));
+    CHECK(!hit.declinedEcho);
+    CHECK(m.HaltActive());
+    CHECK(!hit.fromStep);
+
+    // From a halt the emulator does not number, nothing is assumed to be an echo.
+    StepHaltMachine old;
+    old.Observe(Halted(0x06000840));
+    old.Resumed();
+    CHECK(!old.Observe(Halted(0x06000844)).declinedEcho);
+}
+
+// The same after a step: Step Into, then Continue from the stepped halt. The stepped halt's echo is
+// not presented (it had shown as HALTED, hiding the breakpoint re-hit behind it); the re-hit is.
+void TestContinueAfterAStepPresentsTheNextHitNotTheStepEcho()
+{
+    StepHaltMachine m;
+    m.Observe(Numbered(5, 0x06000840));
+    m.Resumed();
+    m.BeginStep();                                         // Step Into
+    CHECK(m.Observe(Numbered(5, 0x06000840)).declinedEcho);   // pre-step echo: held, not released
+    CHECK(m.HaltActive() && m.StepInFlight());
+    const StepOutcome stepped = m.Observe(Numbered(6, 0x06000842));
+    CHECK(stepped.fromStep && !m.StepInFlight());
+    m.Resumed();                                           // Continue
+    CHECK(m.Observe(Numbered(6, 0x06000842)).declinedEcho);
+    CHECK(!m.HaltActive());
+    const StepOutcome hit = m.Observe(Numbered(7, 0x06000840));
+    CHECK(!hit.declinedEcho && !hit.fromStep);
+    CHECK(m.HaltActive() && m.HaltPc() == 0x06000840);
+}
+
+// Step Over / Out resume through Continue too: the pre-step echo is dropped and the hold still
+// waits for the arrival, which completes the step.
+void TestARunToStepSurvivesTheResumeEcho()
+{
+    StepHaltMachine m;
+    m.Observe(Numbered(5, 0x06001000));
+    m.BeginRunTo(0x06002000, 0);
+    m.Resumed();
+    const StepOutcome echo = m.Observe(Numbered(5, 0x06001000));
+    CHECK(echo.declinedEcho);
+    CHECK(m.StepInFlight() && m.HaltActive());
+    const StepOutcome done = m.Observe(Numbered(6, 0x06002000, 0));
+    CHECK(done.atStepTarget && done.fromStep);
+    CHECK(!m.StepInFlight());
+}
+
 }  // namespace
 
 int main()
@@ -483,6 +548,9 @@ int main()
     TestResetHaltDropsTheStepButKeepsTheTransient();
     TestResetForNewEmulatorClearsEverythingAndForcesASync();
     TestSettleWindowCountsDownAndStops();
+    TestAUserResumeTurnsTheLeftHaltIntoAnEcho();
+    TestContinueAfterAStepPresentsTheNextHitNotTheStepEcho();
+    TestARunToStepSurvivesTheResumeEcho();
     if (gFailures != 0)
     {
         std::cerr << gFailures << " step/halt check(s) failed\n";

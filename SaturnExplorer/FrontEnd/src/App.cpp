@@ -2150,6 +2150,7 @@ void App::DrawTransportBar()
             DiscardPendingEdits();   // the frame they were staged on is being left behind
             mbScrubbing = false;
             mbPaused = false;
+            mStepHalt.Resumed();
             VoidEditTarget();
         }
     }
@@ -5010,6 +5011,7 @@ void App::Continue()
         DiscardPendingEdits();
 #endif
         mbPaused = false;
+        mStepHalt.Resumed();   // the halt left behind is re-reported for a frame or two: not a new stop
     }
 }
 
@@ -5061,6 +5063,7 @@ void App::StepInto(int cpu)
     se_live_step_insn(&mDataSource, 1);
 #endif
     mbPaused = false;
+    mStepHalt.Resumed();
     mStepHalt.BeginStep();   // hold the halted UI until the re-halt lands
 }
 
@@ -8439,6 +8442,7 @@ void App::ExecuteTopBarCommand(const TopBarCommand& command, IPlatform& platform
             DiscardPendingEdits();
 #endif
             mbPaused = false;
+            mStepHalt.Resumed();
         }
         else { se_frame_pause(mContext); mbPaused = true; }
         break;

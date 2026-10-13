@@ -104,6 +104,13 @@ void StepHaltMachine::SuppressHalt()
     mDeclinedSeq    = mObsSeq;
 }
 
+void StepHaltMachine::Resumed()
+{
+    if (!mHaltHasSeq) return;
+    mDeclinedHasSeq = true;
+    mDeclinedSeq    = mHaltSeq;
+}
+
 void StepHaltMachine::HaltPresented(bool atStepTarget)
 {
     // A halt that is going to be SHOWN, at somewhere other than the step's target -- a user

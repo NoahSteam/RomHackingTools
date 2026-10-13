@@ -284,16 +284,21 @@ void CancelHeldAt(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
                 r.status == DecompileStatus::Cancelled ? PhaseName(r.cancelledIn) : "-", MsSince(t0));
 }
 
-// Cancel halfway through 'phase' (by its baseline length); counts only when the phase read
+// Cancel halfway through 'phase' (by its baseline length, earlier on a retry that overshot it);
+// counts only when the phase read
 // before and after setting the flag is 'phase'. Returns false when no attempt was conclusive.
 bool CancelMidway(DecompilerRunner& runner, PhaseGate& gate, int fixture, DecompilePhase phase, DecompileResult& r)
 {
+    // The baseline was measured under whatever load the machine had then. When it has less now
+    // (ctest -j: other tests finish), the phase is shorter than the baseline says and 50% of it
+    // lands past the end, every attempt. So each attempt that landed past it aims earlier.
+    double fraction = 0.5;
     for (int attempt = 1; attempt <= 10; ++attempt)
     {
         gate.Reset();
         runner.Submit(0, gSnap, Big(kFixtures[fixture].entry));
         CHECK(gate.WaitEntered(phase, 60));
-        const double half = gBaseline[fixture].phaseMs[int(phase)] * 0.5;
+        const double half = gBaseline[fixture].phaseMs[int(phase)] * fraction;
         // Spun, not slept: followFlow lasts ~60 ms, and a sleep on a loaded CI VM (macOS under
         // Rosetta) overshoots by more than half of that, landing every attempt in the next phase.
         const auto until = gate.EnteredAt(phase) + std::chrono::duration_cast<Clock::duration>(
@@ -310,6 +315,7 @@ bool CancelMidway(DecompilerRunner& runner, PhaseGate& gate, int fixture, Decomp
                     r.status == DecompileStatus::Cancelled ? PhaseName(r.cancelledIn) : "-", MsSince(t0),
                     conclusive ? "" : "  (inconclusive: the phase changed around the flag)");
         if (conclusive) return true;
+        if (before != phase) fraction *= 0.5;   // already past the phase when the flag went up
     }
     return false;
 }

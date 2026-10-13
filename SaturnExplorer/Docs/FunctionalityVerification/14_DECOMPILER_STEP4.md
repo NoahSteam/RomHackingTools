@@ -53,8 +53,12 @@ for 1–4 and 6; 5 needs live Mednafen.
   Continue to the same breakpoint read WATCHPOINT HIT with no watchpoint set (2 of 2). Fixed in
   `efbcb62`: a breakpoint owns a halt at any mirror of its address, and a stop that no breakpoint
   or armed watchpoint explains reads HALTED. Needs re-test.
-- **Open, live run control:** remove the breakpoint while halted on it, then Continue. The emulator
-  stays at the same frame and PC. Run → Resume then runs it, but the app still says paused: the
-  Call Stack shows PAUSED, the status bar says Paused, and the pseudocode panel says "live, paused"
-  and "decompiling… [stale]". Reproduced at `169c8d5`. Not caused by Step 4, and the root cause is
-  under investigation with the emulator.
+- **Live run control, fixed (needs re-test):** after a user resume (Continue, Resume, Play, Step Into),
+  the emulator re-reports the halt it just left for a frame or two. The app took that echo as a new
+  halt: it paused again, and when the emulator then ran, nothing un-paused it, so the UI said
+  "paused" over a running emulator. The mac tester diagnosed this and the planning session checked
+  it against the code. The same echo explains the HALTED banner after Step Into then Continue: the
+  echo of the stepped halt was presented, and the real breakpoint re-hit behind it was not.
+  `StepHaltMachine::Resumed()` now marks the left halt as an echo, by sequence number, at every
+  user resume. Pinned by three `StepHaltMachineTests`: a resume echo is not a halt, the re-hit
+  after a step is presented, and Step Over / Out still complete through the echo.
