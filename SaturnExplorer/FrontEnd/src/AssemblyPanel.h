@@ -31,7 +31,7 @@ public:
     // out-params any control request the App should act on this frame.
     struct Request
     {
-        bool     runTo = false;       // run until runToAddr (sets a breakpoint there)
+        bool     runTo = false;       // run until runToAddr (a transient, retired on arrival)
         uint32_t runToAddr = 0;
         bool     viewHex = false;     // reveal hexAddr in the Hex Editor
         uint32_t hexAddr = 0;

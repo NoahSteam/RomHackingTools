@@ -2949,17 +2949,12 @@ void App::DrawAssembly()
 
     if (req.editTracepoint) OpenTracepointEditor(req.tpCpu, req.tpAddr);
 
-    // "Run to Here" sets an execution breakpoint at the target and resumes; the
-    // emulator halts there via the stop event. No-op without frame control.
+    // "Run to Here" runs to the target through the step machinery's transient breakpoint, as Step
+    // Over and Step Out do: it is retired when the CPU arrives and the halt reads STEPPED. It used
+    // to add a user breakpoint, which then stayed on the row and labelled the arrival a breakpoint
+    // hit (macOS run, Step 4). No-op without frame control.
     if (req.runTo && mbHasData && se_supports_frame_control(mContext))
-    {
-        // Execution BPs are shared across both SH-2s, so the target is looked up and set by
-        // address alone — irrespective of which Assembly view (master/slave) issued this.
-        if (!mBreakpoints.HasExecutionAt(req.runToAddr))
-            mBreakpoints.ToggleExecution(req.runToAddr);
-        SyncBreakpointsToLive();
-        Continue();
-    }
+        RunToTransient(req.runToAddr, mAssemblyPanel.Cpu());
     // Run control mirrored into the panel header, resolved against the panel's CPU.
     if (req.continueRun) Continue();
     if (req.stepInto) StepInto(mAssemblyPanel.Cpu());
