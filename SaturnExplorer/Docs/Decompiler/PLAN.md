@@ -358,6 +358,7 @@ by `DecompilerPanelTests`:
   and Registers offers it on PC only.
 
 **Gate:** CI green; manual checklist complete on Windows and macOS.
+*Met* (review round 5, at `eb6cc6d`): see `Docs/FunctionalityVerification/13_DECOMPILER_STEP3.md`.
 
 ### Step 4 — Quality
 

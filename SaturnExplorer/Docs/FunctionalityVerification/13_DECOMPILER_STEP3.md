@@ -4,12 +4,11 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 3, contracts A1�
 
 **Started from:** `152bdd2` (Step 2 review closed) · **Step 3 commits:** `97c496d` (implementation) and the commit adding this record  
 **Actions run:** https://github.com/NoahSteam/RomHackingTools/actions/runs/38166760462 (all six A7 jobs green at `97c496d`)  
-**Gate status: NOT complete.** CI is green (above), but PLAN's manual checklist is still open on
-Windows and macOS (see "Manual checklist"); only a Linux run of the real app was possible here.
-The Windows run (at `0e463ee0`, "Real application run (Windows)") failed the A4 reconnect row; the
-Windows re-test at `6e8f2d06` ("After the Windows run") passed it, with one residual (bug 4), since fixed.
-Every checklist row is now passed on both platforms or unavailable with a stated reason (the in-flight A4 race,
-automated); whether that meets the gate is the reviewer's call.
+**Gate status: MET** -- approved in review round 5 (ChatGPT, on master at `eb6cc6d`; production code as at
+`8deb03f`). CI: all six A7 jobs green at `8deb03f` (run 38338646621) and `4fde640` (run 38340559458). Manual
+checklist: every row passed on Windows and macOS, or unavailable with a stated reason (the in-flight A4 race, covered
+by automated tests). History: the Windows run at `0e463ee0` failed the A4 reconnect row; fixes and re-tests are in
+"After the macOS run", "After the Windows run" and "Review round 4".
 
 ## What was added
 
@@ -413,6 +412,13 @@ No production-code blocker. Verdict: gate not yet met, pending the items below.
 - **(c) Pause, then Launch**, twice, plus one extra Launch while running (Refresh never pressed). *Run 1* (Run → Pause at frame 3992 in `func_0x0021f282`, then Session → Launch from the menu): right after connecting the panel kept the old `func_0x0021f282` with "No source" and `[stale: frame 3992]`; by new-session frame 377 it showed `func_0x06034e74` captured at frame 140, and the label stayed `[stale: frame 140]` through frame 1620 (~20 s). I did not catch the intermediate "No function found" line in this run (sampled every ~2 s). *Extra run* (F5 while the game was running, not paused): "No source" with the previous output badged stale; at new-session frames 26 and 90 the red "No function found containing 0x00001D3C: 0x00001D3C is not in captured memory" with the old output below it; `decompiling…` at frame 155; `func_0x0603a410` captured at frame 150 shown by frame 222 (~130 frames, ~2 s after the connect); the label then stayed `[stale: frame 150]` through frame 596. *Run 2* (Run → Pause at frame 1549 in `func_0x0021a398`, then F5): "No source" with the old output stale at 1549; "No function found containing 0x00001D3C" at frames 48 and 118; `func_0x060101ac` captured at frame 149 shown by frame 184; the label stayed `[stale: frame 149]` from frame 184 to 893 (~12 s). The first Launch menu click once did not register (test driver pointer timing), so Run 2 used F5.
 - **(d) Play From Here:** frame #511 had a savestate (144 of 164 recorded frames could be resumed; frames such as #1329 had none). Play From Here at #511 resumed the game from there ("live, running", frame 732, `[stale: frame 511]`). After pausing at frame 1274 the new timeline had 140 frames (#14 … #1274, ring-limited); scrubbing showed each frame's own output: `#14` → `func_0x06001650`, `#426` → `func_0x06010ea0`, the live frame → `func_0x00226f74`, none of the old timeline's functions at the same frame numbers (the old timeline's newest frame, #1629, had been `func_0x0021a4ec`).
 - **No failures.** `settings.ini` restored byte-identical to before this re-check (including `[controller.keys]`); the app quit cleanly; no crash report. Not checked: other CPU (slave), BIOS added at run time.
+
+## Review round 5 (ChatGPT, on `eb6cc6d`)
+
+All three round-4 items closed: the two recorded Windows recovery runs, PLAN/DESIGN's recovery captures (`4fde640`),
+and the debounce-protecting test. The reviewer independently confirmed all six A7 jobs at `8deb03f` and `4fde640`,
+accepted the macOS re-check as closing the remaining manual coverage, and judged Windows run 1's "too large" result the
+expected A4 budget outcome. **Approved for Step 3; no blockers remain.**
 
 ## Observations (not Step 3)
 
