@@ -74,6 +74,17 @@ namespace
 const ImVec4 kAmber(0.95f, 0.75f, 0.30f, 1.0f);
 const ImVec4 kRed(0.95f, 0.42f, 0.42f, 1.0f);
 
+// FNV-1a, a 64-bit value at a time: the fingerprints of engine and finder inputs.
+const uint64_t kFnvBasis = 1469598103934665603ull;
+void Mix(uint64_t& h, uint64_t v)
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        h ^= (v >> (8 * i)) & 0xFF;
+        h *= 1099511628211ull;
+    }
+}
+
 }  // namespace
 
 DecompilerPanel::ViewId DecompilerPanel::IdOf(const DecompilerView& view)
@@ -128,32 +139,111 @@ void DecompilerPanel::ResetSession()
     mResolved = false;
     mCache.clear();
     mCallees.clear();
+    ++mCalleesGeneration;
     mPrototypes.clear();
     mNote.clear();
 }
 
+uint64_t DecompilerPanel::ShapeOf(const Prototype& proto)
+{
+    uint64_t h = kFnvBasis;
+    auto shape = [&h](const TypeShape& t) {
+        Mix(h, (uint64_t(t.kind) << 24) | (uint64_t(t.size) << 16) | (uint64_t(t.pointee) << 8) | t.pointeeSize);
+    };
+    shape(proto.ret);
+    Mix(h, proto.params.size());
+    for (const TypeShape& t : proto.params) shape(t);
+    return h ? h : 1;   // 0 is "none lent"
+}
+
+uint64_t DecompilerPanel::LentShape(uint32_t callee, const SnapshotKey& key, uint64_t functions) const
+{
+    auto it = mPrototypes.find(callee);
+    if (it == mPrototypes.end() || it->second.key != key || it->second.functions != functions) return 0;
+    return it->second.shape;
+}
+
 uint64_t DecompilerPanel::PrototypeHash(uint32_t entry) const
 {
-    // FNV-1a over the lent prototypes, in address order.
-    uint64_t h = 1469598103934665603ull;
-    auto mix = [&h](uint64_t v) {
-        for (int i = 0; i < 8; ++i)
-        {
-            h ^= (v >> (8 * i)) & 0xFF;
-            h *= 1099511628211ull;
-        }
-    };
-    auto shape = [&mix](const TypeShape& t) {
-        mix((uint64_t(t.kind) << 24) | (uint64_t(t.size) << 16) | (uint64_t(t.pointee) << 8) | t.pointeeSize);
-    };
+    // Over the lent prototypes, in address order.
+    uint64_t h = kFnvBasis;
     for (const auto& p : mPrototypes)
     {
         if (!Lendable(p.second, entry, p.first)) continue;
-        mix(p.first);
-        shape(p.second.proto.ret);
-        mix(p.second.proto.params.size());
-        for (const TypeShape& t : p.second.proto.params) shape(t);
+        Mix(h, p.first);
+        Mix(h, p.second.shape);
     }
+    return h;
+}
+
+void DecompilerPanel::Learn(const DecompileResult& r)
+{
+    if (r.status == DecompileStatus::Ok && r.prototype.known)
+    {
+        LearnedPrototype p;
+        p.key = r.key;
+        p.functions = mFunctions;
+        p.proto = r.prototype;
+        p.shape = ShapeOf(r.prototype);
+        // What it was lent for each function it calls. The result answers the question being asked
+        // now (Accept and the cache both check that), so that is what is lendable now.
+        for (uint32_t c : r.callees)
+            if (c != r.entry) p.deps.emplace_back(c, LentShape(c, r.key, mFunctions));
+        mPrototypes[r.entry] = std::move(p);
+    }
+    else
+        mPrototypes.erase(r.entry);
+
+    // Drop every signature recovered from a callee signature that is no longer the one known, to a
+    // fixed point: dropping one changes what its own callers were lent. Each pass drops at least
+    // one or ends, so mutual recursion settles too (both go, and are learned again when shown).
+    for (bool dropped = true; dropped;)
+    {
+        dropped = false;
+        for (auto it = mPrototypes.begin(); it != mPrototypes.end();)
+        {
+            bool obsolete = false;
+            for (const auto& d : it->second.deps)
+                if (LentShape(d.first, it->second.key, it->second.functions) != d.second)
+                {
+                    obsolete = true;
+                    break;
+                }
+            if (obsolete)
+            {
+                it = mPrototypes.erase(it);
+                dropped = true;
+            }
+            else
+                ++it;
+        }
+    }
+}
+
+void DecompilerPanel::UpdateFunctionSet(const DecompilerInputs& inputs)
+{
+    // The names can be a whole imported symbol file: hashed again only when they change. The user's
+    // function starts are a handful, set by hand.
+    if (mSymbolsHashGeneration != inputs.namesGeneration)
+    {
+        mSymbolsHashGeneration = inputs.namesGeneration;
+        mSymbolsHash = kFnvBasis;
+        if (inputs.names)
+            for (const auto& n : *inputs.names) Mix(mSymbolsHash, n.first);
+    }
+    uint64_t h = mSymbolsHash;
+    Mix(h, ~0ull);   // the two sets are not one list
+    if (inputs.bounds)
+        for (uint32_t e : inputs.bounds->Entries()) Mix(h, e);
+    mFunctions = h;
+}
+
+uint64_t DecompilerPanel::CalleeHash() const
+{
+    uint64_t h = kFnvBasis;
+    if (!mSnap) return h;
+    for (const auto& c : mCallees)
+        if (c.second == mSnap->key) Mix(h, c.first);
     return h;
 }
 
@@ -172,6 +262,8 @@ bool DecompilerPanel::ShownStale() const
 void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
 {
     mResolved = true;
+    mResolvedFunctions = mFunctions;
+    mResolvedCallees = CalleeHash();
     mEntryOk = false;
     mEntry = 0;
     mEntrySource = EntrySource::None;
@@ -217,7 +309,8 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     if (inputs.names)
         for (const auto& n : *inputs.names) hints.symbols.insert(n.first);
     if (inputs.callSites) inputs.callSites(hints.callSiteTargets);
-    hints.callees = mCallees;
+    for (const auto& c : mCallees)
+        if (c.second == mSnap->key) hints.callees.insert(c.first);
     const EntryGuess g = FindFunctionContaining(*mSnap, anchor, hints);
     if (!g.ok)
     {
@@ -254,12 +347,6 @@ void DecompilerPanel::CachePut(const Question& q, const DecompileResult& r, cons
     while (mCache.size() > kCacheSize) mCache.pop_back();
 }
 
-void DecompilerPanel::CacheDropEntry(uint32_t entry)
-{
-    for (auto it = mCache.begin(); it != mCache.end();)
-        it = it->question.entry == entry ? mCache.erase(it) : std::next(it);
-}
-
 void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration)
 {
     const bool sameFunction = mShownValid && mShown.entry == result.entry;
@@ -277,11 +364,14 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         std::snprintf(b, sizeof b, "%s, %d%%", EntrySourceName(mEntrySource), mEntryConfidence);
         mShownEntrySource = b;
     }
-    for (uint32_t c : mShown.callees) mCallees.insert(c);
-    if (mShown.status == DecompileStatus::Ok && mShown.prototype.known)
-        mPrototypes[mShown.entry] = LearnedPrototype{ mShown.key, mShown.prototype };
-    else
-        mPrototypes.erase(mShown.entry);
+    for (uint32_t c : mShown.callees)
+    {
+        auto it = mCallees.find(c);
+        if (it != mCallees.end() && it->second == mShown.key) continue;
+        mCallees[c] = mShown.key;
+        ++mCalleesGeneration;
+    }
+    Learn(mShown);
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
     if (!sameFunction)
     {
@@ -319,6 +409,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mResolved && mEntryOk && r.requestedEntry == mPending.entry &&
                          mPending.entry == mEntry &&                   // and the entry wanted now,
                          mPending.namesGeneration == mNamesGeneration && // under the names in force now,
+                         mPending.functions == mFunctions &&           // registering the functions known now,
                          mPending.prototypes == PrototypeHash(mEntry) &&   // lending the signatures known now,
                          HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
@@ -342,6 +433,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
         q.key = mPending.key;
         q.entry = mPending.entry;
         q.namesGeneration = mPending.namesGeneration;
+        q.functions = mPending.functions;
         q.prototypes = mPending.prototypes;
         CachePut(q, r, mPending.snapId);
     }
@@ -371,6 +463,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         mViewPc[cpu] = view.regs[cpu].pc;
     }
     mNamesGeneration = inputs.namesGeneration;
+    UpdateFunctionSet(inputs);
     const bool active = visible && mViewId.valid;
     if (active)
     {
@@ -380,6 +473,9 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         // A BIOS image chosen, reloaded or dropped is the user's doing, not an advancing frame: the
         // held snapshot's region set is wrong from then on, whatever kind of source is shown.
         const bool biosChanged = mSnap && mSnapId.biosHash != mViewId.biosHash;
+        // So is another source -- back from a recorded frame, or a state restored under a new
+        // identity: what is held is not this emulator's memory at all, at any lag.
+        const bool sourceChanged = mSnap && mSnapId.sourceId != mViewId.sourceId;
         bool capture = false;
         if (!snapCurrent)
         {
@@ -418,7 +514,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                     !mPending.active && mSnap->haveRegs[mCpu] && view.haveRegs[mCpu] &&
                     view.regs[mCpu].pc != mSnap->regs[mCpu].pc && mTick - mCaptureTick >= kAutoRefreshFrames)
                     unanswered = true;
-                capture = mExplicit || !mSnap || biosChanged || autoDue || regsArrived || unanswered;
+                capture = mExplicit || !mSnap || biosChanged || sourceChanged || autoDue || regsArrived || unanswered;
                 break;
             }
             case DecompViewKind::None:
@@ -435,6 +531,11 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
             ++mCaptures;
             mResolved = false;
         }
+        // A containing function is found from the finder's hints as well as the snapshot: a start set
+        // or a symbol added inside it, or an entry discovered since, can move it.
+        if (mSnap && mResolved && mTarget.kind != TargetKind::Entry &&
+            (mResolvedFunctions != mFunctions || mResolvedCallees != CalleeHash()))
+            mResolved = false;
         if (mSnap && !mResolved) Resolve(inputs);
     }
 
@@ -456,6 +557,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.key = mSnap->key;
     q.entry = mEntry;
     q.namesGeneration = mNamesGeneration;
+    q.functions = mFunctions;
     q.prototypes = PrototypeHash(mEntry);
     if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
@@ -499,6 +601,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     mPending.entry = mEntry;
     mPending.snapId = mSnapId;
     mPending.namesGeneration = mNamesGeneration;
+    mPending.functions = mFunctions;
     mPending.prototypes = q.prototypes;
 }
 
@@ -947,10 +1050,10 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 if (item("Set Function Start Here",
                          inputs.bounds && ln.firstAddr != 0 && ln.firstAddr != mShown.entry))
                 {
-                    // A boundary correction: the old entry's results go, the new entry is asked for.
+                    // A boundary correction. Every question is keyed by the function set, so the
+                    // answers it outdates -- this function's and its callers' -- are not found again.
                     if (inputs.bounds) inputs.bounds->SetEntry(ln.firstAddr);
                     req.boundsChanged = true;
-                    CacheDropEntry(mShown.entry);
                     Target t;
                     t.kind = TargetKind::Entry;
                     t.address = ln.firstAddr;

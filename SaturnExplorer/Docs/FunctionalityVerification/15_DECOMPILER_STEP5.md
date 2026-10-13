@@ -144,3 +144,30 @@ the chrome allowance changes nothing on that screen. Reaching 16 lines would tak
 window, which would leave the VDP and image views above it too short. The cap stays at half.
 **Outcome:** Reset Layout on a 1470×956 screen gives 14 pseudocode lines and 12 to 13 assembly rows,
 up from about 4. Taller screens get 16 or more.
+
+### Review: inputs that outlive their snapshot (at `16a70c0`)
+
+A review of every engine and finder input found five findings. Each one now has a test in
+`DecompilerPanelTests` that fails without its fix.
+
+1. **Learned signatures outlived the signatures they came from.** If B was decompiled before C, its
+   return value came from C's r0. After C was found to be void, B's signature was obsolete, but A was
+   still given it. Each learned signature now records the snapshot, the function set and the callee
+   signatures it was given. When a signature changes, everything learned from it is dropped, all the
+   way up the call chain. (`TestPrototypeProvenance`)
+2. **Function boundaries were not part of the question.** The user's function starts and the named
+   addresses decide whether a branch counts as a call. Their fingerprint is now part of each request
+   and acceptance check, each cache key, and each learned signature. A correction now outdates its
+   callers' cached results as well as its own. (`TestFunctionSetKeysQuestions`)
+3. **Discovered callees were hints for any memory.** Each callee is now recorded with the snapshot
+   that called it, and it is a hint only for that snapshot. (`TestCalleeHintsBelongToTheirSnapshot`)
+4. **Moving from scrubbing to a running emulator kept the scrubbed snapshot.** When the source
+   changes, the panel now captures again at once, even with auto-refresh off.
+   (`TestRunningAfterScrubCaptures`)
+5. **A new symbol or start did not change which function contained an address.** The panel now
+   finds the containing function again when the function set, or the callees found for the held
+   snapshot, change. (`TestHintsReResolve`)
+
+The finder's call-site hints are still read only during resolution, never every frame, as
+`DecompilerInputs::callSites` requires. A new call-stack entry therefore takes effect at the next
+resolution.

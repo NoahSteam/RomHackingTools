@@ -26,6 +26,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <cstdlib>
 #include <cstring>
 
 using namespace sfe;
@@ -815,6 +816,162 @@ void TestCalleePrototypesLent()
     CHECK(f.WaitShown("(1,2,3)"));
 }
 
+// Review of Step 4 (second pass), finding 1: a signature is only as current as the signatures it was
+// recovered with. A calls B calls C. B decompiled before C's signature is known says B returns what C
+// left in r0; once C is known to be void, that is obsolete, and so is anything learned from it.
+void TestPrototypeProvenance()
+{
+    Fixture f;
+    const uint32_t A = 0x06007300u, B = 0x06007380u, C = 0x06007340u;
+    auto place = [&](uint32_t at, std::initializer_list<uint16_t> words) {
+        for (uint16_t w : words) { f.PutWord(at, w); at += 2; }
+    };
+    place(A, { 0xE401, 0xE502, 0xE603, 0x4F22, 0xB03A, 0x0009, 0x4F26, 0x000B, 0x0009 });   // r4-r6; bsr B
+    place(B, { 0x4F22, 0xE401, 0xBFDC, 0x0009, 0x4F26, 0x000B, 0x0009 });   // mov #1,r4; bsr C
+    place(C, { 0xD101, 0x2142, 0x000B, 0x0009, 0x0600, 0x8000 });           // stores r4, returns nothing
+    ++f.backend.serial;
+    f.Idle();
+    auto show = [&](const char* entry) {
+        f.TypeInto("entry", entry);
+        const uint32_t want = static_cast<uint32_t>(std::strtoul(entry, nullptr, 16));
+        const bool ok = f.PumpUntil([&] {
+            return !f.panel.Pending() && f.panel.Shown() && f.panel.Shown()->entry == want && !f.panel.ShownStale();
+        });
+        if (!ok) f.Dump();
+        return f.Shown().Text();
+    };
+
+    // A with nothing learned passes what it set up; lent B's signature, it knows B takes nothing.
+    const std::string bare = show("06007300");
+    CHECK(Has(bare, "(1,2,3)"));
+    show("06007380");                       // B, before C is known: returns what C left in r0
+    const std::string withOldB = show("06007300");
+    CHECK(Has(withOldB, "= func_0x06007380();"));
+    show("06007340");                       // C: void, one argument -- B's signature is now obsolete
+    CHECK(Has(f.Shown().Text(), "void func_0x06007340("));
+    const std::string afterC = show("06007300");
+    CHECK(afterC == bare);                  // B's old signature is not lent
+    show("06007380");                       // B again, lent C's
+    const std::string withNewB = show("06007300");
+    CHECK(Has(withNewB, "func_0x06007380();"));
+    CHECK(!Has(withNewB, "= func_0x06007380("));
+}
+
+// Finding 2: the function set (the user's starts and the named addresses) is engine input -- it
+// decides whether a branch is a call -- so it keys requests, acceptance and the cache, for every
+// function, not only the one whose start was corrected.
+void TestFunctionSetKeysQuestions()
+{
+    Fixture f;
+    f.Idle();
+    f.TypeInto("entry", "06004000");
+    CHECK(f.WaitShown("func_0x06005000"));
+    uint64_t n = f.panel.Submissions();
+
+    f.bounds.SetEntry(0x06006000u);         // a start elsewhere: asked again
+    f.Idle();
+    CHECK(f.panel.Submissions() == n + 1);
+    CHECK(f.WaitShown());
+    n = f.panel.Submissions();
+    const uint64_t hits = f.panel.CacheHits();
+    f.bounds.ClearEntry(0x06006000u);       // and undone: the answer for that set again
+    f.Idle();
+    CHECK(f.panel.Submissions() == n && f.panel.CacheHits() == hits + 1);
+
+    // An answer that finished while the set changed is not installed: asked again under the new set.
+    f.gate.Close();
+    f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x02;
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.gate.WaitHeld());
+    n = f.panel.Submissions();
+    f.bounds.SetEntry(0x06006000u);
+    f.Idle();
+    f.gate.Open();
+    CHECK(f.PumpUntil([&] { return !f.runner.Busy() && !f.panel.Pending(); }));
+    CHECK(f.panel.Submissions() == n + 1);
+
+    // A caller cached before a correction elsewhere is not served from the cache after it.
+    f.bounds.ClearEntry(0x06006000u);
+    f.TypeInto("entry", "06005000");
+    CHECK(f.WaitShown());
+    f.TypeInto("entry", "06004000");
+    CHECK(f.WaitShown());
+    f.TypeInto("entry", "06005000");
+    CHECK(f.WaitShown());
+    f.bounds.SetEntry(0x06005002u);         // as Set Function Start Here would
+    f.Idle();
+    n = f.panel.Submissions();
+    const uint64_t h2 = f.panel.CacheHits();
+    f.TypeInto("entry", "06004000");
+    CHECK(f.WaitShown());
+    CHECK(f.panel.CacheHits() == h2 && f.panel.Submissions() >= n + 1);
+}
+
+// Finding 3: an entry discovered as a callee is a hint only for the memory that called it.
+void TestCalleeHintsBelongToTheirSnapshot()
+{
+    Fixture f;
+    f.Idle();
+    f.TypeInto("entry", "06004000");
+    CHECK(f.WaitShown("func_0x06005000"));   // 06005000 is now a known callee
+    // Replace the code: a function now starts at 06004FF0 and runs through 06005000.
+    for (uint32_t a = 0x06004FF0u; a < 0x06005010u; a += 2) f.PutWord(a, 0x7001);   // add #1,r0
+    f.PutWord(0x06004FECu, 0x000B);
+    f.PutWord(0x06004FEEu, 0x0009);
+    f.PutWord(0x06005010u, 0x000B);
+    f.PutWord(0x06005012u, 0x0009);
+    ++f.backend.serial;
+    f.panel.ShowFunctionContaining(0, 0x06005004u);
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == 0x06004FF0u);
+}
+
+// Finding 4: back from a recorded frame to a running emulator, the scrubbed snapshot is not this
+// emulator's memory at any lag: captured at once, auto-refresh or not.
+void TestRunningAfterScrubCaptures()
+{
+    Fixture f;
+    f.kind = DecompViewKind::Scrub;
+    f.trackSerial = false;
+    f.sourceId = 1000;
+    CHECK(f.WaitShown("+ 1"));
+    const uint64_t captures = f.panel.Captures();
+    f.kind = DecompViewKind::LiveRunning;
+    f.sourceId = 7;
+    for (int i = 0; i < 5; ++i)
+    {
+        ++f.frame;
+        ++f.fixedSerial;
+        f.Idle();
+    }
+    CHECK(f.panel.Captures() == captures + 1);
+    CHECK(f.Held().sourceId == 7);
+    CHECK(f.WaitShown("+ 1"));
+    CHECK(f.Shown().key.sourceId == 7);
+}
+
+// Finding 5: a containing function is found from the finder's hints too, so a symbol or a start
+// added inside it moves it.
+void TestHintsReResolve()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    CHECK(f.WaitShown());
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
+    f.names[dts::kFixture1AddOne] = "inner";
+    ++f.namesGeneration;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == dts::kFixture1AddOne);
+    f.names.erase(dts::kFixture1AddOne);
+    ++f.namesGeneration;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
+    f.bounds.SetEntry(dts::kFixture1Jsr);
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Jsr);
+}
+
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
 // with other bytes is a new key, a function-start correction asks for the new entry.
 void TestRenameBiosAndBounds()
@@ -1403,6 +1560,11 @@ int main(int argc, char** argv)
         RUN(TestUserCommentsOnLines());
         RUN(TestCalleePrototypesLent());
         RUN(TestRenameBiosAndBounds());
+        RUN(TestPrototypeProvenance());
+        RUN(TestFunctionSetKeysQuestions());
+        RUN(TestCalleeHintsBelongToTheirSnapshot());
+        RUN(TestRunningAfterScrubCaptures());
+        RUN(TestHintsReResolve());
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());

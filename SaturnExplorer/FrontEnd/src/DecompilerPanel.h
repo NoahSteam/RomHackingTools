@@ -19,7 +19,8 @@
 //
 // A result is installed only when it still answers the question being asked: the request the
 // panel has outstanding (generation), made in the current session (runner epoch), for the snapshot
-// the panel holds now (key), for the entry it now wants, under the names in force now. The runner's
+// the panel holds now (key), for the entry it now wants, under the names and function set in force
+// now, lending only the callee signatures still current. The runner's
 // own filtering covers the first two; the panel checks all of them itself, because the runner
 // cannot know which snapshot, entry or names the panel has since moved on to -- and, since a
 // hidden panel takes no new snapshot, that the snapshot it holds is still what is on screen
@@ -30,7 +31,7 @@
 // stays there, labelled stale, until its replacement arrives -- the panel never blanks while it
 // waits, and never shows output for memory other than what the badge says.
 //
-// A request is submitted once per {snapshot key, entry, names, callee signatures lent}: a failure is shown, not retried
+// A request is submitted once per {snapshot key, entry, names, function set, callee signatures lent}: a failure is shown, not retried
 // every frame. Results are kept in a small LRU under that same full key, which is what makes
 // scrubbing back and forth through recorded frames cheap (App gives a recorded frame a stable
 // identity for as long as the recording it came from is unchanged).
@@ -219,6 +220,7 @@ private:
         uint32_t entry = 0;
         ViewId snapId;
         uint64_t namesGeneration = 0;
+        uint64_t functions = 0;      // the function set when asked
         uint64_t prototypes = 0;     // PrototypeHash for the entry when asked
     };
 
@@ -230,11 +232,12 @@ private:
         decomp::SnapshotKey key;
         uint32_t entry = 0;
         uint64_t namesGeneration = 0;
+        uint64_t functions = 0;      // the function set registered (engine input, like the names)
         uint64_t prototypes = 0;     // the callee signatures lent (engine input, like the names)
         bool operator==(const Question& o) const
         {
             return valid == o.valid && key == o.key && entry == o.entry && namesGeneration == o.namesGeneration &&
-                   prototypes == o.prototypes;
+                   functions == o.functions && prototypes == o.prototypes;
         }
     };
 
@@ -250,7 +253,6 @@ private:
     void Install(decomp::DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration);
     const CacheEntry* CacheFind(const Question& q);
     void CachePut(const Question& q, const decomp::DecompileResult& r, const ViewId& snapId);
-    void CacheDropEntry(uint32_t entry);
     void DrawHeader(const DecompilerView& view, const decomp::DecompilerRunner& runner, Request& req);
     void DrawStatus(const DecompilerView& view, const decomp::DecompilerRunner& runner);
     void DrawLines(const DecompilerInputs& inputs, Request& req);
@@ -278,8 +280,10 @@ private:
     ViewId mSnapId;
     uint64_t mTick = 0, mCaptureTick = 0;
 
-    // The entry wanted for mSnap, resolved once per snapshot and target.
+    // The entry wanted for mSnap, resolved once per snapshot, target and set of finder hints: a
+    // function start set, a symbol added or a callee discovered can move the containing entry.
     bool mResolved = false;
+    uint64_t mResolvedFunctions = 0, mResolvedCallees = 0;
     bool mEntryOk = false;
     uint32_t mEntry = 0;
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;
@@ -287,23 +291,46 @@ private:
     std::string mEntryError;
 
     uint64_t mNamesGeneration = 0;
-    std::set<uint32_t> mCallees;     // found by results this session: the finder's last rung
-    // Each function's signature from its last decompilation this session, with the snapshot it was
-    // recovered from, lent to its callers' requests. Engine input: the question carries a hash of
-    // what is lent, so a caller decompiled before its callee is asked again, with the callee's
-    // signature, when it is next shown. Only a signature recovered from the snapshot held now is
-    // lent: an edit, another frame or another BIOS image may have changed the callee (A1). A later
-    // decompilation that cannot vouch for a signature removes the old one rather than keeping it.
+    // The addresses the engine registers as functions: the user's function starts and the named
+    // addresses. A fingerprint, not a generation, so undoing a correction finds the old answers
+    // again. Both change how the engine reads a call (a function, or a branch into code), so this is
+    // engine input like the names, and a finder input besides.
+    uint64_t mFunctions = 0;
+    uint64_t mSymbolsHash = 0, mSymbolsHashGeneration = ~0ull;   // the named addresses' part, per names generation
+    void UpdateFunctionSet(const DecompilerInputs& inputs);
+    // Entries found by results this session (the finder's last rung), with the snapshot whose code
+    // called them: an edit, another frame or another BIOS image may have moved them, so only those
+    // found in the snapshot held are hints.
+    std::map<uint32_t, decomp::SnapshotKey> mCallees;
+    uint64_t mCalleesGeneration = 0;   // moves when an entry is found for a snapshot
+    uint64_t CalleeHash() const;       // over the callees that are hints for mSnap
+    // Each function's signature from its last decompilation this session, lent to its callers'
+    // requests. Engine input: the question carries a hash of what is lent, so a caller decompiled
+    // before its callee is asked again, with the callee's signature, when it is next shown.
+    // A signature is a function of everything its decompilation read, so it records all of it: the
+    // snapshot, the function set, and the signature it was lent for each function it calls ('deps',
+    // 0 for none). Only one recovered from the snapshot held, under the function set in force, is
+    // lent. And when a function's signature changes, every signature recovered from the old one is
+    // dropped, transitively -- B learned before C knew C's signature is obsolete once C's is known,
+    // and so is A learned from B (A1). A later decompilation that cannot vouch for a signature
+    // removes the old one rather than keeping it.
     struct LearnedPrototype
     {
         decomp::SnapshotKey key;
+        uint64_t functions = 0;
         decomp::Prototype proto;
+        uint64_t shape = 0;                                    // ShapeOf(proto), never 0
+        std::vector<std::pair<uint32_t, uint64_t>> deps;       // callee -> shape lent, or 0
     };
     std::map<uint32_t, LearnedPrototype> mPrototypes;
+    static uint64_t ShapeOf(const decomp::Prototype& proto);
+    // The shape of the signature 'callee' would be lent under {key, functions}, or 0.
+    uint64_t LentShape(uint32_t callee, const decomp::SnapshotKey& key, uint64_t functions) const;
     bool Lendable(const LearnedPrototype& p, uint32_t entry, uint32_t callee) const
     {
-        return callee != entry && mSnap && p.key == mSnap->key;
+        return callee != entry && mSnap && p.key == mSnap->key && p.functions == mFunctions;
     }
+    void Learn(const decomp::DecompileResult& result);
     uint64_t PrototypeHash(uint32_t entry) const;   // over the prototypes lent to 'entry' now
 
     Question mAsked;
