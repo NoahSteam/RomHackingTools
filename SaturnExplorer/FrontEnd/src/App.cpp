@@ -1552,6 +1552,9 @@ void App::BuildUI(IPlatform& platform)
         if (stopped && !mbPaused)
         {
             mbPaused = true;   // halted; panel follows the halted PC
+            mHaltFromStep = haltFromStep;
+            mHaltDmaWatch = report.dmaWatch;
+            mHaltUserBp   = report.userBreakpoint;
             // A transient step breakpoint (Step Over / Step Out) has done its job once we
             // halt at it — retire it so it doesn't linger as a stray breakpoint.
             // ...and a halt shown anywhere else ends a step that has not finished: its transient goes
@@ -4489,7 +4492,7 @@ void App::DrawCallStack(IPlatform& platform)
     mCallStackWasShowable = showable;
     if (!ImGui::Begin("Call Stack")) { ImGui::End(); return; }
 
-    // Breakpoint-hit strip: a prominent banner + run control while paused.
+    // Paused strip: a prominent banner naming why the CPU stopped, + run control.
     if (mbPaused)
     {
         se_sh2_regs r{};
@@ -4497,7 +4500,8 @@ void App::DrawCallStack(IPlatform& platform)
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.42f, 0.12f, 0.12f, 1.0f));
         ImGui::BeginChild("bphit", ImVec2(0, ImGui::GetFrameHeightWithSpacing() * 2.0f + 6.0f),
                           ImGuiChildFlags_None);
-        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "BREAKPOINT HIT");
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), "%s",
+                           sfe::StopBannerLabel(mStepHalt.HaltActive(), mHaltFromStep, mHaltDmaWatch, mHaltUserBp));
         ImGui::SameLine();
         ImGui::Text("%s SH-2", mCallStackCpu ? "Slave" : "Master");
         if (haveR) { ImGui::SameLine(); ImGui::Text("\xc2\xb7 PC %08X", r.pc); }

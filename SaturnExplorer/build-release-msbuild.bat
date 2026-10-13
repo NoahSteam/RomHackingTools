@@ -12,7 +12,8 @@ REM  too -- FrontEnd.vcxproj defines SE_ENABLE_LIVE and links the Live driver. T
 REM  two scripts differ only in build system (raw MSBuild vs CMake) and output path.
 REM
 REM  Requires: Visual Studio 2022 or 2019 with "Desktop development with C++".
-REM  (MSBuild is located automatically via vswhere.)
+REM  (MSBuild is located automatically via vswhere; the toolset follows it --
+REM  v142 on 2019, v143 on 2022 -- or set SE_TOOLSET to choose.)
 REM
 REM  Usage:  build-release-msbuild.bat            (Release, x64)
 REM          build-release-msbuild.bat x86        (Release, Win32/x86)
@@ -48,11 +49,30 @@ if not defined MSBUILD (
     goto :error
 )
 
+REM --- Pick the toolset for the Visual Studio that owns this MSBuild. ---
+REM The projects name v142 (VS 2019). VS 2022 installs v143 and only has v142 if the optional
+REM "MSVC v142 build tools" component was added, so building as checked in fails on a stock
+REM VS 2022. Overriding the toolset on the command line leaves the projects as they are, so
+REM VS 2019 users and the IDE see no change. Set SE_TOOLSET to force one (e.g. v142 on VS 2022).
+set "TOOLSET=%SE_TOOLSET%"
+if not defined TOOLSET (
+    set "VSMAJOR="
+    for /f "usebackq tokens=1 delims=." %%v in (`"%VSWHERE%" -latest -requires Microsoft.Component.MSBuild -property installationVersion`) do set "VSMAJOR=%%v"
+    if "!VSMAJOR!"=="16" set "TOOLSET=v142"
+    if "!VSMAJOR!"=="17" set "TOOLSET=v143"
+    if not defined TOOLSET (
+        echo *** Visual Studio !VSMAJOR! is not 2019 or 2022; using v143.
+        echo     Set SE_TOOLSET to override.
+        set "TOOLSET=v143"
+    )
+)
+
 echo.
 echo === MSBuild: "%MSBUILD%"
+echo === Toolset: %TOOLSET%
 echo === Building FrontEnd  (Release ^| %PLATFORM%) ===
 REM /t:FrontEnd builds the app target and its project dependencies only.
-"%MSBUILD%" "%SLN%" /t:FrontEnd /p:Configuration=Release /p:Platform=%PLATFORM% /m /nologo /v:minimal
+"%MSBUILD%" "%SLN%" /t:FrontEnd /p:Configuration=Release /p:Platform=%PLATFORM% /p:PlatformToolset=%TOOLSET% /m /nologo /v:minimal
 if errorlevel 1 goto :error
 
 echo.

@@ -465,6 +465,10 @@ private:
     FunctionNames            mFunctionNames;
     bool                     mCallStackDirty = true;
     bool                     mFocusCallStack = false;   // bring the panel forward on a stop
+    // What the last presented halt was, for the paused strip's heading (StopBannerLabel).
+    bool                     mHaltFromStep = false;
+    bool                     mHaltDmaWatch = false;
+    bool                     mHaltUserBp   = false;
     bool                     mFocusRegisters = false;   // ditto, for the SH-2 register file
     bool                     mSelectSh2RegTab = false;  // and select its SH-2 tab, not a VDP one
     bool                     mFocusBreakpoints = false; // ditto, for the breakpoint list

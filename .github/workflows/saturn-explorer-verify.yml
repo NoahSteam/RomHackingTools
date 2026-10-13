@@ -99,9 +99,17 @@ jobs:
 
   # build-release-msbuild.bat: the checked-in solution, no CMake. This is what proves the
   # hand-written .vcxproj wiring (zlib into the savestate driver, the decompiler projects) builds.
+  # Run twice: once with the toolset the script picks for the runner's VS 2022 (v143), and once
+  # forced to v142, the toolset a VS 2019 machine gets -- so both supported Visual Studios build.
   windows-msbuild-batch:
-    name: build-release-msbuild.bat (Windows, checked-in solution)
+    name: build-release-msbuild.bat (Windows, checked-in solution, ${{ matrix.toolset || 'auto' }})
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolset: ['', 'v142']
+    env:
+      SE_TOOLSET: ${{ matrix.toolset }}
     defaults:
       run:
         working-directory: SaturnExplorer

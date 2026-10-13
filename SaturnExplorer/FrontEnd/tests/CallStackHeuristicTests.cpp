@@ -6,6 +6,7 @@
 // a function start (CPU-03). The entry point is recoverable from a `bsr disp`, which encodes its
 // target, and is not recoverable from a `jsr @Rn` or `bsrf Rn`, where it was in a register the
 // stack image no longer holds.
+#include <string>
 #include "Debug/CallStack.h"
 
 #include <cstdio>
@@ -269,6 +270,17 @@ void TestStepOutRefusesTheReconstructorsFrameZero()
     CHECK(!sfe::ChooseStepOutTarget(cs.Frames(0), regs).ok);
 }
 
+// A pause is named for what caused it: only a halt at a user breakpoint is a "BREAKPOINT HIT".
+static void TestStopBannerNamesTheCause()
+{
+    CHECK(std::string(sfe::StopBannerLabel(false, false, false, false)) == "PAUSED");
+    CHECK(std::string(sfe::StopBannerLabel(false, true,  true,  true))  == "PAUSED");   // stale flags ignored
+    CHECK(std::string(sfe::StopBannerLabel(true,  true,  false, true))  == "STEPPED");
+    CHECK(std::string(sfe::StopBannerLabel(true,  false, true,  false)) == "DMA WATCH HIT");
+    CHECK(std::string(sfe::StopBannerLabel(true,  false, false, true))  == "BREAKPOINT HIT");
+    CHECK(std::string(sfe::StopBannerLabel(true,  false, false, false)) == "WATCHPOINT HIT");
+}
+
 int main()
 {
     TestStepOutRefusesTheReconstructorsFrameZero();
@@ -279,6 +291,7 @@ int main()
     TestJsrLeavesEntryPointUnknown();
     TestBsrfLeavesEntryPointUnknown();
     TestFrameZeroDoesNotClaimAnEntryPoint();
+    TestStopBannerNamesTheCause();
     if (gFailures)
     {
         std::printf("CallStackHeuristicTests: %d check(s) failed\n", gFailures);
