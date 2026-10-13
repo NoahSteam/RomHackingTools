@@ -462,6 +462,17 @@ private:
     // loads; mCallStackDirty flags a needed rebuild, mCallStackCpu picks the CPU shown,
     // and the rename popup edits a function name at mRenameAddr.
     CallStack                mCallStack;
+    // Which memory each CPU's stack was read from (the decompiler's snapshot identity), and a
+    // revision that moves whenever a stack is rebuilt or cleared: the decompiler takes a stack's
+    // entries as hints only for that memory, and finds its containing function again when they change.
+    struct CallStackOrigin
+    {
+        bool valid = false;
+        uint64_t sourceId = 0, deriveSerial = 0, frameNumber = 0;
+    };
+    CallStackOrigin          mCallStackOrigin[2];
+    uint64_t                 mCallStackRevision = 0;
+    void                     CallStackCleared();
     FunctionNames            mFunctionNames;
     bool                     mCallStackDirty = true;
     bool                     mFocusCallStack = false;   // bring the panel forward on a stop

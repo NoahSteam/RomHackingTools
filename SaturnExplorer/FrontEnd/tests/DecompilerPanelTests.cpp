@@ -23,6 +23,7 @@
 
 #include <condition_variable>
 #include <map>
+#include <set>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -152,6 +153,10 @@ struct Fixture
     uint64_t namesGeneration = 1;
     std::unordered_map<uint32_t, std::string> comments;   // SH-2 Assembly's user notes
     FunctionBounds bounds;
+    // The call stack as App holds it: entries, the memory they were read from, and a revision.
+    std::set<uint32_t> stackEntries;
+    SnapshotKey stackBuiltFor;
+    uint64_t stackRevision = 0;
 
     DecompilerPanel::Request req;   // accumulated across frames until Take()
     ImGuiHarness h;
@@ -206,6 +211,12 @@ struct Fixture
         in.namesGeneration = namesGeneration;
         in.bounds = &bounds;
         in.comments = &comments;
+        in.callSites = [this](const SnapshotKey& snap, std::set<uint32_t>& out) {
+            if (snap.sourceId == stackBuiltFor.sourceId && snap.deriveSerial == stackBuiltFor.deriveSerial &&
+                snap.frameNumber == stackBuiltFor.frameNumber)
+                out.insert(stackEntries.begin(), stackEntries.end());
+        };
+        in.callSitesRevision = stackRevision;
         return in;
     }
 
@@ -972,6 +983,57 @@ void TestHintsReResolve()
     CHECK(f.panel.WantedEntry() == dts::kFixture1Jsr);
 }
 
+// Review of 4bd1c99: the call stack's entries are finder hints too. A rebuilt stack finds the
+// containing function again; a stack read from another frame is no hint for this one.
+void TestCallStackHints()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    CHECK(f.WaitShown());
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
+    // A stack rebuilt (after the panel's Update, as App draws it) naming an entry inside it.
+    f.stackEntries = { dts::kFixture1AddOne };
+    f.stackBuiltFor = f.Held();
+    ++f.stackRevision;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == dts::kFixture1AddOne);
+    f.stackEntries.clear();
+    ++f.stackRevision;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == dts::kFixture1Caller);
+
+    // Scrubbing: frame 50's stack names 06005000. Frame 51 has a function at 06004FF0 running
+    // through it; until the stack is rebuilt for frame 51, frame 50's entry must not pick it.
+    f.kind = DecompViewKind::Scrub;
+    f.trackSerial = false;
+    f.sourceId = 1000;
+    f.frame = 50;
+    f.Idle();
+    f.stackEntries = { 0x06005000u };
+    f.stackBuiltFor = f.Held();
+    ++f.stackRevision;
+    f.frame = 51;
+    for (uint32_t a = 0x06004FF0u; a < 0x06005010u; a += 2) f.PutWord(a, 0x7001);   // add #1,r0
+    f.PutWord(0x06004FECu, 0x000B);
+    f.PutWord(0x06004FEEu, 0x0009);
+    f.PutWord(0x06005010u, 0x000B);
+    f.PutWord(0x06005012u, 0x0009);
+    f.panel.ShowFunctionContaining(0, 0x06005004u);
+    f.Idle(2);
+    CHECK(f.Held().frameNumber == 51);
+    CHECK(f.panel.WantedEntry() == 0x06004FF0u);
+    f.stackEntries.clear();                  // rebuilt for frame 51: nothing to add
+    f.stackBuiltFor = f.Held();
+    ++f.stackRevision;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == 0x06004FF0u);
+    // ...and a stack for frame 51 that does name 06005000 is a hint for it.
+    f.stackEntries = { 0x06005000u };
+    ++f.stackRevision;
+    f.Idle(2);
+    CHECK(f.panel.WantedEntry() == 0x06005000u);
+}
+
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
 // with other bytes is a new key, a function-start correction asks for the new entry.
 void TestRenameBiosAndBounds()
@@ -1565,6 +1627,7 @@ int main(int argc, char** argv)
         RUN(TestCalleeHintsBelongToTheirSnapshot());
         RUN(TestRunningAfterScrubCaptures());
         RUN(TestHintsReResolve());
+        RUN(TestCallStackHints());
         RUN(TestRunningLive());
         RUN(TestScrubCache());
         RUN(TestDisabledAndBudget());

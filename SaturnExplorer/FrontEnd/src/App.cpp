@@ -601,6 +601,7 @@ void App::CloseData(bool cancelAutoConnect)
     mbPaused = false;
     mSource = SourceState{};
     mCallStack.ClearAll();       // stale stack; a new source rebuilds it
+    CallStackCleared();
     mCallStackDirty = true;
     mSelectedCommand = -1;
     mSelection.clear();
@@ -3039,11 +3040,18 @@ void App::UpdateDecompiler(IPlatform& platform)
     in.namesGeneration = mFunctionNames.Generation();
     in.bounds = &mFunctionBounds;
     in.comments = &mAssemblyPanel.UserComments();
-    in.callSites = [this](std::set<uint32_t>& out) {
+    in.callSites = [this](const decomp::SnapshotKey& snap, std::set<uint32_t>& out) {
         for (int cpu = 0; cpu < 2; ++cpu)
+        {
+            const CallStackOrigin& o = mCallStackOrigin[cpu];
+            if (!o.valid || o.sourceId != snap.sourceId || o.deriveSerial != snap.deriveSerial ||
+                o.frameNumber != snap.frameNumber)
+                continue;
             for (const CallStackFrame& fr : mCallStack.Frames(cpu))
                 if (fr.functionKnown) out.insert(fr.functionAddress);
+        }
     };
+    in.callSitesRevision = mCallStackRevision;
     mDecompilerPanel.Update(view, *mDecompilerRunner, in, mPanels.decompiler);
     if (!mPanels.decompiler) return;
 
@@ -4418,6 +4426,9 @@ void App::DrawDiscExplorer(IPlatform& platform)
 void App::RebuildCallStack()
 {
     mCallStackDirty = false;
+    ++mCallStackRevision;
+    CallStackOrigin& origin = mCallStackOrigin[mCallStackCpu ? 1 : 0];
+    origin = CallStackOrigin();
     se_sh2_regs regs{};
     if (!mbHasData || se_get_sh2_regs(mContext, mCallStackCpu, &regs) != SE_OK)
     {
@@ -4425,6 +4436,20 @@ void App::RebuildCallStack()
         return;
     }
     BuildCallStack(mCallStackCpu, regs, mCallStack);
+#if SE_ENABLE_DECOMPILER
+    // The identity the decompiler would give the memory on screen now -- the memory just read.
+    const DecompilerView view = BuildDecompilerView();
+    origin.valid = view.kind != DecompViewKind::None;
+    origin.sourceId = view.sourceId;
+    origin.deriveSerial = view.deriveSerial;
+    origin.frameNumber = view.frameNumber;
+#endif
+}
+
+void App::CallStackCleared()
+{
+    ++mCallStackRevision;
+    mCallStackOrigin[0] = mCallStackOrigin[1] = CallStackOrigin();
 }
 
 void App::BuildCallStack(int cpu, const se_sh2_regs& regs, CallStack& out)
@@ -7967,6 +7992,7 @@ void App::AdoptNewEmulatorInstance()
     mScrubShownFrame = 0;
     mMemBackend.NoteSourceChanged();
     mCallStack.ClearAll();           // a stack through code the new run may not even load
+    CallStackCleared();
     mCallStackDirty = true;
     mSelectedCommand = -1;           // indexes into the old frame's VDP1 command list
     mSelection.clear();

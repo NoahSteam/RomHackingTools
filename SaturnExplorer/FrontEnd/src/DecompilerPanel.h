@@ -95,9 +95,12 @@ struct DecompilerInputs
     // A display overlay: shown on the lines decompiled from that instruction, never sent to the
     // engine, so editing one re-requests nothing (A1).
     const std::unordered_map<uint32_t, std::string>* comments = nullptr;
-    // Entries the call stack knows (the finder's call-site rung). Called only when an entry is
-    // being resolved, never per frame.
-    std::function<void(std::set<uint32_t>&)> callSites;
+    // Entries the call stack knows (the finder's call-site rung): only those of a stack read from
+    // the memory 'snap' names, since another frame's stack can name a function that is not there.
+    // Called only when an entry is being resolved, never per frame; callSitesRevision, which moves
+    // whenever a stack is rebuilt or cleared, is what says the hints changed.
+    std::function<void(const decomp::SnapshotKey& snap, std::set<uint32_t>&)> callSites;
+    uint64_t callSitesRevision = 0;
 };
 
 class DecompilerPanel
@@ -283,7 +286,8 @@ private:
     // The entry wanted for mSnap, resolved once per snapshot, target and set of finder hints: a
     // function start set, a symbol added or a callee discovered can move the containing entry.
     bool mResolved = false;
-    uint64_t mResolvedFunctions = 0, mResolvedCallees = 0;
+    uint64_t mResolvedFunctions = 0, mResolvedCallees = 0, mResolvedCallSites = 0;
+    uint64_t mCallSitesRevision = 0;
     bool mEntryOk = false;
     uint32_t mEntry = 0;
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;

@@ -264,6 +264,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mResolved = true;
     mResolvedFunctions = mFunctions;
     mResolvedCallees = CalleeHash();
+    mResolvedCallSites = mCallSitesRevision;
     mEntryOk = false;
     mEntry = 0;
     mEntrySource = EntrySource::None;
@@ -308,7 +309,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     if (inputs.bounds) hints.userEntries = inputs.bounds->Entries();
     if (inputs.names)
         for (const auto& n : *inputs.names) hints.symbols.insert(n.first);
-    if (inputs.callSites) inputs.callSites(hints.callSiteTargets);
+    if (inputs.callSites) inputs.callSites(mSnap->key, hints.callSiteTargets);
     for (const auto& c : mCallees)
         if (c.second == mSnap->key) hints.callees.insert(c.first);
     const EntryGuess g = FindFunctionContaining(*mSnap, anchor, hints);
@@ -463,6 +464,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         mViewPc[cpu] = view.regs[cpu].pc;
     }
     mNamesGeneration = inputs.namesGeneration;
+    mCallSitesRevision = inputs.callSitesRevision;
     UpdateFunctionSet(inputs);
     const bool active = visible && mViewId.valid;
     if (active)
@@ -532,9 +534,10 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
             mResolved = false;
         }
         // A containing function is found from the finder's hints as well as the snapshot: a start set
-        // or a symbol added inside it, or an entry discovered since, can move it.
+        // or a symbol added inside it, an entry discovered since, or a call stack rebuilt can move it.
         if (mSnap && mResolved && mTarget.kind != TargetKind::Entry &&
-            (mResolvedFunctions != mFunctions || mResolvedCallees != CalleeHash()))
+            (mResolvedFunctions != mFunctions || mResolvedCallees != CalleeHash() ||
+             mResolvedCallSites != mCallSitesRevision))
             mResolved = false;
         if (mSnap && !mResolved) Resolve(inputs);
     }

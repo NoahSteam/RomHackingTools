@@ -168,9 +168,13 @@ A review of every engine and finder input found five findings. Each one now has 
    finds the containing function again when the function set, or the callees found for the held
    snapshot, change. (`TestHintsReResolve`)
 
-The finder's call-site hints are still read only during resolution, never every frame, as
-`DecompilerInputs::callSites` requires. A new call-stack entry therefore takes effect at the next
-resolution.
+The re-review at `4bd1c99` approved these and found one more gap: **call-stack hints**. They had no
+snapshot of their own, so a stack read on a scrubbed frame could pick the function on another frame.
+Rebuilding the stack also did not trigger a new resolution. App now records which memory each CPU's
+stack was read from. It passes only stacks that match the held snapshot, and gives a revision that
+changes whenever a stack is rebuilt or cleared. When the revision changes, the panel resolves again
+before it accepts results. The stack is still read only while resolving, never every frame.
+(`TestCallStackHints`)
 
 CI for the follow-ups: run [38416564598](https://github.com/NoahSteam/RomHackingTools/actions/runs/38416564598) at `de8b136`
 passed all seven jobs. That includes the MSBuild jobs, which check that the exe carries the commit,
