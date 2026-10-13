@@ -401,6 +401,8 @@ by `DecompilerPanelTests`:
   trailing `// note` on the first line decompiled from their instruction, once each; they never
   reach the engine, so editing one re-requests nothing. Pinned by `TestUserCommentsOnLines`.
 
+**Step 4 gate:** *Met* (review round 2, at `8e0331b`): see `Docs/FunctionalityVerification/14_DECOMPILER_STEP4.md`.
+
 ### Step 5 — Release
 
 - About dialog "Third-party" section (Dear ImGui, IPA Gothic, Liberation Sans, zlib, Ghidra

@@ -5,7 +5,8 @@ Plan: [Docs/Decompiler/PLAN.md](../Decompiler/PLAN.md) §B Step 4, contracts A1 
 **Started from:** `ca327c0` (Step 3 gate met) · **Step 4 commits:** `1f8f642` (A3 patch 0005), `b1f21f7`
 (hardware map), `169c8d5` (BIOS names), `49ab408` (register hint), `ec50e87` (Assembly notes),
 `540b761` (callee prototypes), and the commit adding this record.
-**Gate status: checklist complete on Windows and macOS; review round 1 (ChatGPT, at `5178393`) not approved -- findings fixed below, re-review pending.** CI green for each pushed commit except any still running when this was written. The
+**Gate status: MET**: code review approved in round 2 (ChatGPT, at `8e0331b`); CI all seven A7 jobs green at `63da92e`
+(run 38401021266); manual checklist complete on Windows and macOS.
 manual checklist below is pending on Windows and macOS, and the review has not been done.
 
 Done on the way, outside the decompiler (`b187062`): `build-release-msbuild.bat` passes the toolset of
@@ -113,3 +114,9 @@ has a regression test that fails when the fix is removed (mutation run per row).
 
 Tests: full local suite 90/90, and `Sh2DecompilerTests` and `DecompilerPanelTests` clean under ASan.
 CI: all seven A7 jobs green at `63da92e` (run 38401021266).
+
+## Review round 2 (ChatGPT, at `8e0331b`): approved
+
+The reviewer ran both affected test executables and its own five reproductions; all now pass, and
+PLAN/DESIGN match the code. No further manual run was needed. The gate waited only on CI: run
+38401021266 at `63da92e` completed with all seven jobs green, including Windows Release.
