@@ -374,6 +374,9 @@ by `DecompilerPanelTests`:
   Sega manuals, each registered as a global at its cached and cache-through address on every
   pass. The SCSP's per-slot block stays unnamed. Pinned by `TestHardwareRegisterNames`.
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).
+  *As built:* the image itself landed in Step 3 (Settings, snapshot region, key hash). Step 4 names
+  functions in it `bios_0x%08x` unless the user named them, as callees and as entries; pinned by
+  `TestBiosFunctionNames`.
 - Register-value hints at a halt for computed `jsr @rN` targets.
 - User comments shown on mapped lines (display layer, per A1).
 

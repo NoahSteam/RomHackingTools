@@ -472,6 +472,45 @@ void TestCalleeHarvest()
     }
 }
 
+// Step 4: with a BIOS image loaded, a call into it is a named callee, bios_0x..., whichever
+// mirror the literal uses; and a BIOS function decompiled directly carries the same name. Without
+// the image the call stays opaque (TestFixture1b).
+void TestBiosFunctionNames()
+{
+    Sh2Decompiler d(gConfig);
+    for (uint32_t literal : { 0x00000600u, 0x20000600u })
+    {
+        auto s = Fixture1Snapshot(literal, 6);
+        std::vector<uint8_t> bios(0x80000, 0);
+        dts::Put16(bios, 0x600, 0x000B);   // rts
+        dts::Put16(bios, 0x602, 0xE007);   //   mov #7,r0
+        auto image = BiosImage::Make(bios);
+        MemoryRegion region;
+        region.name = "BIOS";
+        region.base = MemorySnapshot::kBiosBase;
+        region.bytes = image->bytes;
+        s->regions.push_back(region);
+        s->biosHash = image->contentHash;
+        s->key.regionSetHash = s->ComputeRegionSetHash();
+
+        const DecompileResult r = d.Decompile(s, Request(dts::kFixture1Caller));
+        Print("call into the BIOS", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "bios_0x00000600("));
+        CHECK(!Has(r.Text(), "func_0x00000600") && !Has(r.Text(), "(*(code *)"));
+        CHECK(r.callees == std::vector<uint32_t>{ 0x600u });
+
+        const DecompileResult b = d.Decompile(s, Request(literal));
+        CHECK(b.status == DecompileStatus::Ok);
+        CHECK(b.name == "bios_0x00000600");
+
+        // A user's name still wins.
+        DecompileRequest named = Request(dts::kFixture1Caller);
+        named.names.emplace_back(0x600u, "SYS_Reset");
+        CHECK(Has(d.Decompile(s, named).Text(), "SYS_Reset("));
+    }
+}
+
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --
 // comes back as a failed result, never as an exception; the next request is unaffected.
 void TestAllocationFailureIsReported()
@@ -804,6 +843,7 @@ int main(int argc, char** argv)
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
         RUN(TestCalleeHarvest());
+        RUN(TestBiosFunctionNames());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

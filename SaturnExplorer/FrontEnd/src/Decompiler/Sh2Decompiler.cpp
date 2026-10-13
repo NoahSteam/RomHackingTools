@@ -91,6 +91,21 @@ void SetError(DecompileResult& r, const std::string& text) noexcept
 const char* const kEngineDamaged =
     "the decompiler ran out of memory earlier and its engine may be damaged; restart Saturn Explorer to decompile again";
 
+// A function in the user's BIOS image (DESIGN.md 6.1) is named for where it lives, so a call into
+// the BIOS reads as one at a glance: bios_0x00000600, beside the engine's func_0x06005000.
+bool InBios(const MemorySnapshot& snap, uint32_t canonical)
+{
+    const MemoryRegion* region = snap.RegionAt(canonical);
+    return region != nullptr && region->base == MemorySnapshot::kBiosBase && std::string(region->name) == "BIOS";
+}
+
+std::string BiosFunctionName(uint32_t canonical)
+{
+    char buf[24];
+    std::snprintf(buf, sizeof(buf), "bios_0x%08x", canonical);
+    return buf;
+}
+
 // What one pass learned from a function's raw p-code, before any action has run.
 struct RawScan
 {
@@ -505,6 +520,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             std::string name;
             auto f = named.find(a);
             if (f != named.end()) name = f->second;
+            else if (InBios(*snapshot, a)) name = BiosFunctionName(a);
             else arch->nameFunction(addr, name);
             // A call through a mirror (0x26005000 for 0x06005000) resolves to the address it
             // names, so the function is registered there too, under the canonical name.
