@@ -370,6 +370,9 @@ by `DecompilerPanelTests`:
   case, a load after a `bsr` pair, a load at a `bra` target, a `jsr` case and that jumped-to slot.
 - Callee prototypes from cached callee decompiles.
 - Saturn hardware map as named globals (VDP1/VDP2/SCU/SMPC/SCSP register blocks).
+  *As built:* `Decompiler/SaturnHardwareMap.{h,cpp}`, 256 registers named `<CHIP>_<NAME>` after the
+  Sega manuals, each registered as a global at its cached and cache-through address on every
+  pass. The SCSP's per-slot block stays unnamed. Pinned by `TestHardwareRegisterNames`.
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).
 - Register-value hints at a halt for computed `jsr @rN` targets.
 - User comments shown on mapped lines (display layer, per A1).

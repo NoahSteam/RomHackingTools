@@ -226,6 +226,7 @@ if(SE_ENABLE_DECOMPILER)
         FrontEnd/src/Sh2Address.cpp   # the A2 partition/fold rule MemorySnapshot shares with the AI investigation
         FrontEnd/src/Decompiler/CaptureLoadImage.cpp
         FrontEnd/src/Decompiler/SaturnArchitecture.cpp
+        FrontEnd/src/Decompiler/SaturnHardwareMap.cpp
         FrontEnd/src/Decompiler/Sh2Decompiler.cpp
         FrontEnd/src/Decompiler/Sh2FunctionFinder.cpp
         FrontEnd/src/Decompiler/DecompilerRunner.cpp)

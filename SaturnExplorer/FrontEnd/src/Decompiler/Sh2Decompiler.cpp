@@ -1,6 +1,7 @@
 #include "Decompiler/Sh2Decompiler.h"
 
 #include "Decompiler/SaturnArchitecture.h"   // first among the engine headers (Win32 LoadImage)
+#include "Decompiler/SaturnHardwareMap.h"
 
 #include "Debug/Sh2Disasm.h"
 
@@ -537,6 +538,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     fd = global->addFunction(addr, name)->getFunction();
                 }
             }
+        }
+
+        // The hardware registers by name, at both partitions code reaches them through, so a
+        // folded pointer prints as VDP2_TVMD rather than *(ushort *)0x25f80000.
+        size_t registerCount = 0;
+        const HardwareRegister* registers = SaturnHardwareRegisters(registerCount);
+        for (size_t i = 0; i < registerCount; ++i)
+        {
+            ghidra::Datatype* type = arch->types->getBase(registers[i].size, ghidra::TYPE_UINT);
+            for (uint32_t partition : { 0x00000000u, 0x20000000u })
+                global->addSymbol(registers[i].name, type, ghidra::Address(ram, registers[i].address | partition),
+                                  ghidra::Address());
         }
 
         Enter(DecompilePhase::Flow);

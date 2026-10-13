@@ -17,6 +17,7 @@
 #include "Decompiler/SaturnArchitecture.h"
 #include "funcdata.hh"   // Funcdata, for the 0004 patch test
 #include "Decompiler/Sh2Decompiler.h"
+#include "Decompiler/SaturnHardwareMap.h"
 
 #include <atomic>
 #include <cstring>
@@ -323,6 +324,50 @@ void TestMovWFold()
     CHECK(r.status == DecompileStatus::Ok);
     CHECK(Has(r.Text(), "7000"));
     CHECK(r.literalPools == std::vector<uint32_t>{ base + 8 });
+}
+
+// Step 4: a hardware register reached through a folded literal prints under its name, whichever
+// partition the code uses and whatever its width. Encodings checked with Capstone (SH2, BE).
+void TestHardwareRegisterNames()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    struct Case { uint32_t base; uint16_t op; uint32_t pointer; const char* name; } cases[] = {
+        // mov.l @(8,pc),r1 ; mov #1,r0 ; mov.w r0,@r1 ; rts ; nop -- a 16-bit write, cache-through
+        { 0x06007000u, 0x2101, 0x25F80000u, "VDP2_TVMD = 1;" },
+        // mov.l @(8,pc),r1 ; mov.b @r1,r0 ; rts ; nop -- an SMPC byte register, cache-through
+        { 0x06007100u, 0x6010, 0x20100063u, "SMPC_SF" },
+        // mov.l @(8,pc),r1 ; mov.l @r1,r0 ; rts ; nop -- a 32-bit SCU register, cached partition
+        { 0x06007200u, 0x6012, 0x05FE00A4u, "SCU_IST" },
+    };
+    for (const Case& c : cases)
+    {
+        size_t off = c.base - 0x06000000u;
+        const bool write = c.op == 0x2101;
+        for (uint16_t w : { uint16_t(0xD102), uint16_t(write ? 0xE001 : c.op), uint16_t(write ? c.op : 0x000B),
+                            uint16_t(write ? 0x000B : 0x0009), uint16_t(0x0009), uint16_t(0x0009) })
+        { dts::Put16(hw, off, w); off += 2; }
+        dts::Put32(hw, c.base + 0x0C - 0x06000000u, c.pointer);
+    }
+    auto snap = MakeSnapshot(hw);
+    for (const Case& c : cases)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(c.base));
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), c.name));
+    }
+
+    // The lookup: either partition, inside a register's width, and nothing in other partitions.
+    CHECK(FindHardwareRegister(0x25F80000u) && std::string(FindHardwareRegister(0x25F80000u)->name) == "VDP2_TVMD");
+    CHECK(FindHardwareRegister(0x05F80001u) && std::string(FindHardwareRegister(0x05F80001u)->name) == "VDP2_TVMD");
+    CHECK(FindHardwareRegister(0x25FE00A6u) && std::string(FindHardwareRegister(0x25FE00A6u)->name) == "SCU_IST");
+    CHECK(FindHardwareRegister(0x45F80000u) == nullptr);   // associative purge: not memory
+    CHECK(FindHardwareRegister(0x05F8000Cu) == nullptr);   // VDP2's reserved word
+    CHECK(FindHardwareRegister(0x20100062u) == nullptr);   // SMPC's even bytes are not registers
+    size_t n = 0;
+    const HardwareRegister* all = SaturnHardwareRegisters(n);
+    for (size_t i = 1; i < n; ++i) CHECK(all[i - 1].address + all[i - 1].size <= all[i].address);
 }
 
 // A branch out of the captured region: the function is marked truncated where it left, naming
@@ -754,6 +799,7 @@ int main(int argc, char** argv)
         RUN(TestDelaySlotPcRelative());
         RUN(TestEditsChangeKeyAndOutput());
         RUN(TestMovWFold());
+        RUN(TestHardwareRegisterNames());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
