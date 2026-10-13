@@ -16,6 +16,8 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
+
+#include <SDL.h>
 #endif
 
 namespace
@@ -68,6 +70,25 @@ void se_web_resize(int width, int height)
 
 int main(int argc, char** argv)
 {
+#ifndef __EMSCRIPTEN__
+    // `--selftest`: load, start SDL without a window, and exit 0. A packaged .app can pass
+    // `codesign --verify` and still fail to start: dyld rejects a bundled dylib (library
+    // validation), or Homebrew's sdl2-compat cannot find the SDL3 it loads at run time. Launching
+    // the bundled binary with this flag exercises both, headlessly, so CI can gate on it.
+    if (argc > 1 && std::strcmp(argv[1], "--selftest") == 0)
+    {
+        if (SDL_Init(SDL_INIT_EVENTS) != 0)
+        {
+            std::fprintf(stderr, "selftest: SDL_Init failed: %s\n", SDL_GetError());
+            return 1;
+        }
+        SDL_version linked;
+        SDL_GetVersion(&linked);
+        std::printf("selftest ok: SDL %d.%d.%d\n", linked.major, linked.minor, linked.patch);
+        SDL_Quit();
+        return 0;
+    }
+#endif
     sfe::PlatformConfig config;
     if (!gPlatform.Initialize(config))
     {

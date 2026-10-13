@@ -60,12 +60,19 @@ To ship the app to another Mac, make the bundle self-contained (copy SDL2 and an
 inside it and rewrite their install names), optionally code-sign it, then wrap it in a `.dmg`:
 ```
 cmake -B build -DSE_MACOS_BUNDLE_LIBS=ON \
-      -DSE_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"   # omit to skip signing
+      -DSE_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"   # omit: ad hoc
 cmake --build build
 cmake --install build --prefix dist     # copies dylibs into the .app (fixup_bundle) + signs
 cpack --config build/CPackConfig.cmake -G DragNDrop   # optional: dist/SaturnExplorer-macos.dmg
 ```
 `SE_MACOS_BUNDLE_LIBS` is off by default so a normal dev build stays fast and Homebrew-linked.
+The install step always signs, because rewriting install names breaks the linker's signature and
+macOS kills an app whose signature does not verify. With no identity it signs ad hoc, without the
+hardened runtime: library validation would reject the bundled dylibs, which have no Team ID. Ad hoc
+runs on the Mac that built it, but Gatekeeper quarantines it when downloaded. If Homebrew's `sdl2` is
+sdl2-compat, which loads SDL3 at run time, `libSDL3.dylib` is bundled too.
+`dist/SaturnExplorer.app/Contents/MacOS/SaturnExplorer --selftest` checks that the bundle starts
+(prints `selftest ok`).
 Signing needs an Apple **Developer ID** certificate in your keychain; **notarization** (required
 for Gatekeeper on other Macs) is a separate step Apple runs on the signed `.dmg`:
 ```

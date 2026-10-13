@@ -26,7 +26,7 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
 - **Click a line** to jump SH-2 Assembly to the first instruction it came from.
 - **Right-click a line** for these:
   - **Show in SH-2 Assembly**.
-  - **Rename Function…** and **Rename Callee 0x…**: names are shared with SH-2 Assembly and Call Stack.
+  - **Rename Function...** and **Rename Callee 0x...**: names are shared with SH-2 Assembly and Call Stack.
   - **Set Function Start Here**: use it when the finder guessed the entry wrong.
   - **View in Memory**.
   - **Copy Line** and **Copy Function**.
@@ -37,7 +37,7 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
 
 ## The BIOS
 
-Calls into the BIOS stop at the BIOS boundary unless you give the panel an image. Use **BIOS → Choose BIOS Image…** and pick your own dump; it is never shipped, and it must be 512 KiB or smaller. The image is mapped at `0x00000000`, so BIOS functions decompile and are named `bios_0x…` until you rename them. The path is saved in `settings.ini` under `[decompiler]`.
+Calls into the BIOS stop at the BIOS boundary unless you give the panel an image. Click the **BIOS** button in the panel's toolbar → **Choose BIOS Image...** and pick your own dump; it is never shipped, and it must be 512 KiB or smaller. The image is mapped at `0x00000000`, so BIOS functions decompile and are named `bios_0x…` until you rename them. The path is saved in `settings.ini` under `[decompiler]`.
 
 ## When the output is stale or missing
 

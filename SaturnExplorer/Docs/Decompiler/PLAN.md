@@ -231,7 +231,7 @@ packaging, or both Mac architectures.
 | `build-release.bat` (CMake, VS 2022, Release) | New Windows job running the batch file, asserting `build\bin\Release\SaturnExplorerFrontEnd.exe` exists |
 | `build-release-msbuild.bat` (checked-in solution) | New Windows job running it, asserting the exe exists; this is also what proves A6's project wiring compiles |
 | macOS x86_64 | New job on the arm64 runner with `-DCMAKE_OSX_ARCHITECTURES=x86_64` building `SaturnExplorerGhidraDecomp` and the decompiler tests only (they need no SDL2) and running them under Rosetta; the full x86_64 app is a manual, recorded build until an Intel runner is available |
-| macOS bundle + DMG | New job: `-DSE_MACOS_BUNDLE_LIBS=ON`, `cmake --install`, `cpack -G DragNDrop`, assert the `.app` and `.dmg` exist and `codesign --verify --deep --strict` passes **ad-hoc signed**; Developer ID signing and notarisation stay a manual, recorded step since they need a certificate |
+| macOS bundle + DMG | New job: `-DSE_MACOS_BUNDLE_LIBS=ON`, `cmake --install`, `cpack -G DragNDrop`, assert the `.app` and `.dmg` exist and `codesign --verify --deep --strict` passes **ad-hoc signed** (the default identity, no flag); then, with Homebrew's SDL uninstalled, launch both bundled binaries with `--selftest` (dyld, library validation and sdl2-compat's run-time SDL3 load; added in Step 5 after a bundle that verified did not start); Developer ID signing and notarisation stay a manual, recorded step since they need a certificate |
 | The macOS frontend exists | The existing existence check is extended from `se-render` to `SaturnExplorer.app` (the target's `OUTPUT_NAME`, not the CMake target name) |
 | Timing | No hard millisecond gate. Decompiler tests get a ctest `TIMEOUT` of 60 s, except `DecompilerRunnerTests`, which decompiles the spike's large synthetic fixtures several times and gets 120 s (A4). All of them print their elapsed times, which the step record copies into `Docs/FunctionalityVerification/` |
 
@@ -423,6 +423,12 @@ by `DecompilerPanelTests`:
 - `DECOMPILER_GUIDE.md` (root), `Docs/Decompiler/DEMO.md`, the `CLAUDE.md` rows, and `VENDOR.md`
   "Bumping Ghidra — checklist".
 - Record: `Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md`.
+- *macOS bundle fixes* (the macOS tester, at `9639d2a`: the documented recipe gave a bundle that
+  did not start, for three independent reasons). The install step always re-signs, ad hoc by
+  default, because `fixup_bundle` invalidates the linker's signature. The hardened runtime is used
+  only with a real identity: ad hoc, its library validation rejects the bundled `libSDL2`.
+  When Homebrew's SDL2 is sdl2-compat, which loads SDL3 at run time, `libSDL3.dylib` is bundled too.
+  The A7 bundle job now launches the bundled binaries with `--selftest`, with no Homebrew SDL installed.
 
 ---
 

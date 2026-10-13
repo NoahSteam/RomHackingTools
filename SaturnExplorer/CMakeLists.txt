@@ -1679,35 +1679,90 @@ else()
             # enable with -DSE_MACOS_BUNDLE_LIBS=ON. See BUILD.md "macOS packaging".
             option(SE_MACOS_BUNDLE_LIBS "macOS: bundle dylibs into the .app (self-contained)" OFF)
             if(SE_MACOS_BUNDLE_LIBS)
-                set(SE_MACOS_SIGN_IDENTITY "" CACHE STRING
-                    "codesign identity for the .app (e.g. 'Developer ID Application: …'); empty = skip signing")
+                # Default "-" (ad hoc), never "skip": fixup_bundle's install_name_tool edits and the
+                # Resources added to the bundle invalidate the linker's ad-hoc signature, and macOS
+                # kills an executable whose signature does not verify (Code Signature Invalid).
+                set(SE_MACOS_SIGN_IDENTITY "-" CACHE STRING
+                    "codesign identity for the .app (e.g. 'Developer ID Application: …'); '-' = ad hoc")
                 install(TARGETS SaturnExplorerFrontEnd BUNDLE DESTINATION .)
                 set(SE_APP_PATH "\${CMAKE_INSTALL_PREFIX}/SaturnExplorer.app")
+
+                # Homebrew's sdl2 is now sdl2-compat: a libSDL2 that dlopens libSDL3 at run time
+                # (from @loader_path first). fixup_bundle follows load commands only, so it never
+                # sees SDL3 and the bundle dies with "Failed loading SDL3 library" on any Mac
+                # without Homebrew's sdl3. Detect the shim and copy SDL3 in beside libSDL2.
+                set(SE_BUNDLE_EXTRA_LIBS "")
+                # SDL2_LIBRARIES may hold a path or an imported target (SDL2::SDL2), by SDL version.
+                set(se_sdl_files "")
+                foreach(item ${SDL2_LIBRARIES})
+                    if(TARGET ${item})
+                        get_target_property(se_loc ${item} LOCATION)
+                        if(se_loc)
+                            list(APPEND se_sdl_files "${se_loc}")
+                        endif()
+                    else()
+                        list(APPEND se_sdl_files "${item}")
+                    endif()
+                endforeach()
+                foreach(lib ${se_sdl_files})
+                    if(lib MATCHES "\\.dylib$" AND EXISTS "${lib}")
+                        file(STRINGS "${lib}" se_sdl3_refs REGEX "libSDL3" LIMIT_COUNT 1)
+                        if(se_sdl3_refs)
+                            get_filename_component(se_sdl_dir "${lib}" DIRECTORY)
+                            find_library(SE_SDL3_LIBRARY NAMES SDL3
+                                HINTS "${se_sdl_dir}" /opt/homebrew/lib /usr/local/lib)
+                            if(NOT SE_SDL3_LIBRARY)
+                                message(FATAL_ERROR "${lib} is sdl2-compat, which loads SDL3 at run time, "
+                                    "but no libSDL3 was found to bundle (brew install sdl3)")
+                            endif()
+                            get_filename_component(se_sdl3_real "${SE_SDL3_LIBRARY}" REALPATH)
+                            # Named as sdl2-compat looks for it: @loader_path/libSDL3.dylib.
+                            install(FILES "${se_sdl3_real}"
+                                DESTINATION "SaturnExplorer.app/Contents/Frameworks"
+                                RENAME "libSDL3.dylib"
+                                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+                            set(SE_BUNDLE_EXTRA_LIBS "${SE_APP_PATH}/Contents/Frameworks/libSDL3.dylib")
+                            message(STATUS "SaturnExplorer: ${lib} is sdl2-compat; bundling ${se_sdl3_real}")
+                            break()
+                        endif()
+                    endif()
+                endforeach()
+
                 # fixup_bundle follows the exe's dylib dependencies; the dir hints resolve
-                # Homebrew/@rpath libraries on both Apple-silicon and Intel prefixes.
+                # Homebrew/@rpath libraries on both Apple-silicon and Intel prefixes. Extra libs
+                # (SDL3 above) get their install names rewritten too.
                 install(CODE "
                     include(BundleUtilities)
                     set(BU_CHMOD_BUNDLE_ITEMS ON)
-                    fixup_bundle(\"${SE_APP_PATH}\" \"\" \"/opt/homebrew/lib;/usr/local/lib\")
+                    fixup_bundle(\"${SE_APP_PATH}\" \"${SE_BUNDLE_EXTRA_LIBS}\" \"/opt/homebrew/lib;/usr/local/lib\")
                 ")
-                if(SE_MACOS_SIGN_IDENTITY)
-                    # A requested signature that was not produced must fail the install (and so the
-                    # package): an unsigned bundle shipped as signed is worse than no bundle. The result
-                    # is checked, then the signature is verified rather than assumed.
-                    install(CODE "
-                        execute_process(COMMAND codesign --force --deep --timestamp
-                                --options runtime --sign \"${SE_MACOS_SIGN_IDENTITY}\" \"${SE_APP_PATH}\"
-                            RESULT_VARIABLE se_sign_rc ERROR_VARIABLE se_sign_err)
-                        if(NOT se_sign_rc EQUAL 0)
-                            message(FATAL_ERROR \"codesign failed (\${se_sign_rc}): \${se_sign_err}\")
-                        endif()
-                        execute_process(COMMAND codesign --verify --deep --strict \"${SE_APP_PATH}\"
-                            RESULT_VARIABLE se_verify_rc ERROR_VARIABLE se_verify_err)
-                        if(NOT se_verify_rc EQUAL 0)
-                            message(FATAL_ERROR \"The signed bundle does not verify (\${se_verify_rc}): \${se_verify_err}\")
-                        endif()
-                    ")
+
+                # Hardened runtime only with a real identity. It turns on library validation, which
+                # requires every loaded dylib to share the executable's Team ID; ad hoc there is no
+                # Team ID, so dyld refuses the bundled libSDL2 ("different Team IDs"). Notarisation
+                # requires the hardened runtime, and a Developer ID gives everything one Team ID.
+                if(SE_MACOS_SIGN_IDENTITY STREQUAL "-")
+                    set(SE_SIGN_OPTIONS "")
+                else()
+                    set(SE_SIGN_OPTIONS "--timestamp --options runtime")
                 endif()
+                # A requested signature that was not produced must fail the install (and so the
+                # package): an unsigned bundle shipped as signed is worse than no bundle. The result
+                # is checked, then the signature is verified rather than assumed.
+                install(CODE "
+                    separate_arguments(se_sign_opts UNIX_COMMAND \"${SE_SIGN_OPTIONS}\")
+                    execute_process(COMMAND codesign --force --deep \${se_sign_opts}
+                            --sign \"${SE_MACOS_SIGN_IDENTITY}\" \"${SE_APP_PATH}\"
+                        RESULT_VARIABLE se_sign_rc ERROR_VARIABLE se_sign_err)
+                    if(NOT se_sign_rc EQUAL 0)
+                        message(FATAL_ERROR \"codesign failed (\${se_sign_rc}): \${se_sign_err}\")
+                    endif()
+                    execute_process(COMMAND codesign --verify --deep --strict \"${SE_APP_PATH}\"
+                        RESULT_VARIABLE se_verify_rc ERROR_VARIABLE se_verify_err)
+                    if(NOT se_verify_rc EQUAL 0)
+                        message(FATAL_ERROR \"The signed bundle does not verify (\${se_verify_rc}): \${se_verify_err}\")
+                    endif()
+                ")
                 # `cpack -G DragNDrop` then produces a .dmg of the finished bundle.
                 set(CPACK_GENERATOR "DragNDrop")
                 set(CPACK_PACKAGE_NAME "SaturnExplorer")

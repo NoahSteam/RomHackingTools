@@ -162,8 +162,11 @@ jobs:
           ctest --test-dir build-x86_64 --output-on-failure -V
           -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests'
 
-  # The distributable macOS bundle and DMG, ad-hoc signed. Developer ID signing and
-  # notarisation need a certificate and stay a manual, recorded release step.
+  # The distributable macOS bundle and DMG, ad-hoc signed (BUILD.md's recipe as written, no
+  # identity given). Developer ID signing and notarisation need a certificate and stay a manual,
+  # recorded release step. A bundle can pass `codesign --verify` and still not start (library
+  # validation, sdl2-compat's run-time load of SDL3), so the bundled binary is also launched with
+  # --selftest, with Homebrew's SDL removed so only what the bundle carries can satisfy it.
   macos-bundle-dmg:
     name: macOS bundle + DMG (ad-hoc signed)
     runs-on: macos-latest
@@ -177,7 +180,7 @@ jobs:
       - name: Configure
         run: >
           cmake -S . -B build-bundle -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-          -DSE_MACOS_BUNDLE_LIBS=ON -DSE_MACOS_SIGN_IDENTITY=-
+          -DSE_MACOS_BUNDLE_LIBS=ON
       - name: Build
         run: cmake --build build-bundle --parallel 4
       - name: Install the bundle
@@ -191,8 +194,14 @@ jobs:
           for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
             test -f "stage/SaturnExplorer.app/Contents/Resources/licenses/$f"
           done
-          # Self-contained: nothing may still point into Homebrew.
-          ! otool -L stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer | grep -E '/opt/homebrew|/usr/local/'
+          # Self-contained: nothing may still point into Homebrew, from the exe or a bundled dylib.
+          for f in stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer stage/SaturnExplorer.app/Contents/Frameworks/*.dylib; do
+            ! otool -L "$f" | grep -E '/opt/homebrew|/usr/local/'
+          done
+          # sdl2-compat loads SDL3 at run time; the bundle must carry it.
+          if strings stage/SaturnExplorer.app/Contents/Frameworks/libSDL2*.dylib | grep -q libSDL3; then
+            test -f stage/SaturnExplorer.app/Contents/Frameworks/libSDL3.dylib
+          fi
       - name: Package the DMG
         working-directory: SaturnExplorer/build-bundle
         run: cpack -G DragNDrop
@@ -207,4 +216,14 @@ jobs:
           for f in ghidra-decompiler/LICENSE ghidra-decompiler/NOTICE zlib/LICENSE nlohmann-json/LICENSE.MIT imgui/LICENSE.txt fonts/LICENSE-IPAfont.txt fonts/LICENSE-Liberation.txt; do
             test -f "dmg-mount/SaturnExplorer.app/Contents/Resources/licenses/$f"
           done
+          hdiutil detach dmg-mount
+      # Last, because cpack re-runs fixup_bundle and needs Homebrew's SDL to copy from.
+      - name: Launch the bundled binaries without Homebrew's SDL
+        working-directory: SaturnExplorer/build-bundle
+        run: |
+          brew uninstall --ignore-dependencies sdl2 sdl2-compat sdl3 || true
+          if ls /opt/homebrew/lib/libSDL* /usr/local/lib/libSDL* 2>/dev/null; then echo "Homebrew SDL still present"; exit 1; fi
+          perl -e 'alarm 60; exec @ARGV' ../stage/SaturnExplorer.app/Contents/MacOS/SaturnExplorer --selftest
+          hdiutil attach -nobrowse -readonly -mountpoint dmg-mount SaturnExplorer-macos.dmg
+          perl -e 'alarm 60; exec @ARGV' dmg-mount/SaturnExplorer.app/Contents/MacOS/SaturnExplorer --selftest
           hdiutil detach dmg-mount
