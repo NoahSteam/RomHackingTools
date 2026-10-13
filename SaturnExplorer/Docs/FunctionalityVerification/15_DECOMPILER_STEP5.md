@@ -1,6 +1,9 @@
 # SH-2 decompiler — Step 5 (Release) verification
 
-**Gate status: open.** Waiting for a green CI run of the fixed macOS bundle job. The Windows and macOS columns are recorded below.
+**Gate status: MET.**
+- CI run [38410604062](https://github.com/NoahSteam/RomHackingTools/actions/runs/38410604062) at `33326d2` passed all seven jobs, including the macOS bundle job's new `--selftest` launch without Homebrew SDL. Run 38405230972 at `9639d2a` had also passed all seven.
+- The Windows column (at `9639d2a`) and macOS run 2 (at `33326d2`) are below.
+- The only failures found were the bundle blockers and doc wording. All are fixed, and none were in decompiler code.
 
 This record covers PLAN.md Step 5:
 - the About dialog's "Third-party" section;

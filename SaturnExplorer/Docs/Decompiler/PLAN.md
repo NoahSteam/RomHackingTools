@@ -430,6 +430,9 @@ by `DecompilerPanelTests`:
   When Homebrew's SDL2 is sdl2-compat, which loads SDL3 at run time, `libSDL3.dylib` is bundled too.
   The A7 bundle job now launches the bundled binaries with `--selftest`, with no Homebrew SDL installed.
 
+**Step 5 gate:** *Met* (CI run 38410604062 at `33326d2`; Windows and macOS columns):
+see `Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md`.
+
 ---
 
 ## Effort and order
