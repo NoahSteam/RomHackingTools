@@ -901,8 +901,6 @@ RegisterHint DecompilerPanel::HaltHint() const
     // instruction run through another mirror computes other values (a bsrf's target).
     if (h.insn - insn != mShown.requestedEntry - mShown.entry) return RegisterHint();
     h.insn = insn;
-    uint32_t target = 0;
-    const bool canonical = CanonicalAddress(h.target, target);
     bool inFunction = false;
     for (const Line& l : mShown.lines)
     {
@@ -910,9 +908,11 @@ RegisterHint DecompilerPanel::HaltHint() const
         for (const Token& t : l.tokens) here |= t.addr == h.insn;
         if (!here) continue;
         inFunction = true;
-        // A call the output already resolved (jsr through a literal) needs no hint.
+        // A call the output already resolved (jsr through a literal) needs no hint -- if it is the
+        // very address the CPU is about to call. The same function through another mirror is not
+        // what the output shows (its signature can differ), so that keeps its hint.
         for (const Token& t : l.tokens)
-            if (t.kind == TokenKind::FuncName && canonical && t.target == target) return RegisterHint();
+            if (t.kind == TokenKind::FuncName && t.calledAt != 0 && t.calledAt == h.target) return RegisterHint();
     }
     return inFunction ? h : RegisterHint();
 }

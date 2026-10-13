@@ -1173,6 +1173,28 @@ void TestHaltHintMatchesMirror()
     f.Idle(2);
     CHECK(f.Shown().requestedEntry == dts::kFixture1Caller);
     CHECK(f.panel.HintText().empty());
+    // Review of a92a300: a call the output resolved suppresses the hint only for the exact address
+    // called. The literal names 06005000; the CPU about to call 26005000 is not that call.
+    f.PutWord(dts::kFixture1Jsr - 2, 0xD003);   // the literal load again: the call prints as resolved
+    ++f.backend.serial;
+    f.regs[0].pc = dts::kFixture1Jsr;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    ++f.frame;
+    CHECK(f.WaitShown("func_0x06005000("));
+    f.Idle(2);
+    CHECK(f.panel.HintText().empty());           // exactly the resolved call
+    f.regs[0].r[0] = dts::kFixture1Callee | 0x20000000u;
+    ++f.frame;
+    f.Idle();
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && !f.panel.ShownStale(); }));
+    f.Idle(2);
+    CHECK(!f.panel.HintText().empty());
+    f.PutWord(dts::kFixture1Jsr - 2, 0x6042);
+    ++f.backend.serial;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    f.regs[0].pc = dts::kFixture1Jsr | 0x20000000u;
+    ++f.frame;
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && !f.panel.ShownStale(); }));
     f.TypeInto("entry", "26004000");             // the output for that mirror: the hint is its own
     CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == 0x26004000u; }));
     f.Idle(2);

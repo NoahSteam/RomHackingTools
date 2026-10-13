@@ -90,6 +90,7 @@ struct Token
     TokenKind kind = TokenKind::Plain;
     uint32_t addr = 0;             // the instruction the token came from; 0 = none
     uint32_t target = 0;           // a called function's entry, for FuncName tokens; 0 = none
+    uint32_t calledAt = 0;         // ...and the exact address called (a mirror, if through one); 0 = none
 };
 
 struct Line

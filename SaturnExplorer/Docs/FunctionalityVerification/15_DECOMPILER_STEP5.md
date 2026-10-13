@@ -248,3 +248,12 @@ missing in the panel. Both are now fixed:
 2. **A halt hint could attach to output from another mirror.** A hint is now shown only when the
    halted PC is in the same mirror as the output. (`TestHaltHintMatchesMirror`: output pinned at
    `06004000` gets no hint for a halt at `2600400E`, and the `26004000` output does get one.)
+
+The re-review at `a92a300` closed both findings and found one more. A call the output had already
+resolved hid the halt hint whenever the canonical targets matched, so the CPU about to call
+`26005000` was treated as the printed call to `06005000`. Each function-name token now also records
+the exact address called (`Token::calledAt`). The hint is hidden only when that address equals the
+runtime target, and is kept when there is no such token to compare. (`TestHaltHintMatchesMirror`)
+
+At this point every input-invalidation and SH-2 semantics finding is closed. One hardware-validation
+gap remains: MAC.W setting MACH bit 0 on overflow is confirmed only by Mednafen parity.

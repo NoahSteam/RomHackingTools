@@ -405,7 +405,10 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                     uint32_t c = 0;
                     if (cs && !cs->getEntryAddress().isInvalid() &&
                         CanonicalAddress(static_cast<uint32_t>(cs->getEntryAddress().getOffset()), c))
+                    {
                         t.target = c;   // navigation goes to the canonical entry, whichever mirror was called
+                        t.calledAt = static_cast<uint32_t>(cs->getEntryAddress().getOffset());
+                    }
                 }
             }
             line.tokens.push_back(t);
