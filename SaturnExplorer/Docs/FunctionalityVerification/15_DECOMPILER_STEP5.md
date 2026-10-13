@@ -171,3 +171,7 @@ A review of every engine and finder input found five findings. Each one now has 
 The finder's call-site hints are still read only during resolution, never every frame, as
 `DecompilerInputs::callSites` requires. A new call-stack entry therefore takes effect at the next
 resolution.
+
+CI for the follow-ups: run [38416564598](https://github.com/NoahSteam/RomHackingTools/actions/runs/38416564598) at `de8b136`
+passed all seven jobs. That includes the MSBuild jobs, which check that the exe carries the commit,
+and the bundle `--selftest` launch.
