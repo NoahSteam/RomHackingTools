@@ -106,6 +106,87 @@ std::string BiosFunctionName(uint32_t canonical)
     return buf;
 }
 
+TypeShape ShapeOf(const ghidra::Datatype* t)
+{
+    TypeShape shape;
+    if (t == nullptr) return shape;
+    shape.size = static_cast<uint8_t>(std::min<ghidra::int4>(t->getSize(), 255));
+    switch (t->getMetatype())
+    {
+    case ghidra::TYPE_VOID: shape.kind = TypeKind::Void; shape.size = 0; break;
+    case ghidra::TYPE_INT: shape.kind = TypeKind::Int; break;
+    case ghidra::TYPE_UINT: shape.kind = TypeKind::Uint; break;
+    case ghidra::TYPE_BOOL: shape.kind = TypeKind::Bool; break;
+    case ghidra::TYPE_PTR:
+    {
+        shape.kind = TypeKind::Pointer;
+        const ghidra::Datatype* to = static_cast<const ghidra::TypePointer*>(t)->getPtrTo();
+        if (to != nullptr)
+        {
+            switch (to->getMetatype())
+            {
+            case ghidra::TYPE_INT: shape.pointee = TypeKind::Int; break;
+            case ghidra::TYPE_UINT: shape.pointee = TypeKind::Uint; break;
+            case ghidra::TYPE_BOOL: shape.pointee = TypeKind::Bool; break;
+            default: shape.pointee = TypeKind::Unknown; break;
+            }
+            const ghidra::int4 n = to->getSize();
+            shape.pointeeSize = static_cast<uint8_t>(n == 1 || n == 2 || n == 4 || n == 8 ? n : 1);
+        }
+        break;
+    }
+    default: shape.kind = TypeKind::Unknown; break;   // floats, structures: an unknown of that size
+    }
+    return shape;
+}
+
+ghidra::Datatype* TypeOf(ghidra::TypeFactory& types, const TypeShape& shape)
+{
+    auto base = [&](TypeKind kind, int size) -> ghidra::Datatype* {
+        if (size != 1 && size != 2 && size != 4 && size != 8) size = 4;
+        switch (kind)
+        {
+        case TypeKind::Int: return types.getBase(size, ghidra::TYPE_INT);
+        case TypeKind::Uint: return types.getBase(size, ghidra::TYPE_UINT);
+        case TypeKind::Bool: return types.getBase(1, ghidra::TYPE_BOOL);
+        default: return types.getBase(size, ghidra::TYPE_UNKNOWN);
+        }
+    };
+    switch (shape.kind)
+    {
+    case TypeKind::Void: return types.getTypeVoid();
+    case TypeKind::Pointer: return types.getTypePointer(4, base(shape.pointee, shape.pointeeSize), 1);
+    default: return base(shape.kind, shape.size);
+    }
+}
+
+// Lock 'fd' to 'proto': the caller's call site then copies it instead of guessing.
+void ApplyPrototype(ghidra::Architecture& arch, ghidra::Funcdata& fd, const Prototype& proto)
+{
+    ghidra::PrototypePieces pieces;
+    pieces.model = arch.defaultfp;
+    pieces.name = fd.getName();
+    pieces.outtype = TypeOf(*arch.types, proto.ret);
+    for (size_t i = 0; i < proto.params.size(); ++i)
+    {
+        pieces.intypes.push_back(TypeOf(*arch.types, proto.params[i]));
+        pieces.innames.push_back("param_" + std::to_string(i + 1));
+    }
+    pieces.firstVarArgSlot = -1;
+    fd.getFuncProto().setPieces(pieces);
+}
+
+Prototype PrototypeOf(const ghidra::Funcdata& fd)
+{
+    Prototype p;
+    const ghidra::FuncProto& fp = fd.getFuncProto();
+    if (fp.isDotdotdot()) return p;
+    p.known = true;
+    p.ret = ShapeOf(fp.getOutputType());
+    for (ghidra::int4 i = 0; i < fp.numParams(); ++i) p.params.push_back(ShapeOf(fp.getParam(i)->getType()));
+    return p;
+}
+
 // What one pass learned from a function's raw p-code, before any action has run.
 struct RawScan
 {
@@ -471,6 +552,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         uint32_t c = 0;
         if (!n.second.empty() && CanonicalAddress(n.first, c)) named[c] = n.second;
     }
+    std::map<uint32_t, Prototype> prototypes;
+    for (const auto& p : request.prototypes)
+    {
+        uint32_t c = 0;
+        if (p.second.known && CanonicalAddress(p.first, c)) prototypes[c] = p.second;
+    }
     std::set<uint32_t> known;
     for (uint32_t k : request.knownFunctions)
     {
@@ -542,6 +629,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             {
                 ghidra::Funcdata* f2 = global->addFunction(addr, name)->getFunction();
                 if (a == entry) fd = f2;
+                // A callee decompiled before lends its signature; the function being decompiled
+                // keeps the engine's own recovery.
+                auto proto = prototypes.find(a);
+                if (a != entry && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
             }
             catch (ghidra::LowlevelError& e)
             {
@@ -633,6 +724,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (r.truncated)
             r.warnings.push_back("flows into " + r.truncatedWhy);
         if (r.unimplemented) r.warnings.push_back("the SH-2 spec has no semantics for an instruction here");
+        if (!r.truncated && !r.unsupported && !r.unimplemented) r.prototype = PrototypeOf(*fd);
 
         std::ostringstream markup;
         arch->print->setOutputStream(&markup);

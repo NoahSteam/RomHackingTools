@@ -712,6 +712,41 @@ void TestUserCommentsOnLines()
     for (const std::string& note : f.panel.LineNotes()) CHECK(note.empty());
 }
 
+// Step 4: a callee's signature, learned when the panel showed it, is lent to its caller. The
+// caller shown first guesses from the call site; shown again after its callee, it is asked again
+// -- the question has changed -- and the call shows what the callee really takes.
+void TestCalleePrototypesLent()
+{
+    Fixture f;
+    const uint32_t caller = 0x06007300u, callee = 0x06007340u;
+    // As in Sh2DecompilerTests' TestCalleePrototypes (Capstone-checked): the caller sets r4-r6 and
+    // bsr's to a callee that stores r4 and returns nothing.
+    uint32_t a = caller;
+    for (uint16_t w : { 0xE401, 0xE502, 0xE603, 0x4F22, 0xB01A, 0x0009, 0x4F26, 0x000B, 0x0009 })
+    { f.PutWord(a, w); a += 2; }
+    a = callee;
+    for (uint16_t w : { 0xD101, 0x2142, 0x000B, 0x0009, 0x0600, 0x8000 }) { f.PutWord(a, w); a += 2; }
+    ++f.backend.serial;
+    f.Idle();
+
+    f.TypeInto("entry", "06007300");
+    CHECK(f.WaitShown("(1,2,3)"));
+    f.TypeInto("entry", "06007340");
+    CHECK(f.WaitShown("void func_0x06007340("));
+    const uint64_t n = f.panel.Submissions();
+    f.TypeInto("entry", "06007300");
+    CHECK(f.WaitShown("func_0x06007340(1);"));
+    CHECK(f.panel.Submissions() == n + 1);   // asked again, not served from the cache
+    CHECK(f.panel.CacheHits() == 0);
+
+    // A new session forgets them: what was learned belonged to the old source.
+    f.panel.ResetSession();
+    f.runner.InvalidateSession();
+    ++f.sourceId;
+    f.TypeInto("entry", "06007300");
+    CHECK(f.WaitShown("(1,2,3)"));
+}
+
 // A1 non-memory invalidations: a rename re-runs the request (names are engine input), a BIOS image
 // with other bytes is a new key, a function-start correction asks for the new entry.
 void TestRenameBiosAndBounds()
@@ -1204,7 +1239,11 @@ void TestEntryBoxFollowsShownFunction()
     ImGui::GetIO().AddInputCharacter('7');
     f.Idle();
     f.panel.ShowFunctionContaining(0, dts::kFixture1Callee);
-    CHECK(f.WaitShown());
+    // Not necessarily from the cache: the caller's signature has been learned since, which the
+    // callee's question includes.
+    CHECK(f.PumpUntil([&] {
+        return !f.panel.Pending() && f.panel.Shown() && f.panel.Shown()->entry == dts::kFixture1Callee;
+    }));
     f.Idle(2);
     CHECK(f.Shown().entry == dts::kFixture1Callee);
     CHECK(std::string(f.panel.EntryText()) == "060040007");
@@ -1294,6 +1333,7 @@ int main(int argc, char** argv)
         RUN(TestDelaySlotFlagged());
         RUN(TestRegisterHintAtHalt());
         RUN(TestUserCommentsOnLines());
+        RUN(TestCalleePrototypesLent());
         RUN(TestRenameBiosAndBounds());
         RUN(TestRunningLive());
         RUN(TestScrubCache());

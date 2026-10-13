@@ -30,7 +30,7 @@
 // stays there, labelled stale, until its replacement arrives -- the panel never blanks while it
 // waits, and never shows output for memory other than what the badge says.
 //
-// A request is submitted once per {snapshot key, entry, names}: a failure is shown, not retried
+// A request is submitted once per {snapshot key, entry, names, callee signatures lent}: a failure is shown, not retried
 // every frame. Results are kept in a small LRU under that same full key, which is what makes
 // scrubbing back and forth through recorded frames cheap (App gives a recorded frame a stable
 // identity for as long as the recording it came from is unchanged).
@@ -216,6 +216,7 @@ private:
         uint32_t entry = 0;
         ViewId snapId;
         uint64_t namesGeneration = 0;
+        uint64_t prototypes = 0;     // PrototypeHash for the entry when asked
     };
 
     // What the panel last submitted (or served from the cache): the same question is never asked
@@ -226,9 +227,11 @@ private:
         decomp::SnapshotKey key;
         uint32_t entry = 0;
         uint64_t namesGeneration = 0;
+        uint64_t prototypes = 0;     // the callee signatures lent (engine input, like the names)
         bool operator==(const Question& o) const
         {
-            return valid == o.valid && key == o.key && entry == o.entry && namesGeneration == o.namesGeneration;
+            return valid == o.valid && key == o.key && entry == o.entry && namesGeneration == o.namesGeneration &&
+                   prototypes == o.prototypes;
         }
     };
 
@@ -282,6 +285,11 @@ private:
 
     uint64_t mNamesGeneration = 0;
     std::set<uint32_t> mCallees;     // found by results this session: the finder's last rung
+    // Each function's signature from its last decompilation this session, lent to its callers'
+    // requests. Engine input: the question carries a hash of what is lent, so a caller decompiled
+    // before its callee is asked again, with the callee's signature, when it is next shown.
+    std::map<uint32_t, decomp::Prototype> mPrototypes;
+    uint64_t PrototypeHash(uint32_t entry) const;   // over every prototype but the entry's own
 
     Question mAsked;
     Outstanding mPending;

@@ -128,7 +128,33 @@ void DecompilerPanel::ResetSession()
     mResolved = false;
     mCache.clear();
     mCallees.clear();
+    mPrototypes.clear();
     mNote.clear();
+}
+
+uint64_t DecompilerPanel::PrototypeHash(uint32_t entry) const
+{
+    // FNV-1a over the lent prototypes, in address order.
+    uint64_t h = 1469598103934665603ull;
+    auto mix = [&h](uint64_t v) {
+        for (int i = 0; i < 8; ++i)
+        {
+            h ^= (v >> (8 * i)) & 0xFF;
+            h *= 1099511628211ull;
+        }
+    };
+    auto shape = [&mix](const TypeShape& t) {
+        mix((uint64_t(t.kind) << 24) | (uint64_t(t.size) << 16) | (uint64_t(t.pointee) << 8) | t.pointeeSize);
+    };
+    for (const auto& p : mPrototypes)
+    {
+        if (p.first == entry) continue;
+        mix(p.first);
+        shape(p.second.ret);
+        mix(p.second.params.size());
+        for (const TypeShape& t : p.second.params) shape(t);
+    }
+    return h;
 }
 
 bool DecompilerPanel::ShownOutdatedByView() const
@@ -252,6 +278,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         mShownEntrySource = b;
     }
     for (uint32_t c : mShown.callees) mCallees.insert(c);
+    if (mShown.status == DecompileStatus::Ok && mShown.prototype.known) mPrototypes[mShown.entry] = mShown.prototype;
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
     if (!sameFunction)
     {
@@ -289,6 +316,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mResolved && mEntryOk && r.requestedEntry == mPending.entry &&
                          mPending.entry == mEntry &&                   // and the entry wanted now,
                          mPending.namesGeneration == mNamesGeneration && // under the names in force now,
+                         mPending.prototypes == PrototypeHash(mEntry) &&   // lending the signatures known now,
                          HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
     {
@@ -311,6 +339,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
         q.key = mPending.key;
         q.entry = mPending.entry;
         q.namesGeneration = mPending.namesGeneration;
+        q.prototypes = mPending.prototypes;
         CachePut(q, r, mPending.snapId);
     }
     Install(r, mPending.snapId, mPending.namesGeneration);
@@ -424,6 +453,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.key = mSnap->key;
     q.entry = mEntry;
     q.namesGeneration = mNamesGeneration;
+    q.prototypes = PrototypeHash(mEntry);
     if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
     mNote.clear();
@@ -450,6 +480,8 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         for (const auto& n : *inputs.names) rq.names.push_back(n);
     if (inputs.bounds)
         rq.knownFunctions.assign(inputs.bounds->Entries().begin(), inputs.bounds->Entries().end());
+    for (const auto& p : mPrototypes)
+        if (p.first != mEntry) rq.prototypes.push_back(p);
     const uint64_t generation = runner.Submit(kSlot, mSnap, std::move(rq), retry);
     ++mSubmissions;
     if (generation == 0)
@@ -464,6 +496,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     mPending.entry = mEntry;
     mPending.snapId = mSnapId;
     mPending.namesGeneration = mNamesGeneration;
+    mPending.prototypes = q.prototypes;
 }
 
 bool DecompilerPanel::LineRect(int index, ImVec2& min, ImVec2& max) const

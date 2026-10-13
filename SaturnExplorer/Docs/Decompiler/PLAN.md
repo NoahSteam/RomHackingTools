@@ -369,6 +369,15 @@ by `DecompilerPanelTests`:
   address and the direct path would get the slot's PC too. Fixture 3 gained a `bsr` + `mov.l`
   case, a load after a `bsr` pair, a load at a `bra` target, a `jsr` case and that jumped-to slot.
 - Callee prototypes from cached callee decompiles.
+  *As built:* each Ok result that is not truncated, unsupported or unimplemented carries its
+  function's signature as plain values (`Prototype`, `TypeShape`: base kind and size, one level
+  of pointer). The panel keeps the latest per entry for the session (cleared by `ResetSession`)
+  and lends all but the requested entry's own in `DecompileRequest::prototypes`; the engine
+  locks them on the registered callees (`FuncProto::setPieces`), never on the function being
+  decompiled. They are engine input, so the question carries a hash of what is lent (A1): a
+  caller shown before its callee is asked again, once, when next shown. The cost is that
+  revisiting a function after decompiling others may miss the LRU once. Pinned by
+  `TestCalleePrototypes` and `TestCalleePrototypesLent`.
 - Saturn hardware map as named globals (VDP1/VDP2/SCU/SMPC/SCSP register blocks).
   *As built:* `Decompiler/SaturnHardwareMap.{h,cpp}`, 256 registers named `<CHIP>_<NAME>` after the
   Sega manuals, each registered as a global at its cached and cache-through address on every

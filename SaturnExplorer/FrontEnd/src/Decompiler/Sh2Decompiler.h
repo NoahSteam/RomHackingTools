@@ -41,11 +41,39 @@ namespace sfe
 namespace decomp
 {
 
+// A data type as plain values, so a prototype learned from one decompilation can be handed to
+// another (each builds its own Architecture, whose types are not shared). One level of pointer.
+enum class TypeKind : uint8_t { Unknown, Int, Uint, Bool, Pointer, Void };
+struct TypeShape
+{
+    TypeKind kind = TypeKind::Unknown;
+    uint8_t size = 0;                        // bytes; 0 for Void
+    TypeKind pointee = TypeKind::Unknown;    // Pointer: what it points to
+    uint8_t pointeeSize = 1;
+    bool operator==(const TypeShape& o) const
+    {
+        return kind == o.kind && size == o.size && pointee == o.pointee && pointeeSize == o.pointeeSize;
+    }
+};
+
+// A function's signature as the engine recovered it when it decompiled that function: what a
+// call to it passes and returns. Given for a callee, it is locked, so the caller's call shows
+// that many arguments and that return instead of guessing from the registers it sets up.
+struct Prototype
+{
+    bool known = false;
+    TypeShape ret;
+    std::vector<TypeShape> params;
+    bool operator==(const Prototype& o) const { return known == o.known && ret == o.ret && params == o.params; }
+    bool operator!=(const Prototype& o) const { return !(*this == o); }
+};
+
 struct DecompileRequest
 {
     uint32_t entry = 0;                                       // any mirror; canonicalised first
     std::vector<std::pair<uint32_t, std::string>> names;      // address -> name (FunctionNames)
     std::vector<uint32_t> knownFunctions;                     // extra entries to register
+    std::vector<std::pair<uint32_t, Prototype>> prototypes;    // callee entry -> its decompiled signature
     bool registerCallees = true;                              // run the second pass
     uint32_t maxInstructions = 20000;                         // A4: bounds the uncheckable segments
 };
@@ -98,6 +126,9 @@ struct DecompileResult
 
     std::vector<Line> lines;
     std::vector<uint32_t> callees;        // constant call targets, sorted
+    // This function's own signature, for callers to use (DecompileRequest::prototypes). Not known
+    // when the output is not trustworthy enough to lend it: truncated, unsupported, unimplemented.
+    Prototype prototype;
     std::vector<uint32_t> literalPools;   // literal-pool words marked read-only, sorted, unique
     uint32_t literalLoads = 0;            // PC-relative loads through them (a word may be read twice)
 

@@ -511,6 +511,60 @@ void TestBiosFunctionNames()
     }
 }
 
+// Step 4: a callee's signature, recovered when it was decompiled, is locked into the caller's
+// request. The caller sets up r4-r6 but the callee reads only r4 and returns nothing: guessing
+// from the call site shows more than it takes, the lent prototype shows exactly what it takes.
+// Encodings checked with Capstone (SH2, BE).
+void TestCalleePrototypes()
+{
+    Sh2Decompiler d(gConfig);
+    const uint32_t caller = 0x06007300u, callee = 0x06007340u;
+    std::vector<uint8_t> hw;
+    size_t off = caller - 0x06000000u;
+    for (uint16_t w : { 0xE401,     // mov #1,r4
+                        0xE502,     // mov #2,r5
+                        0xE603,     // mov #3,r6
+                        0x4F22,     // sts.l pr,@-r15
+                        0xB01A,     // bsr 0x06007340
+                        0x0009,     //   nop
+                        0x4F26,     // lds.l @r15+,pr
+                        0x000B,     // rts
+                        0x0009 })   //   nop
+    { dts::Put16(hw, off, w); off += 2; }
+    off = callee - 0x06000000u;
+    for (uint16_t w : { 0xD101,     // mov.l @(4,pc),r1  -> 0x06008000
+                        0x2142,     // mov.l r4,@r1
+                        0x000B,     // rts
+                        0x0009 })   //   nop
+    { dts::Put16(hw, off, w); off += 2; }
+    dts::Put32(hw, 0x06007348u - 0x06000000u, 0x06008000u);
+    auto snap = MakeSnapshot(hw);
+
+    const DecompileResult guessed = d.Decompile(snap, Request(caller));
+    Print("caller, callee unknown", guessed);
+    const DecompileResult c = d.Decompile(snap, Request(callee));
+    Print("callee", c);
+    CHECK(c.prototype.known);
+    CHECK(c.prototype.ret.kind == TypeKind::Void);
+    CHECK(c.prototype.params.size() == 1);
+
+    DecompileRequest lent = Request(caller);
+    lent.prototypes.emplace_back(callee, c.prototype);
+    const DecompileResult r = d.Decompile(snap, lent);
+    Print("caller, callee's prototype lent", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(Has(r.Text(), "func_0x06007340(1);"));
+    CHECK(r.Text() != guessed.Text());
+    // The function being decompiled keeps its own recovery even when a prototype is given for it.
+    DecompileRequest self = Request(callee);
+    Prototype wrong;
+    wrong.known = true;
+    wrong.ret.kind = TypeKind::Int;
+    wrong.ret.size = 4;
+    self.prototypes.emplace_back(callee, wrong);
+    CHECK(d.Decompile(snap, self).Text() == c.Text());
+}
+
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --
 // comes back as a failed result, never as an exception; the next request is unaffected.
 void TestAllocationFailureIsReported()
@@ -844,6 +898,7 @@ int main(int argc, char** argv)
         RUN(TestManyUncapturedBranches());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
+        RUN(TestCalleePrototypes());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
