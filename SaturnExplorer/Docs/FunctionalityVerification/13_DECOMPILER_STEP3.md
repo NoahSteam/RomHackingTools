@@ -295,6 +295,9 @@ calls `MemoryStream(unsigned long long, int)` and `MDFNSS_LoadSM`; Play From Her
 
 Bug 3 (`build-release-msbuild.bat` wants the VS 2019 toolset) is build configuration, not Step 3; CI's `windows-latest` still has v142, which is why CI builds it. Left as recorded.
 
+Verified by https://github.com/NoahSteam/RomHackingTools/actions/runs/38333252775 (all six jobs
+green at `6e8f2d0`). Locally: the full suite passes.
+
 ## Decisions and deviations
 
 Recorded in PLAN.md Step 3 ("As built") and DESIGN.md §5 / §6.2:
