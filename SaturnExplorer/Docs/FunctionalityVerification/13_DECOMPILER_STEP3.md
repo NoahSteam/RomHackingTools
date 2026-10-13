@@ -286,6 +286,15 @@ calls `MemoryStream(unsigned long long, int)` and `MDFNSS_LoadSM`; Play From Her
      frame before a synthetic click lands; one stray click hit Session → Launch and relaunched the emulator while paused,
      which is how bug 1 was first found.
 
+**After the Windows run** (fixed in this container; needs the Windows re-test of check 12)
+
+| Bug | Fix | Test |
+|---|---|---|
+| 1, hang / crash after ending a live session | Not decompiler code, and older than Step 3 (`5c30808`, `9088b1f`): `CloseSource` destroyed the context, which frees the live driver's state, but kept its copy of the data source (`mDataSource`, still pointing at that state) and the emulator slot count. `BuildTopBarViewModel` then called `se_live_server_version` / `se_live_get_stop` on it every frame -- `LiveHas` answers yes once no live source is open, so nothing stopped it -- and the driver trusts any data source it produced. PC bot's lead was right. `mDataSource` and `mEmuSlotCount` are now reset with the context, and `canSaveEmulatorState` also requires a live source | No App-level harness exists for a live session; the Windows re-run of check 12 (Disconnect, Launch while paused, Disconnect → Connect twice) is the test |
+| 2, reconnect kept the old session's output | On a running emulator, Follow PC captures again once the view has registers for the followed CPU that the held snapshot lacked (the first look after connecting can come before the first register frame) | `DecompilerPanelTests` `TestRunningLiveRegistersArrive`: no registers → one capture, no request, none per frame; the other CPU's registers → nothing; the followed CPU's → one capture and the function; then no more while running. Mutation: drop the condition (fails) |
+
+Bug 3 (`build-release-msbuild.bat` wants the VS 2019 toolset) is build configuration, not Step 3; CI's `windows-latest` still has v142, which is why CI builds it. Left as recorded.
+
 ## Decisions and deviations
 
 Recorded in PLAN.md Step 3 ("As built") and DESIGN.md §5 / §6.2:

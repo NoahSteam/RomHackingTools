@@ -985,6 +985,36 @@ void TestCompletedAnswerJudgedAgainstCurrentView()
     }
 }
 
+// Windows manual run: after reconnecting, the first look came before the emulator's first register
+// frame, so Follow PC had no PC -- and a running emulator never captured again until Refresh.
+void TestRunningLiveRegistersArrive()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    f.haveRegs[0] = f.haveRegs[1] = false;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    tick(3);
+    CHECK(f.panel.Captures() == 1 && f.panel.Submissions() == 0);   // the first look: nothing to follow
+    tick(10);
+    CHECK(f.panel.Captures() == 1);                                   // and no capture every frame
+    f.haveRegs[1] = true;                                             // the other CPU's are no use
+    tick(10);
+    CHECK(f.panel.Captures() == 1);
+    f.haveRegs[0] = true;
+    CHECK(f.WaitShown("+ 1"));                                        // once, with the registers
+    CHECK(f.panel.Captures() == 2 && f.panel.Submissions() == 1);
+    tick(60);
+    CHECK(f.panel.Captures() == 2);                                   // then running-live as usual
+}
+
 // Review round 1, finding 3: on a running emulator, choosing, replacing or dropping the BIOS image
 // is a user action -- each one captures and asks again, once, with the new region set.
 void TestBiosChangeWhileRunning()
@@ -1144,6 +1174,7 @@ int main(int argc, char** argv)
         RUN(TestDisabledAndBudget());
         RUN(TestCompletedAnswerJudgedAgainstCurrentView());
         RUN(TestBiosChangeWhileRunning());
+        RUN(TestRunningLiveRegistersArrive());
         RUN(TestEntryParsing());
         RUN(TestEntryBoxFollowsShownFunction());
         RUN(TestRunnerStartFailure());

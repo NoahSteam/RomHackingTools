@@ -371,7 +371,12 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                     const uint32_t span = mShownValid ? std::max<uint32_t>(mShown.bodyBytes, 2u) : 0u;
                     autoDue = known && (!mShownValid || canonical < mShown.entry || canonical - mShown.entry >= span);
                 }
-                capture = mExplicit || !mSnap || biosChanged || autoDue;
+                // Following a PC the held snapshot has no registers for -- the first look after
+                // connecting can land before the emulator's first register frame -- is no answer at
+                // all, not a stale one: capture again once the view has them.
+                const bool regsArrived = mTarget.kind == TargetKind::FollowPc && mSnap &&
+                                         !mSnap->haveRegs[mCpu] && view.haveRegs[mCpu];
+                capture = mExplicit || !mSnap || biosChanged || autoDue || regsArrived;
                 break;
             }
             case DecompViewKind::None:

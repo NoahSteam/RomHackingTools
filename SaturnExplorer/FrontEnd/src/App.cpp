@@ -581,6 +581,14 @@ void App::CloseData(bool cancelAutoConnect)
         se_destroy(mContext);
         mContext = nullptr;
     }
+    // The context owned the data source and has freed its state; the copy kept here still points
+    // at it, and the live driver's accessors trust any data source they produced. Forget it, and
+    // the slot list read from it, or the top bar keeps calling into freed memory after Disconnect
+    // (a hang on a held-looking lock in an MSVC Debug heap, an access violation in Release).
+    mDataSource = se_data_source{};
+#ifdef SE_ENABLE_LIVE
+    mEmuSlotCount = 0;
+#endif
     mFrameKey.Invalidate();
     mMemBackend.NoteSourceChanged();   // a new source reusing this address is still a new source
     mRestoreOutstanding = 0;
@@ -7182,7 +7190,7 @@ TopBarViewModel App::BuildTopBarViewModel() const
     // Explicit version check: LiveHas answers yes for a pre-v24 server, which has no ESV at all.
     // Not while halted at a breakpoint: the save is written at a frame boundary, which a halt never
     // reaches, so it would save whatever state the resume runs into instead of the one shown.
-    vm.canSaveEmulatorState = mEmuSlotCount > 0 &&
+    vm.canSaveEmulatorState = mbLiveSource && mEmuSlotCount > 0 &&
                               se_live_server_version(&mDataSource) >= SE_LIVE_MINVER_EMUSAVE &&
                               LiveHas(SE_LIVE_CAP_EMU_SAVE) &&
                               !se_live_get_stop(&mDataSource, nullptr, nullptr, nullptr);
