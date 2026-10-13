@@ -92,5 +92,8 @@ GitHub sign-in, so the results are recorded here from its report.
   - One Continue after disabling the breakpoint shows Running, and frames advance (2743 → 2940).
   - Run to Here on `060637F0` reads STEPPED, leaves no dot, and a later Continue runs on.
 - **Found, older than Step 4:** starting the Windows app with any command-line argument crashed it
-  (`WinMain.cpp`: `__argv` is null in a `wWinMain` program). Fixed separately (see the commit
-  after this record).
+  (`WinMain.cpp`: `__argv` is null in a `wWinMain` program). Fixed in `5178393` and re-tested on
+  Windows:
+  - `SaturnExplorer.exe foo` starts and keeps running.
+  - `--live` connects to Mednafen.
+  - `--live nosuchendpoint_xyz` waits on that endpoint, so the argument is actually read.
