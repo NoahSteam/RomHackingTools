@@ -137,9 +137,9 @@ inline NameDialogResult NameDialogBody(char* buf, size_t size, float width = 280
 // never more than half, so the image views above stay usable. 24% alone left a 1470x956 laptop
 // screen about four lines of assembly and pseudocode after Reset Layout. 'chromeLines' is what a
 // panel spends before its first output line -- tab bar, toolbar, status line -- which the first
-// version of this counted as output (it asked for 18 lines and the Mac showed 12). 7 is measured:
-// with 5 the Mac showed 14 of 16 in SH-2 Pseudocode, whose toolbar, BIOS row and status line sit
-// above a docked tab bar and window padding.
+// version of this counted as output (it asked for 18 lines and the Mac showed 12). The cap wins on
+// a short screen: a 1470x956 Mac gets half the window and 14 lines of pseudocode, not 16, and that
+// is deliberate -- the image views above need the other half more than the strip needs two lines.
 inline float BottomDockFraction(float dockHeight, float lineHeight, float contentLines = 16.0f,
                                 float chromeLines = 7.0f)
 {

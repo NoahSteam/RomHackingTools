@@ -135,3 +135,12 @@ What was fixed:
 The rename dialog passed: Escape closes it without renaming, and Enter applies. The bottom strip showed
 14 full output lines of the 16 targeted. The panel's chrome measured about 7 lines rather than 5, so
 `BottomDockFraction` now allows 7, which gives about 0.46 of the window on this screen.
+
+### Follow-up round 4 (macOS at `de8b136`): the result
+
+The Mac still showed 14 lines, the same as before. Its measurement showed why: the strip already sits
+on the 50% cap. The dock area is about 735 px in its screenshot space and the strip about 365 px, so
+the chrome allowance changes nothing on that screen. Reaching 16 lines would take about 60% of the
+window, which would leave the VDP and image views above it too short. The cap stays at half.
+**Outcome:** Reset Layout on a 1470×956 screen gives 14 pseudocode lines and 12 to 13 assembly rows,
+up from about 4. Taller screens get 16 or more.
