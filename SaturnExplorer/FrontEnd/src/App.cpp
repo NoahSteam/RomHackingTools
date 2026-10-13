@@ -4826,21 +4826,11 @@ void App::DrawRenameFunctionModal()
     if (ImGui::BeginPopupModal("Rename Function", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("Function at %08X", mRenameAddr);
-        ImGui::SetNextItemWidth(280.0f);
-        // Focus the name on open, with the old name selected, so a rename is type + Enter. A modal
-        // takes focus itself but not for an item in it; without this the first keystrokes go nowhere.
-        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
-        const bool enter = ImGui::InputText("##rn", mRenameBuf, sizeof(mRenameBuf),
-                                            ImGuiInputTextFlags_EnterReturnsTrue |
-                                                ImGuiInputTextFlags_AutoSelectAll);
-        if (ImGui::Button("OK", ImVec2(90, 0)) || enter)
+        if (NameDialogBody(mRenameBuf, sizeof(mRenameBuf)) == NameDialogResult::Ok)
         {
             mFunctionNames.Rename(mRenameAddr, mRenameBuf);
             mFunctionNames.Save();
-            ImGui::CloseCurrentPopup();
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2(90, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 }

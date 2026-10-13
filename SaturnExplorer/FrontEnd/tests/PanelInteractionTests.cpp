@@ -476,12 +476,63 @@ void TestStoredSplitIsClampedIntoRange()
 
 void TestBottomDockFraction()
 {
-    // A tall screen keeps the 24% default; a short one gets enough lines to read; never past 45%.
-    CHECK(BottomDockFraction(2000.0f, 17.0f) == 0.24f);
-    const float laptop = BottomDockFraction(930.0f, 17.0f);       // 1470x956 logical, menu bar off
-    CHECK(laptop > 0.24f && laptop * 930.0f >= 18.0f * 17.0f - 0.5f);
-    CHECK(BottomDockFraction(400.0f, 17.0f) == 0.45f);
+    // A tall screen keeps the 24% default; a short one gets 16 output lines *plus* the panel's
+    // tab bar, toolbar and status (5 lines); never past half.
+    CHECK(BottomDockFraction(2400.0f, 17.0f) == 0.24f);
+    // The Mac that measured 12 output lines: 1470x956 logical, ~920 of dock, ~20.8 px lines.
+    const float laptop = BottomDockFraction(920.0f, 20.8f);
+    CHECK(laptop * 920.0f - 5.0f * 20.8f >= 16.0f * 20.8f - 0.5f);
+    CHECK(BottomDockFraction(400.0f, 17.0f) == 0.50f);
     CHECK(BottomDockFraction(0.0f, 17.0f) == 0.24f);
+}
+
+// The rename dialog: focused on open with the old name selected (typing replaces it), Enter
+// applies, Escape cancels and closes even while the field is being edited.
+NameDialogResult RunNameDialog(char* buf, size_t size, ImGuiKey key, const char* type)
+{
+    bool open = true;
+    bool shown = false;
+    bool editing = false;
+    NameDialogResult result = NameDialogResult::None;
+    ImGuiHarness h([&] {
+        if (open) { ImGui::OpenPopup("Rename"); open = false; }
+        shown = false;
+        if (ImGui::BeginPopupModal("Rename", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            shown = true;
+            const NameDialogResult r = NameDialogBody(buf, size);
+            editing = ImGui::GetActiveID() != 0;
+            if (r != NameDialogResult::None) result = r;
+            ImGui::EndPopup();
+        }
+    });
+    h.Settle();
+    CHECK(shown);
+    CHECK(editing);   // the field is being edited without a click
+    if (type)
+    {
+        ImGui::GetIO().AddInputCharactersUTF8(type);
+        h.Settle();
+    }
+    ImGui::GetIO().AddKeyEvent(key, true);
+    h.Frame(ImVec2(1270.0f, 710.0f), false);
+    ImGui::GetIO().AddKeyEvent(key, false);
+    h.Settle();
+    CHECK(!shown);    // closed
+    return result;
+}
+
+void TestNameDialogEnterAppliesTypedName()
+{
+    char buf[32] = "func_0x0601be30";
+    CHECK(RunNameDialog(buf, sizeof buf, ImGuiKey_Enter, "get_flag") == NameDialogResult::Ok);
+    CHECK(std::string(buf) == "get_flag");   // the old name was selected, so typing replaced it
+}
+
+void TestNameDialogEscapeCancels()
+{
+    char buf[32] = "func_0x0601be30";
+    CHECK(RunNameDialog(buf, sizeof buf, ImGuiKey_Escape, "get") == NameDialogResult::Cancel);
 }
 
 void TestPanelTooShortToSplitDrawsNoSeparator()
@@ -685,6 +736,8 @@ int main()
     TestComboWidthFitsItsWidestEntry();
     TestSplitHeightRoundTripsThroughSettings();
     TestBottomDockFraction();
+    TestNameDialogEnterAppliesTypedName();
+    TestNameDialogEscapeCancels();
     TestAppShortcutFiresWhilePanelHasFocus();
     TestDefaultShortcutRoutingMissesPanelFocus();
     TestAppShortcutYieldsToTextInput();

@@ -109,15 +109,41 @@ inline float SplitTopHeight(float stored, float avail, float minTop, float minBo
     return stored;
 }
 
-// The default layout's bottom debugger strip (SH-2 Assembly, SH-2 Pseudocode, Watch, Breakpoints),
-// as a fraction of the dock's height: 24%, but at least 'minLines' text lines, and never more than
-// 45% so the image views above stay usable. 24% alone left a 1470x956 laptop screen about four
-// lines of assembly and pseudocode after Reset Layout.
-inline float BottomDockFraction(float dockHeight, float lineHeight, float minLines = 18.0f)
+// The body of a one-field naming dialog (Rename Function), drawn inside BeginPopupModal. It
+// closes the popup itself on OK / Enter / Cancel / Escape and says which.
+// - The field has focus when the dialog opens, so a rename is type + Enter: a modal takes focus
+//   itself, but not for an item in it. Focus set from code selects the whole text, so typing
+//   replaces the old name.
+// - Escape cancels. An active InputText takes Escape to revert its text and stop editing, so
+//   without the check below Escape did nothing visible and the dialog stayed open.
+enum class NameDialogResult { None, Ok, Cancel };
+inline NameDialogResult NameDialogBody(char* buf, size_t size, float width = 280.0f)
 {
-    const float kBase = 0.24f, kMax = 0.45f;
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+    const bool enter = ImGui::InputText("##name", buf, size,
+                                        ImGuiInputTextFlags_EnterReturnsTrue);
+    NameDialogResult r = NameDialogResult::None;
+    if (ImGui::Button("OK", ImVec2(90, 0)) || enter) r = NameDialogResult::Ok;
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(90, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        r = NameDialogResult::Cancel;
+    if (r != NameDialogResult::None) ImGui::CloseCurrentPopup();
+    return r;
+}
+
+// The default layout's bottom debugger strip (SH-2 Assembly, SH-2 Pseudocode, Watch, Breakpoints),
+// as a fraction of the dock's height: 24%, but enough for 'contentLines' lines of output, and
+// never more than half, so the image views above stay usable. 24% alone left a 1470x956 laptop
+// screen about four lines of assembly and pseudocode after Reset Layout. 'chromeLines' is what a
+// panel spends before its first output line -- tab bar, toolbar, status line -- which the first
+// version of this counted as output (it asked for 18 lines and the Mac showed 12).
+inline float BottomDockFraction(float dockHeight, float lineHeight, float contentLines = 16.0f,
+                                float chromeLines = 5.0f)
+{
+    const float kBase = 0.24f, kMax = 0.50f;
     if (dockHeight <= 0.0f) return kBase;
-    const float wanted = minLines * lineHeight / dockHeight;
+    const float wanted = (contentLines + chromeLines) * lineHeight / dockHeight;
     return wanted < kBase ? kBase : (wanted > kMax ? kMax : wanted);
 }
 
