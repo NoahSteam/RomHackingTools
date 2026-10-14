@@ -56,19 +56,17 @@ struct TypeShape
     }
 };
 
-// A function's signature as the engine recovered it when it decompiled that function: what a
-// call to it passes and returns. Given for a callee, it is locked, so the caller's call shows
-// that many arguments and that return instead of guessing from the registers it sets up.
 // What a call to a function can do to its caller's state, as verified when the function was
 // decompiled (Sh2Decompiler.cpp, ReturnCheck), so a caller's own return-address proof can rely on it.
-// Bits name the callee's incoming values: kOrigin* below. The defaults assume the worst.
+// Bits name where a value can come from, in the callee's terms: origin::*. The defaults assume the
+// worst.
 namespace origin
 {
 // 0-14 r0-r14, 15 r15, 16 sr, 17 gbr, 18 vbr, 19 mach, 20 macl, 21 pr: that register's value on entry.
 constexpr uint32_t kRegisters = (1u << 22) - 1;
 constexpr uint32_t kStack = 1u << 24;    // an address in the stack (the callee's, or above: the caller's)
 constexpr uint32_t kMemory = 1u << 25;   // loaded from memory not tracked
-constexpr uint32_t kFrame = 1u << 26;    // (storesThrough) wrote at or above its entry r15, or let such an address out
+constexpr uint32_t kFrame = 1u << 26;    // (storesThrough) wrote at or above its entry r15
 constexpr uint32_t kAll = kRegisters | kStack | kMemory | kFrame;
 }
 struct CallEffects
@@ -76,12 +74,18 @@ struct CallEffects
     uint32_t preserved = 0;               // registers equal to their entry values at every return (r15: bit 15)
     uint32_t storesThrough = origin::kAll;   // where the addresses it stores through can come from
     uint32_t outOrigins = origin::kAll;      // where the registers it does not preserve can come from
+    uint32_t leaks = origin::kAll;           // where the values it stores to memory it does not track come from
+    uint32_t frameValues = origin::kAll;     // ...and the values it may write at or above its entry r15
     bool operator==(const CallEffects& o) const
     {
-        return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins;
+        return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins &&
+               leaks == o.leaks && frameValues == o.frameValues;
     }
 };
 
+// A function's signature as the engine recovered it when it decompiled that function: what a
+// call to it passes and returns. Given for a callee, it is locked, so the caller's call shows
+// that many arguments and that return instead of guessing from the registers it sets up.
 struct Prototype
 {
     bool known = false;

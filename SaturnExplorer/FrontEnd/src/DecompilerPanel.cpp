@@ -157,6 +157,8 @@ uint64_t DecompilerPanel::ShapeOf(const Prototype& proto)
     Mix(h, proto.effects.preserved);
     Mix(h, proto.effects.storesThrough);
     Mix(h, proto.effects.outOrigins);
+    Mix(h, proto.effects.leaks);
+    Mix(h, proto.effects.frameValues);
     return h ? h : 1;   // 0 is "none lent"
 }
 

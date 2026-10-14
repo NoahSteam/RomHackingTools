@@ -820,6 +820,87 @@ void TestPrototypeEligibility()
                                 0x402A,                              // lds r0,pr
                                 0x000B,                              // rts
                                 0xE007 });                           //   mov #7,r0
+    // Own review of da2c9d2: (f) a stack address saved in a slot, read back through an inexact
+    // stack address; (g) PR left below r15 across a call; (h) sleep keeps everything; (i) a stack
+    // address let out two calls down.
+    const uint32_t inexactLoad = 0x06012000u, belowSp = 0x06012100u, sleeps = 0x06012200u, keepsR4 = 0x06012300u,
+                   handsOn = 0x06012400u, storesThroughG = 0x06012500u, letOut = 0x06012600u, nearLeaf = 0x06012700u;
+    Place(hw, nearLeaf, { 0x000B, 0x0009 });   // rts; nop  (leaf's bytes, within a bsr's reach)
+    Place(hw, inexactLoad, { 0x4F22,      // sts.l pr,@-r15
+                             0x61F3,      // mov r15,r1
+                             0x2F16,      // mov.l r1,@-r15  (the saved PR's address, on the stack)
+                             0x60F3,      // mov r15,r0
+                             0xCB00,      // or #0,r0
+                             0x6202,      // mov.l @r0,r2    (that address)
+                             0x2232,      // mov.l r3,@r2    (over the saved PR)
+                             0x7F04,      // add #4,r15
+                             0x4F26,      // lds.l @r15+,pr
+                             0x000B,      // rts
+                             0xE007 });   //   mov #7,r0
+    Place(hw, belowSp, { 0x002A,                     // sts pr,r0
+                         0x61F3,                     // mov r15,r1
+                         0x71FC,                     // add #-4,r1
+                         0x2102,                     // mov.l r0,@r1   (PR saved below r15, which never moves)
+                         Bsr(belowSp + 8, nearLeaf), // bsr nearLeaf   (its pushes land there)
+                         0x0009,                     //   nop
+                         0x6012,                     // mov.l @r1,r0
+                         0x402A,                     // lds r0,pr
+                         0x000B,                     // rts
+                         0xE007 });                  //   mov #7,r0
+    // (k) A stack address stored into an indexed local: the stack, not memory let out.
+    const uint32_t indexedLocal = 0x06012900u;
+    Place(hw, indexedLocal, { 0x61F3,      // mov r15,r1
+                              0x310C,      // add r0,r1
+                              0x62F3,      // mov r15,r2
+                              0x2122,      // mov.l r2,@r1
+                              0x000B,      // rts
+                              0x0009 });   //   nop
+    // (j) A stack address stored in two halves, read back whole and stored through.
+    const uint32_t halves = 0x06012800u;
+    Place(hw, halves, { 0x4F22,      // sts.l pr,@-r15
+                        0x7FFC,      // add #-4,r15
+                        0x60F3,      // mov r15,r0
+                        0x7004,      // add #4,r0      (the saved PR's address)
+                        0x81F1,      // mov.w r0,@(2,r15)
+                        0x4029,      // shlr16 r0
+                        0x2F01,      // mov.w r0,@r15
+                        0x61F2,      // mov.l @r15,r1
+                        0xE200,      // mov #0,r2
+                        0x2122,      // mov.l r2,@r1
+                        0x7F04,      // add #4,r15
+                        0x4F26,      // lds.l @r15+,pr
+                        0x000B,      // rts
+                        0xE007 });   //   mov #7,r0
+    Place(hw, sleeps, { 0x4F22,      // sts.l pr,@-r15
+                        0x001B,      // sleep
+                        0x4F26,      // lds.l @r15+,pr
+                        0x000B,      // rts
+                        0x0009 });   //   nop
+    Place(hw, keepsR4, { 0x000B,      // rts
+                         0x2542 });   //   mov.l r4,@r5   (keeps its argument in *r5)
+    Place(hw, handsOn, { 0x4F22,                       // sts.l pr,@-r15
+                         0x64F3,                       // mov r15,r4
+                         0x7404,                       // add #4,r4      (its caller's frame: the saved PR)
+                         Bsr(handsOn + 6, keepsR4),    // bsr keepsR4
+                         0x0009,                       //   nop
+                         0xE400,                       // mov #0,r4      (nothing handed back)
+                         0x4F26,                       // lds.l @r15+,pr
+                         0x000B,                       // rts
+                         0x0009 });                    //   nop
+    Place(hw, storesThroughG, { 0x6152,      // mov.l @r5,r1
+                                0xE000,      // mov #0,r0
+                                0x000B,      // rts
+                                0x2102 });   //   mov.l r0,@r1
+    Place(hw, letOut, { 0x4F22,                          // sts.l pr,@-r15
+                        0xE540,                          // mov #0x40,r5
+                        Bsr(letOut + 4, handsOn),        // bsr handsOn
+                        0x0009,                          //   nop
+                        0xE540,                          // mov #0x40,r5
+                        Bsr(letOut + 10, storesThroughG),// bsr storesThroughG
+                        0x0009,                          //   nop
+                        0x4F26,                          // lds.l @r15+,pr
+                        0x000B,                          // rts
+                        0xE007 });                       //   mov #7,r0
     auto snap = MakeSnapshot(hw);
 
     auto run = [&](uint32_t entry, std::initializer_list<std::pair<uint32_t, Prototype>> lent, const char* label) {
@@ -905,6 +986,29 @@ void TestPrototypeEligibility()
     // (e) A callee's write through an entry register may reach the caller's frame, as a direct
     // store through it may.
     CHECK(!run(savedAtEntrySp, { { zeroArg, za.prototype } }, "PR saved at entry r15").prototype.known);
+
+    // (f) A load through an address that may be in the stack can read any slot.
+    CHECK(!run(inexactLoad, {}, "a stack address read back inexactly").prototype.known);
+    // (g) Below r15 is free stack: pushes and interrupts write there.
+    CHECK(!run(belowSp, { { nearLeaf, lf.prototype } }, "PR below r15 across a call").prototype.known);
+    // (j) Stores of part of a word are kept too.
+    CHECK(!run(halves, {}, "a stack address in two halves").prototype.known);
+    // (k) ...and a store that can only land in the stack lets nothing out to memory.
+    const DecompileResult il = run(indexedLocal, {}, "an indexed local");
+    CHECK(il.prototype.known && !(il.prototype.effects.leaks & origin::kStack) &&
+          (il.prototype.effects.frameValues & origin::kStack));
+    // (h) sleep changes no register or memory.
+    CHECK(run(sleeps, {}, "sleep").prototype.known);
+    // (i) handsOn lets its caller's frame out (through keepsR4), so a later store through memory in
+    // that caller may hit its saved PR.
+    const DecompileResult kr = run(keepsR4, {}, "keeps r4");
+    CHECK(kr.prototype.known && (kr.prototype.effects.leaks & (1u << 4)));
+    const DecompileResult ho = run(handsOn, { { keepsR4, kr.prototype } }, "hands its caller's frame on");
+    CHECK(ho.prototype.known && (ho.prototype.effects.leaks & origin::kStack));
+    const DecompileResult sg = run(storesThroughG, {}, "stores through a loaded pointer");
+    CHECK(sg.prototype.known && (sg.prototype.effects.storesThrough & origin::kMemory));
+    CHECK(!run(letOut, { { handsOn, ho.prototype }, { storesThroughG, sg.prototype } }, "frame let out, then stored through")
+               .prototype.known);
 }
 
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --

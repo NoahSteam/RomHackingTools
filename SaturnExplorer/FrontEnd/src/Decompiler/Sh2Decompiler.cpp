@@ -195,14 +195,17 @@ Prototype PrototypeOf(const ghidra::Funcdata& fd)
 //
 // A value is exact (a register's entry value, a stack address as an offset from r15 on entry, a
 // constant) or else only the set of things it can come from (origin::*). Losing precision keeps
-// the origins, so an address computed from a stack address still may point into the stack, and a
-// store through it forgets every stack slot. Values are 'escaped' once a stack address can be
-// reached other than through r15 -- stored to memory, left in a forgotten slot, or visible to a
-// callee in another register -- after which anything loaded from memory may be one too.
+// the origins, so an address computed from a stack address still may point into the stack. A
+// store that may hit a stack slot leaves it holding what it held or the stored value; a load that
+// may read one gets any of them. Slots below r15 hold anything (pushes, interrupts). The state is
+// 'escaped' once a stack address is let out to untracked memory, after which anything loaded from
+// memory may be one too; a store that can only land in the stack lets nothing out. An absolute address is taken never to be in the stack, as the engine's own
+// stack analysis takes it.
 //
 // A call applies the callee's verified CallEffects: the registers it preserves keep their values,
-// the others take what it can return, and a store it makes through a value that may be ours
-// forgets the slots. A callee whose effects are unknown is taken to do anything.
+// the others take what it can return, its stores through what it was handed hit what they may, and
+// what it lets out escapes. All of it joins this function's own summary. A callee whose effects
+// are unknown is taken to do anything.
 class ReturnCheck
 {
 public:
@@ -235,6 +238,8 @@ public:
         mPreserved = origin::kRegisters;
         mStoresThrough = 0;
         mOut = 0;
+        mLeaks = 0;
+        mFrameValues = 0;
         std::map<uint32_t, State> in;
         std::set<uint32_t> work;
         in[mExec] = start;
@@ -259,6 +264,8 @@ public:
         effects.preserved = mPreserved;
         effects.storesThrough = mStoresThrough;
         effects.outOrigins = mOut;
+        effects.leaks = mLeaks;
+        effects.frameValues = mFrameValues;
         return std::string();
     }
 
@@ -266,7 +273,6 @@ private:
     static constexpr size_t kMaxSteps = 200000;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
     static constexpr int kR15 = 15, kPr = 21;
-    static constexpr uint32_t kNoCall = 0xFFFFFFFFu;   // never an instruction address (odd)
 
     struct Value
     {
@@ -331,7 +337,7 @@ private:
         return f == s.vars.end() ? Value() : f->second;
     }
 
-    static void Set(State& s, const ghidra::VarnodeData& vn, const Value& v)
+    void Set(State& s, const ghidra::VarnodeData& vn, const Value& v) const
     {
         for (auto it = s.vars.begin(); it != s.vars.end();)
         {
@@ -340,22 +346,31 @@ private:
             it = overlap ? s.vars.erase(it) : std::next(it);
         }
         s.vars[KeyOf(vn)] = v;
+        // Below r15 is free stack: a callee's pushes and any interrupt write there. A slot the
+        // stack pointer rises past holds anything from then on.
+        if (KeyOf(vn) == KeyOf(mReg[kR15]))
+            for (auto& slot : s.slots)
+                if (v.kind != Value::Sp || slot.first < v.v) slot.second = Value::From(kAnything);
     }
+
+    static constexpr uint32_t kAnything = origin::kRegisters | origin::kStack | origin::kMemory;
 
     // What a load from untracked memory can give.
     static Value Loaded(const State& s) { return Value::From(origin::kMemory | (s.escaped ? origin::kStack : 0)); }
 
-    // Forget a slot. What it held is no longer tracked, so a stack address in it has escaped.
-    static void Forget(State& s, std::map<int64_t, Value>::iterator& it)
+    // A store this function (or a callee) may have made over slots at offsets 'from' and up, of a
+    // value from 'stored': each holds what it held or that.
+    static void Clobber(State& s, uint32_t stored, int64_t from = INT64_MIN, int64_t to = INT64_MAX)
     {
-        if (it->second.Origins() & origin::kStack) s.escaped = true;
-        it = s.slots.erase(it);
+        for (auto& slot : s.slots)
+            if (slot.first + 4 > from && slot.first < to) slot.second = Value::From(slot.second.Origins() | stored);
     }
-    static void ForgetSlots(State& s, int64_t from = INT64_MIN)
+
+    static uint32_t AllSlots(const State& s)
     {
-        for (auto it = s.slots.begin(); it != s.slots.end();)
-            if (it->first + 4 > from) Forget(s, it);
-            else ++it;
+        uint32_t o = 0;
+        for (const auto& slot : s.slots) o |= slot.second.Origins();
+        return o;
     }
 
     // An address that may point into this function's stack (or above it, its caller's).
@@ -408,81 +423,112 @@ private:
 
     static int64_t Wrap(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v)); }
 
-    // The bits of 'callee' (its entry registers, memory, its stack) as origins in the caller's 's'.
-    uint32_t Map(const State& s, uint32_t callee) const
-    {
-        uint32_t o = callee & origin::kStack;   // its stack, or ours above it
-        if (callee & origin::kMemory) o |= Loaded(s).from;
-        for (int r = 0; r < kTracked; ++r)
-            if (callee & (1u << r)) o |= Get(s, mReg[r]).Origins();
-        return o;
-    }
-
     void Call(State& s, uint32_t at)
     {
         CallEffects e;   // unknown: anything
-        auto t = at == kNoCall ? mCallAt.end() : mCallAt.find(at);
+        auto t = mCallAt.find(at);
         if (t != mCallAt.end())
         {
             auto p = mLent.find(t->second);
             if (p != mLent.end()) e = p->second.effects;
         }
-        // What the callee can see: a stack address in a register other than r15, or in a slot, it
-        // can keep or store through as it likes.
-        for (int r = 0; r < kTracked; ++r)
-            if (r != kR15 && (Get(s, mReg[r]).Origins() & origin::kStack)) s.escaped = true;
-        for (const auto& slot : s.slots)
-            if (slot.second.Origins() & origin::kStack) s.escaped = true;
-        // The callee's writes are this function's too: through what it was handed (mapped onto ours),
-        // and into the frames above its stack pointer -- ours from the call's r15 up, and our caller's.
+        Apply(s, e);
+    }
+
+    void Apply(State& s, const CallEffects& e)
+    {
+        // The callee's bits as origins here. Its entry registers are ours at the call. What it loads
+        // from memory can be anything in memory, our slots included: it may read our frame through
+        // its stack pointer or a pointer it was given. Its stack is ours above its r15.
+        uint32_t reg[kTracked];
+        for (int r = 0; r < kTracked; ++r) reg[r] = Get(s, mReg[r]).Origins();
+        const uint32_t memory = Loaded(s).from | AllSlots(s);
+        auto map = [&](uint32_t bits) {
+            uint32_t o = bits & origin::kStack;
+            if (bits & origin::kMemory) o |= memory;
+            for (int r = 0; r < kTracked; ++r)
+                if (bits & (1u << r)) o |= reg[r];
+            return o;
+        };
+        const uint32_t stores = map(e.storesThrough & ~origin::kFrame);
+        const uint32_t leaked = map(e.leaks);
+        const uint32_t framed = map(e.frameValues);
+        const uint32_t out = map(e.outOrigins);
+        const Value sp = Get(s, mReg[kR15]);
+        // Its pushes (and an interrupt's) land below the call's r15.
+        if (sp.kind == Value::Sp) Clobber(s, kAnything, INT64_MIN, sp.v);
+        else Clobber(s, kAnything);
+        // Its writes and what it lets out are this function's too.
+        Leak(s, leaked);
         if (e.storesThrough & origin::kFrame)
         {
-            s.escaped = true;
+            // Above its r15: our frame from the call's r15 up, and our caller's.
             mStoresThrough |= origin::kFrame;
-            const Value sp = Get(s, mReg[kR15]);
-            ForgetSlots(s, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+            mFrameValues |= framed;
+            Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
         }
-        if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(Map(s, e.storesThrough & ~origin::kFrame)));
-        const Value out = Value::From(Map(s, e.outOrigins));
+        if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(stores), leaked | framed);
         for (int r = 0; r < kTracked; ++r)
-            if (!(e.preserved & (1u << r))) Set(s, mReg[r], out);
+            if (!(e.preserved & (1u << r))) Set(s, mReg[r], Value::From(out));
+    }
+
+    // Values let out to memory this function does not track: its callers learn of them through
+    // 'leaks', and a stack address among them may come back from any load.
+    void Leak(State& s, uint32_t origins)
+    {
+        mLeaks |= origins;
+        if (origins & origin::kStack) s.escaped = true;
     }
 
     void Store(State& s, const Value& addr, const ghidra::VarnodeData& valueVn, const Value& value)
     {
         const int64_t n = valueVn.size;
+        const uint32_t v = value.Origins();
         if (addr.kind == Value::Sp)
         {
-            if (addr.v + n > 0) mStoresThrough |= origin::kFrame;   // at or above r15 on entry
-            for (auto it = s.slots.begin(); it != s.slots.end();)
-                if (it->first < addr.v + n && addr.v < it->first + 4) Forget(s, it);
-                else ++it;
+            if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
+            {
+                mStoresThrough |= origin::kFrame;
+                mFrameValues |= v;
+            }
+            if (n != 4)
+            {
+                // Part of a word: it holds what it held and part of this.
+                for (int64_t w = addr.v & ~int64_t(3); w < addr.v + n; w += 4)
+                    if (s.slots.count(w) == 0) s.slots[w] = Loaded(s);
+            }
+            Clobber(s, v, addr.v, addr.v + n);
             if (n == 4) s.slots[addr.v] = value;
-            else if (value.Origins() & origin::kStack) s.escaped = true;
             return;
         }
-        if (value.Origins() & origin::kStack)
-        {
-            s.escaped = true;
-            mStoresThrough |= origin::kFrame;   // a stack address let out: the caller's, possibly
-        }
-        StoreThrough(s, addr);
+        StoreThrough(s, addr, v);
     }
 
-    // A store through an address not known exactly, made here or by a callee: recorded in this
-    // function's summary, and forgetting the slots it may hit.
-    void StoreThrough(State& s, const Value& addr)
+    // A store through an address not known exactly, made here or by a callee, of a value from
+    // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
+    // address is taken never to be in the stack, as the engine's own stack analysis takes it.
+    void StoreThrough(State& s, const Value& addr, uint32_t stored)
     {
-        mStoresThrough |= addr.Origins() & ~origin::kStack;
-        if (addr.Origins() & origin::kStack) mStoresThrough |= origin::kFrame;   // may reach the caller's frame
-        if (MayBeStack(s, addr)) ForgetSlots(s);
-        else ForgetSlots(s, 0);   // through an entry value: the caller's frame, at most
+        const uint32_t o = addr.Origins();
+        if (o == 0 || (o & ~origin::kStack)) Leak(s, stored);   // memory this function does not track
+        if (o == 0) return;
+        mStoresThrough |= o & ~origin::kStack;
+        if (o & origin::kStack)   // a stack address it cannot place: its own frame or its caller's
+        {
+            mStoresThrough |= origin::kFrame;
+            mFrameValues |= stored;
+        }
+        if (MayBeStack(s, addr)) Clobber(s, stored);
+        else Clobber(s, stored, 0);   // through an entry value: the caller's frame, at most
     }
 
     Value Load(const State& s, const Value& addr, ghidra::uint4 n) const
     {
         if (addr.kind == Value::Sp)
         {
+            // Below r15 an interrupt may have written anything.
+            const Value sp = Get(s, mReg[kR15]);
+            if (sp.kind != Value::Sp || addr.v < sp.v) return Value::From(kAnything);
             if (n == 4)
             {
                 auto f = s.slots.find(addr.v);
@@ -493,7 +539,8 @@ private:
                 if (slot.first < addr.v + n && addr.v < slot.first + 4) o |= slot.second.Origins();
             return Value::From(o);
         }
-        return Loaded(s);
+        // Through an address that may be in the stack but not exactly: any slot.
+        return Value::From(Loaded(s).from | (MayBeStack(s, addr) ? AllSlots(s) : 0));
     }
 
     // At a return: PR must be the caller's; and what the caller sees afterwards is recorded.
@@ -559,21 +606,21 @@ private:
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
+                // An index added to a stack address stays in the stack (the engine's own stack analysis
+                // takes pointer arithmetic so too): somewhere in it, not the index's memory.
+                else if (x.kind == Value::Sp || (!sub && y.kind == Value::Sp)) r = Value::From(origin::kStack);
                 Set(s, op.out, r);
                 break;
             }
             case ghidra::CPUI_LOAD: Set(s, op.out, Load(s, Get(s, op.in[1]), op.out.size)); break;
             case ghidra::CPUI_STORE: Store(s, Get(s, op.in[1]), op.in[2], Get(s, op.in[2])); break;
             case ghidra::CPUI_CALL:
-            case ghidra::CPUI_CALLIND:
-            case ghidra::CPUI_CALLOTHER:   // trapa and the like: unknown
-                if (op.code == ghidra::CPUI_CALLOTHER)
-                {
-                    CallUnknown(s);
-                    if (op.hasOut) Set(s, op.out, Value());
-                }
-                else
-                    Call(s, a);
+            case ghidra::CPUI_CALLIND: Call(s, a); break;
+            case ghidra::CPUI_CALLOTHER:
+                // sleep (Sleep_Standby) changes no register or memory; any other user op, anything.
+                if (mFd.getArch()->userops.getOp(static_cast<ghidra::uint4>(op.in[0].offset))->getName() != "Sleep_Standby")
+                    Apply(s, CallEffects());
+                if (op.hasOut) Set(s, op.out, Value());
                 break;
             case ghidra::CPUI_BRANCH:
             case ghidra::CPUI_CBRANCH:
@@ -620,7 +667,6 @@ private:
         return std::string();
     }
 
-    void CallUnknown(State& s) { Call(s, kNoCall); }   // no call spec there: the worst case
 
     ghidra::Funcdata& mFd;
     uint32_t mExec;
@@ -628,7 +674,7 @@ private:
     ghidra::AddrSpace* mRam = nullptr;
     ghidra::VarnodeData mReg[kTracked];
     std::map<uint32_t, uint32_t> mCallAt;   // call instruction -> the address it calls
-    uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0;
+    uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
 };
 
 // Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent

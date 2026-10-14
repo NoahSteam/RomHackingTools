@@ -318,3 +318,25 @@ entry-register pointer. A callee's `kFrame` is recorded too. (`TestPrototypeElig
 (d) and (e): a wrapper forwarding r4 to `*param_1 = 0` exports the r4 bit, and its caller that
 passes the stack is withheld while one that passes a constant is still lent. PR saved at entry
 r15 + 0 is withheld across that leaf called through r4.)
+
+Before going back to review, two `/code-review` passes on `da2c9d2` found more holes in the PR check.
+All are fixed, and each new check below fails on `da2c9d2`:
+
+- **(f) Inexact loads.** A load through an address that may be in the stack, but is not exact,
+  can read any slot.
+- **(g) Below r15.** A slot below r15 holds anything: a slot r15 rises past, a slot below a call's
+  r15 (the callee's pushes), and any load from below r15 (interrupts).
+- **(j) Part-word stores.** A store of part of a word merges into that word's slot. It used to be
+  dropped.
+- **(i) What a callee lets out.** `CallEffects` gains `leaks`: the values a function stores to
+  memory it does not track. A caller maps them, so a stack address let out two calls down marks it
+  escaped. The old "a stack address visible to the callee" rule is gone.
+- **(k) Writes that stay in the stack.** `frameValues` holds the values written at or above entry
+  r15, kept separate from `leaks`. A store that can only land in the stack is therefore not an escape.
+  An index added to an exact stack address stays a stack address, as the engine's stack analysis
+  also assumes.
+- **(h) sleep.** CALLOTHER `Sleep_Standby` changes nothing. Any other user op takes the worst-case
+  effects. It used to clobber everything.
+- **Absolute addresses.** These are taken never to be in the stack (the engine's own assumption).
+  This is now applied consistently: a store through one no longer forgets slots, though it still
+  leaks the value.
