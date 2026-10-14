@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+ * Modified for SaturnExplorer: a load is read once, never duplicated into its uses (patches/0010-load-not-duplicated.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3309,7 +3310,7 @@ ActionMarkExplicit::OpStackElement::OpStackElement(Varnode *v)
 /// calculate the number of explicit terms in an expression.
 /// \param vn is the given Varnode
 /// \param max is the maximum number of terms to allow
-void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max)
+void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max,bool loadOnce)
 
 {
   vector<OpStackElement> opstack;
@@ -3334,6 +3335,11 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max)
     }
     else {
       PcodeOp *op = vncur->getDef();
+      if (loadOnce && op->code() == CPUI_LOAD) {	// Printed at each use, the load would read again
+	vn->setExplicit();
+	vn->clearImplied();
+	return;
+      }
       Varnode *newvn = op->getIn(opstack.back().slot++);
       if (newvn->isMark()) {	// If an ancestor is marked(also possible implied with multiple descendants)
 	vn->setExplicit();	// then automatically consider this to be explicit
@@ -3410,7 +3416,7 @@ int4 ActionMarkExplicit::apply(Funcdata &data)
   for(int4 i=0;i<multlist.size();++i) {
     Varnode *vn = multlist[i];
     if (vn->isMark())		// Mark may have been cleared by multipleInteraction
-      processMultiplier(vn,maxdup);
+      processMultiplier(vn,maxdup,data.getArch()->loadsNotDuplicated);
   }
   for(int4 i=0;i<multlist.size();++i)
     multlist[i]->clearMark();

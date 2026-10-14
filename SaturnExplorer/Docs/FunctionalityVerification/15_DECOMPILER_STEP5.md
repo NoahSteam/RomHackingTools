@@ -780,3 +780,22 @@ Mutations, each failing its tests:
 - no data-image refusal;
 - shadows read-only.
 
+
+### Review of `aa3f7d1`: hardware-register semantics, round 5
+
+- **P1: a sample read through a volatile pointer was printed twice.** The engine prints a cheap
+  expression with several uses at each use, and `*p` is one term, so the poll's sample appeared
+  in the loop condition and again in `return (int4)*piVar1;`. Both mapped to the one instruction
+  that reads it. Patch 0010 (`Architecture::loadsNotDuplicated`, set by SaturnExplorer) makes an
+  expression containing a load explicit when it has several uses. The fixture now prints
+  `uVar2 = (uint4)*piVar1;` in the loop and `return uVar2;`. The change is in analysis, not in the
+  printed text. It applies to every load through a pointer (a constant-address access is a
+  volatile op or ordinary memory instead), so ordinary code reading `*p` twice also shows one
+  read into a variable.
+- **Inverted ranges.** `VolatileAliases` returns nothing for `last < first`, checked before the
+  longword widening. The decompiler ignores such a request entry and says so in `warnings`. The
+  panel's parser already refuses them.
+
+Tests: the reviewer's fixture (exactly one read, the sample returned), the whole-period range now
+held to one read as well, inverted ranges in the map and end to end. Mutation: 0010's flag off
+fails all three read-count checks.

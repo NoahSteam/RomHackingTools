@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a load is read once, never duplicated into its uses (patches/0010-load-not-duplicated.patch).
  */
 /// \file coreaction.hh
 /// \brief Core decompilation actions which are indepedent of any particular architecture
@@ -436,7 +438,7 @@ class ActionMarkExplicit : public Action {
   };
   static int4 baseExplicit(Varnode *vn,int4 maxref);	///< Make initial determination if a Varnode should be \e explicit
   static int4 multipleInteraction(vector<Varnode *> &multlist);	///< Find multiple descendant chains
-  static void processMultiplier(Varnode *vn,int4 max);	///< For a given multi-descendant Varnode, decide if it should be explicit
+  static void processMultiplier(Varnode *vn,int4 max,bool loadOnce);	///< For a given multi-descendant Varnode, decide if it should be explicit
   static void checkNewToConstructor(Funcdata &data,Varnode *vn);	///< Set special properties on output of CPUI_NEW
 public:
   ActionMarkExplicit(const string &g) : Action(rule_onceperfunc,"markexplicit",g) {}	///< Constructor

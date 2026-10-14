@@ -1397,7 +1397,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // must not be marked read-only.
     std::vector<HardwareRange> userVolatile;
     for (const auto& v : request.volatileMemory)
+    {
+        if (v.second < v.first)
+        {
+            r.warnings.push_back("volatile range " + Hex8(v.first) + "-" + Hex8(v.second) + " is inverted: ignored");
+            continue;
+        }
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) userVolatile.push_back(h);
+    }
     auto sharedLiteral = [&](uint32_t at, int size) {
         const uint32_t end = at + static_cast<uint32_t>(size) - 1;
         if (InHardwareRange(at) || InHardwareRange(end)) return true;

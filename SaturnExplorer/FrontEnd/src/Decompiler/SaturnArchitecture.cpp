@@ -38,6 +38,10 @@ void SaturnArchitecture::Initialise(ghidra::uint4 maxInstructions, std::atomic<b
     // volatility decides (hardware stays, ordinary memory goes), and one that never resolves
     // stays, since it may be hardware (patches/0009-keep-unused-loads.patch).
     keepUnusedLoads = true;
+    // ...and a load is read once in the output, as in the code: the engine prints a cheap
+    // expression at each of its uses, so a sample taken in a poll loop and then returned would
+    // print as a second dereference after the loop (patches/0010-load-not-duplicated.patch).
+    loadsNotDuplicated = true;
 }
 
 void SaturnArchitecture::buildLoader(ghidra::DocumentStorage&)

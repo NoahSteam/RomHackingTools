@@ -546,11 +546,12 @@ void TestHardwareVolatility()
     const Fixture ppaf = simple(0x06009840u, { 0x6012 }, 0x25FE0080u);            // mov.l @r1,r0
     const Fixture shadow = simple(0x060098C0u, { 0x2142, 0x6012 }, 0xFFFFFF18u);  // mov.l r4,@r1; mov.l @r1,r0
     const Fixture pdd = simple(0x06009900u, { 0x6012 }, 0x25FE008Cu);             // mov.l @r1,r0
+    const Fixture ptrMailbox = simple(0x06009940u, mailboxOps, 0x26001000u);
     for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite,
                               &late, &indexed, &lateRam, &mvolRead, &mibufWrite, &wtcnt, &wtcsr, &wovf, &badKey,
                               &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox,
                               &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
-                              &hwramMirrorMailbox, &shadow, &pdd })
+                              &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -717,8 +718,29 @@ void TestHardwareVolatility()
             r = d.Decompile(snap, q);
             Print("mailbox, wide range", r);
             if (w.name) CHECK(kept(r, w.name));
-            else CHECK(Has(r.Text(), "*piVar1 = 1;") && Has(r.Text(), "*piVar1 & 1") && !Has(r.Text(), "while( true )"));
+            else CHECK(Has(r.Text(), "*piVar1 = 1;") && Count(r.Text(), "*piVar1") == 3 && !Has(r.Text(), "while( true )"));
         }
+    }
+    // The mailbox pointer volatile too: the poll's sample is read once per pass through the loop
+    // and returned as read, not dereferenced again after it (review of aa3f7d1).
+    {
+        DecompileRequest q = Request(ptrMailbox.base);
+        q.volatileMemory.emplace_back(ptrMailbox.base + ptrMailbox.literal, ptrMailbox.base + ptrMailbox.literal + 3);
+        q.volatileMemory.emplace_back(0x26001000u, 0x26001001u);
+        r = d.Decompile(snap, q);
+        Print("mailbox through a volatile pointer", r);
+        CHECK(Has(r.Text(), "*piVar1 = 1;"));
+        CHECK(Count(r.Text(), "*piVar1") == 3);   // the declaration, the write, the one read in the loop
+        CHECK(!Has(r.Text(), "return (int4)*piVar1"));
+        CHECK(!Has(r.Text(), "while( true )"));
+    }
+    // An inverted range is no range: ignored, and said.
+    {
+        DecompileRequest q = Request(sharedLiteral.base);
+        q.volatileMemory.emplace_back(0x26002000u, 0x26001000u);
+        r = d.Decompile(snap, q);
+        CHECK(Has(r.Text(), "return 0x12345678;"));
+        CHECK(WarnsAbout(r, "is inverted: ignored"));
     }
     // ...and a word access is kept when the user marked only one byte of it.
     {
@@ -874,6 +896,8 @@ void TestHardwareMap()
         CHECK(covers(y, 0x00000000u) && covers(y, 0x3FFFFFFFu) && covers(y, 0x26101000u));
         const std::vector<HardwareRange> z = VolatileAliases(0x27FFFFFCu, 0x28001003u);   // wraps the period
         CHECK(covers(z, 0x260FFFFCu) && covers(z, 0x00001000u) && covers(z, 0x38001000u) && !covers(z, 0x00002000u));
+        CHECK(VolatileAliases(0x26002000u, 0x26001000u).empty());   // inverted
+        CHECK(VolatileAliases(0x26001003u, 0x26001001u).empty());   // inverted within one longword
         const std::vector<HardwareRange> o = VolatileAliases(0x45000000u, 0x45000003u);   // not the bus
         CHECK(o.size() == 1 && o[0].first == 0x45000000u && o[0].last == 0x45000003u);
         const std::vector<HardwareRange> m = VolatileAliases(0x3FFFFFFCu, 0x40000003u);   // bus and beyond

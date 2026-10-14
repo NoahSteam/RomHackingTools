@@ -37,6 +37,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0007-cspec-wide-return-order.patch` | `superh.cspec` put a 64-bit return's high half in r1. Ghidra's `piece1` is the most significant piece, and the big-endian SH ABI returns the high half in r0, so the join is now `piece1="r0" piece2="r1"`. `Sh2SpecData.h` is regenerated. |
 | `0008-cspec-return-address.patch` | `superh.cspec` declares PR as the return address, so `jmp @rN` with rN copied from PR is a return, not an unrecovered jump table. `Sh2SpecData.h` is regenerated. |
 | `0009-keep-unused-loads.patch` | `Architecture::keepUnusedLoads` (off by default; SaturnExplorer sets it): an unused load is held until its pointer is a constant, then the address's volatility decides. Without it a read whose address folded late, or never, was removed: a dummy hardware read was lost. |
+| `0010-load-not-duplicated.patch` | `Architecture::loadsNotDuplicated` (off by default; SaturnExplorer sets it): an expression containing a LOAD is made explicit when it has several uses, so a sample is read once and reused, not printed as a fresh dereference at each use. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -78,6 +79,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0007: `TestPrototypeEligibility` (a 64-bit return and its caller);
   - 0008: `TestFlowUncertainty` (a return through `jmp @r1`).
   - 0009: `TestHardwareVolatility` (unused reads through a late-folding and an indexed pointer).
+  - 0010: `TestHardwareVolatility` (a poll through a volatile pointer returns its sample).
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

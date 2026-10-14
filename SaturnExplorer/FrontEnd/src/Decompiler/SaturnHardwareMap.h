@@ -92,7 +92,8 @@ const std::vector<HardwareRange>& HardwareRanges();
 
 // Every range a user's volatile memory [first, last] is reached through: widened to whole
 // longwords (an access touching the range starts in it), then on the bus both partitions, bits
-// 28-27 and high work RAM's 1 MiB repeat.
+// 28-27 and high work RAM's 1 MiB repeat. Empty for an inverted range (last < first), which the
+// caller is expected to have rejected (ParseAddressRanges does).
 std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last);
 bool InHardwareRange(uint32_t address);
 

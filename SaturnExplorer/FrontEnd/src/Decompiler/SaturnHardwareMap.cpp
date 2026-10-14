@@ -450,9 +450,9 @@ std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last)
     // so a word or longword that only ends inside the range would otherwise not be. SH-2 accesses
     // are aligned, so every access touching the range then starts in it -- at the cost of the
     // bytes before and after it in the same longword.
+    if (last < first) return std::vector<HardwareRange>();   // inverted: no range (checked before widening)
     first &= ~3u;
     last |= 3u;
-    if (last < first) last = 0xFFFFFFFFu;
     const uint64_t lo = first, hi = last;
     const uint64_t busEnd = 0x40000000ull;   // partitions 000 and 001
     std::vector<HardwareRange> out;
