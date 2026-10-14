@@ -14,6 +14,7 @@ namespace
 const RegisterAccess RW = RegisterAccess::ReadWrite;
 const RegisterAccess RO = RegisterAccess::ReadOnly;
 const RegisterAccess WO = RegisterAccess::WriteOnly;
+const RegisterAccess KW = RegisterAccess::KeyedWrite;
 
 struct Reg
 {
@@ -22,6 +23,7 @@ struct Reg
     RegisterAccess access;
     uint8_t size;         // 0: the block's
     const char* split;    // reads and writes reach different fields: what each does
+    const char* onRead;   // what a read does besides returning a value
 };
 
 struct Block
@@ -62,7 +64,7 @@ const Reg kSmpc[] = {
 // there although the manual pairs it with the readable SCIEB.
 const Reg kScsp[] = {
     { 0x400, "SCSP_MVOL", WO }, { 0x402, "SCSP_RBL_RBP", WO },
-    { 0x404, "SCSP_MIBUF", RO },    // a read takes the next MIDI input byte, with the FIFO flags
+    { 0x404, "SCSP_MIBUF", RO, 0, nullptr, "a read takes the next MIDI input byte off the FIFO" },
     { 0x406, "SCSP_MOBUF", WO },
     { 0x408, "SCSP_MSLC_CA", RW, 0, "a write selects the monitored slot (MSLC); a read returns that slot's CA, SGC and EG" },
     { 0x412, "SCSP_DMEAL", WO }, { 0x414, "SCSP_DMEAH_DRGA", WO },
@@ -148,8 +150,9 @@ const Reg kScu[] = {
     { 0x028, "SCU_D1C", WO }, { 0x02C, "SCU_D1AD", WO }, { 0x030, "SCU_D1EN", WO }, { 0x034, "SCU_D1MD", WO },
     { 0x040, "SCU_D2R", RW }, { 0x044, "SCU_D2W", RW }, { 0x048, "SCU_D2C", WO }, { 0x04C, "SCU_D2AD", WO },
     { 0x050, "SCU_D2EN", WO }, { 0x054, "SCU_D2MD", WO }, { 0x060, "SCU_DSTP", WO }, { 0x07C, "SCU_DSTA", RO },
-    { 0x080, "SCU_PPAF", RW, 0, "a write controls the DSP program; a read returns its status" },
-    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW },
+    { 0x080, "SCU_PPAF", RW, 0, "a write controls the DSP program; a read returns its status",
+      "a read clears the DSP's V and E flags and its end interrupt" },
+    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW, 0, nullptr, "a read advances the DSP data address (PDA)" },
     { 0x090, "SCU_T0C", WO }, { 0x094, "SCU_T1S", WO }, { 0x098, "SCU_T1MD", WO }, { 0x0A0, "SCU_IMS", WO },
     { 0x0A4, "SCU_IST", RW, 0, "a write of 0 clears that interrupt; a read returns the pending ones" }, { 0x0A8, "SCU_AIACK", RW }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
     { 0x0B8, "SCU_AREF", WO }, { 0x0C4, "SCU_RSEL", RW }, { 0x0C8, "SCU_VER", RO },
@@ -164,9 +167,10 @@ const Reg kCdBlock[] = {
     { 0x0018, "CD_CR1", RW, 0, "a write is the command; a read is the response" },
     { 0x001C, "CD_CR2", RW, 0, "a write is the command; a read is the response" },
     { 0x0020, "CD_CR3", RW, 0, "a write is the command; a read is the response" },
-    { 0x0024, "CD_CR4", RW, 0, "a write is the command; a read is the response" },
+    { 0x0024, "CD_CR4", RW, 0, "a write is the command; a read is the response",
+      "a read marks the response as read" },
 };
-const Reg kCdFifo[] = { { 0x0000, "CD_DATATRNS", RW, 4 } };
+const Reg kCdFifo[] = { { 0x0000, "CD_DATATRNS", RW, 4, nullptr, "a read takes the next data off the FIFO" } };
 
 // The CPU-to-CPU signals: a 16-bit write anywhere in the 8 MiB sets the other SH-2's FRT input
 // capture flag (SCU manual MINIT/SINIT; Docs/Saturn/SaturnMemory.txt note 4). Nothing reads back.
@@ -175,32 +179,36 @@ const Reg kSinit[] = { { 0x0000, "SINIT", WO } };   // the slave signals the mas
 
 // The SH-2's own peripherals (Hitachi SH7604 hardware manual; Mednafen sh7095.inc). The FRT
 // counter is two bytes read high first: the high read latches the low byte. The watchdog's
-// registers are named where they are read, a byte each at FE80/FE81/FE83; a byte write there does
-// nothing. They are written as keyed words at FE80 and FE82 instead (KeyedWrite).
+// registers are named where they are read, a byte each at FE80/FE81/FE83 (and again at
+// FE88/FE89/FE8B); they take no byte write, only keyed words at FE80 and FE82 (KeyedWrite).
+// Flags cleared by "writing 0 after reading 1" (FTCSR, CHCR, DMAOR, RTCSR) are armed by the read.
+// DVDNTH_SHADOW and DVDNTL_SHADOW at FF18/FF1C are Mednafen's, not in the SH7604's register table.
 const Reg kOnChip[] = {
     { 0x000, "SH2_SMR", RW, 1 }, { 0x001, "SH2_BRR", RW, 1 }, { 0x002, "SH2_SCR", RW, 1 },
     { 0x003, "SH2_TDR", RW, 1 }, { 0x004, "SH2_SSR", RW, 1 }, { 0x005, "SH2_RDR", RO, 1 },
-    { 0x010, "SH2_TIER", RW, 1 }, { 0x011, "SH2_FTCSR", RW, 1 }, { 0x012, "SH2_FRCH", RW, 1 },
+    { 0x010, "SH2_TIER", RW, 1 }, { 0x011, "SH2_FTCSR", RW, 1, nullptr, "a read arms clearing its flags: write 0 to a flag read as 1" },
+    { 0x012, "SH2_FRCH", RW, 1, nullptr, "a read latches SH2_FRCL for the next low-byte read" },
     { 0x013, "SH2_FRCL", RW, 1 }, { 0x014, "SH2_OCRH", RW, 1 }, { 0x015, "SH2_OCRL", RW, 1 },
-    { 0x016, "SH2_TCR", RW, 1 }, { 0x017, "SH2_TOCR", RW, 1 }, { 0x018, "SH2_FICRH", RO, 1 },
+    { 0x016, "SH2_TCR", RW, 1 }, { 0x017, "SH2_TOCR", RW, 1 }, { 0x018, "SH2_FICRH", RO, 1, nullptr, "a read latches SH2_FICRL for the next low-byte read" },
     { 0x019, "SH2_FICRL", RO, 1 }, { 0x060, "SH2_IPRB", RW, 2 }, { 0x062, "SH2_VCRA", RW, 2 },
     { 0x064, "SH2_VCRB", RW, 2 }, { 0x066, "SH2_VCRC", RW, 2 }, { 0x068, "SH2_VCRD", RW, 2 },
-    { 0x071, "SH2_DRCR0", RW, 1 }, { 0x072, "SH2_DRCR1", RW, 1 }, { 0x080, "SH2_WTCSR", RO, 1 },
-    { 0x081, "SH2_WTCNT", RO, 1 }, { 0x083, "SH2_RSTCSR", RO, 1 }, { 0x091, "SH2_SBYCR", RW, 1 },
+    { 0x071, "SH2_DRCR0", RW, 1 }, { 0x072, "SH2_DRCR1", RW, 1 }, { 0x080, "SH2_WTCSR", KW, 1 },
+    { 0x081, "SH2_WTCNT", KW, 1 }, { 0x083, "SH2_RSTCSR", KW, 1 }, { 0x091, "SH2_SBYCR", RW, 1 },
     { 0x092, "SH2_CCR", RW, 1 }, { 0x0E0, "SH2_ICR", RW, 2 }, { 0x0E2, "SH2_IPRA", RW, 2 },
     { 0x0E4, "SH2_VCRWDT", RW, 2 }, { 0x100, "SH2_DVSR", RW, 4 }, { 0x104, "SH2_DVDNT", RW, 4 },
     { 0x108, "SH2_DVCR", RW, 4 }, { 0x10C, "SH2_VCRDIV", RW, 4 }, { 0x110, "SH2_DVDNTH", RW, 4 },
-    { 0x114, "SH2_DVDNTL", RW, 4 }, { 0x140, "SH2_BARAH", RW, 2 }, { 0x142, "SH2_BARAL", RW, 2 },
+    { 0x114, "SH2_DVDNTL", RW, 4 },
+    { 0x118, "SH2_DVDNTH_SHADOW", RO, 4 }, { 0x11C, "SH2_DVDNTL_SHADOW", RO, 4 }, { 0x140, "SH2_BARAH", RW, 2 }, { 0x142, "SH2_BARAL", RW, 2 },
     { 0x144, "SH2_BAMRAH", RW, 2 }, { 0x146, "SH2_BAMRAL", RW, 2 }, { 0x148, "SH2_BBRA", RW, 2 },
     { 0x160, "SH2_BARBH", RW, 2 }, { 0x162, "SH2_BARBL", RW, 2 }, { 0x164, "SH2_BAMRBH", RW, 2 },
     { 0x166, "SH2_BAMRBL", RW, 2 }, { 0x168, "SH2_BBRB", RW, 2 }, { 0x170, "SH2_BDRBH", RW, 2 },
     { 0x172, "SH2_BDRBL", RW, 2 }, { 0x174, "SH2_BDMRBH", RW, 2 }, { 0x176, "SH2_BDMRBL", RW, 2 },
     { 0x178, "SH2_BRCR", RW, 2 }, { 0x180, "SH2_SAR0", RW, 4 }, { 0x184, "SH2_DAR0", RW, 4 },
-    { 0x188, "SH2_TCR0", RW, 4 }, { 0x18C, "SH2_CHCR0", RW, 4 }, { 0x190, "SH2_SAR1", RW, 4 },
-    { 0x194, "SH2_DAR1", RW, 4 }, { 0x198, "SH2_TCR1", RW, 4 }, { 0x19C, "SH2_CHCR1", RW, 4 },
-    { 0x1A0, "SH2_VCRDMA0", RW, 4 }, { 0x1A8, "SH2_VCRDMA1", RW, 4 }, { 0x1B0, "SH2_DMAOR", RW, 4 },
+    { 0x188, "SH2_TCR0", RW, 4 }, { 0x18C, "SH2_CHCR0", RW, 4, nullptr, "a read arms clearing TE: write 0 to it after reading 1" }, { 0x190, "SH2_SAR1", RW, 4 },
+    { 0x194, "SH2_DAR1", RW, 4 }, { 0x198, "SH2_TCR1", RW, 4 }, { 0x19C, "SH2_CHCR1", RW, 4, nullptr, "a read arms clearing TE: write 0 to it after reading 1" },
+    { 0x1A0, "SH2_VCRDMA0", RW, 4 }, { 0x1A8, "SH2_VCRDMA1", RW, 4 }, { 0x1B0, "SH2_DMAOR", RW, 4, nullptr, "a read arms clearing AE and NMIF: write 0 after reading 1" },
     { 0x1E0, "SH2_BCR1", RW, 4 }, { 0x1E4, "SH2_BCR2", RW, 4 }, { 0x1E8, "SH2_WCR", RW, 4 },
-    { 0x1EC, "SH2_MCR", RW, 4 }, { 0x1F0, "SH2_RTCSR", RW, 4 }, { 0x1F4, "SH2_RTCNT", RW, 4 },
+    { 0x1EC, "SH2_MCR", RW, 4 }, { 0x1F0, "SH2_RTCSR", RW, 4, nullptr, "a read arms clearing CMF: write 0 after reading 1" }, { 0x1F4, "SH2_RTCNT", RW, 4 },
     { 0x1F8, "SH2_RTCOR", RW, 4 },
 };
 
@@ -226,7 +234,7 @@ std::vector<HardwareRegister> Build()
         for (size_t i = 0; i < b.count; ++i)
         {
             const Reg& r = b.regs[i];
-            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access, r.split });
+            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access, r.split, r.onRead });
         }
     std::sort(all.begin(), all.end(),
               [](const HardwareRegister& x, const HardwareRegister& y) { return x.address < y.address; });
@@ -299,9 +307,11 @@ bool HardwareAlias(uint32_t address, uint32_t& canonical)
         if (!(address & 0x4000u)) return false;
         uint32_t offset = address & 0x1FFu;
         if (offset < 0x100u && !((address & 0x10000000u) && (address & 0x1000u))) return false;
-        // The divider answers at 0x120-0x13F too, the same six registers (sh7095.inc decodes
-        // 0x00/0x20 alike, a write there divides as well).
+        // The divider answers at 0x120-0x13F too, the same registers (sh7095.inc decodes
+        // 0x00/0x20 alike, a write there divides as well); the watchdog at 0x88-0x8B, its read
+        // bytes and its write ports alike.
         if (offset >= 0x120u && offset < 0x140u) offset -= 0x20u;
+        if (offset >= 0x088u && offset < 0x08Cu) offset -= 0x08u;
         canonical = kOnChipBase + offset;
         return true;
     }
@@ -358,8 +368,9 @@ const char* DocumentedWideAccess(uint32_t address, uint32_t size)
 {
     uint32_t a = 0;
     if (size != 4 || (address & 3) || !HardwareAlias(address, a)) return nullptr;
-    // VDP2 ("VDP2 User's Manual"): the scroll values are 16- or 32-bit registers, the zoom
-    // increments and the vertical-cell and line scroll table addresses 32-bit ones.
+    // VDP2 ("VDP2 User's Manual"): the scroll values are 16- or 32-bit registers; the zoom
+    // increments and the vertical-cell, line scroll, line colour and back screen table addresses
+    // 32-bit ones.
     struct Wide { uint32_t address; const char* name; };
     static const Wide kWide[] = {
         { 0x05F80070u, "VDP2_SCXN0" }, { 0x05F80074u, "VDP2_SCYN0" }, { 0x05F80078u, "VDP2_ZMXN0" },
@@ -367,6 +378,7 @@ const char* DocumentedWideAccess(uint32_t address, uint32_t size)
         { 0x05F80088u, "VDP2_ZMXN1" }, { 0x05F8008Cu, "VDP2_ZMYN1" }, { 0x05F80090u, "VDP2_SCXN2:SCYN2" },
         { 0x05F80094u, "VDP2_SCXN3:SCYN3" }, { 0x05F8009Cu, "VDP2_VCSTA" }, { 0x05F800A0u, "VDP2_LSTA0" },
         { 0x05F800A4u, "VDP2_LSTA1" },
+        { 0x05F800A8u, "VDP2_LCTA" }, { 0x05F800ACu, "VDP2_BKTA" },
         // The UBC's address, mask and data registers are word halves of one longword (SH7604).
         { 0xFFFFFF40u, "SH2_BARA" }, { 0xFFFFFF44u, "SH2_BAMRA" }, { 0xFFFFFF60u, "SH2_BARB" },
         { 0xFFFFFF64u, "SH2_BAMRB" }, { 0xFFFFFF70u, "SH2_BDRB" }, { 0xFFFFFF74u, "SH2_BDMRB" },
@@ -383,14 +395,24 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
     if (size != 2 || !HardwareAlias(address, a) || (a != 0xFFFFFE80u && a != 0xFFFFFE82u)) return false;
     // SH7604 12.2.4: WTCNT and WTCSR are written by a word at FE80 whose upper byte is the key
     // (0x5A for WTCNT, 0xA5 for WTCSR); RSTCSR by a word at FE82, 0xA500 clearing WOVF and 0x5A
-    // with data setting RSTE and RSTS. Any other word is ignored.
-    char b[96];
+    // with data setting RSTE and RSTS. Any other word is ignored. Each takes effect only on
+    // conditions the write alone does not show: a flag is cleared only if a read saw it set, and
+    // Mednafen loads WTCNT only while WTCSR's TME is set (sh7095.inc).
+    char b[128];
     const uint32_t key = (value >> 8) & 0xFFu, data = value & 0xFFu;
     if (a == 0xFFFFFE80u)
     {
         if (!valueKnown) text = "keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A, SH2_WTCSR when it is 0xA5";
-        else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCNT = 0x%02X", data); text = b; }
-        else if (key == 0xA5u) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCSR = 0x%02X", data); text = b; }
+        else if (key == 0x5Au)
+        {
+            std::snprintf(b, sizeof b, "keyed watchdog write: requests SH2_WTCNT = 0x%02X (taken while SH2_WTCSR's TME is set)", data);
+            text = b;
+        }
+        else if (key == 0xA5u)
+        {
+            std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCSR = 0x%02X (OVF is cleared only if a read saw it set)", data);
+            text = b;
+        }
         else
         {
             std::snprintf(b, sizeof b, "watchdog write with key 0x%02X, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored", key);
@@ -400,7 +422,7 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
         return true;
     }
     if (!valueKnown) text = "keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF, 0x5A with data sets RSTE and RSTS";
-    else if (value == 0xA500u) text = "keyed watchdog write: clears SH2_RSTCSR's WOVF";
+    else if (value == 0xA500u) text = "keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set";
     else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x%02X", data); text = b; }
     else
     {
@@ -409,6 +431,48 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
         ignored = true;
     }
     return true;
+}
+
+std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last)
+{
+    // Outward to whole longwords: the engine asks whether an access is volatile at its first byte,
+    // so a word or longword that only ends inside the range would otherwise not be. SH-2 accesses
+    // are aligned, so every access touching the range then starts in it -- at the cost of the
+    // bytes before and after it in the same longword.
+    first &= ~3u;
+    last |= 3u;
+    std::vector<HardwareRange> out;
+    if ((first >> 29) > 1 || (first >> 29) != (last >> 29))
+    {
+        out.push_back(HardwareRange{ first, last });   // not one bus partition: as given
+        return out;
+    }
+    // On the bus: both partitions and bits 28-27 (not decoded), and high work RAM's 1 MiB repeat
+    // across 0x06000000-0x07FFFFFF.
+    const uint32_t lo = first & 0x07FFFFFFu, hi = last & 0x07FFFFFFu;
+    std::vector<HardwareRange> pieces;
+    const uint32_t hwram = 0x06000000u, mib = 0x00100000u;
+    if (hi < lo) pieces.push_back(HardwareRange{ lo, 0x07FFFFFFu }), pieces.push_back(HardwareRange{ 0, hi });
+    else if (lo >= hwram && hi - lo >= mib - 1) pieces.push_back(HardwareRange{ hwram, 0x07FFFFFFu });
+    else if (lo >= hwram)
+    {
+        const uint32_t a = lo & (mib - 1), b = hi & (mib - 1);
+        for (uint32_t r = hwram; r < 0x08000000u; r += mib)
+        {
+            if (a <= b) pieces.push_back(HardwareRange{ r + a, r + b });
+            else
+            {
+                pieces.push_back(HardwareRange{ r + a, r + mib - 1 });
+                pieces.push_back(HardwareRange{ r, r + b });
+            }
+        }
+    }
+    else pieces.push_back(HardwareRange{ lo, hi });
+    for (uint32_t partition : { 0x00000000u, 0x20000000u })
+        for (uint32_t repeat = 0; repeat < 4; ++repeat)
+            for (const HardwareRange& p : pieces)
+                out.push_back(HardwareRange{ partition | (repeat << 27) | p.first, partition | (repeat << 27) | p.last });
+    return out;
 }
 
 bool InHardwareRange(uint32_t address)

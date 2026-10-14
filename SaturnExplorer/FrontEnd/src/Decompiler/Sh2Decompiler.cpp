@@ -1106,6 +1106,12 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                     note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written", true);
                 if (write && reg->access == RegisterAccess::ReadOnly)
                     note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing", true);
+                if (write && reg->access == RegisterAccess::KeyedWrite)
+                    note(insn, std::string(reg->name) + " takes no " + std::to_string(size) +
+                                   "-byte write: it is written by a keyed word at " +
+                                   (std::string(reg->name) == "SH2_RSTCSR" ? "0xFFFFFE82" : "0xFFFFFE80") +
+                                   "; this write does nothing", true);
+                if (read && reg->onRead) note(insn, std::string(reg->name) + ": " + reg->onRead, false);
                 if (write) written.insert(reg);
                 if (read && reg->split) splitReads.emplace_back(insn, reg);
             }
@@ -1384,6 +1390,20 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // pass's own scan can mark its literals read-only, so a switch bound or a jmp target loaded from
     // a literal pool would not fold; the second pass marks the first pass's literals before flow.
     std::vector<std::pair<uint32_t, int>> knownLiterals;
+    // The user's volatile memory, every alias, and the literal words in it: those stay reads.
+    // A literal is folded from the captured bytes only when it is read-only, and read-only wins
+    // over volatile in the engine (ActionVarnodeProps), so a literal another processor may change
+    // must not be marked read-only.
+    std::vector<HardwareRange> userVolatile;
+    for (const auto& v : request.volatileMemory)
+        for (const HardwareRange& h : VolatileAliases(v.first, v.second)) userVolatile.push_back(h);
+    auto sharedLiteral = [&](uint32_t at, int size) {
+        const uint32_t end = at + static_cast<uint32_t>(size) - 1;
+        if (InHardwareRange(at) || InHardwareRange(end)) return true;
+        for (const HardwareRange& v : userVolatile)
+            if (at <= v.last && end >= v.first) return true;
+        return false;
+    };
 
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output.
@@ -1495,23 +1515,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // slots, the FIFOs), and the mirrors code can reach a register through.
         for (const HardwareRange& h : HardwareRanges())
             arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, h.first, h.last));
-        // The user's shared memory, in both bus partitions: the other processor sees the bus, not
-        // the cache, so code reaches the same bytes through either.
-        for (const auto& v : request.volatileMemory)
-        {
-            const bool bus = (v.first >> 29) <= 1 && (v.first >> 29) == (v.second >> 29);
-            for (uint32_t partition : { 0x00000000u, 0x20000000u })
-            {
-                if (!bus && partition) break;
-                const uint32_t lo = bus ? (v.first & 0x1FFFFFFFu) | partition : v.first;
-                const uint32_t hi = bus ? (v.second & 0x1FFFFFFFu) | partition : v.second;
-                arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, lo, hi));
-            }
-        }
+        // The user's shared memory, through every alias that reaches it (VolatileAliases).
+        for (const HardwareRange& v : userVolatile)
+            arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, v.first, v.last));
 
         for (const auto& ro : knownLiterals)
-            arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
-                                              ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
+            if (!sharedLiteral(ro.first, ro.second))
+                arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
+                                                  ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
         Enter(DecompilePhase::Flow);
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
@@ -1521,7 +1532,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         JumpDests flowTables;
         AddJumpTables(*fd, flowTables);
         for (const auto& ro : scan.readonly)
-            arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
+            if (!sharedLiteral(ro.first, ro.second))
+                arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
                                               ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
 
         // A check-point of ours at each phase boundary: the engine's last one in a phase can come

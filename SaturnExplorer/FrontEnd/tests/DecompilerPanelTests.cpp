@@ -1232,6 +1232,66 @@ void TestFlowUncertaintyShown()
         CHECK(f.panel.VolatileMemory() == "0x26001000-0x26001003");
     }
     {
+        // A signature recovered under one volatile list is not lent under another (review of
+        // 960051e). The callee writes 0 to a mailbox and returns its argument unless the mailbox
+        // still reads 0: with the mailbox ordinary memory that folds away and so does the argument.
+        Fixture f;
+        const uint32_t callee = 0x06009B00u, caller = 0x06009B40u;
+        const uint16_t calleeWords[] = { 0x000B, 0x0009,
+                                         0xD104,           // mov.l @(16,pc),r1  -> 0x26001000
+                                         0xE000,           // mov #0,r0
+                                         0x2102,           // mov.l r0,@r1
+                                         0x6012,           // mov.l @r1,r0
+                                         0x2008,           // tst r0,r0
+                                         0x8900,           // bt done
+                                         0x6043,           // mov r4,r0
+                                         0x000B, 0x0009,   // done: rts ; nop
+                                         0x0009,
+                                         0x2600, 0x1000 }; // the literal
+        for (size_t i = 0; i < sizeof calleeWords / sizeof calleeWords[0]; ++i) f.PutWord(callee - 4 + 2 * uint32_t(i), calleeWords[i]);
+        const uint16_t callerWords[] = { 0x000B, 0x0009,
+                                         0x4F22,           // sts.l pr,@-r15
+                                         0xE401,           // mov #1,r4
+                                         0xBFDC,           // bsr callee
+                                         0x0009,
+                                         0x4F26,           // lds.l @r15+,pr
+                                         0x000B, 0x0009 };
+        for (size_t i = 0; i < sizeof callerWords / sizeof callerWords[0]; ++i) f.PutWord(caller - 4 + 2 * uint32_t(i), callerWords[i]);
+        f.names[callee] = "review_callee";
+        f.names[caller] = "review_caller";
+        ++f.namesGeneration;
+        ++f.backend.serial;
+
+        f.panel.ShowFunctionContaining(0, callee);
+        CHECK(f.WaitShown("4 review_callee("));   // its own signature line
+        f.Idle(2);
+        std::printf("%s", f.Shown().Text().c_str());
+        CHECK(Has(f.Shown().Text(), "review_callee(void)"));   // the argument folded away
+        CHECK(!f.panel.ShownStale());
+
+        // The shown answer is stale as soon as the list changes, whether or not anything is asked.
+        CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
+        CHECK(f.panel.ShownStale());
+
+        f.panel.ShowFunctionContaining(0, caller);
+        CHECK(f.WaitShown("4 review_caller("));
+        f.Idle(2);
+        std::printf("%s", f.Shown().Text().c_str());
+        CHECK(!Has(f.Shown().Text(), "review_callee();"));     // the old signature is not lent
+
+        // Recovered again under the new list, the callee takes its argument, and the caller passes it.
+        f.panel.ShowFunctionContaining(0, callee);
+        CHECK(f.WaitShown("4 review_callee("));   // its own signature line
+        f.Idle(2);
+        std::printf("%s", f.Shown().Text().c_str());
+        CHECK(Has(f.Shown().Text(), "param_1"));
+        f.panel.ShowFunctionContaining(0, caller);
+        CHECK(f.WaitShown("4 review_caller("));
+        f.Idle(2);
+        std::printf("%s", f.Shown().Text().c_str());
+        CHECK(Has(f.Shown().Text(), "review_callee(1)"));
+    }
+    {
         // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
         Fixture f;
         CHECK(f.WaitShown("+ 1"));

@@ -531,9 +531,20 @@ void TestHardwareVolatility()
                                                0x8BFC };  // bf loop
     const Fixture soundMailbox = simple(0x06009600u, mailboxOps, 0x25A01000u);
     const Fixture ramMailbox = simple(0x06009640u, mailboxOps, 0x26001000u);
+    // The same mailbox through work RAM's other addresses: its 1 MiB repeat, bit 27.
+    const Fixture repeatMailbox = simple(0x06009680u, mailboxOps, 0x26101000u);
+    const Fixture farMailbox = simple(0x060096C0u, mailboxOps, 0x26801000u);
+    const Fixture bit27Mailbox = simple(0x06009700u, mailboxOps, 0x2E001000u);
+    // A literal the user marked volatile: mov.l @(4,pc),r0; rts; nop; .long 0x12345678.
+    const Fixture sharedLiteral = { 0x06009740u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x12345678u };
+    const Fixture wdtMirror = simple(0x06009780u, { 0xE05A, 0x4018, 0x2101 }, 0xFFFFFE88u);  // keyed, second copy
+    const Fixture wdtByte = simple(0x060097C0u, { 0x2140 }, 0xFFFFFE81u);         // mov.b r4,@r1: WTCNT
+    const Fixture lcta = simple(0x06009800u, { 0x2142 }, 0x25F800A8u);            // mov.l r4,@r1
+    const Fixture ppaf = simple(0x06009840u, { 0x6012 }, 0x25FE0080u);            // mov.l @r1,r0
     for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite,
                               &late, &indexed, &lateRam, &mvolRead, &mibufWrite, &wtcnt, &wtcsr, &wovf, &badKey,
-                              &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox })
+                              &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox,
+                              &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -614,16 +625,16 @@ void TestHardwareVolatility()
     // The watchdog's write ports: one word write, its register picked by the key.
     r = run("watchdog WTCNT", wtcnt);
     CHECK(Count(r.Text(), "= 0x5a00;") == 1);
-    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCNT = 0x00", false));
+    CHECK(HasNote(r, "keyed watchdog write: requests SH2_WTCNT = 0x00 (taken while SH2_WTCSR's TME is set)", false));
     CHECK(!HasNote(r, "covers") && !HasNote(r, "read-only"));
     CHECK(r.warnings.empty());
 
     r = run("watchdog WTCSR", wtcsr);
-    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00", false));
+    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00 (OVF is cleared only if a read saw it set)", false));
 
     r = run("watchdog RSTCSR", wovf);
     CHECK(Has(r.Text(), "0xa500"));
-    CHECK(HasNote(r, "keyed watchdog write: clears SH2_RSTCSR's WOVF", false));
+    CHECK(HasNote(r, "keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set", false));
 
     r = run("watchdog wrong key", badKey);
     CHECK(HasNote(r, "watchdog write with key 0x12", true));
@@ -667,6 +678,60 @@ void TestHardwareVolatility()
         CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
     }
 
+    // Marked once, the mailbox is kept through every address that reaches it...
+    auto kept = [&](const DecompileResult& x, const char* name) {
+        return Has(x.Text(), (std::string(name) + " = 1;").c_str()) && Count(x.Text(), name) >= 2 &&
+               !Has(x.Text(), "while( true )") && !Has(x.Text(), "while (true)");
+    };
+    {
+        struct { const Fixture* f; const char* name; } via[] = {
+            { &repeatMailbox, "Ram26101000" }, { &farMailbox, "Ram26801000" }, { &bit27Mailbox, "Ram2e001000" } };
+        for (const auto& v : via)
+        {
+            DecompileRequest q = Request(v.f->base);
+            q.volatileMemory.emplace_back(0x26001000u, 0x26001001u);
+            r = d.Decompile(snap, q);
+            Print("mailbox through an alias, marked", r);
+            CHECK(kept(r, v.name));
+        }
+    }
+    // ...and a word access is kept when the user marked only one byte of it.
+    {
+        DecompileRequest q = Request(ramMailbox.base);
+        q.volatileMemory.emplace_back(0x26001001u, 0x26001001u);
+        r = d.Decompile(snap, q);
+        Print("mailbox, one byte marked", r);
+        CHECK(kept(r, "Ram26001000"));
+    }
+
+    // A literal marked volatile is read, not folded from the captured bytes.
+    r = run("literal, not marked", sharedLiteral);
+    CHECK(Has(r.Text(), "return 0x12345678;"));
+    {
+        DecompileRequest q = Request(sharedLiteral.base);
+        q.volatileMemory.emplace_back(0x06009748u, 0x0600974Bu);
+        r = d.Decompile(snap, q);
+        Print("literal, marked", r);
+        CHECK(!Has(r.Text(), "0x12345678"));
+        CHECK(Has(r.Text(), "Ram06009748"));
+    }
+
+    r = run("watchdog second copy", wdtMirror);
+    CHECK(HasNote(r, "requests SH2_WTCNT = 0x00", false));
+    CHECK(!HasNote(r, "covers"));
+
+    r = run("watchdog byte write", wdtByte);
+    CHECK(HasNote(r, "SH2_WTCNT takes no 1-byte write: it is written by a keyed word at 0xFFFFFE80", true));
+    CHECK(!HasNote(r, "read-only"));
+
+    r = run("VDP2 LCTA", lcta);
+    CHECK(HasNote(r, "VDP2_LCTA: one 4-byte write", false));
+    CHECK(r.warnings.empty());
+
+    // A read's own effect is explained even where nothing is written.
+    r = run("SCU PPAF read", ppaf);
+    CHECK(HasNote(r, "SCU_PPAF: a read clears the DSP's V and E flags and its end interrupt", false));
+
     r = run("read-only write", roWrite);
     CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
     CHECK(HasNote(r, "writes VDP1_EDSR, which is read-only"));
@@ -683,7 +748,9 @@ void TestHardwareMap()
     CHECK(name(0xA5F80000u) == "");             // 0xA: Mednafen's associative purge, not the bus
     CHECK(InHardwareRange(0xA0000000u) && InHardwareRange(0xBFFFFFFFu));
     CHECK(name(0xFFFFFF24u) == "SH2_DVDNT");    // the divider's second copy
-    CHECK(name(0xFFFFFF3Cu) == "");             // ...whose 0x1C slot is no register
+    CHECK(name(0xFFFFFF3Cu) == "SH2_DVDNTL_SHADOW");   // Mednafen's shadow, through the same copy
+    CHECK(name(0xFFFFFE88u) == "SH2_WTCSR");    // the watchdog's second copy
+    CHECK(name(0xFFFFFE8Bu) == "SH2_RSTCSR");
     CHECK(name(0xFFFFFF40u) == "SH2_BARAH");
     CHECK(name(0x201000E3u) == "SMPC_SF");      // SMPC every 128 bytes
     CHECK(name(0x25FE01A4u) == "SCU_IST");      // SCU every 256 bytes
@@ -726,10 +793,13 @@ void TestHardwareMap()
     r = FindHardwareRegister(0x25B00408u);
     CHECK(r && r->split != nullptr);                      // MSLC written, CA read
     r = FindHardwareRegister(0xFFFFFE80u);
-    CHECK(r && r->access == RegisterAccess::ReadOnly);    // WTCSR: written only through the key
+    CHECK(r && r->access == RegisterAccess::KeyedWrite);  // WTCSR: written only through the key
     std::string text;
     bool ignored = false;
-    CHECK(KeyedWrite(0xFFFFFE80u, 2, true, 0x5A12u, text, ignored) && !ignored && text == "keyed watchdog write: SH2_WTCNT = 0x12");
+    CHECK(KeyedWrite(0xFFFFFE80u, 2, true, 0x5A12u, text, ignored) && !ignored && Has(text, "requests SH2_WTCNT = 0x12"));
+    CHECK(KeyedWrite(0xFFFFFE88u, 2, true, 0x5A12u, text, ignored) && !ignored);   // its second copy
+    CHECK(KeyedWrite(0xFFFFFE8Au, 2, true, 0xA500u, text, ignored) && Has(text, "WOVF"));
+    CHECK(DocumentedWideAccess(0x25F800A8u, 4) && DocumentedWideAccess(0x25F800ACu, 4));   // LCTA, BKTA
     CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0x5A40u, text, ignored) && !ignored && Has(text, "RSTE/RSTS = 0x40"));
     CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0xA501u, text, ignored) && ignored);
     CHECK(!KeyedWrite(0xFFFFFE80u, 1, true, 0x5Au, text, ignored));   // a byte write is no keyed write

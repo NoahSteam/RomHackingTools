@@ -336,7 +336,7 @@ private:
     struct LearnedPrototype
     {
         decomp::SnapshotKey key;
-        uint64_t functions = 0;
+        uint64_t functions = 0;                                // LendingId() when learned
         decomp::Prototype proto;
         uint64_t shape = 0;                                    // ShapeOf(proto), never 0
         std::vector<std::pair<uint32_t, uint64_t>> deps;       // callee -> shape lent, or 0
@@ -347,8 +347,13 @@ private:
     uint64_t LentShape(uint32_t callee, const decomp::SnapshotKey& key, uint64_t functions) const;
     bool Lendable(const LearnedPrototype& p, uint32_t entry, uint32_t callee) const
     {
-        return callee != entry && mSnap && p.key == mSnap->key && p.functions == mFunctions;
+        return callee != entry && mSnap && p.key == mSnap->key && p.functions == LendingId();
     }
+    // The engine inputs a signature was recovered under besides the snapshot: the function set and
+    // the volatile memory list. A signature recovered with a mailbox folded away is not the one
+    // recovered with it kept, so a change to either makes every learned one unlendable (and, through
+    // 'deps', every one recovered from them).
+    uint64_t LendingId() const { return mVolatileHash ? (mFunctions ^ (mVolatileHash * 0x9E3779B97F4A7C15ull)) : mFunctions; }
     void Learn(const decomp::DecompileResult& result);
     uint64_t PrototypeHash(uint32_t entry) const;   // over the prototypes lent to 'entry' now
 
@@ -365,6 +370,7 @@ private:
     bool mShownValid = false;
     ViewId mShownSnapId;
     uint64_t mShownNamesGeneration = 0;
+    uint64_t mShownVolatileHash = 0;   // the volatile list the shown answer was asked under
     std::string mShownEntrySource;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;

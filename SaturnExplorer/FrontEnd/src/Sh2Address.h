@@ -24,10 +24,9 @@ enum class Sh2Partition : uint8_t
 {
     Cached,              // 000: bus access through the cache
     CacheThrough,        // 001: the same bus, uncached
-    AssociativePurge,    // 010
+    AssociativePurge,    // 010, and 101 as Mednafen decodes it
     CacheAddressArray,   // 011
-    Reserved,            // 100, 101
-    CacheDataArray,      // 110
+    CacheDataArray,      // 110, and 100 as Mednafen decodes it
     OnChip,              // 111: on-chip peripherals
 };
 

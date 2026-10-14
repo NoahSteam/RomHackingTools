@@ -188,14 +188,14 @@ void DecompilerPanel::Learn(const DecompileResult& r)
     {
         LearnedPrototype p;
         p.key = r.key;
-        p.functions = mFunctions;
+        p.functions = LendingId();
         p.proto = r.prototype;
         p.shape = ShapeOf(r.prototype);
         // What it was lent for each function it calls. The result answers the question being asked
         // now (Accept and the cache both check that), so that is what is lendable now.
         // By the addresses they run at, as lent: a mirror can change a signature.
         for (uint32_t c : r.calledAt)
-            if (c != r.requestedEntry) p.deps.emplace_back(c, LentShape(c, r.key, mFunctions));
+            if (c != r.requestedEntry) p.deps.emplace_back(c, LentShape(c, r.key, LendingId()));
         mPrototypes[r.requestedEntry] = std::move(p);
     }
     else
@@ -263,6 +263,7 @@ bool DecompilerPanel::ShownStale() const
 {
     if (!mShownValid) return false;
     return ShownOutdatedByView() || mPending.active || mShownNamesGeneration != mNamesGeneration ||
+           mShownVolatileHash != mVolatileHash ||   // decompiled under another volatile list
            (mResolved && (!mEntryOk || mShown.requestedEntry != mEntry));
 }
 
@@ -473,6 +474,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     mShownValid = true;
     mShownSnapId = snapId;
     mShownNamesGeneration = namesGeneration;
+    mShownVolatileHash = mVolatileHash;   // both callers install only answers asked under it
     char b[64];
     if (mEntrySource == EntrySource::None)
         mShownEntrySource.clear();

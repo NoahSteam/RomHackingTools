@@ -163,10 +163,11 @@ struct FlowWarning
 // An access to a hardware register that the pseudocode, which shows only the register's name,
 // does not explain. A caution says the output may mislead: a read of a write-only register (it
 // does not return what was written), a write to a read-only one (it does nothing), one access
-// covering two registers the manuals do not pair, a watchdog write with the wrong key. The rest
-// explain: a documented register pair accessed whole, which register a keyed write selects, a
-// register reached through a mirror (shown by address), and what a register whose reads and writes
-// reach different fields returns when the function also writes it. The address is the
+// covering two registers the manuals do not pair, a watchdog write with the wrong key or width.
+// The rest explain: a documented register pair accessed whole, what a keyed write requests, a
+// register reached through a mirror (shown by address), what a read does besides returning a value
+// (a FIFO pop, a latch, flags cleared), and what a register whose reads and writes reach different
+// fields returns when the function also writes it. The address is the
 // instruction's, canonical.
 struct HardwareNote
 {

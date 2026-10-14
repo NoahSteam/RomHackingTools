@@ -37,8 +37,8 @@ void TestPartitions()
     CHECK(ClassifyPartition(0x26004000u) == Sh2Partition::CacheThrough);
     CHECK(ClassifyPartition(0x46004000u) == Sh2Partition::AssociativePurge);
     CHECK(ClassifyPartition(0x66004000u) == Sh2Partition::CacheAddressArray);
-    CHECK(ClassifyPartition(0x86004000u) == Sh2Partition::Reserved);
-    CHECK(ClassifyPartition(0xA6004000u) == Sh2Partition::Reserved);
+    CHECK(ClassifyPartition(0x86004000u) == Sh2Partition::CacheDataArray);     // as Mednafen decodes 100
+    CHECK(ClassifyPartition(0xA6004000u) == Sh2Partition::AssociativePurge);   // ...and 101
     CHECK(ClassifyPartition(0xC6004000u) == Sh2Partition::CacheDataArray);
     CHECK(ClassifyPartition(0xFFFFFE00u) == Sh2Partition::OnChip);
 }
@@ -59,7 +59,8 @@ void TestFolding()
     // Not memory: rejected with the partition named, never read as a RAM mirror.
     struct { uint32_t a; const char* name; } rejected[] = {
         { 0x66004000u, "cache address array" }, { 0x46004000u, "associative purge" },
-        { 0xC6004000u, "cache data array" }, { 0xFFFFFE00u, "on-chip" }, { 0x86004000u, "reserved" },
+        { 0xC6004000u, "cache data array" }, { 0xFFFFFE00u, "on-chip" }, { 0x86004000u, "cache data array" },
+        { 0xA6004000u, "associative purge" },
     };
     for (const auto& r : rejected)
     {

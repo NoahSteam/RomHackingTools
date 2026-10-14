@@ -676,3 +676,66 @@ across action loops, repeated volatile reads, and a mailbox poll. Three small pa
 - A result asked for under an older volatile list is no longer installed for a frame.
 - A list longer than the popup's 2047-character box is refused instead of cut mid-address.
 - `a - b` with spaces around the dash parses as one range.
+
+### Review of `960051e`: hardware-register semantics, round 3
+
+- **P1: a literal marked volatile was still folded.** Literal-pool words were marked read-only,
+  and the engine's read-only fill wins over volatile (`ActionVarnodeProps`). Read-only marking
+  now skips any literal in a user volatile range (every alias) or a hardware range, on both
+  passes and for the literals carried between them. `mov.l @(4,pc),r0` over a marked literal
+  prints `xVar1 = Ram06009748; return xVar1;`.
+- **P1: learned signatures outlived the volatile list.** A learned signature now records the
+  volatile list with the function set (`LendingId`). A change makes every learned signature
+  unlendable, and through `deps`, every one recovered from them. The reviewer's callee, whose
+  argument folds away while the mailbox is ordinary memory, is no longer lent as `(void)` once the
+  mailbox is marked. Recovered again, it takes `param_1`.
+- **P1: user ranges missed aliases and partial overlaps.** `VolatileAliases` expands a range to
+  every address that reaches it: both partitions, bits 28-27, and high work RAM's 1 MiB repeat.
+  It also widens each range to whole longwords. The engine tests volatility at an access's first
+  byte, and SH-2 accesses are aligned, so every access touching the range then starts in it. The
+  cost is the other bytes of those longwords. Mailboxes through `0x26101000`, `0x26801000` and
+  `0x2E001000`, and a word access with only its second byte marked, are kept.
+- **Watchdog wording.**
+  - Keyed writes now state their conditions: WTCNT is "requested" (Mednafen loads it only while
+    TME is set); WTCSR's OVF and RSTCSR's WOVF are cleared only if a read saw them set.
+  - The read bytes are a new kind, `KeyedWrite`. A byte write to one is "takes no 1-byte write: it
+    is written by a keyed word at 0xFFFFFE80", not "read-only".
+  - The second copy at FE88-FE8B resolves, ports included.
+- **Divider shadows.** FF18/FF1C (and FF38/FF3C) are named `SH2_DVDNTH_SHADOW` and
+  `SH2_DVDNTL_SHADOW`, recorded as Mednafen's, not the SH7604's.
+- **LCTA and BKTA** are documented 32-bit registers; a 32-bit access is an explanation now.
+- **Read effects.** `onRead` explains what a read does besides return a value, on every read
+  whether or not the function writes the register:
+  - flags cleared: SCU PPAF;
+  - FIFOs popped: SCSP MIBUF, CD_DATATRNS;
+  - the DSP address advanced: SCU PDD;
+  - a response marked read: CD CR4;
+  - FRT latches: FRCH, FICRH;
+  - "write 0 after reading 1" armed: FTCSR, CHCR0/1, DMAOR, RTCSR.
+- **Shown staleness.** The shown answer records the volatile list it was asked under. A change
+  makes it stale at once, pending request or not.
+- **Partition labels.** `ClassifyPartition` follows Mednafen: 100 is the cache data array and 101
+  the associative purge. "Reserved" is gone. Neither is a bus access, so code and data are still
+  never read there.
+
+Tests:
+- `Sh2DecompilerTests`:
+  - the three mailbox aliases, the one-byte overlap;
+  - the marked literal with its unmarked control;
+  - the watchdog second copy and byte write;
+  - LCTA, a PPAF read;
+  - the shadow and watchdog names;
+  - LCTA/BKTA pairs, keyed writes through FE88/FE8A.
+- `DecompilerPanelTests`: the reviewer's callee and caller, which also checks the shown answer is
+  stale right after the change.
+- `MemorySnapshotTests`: the relabelled partitions.
+
+Mutations, each rebuilt and run, and each failing its tests:
+- lending ignoring the list;
+- staleness ignoring the list;
+- literals always read-only;
+- no longword widening;
+- no bus aliases;
+- no watchdog copy;
+- no read effects.
+

@@ -27,10 +27,13 @@ Sh2Partition ClassifyPartition(uint32_t address)
     {
     case 0: return Sh2Partition::Cached;
     case 1: return Sh2Partition::CacheThrough;
-    case 2: return Sh2Partition::AssociativePurge;
+    // 100 and 101 are not in the SH7604's table. Mednafen, which SE runs, decodes them as the cache
+    // data array and the associative purge (sh7095.inc); SaturnMemory.txt calls 101 cache-through
+    // instead. Either way neither is a bus access the decompiler reads code or data from.
+    case 2:
+    case 5: return Sh2Partition::AssociativePurge;
     case 3: return Sh2Partition::CacheAddressArray;
     case 4:
-    case 5: return Sh2Partition::Reserved;
     case 6: return Sh2Partition::CacheDataArray;
     default: return Sh2Partition::OnChip;
     }
@@ -44,7 +47,6 @@ const char* PartitionName(Sh2Partition partition)
     case Sh2Partition::CacheThrough: return "cache-through bus access";
     case Sh2Partition::AssociativePurge: return "associative purge";
     case Sh2Partition::CacheAddressArray: return "cache address array";
-    case Sh2Partition::Reserved: return "reserved partition";
     case Sh2Partition::CacheDataArray: return "cache data array";
     case Sh2Partition::OnChip: return "on-chip peripherals";
     }

@@ -37,6 +37,7 @@ enum class RegisterAccess : uint8_t
     ReadWrite,
     ReadOnly,    // a write does nothing
     WriteOnly,   // a read does not return what was written
+    KeyedWrite,  // read here; written only by a keyed word at its write port (the watchdog)
 };
 
 struct HardwareRegister
@@ -49,6 +50,7 @@ struct HardwareRegister
     // that clears flags, a port's output and its pins): what each does. Reading it back after a
     // write does not return what was written, though the read means something.
     const char* split;
+    const char* onRead;   // set when a read does more than return a value (a FIFO pop, a latch)
 };
 
 // Every register, sorted by address, none overlapping.
@@ -58,7 +60,7 @@ const HardwareRegister* SaturnHardwareRegisters(size_t& count);
 // cache-through partitions, bits 28-27 (not decoded), and each chip's own mirror (SMPC every 128
 // bytes, SCSP every 4 KiB, VDP2 every 512 bytes, SCU every 256 bytes, the CD block's 64-byte
 // window, the CPU-to-CPU signals across their 8 MiB); on-chip, the SH-2's partial decode of
-// 0xE0000000-0xFFFFFFFF and the divider's second copy at 0xFFFFFF20. False outside them, or where
+// 0xE0000000-0xFFFFFFFF, the divider's second copy at 0xFFFFFF20 and the watchdog's at 0xFFFFFE88. False outside them, or where
 // the bus returns garbage rather than a register (Docs/Saturn/SaturnMemory.txt). The 0xA
 // partition is not one: Mednafen sends it to the associative purge (see HardwareRanges).
 bool HardwareAlias(uint32_t address, uint32_t& canonical);
@@ -86,6 +88,11 @@ struct HardwareRange
     uint32_t last;
 };
 const std::vector<HardwareRange>& HardwareRanges();
+
+// Every range a user's volatile memory [first, last] is reached through: widened to whole
+// longwords (an access touching the range starts in it), then on the bus both partitions, bits
+// 28-27 and high work RAM's 1 MiB repeat.
+std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last);
 bool InHardwareRange(uint32_t address);
 
 }  // namespace decomp
