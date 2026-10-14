@@ -804,6 +804,42 @@ void TestFlowUncertainty()
     Print("thunk", r);
     CHECK(any(r, FlowWarning::TailJump, 0x06050002u, "tail call to 0x00000000 (uncaptured"));
     CHECK(warned(r, "tail call"));
+    // A jmp through a literal to code within the same function: the engine makes it a goto, which
+    // is not a tail call (own review of 0c3d989).
+    std::vector<uint8_t> local;
+    Place(local, 0x06050100u, { 0x2542,      // mov.l r4,@r5  (a side effect: the jump is no thunk)
+                                0xD101,      // mov.l @(4,pc),r1  (the literal at +8)
+                                0x412B,      // jmp @r1
+                                0x0009 });   //   nop
+    dts::Put32(local, 0x00050108u, 0x0605010Cu);
+    Place(local, 0x0605010Cu, { 0x000B, 0x6043 });   // rts ; mov r4,r0
+    r = d.Decompile(MakeSnapshot(local), Request(0x06050100u));
+    Print("jmp within the function", r);
+    CHECK(Has(r.Text(), "return param_1;") && !warned(r, "tail call") && r.InBody(0x0605010Eu));
+    CHECK(r.callees.empty() && r.flowWarnings.empty());   // the first pass took it for a call
+
+    // A switch whose bound is a literal-pool word: recovered, since the second pass marks the first
+    // pass's literals read-only before flow (jump tables are recovered during flow).
+    std::vector<uint8_t> lb;
+    Place(lb, 0x06050200u, { 0x9108,      // mov.w @(lit,pc),r1  (2)
+                             0x3416,      // cmp/hi r1,r4
+                             0x8904,      // bt default
+                             0xC704,      // mova table,r0
+                             0x4408,      // shll2 r4
+                             0x014E,      // mov.l @(r0,r4),r1
+                             0x412B,      // jmp @r1
+                             0x0009,      //   nop
+                             0x000B,      // default: rts
+                             0xE0FF,      //   mov #-1,r0
+                             0x0002,      // lit
+                             0x0009 });
+    dts::Put32(lb, 0x00050218u, 0x06050224u);
+    dts::Put32(lb, 0x0005021Cu, 0x06050228u);
+    dts::Put32(lb, 0x00050220u, 0x0605022Cu);
+    Place(lb, 0x06050224u, { 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0x6053 });
+    r = d.Decompile(MakeSnapshot(lb), Request(0x06050200u));
+    Print("switch, literal bound", r);
+    CHECK(r.flowWarnings.empty() && r.prototype.known && r.prototype.params.size() == 2);
 
     // Two ways out of one function: one into memory that is not captured, one into a bad word in
     // captured memory. Each is reported as what it is, at its own address.

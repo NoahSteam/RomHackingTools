@@ -1191,6 +1191,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (cancel && cancel->load()) throw ghidra::CancelError("cancelled");
     };
 
+    // The literal words an earlier pass found. Jump tables are recovered during flow, before this
+    // pass's own scan can mark its literals read-only, so a switch bound or a jmp target loaded from
+    // a literal pool would not fold; the second pass marks the first pass's literals before flow.
+    std::vector<std::pair<uint32_t, int>> knownLiterals;
+
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
     // literals applied, actions run. 'print' adds the markup output.
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets) {
@@ -1286,11 +1291,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                                   ghidra::Address());
         }
 
+        for (const auto& ro : knownLiterals)
+            arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
+                                              ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
         Enter(DecompilePhase::Flow);
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
 
         const RawScan scan = ScanRawPcode(*fd, *snapshot);
+        knownLiterals = scan.readonly;
         for (const auto& ro : scan.readonly)
             arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
                                               ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
@@ -1379,13 +1388,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             if (scratch) text.erase(0, 21);
             else if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
             while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
-            static const char* const kTableOutcomes[] = { "Sanity check requires truncation of jumptable",
-                                                          "Second-stage recovery error", "Bad switch case",
-                                                          "Calculation of case label failed",
-                                                          "This code block may not be properly labeled as switch case",
-                                                          "Could not find normalized switch variable" };
+            // Destinations dropped (recovery in the scratch copy) mean cases are missing; a label
+            // the switch normalisation could not work out (on the function proper, every destination
+            // recovered) is only said.
+            static const char* const kCasesMissing[] = { "Sanity check requires truncation of jumptable",
+                                                         "Second-stage recovery error" };
             bool outcome = false;
-            for (const char* o : kTableOutcomes) outcome |= text.compare(0, std::strlen(o), o) == 0;
+            for (const char* o : kCasesMissing) outcome |= text.compare(0, std::strlen(o), o) == 0;
             if (scratch && !outcome) continue;
             if (outcome) tableIncomplete = true;
             static const char kRestarts[] = "Exceeded maximum restarts";
@@ -1462,11 +1471,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 settled = fd->getJumpTable(t)->getOpAddress().getOffset() == a;
             for (const FlowWarning& w : r.flowWarnings) settled |= w.address == canonicalOf(a) && w.kind == FlowWarning::Engine;
             if (settled) continue;
+            // Only a jump that is now a call: one the engine turned into a goto within the function
+            // (a table of one destination) or removed as dead is not a tail call.
             std::string where = "an address the code computes";
+            bool call = false;
             for (auto it = fd->beginOpMain(ghidra::Address(ram, a)); it != fd->endOpMain(ghidra::Address(ram, a)); ++it)
             {
                 const ghidra::PcodeOp* o = it->second;
                 if (o->code() != ghidra::CPUI_CALLIND && o->code() != ghidra::CPUI_CALL) continue;
+                call = true;
                 const ghidra::FuncCallSpecs* cs = fd->getCallSpecs(o);
                 uint64_t t = 0;
                 bool known = false;
@@ -1477,6 +1490,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 where = Hex8(static_cast<uint32_t>(t));
                 if (missing(static_cast<uint32_t>(t), why)) where += " (" + why + ": what runs there is not shown)";
             }
+            if (!call) continue;
             r.flowWarnings.push_back(FlowWarning{ FlowWarning::TailJump, canonicalOf(a),
                                                   std::string(jmp ? "jmp" : "braf") + " is taken for a tail call to " + where +
                                                       ", assumed to return to this function's caller" });
@@ -1491,8 +1505,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                                                          "probably not code" });
         // Flow that runs into another function's entry -- a tail branch, a fall-through into the next
         // function, a shared epilogue -- has taken that function's code in as this one's. The engine
-        // follows a branch wherever it goes; it is said here, since we know the entries.
-        for (uint32_t a : all)
+        // follows a branch wherever it goes; it is said here, since we know the entries. A callee
+        // counts only if this pass calls it: one the first pass took for a call (a jump whose target
+        // only this pass could fold) is no entry.
+        std::set<uint32_t> entries;
+        for (uint32_t k : known) entries.insert(k);
+        for (const auto& n : named) entries.insert(n.first);
+        if (targets)
+            for (const auto& t : *targets) entries.insert(t.first);
+        for (uint32_t a : entries)
         {
             const uint32_t c = canonicalOf(a);
             if (c == entry || !r.InBody(c)) continue;
@@ -1534,8 +1555,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::string printed;
     if (request.registerCallees)
     {
-        runPass(CalleeAliases(), false, &callees);
-        printed = runPass(callees, true, nullptr);
+        // The callees reported are the printed pass's own: the first pass can take a jump for a call
+        // that the second, with the literals folded, follows as a goto.
+        CalleeAliases first;
+        runPass(CalleeAliases(), false, &first);
+        printed = runPass(first, true, &callees);
     }
     else
     {

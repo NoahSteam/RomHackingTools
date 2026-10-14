@@ -464,7 +464,27 @@ Tests, each failing on `7eaa935`:
 - `TestFlowUncertaintyShown`: "Entry: guessed" for a scanned entry, none for a typed one.
 
 Not tested in isolation: the restart limit alone (it fires alongside the truncated table above).
-Found while building the 300-case fixture: a switch whose bound is loaded from a literal pool is
-not recovered. The literal is marked read-only only after flow, and jump tables are recovered
-during flow. It is warned about ("Could not recover jumptable", "Treating indirect jump as
-call"), so it is not silent, but it is a recovery gap.
+
+Own review of `0c3d989`:
+- **Case-label warnings withheld working switches.** Only "Sanity check requires truncation" and
+  "Second-stage recovery error" mean destinations were dropped. They come from the scratch copy;
+  "cases may be missing" and the withheld signature are now for those two only. The label warnings
+  ("may not be properly labeled", "Bad switch case", "Calculation of case label failed", "no
+  normalized switch variable") come from the function proper after every destination is
+  recovered. They are shown, not counted as missing cases.
+- **A false tail call.** A jump the engine turned into a goto (a table of one destination,
+  `RuleSwitchSingle`) or removed as dead was reported as a tail call. `TailJump` now requires the
+  jump to be a call in the final p-code.
+- **Literal-pool words that read as branches** no longer raise the early-return doubt.
+- **Literals before flow.** Jump tables are recovered during flow, before a pass can mark its own
+  literals read-only. So a switch bound or `jmp` target loaded from a literal pool did not fold:
+  the switch was "Could not recover jumptable", and a far jump within a function became a call.
+  The second pass now marks the first pass's literals before flow.
+- **Callees come from the printed pass.** The first pass took such a jump for a call. Its target
+  was then registered as a function, giving a false "flow runs into another function's entry" and
+  a false callee.
+
+Tests failing on `0c3d989` (`TestFlowUncertainty`): a `jmp` through a literal within the function
+(now a goto, no tail-call warning, no callee), and a switch with a literal-pool bound (now
+recovered, two-argument signature lent). A function whose whole body is `jmp` to a constant is
+still a thunk to the engine and is reported as a tail call.

@@ -146,9 +146,8 @@ Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to, uint32_t a
     return unknown ? Reach::Unknown : Reach::No;
 }
 
-// Whether the halfword at q is data: a word some PC-relative load before it reads (the constant
-// 11 in a literal pool reads as rts), or an rts whose delay slot could not be one.
-bool DataNotReturn(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
+// Whether the halfword at q is a word some PC-relative load before it reads.
+bool LiteralWord(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
 {
     const uint32_t from = q - floor > kPcRelReach ? q - kPcRelReach : floor;
     for (uint32_t x = from; x < q; x += 2)
@@ -157,6 +156,14 @@ bool DataNotReturn(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
         uint32_t lit = 0, size = 0;
         if (snap.ReadU16(x, op) && PcRelLiteral(x, op, lit, size) && q >= lit && q < lit + size) return true;
     }
+    return false;
+}
+
+// Whether the halfword at q is data: a literal (the constant 11 in a literal pool reads as rts),
+// or an rts whose delay slot could not be one.
+bool DataNotReturn(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
+{
+    if (LiteralWord(snap, q, floor)) return true;
     uint16_t slot = 0;
     if (!snap.ReadU16(q + 2, slot)) return false;   // the region's last word: nothing says otherwise
     const DisassembledInstruction s = Sh2Decode(q + 2, slot);
@@ -374,7 +381,8 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
             if (!snap.ReadU16(q, op)) continue;
             const DisassembledInstruction ins = Sh2Decode(q, op);
             if (!ins.IsValid || !ins.HasBranchTarget || ins.IsCall) continue;
-            if (ins.BranchTarget > p + 2 && ins.BranchTarget <= a)
+            // A literal-pool word that only reads as a branch is not one.
+            if (ins.BranchTarget > p + 2 && ins.BranchTarget <= a && !LiteralWord(snap, q, lo))
                 d = "the branch at " + Hex8(q) + " jumps past the rts at " + Hex8(p) + " to " + Hex8(ins.BranchTarget) +
                     ": the rts may be an early return in a function that starts before it";
         }
