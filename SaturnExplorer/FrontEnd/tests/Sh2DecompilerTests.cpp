@@ -463,7 +463,7 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
         const MemoryAccess& g = got[i];
         const Op& w = want[i];
         ok = g.write == w.write && g.direct == (w.address != 0) && g.address == w.address && g.size == w.size &&
-             g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1;
+             g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath;
     }
     if (!ok)
     {
@@ -612,6 +612,26 @@ void TestHardwareVolatility()
                                               0x71FF,     // add #-1,r1
                                               0x2211,     // mov.w r1,@r2
                                               0x000B, 0x0009 }, 0x14, 0 };
+    // From the game-code run (0607190A): one read of a status register, its value tested on two
+    // paths. One machine read; it must be one read in the output too.
+    const Fixture twoPaths = { 0x06009D40u, { 0xD105,     // mov.l @(20,pc),r1  -> VDP2_TVSTAT
+                                              0x6211,     // mov.w @r1,r2       the one read
+                                              0x6023,     // mov r2,r0
+                                              0xC901,     // and #1,r0
+                                              0x2008,     // tst r0,r0
+                                              0x8903,     // bt L
+                                              0x6023,     // mov r2,r0
+                                              0xC9C0,     // and #0xC0,r0
+                                              0x000B, 0x0009,
+                                              0x000B,     // L: rts
+                                              0xE005 },   //    mov #5,r0
+                               0x18, 0x25F80004u };
+    // From the game-code run (0603FB3E): a word store through a pointer the code also reads bytes
+    // through. The engine split the store to fit the byte type -- two byte writes for one word.
+    const Fixture wordToBytes = { 0x06009D80u, { 0x6040,     // mov.b @r4,r0     (r4: a byte pointer)
+                                                 0xE100,     // mov #0,r1
+                                                 0x2411,     // mov.w r1,@r4     one 16-bit write
+                                                 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };
     // Analysis data reads: a pointer to a string in captured memory, returned.
     const Fixture strPtr = { 0x06009B00u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x06009B40u };
     // Diagnostics by direction: the same registers written instead of read, and read instead of written.
@@ -626,7 +646,7 @@ void TestHardwareVolatility()
                               &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
                               &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox,
                               &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
-                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw })
+                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -955,6 +975,12 @@ void TestHardwareVolatility()
         for (const HardwareNote& n : r.hardwareNotes) CHECK(insns.count(n.address) == 1);
     }
 
+    r = run("word store through a byte pointer", wordToBytes);
+    CHECK(Ledger(r, { Rd(0, 1, false, true), Wr(0, 2) }));
+
+    r = run("one read tested on two paths", twoPaths);
+    CHECK(Ledger(r, { Rd(0x25F80004u, 2) }));
+
     r = run("indexed read-modify-write", indexRmw);
     CHECK(Ledger(r, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
 
@@ -1210,6 +1236,48 @@ void TestVolatileRangesAgainstModel()
     CHECK(wrong == 0);
 }
 
+// The width of the memory operand an SH-2 instruction reads or writes, or 0 if it has none.
+// (Stack pushes and pops included: lds.l/sts.l/ldc.l/stc.l move longwords.)
+int MemoryWidth(uint16_t op)
+{
+    const int n = op >> 12, lo = op & 0xF, mid = (op >> 8) & 0xF;
+    switch (n)
+    {
+    case 0x0:
+        if (lo >= 0x4 && lo <= 0x6) return 1 << (lo - 4);    // mov.x Rm,@(R0,Rn)
+        if (lo >= 0xC && lo <= 0xE) return 1 << (lo - 0xC);  // mov.x @(R0,Rm),Rn
+        if (lo == 0xF) return 4;                              // mac.l
+        return 0;
+    case 0x1: return 4;                                       // mov.l Rm,@(disp,Rn)
+    case 0x2:
+        if (lo <= 0x2) return 1 << lo;                        // mov.x Rm,@Rn
+        if (lo >= 0x4 && lo <= 0x6) return 1 << (lo - 4);    // mov.x Rm,@-Rn
+        return 0;
+    case 0x4:
+        if ((op & 0xFF) == 0x1B) return 1;                    // tas.b
+        if (lo == 0xF) return 2;                              // mac.w
+        if (lo == 0x2 || lo == 0x3 || lo == 0x6 || lo == 0x7) return 4;   // sts.l/stc.l/lds.l/ldc.l
+        return 0;
+    case 0x5: return 4;                                       // mov.l @(disp,Rm),Rn
+    case 0x6:
+        if (lo <= 0x2) return 1 << lo;                        // mov.x @Rm,Rn
+        if (lo >= 0x4 && lo <= 0x6) return 1 << (lo - 4);    // mov.x @Rm+,Rn
+        return 0;
+    case 0x8:
+        if (mid == 0x0 || mid == 0x4) return 1;
+        if (mid == 0x1 || mid == 0x5) return 2;
+        return 0;
+    case 0x9: return 2;                                       // mov.w @(disp,PC),Rn
+    case 0xC:
+        if (mid <= 0x2) return 1 << mid;                      // mov.x R0,@(disp,GBR)
+        if (mid >= 0x4 && mid <= 0x6) return 1 << (mid - 4);  // mov.x @(disp,GBR),R0
+        if (mid >= 0xC) return 1;                             // tst.b/and.b/xor.b/or.b @(R0,GBR)
+        return 0;
+    case 0xD: return 4;                                       // mov.l @(disp,PC),Rn
+    default: return 0;
+    }
+}
+
 // Real game code, when given: SE_GAME_HWRAM names a 1 MiB high work RAM image (big-endian, as the
 // SH-2 sees it). Every function prologue (sts.l pr,@-r15) is decompiled; the summary says how many
 // succeeded, how long they took, and what the hardware handling found. SE_GAME_OUT, if set, is a
@@ -1220,6 +1288,7 @@ void TestGameCode()
     const char* path = std::getenv("SE_GAME_HWRAM");
     if (!path) return;
     const char* outDir = std::getenv("SE_GAME_OUT");
+    const char* only = std::getenv("SE_GAME_ONLY");   // one entry, hex: print its output and ledger
     std::vector<uint8_t> hw(0x100000u);
     FILE* f = std::fopen(path, "rb");
     CHECK(f != nullptr);
@@ -1230,13 +1299,21 @@ void TestGameCode()
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
+    int duplicated = 0, wrongWidth = 0;
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
     {
         if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
         const uint32_t entry = 0x06000000u + k;
+        if (only && entry != static_cast<uint32_t>(std::strtoul(only, nullptr, 16))) continue;
         const DecompileResult r = d.Decompile(snap, Request(entry));
+        if (only) Print("game function", r);
+        if (only && std::getenv("SE_GAME_DISASM"))
+        {
+            const uint32_t from = static_cast<uint32_t>(std::strtoul(std::getenv("SE_GAME_DISASM"), nullptr, 16));
+            for (const std::string& l : d.Disassemble(snap, from, 64)) std::printf("    %s\n", l.c_str());
+        }
         ++n;
         if (r.status == DecompileStatus::Ok) ++ok;
         else if (r.status == DecompileStatus::Failed) ++failed;
@@ -1257,6 +1334,37 @@ void TestGameCode()
             }
         }
         for (const HardwareNote& h : r.hardwareNotes) (h.caution ? cautions : notes) += 1;
+        // Per instruction: an SH-2 instruction reads at most once and writes at most once on a path
+        // (mac.l/mac.w read twice). Copies of an access on one path are an access the analysis
+        // made twice; copies on separate paths (a block copied into each) are not.
+        std::map<uint32_t, std::pair<int, int>> perInsn;
+        for (const MemoryAccess& m : r.accesses)
+            if (m.repeatedOnPath) (m.write ? perInsn[m.insn].second : perInsn[m.insn].first) += 1;
+        // Every access as wide as the instruction's operand (its own, or its delay slot's: the
+        // slot's p-code carries the branch's address).
+        for (const MemoryAccess& m : r.accesses)
+        {
+            const uint32_t off = m.insn - 0x06000000u;
+            if (off + 3 >= hw.size()) continue;
+            const int w0 = MemoryWidth(uint16_t(hw[off] << 8 | hw[off + 1]));
+            const int w1 = MemoryWidth(uint16_t(hw[off + 2] << 8 | hw[off + 3]));
+            const bool fits = w0 ? m.size == w0 : (w1 && m.size == w1);
+            if (!fits && (w0 || w1) && ++wrongWidth <= 10)
+                std::printf("  %s of %u bytes at %08X (operand %d, slot %d) in %08X\n", m.write ? "write" : "read",
+                            unsigned(m.size), m.insn, w0, w1, entry);
+        }
+        for (const auto& pi : perInsn)
+        {
+            const uint32_t off = pi.first - 0x06000000u;
+            const uint16_t op = off + 1 < hw.size() ? uint16_t(hw[off] << 8 | hw[off + 1]) : 0;
+            const bool mac = (op & 0xF00F) == 0x000F || (op & 0xF00F) == 0x400F;
+            if ((pi.second.first > 0 && !mac) || pi.second.second > 0)
+            {
+                if (++duplicated <= 10)
+                    std::printf("  %d reads, %d writes at %08X (op %04X) in %08X\n", pi.second.first, pi.second.second,
+                                pi.first, op, entry);
+            }
+        }
         if (outDir)
         {
             char name[512];
@@ -1274,7 +1382,10 @@ void TestGameCode()
                 failed, other, total, worst, worstAt);
     std::printf("  accesses: %d functions with any, %d direct (volatile), %d through pointers, %d not printed "
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
+    std::printf("  %d instructions with more accesses than they make, %d accesses of another width\n", duplicated, wrongWidth);
+    CHECK(wrongWidth == 0);
     CHECK(twice == 0);
+    CHECK(duplicated == 0);
     CHECK(failed == 0);
 }
 

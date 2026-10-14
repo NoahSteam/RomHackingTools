@@ -195,6 +195,10 @@ struct MemoryAccess
     int printed = 0;
     int printedLines = 0;       // output lines holding a token printed from it (a statement can wrap)
     int printedTokens = 0;      // ...and how many such tokens
+    // Another access of the same kind from the same instruction can run after this one on one path
+    // (the engine copies a block into each path that reaches it; copies on separate paths are one
+    // access each, copies on one path are an access made twice).
+    bool repeatedOnPath = false;
 };
 
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table

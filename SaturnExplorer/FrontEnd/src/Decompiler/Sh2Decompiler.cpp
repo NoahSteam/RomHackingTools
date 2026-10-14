@@ -1286,6 +1286,7 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         return false;
     };
     std::vector<MemoryAccess> out;
+    std::vector<const ghidra::PcodeOp*> outOps;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
         const ghidra::PcodeOp* o = *it;
@@ -1324,7 +1325,32 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         // tokens alone cannot say: p[2] prints the load through the pointer arithmetic's tokens.)
         a.printed = a.write || !o->getOut() ? 1 : emissions(o->getOut());
         out.push_back(a);
+        outOps.push_back(o);
     }
+    // Copies of one instruction's access: a copy that another can reach -- through the blocks, or
+    // later in the same block -- would run twice on that path.
+    auto reaches = [](const ghidra::PcodeOp* from, const ghidra::PcodeOp* to) {
+        const ghidra::FlowBlock* a = from->getParent();
+        const ghidra::FlowBlock* b = to->getParent();
+        if (a == b && from->getSeqNum().getOrder() < to->getSeqNum().getOrder()) return true;
+        std::set<const ghidra::FlowBlock*> seen;
+        std::vector<const ghidra::FlowBlock*> todo;
+        for (int i = 0; i < a->sizeOut(); ++i) todo.push_back(a->getOut(i));
+        while (!todo.empty())
+        {
+            const ghidra::FlowBlock* x = todo.back();
+            todo.pop_back();
+            if (x == b) return true;
+            if (!seen.insert(x).second) continue;
+            for (int i = 0; i < x->sizeOut(); ++i) todo.push_back(x->getOut(i));
+        }
+        return false;
+    };
+    for (size_t i = 0; i < out.size(); ++i)
+        for (size_t j = 0; j < out.size(); ++j)
+            if (i != j && out[i].insn == out[j].insn && out[i].write == out[j].write && outOps[i]->getParent() &&
+                outOps[j]->getParent() && reaches(outOps[i], outOps[j]))
+                out[i].repeatedOnPath = out[j].repeatedOnPath = true;
     return out;
 }
 
@@ -1685,6 +1711,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // honoured in that phase, never carried into the next one's work.
         checkCancel();
         Enter(DecompilePhase::Actions);
+        // Every memory access as the code makes it: as many, as wide. These cleanup rules rewrite
+        // accesses to fit the data types -- one load or store split into several (a word store to
+        // a byte pointer printed as two byte stores), two merged into one, a run of stores
+        // collapsed into a string, a load widened to its pointer's type. Harmless for ordinary
+        // memory; for a register, a different access (VDP2 refuses byte writes, a FIFO pops per
+        // read). The access ledger tests pin this.
+        for (const char* rule : { "splitload", "splitstore", "doubleload", "doublestore", "stringstore", "expandload" })
+            if (!arch->allacts.getCurrent()->disableRule(rule))
+                r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
 

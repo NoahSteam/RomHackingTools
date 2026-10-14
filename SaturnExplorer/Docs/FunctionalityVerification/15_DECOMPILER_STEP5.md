@@ -799,3 +799,53 @@ Mutations, each failing its tests:
 Tests: the reviewer's fixture (exactly one read, the sample returned), the whole-period range now
 held to one read as well, inverted ranges in the map and end to end. Mutation: 0010's flag off
 fails all three read-count checks.
+
+### Consolidated hardware-semantics verification (after `d0ce10a`)
+
+One pass over the whole pipeline, rather than the changed lines, with two new instruments:
+- **The access ledger** (`DecompileResult::accesses`) lists every memory access the final p-code
+  keeps: kind, address or pointer, width, instruction, whether it is in a loop, whether it is the
+  returned value, and how often the printer emits it. The emission count is structural: an
+  explicit value prints once, and an implied one once per use. Tokens alone cannot say, since a
+  statement can wrap and `p[2]` prints a load through another op's tokens.
+- **A reference model** for the volatile-range decode.
+
+The pass found two more defects, both fixed here.
+
+| Area | Coverage | Result |
+|---|---|---|
+| Access preservation | Every hardware fixture has a ledger written from its SH-2 instructions: reads, unused reads, repeated reads, overwritten writes, polls, read-modify-write (direct and through a pointer), reused results, keyed writes. Count, width, order, loop and returned value are checked, and each must print exactly once. | Pass. Turning patch 0010 off fails 2 ledgers, 0009 off fails 3, and symbols without the volatile flag fail 17. |
+| Pointer resolution | Direct addresses, literals, late-folding arithmetic, indexed pointers, argument pointers (two reads, unused read, write then read, read-modify-write), pointers loaded from volatile memory, pointers that never resolve. | Pass. |
+| Range expansion | `TestVolatileRangesAgainstModel`: 192,000 seeded addresses, biased to every region, partition and period boundary and to aliases, over small, medium, multi-period and inverted ranges, against an independent model (an address is covered when some byte of the range reaches the same physical longword). | 0 disagreements; the previous `VolatileAliases` gives 18,218. |
+| Analysis data reads | Literal folding and jump tables refuse volatile bytes (earlier rounds). A string-pointer guard was added. | String and pointer inference are not reachable in SE's setup (no `char *` types), so the guard has no positive control. Unverified. |
+| Register-map audit | `Docs/Decompiler/HARDWARE_REGISTER_AUDIT.md`, `tools/audit_hardware_map.py`: all 337 entries against Mednafen's handlers at their width. Mirrors, keyed writes, split fields and read effects by hand. | 22 differences, all recorded: SCU_AIACK (Mednafen reads 0), and the SCI and UBC, which Mednafen does not emulate. The script reports two planted errors. |
+| Diagnostics | Reads and writes tested separately: no read effect claimed for a write, no write caution for a read, a split register written alone says nothing. Each note sits on its access's instruction. | Pass. |
+| State and caching | Volatile list changed while a request is pending, hidden-panel staleness, a cache hit on switching back, signatures not lent across lists. | Pass; the panel suite passed 5 runs in a row. Transitive invalidation and reconnects rely on the existing mechanism and tests; nothing volatile-specific was added for them. |
+| Engine stability | ASan + UBSan builds of `Sh2DecompilerTests`, `DecompilerPanelTests`, `DecompilerRunnerTests`, `Sh2DecompilerEngineTests` and `Sh2DecompilerFixtureTests`, the game code included. | No ASan error or leak. UBSan reports 2 signed shifts in upstream SLEIGH (`address.hh:605`, `slghpatexpress.cc:979`), which predate this work and are not blocking. MSVC and macOS were not run. |
+| Representative code | `TestGameCode` (opt-in, `SE_GAME_HWRAM`): all 1,557 prologues in Sakura Taisen 2's high work RAM, from two save states. Every access must print once, no instruction's access may repeat on one path, and every access must be as wide as the instruction's operand. Compared with `c4927c1` (before this work) on the same code. | 1,557/1,557 decompile, 18,856 accesses, 0 violations. Time is 18.4 s before and 19.8-20.8 s after (about +8-13%); the worst function is 3.2-3.6 s either way. 292 outputs differ, and every difference was examined: |
+
+The 292 differing outputs:
+- 236 reads now read once into a variable.
+- 27 registers are now named.
+- 11 raw hardware addresses are now named.
+- The other 30 include a `VDP2_BGON`/`VDP2_WCTLA` pair now in machine order (the old output had
+  them swapped).
+- In two functions, the old output printed a register read more often than the code reads it.
+
+Defects found and fixed:
+- **A read inside an index was printed twice.** In `p[*p].x -= 1` (game code 0603FB3E), the
+  byte read `*p` appeared at both the load and the store. `processMultiplier` does not look into
+  a PTRADD's index, so patch 0010 now searches the whole implied tree (`containsLoad`). Fixture:
+  "indexed read-modify-write".
+- **Cleanup rules changed accesses.** A word store through a byte pointer became two byte
+  stores (`param_1[0] = 0; param_1[1] = 0;`); in game code a longword store became four byte
+  stores. `RuleSplitLoad`/`RuleSplitStore` did this. `RuleDoubleLoad`/`RuleDoubleStore` merge two
+  accesses into one, `RuleStringStore` collapses a run of stores, and `RuleExpandLoad` widens a
+  load. All six are disabled on the engine's action (`disableRule`, no patch). If one is missing
+  after an engine update, the result's warnings say so. Fixture: "word store through a byte
+  pointer".
+
+Not covered: whether every memory instruction in real code has an access in the output. Reads of
+ordinary memory are dropped by design when unused, so that needs per-instruction pointer
+knowledge; the fixtures cover it instead.
+
