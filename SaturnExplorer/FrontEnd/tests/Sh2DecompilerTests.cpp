@@ -787,6 +787,39 @@ void TestPrototypeEligibility()
                             0x482A,                     // lds r8,pr
                             0x000B,                     // rts
                             0xE007 });                  //   mov #7,r0
+    // Review of b9faafe: (d) a wrapper forwarding r4 to zeroArg stores through r4 too, so a caller
+    // handing it the stack loses its saved PR; (e) PR saved at entry r15 + 0 -- the caller's frame,
+    // which an entry-register pointer may reach -- is lost to zeroArg called through r4.
+    const uint32_t forwards = 0x06011700u, passesSpOn = 0x06011800u, passesConstOn = 0x06011900u,
+                   savedAtEntrySp = 0x06011A00u;
+    Place(hw, forwards, { 0x4F22,                       // sts.l pr,@-r15
+                          Bsr(forwards + 2, zeroArg),   // bsr zeroArg
+                          0x0009,                       //   nop
+                          0x4F26,                       // lds.l @r15+,pr
+                          0x000B,                       // rts
+                          0x0009 });                    //   nop
+    Place(hw, passesSpOn, { 0x4F22,                         // sts.l pr,@-r15
+                            0x64F3,                         // mov r15,r4
+                            Bsr(passesSpOn + 4, forwards),  // bsr forwards
+                            0x0009,                         //   nop
+                            0x4F26,                         // lds.l @r15+,pr
+                            0x000B,                         // rts
+                            0xE007 });                      //   mov #7,r0
+    Place(hw, passesConstOn, { 0x4F22,                            // sts.l pr,@-r15
+                               0xE410,                            // mov #0x10,r4
+                               Bsr(passesConstOn + 4, forwards),  // bsr forwards
+                               0x0009,                            //   nop
+                               0x4F26,                            // lds.l @r15+,pr
+                               0x000B,                            // rts
+                               0xE007 });                         //   mov #7,r0
+    Place(hw, savedAtEntrySp, { 0x002A,                              // sts pr,r0
+                                0x2F02,                              // mov.l r0,@r15
+                                Bsr(savedAtEntrySp + 4, zeroArg),    // bsr zeroArg (r4 as given)
+                                0x0009,                              //   nop
+                                0x60F2,                              // mov.l @r15,r0
+                                0x402A,                              // lds r0,pr
+                                0x000B,                              // rts
+                                0xE007 });                           //   mov #7,r0
     auto snap = MakeSnapshot(hw);
 
     auto run = [&](uint32_t entry, std::initializer_list<std::pair<uint32_t, Prototype>> lent, const char* label) {
@@ -863,6 +896,15 @@ void TestPrototypeEligibility()
     CHECK(lf.prototype.effects.preserved & (1u << 8));
     CHECK(!run(prInR8, { { clobbersR8, c8.prototype } }, "PR in r8 across a clobber").prototype.known);
     CHECK(run(prInR8Kept, { { leaf, lf.prototype } }, "PR in r8 across a leaf").prototype.known);
+
+    // (d) Callee writes are part of the caller's own summary.
+    const DecompileResult fw = run(forwards, { { zeroArg, za.prototype } }, "forwards r4 to zeroArg");
+    CHECK(fw.prototype.known && (fw.prototype.effects.storesThrough & (1u << 4)));
+    CHECK(!run(passesSpOn, { { forwards, fw.prototype } }, "passes the stack on through a wrapper").prototype.known);
+    CHECK(run(passesConstOn, { { forwards, fw.prototype } }, "passes a constant through a wrapper").prototype.known);
+    // (e) A callee's write through an entry register may reach the caller's frame, as a direct
+    // store through it may.
+    CHECK(!run(savedAtEntrySp, { { zeroArg, za.prototype } }, "PR saved at entry r15").prototype.known);
 }
 
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --

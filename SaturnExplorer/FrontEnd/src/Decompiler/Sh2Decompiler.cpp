@@ -433,13 +433,16 @@ private:
             if (r != kR15 && (Get(s, mReg[r]).Origins() & origin::kStack)) s.escaped = true;
         for (const auto& slot : s.slots)
             if (slot.second.Origins() & origin::kStack) s.escaped = true;
+        // The callee's writes are this function's too: through what it was handed (mapped onto ours),
+        // and into the frames above its stack pointer -- ours from the call's r15 up, and our caller's.
         if (e.storesThrough & origin::kFrame)
         {
             s.escaped = true;
+            mStoresThrough |= origin::kFrame;
             const Value sp = Get(s, mReg[kR15]);
             ForgetSlots(s, sp.kind == Value::Sp ? sp.v : INT64_MIN);
         }
-        if (MayBeStack(s, Value::From(Map(s, e.storesThrough & ~origin::kFrame)))) ForgetSlots(s);
+        if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(Map(s, e.storesThrough & ~origin::kFrame)));
         const Value out = Value::From(Map(s, e.outOrigins));
         for (int r = 0; r < kTracked; ++r)
             if (!(e.preserved & (1u << r))) Set(s, mReg[r], out);
@@ -458,13 +461,20 @@ private:
             else if (value.Origins() & origin::kStack) s.escaped = true;
             return;
         }
-        mStoresThrough |= addr.Origins() & ~origin::kStack;
-        if (addr.Origins() & origin::kStack) mStoresThrough |= origin::kFrame;   // may reach the caller's frame
         if (value.Origins() & origin::kStack)
         {
             s.escaped = true;
             mStoresThrough |= origin::kFrame;   // a stack address let out: the caller's, possibly
         }
+        StoreThrough(s, addr);
+    }
+
+    // A store through an address not known exactly, made here or by a callee: recorded in this
+    // function's summary, and forgetting the slots it may hit.
+    void StoreThrough(State& s, const Value& addr)
+    {
+        mStoresThrough |= addr.Origins() & ~origin::kStack;
+        if (addr.Origins() & origin::kStack) mStoresThrough |= origin::kFrame;   // may reach the caller's frame
         if (MayBeStack(s, addr)) ForgetSlots(s);
         else ForgetSlots(s, 0);   // through an entry value: the caller's frame, at most
     }

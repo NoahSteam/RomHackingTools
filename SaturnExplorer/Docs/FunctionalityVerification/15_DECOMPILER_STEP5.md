@@ -309,3 +309,12 @@ signature carries `CallEffects` that a caller applies at the call:
    return. After a call, only those keep their value.
 
 `TestPrototypeEligibility` covers each gap and its control; the three gap checks fail on `0be0808`.
+
+The re-review at `b9faafe` found that a callee's writes were applied to the caller's state but never
+recorded in the caller's own summary. They also skipped the caller-frame rule that a direct store
+follows. A callee's mapped writes now go through the same `StoreThrough` as a direct store: they are
+added to `storesThrough` and forget slots the same way, including slots at offsets ≥ 0 for an
+entry-register pointer. A callee's `kFrame` is recorded too. (`TestPrototypeEligibility`, checks
+(d) and (e): a wrapper forwarding r4 to `*param_1 = 0` exports the r4 bit, and its caller that
+passes the stack is withheld while one that passes a constant is still lent. PR saved at entry
+r15 + 0 is withheld across that leaf called through r4.)
