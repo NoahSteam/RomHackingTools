@@ -14,10 +14,15 @@
 // The nearest known entry at or below the address wins, the more trusted source naming it when
 // several know the same entry. A known entry is a function start, so a nearer one -- of any
 // source -- marks a later function and is never overridden by an older entry further back. An
-// rts between the nearest known entry and the address normally means the address is in a later,
-// unknown function, and the rts scan answers instead -- unless that nearest entry is user-set:
-// user corrections exist precisely for the functions the scan gets wrong (an early return in the
-// middle of a function looks just like an end).
+// rts between the nearest known entry and the address means either the address is in a later,
+// unknown function, or the rts is an early return; flow from the known entry decides (the scan
+// answers only when that flow provably never reaches the address). A user-set entry is never
+// overridden: user corrections exist precisely for the functions the heuristics get wrong.
+//
+// The rts scan passes over words that only read as rts (a literal), the previous function's
+// literal pool and mova-addressed jump table, and -- when the code after the rts never reaches the
+// address -- a function that ends in a tail jump rather than rts. Whatever it cannot settle is
+// said in EntryGuess::doubt.
 //
 // Pure functions over a MemorySnapshot: no engine, no ImGui, testable with byte vectors.
 #pragma once
@@ -46,6 +51,7 @@ struct EntryGuess
     EntrySource source = EntrySource::None;
     int confidence = 0;            // 0..100, for display
     std::string why;               // when !ok
+    std::string doubt;             // when ok: why the entry may be wrong, or empty
 };
 
 // Known entries, all canonical or not (they are canonicalised here).
@@ -64,8 +70,10 @@ const uint32_t kMaxFunctionSpan = 0x10000;
 EntryGuess FindFunctionContaining(const MemorySnapshot& snapshot, uint32_t address, const FinderHints& hints);
 
 // The rts-scan rung alone. False, with 'why', when no boundary is found within kMaxFunctionSpan
-// or what follows it does not decode as code.
-bool RtsScanEntry(const MemorySnapshot& snapshot, uint32_t address, uint32_t& entry, std::string* why = nullptr);
+// or what follows it does not decode as code. 'doubt', when not empty, says why the entry found
+// may still be wrong (a jump table of unknown length skipped, code that never reaches the address).
+bool RtsScanEntry(const MemorySnapshot& snapshot, uint32_t address, uint32_t& entry, std::string* why = nullptr,
+                  std::string* doubt = nullptr);
 
 // The function a call instruction at 'site' calls, when the code says so: bsr encodes it, and a
 // jsr @rN whose rN was loaded by mov.l @(disp,PC),rN in the instructions just before reads it

@@ -475,9 +475,15 @@ void TestManyUncapturedBranches()
     Print("five uncaptured branches", r);
     CHECK(r.status == DecompileStatus::Ok);
     CHECK(r.truncated);
-    CHECK(r.truncatedAt == 0x00300000u || (r.truncatedAt >= 0x00300000u && r.truncatedAt <= 0x00300010u));
+    // Every cut is reported, the lowest first, whatever order flow found them in.
+    CHECK(r.truncatedAt == 0x00300000u);
+    CHECK(r.truncatedCount == 5);
+    int cuts = 0;
+    for (const FlowWarning& w : r.flowWarnings) cuts += w.kind == FlowWarning::Cut;
+    CHECK(cuts == 5);
     CHECK(!r.lines.empty());
 }
+
 
 // Callees: a direct bsr is harvested (its target lives in the call's spec, not the CALL's
 // address input), a callee already known is still listed, and a call through a mirror of the
@@ -654,6 +660,123 @@ void Place(std::vector<uint8_t>& hw, uint32_t at, std::initializer_list<uint16_t
 {
     size_t off = at - 0x06000000u;
     for (uint16_t w : words) { dts::Put16(hw, off, w); off += 2; }
+}
+
+// Control-flow uncertainty is reported, never left to look like a complete function: bad data in
+// captured memory, an indirect jump the engine cannot resolve, flow into another function's entry
+// (a tail branch, a fall-through), each cut and each bad word attributed to its own address. The
+// body is what flow reached, not one range from the entry.
+void TestFlowUncertainty()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    auto any = [](const DecompileResult& r, FlowWarning::Kind kind, uint32_t at, const char* text) {
+        for (const FlowWarning& w : r.flowWarnings)
+            if (w.kind == kind && w.address == at && Has(w.text, text)) return true;
+        return false;
+    };
+    auto warned = [](const DecompileResult& r, const char* text) {
+        for (const std::string& w : r.warnings)
+            if (Has(w, text)) return true;
+        return false;
+    };
+    // Flow into a word in captured memory that does not decode (embedded data).
+    const uint32_t bad = 0x06020000u;
+    Place(hw, bad, { 0x4415,     // cmp/pl r4
+                     0x8902,     // bt bad+0x0A
+                     0xE000,     // mov #0,r0
+                     0x000B,     // rts
+                     0x0009,     //   nop
+                     0xFFFF });  // not an instruction
+    // jmp @r4: no table, so the engine treats it as a call and the function as ending there.
+    const uint32_t jump = 0x06020080u;
+    Place(hw, jump, { 0x442B, 0x0009 });
+    // A tail branch into a named function, and a fall-through into a known entry.
+    const uint32_t tail = 0x06020100u, helper = 0x06020200u, falls = 0x06020300u, next = 0x06020302u;
+    Place(hw, tail, { 0xE401,     // mov #1,r4
+                      0xA07D,     // bra helper
+                      0x0009 });  //   nop
+    Place(hw, helper, { 0x000B, 0x6043 });               // rts ; mov r4,r0
+    Place(hw, falls, { 0xE402, 0x000B, 0x6043 });         // mov #2,r4 ; next: rts ; mov r4,r0
+    // A shared epilogue below the entry.
+    const uint32_t epilogue = 0x06020400u, shared = 0x06020410u;
+    Place(hw, epilogue, { 0x4F26, 0x000B, 0x0009 });     // lds.l @r15+,pr ; rts ; nop
+    Place(hw, shared, { 0x4F22,                          // sts.l pr,@-r15
+                        0xAFF5,                          // bra epilogue
+                        0x0009 });                       //   nop
+    // jmp @r1 with r1 = PR: a return, as rts is.
+    const uint32_t viaPr = 0x06020500u;
+    Place(hw, viaPr, { 0x012A,     // sts pr,r1
+                       0x412B,     // jmp @r1
+                       0x6043 });  //   mov r4,r0
+    auto snap = MakeSnapshot(hw);
+
+    DecompileResult r = d.Decompile(snap, Request(bad));
+    Print("bad data", r);
+    CHECK(r.status == DecompileStatus::Ok && !r.truncated);
+    CHECK(r.badDataAt == std::vector<uint32_t>{ bad + 0x0A });
+    CHECK(any(r, FlowWarning::BadData, bad + 0x0A, "do not decode"));
+    CHECK(warned(r, "do not decode"));
+    CHECK(!r.prototype.known);
+
+    r = d.Decompile(snap, Request(jump));
+    Print("unresolved jump", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(any(r, FlowWarning::Engine, jump, "indirect jump"));
+    CHECK(warned(r, "indirect jump"));
+
+    DecompileRequest q = Request(tail);
+    q.names.emplace_back(helper, "helper");
+    r = d.Decompile(snap, q);
+    Print("tail branch", r);
+    CHECK(any(r, FlowWarning::IntoFunction, helper, "helper"));
+    CHECK(warned(r, "another function's entry"));
+    q = Request(falls);
+    q.knownFunctions.push_back(next);
+    r = d.Decompile(snap, q);
+    Print("fall-through", r);
+    CHECK(any(r, FlowWarning::IntoFunction, next, "another function's entry"));
+    r = d.Decompile(snap, Request(helper));   // its own entry is not "another"
+    CHECK(r.flowWarnings.empty() && r.warnings.empty());
+
+    r = d.Decompile(snap, Request(shared));
+    Print("shared epilogue", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    using Ranges = std::vector<std::pair<uint32_t, uint32_t>>;
+    CHECK(r.body == (Ranges{ { epilogue, epilogue + 6 }, { shared, shared + 6 } }));
+    CHECK(r.InBody(epilogue + 2) && r.InBody(shared + 4));
+    CHECK(!r.InBody(epilogue + 6) && !r.InBody(shared - 2) && !r.InBody(shared + 6));
+    r = d.Decompile(snap, Request(0x26020410u));   // run through a mirror: still canonical
+    CHECK(r.body == (Ranges{ { epilogue, epilogue + 6 }, { shared, shared + 6 } }));
+
+    r = d.Decompile(snap, Request(viaPr));
+    Print("jmp through PR", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+
+    // Two ways out of one function: one into memory that is not captured, one into a bad word in
+    // captured memory. Each is reported as what it is, at its own address.
+    std::vector<uint8_t> none;
+    auto lwSnap = MakeSnapshot(none);
+    auto* lw = const_cast<MemoryRegion*>(lwSnap->RegionAt(MemorySnapshot::kLwramBase));
+    const uint32_t f = 0x002FFFE8u;
+    size_t off = f - lw->base;
+    for (uint16_t w : { 0x4415,     // cmp/pl r4
+                        0x890B,     // bt 0x00300004, past LWRAM's end
+                        0x4411,     // cmp/pz r4
+                        0x8903,     // bt 0x002FFFF8
+                        0x000B,     // rts
+                        0x0009,     //   nop
+                        0x0009,
+                        0x0009,
+                        0xFFFF })   // 0x002FFFF8: not an instruction
+    { lw->bytes[off] = uint8_t(w >> 8); lw->bytes[off + 1] = uint8_t(w); off += 2; }
+    r = d.Decompile(lwSnap, Request(f));
+    Print("cut and bad data", r);
+    CHECK(r.truncated && r.truncatedAt == 0x00300004u && r.truncatedCount == 1);
+    CHECK(r.badDataAt == std::vector<uint32_t>{ 0x002FFFF8u });
+    CHECK(any(r, FlowWarning::Cut, 0x00300004u, "cut off"));
+    CHECK(any(r, FlowWarning::BadData, 0x002FFFF8u, "do not decode"));
 }
 
 void TestPrototypeEligibility()
@@ -1130,7 +1253,7 @@ void TestFetchAndDataRefusals()
     }
     std::printf("  instruction fetch from the BIOS: %s\n", fetch ? "BadDataError" : "WRONG");
     CHECK(fetch);
-    CHECK(arch.FetchImage().HadUnavailable() && arch.FetchImage().UnavailableAddress() == 0x00000600u);
+    CHECK(arch.FetchImage().HadUnavailable() && arch.FetchImage().Refused().begin()->first == 0x00000600u);
 }
 
 
@@ -1361,6 +1484,7 @@ int main(int argc, char** argv)
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
+        RUN(TestFlowUncertainty());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
         RUN(TestCalleePrototypes());

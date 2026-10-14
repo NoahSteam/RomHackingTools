@@ -47,7 +47,13 @@ The output is always for a specific snapshot. If what you are looking at changes
 |---|---|---|
 | **stale: frame N** | The emulator has moved on since this was decompiled. | **Refresh**, or turn on **Auto-refresh**. Auto-refresh only works with Follow PC on, refreshes at most every 30 frames, and is off by default. |
 | **PC-relative load in a delay slot at 0x… : not trustworthy** (amber, greyed) | A `mov.l @(disp,PC)` or `mova` sits in the delay slot of a branch whose slot PC the engine cannot model. `bra` and `bsr` are handled; `bt/s`, `bf/s`, `jmp`, `jsr`, `rts` and `braf` are not. | Read the assembly for that slot. The rest of the output is shown for orientation only. |
-| **Flows into … ; the function is cut off there** | The function falls through into the next one. | Usually the finder's guess; **Set Function Start Here** on the real entry. |
+| **Flows into … at 0x… ; the function is cut off there** (amber; "and at N more places" when there are several) | Flow reached memory that is not captured: the BIOS with no image, or an unmapped area. That path stops there. | Give the panel a BIOS image. If the code should not go there, the entry is probably wrong: **Set Function Start Here**. |
+| **Flow runs into bytes that do not decode at 0x…** (amber) | Flow reached data in captured memory: a literal pool, a jump table, or code read from the wrong place. That path stops there. Four or more such places are flagged as "the entry is probably not code". | Check the entry in SH-2 Assembly; **Set Function Start Here** if it is wrong. |
+| **0x…: Treating indirect jump as call** (or **as return**, **Could not recover jumptable**) (amber) | The engine could not resolve a `braf`/`jmp @rN` switch. Its cases are missing from the output, which shows one indirect call instead. | Read the cases in SH-2 Assembly. |
+| **0x…: flow runs into NAME at 0x…, another function's entry** (amber) | A tail branch, a fall-through or shared code reaches a known function's entry. That function's code is shown as part of this one. | Expected for a tail call. Otherwise check both entries. |
+| **0x… is not reached from this entry** (amber) | The function found for an address (the PC, or the one you asked about) never gets there. The finder picked the wrong entry. | **Set Function Start Here** on the real entry. |
+| **Entry: …** (amber) | The finder is unsure of the entry, and says why: an `rts` that may end the function, a jump table of unknown length, or code that never reaches the address. The confidence shown beside the source drops by 20. | Check the entry; correct it if needed. |
+| **N more flow warnings** | More than four of the amber lines above. | Hover for the rest. |
 | **too large to decompile within 10 s** | The time budget ran out. | **Refresh** retries once on demand. It is not retried automatically. |
 | **Decompiler disabled for this session** | A cancelled run did not stop in time, or the engine failed badly. | Restart Saturn Explorer. The rest of the app is unaffected. |
 | **Decompiler unavailable: <path>** | The language files could not be written to the config directory. | Fix permissions on that directory and restart. |
@@ -55,7 +61,7 @@ The output is always for a specific snapshot. If what you are looking at changes
 ## Limits
 
 - The output is pseudocode for reading, not source that compiles.
-- Function boundaries are found heuristically: backwards to the previous `rts` plus slot, or from a known entry. Expect to correct some with **Set Function Start Here**.
+- Function boundaries are found heuristically, from a known entry or backwards to the previous `rts` plus slot. The scan skips literal pools and `mova` jump tables, and steps past a function that ends in a tail jump. A known entry keeps an address after an `rts` when flow from the entry reaches it (an early return). What the finder cannot settle is shown as an amber line. Expect to correct some entries with **Set Function Start Here**.
 - Indirect calls stay indirect unless you are halted on them (see above).
 - Only one level of pointer type is recovered for signatures. Structures are not inferred.
 

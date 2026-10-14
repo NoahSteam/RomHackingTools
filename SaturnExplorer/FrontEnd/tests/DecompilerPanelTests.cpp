@@ -677,9 +677,15 @@ void TestRegisterHintAtHalt()
     }
     f.regs[0].pc = dts::kFixture1Jsr;
 
-    // The CPU steps on: no longer stopped on the call.
+    // The CPU steps on: no longer stopped on the call. (The panel is let see the new frame first:
+    // until it has, the old output is shown, not pending, and WaitShown would return at once.)
+    auto settled = [&] {
+        f.Idle();
+        return f.PumpUntil([&] { return !f.panel.ShownStale() && !f.panel.Pending(); });
+    };
     f.regs[0].pc = dts::kFixture1AddOne;
     ++f.frame;
+    CHECK(settled());
     CHECK(f.WaitShown("(*(code *)"));
     f.Idle(2);
     CHECK(f.panel.HintText().empty());
@@ -688,6 +694,7 @@ void TestRegisterHintAtHalt()
     // the output goes stale.
     f.regs[0].pc = dts::kFixture1Jsr;
     ++f.frame;
+    CHECK(settled());
     CHECK(f.WaitShown("(*(code *)"));
     f.Idle(2);
     CHECK(!f.panel.HintText().empty());
@@ -1120,6 +1127,84 @@ void TestFunctionStartKeepsMirror()
     CHECK(f.bounds.Entries().count(at) == 1);
     f.Idle();
     CHECK(f.panel.WantedEntry() == (at | 0x20000000u));
+}
+
+// Review of the control-flow criterion: uncertainty is shown, never left to look like a complete
+// function. An entry whose flow never reaches the address it was found for (the finder kept a
+// symbol whose switch it cannot follow), and the engine's unresolved jump, are warned about. A
+// shared epilogue below the entry is part of the body: its notes are listed and a PC in it has not
+// left the function; a PC in the gap between has.
+void TestFlowUncertaintyShown()
+{
+    const uint32_t sw = 0x06009800u, epi = 0x06009900u, shared = 0x06009910u;
+    auto place = [&](Fixture& f) {
+        f.PutWord(sw - 4, 0x000B);   // rts: the end of whatever precedes
+        f.PutWord(sw - 2, 0x0009);
+        const uint16_t swWords[] = { 0x452B, 0x0009, 0x000B, 0x0009, 0x7001, 0x7001, 0x7001, 0x7001, 0x000B, 0x0009 };
+        for (size_t i = 0; i < sizeof swWords / sizeof swWords[0]; ++i) f.PutWord(sw + 2 * uint32_t(i), swWords[i]);
+        const uint16_t epiWords[] = { 0x4F26, 0x000B, 0x0009 };   // lds.l @r15+,pr ; rts ; nop
+        for (size_t i = 0; i < 3; ++i) f.PutWord(epi + 2 * uint32_t(i), epiWords[i]);
+        const uint16_t sharedWords[] = { 0x4F22, 0xAFF5, 0x0009 };   // sts.l pr,@-r15 ; bra epi ; nop
+        for (size_t i = 0; i < 3; ++i) f.PutWord(shared + 2 * uint32_t(i), sharedWords[i]);
+        f.names[sw] = "dispatch";
+        f.names[shared] = "shared";
+        ++f.namesGeneration;
+        ++f.backend.serial;
+    };
+    auto any = [](const std::vector<std::string>& lines, const char* what) {
+        for (const std::string& l : lines)
+            if (Has(l, what)) return true;
+        return false;
+    };
+    {
+        Fixture f;
+        place(f);
+        f.panel.ShowFunctionContaining(0, sw + 0x0C);
+        CHECK(f.WaitShown("dispatch"));
+        f.Idle(2);
+        const std::vector<std::string> u = f.panel.Uncertainties();
+        for (const std::string& l : u) std::printf("  amber: %s\n", l.c_str());
+        CHECK(f.Shown().entry == sw);
+        CHECK(any(u, "0x0600980C is not reached from this entry"));
+        CHECK(any(u, "Entry: an rts before 0x0600980C"));
+        CHECK(any(u, "0x06009800: Treating indirect jump as call"));
+
+        f.TypeInto("entry", "06009910");
+        CHECK(f.WaitShown("shared"));
+        f.comments[epi + 4] = "slot";     // the epilogue's delay slot: no line of its own
+        f.comments[0x06009908u] = "gap";  // between the epilogue and the entry: not the function's
+        f.Idle(2);
+        const std::vector<std::string>& unplaced = f.panel.UnplacedNotes();
+        for (const std::string& n : unplaced) std::printf("  unplaced: %s\n", n.c_str());
+        CHECK(unplaced == std::vector<std::string>{ "0x06009904: slot" });
+        CHECK(f.panel.Uncertainties().empty());   // a typed entry has no address to reach
+    }
+    {
+        Fixture f;
+        place(f);
+        f.kind = DecompViewKind::LiveRunning;
+        f.trackSerial = false;
+        f.regs[0].pc = shared + 2;
+        auto tick = [&](int frames) {
+            for (int i = 0; i < frames; ++i)
+            {
+                ++f.frame;
+                ++f.fixedSerial;
+                f.Idle();
+            }
+        };
+        CHECK(f.WaitShown("shared"));
+        f.panel.SetAutoRefresh(true);
+        const uint64_t c = f.panel.Captures();
+        f.regs[0].pc = epi + 2;   // in the epilogue, below the entry: still inside
+        tick(DecompilerPanel::kAutoRefreshFrames + 1);
+        CHECK(f.panel.Captures() == c);
+        // Between: outside. (What is found for it does not hold it either, so it may refresh again
+        // once that answer is in.)
+        f.regs[0].pc = 0x06009908u;
+        tick(DecompilerPanel::kAutoRefreshFrames + 1);
+        CHECK(f.panel.Captures() > c);
+    }
 }
 
 // Review of c426c2e, finding 1: with Follow PC and auto-refresh, the PC moving into another mirror
@@ -1799,6 +1884,7 @@ int main(int argc, char** argv)
         RUN(TestPrototypesPerMirror());
         RUN(TestFunctionStartKeepsMirror());
         RUN(TestAutoRefreshFollowsMirror());
+        RUN(TestFlowUncertaintyShown());
         RUN(TestHaltHintMatchesMirror());
         RUN(TestRunningLive());
         RUN(TestScrubCache());

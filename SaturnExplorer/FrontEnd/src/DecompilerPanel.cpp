@@ -277,6 +277,8 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mEntrySource = EntrySource::None;
     mEntryConfidence = 0;
     mEntryError.clear();
+    mEntryDoubt.clear();
+    mHaveAnchor = false;
     char b[200];
 
     if (mTarget.kind == TargetKind::Entry)
@@ -334,6 +336,67 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mEntry = g.entry + (anchor - anchorCanonical);
     mEntrySource = g.source;
     mEntryConfidence = g.confidence;
+    mEntryDoubt = g.doubt;
+    mHaveAnchor = true;
+    mAnchor = anchorCanonical;
+}
+
+std::vector<std::string> DecompilerPanel::Uncertainties() const
+{
+    std::vector<std::string> out;
+    if (!mShownValid || mShown.status != DecompileStatus::Ok) return out;
+    char b[200];
+    if (mShown.unsupported)
+    {
+        std::snprintf(b, sizeof b, "PC-relative load in a delay slot at 0x%08X: pseudocode for this function is not "
+                                   "trustworthy.", mShown.unsupportedAt);
+        out.push_back(b);
+    }
+    if (mShown.truncated)
+    {
+        std::snprintf(b, sizeof b, "Flows into %s at 0x%08X; the function is cut off there", 
+                      mShown.truncatedWhy.empty() ? "uncaptured memory" : mShown.truncatedWhy.c_str(), mShown.truncatedAt);
+        std::string line = b;
+        if (mShown.truncatedCount > 1)
+        {
+            std::snprintf(b, sizeof b, " (and at %d more places)", mShown.truncatedCount - 1);
+            line += b;
+        }
+        out.push_back(line + ".");
+    }
+    if (!mShown.badDataAt.empty())
+    {
+        std::snprintf(b, sizeof b, "Flow runs into bytes that do not decode at 0x%08X", mShown.badDataAt.front());
+        std::string line = b;
+        if (mShown.badDataAt.size() > 1)
+        {
+            std::snprintf(b, sizeof b, " (and %zu more places)", mShown.badDataAt.size() - 1);
+            line += b;
+        }
+        out.push_back(line + ": embedded data, or the entry is wrong; the function stops there.");
+    }
+    for (const FlowWarning& w : mShown.flowWarnings)
+    {
+        if (w.kind == FlowWarning::Cut || (w.kind == FlowWarning::BadData && w.address != 0)) continue;
+        if (w.address == 0) out.push_back(w.text);
+        else
+        {
+            std::snprintf(b, sizeof b, "0x%08X: ", w.address);
+            out.push_back(b + w.text);
+        }
+    }
+    // Only for the answer to the question the anchor belongs to.
+    if (mResolved && mEntryOk && mShown.requestedEntry == mEntry)
+    {
+        if (mHaveAnchor && !mShown.InBody(mAnchor))
+        {
+            std::snprintf(b, sizeof b, "0x%08X is not reached from this entry: the function containing it starts "
+                                       "elsewhere (Set Function Start Here corrects it).", mAnchor);
+            out.push_back(b);
+        }
+        if (!mEntryDoubt.empty()) out.push_back("Entry: " + mEntryDoubt + ".");
+    }
+    return out;
 }
 
 const DecompilerPanel::CacheEntry* DecompilerPanel::CacheFind(const Question& q)
@@ -514,9 +577,9 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                     const uint32_t pc = mViewPc[mCpu];
                     uint32_t canonical = 0;
                     const bool known = mViewHavePc[mCpu] && CanonicalAddress(pc, canonical);
-                    const uint32_t span = mShownValid ? std::max<uint32_t>(mShown.bodyBytes, 2u) : 0u;
-                    autoDue = known && (!mShownValid || pc < mShown.requestedEntry ||
-                                        pc - mShown.requestedEntry >= span);
+                    // The body is canonical; the PC is inside only in the mirror the function ran in.
+                    const uint32_t delta = mShownValid ? mShown.requestedEntry - mShown.entry : 0u;
+                    autoDue = known && (!mShownValid || pc - delta != canonical || !mShown.InBody(canonical));
                 }
                 // Following a PC the held snapshot has no registers for -- the first look after
                 // connecting can land before the emulator's first register frame -- is no answer at
@@ -866,13 +929,21 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
         ImGui::TextColored(kRed, "%s", mShown.error.empty() ? "Decompilation failed." : mShown.error.c_str());
         break;
     }
-    if (mShown.unsupported)
-        ImGui::TextColored(kAmber, "PC-relative load in a delay slot at 0x%08X: pseudocode for this function is not "
-                                   "trustworthy.", mShown.unsupportedAt);
-    if (mShown.truncated)
-        ImGui::TextColored(kAmber, "Flows into %s at 0x%08X; the function is cut off there.",
-                           mShown.truncatedWhy.empty() ? "uncaptured memory" : mShown.truncatedWhy.c_str(),
-                           mShown.truncatedAt);
+    // Uncertainty is said, never left to look like a complete function: the first few in full, the
+    // rest behind a count.
+    const std::vector<std::string> uncertain = Uncertainties();
+    const size_t kShownUncertainties = 4;
+    for (size_t i = 0; i < uncertain.size() && i < kShownUncertainties; ++i)
+        ImGui::TextColored(kAmber, "%s", uncertain[i].c_str());
+    if (uncertain.size() > kShownUncertainties)
+    {
+        ImGui::TextColored(kAmber, "%zu more flow warnings", uncertain.size() - kShownUncertainties);
+        if (ImGui::BeginItemTooltip())
+        {
+            for (size_t i = kShownUncertainties; i < uncertain.size(); ++i) ImGui::TextUnformatted(uncertain[i].c_str());
+            ImGui::EndTooltip();
+        }
+    }
     if (!mHintText.empty())
     {
         ImGui::TextColored(kAmber, "%s 0x%08X: %s", mHint.mnemonic, mHint.insn, mHintText.c_str());
@@ -969,14 +1040,14 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
         }
         // The rest of the body's notes: their instruction feeds a line (a literal load folded into
         // a constant, a delay slot) without being one, so they have no line of their own.
-        const uint32_t end = mShown.entry + mShown.bodyBytes;
-        for (auto it = notes.lower_bound(mShown.entry); it != notes.end() && it->first < end; ++it)
-            if (placed.count(it->first) == 0)
-            {
-                char b[16];
-                std::snprintf(b, sizeof b, "0x%08X: ", it->first);
-                mUnplacedNotes.push_back(b + *it->second);
-            }
+        for (const auto& range : mShown.body)
+            for (auto it = notes.lower_bound(range.first); it != notes.end() && it->first < range.second; ++it)
+                if (placed.count(it->first) == 0)
+                {
+                    char b[16];
+                    std::snprintf(b, sizeof b, "0x%08X: ", it->first);
+                    mUnplacedNotes.push_back(b + *it->second);
+                }
     }
 
     if (!mUnplacedNotes.empty())

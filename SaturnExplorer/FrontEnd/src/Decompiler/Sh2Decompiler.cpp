@@ -12,6 +12,7 @@
 #include "prettyprint.hh"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -223,8 +224,11 @@ public:
         {
             const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(i);
             const ghidra::Address at = cs->getEntryAddress();
-            if (cs->getOp() != nullptr && !at.isInvalid() && at.getSpace() == mRam)
-                mCallAt[static_cast<uint32_t>(cs->getOp()->getAddr().getOffset())] = static_cast<uint32_t>(at.getOffset());
+            if (cs->getOp() == nullptr) continue;
+            const uint32_t site = static_cast<uint32_t>(cs->getOp()->getAddr().getOffset());
+            if (!at.isInvalid() && at.getSpace() == mRam) mCallAt[site] = static_cast<uint32_t>(at.getOffset());
+            // Flow stopped after it, so what follows is not this function's (often data).
+            if (cs->isNoReturn()) mNoReturn.insert(site);
         }
     }
 
@@ -616,7 +620,10 @@ private:
             case ghidra::CPUI_LOAD: Set(s, op.out, Load(s, Get(s, op.in[1]), op.out.size)); break;
             case ghidra::CPUI_STORE: Store(s, Get(s, op.in[1]), op.in[2], Get(s, op.in[2])); break;
             case ghidra::CPUI_CALL:
-            case ghidra::CPUI_CALLIND: Call(s, a); break;
+            case ghidra::CPUI_CALLIND:
+                Call(s, a);
+                if (mNoReturn.count(a)) continue;   // the path ends in the callee
+                break;
             case ghidra::CPUI_CALLOTHER:
                 // sleep (Sleep_Standby) changes no register or memory; any other user op, anything.
                 if (mFd.getArch()->userops.getOp(static_cast<ghidra::uint4>(op.in[0].offset))->getName() != "Sleep_Standby")
@@ -645,7 +652,9 @@ private:
                     for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
                         succ.emplace_back(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()), s);
                 }
-                if (!found) return "an indirect jump it does not resolve";
+                // jmp @rN with rN holding the caller's PR is a return like rts (the engine takes a jump
+                // table it cannot recover that way too, when the target is the return address).
+                if (!found && !Return(s, op.in[0])) return "an indirect jump it does not resolve";
                 falls = false;
                 break;
             }
@@ -675,6 +684,7 @@ private:
     ghidra::AddrSpace* mRam = nullptr;
     ghidra::VarnodeData mReg[kTracked];
     std::map<uint32_t, uint32_t> mCallAt;   // call instruction -> the address it calls
+    std::set<uint32_t> mNoReturn;            // call instructions the engine knows do not return
     uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
 };
 
@@ -730,6 +740,7 @@ struct RawScan
     std::vector<std::pair<uint32_t, int>> readonly;   // (address, size) ranges to mark
     bool unsupported = false;
     uint32_t unsupportedAt = 0;
+    std::set<uint32_t> insns;   // every instruction with p-code, before any action removes some
 };
 
 // Literal pools and A3. SLEIGH emits "tmp = #addr; Rn = *(ram, tmp)" for mov.w/mov.l
@@ -747,7 +758,7 @@ RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
     // Every other delayed branch -- conditional, through a register, rts -- leaves the spec
     // computing the slot's own address, which is wrong whenever the branch is taken; that
     // literal is excluded from folding and the function flagged.
-    std::set<uint32_t> insns;
+    std::set<uint32_t>& insns = scan.insns;
     for (auto it = fd.beginOpMain(); it != fd.endOpMain(); ++it)
         insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
     // The patch hands the slot its PC by address, so a slot that anything in the function also
@@ -1009,6 +1020,58 @@ std::string DecompileResult::Text() const
     }
     return s;
 }
+
+bool DecompileResult::InBody(uint32_t canonical) const
+{
+    auto it = std::upper_bound(body.begin(), body.end(), std::make_pair(canonical, ~0u));
+    return it != body.begin() && canonical < std::prev(it)->second;
+}
+
+namespace
+{
+
+// The instructions flow reached, as merged [lo, hi) ranges. 'insns' holds every instruction that
+// had p-code at some point; nop has none, and a delay slot's p-code carries its branch's address,
+// so both are added here. Halts on memory that is not there or does not decode are not
+// instructions and are left out.
+std::vector<std::pair<uint32_t, uint32_t>> BodyRanges(const std::set<uint32_t>& insns, const MemorySnapshot& snap)
+{
+    std::set<uint32_t> all;
+    for (uint32_t a : insns)
+    {
+        uint16_t op = 0;
+        if (!snap.ReadU16(a, op)) continue;
+        const DisassembledInstruction ins = Sh2Decode(a, op);
+        if (!ins.IsValid) continue;
+        all.insert(a);
+        uint32_t next = a + 2;
+        if (ins.HasDelaySlot)
+        {
+            all.insert(a + 2);
+            next = a + 4;
+        }
+        // A fall-through run of nops: flow went through them without p-code.
+        if (ins.IsReturn || (ins.IsBranch && !ins.IsConditional && !ins.IsCall)) continue;
+        for (uint16_t w = 0; insns.count(next) == 0 && snap.ReadU16(next, w) && w == 0x0009; next += 2)
+            all.insert(next);
+    }
+    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+    for (uint32_t a : all)
+    {
+        uint32_t c = 0;
+        if (!CanonicalAddress(a, c)) continue;
+        if (!ranges.empty() && ranges.back().second == c) ranges.back().second = c + 2;
+        else ranges.emplace_back(c, c + 2);
+    }
+    std::sort(ranges.begin(), ranges.end());
+    std::vector<std::pair<uint32_t, uint32_t>> merged;
+    for (const auto& r : ranges)
+        if (!merged.empty() && r.first <= merged.back().second) merged.back().second = std::max(merged.back().second, r.second);
+        else merged.push_back(r);
+    return merged;
+}
+
+}  // namespace
 
 Sh2Decompiler::Sh2Decompiler(std::string configDir) : mConfigDir(std::move(configDir))
 {
@@ -1275,10 +1338,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.unimplemented = fd->hasUnimplemented();
         r.unsupported = scan.unsupported;
         r.unsupportedAt = canonicalOf(scan.unsupportedAt);
-        const CaptureLoadImage& image = arch->FetchImage();
-        r.truncated = fd->hasBadData() && image.HadUnavailable();
-        r.truncatedAt = canonicalOf(image.UnavailableAddress());
-        r.truncatedWhy = image.UnavailableWhy();
+        // The body: what flow reached, now (a restart in the actions can flow further) and before
+        // the actions removed what they found dead.
+        std::set<uint32_t> insns = scan.insns;
+        for (auto it = fd->beginOpMain(); it != fd->endOpMain(); ++it)
+            insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
+        r.body = BodyRanges(insns, *snapshot);
         for (uint32_t w : scan.literalWords) r.literalPools.push_back(canonicalOf(w));
         std::sort(r.literalPools.begin(), r.literalPools.end());
         r.literalPools.erase(std::unique(r.literalPools.begin(), r.literalPools.end()), r.literalPools.end());
@@ -1286,9 +1351,87 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (scan.unsupported)
             r.warnings.push_back("PC-relative load in a delay slot at " + Hex8(r.unsupportedAt) +
                                  ": pseudocode for this function is not trustworthy");
-        if (r.truncated)
-            r.warnings.push_back("flows into " + r.truncatedWhy);
         if (r.unimplemented) r.warnings.push_back("the SH-2 spec has no semantics for an instruction here");
+
+        // Every uncertainty the engine recorded while following flow, which it keeps as warning
+        // comments on the function. The pseudocode shows them inline only as far as the comment
+        // options print them; here they become part of the result, so a function cut short never
+        // passes for a complete one.
+        const CaptureLoadImage& image = arch->FetchImage();
+        const ghidra::Address fad = fd->getAddress();
+        for (auto it = arch->commentdb->beginComment(fad); it != arch->commentdb->endComment(fad); ++it)
+        {
+            const ghidra::Comment* c = *it;
+            if ((c->getType() & (ghidra::Comment::warning | ghidra::Comment::warningheader)) == 0) continue;
+            std::string text = c->getText();
+            // Jump-table recovery follows flow speculatively in a scratch copy of the function; what
+            // that copy ran into is not this function's flow. The outcome for the jump itself
+            // ("Treating indirect jump as call") is recorded on the function proper.
+            if (text.compare(0, 20, "WARNING (jumptable):") == 0) continue;
+            if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
+            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+            const bool header = (c->getType() & ghidra::Comment::warningheader) != 0;
+            // Said once per halt below, where it is.
+            if (header && (text == "Control flow encountered bad instruction data" ||
+                           text == "Control flow encountered unimplemented instructions"))
+                continue;
+            const uint32_t at = static_cast<uint32_t>(c->getAddr().getOffset());
+            FlowWarning w;
+            w.address = header ? 0 : canonicalOf(at);
+            if (!header && text == "Bad instruction - Truncating control flow here")
+            {
+                // A fetch the image refused (the instruction, or the delay slot decoded with it), or
+                // bytes that are there but do not decode.
+                auto refused = image.Refused().lower_bound(at);
+                if (refused != image.Refused().end() && refused->first < at + 4)
+                {
+                    const uint32_t cut = canonicalOf(refused->first);
+                    if (!r.truncated || cut < r.truncatedAt)
+                    {
+                        r.truncatedAt = cut;
+                        r.truncatedWhy = refused->second;
+                    }
+                    r.truncated = true;
+                    ++r.truncatedCount;
+                    w.kind = FlowWarning::Cut;
+                    w.address = cut;
+                    w.text = "flows into " + refused->second + "; the function is cut off there";
+                }
+                else
+                {
+                    r.badDataAt.push_back(w.address);
+                    w.kind = FlowWarning::BadData;
+                    w.text = "flow reaches bytes that do not decode as an instruction and stops there (embedded "
+                             "data, or the entry is wrong)";
+                }
+            }
+            else
+                w.text = text;
+            r.flowWarnings.push_back(std::move(w));
+        }
+        std::sort(r.badDataAt.begin(), r.badDataAt.end());
+        // Ghidra fails a function on its fifth bad-data halt; ours carries on (SaturnArchitecture:
+        // halts on uncaptured memory are expected), so the same judgement is a warning here.
+        if (r.badDataAt.size() >= 4)
+            r.flowWarnings.push_back(FlowWarning{ FlowWarning::BadData, 0, std::to_string(r.badDataAt.size()) +
+                                                         " paths run into bytes that do not decode: the entry is "
+                                                         "probably not code" });
+        // Flow that runs into another function's entry -- a tail branch, a fall-through into the next
+        // function, a shared epilogue -- has taken that function's code in as this one's. The engine
+        // follows a branch wherever it goes; it is said here, since we know the entries.
+        for (uint32_t a : all)
+        {
+            const uint32_t c = canonicalOf(a);
+            if (c == entry || !r.InBody(c)) continue;
+            auto f = named.find(c);
+            r.flowWarnings.push_back(FlowWarning{ FlowWarning::IntoFunction, c, "flow runs into " + (f != named.end() ? f->second + " at " : std::string()) +
+                                                         Hex8(c) + ", another function's entry: that code is shown "
+                                                         "as part of this function" });
+        }
+        std::stable_sort(r.flowWarnings.begin(), r.flowWarnings.end(),
+                         [](const FlowWarning& x, const FlowWarning& y) { return x.address < y.address; });
+        for (const FlowWarning& w : r.flowWarnings)
+            r.warnings.push_back(w.address ? Hex8(w.address) + ": " + w.text : w.text);
         if (r.truncated) r.prototypeWithheld = "truncated";
         else if (r.unsupported) r.prototypeWithheld = "unsupported";
         else if (r.unimplemented) r.prototypeWithheld = "unimplemented";

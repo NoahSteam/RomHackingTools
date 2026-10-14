@@ -352,3 +352,64 @@ The review accepts two assumptions as stated conditions of lending, not guarante
 SH-2 code:
 - an index added to a stack address stays in the stack;
 - an absolute address never points into the stack.
+
+## Control-flow recovery and function boundaries (review at `b488688`)
+
+The criterion: jump tables, indirect branches, shared epilogues, overlapping and multiple-entry
+functions, embedded data and flow out of captured memory must produce warnings, not an
+apparently complete function. Before this round the result carried only three conditions
+(uncaptured memory, the delay-slot load, unimplemented instructions). Everything else the engine
+noticed was visible only as the reason a signature was withheld, or as an inline comment.
+
+- **The engine's flow warnings are part of the result.** `DecompileResult::flowWarnings` is read
+  from the warning comments the engine keeps on the function: an unrecovered jump table treated as
+  a call or a return, overlapping instructions, unreachable code removed, too many instructions.
+  Each is also in `warnings`, and the panel shows them as amber lines (four, then "N more").
+  Warnings from jump-table recovery's speculative copy of the function are left out.
+- **Bad data in captured memory** (`badDataAt`) is reported where it is: flow halts there,
+  "embedded data, or the entry is wrong". It is no longer folded into "truncated". Four or more
+  such halts add "the entry is probably not code". This is the warning Ghidra's own default turns
+  into a failure; `max_baddata` stays high so a function with many uncaptured branches is still
+  shown.
+- **Cuts are attributed.** The fetch image keeps every refused address, not only the first. A
+  bad-instruction halt is a cut only when the image refused that fetch (or its delay slot's).
+  `truncatedAt` is the lowest cut and `truncatedCount` how many there are, each one a warning.
+- **Flow into another function's entry** is a warning naming it: a tail branch, a fall-through
+  into the next function, shared code.
+- **The body is what flow reached** (`body`, merged canonical ranges), not
+  `[entry, entry + bodyBytes)`. The panel uses it for notes with no line of their own and for
+  auto-refresh, so a shared epilogue below the entry is inside and the gap between is outside.
+- **An address the entry never reaches** is warned about. The panel checks the PC (or the address
+  asked about) against the body of the function found for it.
+- **The finder.**
+  - Flow from a known entry decides whether an `rts` after it is that function's end or an early
+    return. The scan wins only when that flow provably never reaches the address. When the finder
+    cannot follow it (a switch), the known entry is kept and the alternative stated.
+  - A word that only reads as `rts` is skipped: one a PC-relative load reads, such as `.long 11`, or
+    one whose delay slot could not be one.
+  - A `mova`-addressed jump table after an `rts` is skipped, and its guessed end is stated.
+  - When the code after the `rts` never reaches the address, the entry moves past that function's
+    tail jump.
+  - `EntryGuess::doubt` carries what the finder could not settle, and the confidence drops by 20.
+- **ReturnCheck** follows the engine where it stops: a call the engine marks as not returning ends
+  the path, and `jmp @rN` to the caller's PR is a return.
+- **Patch 0008.** `superh.cspec` declares PR as the return address. Without it the engine read
+  `sts pr,r1; jmp @r1` as an unrecovered jump table, `(*UNRECOVERED_JUMPTABLE)(); return;`, and
+  withheld the signature.
+- **A test race fixed.** `TestRegisterHintAtHalt` failed about one run in eight under parallel load,
+  on the old code too: `WaitShown` could return before the panel had seen the new frame. It now waits
+  for the panel to settle first.
+
+Tests, each failing on `b488688` (checked with old-API variants of the same fixtures):
+- `Sh2DecompilerTests` `TestFlowUncertainty`: bad data, an unresolved `jmp @r4`, a tail branch
+  into a named function, a fall-through into a known entry, a shared epilogue's body (also through
+  a mirror), `jmp` through PR lent, and one cut plus one bad word attributed separately.
+  `TestManyUncapturedBranches` now requires the lowest cut and all five counted.
+- `Sh2FunctionFinderTests` `TestBoundaries`: an early return in a named function, a switch the
+  finder cannot follow, `.long 11`, a tail jump, a `mova` table.
+- `DecompilerPanelTests` `TestFlowUncertaintyShown`: the amber lines for an entry that does not
+  reach its address, an epilogue note listed, and auto-refresh with a PC in the epilogue and in the
+  gap.
+
+Not covered by a test: a call the engine marks as not returning. Nothing in this setup produces
+one, since lent signatures carry no no-return flag.

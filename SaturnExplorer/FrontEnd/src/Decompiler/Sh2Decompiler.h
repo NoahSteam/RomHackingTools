@@ -137,6 +137,19 @@ struct Line
 enum class DecompilePhase : uint8_t { Idle, Init, Flow, Actions, Print, Teardown };
 const char* PhaseName(DecompilePhase phase);
 
+// Something flow recovery could not settle: the engine's own warnings (an unrecovered jump table
+// treated as a call, bad instruction data, overlapping instructions, unreachable code removed) and
+// ours (flow running into another function's entry). The address is the instruction it concerns,
+// canonical; 0 when it concerns the function as a whole.
+struct FlowWarning
+{
+    // Cut: flow left captured memory (truncated*); BadData: badDataAt; IntoFunction: flow ran into
+    // another known entry; Engine: anything else the engine said.
+    enum Kind : uint8_t { Engine, Cut, BadData, IntoFunction } kind = Engine;
+    uint32_t address = 0;
+    std::string text;
+};
+
 enum class DecompileStatus : uint8_t
 {
     Ok,
@@ -177,10 +190,19 @@ struct DecompileResult
     std::vector<uint32_t> literalPools;   // literal-pool words marked read-only, sorted, unique
     uint32_t literalLoads = 0;            // PC-relative loads through them (a word may be read twice)
 
-    uint32_t bodyBytes = 0;
+    // The instructions flow reached, as [lo, hi) canonical ranges, sorted and merged. A function is
+    // not one range from its entry: a shared epilogue can sit below the entry, a tail far above it.
+    std::vector<std::pair<uint32_t, uint32_t>> body;
+    bool InBody(uint32_t canonical) const;
+    uint32_t bodyBytes = 0;        // the span from the lowest instruction to the end of the highest
     bool truncated = false;        // flow reached memory that is not captured / not memory
-    uint32_t truncatedAt = 0;
+    uint32_t truncatedAt = 0;      // the lowest such address (every one is in flowWarnings)
     std::string truncatedWhy;
+    int truncatedCount = 0;        // how many places flow was cut off
+    // Words in captured memory flow tried to run that do not decode as instructions: embedded data,
+    // or a wrong entry. Flow stops at each.
+    std::vector<uint32_t> badDataAt;
+    std::vector<FlowWarning> flowWarnings;   // every one is in warnings too
     bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
     uint32_t unsupportedAt = 0;    // the slot instruction's address
     bool unimplemented = false;    // the spec has no semantics for an instruction

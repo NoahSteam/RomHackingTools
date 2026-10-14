@@ -8,8 +8,9 @@
 //   Fetch  the SLEIGH translator's, used only to decode instructions. Refuses with BadDataError,
 //          which flow following catches: it halts flow at that address and marks the function as
 //          reaching bad data, so a branch into the BIOS truncates the function instead of
-//          aborting it. Keeps the first refused address and why ("uncaptured memory at
-//          0x00000600 (BIOS)") for the result.
+//          aborting it. Keeps every refused address and why ("uncaptured memory at
+//          0x00000600 (BIOS)"), so the result can name the ones where flow really stopped:
+//          jump-table recovery fetches speculatively too, and those do not cut the function.
 //   Data   the Architecture's own, used for values (read-only literals, jump tables, strings).
 //          Refuses with DataUnavailError, which those readers catch.
 // (DataUnavailError from a fetch would propagate out of flow following and abort the whole
@@ -28,6 +29,7 @@
 
 #include "Decompiler/MemorySnapshot.h"
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -47,17 +49,16 @@ public:
     std::string getArchType() const override { return "saturn-capture"; }
     void adjustVma(long) override {}
 
-    // Fetch: the first instruction the engine tried to decode from memory it cannot have, and why.
-    bool HadUnavailable() const { return mUnavailable; }
-    uint32_t UnavailableAddress() const { return mUnavailableAddress; }
-    const std::string& UnavailableWhy() const { return mUnavailableWhy; }
+    // Fetch: every instruction address the engine tried to decode from memory it cannot have, and
+    // why. Bounded (kMaxRefused), since flow can probe many; the lowest addresses are kept.
+    bool HadUnavailable() const { return !mRefused.empty(); }
+    const std::map<uint32_t, std::string>& Refused() const { return mRefused; }
+    static const size_t kMaxRefused = 256;
 
 private:
     std::shared_ptr<const MemorySnapshot> mSnapshot;
     Use mUse;
-    bool mUnavailable = false;
-    uint32_t mUnavailableAddress = 0;
-    std::string mUnavailableWhy;
+    std::map<uint32_t, std::string> mRefused;
 };
 
 }  // namespace decomp

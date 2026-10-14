@@ -1,0 +1,22 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.cspec b/Ghidra/Processors/SuperH/data/languages/superh.cspec
+index b46b771..ea84bf7 100644
+--- a/Ghidra/Processors/SuperH/data/languages/superh.cspec
++++ b/Ghidra/Processors/SuperH/data/languages/superh.cspec
+@@ -1,5 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<!-- Modified for SaturnExplorer: a 64-bit return has its high half in r0 (patches/0007-cspec-wide-return-order.patch). -->
++<!-- Modified for SaturnExplorer: a 64-bit return has its high half in r0 (patches/0007-cspec-wide-return-order.patch);
++     the return address is in pr (patches/0008-cspec-return-address.patch). -->
+ 
+ <compiler_spec>
+     <data_organization>  <!-- These tags were taken from https://gcc-renesas.com/manuals/SH-ABI-Specification.html-->
+@@ -27,6 +28,9 @@
+         <range space="ram"/>
+     </global>
+     <stackpointer register="r15" space="ram"/>
++    <returnaddress>
++        <register name="pr"/>
++    </returnaddress>
+     <default_proto>
+     <prototype name="__stdcall" extrapop="0" stackshift="0">
+         <input>

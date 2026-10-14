@@ -157,6 +157,96 @@ void TestCallTargets()
     CHECK(CallTargetsFromListing(*s, kF1, kF3 + 4) == (std::vector<uint32_t>{ kF2, kF3 }));
 }
 
+// Review of the control-flow criterion: the scan and the ladder against layouts that fool an
+// rts-only boundary. An early return inside a named function; a function whose flow the finder
+// cannot follow (a switch); the constant 11 in a literal pool, which reads as rts; a function that
+// ends in a tail jump instead of rts; a jump table addressed with mova after an rts.
+void TestBoundaries()
+{
+    std::vector<uint8_t> hw;
+    auto put = [&](uint32_t a, std::initializer_list<uint16_t> words) {
+        size_t off = a - 0x06000000u;
+        for (uint16_t w : words) { dts::Put16(hw, off, w); off += 2; }
+    };
+    // An early return: the rts at +8 is not the function's end, since bt jumps past it.
+    const uint32_t early = 0x06030004u;
+    put(early - 4, { 0x000B, 0x0009 });
+    put(early, { 0x4415,      // cmp/pl r4
+                 0x8901,      // bt early+0x08
+                 0x000B,      // rts
+                 0xE000,      //   mov #0,r0
+                 0x7401,      // add #1,r4
+                 0x6043,      // mov r4,r0
+                 0x000B,      // rts
+                 0x0009 });   //   nop
+    // A switch the finder cannot follow (jmp @r5), then an rts, then more code.
+    const uint32_t sw = 0x06030100u;
+    put(sw, { 0x452B, 0x0009, 0x000B, 0x0009, 0x7001, 0x7001, 0x7001, 0x7001, 0x000B, 0x0009 });
+    // .long 11 in a literal pool, after a bra over it.
+    const uint32_t lit = 0x06030204u;
+    put(lit - 4, { 0x000B, 0x0009 });
+    put(lit, { 0xD001,      // mov.l @(4,pc),r0  (the literal at lit+8)
+               0xA003,      // bra lit+0x0C
+               0x0009,      //   nop
+               0x0009 });   // (aligns the literal)
+    dts::Put32(hw, lit + 8 - 0x06000000u, 11);
+    put(lit + 0x0C, { 0x7001, 0x7001, 0x7001, 0x000B, 0x0009 });
+    // f2 ends in a tail jump through a literal; f3 follows its pool.
+    const uint32_t f2 = 0x06030304u, f3 = 0x06030310u;
+    put(f2 - 4, { 0x000B, 0x0009 });
+    put(f2, { 0xD101,      // mov.l @(4,pc),r1
+              0x412B,      // jmp @r1
+              0x0009,      //   nop
+              0x0009 });
+    dts::Put32(hw, f2 + 8 - 0x06000000u, 0x06030400u);
+    put(f3, { 0x4F22, 0x7401, 0x7401, 0x4F26, 0x000B, 0x0009 });
+    // mova of a table placed after the rts; the table's offsets decode as instructions.
+    const uint32_t mv = 0x06030500u, afterTable = 0x0603050Cu;
+    put(mv, { 0xC701,      // mova @(4,pc),r0  (the table at mv+8)
+              0x000B,      // rts
+              0x0009,      //   nop
+              0x0009,
+              0x0014,      // table: two 16-bit offsets
+              0x0024 });
+    put(afterTable, { 0x4F22, 0x7401, 0x7401, 0x4F26, 0x000B, 0x0009 });
+    auto s = dts::MakeSnapshot(hw);
+
+    // Flow from the symbol gets past its own early return: the symbol answers, not the scan.
+    FinderHints sym;
+    sym.symbols.insert(early);
+    EntryGuess g = FindFunctionContaining(*s, early + 0x0A, sym);
+    std::printf("  early return: %08X from %s%s%s\n", g.entry, EntrySourceName(g.source), g.doubt.empty() ? "" : ", ",
+                g.doubt.c_str());
+    CHECK(g.ok && g.entry == early && g.source == EntrySource::Symbol && g.doubt.empty());
+
+    // Flow the finder cannot follow: the symbol is kept, the alternative said.
+    FinderHints swSym;
+    swSym.symbols.insert(sw);
+    g = FindFunctionContaining(*s, sw + 0x0C, swSym);
+    std::printf("  unfollowable: %08X from %s, %s\n", g.entry, EntrySourceName(g.source), g.doubt.c_str());
+    CHECK(g.ok && g.entry == sw && g.source == EntrySource::Symbol);
+    CHECK(g.doubt.find("0x06030108") != std::string::npos && g.confidence < 90);
+
+    // The literal 11's low half is not an rts.
+    uint32_t e = 0;
+    std::string why, doubt;
+    CHECK(RtsScanEntry(*s, lit + 0x10, e, &why, &doubt));
+    std::printf("  .long 11: %08X\n", e);
+    CHECK(e == lit && doubt.empty());
+
+    // f2 never reaches f3: the entry is after its tail jump and pool.
+    CHECK(RtsScanEntry(*s, f3 + 4, e, &why, &doubt));
+    std::printf("  tail jump: %08X, %s\n", e, doubt.c_str());
+    CHECK(e == f3 && doubt.find("never reaches") != std::string::npos);
+    g = FindFunctionContaining(*s, f3 + 4, FinderHints());
+    CHECK(g.ok && g.entry == f3 && g.source == EntrySource::RtsScan && !g.doubt.empty() && g.confidence < 60);
+
+    // The mova table is skipped, and its guessed end said.
+    CHECK(RtsScanEntry(*s, afterTable + 4, e, &why, &doubt));
+    std::printf("  mova table: %08X, %s\n", e, doubt.c_str());
+    CHECK(e == afterTable && doubt.find("jump table") != std::string::npos);
+}
+
 // The returns at the bottom of the scan window are candidates too: at the region's base, and at
 // a span-limited floor.
 void TestScanFloor()
@@ -224,6 +314,7 @@ int main(int argc, char** argv)
     RUN(TestLadder());
     RUN(TestCallTargets());
     RUN(TestScanFloor());
+    RUN(TestBoundaries());
     RUN(TestBoundsPersistence(scratch));
     dts::RemoveTree(scratch);
     return dts::Finish("Sh2FunctionFinderTests", start);

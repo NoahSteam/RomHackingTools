@@ -3,6 +3,7 @@
 #include "translate.hh"   // BadDataError
 
 #include <cstring>
+#include <iterator>
 #include <sstream>
 
 namespace sfe
@@ -37,11 +38,10 @@ void CaptureLoadImage::loadFill(ghidra::uint1* ptr, ghidra::int4 size, const ghi
         std::memset(ptr + prefix, 0, static_cast<size_t>(size - prefix));
         return;
     }
-    if (!mUnavailable)
+    if (mRefused.size() < kMaxRefused || a < mRefused.rbegin()->first)
     {
-        mUnavailable = true;
-        mUnavailableAddress = a;
-        mUnavailableWhy = why;
+        mRefused.emplace(a, why);
+        if (mRefused.size() > kMaxRefused) mRefused.erase(std::prev(mRefused.end()));
     }
     throw ghidra::BadDataError(e.str());
 }

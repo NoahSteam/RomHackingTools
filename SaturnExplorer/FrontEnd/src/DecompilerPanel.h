@@ -172,6 +172,10 @@ public:
     const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
     uint32_t WantedEntry() const { return mEntryOk ? mEntry : 0; }   // as run: a mirror stays one
     const std::string& EntryError() const { return mEntryError; }
+    // What the panel warns about the output on screen, one amber line each: flow cut off or into
+    // data, the engine's flow warnings, flow into another function, an address the entry never
+    // reaches, an entry the finder doubts. Empty when nothing is uncertain.
+    std::vector<std::string> Uncertainties() const;
     const char* EntryText() const { return mEntryBuf; }
     // The register hint the last Draw showed for a register-target call at the halt, or "".
     const std::string& HintText() const { return mHintText; }
@@ -293,6 +297,9 @@ private:
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;
     int mEntryConfidence = 0;
     std::string mEntryError;
+    std::string mEntryDoubt;         // the finder's doubt about mEntry
+    bool mHaveAnchor = false;        // the entry was found for an address (a PC, a line asked about)...
+    uint32_t mAnchor = 0;            // ...this one, which the function found must reach
 
     uint64_t mNamesGeneration = 0;
     // The addresses the engine registers as functions: the user's function starts and the named

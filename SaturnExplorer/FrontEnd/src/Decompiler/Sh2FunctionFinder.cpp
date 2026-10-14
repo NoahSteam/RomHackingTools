@@ -54,6 +54,114 @@ bool PcRelLiteral(uint32_t site, uint16_t op, uint32_t& address, uint32_t& size)
     return false;
 }
 
+// The value a mov.l @(disp,PC),rN loaded into rN in the instructions just before 'site', believed
+// only when every instruction in between provably leaves rN alone. SH-2 encodes its register
+// operands in bits 8-11 and 4-7, so one naming rN in either may change it (a destination, or @rN+ /
+// @-rN); r0 is also written implicitly by mova, the GBR-relative and #imm-to-r0 forms (0xCxxx) and
+// mov.b/mov.w @(disp,rM),r0 (0x8xxx); and a branch or call in between means the load may not even
+// have run. Anything of that kind ends the search with no answer.
+bool LiteralInRegister(const MemorySnapshot& snap, uint32_t site, unsigned n, uint32_t& value)
+{
+    for (int back = 1; back <= 8; ++back)
+    {
+        const uint32_t q = site - 2 * back;
+        uint16_t prev = 0;
+        if (!snap.ReadU16(q, prev)) return false;
+        uint32_t lit = 0, size = 0;
+        if ((prev & 0xF000u) == 0xD000u && ((prev >> 8) & 0xF) == n && PcRelLiteral(q, prev, lit, size))
+            return snap.ReadU32(lit, value);
+        const DisassembledInstruction ins = Sh2Decode(q, prev);
+        if (!ins.IsValid || ins.IsBranch || ins.HasDelaySlot) return false;
+        if (((prev >> 8) & 0xF) == n || ((prev >> 4) & 0xF) == n) return false;
+        const unsigned hi = prev >> 12;
+        if (n == 0 && (hi == 0x8 || hi == 0xC)) return false;
+    }
+    return false;
+}
+
+// How many instructions a reachability walk visits before giving up with no answer.
+const size_t kMaxReachInstructions = 4096;
+
+enum class Reach { Yes, No, Unknown };
+
+// Whether flow from 'from' gets to the instruction at 'to', followed the way the decompiler's flow
+// is: both ways of a conditional branch, over calls (taken to return), never past rts/rte. A jump
+// the code does not resolve (braf, or jmp @rN not loaded from a literal: a switch, perhaps) or
+// bytes that do not decode leave it Unknown unless 'to' is reached some other way; a jmp @rN to a
+// literal address is a tail call, which ends the path.
+Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to)
+{
+    std::set<uint32_t> seen;
+    std::vector<uint32_t> work{ from };
+    bool unknown = false;
+    while (!work.empty())
+    {
+        const uint32_t p = work.back();
+        work.pop_back();
+        if (!seen.insert(p).second) continue;
+        if (seen.size() > kMaxReachInstructions) return Reach::Unknown;
+        if (p == to) return Reach::Yes;
+        uint16_t op = 0;
+        if (!snap.ReadU16(p, op))
+        {
+            unknown = true;
+            continue;
+        }
+        const DisassembledInstruction ins = Sh2Decode(p, op);
+        if (!ins.IsValid)
+        {
+            unknown = true;
+            continue;
+        }
+        uint32_t next = p + 2;
+        if (ins.HasDelaySlot)
+        {
+            if (p + 2 == to) return Reach::Yes;
+            next = p + 4;
+        }
+        if (ins.IsReturn) continue;
+        if (ins.IsCall)
+        {
+            work.push_back(next);
+            continue;
+        }
+        if (ins.IsBranch)
+        {
+            uint32_t t = 0;
+            if (ins.HasBranchTarget) work.push_back(ins.BranchTarget);
+            else if (!((op & 0xF0FFu) == 0x402Bu && LiteralInRegister(snap, p, (op >> 8) & 0xF, t))) unknown = true;
+            if (ins.IsConditional) work.push_back(next);
+            continue;
+        }
+        work.push_back(next);
+    }
+    return unknown ? Reach::Unknown : Reach::No;
+}
+
+// Whether the halfword at q is data: a word some PC-relative load before it reads (the constant
+// 11 in a literal pool reads as rts), or an rts whose delay slot could not be one.
+bool DataNotReturn(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
+{
+    const uint32_t from = q - floor > kPcRelReach ? q - kPcRelReach : floor;
+    for (uint32_t x = from; x < q; x += 2)
+    {
+        uint16_t op = 0;
+        uint32_t lit = 0, size = 0;
+        if (snap.ReadU16(x, op) && PcRelLiteral(x, op, lit, size) && q >= lit && q < lit + size) return true;
+    }
+    uint16_t slot = 0;
+    if (!snap.ReadU16(q + 2, slot)) return false;   // the region's last word: nothing says otherwise
+    const DisassembledInstruction s = Sh2Decode(q + 2, slot);
+    return !s.IsValid || s.IsBranch || s.HasDelaySlot;
+}
+
+// A word a jump table may hold: a 16-bit offset to a case (braf, or added to the table's base), so
+// small either way. Function prologues (mov.l rN,@-r15, sts.l pr,@-r15, add #-n,r15) are not.
+bool TableOffset(uint16_t w)
+{
+    return w < 0x1000u || w >= 0xF000u;
+}
+
 int Confidence(EntrySource s)
 {
     switch (s)
@@ -82,7 +190,82 @@ const char* EntrySourceName(EntrySource source)
     }
 }
 
-bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry, std::string* why)
+namespace
+{
+
+// The first instruction after the unconditional transfer at p (rts, or a jump) and its delay slot:
+// past the previous function's literal pool, a jump table it addresses with mova, and nop/zero
+// padding. False when that runs past 'a'. A mova table has no stated length, so its end is a guess
+// ('guessed'): words read as table entries for as long as they look like them.
+bool SkipToCode(const MemorySnapshot& snap, uint32_t p, uint32_t floor, uint32_t a, uint32_t& c, bool& guessed)
+{
+    std::vector<std::pair<uint32_t, uint32_t>> literals;   // [lo, hi)
+    std::set<uint32_t> tables;
+    const uint32_t from = p - floor > kPcRelReach ? p - kPcRelReach : floor;
+    for (uint32_t q = from; q <= p + 2; q += 2)
+    {
+        uint16_t op = 0;
+        if (!snap.ReadU16(q, op)) continue;
+        uint32_t lit = 0, size = 0;
+        if (PcRelLiteral(q, op, lit, size) && lit >= p + 4) literals.emplace_back(lit, lit + size);
+        const DisassembledInstruction ins = Sh2Decode(q, op);
+        if (ins.PcRel == Sh2PcRel::Mova)
+        {
+            const uint32_t t = ((q + 4) & ~3u) + ins.PcRelDisp;
+            if (t >= p + 4) tables.insert(t);
+        }
+    }
+    c = p + 4;
+    bool inTable = false;
+    for (;;)
+    {
+        uint16_t w = 0;
+        if (c > a || !snap.ReadU16(c, w)) break;
+        bool literal = false;
+        for (const auto& l : literals)
+            if (c >= l.first && c < l.second) literal = true;
+        if (literal || w == kNop || w == 0x0000)
+        {
+            c += 2;
+            continue;
+        }
+        inTable = inTable || tables.count(c) != 0;
+        if (inTable)
+        {
+            // Entries are case addresses (32-bit, into captured memory) or offsets (16-bit, small).
+            uint32_t v = 0, canonical = 0;
+            if ((c & 3) == 0 && snap.ReadU32(c, v) && (v & 1) == 0 && CanonicalAddress(v, canonical) &&
+                snap.RegionAt(canonical))
+            {
+                c += 4;
+                guessed = true;
+                continue;
+            }
+            if (TableOffset(w))
+            {
+                c += 2;
+                guessed = true;
+                continue;
+            }
+        }
+        break;
+    }
+    return c <= a;
+}
+
+bool DecodesAsCode(const MemorySnapshot& snap, uint32_t c)
+{
+    for (int i = 0; i < kValidateInstructions; ++i)
+    {
+        uint16_t op = 0;
+        if (!snap.ReadU16(c + 2 * i, op) || !Sh2Decode(c + 2 * i, op).IsValid) return false;
+    }
+    return true;
+}
+
+}  // namespace
+
+bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry, std::string* why, std::string* doubt)
 {
     uint32_t a = 0;
     if (!CanonicalAddress(address, a, why)) return false;
@@ -98,7 +281,8 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
     // The previous return: rts/rte at p, its delay slot at p+2, so the next function can start
     // at p+4. An rts whose slot is the address itself still belongs to the address's function.
     // Candidates p run from a - 4 (so the slot at p + 2 is still before the address) down to the
-    // floor itself, inclusive.
+    // floor itself, inclusive. A word that only reads as rts -- a literal, or one with no possible
+    // delay slot after it -- is passed over.
     uint32_t p = 0;
     bool found = false;
     if (a - floor >= 4)
@@ -107,7 +291,7 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
         {
             uint16_t w = 0;
             if (!snap.ReadU16(q, w)) break;
-            if (w == kRts || w == kRte)
+            if ((w == kRts || w == kRte) && !DataNotReturn(snap, q, floor))
             {
                 p = q;
                 found = true;
@@ -122,43 +306,45 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
         return false;
     }
 
-    // The previous function's literal pool sits between its last instruction and the next
-    // function: the words its PC-relative loads read. They are skipped, as is nop/zero padding.
-    std::vector<std::pair<uint32_t, uint32_t>> literals;   // [lo, hi)
-    const uint32_t from = p - floor > kPcRelReach ? p - kPcRelReach : floor;
-    for (uint32_t q = from; q <= p + 2; q += 2)
-    {
-        uint16_t op = 0;
-        uint32_t lit = 0, size = 0;
-        if (snap.ReadU16(q, op) && PcRelLiteral(q, op, lit, size) && lit >= p + 4)
-            literals.emplace_back(lit, lit + size);
-    }
-    uint32_t c = p + 4;
-    for (;;)
-    {
-        uint16_t w = 0;
-        if (c > a || !snap.ReadU16(c, w)) break;
-        bool literal = false;
-        for (const auto& l : literals)
-            if (c >= l.first && c < l.second) literal = true;
-        if (!literal && w != kNop && w != 0x0000) break;
-        c += 2;
-    }
-    if (c > a)
+    uint32_t c = 0;
+    bool guessed = false;
+    if (!SkipToCode(snap, p, floor, a, c, guessed))
     {
         if (why) *why = Hex8(a) + " is padding or a literal pool after the function ending at " + Hex8(p + 2);
         return false;
     }
-    for (int i = 0; i < kValidateInstructions; ++i)
+    if (!DecodesAsCode(snap, c))
     {
-        uint16_t op = 0;
-        if (!snap.ReadU16(c + 2 * i, op) || !Sh2Decode(c + 2 * i, op).IsValid)
+        if (why) *why = "what follows the rts at " + Hex8(p) + " does not decode as code";
+        return false;
+    }
+    std::string d;
+    if (guessed) d = "the jump table after the rts at " + Hex8(p) + " has no stated end; the entry is a guess";
+
+    // The previous function need not end in rts: it can end in a tail jump (jmp @rN, bra, braf), so
+    // the code after the rts can be a whole function before the address's own. If it provably never
+    // gets to the address, the entry is after the first such jump whose code does.
+    if (Reaches(snap, c, a) == Reach::No)
+    {
+        bool moved = false;
+        for (uint32_t q = c; q + 4 <= a && !moved; q += 2)
         {
-            if (why) *why = "what follows the rts at " + Hex8(p) + " does not decode as code";
-            return false;
+            uint16_t op = 0;
+            if (!snap.ReadU16(q, op)) break;
+            const DisassembledInstruction ins = Sh2Decode(q, op);
+            if (!ins.IsValid || !ins.IsBranch || ins.IsCall || ins.IsConditional || !ins.HasDelaySlot) continue;
+            uint32_t c2 = 0;
+            bool guessed2 = false;
+            if (!SkipToCode(snap, q, floor, a, c2, guessed2) || !DecodesAsCode(snap, c2)) continue;
+            if (Reaches(snap, c2, a) != Reach::Yes) continue;
+            d = "the code after the rts at " + Hex8(p) + " never reaches " + Hex8(a) + "; the entry is after the jump at " + Hex8(q);
+            c = c2;
+            moved = true;
         }
+        if (!moved) d = "the code from " + Hex8(c) + " (after the rts at " + Hex8(p) + ") never reaches " + Hex8(a);
     }
     entry = c;
+    if (doubt) *doubt = d;
     return true;
 }
 
@@ -173,34 +359,8 @@ bool CallTargetAt(const MemorySnapshot& snap, uint32_t site, uint32_t& target)
         t = call.BranchTarget;
     else if ((op & 0xF0FFu) == 0x400Bu)   // jsr @rN
     {
-        // Walk back to the mov.l @(disp,PC),rN that loaded rN, believing it only when every
-        // instruction in between provably leaves rN alone. SH-2 encodes its register operands in
-        // bits 8-11 and 4-7, so one naming rN in either may change it (a destination, or @rN+ /
-        // @-rN); r0 is also written implicitly by mova, the GBR-relative and #imm-to-r0 forms
-        // (0xCxxx) and mov.b/mov.w @(disp,rM),r0 (0x8xxx); and a branch or call in between means
-        // the load may not even have run. Anything of that kind ends the search with no answer:
-        // a missed name costs nothing, a wrong one sends the user to the wrong function.
-        const unsigned n = (op >> 8) & 0xF;
-        bool found = false;
-        for (int back = 1; back <= 8 && !found; ++back)
-        {
-            const uint32_t q = site - 2 * back;
-            uint16_t prev = 0;
-            if (!snap.ReadU16(q, prev)) return false;
-            uint32_t lit = 0, size = 0;
-            if ((prev & 0xF000u) == 0xD000u && ((prev >> 8) & 0xF) == n && PcRelLiteral(q, prev, lit, size))
-            {
-                if (!snap.ReadU32(lit, t)) return false;
-                found = true;
-                break;
-            }
-            const DisassembledInstruction ins = Sh2Decode(q, prev);
-            if (!ins.IsValid || ins.IsBranch || ins.HasDelaySlot) return false;
-            if (((prev >> 8) & 0xF) == n || ((prev >> 4) & 0xF) == n) return false;
-            const unsigned hi = prev >> 12;
-            if (n == 0 && (hi == 0x8 || hi == 0xC)) return false;
-        }
-        if (!found) return false;
+        // A missed name costs nothing, a wrong one sends the user to the wrong function.
+        if (!LiteralInRegister(snap, site, (op >> 8) & 0xF, t)) return false;
     }
     else
         return false;
@@ -260,10 +420,27 @@ EntryGuess FindFunctionContaining(const MemorySnapshot& snap, uint32_t address, 
     rename(hints.userEntries, EntrySource::User);
 
     uint32_t scanned = 0;
-    std::string scanWhy;
-    const bool haveScan = RtsScanEntry(snap, a, scanned, &scanWhy);
+    std::string scanWhy, scanDoubt;
+    const bool haveScan = RtsScanEntry(snap, a, scanned, &scanWhy, &scanDoubt);
 
-    if (haveKnown && (knownSource == EntrySource::User || !haveScan || known >= scanned))
+    // An rts between a known entry and the address is either that function's end (the address is
+    // in a later one) or an early return inside it. Flow from the entry says which: if it gets to
+    // the address, the rts was an early return; if it provably does not, a later function. When
+    // flow cannot tell (a switch it cannot follow), the known entry -- a real function start -- is
+    // kept, and the alternative said.
+    bool useKnown = haveKnown && (knownSource == EntrySource::User || !haveScan || known >= scanned);
+    if (haveKnown && !useKnown)
+    {
+        const Reach r = Reaches(snap, known, a);
+        if (r == Reach::Yes) useKnown = true;
+        else if (r == Reach::Unknown)
+        {
+            useKnown = true;
+            g.doubt = "an rts before " + Hex8(a) + " may end this function; if so, " + Hex8(a) +
+                      " is in one starting at " + Hex8(scanned);
+        }
+    }
+    if (useKnown)
     {
         g.ok = true;
         g.entry = known;
@@ -274,6 +451,7 @@ EntryGuess FindFunctionContaining(const MemorySnapshot& snap, uint32_t address, 
         g.ok = true;
         g.entry = scanned;
         g.source = EntrySource::RtsScan;
+        g.doubt = scanDoubt;
     }
     else
     {
@@ -281,6 +459,7 @@ EntryGuess FindFunctionContaining(const MemorySnapshot& snap, uint32_t address, 
         return g;
     }
     g.confidence = Confidence(g.source);
+    if (!g.doubt.empty()) g.confidence -= 20;
     return g;
 }
 
