@@ -188,33 +188,53 @@ Prototype PrototypeOf(const ghidra::Funcdata& fd)
     return p;
 }
 
-// Whether every return in the function goes to the caller's return address: PR as it was on entry,
-// kept in a register or saved on the stack and reloaded. The engine cannot say -- its actions
-// replace a RETURN's address with 0 once it is dead -- so each instruction's p-code is interpreted
-// here over a small domain: PR on entry, a stack address (an offset from r15 on entry), a
-// constant, or anything else. Stores through anything but a stack address are taken not to touch
-// the stack, as the engine's own stack analysis takes them; a call leaves r8-r15 and gbr as they
-// were (the ABI's unaffected registers) and anything else unknown.
+// Whether every return in the function goes to the caller's return address -- PR as it was on
+// entry, kept in a register or saved on the stack and reloaded -- and what a call to the function
+// can do to its caller (CallEffects). The engine cannot say: its actions replace a RETURN's address
+// with 0 once it is dead. So each instruction's p-code is interpreted here.
+//
+// A value is exact (a register's entry value, a stack address as an offset from r15 on entry, a
+// constant) or else only the set of things it can come from (origin::*). Losing precision keeps
+// the origins, so an address computed from a stack address still may point into the stack, and a
+// store through it forgets every stack slot. Values are 'escaped' once a stack address can be
+// reached other than through r15 -- stored to memory, left in a forgotten slot, or visible to a
+// callee in another register -- after which anything loaded from memory may be one too.
+//
+// A call applies the callee's verified CallEffects: the registers it preserves keep their values,
+// the others take what it can return, and a store it makes through a value that may be ours
+// forgets the slots. A callee whose effects are unknown is taken to do anything.
 class ReturnCheck
 {
 public:
-    ReturnCheck(ghidra::Funcdata& fd, uint32_t exec) : mFd(fd), mExec(exec)
+    ReturnCheck(ghidra::Funcdata& fd, uint32_t exec, const std::map<uint32_t, Prototype>& lent)
+        : mFd(fd), mExec(exec), mLent(lent)
     {
         const ghidra::Architecture* arch = fd.getArch();
         mRam = arch->getDefaultCodeSpace();
-        mPr = arch->translate->getRegister("pr");
-        mSp = arch->translate->getRegister("r15");
-        for (const char* r : { "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "gbr" })
-            mKept.push_back(arch->translate->getRegister(r));
+        const char* names[kTracked] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+                                        "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
+        for (int i = 0; i < kTracked; ++i) mReg[i] = arch->translate->getRegister(names[i]);
+        // Where each call goes, by the instruction that makes it (the engine's call specs know a
+        // jsr @rN through a literal; the p-code alone does not).
+        for (ghidra::int4 i = 0; i < fd.numCalls(); ++i)
+        {
+            const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(i);
+            const ghidra::Address at = cs->getEntryAddress();
+            if (cs->getOp() != nullptr && !at.isInvalid() && at.getSpace() == mRam)
+                mCallAt[static_cast<uint32_t>(cs->getOp()->getAddr().getOffset())] = static_cast<uint32_t>(at.getOffset());
+        }
     }
 
-    // Empty when every return reached goes to the caller, else why not.
-    std::string Run()
+    // Empty when every return reached goes to the caller, else why not. 'effects' is then this
+    // function's own summary.
+    std::string Run(CallEffects& effects)
     {
         State start;
         start.reached = true;
-        Set(start, mPr, Value::Incoming());
-        Set(start, mSp, Value::Stack(0));
+        for (int i = 0; i < kTracked; ++i) Set(start, mReg[i], i == kR15 ? Value::Stack(0) : Value::Entry(i));
+        mPreserved = origin::kRegisters;
+        mStoresThrough = 0;
+        mOut = 0;
         std::map<uint32_t, State> in;
         std::set<uint32_t> work;
         in[mExec] = start;
@@ -236,27 +256,46 @@ public:
                 work.insert(o.first);
             }
         }
+        effects.preserved = mPreserved;
+        effects.storesThrough = mStoresThrough;
+        effects.outOrigins = mOut;
         return std::string();
     }
 
 private:
     static constexpr size_t kMaxSteps = 200000;
+    static constexpr int kTracked = 22;   // the registers origin:: names, in its order
+    static constexpr int kR15 = 15, kPr = 21;
+    static constexpr uint32_t kNoCall = 0xFFFFFFFFu;   // never an instruction address (odd)
 
     struct Value
     {
-        enum Kind : uint8_t { Other, Pr, Sp, Imm } kind = Other;
-        int64_t v = 0;
-        static Value Incoming() { Value x; x.kind = Pr; return x; }
+        enum Kind : uint8_t { Fuzzy, Reg, Sp, Imm } kind = Fuzzy;
+        int64_t v = 0;               // Reg: the register's index; Sp: the offset; Imm: the constant
+        uint32_t from = origin::kAll;   // Fuzzy: what it can come from
+        static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
         static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
         static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
-        bool operator==(const Value& o) const { return kind == o.kind && v == o.v; }
+        static Value From(uint32_t o) { Value x; x.from = o; return x; }
+        uint32_t Origins() const
+        {
+            switch (kind)
+            {
+            case Reg: return 1u << v;
+            case Sp: return origin::kStack;
+            case Imm: return 0;
+            default: return from;
+            }
+        }
+        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || from == o.from); }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
     struct State
     {
         bool reached = false;
-        std::map<Key, Value> vars;         // registers and temporaries; absent = Other
-        std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = Other
+        bool escaped = false;
+        std::map<Key, Value> vars;         // registers and temporaries; absent = anything
+        std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
     };
     struct Op
     {
@@ -285,7 +324,7 @@ private:
 
     static Key KeyOf(const ghidra::VarnodeData& vn) { return Key(vn.space, vn.offset, vn.size); }
 
-    Value Get(const State& s, const ghidra::VarnodeData& vn) const
+    static Value Get(const State& s, const ghidra::VarnodeData& vn)
     {
         if (vn.space->getType() == ghidra::IPTR_CONSTANT) return Value::Const(static_cast<int64_t>(vn.offset));
         auto f = s.vars.find(KeyOf(vn));
@@ -300,31 +339,168 @@ private:
                                  vn.offset < std::get<1>(it->first) + std::get<2>(it->first);
             it = overlap ? s.vars.erase(it) : std::next(it);
         }
-        if (v.kind != Value::Other) s.vars[KeyOf(vn)] = v;
+        s.vars[KeyOf(vn)] = v;
     }
 
-    // Keeps in 'into' only what both states agree on; true when 'into' changed.
+    // What a load from untracked memory can give.
+    static Value Loaded(const State& s) { return Value::From(origin::kMemory | (s.escaped ? origin::kStack : 0)); }
+
+    // Forget a slot. What it held is no longer tracked, so a stack address in it has escaped.
+    static void Forget(State& s, std::map<int64_t, Value>::iterator& it)
+    {
+        if (it->second.Origins() & origin::kStack) s.escaped = true;
+        it = s.slots.erase(it);
+    }
+    static void ForgetSlots(State& s, int64_t from = INT64_MIN)
+    {
+        for (auto it = s.slots.begin(); it != s.slots.end();)
+            if (it->first + 4 > from) Forget(s, it);
+            else ++it;
+    }
+
+    // An address that may point into this function's stack (or above it, its caller's).
+    static bool MayBeStack(const State& s, const Value& addr)
+    {
+        const uint32_t o = addr.Origins();
+        return (o & origin::kStack) || (s.escaped && (o & origin::kMemory));
+    }
+
+    // Keeps in 'into' what both states agree on, the rest as its origins; true when 'into' changed.
     static bool Join(State& into, const State& from)
     {
         bool changed = false;
-        auto meet = [&changed](auto& a, const auto& b) {
-            for (auto it = a.begin(); it != a.end();)
-            {
-                auto f = b.find(it->first);
-                if (f != b.end() && f->second == it->second) ++it;
-                else
-                {
-                    it = a.erase(it);
-                    changed = true;
-                }
-            }
+        if (from.escaped && !into.escaped) into.escaped = changed = true;
+        auto merge = [&changed](Value& a, const Value& b) {
+            if (a == b) return;
+            const Value m = Value::From(a.Origins() | b.Origins());
+            if (m == a) return;
+            a = m;
+            changed = true;
         };
-        meet(into.vars, from.vars);
-        meet(into.slots, from.slots);
+        // A register or temporary absent from either is anything.
+        for (auto it = into.vars.begin(); it != into.vars.end();)
+        {
+            auto f = from.vars.find(it->first);
+            if (f == from.vars.end())
+            {
+                it = into.vars.erase(it);
+                changed = true;
+                continue;
+            }
+            merge(it->second, f->second);
+            ++it;
+        }
+        // A slot absent from either holds what a load from memory gives there.
+        for (auto& slot : into.slots)
+        {
+            auto f = from.slots.find(slot.first);
+            merge(slot.second, f == from.slots.end() ? Loaded(from) : f->second);
+        }
+        for (const auto& slot : from.slots)
+            if (into.slots.count(slot.first) == 0)
+            {
+                Value v = Loaded(into);
+                merge(v, slot.second);
+                if (!(v == Loaded(into))) into.slots[slot.first] = v;
+            }
         return changed;
     }
 
     static int64_t Wrap(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v)); }
+
+    // The bits of 'callee' (its entry registers, memory, its stack) as origins in the caller's 's'.
+    uint32_t Map(const State& s, uint32_t callee) const
+    {
+        uint32_t o = callee & origin::kStack;   // its stack, or ours above it
+        if (callee & origin::kMemory) o |= Loaded(s).from;
+        for (int r = 0; r < kTracked; ++r)
+            if (callee & (1u << r)) o |= Get(s, mReg[r]).Origins();
+        return o;
+    }
+
+    void Call(State& s, uint32_t at)
+    {
+        CallEffects e;   // unknown: anything
+        auto t = at == kNoCall ? mCallAt.end() : mCallAt.find(at);
+        if (t != mCallAt.end())
+        {
+            auto p = mLent.find(t->second);
+            if (p != mLent.end()) e = p->second.effects;
+        }
+        // What the callee can see: a stack address in a register other than r15, or in a slot, it
+        // can keep or store through as it likes.
+        for (int r = 0; r < kTracked; ++r)
+            if (r != kR15 && (Get(s, mReg[r]).Origins() & origin::kStack)) s.escaped = true;
+        for (const auto& slot : s.slots)
+            if (slot.second.Origins() & origin::kStack) s.escaped = true;
+        if (e.storesThrough & origin::kFrame)
+        {
+            s.escaped = true;
+            const Value sp = Get(s, mReg[kR15]);
+            ForgetSlots(s, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+        }
+        if (MayBeStack(s, Value::From(Map(s, e.storesThrough & ~origin::kFrame)))) ForgetSlots(s);
+        const Value out = Value::From(Map(s, e.outOrigins));
+        for (int r = 0; r < kTracked; ++r)
+            if (!(e.preserved & (1u << r))) Set(s, mReg[r], out);
+    }
+
+    void Store(State& s, const Value& addr, const ghidra::VarnodeData& valueVn, const Value& value)
+    {
+        const int64_t n = valueVn.size;
+        if (addr.kind == Value::Sp)
+        {
+            if (addr.v + n > 0) mStoresThrough |= origin::kFrame;   // at or above r15 on entry
+            for (auto it = s.slots.begin(); it != s.slots.end();)
+                if (it->first < addr.v + n && addr.v < it->first + 4) Forget(s, it);
+                else ++it;
+            if (n == 4) s.slots[addr.v] = value;
+            else if (value.Origins() & origin::kStack) s.escaped = true;
+            return;
+        }
+        mStoresThrough |= addr.Origins() & ~origin::kStack;
+        if (addr.Origins() & origin::kStack) mStoresThrough |= origin::kFrame;   // may reach the caller's frame
+        if (value.Origins() & origin::kStack)
+        {
+            s.escaped = true;
+            mStoresThrough |= origin::kFrame;   // a stack address let out: the caller's, possibly
+        }
+        if (MayBeStack(s, addr)) ForgetSlots(s);
+        else ForgetSlots(s, 0);   // through an entry value: the caller's frame, at most
+    }
+
+    Value Load(const State& s, const Value& addr, ghidra::uint4 n) const
+    {
+        if (addr.kind == Value::Sp)
+        {
+            if (n == 4)
+            {
+                auto f = s.slots.find(addr.v);
+                if (f != s.slots.end()) return f->second;
+            }
+            uint32_t o = Loaded(s).from;
+            for (const auto& slot : s.slots)
+                if (slot.first < addr.v + n && addr.v < slot.first + 4) o |= slot.second.Origins();
+            return Value::From(o);
+        }
+        return Loaded(s);
+    }
+
+    // At a return: PR must be the caller's; and what the caller sees afterwards is recorded.
+    bool Return(const State& s, const ghidra::VarnodeData& target)
+    {
+        const Value t = Get(s, target);
+        if (!(t.kind == Value::Reg && t.v == kPr)) return false;
+        for (int r = 0; r < kTracked; ++r)
+        {
+            const Value v = Get(s, mReg[r]);
+            const bool same = r == kR15 ? v.kind == Value::Sp && v.v == 0 : v.kind == Value::Reg && v.v == r;
+            if (same) continue;
+            mPreserved &= ~(1u << r);
+            mOut |= v.Origins();
+        }
+        return true;
+    }
 
     // One instruction (with its delay slot, which the engine's p-code for a delayed branch holds):
     // its own p-code is a small graph of its own when it has internal branches.
@@ -356,7 +532,8 @@ private:
         {
             const int i = *work.begin();
             work.erase(work.begin());
-            if (i == n || ++steps > 4096) continue;
+            if (i == n) continue;
+            if (++steps > 4096) return "a return not proven to go to its caller (too many paths)";
             State s = at[i];
             const Op& op = c.ops[i];
             bool falls = true;
@@ -368,45 +545,25 @@ private:
             {
                 const Value x = Get(s, op.in[0]), y = Get(s, op.in[1]);
                 const bool sub = op.code == ghidra::CPUI_INT_SUB;
-                Value r;
+                Value r = Value::From(x.Origins() | y.Origins());
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
                 Set(s, op.out, r);
                 break;
             }
-            case ghidra::CPUI_LOAD:
-            {
-                const Value addr = Get(s, op.in[1]);
-                Value r;
-                if (addr.kind == Value::Sp && op.out.size == 4)
-                {
-                    auto f = s.slots.find(addr.v);
-                    if (f != s.slots.end()) r = f->second;
-                }
-                Set(s, op.out, r);
-                break;
-            }
-            case ghidra::CPUI_STORE:
-            {
-                const Value addr = Get(s, op.in[1]);
-                if (addr.kind != Value::Sp) break;
-                const int64_t lo = addr.v, hi = addr.v + op.in[2].size;
-                for (auto it = s.slots.begin(); it != s.slots.end();)
-                    it = it->first < hi && lo < it->first + 4 ? s.slots.erase(it) : std::next(it);
-                const Value v = Get(s, op.in[2]);
-                if (op.in[2].size == 4 && v.kind != Value::Other) s.slots[lo] = v;
-                break;
-            }
+            case ghidra::CPUI_LOAD: Set(s, op.out, Load(s, Get(s, op.in[1]), op.out.size)); break;
+            case ghidra::CPUI_STORE: Store(s, Get(s, op.in[1]), op.in[2], Get(s, op.in[2])); break;
             case ghidra::CPUI_CALL:
             case ghidra::CPUI_CALLIND:
-                for (auto it = s.vars.begin(); it != s.vars.end();)
+            case ghidra::CPUI_CALLOTHER:   // trapa and the like: unknown
+                if (op.code == ghidra::CPUI_CALLOTHER)
                 {
-                    bool kept = std::get<0>(it->first)->getType() != ghidra::IPTR_PROCESSOR;   // temporaries
-                    for (const ghidra::VarnodeData& k : mKept)
-                        kept = kept || KeyOf(k) == it->first;
-                    it = kept ? std::next(it) : s.vars.erase(it);
+                    CallUnknown(s);
+                    if (op.hasOut) Set(s, op.out, Value());
                 }
+                else
+                    Call(s, a);
                 break;
             case ghidra::CPUI_BRANCH:
             case ghidra::CPUI_CBRANCH:
@@ -435,11 +592,16 @@ private:
                 break;
             }
             case ghidra::CPUI_RETURN:
-                if (Get(s, op.in[0]).kind != Value::Pr) return "a return not to its caller";
+                if (!Return(s, op.in[0])) return "a return not to its caller";
                 falls = false;
                 break;
             default:
-                if (op.hasOut) Set(s, op.out, Value());
+                if (op.hasOut)
+                {
+                    uint32_t o = 0;
+                    for (const ghidra::VarnodeData& vn : op.in) o |= Get(s, vn).Origins();
+                    Set(s, op.out, Value::From(o));
+                }
                 break;
             }
             if (falls && flow(i + 1, s)) work.insert(i + 1);
@@ -448,18 +610,22 @@ private:
         return std::string();
     }
 
+    void CallUnknown(State& s) { Call(s, kNoCall); }   // no call spec there: the worst case
+
     ghidra::Funcdata& mFd;
     uint32_t mExec;
+    const std::map<uint32_t, Prototype>& mLent;
     ghidra::AddrSpace* mRam = nullptr;
-    ghidra::VarnodeData mPr, mSp;
-    std::vector<ghidra::VarnodeData> mKept;
+    ghidra::VarnodeData mReg[kTracked];
+    std::map<uint32_t, uint32_t> mCallAt;   // call instruction -> the address it calls
+    uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0;
 };
 
 // Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent
 // signature is locked: the caller's call shows exactly those arguments and that return, and
 // nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
 std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Prototype>& lent, uint32_t exec,
-                           uint32_t entry)
+                           uint32_t entry, CallEffects& effects)
 {
     if (fd.hasBadData()) return "bad instruction data";
     const ghidra::FuncProto& fp = fd.getFuncProto();
@@ -496,7 +662,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     }
     // A return that does not go back to the caller (PR replaced, or saved after a call changed it)
     // is a jump somewhere else, not a return to the call site the signature describes.
-    return ReturnCheck(fd, exec).Run();
+    return ReturnCheck(fd, exec, lent).Run(effects);
 }
 
 // What one pass learned from a function's raw p-code, before any action has run.
@@ -1069,8 +1235,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (r.truncated) r.prototypeWithheld = "truncated";
         else if (r.unsupported) r.prototypeWithheld = "unsupported";
         else if (r.unimplemented) r.prototypeWithheld = "unimplemented";
-        else r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry);
-        if (r.prototypeWithheld.empty()) r.prototype = PrototypeOf(*fd);
+        CallEffects effects;
+        if (r.prototypeWithheld.empty()) r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, effects);
+        if (r.prototypeWithheld.empty())
+        {
+            r.prototype = PrototypeOf(*fd);
+            r.prototype.effects = effects;
+        }
 
         std::ostringstream markup;
         arch->print->setOutputStream(&markup);

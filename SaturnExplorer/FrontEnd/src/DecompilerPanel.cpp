@@ -153,6 +153,10 @@ uint64_t DecompilerPanel::ShapeOf(const Prototype& proto)
     shape(proto.ret);
     Mix(h, proto.params.size());
     for (const TypeShape& t : proto.params) shape(t);
+    // The call effects too: a caller's own signature can depend on them (its return proof).
+    Mix(h, proto.effects.preserved);
+    Mix(h, proto.effects.storesThrough);
+    Mix(h, proto.effects.outOrigins);
     return h ? h : 1;   // 0 is "none lent"
 }
 

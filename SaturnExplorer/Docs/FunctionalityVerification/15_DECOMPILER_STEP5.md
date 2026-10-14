@@ -295,3 +295,17 @@ known.
 Cost: a function that calls the BIOS without an image, or through a computed pointer, never lends
 its signature.
 
+
+The re-review at `0be0808` closed findings 1–4 and found three more gaps in the PR check (5).
+`ReturnCheck` now tracks where each value can come from instead of discarding it, and every lent
+signature carries `CallEffects` that a caller applies at the call:
+
+1. **Precision loss.** A computed value keeps its origins, so `or #0,r0` on a stack address is still
+   possibly a stack address. A store through it forgets every stack slot.
+2. **Stack escaping to a callee.** `storesThrough` records where a function's store addresses come
+   from. A caller that passes a stack address in a register its callee stores through forgets its
+   slots.
+3. **Unverified preservation.** `preserved` lists the registers equal to their entry value at every
+   return. After a call, only those keep their value.
+
+`TestPrototypeEligibility` covers each gap and its control; the three gap checks fail on `0be0808`.

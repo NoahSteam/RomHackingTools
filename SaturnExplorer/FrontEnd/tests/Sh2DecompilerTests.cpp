@@ -743,6 +743,50 @@ void TestPrototypeEligibility()
                         0x4F26,                  // lds.l @r15+,pr
                         0x000B,                  // rts
                         0x0009 });               //   nop
+    // Review of 0be0808: saved PR overwritten (a) through a stack address the checker lost track of,
+    // (b) by a callee handed a stack address, (c) in r8 by a callee that does not preserve r8.
+    const uint32_t aliasStore = 0x06011000u, zeroArg = 0x06011100u, passesSp = 0x06011200u,
+                   passesConst = 0x06011300u, clobbersR8 = 0x06011400u, prInR8 = 0x06011500u, prInR8Kept = 0x06011600u;
+    Place(hw, aliasStore, { 0x4F22,      // sts.l pr,@-r15
+                            0x60F3,      // mov r15,r0
+                            0xCB00,      // or #0,r0
+                            0xE100,      // mov #0,r1
+                            0x2012,      // mov.l r1,@r0   (the saved PR)
+                            0x4F26,      // lds.l @r15+,pr
+                            0x000B,      // rts
+                            0xE007 });   //   mov #7,r0
+    Place(hw, zeroArg, { 0xE000,         // mov #0,r0
+                         0x000B,         // rts
+                         0x2402 });      //   mov.l r0,@r4
+    Place(hw, passesSp, { 0x4F22,                       // sts.l pr,@-r15
+                          0x64F3,                       // mov r15,r4
+                          Bsr(passesSp + 4, zeroArg),   // bsr zeroArg
+                          0x0009,                       //   nop
+                          0x4F26,                       // lds.l @r15+,pr
+                          0x000B,                       // rts
+                          0xE007 });                    //   mov #7,r0
+    Place(hw, passesConst, { 0x4F22,                          // sts.l pr,@-r15
+                             0xE410,                          // mov #0x10,r4
+                             Bsr(passesConst + 4, zeroArg),   // bsr zeroArg
+                             0x0009,                          //   nop
+                             0x4F26,                          // lds.l @r15+,pr
+                             0x000B,                          // rts
+                             0xE007 });                       //   mov #7,r0
+    Place(hw, clobbersR8, { 0xE800,      // mov #0,r8
+                            0x000B,      // rts
+                            0x0009 });   //   nop
+    Place(hw, prInR8, { 0x082A,                         // sts pr,r8
+                        Bsr(prInR8 + 2, clobbersR8),    // bsr clobbersR8
+                        0x0009,                         //   nop
+                        0x482A,                         // lds r8,pr
+                        0x000B,                         // rts
+                        0xE007 });                      //   mov #7,r0
+    Place(hw, prInR8Kept, { 0x082A,                     // sts pr,r8
+                            Bsr(prInR8Kept + 2, leaf),  // bsr leaf
+                            0x0009,                     //   nop
+                            0x482A,                     // lds r8,pr
+                            0x000B,                     // rts
+                            0xE007 });                  //   mov #7,r0
     auto snap = MakeSnapshot(hw);
 
     auto run = [&](uint32_t entry, std::initializer_list<std::pair<uint32_t, Prototype>> lent, const char* label) {
@@ -803,6 +847,22 @@ void TestPrototypeEligibility()
     CHECK(run(framed, { { leaf, lf.prototype } }, "frame pointer").prototype.known);
     CHECK(!run(prFromR4, {}, "PR from r4").prototype.known);
     CHECK(!run(prInSlot, { { leaf, lf.prototype } }, "PR saved in a bsr slot").prototype.known);
+
+    // (a) A store through a stack address the checker cannot follow (or #0 keeps it a stack
+    // address) may hit the saved PR.
+    CHECK(!run(aliasStore, {}, "store through a lost stack address").prototype.known);
+    // (b) A callee storing through its first argument: handed a stack address, it may overwrite the
+    // saved PR; handed a constant, it cannot.
+    const DecompileResult za = run(zeroArg, {}, "stores through its argument");
+    CHECK(za.prototype.known && (za.prototype.effects.storesThrough & (1u << 4)));
+    CHECK(!run(passesSp, { { zeroArg, za.prototype } }, "passes the stack to it").prototype.known);
+    CHECK(run(passesConst, { { zeroArg, za.prototype } }, "passes a constant to it").prototype.known);
+    // (c) PR kept in r8 across a call: only a callee verified to preserve r8 keeps it.
+    const DecompileResult c8 = run(clobbersR8, {}, "clobbers r8");
+    CHECK(c8.prototype.known && !(c8.prototype.effects.preserved & (1u << 8)));
+    CHECK(lf.prototype.effects.preserved & (1u << 8));
+    CHECK(!run(prInR8, { { clobbersR8, c8.prototype } }, "PR in r8 across a clobber").prototype.known);
+    CHECK(run(prInR8Kept, { { leaf, lf.prototype } }, "PR in r8 across a leaf").prototype.known);
 }
 
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --
