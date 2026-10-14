@@ -3562,12 +3562,17 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
   if (op->code() == CPUI_LOAD && data.getArch()->loadsNotDuplicated) {
     // SaturnExplorer: the load is printed where the implied chain it starts ends up being used.
     // Any other memory operation in between -- a store, another load, a user op (a volatile read
-    // or write), a call -- would then appear in the wrong order with respect to it.
+    // or write), a call -- would then appear in the wrong order with respect to it; and in the
+    // right operand of a short-circuit operator it would appear conditional.
     vector<Varnode *> chain;
     chain.push_back(vn);
     for(Varnode *cur = vn;;) {
       PcodeOp *use = cur->loneDescend();
       if (use == (PcodeOp *)0) break;
+      // The right operand of && and || is printed as evaluated only when the left one does not
+      // decide: a load there would appear conditional though the code always makes it.
+      if ((use->code() == CPUI_BOOL_AND || use->code() == CPUI_BOOL_OR) && use->getSlot(cur) == 1)
+	return false;
       Varnode *out = use->getOut();
       if (out == (Varnode *)0 || !out->isImplied() || out->isExplicit()) break;
       chain.push_back(out);

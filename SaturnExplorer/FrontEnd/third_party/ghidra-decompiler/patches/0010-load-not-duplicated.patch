@@ -39,7 +39,7 @@ index d6a82ad..3867e98 100644
    int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
    uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
-index 32f95ae..1cc4b71 100644
+index 32f95ae..4b243da 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 @@ -14,6 +14,7 @@
@@ -112,19 +112,24 @@ index 32f95ae..1cc4b71 100644
    }
    for(int4 i=0;i<multlist.size();++i)
      multlist[i]->clearMark();
-@@ -3527,6 +3559,32 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
+@@ -3527,6 +3559,37 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
    int4 i;
  
    op = vn->getDef();
 +  if (op->code() == CPUI_LOAD && data.getArch()->loadsNotDuplicated) {
 +    // SaturnExplorer: the load is printed where the implied chain it starts ends up being used.
 +    // Any other memory operation in between -- a store, another load, a user op (a volatile read
-+    // or write), a call -- would then appear in the wrong order with respect to it.
++    // or write), a call -- would then appear in the wrong order with respect to it; and in the
++    // right operand of a short-circuit operator it would appear conditional.
 +    vector<Varnode *> chain;
 +    chain.push_back(vn);
 +    for(Varnode *cur = vn;;) {
 +      PcodeOp *use = cur->loneDescend();
 +      if (use == (PcodeOp *)0) break;
++      // The right operand of && and || is printed as evaluated only when the left one does not
++      // decide: a load there would appear conditional though the code always makes it.
++      if ((use->code() == CPUI_BOOL_AND || use->code() == CPUI_BOOL_OR) && use->getSlot(cur) == 1)
++	return false;
 +      Varnode *out = use->getOut();
 +      if (out == (Varnode *)0 || !out->isImplied() || out->isExplicit()) break;
 +      chain.push_back(out);

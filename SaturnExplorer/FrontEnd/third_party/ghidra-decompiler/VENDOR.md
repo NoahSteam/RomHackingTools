@@ -37,7 +37,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0007-cspec-wide-return-order.patch` | `superh.cspec` put a 64-bit return's high half in r1. Ghidra's `piece1` is the most significant piece, and the big-endian SH ABI returns the high half in r0, so the join is now `piece1="r0" piece2="r1"`. `Sh2SpecData.h` is regenerated. |
 | `0008-cspec-return-address.patch` | `superh.cspec` declares PR as the return address, so `jmp @rN` with rN copied from PR is a return, not an unrecovered jump table. `Sh2SpecData.h` is regenerated. |
 | `0009-keep-unused-loads.patch` | `Architecture::keepUnusedLoads` (off by default; SaturnExplorer sets it): an unused load is held until its pointer is a constant, then the address's volatility decides. Without it a read whose address folded late, or never, was removed: a dummy hardware read was lost. |
-| `0010-load-not-duplicated.patch` | `Architecture::loadsNotDuplicated` (off by default; SaturnExplorer sets it): a LOAD is printed once and in place. It becomes explicit when its expression has several uses, or when another memory operation (store, load, user op, call) lies between it and where it would be printed. |
+| `0010-load-not-duplicated.patch` | `Architecture::loadsNotDuplicated` (off by default; SaturnExplorer sets it): a LOAD is printed once, in place and unconditionally. It becomes explicit when its expression has several uses, when another memory operation (store, load, user op, call) lies between it and where it would be printed, or when it would be printed in the right operand of `&&` or `||`. |
+| `0011-ptrsub-char-constant-cast.patch` | `RulePtrsubCharConstant` checks that a type is a pointer before casting it to one (a UBSan vptr report; behaviour unchanged). |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -79,7 +80,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0007: `TestPrototypeEligibility` (a 64-bit return and its caller);
   - 0008: `TestFlowUncertainty` (a return through `jmp @r1`).
   - 0009: `TestHardwareVolatility` (unused reads through a late-folding and an indexed pointer).
-  - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once and in order).
+  - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once, in order, unconditionally);
+  - 0011: `Sh2DecompilerTests` under UBSan with vptr.
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

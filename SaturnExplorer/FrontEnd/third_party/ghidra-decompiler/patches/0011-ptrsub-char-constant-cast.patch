@@ -1,0 +1,25 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+index 037cdfa..68bf77b 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -7252,8 +7254,9 @@ int4 RulePtrsubCharConstant::applyOp(PcodeOp *op,Funcdata &data)
+   Varnode *vn1 = op->getIn(1);
+   if (!vn1->isConstant()) return 0;
+   Varnode *outvn = op->getOut();
+-  TypePointer *outtype = (TypePointer *)outvn->getTypeDefFacing();
+-  if (outtype->getMetatype() != TYPE_PTR) return 0;
++  Datatype *outdt = outvn->getTypeDefFacing();
++  if (outdt->getMetatype() != TYPE_PTR) return 0;	// Checked before the downcast
++  TypePointer *outtype = (TypePointer *)outdt;
+   Datatype *basetype = outtype->getPtrTo();
+   if (!basetype->isCharPrint()) return 0;
+   Address symaddr = sbtype->getAddress(vn1->getOffset(),vn1->getSize(),op->getAddr());

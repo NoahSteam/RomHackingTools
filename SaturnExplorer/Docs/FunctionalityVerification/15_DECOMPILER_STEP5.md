@@ -884,3 +884,27 @@ Tests: "read through a pointer, then a command", "two FIFO reads through a volat
 and the order check in every ledger. Mutation: with the new rule off, 3 ledgers fail (including
 the argument `*p - *p`) and the game-code order checks report 1,656 and 1,283.
 
+### Review of `47ae113`: reads that always happen, printed as conditional
+
+- **P1: a read could print in the right operand of `&&` or `||`.** `tst r5,r5; movt r1;
+  mov.l @r4,r0; tst r0,r0; movt r0; and r0,r1` printed `return param_2 == 0 && *param_1 == 0;`.
+  C evaluates the right operand only when the left one does not decide, so the FIFO read the
+  code always makes appeared skipped when `param_2 != 0`; `or` gave the same with `||`. Patch
+  0010 now also keeps a load explicit when its implied chain enters the right operand of a
+  BOOL_AND or BOOL_OR:
+  - the `&&` case prints `iVar1 = *param_1; return param_2 == 0 && iVar1 == 0;`;
+  - two reads combined print as two statements, in order;
+  - a byte read prints the same way.
+
+  A genuine branch is the control: the code reads only when `param_2 == 0`, and the output
+  keeps the read under `if (param_2 == 0)`.
+- **The ledger rejects it.** `MemoryAccess::conditionalInPrint` marks a read printed in the
+  right operand of `&&` or `||`. The ledger requires it false, and `TestGameCode` counts it:
+  0 in both save states. That pattern does not occur in this game's code, so the fixtures carry
+  it. With the rule off, 4 fixtures fail.
+- **Patch 0011.** `RulePtrsubCharConstant` cast to `TypePointer *` before checking the metatype;
+  the cast now follows the check. The UBSan vptr check reported it. The SLEIGH signed-shift
+  reports remain upstream, recorded and not blocking.
+- **The earlier review of `f212a8d`** reported the two ordering failures that `47ae113` already
+  fixes.
+

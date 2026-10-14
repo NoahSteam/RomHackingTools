@@ -474,7 +474,8 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
         const MemoryAccess& g = got[i];
         const Op& w = want[i];
         ok = g.write == w.write && g.direct == (w.address != 0) && g.address == w.address && g.size == w.size &&
-             g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath;
+             g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath &&
+             !g.conditionalInPrint;
     }
     // Printed in the order the code makes them (the fixtures are straight-line code), and no two
     // reads in one statement: C leaves the order of two reads in one expression open.
@@ -665,6 +666,40 @@ void TestHardwareVolatility()
                                                     0x6012,           // mov.l @r1,r0     second
                                                     0x3028 },         // sub r2,r0        second - first
                                      0x25818000u);
+    // Reads the code always makes, combined into a boolean (review of 47ae113): printed in the
+    // right operand of && or ||, they would appear skipped whenever the left one decides.
+    const Fixture andRead = { 0x06009E40u, { 0x2558,      // tst r5,r5
+                                             0x0129,      // movt r1         r1 = param_2 == 0
+                                             0x6042,      // mov.l @r4,r0    the read, always made
+                                             0x2008,      // tst r0,r0
+                                             0x0029,      // movt r0
+                                             0x2109,      // and r0,r1
+                                             0x6013,      // mov r1,r0
+                                             0x000B, 0x0009, 0x0009 }, 0x14, 0 };
+    const Fixture orRead = { 0x06009E80u, { 0x2558, 0x0129, 0x6042, 0x2008, 0x0029,
+                                            0x210B,       // or r0,r1
+                                            0x6013, 0x000B, 0x0009, 0x0009 }, 0x14, 0 };
+    const Fixture andByte = { 0x06009EC0u, { 0x2558, 0x0129, 0x6040,   // mov.b @r4,r0
+                                             0x2008, 0x0029, 0x2109, 0x6013, 0x000B, 0x0009, 0x0009 }, 0x14, 0 };
+    const Fixture twoBools = { 0x06009F00u, { 0x6142,     // mov.l @r4,r1
+                                              0x2118,     // tst r1,r1
+                                              0x0129,     // movt r1
+                                              0x6052,     // mov.l @r5,r0
+                                              0x2008,     // tst r0,r0
+                                              0x0029,     // movt r0
+                                              0x2109,     // and r0,r1
+                                              0x6013,     // mov r1,r0
+                                              0x000B, 0x0009 }, 0x14, 0 };
+    // The control: a read the code makes only when a branch is not taken.
+    const Fixture branchRead = { 0x06009F40u, { 0x2558,   // tst r5,r5
+                                                0x8B04,   // bf F          param_2 != 0: return 0
+                                                0x6042,   // mov.l @r4,r0  read only on this path
+                                                0x2008,   // tst r0,r0
+                                                0x0029,   // movt r0
+                                                0x000B, 0x0009,
+                                                0x000B,   // F: rts
+                                                0xE000 }, //    mov #0,r0
+                                 0x14, 0 };
     // Analysis data reads: a pointer to a string in captured memory, returned.
     const Fixture strPtr = { 0x06009B00u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x06009B40u };
     // Diagnostics by direction: the same registers written instead of read, and read instead of written.
@@ -679,7 +714,8 @@ void TestHardwareVolatility()
                               &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
                               &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox,
                               &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
-                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice })
+                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice,
+                              &andRead, &orRead, &andByte, &twoBools, &branchRead })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1022,6 +1058,19 @@ void TestHardwareVolatility()
     // A single read used in place stays inline.
     r = run("unused read through an argument (inline check)", argUnused);
 
+    r = run("read combined with &&", andRead);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    r = run("read combined with ||", orRead);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    r = run("byte read combined with &&", andByte);
+    CHECK(Ledger(r, { Rd(0, 1) }));
+    r = run("two reads combined with &&", twoBools);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+    // A read under a real branch stays under it: not hoisted to run unconditionally.
+    r = run("read under a branch", branchRead);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(!r.accesses.empty() && r.accesses[0].block != 0);
+
     r = run("word store through a byte pointer", wordToBytes);
     CHECK(Ledger(r, { Rd(0, 1, false, true), Wr(0, 2) }));
 
@@ -1346,7 +1395,7 @@ void TestGameCode()
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
-    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0;
+    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0;
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
@@ -1395,6 +1444,9 @@ void TestGameCode()
                     std::find(m.through.begin(), m.through.end(), o.id) == m.through.end() && ++moved <= 10)
                     std::printf("  read at %08X printed past the access at %08X in %08X\n", m.insn, o.insn, entry);
         }
+        for (const MemoryAccess& m : r.accesses)
+            if (m.conditionalInPrint && ++shortCircuit <= 10)
+                std::printf("  read at %08X printed in the right operand of && or || in %08X\n", m.insn, entry);
         for (size_t i = 0; i < r.accesses.size(); ++i)
             for (size_t j = i + 1; j < r.accesses.size(); ++j)
                 if (Unordered(r.accesses[i], r.accesses[j]) && ++unordered <= 10)
@@ -1447,7 +1499,8 @@ void TestGameCode()
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
     std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
                 "with two reads\n", duplicated, wrongWidth, unordered);
-    std::printf("  %d reads printed past another access\n", moved);
+    std::printf("  %d reads printed past another access, %d printed as conditional\n", moved, shortCircuit);
+    CHECK(shortCircuit == 0);
     CHECK(unordered == 0);
     CHECK(moved == 0);
     CHECK(wrongWidth == 0);

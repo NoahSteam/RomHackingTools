@@ -1331,6 +1331,8 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
             {
                 const ghidra::PcodeOp* use = v->loneDescend();
                 if (!use) break;
+                if ((use->code() == ghidra::CPUI_BOOL_AND || use->code() == ghidra::CPUI_BOOL_OR) && use->getSlot(v) == 1)
+                    a.conditionalInPrint = true;
                 at = use;
                 a.through.push_back(static_cast<uint32_t>(use->getTime()) + 1);
                 v = use->getOut();
