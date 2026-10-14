@@ -16,8 +16,10 @@
 // source -- marks a later function and is never overridden by an older entry further back. An
 // rts between the nearest known entry and the address means either the address is in a later,
 // unknown function, or the rts is an early return; flow from the known entry decides (the scan
-// answers only when that flow provably never reaches the address). A user-set entry is never
-// overridden: user corrections exist precisely for the functions the heuristics get wrong.
+// answers when that flow provably never reaches the address, or cannot be followed and several
+// returns lie in between). Flow that gets there only through the scan's entry may be a
+// conditional tail call, which is said. A user-set entry is never overridden: user corrections
+// exist precisely for the functions the heuristics get wrong.
 //
 // The rts scan passes over words that only read as rts (a literal), the previous function's
 // literal pool and mova-addressed jump table, and -- when the code after the rts never reaches the

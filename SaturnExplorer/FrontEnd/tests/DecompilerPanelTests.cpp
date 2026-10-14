@@ -1165,7 +1165,7 @@ void TestFlowUncertaintyShown()
         const std::vector<std::string> u = f.panel.Uncertainties();
         for (const std::string& l : u) std::printf("  amber: %s\n", l.c_str());
         CHECK(f.Shown().entry == sw);
-        CHECK(any(u, "0x0600980C is not reached from this entry"));
+        CHECK(any(u, "0x0600980C is not reached from this entry: flow may stop short of it"));
         CHECK(any(u, "Entry: an rts before 0x0600980C"));
         CHECK(any(u, "0x06009800: Treating indirect jump as call"));
 
@@ -1199,11 +1199,18 @@ void TestFlowUncertaintyShown()
         f.regs[0].pc = epi + 2;   // in the epilogue, below the entry: still inside
         tick(DecompilerPanel::kAutoRefreshFrames + 1);
         CHECK(f.panel.Captures() == c);
-        // Between: outside. (What is found for it does not hold it either, so it may refresh again
-        // once that answer is in.)
+        // Between: outside, refreshed for once. What is found for it does not hold it either, and
+        // the PC parked there is not refreshed for again every interval.
         f.regs[0].pc = 0x06009908u;
         tick(DecompilerPanel::kAutoRefreshFrames + 1);
-        CHECK(f.panel.Captures() > c);
+        CHECK(f.panel.Captures() == c + 1);
+        while (f.panel.Pending()) tick(1);
+        tick(3 * DecompilerPanel::kAutoRefreshFrames);
+        CHECK(f.panel.Captures() == c + 1);
+        f.regs[0].pc = shared + 2;   // moving on is refreshed for, back to the shared function
+        tick(DecompilerPanel::kAutoRefreshFrames + 1);
+        CHECK(f.panel.Captures() == c + 2);
+        CHECK(f.WaitShown("shared"));
     }
 }
 

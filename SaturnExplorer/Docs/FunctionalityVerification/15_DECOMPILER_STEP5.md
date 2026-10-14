@@ -413,3 +413,26 @@ Tests, each failing on `b488688` (checked with old-API variants of the same fixt
 
 Not covered by a test: a call the engine marks as not returning. Nothing in this setup produces
 one, since lent signatures carry no no-return flag.
+
+Own review of `a5c6615`:
+- **A distant known entry won whenever its flow could not be followed.** A symbol with a switch,
+  several functions before the address, beat the scan's correct answer. That was a regression.
+  Unfollowable flow now keeps the known entry only when the scan's `rts` is the only return in
+  between.
+- **A conditional tail call looked like an early return.** `bf F2; rts; nop; F2:` is the same
+  shape. When flow from the known entry gets to the address only through the scan's entry, the
+  known entry is kept and the doubt is stated.
+- **A far jump within a function** (`jmp @rN` through a literal, past `bra`'s reach) was taken for
+  a tail call. A literal target between the entry and the address is now followed.
+- **The "not reached" advice** said "starts elsewhere" even when flow had stopped short, because of
+  an unrecovered switch, a cut or data. When the result has flow warnings, it now says flow may stop
+  short. It says nothing for a literal-pool word.
+- **Auto-refresh with the PC parked** in a hole no answer holds re-captured every 30 frames. Each PC
+  is now refreshed for once.
+- **Not a gap:** a function past the instruction limit. The engine's default
+  (`error_toomanyinstructions`) fails the whole decompile, so partial flow neither shows as complete
+  nor lends a signature. `TestFlowUncertainty` pins this.
+
+Each new check fails on `a5c6615`: `TestBoundaries` (doubt on the early return, the far
+unfollowable symbol, the far jump) and `TestFlowUncertaintyShown` (the "stop short" wording, one
+refresh for a parked PC).

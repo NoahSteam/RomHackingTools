@@ -388,10 +388,19 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
     // Only for the answer to the question the anchor belongs to.
     if (mResolved && mEntryOk && mShown.requestedEntry == mEntry)
     {
-        if (mHaveAnchor && !mShown.InBody(mAnchor))
+        // Not reached can mean the entry is wrong, or that flow stopped short of the address (a
+        // switch it could not recover, a cut, data) -- then a new start would be the wrong fix. A
+        // literal word asked about is never an instruction flow reaches.
+        auto pool = [&](uint32_t a) { return std::binary_search(mShown.literalPools.begin(), mShown.literalPools.end(), a); };
+        const bool literal = pool(mAnchor) || pool(mAnchor - 2);   // either half of a long
+        if (mHaveAnchor && !literal && !mShown.InBody(mAnchor))
         {
-            std::snprintf(b, sizeof b, "0x%08X is not reached from this entry: the function containing it starts "
-                                       "elsewhere (Set Function Start Here corrects it).", mAnchor);
+            if (mShown.flowWarnings.empty())
+                std::snprintf(b, sizeof b, "0x%08X is not reached from this entry: the function containing it starts "
+                                           "elsewhere (Set Function Start Here corrects it).", mAnchor);
+            else
+                std::snprintf(b, sizeof b, "0x%08X is not reached from this entry: flow may stop short of it (see the "
+                                           "warnings above), or the function containing it starts elsewhere.", mAnchor);
             out.push_back(b);
         }
         if (!mEntryDoubt.empty()) out.push_back("Entry: " + mEntryDoubt + ".");
@@ -580,6 +589,15 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                     // The body is canonical; the PC is inside only in the mirror the function ran in.
                     const uint32_t delta = mShownValid ? mShown.requestedEntry - mShown.entry : 0u;
                     autoDue = known && (!mShownValid || pc - delta != canonical || !mShown.InBody(canonical));
+                    // A PC no answer holds (a hole flow never reached: an unrecovered switch's case,
+                    // or an answer that failed) is refreshed for once, not every interval while it
+                    // sits there.
+                    if (autoDue && mAutoPcValid && pc == mAutoPc) autoDue = false;
+                    if (autoDue)
+                    {
+                        mAutoPc = pc;
+                        mAutoPcValid = true;
+                    }
                 }
                 // Following a PC the held snapshot has no registers for -- the first look after
                 // connecting can land before the emulator's first register frame -- is no answer at

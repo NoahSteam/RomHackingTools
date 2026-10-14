@@ -4,6 +4,7 @@
 #include "Disc/PathUtil.h"   // ReadWholeFile
 #include "FileWrite.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -87,9 +88,10 @@ enum class Reach { Yes, No, Unknown };
 // Whether flow from 'from' gets to the instruction at 'to', followed the way the decompiler's flow
 // is: both ways of a conditional branch, over calls (taken to return), never past rts/rte. A jump
 // the code does not resolve (braf, or jmp @rN not loaded from a literal: a switch, perhaps) or
-// bytes that do not decode leave it Unknown unless 'to' is reached some other way; a jmp @rN to a
-// literal address is a tail call, which ends the path.
-Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to)
+// bytes that do not decode leave it Unknown unless 'to' is reached some other way. A jmp @rN to a
+// literal address between 'from' and 'to' is a far branch within the function (past bra's reach);
+// anywhere else it is a tail call, which ends the path. Flow is not followed through 'avoid'.
+Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to, uint32_t avoid = 1)
 {
     std::set<uint32_t> seen;
     std::vector<uint32_t> work{ from };
@@ -100,6 +102,7 @@ Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to)
         work.pop_back();
         if (!seen.insert(p).second) continue;
         if (seen.size() > kMaxReachInstructions) return Reach::Unknown;
+        if (p == avoid && p != from) continue;
         if (p == to) return Reach::Yes;
         uint16_t op = 0;
         if (!snap.ReadU16(p, op))
@@ -127,9 +130,14 @@ Reach Reaches(const MemorySnapshot& snap, uint32_t from, uint32_t to)
         }
         if (ins.IsBranch)
         {
-            uint32_t t = 0;
+            uint32_t t = 0, c = 0;
             if (ins.HasBranchTarget) work.push_back(ins.BranchTarget);
-            else if (!((op & 0xF0FFu) == 0x402Bu && LiteralInRegister(snap, p, (op >> 8) & 0xF, t))) unknown = true;
+            else if ((op & 0xF0FFu) == 0x402Bu && LiteralInRegister(snap, p, (op >> 8) & 0xF, t))
+            {
+                if (CanonicalAddress(t, c) && c >= std::min(from, to) && c <= std::max(from, to)) work.push_back(c);
+            }
+            else
+                unknown = true;
             if (ins.IsConditional) work.push_back(next);
             continue;
         }
@@ -153,6 +161,18 @@ bool DataNotReturn(const MemorySnapshot& snap, uint32_t q, uint32_t floor)
     if (!snap.ReadU16(q + 2, slot)) return false;   // the region's last word: nothing says otherwise
     const DisassembledInstruction s = Sh2Decode(q + 2, slot);
     return !s.IsValid || s.IsBranch || s.HasDelaySlot;
+}
+
+// How many returns (rts/rte that are not data) lie in [lo, hi).
+int ReturnsBetween(const MemorySnapshot& snap, uint32_t lo, uint32_t hi)
+{
+    int n = 0;
+    for (uint32_t q = lo; q + 2 <= hi; q += 2)
+    {
+        uint16_t w = 0;
+        if (snap.ReadU16(q, w) && (w == kRts || w == kRte) && !DataNotReturn(snap, q, lo)) ++n;
+    }
+    return n;
 }
 
 // A word a jump table may hold: a 16-bit offset to a case (braf, or added to the table's base), so
@@ -424,16 +444,24 @@ EntryGuess FindFunctionContaining(const MemorySnapshot& snap, uint32_t address, 
     const bool haveScan = RtsScanEntry(snap, a, scanned, &scanWhy, &scanDoubt);
 
     // An rts between a known entry and the address is either that function's end (the address is
-    // in a later one) or an early return inside it. Flow from the entry says which: if it gets to
-    // the address, the rts was an early return; if it provably does not, a later function. When
-    // flow cannot tell (a switch it cannot follow), the known entry -- a real function start -- is
-    // kept, and the alternative said.
+    // in a later one) or an early return inside it. Flow from the entry says which: if it provably
+    // never gets to the address, a later function. If it does, the known entry is kept -- but a
+    // path that only gets there through the scan's entry, just after the rts, is a conditional
+    // tail call into a later function as much as an early return, and that is said. When flow
+    // cannot tell (a switch it cannot follow), the known entry -- a real function start -- is kept
+    // only if that rts is the one return in between; past several, the scan answers.
     bool useKnown = haveKnown && (knownSource == EntrySource::User || !haveScan || known >= scanned);
     if (haveKnown && !useKnown)
     {
         const Reach r = Reaches(snap, known, a);
-        if (r == Reach::Yes) useKnown = true;
-        else if (r == Reach::Unknown)
+        if (r == Reach::Yes)
+        {
+            useKnown = true;
+            if (Reaches(snap, known, a, scanned) != Reach::Yes)
+                g.doubt = "flow from " + Hex8(known) + " gets to " + Hex8(a) + " only through " + Hex8(scanned) +
+                          ", just after an rts: an early return, or a branch into a function starting there";
+        }
+        else if (r == Reach::Unknown && ReturnsBetween(snap, known, scanned) <= 1)
         {
             useKnown = true;
             g.doubt = "an rts before " + Hex8(a) + " may end this function; if so, " + Hex8(a) +

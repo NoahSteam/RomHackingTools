@@ -749,6 +749,16 @@ void TestFlowUncertainty()
     r = d.Decompile(snap, Request(0x26020410u));   // run through a mirror: still canonical
     CHECK(r.body == (Ranges{ { epilogue, epilogue + 6 }, { shared, shared + 6 } }));
 
+    // Past the instruction limit the engine fails the function (its default, error_toomanyinstructions),
+    // so partial flow never shows as complete nor lends a signature.
+    DecompileRequest few = Request(falls);
+    few.maxInstructions = 1;
+    r = d.Decompile(snap, Request(falls));
+    CHECK(r.prototype.known);
+    r = d.Decompile(snap, few);
+    Print("instruction limit", r);
+    CHECK(r.status == DecompileStatus::Failed && Has(r.error, "maximum allowable instructions") && !r.prototype.known);
+
     r = d.Decompile(snap, Request(viaPr));
     Print("jmp through PR", r);
     CHECK(r.status == DecompileStatus::Ok);

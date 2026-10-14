@@ -209,15 +209,47 @@ void TestBoundaries()
               0x0014,      // table: two 16-bit offsets
               0x0024 });
     put(afterTable, { 0x4F22, 0x7401, 0x7401, 0x4F26, 0x000B, 0x0009 });
+    // A switch the finder cannot follow, then two more functions ending in rts.
+    const uint32_t farSw = 0x06030600u, farFn = 0x0603060Eu;
+    put(farSw, { 0x452B, 0x0009, 0x000B, 0x0009,          // jmp @r5 ; nop ; rts ; nop
+                 0x7001, 0x000B, 0x0009,                   // add #1,r0 ; rts ; nop
+                 0x7001, 0x7001, 0x7001, 0x000B, 0x0009 }); // farFn
+    // After an rts: a jmp through a literal to further on in the same code.
+    const uint32_t farJump = 0x06030704u;
+    put(farJump - 4, { 0x000B, 0x0009 });
+    put(farJump, { 0xD101,      // mov.l @(4,pc),r1
+                   0x412B,      // jmp @r1
+                   0x0009,      //   nop
+                   0x0009 });
+    dts::Put32(hw, farJump + 8 - 0x06000000u, farJump + 0x10);
+    put(farJump + 0x0C, { 0x7001, 0x7001, 0x7001, 0x7001, 0x7001, 0x000B, 0x0009 });
     auto s = dts::MakeSnapshot(hw);
+    uint32_t e = 0;
+    std::string why, doubt;
 
-    // Flow from the symbol gets past its own early return: the symbol answers, not the scan.
+    // Flow from the symbol gets past its own early return: the symbol answers, not the scan. It gets
+    // there only by branching to just after the rts, which a conditional tail call into a later
+    // function does too, so that is said.
     FinderHints sym;
     sym.symbols.insert(early);
     EntryGuess g = FindFunctionContaining(*s, early + 0x0A, sym);
-    std::printf("  early return: %08X from %s%s%s\n", g.entry, EntrySourceName(g.source), g.doubt.empty() ? "" : ", ",
-                g.doubt.c_str());
-    CHECK(g.ok && g.entry == early && g.source == EntrySource::Symbol && g.doubt.empty());
+    std::printf("  early return: %08X from %s, %s\n", g.entry, EntrySourceName(g.source), g.doubt.c_str());
+    CHECK(g.ok && g.entry == early && g.source == EntrySource::Symbol);
+    CHECK(g.doubt.find("only through 0x0603000C") != std::string::npos);
+
+    // Flow the finder cannot follow, and several returns between the symbol and the address: the
+    // scan answers.
+    FinderHints far;
+    far.symbols.insert(farSw);
+    g = FindFunctionContaining(*s, farFn + 4, far);
+    std::printf("  unfollowable, far: %08X from %s\n", g.entry, EntrySourceName(g.source));
+    CHECK(g.ok && g.entry == farFn && g.source == EntrySource::RtsScan);
+
+    // A far jump within the function (through a literal, past bra's reach) is followed, not taken
+    // for a tail call: the entry after the rts stands.
+    CHECK(RtsScanEntry(*s, farJump + 0x14, e, &why, &doubt));
+    std::printf("  far jump: %08X %s\n", e, doubt.c_str());
+    CHECK(e == farJump && doubt.empty());
 
     // Flow the finder cannot follow: the symbol is kept, the alternative said.
     FinderHints swSym;
@@ -228,8 +260,6 @@ void TestBoundaries()
     CHECK(g.doubt.find("0x06030108") != std::string::npos && g.confidence < 90);
 
     // The literal 11's low half is not an rts.
-    uint32_t e = 0;
-    std::string why, doubt;
     CHECK(RtsScanEntry(*s, lit + 0x10, e, &why, &doubt));
     std::printf("  .long 11: %08X\n", e);
     CHECK(e == lit && doubt.empty());

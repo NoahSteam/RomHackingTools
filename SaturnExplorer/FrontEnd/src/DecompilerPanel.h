@@ -286,6 +286,8 @@ private:
     std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds
     ViewId mSnapId;
     uint64_t mTick = 0, mCaptureTick = 0;
+    bool mAutoPcValid = false;       // the PC the last auto-refresh was for: not refreshed for again
+    uint32_t mAutoPc = 0;
 
     // The entry wanted for mSnap, resolved once per snapshot, target and set of finder hints: a
     // function start set, a symbol added or a callee discovered can move the containing entry.
