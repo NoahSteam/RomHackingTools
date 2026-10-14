@@ -355,7 +355,7 @@ private:
     std::string mVolatileText;                                   // as typed and saved
     std::vector<std::pair<uint32_t, uint32_t>> mVolatile;        // ...parsed
     uint64_t mVolatileHash = 0;
-    char mVolatileEdit[512] = {};                                // the popup's edit box
+    char mVolatileEdit[2048] = {};                               // the popup's edit box
     std::string mVolatileError;
     Question mAsked;
     Outstanding mPending;

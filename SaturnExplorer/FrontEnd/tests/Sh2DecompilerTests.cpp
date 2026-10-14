@@ -763,6 +763,8 @@ void TestHardwareMap()
     CHECK(ranges.size() == 3 && ranges[0] == std::make_pair(0x26001000u, 0x26001003u) &&
           ranges[1] == std::make_pair(0x25A01000u, 0x25A01000u) && ranges[2].first == 0x06002000u);
     CHECK(ParseAddressRanges("", ranges, error) && ranges.empty());
+    CHECK(ParseAddressRanges("26001000 - 26001003", ranges, error) && ranges.size() == 1 &&
+          ranges[0] == std::make_pair(0x26001000u, 0x26001003u));
     CHECK(!ParseAddressRanges("0x10-0x08", ranges, error) && Has(error, "0x10-0x08"));
     CHECK(!ParseAddressRanges("zz", ranges, error));
     CHECK(!ParseAddressRanges("123456789", ranges, error));

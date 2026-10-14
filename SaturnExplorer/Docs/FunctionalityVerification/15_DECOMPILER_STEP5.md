@@ -671,3 +671,8 @@ failing its tests:
 - the user's ranges ignored;
 - the old MVOL/MIBUF kinds.
 
+Own review of `88295f7` found no engine problems. The 0009 flag was checked with and without
+across action loops, repeated volatile reads, and a mailbox poll. Three small panel fixes:
+- A result asked for under an older volatile list is no longer installed for a frame.
+- A list longer than the popup's 2047-character box is refused instead of cut mid-address.
+- `a - b` with spaces around the dash parses as one range.

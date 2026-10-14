@@ -1143,10 +1143,24 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
 
 }  // namespace
 
-bool ParseAddressRanges(const std::string& text, std::vector<std::pair<uint32_t, uint32_t>>& out, std::string& error)
+bool ParseAddressRanges(const std::string& input, std::vector<std::pair<uint32_t, uint32_t>>& out, std::string& error)
 {
     out.clear();
     error.clear();
+    // "a - b" is one range: spaces around a dash go before entries are split.
+    std::string text;
+    for (size_t k = 0; k < input.size(); ++k)
+    {
+        if (std::isspace(static_cast<unsigned char>(input[k])))
+        {
+            size_t n = k;
+            while (n < input.size() && std::isspace(static_cast<unsigned char>(input[n]))) ++n;
+            const bool nextDash = n < input.size() && input[n] == '-';
+            const bool afterDash = !text.empty() && text.back() == '-';
+            if (nextDash || afterDash) { k = n - 1; continue; }
+        }
+        text += input[k];
+    }
     auto hex = [](const std::string& t, uint32_t& v) {
         std::string d = t;
         if (d.size() > 2 && d[0] == '0' && (d[1] == 'x' || d[1] == 'X')) d = d.substr(2);

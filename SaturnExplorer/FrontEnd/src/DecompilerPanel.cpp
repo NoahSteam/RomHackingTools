@@ -418,6 +418,13 @@ bool DecompilerPanel::SetVolatileMemory(const std::string& text, std::string* er
 {
     std::vector<std::pair<uint32_t, uint32_t>> ranges;
     std::string why;
+    // The popup edits a fixed buffer: a longer list could not be shown whole, and an edit would
+    // cut it mid-address.
+    if (text.size() >= sizeof mVolatileEdit)
+    {
+        if (error) *error = "the list is longer than " + std::to_string(sizeof mVolatileEdit - 1) + " characters";
+        return false;
+    }
     if (!ParseAddressRanges(text, ranges, why))
     {
         if (error) *error = why;
@@ -523,6 +530,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
                          mPending.namesGeneration == mNamesGeneration && // under the names in force now,
                          mPending.functions == mFunctions &&           // registering the functions known now,
                          mPending.prototypes == PrototypeHash(mEntry) &&   // lending the signatures known now,
+                         mPending.volatileMemory == mVolatileHash &&   // with the volatile memory set now,
                          HeldIsOnScreen();                             // while that snapshot is what is shown
     if (!current)
     {

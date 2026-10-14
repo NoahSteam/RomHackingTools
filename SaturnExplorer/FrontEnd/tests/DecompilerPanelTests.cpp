@@ -1228,6 +1228,8 @@ void TestFlowUncertaintyShown()
         std::string error;
         CHECK(!f.panel.SetVolatileMemory("0x10-0x08", &error) && !error.empty());
         CHECK(f.panel.VolatileMemory() == "0x26001000-0x26001003");
+        CHECK(!f.panel.SetVolatileMemory(std::string(4000, '1'), &error) && Has(error, "longer"));
+        CHECK(f.panel.VolatileMemory() == "0x26001000-0x26001003");
     }
     {
         // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
