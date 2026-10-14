@@ -40,7 +40,7 @@ enum class RegisterAccess : uint8_t
 
 struct HardwareRegister
 {
-    uint32_t address;   // canonical: a cached-partition bus address, or 0xFFFFFExxx on-chip
+    uint32_t address;   // canonical: a cached-partition bus address, or on-chip at 0xFFFFFE00 and up
     uint8_t size;       // the documented access width in bytes: 1, 2 or 4
     const char* name;   // "VDP2_TVMD"
     RegisterAccess access;
