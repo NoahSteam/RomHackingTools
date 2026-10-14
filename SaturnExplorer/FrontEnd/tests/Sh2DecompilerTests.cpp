@@ -764,6 +764,47 @@ void TestFlowUncertainty()
     CHECK(r.status == DecompileStatus::Ok);
     CHECK(r.prototype.known && r.prototypeWithheld.empty());
 
+    // A bounded three-case switch (review of 7eaa935, finding 1). Recovered whole, it takes the
+    // selector and r5 (case 2 returns it). With case 1's destination zeroed, the engine truncates
+    // the table before cases 1 and 2: said, and the one-argument signature is not lent.
+    auto switchAt = [&](uint32_t case1) {
+        std::vector<uint8_t> sw;
+        const uint32_t base = 0x06050000u;
+        Place(sw, base, { 0xE102,      // mov #2,r1
+                          0x3416,      // cmp/hi r1,r4
+                          0x8904,      // bt default
+                          0xC703,      // mova table,r0
+                          0x4408,      // shll2 r4
+                          0x014E,      // mov.l @(r0,r4),r1
+                          0x412B,      // jmp @r1
+                          0x0009,      //   nop
+                          0x000B,      // default: rts
+                          0xE0FF });   //   mov #-1,r0
+        dts::Put32(sw, 0x00050014u, 0x06050020u);
+        dts::Put32(sw, 0x00050018u, case1);
+        dts::Put32(sw, 0x0005001Cu, 0x06050028u);
+        Place(sw, 0x06050020u, { 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0x6053 });
+        return MakeSnapshot(sw);
+    };
+    r = d.Decompile(switchAt(0x06050024u), Request(0x06050000u));
+    Print("switch", r);
+    CHECK(r.status == DecompileStatus::Ok && r.flowWarnings.empty());
+    CHECK(r.prototype.known && r.prototype.params.size() == 2);
+    r = d.Decompile(switchAt(0), Request(0x06050000u));
+    Print("switch, truncated table", r);
+    CHECK(any(r, FlowWarning::JumpTable, 0x06050000u + 0x0C, "truncation of jumptable"));
+    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "jump table"));
+    CHECK(warned(r, "Exceeded maximum restarts"));   // and withheld for it too, were the table whole
+
+    // A jump the engine takes for a thunk (finding 2): jmp to a constant, into the BIOS that is not
+    // captured. It used to print a call and a return with no warning at all.
+    std::vector<uint8_t> th;
+    Place(th, 0x06050000u, { 0xE100, 0x412B, 0x0009 });   // mov #0,r1 ; jmp @r1 ; nop
+    r = d.Decompile(MakeSnapshot(th), Request(0x06050000u));
+    Print("thunk", r);
+    CHECK(any(r, FlowWarning::TailJump, 0x06050002u, "tail call to 0x00000000 (uncaptured"));
+    CHECK(warned(r, "tail call"));
+
     // Two ways out of one function: one into memory that is not captured, one into a bad word in
     // captured memory. Each is reported as what it is, at its own address.
     std::vector<uint8_t> none;
@@ -787,6 +828,36 @@ void TestFlowUncertainty()
     CHECK(r.badDataAt == std::vector<uint32_t>{ 0x002FFFF8u });
     CHECK(any(r, FlowWarning::Cut, 0x00300004u, "cut off"));
     CHECK(any(r, FlowWarning::BadData, 0x002FFFF8u, "do not decode"));
+
+    // A 300-case switch, 299 of its cases in memory that is not captured (finding 4): every one is
+    // a cut, however many refusals the fetch image keeps, and none is taken for bad data.
+    auto bigSnap = MakeSnapshot(none);
+    auto* big = const_cast<MemoryRegion*>(bigSnap->RegionAt(MemorySnapshot::kLwramBase));
+    auto put16 = [&](uint32_t a, uint16_t w) { big->bytes[a - big->base] = uint8_t(w >> 8); big->bytes[a - big->base + 1] = uint8_t(w); };
+    auto put32 = [&](uint32_t a, uint32_t v) { put16(a, uint16_t(v >> 16)); put16(a + 2, uint16_t(v)); };
+    const uint32_t g = 0x002FE000u;
+    const uint16_t code[] = { 0xE14B,     // mov #75,r1
+                              0x4108,     // shll2 r1  (300)
+                              0x3412,     // cmp/hs r1,r4
+                              0x8904,     // bt default
+                              0xC703,     // mova table,r0
+                              0x4408,     // shll2 r4
+                              0x014E,     // mov.l @(r0,r4),r1
+                              0x412B,     // jmp @r1
+                              0x0009,     //   nop
+                              0x000B,     // default: rts
+                              0xE0FF,     //   mov #-1,r0
+                              0x0009 };
+    for (size_t i = 0; i < sizeof code / sizeof code[0]; ++i) put16(g + 2 * uint32_t(i), code[i]);
+    put32(g + 0x18, 0x002FFFF0u);
+    for (uint32_t i = 1; i < 300; ++i) put32(g + 0x18 + 4 * i, 0x00300000u + 2 * i);
+    put16(0x002FFFF0u, 0x000B);
+    put16(0x002FFFF2u, 0x0009);
+    r = d.Decompile(bigSnap, Request(g));
+    std::printf("300-case switch: truncated %d, cut %d times at lowest %08X, %zu bad-data halts\n", int(r.truncated),
+                r.truncatedCount, r.truncatedAt, r.badDataAt.size());
+    CHECK(r.truncated && r.truncatedCount == 299 && r.truncatedAt == 0x00300002u);
+    CHECK(r.badDataAt.empty());
 }
 
 void TestPrototypeEligibility()

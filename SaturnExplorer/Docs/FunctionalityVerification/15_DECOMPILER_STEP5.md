@@ -436,3 +436,35 @@ Own review of `a5c6615`:
 Each new check fails on `a5c6615`: `TestBoundaries` (doubt on the early return, the far
 unfollowable symbol, the far jump) and `TestFlowUncertaintyShown` (the "stop short" wording, one
 refresh for a parked PC).
+
+Review of `7eaa935` (four findings, each reproduced by the reviewer):
+- **Jump-table recovery outcomes were dropped** along with the scratch copy's speculative flow
+  noise. A table the sanity check truncated (a zero destination) gave clean output and a lendable
+  one-argument signature, though the dropped case reads r5. The scratch copy's warnings are now
+  filtered by kind. Recovery outcomes are kept as `FlowWarning::JumpTable`: truncation,
+  second-stage failure, bad or unlabelled cases, no normalized switch variable. They withhold the
+  signature, as do a table still marked partial and "Exceeded maximum restarts".
+- **A jump the engine takes for a thunk was silent.** `fail_thunk` (a table of one entry, such as
+  `mov #0,r1; jmp @r1`) adds a call and a return without a warning. Every `jmp`/`braf` the flow
+  reached that has no table and no engine warning is now `FlowWarning::TailJump`. The warning
+  names the target when it is constant, and says when that target is not captured.
+- **An early return could become a silent boundary.** With no known entry, the scan's entry after
+  an early `rts` came back with no doubt. A branch within 4 KiB before the `rts` that jumps past it
+  now raises a doubt. Any entry found only by the scan also says "guessed from the previous rts",
+  without the confidence penalty, so a scanned boundary is never shown as settled.
+- **The 256-refusal cap turned cuts into bad data.** A halt is now classified by asking the
+  snapshot whether its address, or the delay slot decoded with it, is there. The fetch image's
+  list is diagnostic only.
+
+Tests, each failing on `7eaa935`:
+- `TestFlowUncertainty`: the three-case switch (whole: two arguments, no warnings; truncated:
+  warned and withheld), the thunk into the BIOS, and a 300-case switch with 299 targets uncaptured.
+  That switch now gives 299 cuts and no bad data; the old code gave 256 cuts and 43 bad data.
+- `TestBoundaries`: the early return without a symbol, and the plain-scan doubt.
+- `TestFlowUncertaintyShown`: "Entry: guessed" for a scanned entry, none for a typed one.
+
+Not tested in isolation: the restart limit alone (it fires alongside the truncated table above).
+Found while building the 300-case fixture: a switch whose bound is loaded from a literal pool is
+not recovered. The literal is marked read-only only after flow, and jump tables are recovered
+during flow. It is warned about ("Could not recover jumptable", "Treating indirect jump as
+call"), so it is not silent, but it is a recovery gap.

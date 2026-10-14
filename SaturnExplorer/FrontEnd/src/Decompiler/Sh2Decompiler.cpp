@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <new>
@@ -1357,19 +1358,38 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // comments on the function. The pseudocode shows them inline only as far as the comment
         // options print them; here they become part of the result, so a function cut short never
         // passes for a complete one.
-        const CaptureLoadImage& image = arch->FetchImage();
         const ghidra::Address fad = fd->getAddress();
+        // What the snapshot says of a halt's address: not there (a cut), or there (it did not
+        // decode). Asked of the snapshot itself, so the answer does not depend on how many refusals
+        // the fetch image happened to record.
+        auto missing = [&](uint32_t a, std::string& why) {
+            uint8_t b[2];
+            return !snapshot->Read(a, b, 2, &why);
+        };
+        bool restartsExhausted = false, tableIncomplete = false;
         for (auto it = arch->commentdb->beginComment(fad); it != arch->commentdb->endComment(fad); ++it)
         {
             const ghidra::Comment* c = *it;
             if ((c->getType() & (ghidra::Comment::warning | ghidra::Comment::warningheader)) == 0) continue;
             std::string text = c->getText();
-            // Jump-table recovery follows flow speculatively in a scratch copy of the function; what
-            // that copy ran into is not this function's flow. The outcome for the jump itself
-            // ("Treating indirect jump as call") is recorded on the function proper.
-            if (text.compare(0, 20, "WARNING (jumptable):") == 0) continue;
-            if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
+            // Jump-table recovery works in a scratch copy of the function. What that copy's own flow
+            // and simplification ran into is not this function's; what recovery concluded about the
+            // table is -- a table cut short, a second stage that failed, a case it could not label.
+            const bool scratch = text.compare(0, 20, "WARNING (jumptable):") == 0;
+            if (scratch) text.erase(0, 21);
+            else if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
             while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+            static const char* const kTableOutcomes[] = { "Sanity check requires truncation of jumptable",
+                                                          "Second-stage recovery error", "Bad switch case",
+                                                          "Calculation of case label failed",
+                                                          "This code block may not be properly labeled as switch case",
+                                                          "Could not find normalized switch variable" };
+            bool outcome = false;
+            for (const char* o : kTableOutcomes) outcome |= text.compare(0, std::strlen(o), o) == 0;
+            if (scratch && !outcome) continue;
+            if (outcome) tableIncomplete = true;
+            static const char kRestarts[] = "Exceeded maximum restarts";
+            if (text.compare(0, sizeof kRestarts - 1, kRestarts) == 0) restartsExhausted = true;
             const bool header = (c->getType() & ghidra::Comment::warningheader) != 0;
             // Said once per halt below, where it is.
             if (header && (text == "Control flow encountered bad instruction data" ||
@@ -1380,22 +1400,34 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             w.address = header ? 0 : canonicalOf(at);
             if (!header && text == "Bad instruction - Truncating control flow here")
             {
-                // A fetch the image refused (the instruction, or the delay slot decoded with it), or
+                // Memory that is not there (the instruction, or the delay slot decoded with it), or
                 // bytes that are there but do not decode.
-                auto refused = image.Refused().lower_bound(at);
-                if (refused != image.Refused().end() && refused->first < at + 4)
+                std::string why;
+                uint32_t gone = 0;
+                bool cutHere = missing(at, why);
+                if (cutHere) gone = at;
+                else
                 {
-                    const uint32_t cut = canonicalOf(refused->first);
+                    uint16_t op = 0;
+                    if (snapshot->ReadU16(at, op) && Sh2Decode(at, op).HasDelaySlot && missing(at + 2, why))
+                    {
+                        cutHere = true;
+                        gone = at + 2;
+                    }
+                }
+                if (cutHere)
+                {
+                    const uint32_t cut = canonicalOf(gone);
                     if (!r.truncated || cut < r.truncatedAt)
                     {
                         r.truncatedAt = cut;
-                        r.truncatedWhy = refused->second;
+                        r.truncatedWhy = why;
                     }
                     r.truncated = true;
                     ++r.truncatedCount;
                     w.kind = FlowWarning::Cut;
                     w.address = cut;
-                    w.text = "flows into " + refused->second + "; the function is cut off there";
+                    w.text = "flows into " + why + "; the function is cut off there";
                 }
                 else
                 {
@@ -1406,9 +1438,50 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 }
             }
             else
+            {
+                if (outcome)
+                {
+                    w.kind = FlowWarning::JumpTable;
+                    text += ": cases may be missing";
+                }
                 w.text = text;
+            }
             r.flowWarnings.push_back(std::move(w));
         }
+        // An indirect jump the engine turned into a call without a word: a table of one entry, which
+        // it takes for a thunk -- a tail call, with a return assumed after it. Every other way an
+        // indirect jump ends up (a table, a call, a return) is recorded at its address.
+        for (uint32_t a : scan.insns)
+        {
+            uint16_t op = 0;
+            if (!snapshot->ReadU16(a, op)) continue;
+            const bool jmp = (op & 0xF0FFu) == 0x402Bu, braf = (op & 0xF0FFu) == 0x0023u;
+            if (!jmp && !braf) continue;
+            bool settled = false;
+            for (ghidra::int4 t = 0; t < fd->numJumpTables() && !settled; ++t)
+                settled = fd->getJumpTable(t)->getOpAddress().getOffset() == a;
+            for (const FlowWarning& w : r.flowWarnings) settled |= w.address == canonicalOf(a) && w.kind == FlowWarning::Engine;
+            if (settled) continue;
+            std::string where = "an address the code computes";
+            for (auto it = fd->beginOpMain(ghidra::Address(ram, a)); it != fd->endOpMain(ghidra::Address(ram, a)); ++it)
+            {
+                const ghidra::PcodeOp* o = it->second;
+                if (o->code() != ghidra::CPUI_CALLIND && o->code() != ghidra::CPUI_CALL) continue;
+                const ghidra::FuncCallSpecs* cs = fd->getCallSpecs(o);
+                uint64_t t = 0;
+                bool known = false;
+                if (cs && !cs->getEntryAddress().isInvalid()) { t = cs->getEntryAddress().getOffset(); known = true; }
+                else if (o->getIn(0)->isConstant()) { t = o->getIn(0)->getOffset(); known = true; }
+                if (!known) continue;
+                std::string why;
+                where = Hex8(static_cast<uint32_t>(t));
+                if (missing(static_cast<uint32_t>(t), why)) where += " (" + why + ": what runs there is not shown)";
+            }
+            r.flowWarnings.push_back(FlowWarning{ FlowWarning::TailJump, canonicalOf(a),
+                                                  std::string(jmp ? "jmp" : "braf") + " is taken for a tail call to " + where +
+                                                      ", assumed to return to this function's caller" });
+        }
+        for (ghidra::int4 t = 0; t < fd->numJumpTables(); ++t) tableIncomplete |= fd->getJumpTable(t)->isPartial();
         std::sort(r.badDataAt.begin(), r.badDataAt.end());
         // Ghidra fails a function on its fifth bad-data halt; ours carries on (SaturnArchitecture:
         // halts on uncaptured memory are expected), so the same judgement is a warning here.
@@ -1433,6 +1506,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         for (const FlowWarning& w : r.flowWarnings)
             r.warnings.push_back(w.address ? Hex8(w.address) + ": " + w.text : w.text);
         if (r.truncated) r.prototypeWithheld = "truncated";
+        else if (tableIncomplete) r.prototypeWithheld = "a jump table recovered incompletely";
+        else if (restartsExhausted) r.prototypeWithheld = "the analysis did not settle (restart limit)";
         else if (r.unsupported) r.prototypeWithheld = "unsupported";
         else if (r.unimplemented) r.prototypeWithheld = "unimplemented";
         CallEffects effects;

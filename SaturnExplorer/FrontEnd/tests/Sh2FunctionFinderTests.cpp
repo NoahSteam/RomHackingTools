@@ -271,6 +271,21 @@ void TestBoundaries()
     g = FindFunctionContaining(*s, f3 + 4, FinderHints());
     CHECK(g.ok && g.entry == f3 && g.source == EntrySource::RtsScan && !g.doubt.empty() && g.confidence < 60);
 
+    // An early return with no known entry (review of 7eaa935, finding 3): the scan's boundary after
+    // it is doubted, since a branch before the rts jumps past it.
+    CHECK(RtsScanEntry(*s, early + 0x0A, e, &why, &doubt));
+    std::printf("  early return, no symbol: %08X, %s\n", e, doubt.c_str());
+    CHECK(e == early + 8 && doubt.find("branch at 0x06030006 jumps past the rts") != std::string::npos);
+    g = FindFunctionContaining(*s, early + 0x0A, FinderHints());
+    CHECK(g.ok && g.source == EntrySource::RtsScan && !g.doubt.empty() && g.confidence < 60);
+    // Even with nothing against it, a scanned entry is said to be a guess.
+    g = FindFunctionContaining(*s, f3 + 4, FinderHints());
+    CHECK(!g.doubt.empty());
+    g = FindFunctionContaining(*s, lit + 0x10, FinderHints());
+    std::printf("  plain scan: %08X, %s\n", g.entry, g.doubt.c_str());
+    CHECK(g.ok && g.entry == lit && g.doubt.find("guessed from the previous rts") != std::string::npos &&
+          g.confidence == 60);
+
     // The mova table is skipped, and its guessed end said.
     CHECK(RtsScanEntry(*s, afterTable + 4, e, &why, &doubt));
     std::printf("  mova table: %08X, %s\n", e, doubt.c_str());

@@ -144,8 +144,9 @@ const char* PhaseName(DecompilePhase phase);
 struct FlowWarning
 {
     // Cut: flow left captured memory (truncated*); BadData: badDataAt; IntoFunction: flow ran into
-    // another known entry; Engine: anything else the engine said.
-    enum Kind : uint8_t { Engine, Cut, BadData, IntoFunction } kind = Engine;
+    // another known entry; JumpTable: a table recovered incompletely (cases may be missing);
+    // TailJump: an indirect jump taken for a tail call; Engine: anything else the engine said.
+    enum Kind : uint8_t { Engine, Cut, BadData, IntoFunction, JumpTable, TailJump } kind = Engine;
     uint32_t address = 0;
     std::string text;
 };
@@ -181,7 +182,8 @@ struct DecompileResult
     std::vector<uint32_t> calledAt;
     // This function's own signature, for callers to use (DecompileRequest::prototypes). Not known
     // unless the analysis that recovered it was complete: the output is not truncated, unsupported
-    // or unimplemented, there is no bad instruction, every call resolves to a callee whose
+    // or unimplemented, there is no bad instruction, every jump table was recovered whole and the
+    // analysis settled within its restarts, every call resolves to a callee whose
     // signature was lent (none to itself), every incoming argument read is in the signature, and
     // every return goes to the caller's PR. A caller decompiled first is lent nothing; it can be
     // once its callees' signatures are known.

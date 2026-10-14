@@ -1171,6 +1171,7 @@ void TestFlowUncertaintyShown()
 
         f.TypeInto("entry", "06009910");
         CHECK(f.WaitShown("shared"));
+        CHECK(f.panel.Uncertainties().empty());   // a typed entry is no guess
         f.comments[epi + 4] = "slot";     // the epilogue's delay slot: no line of its own
         f.comments[0x06009908u] = "gap";  // between the epilogue and the entry: not the function's
         f.Idle(2);
@@ -1178,6 +1179,14 @@ void TestFlowUncertaintyShown()
         for (const std::string& n : unplaced) std::printf("  unplaced: %s\n", n.c_str());
         CHECK(unplaced == std::vector<std::string>{ "0x06009904: slot" });
         CHECK(f.panel.Uncertainties().empty());   // a typed entry has no address to reach
+    }
+    {
+        // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
+        Fixture f;
+        CHECK(f.WaitShown("+ 1"));
+        f.Idle(2);
+        const std::vector<std::string> u = f.panel.Uncertainties();
+        CHECK(any(u, "Entry: guessed from the previous rts"));
     }
     {
         Fixture f;

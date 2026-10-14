@@ -8,9 +8,10 @@
 //   Fetch  the SLEIGH translator's, used only to decode instructions. Refuses with BadDataError,
 //          which flow following catches: it halts flow at that address and marks the function as
 //          reaching bad data, so a branch into the BIOS truncates the function instead of
-//          aborting it. Keeps every refused address and why ("uncaptured memory at
-//          0x00000600 (BIOS)"), so the result can name the ones where flow really stopped:
-//          jump-table recovery fetches speculatively too, and those do not cut the function.
+//          aborting it. Keeps the refused addresses and why ("uncaptured memory at
+//          0x00000600 (BIOS)"), up to a bound, for diagnostics. The result does not classify
+//          halts from this list (it asks the snapshot), so the bound never turns a cut into
+//          bad data.
 //   Data   the Architecture's own, used for values (read-only literals, jump tables, strings).
 //          Refuses with DataUnavailError, which those readers catch.
 // (DataUnavailError from a fetch would propagate out of flow following and abort the whole

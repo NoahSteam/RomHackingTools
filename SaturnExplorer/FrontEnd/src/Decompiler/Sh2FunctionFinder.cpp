@@ -363,6 +363,22 @@ bool RtsScanEntry(const MemorySnapshot& snap, uint32_t address, uint32_t& entry,
         }
         if (!moved) d = "the code from " + Hex8(c) + " (after the rts at " + Hex8(p) + ") never reaches " + Hex8(a);
     }
+    // Code before the rts that branches past it, into what the scan takes for the next function:
+    // the rts is then as likely an early return inside one function. (A bra reaches 4 KiB back.)
+    if (d.empty())
+    {
+        const uint32_t lo = p - floor > 0x1000u ? p - 0x1000u : floor;
+        for (uint32_t q = lo; q < p && d.empty(); q += 2)
+        {
+            uint16_t op = 0;
+            if (!snap.ReadU16(q, op)) continue;
+            const DisassembledInstruction ins = Sh2Decode(q, op);
+            if (!ins.IsValid || !ins.HasBranchTarget || ins.IsCall) continue;
+            if (ins.BranchTarget > p + 2 && ins.BranchTarget <= a)
+                d = "the branch at " + Hex8(q) + " jumps past the rts at " + Hex8(p) + " to " + Hex8(ins.BranchTarget) +
+                    ": the rts may be an early return in a function that starts before it";
+        }
+    }
     entry = c;
     if (doubt) *doubt = d;
     return true;
@@ -488,6 +504,10 @@ EntryGuess FindFunctionContaining(const MemorySnapshot& snap, uint32_t address, 
     }
     g.confidence = Confidence(g.source);
     if (!g.doubt.empty()) g.confidence -= 20;
+    // A boundary found only by scanning is a guess however well it decodes: nothing proves the rts
+    // ends a function rather than returning early from one. Said, so it is never shown as settled.
+    if (g.source == EntrySource::RtsScan && g.doubt.empty())
+        g.doubt = "guessed from the previous rts; no symbol, call or user entry confirms it";
     return g;
 }
 
