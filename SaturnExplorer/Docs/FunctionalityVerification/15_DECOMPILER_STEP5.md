@@ -503,3 +503,12 @@ Re-review at `54bd571`: the four findings are closed. Two P2 follow-ups:
 
 Each check fails on `54bd571`. Coverage gaps the reviewer also lists: the restart limit alone,
 failed multistage recovery, and a call the engine marks noreturn.
+
+**Accepted at `6172fbf`.** The reviewer closed both P2s and reran the earlier counterexamples. It
+accepted the control-flow criterion (uncertain recovery produces warnings, not an apparently
+complete function) within the acknowledged limits:
+- **Not established:** code/data distinction for data that decodes as valid code, and exclusive
+  ownership of a shared epilogue.
+- **Reviewed from source, not exercised by a regression test:** the restart limit alone, failed
+  multistage recovery ("Second-stage recovery error"), and an engine-marked noreturn call. No
+  silent-output reproduction was found in any of them.
