@@ -401,16 +401,209 @@ void TestHardwareRegisterNames()
         CHECK(Has(r.Text(), c.name));
     }
 
-    // The lookup: either partition, inside a register's width, and nothing in other partitions.
-    CHECK(FindHardwareRegister(0x25F80000u) && std::string(FindHardwareRegister(0x25F80000u)->name) == "VDP2_TVMD");
     CHECK(FindHardwareRegister(0x05F80001u) && std::string(FindHardwareRegister(0x05F80001u)->name) == "VDP2_TVMD");
-    CHECK(FindHardwareRegister(0x25FE00A6u) && std::string(FindHardwareRegister(0x25FE00A6u)->name) == "SCU_IST");
-    CHECK(FindHardwareRegister(0x45F80000u) == nullptr);   // associative purge: not memory
-    CHECK(FindHardwareRegister(0x05F8000Cu) == nullptr);   // VDP2's reserved word
-    CHECK(FindHardwareRegister(0x20100062u) == nullptr);   // SMPC's even bytes are not registers
+}
+
+// Naming a register must not turn it into memory. Every access the code makes stays in the
+// pseudocode, in order: a write before a poll, the poll itself, a write the next one overwrites,
+// a read nobody uses, two reads of a counter, the SH-2 divider's quotient, a write wider than one
+// register and a register reached through a mirror. Before the registers were volatile the poll
+// printed as do {} while (true), reading SCU_IST back as "return param_1" and the counter
+// difference as "return 0".
+size_t Count(const std::string& text, const char* what)
+{
+    size_t n = 0;
+    for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + 1)) ++n;
+    return n;
+}
+
+bool HasNote(const DecompileResult& r, const char* what)
+{
+    for (const HardwareNote& n : r.hardwareNotes)
+        if (Has(n.text, what)) return true;
+    return false;
+}
+
+void TestHardwareVolatility()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    // Each fixture: its instructions from 'base', then the register's address as a literal at
+    // base + literal (the first instruction is mov.l @(disp,pc),r1 loading it).
+    struct Fixture { uint32_t base; std::vector<uint16_t> code; uint32_t literal; uint32_t pointer; };
+    const Fixture poll = { 0x06009000u, { 0xD103,     // mov.l @(12,pc),r1   -> SMPC_SF
+                                          0xE001,     // mov #1,r0
+                                          0x2100,     // mov.b r0,@r1        SMPC_SF = 1
+                                          0x6010,     // loop: mov.b @r1,r0
+                                          0xC801,     // tst #1,r0
+                                          0x8BFC,     // bf loop             while (SMPC_SF & 1)
+                                          0x000B, 0x0009 }, 0x10, 0x20100063u };
+    const Fixture echo = { 0x06009040u, { 0xD102,     // mov.l @(8,pc),r1    -> SCU_IST
+                                          0x2142,     // mov.l r4,@r1        SCU_IST = param_1
+                                          0x6012,     // mov.l @r1,r0        return SCU_IST
+                                          0x000B, 0x0009, 0x0009 }, 0x0C, 0x25FE00A4u };
+    const Fixture twice = { 0x06009080u, { 0xD103,    // mov.l @(12,pc),r1   -> VDP2_TVMD
+                                           0xE000,    // mov #0,r0
+                                           0x2101,    // mov.w r0,@r1        VDP2_TVMD = 0
+                                           0xE001,    // mov #1,r0
+                                           0x2101,    // mov.w r0,@r1        VDP2_TVMD = 1
+                                           0x000B, 0x0009, 0x0009 }, 0x10, 0x25F80000u };
+    const Fixture dummy = { 0x060090C0u, { 0xD102,    // mov.l @(8,pc),r1    -> SCU_IST
+                                           0x6212,    // mov.l @r1,r2        a read nobody uses
+                                           0xE200,    // mov #0,r2
+                                           0x2122,    // mov.l r2,@r1        SCU_IST = 0
+                                           0x000B, 0x0009 }, 0x0C, 0x25FE00A4u };
+    const Fixture counter = { 0x06009100u, { 0xD102,  // mov.l @(8,pc),r1    -> VDP2_VCNT
+                                             0x6211,  // mov.w @r1,r2
+                                             0x6011,  // mov.w @r1,r0
+                                             0x3028,  // sub r2,r0           return second - first
+                                             0x000B, 0x0009 }, 0x0C, 0x25F8000Au };
+    const Fixture divide = { 0x06009140u, { 0xD102,   // mov.l @(8,pc),r1    -> SH2_DVSR
+                                            0x2152,   // mov.l r5,@r1        DVSR = param_2
+                                            0x1141,   // mov.l r4,@(4,r1)    DVDNT = param_1: divides
+                                            0x5011,   // mov.l @(4,r1),r0    the quotient
+                                            0x000B, 0x0009 }, 0x0C, 0xFFFFFF00u };
+    const Fixture wide = { 0x06009180u, { 0xD102,     // mov.l @(8,pc),r1    -> VDP2_SCXIN0
+                                          0x2142,     // mov.l r4,@r1        SCXIN0:SCXDN0 = param_1
+                                          0x2152,     // mov.l r5,@r1        ... = param_2
+                                          0x000B, 0x0009, 0x0009 }, 0x0C, 0x25F80070u };
+    const Fixture mirror = { 0x060091C0u, poll.code, 0x10, 0x201000E3u };   // SMPC_SF, 128 bytes up
+    const Fixture woRead = { 0x06009200u, { 0xD102,   // mov.l @(8,pc),r1    -> VDP1_FBCR
+                                            0x2141,   // mov.w r4,@r1        VDP1_FBCR = param_1
+                                            0x6011,   // mov.w @r1,r0        reads a write-only register
+                                            0x000B, 0x0009, 0x0009 }, 0x0C, 0x25D00002u };
+    const Fixture roWrite = { 0x06009240u, { 0xD101,  // mov.l @(4,pc),r1    -> VDP1_EDSR
+                                             0x2141,  // mov.w r4,@r1        writes a read-only one
+                                             0x000B, 0x0009 }, 0x08, 0x25D00010u };
+    for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite })
+    {
+        size_t off = f->base - 0x06000000u;
+        for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
+        dts::Put32(hw, f->base + f->literal - 0x06000000u, f->pointer);
+    }
+    auto snap = MakeSnapshot(hw);
+    auto run = [&](const char* label, const Fixture& f) {
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+
+    DecompileResult r = run("SMPC_SF poll", poll);
+    CHECK(Has(r.Text(), "SMPC_SF = 1;"));
+    CHECK(Count(r.Text(), "SMPC_SF") >= 2);   // the write and the poll's read
+    CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
+    CHECK(r.hardwareNotes.empty());
+
+    r = run("SCU_IST write then read", echo);
+    CHECK(Has(r.Text(), "SCU_IST = param_1;"));
+    CHECK(Has(r.Text(), "Var1 = SCU_IST;"));   // read back after the write: the read is kept
+    CHECK(!Has(r.Text(), "return param_1;"));
+
+    r = run("VDP2_TVMD twice", twice);
+    CHECK(Has(r.Text(), "VDP2_TVMD = 0;"));
+    CHECK(Has(r.Text(), "VDP2_TVMD = 1;"));
+
+    r = run("SCU_IST dummy read", dummy);
+    CHECK(Count(r.Text(), "SCU_IST") >= 2);   // the read stays, before the write
+    CHECK(Has(r.Text(), "SCU_IST = 0;"));
+
+    r = run("VDP2_VCNT twice", counter);
+    CHECK(Count(r.Text(), "VDP2_VCNT") >= 2);
+    CHECK(!Has(r.Text(), "return 0;"));
+
+    r = run("SH-2 divider", divide);
+    CHECK(Has(r.Text(), "SH2_DVSR = param_2;"));
+    CHECK(Has(r.Text(), "SH2_DVDNT = param_1;"));
+    CHECK(Has(r.Text(), "Var1 = SH2_DVDNT;"));   // the quotient, read after the dividend's write
+    CHECK(!Has(r.Text(), "return param_1;"));
+
+    r = run("VDP2 32-bit scroll write", wide);
+    CHECK(Has(r.Text(), "param_1"));   // the first write is not lost to the second
+    CHECK(Has(r.Text(), "param_2"));
+    CHECK(HasNote(r, "covers VDP2_SCXIN0 and VDP2_SCXDN0"));
+
+    r = run("SMPC_SF through a mirror", mirror);
+    CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
+    CHECK(HasNote(r, "0x201000E3 is SMPC_SF through a mirror"));
+
+    r = run("write-only read", woRead);
+    CHECK(Has(r.Text(), "Var1 = VDP1_FBCR;"));
+    CHECK(!Has(r.Text(), "return param_1;"));
+    CHECK(HasNote(r, "reads VDP1_FBCR, which is write-only"));
+    CHECK(!r.warnings.empty() && Has(r.warnings.back(), "write-only"));
+
+    r = run("read-only write", roWrite);
+    CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
+    CHECK(HasNote(r, "writes VDP1_EDSR, which is read-only"));
+}
+
+// The map itself: names through every alias the bus decodes, widths, access kinds, and the
+// volatile ranges covering every register.
+void TestHardwareMap()
+{
+    auto name = [](uint32_t a) { const HardwareRegister* r = FindHardwareRegister(a); return std::string(r ? r->name : ""); };
+    CHECK(name(0x05F80000u) == "VDP2_TVMD");
+    CHECK(name(0x25F80201u) == "VDP2_TVMD");    // VDP2 repeats every 512 bytes
+    CHECK(name(0x2DF80000u) == "VDP2_TVMD");    // bits 28-27 are not decoded
+    CHECK(name(0xA5F80000u) == "VDP2_TVMD");    // the 0xA partition is cache-through again
+    CHECK(name(0x201000E3u) == "SMPC_SF");      // SMPC every 128 bytes
+    CHECK(name(0x25FE01A4u) == "SCU_IST");      // SCU every 256 bytes
+    CHECK(name(0x25B01422u) == "SCSP_SCIRE");   // SCSP every 4 KiB
+    CHECK(name(0x25D00000u) == "VDP1_TVMR");
+    CHECK(name(0x25D00020u) == "");             // VDP1 does not repeat
+    CHECK(name(0x25890008u) == "CD_HIRQ");
+    CHECK(name(0x2589000Au) == "CD_HIRQ");      // one CD register per 4 bytes
+    CHECK(name(0x25818000u) == "CD_DATATRNS");
+    CHECK(name(0x25890000u) == "CD_DATATRNS");  // the FIFO answers in the register window too
+    CHECK(name(0x21000000u) == "MINIT");
+    CHECK(name(0x21800000u) == "SINIT");
+    CHECK(name(0xFFFFFF04u) == "SH2_DVDNT");
+    CHECK(name(0xFFFFFE11u) == "SH2_FTCSR");
+    CHECK(name(0xE0004104u) == "SH2_DVDNT");    // on-chip upper half: only bit 14 matters
+    CHECK(name(0xE0004011u) == "");             // the lower half needs bits 28 and 12 as well
+    CHECK(name(0xFFFFBF04u) == "");             // bit 14 clear: not the registers
+    CHECK(name(0x45F80000u) == "");             // associative purge: not memory
+    CHECK(name(0x05F8000Cu) == "");             // VDP2's reserved word
+    CHECK(name(0x20100062u) == "");             // SMPC's even bytes are not registers
+
+    const HardwareRegister* r = FindHardwareRegister(0x05F80004u);
+    CHECK(r && r->access == RegisterAccess::ReadOnly);    // TVSTAT
+    r = FindHardwareRegister(0x05F80070u);
+    CHECK(r && r->access == RegisterAccess::WriteOnly);   // SCXIN0
+    r = FindHardwareRegister(0x05D00004u);
+    CHECK(r && r->access == RegisterAccess::WriteOnly);   // PTMR
+    r = FindHardwareRegister(0x001000E1u);
+    CHECK(r && r->access == RegisterAccess::ReadOnly);    // OREG0
+    r = FindHardwareRegister(0x05FE00A0u);
+    CHECK(r && r->access == RegisterAccess::WriteOnly);   // IMS
+    r = FindHardwareRegister(0xFFFFFF00u);
+    CHECK(r && r->size == 4);
+    r = FindHardwareRegister(0xFFFFFE92u);
+    CHECK(r && r->size == 1);                             // CCR
+
+    const std::vector<const HardwareRegister*> pair = HardwareRegistersCovering(0x25F80070u, 4);
+    CHECK(pair.size() == 2 && std::string(pair[0]->name) == "VDP2_SCXIN0" && std::string(pair[1]->name) == "VDP2_SCXDN0");
+
     size_t n = 0;
     const HardwareRegister* all = SaturnHardwareRegisters(n);
     for (size_t i = 1; i < n; ++i) CHECK(all[i - 1].address + all[i - 1].size <= all[i].address);
+    for (size_t i = 0; i < n; ++i)
+    {
+        uint32_t c = 0;
+        CHECK(HardwareAlias(all[i].address, c) && c == all[i].address);   // canonical is canonical
+        CHECK(InHardwareRange(all[i].address));
+        if (all[i].address < 0xE0000000u)
+        {
+            CHECK(InHardwareRange(all[i].address | 0x20000000u));
+            CHECK(InHardwareRange(all[i].address | 0x08000000u));
+        }
+    }
+    CHECK(InHardwareRange(0x25B00000u));    // SCSP slot registers: unnamed, still volatile
+    CHECK(InHardwareRange(0x40001234u));    // associative purge
+    CHECK(!InHardwareRange(0x06000000u));   // work RAM
+    CHECK(!InHardwareRange(0x25E00000u));   // VDP2 VRAM
+    CHECK(!InHardwareRange(0xC0000000u));   // cache used as RAM
 }
 
 // A branch out of the captured region: the function is marked truncated where it left, naming
@@ -1702,6 +1895,8 @@ int main(int argc, char** argv)
         RUN(TestEditsChangeKeyAndOutput());
         RUN(TestMovWFold());
         RUN(TestHardwareRegisterNames());
+        RUN(TestHardwareVolatility());
+        RUN(TestHardwareMap());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());

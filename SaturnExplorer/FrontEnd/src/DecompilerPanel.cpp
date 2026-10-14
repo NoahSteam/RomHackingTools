@@ -385,6 +385,11 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
             out.push_back(b + w.text);
         }
     }
+    for (const HardwareNote& n : mShown.hardwareNotes)
+    {
+        std::snprintf(b, sizeof b, "0x%08X: ", n.address);
+        out.push_back(b + n.text);
+    }
     // Only for the answer to the question the anchor belongs to.
     if (mResolved && mEntryOk && mShown.requestedEntry == mEntry)
     {
@@ -955,7 +960,7 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
         ImGui::TextColored(kAmber, "%s", uncertain[i].c_str());
     if (uncertain.size() > kShownUncertainties)
     {
-        ImGui::TextColored(kAmber, "%zu more flow warnings", uncertain.size() - kShownUncertainties);
+        ImGui::TextColored(kAmber, "%zu more warnings", uncertain.size() - kShownUncertainties);
         if (ImGui::BeginItemTooltip())
         {
             for (size_t i = kShownUncertainties; i < uncertain.size(); ++i) ImGui::TextUnformatted(uncertain[i].c_str());

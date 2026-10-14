@@ -1063,6 +1063,65 @@ void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
     gNoReturnForTests = entries;
 }
 
+namespace
+{
+
+// What the pseudocode does not say about the hardware accesses it shows. Every access to a
+// register area is a volatile read or write by now (the symbols and ranges are volatile), so
+// those ops are the accesses, at the address and width the code used.
+std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    std::set<std::pair<uint32_t, std::string>> seen;
+    std::vector<HardwareNote> out;
+    auto note = [&](uint32_t at, std::string text) {
+        if (seen.insert(std::make_pair(at, text)).second) out.push_back(HardwareNote{ at, std::move(text) });
+    };
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
+        const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+        const bool read = u && u->getType() == ghidra::UserPcodeOp::volatile_read;
+        const bool write = u && u->getType() == ghidra::UserPcodeOp::volatile_write;
+        if (!read && !write) continue;
+        const ghidra::Varnode* value = read ? o->getOut() : (o->numInput() > 2 ? o->getIn(2) : nullptr);
+        if (!value) continue;
+        const uint32_t at = static_cast<uint32_t>(o->getIn(1)->getOffset());
+        const uint32_t size = static_cast<uint32_t>(value->getSize());
+        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(at, size);
+        if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
+        const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+        for (const HardwareRegister* reg : regs)
+        {
+            if (read && reg->access == RegisterAccess::WriteOnly)
+                note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written");
+            if (write && reg->access == RegisterAccess::ReadOnly)
+                note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing");
+        }
+        if (regs.size() > 1)
+        {
+            std::string names = regs[0]->name;
+            for (size_t i = 1; i < regs.size(); ++i) names += (i + 1 == regs.size() ? " and " : ", ") + std::string(regs[i]->name);
+            note(insn, "one " + std::to_string(size) + "-byte " + (read ? "read" : "write") + " covers " + names +
+                           " (shown under the first)");
+        }
+        // The engine names a register only at the address its symbol is at: the cached and
+        // cache-through partitions for the bus, the one on-chip address. Any other alias is
+        // shown as an address.
+        uint32_t canonical = 0;
+        HardwareAlias(at, canonical);
+        const bool named = ClassifyPartition(canonical) == Sh2Partition::OnChip
+                               ? at == canonical
+                               : (at >> 29) <= 1 && (at & 0x1FFFFFFFu) == canonical;
+        if (!named)
+            note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)");
+    }
+    std::stable_sort(out.begin(), out.end(), [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
+    return out;
+}
+
+}  // namespace
+
 std::string DecompileResult::Text() const
 {
     std::string s;
@@ -1336,16 +1395,31 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
 
         // The hardware registers by name, at both partitions code reaches them through, so a
-        // folded pointer prints as VDP2_TVMD rather than *(ushort *)0x25f80000.
+        // folded pointer prints as VDP2_TVMD rather than *(ushort *)0x25f80000. Each is volatile:
+        // to the engine a named global is an ordinary variable, and it would forward a write to the
+        // next read, drop a write the next one overwrites and remove a read nobody uses -- a
+        // status poll becomes an endless loop. A symbol's own flags win over a property range
+        // (Scope::queryProperties), so the symbol needs the flag itself.
         size_t registerCount = 0;
         const HardwareRegister* registers = SaturnHardwareRegisters(registerCount);
         for (size_t i = 0; i < registerCount; ++i)
         {
             ghidra::Datatype* type = arch->types->getBase(registers[i].size, ghidra::TYPE_UINT);
+            const uint32_t at = registers[i].address;
+            const bool onChip = ClassifyPartition(at) == Sh2Partition::OnChip;
             for (uint32_t partition : { 0x00000000u, 0x20000000u })
-                global->addSymbol(registers[i].name, type, ghidra::Address(ram, registers[i].address | partition),
-                                  ghidra::Address());
+            {
+                if (onChip && partition) continue;
+                ghidra::SymbolEntry* e = global->addSymbol(registers[i].name, type, ghidra::Address(ram, at | partition),
+                                                           ghidra::Address());
+                global->setAttribute(e->getSymbol(), ghidra::Varnode::volatil);
+            }
         }
+        // ...and everything else in a register area, every alias included: an access wider than
+        // one register (no symbol contains it, so the range decides), the unnamed ones (SCSP
+        // slots, the FIFOs), and the mirrors code can reach a register through.
+        for (const HardwareRange& h : HardwareRanges())
+            arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, h.first, h.last));
 
         for (const auto& ro : knownLiterals)
             arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
@@ -1572,6 +1646,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                          [](const FlowWarning& x, const FlowWarning& y) { return x.address < y.address; });
         for (const FlowWarning& w : r.flowWarnings)
             r.warnings.push_back(w.address ? Hex8(w.address) + ": " + w.text : w.text);
+        r.hardwareNotes = HardwareNotes(*fd, canonicalOf);
+        for (const HardwareNote& n : r.hardwareNotes) r.warnings.push_back(Hex8(n.address) + ": " + n.text);
         if (r.truncated) r.prototypeWithheld = "truncated";
         else if (tableIncomplete) r.prototypeWithheld = "a jump table recovered incompletely";
         else if (restartsExhausted) r.prototypeWithheld = "the analysis did not settle (restart limit)";

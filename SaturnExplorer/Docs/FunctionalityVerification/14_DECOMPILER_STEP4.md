@@ -18,7 +18,7 @@ or WATCHPOINT HIT (`StopBannerLabel`, `CallStackHeuristicTests`).
 | Item | Files | Pinned by |
 |---|---|---|
 | A3: `bra`/`bsr` delay slots get their real PC in the spec | `patches/0005-sleigh-delay-slot-pc.patch` (`superh.sinc`), regenerated `sh-2.sla` and `Sh2SpecData.h`; `Sh2Decompiler.cpp` (`ScanRawPcode` no longer flags those slots, except one that another branch also jumps to) | `TestDelaySlotPcRelative` (fixture 3, extended and Capstone-checked by `fixture3.py`); `SlaFreshnessTests`; `TestDelaySlotFlagged` (panel, now on the `bf/s` case) |
-| Hardware registers as named globals | `Decompiler/SaturnHardwareMap.{h,cpp}` (256 registers: VDP1, VDP2, SCU, SMPC, SCSP common block) | `TestHardwareRegisterNames` |
+| Hardware registers as named globals | `Decompiler/SaturnHardwareMap.{h,cpp}` (256 registers: VDP1, VDP2, SCU, SMPC, SCSP common block; made volatile and extended later, see `15_DECOMPILER_STEP5.md` → "Hardware-register semantics") | `TestHardwareRegisterNames` |
 | BIOS functions named `bios_0x…` | `Sh2Decompiler.cpp` | `TestBiosFunctionNames` |
 | Register hint for a computed call at the halt | `Decompiler/RegisterHint.{h,cpp}`, `DecompilerPanel.cpp` | `TestRegisterHintAtHalt` |
 | SH-2 Assembly notes on decompiled lines | `DecompilerPanel.cpp`, `App.cpp` (`DecompilerInputs::comments`) | `TestUserCommentsOnLines` |

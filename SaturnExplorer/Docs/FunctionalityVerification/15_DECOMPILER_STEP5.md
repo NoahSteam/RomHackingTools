@@ -532,3 +532,71 @@ Each was checked by removing the handling it pins and watching it fail:
   error" is kept and counted as missing cases. The scratch copy's other warnings are dropped. A
   case-label warning is kept without counting as missing cases, and the restart-limit text is
   recognised.
+
+## Hardware-register semantics (review at `c4927c1`)
+
+The criterion: register addresses, widths and aliases match the hardware documentation, and
+naming a register must not let the optimiser remove a hardware access. The addresses of all 256
+registers matched the Sega manuals. Volatility did not hold.
+
+- **Registers were ordinary globals.** The engine turns a constant-address load or store into a
+  global variable in SSA form, so it forwarded writes to reads, removed overwritten writes and dead
+  reads, and folded polls. Each of these was reproduced:
+  - `SMPC_SF = 1; while (SMPC_SF & 1);` printed as `do {} while (true);`.
+  - Reading `SCU_IST` back after writing `param_1` to it printed as `return param_1;`.
+  - The first of two `VDP2_TVMD` writes was missing.
+  - A dummy read of `SCU_IST` was removed.
+  - Two reads of `VDP2_VCNT` subtracted printed as `return 0;`.
+  - The SH-2 divider's quotient printed as the dividend.
+
+  Each register symbol is now `Varnode::volatil`. A symbol's own flags override a property range
+  (`Scope::queryProperties`), so a range alone does not protect named registers.
+- **Register areas are volatile ranges, every alias included.** This covers accesses wider than
+  one register (no symbol contains them), unnamed registers (SCSP slots, the FIFOs) and mirrors.
+  - The bus areas are SMPC, `MINIT`/`SINIT`, A-bus CS2 (the CD block), SCSP, VDP1, VDP2 and SCU.
+    Each is covered in the cached, cache-through and 0xA partitions, and at the three 128 MiB
+    repeats that bits 28-27 produce, since those bits are not decoded.
+  - The associative-purge and cache-address-array partitions and the on-chip partition are
+    covered whole.
+  - Work RAM, VRAM, CRAM and the cache used as RAM are not covered.
+- **The map is complete enough for the semantics.**
+  - **SH-2 on-chip registers:** SCI, FRT, INTC, DMAC, WDT, SBYCR/CCR, DIVU, UBC and BSC, each at
+    its own width (Hitachi SH7604 manual; Mednafen `sh7095.inc`).
+  - **CD block:** `CD_HIRQ`, `CD_HIRQMSK`, `CD_CR1`-`CD_CR4` and `CD_DATATRNS`.
+  - **`MINIT`/`SINIT`.**
+  - **Access kinds:** every register is read/write, read-only or write-only.
+    - VDP1: the manual's table.
+    - VDP2: only the first eight words read back; the manual, register by register.
+    - SMPC and SCU: what Mednafen returns on a read.
+- **Aliases resolve.** `HardwareAlias` and `FindHardwareRegister` decode each chip's mirror:
+  - SMPC every 128 bytes, SCSP every 4 KiB, VDP2 every 512 bytes, SCU every 256 bytes;
+  - the CD block's 64-byte window;
+  - bits 28-27 and the 0xA partition;
+  - the SH-2's partial on-chip decode.
+
+  The lookup now has a production caller: the notes.
+- **Notes for what a name does not explain.** `DecompileResult::hardwareNotes` lists each of
+  these, also in `warnings` and as amber lines:
+  - a read of a write-only register;
+  - a write to a read-only one;
+  - one access covering two registers (the engine shows `_VDP2_SCXIN0` for a 32-bit scroll write);
+  - a register reached through a mirror (shown by address).
+- **The header's invariant was false.** "Nothing here folds: reads stay reads" described only the
+  load image. It now says why both the symbol flag and the ranges are needed.
+
+Not done: write-to-clear and trigger registers have no flag of their own. Every access is kept
+whatever the register does, so a flag would change nothing in the output. Mirrors are not named;
+they are protected and noted.
+
+Tests:
+- `Sh2DecompilerTests` `TestHardwareVolatility` covers the poll, the read-back, the double write,
+  the dummy read, the two counter reads and the divider. It also covers the 32-bit scroll write
+  (both writes kept, the pair noted), a poll through an SMPC mirror (kept, noted), a write-only
+  read-back and a read-only write. `TestHardwareMap` covers every alias rule, the access kinds,
+  widths and ranges.
+- `DecompilerPanelTests` `TestFlowUncertaintyShown`: a write-only read-back is an amber line.
+- Mutations, each rebuilt and run:
+  - Without the symbol flag, 11 checks fail (the poll, the read-back, the double write, the dummy
+    read, the divider, the write-only note).
+  - Without the ranges, 3 fail (the wide write, the mirrored poll and its note).
+  - Without both, 14 fail.

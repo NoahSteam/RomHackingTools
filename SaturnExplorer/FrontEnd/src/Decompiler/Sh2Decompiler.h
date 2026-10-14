@@ -152,6 +152,17 @@ struct FlowWarning
     std::string text;
 };
 
+// An access to a hardware register that the pseudocode, which shows only the register's name,
+// does not explain: a read of a write-only register (it does not return what was written), a
+// write to a read-only one (it does nothing), one access covering two registers, or a register
+// reached through a mirror (shown by address, not by name). The address is the instruction's,
+// canonical.
+struct HardwareNote
+{
+    uint32_t address = 0;
+    std::string text;
+};
+
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
 // recovery's scratch copy are dropped, unless they say cases were dropped), its text, and whether
 // it means a jump table lost cases or the analysis hit its restart limit (either withholds the
@@ -220,6 +231,7 @@ struct DecompileResult
     // or a wrong entry. Flow stops at each.
     std::vector<uint32_t> badDataAt;
     std::vector<FlowWarning> flowWarnings;   // every one is in warnings too
+    std::vector<HardwareNote> hardwareNotes; // so is every one of these
     bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
     uint32_t unsupportedAt = 0;    // the slot instruction's address
     bool unimplemented = false;    // the spec has no semantics for an instruction

@@ -1181,6 +1181,28 @@ void TestFlowUncertaintyShown()
         CHECK(f.panel.Uncertainties().empty());   // a typed entry has no address to reach
     }
     {
+        // A hardware note is an amber line too: reading a write-only register back shows a value
+        // the hardware never returns.
+        Fixture f;
+        const uint32_t fn = 0x06009A00u;
+        const uint16_t words[] = { 0x000B, 0x0009,   // rts ; nop: the end of whatever precedes
+                                   0xD102,           // mov.l @(8,pc),r1  -> VDP1_FBCR
+                                   0x2141,           // mov.w r4,@r1
+                                   0x6011,           // mov.w @r1,r0      reads it back
+                                   0x000B, 0x0009, 0x0009,
+                                   0x25D0, 0x0002 }; // the literal
+        for (size_t i = 0; i < sizeof words / sizeof words[0]; ++i) f.PutWord(fn - 4 + 2 * uint32_t(i), words[i]);
+        f.names[fn] = "fbcr";
+        ++f.namesGeneration;
+        ++f.backend.serial;
+        f.panel.ShowFunctionContaining(0, fn);
+        CHECK(f.WaitShown("fbcr"));
+        f.Idle(2);
+        const std::vector<std::string> u = f.panel.Uncertainties();
+        for (const std::string& l : u) std::printf("  amber: %s\n", l.c_str());
+        CHECK(any(u, "0x06009A04: reads VDP1_FBCR, which is write-only"));
+    }
+    {
         // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
         Fixture f;
         CHECK(f.WaitShown("+ 1"));

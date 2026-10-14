@@ -385,6 +385,12 @@ by `DecompilerPanelTests`:
   *As built:* `Decompiler/SaturnHardwareMap.{h,cpp}`, 256 registers named `<CHIP>_<NAME>` after the
   Sega manuals, each registered as a global at its cached and cache-through address on every
   pass. The SCSP's per-slot block stays unnamed. Pinned by `TestHardwareRegisterNames`.
+  *Amended (hardware-register review at `c4927c1`):* names alone made registers ordinary globals,
+  so the engine folded write-then-read, dropped overwritten writes and dead reads, and turned
+  polls into endless loops. Each register symbol is now volatile, and so is every register area
+  with all its aliases. Access kinds, the SH-2 on-chip block, the CD block and `MINIT`/`SINIT`
+  were added, with notes for accesses the names do not explain. 335 registers. Pinned by
+  `TestHardwareVolatility` and `TestHardwareMap`.
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).
   *As built:* the image itself landed in Step 3 (Settings, snapshot region, key hash). Step 4 names
   functions in it `bios_0x%08x` unless the user named them, as callees and as entries; pinned by
