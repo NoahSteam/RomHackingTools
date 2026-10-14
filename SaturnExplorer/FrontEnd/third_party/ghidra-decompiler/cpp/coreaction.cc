@@ -3317,6 +3317,12 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max,bool loadOnce)
   Varnode *vncur;
   int4 finalcount = 0;
 
+  if (loadOnce && containsLoad(vn)) {	// Printed at each use, the load would read again
+    vn->setExplicit();
+    vn->clearImplied();
+    return;
+  }
+
   opstack.push_back(vn);
   do {
     vncur = opstack.back().vn;
@@ -3335,11 +3341,6 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max,bool loadOnce)
     }
     else {
       PcodeOp *op = vncur->getDef();
-      if (loadOnce && op->code() == CPUI_LOAD) {	// Printed at each use, the load would read again
-	vn->setExplicit();
-	vn->clearImplied();
-	return;
-      }
       Varnode *newvn = op->getIn(opstack.back().slot++);
       if (newvn->isMark()) {	// If an ancestor is marked(also possible implied with multiple descendants)
 	vn->setExplicit();	// then automatically consider this to be explicit
@@ -3348,6 +3349,31 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max,bool loadOnce)
       opstack.push_back(newvn);
     }
   } while(!opstack.empty());
+}
+
+/// Whether the expression that would print in place of \b vn reads memory: a LOAD defines it or
+/// any Varnode it is built from, through every input (the term count above skips a PTRADD's
+/// index, which can hold a load) and up to explicit Varnodes, which print as names.
+/// \param vn is the given Varnode
+/// \return \b true if a LOAD is part of the expression
+bool ActionMarkExplicit::containsLoad(Varnode *vn)
+
+{
+  vector<Varnode *> work;
+  set<Varnode *> seen;
+  work.push_back(vn);
+  while(!work.empty()) {
+    Varnode *cur = work.back();
+    work.pop_back();
+    if (!cur->isWritten()) continue;
+    if (cur != vn && cur->isExplicit()) continue;
+    if (!seen.insert(cur).second) continue;
+    PcodeOp *op = cur->getDef();
+    if (op->code() == CPUI_LOAD) return true;
+    for(int4 i=0;i<op->numInput();++i)
+      work.push_back(op->getIn(i));
+  }
+  return false;
 }
 
 /// Assume \b vn is produced via a CPUI_NEW operation. If it is immediately fed to a constructor,

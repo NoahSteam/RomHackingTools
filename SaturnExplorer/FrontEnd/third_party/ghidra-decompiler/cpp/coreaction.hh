@@ -439,6 +439,7 @@ class ActionMarkExplicit : public Action {
   static int4 baseExplicit(Varnode *vn,int4 maxref);	///< Make initial determination if a Varnode should be \e explicit
   static int4 multipleInteraction(vector<Varnode *> &multlist);	///< Find multiple descendant chains
   static void processMultiplier(Varnode *vn,int4 max,bool loadOnce);	///< For a given multi-descendant Varnode, decide if it should be explicit
+  static bool containsLoad(Varnode *vn);			///< Does the expression printed for \b vn read memory
   static void checkNewToConstructor(Funcdata &data,Varnode *vn);	///< Set special properties on output of CPUI_NEW
 public:
   ActionMarkExplicit(const string &g) : Action(rule_onceperfunc,"markexplicit",g) {}	///< Constructor

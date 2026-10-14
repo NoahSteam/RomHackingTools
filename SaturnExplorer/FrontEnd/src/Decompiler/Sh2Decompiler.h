@@ -176,6 +176,27 @@ struct HardwareNote
     bool caution = true;
 };
 
+// One memory access the final analysis keeps -- a volatile read or write of a constant address,
+// or a load or store through a pointer -- and how the pseudocode shows it. The access ledger:
+// tests compare it with the operations the SH-2 code makes, so an access that disappears, or one
+// printed more often than it happens, shows up even where the text reads plausibly. Accesses to
+// ordinary memory at constant addresses are values, not operations, and are not listed.
+struct MemoryAccess
+{
+    bool write = false;
+    bool direct = false;        // a constant address; else through a pointer
+    uint32_t address = 0;       // the constant address (as the code uses it); 0 through a pointer
+    uint8_t size = 0;
+    uint32_t insn = 0;          // the instruction, canonical
+    bool inLoop = false;        // in a block that can reach itself
+    bool returned = false;      // a read whose value is the return value, through copies and extensions
+    // How many times the pseudocode shows it: a write once, a read once per emission of its value
+    // (an implied expression is printed in place at each use). 0 when nothing printed comes from it.
+    int printed = 0;
+    int printedLines = 0;       // output lines holding a token printed from it (a statement can wrap)
+    int printedTokens = 0;      // ...and how many such tokens
+};
+
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
 // recovery's scratch copy are dropped, unless they say cases were dropped), its text, and whether
 // it means a jump table lost cases or the analysis hit its restart limit (either withholds the
@@ -245,6 +266,7 @@ struct DecompileResult
     std::vector<uint32_t> badDataAt;
     std::vector<FlowWarning> flowWarnings;   // every one is in warnings too
     std::vector<HardwareNote> hardwareNotes; // the cautions are in warnings too
+    std::vector<MemoryAccess> accesses;      // in p-code order
     bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
     uint32_t unsupportedAt = 0;    // the slot instruction's address
     bool unimplemented = false;    // the spec has no semantics for an instruction

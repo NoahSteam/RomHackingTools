@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cstring>
 #include <stdexcept>
+#include <cstdlib>
 #include <sstream>
 
 using namespace sfe::decomp;
@@ -42,6 +43,10 @@ void Print(const char* label, const DecompileResult& r)
     if (!r.error.empty()) std::printf("  error: %s\n", r.error.c_str());
     if (!r.prototypeWithheld.empty()) std::printf("  signature withheld: %s\n", r.prototypeWithheld.c_str());
     for (const std::string& w : r.warnings) std::printf("  warning: %s\n", w.c_str());
+    for (const MemoryAccess& m : r.accesses)
+        std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)\n", m.write ? "write" : "read",
+                    m.direct ? "direct" : "via pointer", m.address, unsigned(m.size), m.insn, m.inLoop ? " in loop" : "",
+                    m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens);
     for (const Line& l : r.lines)
     {
         if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
@@ -432,6 +437,47 @@ bool WarnsAbout(const DecompileResult& r, const char* what)
     return false;
 }
 
+// The access ledger (consolidated review): the memory operations the SH-2 code makes, written
+// from the instructions, compared with DecompileResult::accesses in instruction order -- kind,
+// address (0: through a pointer), width, whether it is in a loop, whether it is the value
+// returned -- and each one printed on exactly one line. A substring check passes when an access is
+// lost or printed twice; this does not.
+struct Op
+{
+    bool write;
+    uint32_t address;   // 0: through a pointer
+    uint8_t size;
+    bool loop;
+    bool returned;
+};
+Op Rd(uint32_t a, uint8_t size, bool loop = false, bool returned = false) { return Op{ false, a, size, loop, returned }; }
+Op Wr(uint32_t a, uint8_t size, bool loop = false) { return Op{ true, a, size, loop, false }; }
+
+bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
+{
+    std::vector<MemoryAccess> got = r.accesses;
+    std::stable_sort(got.begin(), got.end(), [](const MemoryAccess& x, const MemoryAccess& y) { return x.insn < y.insn; });
+    bool ok = got.size() == want.size();
+    for (size_t i = 0; ok && i < got.size(); ++i)
+    {
+        const MemoryAccess& g = got[i];
+        const Op& w = want[i];
+        ok = g.write == w.write && g.direct == (w.address != 0) && g.address == w.address && g.size == w.size &&
+             g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1;
+    }
+    if (!ok)
+    {
+        std::printf("  ledger mismatch, expected:\n");
+        for (const Op& w : want)
+            std::printf("    %s %08X size %u%s%s\n", w.write ? "write" : "read", w.address, unsigned(w.size),
+                        w.loop ? " in loop" : "", w.returned ? " returned" : "");
+    }
+    return ok;
+}
+
+// A mailbox: one write, then one read per pass through the poll, returned as read.
+std::vector<Op> Mailbox(uint32_t a) { return { Wr(a, 2), Rd(a, 2, true, true) }; }
+
 void TestHardwareVolatility()
 {
     Sh2Decompiler d(gConfig);
@@ -547,15 +593,48 @@ void TestHardwareVolatility()
     const Fixture shadow = simple(0x060098C0u, { 0x2142, 0x6012 }, 0xFFFFFF18u);  // mov.l r4,@r1; mov.l @r1,r0
     const Fixture pdd = simple(0x06009900u, { 0x6012 }, 0x25FE008Cu);             // mov.l @r1,r0
     const Fixture ptrMailbox = simple(0x06009940u, mailboxOps, 0x26001000u);
+    // The rest of the access matrix: read-modify-write, a result used twice, and pointers that are
+    // the function's arguments (never constant).
+    const Fixture rmw = simple(0x06009980u, { 0x6011, 0xCB01, 0x2101 }, 0x25F80000u);   // TVMD |= 1
+    const Fixture reuse = simple(0x060099C0u, { 0x6011, 0x6203, 0x302C }, 0x25F8000Au); // v = VCNT; return v + v
+    const Fixture argTwice = { 0x06009A00u, { 0x6041, 0x6241, 0x3028, 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };   // *p - *p
+    const Fixture argUnused = { 0x06009A40u, { 0x6241, 0x000B, 0x0009, 0x0009 }, 0x08, 0 };                  // (void)*p
+    const Fixture argEcho = { 0x06009A80u, { 0x2451, 0x6041, 0x000B, 0x0009 }, 0x08, 0 };                    // *p = q; return *p
+    const Fixture argRmw = { 0x06009AC0u, { 0x6041, 0xCB01, 0x2401, 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };     // *p |= 1
+    // From the game-code run: one byte read gives an index, the address built from it is used by a
+    // load and a store (p[*p].x -= 1). The address was printed at both, and the byte read with it.
+    const Fixture indexRmw = { 0x06009D00u, { 0x6240,     // mov.b @r4,r2
+                                              0x622C,     // extu.b r2,r2
+                                              0x322C,     // add r2,r2
+                                              0x324C,     // add r4,r2
+                                              0x720E,     // add #14,r2
+                                              0x6121,     // mov.w @r2,r1
+                                              0x71FF,     // add #-1,r1
+                                              0x2211,     // mov.w r1,@r2
+                                              0x000B, 0x0009 }, 0x14, 0 };
+    // Analysis data reads: a pointer to a string in captured memory, returned.
+    const Fixture strPtr = { 0x06009B00u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x06009B40u };
+    // Diagnostics by direction: the same registers written instead of read, and read instead of written.
+    const Fixture ppafWrite = simple(0x06009B80u, { 0x2142 }, 0x25FE0080u);   // mov.l r4,@r1: PPAF
+    const Fixture istWrite = simple(0x06009BC0u, { 0x2142 }, 0x25FE00A4u);    // IST written only
+    const Fixture wtcntRead = simple(0x06009C00u, { 0x6010 }, 0xFFFFFE81u);   // mov.b @r1,r0: WTCNT read
+    const Fixture tvstatRead = simple(0x06009C40u, { 0x6011 }, 0x25F80004u);  // TVSTAT (read-only) read
+    const Fixture ptmrWrite = simple(0x06009C80u, { 0x2141 }, 0x25D00004u);   // PTMR (write-only) written
     for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite,
                               &late, &indexed, &lateRam, &mvolRead, &mibufWrite, &wtcnt, &wtcsr, &wovf, &badKey,
                               &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox,
                               &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
-                              &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox })
+                              &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox,
+                              &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
+                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
         dts::Put32(hw, f->base + f->literal - 0x06000000u, f->pointer);
+    }
+    {
+        const char text[] = "HELLO";
+        for (size_t i = 0; i < sizeof text; ++i) hw[0x9B40 + i] = static_cast<uint8_t>(text[i]);
     }
     auto snap = MakeSnapshot(hw);
     auto run = [&](const char* label, const Fixture& f) {
@@ -566,36 +645,43 @@ void TestHardwareVolatility()
     };
 
     DecompileResult r = run("SMPC_SF poll", poll);
+    CHECK(Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true, true) }));
     CHECK(Has(r.Text(), "SMPC_SF = 1;"));
     CHECK(Count(r.Text(), "SMPC_SF") >= 2);   // the write and the poll's read
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
     CHECK(r.hardwareNotes.empty());
 
     r = run("SCU_IST write then read", echo);
+    CHECK(Ledger(r, { Wr(0x25FE00A4u, 4), Rd(0x25FE00A4u, 4, false, true) }));
     CHECK(Has(r.Text(), "SCU_IST = param_1;"));
     CHECK(Has(r.Text(), "Var1 = SCU_IST;"));   // read back after the write: the read is kept
     CHECK(!Has(r.Text(), "return param_1;"));
     CHECK(HasNote(r, "SCU_IST: a write of 0 clears that interrupt; a read returns the pending ones", false));
 
     r = run("VDP2_TVMD twice", twice);
+    CHECK(Ledger(r, { Wr(0x25F80000u, 2), Wr(0x25F80000u, 2) }));
     CHECK(Has(r.Text(), "VDP2_TVMD = 0;"));
     CHECK(Has(r.Text(), "VDP2_TVMD = 1;"));
 
     r = run("SCU_IST dummy read", dummy);
+    CHECK(Ledger(r, { Rd(0x25FE00A4u, 4), Wr(0x25FE00A4u, 4) }));
     CHECK(Count(r.Text(), "SCU_IST") >= 2);   // the read stays, before the write
     CHECK(Has(r.Text(), "SCU_IST = 0;"));
 
     r = run("VDP2_VCNT twice", counter);
+    CHECK(Ledger(r, { Rd(0x25F8000Au, 2), Rd(0x25F8000Au, 2) }));
     CHECK(Count(r.Text(), "VDP2_VCNT") >= 2);
     CHECK(!Has(r.Text(), "return 0;"));
 
     r = run("SH-2 divider", divide);
+    CHECK(Ledger(r, { Wr(0xFFFFFF00u, 4), Wr(0xFFFFFF04u, 4), Rd(0xFFFFFF04u, 4, false, true) }));
     CHECK(Has(r.Text(), "SH2_DVSR = param_2;"));
     CHECK(Has(r.Text(), "SH2_DVDNT = param_1;"));
     CHECK(Has(r.Text(), "Var1 = SH2_DVDNT;"));   // the quotient, read after the dividend's write
     CHECK(!Has(r.Text(), "return param_1;"));
 
     r = run("VDP2 32-bit scroll write", wide);
+    CHECK(Ledger(r, { Wr(0x25F80070u, 4), Wr(0x25F80070u, 4) }));
     CHECK(Has(r.Text(), "param_1"));   // the first write is not lost to the second
     CHECK(Has(r.Text(), "param_2"));
     // Documented as one 32-bit register: explained on the line, not a caution.
@@ -603,76 +689,94 @@ void TestHardwareVolatility()
     CHECK(!WarnsAbout(r, "SCXIN0"));
 
     r = run("SMPC_SF through a mirror", mirror);
+    CHECK(Ledger(r, { Wr(0x201000E3u, 1), Rd(0x201000E3u, 1, true, true) }));
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
     CHECK(HasNote(r, "0x201000E3 is SMPC_SF through a mirror", false));
 
     r = run("write-only read", woRead);
+    CHECK(Ledger(r, { Wr(0x25D00002u, 2), Rd(0x25D00002u, 2, false, true) }));
     CHECK(Has(r.Text(), "Var1 = VDP1_FBCR;"));
     CHECK(!Has(r.Text(), "return param_1;"));
     CHECK(HasNote(r, "reads VDP1_FBCR, which is write-only"));
     CHECK(!r.warnings.empty() && Has(r.warnings.back(), "write-only"));
 
     r = run("unused read, address folds late", late);
+    CHECK(Ledger(r, { Rd(0x20100063u, 1) }));
     CHECK(Has(r.Text(), "= SMPC_SF;"));
 
     r = run("unused read, indexed address", indexed);
+    CHECK(Ledger(r, { Rd(0, 1) }));
     CHECK(Has(r.Text(), "(&SMPC_SF)[param_1]"));
 
     r = run("unused read, address folds late to work RAM", lateRam);
+    CHECK(Ledger(r, {}));
     CHECK(!Has(r.Text(), "Var1"));   // nothing but the return
 
     r = run("SCSP MVOL read", mvolRead);
+    CHECK(Ledger(r, { Rd(0x25B00400u, 2, false, true) }));
     CHECK(Has(r.Text(), "= SCSP_MVOL;"));
     CHECK(HasNote(r, "reads SCSP_MVOL, which is write-only"));
 
     r = run("SCSP MIBUF write", mibufWrite);
+    CHECK(Ledger(r, { Wr(0x25B00404u, 2) }));
     CHECK(Has(r.Text(), "SCSP_MIBUF = param_1;"));
     CHECK(HasNote(r, "writes SCSP_MIBUF, which is read-only"));
 
     // The watchdog's write ports: one word write, its register picked by the key.
     r = run("watchdog WTCNT", wtcnt);
+    CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
     CHECK(Count(r.Text(), "= 0x5a00;") == 1);
     CHECK(HasNote(r, "keyed watchdog write: requests SH2_WTCNT = 0x00 (taken while SH2_WTCSR's TME is set)", false));
     CHECK(!HasNote(r, "covers") && !HasNote(r, "read-only"));
     CHECK(r.warnings.empty());
 
     r = run("watchdog WTCSR", wtcsr);
+    CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
     CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00 (OVF is cleared only if a read saw it set)", false));
 
     r = run("watchdog RSTCSR", wovf);
+    CHECK(Ledger(r, { Wr(0xFFFFFE82u, 2) }));
     CHECK(Has(r.Text(), "0xa500"));
     CHECK(HasNote(r, "keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set", false));
 
     r = run("watchdog wrong key", badKey);
+    CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
     CHECK(HasNote(r, "watchdog write with key 0x12", true));
 
     r = run("watchdog key unknown", keyVar);
+    CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
     CHECK(HasNote(r, "SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set)", false));
     CHECK(HasNote(r, "OVF cleared only if a read saw it set", false));
 
     r = run("divider mirror", divMirror);
+    CHECK(Ledger(r, { Rd(0xFFFFFF24u, 4, false, true) }));
     CHECK(Has(r.Text(), "Ramffffff24"));
     CHECK(HasNote(r, "0xFFFFFF24 is SH2_DVDNT through a mirror", false));
 
     // 0xA: the associative purge for Mednafen, which SE runs. Kept, and not called VDP2_TVMD.
     r = run("0xA partition", purge5);
+    CHECK(Ledger(r, { Rd(0xA5F80000u, 2, false, true) }));
     CHECK(Has(r.Text(), "a5f80000"));
     CHECK(r.hardwareNotes.empty());
 
     r = run("undocumented pair", oddPair);
+    CHECK(Ledger(r, { Wr(0x25F80000u, 4) }));
     CHECK(HasNote(r, "one 4-byte write covers VDP2_TVMD and VDP2_EXTEN", true));
 
     r = run("UBC pair", ubcPair);
+    CHECK(Ledger(r, { Wr(0xFFFFFF40u, 4) }));
     CHECK(HasNote(r, "SH2_BARA: one 4-byte write of SH2_BARAH and SH2_BARAL, as documented", false));
     CHECK(r.warnings.empty());
 
     r = run("sound RAM mailbox", soundMailbox);
+    CHECK(Ledger(r, Mailbox(0x25A01000u)));
     CHECK(Has(r.Text(), "Ram25a01000 = 1;"));
     CHECK(Count(r.Text(), "Ram25a01000") >= 2);
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
 
     // Work RAM folds by default (it is ordinary memory)...
     r = run("work RAM mailbox, not marked", ramMailbox);
+    CHECK(Ledger(r, {}));
     CHECK(!Has(r.Text(), "Ram26001000 = 1;"));
     // ...and is kept once marked, through either partition.
     for (uint32_t marked : { 0x26001000u, 0x06001000u })
@@ -681,6 +785,7 @@ void TestHardwareVolatility()
         q.volatileMemory.emplace_back(marked, marked + 1);
         r = d.Decompile(snap, q);
         Print("work RAM mailbox, marked", r);
+        CHECK(Ledger(r, Mailbox(0x26001000u)));
         CHECK(Has(r.Text(), "Ram26001000 = 1;"));
         CHECK(Count(r.Text(), "Ram26001000") >= 2);
         CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
@@ -700,6 +805,7 @@ void TestHardwareVolatility()
             q.volatileMemory.emplace_back(0x26001000u, 0x26001001u);
             r = d.Decompile(snap, q);
             Print("mailbox through an alias, marked", r);
+            CHECK(Ledger(r, Mailbox(v.f->pointer)));
             CHECK(kept(r, v.name));
         }
     }
@@ -717,6 +823,8 @@ void TestHardwareVolatility()
             q.volatileMemory.emplace_back(w.first, w.last);
             r = d.Decompile(snap, q);
             Print("mailbox, wide range", r);
+            if (w.name) CHECK(Ledger(r, Mailbox(w.f->pointer)));
+            else CHECK(Ledger(r, { Rd(w.f->base + w.f->literal, 4), Wr(0, 2), Rd(0, 2, true, true) }));   // pointer, then mailbox
             if (w.name) CHECK(kept(r, w.name));
             else CHECK(Has(r.Text(), "*piVar1 = 1;") && Count(r.Text(), "*piVar1") == 3 && !Has(r.Text(), "while( true )"));
         }
@@ -729,6 +837,7 @@ void TestHardwareVolatility()
         q.volatileMemory.emplace_back(0x26001000u, 0x26001001u);
         r = d.Decompile(snap, q);
         Print("mailbox through a volatile pointer", r);
+        CHECK(Ledger(r, { Rd(ptrMailbox.base + ptrMailbox.literal, 4), Wr(0, 2), Rd(0, 2, true, true) }));
         CHECK(Has(r.Text(), "*piVar1 = 1;"));
         CHECK(Count(r.Text(), "*piVar1") == 3);   // the declaration, the write, the one read in the loop
         CHECK(!Has(r.Text(), "return (int4)*piVar1"));
@@ -748,46 +857,109 @@ void TestHardwareVolatility()
         q.volatileMemory.emplace_back(0x26001001u, 0x26001001u);
         r = d.Decompile(snap, q);
         Print("mailbox, one byte marked", r);
+        CHECK(Ledger(r, Mailbox(0x26001000u)));
         CHECK(kept(r, "Ram26001000"));
     }
 
     // A literal marked volatile is read, not folded from the captured bytes.
     r = run("literal, not marked", sharedLiteral);
+    CHECK(Ledger(r, {}));
     CHECK(Has(r.Text(), "return 0x12345678;"));
     {
         DecompileRequest q = Request(sharedLiteral.base);
         q.volatileMemory.emplace_back(0x06009748u, 0x0600974Bu);
         r = d.Decompile(snap, q);
         Print("literal, marked", r);
+        CHECK(Ledger(r, { Rd(0x06009748u, 4, false, true) }));
         CHECK(!Has(r.Text(), "0x12345678"));
         CHECK(Has(r.Text(), "Ram06009748"));
     }
 
     r = run("watchdog second copy", wdtMirror);
+    CHECK(Ledger(r, { Wr(0xFFFFFE88u, 2) }));
     CHECK(HasNote(r, "requests SH2_WTCNT = 0x00", false));
     CHECK(!HasNote(r, "covers"));
 
     r = run("watchdog byte write", wdtByte);
+    CHECK(Ledger(r, { Wr(0xFFFFFE81u, 1) }));
     CHECK(HasNote(r, "SH2_WTCNT takes no 1-byte write: it is written by a keyed word at 0xFFFFFE80", true));
     CHECK(!HasNote(r, "read-only"));
 
     r = run("VDP2 LCTA", lcta);
+    CHECK(Ledger(r, { Wr(0x25F800A8u, 4) }));
     CHECK(HasNote(r, "VDP2_LCTA: one 4-byte write", false));
     CHECK(r.warnings.empty());
 
     // A read's own effect is explained even where nothing is written.
     r = run("SCU PPAF read", ppaf);
+    CHECK(Ledger(r, { Rd(0x25FE0080u, 4, false, true) }));
     CHECK(HasNote(r, "SCU_PPAF: a read clears the DSP's V and E flags and its end interrupt", false));
 
     r = run("divider shadow", shadow);
+    CHECK(Ledger(r, { Wr(0xFFFFFF18u, 4), Rd(0xFFFFFF18u, 4, false, true) }));
     CHECK(!HasNote(r, "read-only"));
     CHECK(HasNote(r, "SH2_DVDNTH_SHADOW: Mednafen's divider shadow register, not one in the SH7604's register table", false));
     CHECK(Has(r.Text(), "SH2_DVDNTH_SHADOW = param_1;"));
 
     r = run("SCU PDD read", pdd);
+    CHECK(Ledger(r, { Rd(0x25FE008Cu, 4, false, true) }));
     CHECK(HasNote(r, "while the DSP is stopped, a read returns data and advances the address", false));
 
+    r = run("read-modify-write", rmw);
+    CHECK(Ledger(r, { Rd(0x25F80000u, 2), Wr(0x25F80000u, 2) }));
+    r = run("a read used twice", reuse);
+    CHECK(Ledger(r, { Rd(0x25F8000Au, 2) }));
+    r = run("two reads through an argument", argTwice);
+    CHECK(Ledger(r, { Rd(0, 2), Rd(0, 2) }));
+    r = run("unused read through an argument", argUnused);
+    CHECK(Ledger(r, { Rd(0, 2) }));
+    r = run("write then read through an argument", argEcho);
+    CHECK(Ledger(r, { Wr(0, 2), Rd(0, 2, false, true) }));
+    r = run("read-modify-write through an argument", argRmw);
+    CHECK(Ledger(r, { Rd(0, 2), Wr(0, 2) }));
+
+    // A string the engine may print as its contents -- unless the bytes are volatile, when the
+    // snapshot's copy is no evidence of what the string holds.
+    r = run("string pointer", strPtr);
+    std::printf("  (unmarked string output above)\n");
+    {
+        DecompileRequest q = Request(strPtr.base);
+        q.volatileMemory.emplace_back(0x06009B40u, 0x06009B45u);
+        r = d.Decompile(snap, q);
+        Print("string pointer, string marked volatile", r);
+        CHECK(!Has(r.Text(), "HELLO"));
+    }
+
+    // Diagnostics follow the direction: a read's effect is not claimed for a write, a write's
+    // caution not for a read, and a split register written without being read says nothing.
+    r = run("PPAF written", ppafWrite);
+    CHECK(Ledger(r, { Wr(0x25FE0080u, 4) }));
+    CHECK(r.hardwareNotes.empty());
+    r = run("IST written only", istWrite);
+    CHECK(Ledger(r, { Wr(0x25FE00A4u, 4) }));
+    CHECK(r.hardwareNotes.empty());
+    r = run("WTCNT read", wtcntRead);
+    CHECK(Ledger(r, { Rd(0xFFFFFE81u, 1, false, true) }));
+    CHECK(r.hardwareNotes.empty());   // read where it is read: nothing to say
+    r = run("TVSTAT read", tvstatRead);
+    CHECK(r.hardwareNotes.empty());
+    r = run("PTMR written", ptmrWrite);
+    CHECK(r.hardwareNotes.empty());
+    // Every note sits on the instruction of the access it is about.
+    for (const Fixture* f : { &woRead, &roWrite, &mvolRead, &mibufWrite, &wtcnt, &badKey, &wdtByte, &ppaf, &oddPair, &mirror })
+    {
+        r = d.Decompile(snap, Request(f->base));
+        std::set<uint32_t> insns;
+        for (const MemoryAccess& m : r.accesses) insns.insert(m.insn);
+        CHECK(!r.hardwareNotes.empty());
+        for (const HardwareNote& n : r.hardwareNotes) CHECK(insns.count(n.address) == 1);
+    }
+
+    r = run("indexed read-modify-write", indexRmw);
+    CHECK(Ledger(r, { Rd(0, 1), Rd(0, 2), Wr(0, 2) }));
+
     r = run("read-only write", roWrite);
+    CHECK(Ledger(r, { Wr(0x25D00010u, 2) }));
     CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
     CHECK(HasNote(r, "writes VDP1_EDSR, which is read-only"));
 }
@@ -920,6 +1092,190 @@ void TestHardwareMap()
     CHECK(!InHardwareRange(0x06000000u));   // work RAM
     CHECK(!InHardwareRange(0x25E00000u));   // VDP2 VRAM
     CHECK(!InHardwareRange(0xC0000000u));   // cache used as RAM
+}
+
+// VolatileAliases against an independent model of the bus decode, on seeded random ranges and
+// addresses biased to the boundaries (consolidated review). The model states the rule directly:
+// an address is covered when some byte of the range reaches the same physical longword. It finds
+// that by listing every address that reaches the longword, not by decomposing the range.
+namespace rangemodel
+{
+// The physical longword an address reaches, and whether it is on the bus at all.
+void Decode(uint32_t x, bool& bus, uint32_t& lw)
+{
+    bus = (x >> 29) <= 1;
+    if (!bus) { lw = x & ~3u; return; }
+    uint32_t a = x & 0x07FFFFFFu;                                // bits 31-27 do not reach the bus
+    if (a >= 0x06000000u) a = 0x06000000u | (a & 0x000FFFFFu);   // high work RAM repeats every 1 MiB
+    lw = a & ~3u;
+}
+
+bool Covered(uint32_t x, uint32_t first, uint32_t last)
+{
+    if (last < first) return false;
+    bool bus;
+    uint32_t lw;
+    Decode(x, bus, lw);
+    auto hits = [&](uint64_t base) { return base <= last && base + 3 >= first; };
+    if (!bus) return hits(lw);
+    for (uint32_t partition = 0; partition < 2; ++partition)
+        for (uint32_t period = 0; period < 4; ++period)
+        {
+            const uint32_t top = (partition << 29) | (period << 27);
+            if (lw < 0x06000000u)
+            {
+                if (hits(top | lw)) return true;
+                continue;
+            }
+            for (uint32_t m = 0; m < 32; ++m)
+                if (hits(top | (0x06000000u + m * 0x00100000u + (lw & 0x000FFFFFu)))) return true;
+        }
+    return false;
+}
+}  // namespace rangemodel
+
+void TestVolatileRangesAgainstModel()
+{
+    uint64_t state = 0x5EED5A7u;
+    auto next = [&]() {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        return static_cast<uint32_t>(state);
+    };
+    const uint32_t edges[] = { 0x00000000u, 0x00100000u, 0x00200000u, 0x00300000u, 0x05A00000u, 0x05FFFFFCu,
+                               0x06000000u, 0x060FFFFCu, 0x06100000u, 0x06F00000u, 0x07FFFFFCu, 0x08000000u,
+                               0x0E000000u, 0x10000000u, 0x18000000u, 0x1FFFFFFCu, 0x20000000u, 0x25FFFFFCu,
+                               0x26000000u, 0x27FFFFFCu, 0x28000000u, 0x3FFFFFFCu, 0x40000000u, 0x5FFFFFFCu,
+                               0xA0000000u, 0xC0000000u, 0xFFFFFE00u, 0xFFFFFFFCu };
+    const size_t nEdges = sizeof edges / sizeof edges[0];
+    auto endpoint = [&]() -> uint32_t {
+        switch (next() % 4)
+        {
+        case 0: return next();
+        case 1: return edges[next() % nEdges] + (next() % 9) - 4;
+        default: return edges[next() % nEdges] + (next() % 0x400) - 0x200;
+        }
+    };
+    // Every other address that decodes like 'x' on the bus, give or take a few bytes.
+    auto alias = [&](uint32_t x) -> uint32_t {
+        uint32_t a = x;
+        if ((a >> 29) <= 1)
+        {
+            a = (a & 0x07FFFFFFu) | ((next() % 2) << 29) | ((next() % 4) << 27);
+            if ((a & 0x07FFFFFFu) >= 0x06000000u) a = (a & ~0x01F00000u) | ((next() % 32) << 20);
+        }
+        return a + (next() % 9) - 4;
+    };
+    int checked = 0, wrong = 0;
+    for (int round = 0; round < 4000; ++round)
+    {
+        uint32_t first = endpoint(), last;
+        switch (next() % 4)
+        {
+        case 0: last = first + next() % 16; break;
+        case 1: last = first + next() % 0x00300000u; break;
+        case 2: last = first + next() % 0x20000000u; break;
+        default: last = endpoint(); break;
+        }
+        if (last < first && next() % 2) std::swap(first, last);   // inverted ones kept too, half the time
+        const std::vector<HardwareRange> got = VolatileAliases(first, last);
+        auto covers = [&](uint32_t a) {
+            for (const HardwareRange& h : got)
+                if (a >= h.first && a <= h.last) return true;
+            return false;
+        };
+        for (int probe = 0; probe < 48; ++probe)
+        {
+            uint32_t x;
+            switch (probe % 6)
+            {
+            case 0: x = alias(first); break;
+            case 1: x = alias(last); break;
+            case 2: x = first + (next() % 9) - 4; break;
+            case 3: x = last + (next() % 9) - 4; break;
+            case 4: x = alias(first + (last - first) / 2); break;
+            default: x = next(); break;
+            }
+            ++checked;
+            if (covers(x) != rangemodel::Covered(x, first, last))
+            {
+                if (++wrong <= 10)
+                    std::printf("  model disagrees: range %08X-%08X, address %08X: VolatileAliases %d, model %d\n", first,
+                                last, x, int(covers(x)), int(rangemodel::Covered(x, first, last)));
+            }
+        }
+    }
+    std::printf("  %d addresses checked against the model, %d disagreements\n", checked, wrong);
+    CHECK(wrong == 0);
+}
+
+// Real game code, when given: SE_GAME_HWRAM names a 1 MiB high work RAM image (big-endian, as the
+// SH-2 sees it). Every function prologue (sts.l pr,@-r15) is decompiled; the summary says how many
+// succeeded, how long they took, and what the hardware handling found. SE_GAME_OUT, if set, is a
+// directory that receives each output, for comparing two builds. Not run otherwise: the image is
+// a game's, and is not in the repository.
+void TestGameCode()
+{
+    const char* path = std::getenv("SE_GAME_HWRAM");
+    if (!path) return;
+    const char* outDir = std::getenv("SE_GAME_OUT");
+    std::vector<uint8_t> hw(0x100000u);
+    FILE* f = std::fopen(path, "rb");
+    CHECK(f != nullptr);
+    if (!f) return;
+    const size_t got = std::fread(hw.data(), 1, hw.size(), f);
+    std::fclose(f);
+    CHECK(got == hw.size());
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
+    double total = 0, worst = 0;
+    uint32_t worstAt = 0;
+    for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
+    {
+        if (hw[k] != 0x4F || hw[k + 1] != 0x22) continue;
+        const uint32_t entry = 0x06000000u + k;
+        const DecompileResult r = d.Decompile(snap, Request(entry));
+        ++n;
+        if (r.status == DecompileStatus::Ok) ++ok;
+        else if (r.status == DecompileStatus::Failed) ++failed;
+        else ++other;
+        total += r.elapsedMs;
+        if (r.elapsedMs > worst) { worst = r.elapsedMs; worstAt = entry; }
+        if (!r.accesses.empty()) ++withAccesses;
+        for (const MemoryAccess& m : r.accesses)
+        {
+            (m.direct ? direct : pointer) += 1;
+            if (m.printed != 1 && ++twice <= 12)
+            {
+                std::printf("  printed %d times: %s %s %08X size %u at %08X in %08X\n", m.printed, m.write ? "write" : "read",
+                            m.direct ? "direct" : "via pointer", m.address, unsigned(m.size), m.insn, entry);
+                for (const Line& l : r.lines)
+                    for (const Token& t : l.tokens)
+                        if (t.addr == m.insn) { std::printf("      | %s\n", l.text.c_str()); break; }
+            }
+        }
+        for (const HardwareNote& h : r.hardwareNotes) (h.caution ? cautions : notes) += 1;
+        if (outDir)
+        {
+            char name[512];
+            std::snprintf(name, sizeof name, "%s/%08X.c", outDir, entry);
+            if (FILE* o = std::fopen(name, "w"))
+            {
+                std::fprintf(o, "status %d\n", int(r.status));
+                for (const std::string& w : r.warnings) std::fprintf(o, "// warning: %s\n", w.c_str());
+                std::fputs(r.Text().c_str(), o);
+                std::fclose(o);
+            }
+        }
+    }
+    std::printf("  game code: %d functions, %d ok, %d failed, %d other; %.0f ms total, worst %.1f ms at %08X\n", n, ok,
+                failed, other, total, worst, worstAt);
+    std::printf("  accesses: %d functions with any, %d direct (volatile), %d through pointers, %d not printed "
+                "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
+    CHECK(twice == 0);
+    CHECK(failed == 0);
 }
 
 // A branch out of the captured region: the function is marked truncated where it left, naming
@@ -2226,6 +2582,8 @@ int main(int argc, char** argv)
         RUN(TestHardwareRegisterNames());
         RUN(TestHardwareVolatility());
         RUN(TestHardwareMap());
+        RUN(TestVolatileRangesAgainstModel());
+        RUN(TestGameCode());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());

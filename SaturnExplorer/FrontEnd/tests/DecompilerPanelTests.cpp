@@ -1292,6 +1292,44 @@ void TestFlowUncertaintyShown()
         CHECK(Has(f.Shown().Text(), "review_callee(1)"));
     }
     {
+        // State and caching across volatile lists (consolidated review). The callee alone: its
+        // mailbox write and read fold away while the mailbox is ordinary memory, and stay when it
+        // is volatile.
+        Fixture f;
+        const uint32_t callee = 0x06009B00u;
+        const uint16_t calleeWords[] = { 0x000B, 0x0009, 0xD104, 0xE000, 0x2102, 0x6012, 0x2008, 0x8900, 0x6043,
+                                         0x000B, 0x0009, 0x0009, 0x2600, 0x1000 };
+        for (size_t i = 0; i < sizeof calleeWords / sizeof calleeWords[0]; ++i) f.PutWord(callee - 4 + 2 * uint32_t(i), calleeWords[i]);
+        f.names[callee] = "mailbox_fn";
+        ++f.namesGeneration;
+        ++f.backend.serial;
+        auto keeps = [&] { return Has(f.Shown().Text(), "iVar1 = Ram26001000;"); };
+
+        // The list changes while the first request is outstanding: whatever comes back for the
+        // old list is not installed as the answer, and the one shown is the new list's.
+        f.panel.ShowFunctionContaining(0, callee);
+        CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
+        CHECK(f.WaitShown("mailbox_fn"));
+        f.Idle(4);
+        CHECK(f.WaitShown("mailbox_fn"));
+        CHECK(keeps());
+        CHECK(!f.panel.ShownStale());
+
+        // Back to no list: asked again, the mailbox folds.
+        CHECK(f.panel.SetVolatileMemory(""));
+        f.Idle(4);
+        CHECK(f.WaitShown("mailbox_fn"));
+        CHECK(!keeps());
+        // ...and to the list again: the earlier answer comes from the cache, not the engine.
+        const uint64_t submissions = f.panel.Submissions(), hits = f.panel.CacheHits();
+        CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
+        f.Idle(4);
+        CHECK(f.WaitShown("mailbox_fn"));
+        CHECK(keeps());
+        CHECK(f.panel.Submissions() == submissions && f.panel.CacheHits() == hits + 1);
+        CHECK(!f.panel.ShownStale());
+    }
+    {
         // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
         Fixture f;
         CHECK(f.WaitShown("+ 1"));

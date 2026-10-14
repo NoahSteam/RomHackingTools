@@ -39,7 +39,7 @@ index d6a82ad..884c48b 100644
    int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
    uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
-index 32f95ae..c8d07cc 100644
+index 32f95ae..c302a3e 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
 @@ -14,6 +14,7 @@
@@ -50,7 +50,7 @@ index 32f95ae..c8d07cc 100644
   */
  #include "coreaction.hh"
  #include "condexe.hh"
-@@ -3309,7 +3310,7 @@ ActionMarkExplicit::OpStackElement::OpStackElement(Varnode *v)
+@@ -3309,13 +3310,19 @@ ActionMarkExplicit::OpStackElement::OpStackElement(Varnode *v)
  /// calculate the number of explicit terms in an expression.
  /// \param vn is the given Varnode
  /// \param max is the maximum number of terms to allow
@@ -59,19 +59,51 @@ index 32f95ae..c8d07cc 100644
  
  {
    vector<OpStackElement> opstack;
-@@ -3334,6 +3335,11 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max)
-     }
-     else {
-       PcodeOp *op = vncur->getDef();
-+      if (loadOnce && op->code() == CPUI_LOAD) {	// Printed at each use, the load would read again
-+	vn->setExplicit();
-+	vn->clearImplied();
-+	return;
-+      }
-       Varnode *newvn = op->getIn(opstack.back().slot++);
-       if (newvn->isMark()) {	// If an ancestor is marked(also possible implied with multiple descendants)
- 	vn->setExplicit();	// then automatically consider this to be explicit
-@@ -3410,7 +3416,7 @@ int4 ActionMarkExplicit::apply(Funcdata &data)
+   Varnode *vncur;
+   int4 finalcount = 0;
+ 
++  if (loadOnce && containsLoad(vn)) {	// Printed at each use, the load would read again
++    vn->setExplicit();
++    vn->clearImplied();
++    return;
++  }
++
+   opstack.push_back(vn);
+   do {
+     vncur = opstack.back().vn;
+@@ -3344,6 +3351,31 @@ void ActionMarkExplicit::processMultiplier(Varnode *vn,int4 max)
+   } while(!opstack.empty());
+ }
+ 
++/// Whether the expression that would print in place of \b vn reads memory: a LOAD defines it or
++/// any Varnode it is built from, through every input (the term count above skips a PTRADD's
++/// index, which can hold a load) and up to explicit Varnodes, which print as names.
++/// \param vn is the given Varnode
++/// \return \b true if a LOAD is part of the expression
++bool ActionMarkExplicit::containsLoad(Varnode *vn)
++
++{
++  vector<Varnode *> work;
++  set<Varnode *> seen;
++  work.push_back(vn);
++  while(!work.empty()) {
++    Varnode *cur = work.back();
++    work.pop_back();
++    if (!cur->isWritten()) continue;
++    if (cur != vn && cur->isExplicit()) continue;
++    if (!seen.insert(cur).second) continue;
++    PcodeOp *op = cur->getDef();
++    if (op->code() == CPUI_LOAD) return true;
++    for(int4 i=0;i<op->numInput();++i)
++      work.push_back(op->getIn(i));
++  }
++  return false;
++}
++
+ /// Assume \b vn is produced via a CPUI_NEW operation. If it is immediately fed to a constructor,
+ /// set special printing flags on the Varnode.
+ /// \param data is the function being analyzed
+@@ -3410,7 +3442,7 @@ int4 ActionMarkExplicit::apply(Funcdata &data)
    for(int4 i=0;i<multlist.size();++i) {
      Varnode *vn = multlist[i];
      if (vn->isMark())		// Mark may have been cleared by multipleInteraction
@@ -81,7 +113,7 @@ index 32f95ae..c8d07cc 100644
    for(int4 i=0;i<multlist.size();++i)
      multlist[i]->clearMark();
 diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
-index ad8cbfc..289dc7a 100644
+index ad8cbfc..6cf88a4 100644
 --- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
 +++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.hh
 @@ -12,6 +12,8 @@
@@ -93,12 +125,13 @@ index ad8cbfc..289dc7a 100644
   */
  /// \file coreaction.hh
  /// \brief Core decompilation actions which are indepedent of any particular architecture
-@@ -436,7 +438,7 @@ class ActionMarkExplicit : public Action {
+@@ -436,7 +438,8 @@ class ActionMarkExplicit : public Action {
    };
    static int4 baseExplicit(Varnode *vn,int4 maxref);	///< Make initial determination if a Varnode should be \e explicit
    static int4 multipleInteraction(vector<Varnode *> &multlist);	///< Find multiple descendant chains
 -  static void processMultiplier(Varnode *vn,int4 max);	///< For a given multi-descendant Varnode, decide if it should be explicit
 +  static void processMultiplier(Varnode *vn,int4 max,bool loadOnce);	///< For a given multi-descendant Varnode, decide if it should be explicit
++  static bool containsLoad(Varnode *vn);			///< Does the expression printed for \b vn read memory
    static void checkNewToConstructor(Funcdata &data,Varnode *vn);	///< Set special properties on output of CPUI_NEW
  public:
    ActionMarkExplicit(const string &g) : Action(rule_onceperfunc,"markexplicit",g) {}	///< Constructor

@@ -908,7 +908,8 @@ TokenKind KindForColor(int color)
 // was printed from; that op's address is the SH-2 instruction it came from. The markup is read
 // in Ghidra's packed encoding, not XML: its XML parser drops whitespace-only text, which is every
 // space between tokens.
-std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcdata& fd, const ghidra::AddrSpaceManager* spaces)
+std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcdata& fd, const ghidra::AddrSpaceManager* spaces,
+                                  std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>* printed = nullptr)
 {
     std::map<ghidra::uintm, const ghidra::PcodeOp*> ops;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it) ops[(*it)->getTime()] = *it;
@@ -921,6 +922,7 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
     const ghidra::uint4 kBreak = ghidra::ELEM_BREAK.getId();
     const ghidra::uint4 kLabel = ghidra::ELEM_LABEL.getId();
     const ghidra::uint4 kFuncName = ghidra::ELEM_FUNCNAME.getId();
+    const ghidra::uint4 kCaseLabel = ghidra::ELEM_VALUE.getId();   // EmitMarkup::tagCaseLabel
     std::function<void()> walk = [&]() {
         const ghidra::uint4 elem = decoder.openElement();
         int color = 8, indent = 0;
@@ -977,6 +979,13 @@ std::vector<Line> LinesFromMarkup(const std::string& packed, const ghidra::Funcd
                 }
             }
             line.tokens.push_back(t);
+            // A case label names the first op of its case: it is a label, not that op printed again.
+            if (op && printed && elem != kCaseLabel)
+            {
+                auto& p = (*printed)[op];
+                p.first.insert(lines.size() - 1);
+                ++p.second;
+            }
         }
         while (decoder.peekElement() != 0) walk();
         decoder.closeElement(elem);
@@ -1203,6 +1212,123 @@ bool ParseAddressRanges(const std::string& input, std::vector<std::pair<uint32_t
     }
     return true;
 }
+
+namespace
+{
+
+// The access ledger (MemoryAccess), from the final p-code and what was printed of it.
+std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
+                                   const std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>& printed,
+                                   const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    // The values returned, traced back through what passes a value on unchanged.
+    std::set<const ghidra::Varnode*> returnedVns;
+    std::vector<const ghidra::Varnode*> work;
+    for (auto it = fd.beginOp(ghidra::CPUI_RETURN); it != fd.endOp(ghidra::CPUI_RETURN); ++it)
+        if (!(*it)->isDead() && (*it)->numInput() > 1) work.push_back((*it)->getIn(1));
+    while (!work.empty())
+    {
+        const ghidra::Varnode* vn = work.back();
+        work.pop_back();
+        if (!returnedVns.insert(vn).second || !vn->isWritten()) continue;
+        const ghidra::PcodeOp* d = vn->getDef();
+        switch (d->code())
+        {
+        case ghidra::CPUI_COPY:
+        case ghidra::CPUI_INT_ZEXT:
+        case ghidra::CPUI_INT_SEXT:
+        case ghidra::CPUI_SUBPIECE:
+        case ghidra::CPUI_CAST:
+            work.push_back(d->getIn(0));
+            break;
+        case ghidra::CPUI_MULTIEQUAL:
+            for (int i = 0; i < d->numInput(); ++i) work.push_back(d->getIn(i));
+            break;
+        case ghidra::CPUI_INDIRECT:
+            work.push_back(d->getIn(0));
+            break;
+        default:
+            break;
+        }
+    }
+    // How many times the printer emits a value: once where it is explicit (a statement or a
+    // variable), at every use where it is implied -- the engine prints an implied expression in
+    // place at each of its uses, so a read inside one is printed, and appears to happen, that often.
+    std::map<const ghidra::Varnode*, int> memo;
+    std::function<int(const ghidra::Varnode*)> emissions = [&](const ghidra::Varnode* vn) -> int {
+        if (!vn->isImplied()) return 1;
+        auto m = memo.find(vn);
+        if (m != memo.end()) return m->second;
+        memo[vn] = 1;   // a cycle cannot be implied; this only bounds a malformed graph
+        int n = 0;
+        for (auto d = vn->beginDescend(); d != vn->endDescend(); ++d)
+        {
+            const ghidra::PcodeOp* use = *d;
+            if (use->isDead()) continue;
+            const ghidra::Varnode* out = use->getOut();
+            n += out ? emissions(out) : 1;
+        }
+        memo[vn] = n;
+        return n;
+    };
+    auto inLoop = [](const ghidra::FlowBlock* b) {
+        std::set<const ghidra::FlowBlock*> seen;
+        std::vector<const ghidra::FlowBlock*> todo;
+        for (int i = 0; i < b->sizeOut(); ++i) todo.push_back(b->getOut(i));
+        while (!todo.empty())
+        {
+            const ghidra::FlowBlock* x = todo.back();
+            todo.pop_back();
+            if (x == b) return true;
+            if (!seen.insert(x).second) continue;
+            for (int i = 0; i < x->sizeOut(); ++i) todo.push_back(x->getOut(i));
+        }
+        return false;
+    };
+    std::vector<MemoryAccess> out;
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        MemoryAccess a;
+        const ghidra::Varnode* value = nullptr;
+        if (o->code() == ghidra::CPUI_LOAD || o->code() == ghidra::CPUI_STORE)
+        {
+            a.write = o->code() == ghidra::CPUI_STORE;
+            value = a.write ? o->getIn(2) : o->getOut();
+            if (o->getIn(1)->isConstant()) a.address = static_cast<uint32_t>(o->getIn(1)->getOffset());
+        }
+        else if (o->code() == ghidra::CPUI_CALLOTHER && o->numInput() >= 2 && o->getIn(0)->isConstant())
+        {
+            const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+            if (!u || (u->getType() != ghidra::UserPcodeOp::volatile_read && u->getType() != ghidra::UserPcodeOp::volatile_write))
+                continue;
+            a.write = u->getType() == ghidra::UserPcodeOp::volatile_write;
+            a.direct = true;
+            a.address = static_cast<uint32_t>(o->getIn(1)->getOffset());
+            value = a.write ? (o->numInput() > 2 ? o->getIn(2) : nullptr) : o->getOut();
+        }
+        else
+            continue;
+        if (!value) continue;
+        a.size = static_cast<uint8_t>(value->getSize());
+        a.insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+        a.inLoop = o->getParent() && inLoop(o->getParent());
+        a.returned = !a.write && returnedVns.count(value) != 0;
+        auto p = printed.find(o);
+        if (p != printed.end())
+        {
+            a.printedLines = static_cast<int>(p->second.first.size());
+            a.printedTokens = p->second.second;
+        }
+        // A write is its own statement; a read is printed as often as its value is emitted. (Its
+        // tokens alone cannot say: p[2] prints the load through the pointer arithmetic's tokens.)
+        a.printed = a.write || !o->getOut() ? 1 : emissions(o->getOut());
+        out.push_back(a);
+    }
+    return out;
+}
+
+}  // namespace
 
 std::string DecompileResult::Text() const
 {
@@ -1789,7 +1915,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->print->setPackedOutput(true);
         arch->print->docFunction(fd);
         arch->print->setMarkup(false);
-        r.lines = LinesFromMarkup(markup.str(), *fd, arch.get());
+        std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>> printed;
+        r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
+        r.accesses = Accesses(*fd, printed, canonicalOf);
         const std::string e = errors.str();
         if (!e.empty()) r.warnings.push_back(e);
         return std::string("ok");
