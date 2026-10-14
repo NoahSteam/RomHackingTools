@@ -208,11 +208,28 @@ Prototype PrototypeOf(const ghidra::Funcdata& fd)
 // the others take what it can return, its stores through what it was handed hit what they may, and
 // what it lets out escapes. All of it joins this function's own summary. A callee whose effects
 // are unknown is taken to do anything.
+// Each indirect jump's recovered destinations, by the jump's address: as flow recovered them, and
+// as the function holds them at the end. Both, because the actions can remove a table they have
+// resolved -- one destination becomes a plain goto (RuleSwitchSingle) -- while the jump itself is
+// still in the instruction it came from.
+using JumpDests = std::map<uint32_t, std::set<uint32_t>>;
+
+void AddJumpTables(ghidra::Funcdata& fd, JumpDests& dests)
+{
+    for (ghidra::int4 t = 0; t < fd.numJumpTables(); ++t)
+    {
+        const ghidra::JumpTable* table = fd.getJumpTable(t);
+        std::set<uint32_t>& d = dests[static_cast<uint32_t>(table->getOpAddress().getOffset())];
+        for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
+            d.insert(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()));
+    }
+}
+
 class ReturnCheck
 {
 public:
-    ReturnCheck(ghidra::Funcdata& fd, uint32_t exec, const std::map<uint32_t, Prototype>& lent)
-        : mFd(fd), mExec(exec), mLent(lent)
+    ReturnCheck(ghidra::Funcdata& fd, uint32_t exec, const std::map<uint32_t, Prototype>& lent, const JumpDests& tables)
+        : mFd(fd), mExec(exec), mLent(lent), mTables(tables)
     {
         const ghidra::Architecture* arch = fd.getArch();
         mRam = arch->getDefaultCodeSpace();
@@ -644,15 +661,10 @@ private:
                 break;
             case ghidra::CPUI_BRANCHIND:
             {
-                bool found = false;
-                for (ghidra::int4 t = 0; t < mFd.numJumpTables(); ++t)
-                {
-                    const ghidra::JumpTable* table = mFd.getJumpTable(t);
-                    if (table->getOpAddress().getOffset() != a) continue;
-                    found = true;
-                    for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
-                        succ.emplace_back(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()), s);
-                }
+                auto table = mTables.find(a);
+                const bool found = table != mTables.end() && !table->second.empty();
+                if (found)
+                    for (uint32_t to : table->second) succ.emplace_back(to, s);
                 // jmp @rN with rN holding the caller's PR is a return like rts (the engine takes a jump
                 // table it cannot recover that way too, when the target is the return address).
                 if (!found && !Return(s, op.in[0])) return "an indirect jump it does not resolve";
@@ -682,6 +694,7 @@ private:
     ghidra::Funcdata& mFd;
     uint32_t mExec;
     const std::map<uint32_t, Prototype>& mLent;
+    const JumpDests& mTables;
     ghidra::AddrSpace* mRam = nullptr;
     ghidra::VarnodeData mReg[kTracked];
     std::map<uint32_t, uint32_t> mCallAt;   // call instruction -> the address it calls
@@ -693,7 +706,7 @@ private:
 // signature is locked: the caller's call shows exactly those arguments and that return, and
 // nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
 std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Prototype>& lent, uint32_t exec,
-                           uint32_t entry, CallEffects& effects)
+                           uint32_t entry, const JumpDests& tables, CallEffects& effects)
 {
     if (fd.hasBadData()) return "bad instruction data";
     const ghidra::FuncProto& fp = fd.getFuncProto();
@@ -730,7 +743,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     }
     // A return that does not go back to the caller (PR replaced, or saved after a call changed it)
     // is a jump somewhere else, not a return to the call site the signature describes.
-    return ReturnCheck(fd, exec, lent).Run(effects);
+    return ReturnCheck(fd, exec, lent, tables).Run(effects);
 }
 
 // What one pass learned from a function's raw p-code, before any action has run.
@@ -742,6 +755,7 @@ struct RawScan
     bool unsupported = false;
     uint32_t unsupportedAt = 0;
     std::set<uint32_t> insns;   // every instruction with p-code, before any action removes some
+    std::set<uint32_t> halted;  // ...of which these failed to decode: flow stopped at them
 };
 
 // Literal pools and A3. SLEIGH emits "tmp = #addr; Rn = *(ram, tmp)" for mov.w/mov.l
@@ -761,7 +775,12 @@ RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
     // literal is excluded from folding and the function flagged.
     std::set<uint32_t>& insns = scan.insns;
     for (auto it = fd.beginOpMain(); it != fd.endOpMain(); ++it)
-        insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
+    {
+        const uint32_t a = static_cast<uint32_t>(it->second->getAddr().getOffset());
+        insns.insert(a);
+        if (it->second->getHaltType() & (ghidra::PcodeOp::badinstruction | ghidra::PcodeOp::unimplemented))
+            scan.halted.insert(a);
+    }
     // The patch hands the slot its PC by address, so a slot that anything in the function also
     // jumps straight to would get the slot's PC on that path too. Such code is flagged rather than
     // trusted. Jumps come from immediate branches and from the jump tables flow recovered (a
@@ -1033,8 +1052,8 @@ namespace
 
 // The instructions flow reached, as merged [lo, hi) ranges. 'insns' holds every instruction that
 // had p-code at some point; nop has none, and a delay slot's p-code carries its branch's address,
-// so both are added here. Halts on memory that is not there or does not decode are not
-// instructions and are left out.
+// so both are added here. The caller leaves out the instructions flow halted at (memory not there,
+// or not decoding), and a delay slot is added only when it decodes.
 std::vector<std::pair<uint32_t, uint32_t>> BodyRanges(const std::set<uint32_t>& insns, const MemorySnapshot& snap)
 {
     std::set<uint32_t> all;
@@ -1048,6 +1067,9 @@ std::vector<std::pair<uint32_t, uint32_t>> BodyRanges(const std::set<uint32_t>& 
         uint32_t next = a + 2;
         if (ins.HasDelaySlot)
         {
+            // The slot ran only if it is there and decodes (the engine halts the pair otherwise).
+            uint16_t slot = 0;
+            if (!snap.ReadU16(a + 2, slot) || !Sh2Decode(a + 2, slot).IsValid) continue;
             all.insert(a + 2);
             next = a + 4;
         }
@@ -1300,6 +1322,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 
         const RawScan scan = ScanRawPcode(*fd, *snapshot);
         knownLiterals = scan.readonly;
+        JumpDests flowTables;
+        AddJumpTables(*fd, flowTables);
         for (const auto& ro : scan.readonly)
             arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
                                               ghidra::Range(ram, ro.first, ro.first + ro.second - 1));
@@ -1353,6 +1377,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::set<uint32_t> insns = scan.insns;
         for (auto it = fd->beginOpMain(); it != fd->endOpMain(); ++it)
             insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
+        for (uint32_t h : scan.halted) insns.erase(h);
         r.body = BodyRanges(insns, *snapshot);
         for (uint32_t w : scan.literalWords) r.literalPools.push_back(canonicalOf(w));
         std::sort(r.literalPools.begin(), r.literalPools.end());
@@ -1532,7 +1557,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         else if (r.unsupported) r.prototypeWithheld = "unsupported";
         else if (r.unimplemented) r.prototypeWithheld = "unimplemented";
         CallEffects effects;
-        if (r.prototypeWithheld.empty()) r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, effects);
+        if (r.prototypeWithheld.empty()) 
+        {
+            AddJumpTables(*fd, flowTables);
+            r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects);
+        }
         if (r.prototypeWithheld.empty())
         {
             r.prototype = PrototypeOf(*fd);

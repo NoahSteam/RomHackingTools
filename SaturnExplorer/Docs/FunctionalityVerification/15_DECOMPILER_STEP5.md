@@ -488,3 +488,18 @@ Tests failing on `0c3d989` (`TestFlowUncertainty`): a `jmp` through a literal wi
 (now a goto, no tail-call warning, no callee), and a switch with a literal-pool bound (now
 recovered, two-argument signature lent). A function whose whole body is `jmp` to a constant is
 still a thunk to the engine and is reported as a tail call.
+
+Re-review at `54bd571`: the four findings are closed. Two P2 follow-ups:
+- **A resolved goto lost its signature.** `RuleSwitchSingle` removes a table whose destinations
+  are all one address and makes the jump a plain goto. ReturnCheck looked the jump up in the final
+  tables, found none, and withheld the signature for "an indirect jump it does not resolve". It
+  now reads the destinations recovered during flow, merged with the final tables. Pinned: a `jmp`
+  through a literal within the function, and a three-case switch whose cases and default share one
+  destination. Both are now lent.
+- **The body held an uncaptured delay slot.** For `rts` in LWRAM's last halfword, `BodyRanges`
+  decoded the captured word and added its slot at 0x00300000, though the engine had halted the
+  pair. Instructions flow halted at are now left out, and a slot is added only when it decodes.
+  Pinned: neither the `rts` nor the slot is in the body.
+
+Each check fails on `54bd571`. Coverage gaps the reviewer also lists: the restart limit alone,
+failed multistage recovery, and a call the engine marks noreturn.

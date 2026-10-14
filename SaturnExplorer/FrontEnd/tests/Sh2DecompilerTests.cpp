@@ -817,6 +817,21 @@ void TestFlowUncertainty()
     Print("jmp within the function", r);
     CHECK(Has(r.Text(), "return param_1;") && !warned(r, "tail call") && r.InBody(0x0605010Eu));
     CHECK(r.callees.empty() && r.flowWarnings.empty());   // the first pass took it for a call
+    // ...and the goto the table became is followed: the signature is lent (review of 54bd571).
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+
+    // Every case and the default reach one destination: the engine makes it a goto, and the
+    // signature is still lent.
+    std::vector<uint8_t> same;
+    Place(same, 0x06050000u, { 0xE102, 0x3416, 0x8904, 0xC703, 0x4408, 0x014E, 0x412B, 0x0009,
+                               0xA006,      // default: bra 0x06050020
+                               0x0009 });   //   nop
+    for (uint32_t i = 0; i < 3; ++i) dts::Put32(same, 0x00050014u + 4 * i, 0x06050020u);
+    Place(same, 0x06050020u, { 0x000B, 0xE000 });
+    r = d.Decompile(MakeSnapshot(same), Request(0x06050000u));
+    Print("switch, one destination", r);
+    CHECK(Has(r.Text(), "return 0;") && !warned(r, "tail call") && !warned(r, "cases may be missing"));
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
 
     // A switch whose bound is a literal-pool word: recovered, since the second pass marks the first
     // pass's literals read-only before flow (jump tables are recovered during flow).
@@ -864,6 +879,17 @@ void TestFlowUncertainty()
     CHECK(r.badDataAt == std::vector<uint32_t>{ 0x002FFFF8u });
     CHECK(any(r, FlowWarning::Cut, 0x00300004u, "cut off"));
     CHECK(any(r, FlowWarning::BadData, 0x002FFFF8u, "do not decode"));
+
+    // rts in LWRAM's last halfword: its slot is not captured, so the pair halts. Neither is body.
+    auto slotSnap = MakeSnapshot(none);
+    auto* sl = const_cast<MemoryRegion*>(slotSnap->RegionAt(MemorySnapshot::kLwramBase));
+    off = 0x002FFFFAu - sl->base;
+    for (uint16_t w : { 0x7401, 0x0009, 0x000B })   // add #1,r4 ; nop ; rts | slot at 0x00300000
+    { sl->bytes[off] = uint8_t(w >> 8); sl->bytes[off + 1] = uint8_t(w); off += 2; }
+    r = d.Decompile(slotSnap, Request(0x002FFFFAu));
+    Print("rts with an uncaptured slot", r);
+    CHECK(r.truncated && r.truncatedAt == 0x00300000u);
+    CHECK(!r.InBody(0x00300000u) && !r.InBody(0x002FFFFEu) && r.InBody(0x002FFFFAu));
 
     // A 300-case switch, 299 of its cases in memory that is not captured (finding 4): every one is
     // a cut, however many refusals the fetch image keeps, and none is taken for bad data.
