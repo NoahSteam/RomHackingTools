@@ -51,6 +51,7 @@ struct HardwareRegister
     // write does not return what was written, though the read means something.
     const char* split;
     const char* onRead;   // set when a read does more than return a value (a FIFO pop, a latch)
+    const char* about;    // set for a register only the emulator has: said of every access
 };
 
 // Every register, sorted by address, none overlapping.

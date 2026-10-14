@@ -24,6 +24,7 @@ struct Reg
     uint8_t size;         // 0: the block's
     const char* split;    // reads and writes reach different fields: what each does
     const char* onRead;   // what a read does besides returning a value
+    const char* about;    // said of every access: a register only the emulator has
 };
 
 struct Block
@@ -152,7 +153,9 @@ const Reg kScu[] = {
     { 0x050, "SCU_D2EN", WO }, { 0x054, "SCU_D2MD", WO }, { 0x060, "SCU_DSTP", WO }, { 0x07C, "SCU_DSTA", RO },
     { 0x080, "SCU_PPAF", RW, 0, "a write controls the DSP program; a read returns its status",
       "a read clears the DSP's V and E flags and its end interrupt" },
-    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW, 0, nullptr, "a read advances the DSP data address (PDA)" },
+    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW, 0, nullptr,
+      "while the DSP is stopped, a read returns data and advances the address (PDA); while it runs, "
+      "it returns 0xFFFFFFFF and advances nothing" },
     { 0x090, "SCU_T0C", WO }, { 0x094, "SCU_T1S", WO }, { 0x098, "SCU_T1MD", WO }, { 0x0A0, "SCU_IMS", WO },
     { 0x0A4, "SCU_IST", RW, 0, "a write of 0 clears that interrupt; a read returns the pending ones" }, { 0x0A8, "SCU_AIACK", RW }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
     { 0x0B8, "SCU_AREF", WO }, { 0x0C4, "SCU_RSEL", RW }, { 0x0C8, "SCU_VER", RO },
@@ -177,6 +180,8 @@ const Reg kCdFifo[] = { { 0x0000, "CD_DATATRNS", RW, 4, nullptr, "a read takes t
 const Reg kMinit[] = { { 0x0000, "MINIT", WO } };   // the master signals the slave
 const Reg kSinit[] = { { 0x0000, "SINIT", WO } };   // the slave signals the master
 
+const char* const kShadow = "Mednafen's divider shadow register, not one in the SH7604's register table";
+
 // The SH-2's own peripherals (Hitachi SH7604 hardware manual; Mednafen sh7095.inc). The FRT
 // counter is two bytes read high first: the high read latches the low byte. The watchdog's
 // registers are named where they are read, a byte each at FE80/FE81/FE83 (and again at
@@ -198,7 +203,9 @@ const Reg kOnChip[] = {
     { 0x0E4, "SH2_VCRWDT", RW, 2 }, { 0x100, "SH2_DVSR", RW, 4 }, { 0x104, "SH2_DVDNT", RW, 4 },
     { 0x108, "SH2_DVCR", RW, 4 }, { 0x10C, "SH2_VCRDIV", RW, 4 }, { 0x110, "SH2_DVDNTH", RW, 4 },
     { 0x114, "SH2_DVDNTL", RW, 4 },
-    { 0x118, "SH2_DVDNTH_SHADOW", RO, 4 }, { 0x11C, "SH2_DVDNTL_SHADOW", RO, 4 }, { 0x140, "SH2_BARAH", RW, 2 }, { 0x142, "SH2_BARAL", RW, 2 },
+    { 0x118, "SH2_DVDNTH_SHADOW", RW, 4, nullptr, nullptr, kShadow },
+    { 0x11C, "SH2_DVDNTL_SHADOW", RW, 4, nullptr, nullptr, kShadow },
+    { 0x140, "SH2_BARAH", RW, 2 }, { 0x142, "SH2_BARAL", RW, 2 },
     { 0x144, "SH2_BAMRAH", RW, 2 }, { 0x146, "SH2_BAMRAL", RW, 2 }, { 0x148, "SH2_BBRA", RW, 2 },
     { 0x160, "SH2_BARBH", RW, 2 }, { 0x162, "SH2_BARBL", RW, 2 }, { 0x164, "SH2_BAMRBH", RW, 2 },
     { 0x166, "SH2_BAMRBL", RW, 2 }, { 0x168, "SH2_BBRB", RW, 2 }, { 0x170, "SH2_BDRBH", RW, 2 },
@@ -234,7 +241,7 @@ std::vector<HardwareRegister> Build()
         for (size_t i = 0; i < b.count; ++i)
         {
             const Reg& r = b.regs[i];
-            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access, r.split, r.onRead });
+            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access, r.split, r.onRead, r.about });
         }
     std::sort(all.begin(), all.end(),
               [](const HardwareRegister& x, const HardwareRegister& y) { return x.address < y.address; });
@@ -402,7 +409,9 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
     const uint32_t key = (value >> 8) & 0xFFu, data = value & 0xFFu;
     if (a == 0xFFFFFE80u)
     {
-        if (!valueKnown) text = "keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A, SH2_WTCSR when it is 0xA5";
+        if (!valueKnown)
+            text = "keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is "
+                   "set), SH2_WTCSR when it is 0xA5 (OVF cleared only if a read saw it set)";
         else if (key == 0x5Au)
         {
             std::snprintf(b, sizeof b, "keyed watchdog write: requests SH2_WTCNT = 0x%02X (taken while SH2_WTCSR's TME is set)", data);
@@ -421,7 +430,9 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
         }
         return true;
     }
-    if (!valueKnown) text = "keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF, 0x5A with data sets RSTE and RSTS";
+    if (!valueKnown)
+        text = "keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF if a read saw it set, 0x5A with data sets "
+               "RSTE and RSTS";
     else if (value == 0xA500u) text = "keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set";
     else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x%02X", data); text = b; }
     else
@@ -441,37 +452,62 @@ std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last)
     // bytes before and after it in the same longword.
     first &= ~3u;
     last |= 3u;
+    if (last < first) last = 0xFFFFFFFFu;
+    const uint64_t lo = first, hi = last;
+    const uint64_t busEnd = 0x40000000ull;   // partitions 000 and 001
     std::vector<HardwareRange> out;
-    if ((first >> 29) > 1 || (first >> 29) != (last >> 29))
+    // Whatever lies outside the bus partitions is taken as given.
+    if (hi >= busEnd) out.push_back(HardwareRange{ static_cast<uint32_t>(std::max<uint64_t>(lo, busEnd)), last });
+    if (lo >= busEnd) return out;
+
+    // The bus part, as physical (27-bit) intervals: bits 31-27 do not select memory on the bus,
+    // so an interval spanning a whole 128 MiB period covers all of it, and one crossing a period
+    // boundary wraps.
+    const uint64_t period = 0x08000000ull;
+    const uint64_t a = lo, b = std::min<uint64_t>(hi, busEnd - 1);
+    std::vector<std::pair<uint32_t, uint32_t>> phys;
+    if (b - a + 1 >= period)
+        phys.emplace_back(0u, 0x07FFFFFFu);
+    else
     {
-        out.push_back(HardwareRange{ first, last });   // not one bus partition: as given
-        return out;
+        const uint32_t pa = static_cast<uint32_t>(a % period), pb = static_cast<uint32_t>(b % period);
+        if (pa <= pb) phys.emplace_back(pa, pb);
+        else
+        {
+            phys.emplace_back(pa, 0x07FFFFFFu);
+            phys.emplace_back(0u, pb);
+        }
     }
-    // On the bus: both partitions and bits 28-27 (not decoded), and high work RAM's 1 MiB repeat
-    // across 0x06000000-0x07FFFFFF.
-    const uint32_t lo = first & 0x07FFFFFFu, hi = last & 0x07FFFFFFu;
-    std::vector<HardwareRange> pieces;
+    // High work RAM repeats every 1 MiB across 0x06000000-0x07FFFFFF: each physical interval's
+    // part in it reaches the same bytes through every repeat.
     const uint32_t hwram = 0x06000000u, mib = 0x00100000u;
-    if (hi < lo) pieces.push_back(HardwareRange{ lo, 0x07FFFFFFu }), pieces.push_back(HardwareRange{ 0, hi });
-    else if (lo >= hwram && hi - lo >= mib - 1) pieces.push_back(HardwareRange{ hwram, 0x07FFFFFFu });
-    else if (lo >= hwram)
+    std::vector<std::pair<uint32_t, uint32_t>> pieces;
+    for (const auto& p : phys)
     {
-        const uint32_t a = lo & (mib - 1), b = hi & (mib - 1);
+        if (p.first < hwram) pieces.emplace_back(p.first, std::min(p.second, hwram - 1));
+        if (p.second < hwram) continue;
+        const uint32_t s = std::max(p.first, hwram), e = p.second;
+        if (e - s + 1 >= mib)
+        {
+            pieces.emplace_back(hwram, 0x07FFFFFFu);
+            continue;
+        }
+        const uint32_t sa = s & (mib - 1), ea = e & (mib - 1);
         for (uint32_t r = hwram; r < 0x08000000u; r += mib)
         {
-            if (a <= b) pieces.push_back(HardwareRange{ r + a, r + b });
+            if (sa <= ea) pieces.emplace_back(r + sa, r + ea);
             else
             {
-                pieces.push_back(HardwareRange{ r + a, r + mib - 1 });
-                pieces.push_back(HardwareRange{ r, r + b });
+                pieces.emplace_back(r + sa, r + mib - 1);
+                pieces.emplace_back(r, r + ea);
             }
         }
     }
-    else pieces.push_back(HardwareRange{ lo, hi });
+    // ...through both partitions and every 128 MiB period.
     for (uint32_t partition : { 0x00000000u, 0x20000000u })
         for (uint32_t repeat = 0; repeat < 4; ++repeat)
-            for (const HardwareRange& p : pieces)
-                out.push_back(HardwareRange{ partition | (repeat << 27) | p.first, partition | (repeat << 27) | p.last });
+            for (const auto& p : pieces)
+                out.push_back(HardwareRange{ partition | (repeat << 27) | p.first, partition | (repeat << 27) | p.second });
     return out;
 }
 

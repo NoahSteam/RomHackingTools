@@ -2,6 +2,7 @@
 
 #include "translate.hh"   // BadDataError
 
+#include <algorithm>
 #include <cstring>
 #include <iterator>
 #include <sstream>
@@ -16,9 +17,29 @@ CaptureLoadImage::CaptureLoadImage(std::shared_ptr<const MemorySnapshot> snapsho
 {
 }
 
+void CaptureLoadImage::SetVolatile(std::vector<std::pair<uint32_t, uint32_t>> ranges)
+{
+    std::sort(ranges.begin(), ranges.end());
+    mVolatile = std::move(ranges);
+}
+
 void CaptureLoadImage::loadFill(ghidra::uint1* ptr, ghidra::int4 size, const ghidra::Address& addr)
 {
     const uint32_t a = static_cast<uint32_t>(addr.getOffset());
+    if (mUse == Use::Data && size > 0)
+    {
+        const uint64_t end = static_cast<uint64_t>(a) + static_cast<uint64_t>(size) - 1;
+        for (const auto& v : mVolatile)
+        {
+            if (v.first > end) break;
+            if (v.second >= a)
+            {
+                std::ostringstream e;
+                e << "Unable to load " << size << " bytes at 0x" << std::hex << a << ": volatile memory";
+                throw ghidra::DataUnavailError(e.str());
+            }
+        }
+    }
     std::string why;
     // Read() leaves 'ptr' untouched when it fails, so the partial fill below starts clean.
     if (mSnapshot->Read(a, ptr, static_cast<size_t>(size), &why)) return;

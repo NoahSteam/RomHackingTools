@@ -1112,6 +1112,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                                    (std::string(reg->name) == "SH2_RSTCSR" ? "0xFFFFFE82" : "0xFFFFFE80") +
                                    "; this write does nothing", true);
                 if (read && reg->onRead) note(insn, std::string(reg->name) + ": " + reg->onRead, false);
+                if (reg->about) note(insn, std::string(reg->name) + ": " + reg->about, false);
                 if (write) written.insert(reg);
                 if (read && reg->split) splitReads.emplace_back(insn, reg);
             }
@@ -1518,6 +1519,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // The user's shared memory, through every alias that reaches it (VolatileAliases).
         for (const HardwareRange& v : userVolatile)
             arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, v.first, v.last));
+        // ...and none of it, nor any hardware, is a value the analysis may read from the snapshot:
+        // jump-table recovery reads its table through the data image, and a table another
+        // processor can rewrite is no fixed switch.
+        {
+            std::vector<std::pair<uint32_t, uint32_t>> noData;
+            for (const HardwareRange& h : HardwareRanges()) noData.emplace_back(h.first, h.last);
+            for (const HardwareRange& v : userVolatile) noData.emplace_back(v.first, v.last);
+            arch->DataImage().SetVolatile(std::move(noData));
+        }
 
         for (const auto& ro : knownLiterals)
             if (!sharedLiteral(ro.first, ro.second))

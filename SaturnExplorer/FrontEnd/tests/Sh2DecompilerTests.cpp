@@ -535,16 +535,22 @@ void TestHardwareVolatility()
     const Fixture repeatMailbox = simple(0x06009680u, mailboxOps, 0x26101000u);
     const Fixture farMailbox = simple(0x060096C0u, mailboxOps, 0x26801000u);
     const Fixture bit27Mailbox = simple(0x06009700u, mailboxOps, 0x2E001000u);
+    // Ranges crossing a region or bus-period boundary, or spanning whole periods, still reach the
+    // mailbox through its other addresses (review of 80620fb).
+    const Fixture hwramMirrorMailbox = simple(0x06009880u, mailboxOps, 0x260FFFFCu);
     // A literal the user marked volatile: mov.l @(4,pc),r0; rts; nop; .long 0x12345678.
     const Fixture sharedLiteral = { 0x06009740u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x12345678u };
     const Fixture wdtMirror = simple(0x06009780u, { 0xE05A, 0x4018, 0x2101 }, 0xFFFFFE88u);  // keyed, second copy
     const Fixture wdtByte = simple(0x060097C0u, { 0x2140 }, 0xFFFFFE81u);         // mov.b r4,@r1: WTCNT
     const Fixture lcta = simple(0x06009800u, { 0x2142 }, 0x25F800A8u);            // mov.l r4,@r1
     const Fixture ppaf = simple(0x06009840u, { 0x6012 }, 0x25FE0080u);            // mov.l @r1,r0
+    const Fixture shadow = simple(0x060098C0u, { 0x2142, 0x6012 }, 0xFFFFFF18u);  // mov.l r4,@r1; mov.l @r1,r0
+    const Fixture pdd = simple(0x06009900u, { 0x6012 }, 0x25FE008Cu);             // mov.l @r1,r0
     for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite,
                               &late, &indexed, &lateRam, &mvolRead, &mibufWrite, &wtcnt, &wtcsr, &wovf, &badKey,
                               &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox,
-                              &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf })
+                              &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
+                              &hwramMirrorMailbox, &shadow, &pdd })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -640,7 +646,8 @@ void TestHardwareVolatility()
     CHECK(HasNote(r, "watchdog write with key 0x12", true));
 
     r = run("watchdog key unknown", keyVar);
-    CHECK(HasNote(r, "SH2_WTCNT when the upper byte is 0x5A, SH2_WTCSR when it is 0xA5", false));
+    CHECK(HasNote(r, "SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set)", false));
+    CHECK(HasNote(r, "OVF cleared only if a read saw it set", false));
 
     r = run("divider mirror", divMirror);
     CHECK(Has(r.Text(), "Ramffffff24"));
@@ -695,6 +702,24 @@ void TestHardwareVolatility()
             CHECK(kept(r, v.name));
         }
     }
+    {
+        struct { uint32_t first, last; const Fixture* f; const char* name; } wide[] = {
+            { 0x25FFFFFCu, 0x26001003u, &repeatMailbox, "Ram26101000" },        // crosses into HWRAM
+            // A whole bus period: all of it, the function's own literal pool included, so even the
+            // mailbox pointer is a read now -- and the write and the poll through it are kept.
+            { 0x26000000u, 0x2E000003u, &repeatMailbox, nullptr },
+            { 0x27FFFFFCu, 0x28001003u, &hwramMirrorMailbox, "Ram260ffffc" },   // wraps the bus period
+        };
+        for (const auto& w : wide)
+        {
+            DecompileRequest q = Request(w.f->base);
+            q.volatileMemory.emplace_back(w.first, w.last);
+            r = d.Decompile(snap, q);
+            Print("mailbox, wide range", r);
+            if (w.name) CHECK(kept(r, w.name));
+            else CHECK(Has(r.Text(), "*piVar1 = 1;") && Has(r.Text(), "*piVar1 & 1") && !Has(r.Text(), "while( true )"));
+        }
+    }
     // ...and a word access is kept when the user marked only one byte of it.
     {
         DecompileRequest q = Request(ramMailbox.base);
@@ -732,6 +757,14 @@ void TestHardwareVolatility()
     r = run("SCU PPAF read", ppaf);
     CHECK(HasNote(r, "SCU_PPAF: a read clears the DSP's V and E flags and its end interrupt", false));
 
+    r = run("divider shadow", shadow);
+    CHECK(!HasNote(r, "read-only"));
+    CHECK(HasNote(r, "SH2_DVDNTH_SHADOW: Mednafen's divider shadow register, not one in the SH7604's register table", false));
+    CHECK(Has(r.Text(), "SH2_DVDNTH_SHADOW = param_1;"));
+
+    r = run("SCU PDD read", pdd);
+    CHECK(HasNote(r, "while the DSP is stopped, a read returns data and advances the address", false));
+
     r = run("read-only write", roWrite);
     CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
     CHECK(HasNote(r, "writes VDP1_EDSR, which is read-only"));
@@ -749,6 +782,8 @@ void TestHardwareMap()
     CHECK(InHardwareRange(0xA0000000u) && InHardwareRange(0xBFFFFFFFu));
     CHECK(name(0xFFFFFF24u) == "SH2_DVDNT");    // the divider's second copy
     CHECK(name(0xFFFFFF3Cu) == "SH2_DVDNTL_SHADOW");   // Mednafen's shadow, through the same copy
+    CHECK(FindHardwareRegister(0xFFFFFF18u)->access == RegisterAccess::ReadWrite);   // Mednafen writes it
+    CHECK(FindHardwareRegister(0xFFFFFF18u)->about != nullptr);
     CHECK(name(0xFFFFFE88u) == "SH2_WTCSR");    // the watchdog's second copy
     CHECK(name(0xFFFFFE8Bu) == "SH2_RSTCSR");
     CHECK(name(0xFFFFFF40u) == "SH2_BARAH");
@@ -799,6 +834,7 @@ void TestHardwareMap()
     CHECK(KeyedWrite(0xFFFFFE80u, 2, true, 0x5A12u, text, ignored) && !ignored && Has(text, "requests SH2_WTCNT = 0x12"));
     CHECK(KeyedWrite(0xFFFFFE88u, 2, true, 0x5A12u, text, ignored) && !ignored);   // its second copy
     CHECK(KeyedWrite(0xFFFFFE8Au, 2, true, 0xA500u, text, ignored) && Has(text, "WOVF"));
+    CHECK(KeyedWrite(0xFFFFFE82u, 2, false, 0, text, ignored) && Has(text, "clears WOVF if a read saw it set"));
     CHECK(DocumentedWideAccess(0x25F800A8u, 4) && DocumentedWideAccess(0x25F800ACu, 4));   // LCTA, BKTA
     CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0x5A40u, text, ignored) && !ignored && Has(text, "RSTE/RSTS = 0x40"));
     CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0xA501u, text, ignored) && ignored);
@@ -825,6 +861,24 @@ void TestHardwareMap()
     }
     CHECK(InHardwareRange(0x25B00000u));    // SCSP slot registers: unnamed, still volatile
     CHECK(InHardwareRange(0x25A01000u));    // sound RAM: shared with the 68000
+    auto covers = [](const std::vector<HardwareRange>& v, uint32_t a) {
+        for (const HardwareRange& h : v)
+            if (a >= h.first && a <= h.last) return true;
+        return false;
+    };
+    {
+        const std::vector<HardwareRange> x = VolatileAliases(0x25FFFFFCu, 0x26001003u);   // into HWRAM
+        CHECK(covers(x, 0x26101000u) && covers(x, 0x07F01000u) && covers(x, 0x05FFFFFCu) && covers(x, 0x3DFFFFFCu));
+        CHECK(!covers(x, 0x26002000u) && !covers(x, 0x05FFFFF8u));
+        const std::vector<HardwareRange> y = VolatileAliases(0x26000000u, 0x2E000003u);   // >= 128 MiB
+        CHECK(covers(y, 0x00000000u) && covers(y, 0x3FFFFFFFu) && covers(y, 0x26101000u));
+        const std::vector<HardwareRange> z = VolatileAliases(0x27FFFFFCu, 0x28001003u);   // wraps the period
+        CHECK(covers(z, 0x260FFFFCu) && covers(z, 0x00001000u) && covers(z, 0x38001000u) && !covers(z, 0x00002000u));
+        const std::vector<HardwareRange> o = VolatileAliases(0x45000000u, 0x45000003u);   // not the bus
+        CHECK(o.size() == 1 && o[0].first == 0x45000000u && o[0].last == 0x45000003u);
+        const std::vector<HardwareRange> m = VolatileAliases(0x3FFFFFFCu, 0x40000003u);   // bus and beyond
+        CHECK(covers(m, 0x40000000u) && covers(m, 0x07FFFFFCu) && covers(m, 0x07FFFFFFu));
+    }
     CHECK(!InHardwareRange(0x26001000u));   // work RAM: the user's to mark
 
     std::vector<std::pair<uint32_t, uint32_t>> ranges;
@@ -1286,6 +1340,19 @@ void TestFlowUncertainty()
     r = d.Decompile(MakeSnapshot(lb), Request(0x06050200u));
     Print("switch, literal bound", r);
     CHECK(r.flowWarnings.empty() && r.prototype.known && r.prototype.params.size() == 2);
+    // The same table marked volatile: another processor may rewrite it, so its captured
+    // destinations are no fixed switch (review of 80620fb). Recovery reads it through the data
+    // image, which refuses volatile memory: the jump stays unresolved, said, and nothing is lent.
+    {
+        DecompileRequest q = Request(0x06050200u);
+        q.volatileMemory.emplace_back(0x06050218u, 0x06050223u);
+        r = d.Decompile(MakeSnapshot(lb), q);
+        Print("switch, volatile table", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!Has(r.Text(), "switch"));
+        CHECK(!r.flowWarnings.empty());
+        CHECK(!r.prototype.known);
+    }
 
     // Two ways out of one function: one into memory that is not captured, one into a bad word in
     // captured memory. Each is reported as what it is, at its own address.

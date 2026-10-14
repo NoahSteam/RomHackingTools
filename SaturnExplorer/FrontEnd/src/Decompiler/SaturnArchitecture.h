@@ -36,6 +36,8 @@ public:
 
     // The translator's load image: where flow ran into memory that is not captured.
     const CaptureLoadImage& FetchImage() const { return *mFetchImage; }
+    // The data image, which the engine owns once built (Architecture::loader).
+    CaptureLoadImage& DataImage() { return *static_cast<CaptureLoadImage*>(loader); }
 
     // Materialise the embedded spec bundle under 'configDir' (SpecBundle, PLAN.md A5) and point
     // the engine's process-global spec search path at it. Once per process: later calls return

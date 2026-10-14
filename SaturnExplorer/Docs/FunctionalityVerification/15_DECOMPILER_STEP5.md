@@ -739,3 +739,44 @@ Mutations, each rebuilt and run, and each failing its tests:
 - no watchdog copy;
 - no read effects.
 
+### Review of `80620fb`: hardware-register semantics, round 4
+
+- **P1: `VolatileAliases` lost coverage for large or boundary-crossing ranges.** It masked the
+  endpoints before looking at the length, did not expand the high work RAM part of a range that
+  started below it, and did not expand the pieces of a range that wrapped the bus period. It now
+  works on physical (27-bit) intervals:
+  - a bus part spanning a whole 128 MiB period covers the whole bus;
+  - otherwise the interval is split where it wraps;
+  - each physical interval's high work RAM part is expanded through every 1 MiB repeat;
+  - every piece is placed in both partitions and all four periods;
+  - anything above the bus partitions is kept as given.
+
+  The reviewer's three ranges now keep their mailboxes. A range covering all of high work RAM
+  also covers the function's own literal pool, so even the pointer becomes a read; the write and
+  the poll through it are kept.
+- **P1: jump-table recovery froze volatile tables.** Recovery reads its table through the data
+  image, not through the read-only rule. The data image (`CaptureLoadImage::SetVolatile`) now
+  refuses every hardware range and every alias of the user's volatile memory; instruction fetch
+  keeps its own image. The literal-bound switch with its table marked volatile prints
+  `(**(code **)(param_1 * 4 + 0x6050218))()` with "Could not emulate address calculation" and
+  "Treating indirect jump as call", and its signature is withheld.
+- **The divider shadows** are read/write, as Mednafen writes them. Every access explains they are
+  Mednafen's, not in the SH7604's register table (`HardwareRegister::about`).
+- **Wording.**
+  - The unknown-value watchdog explanations carry the same conditions as the constant ones.
+  - PDD says a read returns data and advances the address only while the DSP is stopped; while
+    it runs, the read returns 0xFFFFFFFF.
+
+Tests:
+- the three wide ranges, end to end and in `TestHardwareMap`, with a non-bus range and one
+  crossing out of the bus;
+- the volatile jump table;
+- a write and read-back of `SH2_DVDNTH_SHADOW`;
+- PDD;
+- the unknown-value watchdog texts.
+
+Mutations, each failing its tests:
+- the old `VolatileAliases`;
+- no data-image refusal;
+- shadows read-only.
+

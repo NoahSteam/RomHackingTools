@@ -13,7 +13,10 @@
 //          halts from this list (it asks the snapshot), so the bound never turns a cut into
 //          bad data.
 //   Data   the Architecture's own, used for values (read-only literals, jump tables, strings).
-//          Refuses with DataUnavailError, which those readers catch.
+//          Refuses with DataUnavailError, which those readers catch. Also refuses volatile
+//          memory (SetVolatile): bytes another processor or the hardware can change are no
+//          evidence of a fixed value -- jump-table recovery would otherwise turn a table there
+//          into a fixed switch.
 // (DataUnavailError from a fetch would propagate out of flow following and abort the whole
 // function; Ghidra's alternative, a bounded followFlow, leaves the branch with no target op.)
 //
@@ -33,6 +36,8 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace sfe
 {
@@ -56,9 +61,13 @@ public:
     const std::map<uint32_t, std::string>& Refused() const { return mRefused; }
     static const size_t kMaxRefused = 256;
 
+    // Data: inclusive ranges whose bytes are never served (volatile memory, every alias).
+    void SetVolatile(std::vector<std::pair<uint32_t, uint32_t>> ranges);
+
 private:
     std::shared_ptr<const MemorySnapshot> mSnapshot;
     Use mUse;
+    std::vector<std::pair<uint32_t, uint32_t>> mVolatile;   // sorted by start
     std::map<uint32_t, std::string> mRefused;
 };
 
