@@ -600,3 +600,74 @@ Tests:
     read, the divider, the write-only note).
   - Without the ranges, 3 fail (the wide write, the mirrored poll and its note).
   - Without both, 14 fail.
+
+### Review of `20bfde7`: hardware-register semantics, round 2
+
+- **P1: an unused read disappeared before its address became constant.** The engine keeps an
+  unused load only when it can already see its pointer is constant (`lastChanceLoad`,
+  `isEventualConstant(3,1)`), and drops that hold once heritage moves on. So these were removed as
+  dead before their address could be seen to be volatile:
+  - `mov r4,r2; xor r2,r2; add r2,r1; mov.b @r1,r3` with r1 = `SMPC_SF`;
+  - `add r4,r1; mov.b @r1,r2`.
+
+  Patch 0009 adds `Architecture::keepUnusedLoads`, which SaturnExplorer sets. It is a stated
+  policy: a compiler drops an unused load unless it is volatile, so one that remains is there for
+  its effect. Every unused load is held until its pointer is a constant; then the address's
+  volatility decides. A load whose pointer never resolves stays. Outputs:
+  - the first example prints `xVar1 = SMPC_SF;`;
+  - the second prints `uVar1 = (&SMPC_SF)[param_1];`;
+  - the same late-folding read of work RAM is still dropped.
+- **SCSP access kinds**, per Mednafen `scsp.inc`, which reads 0 from every write-only field:
+  - Write-only: MVOL, RBL/RBP, MOBUF, DMEAL, DMEAH/DRGA, TIMA-C, SCILV0-2 and MCIEB. The manual
+    pairs MCIEB with the readable SCIEB; the emulator decides.
+  - Read-only: MIBUF.
+- **Registers whose reads and writes reach different fields** now carry a description (`split`):
+  - SCSP: MSLC/CA, DTLG, SCIPD, MCIPD;
+  - SCU: IST, PPAF;
+  - CD block: HIRQ, CR1-CR4;
+  - SMPC: PDR1-2.
+
+  When a function both writes and reads one, the read gets an explanation.
+- **The watchdog's write ports.** WTCSR, WTCNT and RSTCSR are named where they are read (a byte
+  each at FE80/FE81/FE83); a byte write there is flagged as doing nothing. A word write to FE80
+  or FE82 is described by its key (`KeyedWrite`):
+  - FE80 with key 0x5A: "SH2_WTCNT = …";
+  - FE80 with key 0xA5: "SH2_WTCSR = …";
+  - FE82 with 0xA500: clears WOVF;
+  - FE82 with 0x5A: sets RSTE/RSTS.
+
+  The value is not always a constant: then the note says what each key does. A wrong key is a
+  caution. The pair caution no longer fires for these writes.
+- **The divider's second copy**, at `0xFFFFFF20`-`0xFFFFFF3F`, resolves to the same registers.
+- **The 0xA partition.** SaturnMemory.txt says it is the cache-through partition again. Mednafen,
+  which SE runs, sends it to the associative purge, as it does 0x4. SE follows the backend: 0xA
+  addresses are not register aliases, and the whole partition is volatile.
+- **Shared memory.**
+  - Sound RAM, shared with the 68000, is volatile by default.
+  - Other shared memory is the user's to list: `DecompileRequest::volatileMemory`, the panel's
+    **Volatile** popup, `settings.ini [decompiler] volatile`. The list is part of the panel's
+    question, so changing it asks again.
+  - Work RAM is not volatile by default, since most of it is ordinary memory. A poll of unmarked
+    shared work RAM still folds, with the engine's "Do nothing block with infinite loop" warning.
+- **Cautions and explanations.** `HardwareNote::caution` separates the two:
+  - Cautions stay amber and in `warnings`: a read of a write-only register, a write to a read-only
+    one, a pair the manuals do not document, a wrong watchdog key.
+  - Explanations go on the line as a trailing comment, like a user's note: a documented pair
+    (VDP2 scroll, zoom, VCSTA and LSTA; UBC halves), a keyed write, a mirror, a split register.
+
+Tests (all in `TestHardwareVolatility`, `TestHardwareMap` and the panel's
+`TestFlowUncertaintyShown`): the two P1 reads and the work-RAM control, MVOL read and MIBUF write,
+four keyed watchdog writes and a non-constant one, the divider mirror, an 0xA read, an
+undocumented and two documented pairs, a sound-RAM mailbox, and a work-RAM mailbox unmarked,
+marked through either partition. The panel tests check that an explanation is on its line and not
+amber, and that a changed volatile list asks again. Mutations, each rebuilt and run, and each
+failing its tests:
+- 0009's flag off;
+- keyed writes off;
+- no divider mirror;
+- 0xA decoded as cache-through;
+- no sound-RAM range;
+- no documented pairs;
+- the user's ranges ignored;
+- the old MVOL/MIBUF kinds.
+

@@ -391,6 +391,11 @@ by `DecompilerPanelTests`:
   with all its aliases. Access kinds, the SH-2 on-chip block, the CD block and `MINIT`/`SINIT`
   were added, with notes for accesses the names do not explain. 335 registers. Pinned by
   `TestHardwareVolatility` and `TestHardwareMap`.
+  *Amended again (review of `20bfde7`):* patch 0009 keeps an unused load until its pointer is a
+  constant (one that never resolves stays); access kinds were corrected (SCSP per Mednafen),
+  registers whose reads and writes differ are described, watchdog keyed writes are decoded, the
+  divider's mirror resolves, 0xA follows Mednafen (purge), sound RAM is volatile and the user can
+  mark shared memory volatile. Notes are cautions (amber) or explanations (on the line).
 - Optional BIOS image region with `bios_` naming (A1 covers its invalidation).
   *As built:* the image itself landed in Step 3 (Settings, snapshot region, key hash). Step 4 names
   functions in it `bios_0x%08x` unless the user named them, as callees and as entries; pinned by

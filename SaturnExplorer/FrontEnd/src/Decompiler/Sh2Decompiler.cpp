@@ -1068,14 +1068,18 @@ namespace
 
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
 // register area is a volatile read or write by now (the symbols and ranges are volatile), so
-// those ops are the accesses, at the address and width the code used.
+// those ops are the accesses, at the address and width the code used. A read through a pointer
+// that never became a constant stays a plain load (patches/0009) and says nothing here: which
+// register it reaches depends on run time.
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::set<std::pair<uint32_t, std::string>> seen;
     std::vector<HardwareNote> out;
-    auto note = [&](uint32_t at, std::string text) {
-        if (seen.insert(std::make_pair(at, text)).second) out.push_back(HardwareNote{ at, std::move(text) });
+    auto note = [&](uint32_t at, std::string text, bool caution) {
+        if (seen.insert(std::make_pair(at, text)).second) out.push_back(HardwareNote{ at, std::move(text), caution });
     };
+    std::set<const HardwareRegister*> written;
+    std::vector<std::pair<uint32_t, const HardwareRegister*>> splitReads;
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
         const ghidra::PcodeOp* o = *it;
@@ -1088,23 +1092,37 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         if (!value) continue;
         const uint32_t at = static_cast<uint32_t>(o->getIn(1)->getOffset());
         const uint32_t size = static_cast<uint32_t>(value->getSize());
-        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(at, size);
-        if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
         const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
-        for (const HardwareRegister* reg : regs)
+        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(at, size);
+        std::string text;
+        bool ignored = false;
+        if (write && KeyedWrite(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset()), text, ignored))
+            note(insn, text, ignored);   // the watchdog's write ports: the key picks the register
+        else if (!regs.empty())
         {
-            if (read && reg->access == RegisterAccess::WriteOnly)
-                note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written");
-            if (write && reg->access == RegisterAccess::ReadOnly)
-                note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing");
+            for (const HardwareRegister* reg : regs)
+            {
+                if (read && reg->access == RegisterAccess::WriteOnly)
+                    note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written", true);
+                if (write && reg->access == RegisterAccess::ReadOnly)
+                    note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing", true);
+                if (write) written.insert(reg);
+                if (read && reg->split) splitReads.emplace_back(insn, reg);
+            }
+            if (regs.size() > 1)
+            {
+                std::string names = regs[0]->name;
+                for (size_t i = 1; i < regs.size(); ++i) names += (i + 1 == regs.size() ? " and " : ", ") + std::string(regs[i]->name);
+                const char* whole = DocumentedWideAccess(at, size);
+                if (whole)
+                    note(insn, std::string(whole) + ": one " + std::to_string(size) + "-byte " + (read ? "read" : "write") +
+                                   " of " + names + ", as documented (shown under the first)", false);
+                else
+                    note(insn, "one " + std::to_string(size) + "-byte " + (read ? "read" : "write") + " covers " + names +
+                                   " (shown under the first)", true);
+            }
         }
-        if (regs.size() > 1)
-        {
-            std::string names = regs[0]->name;
-            for (size_t i = 1; i < regs.size(); ++i) names += (i + 1 == regs.size() ? " and " : ", ") + std::string(regs[i]->name);
-            note(insn, "one " + std::to_string(size) + "-byte " + (read ? "read" : "write") + " covers " + names +
-                           " (shown under the first)");
-        }
+        if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
         // shown as an address.
@@ -1113,14 +1131,57 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         const bool named = ClassifyPartition(canonical) == Sh2Partition::OnChip
                                ? at == canonical
                                : (at >> 29) <= 1 && (at & 0x1FFFFFFFu) == canonical;
-        if (!named)
-            note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)");
+        if (!named) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
     }
+    // A register read back in a function that also writes it, when the read returns something
+    // else: say what.
+    for (const auto& r : splitReads)
+        if (written.count(r.second)) note(r.first, std::string(r.second->name) + ": " + r.second->split, false);
     std::stable_sort(out.begin(), out.end(), [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
     return out;
 }
 
 }  // namespace
+
+bool ParseAddressRanges(const std::string& text, std::vector<std::pair<uint32_t, uint32_t>>& out, std::string& error)
+{
+    out.clear();
+    error.clear();
+    auto hex = [](const std::string& t, uint32_t& v) {
+        std::string d = t;
+        if (d.size() > 2 && d[0] == '0' && (d[1] == 'x' || d[1] == 'X')) d = d.substr(2);
+        if (d.empty() || d.size() > 8) return false;
+        v = 0;
+        for (char c : d)
+        {
+            if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
+            v = (v << 4) | static_cast<uint32_t>(std::isdigit(static_cast<unsigned char>(c)) ? c - '0' : (std::tolower(c) - 'a' + 10));
+        }
+        return true;
+    };
+    size_t i = 0;
+    while (i < text.size())
+    {
+        while (i < text.size() && (text[i] == ',' || std::isspace(static_cast<unsigned char>(text[i])))) ++i;
+        size_t j = i;
+        while (j < text.size() && text[j] != ',' && !std::isspace(static_cast<unsigned char>(text[j]))) ++j;
+        if (j == i) break;
+        const std::string entry = text.substr(i, j - i);
+        const size_t dash = entry.find('-');
+        uint32_t lo = 0, hi = 0;
+        const bool ok = dash == std::string::npos ? hex(entry, lo) && hex(entry, hi)
+                                                  : hex(entry.substr(0, dash), lo) && hex(entry.substr(dash + 1), hi);
+        if (!ok || hi < lo)
+        {
+            error = "\"" + entry + "\" is not an address or a range first-last";
+            out.clear();
+            return false;
+        }
+        out.emplace_back(lo, hi);
+        i = j;
+    }
+    return true;
+}
 
 std::string DecompileResult::Text() const
 {
@@ -1420,6 +1481,19 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // slots, the FIFOs), and the mirrors code can reach a register through.
         for (const HardwareRange& h : HardwareRanges())
             arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, h.first, h.last));
+        // The user's shared memory, in both bus partitions: the other processor sees the bus, not
+        // the cache, so code reaches the same bytes through either.
+        for (const auto& v : request.volatileMemory)
+        {
+            const bool bus = (v.first >> 29) <= 1 && (v.first >> 29) == (v.second >> 29);
+            for (uint32_t partition : { 0x00000000u, 0x20000000u })
+            {
+                if (!bus && partition) break;
+                const uint32_t lo = bus ? (v.first & 0x1FFFFFFFu) | partition : v.first;
+                const uint32_t hi = bus ? (v.second & 0x1FFFFFFFu) | partition : v.second;
+                arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, lo, hi));
+            }
+        }
 
         for (const auto& ro : knownLiterals)
             arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,
@@ -1647,7 +1721,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         for (const FlowWarning& w : r.flowWarnings)
             r.warnings.push_back(w.address ? Hex8(w.address) + ": " + w.text : w.text);
         r.hardwareNotes = HardwareNotes(*fd, canonicalOf);
-        for (const HardwareNote& n : r.hardwareNotes) r.warnings.push_back(Hex8(n.address) + ": " + n.text);
+        for (const HardwareNote& n : r.hardwareNotes)
+            if (n.caution) r.warnings.push_back(Hex8(n.address) + ": " + n.text);
         if (r.truncated) r.prototypeWithheld = "truncated";
         else if (tableIncomplete) r.prototypeWithheld = "a jump table recovered incompletely";
         else if (restartsExhausted) r.prototypeWithheld = "the analysis did not settle (restart limit)";

@@ -112,7 +112,15 @@ struct DecompileRequest
     std::vector<std::pair<uint32_t, Prototype>> prototypes;
     bool registerCallees = true;                              // run the second pass
     uint32_t maxInstructions = 20000;                         // A4: bounds the uncheckable segments
+    // Memory another processor changes -- a mailbox shared with the slave SH-2 or the sound CPU --
+    // as inclusive [first, last] ranges. Every access there is kept, like a hardware register's
+    // (the registers and sound RAM always are). A cached or cache-through address covers both.
+    std::vector<std::pair<uint32_t, uint32_t>> volatileMemory;
 };
+
+// "0x26001000-0x26001003, 25A01000": inclusive ranges, or single bytes, hex with or without 0x,
+// separated by commas, spaces or new lines. False with 'error' naming the first bad entry.
+bool ParseAddressRanges(const std::string& text, std::vector<std::pair<uint32_t, uint32_t>>& out, std::string& error);
 
 enum class TokenKind : uint8_t { Plain, Keyword, Type, FuncName, Variable, Param, Const, Comment, Global, Label, Error };
 
@@ -153,14 +161,18 @@ struct FlowWarning
 };
 
 // An access to a hardware register that the pseudocode, which shows only the register's name,
-// does not explain: a read of a write-only register (it does not return what was written), a
-// write to a read-only one (it does nothing), one access covering two registers, or a register
-// reached through a mirror (shown by address, not by name). The address is the instruction's,
-// canonical.
+// does not explain. A caution says the output may mislead: a read of a write-only register (it
+// does not return what was written), a write to a read-only one (it does nothing), one access
+// covering two registers the manuals do not pair, a watchdog write with the wrong key. The rest
+// explain: a documented register pair accessed whole, which register a keyed write selects, a
+// register reached through a mirror (shown by address), and what a register whose reads and writes
+// reach different fields returns when the function also writes it. The address is the
+// instruction's, canonical.
 struct HardwareNote
 {
     uint32_t address = 0;
     std::string text;
+    bool caution = true;
 };
 
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
@@ -231,7 +243,7 @@ struct DecompileResult
     // or a wrong entry. Flow stops at each.
     std::vector<uint32_t> badDataAt;
     std::vector<FlowWarning> flowWarnings;   // every one is in warnings too
-    std::vector<HardwareNote> hardwareNotes; // so is every one of these
+    std::vector<HardwareNote> hardwareNotes; // the cautions are in warnings too
     bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
     uint32_t unsupportedAt = 0;    // the slot instruction's address
     bool unimplemented = false;    // the spec has no semantics for an instruction

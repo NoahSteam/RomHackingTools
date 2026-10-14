@@ -1,6 +1,7 @@
 #include "Decompiler/SaturnHardwareMap.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 
 namespace sfe
@@ -19,7 +20,8 @@ struct Reg
     uint16_t offset;
     const char* name;
     RegisterAccess access;
-    uint8_t size;   // 0: the block's
+    uint8_t size;         // 0: the block's
+    const char* split;    // reads and writes reach different fields: what each does
 };
 
 struct Block
@@ -47,21 +49,31 @@ const Reg kSmpc[] = {
     { 0x053, "SMPC_OREG25", RO }, { 0x055, "SMPC_OREG26", RO }, { 0x057, "SMPC_OREG27", RO },
     { 0x059, "SMPC_OREG28", RO }, { 0x05B, "SMPC_OREG29", RO }, { 0x05D, "SMPC_OREG30", RO },
     { 0x05F, "SMPC_OREG31", RO }, { 0x061, "SMPC_SR", RO }, { 0x063, "SMPC_SF", RW },
-    { 0x075, "SMPC_PDR1", RW }, { 0x077, "SMPC_PDR2", RW }, { 0x079, "SMPC_DDR1", WO },
+    { 0x075, "SMPC_PDR1", RW, 0, "a write sets the port's output bits; a read returns its pin levels" },
+    { 0x077, "SMPC_PDR2", RW, 0, "a write sets the port's output bits; a read returns its pin levels" },
+    { 0x079, "SMPC_DDR1", WO },
     { 0x07B, "SMPC_DDR2", WO }, { 0x07D, "SMPC_IOSEL", WO }, { 0x07F, "SMPC_EXLE", WO },
 };
 
 // SCSP common control registers, named after the fields they hold ("SCSP User's Manual"). The
 // per-slot block below 0x400 is left unnamed: 32 copies of one layout read better as offsets.
-// SCIRE and MCIRE reset pending interrupts and read back nothing.
+// Access per Mednafen scsp.inc, which reads 0 from every write-only field. Where the English
+// manual's labels disagree with its own descriptions, the emulator decides; MCIEB is write-only
+// there although the manual pairs it with the readable SCIEB.
 const Reg kScsp[] = {
-    { 0x400, "SCSP_MVOL", RW }, { 0x402, "SCSP_RBL_RBP", RW }, { 0x404, "SCSP_MIBUF", RW },
-    { 0x406, "SCSP_MOBUF", RW }, { 0x408, "SCSP_MSLC_CA", RW }, { 0x412, "SCSP_DMEAL", RW },
-    { 0x414, "SCSP_DMEAH_DRGA", RW }, { 0x416, "SCSP_DTLG", RW }, { 0x418, "SCSP_TIMA", RW },
-    { 0x41A, "SCSP_TIMB", RW }, { 0x41C, "SCSP_TIMC", RW }, { 0x41E, "SCSP_SCIEB", RW },
-    { 0x420, "SCSP_SCIPD", RW }, { 0x422, "SCSP_SCIRE", WO }, { 0x424, "SCSP_SCILV0", RW },
-    { 0x426, "SCSP_SCILV1", RW }, { 0x428, "SCSP_SCILV2", RW }, { 0x42A, "SCSP_MCIEB", RW },
-    { 0x42C, "SCSP_MCIPD", RW }, { 0x42E, "SCSP_MCIRE", WO },
+    { 0x400, "SCSP_MVOL", WO }, { 0x402, "SCSP_RBL_RBP", WO },
+    { 0x404, "SCSP_MIBUF", RO },    // a read takes the next MIDI input byte, with the FIFO flags
+    { 0x406, "SCSP_MOBUF", WO },
+    { 0x408, "SCSP_MSLC_CA", RW, 0, "a write selects the monitored slot (MSLC); a read returns that slot's CA, SGC and EG" },
+    { 0x412, "SCSP_DMEAL", WO }, { 0x414, "SCSP_DMEAH_DRGA", WO },
+    { 0x416, "SCSP_DTLG", RW, 0, "a write sets DTLG and EX, DI, GA; a read returns only EX, DI and GA" },
+    { 0x418, "SCSP_TIMA", WO }, { 0x41A, "SCSP_TIMB", WO }, { 0x41C, "SCSP_TIMC", WO },
+    { 0x41E, "SCSP_SCIEB", RW },
+    { 0x420, "SCSP_SCIPD", RW, 0, "a read returns the pending interrupts; a write of bit 5 only requests one" },
+    { 0x422, "SCSP_SCIRE", WO }, { 0x424, "SCSP_SCILV0", WO }, { 0x426, "SCSP_SCILV1", WO },
+    { 0x428, "SCSP_SCILV2", WO }, { 0x42A, "SCSP_MCIEB", WO },
+    { 0x42C, "SCSP_MCIPD", RW, 0, "a read returns the pending interrupts; a write of bit 5 only requests one" },
+    { 0x42E, "SCSP_MCIRE", WO },
 };
 
 // VDP1 ("VDP1 User's Manual" ch. 4: the control registers are write-only, the status ones
@@ -136,9 +148,10 @@ const Reg kScu[] = {
     { 0x028, "SCU_D1C", WO }, { 0x02C, "SCU_D1AD", WO }, { 0x030, "SCU_D1EN", WO }, { 0x034, "SCU_D1MD", WO },
     { 0x040, "SCU_D2R", RW }, { 0x044, "SCU_D2W", RW }, { 0x048, "SCU_D2C", WO }, { 0x04C, "SCU_D2AD", WO },
     { 0x050, "SCU_D2EN", WO }, { 0x054, "SCU_D2MD", WO }, { 0x060, "SCU_DSTP", WO }, { 0x07C, "SCU_DSTA", RO },
-    { 0x080, "SCU_PPAF", RW }, { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW },
+    { 0x080, "SCU_PPAF", RW, 0, "a write controls the DSP program; a read returns its status" },
+    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW },
     { 0x090, "SCU_T0C", WO }, { 0x094, "SCU_T1S", WO }, { 0x098, "SCU_T1MD", WO }, { 0x0A0, "SCU_IMS", WO },
-    { 0x0A4, "SCU_IST", RW }, { 0x0A8, "SCU_AIACK", RW }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
+    { 0x0A4, "SCU_IST", RW, 0, "a write of 0 clears that interrupt; a read returns the pending ones" }, { 0x0A8, "SCU_AIACK", RW }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
     { 0x0B8, "SCU_AREF", WO }, { 0x0C4, "SCU_RSEL", RW }, { 0x0C8, "SCU_VER", RO },
 };
 
@@ -146,8 +159,12 @@ const Reg kScu[] = {
 // first (Mednafen cdb.cpp CDB_Read/CDB_Write_DBM, scu.inc). The FIFO is read 32 bits at a time
 // at 0x25818000 by the BIOS and SBL, so it is named there.
 const Reg kCdBlock[] = {
-    { 0x0008, "CD_HIRQ", RW }, { 0x000C, "CD_HIRQMSK", RW }, { 0x0018, "CD_CR1", RW },
-    { 0x001C, "CD_CR2", RW }, { 0x0020, "CD_CR3", RW }, { 0x0024, "CD_CR4", RW },
+    { 0x0008, "CD_HIRQ", RW, 0, "a write of 0 clears that flag; a read returns the flags" },
+    { 0x000C, "CD_HIRQMSK", RW },
+    { 0x0018, "CD_CR1", RW, 0, "a write is the command; a read is the response" },
+    { 0x001C, "CD_CR2", RW, 0, "a write is the command; a read is the response" },
+    { 0x0020, "CD_CR3", RW, 0, "a write is the command; a read is the response" },
+    { 0x0024, "CD_CR4", RW, 0, "a write is the command; a read is the response" },
 };
 const Reg kCdFifo[] = { { 0x0000, "CD_DATATRNS", RW, 4 } };
 
@@ -157,8 +174,9 @@ const Reg kMinit[] = { { 0x0000, "MINIT", WO } };   // the master signals the sl
 const Reg kSinit[] = { { 0x0000, "SINIT", WO } };   // the slave signals the master
 
 // The SH-2's own peripherals (Hitachi SH7604 hardware manual; Mednafen sh7095.inc). The FRT
-// counter is two bytes read high first: the high read latches the low byte. The watchdog is read
-// a byte at a time at FE80/FE81/FE83 but written as keyed words at FE80/FE82.
+// counter is two bytes read high first: the high read latches the low byte. The watchdog's
+// registers are named where they are read, a byte each at FE80/FE81/FE83; a byte write there does
+// nothing. They are written as keyed words at FE80 and FE82 instead (KeyedWrite).
 const Reg kOnChip[] = {
     { 0x000, "SH2_SMR", RW, 1 }, { 0x001, "SH2_BRR", RW, 1 }, { 0x002, "SH2_SCR", RW, 1 },
     { 0x003, "SH2_TDR", RW, 1 }, { 0x004, "SH2_SSR", RW, 1 }, { 0x005, "SH2_RDR", RO, 1 },
@@ -167,8 +185,8 @@ const Reg kOnChip[] = {
     { 0x016, "SH2_TCR", RW, 1 }, { 0x017, "SH2_TOCR", RW, 1 }, { 0x018, "SH2_FICRH", RO, 1 },
     { 0x019, "SH2_FICRL", RO, 1 }, { 0x060, "SH2_IPRB", RW, 2 }, { 0x062, "SH2_VCRA", RW, 2 },
     { 0x064, "SH2_VCRB", RW, 2 }, { 0x066, "SH2_VCRC", RW, 2 }, { 0x068, "SH2_VCRD", RW, 2 },
-    { 0x071, "SH2_DRCR0", RW, 1 }, { 0x072, "SH2_DRCR1", RW, 1 }, { 0x080, "SH2_WTCSR", RW, 1 },
-    { 0x081, "SH2_WTCNT", RW, 1 }, { 0x083, "SH2_RSTCSR", RW, 1 }, { 0x091, "SH2_SBYCR", RW, 1 },
+    { 0x071, "SH2_DRCR0", RW, 1 }, { 0x072, "SH2_DRCR1", RW, 1 }, { 0x080, "SH2_WTCSR", RO, 1 },
+    { 0x081, "SH2_WTCNT", RO, 1 }, { 0x083, "SH2_RSTCSR", RO, 1 }, { 0x091, "SH2_SBYCR", RW, 1 },
     { 0x092, "SH2_CCR", RW, 1 }, { 0x0E0, "SH2_ICR", RW, 2 }, { 0x0E2, "SH2_IPRA", RW, 2 },
     { 0x0E4, "SH2_VCRWDT", RW, 2 }, { 0x100, "SH2_DVSR", RW, 4 }, { 0x104, "SH2_DVDNT", RW, 4 },
     { 0x108, "SH2_DVCR", RW, 4 }, { 0x10C, "SH2_VCRDIV", RW, 4 }, { 0x110, "SH2_DVDNTH", RW, 4 },
@@ -208,7 +226,7 @@ std::vector<HardwareRegister> Build()
         for (size_t i = 0; i < b.count; ++i)
         {
             const Reg& r = b.regs[i];
-            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access });
+            all.push_back(HardwareRegister{ b.base + r.offset, r.size ? r.size : b.size, r.name, r.access, r.split });
         }
     std::sort(all.begin(), all.end(),
               [](const HardwareRegister& x, const HardwareRegister& y) { return x.address < y.address; });
@@ -222,7 +240,10 @@ const std::vector<HardwareRegister>& Table()
 }
 
 // The bus areas that hold registers rather than memory, as 27-bit bus addresses
-// (Docs/Saturn/MemoryLayout.txt). Whole areas, mirrors and unnamed registers included.
+// (Docs/Saturn/MemoryLayout.txt). Whole areas, mirrors and unnamed registers included. Sound RAM
+// is memory, but the 68000 runs from it and the two CPUs talk through it, so a poll of a
+// mailbox there must not fold either. Work RAM shared with the slave SH-2 is the user's to mark
+// (DecompileRequest::volatileMemory): most of it is ordinary memory.
 struct Area
 {
     uint32_t first, last;
@@ -231,6 +252,7 @@ const Area kBusAreas[] = {
     { 0x00100000u, 0x0017FFFFu },   // SMPC
     { 0x01000000u, 0x01FFFFFFu },   // MINIT / SINIT
     { 0x05800000u, 0x058FFFFFu },   // A-bus CS2: the CD block
+    { 0x05A00000u, 0x05AFFFFFu },   // sound RAM, shared with the 68000
     { 0x05B00000u, 0x05BFFFFFu },   // SCSP registers
     { 0x05D00000u, 0x05D7FFFFu },   // VDP1 registers
     { 0x05F80000u, 0x05FBFFFFu },   // VDP2 registers
@@ -240,9 +262,8 @@ const Area kBusAreas[] = {
 std::vector<HardwareRange> BuildRanges()
 {
     std::vector<HardwareRange> out;
-    // Bits 28-27 are not decoded, so each area repeats every 128 MiB; the 0xA partition is the
-    // cache-through one again (SaturnMemory.txt).
-    for (uint32_t partition : { 0x00000000u, 0x20000000u, 0xA0000000u })
+    // Bits 28-27 are not decoded, so each area repeats every 128 MiB.
+    for (uint32_t partition : { 0x00000000u, 0x20000000u })
         for (uint32_t repeat = 0; repeat < 4; ++repeat)
             for (const Area& a : kBusAreas)
             {
@@ -250,8 +271,12 @@ std::vector<HardwareRange> BuildRanges()
                 out.push_back(HardwareRange{ base | a.first, base | a.last });
             }
     // Not memory at all: associative purge and the cache address array (writes there change the
-    // cache), and the on-chip partition.
+    // cache), the 0xA partition, and the on-chip partition. SaturnMemory.txt calls 0xA the
+    // cache-through partition again; Mednafen, which SE runs, sends it to the associative purge
+    // with 0x4 (sh7095.inc). Either way an access there has an effect, so all of it is volatile;
+    // its registers are not named, since the backend does not reach them there.
     out.push_back(HardwareRange{ 0x40000000u, 0x7FFFFFFFu });
+    out.push_back(HardwareRange{ 0xA0000000u, 0xBFFFFFFFu });
     out.push_back(HardwareRange{ 0xE0000000u, 0xFFFFFFFFu });
     std::sort(out.begin(), out.end(), [](const HardwareRange& x, const HardwareRange& y) { return x.first < y.first; });
     return out;
@@ -272,12 +297,15 @@ bool HardwareAlias(uint32_t address, uint32_t& canonical)
         // 111x ???? ???? ???? ?1?x ???r rrrr rrrr: bit 14 must be set, and the low 256 offsets
         // are registers only with bits 28 and 12 set too; elsewhere they read garbage.
         if (!(address & 0x4000u)) return false;
-        const uint32_t offset = address & 0x1FFu;
+        uint32_t offset = address & 0x1FFu;
         if (offset < 0x100u && !((address & 0x10000000u) && (address & 0x1000u))) return false;
+        // The divider answers at 0x120-0x13F too, the same six registers (sh7095.inc decodes
+        // 0x00/0x20 alike, a write there divides as well).
+        if (offset >= 0x120u && offset < 0x140u) offset -= 0x20u;
         canonical = kOnChipBase + offset;
         return true;
     }
-    if (partition != 0 && partition != 1 && partition != 5) return false;
+    if (partition != 0 && partition != 1) return false;
     const uint32_t a = address & 0x07FFFFFFu;
     if (a >= 0x00100000u && a <= 0x0017FFFFu) canonical = kSmpcBase | (a & 0x7Fu);
     else if (a >= 0x01000000u && a <= 0x017FFFFFu) canonical = kMinitBase | (a & 1u);
@@ -324,6 +352,63 @@ const std::vector<HardwareRange>& HardwareRanges()
 {
     static const std::vector<HardwareRange> ranges = BuildRanges();
     return ranges;
+}
+
+const char* DocumentedWideAccess(uint32_t address, uint32_t size)
+{
+    uint32_t a = 0;
+    if (size != 4 || (address & 3) || !HardwareAlias(address, a)) return nullptr;
+    // VDP2 ("VDP2 User's Manual"): the scroll values are 16- or 32-bit registers, the zoom
+    // increments and the vertical-cell and line scroll table addresses 32-bit ones.
+    struct Wide { uint32_t address; const char* name; };
+    static const Wide kWide[] = {
+        { 0x05F80070u, "VDP2_SCXN0" }, { 0x05F80074u, "VDP2_SCYN0" }, { 0x05F80078u, "VDP2_ZMXN0" },
+        { 0x05F8007Cu, "VDP2_ZMYN0" }, { 0x05F80080u, "VDP2_SCXN1" }, { 0x05F80084u, "VDP2_SCYN1" },
+        { 0x05F80088u, "VDP2_ZMXN1" }, { 0x05F8008Cu, "VDP2_ZMYN1" }, { 0x05F80090u, "VDP2_SCXN2:SCYN2" },
+        { 0x05F80094u, "VDP2_SCXN3:SCYN3" }, { 0x05F8009Cu, "VDP2_VCSTA" }, { 0x05F800A0u, "VDP2_LSTA0" },
+        { 0x05F800A4u, "VDP2_LSTA1" },
+        // The UBC's address, mask and data registers are word halves of one longword (SH7604).
+        { 0xFFFFFF40u, "SH2_BARA" }, { 0xFFFFFF44u, "SH2_BAMRA" }, { 0xFFFFFF60u, "SH2_BARB" },
+        { 0xFFFFFF64u, "SH2_BAMRB" }, { 0xFFFFFF70u, "SH2_BDRB" }, { 0xFFFFFF74u, "SH2_BDMRB" },
+    };
+    for (const Wide& w : kWide)
+        if (w.address == a) return w.name;
+    return nullptr;
+}
+
+bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value, std::string& text, bool& ignored)
+{
+    uint32_t a = 0;
+    ignored = false;
+    if (size != 2 || !HardwareAlias(address, a) || (a != 0xFFFFFE80u && a != 0xFFFFFE82u)) return false;
+    // SH7604 12.2.4: WTCNT and WTCSR are written by a word at FE80 whose upper byte is the key
+    // (0x5A for WTCNT, 0xA5 for WTCSR); RSTCSR by a word at FE82, 0xA500 clearing WOVF and 0x5A
+    // with data setting RSTE and RSTS. Any other word is ignored.
+    char b[96];
+    const uint32_t key = (value >> 8) & 0xFFu, data = value & 0xFFu;
+    if (a == 0xFFFFFE80u)
+    {
+        if (!valueKnown) text = "keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A, SH2_WTCSR when it is 0xA5";
+        else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCNT = 0x%02X", data); text = b; }
+        else if (key == 0xA5u) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCSR = 0x%02X", data); text = b; }
+        else
+        {
+            std::snprintf(b, sizeof b, "watchdog write with key 0x%02X, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored", key);
+            text = b;
+            ignored = true;
+        }
+        return true;
+    }
+    if (!valueKnown) text = "keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF, 0x5A with data sets RSTE and RSTS";
+    else if (value == 0xA500u) text = "keyed watchdog write: clears SH2_RSTCSR's WOVF";
+    else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x%02X", data); text = b; }
+    else
+    {
+        std::snprintf(b, sizeof b, "SH2_RSTCSR write 0x%04X is neither 0xA500 nor 0x5A with data: ignored", value & 0xFFFFu);
+        text = b;
+        ignored = true;
+    }
+    return true;
 }
 
 bool InHardwareRange(uint32_t address)

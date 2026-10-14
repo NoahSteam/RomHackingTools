@@ -31,6 +31,13 @@ void SaturnArchitecture::Initialise(ghidra::uint4 maxInstructions, std::atomic<b
     // max_instructions, so the allowance is too: each such halt ends one path, it never runs on.
     max_baddata = maxInstructions;
     cancelRequested = cancel;
+    // A compiler drops a load whose value is unused unless it is volatile, so one that remains is
+    // there for its effect -- a dummy read that clears a flag, a FIFO pop. The engine only keeps
+    // it when it can already see the address is constant; a pointer that folds later (or never)
+    // lost the read. Every unused load is held until its pointer is a constant: then the address's
+    // volatility decides (hardware stays, ordinary memory goes), and one that never resolves
+    // stays, since it may be hardware (patches/0009-keep-unused-loads.patch).
+    keepUnusedLoads = true;
 }
 
 void SaturnArchitecture::buildLoader(ghidra::DocumentStorage&)

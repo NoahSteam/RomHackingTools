@@ -154,6 +154,10 @@ public:
     bool FollowPc() const { return mTarget.kind == TargetKind::FollowPc; }
     bool AutoRefresh() const { return mAutoRefresh; }
     void SetAutoRefresh(bool on) { mAutoRefresh = on; }
+    // The user's volatile memory (DecompileRequest::volatileMemory), as typed: settings keep the
+    // text. False, keeping the old ranges, when it does not parse.
+    const std::string& VolatileMemory() const { return mVolatileText; }
+    bool SetVolatileMemory(const std::string& text, std::string* error = nullptr);
 
     // The install decision for one polled result (called by Update; public so tests can offer a
     // result the runner would never deliver, which is how the panel's own checks are pinned
@@ -229,6 +233,7 @@ private:
         uint64_t namesGeneration = 0;
         uint64_t functions = 0;      // the function set when asked
         uint64_t prototypes = 0;     // PrototypeHash for the entry when asked
+        uint64_t volatileMemory = 0; // VolatileHash when asked
     };
 
     // What the panel last submitted (or served from the cache): the same question is never asked
@@ -241,10 +246,11 @@ private:
         uint64_t namesGeneration = 0;
         uint64_t functions = 0;      // the function set registered (engine input, like the names)
         uint64_t prototypes = 0;     // the callee signatures lent (engine input, like the names)
+        uint64_t volatileMemory = 0; // the user's volatile ranges (engine input)
         bool operator==(const Question& o) const
         {
             return valid == o.valid && key == o.key && entry == o.entry && namesGeneration == o.namesGeneration &&
-                   functions == o.functions && prototypes == o.prototypes;
+                   functions == o.functions && prototypes == o.prototypes && volatileMemory == o.volatileMemory;
         }
     };
 
@@ -346,6 +352,11 @@ private:
     void Learn(const decomp::DecompileResult& result);
     uint64_t PrototypeHash(uint32_t entry) const;   // over the prototypes lent to 'entry' now
 
+    std::string mVolatileText;                                   // as typed and saved
+    std::vector<std::pair<uint32_t, uint32_t>> mVolatile;        // ...parsed
+    uint64_t mVolatileHash = 0;
+    char mVolatileEdit[512] = {};                                // the popup's edit box
+    std::string mVolatileError;
     Question mAsked;
     Outstanding mPending;
     std::string mNote;               // "cancelled", ... (the last request's fate when not installed)

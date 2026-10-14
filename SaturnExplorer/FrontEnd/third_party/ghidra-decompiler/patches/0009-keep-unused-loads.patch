@@ -1,0 +1,71 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+index 95b669b..6164545 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+  * Modified for SaturnExplorer: translator owned by the Architecture before initialize (patches/0003-translator-ownership-on-init-failure.patch).
++ * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  */
+ // Set up decompiler for specific architectures
+ 
+@@ -176,6 +177,7 @@ Architecture::Architecture(void)
+   options = new OptionDatabase(this);
+   loadersymbols_parsed = false;
+   cancelRequested = (std::atomic<bool> *)0;
++  keepUnusedLoads = false;
+ #ifdef CPUI_STATISTICS
+   stats = new Statistics();
+ #endif
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+index ef2d543..d6a82ad 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.hh
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
++ * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  */
+ /// \file architecture.hh
+ /// \brief Architecture and associated classes that help manage a single processor architecture and load image
+@@ -188,6 +189,7 @@ public:
+   uint4 max_instructions;	///< Maximum instructions that can be processed in one function
+   std::atomic<bool> *cancelRequested;	///< Host-owned flag; when set, analysis throws CancelError at its next check-point
+   bool isCancelRequested(void) const { return cancelRequested != (std::atomic<bool> *)0 && cancelRequested->load(std::memory_order_relaxed); }
++  bool keepUnusedLoads;		///< Host policy: an unused LOAD stays until its pointer is a constant (then volatility decides)
+   uint4 max_baddata;		///< Maximum number of bad instructions that one function can encounter
+   int4 alias_block_level;	///< Aliases blocked by 0=none, 1=struct, 2=array, 3=all
+   uint4 split_datatype_config;	///< Toggle for data-types splitting: Bit 0=structs, 1=arrays, 2=pointers
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+index aea3206..32f95ae 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -1371,6 +1373,8 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
+ 	    Varnode *ptr = loadOp->getIn(1);
+ 	    if (ptr->isConstant() || ptr->isReadOnly())
+ 	      continue;
++	    if (glb->keepUnusedLoads)	// Not yet known to be ordinary memory: it may still be volatile
++	      continue;
+ 	    if (ptr->isWritten()) {
+ 	      PcodeOp *copyOp = ptr->getDef();
+ 	      if (copyOp->code() == CPUI_COPY) {
+@@ -4114,7 +4118,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
+     if (op->isDead()) continue;
+     Varnode *vn = op->getOut();
+     if (vn->isConsumeVacuous()) continue;
+-    if (op->getIn(1)->isEventualConstant(3, 1)) {
++    if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {
+       pushConsumed(~(uintb)0, vn, worklist);
+       vn->setAutoLiveHold();
+       res = true;

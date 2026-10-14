@@ -36,6 +36,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0006-sleigh-sh2-semantics.patch` | Fixes six SH-2 semantics errors in `superh.sinc`, checked against Mednafen's SH-2 core. `bsr`/`bsrf`/`jsr` now write PR before their delay slot. `MAC.L` had a wrong carry; it is rewritten as a 64-bit accumulate with 48-bit saturation. `MAC.W` now does word loads, sign-extends, and saturates at 32 bits. `XOR.B` was an AND. `mov.x Rm,@-Rn` now reads Rm before Rn is decremented. `DIV1` now reads Rm after Rn is shifted. `sh-2.sla` and `Sh2SpecData.h` are regenerated. |
 | `0007-cspec-wide-return-order.patch` | `superh.cspec` put a 64-bit return's high half in r1. Ghidra's `piece1` is the most significant piece, and the big-endian SH ABI returns the high half in r0, so the join is now `piece1="r0" piece2="r1"`. `Sh2SpecData.h` is regenerated. |
 | `0008-cspec-return-address.patch` | `superh.cspec` declares PR as the return address, so `jmp @rN` with rN copied from PR is a return, not an unrecovered jump table. `Sh2SpecData.h` is regenerated. |
+| `0009-keep-unused-loads.patch` | `Architecture::keepUnusedLoads` (off by default; SaturnExplorer sets it): an unused load is held until its pointer is a constant, then the address's volatility decides. Without it a read whose address folded late, or never, was removed: a dummy hardware read was lost. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -76,6 +77,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
     reference model);
   - 0007: `TestPrototypeEligibility` (a 64-bit return and its caller);
   - 0008: `TestFlowUncertainty` (a return through `jmp @r1`).
+  - 0009: `TestHardwareVolatility` (unused reads through a late-folding and an indexed pointer).
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

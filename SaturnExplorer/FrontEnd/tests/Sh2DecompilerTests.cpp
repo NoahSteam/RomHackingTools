@@ -417,10 +417,18 @@ size_t Count(const std::string& text, const char* what)
     return n;
 }
 
-bool HasNote(const DecompileResult& r, const char* what)
+// A note containing 'what', of the given kind: a caution (amber, in warnings) or an explanation.
+bool HasNote(const DecompileResult& r, const char* what, bool caution = true)
 {
     for (const HardwareNote& n : r.hardwareNotes)
-        if (Has(n.text, what)) return true;
+        if (Has(n.text, what) && n.caution == caution) return true;
+    return false;
+}
+
+bool WarnsAbout(const DecompileResult& r, const char* what)
+{
+    for (const std::string& w : r.warnings)
+        if (Has(w, what)) return true;
     return false;
 }
 
@@ -475,7 +483,57 @@ void TestHardwareVolatility()
     const Fixture roWrite = { 0x06009240u, { 0xD101,  // mov.l @(4,pc),r1    -> VDP1_EDSR
                                              0x2141,  // mov.w r4,@r1        writes a read-only one
                                              0x000B, 0x0009 }, 0x08, 0x25D00010u };
-    for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite })
+    // An unused read whose address only becomes constant late: the engine removed it as dead
+    // before the xor folded (review of 20bfde7).
+    const Fixture late = { 0x06009280u, { 0xD103,     // mov.l @(12,pc),r1   -> SMPC_SF
+                                          0x6243,     // mov r4,r2
+                                          0x222A,     // xor r2,r2           r2 = 0, once folded
+                                          0x312C,     // add r2,r1
+                                          0x6310,     // mov.b @r1,r3        reads SMPC_SF
+                                          0xE300,     // mov #0,r3           the value is unused
+                                          0x000B, 0x0009 }, 0x10, 0x20100063u };
+    // ...and one whose address never becomes constant: kept, since it may be a register.
+    const Fixture indexed = { 0x060092C0u, { 0xD102,  // mov.l @(8,pc),r1    -> 0x20100063
+                                             0x314C,  // add r4,r1           plus a runtime offset
+                                             0x6210,  // mov.b @r1,r2
+                                             0xE200,  // mov #0,r2           the value is unused
+                                             0x000B, 0x0009 }, 0x0C, 0x20100063u };
+    // The policy's other side: once the address folds to ordinary memory the unused read goes.
+    const Fixture lateRam = { 0x06009300u, late.code, 0x10, 0x26070000u };
+    // mov.l @(disp,pc),r1 -> 'pointer'; 'ops'; rts; nop; the literal after them, word-aligned.
+    auto simple = [](uint32_t base, std::vector<uint16_t> ops, uint32_t pointer) {
+        std::vector<uint16_t> code = { 0 };
+        code.insert(code.end(), ops.begin(), ops.end());
+        code.push_back(0x000B);
+        code.push_back(0x0009);
+        if (code.size() % 2) code.push_back(0x0009);
+        const uint32_t literal = uint32_t(code.size()) * 2;
+        code[0] = uint16_t(0xD100 | ((literal - 4) / 4));
+        return Fixture{ base, code, literal, pointer };
+    };
+    const Fixture mvolRead = simple(0x06009340u, { 0x6011 }, 0x25B00400u);          // mov.w @r1,r0
+    const Fixture mibufWrite = simple(0x06009380u, { 0x2141 }, 0x25B00404u);        // mov.w r4,@r1
+    const Fixture wtcnt = simple(0x060093C0u, { 0xE05A, 0x4018, 0x2101 }, 0xFFFFFE80u);   // mov #0x5A,r0; shll8 r0; mov.w r0,@r1
+    const Fixture wtcsr = simple(0x06009400u, { 0xE0A5, 0x4018, 0x2101 }, 0xFFFFFE80u);   // key 0xA5
+    const Fixture wovf = simple(0x06009440u, { 0xE0A5, 0x4018, 0x2101 }, 0xFFFFFE82u);    // 0xA500 at FE82
+    const Fixture badKey = simple(0x06009480u, { 0xE012, 0x4018, 0x2101 }, 0xFFFFFE80u);  // key 0x12
+    const Fixture keyVar = simple(0x060094C0u, { 0x2141 }, 0xFFFFFE80u);                  // mov.w r4,@r1
+    const Fixture divMirror = simple(0x06009500u, { 0x6012 }, 0xFFFFFF24u);         // mov.l @r1,r0
+    const Fixture purge5 = simple(0x06009540u, { 0x6011 }, 0xA5F80000u);            // mov.w @r1,r0
+    const Fixture oddPair = simple(0x06009580u, { 0x2142 }, 0x25F80000u);           // mov.l r4,@r1: TVMD:EXTEN
+    const Fixture ubcPair = simple(0x060095C0u, { 0x2142 }, 0xFFFFFF40u);           // mov.l r4,@r1: BARAH:BARAL
+    // A mailbox: set a flag, wait for the other CPU to clear it. In sound RAM always kept; in work
+    // RAM only when the user marks it volatile.
+    const std::vector<uint16_t> mailboxOps = { 0xE001,    // mov #1,r0
+                                               0x2101,    // mov.w r0,@r1
+                                               0x6011,    // loop: mov.w @r1,r0
+                                               0xC801,    // tst #1,r0
+                                               0x8BFC };  // bf loop
+    const Fixture soundMailbox = simple(0x06009600u, mailboxOps, 0x25A01000u);
+    const Fixture ramMailbox = simple(0x06009640u, mailboxOps, 0x26001000u);
+    for (const Fixture* f : { &poll, &echo, &twice, &dummy, &counter, &divide, &wide, &mirror, &woRead, &roWrite,
+                              &late, &indexed, &lateRam, &mvolRead, &mibufWrite, &wtcnt, &wtcsr, &wovf, &badKey,
+                              &keyVar, &divMirror, &purge5, &oddPair, &ubcPair, &soundMailbox, &ramMailbox })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -499,6 +557,7 @@ void TestHardwareVolatility()
     CHECK(Has(r.Text(), "SCU_IST = param_1;"));
     CHECK(Has(r.Text(), "Var1 = SCU_IST;"));   // read back after the write: the read is kept
     CHECK(!Has(r.Text(), "return param_1;"));
+    CHECK(HasNote(r, "SCU_IST: a write of 0 clears that interrupt; a read returns the pending ones", false));
 
     r = run("VDP2_TVMD twice", twice);
     CHECK(Has(r.Text(), "VDP2_TVMD = 0;"));
@@ -521,17 +580,92 @@ void TestHardwareVolatility()
     r = run("VDP2 32-bit scroll write", wide);
     CHECK(Has(r.Text(), "param_1"));   // the first write is not lost to the second
     CHECK(Has(r.Text(), "param_2"));
-    CHECK(HasNote(r, "covers VDP2_SCXIN0 and VDP2_SCXDN0"));
+    // Documented as one 32-bit register: explained on the line, not a caution.
+    CHECK(HasNote(r, "VDP2_SCXN0: one 4-byte write of VDP2_SCXIN0 and VDP2_SCXDN0, as documented", false));
+    CHECK(!WarnsAbout(r, "SCXIN0"));
 
     r = run("SMPC_SF through a mirror", mirror);
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
-    CHECK(HasNote(r, "0x201000E3 is SMPC_SF through a mirror"));
+    CHECK(HasNote(r, "0x201000E3 is SMPC_SF through a mirror", false));
 
     r = run("write-only read", woRead);
     CHECK(Has(r.Text(), "Var1 = VDP1_FBCR;"));
     CHECK(!Has(r.Text(), "return param_1;"));
     CHECK(HasNote(r, "reads VDP1_FBCR, which is write-only"));
     CHECK(!r.warnings.empty() && Has(r.warnings.back(), "write-only"));
+
+    r = run("unused read, address folds late", late);
+    CHECK(Has(r.Text(), "= SMPC_SF;"));
+
+    r = run("unused read, indexed address", indexed);
+    CHECK(Has(r.Text(), "(&SMPC_SF)[param_1]"));
+
+    r = run("unused read, address folds late to work RAM", lateRam);
+    CHECK(!Has(r.Text(), "Var1"));   // nothing but the return
+
+    r = run("SCSP MVOL read", mvolRead);
+    CHECK(Has(r.Text(), "= SCSP_MVOL;"));
+    CHECK(HasNote(r, "reads SCSP_MVOL, which is write-only"));
+
+    r = run("SCSP MIBUF write", mibufWrite);
+    CHECK(Has(r.Text(), "SCSP_MIBUF = param_1;"));
+    CHECK(HasNote(r, "writes SCSP_MIBUF, which is read-only"));
+
+    // The watchdog's write ports: one word write, its register picked by the key.
+    r = run("watchdog WTCNT", wtcnt);
+    CHECK(Count(r.Text(), "= 0x5a00;") == 1);
+    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCNT = 0x00", false));
+    CHECK(!HasNote(r, "covers") && !HasNote(r, "read-only"));
+    CHECK(r.warnings.empty());
+
+    r = run("watchdog WTCSR", wtcsr);
+    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00", false));
+
+    r = run("watchdog RSTCSR", wovf);
+    CHECK(Has(r.Text(), "0xa500"));
+    CHECK(HasNote(r, "keyed watchdog write: clears SH2_RSTCSR's WOVF", false));
+
+    r = run("watchdog wrong key", badKey);
+    CHECK(HasNote(r, "watchdog write with key 0x12", true));
+
+    r = run("watchdog key unknown", keyVar);
+    CHECK(HasNote(r, "SH2_WTCNT when the upper byte is 0x5A, SH2_WTCSR when it is 0xA5", false));
+
+    r = run("divider mirror", divMirror);
+    CHECK(Has(r.Text(), "Ramffffff24"));
+    CHECK(HasNote(r, "0xFFFFFF24 is SH2_DVDNT through a mirror", false));
+
+    // 0xA: the associative purge for Mednafen, which SE runs. Kept, and not called VDP2_TVMD.
+    r = run("0xA partition", purge5);
+    CHECK(Has(r.Text(), "a5f80000"));
+    CHECK(r.hardwareNotes.empty());
+
+    r = run("undocumented pair", oddPair);
+    CHECK(HasNote(r, "one 4-byte write covers VDP2_TVMD and VDP2_EXTEN", true));
+
+    r = run("UBC pair", ubcPair);
+    CHECK(HasNote(r, "SH2_BARA: one 4-byte write of SH2_BARAH and SH2_BARAL, as documented", false));
+    CHECK(r.warnings.empty());
+
+    r = run("sound RAM mailbox", soundMailbox);
+    CHECK(Has(r.Text(), "Ram25a01000 = 1;"));
+    CHECK(Count(r.Text(), "Ram25a01000") >= 2);
+    CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
+
+    // Work RAM folds by default (it is ordinary memory)...
+    r = run("work RAM mailbox, not marked", ramMailbox);
+    CHECK(!Has(r.Text(), "Ram26001000 = 1;"));
+    // ...and is kept once marked, through either partition.
+    for (uint32_t marked : { 0x26001000u, 0x06001000u })
+    {
+        DecompileRequest q = Request(ramMailbox.base);
+        q.volatileMemory.emplace_back(marked, marked + 1);
+        r = d.Decompile(snap, q);
+        Print("work RAM mailbox, marked", r);
+        CHECK(Has(r.Text(), "Ram26001000 = 1;"));
+        CHECK(Count(r.Text(), "Ram26001000") >= 2);
+        CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
+    }
 
     r = run("read-only write", roWrite);
     CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
@@ -546,7 +680,11 @@ void TestHardwareMap()
     CHECK(name(0x05F80000u) == "VDP2_TVMD");
     CHECK(name(0x25F80201u) == "VDP2_TVMD");    // VDP2 repeats every 512 bytes
     CHECK(name(0x2DF80000u) == "VDP2_TVMD");    // bits 28-27 are not decoded
-    CHECK(name(0xA5F80000u) == "VDP2_TVMD");    // the 0xA partition is cache-through again
+    CHECK(name(0xA5F80000u) == "");             // 0xA: Mednafen's associative purge, not the bus
+    CHECK(InHardwareRange(0xA0000000u) && InHardwareRange(0xBFFFFFFFu));
+    CHECK(name(0xFFFFFF24u) == "SH2_DVDNT");    // the divider's second copy
+    CHECK(name(0xFFFFFF3Cu) == "");             // ...whose 0x1C slot is no register
+    CHECK(name(0xFFFFFF40u) == "SH2_BARAH");
     CHECK(name(0x201000E3u) == "SMPC_SF");      // SMPC every 128 bytes
     CHECK(name(0x25FE01A4u) == "SCU_IST");      // SCU every 256 bytes
     CHECK(name(0x25B01422u) == "SCSP_SCIRE");   // SCSP every 4 KiB
@@ -581,6 +719,22 @@ void TestHardwareMap()
     CHECK(r && r->size == 4);
     r = FindHardwareRegister(0xFFFFFE92u);
     CHECK(r && r->size == 1);                             // CCR
+    r = FindHardwareRegister(0x25B00404u);
+    CHECK(r && r->access == RegisterAccess::ReadOnly);    // MIBUF
+    r = FindHardwareRegister(0x25B0042Au);
+    CHECK(r && r->access == RegisterAccess::WriteOnly);   // MCIEB, per Mednafen
+    r = FindHardwareRegister(0x25B00408u);
+    CHECK(r && r->split != nullptr);                      // MSLC written, CA read
+    r = FindHardwareRegister(0xFFFFFE80u);
+    CHECK(r && r->access == RegisterAccess::ReadOnly);    // WTCSR: written only through the key
+    std::string text;
+    bool ignored = false;
+    CHECK(KeyedWrite(0xFFFFFE80u, 2, true, 0x5A12u, text, ignored) && !ignored && text == "keyed watchdog write: SH2_WTCNT = 0x12");
+    CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0x5A40u, text, ignored) && !ignored && Has(text, "RSTE/RSTS = 0x40"));
+    CHECK(KeyedWrite(0xFFFFFE82u, 2, true, 0xA501u, text, ignored) && ignored);
+    CHECK(!KeyedWrite(0xFFFFFE80u, 1, true, 0x5Au, text, ignored));   // a byte write is no keyed write
+    CHECK(DocumentedWideAccess(0x25F800A0u, 4) && std::string(DocumentedWideAccess(0x25F800A0u, 4)) == "VDP2_LSTA0");
+    CHECK(DocumentedWideAccess(0x25F80000u, 4) == nullptr);
 
     const std::vector<const HardwareRegister*> pair = HardwareRegistersCovering(0x25F80070u, 4);
     CHECK(pair.size() == 2 && std::string(pair[0]->name) == "VDP2_SCXIN0" && std::string(pair[1]->name) == "VDP2_SCXDN0");
@@ -600,6 +754,18 @@ void TestHardwareMap()
         }
     }
     CHECK(InHardwareRange(0x25B00000u));    // SCSP slot registers: unnamed, still volatile
+    CHECK(InHardwareRange(0x25A01000u));    // sound RAM: shared with the 68000
+    CHECK(!InHardwareRange(0x26001000u));   // work RAM: the user's to mark
+
+    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+    std::string error;
+    CHECK(ParseAddressRanges("0x26001000-0x26001003, 25A01000\n06002000", ranges, error));
+    CHECK(ranges.size() == 3 && ranges[0] == std::make_pair(0x26001000u, 0x26001003u) &&
+          ranges[1] == std::make_pair(0x25A01000u, 0x25A01000u) && ranges[2].first == 0x06002000u);
+    CHECK(ParseAddressRanges("", ranges, error) && ranges.empty());
+    CHECK(!ParseAddressRanges("0x10-0x08", ranges, error) && Has(error, "0x10-0x08"));
+    CHECK(!ParseAddressRanges("zz", ranges, error));
+    CHECK(!ParseAddressRanges("123456789", ranges, error));
     CHECK(InHardwareRange(0x40001234u));    // associative purge
     CHECK(!InHardwareRange(0x06000000u));   // work RAM
     CHECK(!InHardwareRange(0x25E00000u));   // VDP2 VRAM

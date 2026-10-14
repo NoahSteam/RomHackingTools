@@ -413,6 +413,8 @@ void App::LoadSettings()
     mCallStackSplit = mSettings.GetFloat("callstack", "split", 0.0f);
 #if SE_ENABLE_DECOMPILER
     mDecompilerPanel.SetAutoRefresh(mSettings.GetBool("decompiler", "autorefresh", false));
+    if (!mDecompilerPanel.SetVolatileMemory(mSettings.Get("decompiler", "volatile", "")))
+        mLog.Error("settings.ini [decompiler] volatile does not parse; no volatile memory set");
     mBiosPath = mSettings.Get("decompiler", "bios", "");
     mBiosImage.reset();
     if (!mBiosPath.empty()) LoadBiosImage(mBiosPath);
@@ -443,6 +445,7 @@ void App::SaveSettings()
     mSettings.SetFloat("callstack", "split", mCallStackSplit);
 #if SE_ENABLE_DECOMPILER
     mSettings.SetBool("decompiler", "autorefresh", mDecompilerPanel.AutoRefresh());
+    mSettings.Set("decompiler", "volatile", mDecompilerPanel.VolatileMemory());
     mSettings.Set("decompiler", "bios", mBiosPath);
 #endif
     mLayerPanels.Save(mSettings);

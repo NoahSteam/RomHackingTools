@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: translator owned by the Architecture before initialize (patches/0003-translator-ownership-on-init-failure.patch).
+ * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  */
 // Set up decompiler for specific architectures
 
@@ -176,6 +177,7 @@ Architecture::Architecture(void)
   options = new OptionDatabase(this);
   loadersymbols_parsed = false;
   cancelRequested = (std::atomic<bool> *)0;
+  keepUnusedLoads = false;
 #ifdef CPUI_STATISTICS
   stats = new Statistics();
 #endif

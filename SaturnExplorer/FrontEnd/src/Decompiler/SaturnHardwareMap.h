@@ -22,6 +22,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace sfe
@@ -44,16 +45,22 @@ struct HardwareRegister
     uint8_t size;       // the documented access width in bytes: 1, 2 or 4
     const char* name;   // "VDP2_TVMD"
     RegisterAccess access;
+    // Set when a read and a write reach different fields (a command and its response, a write
+    // that clears flags, a port's output and its pins): what each does. Reading it back after a
+    // write does not return what was written, though the read means something.
+    const char* split;
 };
 
 // Every register, sorted by address, none overlapping.
 const HardwareRegister* SaturnHardwareRegisters(size_t& count);
 
-// The canonical address 'address' reaches if it is in a register area: the cached, cache-through
-// and 0xA partitions, bits 28-27 (not decoded), and each chip's own mirror (SMPC every 128 bytes,
-// SCSP every 4 KiB, VDP2 every 512 bytes, SCU every 256 bytes, the CPU-to-CPU signals across their
-// 8 MiB); on-chip, the SH-2's partial decode of 0xE0000000-0xFFFFFFFF. False outside them, or where
-// the bus returns garbage rather than a register (Docs/Saturn/SaturnMemory.txt).
+// The canonical address 'address' reaches if it is in a register area: the cached and
+// cache-through partitions, bits 28-27 (not decoded), and each chip's own mirror (SMPC every 128
+// bytes, SCSP every 4 KiB, VDP2 every 512 bytes, SCU every 256 bytes, the CD block's 64-byte
+// window, the CPU-to-CPU signals across their 8 MiB); on-chip, the SH-2's partial decode of
+// 0xE0000000-0xFFFFFFFF and the divider's second copy at 0xFFFFFF20. False outside them, or where
+// the bus returns garbage rather than a register (Docs/Saturn/SaturnMemory.txt). The 0xA
+// partition is not one: Mednafen sends it to the associative purge (see HardwareRanges).
 bool HardwareAlias(uint32_t address, uint32_t& canonical);
 
 // The register at 'address' through any alias, the address anywhere inside its width; or null.
@@ -62,7 +69,17 @@ const HardwareRegister* FindHardwareRegister(uint32_t address);
 // The registers an access of 'size' bytes at 'address' touches, through any alias, in order.
 std::vector<const HardwareRegister*> HardwareRegistersCovering(uint32_t address, uint32_t size);
 
-// Inclusive address ranges where every access goes to hardware, every alias included.
+// The documented name of a 4-byte access that spans a register pair the manuals allow to be
+// accessed whole (VDP2 scroll and table addresses, the UBC's halves); null otherwise.
+const char* DocumentedWideAccess(uint32_t address, uint32_t size);
+
+// A word write to the watchdog's write ports (FE80, FE82), which select their register by the
+// value's upper byte: true, with what it does in 'text', and 'ignored' when the key is wrong.
+// 'valueKnown' false when the value is not a constant.
+bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value, std::string& text, bool& ignored);
+
+// Inclusive address ranges where every access goes to hardware, or to memory another processor
+// always shares (sound RAM), every alias included.
 struct HardwareRange
 {
     uint32_t first;

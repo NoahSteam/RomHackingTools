@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -1370,6 +1372,8 @@ int4 ActionVarnodeProps::apply(Funcdata &data)
 	  if (loadOp->code() == CPUI_LOAD) {
 	    Varnode *ptr = loadOp->getIn(1);
 	    if (ptr->isConstant() || ptr->isReadOnly())
+	      continue;
+	    if (glb->keepUnusedLoads)	// Not yet known to be ordinary memory: it may still be volatile
 	      continue;
 	    if (ptr->isWritten()) {
 	      PcodeOp *copyOp = ptr->getDef();
@@ -4114,7 +4118,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
     if (op->isDead()) continue;
     Varnode *vn = op->getOut();
     if (vn->isConsumeVacuous()) continue;
-    if (op->getIn(1)->isEventualConstant(3, 1)) {
+    if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {
       pushConsumed(~(uintb)0, vn, worklist);
       vn->setAutoLiveHold();
       res = true;

@@ -387,6 +387,7 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
     }
     for (const HardwareNote& n : mShown.hardwareNotes)
     {
+        if (!n.caution) continue;   // an explanation, shown on its line
         std::snprintf(b, sizeof b, "0x%08X: ", n.address);
         out.push_back(b + n.text);
     }
@@ -411,6 +412,27 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
         if (!mEntryDoubt.empty()) out.push_back("Entry: " + mEntryDoubt + ".");
     }
     return out;
+}
+
+bool DecompilerPanel::SetVolatileMemory(const std::string& text, std::string* error)
+{
+    std::vector<std::pair<uint32_t, uint32_t>> ranges;
+    std::string why;
+    if (!ParseAddressRanges(text, ranges, why))
+    {
+        if (error) *error = why;
+        return false;
+    }
+    mVolatileText = text;
+    mVolatile = std::move(ranges);
+    // Engine input, so part of the question: changing it asks again, and the cache keeps answers
+    // for each set.
+    uint64_t h = 1469598103934665603ull;
+    for (const auto& r : mVolatile)
+        for (uint32_t v : { r.first, r.second })
+            for (int b = 0; b < 4; ++b) h = (h ^ ((v >> (8 * b)) & 0xFFu)) * 1099511628211ull;
+    mVolatileHash = mVolatile.empty() ? 0 : h;
+    return true;
 }
 
 const DecompilerPanel::CacheEntry* DecompilerPanel::CacheFind(const Question& q)
@@ -525,6 +547,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
         q.namesGeneration = mPending.namesGeneration;
         q.functions = mPending.functions;
         q.prototypes = mPending.prototypes;
+        q.volatileMemory = mPending.volatileMemory;
         CachePut(q, r, mPending.snapId);
     }
     Install(r, mPending.snapId, mPending.namesGeneration);
@@ -663,6 +686,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.namesGeneration = mNamesGeneration;
     q.functions = mFunctions;
     q.prototypes = PrototypeHash(mEntry);
+    q.volatileMemory = mVolatileHash;
     if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
     mNote.clear();
@@ -691,6 +715,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
         rq.knownFunctions.assign(inputs.bounds->Entries().begin(), inputs.bounds->Entries().end());
     for (const auto& p : mPrototypes)
         if (Lendable(p.second, mEntry, p.first)) rq.prototypes.emplace_back(p.first, p.second.proto);
+    rq.volatileMemory = mVolatile;
     const uint64_t generation = runner.Submit(kSlot, mSnap, std::move(rq), retry);
     ++mSubmissions;
     if (generation == 0)
@@ -707,6 +732,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     mPending.namesGeneration = mNamesGeneration;
     mPending.functions = mFunctions;
     mPending.prototypes = q.prototypes;
+    mPending.volatileMemory = q.volatileMemory;
 }
 
 bool DecompilerPanel::LineRect(int index, ImVec2& min, ImVec2& max) const
@@ -890,6 +916,32 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         if (ImGui::MenuItem("Stop Using BIOS Image", nullptr, false, view.bios != nullptr)) req.clearBios = true;
         ImGui::EndPopup();
     }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Volatile"))
+    {
+        std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", mVolatileText.c_str());
+        mVolatileError.clear();
+        ImGui::OpenPopup("volatile");
+    }
+    ImGui::SetItemTooltip("Memory another processor changes, such as a mailbox shared with the slave SH-2:\n"
+                          "every access there is kept. Hardware registers and sound RAM always are.");
+    if (ImGui::BeginPopup("volatile"))
+    {
+        ImGui::TextUnformatted("Volatile memory: first-last or single addresses, hex");
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 24);
+        const bool enter = ImGui::InputText("##volatile", mVolatileEdit, sizeof mVolatileEdit, ImGuiInputTextFlags_EnterReturnsTrue);
+        if (ImGui::Button("Apply") || enter)
+        {
+            if (SetVolatileMemory(mVolatileEdit, &mVolatileError))
+            {
+                req.settingsChanged = true;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (!mVolatileError.empty()) ImGui::TextColored(kAmber, "%s", mVolatileError.c_str());
+        ImGui::EndPopup();
+    }
 }
 
 void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRunner& runner)
@@ -1039,14 +1091,21 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
     // Assembly panel showed; the output's addresses are canonical.
     mLineNotes.assign(mShown.lines.size(), std::string());
     mUnplacedNotes.clear();
-    if (inputs.comments && !inputs.comments->empty())
+    // The result's explanations of hardware accesses (a documented register pair, the register a
+    // keyed write selects, a mirror) go on their lines like the user's notes, after them.
+    std::map<uint32_t, std::string> info;
+    for (const HardwareNote& n : mShown.hardwareNotes)
+        if (!n.caution) info[n.address] += (info[n.address].empty() ? "" : "; ") + n.text;
+    if ((inputs.comments && !inputs.comments->empty()) || !info.empty())
     {
-        std::map<uint32_t, const std::string*> notes;
-        for (const auto& c : *inputs.comments)
-        {
-            uint32_t canonical = 0;
-            if (!c.second.empty() && CanonicalAddress(c.first, canonical)) notes[canonical] = &c.second;
-        }
+        std::map<uint32_t, std::string> notes;
+        if (inputs.comments)
+            for (const auto& c : *inputs.comments)
+            {
+                uint32_t canonical = 0;
+                if (!c.second.empty() && CanonicalAddress(c.first, canonical)) notes[canonical] = c.second;
+            }
+        for (const auto& n : info) notes[n.first] += (notes[n.first].empty() ? "" : "; ") + n.second;
         std::set<uint32_t> placed;
         for (size_t i = 0; i < mShown.lines.size(); ++i)
         {
@@ -1058,7 +1117,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 auto it = notes.find(a);
                 if (it == notes.end() || !placed.insert(a).second) continue;
                 if (!mLineNotes[i].empty()) mLineNotes[i] += "; ";
-                mLineNotes[i] += *it->second;
+                mLineNotes[i] += it->second;
             }
         }
         // The rest of the body's notes: their instruction feeds a line (a literal load folded into
@@ -1069,7 +1128,7 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                 {
                     char b[16];
                     std::snprintf(b, sizeof b, "0x%08X: ", it->first);
-                    mUnplacedNotes.push_back(b + *it->second);
+                    mUnplacedNotes.push_back(b + it->second);
                 }
     }
 

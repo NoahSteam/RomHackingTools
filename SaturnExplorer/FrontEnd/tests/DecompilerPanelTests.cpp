@@ -1201,6 +1201,33 @@ void TestFlowUncertaintyShown()
         const std::vector<std::string> u = f.panel.Uncertainties();
         for (const std::string& l : u) std::printf("  amber: %s\n", l.c_str());
         CHECK(any(u, "0x06009A04: reads VDP1_FBCR, which is write-only"));
+
+        // An explanation is not amber: it goes on its line, like a user's note.
+        const uint32_t mir = 0x06009A40u;
+        const uint16_t mirWords[] = { 0x000B, 0x0009,
+                                      0xD101,              // mov.l @(4,pc),r1  -> SMPC_SF, 128 bytes up
+                                      0x6010,              // mov.b @r1,r0
+                                      0x000B, 0x0009,
+                                      0x2010, 0x00E3 };    // the literal
+        for (size_t i = 0; i < sizeof mirWords / sizeof mirWords[0]; ++i) f.PutWord(mir - 4 + 2 * uint32_t(i), mirWords[i]);
+        f.names[mir] = "mirrored";
+        ++f.namesGeneration;
+        ++f.backend.serial;
+        f.panel.ShowFunctionContaining(0, mir);
+        CHECK(f.WaitShown("mirrored"));
+        f.Idle(2);
+        for (const std::string& l : f.panel.Uncertainties()) CHECK(!Has(l, "through a mirror"));
+        CHECK(any(f.panel.LineNotes(), "0x201000E3 is SMPC_SF through a mirror (shown by address)"));
+
+        // The user's volatile memory is engine input: a change asks again, a bad list changes nothing.
+        const uint64_t before = f.panel.Submissions();
+        CHECK(f.panel.SetVolatileMemory("0x26001000-0x26001003"));
+        f.Idle(2);
+        CHECK(f.WaitShown("mirrored"));
+        CHECK(f.panel.Submissions() > before);
+        std::string error;
+        CHECK(!f.panel.SetVolatileMemory("0x10-0x08", &error) && !error.empty());
+        CHECK(f.panel.VolatileMemory() == "0x26001000-0x26001003");
     }
     {
         // An entry the rts scan found is a guess, and the panel says so (review of 7eaa935).
