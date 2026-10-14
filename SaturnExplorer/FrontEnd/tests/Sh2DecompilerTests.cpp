@@ -442,6 +442,17 @@ bool WarnsAbout(const DecompileResult& r, const char* what)
 // address (0: through a pointer), width, whether it is in a loop, whether it is the value
 // returned -- and each one printed on exactly one line. A substring check passes when an access is
 // lost or printed twice; this does not.
+// Two reads in one statement are in an order C leaves open -- unless one feeds the other
+// (a pointer read and the read through it), which orders them.
+bool Unordered(const MemoryAccess& a, const MemoryAccess& b)
+{
+    if (a.write || b.write || a.statement != b.statement) return false;
+    auto feeds = [](const MemoryAccess& x, const MemoryAccess& y) {
+        return std::find(x.through.begin(), x.through.end(), y.id) != x.through.end();
+    };
+    return !feeds(a, b) && !feeds(b, a);
+}
+
 struct Op
 {
     bool write;
@@ -464,6 +475,19 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
         const Op& w = want[i];
         ok = g.write == w.write && g.direct == (w.address != 0) && g.address == w.address && g.size == w.size &&
              g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath;
+    }
+    // Printed in the order the code makes them (the fixtures are straight-line code), and no two
+    // reads in one statement: C leaves the order of two reads in one expression open.
+    for (size_t i = 1; ok && i < got.size(); ++i)
+    {
+        const MemoryAccess& a = got[i - 1];
+        const MemoryAccess& b = got[i];
+        if (a.firstLine < 0 || b.firstLine < 0) continue;
+        if (b.firstLine < a.firstLine || Unordered(a, b))
+        {
+            std::printf("  ledger: %08X printed on line %d, %08X on line %d\n", a.insn, a.firstLine, b.insn, b.firstLine);
+            ok = false;
+        }
     }
     if (!ok)
     {
@@ -632,6 +656,15 @@ void TestHardwareVolatility()
                                                  0xE100,     // mov #0,r1
                                                  0x2411,     // mov.w r1,@r4     one 16-bit write
                                                  0x000B, 0x0009, 0x0009 }, 0x0C, 0 };
+    // Order through pointers (review of d0ce10a): a read through a runtime pointer, then an SMPC
+    // command; and two reads of a FIFO through a volatile pointer, subtracted.
+    const Fixture readThenCommand = simple(0x06009DC0u, { 0x6042,     // mov.l @r4,r0     the read
+                                                          0x2150 },   // mov.b r5,@r1     SMPC_COMREG = param_2
+                                           0x2010001Fu);
+    const Fixture fifoTwice = simple(0x06009E00u, { 0x6212,           // mov.l @r1,r2     first FIFO read
+                                                    0x6012,           // mov.l @r1,r0     second
+                                                    0x3028 },         // sub r2,r0        second - first
+                                     0x25818000u);
     // Analysis data reads: a pointer to a string in captured memory, returned.
     const Fixture strPtr = { 0x06009B00u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x06009B40u };
     // Diagnostics by direction: the same registers written instead of read, and read instead of written.
@@ -646,7 +679,7 @@ void TestHardwareVolatility()
                               &repeatMailbox, &farMailbox, &bit27Mailbox, &sharedLiteral, &wdtMirror, &wdtByte, &lcta, &ppaf,
                               &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox,
                               &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
-                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes })
+                              &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -975,6 +1008,20 @@ void TestHardwareVolatility()
         for (const HardwareNote& n : r.hardwareNotes) CHECK(insns.count(n.address) == 1);
     }
 
+    // The read is printed before the command it precedes, not moved into the return after it.
+    r = run("read through a pointer, then a command", readThenCommand);
+    CHECK(Ledger(r, { Rd(0, 4, false, true), Wr(0x2010001Fu, 1) }));
+    // ...and two FIFO reads through a volatile pointer keep their order and their roles.
+    {
+        DecompileRequest q = Request(fifoTwice.base);
+        q.volatileMemory.emplace_back(fifoTwice.base + fifoTwice.literal, fifoTwice.base + fifoTwice.literal + 3);
+        r = d.Decompile(snap, q);
+        Print("two FIFO reads through a volatile pointer", r);
+        CHECK(Ledger(r, { Rd(fifoTwice.base + fifoTwice.literal, 4), Rd(0, 4), Rd(0, 4) }));
+    }
+    // A single read used in place stays inline.
+    r = run("unused read through an argument (inline check)", argUnused);
+
     r = run("word store through a byte pointer", wordToBytes);
     CHECK(Ledger(r, { Rd(0, 1, false, true), Wr(0, 2) }));
 
@@ -1299,7 +1346,7 @@ void TestGameCode()
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
-    int duplicated = 0, wrongWidth = 0;
+    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0;
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
@@ -1337,6 +1384,22 @@ void TestGameCode()
         // Per instruction: an SH-2 instruction reads at most once and writes at most once on a path
         // (mac.l/mac.w read twice). Copies of an access on one path are an access the analysis
         // made twice; copies on separate paths (a block copied into each) are not.
+        // Two reads in one statement: C leaves their order open.
+        // A read printed later than it happens (in the statement its value ends in) must not pass
+        // another access on the way: within one block, nothing in between.
+        for (const MemoryAccess& m : r.accesses)
+        {
+            if (m.write || m.statement == m.id || m.block < 0 || m.block != m.statementBlock) continue;
+            for (const MemoryAccess& o : r.accesses)
+                if (o.id != m.id && o.block == m.block && o.order > m.order && o.order < m.statementOrder &&
+                    std::find(m.through.begin(), m.through.end(), o.id) == m.through.end() && ++moved <= 10)
+                    std::printf("  read at %08X printed past the access at %08X in %08X\n", m.insn, o.insn, entry);
+        }
+        for (size_t i = 0; i < r.accesses.size(); ++i)
+            for (size_t j = i + 1; j < r.accesses.size(); ++j)
+                if (Unordered(r.accesses[i], r.accesses[j]) && ++unordered <= 10)
+                    std::printf("  two reads in one statement, neither feeding the other (%08X, %08X) in %08X\n",
+                                r.accesses[i].insn, r.accesses[j].insn, entry);
         std::map<uint32_t, std::pair<int, int>> perInsn;
         for (const MemoryAccess& m : r.accesses)
             if (m.repeatedOnPath) (m.write ? perInsn[m.insn].second : perInsn[m.insn].first) += 1;
@@ -1382,7 +1445,11 @@ void TestGameCode()
                 failed, other, total, worst, worstAt);
     std::printf("  accesses: %d functions with any, %d direct (volatile), %d through pointers, %d not printed "
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
-    std::printf("  %d instructions with more accesses than they make, %d accesses of another width\n", duplicated, wrongWidth);
+    std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
+                "with two reads\n", duplicated, wrongWidth, unordered);
+    std::printf("  %d reads printed past another access\n", moved);
+    CHECK(unordered == 0);
+    CHECK(moved == 0);
     CHECK(wrongWidth == 0);
     CHECK(twice == 0);
     CHECK(duplicated == 0);

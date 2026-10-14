@@ -849,3 +849,38 @@ Not covered: whether every memory instruction in real code has an access in the 
 ordinary memory are dropped by design when unused, so that needs per-instruction pointer
 knowledge; the fixtures cover it instead.
 
+### Review of `d0ce10a`: order of reads through pointers
+
+- **P1: single-use loads moved past other operations.** Patch 0010 kept a load from being
+  duplicated, not from being moved. A load used once prints where its value is finally used, and
+  the engine checked only stores that may alias it, and calls, in between. Two results:
+  - A read through `param_1` before an SMPC command printed as
+    `SMPC_COMREG = param_2; return *param_1;`.
+  - Two FIFO reads through a volatile pointer printed as `*piVar1 - *piVar1`, in an order C
+    leaves open.
+
+  Patch 0010 now also makes `checkImpliedCover` keep a load explicit when any other memory
+  operation lies inside the live range of the implied chain the load starts: a store, another
+  load, a user op (volatile reads and writes), or a call. The first case now prints
+  `xVar1 = *param_1; SMPC_COMREG = param_2; return xVar1;`, and the second
+  `iVar2 = *piVar1; return *piVar1 - iVar2;`. A load with nothing in between still prints
+  inline. The rule applies to every load, since every remaining LOAD may reach volatile memory.
+- **The ledger now checks order.**
+  - In the straight-line fixtures, accesses must be printed in the order of their instructions.
+  - No two reads may share a statement unless one feeds the other (a pointer and the read through
+    it). `MemoryAccess` gains `statement`, `through`, the block and the order.
+  - "Two reads through an argument" (`*p - *p`) had the same defect; it passed before only
+    because the ledger did not check order.
+- **Game code.** `TestGameCode` also finds every read printed later than it happens, and checks
+  that no other access lies between, within the block; and every statement with two independent
+  reads.
+  - With the rule: 0 and 0 in both save states.
+  - Without it: 1,656 reads printed past another access, and 1,283 such statements.
+  - Time and failures are unchanged: 1,557/1,557 decompile, in 19-21 s.
+- **Sanitizers.** ASan and UBSan on the decompiler and panel suites, game code included: no
+  errors beyond the two upstream SLEIGH shift sites.
+
+Tests: "read through a pointer, then a command", "two FIFO reads through a volatile pointer",
+and the order check in every ledger. Mutation: with the new rule off, 3 ledgers fail (including
+the argument `*p - *p`) and the game-code order checks report 1,656 and 1,283.
+

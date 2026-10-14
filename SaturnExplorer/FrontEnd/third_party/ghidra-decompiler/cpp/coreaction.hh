@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Modified for SaturnExplorer: a load is read once, never duplicated into its uses (patches/0010-load-not-duplicated.patch).
+ * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  */
 /// \file coreaction.hh
 /// \brief Core decompilation actions which are indepedent of any particular architecture

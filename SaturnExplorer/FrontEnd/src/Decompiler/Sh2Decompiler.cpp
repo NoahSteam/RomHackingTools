@@ -1319,11 +1319,29 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         if (p != printed.end())
         {
             a.printedLines = static_cast<int>(p->second.first.size());
+            if (!p->second.first.empty()) a.firstLine = static_cast<int>(*p->second.first.begin());
             a.printedTokens = p->second.second;
         }
         // A write is its own statement; a read is printed as often as its value is emitted. (Its
         // tokens alone cannot say: p[2] prints the load through the pointer arithmetic's tokens.)
         a.printed = a.write || !o->getOut() ? 1 : emissions(o->getOut());
+        {
+            const ghidra::PcodeOp* at = o;
+            for (const ghidra::Varnode* v = a.write ? nullptr : o->getOut(); v && v->isImplied();)
+            {
+                const ghidra::PcodeOp* use = v->loneDescend();
+                if (!use) break;
+                at = use;
+                a.through.push_back(static_cast<uint32_t>(use->getTime()) + 1);
+                v = use->getOut();
+            }
+            a.statement = static_cast<uint32_t>(at->getTime()) + 1;
+            a.id = static_cast<uint32_t>(o->getTime()) + 1;
+            if (o->getParent()) a.block = o->getParent()->getIndex();
+            if (at->getParent()) a.statementBlock = at->getParent()->getIndex();
+            a.order = static_cast<uint32_t>(o->getSeqNum().getOrder());
+            a.statementOrder = static_cast<uint32_t>(at->getSeqNum().getOrder());
+        }
         out.push_back(a);
         outOps.push_back(o);
     }

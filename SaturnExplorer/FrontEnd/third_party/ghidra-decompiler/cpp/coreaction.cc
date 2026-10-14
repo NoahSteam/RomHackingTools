@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
- * Modified for SaturnExplorer: a load is read once, never duplicated into its uses (patches/0010-load-not-duplicated.patch).
+ * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3559,6 +3559,32 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
   int4 i;
 
   op = vn->getDef();
+  if (op->code() == CPUI_LOAD && data.getArch()->loadsNotDuplicated) {
+    // SaturnExplorer: the load is printed where the implied chain it starts ends up being used.
+    // Any other memory operation in between -- a store, another load, a user op (a volatile read
+    // or write), a call -- would then appear in the wrong order with respect to it.
+    vector<Varnode *> chain;
+    chain.push_back(vn);
+    for(Varnode *cur = vn;;) {
+      PcodeOp *use = cur->loneDescend();
+      if (use == (PcodeOp *)0) break;
+      Varnode *out = use->getOut();
+      if (out == (Varnode *)0 || !out->isImplied() || out->isExplicit()) break;
+      chain.push_back(out);
+      cur = out;
+    }
+    const OpCode memops[] = { CPUI_STORE, CPUI_LOAD, CPUI_CALLOTHER, CPUI_CALL, CPUI_CALLIND };
+    for(int4 k=0;k<5;++k) {
+      list<PcodeOp *>::const_iterator oiter = data.beginOp(memops[k]);
+      list<PcodeOp *>::const_iterator oend = data.endOp(memops[k]);
+      for(;oiter!=oend;++oiter) {
+	PcodeOp *other = *oiter;
+	if (other == op || other->isDead()) continue;
+	for(int4 c=0;c<chain.size();++c)
+	  if (chain[c]->getCover()->contain(other,2)) return false;
+      }
+    }
+  }
   if (op->code() == CPUI_LOAD) { // Check for loads crossing stores
     list<PcodeOp *>::const_iterator oiter,iterend;
     iterend = data.endOp(CPUI_STORE);

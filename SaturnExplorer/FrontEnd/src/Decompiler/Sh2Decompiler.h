@@ -195,6 +195,15 @@ struct MemoryAccess
     int printed = 0;
     int printedLines = 0;       // output lines holding a token printed from it (a statement can wrap)
     int printedTokens = 0;      // ...and how many such tokens
+    int firstLine = -1;         // the first output line with a token from it; -1 if none
+    // The statement it is printed in: its own when explicit (or a write), else the op its implied
+    // value is finally used in. Two reads in one statement are in an order C leaves open.
+    uint32_t statement = 0;
+    uint32_t id = 0;                // this access's op, as numbered in 'through'
+    std::vector<uint32_t> through;  // the ops its implied value passes through to that statement
+    // Where it happens and where it is printed, as block index and order within the block.
+    int block = -1, statementBlock = -1;
+    uint32_t order = 0, statementOrder = 0;
     // Another access of the same kind from the same instruction can run after this one on one path
     // (the engine copies a block into each path that reaches it; copies on separate paths are one
     // access each, copies on one path are an access made twice).
