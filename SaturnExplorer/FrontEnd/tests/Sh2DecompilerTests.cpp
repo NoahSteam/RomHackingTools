@@ -922,6 +922,84 @@ void TestFlowUncertainty()
     CHECK(r.badDataAt.empty());
 }
 
+// The engine paths the control-flow review could only check by reading the source. Two are reached
+// end to end: the restart limit alone (no jump table involved) and a call the engine treats as never
+// returning (through the test hook: nothing in SE marks one). The third, a failed second-stage
+// jump-table recovery, has no SH-2 fixture -- both stages analyse the same scratch copy of the
+// function -- so its warning's handling is pinned on the engine's own text.
+void TestEngineEdgePaths()
+{
+    Sh2Decompiler d(gConfig);
+    auto warned = [](const DecompileResult& r, const char* text) {
+        for (const std::string& w : r.warnings)
+            if (Has(w, text)) return true;
+        return false;
+    };
+
+    // Restart limit. A pointer to a stack slot, spilled and reloaded, is found only after the stack's
+    // dead code was removed (restart one); the global it leads to, whose first store was dead, only
+    // after that (restart two, past the limit of one).
+    std::vector<uint8_t> hw;
+    Place(hw, 0x06060300u, { 0x7FF8,      // add #-8,r15
+                             0xD206,      // mov.l @(lit,pc),r2   (0x06070000)
+                             0x2242,      // mov.l r4,@r2         (dead: overwritten)
+                             0x2252,      // mov.l r5,@r2
+                             0x2F22,      // mov.l r2,@r15
+                             0x61F3,      // mov r15,r1
+                             0x1F11,      // mov.l r1,@(4,r15)
+                             0x53F1,      // mov.l @(4,r15),r3    (&slot, reloaded)
+                             0x6332,      // mov.l @r3,r3         (the global's address, through it)
+                             0x6032,      // mov.l @r3,r0         (the global)
+                             0x7F08,      // add #8,r15
+                             0x000B,      // rts
+                             0x0009,      //   nop
+                             0x0009 });
+    dts::Put32(hw, 0x0006031Cu, 0x06070000u);
+    // A callee that never returns, and a caller with data after its call to it.
+    const uint32_t dies = 0x06060400u, caller = 0x06060500u;
+    Place(hw, dies, { 0xAFFE, 0x0009 });                                   // bra dies ; nop
+    Place(hw, caller, { 0x4F22, Bsr(caller + 2, dies), 0x0009, 0xFFFF });  // sts.l pr ; bsr dies ; nop ; data
+    auto snap = MakeSnapshot(hw);
+
+    DecompileResult r = d.Decompile(snap, Request(0x06060300u));
+    Print("restart limit", r);
+    CHECK(r.status == DecompileStatus::Ok && warned(r, "Exceeded maximum restarts"));
+    for (const FlowWarning& w : r.flowWarnings) CHECK(w.kind != FlowWarning::JumpTable);
+    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "restart limit"));
+
+    // Never returns. Flow stops at the call, so the data after it is not reached, and ReturnCheck
+    // ends the path there too: the caller's signature is lent. Without the mark, the same caller
+    // flows into the data.
+    const DecompileResult callee = d.Decompile(snap, Request(dies));
+    CHECK(callee.prototype.known);
+    DecompileRequest q = Request(caller);
+    q.prototypes.emplace_back(dies, callee.prototype);
+    r = d.Decompile(snap, q);
+    CHECK(!r.badDataAt.empty() && !r.prototype.known);
+    Sh2Decompiler::SetNoReturnForTests({ dies });
+    r = d.Decompile(snap, q);
+    Sh2Decompiler::SetNoReturnForTests({});
+    Print("call that never returns", r);
+    bool noReturn = false;
+    for (const FlowWarning& w : r.flowWarnings) noReturn |= w.address == caller + 2 && Has(w.text, "does not return");
+    CHECK(noReturn && r.badDataAt.empty() && !r.InBody(caller + 6));
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+
+    // Failed second stage, on the engine's text (jumptable.cc, JumpTable::recoverMultistage, raised in
+    // the scratch copy): kept, cases missing. The scratch copy's other warnings are dropped; a case
+    // label on the function proper is kept without counting as missing cases.
+    EngineWarning w = ClassifyEngineWarning("WARNING (jumptable): Second-stage recovery error");
+    CHECK(w.keep && w.casesMissing && !w.restartLimit && w.text == "Second-stage recovery error");
+    w = ClassifyEngineWarning("WARNING (jumptable): Sanity check requires truncation of jumptable");
+    CHECK(w.keep && w.casesMissing);
+    w = ClassifyEngineWarning("WARNING (jumptable): Bad instruction - Truncating control flow here");
+    CHECK(!w.keep);
+    w = ClassifyEngineWarning("WARNING: Bad switch case");
+    CHECK(w.keep && !w.casesMissing);
+    w = ClassifyEngineWarning("WARNING: Exceeded maximum restarts with more pending\n");
+    CHECK(w.keep && w.restartLimit && w.text == "Exceeded maximum restarts with more pending");
+}
+
 void TestPrototypeEligibility()
 {
     Sh2Decompiler d(gConfig);
@@ -1628,6 +1706,7 @@ int main(int argc, char** argv)
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
         RUN(TestFlowUncertainty());
+        RUN(TestEngineEdgePaths());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
         RUN(TestCalleePrototypes());

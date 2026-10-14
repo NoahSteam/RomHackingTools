@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -151,6 +152,20 @@ struct FlowWarning
     std::string text;
 };
 
+// How one of the engine's warning comments is reported: kept or not (warnings from jump-table
+// recovery's scratch copy are dropped, unless they say cases were dropped), its text, and whether
+// it means a jump table lost cases or the analysis hit its restart limit (either withholds the
+// signature). Exposed for tests: a failed second-stage table recovery has no SH-2 fixture that
+// reaches it, since both stages analyse the same scratch copy.
+struct EngineWarning
+{
+    bool keep = false;
+    bool casesMissing = false;
+    bool restartLimit = false;
+    std::string text;   // without the "WARNING: " prefix
+};
+EngineWarning ClassifyEngineWarning(const std::string& comment);
+
 enum class DecompileStatus : uint8_t
 {
     Ok,
@@ -236,6 +251,12 @@ public:
     // Architecture is destroyed). Tests use it to prove which phase a cancel landed in; it may
     // block, which holds the engine at the start of that phase.
     void SetPhaseObserver(std::function<void(DecompilePhase)> observer) { mObserver = std::move(observer); }
+
+    // Tests only: the engine treats these callees as never returning. Nothing in SE marks one (the
+    // spec's only user op has no output, and lent signatures carry no such flag), so this is how
+    // that path -- flow ending at the call, ReturnCheck ending the path there -- is exercised.
+    // Process-wide; set it before Decompile and clear it after.
+    static void SetNoReturnForTests(const std::set<uint32_t>& entries);
 
 private:
     void DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,

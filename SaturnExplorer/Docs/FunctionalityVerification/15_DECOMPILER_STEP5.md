@@ -512,3 +512,23 @@ complete function) within the acknowledged limits:
 - **Reviewed from source, not exercised by a regression test:** the restart limit alone, failed
   multistage recovery ("Second-stage recovery error"), and an engine-marked noreturn call. No
   silent-output reproduction was found in any of them.
+
+The three reviewed-from-source paths now have tests (`Sh2DecompilerTests` `TestEngineEdgePaths`).
+Each was checked by removing the handling it pins and watching it fail:
+- **Restart limit alone, end to end.** No jump table is involved. A stack pointer is spilled and
+  reloaded, and a global whose first store was dead is read through it. That takes two
+  dead-code-delay restarts (stack, then ram), and the limit is one. The warning is kept and the
+  signature is withheld for "restart limit".
+- **A call that never returns, end to end.** `Sh2Decompiler::SetNoReturnForTests` marks a callee
+  as never returning. Nothing in SE marks one: the spec's only user op has no output, so the
+  engine's `fail_callother` mode cannot arise, and lent signatures carry no such flag. With the
+  mark, the engine warns "Subroutine does not return" and flow stops at the call. The data after
+  the call is neither reached nor in the body, and ReturnCheck ends the path there, so the caller is
+  lent. Without the mark, the same caller flows into the data.
+- **Failed second-stage recovery, on the engine's text.** No SH-2 fixture reaches it: both
+  recovery stages analyse the same scratch copy of the function, which does not inherit the
+  function's overrides, so the second sees what the first saw. The classification is factored into
+  `ClassifyEngineWarning` and tested on the exact strings. "(jumptable) Second-stage recovery
+  error" is kept and counted as missing cases. The scratch copy's other warnings are dropped. A
+  case-label warning is kept without counting as missing cases, and the restart-limit text is
+  recognised.

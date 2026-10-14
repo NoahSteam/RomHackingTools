@@ -1030,6 +1030,39 @@ void Sh2Decompiler::Enter(DecompilePhase phase)
     if (mObserver) mObserver(phase);
 }
 
+EngineWarning ClassifyEngineWarning(const std::string& comment)
+{
+    EngineWarning w;
+    std::string text = comment;
+    // Jump-table recovery works in a scratch copy of the function. What that copy's own flow and
+    // simplification ran into is not this function's; what recovery concluded about the table is.
+    const bool scratch = text.compare(0, 20, "WARNING (jumptable):") == 0;
+    if (scratch) text.erase(0, 21);
+    else if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
+    // Destinations dropped (recovery in the scratch copy) mean cases are missing; a label the switch
+    // normalisation could not work out (on the function proper, every destination recovered) is
+    // only said.
+    static const char* const kCasesMissing[] = { "Sanity check requires truncation of jumptable",
+                                                 "Second-stage recovery error" };
+    for (const char* o : kCasesMissing) w.casesMissing |= text.compare(0, std::strlen(o), o) == 0;
+    static const char kRestarts[] = "Exceeded maximum restarts";
+    w.restartLimit = text.compare(0, sizeof kRestarts - 1, kRestarts) == 0;
+    w.keep = !scratch || w.casesMissing;
+    w.text = text;
+    return w;
+}
+
+namespace
+{
+std::set<uint32_t> gNoReturnForTests;
+}  // namespace
+
+void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
+{
+    gNoReturnForTests = entries;
+}
+
 std::string DecompileResult::Text() const
 {
     std::string s;
@@ -1287,6 +1320,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 // keeps the engine's own recovery.
                 auto proto = prototypes.find(a);
                 if (a != exec && proto != prototypes.end()) ApplyPrototype(*arch, *f2, proto->second);
+                if (a != exec && gNoReturnForTests.count(a)) f2->getFuncProto().setNoReturn(true);
             }
             catch (ghidra::LowlevelError& e)
             {
@@ -1405,25 +1439,12 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         {
             const ghidra::Comment* c = *it;
             if ((c->getType() & (ghidra::Comment::warning | ghidra::Comment::warningheader)) == 0) continue;
-            std::string text = c->getText();
-            // Jump-table recovery works in a scratch copy of the function. What that copy's own flow
-            // and simplification ran into is not this function's; what recovery concluded about the
-            // table is -- a table cut short, a second stage that failed, a case it could not label.
-            const bool scratch = text.compare(0, 20, "WARNING (jumptable):") == 0;
-            if (scratch) text.erase(0, 21);
-            else if (text.compare(0, 9, "WARNING: ") == 0) text.erase(0, 9);
-            while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
-            // Destinations dropped (recovery in the scratch copy) mean cases are missing; a label
-            // the switch normalisation could not work out (on the function proper, every destination
-            // recovered) is only said.
-            static const char* const kCasesMissing[] = { "Sanity check requires truncation of jumptable",
-                                                         "Second-stage recovery error" };
-            bool outcome = false;
-            for (const char* o : kCasesMissing) outcome |= text.compare(0, std::strlen(o), o) == 0;
-            if (scratch && !outcome) continue;
-            if (outcome) tableIncomplete = true;
-            static const char kRestarts[] = "Exceeded maximum restarts";
-            if (text.compare(0, sizeof kRestarts - 1, kRestarts) == 0) restartsExhausted = true;
+            const EngineWarning cls = ClassifyEngineWarning(c->getText());
+            if (!cls.keep) continue;
+            std::string text = cls.text;
+            const bool outcome = cls.casesMissing;
+            tableIncomplete |= cls.casesMissing;
+            restartsExhausted |= cls.restartLimit;
             const bool header = (c->getType() & ghidra::Comment::warningheader) != 0;
             // Said once per halt below, where it is.
             if (header && (text == "Control flow encountered bad instruction data" ||
