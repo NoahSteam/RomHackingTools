@@ -855,6 +855,21 @@ void TestPrototypeEligibility()
                               0x2122,      // mov.l r2,@r1
                               0x000B,      // rts
                               0x0009 });   //   nop
+    // (l) A word of free stack (below r15), read exactly and through an inexact address, stored
+    // through: it may hold the saved PR's address.
+    const uint32_t freeExact = 0x06012A00u, freeInexact = 0x06012B00u;
+    for (uint32_t at : { freeExact, freeInexact })
+        Place(hw, at, { 0x4F22,                                // sts.l pr,@-r15
+                        0x60F3,                                // mov r15,r0
+                        0x70FC,                                // add #-4,r0   (below r15)
+                        uint16_t(at == freeExact ? 0x0009      // nop
+                                                 : 0xCB00),    // or #0,r0     (the same address, inexact)
+                        0x6102,                                // mov.l @r0,r1
+                        0xE200,                                // mov #0,r2
+                        0x2122,                                // mov.l r2,@r1
+                        0x4F26,                                // lds.l @r15+,pr
+                        0x000B,                                // rts
+                        0xE007 });                             //   mov #7,r0
     // (j) A stack address stored in two halves, read back whole and stored through.
     const uint32_t halves = 0x06012800u;
     Place(hw, halves, { 0x4F22,      // sts.l pr,@-r15
@@ -991,6 +1006,9 @@ void TestPrototypeEligibility()
     CHECK(!run(inexactLoad, {}, "a stack address read back inexactly").prototype.known);
     // (g) Below r15 is free stack: pushes and interrupts write there.
     CHECK(!run(belowSp, { { nearLeaf, lf.prototype } }, "PR below r15 across a call").prototype.known);
+    // (l) Free stack holds anything, however its address is known.
+    CHECK(!run(freeExact, {}, "free stack read exactly").prototype.known);
+    CHECK(!run(freeInexact, {}, "free stack read inexactly").prototype.known);
     // (j) Stores of part of a word are kept too.
     CHECK(!run(halves, {}, "a stack address in two halves").prototype.known);
     // (k) ...and a store that can only land in the stack lets nothing out to memory.

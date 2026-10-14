@@ -340,3 +340,15 @@ All are fixed, and each new check below fails on `da2c9d2`:
 - **Absolute addresses.** These are taken never to be in the stack (the engine's own assumption).
   This is now applied consistently: a store through one no longer forgets slots, though it still
   leaks the value.
+
+The re-review at `987e023` closed both findings and found one more gap. A load through an inexact,
+possibly-stack address returned only the tracked slots. That address cannot be shown to stay
+above r15, so the load may read free stack. It now returns "anything", the same as an exact load
+below r15. (`TestPrototypeEligibility` (l): the exact and inexact reads of the free-stack word are
+both withheld; the inexact one is lent on `987e023`.) The cost is precision: a pointer loaded from a
+local array, if stored through, now makes the function forget its saved PR.
+
+The review accepts two assumptions as stated conditions of lending, not guarantees for arbitrary
+SH-2 code:
+- an index added to a stack address stays in the stack;
+- an absolute address never points into the stack.

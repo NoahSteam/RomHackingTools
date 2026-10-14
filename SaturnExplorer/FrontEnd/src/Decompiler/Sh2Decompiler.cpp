@@ -539,8 +539,9 @@ private:
                 if (slot.first < addr.v + n && addr.v < slot.first + 4) o |= slot.second.Origins();
             return Value::From(o);
         }
-        // Through an address that may be in the stack but not exactly: any slot.
-        return Value::From(Loaded(s).from | (MayBeStack(s, addr) ? AllSlots(s) : 0));
+        // Through an address that may be in the stack but not exactly: nothing bounds it above r15,
+        // so it may read free stack, which holds anything.
+        return MayBeStack(s, addr) ? Value::From(kAnything) : Loaded(s);
     }
 
     // At a return: PR must be the caller's; and what the caller sees afterwards is recorded.
