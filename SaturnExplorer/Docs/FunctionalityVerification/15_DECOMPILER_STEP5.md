@@ -903,8 +903,9 @@ the argument `*p - *p`) and the game-code order checks report 1,656 and 1,283.
   0 in both save states. That pattern does not occur in this game's code, so the fixtures carry
   it. With the rule off, 4 fixtures fail.
 - **Patch 0011.** `RulePtrsubCharConstant` cast to `TypePointer *` before checking the metatype;
-  the cast now follows the check. The UBSan vptr check reported it. The SLEIGH signed-shift
-  reports remain upstream, recorded and not blocking.
+  the cast now follows the check. The UBSan vptr check reported it. `Sh2DecompilerTests`
+  (game code included) under ASan and UBSan with vptr now reports nothing beyond the two SLEIGH
+  signed-shift sites, which remain upstream, recorded and not blocking.
 - **The earlier review of `f212a8d`** reported the two ordering failures that `47ae113` already
   fixes.
 
