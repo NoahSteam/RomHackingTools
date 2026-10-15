@@ -45,6 +45,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0015-proto-param-replace-order.patch` | A prototype parameter's replacement is allocated before the old one is freed (an allocation failure there was a double free at teardown); and a switch's table-lookup flag (0014) goes only on the loads between the switch variable and the jump, not on a selector read from memory. |
 | `0016-jumpassisted-leak.patch` | A failed assisted jump model (tried when an indirect jump's address is a volatile read) is freed instead of leaked. |
 | `0017-access-fates.patch` | `Funcdata` records how each LOAD and STORE the flow made ended (folded into a variable of ordinary memory, removed as dead, removed with an unreachable block, or the read of a recovered switch's table), so the host's oracle can account for every memory access instead of excusing some by a heuristic. |
+| `0019-sleigh-sr-rte.patch` | `ldc`/`ldc.l` to SR keep only T, S, I3-I0, Q and M (`0x3F3`); `rte` masks the stacked SR the same way and restores it before its delay slot, not after. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
+| `0020-sleigh-cache-lru.patch` | `DisassemblyCache::getParserContext` makes a hit the newest entry (least recently used, not oldest allocated). A delayed branch whose tree was cached but whose slot's was not took its own tree for the slot and was built from the slot's parse. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -89,6 +91,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once, in order, unconditionally);
   - 0011: `Sh2DecompilerTests` under UBSan with vptr.
   - 0017: `TestHardwareVolatility` (every reference-run access of a fixture is printed, folded, or removed with said code) and `TestGameCode` (0 dropped).
+  - 0019: `SaturnExplorerSh2DecodeTests` (the `ldc`, `ldc.l` and `rte` shapes and forms against the Mednafen model);
+  - 0020: `SaturnExplorerSh2DecodeTests` (`TestRecycledTreeInDecompiler`, `TestTranslationHistory`).
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.

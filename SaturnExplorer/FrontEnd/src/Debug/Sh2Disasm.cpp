@@ -241,11 +241,12 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x5: o.set("mov.w"); o.ops("@(0x%X,r%d),r0", d4 * 2, m); return ins;
         case 0x8: o.set("cmp/eq");o.ops("#0x%X,r0", (uint8_t)imm); return ins;
         // Conditional PC-relative branches: same 8-bit-disp target, differ only by
-        // mnemonic (bt/bf and their delayed-slot variants).
+        // mnemonic (bt/bf and their delayed-slot variants, spelled bt/s and bf/s as Renesas and the
+        // SLEIGH listing do).
         case 0x9: case 0xB: case 0xD: case 0xF: {
             const int sub = (op >> 8) & 0xF;
             const char* mn = sub == 0x9 ? "bt" : sub == 0xB ? "bf"
-                           : sub == 0xD ? "bt.s" : "bf.s";
+                           : sub == 0xD ? "bt/s" : "bf/s";
             const uint32_t t = address + 4 + s8ext(op) * 2;
             o.set(mn); o.ops("0x%08X", t);
             ins.HasBranchTarget = true; ins.BranchTarget = t;
@@ -269,7 +270,7 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t op)
         case 0x0: o.set("mov.b"); o.ops("r0,@(0x%X,gbr)", imm); return ins;
         case 0x1: o.set("mov.w"); o.ops("r0,@(0x%X,gbr)", imm * 2); return ins;
         case 0x2: o.set("mov.l"); o.ops("r0,@(0x%X,gbr)", imm * 4); return ins;
-        case 0x3: o.set("trapa"); o.ops("#0x%X", imm); ins.IsCall = true; return ins;
+        case 0x3: o.set("trapa"); o.ops("#0x%X", imm); ins.IsBranch = ins.IsCall = true; return ins;
         case 0x4: o.set("mov.b"); o.ops("@(0x%X,gbr),r0", imm); return ins;
         case 0x5: o.set("mov.w"); o.ops("@(0x%X,gbr),r0", imm * 2); return ins;
         case 0x6: o.set("mov.l"); o.ops("@(0x%X,gbr),r0", imm * 4); return ins;

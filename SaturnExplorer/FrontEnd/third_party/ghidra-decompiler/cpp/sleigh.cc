@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
+ * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
  */
 #include "sleigh.hh"
 #include "loadimage.hh"
@@ -499,8 +500,19 @@ ParserContext *DisassemblyCache::getParserContext(const Address &addr)
 {
   int4 hashindex = ((int4) addr.getOffset()) & mask;
   ParserContext *res = hashtable[ hashindex ];
-  if (res->getAddr() == addr)
+  if (res->getAddr() == addr) {
+    // A hit makes the entry the newest. Otherwise the ring evicts in order of allocation, and a
+    // tree that is hit while it is the oldest is the next one reused: Sleigh::oneInstruction
+    // looks up an instruction, then its delay slot, and a slot that misses took the
+    // instruction's own tree (so a delayed branch was built from its slot's parse).
+    int4 k = 0;
+    while (list[ (nextfree + k) % minimumreuse ] != res)
+      k += 1;
+    for(;k<minimumreuse-1;++k)
+      list[ (nextfree + k) % minimumreuse ] = list[ (nextfree + k + 1) % minimumreuse ];
+    list[ (nextfree + minimumreuse - 1) % minimumreuse ] = res;
     return res;
+  }
   res = list[ nextfree ];
   nextfree += 1;		// Advance the circular index
   if (nextfree >= minimumreuse)
