@@ -1623,10 +1623,36 @@ Varnode *JumpBasic::foldInNormalization(Funcdata *fd,PcodeOp *indop)
   // Set the BRANCHIND input to be the unnormalized switch variable, so
   // all the intervening code to calculate the final address is eliminated as dead.
   // SaturnExplorer: the table lookup among that code is a load that must go with it, not one to
-  // keep for its effect (lastChanceLoad): the switch stands for it.
-  for(int4 i=0;i<pathMeld.numOps();++i)
-    if (pathMeld.getOp(i)->code() == CPUI_LOAD)
-      pathMeld.getOp(i)->setJumptableLookup();
+  // keep for its effect (lastChanceLoad): the switch stands for it. Only the loads between the
+  // switch variable and the jump are that code: the model's paths reach above the switch variable,
+  // to the read that produced it, and that read is the code's own (review of 0c2dd20: a selector
+  // read from memory, flagged, went with a switch whose cases all coincide).
+  {
+    vector<PcodeOp *> todo;
+    vector<PcodeOp *> seen;
+    todo.push_back(indop);
+    while(!todo.empty()) {
+      PcodeOp *op = todo.back();
+      todo.pop_back();
+      for(int4 i=0;i<op->numInput();++i) {
+	Varnode *vn = op->getIn(i);
+	if (vn == switchvn || !vn->isWritten()) continue;
+	PcodeOp *def = vn->getDef();
+	int4 j;
+	for(j=0;j<pathMeld.numOps();++j)
+	  if (pathMeld.getOp(j) == def) break;
+	if (j == pathMeld.numOps()) continue;		// Not part of the model
+	int4 k;
+	for(k=0;k<seen.size();++k)
+	  if (seen[k] == def) break;
+	if (k < seen.size()) continue;
+	seen.push_back(def);
+	if (def->code() == CPUI_LOAD)
+	  def->setJumptableLookup();
+	todo.push_back(def);
+      }
+    }
+  }
   fd->opSetInput(indop,switchvn,0);
   return switchvn;
 }

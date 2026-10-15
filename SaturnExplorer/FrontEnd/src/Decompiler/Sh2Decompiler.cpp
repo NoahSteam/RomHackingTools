@@ -62,6 +62,18 @@ std::atomic<bool> gEngineDamaged(false);
 
 // Canonical call target -> the addresses the code actually calls it through (itself, or mirrors).
 using CalleeAliases = std::map<uint32_t, std::set<uint32_t>>;
+}  // namespace
+
+// The literals marked read-only and the callees registered before a printed pass followed its flow
+// (the first pass's findings): a pass given them follows the same flow in one pass.
+struct PassSeed
+{
+    std::vector<std::pair<uint32_t, int>> literals;
+    CalleeAliases callees;
+};
+
+namespace
+{
 
 // Fills the error text of a failed result. Never throws: the failure being reported may be an
 // allocation failure, and the result must still leave the boundary with its status set. The
@@ -1070,10 +1082,18 @@ const char* PhaseName(DecompilePhase phase)
     return "?";
 }
 
+namespace
+{
+std::set<uint32_t> gNoReturnForTests;
+std::function<void(DecompilePhase)> gPhaseHookForTests;
+std::function<void()> gBeforeReferenceHookForTests;
+}  // namespace
+
 void Sh2Decompiler::Enter(DecompilePhase phase)
 {
     if (phase != DecompilePhase::Teardown) mWorkPhase = phase;
-    if (mObserver) mObserver(phase);
+    if (gPhaseHookForTests) gPhaseHookForTests(phase);
+    if (mObserver && !mQuietPhases) mObserver(phase);
 }
 
 EngineWarning ClassifyEngineWarning(const std::string& comment)
@@ -1099,14 +1119,19 @@ EngineWarning ClassifyEngineWarning(const std::string& comment)
     return w;
 }
 
-namespace
-{
-std::set<uint32_t> gNoReturnForTests;
-}  // namespace
-
 void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
 {
     gNoReturnForTests = entries;
+}
+
+void Sh2Decompiler::SetPhaseHookForTests(std::function<void(DecompilePhase)> hook)
+{
+    gPhaseHookForTests = std::move(hook);
+}
+
+void Sh2Decompiler::SetBeforeReferenceHookForTests(std::function<void()> hook)
+{
+    gBeforeReferenceHookForTests = std::move(hook);
 }
 
 namespace
@@ -1264,6 +1289,9 @@ struct FlowRecord
     // again by its instruction and kind.
     std::map<std::pair<uint32_t, bool>, std::vector<std::pair<int, uint32_t>>> accessesByInsn;
     std::vector<std::vector<int>> successors;
+    std::vector<uint32_t> blockStart;                 // each block's first address, canonical
+    std::vector<std::vector<uint32_t>> blockInsns;    // each block's instructions, canonical, sorted
+    int entryBlock = 0;
 };
 
 FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
@@ -1271,31 +1299,76 @@ FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(u
     FlowRecord f;
     const ghidra::BlockGraph& graph = fd.getBasicBlocks();
     f.successors.resize(static_cast<size_t>(graph.getSize()));
+    f.blockStart.resize(static_cast<size_t>(graph.getSize()));
+    f.blockInsns.resize(static_cast<size_t>(graph.getSize()));
     // The blocks have no indices of their own yet (the engine numbers them later): by position.
     std::map<const ghidra::FlowBlock*, int> indexOf;
     for (ghidra::int4 i = 0; i < graph.getSize(); ++i) indexOf[graph.getBlock(i)] = i;
     for (ghidra::int4 i = 0; i < graph.getSize(); ++i)
     {
         const ghidra::FlowBlock* b = graph.getBlock(i);
+        if (b->isEntryPoint()) f.entryBlock = i;
         for (ghidra::int4 k = 0; k < b->sizeOut(); ++k)
         {
             auto t = indexOf.find(b->getOut(k));
             if (t != indexOf.end()) f.successors[i].push_back(t->second);
         }
         const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(b);
+        f.blockStart[i] = canonicalOf(static_cast<uint32_t>(bb->getStart().getOffset()));
         uint32_t pos = 0;
         for (auto it = bb->beginOp(); it != bb->endOp(); ++it, ++pos)
         {
             const ghidra::PcodeOp* o = *it;
             const ghidra::OpCode c = o->code();
+            f.blockInsns[i].push_back(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())));
             if (c != ghidra::CPUI_LOAD && c != ghidra::CPUI_STORE && c != ghidra::CPUI_CALL && c != ghidra::CPUI_CALLIND) continue;
             f.ops[o->getTime()] = std::make_pair(i, pos);
             if (c == ghidra::CPUI_LOAD || c == ghidra::CPUI_STORE)
                 f.accessesByInsn[std::make_pair(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), c == ghidra::CPUI_STORE)]
                     .emplace_back(i, pos);
         }
+        std::sort(f.blockInsns[i].begin(), f.blockInsns[i].end());
+        f.blockInsns[i].erase(std::unique(f.blockInsns[i].begin(), f.blockInsns[i].end()), f.blockInsns[i].end());
     }
     return f;
+}
+
+// The instructions in the flow's blocks that the analysis removed as unreachable: the blocks whose
+// start the engine's warnings name ("Removing unreachable block (ram,0x...)", one per block as it
+// was at the time -- blocks spliced into one are named once, by the first), and every block only
+// reachable through those. Read from the flow's own blocks, since the final ones are gone.
+std::vector<uint32_t> RemovedInstructions(const FlowRecord& flow, const std::vector<uint32_t>& removedStarts)
+{
+    const size_t n = flow.successors.size();
+    std::vector<bool> removed(n, false);
+    for (uint32_t start : removedStarts)
+    {
+        bool found = false;
+        for (size_t i = 0; i < n && !found; ++i)
+            if (flow.blockStart[i] == start) removed[i] = found = true;
+        // A block split after flow (jump-table recovery can) starts inside a flow block.
+        for (size_t i = 0; i < n && !found; ++i)
+            if (std::binary_search(flow.blockInsns[i].begin(), flow.blockInsns[i].end(), start)) removed[i] = found = true;
+    }
+    std::vector<bool> reached(n, false);
+    std::vector<int> todo;
+    if (n && !removed[static_cast<size_t>(flow.entryBlock)]) todo.push_back(flow.entryBlock);
+    while (!todo.empty())
+    {
+        const int b = todo.back();
+        todo.pop_back();
+        if (reached[static_cast<size_t>(b)]) continue;
+        reached[static_cast<size_t>(b)] = true;
+        for (int s : flow.successors[static_cast<size_t>(b)])
+            if (!removed[static_cast<size_t>(s)]) todo.push_back(s);
+    }
+    std::vector<uint32_t> out;
+    for (size_t i = 0; i < n; ++i)
+        if (!reached[i])
+            out.insert(out.end(), flow.blockInsns[i].begin(), flow.blockInsns[i].end());
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
 }
 
 std::vector<CallSite> Calls(const ghidra::Funcdata& fd, const FlowRecord& flow, const std::function<uint32_t(uint32_t)>& canonicalOf)
@@ -1324,8 +1397,16 @@ std::vector<CallSite> Calls(const ghidra::Funcdata& fd, const FlowRecord& flow, 
 // The access ledger (MemoryAccess), from the final p-code and what was printed of it.
 std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
                                    const std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>& printed,
-                                   const std::function<uint32_t(uint32_t)>& canonicalOf, const FlowRecord& flow)
+                                   const std::function<uint32_t(uint32_t)>& canonicalOf, const FlowRecord& flow,
+                                   const std::vector<HardwareRange>& userVolatile)
 {
+    // Memory that stays a read in an ordinary run too: a register, or memory the request marks.
+    auto volatileAt = [&](uint32_t a) {
+        if (InHardwareRange(a)) return true;
+        for (const HardwareRange& v : userVolatile)
+            if (v.first <= a && a <= v.last) return true;
+        return false;
+    };
     // The values returned, traced back through what passes a value on unchanged.
     std::set<const ghidra::Varnode*> returnedVns;
     std::vector<const ghidra::Varnode*> work;
@@ -1477,7 +1558,7 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
                 {
                     const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(d->getIn(0)->getOffset()));
                     if (u && u->getType() == ghidra::UserPcodeOp::volatile_read &&
-                        !InHardwareRange(static_cast<uint32_t>(d->getIn(1)->getOffset())))
+                        !volatileAt(static_cast<uint32_t>(d->getIn(1)->getOffset())))
                         a.pointerFromOrdinaryMemory = true;
                     continue;
                 }
@@ -1617,8 +1698,9 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
     {
         r.key = snapshot->key;
         r.requestedEntry = request.entry;
-        DecompileInto(snapshot, request, cancel, r);
-        if (r.status == DecompileStatus::Ok && !request.allMemoryVolatile) NoteRemovedAccesses(snapshot, request, cancel, r);
+        PassSeed seed;
+        DecompileInto(snapshot, request, cancel, r, nullptr, &seed);
+        if (r.status == DecompileStatus::Ok && !request.allMemoryVolatile) NoteRemovedAccesses(snapshot, request, cancel, r, seed);
     }
     catch (ghidra::CancelError&)
     {
@@ -1655,44 +1737,69 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         SetError(r, "unexpected exception");
     }
     mWorkPhase = DecompilePhase::Idle;
+    mQuietPhases = false;   // however the reference run ended
     r.elapsedMs = MsSince(t0);
     return r;
 }
 
-// A loop the analysis takes to run for ever ends the function there: the engine removes what
-// follows as unreachable, hardware accesses included, and only its own warnings say so. The usual
-// cause is a poll of memory not marked volatile that the function itself wrote (a mailbox for the
-// other SH-2 or the sound CPU): the write is forwarded to the read and the exit is never taken.
-// When the engine reports such a removal, the function is analysed once more with every address
-// volatile (nothing folds, so the loop exits and every access the flow reaches stays), and each
-// hardware access in that output which the shown output lacks is said, on its instruction and in
-// the warnings, with the cause. The signature is withheld: it describes a function that stops at
-// the loop (review of 0e3cd12, from the ledger's reference run on game code).
+// Code the analysis removed as unreachable is gone from the output, hardware accesses included, and
+// only the engine's warnings say so. The usual cause is a test of memory not marked volatile that
+// the function itself wrote (a mailbox for the other SH-2 or the sound CPU): the write is forwarded
+// to the read and the branch is decided -- a poll never exits, a check always goes one way. When
+// the engine reports such a removal, the function is analysed once more with every address
+// volatile (nothing folds, so every branch stays open and every access the flow reaches stays), with
+// the literals and callees the shown pass followed its flow with, so that both follow the same flow
+// (a switch bounded by a literal only the second pass folds is reached by both). Each access in the removed
+// code that is a register, memory the request marks, or through a pointer -- whatever the pointer
+// came from: it is missing because its code was removed, not because it folded -- is said, on its
+// instruction and in the warnings, with the cause. The signature is withheld: it describes a
+// function that stops at the fold. Should the reference run not finish (an engine error, a cancel,
+// the time budget), the removal is said without its contents and the signature is still withheld;
+// an allocation failure inside the engine leaves this function like any other, marking the engine
+// damaged (review of 0e3cd12, from the ledger's reference run on game code; review of 0c2dd20).
 void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
-                                        std::atomic<bool>* cancel, DecompileResult& r)
+                                        std::atomic<bool>* cancel, DecompileResult& r, const PassSeed& seed)
 {
-    bool removed = false;
+    if (r.removedInsns.empty()) return;
+    bool loop = false;
     for (const std::string& w : r.warnings)
-        if (w.find("Removing unreachable block") != std::string::npos || w.find("Do nothing block with infinite loop") != std::string::npos)
-            removed = true;
-    if (!removed) return;
+        if (w.find("Do nothing block with infinite loop") != std::string::npos) loop = true;
+    if (gBeforeReferenceHookForTests) gBeforeReferenceHookForTests();
     DecompileRequest ref = request;
     ref.allMemoryVolatile = true;
-    ref.registerCallees = false;   // the flow, which is what matters here, is the first pass's
     DecompileResult rr;
+    std::string notDone;
+    mQuietPhases = true;
     try
     {
-        DecompileInto(snapshot, ref, cancel, rr);
+        DecompileInto(snapshot, ref, cancel, rr, &seed);   // one pass, the shown pass's flow
     }
     catch (ghidra::CancelError&)
     {
-        throw;
+        // The shown output is finished; only this check was cut short (the budget, or a stop).
+        notDone = "cancelled";
     }
-    catch (...)
+    catch (ghidra::LowlevelError& e)
     {
-        return;   // no reference: nothing is said
+        notDone = e.explain;
     }
-    if (rr.status != DecompileStatus::Ok) return;
+    // Anything else -- an allocation failure, an unexpected exception -- is the engine's state in
+    // doubt: it leaves through Decompile's handlers, as from the shown run.
+    mQuietPhases = false;
+    if (notDone.empty() && rr.status != DecompileStatus::Ok) notDone = rr.error.empty() ? "no reference output" : rr.error;
+    const std::string cause = loop ? "the analysis removed the code around it as unreachable, after a loop it takes to run for "
+                                     "ever. A poll of memory another processor writes folds so unless that memory is marked volatile"
+                                   : "the analysis removed the code around it as unreachable, after a branch it takes always the "
+                                     "same way. A test of memory another processor writes is decided from this function's own "
+                                     "write unless that memory is marked volatile";
+    if (!notDone.empty())
+    {
+        r.warnings.push_back("code was removed as unreachable and could not be checked for hardware accesses (" + notDone +
+                             "): " + cause);
+        if (r.prototypeWithheld.empty()) r.prototypeWithheld = "code removed as unreachable was not checked for hardware accesses";
+        r.prototype.known = false;
+        return;
+    }
     std::vector<HardwareRange> marked;
     for (const auto& v : request.volatileMemory)
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) marked.push_back(h);
@@ -1704,21 +1811,19 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     bool any = false;
     for (const MemoryAccess& m : rr.accesses)
     {
-        if (m.direct ? (!InHardwareRange(m.address) && !isMarked(m.address)) : m.pointerFromOrdinaryMemory) continue;
+        if (!std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn)) continue;   // reached: folded, if anything
+        if (m.direct && !InHardwareRange(m.address) && !isMarked(m.address)) continue;             // ordinary memory
         bool shown = false;
         for (const MemoryAccess& x : r.accesses)
             if (x.insn == m.insn && x.write == m.write && x.size == m.size) shown = true;
         if (shown) continue;
-        std::string what = "through a pointer";
+        std::string what = " through a pointer";
         if (m.direct)
         {
             const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(m.address, m.size);
-            what = regs.empty() ? Hex8(m.address) : std::string(regs[0]->name);
+            what = " of " + (regs.empty() ? Hex8(m.address) : std::string(regs[0]->name));
         }
-        const std::string text = std::string("the ") + (m.write ? "write" : "read") + " of " + what +
-                                 " here is missing: the analysis removed the code around it as unreachable, after a loop it "
-                                 "takes to run for ever. A poll of memory another processor writes folds so unless that "
-                                 "memory is marked volatile";
+        const std::string text = std::string("the ") + (m.write ? "write" : "read") + what + " here is missing: " + cause;
         r.hardwareNotes.push_back(HardwareNote{ m.insn, text, true });
         r.warnings.push_back(Hex8(m.insn) + ": " + text);
         any = true;
@@ -1731,7 +1836,8 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
 }
 
 void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot,
-                                  const DecompileRequest& request, std::atomic<bool>* cancel, DecompileResult& r)
+                                  const DecompileRequest& request, std::atomic<bool>* cancel, DecompileResult& r,
+                                  const PassSeed* seedIn, PassSeed* seedOut)
 {
     std::string why;
     uint32_t entry = 0;
@@ -2043,10 +2149,23 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             return !snapshot->Read(a, b, 2, &why);
         };
         bool restartsExhausted = false, tableIncomplete = false;
+        std::vector<uint32_t> removedStarts;   // blocks the engine removed as unreachable, by their start
         for (auto it = arch->commentdb->beginComment(fad); it != arch->commentdb->endComment(fad); ++it)
         {
             const ghidra::Comment* c = *it;
             if ((c->getType() & (ghidra::Comment::warning | ghidra::Comment::warningheader)) == 0) continue;
+            {
+                // "Removing unreachable block (ram,0x06009012)": Funcdata::removeUnreachableBlocks,
+                // one per block, the address printed raw by the engine (lowercase hex). Not one
+                // from jump-table recovery's scratch copy ("WARNING (jumptable):"), whose partial
+                // flow is not this function's.
+                const std::string& raw = c->getText();
+                const size_t at = raw.compare(0, 20, "WARNING (jumptable):") == 0 ? std::string::npos
+                                                                                    : raw.find("Removing unreachable block (");
+                const size_t hex = at == std::string::npos ? at : raw.find("0x", at);
+                if (hex != std::string::npos)
+                    removedStarts.push_back(canonicalOf(static_cast<uint32_t>(std::strtoul(raw.c_str() + hex, nullptr, 16))));
+            }
             const EngineWarning cls = ClassifyEngineWarning(c->getText());
             if (!cls.keep) continue;
             std::string text = cls.text;
@@ -2208,7 +2327,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->print->setMarkup(false);
         std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>> printed;
         r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
-        r.accesses = Accesses(*fd, printed, canonicalOf, flow);
+        r.accesses = Accesses(*fd, printed, canonicalOf, flow, userVolatile);
+        r.removedInsns = RemovedInstructions(flow, removedStarts);
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
         const std::string e = errors.str();
@@ -2218,18 +2338,24 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 
     CalleeAliases callees;
     std::string printed;
-    if (request.registerCallees)
+    // The callees reported are the printed pass's own: the first pass can take a jump for a call
+    // that the second, with the literals folded, follows as a goto.
+    CalleeAliases first;
+    if (seedIn)
     {
-        // The callees reported are the printed pass's own: the first pass can take a jump for a call
-        // that the second, with the literals folded, follows as a goto.
-        CalleeAliases first;
+        knownLiterals = seedIn->literals;
+        first = seedIn->callees;
+    }
+    else if (request.registerCallees)
+    {
         runPass(CalleeAliases(), false, &first);
-        printed = runPass(first, true, &callees);
     }
-    else
+    if (seedOut)
     {
-        printed = runPass(CalleeAliases(), true, &callees);
+        seedOut->literals = knownLiterals;
+        seedOut->callees = first;
     }
+    printed = runPass(first, true, &callees);
     if (printed.empty())
     {
         r.status = DecompileStatus::NoCode;

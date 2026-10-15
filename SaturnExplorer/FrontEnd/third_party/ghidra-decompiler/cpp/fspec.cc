@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch).
  */
 #include "fspec.hh"
 #include "funcdata.hh"
@@ -3135,9 +3137,9 @@ ParameterSymbol *ProtoStoreSymbol::getSymbolBacked(int4 i)
   ParameterSymbol *res = dynamic_cast<ParameterSymbol *>(inparam[i]);
   if (res != (ParameterSymbol *)0)
     return res;
+  res = new ParameterSymbol();	// SaturnExplorer: before the delete
   if (inparam[i] != (ProtoParameter *)0)
     delete inparam[i];
-  res = new ParameterSymbol();
   inparam[i] = res;
   return res;
 }
@@ -3253,9 +3255,12 @@ ProtoParameter *ProtoStoreSymbol::getInput(int4 i)
 ProtoParameter *ProtoStoreSymbol::setOutput(const ParameterPieces &piece)
 
 {
+  // SaturnExplorer: the replacement is made before the old parameter goes. If its allocation
+  // throws, the old pointer stays valid and the destructor frees it once, not twice.
+  ProtoParameter *res = new ParameterBasic("",piece.addr,piece.type,piece.flags);
   if (outparam != (ProtoParameter *)0)
     delete outparam;
-  outparam = new ParameterBasic("",piece.addr,piece.type,piece.flags);
+  outparam = res;
   return outparam;
 }
 
@@ -3328,9 +3333,10 @@ ProtoParameter *ProtoStoreInternal::setInput(int4 i,const string &nm,const Param
 {
   while(inparam.size() <= i)
     inparam.push_back((ProtoParameter *)0);
+  ProtoParameter *res = new ParameterBasic(nm,pieces.addr,pieces.type,pieces.flags);	// SaturnExplorer: before the delete
   if (inparam[i] != (ProtoParameter *)0)
     delete inparam[i];
-  inparam[i] = new ParameterBasic(nm,pieces.addr,pieces.type,pieces.flags);
+  inparam[i] = res;
   return inparam[i];
 }
 
@@ -3377,18 +3383,20 @@ ProtoParameter *ProtoStoreInternal::getInput(int4 i)
 ProtoParameter *ProtoStoreInternal::setOutput(const ParameterPieces &piece)
 
 {
+  ProtoParameter *res = new ParameterBasic("",piece.addr,piece.type,piece.flags);	// SaturnExplorer: before the delete
   if (outparam != (ProtoParameter *)0)
     delete outparam;
-  outparam = new ParameterBasic("",piece.addr,piece.type,piece.flags);
+  outparam = res;
   return outparam;
 }
 
 void ProtoStoreInternal::clearOutput(void)
 
 {
+  ProtoParameter *res = new ParameterBasic(voidtype);	// SaturnExplorer: before the delete
   if (outparam != (ProtoParameter *)0)
     delete outparam;
-  outparam = new ParameterBasic(voidtype);
+  outparam = res;
 }
 
 ProtoParameter *ProtoStoreInternal::getOutput(void)

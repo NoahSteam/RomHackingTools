@@ -1094,3 +1094,96 @@ Matrix, rerun whole:
 
 Unverified: switch selectors loaded from memory beyond the fixtures here; MSVC and macOS builds;
 LeakSanitizer; the string and pointer-inference positive controls.
+
+### Review of `0c2dd20`: the reference run's exemptions, the lookup flag, and the reference run's own failures
+
+Two external reviews of `0c2dd20`, both probing the three questions the last round left open.
+Everything reproduced.
+
+- **P1: a selector read from memory went with a switch whose cases all coincide.** `switch
+  (*p)` with every case at one destination is removed by `RuleSwitchSingle`; the read `*p` went
+  with it, and its pointer parameter too, with the signature known: `return 0;` for a function that
+  reads memory. Patch 0014's `foldInNormalization` flagged every LOAD on the model's paths
+  (`PathMeld`), and those paths reach above the switch variable to the read that produced it, so
+  the selector carried the table lookup's flag and nothing held it. Patch 0015: only the loads
+  between the switch variable and the jump are flagged, walked from the jump's address input back
+  to the switch variable through the model's own ops. The selector stays (`xVar1 = *param_1;`)
+  and is the argument; a switch with distinct cases still prints as one with its selector read
+  once. Fixture: four cases to one `rts`.
+- **P1: a pointer read from ordinary memory exempted an access from the removal check.** The
+  mailbox poll with the hardware pointer saved in work RAM first and read back after the poll
+  printed `do {} while (true);` with no caution and a known `void` signature: the removed write
+  was `pointerFromOrdinaryMemory`, which both the production check and the tests' oracle skipped,
+  wherever the access was. The exemption was for a pointer that folds in the ordinary run (the
+  function stored it; the access becomes a direct one to ordinary memory, which may be dropped as
+  overwritten); a pointer's origin says nothing about whether the code around the access was
+  removed. The removal is now known: the printed pass records the blocks the engine's warnings
+  name (`Removing unreachable block (ram,0x...)`, one per block as it was) and, from the flow's
+  own block graph, every block only reachable through them, as `DecompileResult::removedInsns`.
+  In code so removed, every access that is a register, user-marked memory or through a pointer is
+  said, whatever the pointer came from; the fold exemption applies only to code the analysis
+  reached. The tests' oracle (`ReferenceOk`, `TestGameCode`) draws the same line, and demands the
+  caution itself on the instruction (`SaidMissing`: a caution note at that address) rather than
+  any warning that prints the address -- the engine prints its own in lowercase, so an address of
+  digits alone matched either. `pointerFromOrdinaryMemory` also no longer counts a pointer read
+  from user-marked memory as ordinary (the mark keeps that read in an ordinary run too). A
+  pointer made of a register's address plus an index read from RAM keeps its access
+  (`(&VDP2_TVMD)[Ram26001000]`, probed).
+- **P1: an allocation failure while a prototype parameter is replaced freed it twice (upstream).**
+  `ProtoStoreSymbol::setOutput` deleted the old parameter and then allocated its replacement; when
+  the allocation threw, the freed pointer stayed in the store and its destructor freed it again.
+  The first allocation after the reference run's actions begin is exactly this one, so the
+  reviewers' injected failure died in a double free. Patch 0015 makes the replacement first in
+  `setOutput` (both stores), `setInput`, `clearOutput` and `getSymbolBacked`. Pinned by the
+  `reference` children below: the mutant dies with a segmentation fault.
+- **P2: the reference run swallowed failures and returned a result that claimed the check.** Its
+  `catch (...)` returned with the signature known; an allocation failure inside the engine did not
+  mark it damaged, unlike the same failure in the shown run. Now: an allocation failure or any
+  unexpected exception leaves through `Decompile`'s handlers like the shown run's (Failed, later
+  requests refused); an engine error, a status other than Ok, or a cancel (a stop, or the time
+  budget -- the shown output is finished, so the result stands) adds a warning that the removed
+  code could not be checked, with the reason, and withholds the signature (`code removed as
+  unreachable was not checked for hardware accesses`). The reference run also no longer reports
+  its phases to the observer (the panel's progress restarted); two test seams see them
+  (`SetPhaseHookForTests`, `SetBeforeReferenceHookForTests`).
+- **P2: the production reference run missed what a literal-bounded switch holds.** It ran one
+  pass with no callees registered, so a switch bound that only the second pass folds (a `mov.w
+  @(disp,pc)` literal, marked read-only before flow from the first pass's findings) stayed
+  unbounded, the table was not recovered, and the three `SMPC_SF` writes in its cases were never
+  reached: the caution named only the selector read. The reference run now follows the flow with
+  the literals and callees the shown pass followed its with (`PassSeed`: what the first pass
+  found, handed to the printed pass), in one pass, so both runs have the same flow. Fixture: the
+  poll, then the switch; the three writes and the selector read are said.
+- **P3: the caution claimed a loop that was not there.** A test of the mailbox taken always one
+  way, with no loop, removes the other way; the caution said `after a loop it takes to run for
+  ever`. It now says a branch (`after a branch it takes always the same way. A test of memory
+  another processor writes is decided from this function's own write unless that memory is marked
+  volatile`) unless the engine's do-nothing-loop warning is there. And `the write of through a
+  pointer` reads `the write through a pointer`.
+- **P3s in the tests.** `ReferenceOk` returned true when the reference run was not Ok; it fails
+  now, and `TestGameCode` requires every function to have a reference.
+
+Mutation, each rebuilt and run: without patch 0015's flag change the same-destination fixture
+fails (ledger and text); without its allocation order the `reference +0` child dies in a
+segmentation fault (`rc == 0` fails); with the old pointer exemption the saved-pointer fixture
+fails (`SaidMissing` and the withheld signature); with the reference run back to one unseeded pass
+the literal-bounded switch fixture fails (the three writes not said); with the loop wording
+forced the branch fixture fails; with the observer told of the reference run's phases the
+observer fixture fails (3 passes seen, not 2); with a cancel in the reference run rethrown the
+cancel fixture fails (Cancelled, not Ok); with the reference run's `catch (...)` restored the three
+`reference` children fail (Ok with the signature known, not Failed).
+
+Matrix, rerun whole:
+
+| Check | Result |
+|---|---|
+| Fixtures (`Sh2DecompilerTests`, 4 new fixtures with 7 runs, the observer and cancel checks, 3 allocation-failure children) and the whole suite | 91 of 91 tests pass (`ctest`, 122 s). |
+| Range model | 0 disagreements. |
+| Game code, two save states (839 and 1,554 prologues), each function also decompiled as the reference | 839/839 and 1,554/1,554 decompile; 0 of every ledger count, 0 functions without a reference; 16 and 20 accesses missing and said, as before (the same 4 folded polls). 0 outputs differ from `0c2dd20` on either image: the selector fix and the removal rule change no game output, and the game's removals are all loops. |
+| Against `c4927c1` on the same images | 225 of 839 and 480 of 1,554 outputs differ, as last round. Time, both builds run back to back on an otherwise idle machine: 4,970 -> 5,242 ms and 18,005 -> 19,649 ms (about +5% and +9%); the worst function 3.6 s either way. The production reference run is now one pass seeded with the shown pass's flow, so the 4 functions that pay for it pay for one pass, not two. |
+| Sanitizers | gcc ASan + UBSan (vptr included) builds of `Sh2DecompilerTests` (its allocation-failure children and the game code on both images with their reference runs included), `DecompilerPanelTests`, `DecompilerRunnerTests`, `Sh2DecompilerEngineTests` and `Sh2DecompilerFixtureTests`: no ASan error; UBSan reports only the two upstream SLEIGH shift sites (`address.hh:605`, `slghpatexpress.cc:979`), as before. Before patch 0015 the `reference +0` child died in the double free the reviewers found. |
+
+Unverified: switch selectors loaded from memory beyond the fixtures here (every case the same,
+distinct cases, the guard shapes of the last round); a second-stage (`JumpBasic2`) recovery is not
+reached by any SH-2 fixture, so its flagging is covered only by the shared walk; MSVC and macOS
+builds; LeakSanitizer; the string and pointer-inference positive controls.

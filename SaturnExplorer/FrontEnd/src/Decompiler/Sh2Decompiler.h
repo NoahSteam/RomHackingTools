@@ -225,10 +225,13 @@ struct MemoryAccess
     int origBlock = -1;
     uint32_t origOrder = 0;
     bool inSwitchBlock = false;   // the final block ends in the jump of a switch
-    // Through a pointer whose value comes from a read of ordinary memory at a constant address. In
-    // the reference run (DecompileRequest::allMemoryVolatile) that read stays a read, so the
-    // access stays through a pointer; an ordinary run may know the memory's value (the function
-    // stored it) and fold the access into a variable, which the ledger does not list.
+    // Through a pointer whose value comes from a read of ordinary memory at a constant address
+    // (not a register, not memory the request marks volatile). In the reference run
+    // (DecompileRequest::allMemoryVolatile) that read stays a read, so the access stays through a
+    // pointer; an ordinary run may know the memory's value (the function stored it) and fold the
+    // access into a variable, which the ledger does not list -- when the code is reached at all.
+    // An access in code the ordinary run removed as unreachable (DecompileResult::removedInsns) is
+    // missing for that reason, whatever the pointer came from (review of 0c2dd20).
     bool pointerFromOrdinaryMemory = false;
 };
 
@@ -283,6 +286,11 @@ struct DecompileResult
     std::vector<Line> lines;
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
+    // The instructions (canonical, sorted) in the flow's blocks that the analysis removed as
+    // unreachable: those its warnings name, and the ones only reachable through them. Code that
+    // was reached but folded away is not here. What the reference run lists at these instructions
+    // is missing from the output because it was removed, whatever its pointer came from.
+    std::vector<uint32_t> removedInsns;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the
@@ -325,6 +333,8 @@ struct DecompileResult
     std::string Text() const;      // the lines joined with '\n'
 };
 
+struct PassSeed;   // what a printed pass followed its flow with: the reference run follows the same
+
 class Sh2Decompiler
 {
 public:
@@ -352,17 +362,26 @@ public:
     // that path -- flow ending at the call, ReturnCheck ending the path there -- is exercised.
     // Process-wide; set it before Decompile and clear it after.
     static void SetNoReturnForTests(const std::set<uint32_t>& entries);
+    // Tests only: called as each phase begins, in every pass, including the reference run's (which
+    // the observer is not told of); and just before the reference run starts. Process-wide.
+    static void SetPhaseHookForTests(std::function<void(DecompilePhase)> hook);
+    static void SetBeforeReferenceHookForTests(std::function<void()> hook);
 
 private:
     void NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
-                             std::atomic<bool>* cancel, DecompileResult& r);
+                             std::atomic<bool>* cancel, DecompileResult& r, const PassSeed& seed);
+    // 'seedIn' makes the printed pass follow its flow with another pass's literals and callees (one
+    // pass, the same flow); 'seedOut' receives the printed pass's own.
     void DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
-                       std::atomic<bool>* cancel, DecompileResult& r);
+                       std::atomic<bool>* cancel, DecompileResult& r, const PassSeed* seedIn = nullptr,
+                       PassSeed* seedOut = nullptr);
     void Enter(DecompilePhase phase);
 
     std::string mConfigDir;
     std::function<void(DecompilePhase)> mObserver;
     DecompilePhase mWorkPhase = DecompilePhase::Idle;   // the last phase that does work
+    // The reference run's phases are not the request's progress: the observer is not told of them.
+    bool mQuietPhases = false;
 };
 
 }  // namespace decomp

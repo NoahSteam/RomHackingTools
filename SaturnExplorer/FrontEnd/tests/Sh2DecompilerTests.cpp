@@ -437,6 +437,16 @@ bool WarnsAbout(const DecompileResult& r, const char* what)
     return false;
 }
 
+// The output says, on this instruction, that its access is missing because the code around it was
+// removed as unreachable: the caution itself, not any warning that happens to print the address
+// (the engine prints its own in lowercase, and an address of digits alone matches either).
+bool SaidMissing(const DecompileResult& r, uint32_t insn)
+{
+    for (const HardwareNote& n : r.hardwareNotes)
+        if (n.address == insn && n.caution && Has(n.text, "here is missing")) return true;
+    return false;
+}
+
 // The access ledger (consolidated review): the memory operations the SH-2 code makes, written
 // from the instructions, compared with DecompileResult::accesses in instruction order -- kind,
 // address (0: through a pointer), width, whether it is in a loop, whether it is the value
@@ -545,8 +555,8 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     const DecompileResult rr = d.Decompile(snap, ref);
     if (rr.status != DecompileStatus::Ok)
     {
-        std::printf("  reference run: status %d (not compared)\n", int(rr.status));
-        return true;
+        std::printf("  reference run: status %d (%s): nothing to compare with\n", int(rr.status), rr.error.c_str());
+        return false;
     }
     std::vector<HardwareRange> user;
     for (const auto& v : q.volatileMemory)
@@ -559,17 +569,22 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     bool ok = true;
     for (const MemoryAccess& m : rr.accesses)
     {
-        // Ordinary memory at a constant address, and a pointer read from such memory, may fold.
-        if (m.direct ? (!InHardwareRange(m.address) && !marked(m.address)) : m.pointerFromOrdinaryMemory) continue;
+        // Ordinary memory at a constant address may fold, and is no loss when its code is removed.
+        if (m.direct && !InHardwareRange(m.address) && !marked(m.address)) continue;
+        // An access the output's analysis reached but did not list, through a pointer read from
+        // ordinary memory: the pointer folded (to a constant the output shows direct, or to
+        // ordinary memory it dropped). One in code that analysis removed as unreachable is missing
+        // for that reason, whatever its pointer came from, and must be said.
+        const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn);
+        if (!removed && m.pointerFromOrdinaryMemory) continue;
         bool found = false;
         for (const MemoryAccess& x : r.accesses)
             if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
         if (found) continue;
-        char at[12];
-        std::snprintf(at, sizeof at, "%08X", m.insn);
-        if (WarnsAbout(r, at)) continue;   // missing, and the output says so (code removed as unreachable)
-        std::printf("  reference: the %s of %u bytes at %s (%s%08X) has no access in the output\n", m.write ? "write" : "read",
-                    unsigned(m.size), at, m.direct ? "" : "through a pointer; ", m.address);
+        if (removed && SaidMissing(r, m.insn)) continue;
+        std::printf("  reference: the %s of %u bytes at %08X (%s%08X) has no access in the output%s\n", m.write ? "write" : "read",
+                    unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address,
+                    removed ? ", and its removal is not said" : "");
         ok = false;
     }
     return ok;
@@ -824,6 +839,68 @@ void TestHardwareVolatility()
                                                       0xE100,     // mov #0,r1
                                                       0x2212,     // mov.l r1,@r2       global = 0: the first store is dead
                                                       0x000B, 0x0009, 0x0009 }, 0x10, 0x26001000u };
+    // Review of 0c2dd20. A switch whose cases all coincide is removed as a switch with one
+    // destination; its selector, read from memory, must stay (the lookup flag landed on it).
+    const Fixture switchSameDest = { 0x0600A500u, { 0x6442,     // mov.l @r4,r4   the selector
+                                                    0xE102,     // mov #2,r1
+                                                    0x3416,     // cmp/hi r1,r4
+                                                    0x8B01,     // bf in_range
+                                                    0xE403,     // mov #3,r4      clamp
+                                                    0x0009,
+                                                    0xC702,     // in_range: mova table,r0
+                                                    0x4408,     // shll2 r4
+                                                    0x014E,     // mov.l @(r0,r4),r1
+                                                    0x412B,     // jmp @r1
+                                                    0x0009, 0x0009,
+                                                    0x0600, 0xA528, 0x0600, 0xA528, 0x0600, 0xA528, 0x0600, 0xA528,   // the table
+                                                    0x000B, 0xE000 },   // done: rts; mov #0,r0
+                                     0x2C, 0 };
+    // The mailbox poll, with the hardware pointer saved in work RAM first and read back after the
+    // poll: the write through it is in the removed code, and its pointer's origin must not exempt it.
+    const Fixture ptrSavedInRam = { 0x0600A540u, { 0xD106,     // mov.l @(24,pc),r1   -> 0x26002000, ordinary RAM
+                                                   0xD207,     // mov.l @(28,pc),r2   -> SMPC_SF
+                                                   0xD307,     // mov.l @(28,pc),r3   -> 0x26001000, the mailbox
+                                                   0x2122,     // mov.l r2,@r1        saved = &SMPC_SF
+                                                   0xE001,     // mov #1,r0
+                                                   0x2302,     // mov.l r0,@r3        mailbox = 1
+                                                   0x6032,     // poll: mov.l @r3,r0
+                                                   0x2008,     // tst r0,r0
+                                                   0x8BFC,     // bf poll
+                                                   0x6212,     // mov.l @r1,r2        the pointer, read back
+                                                   0x2200,     // mov.b r0,@r2        SMPC_SF = 0: removed
+                                                   0x000B, 0x0009, 0x0009,
+                                                   0x2600, 0x2000, 0x2010, 0x0063, 0x2600, 0x1000 },
+                                    0x28, 0 };
+    // The poll, then a switch bounded by a literal (mov.w @(disp,pc)) with three cases writing
+    // SMPC_SF: the bound folds only in a second pass, so the reference run must run both.
+    const Fixture litSwitchAfterPoll = { 0x0600A600u, { 0xD114,     // mov.l @(80,pc),r1   -> the mailbox
+                                                        0xE001, 0x2102,             // mailbox = 1
+                                                        0x6012, 0x2008, 0x8BFC,     // poll
+                                                        0xE300,                     // mov #0,r3
+                                                        0x6442,                     // mov.l @r4,r4   the selector
+                                                        0x911C,                     // mov.w @(56,pc),r1   the bound, 2
+                                                        0x3416, 0x8905,             // cmp/hi r1,r4; bt default
+                                                        0xC704, 0x4408, 0x014E, 0x412B, 0x0009,   // the jump
+                                                        0x0009,
+                                                        0x000B, 0x0009, 0x0009,     // default: rts
+                                                        0x0600, 0xA634, 0x0600, 0xA63C, 0x0600, 0xA644,   // the table
+                                                        0xD206, 0x2230, 0x000B, 0x0009,   // case 0: SMPC_SF = 0
+                                                        0xD204, 0x2230, 0x000B, 0x0009,   // case 1
+                                                        0xD202, 0x2230, 0x000B, 0x0009,   // case 2
+                                                        0x0002, 0x0000,                   // the bound
+                                                        0x2010, 0x0063, 0x2600, 0x1000 },
+                                         0x58, 0 };
+    // A test of the mailbox taken always one way, with no loop: the caution must not claim one.
+    const Fixture forwardFold = { 0x0600A680u, { 0xD105,     // mov.l @(20,pc),r1   -> the mailbox
+                                                 0xE001, 0x2102,     // mailbox = 1
+                                                 0x6012, 0x2008,     // tst mailbox
+                                                 0x8B02,             // bf skip
+                                                 0xD203,             // mov.l @(12,pc),r2   -> SMPC_SF
+                                                 0xE300, 0x2230,     // SMPC_SF = 0: removed
+                                                 0x000B, 0x0009,     // skip: rts
+                                                 0x0009,
+                                                 0x2600, 0x1000, 0x2010, 0x0063 },
+                                  0x20, 0 };
     // Two correct outputs the earlier ledger rejected (review of 0e3cd12). A branch on a constant
     // always goes to B, which then runs A: the engine joins entry, B and A into one block, so B's
     // read (made later in the flow, at a higher address) is rightly before A's. And a for loop whose
@@ -1022,7 +1099,8 @@ void TestHardwareVolatility()
                               &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
                               &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
-                              &backSplice, &forCondBody, &mailboxFold, &storeOverwritten })
+                              &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &switchSameDest, &ptrSavedInRam,
+                              &litSwitchAfterPoll, &forwardFold })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1446,6 +1524,66 @@ void TestHardwareVolatility()
         CHECK(ReferenceOk(d, snap, q, r));
         CHECK(!WarnsAbout(r, "missing") && r.prototype.known);
     }
+    // The reference run is not the request's progress: the observer sees the two passes, not the
+    // reference's as well (one pass: it follows the flow with the shown pass's literals and callees).
+    {
+        int observed = 0, entered = 0;
+        d.SetPhaseObserver([&](DecompilePhase p) { if (p == DecompilePhase::Init) ++observed; });
+        Sh2Decompiler::SetPhaseHookForTests([&](DecompilePhase p) { if (p == DecompilePhase::Init) ++entered; });
+        r = d.Decompile(snap, Request(mailboxFold.base));
+        d.SetPhaseObserver(nullptr);
+        Sh2Decompiler::SetPhaseHookForTests(nullptr);
+        std::printf("  mailbox poll: the observer saw %d passes begin, the engine began %d\n", observed, entered);
+        CHECK(observed == 2 && entered == 3);
+    }
+    // The reference run cut short (the budget, a stop): the finished output stands, the removal is
+    // said without its contents, and the signature is withheld.
+    {
+        std::atomic<bool> cancel(false);
+        Sh2Decompiler::SetBeforeReferenceHookForTests([&] { cancel = true; });
+        r = d.Decompile(snap, Request(mailboxFold.base), &cancel);
+        Sh2Decompiler::SetBeforeReferenceHookForTests(nullptr);
+        Print("mailbox poll, the reference run cancelled", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(WarnsAbout(r, "could not be checked for hardware accesses (cancelled)"));
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "not checked"));
+        CHECK(!HasNote(r, "here is missing"));
+    }
+    // The pointer saved in RAM: the write through it is in the removed code, so it is said.
+    r = run("mailbox poll, the hardware pointer saved in RAM", ptrSavedInRam);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidMissing(r, 0x0600A554u) && HasNote(r, "the write through a pointer here is missing") && !Has(r.Text(), "of through"));
+    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
+    {
+        DecompileRequest q = Request(ptrSavedInRam.base);
+        q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
+        r = d.Decompile(snap, q);
+        Print("...on marked RAM", r);
+        CHECK(Ledger(r, { Wr(0x26001000u, 4), Rd(0x26001000u, 4, true), Wr(0x20100063u, 1) }));
+        CHECK(ReferenceOk(d, snap, q, r));
+        CHECK(!WarnsAbout(r, "missing") && r.prototype.known && Has(r.Text(), "SMPC_SF = 0;"));
+    }
+    // The switch after the poll: its bound is a literal the second pass folds, and its cases are
+    // the removed code. The reference run must see them to say what they hold.
+    r = run("mailbox poll, then a literal-bounded switch writing SMPC_SF", litSwitchAfterPoll);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidMissing(r, 0x0600A636u) && SaidMissing(r, 0x0600A63Eu) && SaidMissing(r, 0x0600A646u) && SaidMissing(r, 0x0600A60Eu));
+    CHECK(HasNote(r, "the write of SMPC_SF here is missing") && !r.prototype.known);
+    {
+        DecompileRequest q = Request(litSwitchAfterPoll.base);
+        q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
+        r = d.Decompile(snap, q);
+        Print("...on marked RAM", r);
+        CHECK(Ledger(r, { Wr(0x26001000u, 4), Rd(0x26001000u, 4, true), Rd(0, 4), Wr(0x20100063u, 1), Wr(0x20100063u, 1),
+                          Wr(0x20100063u, 1) }));
+        CHECK(ReferenceOk(d, snap, q, r));
+        CHECK(Has(r.Text(), "switch(*param_1)") && !WarnsAbout(r, "missing"));
+    }
+    // No loop: the caution says a branch, not a loop.
+    r = run("a test of the mailbox taken always one way", forwardFold);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidMissing(r, 0x0600A690u) && HasNote(r, "after a branch it takes always the same way") && !HasNote(r, "for ever"));
+    CHECK(!r.prototype.known);
 
     // Correct outputs the ledger must accept: the joined blocks in the code's order, and the for loop.
     r = run("a branch on a constant, the blocks joined in flow order", backSplice);
@@ -1474,6 +1612,10 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) }));
     CHECK(Has(r.Text(), "if (*param_1 < 4)") && !Has(r.Text(), "switch"));
     CHECK(!r.prototype.known);
+    // Every case the same: the switch goes, its selector read stays, and is the argument.
+    r = run("switch: every case the same destination", switchSameDest);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(Has(r.Text(), "= *param_1;") && Has(r.Text(), "*param_1)") && !Has(r.Text(), "switch"));
 
     r = run("one read tested on two paths", twoPaths);
     CHECK(Ledger(r, { Rd(0x25F80004u, 2) }));
@@ -1882,17 +2024,18 @@ void TestGameCode()
             else
                 for (const MemoryAccess& m : rr.accesses)
                 {
-                    if (m.direct ? !InHardwareRange(m.address) : m.pointerFromOrdinaryMemory) continue;
+                    if (m.direct && !InHardwareRange(m.address)) continue;   // ordinary memory: folds, or goes with removed code
+                    const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn);
+                    if (!removed && m.pointerFromOrdinaryMemory) continue;   // reached: the pointer folded (as ReferenceOk)
                     bool found = false;
                     for (const MemoryAccess& x : r.accesses)
                         if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
                     if (found) continue;
-                    char at[12];
-                    std::snprintf(at, sizeof at, "%08X", m.insn);
-                    if (WarnsAbout(r, at)) ++droppedSaid;   // removed as unreachable, and the output says so
+                    if (removed && SaidMissing(r, m.insn)) ++droppedSaid;   // removed as unreachable, and the output says so
                     else if (++dropped <= 10)
-                        std::printf("  the %s of %u bytes at %s (%s%08X) has no access in %08X\n", m.write ? "write" : "read",
-                                    unsigned(m.size), at, m.direct ? "" : "through a pointer; ", m.address, entry);
+                        std::printf("  the %s of %u bytes at %08X (%s%08X) has no access in %08X%s\n", m.write ? "write" : "read",
+                                    unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address, entry,
+                                    removed ? " (removed, not said)" : "");
                 }
         }
         for (size_t i = 0; i < r.accesses.size(); ++i)
@@ -1952,6 +2095,7 @@ void TestGameCode()
     std::printf("  %d accesses dropped against the reference run, %d missing and said (code removed as unreachable); "
                 "%d functions without a reference\n", dropped, droppedSaid, noReference);
     CHECK(dropped == 0);
+    CHECK(noReference == 0);
     CHECK(folded == 0);
     CHECK(outOfOrder == 0);
     CHECK(shortCircuit == 0);
@@ -3173,6 +3317,59 @@ int ObserverOomChild(const std::string& scratch)
     std::_Exit(dts::Failures() ? 1 : 0);
 }
 
+// Out of memory inside the reference run (the one that checks code removed as unreachable for
+// hardware accesses): the same outcome as in the shown run -- Failed, and every later request
+// refused -- not a result that claims the check was made. The first allocation after the
+// reference run's actions begin is a parameter's replacement (ProtoStore::setOutput), which patch
+// 0015 makes before the old one is freed: before it, the old one was freed twice at teardown.
+int ReferenceOomChild(const std::string& scratch, long offset)
+{
+    dts::PrepareProcess();
+    gConfig = dts::Join(scratch, "config");
+    sfe::MakeDirectory(scratch);
+    sfe::MakeDirectory(gConfig);
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw(0x100000u);
+    const uint32_t base = 0x0600A480u;
+    const uint16_t code[] = { 0xD104, 0xE001, 0x2102, 0x6012, 0x2008, 0x8BFC, 0xD202, 0x2200, 0x000B, 0x0009,
+                              0x2600, 0x1000, 0x2010, 0x0063 };   // TestHardwareVolatility's mailboxFold
+    size_t off = base - 0x06000000u;
+    for (uint16_t w : code) { dts::Put16(hw, off, w); off += 2; }
+    auto snap = MakeSnapshot(hw);
+    DecompileRequest q = Request(base);
+    {
+        const DecompileResult warm = d.Decompile(snap, q);
+        CHECK(warm.status == DecompileStatus::Ok && HasNote(warm, "here is missing"));
+    }
+    bool inReference = false;
+    Sh2Decompiler::SetBeforeReferenceHookForTests([&] { inReference = true; });
+    Sh2Decompiler::SetPhaseHookForTests([&](DecompilePhase p) {
+        if (inReference && p == DecompilePhase::Actions && dts::FailAfter() < 0) dts::FailAfter() = offset;
+    });
+    DecompileResult r;
+    bool escaped = false;
+    try
+    {
+        r = d.Decompile(snap, q);
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    dts::FailAfter() = -1;
+    Sh2Decompiler::SetBeforeReferenceHookForTests(nullptr);
+    Sh2Decompiler::SetPhaseHookForTests(nullptr);
+    std::printf("  child (reference +%ld): allocation fails in the reference run's actions -> status %d (%s)\n", offset,
+                int(r.status), r.error.c_str());
+    CHECK(!escaped);
+    CHECK(r.status == DecompileStatus::Failed && Has(r.error, "out of memory"));
+    const DecompileResult after = d.Decompile(snap, q);
+    std::printf("  child: next request -> status %d (%s)\n", int(after.status), after.error.c_str());
+    CHECK(after.status == DecompileStatus::Unavailable);
+    std::fflush(stdout);
+    std::_Exit(dts::Failures() ? 1 : 0);
+}
+
 int EngineOomChild(const std::string& scratch, const std::string& where, long offset)
 {
     dts::PrepareProcess();
@@ -3254,9 +3451,10 @@ void TestEngineAllocationFailureInChild(const char* self, const std::string& scr
     }
     // Inside flow following, and each of the first allocations of building an Architecture (the
     // Architecture itself, then its two load images).
-    const char* where[] = { "flow", "construct", "construct", "construct", "construct", "reset", "reset", "observer" };
-    const long offset[] = { 10, 0, 1, 2, 3, 0, 1, 0 };
-    for (int i = 0; i < 8; ++i)
+    const char* where[] = { "flow", "construct", "construct", "construct", "construct", "reset", "reset", "observer",
+                            "reference", "reference", "reference" };
+    const long offset[] = { 10, 0, 1, 2, 3, 0, 1, 0, 0, 1, 50 };
+    for (int i = 0; i < 11; ++i)
     {
         std::string cmd = std::string("\"") + self + "\" --engine-oom " + where[i] + " " + std::to_string(offset[i]) +
                           " \"" + dts::Join(scratch, "oom") + "\"";
@@ -3277,6 +3475,7 @@ int main(int argc, char** argv)
         const std::string where = argv[2];
         if (where == "reset") return ResetOomChild(argv[4], std::atol(argv[3]));
         if (where == "observer") return ObserverOomChild(argv[4]);
+        if (where == "reference") return ReferenceOomChild(argv[4], std::atol(argv[3]));
         return EngineOomChild(argv[4], where, std::atol(argv[3]));
     }
     if (argc != 2)
