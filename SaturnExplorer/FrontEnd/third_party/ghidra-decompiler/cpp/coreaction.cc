@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
+ * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4190,8 +4191,21 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
     if (op->isDead()) continue;
     if (op->isJumptableLookup()) continue;	// SaturnExplorer: the switch stands for this read
     Varnode *vn = op->getOut();
+    if (data.getArch()->keepUnusedLoads) {
+      // SaturnExplorer: every load is held, whether or not its value is used at this pass. The
+      // uses a load has now can go later without a pass of this action to see the load unused:
+      // a rule folds the expression (xor r0,r0; cmp/eq r3,r3; an AND with 0) and RuleEarlyRemoval
+      // removes the load, which was not held because it was used; or the use is dead in this very
+      // pass and the load counts as consumed vacuously (neverConsumed). The read was made.
+      vn->setAutoLiveHold();
+      if (vn->getConsume() == 0) {	// unused, or used only by what is dead: nothing else keeps it
+	pushConsumed(~(uintb)0, vn, worklist);
+	res = true;
+      }
+      continue;
+    }
     if (vn->isConsumeVacuous()) continue;
-    if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {
+    if (op->getIn(1)->isEventualConstant(3, 1)) {
       pushConsumed(~(uintb)0, vn, worklist);
       vn->setAutoLiveHold();
       res = true;

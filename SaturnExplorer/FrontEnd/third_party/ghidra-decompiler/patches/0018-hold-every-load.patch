@@ -1,0 +1,84 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/condexe.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/condexe.cc
+index 67a01de..dc375d4 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/condexe.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/condexe.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a read of volatile memory is not removed with the block it is in (patches/0018-hold-every-load.patch).
+  */
+ #include "condexe.hh"
+ 
+@@ -377,6 +379,11 @@
+     if ((op->code()==CPUI_LOAD)||(op->code()==CPUI_STORE))
+       return false;
+     if (op->code()==CPUI_INDIRECT) return false;
++    // SaturnExplorer: a read of volatile memory is a memory access like a LOAD. RuleLoadVarnode makes
++    // it a COPY of the volatile Varnode, which ActionVarnodeProps replaces with a user op only on the
++    // next pass of the main loop, after this action: an unused one is not an op to remove.
++    for(int4 i=0;i<op->numInput();++i)
++      if (op->getIn(i)->isVolatile()) return false;
+ 
+     vn = op->getOut();
+     if (vn->isAddrTied()) return false;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+index 9970c1d..06e54e9 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
+  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
++ * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -4190,8 +4191,21 @@
+     if (op->isDead()) continue;
+     if (op->isJumptableLookup()) continue;	// SaturnExplorer: the switch stands for this read
+     Varnode *vn = op->getOut();
++    if (data.getArch()->keepUnusedLoads) {
++      // SaturnExplorer: every load is held, whether or not its value is used at this pass. The
++      // uses a load has now can go later without a pass of this action to see the load unused:
++      // a rule folds the expression (xor r0,r0; cmp/eq r3,r3; an AND with 0) and RuleEarlyRemoval
++      // removes the load, which was not held because it was used; or the use is dead in this very
++      // pass and the load counts as consumed vacuously (neverConsumed). The read was made.
++      vn->setAutoLiveHold();
++      if (vn->getConsume() == 0) {	// unused, or used only by what is dead: nothing else keeps it
++	pushConsumed(~(uintb)0, vn, worklist);
++	res = true;
++      }
++      continue;
++    }
+     if (vn->isConsumeVacuous()) continue;
+-    if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {
++    if (op->getIn(1)->isEventualConstant(3, 1)) {
+       pushConsumed(~(uintb)0, vn, worklist);
+       vn->setAutoLiveHold();
+       res = true;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+index a2345dc..d41cfaf 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a switch's guard is not folded over a load, and does not bound a second load (patches/0013-jumptable-loads.patch).
+  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: a failed assisted jump model is freed (patches/0016-jumpassisted-leak.patch).
++ * Modified for SaturnExplorer: a recovered switch's table lookup is not held with the other loads (patches/0018-hold-every-load.patch).
+  */
+ #include "jumptable.hh"
+ #include "emulate.hh"
+@@ -1648,8 +1649,10 @@
+ 	  if (seen[k] == def) break;
+ 	if (k < seen.size()) continue;
+ 	seen.push_back(def);
+-	if (def->code() == CPUI_LOAD)
++	if (def->code() == CPUI_LOAD) {
+ 	  def->setJumptableLookup();
++	  def->getOut()->clearAutoLiveHold();	// held with every load (patch 0018); the switch stands for this one
++	}
+ 	todo.push_back(def);
+       }
+     }

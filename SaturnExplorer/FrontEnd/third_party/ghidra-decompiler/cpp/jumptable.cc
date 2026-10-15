@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a switch's guard is not folded over a load, and does not bound a second load (patches/0013-jumptable-loads.patch).
  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: a failed assisted jump model is freed (patches/0016-jumpassisted-leak.patch).
+ * Modified for SaturnExplorer: a recovered switch's table lookup is not held with the other loads (patches/0018-hold-every-load.patch).
  */
 #include "jumptable.hh"
 #include "emulate.hh"
@@ -1648,8 +1649,10 @@ Varnode *JumpBasic::foldInNormalization(Funcdata *fd,PcodeOp *indop)
 	  if (seen[k] == def) break;
 	if (k < seen.size()) continue;
 	seen.push_back(def);
-	if (def->code() == CPUI_LOAD)
+	if (def->code() == CPUI_LOAD) {
 	  def->setJumptableLookup();
+	  def->getOut()->clearAutoLiveHold();	// held with every load (patch 0018); the switch stands for this one
+	}
 	todo.push_back(def);
       }
     }

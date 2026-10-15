@@ -45,6 +45,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0015-proto-param-replace-order.patch` | A prototype parameter's replacement is allocated before the old one is freed (an allocation failure there was a double free at teardown); and a switch's table-lookup flag (0014) goes only on the loads between the switch variable and the jump, not on a selector read from memory. |
 | `0016-jumpassisted-leak.patch` | A failed assisted jump model (tried when an indirect jump's address is a volatile read) is freed instead of leaked. |
 | `0017-access-fates.patch` | `Funcdata` records how each LOAD and STORE the flow made ended (folded into a variable of ordinary memory, removed as dead, removed with an unreachable block, or the read of a recovered switch's table), so the host's oracle can account for every memory access instead of excusing some by a heuristic. |
+| `0018-hold-every-load.patch` | Under `keepUnusedLoads`, `lastChanceLoad` holds every load, not only the ones unused when it runs: a load whose use a rule folds away later (`xor r0,r0`, `cmp/eq r3,r3`, an AND with 0) or whose only consumer is dead in the same pass was removed with its use, a register or marked read included. A recovered switch's table lookup is released from the hold. `ConditionalExecution` no longer removes an op that reads a volatile Varnode (a read in transit between its LOAD and its user op) with the block it is in. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -89,6 +90,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once, in order, unconditionally);
   - 0011: `Sh2DecompilerTests` under UBSan with vptr.
   - 0017: `TestHardwareVolatility` (every reference-run access of a fixture is printed, folded, or removed with said code) and `TestGameCode` (0 dropped).
+  - 0018: `TestHardwareVolatility` (the dead-read fixtures: a read whose value's only use folds or dies stays) and `TestGameCode` (no access ended dead that is not a direct access of ordinary memory); `SaturnExplorerSh2GeneratedTests`.
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
   If `LICENSE` or `NOTICE` changed, check that the About dialog's wording still holds.
