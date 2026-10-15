@@ -388,7 +388,12 @@ unsigned Expected(const Log& L, int s)
     {
         const bool prints = s + 1 < L.n && L.phase[s + 1] == DecompilePhase::Print;
         if (prints) return L.inRef[s] ? kOkRefCut : kCancelActions;
-        return kCancelActions | kCancelFlow;
+        // The first pass has no check-point after its action tree (Sh2Decompiler.cpp returns before
+        // checkCancel when the pass does not print), so a flag raised in the tail of it is carried
+        // into the second pass: its Init (uncheckable) and then its Flow. The comment at checkCancel
+        // says a cancel is "never carried into the next one's work"; A6-6 records that it is. It is
+        // not excused here.
+        return kCancelActions;
     }
     for (int j = s + 1; j < L.n; ++j)
         if (L.phase[j] == DecompilePhase::Flow) return L.inRef[j] ? kOkRefCut : kCancelFlow;
@@ -1541,6 +1546,7 @@ struct RunnerCtx
     DecompileRequest req;
     std::string baseSig;
     Log log;
+    double requestMs = 0;   // a warm request through the runner, wall clock: budgets are set against it
 };
 
 RunnerOptions Generous()
@@ -1589,7 +1595,8 @@ bool CheckNext(DecompilerRunner& runner, RunnerCtx& rc, const char* after)
     const bool got = WaitResult(runner, r);
     const bool ok = g != 0 && got && r.status == DecompileStatus::Ok && r.generation == g && Signature(r) == rc.baseSig;
     Expect(ok, "the next request after recovery is correct",
-           std::string(after) + ": gen " + std::to_string(g) + " got " + std::to_string(got) + " status " + std::to_string(int(r.status)));
+           std::string(after) + ": gen " + std::to_string(g) + " got " + std::to_string(got) + " status " + std::to_string(int(r.status)) +
+               (got && r.status == DecompileStatus::Ok ? "; " + FirstDiff(rc.baseSig, Signature(r)) : std::string()));
     return ok;
 }
 
@@ -1610,9 +1617,12 @@ bool RunnerBaseline(DecompilerRunner& runner, RunnerCtx& rc)
     for (int i = 0; i < 2; ++i)
     {
         gGate.Arm(-1);
+        const auto tb = Clock::now();
         runner.Submit(0, rc.snap, rc.req);
         DecompileResult r;
-        if (!WaitResult(runner, r) || r.status != DecompileStatus::Ok)
+        const bool done = WaitResult(runner, r);
+        rc.requestMs = MsSince(tb);
+        if (!done || r.status != DecompileStatus::Ok)
         {
             std::printf("the baseline request of '%s' did not complete Ok\n", rc.fix->name);
             return false;
@@ -1649,7 +1659,7 @@ void CheckOutcome(const DecompileResult& r, const RunnerCtx& rc, long e, const c
 bool HoldAt(DecompilerRunner& runner, RunnerCtx& rc, long e, int slot, uint64_t& gen)
 {
     gGate.Arm(e);
-    gen = runner.Submit(slot, rc.snap, rc.req);
+    gen = runner.Submit(slot, rc.snap, rc.req, true);   // retryTooLarge: a memo from an earlier expiry must not answer instead of the worker
     const bool held = gGate.WaitHolding(60.0);
     Expect(held && gen != 0, "the worker reaches the phase entry", "entry " + std::to_string(e));
     return held && gen != 0;
@@ -1760,8 +1770,9 @@ void ScenarioDestroy(const std::string& config, RunnerCtx& rc, long e)
 void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
 {
     RunnerOptions o;
-    o.budgetSeconds = 0.05;
+    o.budgetSeconds = std::max(0.05, 6.0 * rc.requestMs / 1000.0);   // a request that is merely slow must not expire it
     o.cancelAckSeconds = 600;
+    const double spinMs = o.budgetSeconds * 1000.0 + 150.0;   // held for longer than the budget
     DecompilerRunner runner(config, o);
     gGate.Arm(-1);
     // The budget runs from the start of the request, a cold translator build included: warm the
@@ -1770,7 +1781,7 @@ void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
     if (!HoldAt(runner, rc, e, 0, g)) return;
     const auto t0 = Clock::now();
     DecompileResult r;
-    while (MsSince(t0) < 200.0) runner.Poll(r);   // Poll enforces the budget: 50 ms in, the cancel goes up
+    while (MsSince(t0) < spinMs) runner.Poll(r);   // Poll enforces the budget: the cancel goes up when it is spent
     gGate.Release();
     const auto got = DrainUntilIdle(runner);
     Expect(got.size() == 1 && got[0].generation == g, "Budget: exactly the request's result comes back",
@@ -1834,7 +1845,7 @@ void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
     if (HoldAt(runner, rc, e, 0, g2))
     {
         const auto t1 = Clock::now();
-        while (MsSince(t1) < 200.0) runner.Poll(r);
+        while (MsSince(t1) < spinMs) runner.Poll(r);
         runner.InvalidateSession();
         gGate.Release();
         const auto late = DrainUntilIdle(runner);
@@ -1856,7 +1867,7 @@ void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
 void ScenarioDisable(const std::string& config, RunnerCtx& rc, long e, bool invalidateFirst)
 {
     RunnerOptions o;
-    o.budgetSeconds = 0.05;
+    o.budgetSeconds = std::max(0.05, 6.0 * rc.requestMs / 1000.0);
     o.cancelAckSeconds = 0.15;
     DecompilerRunner runner(config, o);
     uint64_t g = 0;
