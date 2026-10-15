@@ -512,7 +512,11 @@ struct Stats
 enum class OpKind
 {
     Edit, Scrub, Resume, Refresh, Reconnect, Replace, Bios, Volatile, Rename, Bound, Select, Stop, Cpu,
-    Run, Pause, Advance, Hide, Show, Hold, Wait, Finish, Starve
+    Run, Pause, Advance, Hide, Show, Hold, Wait, Finish, Starve,
+    // Script only (never generated, so the seeds' sequences are unchanged): Refresh, hold the engine
+    // on it, Stop, and keep it held past the runner's (short, in a 'wedge' program) cancel deadline,
+    // so the runner disables decompilation for the session. The engine stays held until 'wait'.
+    Wedge
 };
 
 struct Op
@@ -551,7 +555,10 @@ std::string Describe(const Op& o, const std::vector<int>& placed)
         std::snprintf(b, sizeof b, "name %s (%s) := '%s'", fnName(o.a), "entry", kNameOptions[o.b]);
         return b;
     case OpKind::Bound: std::snprintf(b, sizeof b, "toggle function start at %s%s", fnName(o.a), o.b ? "+4" : ""); return b;
-    case OpKind::Select: std::snprintf(b, sizeof b, "select %s", o.a < 0 ? "the BIOS function" : fnName(o.a)); return b;
+    case OpKind::Select:
+        std::snprintf(b, sizeof b, "select %s%s", o.a < 0 ? "the BIOS function" : fnName(o.a),
+                      o.text == "m" ? " through its 0x2xxxxxxx mirror" : "");
+        return b;
     case OpKind::Stop: return "Stop";
     case OpKind::Cpu: std::snprintf(b, sizeof b, "CPU %d", o.a); return b;
     case OpKind::Run: return "emulator runs";
@@ -563,6 +570,7 @@ std::string Describe(const Op& o, const std::vector<int>& placed)
     case OpKind::Wait: return "release the engine and wait for the results";
     case OpKind::Finish: return "let the engine finish, delivering nothing yet";
     case OpKind::Starve: return "Refresh, and stall the engine past the time budget";
+    case OpKind::Wedge: return "Refresh, Stop, and keep the engine from acknowledging past the cancel deadline (decompilation disabled)";
     }
     return "?";
 }
@@ -572,6 +580,7 @@ struct Program
     std::vector<int> placed;
     int game = 0;
     bool starve = false;   // a short time budget, and operations that exceed it
+    bool wedge = false;    // a short cancel deadline, and an operation that misses it (script only)
     std::vector<Op> ops;
 };
 
@@ -581,7 +590,7 @@ struct Program
 // Words: select <fn|X>, edit <fn> <site> <value>, starve, refresh, stop, scrub <0-2>, resume,
 // reconnect [1], replace <image> <0 dump|1 paused|2 running>, bios <0 none|1 A|2 B>, volatile <0-3>,
 // name <fn> <0-3>, bound <fn> <0|1>, cpu <0|1>, run, pause, advance, hide, show, hold, wait,
-// finish. <fn> is a letter of the world (A B P C D E Q); X is the BIOS function.
+// finish, wedge. <fn> is a letter of the world (A B P C D E Q); X is the BIOS function.
 bool ParseScript(const std::string& script, const std::string& world, int image, Program& out, std::string& error)
 {
     static const char* const letters = "ABPCDEQ";
@@ -618,6 +627,9 @@ bool ParseScript(const std::string& script, const std::string& world, int image,
         auto num = [&](size_t i, int& v) { if (i >= arg.size()) return false; v = std::atoi(arg[i].c_str()); return true; };
         bool ok = true;
         if (verb == "select") { o.kind = OpKind::Select; ok = arg.size() == 1 && pos(arg[0], o.a); }
+        // Script only: the entry typed through the cache-through mirror (0x2xxxxxxx), where mova and
+        // PC-relative values differ, so it is another question with its own lent prototypes.
+        else if (verb == "selectm") { o.kind = OpKind::Select; o.text = "m"; ok = arg.size() == 1 && pos(arg[0], o.a); }
         else if (verb == "edit") { o.kind = OpKind::Edit; ok = arg.size() == 3 && pos(arg[0], o.a) && num(1, o.b) && num(2, o.c); }
         else if (verb == "starve") { o.kind = OpKind::Starve; out.starve = true; }
         else if (verb == "refresh") o.kind = OpKind::Refresh;
@@ -639,6 +651,7 @@ bool ParseScript(const std::string& script, const std::string& world, int image,
         else if (verb == "hold") o.kind = OpKind::Hold;
         else if (verb == "wait") o.kind = OpKind::Wait;
         else if (verb == "finish") o.kind = OpKind::Finish;
+        else if (verb == "wedge") { o.kind = OpKind::Wedge; out.wedge = true; }
         else ok = false;
         if (!ok)
         {
@@ -899,6 +912,7 @@ struct Rig
     bool visible = true;
     bool closed = false;     // no source for a frame (CloseData)
     int selected = -2;       // index into placed, -1: the BIOS function, -2: nothing yet
+    bool mirrorSel = false;  // ...typed through the 0x2xxxxxxx mirror ('selectm')
     int cpu = 0;
     uint64_t counter = 1000;
 
@@ -929,7 +943,7 @@ struct Rig
     bool shownExcused = false;   // the shown "too large" result was excused when it was installed
 
     Rig(Oracle& o, const Program& p, uint64_t sd, bool verb)
-        : runner(gConfig, Options(p.starve)), h([this] { Ui(); }), oracle(o), prog(p), rng(sd * 77 + 5), verbose(verb), seed(sd)
+        : runner(gConfig, Options(p.starve, p.wedge)), h([this] { Ui(); }), oracle(o), prog(p), rng(sd * 77 + 5), verbose(verb), seed(sd)
     {
         ApplyTheme(ImGui::GetStyle());
         LoadFonts(ImGui::GetIO());
@@ -954,11 +968,12 @@ struct Rig
     // runs that stall a request on purpose (Starve), where it is the shortest that still leaves
     // an ordinary decompilation (milliseconds) two orders of magnitude of room.
     static const double kShortBudget;
-    static RunnerOptions Options(bool starve)
+    static const double kShortCancelAck;
+    static RunnerOptions Options(bool starve, bool wedge)
     {
         RunnerOptions o;
         o.budgetSeconds = starve ? kShortBudget : 120;
-        o.cancelAckSeconds = 60;
+        o.cancelAckSeconds = wedge ? kShortCancelAck : 60;
         return o;
     }
 
@@ -1038,9 +1053,10 @@ struct Rig
 
     uint32_t SelectedEntry() const
     {
-        if (selected == -1) return kBiosFn;
+        const uint32_t mirror = mirrorSel ? 0x20000000u : 0u;
+        if (selected == -1) return kBiosFn | mirror;
         if (selected < 0) return 0;
-        return Defs()[placed[static_cast<size_t>(selected)]].entry;
+        return Defs()[placed[static_cast<size_t>(selected)]].entry | mirror;
     }
 
     Sig SigOf(const Sig& snapshot) const
@@ -1349,11 +1365,14 @@ struct Rig
             // inside another function would move the entry (area 4's subject, not this one's).
             const int want = o.a < 0 ? -1 : static_cast<int>(static_cast<size_t>(o.a) % placed.size());
             const int before = selected;
+            const bool beforeMirror = mirrorSel;
             ImVec2 a, b;
             if (!visible || !panel.ItemRect("entry", a, b)) return "(panel hidden: no entry box)";
             selected = want;
+            mirrorSel = o.text == "m";
             const uint32_t entry = SelectedEntry();
             selected = before;   // until the Enter has been handled
+            mirrorSel = beforeMirror;
             const ImVec2 c = Centre(a, b);
             for (int i = 0; i < 3; ++i) Frame(c, false);
             Frame(c, true);
@@ -1367,6 +1386,7 @@ struct Rig
             ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true);
             Frame();                    // the box returns true in this frame's Draw: the target is set
             selected = want;            // ...and the next Update is the first to ask for it
+            mirrorSel = o.text == "m";
             explicitPending = true;
             // An explicit Enter asks the question again even after a Stop (A1-3): nothing excuses a
             // stale result from here on. (A Stop with the request still outstanding is replaced.)
@@ -1412,6 +1432,7 @@ struct Rig
             return runner.Busy() ? "(the engine did not finish)" : "";
         }
         case OpKind::Starve: return Starve();
+        case OpKind::Wedge: return Wedge();
         case OpKind::Hold:
         case OpKind::Wait:
             return "";
@@ -1452,6 +1473,38 @@ struct Rig
         memo.starved.push_back(SigOf(held));
         Wait();
         return "";
+    }
+
+    // Refresh the shown function, hold the engine on it, press Stop, and keep the engine from reaching
+    // a check-point until the runner's cancel deadline has passed: the runner disables decompilation
+    // for the session (DecompilerRunner: "a cancelled decompilation ... did not stop"). The engine
+    // stays held (as after 'hold') until 'wait' lets the stuck request end; a later session then
+    // decompiles again on the same worker.
+    std::string Wedge()
+    {
+        if (!prog.wedge) return "(no short cancel deadline in this run)";
+        if (holding || selected == -2 || !visible) return "(nothing to wedge)";
+        gate.Close();
+        holding = true;
+        if (!Click("refresh")) return "(no Refresh button)";
+        explicitPending = true;
+        haveStopped = false;
+        Idle(2);
+        const auto t0 = std::chrono::steady_clock::now();
+        while (runner.Busy() && gate.Held() == 0 && dts::MsSince(t0) < 30000.0) std::this_thread::yield();
+        if (gate.Held() == 0) return "(Refresh asked for nothing)";
+        stopped = SigOf(held);
+        stopCertain = true;
+        stoppedNamesGen = namesGeneration;
+        if (!Click("stop")) return "(no Stop button)";
+        haveStopped = true;
+        const auto t1 = std::chrono::steady_clock::now();
+        while (!runner.Disabled() && dts::MsSince(t1) < kShortCancelAck * 1000.0 + 5000.0)
+        {
+            Frame();   // the runner enforces the cancel deadline when polled
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return runner.Disabled() ? "" : "(the runner did not disable)";
     }
 
     // ---- checking --------------------------------------------------------------------------
@@ -1614,7 +1667,8 @@ struct Rig
         const DecompileResult* s = panel.Shown();
         if (!s)
         {
-            if (visible && now.valid) Fail("NOTHING SHOWN: a function is selected, the runner is idle, and the panel shows no result");
+            if (visible && now.valid && !runner.Disabled())
+                Fail("NOTHING SHOWN: a function is selected, the runner is idle, and the panel shows no result");
             return;
         }
         if (!haveShown)
@@ -1629,7 +1683,9 @@ struct Rig
         // By design a running emulator's held snapshot lags (frames and writes, not source or BIOS).
         const bool byDesignLag = !otherDiff && ViewNow().kind == DecompViewKind::LiveRunning && shown.source == now.source &&
                                  shown.BiosHash() == now.BiosHash();
-        const bool excused = haveStopped && SigOf(held).Same(stopped);   // the user stopped this very question
+        // The user stopped this very question; or decompilation is disabled for this session (a cancel
+        // that was not acknowledged, 'wedge'): nothing can be asked until a new session.
+        const bool excused = (haveStopped && SigOf(held).Same(stopped)) || runner.Disabled();
         std::string state = "\n  shown under " + DescribeSig(shown) + "\n  now          " + DescribeSig(now) +
                             "\n  model stale " + std::to_string(modelStale) + " (view " + std::to_string(viewDiff) +
                             ", other inputs " + std::to_string(otherDiff) + "), panel stale " + std::to_string(panelStale);
@@ -1767,6 +1823,7 @@ struct Rig
     // A callee-first walk through every function, then each shows exactly the from-scratch answer.
     void Converge()
     {
+        if (runner.Disabled()) return;   // a session disabled by 'wedge' answers nothing until it ends
         Op show;
         show.kind = OpKind::Show;
         Step(show, "final walk");
@@ -1804,6 +1861,7 @@ struct Rig
 };
 
 const double Rig::kShortBudget = 1.0;
+const double Rig::kShortCancelAck = 0.5;
 
 // ---- Seeds -------------------------------------------------------------------------------------
 
@@ -1869,6 +1927,18 @@ const Pinned kPinned[] = {
     { "A1-3", "hold; select A; stop; wait; select A", "C,A", 0 },
 };
 
+// The open findings of round 2 (REVIEW_LEDGER.md A1-4, A1-5), not in the default run while they
+// fail: SE_MODEL_OPEN=1 runs them alone. The fixer moves each into kPinned once it passes.
+const Pinned kOpen[] = {
+    // An answer discarded while the panel is closed; the view comes back to the question asked.
+    { "A1-4 (resume)", "hold; select A; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
+    { "A1-4 (scrub)", "scrub 1; hold; select A; hide; scrub 2; wait; scrub 1; show; wait", "C,A", 0 },
+    { "A1-4 (BIOS)", "hold; select A; hide; bios 1; wait; bios 0; show; wait", "C,A", 0 },
+    { "A1-4 (start)", "hold; select A; hide; bound C 1; wait; bound C 1; show; wait", "C,A", 0 },
+    // A question formed while the runner is disabled; the runner recovers in the new session.
+    { "A1-5", "select A; wedge; reconnect; wait", "C,A", 0 },
+};
+
 std::set<int> ParseList(const char* text)
 {
     std::set<int> out;
@@ -1921,6 +1991,25 @@ int main(int argc, char** argv)
     try
     {
         Oracle oracle;
+        if (std::getenv("SE_MODEL_OPEN"))
+        {
+            int open = 0;
+            for (const Pinned& pin : kOpen)
+            {
+                Program p;
+                std::string error;
+                if (!ParseScript(pin.script, pin.world, pin.image, p, error))
+                {
+                    std::printf("open %s: %s\n", pin.id, error.c_str());
+                    return 2;
+                }
+                const bool ok = RunProgram(oracle, p, 0, false, std::set<int>(), -1);
+                std::printf("open finding %s: %s (%s)\n", pin.id, ok ? "ok" : "FAILED", pin.script);
+                if (!ok) ++open;
+            }
+            dts::RemoveTree(scratch);
+            return open ? 1 : 0;
+        }
         if (const char* script = std::getenv("SE_MODEL_SCRIPT"))
         {
             const char* world = std::getenv("SE_MODEL_WORLD");

@@ -2708,3 +2708,94 @@ touches no spec).
   signature learned under another volatile list is not lent).
 - The corpus still has 39 and 77 functions withheld on "uses a register after calling": callers of helpers that change the register
   (or whose own signature is not lent).
+
+## Areas 1 and 8, round 2 review
+
+Branch `review/1-8-round2-review`, from master `f0684b9`. This round reviewed area 1 (the round 1 fix of the too-large memo,
+`f5958a2`), the oracle itself, and area 8's indicators (stale, unsupported, truncated, unimplemented, unavailable, too-large) along
+area 1's sequences. No production source was changed. Three ledger rows were added: **A1-4 (P3), A1-5 (P3) and A8-1 (P3)**. No P1 or
+P2 was found.
+
+**Record note for the coordinator.** The "Area 1, oracle" and "Area 1, round 1" sections are no longer in this file. Commit `b10bc98`
+("Area 6 round 1: record the merged-tree runs") replaced 741 lines from line 1914 onwards. Along with the area 1 sections, it removed
+"Areas 3 and 4, oracle: the generator's second grammar", "Area 5, round 2: fixes", "Area 6, oracle" and "Area 6, round 1". Their text
+is intact in `253f058:SaturnExplorer/Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md` and other commits before `b10bc98`. This
+round read them from `253f058`. They were not restored here, because this branch fixes nothing.
+
+### What changed in the model (test only)
+
+`DecompilerModelTests.cpp` gains three things. None of them is generated, so every seed produces the same sequence as before and the
+default run is unchanged.
+
+- **`wedge`**: Refresh, hold the engine on that request, press Stop, and keep the engine from reaching a check-point until a 0.5 s
+  cancel deadline has passed. The runner then disables decompilation for the session. The engine stays held until `wait`. While the
+  runner is disabled, `CheckIdle` excuses an idle, stale or empty panel, and the final walk is skipped.
+- **`selectm <fn>`**: types the entry through the 0x2xxxxxxx cache-through mirror.
+- **`kOpen`**: the fixtures of the open rows, run alone with `SE_MODEL_OPEN=1` (the exit code is 1 while any of them fails). The fixer
+  moves each one into `kPinned` once it passes.
+
+### Findings
+
+- **A1-4.** An answer discarded while the panel is closed leaves its question recorded in `mAsked`. When the view comes back to that
+  question before the panel is shown, `Update` sees it as already asked and submits nothing. The view can come back by a resume after a
+  scrub, by a scrub away and back to the same frame, by a BIOS image dropped and chosen again, or by a function start set and cleared.
+  The function the user chose never appears; the previous one stays on screen, stale, with nothing outstanding. Fixture:
+  `hold; select A; hide; scrub 1; wait; resume; show; wait`, world C,A.
+- **A1-5.** `Update` records the question in `mAsked` before it checks `runner.Disabled()`. When the runner re-enables in a new session
+  (the stuck request ends after the session changed: `RecoverLocked` on the worker), the panel never asks the new session's question.
+  Fixture: `select A; wedge; reconnect; wait`, world C,A. Two controls pass: the stuck request ending before the session change, and an
+  edit made while the session is still disabled.
+- **A8-1.** For every view except a running emulator, the stale badge's tooltip promises "its replacement is shown when it is ready",
+  whether or not anything is outstanding. After Stop, A1-4 and A1-5, nothing is outstanding. The panel exposes no stale reason that a
+  state model could check.
+
+### What held
+
+- **The round 1 fix.** `MakeRequestKey` digests every field of `DecompileRequest`: the entry as asked, names with their text, function
+  starts, each lent prototype with its whole signature and all five call-effect fields, `registerCallees`, `maxInstructions`, the volatile
+  list and `allMemoryVolatile`. It also digests the snapshot key, which covers source, derive serial, frame and region set; the region
+  set includes the BIOS content hash.
+  - A run of the same key that ends in any other status erases its memo entry. That includes a user cancel, a supersession and a
+    session cancel. A run from an old epoch never inserts one, and `InvalidateSession` clears the memo.
+  - A stuck request that ends after a recovery cannot plant an entry either, because its epoch is old.
+  - The pinned A1-1 to A1-3 sequences pass. `selectm A; starve; select A; selectm A; edit A 0 1; selectm A` passes: a mirror and the
+    canonical entry are separate questions.
+- **Inputs outside the body.** Every byte the engine can read is behind the derive serial: the body, a literal pool, a callee's code,
+  data that flow reaches. `Context::WriteVram` calls `RebuildDerived` for every work-RAM and VRAM write, and that bumps
+  `se_derive_serial`. An edit through a mirror address writes the same region, so it bumps the serial too.
+  - On a scrubbed frame the identity is the timeline, the frame number, and 0 or a fresh edit counter. `mScrubTimeline` moves on Play
+    From Here, on a ring clear, on a slot load (`DropRecordedHistory`) and on a session reset. `FrameRecorder::Capture` refuses a frame
+    number that does not advance, so within one timeline a number is never reused.
+  - The engine version, the patches, the hardware map and the budget are constant for a process. Nothing is cached across processes.
+- **Lent prototypes.** Learned prototypes are keyed by the snapshot, `LendingId()` (the function set and the volatile list) and the
+  address as run. They drop transitively through `deps`. The engine applies a lent prototype only to registered functions, and every
+  call it makes is in `calledAt`, so `deps` sees every prototype a result used.
+  - A shown result's lent set cannot change without a new install: only `Install` calls `Learn`. So `ShownStale` not looking at the
+    prototype hash leaves no gap.
+  - Mirror sequences pass: the C/A walk through mirrors with an edit in between, the volatile list through a mirror of P, and the
+    mirrored BIOS function with another BIOS image.
+- **Stale mark.** 600 random seeds produced no failure: 23,625 operations, 13,796 results checked at install, 23,577 idle checks, 7,649
+  checks with the engine held, 1,628 finish-then-change races, 127 stops and 59 budget stalls (394 s). The default run still passes
+  (18 seeds and 5 pins). Directed sequences also pass: Stop, then reconnect, then the same function; a starve, then hide, scrub away and
+  back, show and Refresh; a starve, then reconnect, then the same function; a running emulator with a held request across hide and two
+  frame advances.
+- **Trust indicators.** Unsupported, truncated, bad data, flow warnings and too-large all come with the result and are replaced with
+  it. A function that becomes supported, or no longer truncated, gets a new key and so a new result. The panel cache holds only `Ok`
+  results, under the full question, so a truncated result is cached under the region set it was truncated for.
+
+### Not probed, and why
+
+- **`App` itself.** It was read but not run: the scrub identity, the call-site hints keyed by snapshot, `AdoptNewEmulatorInstance` and
+  the slot load were checked against the code. A wrong identity in `App` is still invisible to the model, which builds the view the way
+  `App` does.
+- **Follow PC, Containing, auto-refresh and the halt hint.** The model's world has no registers. Auto-refresh's `mAutoPc` is not reset
+  by `ResetSession`; with the same PC after a new session it could suppress one refresh. That needs registers to reproduce, so it is
+  only a question.
+- **"Unimplemented".** It is unreachable on this spec: `sh-2.slaspec` and `superh.sinc` contain no `unimpl` constructor. It would also
+  show only as a grey warning count, not as an amber line; that should change if the spec ever gains one.
+- **`DecompileStatus::Disabled`.** The panel draws it, but nothing produces it.
+- **Speed.** Since round 1 the memo keys by snapshot, so stepping a paused emulator, or scrubbing, through a function that runs out of
+  budget costs a full budget (10 s) on every step. That is behaviour as documented, but it is a speed regression from the old memo.
+  There is no fixture: no oracle rejects it.
+- **The runner suite.** `SaturnExplorerDecompilerRunnerTests` was not rebuilt: the container's disk was full while it compiled. The
+  model and panel binaries were built and run.
