@@ -40,6 +40,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0010-load-not-duplicated.patch` | `Architecture::loadsNotDuplicated` (off by default; SaturnExplorer sets it): a LOAD is printed once, in place and unconditionally. It becomes explicit when its expression has several uses, when another memory operation (store, load, user op, call) lies between it and where it would be printed, or when it would be printed in the right operand of `&&` or `||`. |
 | `0011-ptrsub-char-constant-cast.patch` | `RulePtrsubCharConstant` checks that a type is a pointer before casting it to one (a UBSan vptr report; behaviour unchanged). |
 | `0012-load-in-place.patch` | Under the same policy: a LOAD cannot be moved past another LOAD (for-loop recovery moved the loop's step or initialiser statement to the end of its block), and a LOAD whose implied use is in another block becomes explicit (it printed inside one side of a branch though it is made before it). |
+| `0013-jumptable-loads.patch` | Under the same policy: a switch's guard is not folded into the switch when the switch block holds a load other than the table lookup (the read would print for the guarded-out values), and two loads from one pointer are two values, so a guard on one does not bound a switch on the other and the guard's read is not dropped. |
+| `0014-keep-unused-loads-late.patch` | Under `keepUnusedLoads`, `lastChanceLoad` holds an unused load in every heritage pass, not only the first: a load whose consumer, a store to a global, is removed as overwritten in a later pass was removed with it. |
 
 MSVC and Apple clang needed no patch beyond these.
 

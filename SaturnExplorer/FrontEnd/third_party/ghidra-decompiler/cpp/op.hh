@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  */
 /// \file op.hh
 /// \brief The PcodeOp and PcodeOpBank classes
@@ -118,7 +120,8 @@ public:
     no_indirect_collapse = 0x200,	///< Do not collapse \b this INDIRECT (via RuleIndirectCollapse)
     store_unmapped = 0x400,	///< If STORE collapses to a stack Varnode, force it to be unmapped
     immed_copy = 0x800,		///< Copy has propagated into input of \b this op
-    store_aliasupdate = 0x1000	///< If alias information for \b this STORE has been changed
+    store_aliasupdate = 0x1000,	///< If alias information for \b this STORE has been changed
+    jumptable_lookup = 0x2000	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
   };
 private:
   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation
@@ -202,6 +205,8 @@ public:
   bool isWarning(void) const { return ((addlflags&PcodeOp::warning)!=0); } ///< Return \b true if a warning has been generated for this op
   void clearMark(void) const { flags &= ~PcodeOp::mark; } ///< Clear any mark on this op
   bool isIndirectSource(void) const { return ((flags&PcodeOp::indirect_source)!=0); } ///< Return \b true if this causes an INDIRECT
+  bool isJumptableLookup(void) const { return ((addlflags&PcodeOp::jumptable_lookup)!=0); }	///< SaturnExplorer: did this LOAD read a recovered switch's table
+  void setJumptableLookup(void) { addlflags |= PcodeOp::jumptable_lookup; }	///< SaturnExplorer: mark the LOAD that read a recovered switch's table
   void setIndirectSource(void) { flags |= PcodeOp::indirect_source; } ///< Mark this op as source of INDIRECT
   void clearIndirectSource(void) { flags &= ~PcodeOp::indirect_source; } ///< Clear INDIRECT source flag
   bool isPtrFlow(void) const { return ((flags&PcodeOp::ptrflow)!=0); } ///< Return \b true if this produces/consumes ptrs

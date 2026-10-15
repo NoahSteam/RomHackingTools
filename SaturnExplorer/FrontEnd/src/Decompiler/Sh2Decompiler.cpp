@@ -356,7 +356,21 @@ private:
     {
         if (vn.space->getType() == ghidra::IPTR_CONSTANT) return Value::Const(static_cast<int64_t>(vn.offset));
         auto f = s.vars.find(KeyOf(vn));
-        return f == s.vars.end() ? Value() : f->second;
+        if (f != s.vars.end()) return f->second;
+        // Part of a tracked register (mov.w r1,@r2 stores r1's low word): a constant's bytes, else
+        // what the whole can come from. Not found as a whole either: anything (review of 0e3cd12;
+        // taken for anything, a word store of a register made the signature withheld).
+        for (const auto& v : s.vars)
+        {
+            if (std::get<0>(v.first) != vn.space || std::get<1>(v.first) > vn.offset ||
+                vn.offset + vn.size > std::get<1>(v.first) + std::get<2>(v.first))
+                continue;
+            if (v.second.kind != Value::Imm) return Value::From(v.second.Origins());
+            const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
+            const uint64_t mask = vn.size >= 8 ? ~0ull : (1ull << (8 * vn.size)) - 1;   // big-endian: the last bytes are the low ones
+            return Value::Const(static_cast<int64_t>((static_cast<uint64_t>(v.second.v) >> (8 * below)) & mask));
+        }
+        return Value();
     }
 
     void Set(State& s, const ghidra::VarnodeData& vn, const Value& v) const
@@ -724,6 +738,29 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
         uint32_t c = 0;
         if (t == entry || (CanonicalAddress(t, c) && c == entry)) return "it calls itself";   // through any mirror
         if (lent.count(t) == 0) return "it calls " + Hex8(t) + ", whose signature is not known";
+    }
+    // A register read after a call that the callee's signature does not return (the engine prints
+    // it as extraout_rN): the callee's signature is its own analysis -- void when it found no value
+    // returned, which may be a return it could not see -- so what this function does with that
+    // register is not described by anything, and its own signature is not lent on it (review of
+    // 0e3cd12: a caller returning P() + 1 under a void P was lent as known).
+    for (auto it = fd.beginLoc(); it != fd.endLoc(); ++it)
+    {
+        const ghidra::Varnode* vn = *it;
+        if (!vn->isExtraOut() || vn->hasNoDescend() || !vn->isWritten()) continue;
+        const ghidra::PcodeOp* ind = vn->getDef();
+        const ghidra::PcodeOp* call = ind->code() == ghidra::CPUI_INDIRECT && ind->getIn(1)->getSpace()->getType() == ghidra::IPTR_IOP
+                                          ? ghidra::PcodeOp::getOpFromConst(ind->getIn(1)->getAddr())
+                                          : nullptr;
+        if (!call || (call->code() != ghidra::CPUI_CALL && call->code() != ghidra::CPUI_CALLIND)) continue;   // a user op's effect (sleep) is not a call's
+        std::string callee = "a call";
+        {
+            const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(const_cast<ghidra::PcodeOp*>(call));
+            if (cs && !cs->getEntryAddress().isInvalid()) callee = Hex8(static_cast<uint32_t>(cs->getEntryAddress().getOffset()));
+        }
+        const std::string reg = fd.getArch()->translate->getRegisterName(vn->getSpace(), vn->getOffset(), vn->getSize());
+        return "it uses " + (reg.empty() ? std::string("a register") : reg) + " after calling " + callee +
+               ", which is not known to return it";
     }
     // An incoming argument the signature does not hold: the fifth one read with r4-r7 unused is
     // left a stack local, and a signature without it loses it at every call.
@@ -1216,10 +1253,78 @@ bool ParseAddressRanges(const std::string& input, std::vector<std::pair<uint32_t
 namespace
 {
 
+// The flow as first followed, before any action: where each memory op and call was, and the
+// blocks' edges. The final blocks are joined (a block with one way out into one with one way in),
+// split and copied, so the order two accesses are made in is read from here, not from op ids or
+// addresses (review of 0e3cd12: both were wrong on joined blocks).
+struct FlowRecord
+{
+    std::map<ghidra::uintm, std::pair<int, uint32_t>> ops;   // op time -> (block, position)
+    // A volatile register access is a new op the engine makes where the LOAD or STORE was: found
+    // again by its instruction and kind.
+    std::map<std::pair<uint32_t, bool>, std::vector<std::pair<int, uint32_t>>> accessesByInsn;
+    std::vector<std::vector<int>> successors;
+};
+
+FlowRecord RecordFlow(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    FlowRecord f;
+    const ghidra::BlockGraph& graph = fd.getBasicBlocks();
+    f.successors.resize(static_cast<size_t>(graph.getSize()));
+    // The blocks have no indices of their own yet (the engine numbers them later): by position.
+    std::map<const ghidra::FlowBlock*, int> indexOf;
+    for (ghidra::int4 i = 0; i < graph.getSize(); ++i) indexOf[graph.getBlock(i)] = i;
+    for (ghidra::int4 i = 0; i < graph.getSize(); ++i)
+    {
+        const ghidra::FlowBlock* b = graph.getBlock(i);
+        for (ghidra::int4 k = 0; k < b->sizeOut(); ++k)
+        {
+            auto t = indexOf.find(b->getOut(k));
+            if (t != indexOf.end()) f.successors[i].push_back(t->second);
+        }
+        const ghidra::BlockBasic* bb = static_cast<const ghidra::BlockBasic*>(b);
+        uint32_t pos = 0;
+        for (auto it = bb->beginOp(); it != bb->endOp(); ++it, ++pos)
+        {
+            const ghidra::PcodeOp* o = *it;
+            const ghidra::OpCode c = o->code();
+            if (c != ghidra::CPUI_LOAD && c != ghidra::CPUI_STORE && c != ghidra::CPUI_CALL && c != ghidra::CPUI_CALLIND) continue;
+            f.ops[o->getTime()] = std::make_pair(i, pos);
+            if (c == ghidra::CPUI_LOAD || c == ghidra::CPUI_STORE)
+                f.accessesByInsn[std::make_pair(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), c == ghidra::CPUI_STORE)]
+                    .emplace_back(i, pos);
+        }
+    }
+    return f;
+}
+
+std::vector<CallSite> Calls(const ghidra::Funcdata& fd, const FlowRecord& flow, const std::function<uint32_t(uint32_t)>& canonicalOf)
+{
+    std::vector<CallSite> out;
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        if (o->code() != ghidra::CPUI_CALL && o->code() != ghidra::CPUI_CALLIND) continue;
+        CallSite c;
+        c.insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+        if (o->getParent()) c.block = o->getParent()->getIndex();
+        c.order = static_cast<uint32_t>(o->getSeqNum().getOrder());
+        c.id = static_cast<uint32_t>(o->getTime()) + 1;
+        auto f = flow.ops.find(o->getTime());
+        if (f != flow.ops.end())
+        {
+            c.origBlock = f->second.first;
+            c.origOrder = f->second.second;
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
 // The access ledger (MemoryAccess), from the final p-code and what was printed of it.
 std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
                                    const std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>>& printed,
-                                   const std::function<uint32_t(uint32_t)>& canonicalOf)
+                                   const std::function<uint32_t(uint32_t)>& canonicalOf, const FlowRecord& flow)
 {
     // The values returned, traced back through what passes a value on unchanged.
     std::set<const ghidra::Varnode*> returnedVns;
@@ -1342,6 +1447,9 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
                 if (use->getParent() != o->getParent()) a.conditionalInPrint = true;
                 at = use;
                 a.through.push_back(static_cast<uint32_t>(use->getTime()) + 1);
+                // A call's argument is printed in the call: the chain ends there, whatever is done
+                // with the call's result.
+                if (use->isCall()) break;
                 v = use->getOut();
             }
             a.statement = static_cast<uint32_t>(at->getTime()) + 1;
@@ -1350,6 +1458,51 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
             if (at->getParent()) a.statementBlock = at->getParent()->getIndex();
             a.order = static_cast<uint32_t>(o->getSeqNum().getOrder());
             a.statementOrder = static_cast<uint32_t>(at->getSeqNum().getOrder());
+        }
+        if (o->getParent() && o->getParent()->lastOp() && o->getParent()->lastOp()->code() == ghidra::CPUI_BRANCHIND)
+            a.inSwitchBlock = true;
+        if (!a.direct)
+        {
+            // Does the pointer's value come from a volatile read of ordinary memory (the reference
+            // run's way of saying "a memory value the ordinary run may fold")?
+            std::vector<const ghidra::Varnode*> todo = { o->getIn(1) };
+            std::set<const ghidra::Varnode*> seen;
+            while (!todo.empty() && !a.pointerFromOrdinaryMemory)
+            {
+                const ghidra::Varnode* vn = todo.back();
+                todo.pop_back();
+                if (!vn->isWritten() || !seen.insert(vn).second) continue;
+                const ghidra::PcodeOp* d = vn->getDef();
+                if (d->code() == ghidra::CPUI_CALLOTHER && d->numInput() >= 2 && d->getIn(0)->isConstant())
+                {
+                    const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(d->getIn(0)->getOffset()));
+                    if (u && u->getType() == ghidra::UserPcodeOp::volatile_read &&
+                        !InHardwareRange(static_cast<uint32_t>(d->getIn(1)->getOffset())))
+                        a.pointerFromOrdinaryMemory = true;
+                    continue;
+                }
+                if (d->isCall()) continue;
+                for (int i = 0; i < d->numInput(); ++i) todo.push_back(d->getIn(i));
+            }
+        }
+        // Where it was in the flow: a LOAD or STORE is the flow's own op; a register access is a
+        // new op, found by its instruction and kind when that names one position.
+        {
+            auto f = flow.ops.find(o->getTime());
+            if (f != flow.ops.end() && !a.direct)
+            {
+                a.origBlock = f->second.first;
+                a.origOrder = f->second.second;
+            }
+            else if (a.direct)
+            {
+                auto g = flow.accessesByInsn.find(std::make_pair(a.insn, a.write));
+                if (g != flow.accessesByInsn.end() && g->second.size() == 1)
+                {
+                    a.origBlock = g->second[0].first;
+                    a.origOrder = g->second[0].second;
+                }
+            }
         }
         out.push_back(a);
         outOps.push_back(o);
@@ -1465,6 +1618,7 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
         r.key = snapshot->key;
         r.requestedEntry = request.entry;
         DecompileInto(snapshot, request, cancel, r);
+        if (r.status == DecompileStatus::Ok && !request.allMemoryVolatile) NoteRemovedAccesses(snapshot, request, cancel, r);
     }
     catch (ghidra::CancelError&)
     {
@@ -1503,6 +1657,77 @@ DecompileResult Sh2Decompiler::Decompile(const std::shared_ptr<const MemorySnaps
     mWorkPhase = DecompilePhase::Idle;
     r.elapsedMs = MsSince(t0);
     return r;
+}
+
+// A loop the analysis takes to run for ever ends the function there: the engine removes what
+// follows as unreachable, hardware accesses included, and only its own warnings say so. The usual
+// cause is a poll of memory not marked volatile that the function itself wrote (a mailbox for the
+// other SH-2 or the sound CPU): the write is forwarded to the read and the exit is never taken.
+// When the engine reports such a removal, the function is analysed once more with every address
+// volatile (nothing folds, so the loop exits and every access the flow reaches stays), and each
+// hardware access in that output which the shown output lacks is said, on its instruction and in
+// the warnings, with the cause. The signature is withheld: it describes a function that stops at
+// the loop (review of 0e3cd12, from the ledger's reference run on game code).
+void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
+                                        std::atomic<bool>* cancel, DecompileResult& r)
+{
+    bool removed = false;
+    for (const std::string& w : r.warnings)
+        if (w.find("Removing unreachable block") != std::string::npos || w.find("Do nothing block with infinite loop") != std::string::npos)
+            removed = true;
+    if (!removed) return;
+    DecompileRequest ref = request;
+    ref.allMemoryVolatile = true;
+    ref.registerCallees = false;   // the flow, which is what matters here, is the first pass's
+    DecompileResult rr;
+    try
+    {
+        DecompileInto(snapshot, ref, cancel, rr);
+    }
+    catch (ghidra::CancelError&)
+    {
+        throw;
+    }
+    catch (...)
+    {
+        return;   // no reference: nothing is said
+    }
+    if (rr.status != DecompileStatus::Ok) return;
+    std::vector<HardwareRange> marked;
+    for (const auto& v : request.volatileMemory)
+        for (const HardwareRange& h : VolatileAliases(v.first, v.second)) marked.push_back(h);
+    auto isMarked = [&](uint32_t a) {
+        for (const HardwareRange& h : marked)
+            if (h.first <= a && a <= h.last) return true;
+        return false;
+    };
+    bool any = false;
+    for (const MemoryAccess& m : rr.accesses)
+    {
+        if (m.direct ? (!InHardwareRange(m.address) && !isMarked(m.address)) : m.pointerFromOrdinaryMemory) continue;
+        bool shown = false;
+        for (const MemoryAccess& x : r.accesses)
+            if (x.insn == m.insn && x.write == m.write && x.size == m.size) shown = true;
+        if (shown) continue;
+        std::string what = "through a pointer";
+        if (m.direct)
+        {
+            const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(m.address, m.size);
+            what = regs.empty() ? Hex8(m.address) : std::string(regs[0]->name);
+        }
+        const std::string text = std::string("the ") + (m.write ? "write" : "read") + " of " + what +
+                                 " here is missing: the analysis removed the code around it as unreachable, after a loop it "
+                                 "takes to run for ever. A poll of memory another processor writes folds so unless that "
+                                 "memory is marked volatile";
+        r.hardwareNotes.push_back(HardwareNote{ m.insn, text, true });
+        r.warnings.push_back(Hex8(m.insn) + ": " + text);
+        any = true;
+    }
+    if (!any) return;
+    std::stable_sort(r.hardwareNotes.begin(), r.hardwareNotes.end(),
+                     [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
+    if (r.prototypeWithheld.empty()) r.prototypeWithheld = "code removed as unreachable holds hardware accesses";
+    r.prototype.known = false;
 }
 
 void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot,
@@ -1705,6 +1930,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // The user's shared memory, through every alias that reaches it (VolatileAliases).
         for (const HardwareRange& v : userVolatile)
             arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, v.first, v.last));
+        // The ledger's reference run: nothing folds but the literal pools (read-only, set below, wins).
+        if (request.allMemoryVolatile)
+            arch->symboltab->setPropertyRange(ghidra::Varnode::volatil, ghidra::Range(ram, 0, 0xFFFFFFFFu));
         // ...and none of it, nor any hardware, is a value the analysis may read from the snapshot:
         // jump-table recovery reads its table through the data image, and a table another
         // processor can rewrite is no fixed switch.
@@ -1722,6 +1950,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         Enter(DecompilePhase::Flow);
         fd->followFlow(ghidra::Address(ram, 0), ghidra::Address(ram, ram->getHighest()));
         if (fd->hasNoCode()) return std::string();
+        const FlowRecord flow = RecordFlow(*fd, canonicalOf);
 
         const RawScan scan = ScanRawPcode(*fd, *snapshot);
         knownLiterals = scan.readonly;
@@ -1979,7 +2208,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->print->setMarkup(false);
         std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>> printed;
         r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
-        r.accesses = Accesses(*fd, printed, canonicalOf);
+        r.accesses = Accesses(*fd, printed, canonicalOf, flow);
+        r.calls = Calls(*fd, flow, canonicalOf);
+        r.flowSuccessors = flow.successors;
         const std::string e = errors.str();
         if (!e.empty()) r.warnings.push_back(e);
         return std::string("ok");

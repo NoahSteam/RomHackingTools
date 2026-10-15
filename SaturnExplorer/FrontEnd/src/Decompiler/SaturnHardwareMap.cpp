@@ -478,30 +478,42 @@ std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last)
             phys.emplace_back(0u, pb);
         }
     }
-    // High work RAM repeats every 1 MiB across 0x06000000-0x07FFFFFF: each physical interval's
-    // part in it reaches the same bytes through every repeat.
-    const uint32_t hwram = 0x06000000u, mib = 0x00100000u;
+    // Work RAM repeats every 1 MiB: high work RAM across 0x06000000-0x07FFFFFF, and low work RAM
+    // (1 MiB, Mednafen's "Low RAM") across 0x00200000-0x003FFFFF (review of 0e3cd12). Each
+    // physical interval's part in a repeating area reaches the same bytes through every repeat.
+    const uint32_t mib = 0x00100000u;
+    struct Repeat { uint32_t first, last; } const repeats[] = { { 0x00200000u, 0x003FFFFFu }, { 0x06000000u, 0x07FFFFFFu } };
     std::vector<std::pair<uint32_t, uint32_t>> pieces;
     for (const auto& p : phys)
     {
-        if (p.first < hwram) pieces.emplace_back(p.first, std::min(p.second, hwram - 1));
-        if (p.second < hwram) continue;
-        const uint32_t s = std::max(p.first, hwram), e = p.second;
-        if (e - s + 1 >= mib)
+        uint64_t next = p.first;   // the start of the part of p not yet placed
+        for (const Repeat& rep : repeats)
         {
-            pieces.emplace_back(hwram, 0x07FFFFFFu);
-            continue;
-        }
-        const uint32_t sa = s & (mib - 1), ea = e & (mib - 1);
-        for (uint32_t r = hwram; r < 0x08000000u; r += mib)
-        {
-            if (sa <= ea) pieces.emplace_back(r + sa, r + ea);
+            if (next > p.second) break;
+            if (next < rep.first)   // the part below this repeating area is taken as it is
+            {
+                pieces.emplace_back(static_cast<uint32_t>(next), std::min(p.second, rep.first - 1));
+                next = rep.first;
+            }
+            if (next > p.second || next > rep.last) continue;
+            const uint32_t s = static_cast<uint32_t>(next), e = std::min(p.second, rep.last);
+            if (e - s + 1 >= mib) pieces.emplace_back(rep.first, rep.last);
             else
             {
-                pieces.emplace_back(r + sa, r + mib - 1);
-                pieces.emplace_back(r, r + ea);
+                const uint32_t sa = s & (mib - 1), ea = e & (mib - 1);
+                for (uint32_t r = rep.first; r < rep.last; r += mib)
+                {
+                    if (sa <= ea) pieces.emplace_back(r + sa, r + ea);
+                    else
+                    {
+                        pieces.emplace_back(r + sa, r + mib - 1);
+                        pieces.emplace_back(r, r + ea);
+                    }
+                }
             }
+            next = static_cast<uint64_t>(rep.last) + 1;
         }
+        if (next <= p.second) pieces.emplace_back(static_cast<uint32_t>(next), p.second);
     }
     // ...through both partitions and every 128 MiB period.
     for (uint32_t partition : { 0x00000000u, 0x20000000u })

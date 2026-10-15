@@ -877,6 +877,36 @@ void TestPrototypeProvenance()
 
 // Finding 2: the function set (the user's starts and the named addresses) is engine input -- it
 // decides whether a branch is a call -- so it keys requests, acceptance and the cache, for every
+// A saved volatile list that does not parse is kept, for the editor and for saving back, until a
+// list that parses replaces it (review of 0e3cd12: it was saved back as nothing).
+void TestUnparsedVolatileKept()
+{
+    Fixture f;
+    std::string error;
+    CHECK(!f.panel.SetVolatileMemory("26001000-zz", &error) && !error.empty());
+    f.panel.KeepUnparsedVolatileMemory("26001000-zz");
+    CHECK(f.panel.VolatileMemory() == "26001000-zz");
+    CHECK(f.panel.SetVolatileMemory("26001000-26001003"));
+    CHECK(f.panel.VolatileMemory() == "26001000-26001003");
+    CHECK(f.panel.SetVolatileMemory(""));
+    CHECK(f.panel.VolatileMemory().empty());   // the unparsed text is gone for good
+}
+
+// A function start set after the answer arrived makes the shown output stale even when nothing is
+// pending any more (review of 0e3cd12: after a Stop, or with the runner disabled, nothing re-asks).
+void TestFunctionSetChangeIsStale()
+{
+    Fixture f;
+    f.Idle();
+    f.TypeInto("entry", "06004000");
+    CHECK(f.WaitShown("func_0x06005000"));
+    CHECK(!f.panel.ShownStale());
+    f.runner.InvalidateSession();   // as a session's end does: nothing outstanding will be answered
+    f.bounds.SetEntry(0x06006000u);
+    f.Idle();
+    CHECK(f.panel.ShownStale());
+}
+
 // function, not only the one whose start was corrected.
 void TestFunctionSetKeysQuestions()
 {
@@ -2040,6 +2070,8 @@ int main(int argc, char** argv)
         RUN(TestCalleePrototypesLent());
         RUN(TestRenameBiosAndBounds());
         RUN(TestPrototypeProvenance());
+        RUN(TestUnparsedVolatileKept());
+        RUN(TestFunctionSetChangeIsStale());
         RUN(TestFunctionSetKeysQuestions());
         RUN(TestCalleeHintsBelongToTheirSnapshot());
         RUN(TestRunningAfterScrubCaptures());

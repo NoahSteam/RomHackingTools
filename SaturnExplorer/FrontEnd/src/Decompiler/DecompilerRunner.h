@@ -139,7 +139,10 @@ private:
     std::deque<Job> mQueue;
     std::deque<std::pair<uint64_t, DecompileResult>> mDone;   // (epoch, result)
     std::map<int, uint64_t> mLatest;            // slot -> newest generation submitted
-    std::set<uint32_t> mTooLarge;               // entries, as asked (any mirror), that ran out of budget this epoch
+    // Entries, as asked (any mirror), that ran out of budget this epoch -- under which volatile list:
+    // another list is another question (review of 0e3cd12).
+    std::set<std::pair<uint32_t, uint64_t>> mTooLarge;
+    static uint64_t VolatileKey(const DecompileRequest& request);
     uint64_t mNextGeneration = 1;
     uint64_t mEpoch = 1;
     bool mStopping = false;

@@ -1,0 +1,97 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+index 0e36cb3..9970c1d 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
++ * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -4175,7 +4176,10 @@ uintb ActionDeadCode::gatherConsumedReturn(Funcdata &data)
+ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
+ 
+ {
+-  if (data.getHeritagePass() > 1) return false;
++  // SaturnExplorer: a load becomes unused in a later pass too, when the store that consumed it is
++  // removed as overwritten (a store to a global, made a direct write by a later pass). The hold is
++  // then still wanted: the read may be of a register.
++  if (data.getHeritagePass() > 1 && !data.getArch()->keepUnusedLoads) return false;
+   if (data.isJumptableRecoveryOn()) return false;
+   list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
+   list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
+@@ -4184,6 +4188,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
+     PcodeOp *op = *iter;
+     ++iter;
+     if (op->isDead()) continue;
++    if (op->isJumptableLookup()) continue;	// SaturnExplorer: the switch stands for this read
+     Varnode *vn = op->getOut();
+     if (vn->isConsumeVacuous()) continue;
+     if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+index 70c2f2d..80a8c91 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a switch's guard is not folded over a load, and does not bound a second load (patches/0013-jumptable-loads.patch).
++ * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  */
+ #include "jumptable.hh"
+ #include "emulate.hh"
+@@ -1462,7 +1463,7 @@ bool JumpBasic::foldInOneGuard(Funcdata *fd,GuardRecord &guard,JumpTable *jump)
+     list<PcodeOp *>::const_iterator iter;
+     for(iter=switchbl->beginOp();iter!=switchbl->endOp();++iter) {
+       PcodeOp *bop = *iter;
+-      if (bop->code() == CPUI_LOAD && tableOps.find(bop) == tableOps.end())
++      if (bop->code() == CPUI_LOAD && !bop->isJumptableLookup() && tableOps.find(bop) == tableOps.end())
+ 	return false;
+     }
+   }
+@@ -1621,6 +1622,11 @@ Varnode *JumpBasic::foldInNormalization(Funcdata *fd,PcodeOp *indop)
+ {
+   // Set the BRANCHIND input to be the unnormalized switch variable, so
+   // all the intervening code to calculate the final address is eliminated as dead.
++  // SaturnExplorer: the table lookup among that code is a load that must go with it, not one to
++  // keep for its effect (lastChanceLoad): the switch stands for it.
++  for(int4 i=0;i<pathMeld.numOps();++i)
++    if (pathMeld.getOp(i)->code() == CPUI_LOAD)
++      pathMeld.getOp(i)->setJumptableLookup();
+   fd->opSetInput(indop,switchvn,0);
+   return switchvn;
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+index e1d4817..4534e12 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
+  */
+ /// \file op.hh
+ /// \brief The PcodeOp and PcodeOpBank classes
+@@ -118,7 +120,8 @@ public:
+     no_indirect_collapse = 0x200,	///< Do not collapse \b this INDIRECT (via RuleIndirectCollapse)
+     store_unmapped = 0x400,	///< If STORE collapses to a stack Varnode, force it to be unmapped
+     immed_copy = 0x800,		///< Copy has propagated into input of \b this op
+-    store_aliasupdate = 0x1000	///< If alias information for \b this STORE has been changed
++    store_aliasupdate = 0x1000,	///< If alias information for \b this STORE has been changed
++    jumptable_lookup = 0x2000	///< SaturnExplorer: the LOAD that read a recovered switch's table (the switch now stands for it)
+   };
+ private:
+   TypeOp *opcode;		///< Pointer to class providing behavioral details of the operation
+@@ -202,6 +205,8 @@ public:
+   bool isWarning(void) const { return ((addlflags&PcodeOp::warning)!=0); } ///< Return \b true if a warning has been generated for this op
+   void clearMark(void) const { flags &= ~PcodeOp::mark; } ///< Clear any mark on this op
+   bool isIndirectSource(void) const { return ((flags&PcodeOp::indirect_source)!=0); } ///< Return \b true if this causes an INDIRECT
++  bool isJumptableLookup(void) const { return ((addlflags&PcodeOp::jumptable_lookup)!=0); }	///< SaturnExplorer: did this LOAD read a recovered switch's table
++  void setJumptableLookup(void) { addlflags |= PcodeOp::jumptable_lookup; }	///< SaturnExplorer: mark the LOAD that read a recovered switch's table
+   void setIndirectSource(void) { flags |= PcodeOp::indirect_source; } ///< Mark this op as source of INDIRECT
+   void clearIndirectSource(void) { flags &= ~PcodeOp::indirect_source; } ///< Clear INDIRECT source flag
+   bool isPtrFlow(void) const { return ((flags&PcodeOp::ptrflow)!=0); } ///< Return \b true if this produces/consumes ptrs

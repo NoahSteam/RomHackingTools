@@ -264,6 +264,7 @@ bool DecompilerPanel::ShownStale() const
     if (!mShownValid) return false;
     return ShownOutdatedByView() || mPending.active || mShownNamesGeneration != mNamesGeneration ||
            mShownVolatileHash != mVolatileHash ||   // decompiled under another volatile list
+           mShownFunctions != mFunctions ||         // or another function set: after a Stop nothing re-asks (review of 0e3cd12)
            (mResolved && (!mEntryOk || mShown.requestedEntry != mEntry));
 }
 
@@ -432,6 +433,7 @@ bool DecompilerPanel::SetVolatileMemory(const std::string& text, std::string* er
         return false;
     }
     mVolatileText = text;
+    mVolatileUnparsed.clear();
     mVolatile = std::move(ranges);
     // Engine input, so part of the question: changing it asks again, and the cache keeps answers
     // for each set.
@@ -475,6 +477,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     mShownSnapId = snapId;
     mShownNamesGeneration = namesGeneration;
     mShownVolatileHash = mVolatileHash;   // both callers install only answers asked under it
+    mShownFunctions = mFunctions;         // ...and under the function set in force
     char b[64];
     if (mEntrySource == EntrySource::None)
         mShownEntrySource.clear();
@@ -930,7 +933,7 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
     ImGui::SameLine();
     if (ImGui::Button("Volatile"))
     {
-        std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", mVolatileText.c_str());
+        std::snprintf(mVolatileEdit, sizeof mVolatileEdit, "%s", VolatileMemory().c_str());
         mVolatileError.clear();
         ImGui::OpenPopup("volatile");
     }

@@ -162,7 +162,8 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
     uint32_t entry = 0;
     // By the address asked for, not the canonical one: run through another mirror, PC-derived
     // values differ and so may the code reached.
-    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(request.entry) && !retryTooLarge)
+    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(std::make_pair(request.entry, VolatileKey(request))) &&
+        !retryTooLarge)
     {
         DecompileResult r;
         r.status = DecompileStatus::TooLarge;
@@ -283,6 +284,15 @@ bool DecompilerRunner::Poll(DecompileResult& out)
         return true;
     }
     return false;
+}
+
+uint64_t DecompilerRunner::VolatileKey(const DecompileRequest& request)
+{
+    uint64_t h = 1469598103934665603ull;
+    for (const auto& r : request.volatileMemory)
+        for (uint32_t v : { r.first, r.second })
+            h = (h ^ v) * 1099511628211ull;
+    return h;
 }
 
 void DecompilerRunner::InvalidateSession()
@@ -409,7 +419,7 @@ void DecompilerRunner::WorkerMain()
                 std::snprintf(b, sizeof b, "too large to decompile within %g s", mOptions.budgetSeconds);
                 r.status = DecompileStatus::TooLarge;
                 r.error = b;
-                if (job.epoch == mEpoch) mTooLarge.insert(r.requestedEntry);
+                if (job.epoch == mEpoch) mTooLarge.insert(std::make_pair(r.requestedEntry, VolatileKey(job.request)));
             }
             mDone.push_back(std::make_pair(job.epoch, std::move(r)));
             RecoverLocked();

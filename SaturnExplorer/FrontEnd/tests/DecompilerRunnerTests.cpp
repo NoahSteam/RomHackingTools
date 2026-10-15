@@ -410,6 +410,13 @@ void TestBudget()
     CHECK(WaitResult(runner, again));
     CHECK(again.status == DecompileStatus::TooLarge);
     CHECK(runner.RunsStarted() == runs + 2);
+    // Review of 0e3cd12: another volatile list is another question, attempted again.
+    DecompileRequest withVolatile = Big(dts::kDiamondsBase);
+    withVolatile.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
+    runner.Submit(0, gSnap, withVolatile);
+    CHECK(WaitResult(runner, again));
+    CHECK(again.status == DecompileStatus::TooLarge);
+    CHECK(runner.RunsStarted() == runs + 3);
 
     // The immediate TooLarge answer still supersedes what the same requester had queued.
     PhaseGate gate;

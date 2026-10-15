@@ -453,15 +453,126 @@ bool Unordered(const MemoryAccess& a, const MemoryAccess& b)
     return !feeds(a, b) && !feeds(b, a);
 }
 
-// Two accesses in one block, the second made after the first but placed before it. The accesses
-// through pointers are the LOAD and STORE ops the code was translated into, created in the order
-// they are made (a block is one straight run of instructions, or runs the engine joined end to
-// end); a volatile register access is an op the engine made later, so only those two kinds are
-// compared, and only with each other. Ops stay where they are made unless the engine moves one.
-bool MovedInBlock(const MemoryAccess& a, const MemoryAccess& b)
+// Reachability over the flow's blocks as first followed (DecompileResult::flowSuccessors): the
+// reference for the order two accesses can be made in. The final blocks are joined, split and
+// copied by the engine, so op ids, addresses and output lines all mislead (review of 0e3cd12).
+struct FlowReach
 {
-    if (a.direct || b.direct || a.block < 0 || a.block != b.block) return false;
-    return (a.id < b.id) != (a.order < b.order);
+    std::vector<std::vector<char>> reach;    // reach[x][y]: y runs after x on some path
+    std::vector<std::vector<char>> uncond;   // uncond[x][y]: ...and on every path, through blocks with one way out
+    explicit FlowReach(const std::vector<std::vector<int>>& succ)
+    {
+        const size_t n = succ.size();
+        reach.assign(n, std::vector<char>(n, 0));
+        uncond.assign(n, std::vector<char>(n, 0));
+        for (size_t x = 0; x < n; ++x)
+        {
+            std::vector<int> todo(succ[x].begin(), succ[x].end());
+            while (!todo.empty())
+            {
+                const int y = todo.back();
+                todo.pop_back();
+                if (y < 0 || size_t(y) >= n || reach[x][y]) continue;
+                reach[x][y] = 1;
+                todo.insert(todo.end(), succ[y].begin(), succ[y].end());
+            }
+            for (size_t y = x; succ[y].size() == 1;)
+            {
+                const int z = succ[y][0];
+                if (z < 0 || size_t(z) >= n || uncond[x][z] || size_t(z) == x) break;
+                uncond[x][z] = 1;
+                y = size_t(z);
+            }
+        }
+    }
+};
+
+// Whether the code can make 'a' before 'b'. Unknown origins (ops the engine made later) are not judged.
+bool FlowOrdered(const FlowReach& fr, const MemoryAccess& a, const MemoryAccess& b)
+{
+    if (a.origBlock < 0 || b.origBlock < 0) return true;
+    if (a.origBlock == b.origBlock) return a.origOrder < b.origOrder;
+    return fr.reach[a.origBlock][b.origBlock] != 0;
+}
+
+// Two accesses in one final block, printed in an order the code cannot make them in.
+bool OutOfFlowOrder(const FlowReach& fr, const MemoryAccess& a, const MemoryAccess& b)
+{
+    if (a.block < 0 || a.block != b.block) return false;
+    return a.order < b.order ? !FlowOrdered(fr, a, b) : !FlowOrdered(fr, b, a);
+}
+
+// Two accesses from blocks the flow kept apart by a branch, now in one block that ends in a switch:
+// a guard folded into the switch over a read, which then appears made for the guarded-out values.
+bool FoldedIntoSwitch(const FlowReach& fr, const MemoryAccess& a, const MemoryAccess& b)
+{
+    if (a.block < 0 || a.block != b.block || !a.inSwitchBlock || a.origBlock < 0 || b.origBlock < 0 || a.origBlock == b.origBlock)
+        return false;
+    return !fr.uncond[a.origBlock][b.origBlock] && !fr.uncond[b.origBlock][a.origBlock];
+}
+
+// A read printed where its value is used, later in its block, with another access or a call made in
+// between: it is shown after them.
+bool PrintedPast(const MemoryAccess& m, const std::vector<MemoryAccess>& accesses, const std::vector<CallSite>& calls,
+                 std::string* what)
+{
+    if (m.write || m.statement == m.id || m.block < 0 || m.block != m.statementBlock) return false;
+    for (const MemoryAccess& o : accesses)
+        if (o.id != m.id && o.block == m.block && o.order > m.order && o.order < m.statementOrder &&
+            std::find(m.through.begin(), m.through.end(), o.id) == m.through.end())
+        {
+            if (what) *what = "the access at " + [&] { char b[12]; std::snprintf(b, sizeof b, "%08X", o.insn); return std::string(b); }();
+            return true;
+        }
+    for (const CallSite& c : calls)
+        if (c.block == m.block && c.order > m.order && c.order < m.statementOrder)
+        {
+            if (what) *what = "the call at " + [&] { char b[12]; std::snprintf(b, sizeof b, "%08X", c.insn); return std::string(b); }();
+            return true;
+        }
+    return false;
+}
+
+// The ledger's reference: the same request with every address volatile, so the output holds every
+// memory instruction the flow reaches. An access there that is missing from the ordinary output must
+// be one of ordinary memory at a constant address (which folds into a variable); anything else --
+// a hardware register, memory the user marked, a read or write through a pointer -- was dropped.
+bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const DecompileRequest& q,
+                 const DecompileResult& r)
+{
+    DecompileRequest ref = q;
+    ref.allMemoryVolatile = true;
+    const DecompileResult rr = d.Decompile(snap, ref);
+    if (rr.status != DecompileStatus::Ok)
+    {
+        std::printf("  reference run: status %d (not compared)\n", int(rr.status));
+        return true;
+    }
+    std::vector<HardwareRange> user;
+    for (const auto& v : q.volatileMemory)
+        for (const HardwareRange& h : VolatileAliases(v.first, v.second)) user.push_back(h);
+    auto marked = [&](uint32_t a) {
+        for (const HardwareRange& h : user)
+            if (h.first <= a && a <= h.last) return true;
+        return false;
+    };
+    bool ok = true;
+    for (const MemoryAccess& m : rr.accesses)
+    {
+        // Ordinary memory at a constant address, and a pointer read from such memory, may fold.
+        if (m.direct ? (!InHardwareRange(m.address) && !marked(m.address)) : m.pointerFromOrdinaryMemory) continue;
+        bool found = false;
+        for (const MemoryAccess& x : r.accesses)
+            if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
+        if (found) continue;
+        char at[12];
+        std::snprintf(at, sizeof at, "%08X", m.insn);
+        if (WarnsAbout(r, at)) continue;   // missing, and the output says so (code removed as unreachable)
+        std::printf("  reference: the %s of %u bytes at %s (%s%08X) has no access in the output\n", m.write ? "write" : "read",
+                    unsigned(m.size), at, m.direct ? "" : "through a pointer; ", m.address);
+        ok = false;
+    }
+    return ok;
 }
 
 struct Op
@@ -491,43 +602,40 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
              g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath &&
              !g.conditionalInPrint;
     }
-    // Printed in the order the code makes them, and no two reads in one statement: C leaves the
-    // order of two reads in one expression open. Within one block the engine's op order is the
-    // printed order of the statements (a for loop's iterator prints in the header but is the
-    // block's last op, and runs last), so there the accesses must still be in the order they were
-    // made: the engine moved one otherwise (review at 5670323). Across blocks the output lines
-    // decide.
-    for (size_t i = 1; ok && i < got.size(); ++i)
-    {
-        const MemoryAccess& a = got[i - 1];
-        const MemoryAccess& b = got[i];
-        if (Unordered(a, b))
+    // No two reads in one statement (C leaves their order open); within one final block the
+    // accesses must be in an order the code can make them in, read from the flow's own blocks
+    // (FlowReach); two blocks the flow kept apart by a branch are not joined into a switch's; and a
+    // read printed where its value is used does not pass another access or a call on the way.
+    const FlowReach fr(r.flowSuccessors);
+    for (size_t i = 0; ok && i < got.size(); ++i)
+        for (size_t j = i + 1; ok && j < got.size(); ++j)
         {
-            std::printf("  ledger: %08X and %08X are read in one statement\n", a.insn, b.insn);
-            ok = false;
-        }
-        else if (MovedInBlock(a, b))
-        {
-            std::printf("  ledger: %08X was moved after %08X in block %d\n", a.insn, b.insn, a.block);
-            ok = false;
-        }
-        else if (a.block != b.block && a.firstLine >= 0 && b.firstLine >= 0 && b.firstLine < a.firstLine)
-        {
-            std::printf("  ledger: %08X printed on line %d, %08X on line %d\n", a.insn, a.firstLine, b.insn, b.firstLine);
-            ok = false;
-        }
-    }
-    // A read printed where its value is used, later in its block, must not pass another access.
-    for (const MemoryAccess& m : got)
-    {
-        if (!ok || m.write || m.statement == m.id || m.block < 0 || m.block != m.statementBlock) continue;
-        for (const MemoryAccess& o : got)
-            if (o.id != m.id && o.block == m.block && o.order > m.order && o.order < m.statementOrder &&
-                std::find(m.through.begin(), m.through.end(), o.id) == m.through.end())
+            const MemoryAccess& a = got[i];
+            const MemoryAccess& b = got[j];
+            if (Unordered(a, b))
             {
-                std::printf("  ledger: the read at %08X is printed past the access at %08X\n", m.insn, o.insn);
+                std::printf("  ledger: %08X and %08X are read in one statement\n", a.insn, b.insn);
                 ok = false;
             }
+            else if (OutOfFlowOrder(fr, a, b))
+            {
+                std::printf("  ledger: %08X and %08X are out of the code's order in block %d\n", a.insn, b.insn, a.block);
+                ok = false;
+            }
+            else if (FoldedIntoSwitch(fr, a, b))
+            {
+                std::printf("  ledger: %08X and %08X were joined into a switch's block across a branch\n", a.insn, b.insn);
+                ok = false;
+            }
+        }
+    for (const MemoryAccess& m : got)
+    {
+        std::string what;
+        if (ok && PrintedPast(m, got, r.calls, &what))
+        {
+            std::printf("  ledger: the read at %08X is printed past %s\n", m.insn, what.c_str());
+            ok = false;
+        }
     }
     if (!ok)
     {
@@ -648,6 +756,103 @@ void TestHardwareVolatility()
     // Ranges crossing a region or bus-period boundary, or spanning whole periods, still reach the
     // mailbox through its other addresses (review of 80620fb).
     const Fixture hwramMirrorMailbox = simple(0x06009880u, mailboxOps, 0x260FFFFCu);
+    // A switch's guard and its block (review of 0e3cd12). The engine folds a guard branch into the
+    // switch as its default case when the switch block holds no statement; a read in that block
+    // then prints before the switch, as if made for the guarded-out values too. Four fixtures: the
+    // read in the switch block (unused, so not a statement to the engine), the read in the jump's
+    // delay slot, the control with the table load only (still folded), and a switch on a second
+    // read of the pointer the guard tested (two reads, not one). Each has a 4-entry table at +0x28
+    // and cases returning 0..3 at +0x28, +0x2C, +0x30, +0x34.
+    auto switchFixture = [](uint32_t base, std::vector<uint16_t> head) {
+        // head: the 10 words from the selector read to the jump's delay slot (0x00-0x12).
+        std::vector<uint16_t> code = head;
+        code.insert(code.end(), { 0x000B, 0xE0FF });   // 0x14 default: rts; mov #-1,r0
+        for (uint32_t i = 0; i < 4; ++i)               // 0x18 the table
+        {
+            const uint32_t target = base + 0x28 + 4 * i;
+            code.push_back(uint16_t(target >> 16));
+            code.push_back(uint16_t(target));
+        }
+        code.insert(code.end(), { 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0xE002, 0x000B, 0xE003 });
+        return Fixture{ base, code, 0x3C, 0 };   // no literal of its own (the table is in the code)
+    };
+    const Fixture switchRead = switchFixture(0x0600A300u, { 0x6442,     // mov.l @r4,r4   the selector
+                                                            0xE103,     // mov #3,r1
+                                                            0x3416,     // cmp/hi r1,r4
+                                                            0x8905,     // bt default
+                                                            0x6352,     // mov.l @r5,r3   the read, guarded; unused
+                                                            0xC703,     // mova table,r0
+                                                            0x4408,     // shll2 r4
+                                                            0x014E,     // mov.l @(r0,r4),r1
+                                                            0x412B,     // jmp @r1
+                                                            0x0009 });  //   nop
+    const Fixture switchSlotRead = switchFixture(0x0600A340u, { 0x6442, 0xE103, 0x3416, 0x8905, 0xC703, 0x4408, 0x014E,
+                                                                0x412B,
+                                                                0x6352,     //   mov.l @r5,r3 in the slot
+                                                                0x0009 });
+    const Fixture switchFold = switchFixture(0x0600A380u, { 0x6442, 0xE103, 0x3416, 0x8905, 0xC703, 0x4408, 0x014E,
+                                                            0x412B, 0x0009, 0x0009 });
+    const Fixture switchSecondRead = switchFixture(0x0600A3C0u, { 0x6142,     // mov.l @r4,r1   the guard's read
+                                                                  0xE203,     // mov #3,r2
+                                                                  0x3126,     // cmp/hi r2,r1
+                                                                  0x8905,     // bt default
+                                                                  0x6142,     // mov.l @r4,r1   read again: the selector
+                                                                  0xC703, 0x4108,
+                                                                  0x011E,     // mov.l @(r0,r1),r1
+                                                                  0x412B, 0x0009 });
+    // A mailbox in work RAM, not marked: the write is forwarded to the poll, the loop never ends as
+    // analysed, and the engine removes the hardware write after it as unreachable. Found by the
+    // reference run on game code (review of 0e3cd12): the output must say what is missing and why.
+    const Fixture mailboxFold = { 0x0600A480u, { 0xD104,     // mov.l @(16,pc),r1   -> 0x26001000
+                                                 0xE001,     // mov #1,r0
+                                                 0x2102,     // mov.l r0,@r1        mailbox = 1
+                                                 0x6012,     // loop: mov.l @r1,r0
+                                                 0x2008,     // tst r0,r0
+                                                 0x8BFC,     // bf loop             while (mailbox != 0)
+                                                 0xD202,     // mov.l @(8,pc),r2    -> SMPC_SF
+                                                 0x2200,     // mov.b r0,@r2        SMPC_SF = 0: removed as unreachable
+                                                 0x000B, 0x0009,
+                                                 0x2600, 0x1000,     // 0x14: the mailbox
+                                                 0x2010, 0x0063 },   // 0x18: SMPC_SF
+                                  0x1C, 0 };
+    // A read whose only use is a store to a work RAM global that the function overwrites before any
+    // read: the store is removed as overwritten, late, and the read with it (found by the reference
+    // run on game code, review of 0e3cd12). The read stays: it may be of a register.
+    const Fixture storeOverwritten = { 0x0600A4C0u, { 0xD203,     // mov.l @(12,pc),r2  -> 0x26001000
+                                                      0x6142,     // mov.l @r4,r1       the read
+                                                      0x2212,     // mov.l r1,@r2       global = *p
+                                                      0xE100,     // mov #0,r1
+                                                      0x2212,     // mov.l r1,@r2       global = 0: the first store is dead
+                                                      0x000B, 0x0009, 0x0009 }, 0x10, 0x26001000u };
+    // Two correct outputs the earlier ledger rejected (review of 0e3cd12). A branch on a constant
+    // always goes to B, which then runs A: the engine joins entry, B and A into one block, so B's
+    // read (made later in the flow, at a higher address) is rightly before A's. And a for loop whose
+    // step read is the body's last, with the body's other read under a branch: the step prints in
+    // the header, above the body, and runs after it.
+    const Fixture backSplice = { 0x0600A400u, { 0xE000,     // mov #0,r0
+                                                0x2008,     // tst r0,r0        T = 1
+                                                0x8902,     // bt B             always
+                                                0x6052,     // A: mov.l @r5,r0
+                                                0x000B,     //    rts
+                                                0x0009,     //    nop
+                                                0x6142,     // B: mov.l @r4,r1
+                                                0xAFFA,     //    bra A
+                                                0x0009 },   //    nop
+                                 0x14, 0 };
+    const Fixture forCondBody = { 0x0600A440u, { 0xA004,     // bra test
+                                                 0x0009,     //   nop
+                                                 0x2668,     // body: tst r6,r6
+                                                 0x8900,     //       bt step
+                                                 0x6152,     //       mov.l @r5,r1   x = *q, only when r6 == 0
+                                                 0x6442,     // step: mov.l @r4,r4   p = *p
+                                                 0x2448,     // test: tst r4,r4
+                                                 0x8BF9,     //       bf body
+                                                 0x000B,     // rts
+                                                 0x6013 },   //   mov r1,r0
+                                  0x14, 0 };
+    // Low work RAM is 1 MiB mirrored twice over 0x00200000-0x003FFFFF (review of 0e3cd12): a
+    // mailbox marked at 0x20201000 and polled through 0x20301000.
+    const Fixture lowRamMirrorMailbox = simple(0x0600A2C0u, mailboxOps, 0x20301000u);
     // A literal the user marked volatile: mov.l @(4,pc),r0; rts; nop; .long 0x12345678.
     const Fixture sharedLiteral = { 0x06009740u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x12345678u };
     const Fixture wdtMirror = simple(0x06009780u, { 0xE05A, 0x4018, 0x2101 }, 0xFFFFFE88u);  // keyed, second copy
@@ -815,7 +1020,9 @@ void TestHardwareVolatility()
                               &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
                               &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice,
                               &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
-                              &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs })
+                              &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
+                              &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
+                              &backSplice, &forCondBody, &mailboxFold, &storeOverwritten })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -830,6 +1037,7 @@ void TestHardwareVolatility()
         const DecompileResult r = d.Decompile(snap, Request(f.base));
         Print(label, r);
         CHECK(r.status == DecompileStatus::Ok);
+        CHECK(ReferenceOk(d, snap, Request(f.base), r));
         return r;
     };
 
@@ -1040,6 +1248,15 @@ void TestHardwareVolatility()
         CHECK(Has(r.Text(), "return 0x12345678;"));
         CHECK(WarnsAbout(r, "is inverted: ignored"));
     }
+    // ...and through low work RAM's second image (review of 0e3cd12).
+    {
+        DecompileRequest q = Request(lowRamMirrorMailbox.base);
+        q.volatileMemory.emplace_back(0x20201000u, 0x20201001u);
+        r = d.Decompile(snap, q);
+        Print("low work RAM mailbox through its mirror", r);
+        CHECK(Ledger(r, Mailbox(0x20301000u)));
+        CHECK(kept(r, "Ram20301000"));
+    }
     // ...and a word access is kept when the user marked only one byte of it.
     {
         DecompileRequest q = Request(ramMailbox.base);
@@ -1209,6 +1426,55 @@ void TestHardwareVolatility()
     r = run("two reads as call arguments", callArgs);
     CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
 
+    // The read outlives the store that consumed it.
+    r = run("a read stored to a global the function overwrites", storeOverwritten);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(Has(r.Text(), "*param_1"));
+
+    // The folded poll: nothing is shown after it, and the missing write is said, with the cause.
+    r = run("mailbox poll on unmarked RAM removes a hardware write", mailboxFold);
+    CHECK(Ledger(r, {}));
+    CHECK(WarnsAbout(r, "0600A48E: the write of SMPC_SF here is missing") && WarnsAbout(r, "marked volatile"));
+    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
+    CHECK(HasNote(r, "the write of SMPC_SF here is missing", true));
+    {
+        DecompileRequest q = Request(mailboxFold.base);
+        q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
+        r = d.Decompile(snap, q);
+        Print("mailbox poll on marked RAM keeps the hardware write", r);
+        CHECK(Ledger(r, { Wr(0x26001000u, 4), Rd(0x26001000u, 4, true), Wr(0x20100063u, 1) }));
+        CHECK(ReferenceOk(d, snap, q, r));
+        CHECK(!WarnsAbout(r, "missing") && r.prototype.known);
+    }
+
+    // Correct outputs the ledger must accept: the joined blocks in the code's order, and the for loop.
+    r = run("a branch on a constant, the blocks joined in flow order", backSplice);
+    CHECK(Ledger(r, { Rd(0, 4, false, true), Rd(0, 4) }));
+    CHECK(r.accesses.size() == 2 && r.accesses[0].block == r.accesses[1].block);
+    r = run("for loop: the step read last, the body's read under a branch", forCondBody);
+    CHECK(Ledger(r, { Rd(0, 4, true, true), Rd(0, 4, true) }));
+    CHECK(Has(r.Text(), "for ("));
+
+    // The guarded read stays under the guard: its block is not the selector's, and the guard is an if.
+    r = run("switch: a read in the guarded block", switchRead);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+    CHECK(r.accesses.size() == 2 && r.accesses[0].block != r.accesses[1].block);
+    CHECK(Has(r.Text(), "if (3 < ") && !Has(r.Text(), "default:"));
+    r = run("switch: a read in the jump's delay slot", switchSlotRead);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+    CHECK(r.accesses.size() == 2 && r.accesses[0].block != r.accesses[1].block);
+    CHECK(Has(r.Text(), "if (3 < ") && !Has(r.Text(), "default:"));
+    // With only the table load in the block, the guard is still folded into the switch's default.
+    r = run("switch: the control, folded", switchFold);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(Has(r.Text(), "default:") && !Has(r.Text(), "if ("));
+    // A guard on one read does not bound a switch on a second read of the same pointer: both reads
+    // stay, the guard is an if, and the table (unbounded now) is not recovered, so nothing is lent.
+    r = run("switch: the selector is a second read of the guarded pointer", switchSecondRead);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4), Rd(0, 4) }));
+    CHECK(Has(r.Text(), "if (*param_1 < 4)") && !Has(r.Text(), "switch"));
+    CHECK(!r.prototype.known);
+
     r = run("one read tested on two paths", twoPaths);
     CHECK(Ledger(r, { Rd(0x25F80004u, 2) }));
 
@@ -1327,6 +1593,10 @@ void TestHardwareMap()
         CHECK(covers(z, 0x260FFFFCu) && covers(z, 0x00001000u) && covers(z, 0x38001000u) && !covers(z, 0x00002000u));
         CHECK(VolatileAliases(0x26002000u, 0x26001000u).empty());   // inverted
         CHECK(VolatileAliases(0x26001003u, 0x26001001u).empty());   // inverted within one longword
+        const std::vector<HardwareRange> lw = VolatileAliases(0x20201000u, 0x20201001u);   // low work RAM
+        CHECK(covers(lw, 0x20301000u) && covers(lw, 0x00301003u) && covers(lw, 0x28201000u) && !covers(lw, 0x20401000u));
+        const std::vector<HardwareRange> lwEdge = VolatileAliases(0x001FFFFCu, 0x00400003u);   // across the whole area
+        CHECK(covers(lwEdge, 0x00301234u) && covers(lwEdge, 0x001FFFFCu) && covers(lwEdge, 0x00400000u) && !covers(lwEdge, 0x00400004u));
         const std::vector<HardwareRange> o = VolatileAliases(0x45000000u, 0x45000003u);   // not the bus
         CHECK(o.size() == 1 && o[0].first == 0x45000000u && o[0].last == 0x45000003u);
         const std::vector<HardwareRange> m = VolatileAliases(0x3FFFFFFCu, 0x40000003u);   // bus and beyond
@@ -1364,6 +1634,7 @@ void Decode(uint32_t x, bool& bus, uint32_t& lw)
     if (!bus) { lw = x & ~3u; return; }
     uint32_t a = x & 0x07FFFFFFu;                                // bits 31-27 do not reach the bus
     if (a >= 0x06000000u) a = 0x06000000u | (a & 0x000FFFFFu);   // high work RAM repeats every 1 MiB
+    else if (a >= 0x00200000u && a < 0x00400000u) a = 0x00200000u | (a & 0x000FFFFFu);   // low work RAM: 1 MiB, twice
     lw = a & ~3u;
 }
 
@@ -1379,6 +1650,11 @@ bool Covered(uint32_t x, uint32_t first, uint32_t last)
         for (uint32_t period = 0; period < 4; ++period)
         {
             const uint32_t top = (partition << 29) | (period << 27);
+            if (lw >= 0x00200000u && lw < 0x00400000u)
+            {
+                if (hits(top | lw) || hits(top | (lw ^ 0x00100000u))) return true;
+                continue;
+            }
             if (lw < 0x06000000u)
             {
                 if (hits(top | lw)) return true;
@@ -1530,7 +1806,8 @@ void TestGameCode()
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
-    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0, outOfOrder = 0;
+    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0, outOfOrder = 0, folded = 0, dropped = 0,
+        noReference = 0, droppedSaid = 0;
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
@@ -1570,24 +1847,54 @@ void TestGameCode()
         // made twice; copies on separate paths (a block copied into each) are not.
         // Two reads in one statement: C leaves their order open.
         // A read printed later than it happens (in the statement its value ends in) must not pass
-        // another access on the way: within one block, nothing in between.
+        // another access or a call on the way.
         for (const MemoryAccess& m : r.accesses)
         {
-            if (m.write || m.statement == m.id || m.block < 0 || m.block != m.statementBlock) continue;
-            for (const MemoryAccess& o : r.accesses)
-                if (o.id != m.id && o.block == m.block && o.order > m.order && o.order < m.statementOrder &&
-                    std::find(m.through.begin(), m.through.end(), o.id) == m.through.end() && ++moved <= 10)
-                    std::printf("  read at %08X printed past the access at %08X in %08X\n", m.insn, o.insn, entry);
+            std::string what;
+            if (PrintedPast(m, r.accesses, r.calls, &what) && ++moved <= 10)
+                std::printf("  read at %08X printed past %s in %08X\n", m.insn, what.c_str(), entry);
         }
         for (const MemoryAccess& m : r.accesses)
             if (m.conditionalInPrint && ++shortCircuit <= 10)
                 std::printf("  read at %08X printed in the right operand of && or || in %08X\n", m.insn, entry);
-        // An access the engine moved past another in its block (MovedInBlock).
-        for (size_t i = 0; i < r.accesses.size(); ++i)
-            for (size_t j = i + 1; j < r.accesses.size(); ++j)
-                if (MovedInBlock(r.accesses[i], r.accesses[j]) && ++outOfOrder <= 10)
-                    std::printf("  accesses at %08X and %08X are out of order in block %d in %08X\n", r.accesses[i].insn,
-                                r.accesses[j].insn, r.accesses[i].block, entry);
+        // Two accesses in one final block in an order the code cannot make them in, and two joined
+        // into a switch's block across a branch (FlowReach, from the flow's own blocks).
+        {
+            const FlowReach fr(r.flowSuccessors);
+            for (size_t i = 0; i < r.accesses.size(); ++i)
+                for (size_t j = i + 1; j < r.accesses.size(); ++j)
+                {
+                    if (OutOfFlowOrder(fr, r.accesses[i], r.accesses[j]) && ++outOfOrder <= 10)
+                        std::printf("  accesses at %08X and %08X are out of the code's order in block %d in %08X\n",
+                                    r.accesses[i].insn, r.accesses[j].insn, r.accesses[i].block, entry);
+                    if (FoldedIntoSwitch(fr, r.accesses[i], r.accesses[j]) && ++folded <= 10)
+                        std::printf("  accesses at %08X and %08X joined into a switch's block across a branch in %08X\n",
+                                    r.accesses[i].insn, r.accesses[j].insn, entry);
+                }
+        }
+        // Every memory instruction the flow reaches has an access, unless it is ordinary memory at a
+        // constant address: the reference run (every address volatile) lists them all.
+        {
+            DecompileRequest ref = Request(entry);
+            ref.allMemoryVolatile = true;
+            const DecompileResult rr = d.Decompile(snap, ref);
+            if (rr.status != DecompileStatus::Ok) ++noReference;
+            else
+                for (const MemoryAccess& m : rr.accesses)
+                {
+                    if (m.direct ? !InHardwareRange(m.address) : m.pointerFromOrdinaryMemory) continue;
+                    bool found = false;
+                    for (const MemoryAccess& x : r.accesses)
+                        if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
+                    if (found) continue;
+                    char at[12];
+                    std::snprintf(at, sizeof at, "%08X", m.insn);
+                    if (WarnsAbout(r, at)) ++droppedSaid;   // removed as unreachable, and the output says so
+                    else if (++dropped <= 10)
+                        std::printf("  the %s of %u bytes at %s (%s%08X) has no access in %08X\n", m.write ? "write" : "read",
+                                    unsigned(m.size), at, m.direct ? "" : "through a pointer; ", m.address, entry);
+                }
+        }
         for (size_t i = 0; i < r.accesses.size(); ++i)
             for (size_t j = i + 1; j < r.accesses.size(); ++j)
                 if (Unordered(r.accesses[i], r.accesses[j]) && ++unordered <= 10)
@@ -1640,8 +1947,12 @@ void TestGameCode()
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
     std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
                 "with two reads\n", duplicated, wrongWidth, unordered);
-    std::printf("  %d reads printed past another access, %d printed as conditional, %d moved within a block\n", moved,
-                shortCircuit, outOfOrder);
+    std::printf("  %d reads printed past another access or a call, %d printed as conditional, %d pairs out of the code's "
+                "order, %d joined into a switch across a branch\n", moved, shortCircuit, outOfOrder, folded);
+    std::printf("  %d accesses dropped against the reference run, %d missing and said (code removed as unreachable); "
+                "%d functions without a reference\n", dropped, droppedSaid, noReference);
+    CHECK(dropped == 0);
+    CHECK(folded == 0);
     CHECK(outOfOrder == 0);
     CHECK(shortCircuit == 0);
     CHECK(unordered == 0);
@@ -2512,6 +2823,25 @@ void TestPrototypeEligibility()
                         0x4F26,                          // lds.l @r15+,pr
                         0x000B,                          // rts
                         0xE007 });                       //   mov #7,r0
+    // Review of 0e3cd12: a callee that returns nothing, a caller that uses r0 after calling it (as if
+    // it returned a value), and a caller storing a register's low word (its signature was withheld).
+    const uint32_t voidLeaf = 0x06013000u, usesR0After = 0x06013100u, wordStoreCaller = 0x06013200u;
+    Place(hw, voidLeaf, { 0x000B,          // rts
+                          0x0009 });       //   nop
+    Place(hw, usesR0After, { 0x4F22,                              // sts.l pr,@-r15
+                             Bsr(usesR0After + 2, voidLeaf),      // bsr voidLeaf
+                             0x0009,                              //   nop
+                             0x7001,                              // add #1,r0      r0: what the callee left
+                             0x4F26,                              // lds.l @r15+,pr
+                             0x000B,                              // rts
+                             0x0009 });                           //   nop
+    Place(hw, wordStoreCaller, { 0x4F22,                              // sts.l pr,@-r15
+                                 Bsr(wordStoreCaller + 2, voidLeaf),  // bsr voidLeaf
+                                 0x0009,                              //   nop
+                                 0x2451,                              // mov.w r5,@r4   r5's low word
+                                 0x4F26,                              // lds.l @r15+,pr
+                                 0x000B,                              // rts
+                                 0x0009 });                           //   nop
     auto snap = MakeSnapshot(hw);
 
     auto run = [&](uint32_t entry, std::initializer_list<std::pair<uint32_t, Prototype>> lent, const char* label) {
@@ -2623,6 +2953,23 @@ void TestPrototypeEligibility()
     CHECK(sg.prototype.known && (sg.prototype.effects.storesThrough & origin::kMemory));
     CHECK(!run(letOut, { { handsOn, ho.prototype }, { storesThroughG, sg.prototype } }, "frame let out, then stored through")
                .prototype.known);
+    // The void callee is lent as it is; the caller that uses r0 after it is not lent on it; the
+    // caller that stores a register's low word keeps its signature.
+    {
+        const DecompileResult leafR = d.Decompile(snap, Request(voidLeaf));
+        CHECK(leafR.prototype.known && leafR.prototype.ret.kind == TypeKind::Void);
+        DecompileRequest q = Request(usesR0After);
+        q.prototypes.emplace_back(voidLeaf, leafR.prototype);
+        const DecompileResult r1 = d.Decompile(snap, q);
+        Print("uses r0 after a void callee", r1);
+        CHECK(Has(r1.Text(), "extraout_r0"));
+        CHECK(!r1.prototype.known && Has(r1.prototypeWithheld, "not known to return it") && Has(r1.prototypeWithheld, "r0"));
+        q = Request(wordStoreCaller);
+        q.prototypes.emplace_back(voidLeaf, leafR.prototype);
+        const DecompileResult r2 = d.Decompile(snap, q);
+        Print("stores a register's low word around a call", r2);
+        CHECK(r2.prototype.known && r2.prototypeWithheld.empty());
+    }
 }
 
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --

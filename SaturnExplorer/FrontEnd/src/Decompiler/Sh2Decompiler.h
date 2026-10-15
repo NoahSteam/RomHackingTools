@@ -116,6 +116,11 @@ struct DecompileRequest
     // as inclusive [first, last] ranges. Every access there is kept, like a hardware register's
     // (the registers and sound RAM always are). A cached or cache-through address covers both.
     std::vector<std::pair<uint32_t, uint32_t>> volatileMemory;
+    // Test instrumentation: every address is volatile, so no access folds away and the access
+    // ledger lists every memory instruction the flow reaches (literal pools still fold: read-only
+    // wins). The ledger of an ordinary run is checked against it: an access missing there must be
+    // one of ordinary memory at a constant address, which may fold, and nothing else.
+    bool allMemoryVolatile = false;
 };
 
 // "0x26001000-0x26001003, 25A01000": inclusive ranges, or single bytes, hex with or without 0x,
@@ -212,6 +217,30 @@ struct MemoryAccess
     // (the engine copies a block into each path that reaches it; copies on separate paths are one
     // access each, copies on one path are an access made twice).
     bool repeatedOnPath = false;
+    // Where the access was when the flow was first followed, before any action: the block index in
+    // DecompileResult::flowSuccessors and its position in that block. -1 when the op is not one of
+    // the flow's (made later by a rule, or a register access with several candidates in its
+    // instruction). The order the code makes two accesses in is read from here: the final blocks
+    // are joined, split and copied, so neither op ids nor addresses say.
+    int origBlock = -1;
+    uint32_t origOrder = 0;
+    bool inSwitchBlock = false;   // the final block ends in the jump of a switch
+    // Through a pointer whose value comes from a read of ordinary memory at a constant address. In
+    // the reference run (DecompileRequest::allMemoryVolatile) that read stays a read, so the
+    // access stays through a pointer; an ordinary run may know the memory's value (the function
+    // stored it) and fold the access into a variable, which the ledger does not list.
+    bool pointerFromOrdinaryMemory = false;
+};
+
+// A call in the final p-code: an access's order relative to it matters as much as to another access.
+struct CallSite
+{
+    uint32_t insn = 0;
+    int block = -1;
+    uint32_t order = 0;
+    uint32_t id = 0;
+    int origBlock = -1;
+    uint32_t origOrder = 0;
 };
 
 // How one of the engine's warning comments is reported: kept or not (warnings from jump-table
@@ -252,6 +281,8 @@ struct DecompileResult
     std::string name;
 
     std::vector<Line> lines;
+    std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
+    std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the
@@ -323,6 +354,8 @@ public:
     static void SetNoReturnForTests(const std::set<uint32_t>& entries);
 
 private:
+    void NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
+                             std::atomic<bool>* cancel, DecompileResult& r);
     void DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
                        std::atomic<bool>* cancel, DecompileResult& r);
     void Enter(DecompilePhase phase);

@@ -978,3 +978,119 @@ Matrix, rerun whole:
 
 Unverified: switch selectors read from memory, MSVC and macOS builds, LeakSanitizer, and the
 string and pointer-inference positive controls from the consolidated round.
+
+### Review of `0e3cd12`: jump-table recovery, the low work RAM mirror, and the ledger's oracle
+
+Two external reviews of `0e3cd12`. The first found two P1s in jump-table recovery, a missing
+mirror, and that the ledger's order checks were anchored on op ids, addresses and output lines;
+the second found the two shapes on which those anchors reject correct output. Everything
+reproduced except where noted.
+
+- **P1: a switch's guard folded over a read.** `x = *p; if (x > 3) goto def; y = *q;
+  switch (x)` printed `y = *q` before the `switch`: with no statement in the switch block, the
+  engine folds the guard into the switch as its default and joins the blocks, and an unused load
+  (kept for its effect) is no statement to `noInterveningStatement`; a store or a call would have
+  stopped it. The same with the read in the jump's delay slot. The read then appears made for
+  `x > 3` too. Patch 0013: the fold is refused when the switch block holds a LOAD other than the
+  table lookup. The table lookup stays exempt (the reviewer measured 11 game functions that fold
+  through one); the control fixture still folds.
+- **P1: a guard on one read bounding a switch on another.** `if (*p < 4) switch (*p)` lost the
+  first read and its `if`: `GuardRecord::valueMatch` took two loads from one pointer for one value
+  (upstream's own `TODO: we need to check for aliases`), so the guard bounded the switch on the
+  second read and was folded away. With a store between the reads the guard printed, but the
+  table was still bounded by the other read. Patch 0013: two different LOAD ops never match. The
+  guard stays an `if`, both reads stay, and the table, unbounded, is not recovered: the jump is an
+  indirect call and nothing is lent. In the game's work RAM this fires once per save state
+  (0x06017E38 and 0x06017E48, on ordinary RAM).
+- **P2: low work RAM's mirror.** Mednafen maps 0x00200000-0x003FFFFF as 1 MiB twice;
+  `VolatileAliases` repeated only high work RAM, so a mailbox marked at 0x20201000 and polled
+  through 0x20301000 folded to `do {} while (true)`. Both work RAM areas now repeat, the range
+  model in the tests has the same rule (0 disagreements over 192,000 addresses), and a fixture
+  polls through the second image.
+- **P2: a `void` return lent as known.** A callee whose analysis found no value returned is
+  lent as void, and a caller doing `return P() + 1` printed `P(); return extraout_r0 + 1;` with
+  its own signature still reported as known. The caller's signature is now withheld: `it uses r0
+  after calling P, which is not known to return it` (`extraout_` is the engine's name for a
+  register read after a call that the callee's signature does not return). The mirror gap above
+  was one way to such a callee: a poll that folded to an endless loop returned nothing.
+- **P2/P3, the ledger (both reviews).** Order was judged by op creation ids within a block and by
+  output lines across blocks. Both reject correct output: a branch on a constant whose blocks the
+  engine joins in flow order (B's read, created later, rightly before A's), and a `for` loop
+  whose step prints in the header above a body read it runs after. And neither could see a read
+  dropped from the output, nor one printed as unconditional when the code makes it under a guard.
+  The oracle is now the flow itself:
+  - `DecompileResult::flowSuccessors` is the block graph as first followed, before any action,
+    and each access and call carries its block and position there (`origBlock`, `origOrder`).
+    Two accesses in one final block must be in an order the code can make them in
+    (`FlowReach`: same block and earlier, or a path between the blocks). Op ids, addresses and
+    lines are no longer compared. Both rejected outputs are fixtures and pass.
+  - `DecompileResult::calls` lists the calls, and a read printed where its value is used must not
+    pass a call any more than another access (`PrintedPast`).
+  - `FoldedIntoSwitch`: two accesses from blocks the flow kept apart by a branch, joined into a
+    block that ends in a switch's jump. With patch 0013 removed, the two guard fixtures fail on
+    this check alone.
+  - **The reference run.** `DecompileRequest::allMemoryVolatile` makes every address volatile
+    (literal pools excepted: read-only wins), so the output holds every memory instruction the
+    flow reaches. The ordinary output is compared with it: an access of the reference that is
+    missing must be one of ordinary memory at a constant address, which folds into a variable;
+    a register, user-marked memory or any access through a pointer that is missing was dropped
+    (`ReferenceOk`, every fixture; `TestGameCode` counts them). A pointer whose value the
+    reference read from ordinary memory (`pointerFromOrdinaryMemory`) is exempt too: the ordinary
+    run may know that memory's value, when the function stored it, and fold the access into a
+    variable (three byte stores in one game function did exactly that). Its limit: a drop that
+    does not depend on volatility -- the second P1 above, inside jump-table recovery -- happens in
+    both runs alike; that one is pinned by its fixture's text.
+  - The ledger's chain from a read to its statement stops at a call: the read is the call's
+    argument, printed in the call, whatever is done with the call's result (two game functions
+    were otherwise reported as a read printed past a call).
+- **Found by the reference run on game code: a folded poll removes hardware writes.** Two
+  functions (0x06003C06, the master's wait for the slave; 0x0600C2DA) write a work RAM word and
+  poll it. Unmarked, the write is forwarded to the read, the loop never ends as analysed, and the
+  engine removes everything after it as unreachable: `SH2_IPRA = 0`, `SH2_IPRB = 0`,
+  `SH2_TIER = 1`, `SINIT = 0xffff` and the `SH2_FTCSR` poll in the first, two `VDP2_BGON` writes in
+  the second. The output was `do {} while (true);` with the engine's own warnings and a known
+  `void` signature. The design still asks the user to mark the mailbox, but the output now says
+  what that cost: when the engine reports an unreachable-block removal or a do-nothing loop, the
+  function is analysed once more with every address volatile, and each hardware access of that
+  run missing from the shown output is an amber line on its instruction and a warning (`the write
+  of SH2_IPRA here is missing: the analysis removed the code around it as unreachable, after a loop
+  it takes to run for ever. A poll of memory another processor writes folds so unless that memory
+  is marked volatile`), and the signature is withheld. The cost is paid only by functions with such
+  a removal. Fixture: the poll then an SMPC write, unmarked (said, withheld) and marked (three
+  accesses, nothing said). `TestGameCode` counts a missing access the output says as said, not
+  dropped.
+- **Found by the reference run on game code: a read dropped with the store it fed.** In
+  0x0601561A, `Ram060a51f6 = *(*(param_1 + 0x18) + 0x28)` and its two reads were gone: the global
+  is overwritten on every path before any read, so the store is removed as dead -- late, once a
+  later pass has made it a direct write -- and `ActionDeadCode::lastChanceLoad`, which holds an
+  unused load for its effect, gives up after the first heritage pass, so the two reads went with
+  it. Patch 0014: under `keepUnusedLoads` the hold is offered in every pass. One load must not be
+  held: a recovered switch's table lookup becomes unused when the switch replaces it, and held it
+  printed as a stray read and stopped patch 0013's guard fold; `foldInNormalization` now flags it
+  (`PcodeOp::jumptable_lookup`) and both skip it. Fixture: `mov.l @r4,r1; mov.l r1,@global;
+  mov.l #0,@global` keeps `*param_1`; without the patch the ledger's reference run rejects it.
+- **P3s.** `ReturnCheck::Get` now reads part of a tracked register (a `mov.w r1,@r2` stores
+  r1's low word; it was taken for anything, and a PR-saving caller lost its signature). The
+  runner's too-large memo is keyed by the entry and the volatile list. A saved volatile list that
+  does not parse is kept as it is, shown in the editor with the error, and saved back unchanged
+  until a list that parses replaces it. The shown output is stale when the function set changed
+  after it arrived, even with nothing pending (after a Stop, or a disabled runner).
+
+Mutation, each rebuilt and run: without patch 0013 the two guard fixtures fail (`joined into a
+switch's block across a branch`, from the ledger alone) and the second-read fixture fails on its
+text and its withheld signature; without patch 0014 the overwritten-store fixture fails on its
+ledger, its text and the reference run; the ledger's own earlier false positives are fixtures that
+pass.
+
+Matrix, rerun whole:
+
+| Check | Result |
+|---|---|
+| Fixtures (`Sh2DecompilerTests`, 15 new; one each in the runner and panel suites) and the whole suite | 91 of 91 tests pass. |
+| Range model | 0 disagreements, low work RAM's mirror included. |
+| Game code, two save states (839 and 1,554 prologues), each function also decompiled as the reference | 839/839 and 1,554/1,554 decompile; 0 of every ledger count: duplicated, wrong width, two reads in a statement, printed past an access or a call, conditional, out of the code's order, joined into a switch across a branch, dropped against the reference. 16 and 20 accesses are missing and said (the folded polls above: 4 functions in all, 36 hardware accesses, each now an amber line and a warning). 5 and 8 outputs differ from `0e3cd12`: those cautions, the restored `Ram060a51f6` read, the guard no longer folded over a read (a `default:` becomes `case 3:` plus `default: return;`), and reads through a pointer now kept after the store they fed was removed as overwritten (`xVar1 = *param_1;` and two more in 0x06065EDC). |
+| Against `c4927c1` on the same images | 225 of 839 and 480 of 1,554 outputs differ (the earlier rounds' changes plus this round's). Time 5,235 -> 5,668 ms and 17,610 -> 18,868 ms (about +8% and +7%); the worst function 2.8 s either way. The ledger's reference run is test-only and not in these times; the production caution's second analysis runs only for the 4 functions with a removal. |
+| Sanitizers | gcc ASan + UBSan (vptr included) builds of `Sh2DecompilerTests` (game code and its reference runs included), `DecompilerPanelTests`, `DecompilerRunnerTests`, `Sh2DecompilerEngineTests` and `Sh2DecompilerFixtureTests`: no ASan error; UBSan reports only the two upstream SLEIGH shift sites (`address.hh:605`, `slghpatexpress.cc:979`), as before. `DecompilerRunnerTests` failed once under ASan while the game-code run shared the machine (its 50 ms budget test took a correct answer for a late one) and passed when run alone. |
+
+Unverified: switch selectors loaded from memory beyond the fixtures here; MSVC and macOS builds;
+LeakSanitizer; the string and pointer-inference positive controls.

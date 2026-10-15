@@ -12,6 +12,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a switch's guard is not folded over a load, and does not bound a second load (patches/0013-jumptable-loads.patch).
+ * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  */
 #include "jumptable.hh"
 #include "emulate.hh"
@@ -669,6 +672,11 @@ int4 GuardRecord::valueMatch(Varnode *vn2,Varnode *baseVn2,int4 bitsPreserved2) 
     return 1;
   if (loadOp->code() != CPUI_LOAD) return 0;
   if (loadOp2->code() != CPUI_LOAD) return 0;
+  // SaturnExplorer: two loads are two reads. The second may see another value (a register, a
+  // mailbox, a store in between), so a guard on the first does not bound a switch on the second;
+  // and the guard's own read must not be dropped as a duplicate of the switch's.
+  if (loadOp != loadOp2 && loadOp->getParent()->getFuncdata()->getArch()->loadsNotDuplicated)
+    return 0;
   if (loadOp->getIn(0)->getOffset() != loadOp2->getIn(0)->getOffset()) return 0;
   Varnode *ptr = loadOp->getIn(1);
   Varnode *ptr2 = loadOp2->getIn(1);
@@ -1436,6 +1444,29 @@ bool JumpBasic::foldInOneGuard(Funcdata *fd,GuardRecord &guard,JumpTable *jump)
 
   if (!switchbl->noInterveningStatement())
     return false;
+  if (fd->getArch()->loadsNotDuplicated) {
+    // SaturnExplorer: folding puts the switch block on the guarded-out path too, so a load in it
+    // that is not the table lookup would be read for values the guard excludes. (An unused read
+    // is kept for its effect, and noInterveningStatement does not count it as a statement.)
+    set<PcodeOp *> tableOps;
+    vector<Varnode *> work;
+    work.push_back(jump->getIndirectOp()->getIn(0));
+    while(!work.empty()) {
+      Varnode *vn = work.back();
+      work.pop_back();
+      if (!vn->isWritten()) continue;
+      PcodeOp *defOp = vn->getDef();
+      if (defOp->getParent() != switchbl || !tableOps.insert(defOp).second) continue;
+      for(int4 i=0;i<defOp->numInput();++i)
+	work.push_back(defOp->getIn(i));
+    }
+    list<PcodeOp *>::const_iterator iter;
+    for(iter=switchbl->beginOp();iter!=switchbl->endOp();++iter) {
+      PcodeOp *bop = *iter;
+      if (bop->code() == CPUI_LOAD && !bop->isJumptableLookup() && tableOps.find(bop) == tableOps.end())
+	return false;
+    }
+  }
   if (pos == switchbl->sizeOut()) {
     jump->addBlockToSwitch(guardtarget,JumpValues::NO_LABEL);	// Add new destination to table without a label
     jump->setLastAsDefault();			// treating it as either the default case or an exit
@@ -1591,6 +1622,11 @@ Varnode *JumpBasic::foldInNormalization(Funcdata *fd,PcodeOp *indop)
 {
   // Set the BRANCHIND input to be the unnormalized switch variable, so
   // all the intervening code to calculate the final address is eliminated as dead.
+  // SaturnExplorer: the table lookup among that code is a load that must go with it, not one to
+  // keep for its effect (lastChanceLoad): the switch stands for it.
+  for(int4 i=0;i<pathMeld.numOps();++i)
+    if (pathMeld.getOp(i)->code() == CPUI_LOAD)
+      pathMeld.getOp(i)->setJumptableLookup();
   fd->opSetInput(indop,switchvn,0);
   return switchvn;
 }

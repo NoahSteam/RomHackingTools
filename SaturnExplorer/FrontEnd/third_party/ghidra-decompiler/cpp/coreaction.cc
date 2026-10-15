@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
+ * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4175,7 +4176,10 @@ uintb ActionDeadCode::gatherConsumedReturn(Funcdata &data)
 bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
 
 {
-  if (data.getHeritagePass() > 1) return false;
+  // SaturnExplorer: a load becomes unused in a later pass too, when the store that consumed it is
+  // removed as overwritten (a store to a global, made a direct write by a later pass). The hold is
+  // then still wanted: the read may be of a register.
+  if (data.getHeritagePass() > 1 && !data.getArch()->keepUnusedLoads) return false;
   if (data.isJumptableRecoveryOn()) return false;
   list<PcodeOp *>::const_iterator iter = data.beginOp(CPUI_LOAD);
   list<PcodeOp *>::const_iterator enditer = data.endOp(CPUI_LOAD);
@@ -4184,6 +4188,7 @@ bool ActionDeadCode::lastChanceLoad(Funcdata &data,vector<Varnode *> &worklist)
     PcodeOp *op = *iter;
     ++iter;
     if (op->isDead()) continue;
+    if (op->isJumptableLookup()) continue;	// SaturnExplorer: the switch stands for this read
     Varnode *vn = op->getOut();
     if (vn->isConsumeVacuous()) continue;
     if (data.getArch()->keepUnusedLoads || op->getIn(1)->isEventualConstant(3, 1)) {

@@ -156,8 +156,11 @@ public:
     void SetAutoRefresh(bool on) { mAutoRefresh = on; }
     // The user's volatile memory (DecompileRequest::volatileMemory), as typed: settings keep the
     // text. False, keeping the old ranges, when it does not parse.
-    const std::string& VolatileMemory() const { return mVolatileText; }
+    // The list as typed and saved. A saved list that did not parse is kept here untouched, until a
+    // list that does is set, so a typo is not overwritten with nothing on exit (review of 0e3cd12).
+    const std::string& VolatileMemory() const { return mVolatileText.empty() ? mVolatileUnparsed : mVolatileText; }
     bool SetVolatileMemory(const std::string& text, std::string* error = nullptr);
+    void KeepUnparsedVolatileMemory(const std::string& text) { mVolatileUnparsed = text; }
 
     // The install decision for one polled result (called by Update; public so tests can offer a
     // result the runner would never deliver, which is how the panel's own checks are pinned
@@ -358,6 +361,7 @@ private:
     uint64_t PrototypeHash(uint32_t entry) const;   // over the prototypes lent to 'entry' now
 
     std::string mVolatileText;                                   // as typed and saved
+    std::string mVolatileUnparsed;                               // a saved list that did not parse
     std::vector<std::pair<uint32_t, uint32_t>> mVolatile;        // ...parsed
     uint64_t mVolatileHash = 0;
     char mVolatileEdit[2048] = {};                               // the popup's edit box
@@ -371,6 +375,7 @@ private:
     ViewId mShownSnapId;
     uint64_t mShownNamesGeneration = 0;
     uint64_t mShownVolatileHash = 0;   // the volatile list the shown answer was asked under
+    uint64_t mShownFunctions = 0;      // ...and the function set (names and starts), so a change after a Stop still shows as stale
     std::string mShownEntrySource;
     float mShownWidth = 0.0f;        // widest line, for the horizontal scroll range
     int mSelectedLine = -1;

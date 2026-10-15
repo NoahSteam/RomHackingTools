@@ -414,7 +414,10 @@ void App::LoadSettings()
 #if SE_ENABLE_DECOMPILER
     mDecompilerPanel.SetAutoRefresh(mSettings.GetBool("decompiler", "autorefresh", false));
     if (!mDecompilerPanel.SetVolatileMemory(mSettings.Get("decompiler", "volatile", "")))
+    {
         mLog.Error("settings.ini [decompiler] volatile does not parse; no volatile memory set");
+        mDecompilerPanel.KeepUnparsedVolatileMemory(mSettings.Get("decompiler", "volatile", ""));   // saved back as it is
+    }
     mBiosPath = mSettings.Get("decompiler", "bios", "");
     mBiosImage.reset();
     if (!mBiosPath.empty()) LoadBiosImage(mBiosPath);
