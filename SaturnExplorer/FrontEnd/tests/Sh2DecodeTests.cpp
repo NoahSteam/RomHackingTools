@@ -1267,13 +1267,21 @@ struct Layout
 
 // The words a form is tried on: all of them when there are few, otherwise the extremes of every
 // field (all zero, all one, the sign bit, the bit below it, ...) and a random fill.
+// MSVC has no __builtin_popcount.
+int BitCount(uint32_t v)
+{
+    int n = 0;
+    for (; v; v &= v - 1) ++n;
+    return n;
+}
+
 std::vector<uint16_t> PoolWords(int op, Rng& rng, size_t maxN)
 {
     std::vector<const Pat*> ps;
     for (const Pat& p : kPats)
         if (p.op == op) ps.push_back(&p);
     size_t total = 0;
-    for (const Pat* p : ps) total += size_t(1) << __builtin_popcount(~p->mask & 0xFFFF);
+    for (const Pat* p : ps) total += size_t(1) << BitCount(~p->mask & 0xFFFF);
     std::vector<uint16_t> out;
     if (total <= maxN)
     {

@@ -1680,3 +1680,107 @@ else open from this round. Not done: MSVC and macOS builds; the CI sanitizer job
 commands were run locally); the generator under ASan; `deadStack` does not separate the patch from
 its absence (kept as the control, with the game code's own functions as the real check); the push
 for a load reached with mask 0 is exercised by `deadShift` only.
+
+## Area 12, Windows run 1
+
+Master at `7fbbd1c`, branch `review/12-windows`. Windows 11 Home 10.0.26200, Visual Studio Community
+2022 17.14 (MSBuild 17.14.23), MSVC 19.38.33145 (toolset v143, tools 14.38.33130), Windows SDK
+10.0.26100, CMake 4.4.0, generator "Visual Studio 17 2022" x64. Ledger rows A12-1 to A12-5.
+
+**Builds.**
+
+| Build | Command | Result |
+|---|---|---|
+| CMake Debug, tests on | `cmake -B build -A x64 -DBUILD_TESTING=ON`, `cmake --build build --config Debug --parallel` | **Fails** at `7fbbd1c` (exit 1, 427 s): `Sh2DecodeTests.cpp(1276)` C3861 `__builtin_popcount` (A12-1), `Sh2FunctionFinderTests.cpp(243)` C2059, the `far` macro (A12-2). Builds after the two fixes on this branch |
+| CMake Release | `build-release.bat` | Builds (371 s); `build\bin\Release\SaturnExplorerFrontEnd.exe` and `licenses\` (fonts, ghidra-decompiler, imgui, nlohmann-json, zlib) |
+| MSBuild Release, v143 | `build-release-msbuild.bat` | Builds (254 s); `x64\Release\SaturnExplorer.exe` and `licenses\`, identical (`diff -r`) to the CMake build's |
+| MSBuild Release, v142 | `set SE_TOOLSET=v142`, `build-release-msbuild.bat` | MSB8020: the VS 2019 tools are not installed on this machine. Not a finding |
+| CMake Release, decompiler off | `cmake -B <dir> -A x64 -DSE_ENABLE_DECOMPILER=OFF -DBUILD_TESTING=OFF`, `--target SaturnExplorerFrontEnd` | Builds (102 s); `licenses\` correctly has no `ghidra-decompiler` |
+
+Two problems on this machine, not in the repository: a fresh configure picks the VS 2022 Build
+Tools instance, whose `cl.exe` 14.44 fails CMake's compiler check, so the configure needs
+`-DCMAKE_GENERATOR_INSTANCE=<Community>` (the existing `build\` already had it); and a build
+directory under a long path (`%TEMP%\claude\...`) fails in MSBuild's FileTracker (FTK1011, the
+path is over MAX_PATH).
+
+**ctest**, the whole suite, `-j4`, Debug and Release in the same tree. 77 of 78 pass in each; the
+one failure is `SlaFreshnessTests` (A12-3). No timeout. Times as ctest reports them under `-j4`:
+
+| Test | Debug | Release |
+|---|---|---|
+| `Sh2GeneratedTests` | 74.91 s | 14.15 s |
+| `DecompilerRunnerTests` | 25.23 s | 68.88 s |
+| `Sh2DumpTests` | 51.44 s | 2.17 s |
+| `Sh2DecodeTests` | 46.68 s | 5.26 s |
+| `Sh2DecompilerTests` | 22.50 s | 5.46 s |
+| `MemoryCompareTests` | 18.58 s | 4.30 s |
+| `DecompilerPanelTests` | 13.31 s | 2.64 s |
+| `Sh2SemanticsTests` | 11.29 s | 2.04 s |
+| `CanonicalTargetTests` | 9.18 s | 0.91 s |
+| `FrameRecorderTests` | 3.55 s | 3.30 s |
+| `SourceKeyTests` | 3.08 s | 0.54 s |
+| `ExportShutdownTests` | 1.33 s | 2.37 s |
+| `Sh2DecompilerEngineTests` | 1.58 s | 2.04 s |
+| `ResponseValidatorTests` | 1.95 s | 0.18 s |
+| `MemoryComparePanelTests` | 0.47 s | 1.72 s |
+| `DataSearchRunnerTests` | 1.65 s | 1.28 s |
+| `AIInvestigationEndToEndTests` | 1.65 s | 1.39 s |
+| `SavestateShapeTests` | 0.86 s | 1.30 s |
+| `Sh2FunctionFinderTests` | 0.51 s | 1.29 s |
+| `MemorySearchRunnerTests` | 0.90 s | 1.21 s |
+| `LayerExportTests` | 0.40 s | 1.08 s |
+| `ActionRegistryTests` | 0.59 s | 1.04 s |
+| `SlaFreshnessTests` | 0.43 s **Failed** | 0.81 s **Failed** |
+| the other 55 tests | under 1 s each, all pass | under 1 s each, all pass |
+
+The tests to watch, run alone:
+
+| Test (alone) | Debug | Release | Timeout |
+|---|---|---|---|
+| `DecompilerRunnerTests` | 17.9 s | 43.1 s (55.5 s run directly) | 120 s |
+| `Sh2GeneratedTests` (300 seeds) | 60.9 s | 7.8 s | 120 s |
+| `Sh2DecodeTests` (`WILL_FAIL`, fails as expected) | 34.3 s | 2.8 s | 120 s |
+
+The runner test does not time out on Windows Debug, for two reasons: the engine library is
+compiled optimised in every configuration, and the test runs a tenth of its fixtures under the
+MSVC Debug CRT ("fixtures: diamonds 100, straight 500, jumptable 16 x 30 (a tenth: MSVC Debug
+CRT)"). So on Windows it is the Release run, with the full workload, that is closest to the
+limit: 43 s alone, 69 s when ctest runs it beside three others, 1.7 times inside 120 s. No change
+proposed for Windows. For the Linux unoptimised timeout (157 s), the Windows numbers argue for
+the same tenth-sized workload whenever the test binary itself is unoptimised (the condition the
+MSVC Debug CRT check stands in for), rather than a longer timeout: the test's subject is
+cancellation and lifetime, not volume, and the full workload still runs in every optimised
+configuration and in the sanitizer job.
+
+One measurement for area 6, from the Release runner log: "cancel at 50% of actions" took 2,536 ms
+(straight) and 1,539 ms (jumptable) from flag to result, against 10 to 100 ms for every other
+cancel point; in Debug (a tenth of the size) 419 and 424 ms. A cancel inside one long action
+waits for that action to finish. The test passes; noted, not a row.
+
+**Allocation-failure children** (task 4), the Release binary run directly:
+`build\bin\Release\SaturnExplorerSh2DecompilerTests.exe <scratch dir>` exits 0, "all passed",
+2.9 s. `TestAllocationFailureIsReported`: 9 of 9 injected failures reported as Failed, none
+escaped. `TestEngineAllocationFailureInChild`: all 11 children pass (flow +10; construct +0..+3;
+reset +0, +1; observer; reference +0, +1, +50), each failing with status 3 and the next request
+answering status 4. The runner test's own children (`TestWorkerAllocationFailure`,
+`TestConstructionFailureReleasesEngine`, `TestOutOfMemoryEdges`) also run and pass in Release;
+in Debug all of these say "SKIPPED in an MSVC Debug build", by design.
+
+**MSVC warnings** (task 3): A12-5. Nothing in patches 0017 or 0018, `coreaction.cc`,
+`condexe.cc` or `Sh2GeneratedTests.cpp`; the errors in the new test code are A12-1 and A12-2.
+
+**The app** (task 5), `x64\Release\SaturnExplorer.exe` (MSBuild v143), `GS-9169_007.yss` opened
+through Session > Source > Load Dump > Yabause Save State (a path on the command line is ignored:
+A12-4):
+
+| Step | Result |
+|---|---|
+| SH-2 Pseudocode, Follow PC | `func_0x06030548` decompiled at once |
+| Volatile: `06001F00-06001FFF`, Apply | Kept; reopening the popup shows it |
+| Refresh | Decompiles again, no error |
+| Stop while decompiling: entry `0601A0C8`, Enter, Stop at once | "Stopped.", the previous function stays shown; Refresh then decompiles `0601A0C8` in full |
+| Close the window with a decompile in flight (entry `06031A6C`, Enter, then the close box) | Process gone within 0.1 s: no hang on the worker join. Release decompiles of these functions take under 0.2 s, so the request may have finished before the close arrived; the runner test's `TestDestructorJoins` covers a join with a request in flight (31.6 ms in Release) |
+| Restart | `settings.ini` has `volatile = 06001F00-06001FFF` under `[decompiler]`; the popup shows it again |
+| Decompiler-off build | Starts and responds; closed with WM_CLOSE it exits in 0.2 s; it leaves the saved `volatile` line as it was. Its panel was not looked at: screen access to that build was declined on this machine |
+
+Settings files were restored afterwards (hash-checked).
