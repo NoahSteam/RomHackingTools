@@ -631,6 +631,49 @@ void TestEntriesAndNoRetryLoops()
     CHECK(f.panel.WantedEntry() == 0x26004000u);
 }
 
+// Review of area 1 (A1-3): "asked already" stops the panel asking the same question every frame, not
+// the user. Enter in the entry box asks again, once -- after a failure, and after Stop, where the
+// old function would otherwise stay on screen, stale, until Refresh.
+void TestEnterAsksAgain()
+{
+    {
+        Fixture f;
+        f.Idle(3);
+        f.TypeInto("entry", "00000600");   // BIOS, not captured: a failure
+        CHECK(f.PumpUntil([&] { return f.panel.Shown() && !f.panel.Pending(); }));
+        const uint64_t n = f.panel.Submissions();
+        f.TypeInto("entry", "00000600");
+        CHECK(f.PumpUntil([&] { return !f.panel.Pending(); }));
+        CHECK(f.panel.Submissions() == n + 1);
+        f.Idle(60);
+        CHECK(f.panel.Submissions() == n + 1);   // once, not a loop
+    }
+    {
+        Fixture f;
+        f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+        CHECK(f.WaitShown("+ 1"));
+        f.gate.Close();
+        f.backend.hw[dts::kFixture1AddOne + 1 - kHw] = 0x02;
+        ++f.backend.serial;
+        f.Idle();
+        CHECK(f.gate.WaitHeld());
+        f.ClickItem("stop");
+        f.gate.Open();
+        CHECK(f.PumpUntil([&] { return !f.panel.Pending(); }));
+        CHECK(Has(f.Shown().Text(), "+ 1"));
+        CHECK(f.panel.ShownStale());
+        const uint64_t n = f.panel.Submissions();
+        f.Idle(30);
+        CHECK(f.panel.Submissions() == n);       // a Stop is not undone by the panel itself
+        char entry[16];
+        std::snprintf(entry, sizeof entry, "%08X", dts::kFixture1Caller);
+        f.TypeInto("entry", entry);
+        CHECK(f.WaitShown("+ 2"));
+        CHECK(!f.panel.ShownStale());
+        CHECK(f.panel.Submissions() == n + 1);
+    }
+}
+
 // A3: a delay-slot construct the spec cannot get right (bf/s) is flagged, with its address, and
 // still shown.
 void TestDelaySlotFlagged()
@@ -2064,6 +2107,7 @@ int main(int argc, char** argv)
         RUN(TestInstallRule());
         RUN(TestSessionChangeDoesNotWait());
         RUN(TestEntriesAndNoRetryLoops());
+        RUN(TestEnterAsksAgain());
         RUN(TestDelaySlotFlagged());
         RUN(TestRegisterHintAtHalt());
         RUN(TestUserCommentsOnLines());

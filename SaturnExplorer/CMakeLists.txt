@@ -702,12 +702,12 @@ if(BUILD_TESTING)
         target_link_libraries(SaturnExplorerDecompilerModelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
         add_test(NAME SaturnExplorerDecompilerModelTests
                  COMMAND SaturnExplorerDecompilerModelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_model_test)
-        # Expected to fail while the model's open findings stand (REVIEW_LEDGER.md: A1-1 and A1-2, the
-        # runner's too-large memo outliving the bytes it was reached for and a successful Refresh; the
-        # default run ends with their shrunk sequences, kPinned). WILL_FAIL inverts the verdict, so
-        # ctest stays green on master and goes red the day the fix lands -- the signal to remove this
-        # property and the matching kPinned lines.
-        set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
+        # The default run ends with the shrunk sequences of the findings it has fixed (kPinned:
+        # REVIEW_LEDGER.md A1-1, A1-2 and A1-3, the runner's too-large memo and the entry box after
+        # Stop), kept as regression pins. A finding the model makes later that is not yet fixed goes
+        # in kPinned with WILL_FAIL TRUE here, so ctest stays green until the fix lands and goes red
+        # the day it does -- the signal to remove WILL_FAIL and keep the line.
+        set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT 120)
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged

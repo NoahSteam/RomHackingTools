@@ -574,7 +574,11 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     if (mCancelRequested)
     {
         mCancelRequested = false;
-        if (mPending.active) runner.Cancel(kSlot);
+        if (mPending.active)
+        {
+            runner.Cancel(kSlot);
+            mPending.cancelled = true;
+        }
     }
 
     // First bring the panel's own state up to date with what is on screen -- the view's identity,
@@ -689,7 +693,13 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
 
     if (!active || !mSnap) return;
     const bool force = mForceSubmit, retry = mRetryTooLarge;
-    mForceSubmit = mRetryTooLarge = false;
+    // An explicit Enter re-asks a question that has been asked, but not over a request still
+    // outstanding for it and wanted (a second Enter while it runs would only cancel and restart it);
+    // one the user has Stopped is not wanted, so Stop and Enter at once ask it afresh. The rule
+    // against asking the same question every frame holds for everything but the user's own request,
+    // which is taken once.
+    const bool askAgain = mAskAgain && (!mPending.active || mPending.cancelled);
+    mForceSubmit = mRetryTooLarge = mAskAgain = false;
     if (!mEntryOk) return;
 
     Question q;
@@ -700,7 +710,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.functions = mFunctions;
     q.prototypes = PrototypeHash(mEntry);
     q.volatileMemory = mVolatileHash;
-    if (q == mAsked && !force) return;   // asked already: its answer, or its failure, is shown
+    if (q == mAsked && !force && !askAgain) return;   // asked already: its answer, or its failure, is shown
     mAsked = q;
     mNote.clear();
 
@@ -881,6 +891,10 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
             t.address = v;
             t.source = EntrySource::User;
             SetTarget(t);
+            // Typing an entry and pressing Enter is a request, not a state the panel drifted into: it
+            // is answered even when the same question was asked before (after Stop, or after a
+            // failure, the old function would otherwise stay on screen with nothing coming).
+            mAskAgain = true;
         }
         else
         {

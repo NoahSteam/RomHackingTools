@@ -19,8 +19,11 @@
 // check-point, after the current uncheckable segment -- Architecture construction, one action's
 // body, printing, teardown. So:
 //   - The wall-clock budget (default 10 s) sets the cancel flag from Poll; the result comes back
-//     "too large to decompile within N s", and that entry is not retried automatically this
-//     session.
+//     "too large to decompile within N s", and that very request is not retried automatically this
+//     session: the memo is keyed by the whole request (RequestKey: the snapshot's key, the entry
+//     as asked, names, function starts, lent prototypes, volatile list), so it answers only the
+//     question that ran out of budget. Any change to what the result depends on is a new question
+//     and runs; a run of the same request that completes, whatever its status, erases the entry.
 //   - If a cancel is not acknowledged within the limit (default 5 s), decompilation is disabled
 //     for the session, with a reason naming the entry. No replacement worker is started: a second
 //     engine thread would reset the translator under the stuck one. A later session (after
@@ -72,9 +75,10 @@ public:
     static std::unique_ptr<DecompilerRunner> Start(const std::string& configDir, std::string& why,
                                                    RunnerOptions options = RunnerOptions()) noexcept;
 
-    // Returns the request's generation, or 0 when decompilation is disabled. An entry that ran out
-    // of budget earlier this session is not run again unless 'retryTooLarge' (an explicit
-    // Refresh): Poll hands back its TooLarge result at once.
+    // Returns the request's generation, or 0 when decompilation is disabled. A request that ran out
+    // of budget earlier this session -- the same snapshot key and the same request, all of it -- is
+    // not run again unless 'retryTooLarge' (an explicit Refresh): Poll hands back its TooLarge
+    // result at once. A request that differs in anything the result depends on is run.
     uint64_t Submit(int slot, std::shared_ptr<const MemorySnapshot> snapshot, DecompileRequest request,
                     bool retryTooLarge = false);
 
@@ -115,6 +119,19 @@ public:
 private:
     using Clock = std::chrono::steady_clock;
 
+    // Everything a result depends on, as a 128-bit digest: the snapshot's key (source, derive
+    // serial, frame, region set and BIOS contents), and the request's entry as asked, names,
+    // function starts, lent prototypes, volatile list and limits. Two requests with the same key
+    // are the same question and have the same answer, so the too-large memo can be an honest
+    // cache; two lanes make a collision, which would answer a different question "too large",
+    // negligible.
+    struct RequestKey
+    {
+        uint64_t lo = 0, hi = 0;
+        bool operator<(const RequestKey& o) const { return lo != o.lo ? lo < o.lo : hi < o.hi; }
+    };
+    static RequestKey MakeRequestKey(const SnapshotKey& snapshotKey, const DecompileRequest& request);
+
     struct Job
     {
         uint64_t generation = 0;
@@ -122,6 +139,7 @@ private:
         int slot = 0;
         std::shared_ptr<const MemorySnapshot> snapshot;
         DecompileRequest request;
+        RequestKey memoKey;   // of snapshot and request, taken at Submit (the snapshot is dropped early)
     };
 
     enum class CancelReason { None, User, Superseded, Session, Budget, Exit };
@@ -139,10 +157,12 @@ private:
     std::deque<Job> mQueue;
     std::deque<std::pair<uint64_t, DecompileResult>> mDone;   // (epoch, result)
     std::map<int, uint64_t> mLatest;            // slot -> newest generation submitted
-    // Entries, as asked (any mirror), that ran out of budget this epoch -- under which volatile list:
-    // another list is another question (review of 0e3cd12).
-    std::set<std::pair<uint32_t, uint64_t>> mTooLarge;
-    static uint64_t VolatileKey(const DecompileRequest& request);
+    // The requests that ran out of budget this epoch, by everything their result depends on
+    // (RequestKey) -- not by entry alone: after an edit to the function or a callee, a rename, a
+    // function start, another volatile list or different lent prototypes the answer may be Ok, and
+    // after a run of the same request completes the memo has been overtaken (A1-1, A1-2). Erased
+    // when such a run completes with any status other than the budget; cleared by InvalidateSession.
+    std::set<RequestKey> mTooLarge;
     uint64_t mNextGeneration = 1;
     uint64_t mEpoch = 1;
     bool mStopping = false;

@@ -32,9 +32,11 @@
 //   - the snapshot the panel holds is the one the policy of DecompilerPanel.h says;
 //   - a result made from other inputs than the ones now says stale, even while the engine is held;
 //   - Refresh asks the runner again; a request Stop cancelled in the engine installs nothing;
-//   - "too large" is accepted for the request held past the budget, and for the runner's memo of it
-//     while the bytes it runs are unchanged and nothing has decompiled it since (A1-1, A1-2 are the
-//     seeds and shrunk sequences where it is not);
+//   - "too large" is accepted for the request held past the budget, and for the runner's memo of
+//     exactly that question (same snapshot key, entry, names, starts, volatile list) until a run of
+//     it completes; a verdict reached for other bytes or inputs is a failure (A1-1, A1-2);
+//   - typing a function's entry into the box and pressing Enter asks for it, even where the same
+//     question was Stopped (A1-3);
 //   - at the end of a sequence a callee-first walk through every function leaves each one showing
 //     exactly the from-scratch answer, with every callee prototype lent.
 //
@@ -844,13 +846,13 @@ Program Generate(uint64_t seed)
 
 enum class LiveKind { Static, Paused, Running };
 
-// What the model believes the runner remembers of a request that ran out of budget (see Starve).
+// What the model believes the runner remembers of requests that ran out of budget (see Starve): the
+// inputs each was stalled under. The runner's memo answers a request only when everything its result
+// depends on is the same (the snapshot's key, the entry, the names, the function starts, the volatile
+// list, the prototypes lent), and forgets it when a run of that request completes.
 struct TooLargeMemo
 {
-    std::set<std::pair<uint32_t, std::string>> entries;   // (entry, volatile list) this session
-    Sig starved;                                          // the snapshot etc. it was stalled under
-    bool have = false;
-    bool fitsSince = false;                               // a decompilation of it has succeeded since
+    std::vector<Sig> starved;
 };
 
 struct Install
@@ -1115,11 +1117,13 @@ struct Rig
         }
         installs.push_back(std::move(in));
         {
-            // A decompilation of the stalled function that succeeds shows that it fits.
+            // An answer that is not "too large" for inputs that once ran out of budget overtakes the
+            // memo of them: the runner erased it when that run completed (or the panel's cache holds
+            // the answer, and Refresh runs the request again regardless).
             const Install& last = installs.back();
-            if (memo.have && last.result.status == DecompileStatus::Ok && last.sig.entry == memo.starved.entry &&
-                last.sig.volatileText == memo.starved.volatileText)
-                memo.fitsSince = true;
+            if (last.result.status != DecompileStatus::TooLarge)
+                for (size_t i = memo.starved.size(); i-- > 0;)
+                    if (memo.starved[i].Same(last.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
         }
         shown = installs.back().sig;
         haveShown = true;
@@ -1364,6 +1368,9 @@ struct Rig
             Frame();                    // the box returns true in this frame's Draw: the target is set
             selected = want;            // ...and the next Update is the first to ask for it
             explicitPending = true;
+            // An explicit Enter asks the question again even after a Stop (A1-3): nothing excuses a
+            // stale result from here on. (A Stop with the request still outstanding is replaced.)
+            haveStopped = false;
             ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false);
             Frame();
             return "";
@@ -1442,10 +1449,7 @@ struct Rig
             Frame();   // the runner enforces the budget when polled
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
-        memo.entries.insert(std::make_pair(SelectedEntry(), volatileText));
-        memo.starved = SigOf(held);
-        memo.have = true;
-        memo.fitsSince = false;
+        memo.starved.push_back(SigOf(held));
         Wait();
         return "";
     }
@@ -1499,28 +1503,18 @@ struct Rig
     }
 
     // A "too large" answer the model accepts: the request that was stalled on purpose, or the
-    // runner's memo of it for the same function (and volatile list) while the bytes it runs are those
-    // it was stalled on -- its own and its callees'. Another snapshot
-    // key with the same code is the same verdict (a live game's every frame is a new key, and the
-    // memo exists so a slow function is not retried on each). Different bytes, or a Refresh that has
-    // since shown that the function fits, make it a verdict on something else: the from-scratch
-    // answer is a decompilation.
+    // runner's memo of exactly that question -- the same snapshot key (so the same bytes), entry,
+    // names, function starts and volatile list -- until a run of it completes. Anything else is a
+    // verdict on something else and the from-scratch answer is a decompilation: other bytes (the
+    // function's own, a callee's, another recorded frame's), a rename, a start, another volatile
+    // list, or a request that has since been decompiled (A1-1, A1-2). The same bytes under a new key
+    // are another question too, and are attempted again; the lent prototypes are not part of the
+    // signature, which makes this a superset of what the runner answers.
     bool TooLargeExcused(const Sig& s, const TooLargeMemo& m)
     {
-        const Sig& starved = m.starved;
-        if (!m.have || m.fitsSince || !m.entries.count(std::make_pair(s.entry, s.volatileText)) ||
-            s.entry != starved.entry || s.volatileText != starved.volatileText)
-            return false;
-        std::set<uint32_t> reach;
-        Reach(s, s.entry, reach);
-        for (uint32_t f : reach)
-        {
-            if (f < kHw || f + 0x40 > kHw + kSize) continue;
-            const uint8_t* a = s.content->bytes.data() + (f - 4 - kHw);
-            const uint8_t* b = starved.content->bytes.data() + (f - 4 - kHw);
-            if (std::memcmp(a, b, 0x44) != 0) return false;
-        }
-        return true;
+        for (const Sig& starved : m.starved)
+            if (starved.Same(s)) return true;
+        return false;
     }
 
     bool CheckInstalls()
@@ -1795,17 +1789,13 @@ struct Rig
             if (verbose) std::printf("%s\n", d.c_str());
             Idle(2);
             Wait();
-            // A question the user stopped is not asked again by choosing the function again, only by
-            // Refresh (DecompilerPanel.cpp, Accept): the documented way out, taken here.
+            // Typing the entry asks for it even where the question was Stopped (A1-3): the function
+            // is on screen now, with no Refresh in between.
             const DecompileResult* now = panel.Shown();
-            if (!failed && (!now || now->requestedEntry != SelectedEntry()) && haveStopped)
-            {
-                Click("refresh");
-                explicitPending = true;
-                haveStopped = false;
-                Idle(2);
-                Wait();
-            }
+            if (!failed && (!now || now->requestedEntry != SelectedEntry()))
+                Fail("WALK: the function was typed into the entry box and the panel still shows " +
+                     std::string(now ? Hex(now->requestedEntry) : "nothing") + " instead of " + Hex(SelectedEntry()) +
+                     " (a question the user Stopped must be asked again by an explicit Enter)");
             CheckConverged();
             ++gStats.walks;
             Verbose();
@@ -1856,8 +1846,8 @@ bool RunSeed(Oracle& oracle, uint64_t seed, bool verbose, const std::set<int>& s
     return RunProgram(oracle, Generate(seed), seed, verbose, skip, limit);
 }
 
-// The default run: this many seeds, then the shrunk sequences of the findings that stand open in
-// REVIEW_LEDGER.md (each fails until its row is fixed; remove a line when its row closes).
+// The default run: this many seeds, then the shrunk sequences of the findings fixed from this model
+// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-3), which stay in the default run as regression pins.
 const uint64_t kDefaultSeeds = 18;
 
 struct Pinned
@@ -1865,12 +1855,18 @@ struct Pinned
     const char* id;
     const char* script;
     const char* world;
+    int image;
 };
 const Pinned kPinned[] = {
-    // A function that ran out of budget is answered "too large" for the bytes edited since.
-    { "A1-1", "select A; starve; edit A 0 1", "A" },
+    // A function that ran out of budget is answered "too large" for the bytes edited since...
+    { "A1-1", "select A; starve; edit A 0 1", "A", 0 },
+    // ...or a callee's, or another recorded frame's...
+    { "A1-1 (callee)", "select D; starve; edit C 2 1", "D,C,A", 0 },
+    { "A1-1 (scrub)", "select A; starve; scrub 1", "A", 1 },
     // ...and again after a Refresh has just decompiled it, when anything asks again (a rename).
-    { "A1-2", "select A; starve; refresh; name A 1", "A" },
+    { "A1-2", "select A; starve; refresh; name A 1", "A", 0 },
+    // Typing the entry of a function again after Stop asks for it (the old one must not stay, stale).
+    { "A1-3", "hold; select A; stop; wait; select A", "C,A", 0 },
 };
 
 std::set<int> ParseList(const char* text)
@@ -1961,7 +1957,7 @@ int main(int argc, char** argv)
             {
                 Program p;
                 std::string error;
-                if (!ParseScript(pin.script, pin.world, 0, p, error))
+                if (!ParseScript(pin.script, pin.world, pin.image, p, error))
                 {
                     std::printf("pinned %s: %s\n", pin.id, error.c_str());
                     return 2;
