@@ -3038,3 +3038,142 @@ removed as unreachable) as before. Against the previous master (`SE_GAME_OUT` co
 300 seeds and at 3,000 (both grammars, 1,500 each; 0 failing seeds, 0 findings); the game corpus above; `vendor.py` on the pinned
 Ghidra (`918d44e`, a sparse checkout) reproduces the committed tree, `sh-2.sla` aside, with 0025 and 0026 applied. The whole
 `ctest`: 95 of 95 pass (RelWithDebInfo, the final spec data).
+
+## Area 4, round 2: the default that is also a case
+
+Fixer, branch `review/4-round2-fix`, fix commit `c34ac94`, on `5ecc36d` (patches 0001 to 0024; this adds 0027, and
+`vendor.py` on a sparse clone of the pinned Ghidra (`918d44e`) reproduces the vendored tree exactly with it). Ledger rows A4-4
+(P1), A4-6 and A3-1 are `fixed c34ac94`; A4-5 is `accepted` with the reasoning below. The generator's own contract bug (seed
+104955, `generator:no-return`) is fixed. The engine change is one function (`JumpBasic::foldInOneGuard`), about 14 functional
+lines; the rest is the generator and a test block.
+
+### 1. A4-4: the mechanism
+
+The fixture (`mov #4,r0` on the default path; `mova table,r0` in the switch block; a join that tests `r0 & 0x10` and writes
+SCU_IST under it) has a MULTIEQUAL at the join: r0 = (the guard block's edge: the 4 of `mov #4,r0`; the switch block's edge: the
+`mova` COPY, `#0x6009014`). Entry 1 of the table is the join itself, so when `foldInOneGuard` folds the bound check into the
+switch the guard's target is already one of the switch block's destinations (`pos != sizeOut`), and it takes its second branch:
+it sets the guard `CBRANCH`'s condition to a constant (the branch now always enters the switch block) and marks the existing
+destination as the default. The edge from the guard block into the join is then dead and goes, and with it the MULTIEQUAL's input
+4: the join keeps one edge, the switch block's, and r0 at the join is the `mova` address for the default path as well. Then
+`tst #0x10,r0` folds to a constant, `bf` is always taken, the write is unreachable and removed ("Removing unreachable block"), and
+the function returns `0x6009014` for every index (the emulator returns 4 for an index of 2 or more). Nothing refused it because
+`noInterveningStatement` (upstream's "the switch block makes no value used outside it") passes a COPY or SUBPIECE whatever uses
+its output, and the `mova` is such a COPY: the round 1 fixer's note on patch 0024 named it. A temporary print in the fold showed
+the two inputs: `r0(0x06009002:2)` against `r0(0x06009010:12) = #0x6009014`, the second defined in the switch block.
+
+The other branch of the fold (`pos == sizeOut`: the guard's target is not a destination yet) is right, and the ledger's control
+(entry 1 at its own `bra join`) is that branch: `pushBranch` moves the guard block's out edge to the switch block and the join's
+MULTIEQUAL keeps its input for that edge, so the default path still carries its own 4 whatever the switch block computes.
+
+*Fix, patch 0027.* When the guard's target is already a destination, the fold is refused if any MULTIEQUAL of that block takes a
+different Varnode from the edge of the guard block and from the edge of the switch block. The guard stays an `if`, which assigns
+the default path's values. Not under `loadsNotDuplicated`: it is a miscompile of the upstream fold, whatever is done with loads.
+The fixed output of the 25 words, which the generator checks against the emulator:
+
+```
+uVar1 = 4;
+if (param_1 < 2) { uVar1 = 0x6009014; switch(param_1) { case 0: uVar1 = 0x6009014; } }
+if ((uVar1 & 0x10) == 0) { SCU_IST._0_1_ = (char)uVar1; }
+return uVar1;
+```
+
+*Suite.* `TestDefaultAlsoCase` (a separate block after `TestFlowReachedBody`, with its own snapshot): the ledger's 25 words at
+0x06009000: `Ledger` `{ Wr(SCU_IST, 1) }`, the write's block in the body, no `Unreachable` record, no removal warning, `& 0x10` and
+`SCU_IST` in the text, `if (param_1 < 2)` and `= 4;`, not `return 0x6009014;`, `ReferenceOk`; the control (entry 1 at its own
+`bra join`); and a default that is also a case whose join reads nothing the switch block computed (`rts ; mov #5,r0`), which must
+still fold into a `switch` with no `if`.
+
+*Oracle.* The generator replay of the 25 words (ledger A4-4): 0 findings (the trace writes SCU_IST once, the output lists it
+once); seeds 68620 and 107923 pass. The switchFold control stays folded; the corpus's switch lookups are 27 and 155, as before.
+
+### 2. A4-5: accepted, from the design
+
+An indirect jump with one destination known after the first flow is a *tail call*: the engine turns it into a call and the host
+warns "taken for a tail call to X, assumed to return to this function's caller". The code at X is a function of its own. That is
+the design's rule for every jump the flow does not follow, and the suite already pins it from the other side:
+`TestFlowReachedBody` has the second jump into an address nobody named, with the verdict "a tail call to it, not flow into it: one
+warning, and nothing of F2 in the body". Putting the destination in the body for the three shapes of the row would make the body
+disagree with the pseudocode, which shows a call there and not the code, and would make the panel's "address in this function"
+test and the mapping (area 7) claim instructions the output does not contain. The signature is withheld (it calls an address
+whose signature is not known, or "an indirect call it does not resolve"), so nothing wrong is lent; and the destination is
+visible by naming it (a function start at X: the callee is decompiled, and a caller lent its signature prints
+`func_0x0600900a(param_1)`; `TestTailJumpToUnreachedCode`). So:
+
+- The warning says more: "...; the code there is not part of this function's body" (also for an address the code computes;
+  an uncaptured destination keeps its "what runs there is not shown"), and the `DECOMPILER_GUIDE.md` row says the same and how
+  to see the code.
+- The generator's `outside-body` check takes what a run executes after a jump the output warns of as a tail call (or the engine
+  of as an indirect jump it treats as a call: shape c, a table whose guard admits one index and whose word the engine reads as a
+  pointer in RAM) as named by that warning, unless another run executed the same instruction before any such jump. The
+  lent-prototype check still sees those instructions as outside the body: a signature lent with one is `lent-incomplete`.
+  Shapes a, b and c of the row give 0 findings; the control with two entries stays a switch.
+- Not changed: shape c would read `return 2;` if the table's word were known to be read-only. The host marks only the literal
+  pools of PC-relative loads as read-only; a table reached through `mova` is read as ordinary memory, because a table in RAM may
+  be edited. Marking it is a design change with its own risk (a table the code patches), and the output now says what it is
+  (a call through a word in RAM). Left as it is.
+
+### 3. The generator: A4-6, A3-1, seed 104955
+
+- **A4-6.** The trace's instruction addresses (`TraceRec::insn`, the run's `pcs`) are canonical (`Env::Canon`), so a callee run
+  through the cache-through mirror is function 1 at its canonical address and not "outside every function". The row's replay: 0
+  findings.
+- **A3-1.** The finding was not the check but the world it perturbs. A read of memory that is neither work RAM nor a register
+  (the BIOS area: `mov.b @r5,r1` with r5 = 0) drew the next value of the hardware's pseudo-random sequence, so a perturbed run
+  that made one read more saw other values from the registers after it, the traces differed in a *value* and the check called r5 a
+  parameter. Ordinary non-RAM memory now has a value of its own by address, and the sequence is advanced only by hardware.
+  Seeds 107035 and 101046 pass; the perturbation check is otherwise as it was (a read of hardware or of the parameter's own memory
+  through the perturbed register still counts).
+- **Seed 104955.** The second grammar's discipline says a register "holds a value" when every path to the instruction defines
+  it, and after a jump table it kept r1 as the bound. On the paths through a case r0 is the `mova` address and r1 the table entry
+  (a code address); a call's argument `mov r1,r6` after `add #0x6B,r1` passed a pointer into the program's own literal pool to a
+  callee that stored through it (`mov.w r1,@r6` wrote the low half of the literal a later `jmp @r2` loaded), and the run restarted
+  the function until the step limit. A function with a jump table now passes r0 to r3 on as arguments only as an integer
+  (`mov #imm,Rk` in its place; the draws are the same, so every other program of a seed is unchanged: 107923 is the same
+  program, 68620 differs in one word, `mov r0,r5` to `mov #0x20,r5`). The no-return finding says where the run stopped.
+
+### 4. Matrix
+
+**Mutation** (reverted by a temporary environment variable in a scratch build, not by editing the patch or the checks; restored,
+all pass):
+
+| Reverted | Fails |
+|---|---|
+| patch 0027's check | `TestDefaultAlsoCase`: 5 checks (ledger, body and no removal, text, `if (param_1 < 2)`, not `return 0x6009014;`); the 25-word replay (`dropped:W1:hardware:removed-unsaid`); seeds 68620 (two writes, hardware) and 107923 (param); the corpus is unchanged |
+| the check made to refuse every fold of this shape | `TestDefaultAlsoCase`: 1 check (the fold that must still happen prints `switch(` and no `if (`) |
+| canonical trace addresses | the mirror replay: 1 finding (`trace-outside`) |
+| the value of ordinary non-RAM memory by address | seeds 107035 and 101046 (`param-dropped:r5`, `r7`) |
+| the tail-jump naming rule | the row's shapes a, b and c: 3, 3 and 2 `outside-body` findings |
+| integer arguments from a table function's r0 to r3 | seed 104955 (`generator:no-return`) |
+
+**Matrix** (RelWithDebInfo, gcc; the machine ran other work):
+
+| | |
+|---|---|
+| `ctest` | 95 of 95 passed (59 s with -j3) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` | 0 failing seeds, 0 findings (184 s). 9,854 functions, 11,046 prototypes lent (4,375 void, 6,671 returning; 803 withheld), 779 parameter candidates all insensitive, 43,160 emulator runs |
+| `SE_GENERATED_SEEDS=5000` (both grammars) | 0 failing seeds, 0 findings (178 s) |
+| `SE_GENERATED_FIRST=60001 SE_GENERATED_SEEDS=10000` (the A4-4 window, both grammars) | 0 failing seeds, 0 findings (250 s); the review run had 1 (68620) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=100001 SE_GENERATED_SEEDS=10000` | 0 failing seeds, 0 findings (247 s); the review run had 4 (107923, 101046, 107035, 104955) |
+| Seeds 68620, 107923, 104955, 101046, 107035 (`SE_GENERATED_SEED`, `SE_GENERATED_GRAMMAR=2`, and with the default choice) | each passes; the 68620 and 107923 programs still reach A4-4 (the mutation above fails both) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups; **0 of 839 outputs changed** against the same build with patch 0027 off (`SE_GAME_OUT`, compared file by file; the patch refuses no fold in the corpus). 6,846 ms against 6,954 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups; **0 of 1,554 outputs changed**. 22,022 ms against 22,721 |
+| `vendor.py` on a sparse clone of `918d44e` | reproduces the vendored tree exactly (84 library sources, 94 headers, 5 spec files; patches 0001 to 0027, less the numbers other branches hold) |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` (`detect_leaks=1`) | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report; the suite passes (17 s), and with `SE_GAME_HWRAM=hwram007.bin` (839 functions, 128 s) |
+
+**Wrong in the first drafts, so a later reader does not repeat them.** The first fix for seed 104955 cleared r0 and r1 from the
+"holds a value" set after a table. That changed the draws of every later choice, so seeds 68620 and 107923 stopped being the
+programs of the ledger (A4-4 no longer reproduced from the seed); the integer-argument form keeps the draws. A first version of
+patch 0027 also skipped a MULTIEQUAL whose output nothing reads, to keep folds that a dead merge would refuse; it never fired
+(neither the suite nor the two corpus images changed with it removed) and was dropped. The first guess for 104955, a runaway loop in the program, was wrong: the instruction histogram of the unfinished run showed the whole
+function executed 28 times, and printing the first pass's writes found the store into the literal pool.
+
+**Not done.**
+- `noInterveningStatement` is as upstream: a COPY or SUBPIECE whose output is used outside the block still passes. Patch 0027
+  closes the one place it matters (a join that is the guard's target and also a case); the other branch of the fold keeps
+  the default path's values by moving the edge, as the control and the corpus show. A fold elsewhere that depends on the same
+  blind spot is not known.
+- A mirrored callee is still not in the generator's grammar (a new literal kind would shift every stream); the replay line
+  covers it.
+- The mova-reached table as read-only memory (shape c of A4-5), above.
+- The scan before the actions still reads the first flow only (round 1's note), and the A4-5 shapes did not change that.
