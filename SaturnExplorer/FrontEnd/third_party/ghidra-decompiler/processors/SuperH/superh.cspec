@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Modified for SaturnExplorer: a 64-bit return has its high half in r0 (patches/0007-cspec-wide-return-order.patch);
-     the return address is in pr (patches/0008-cspec-return-address.patch). -->
+     the return address is in pr (patches/0008-cspec-return-address.patch);
+     a call kills r0-r7, mach, macl and sr, and keeps vbr (patches/0026-cspec-call-clobbers.patch). -->
 
 <compiler_spec>
     <data_organization>  <!-- These tags were taken from https://gcc-renesas.com/manuals/SH-ABI-Specification.html-->
@@ -68,10 +69,24 @@
                 <register name="r14"/>
                 <register name="r15"/>
                 <register name="gbr"/>
+                <register name="vbr"/>
             </unaffected>
+            <!-- The SH ABI (Renesas and gcc): r0-r7 are caller-saved (r0 and r1 return values, r4-r7 carry
+                 arguments; r1 is an output only for a 64-bit return, so a signature that returns less leaves
+                 it to this list), so are mach and macl, and a call leaves the T bit (and so sr, which the engine tracks whole) unknown.
+                 A register in neither list reads after a call as the value it had before it. -->
             <killedbycall>
+                <register name="r0"/>
+                <register name="r1"/>
                 <register name="r2"/>
                 <register name="r3"/>
+                <register name="r4"/>
+                <register name="r5"/>
+                <register name="r6"/>
+                <register name="r7"/>
+                <register name="mach"/>
+                <register name="macl"/>
+                <register name="sr"/>
             </killedbycall>
         </prototype>
     </default_proto>

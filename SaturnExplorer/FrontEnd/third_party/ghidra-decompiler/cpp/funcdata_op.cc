@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -789,6 +790,7 @@ void Funcdata::followFlow(const Address &baddr,const Address &eaddr)
   flow.setMaximumInstructions(glb->max_instructions);
   flow.generateOps();
   flowOps = obank.getUniqId();	// SaturnExplorer: the ops so far are the flow's; recordAccessFate keeps only their fates
+  flow.recordInstructions(flowInsns);	// SaturnExplorer: the instructions, as translated, before any action removes some
   size = flow.getSize();
   // Cannot keep track of function sizes in general because of non-contiguous functions
   //  glb->symboltab->update_size(name,size);
@@ -796,6 +798,14 @@ void Funcdata::followFlow(const Address &baddr,const Address &eaddr)
   flow.generateBlocks();
   flags |= blocks_generated;
   switchOverJumpTables(flow);
+  flowTables.clear();		// SaturnExplorer: the destinations, as recovered, before an action turns a table of one into a goto
+  for(int4 i=0;i<jumpvec.size();++i) {
+    FlowTable rec;
+    rec.op = jumpvec[i]->getOpAddress();
+    for(int4 j=0;j<jumpvec[i]->numEntries();++j)
+      rec.dests.push_back(jumpvec[i]->getAddressByIndex(j));
+    flowTables.push_back(rec);
+  }
   if (flow.hasUnimplemented())
     flags |= unimplemented_present;
   if (flow.hasBadData())

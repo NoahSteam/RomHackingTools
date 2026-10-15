@@ -11,7 +11,9 @@
 //   * loads and stores of every width through r4/r5 (pointer parameters into scratch RAM) and
 //     r6/r7 (pointers loaded from the literal pool: a hardware register, an ordinary RAM address
 //     or a mailbox the request marks volatile), as @Rn, @(disp,Rn), @(r0,Rn), @Rm+ / @-Rn (r4/r5
-//     only) and tas.b. r15 is never touched.
+//     only) and tas.b; and mac.l / mac.w @Rm+,@Rn+, two reads in one instruction (one program in eight,
+//     from a stream of its own so the other programs of a seed are the same as before it was in the
+//     grammar). r15 is never touched.
 //   * a forward conditional branch (tst/cmp, then bt/bf or bt/s/bf/s with a delay-slot
 //     instruction) over one to three instructions, which may reload a pointer register.
 //   * a counted loop: mov #n,r3 ; body ; dt r3 ; bf.
@@ -50,14 +52,17 @@
 //      is not a hardware address and not memory the request marked), or is a literal-pool load
 //      (folded by design), or is a local (an access in the stack area through r15 or r14: a variable
 //      by design, ledger A11-1), or sits in code the output says it removed ("here is missing").
-//      Everything else is a dropped access.
+//      Everything else is a dropped access. A ledger entry stands for one access of one execution of
+//      the instruction, never two (mac reads two operands: a printed one must not excuse a lost
+//      second); an entry with a constant address only for an access at that address.
 //   3. Of the accesses listed: each is printed exactly once, none is made twice on a path, none
 //      is printed only on some of the paths that reach it, and the ledger's ordering invariants
 //      (Sh2DecompilerTests.cpp's Ledger) hold. (FoldedIntoSwitch reports only what a run shows: two
 //      accesses it joined, one made without the other.)
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
-//      this one calls (or that function's body), or a flow warning names it.
+//      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
+//      a tail call, or an indirect jump treated as a call, names what the run executes after it).
 //   5. The entry of another function inside the body has a "flow runs into" warning; no data word skipped
 //      by a bra is in the body.
 //   6. Each index of a jump table that a run dispatched with reaches a case that holds the code the
@@ -90,7 +95,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|params|ret|body|cases|warn|preserved|lent|data
+//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
@@ -271,6 +276,9 @@ struct Program
 struct Gen
 {
     Rng rng;
+    // A stream of its own for mac: the other items' draws, and so every program a seed made before mac
+    // was in the grammar, are unchanged; mac only adds an item.
+    Rng macRng;
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -280,12 +288,13 @@ struct Gen
     bool disc = false;
     uint32_t defined = 0;     // bit n: Rn holds a value here, on every path
     bool noR0 = false;        // the function never writes r0 itself
+    bool codeInRegs = false;  // the function has a jump table: r0 and r1 may hold a code address on the way out of it
     int selReg = -1;          // a register holding an integer (a jump table's index), never a pointer
     int frame = 0;            // bytes of locals the function has
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -525,6 +534,31 @@ struct Gen
         return it;
     }
 
+    // mac.l / mac.w @Rm+,@Rn+: two reads in one instruction, each through a pointer that is then advanced
+    // by the width. Rm and Rn are among r4-r7 (a pointer into scratch RAM, a hardware register, an ordinary
+    // RAM address or a mailbox), sometimes the same register (the second read is then the next word). A
+    // literal pointer must be aligned for the width, and is only as aligned as that afterwards. Version 1
+    // only: the discipline of version 2 (registers that hold a value on every path) does not apply to it.
+    Item MakeMac()
+    {
+        Item it;
+        it.type = Item::Mem;
+        const bool isLong = macRng.Chance(50);
+        const int w = isLong ? 4 : 2;
+        int pool[4], k = 0;
+        for (int r = 4; r < 8; ++r)
+            if (r < 6 || align[r] >= w) pool[k++] = r;
+        const int n = pool[macRng.Below(static_cast<uint32_t>(k))];
+        const int m = macRng.Chance(15) ? n : pool[macRng.Below(static_cast<uint32_t>(k))];
+        it.shape = isLong ? "mem.mac.l" : "mem.mac.w";
+        it.words = { uint16_t((isLong ? 0x000F : 0x400F) | n << 8 | m << 4) };
+        it.base = n;
+        it.width = w;
+        for (int r : { n, m })
+            if (r >= 6) align[r] = std::min(align[r], w);
+        return it;
+    }
+
     Item MakeSimple(int avoid, bool single, bool allowLit)
     {
         const uint32_t r = rng.Below(100);
@@ -718,7 +752,18 @@ struct Gen
                 int pool[16], n = 0;
                 for (int i = 0; i < 8; ++i)
                     if ((def >> i) & 1u) pool[n++] = i;
-                if (n) w = uint16_t(0x6003 | reg << 8 | pool[rng.Below(static_cast<uint32_t>(n))] << 4);   // mov Rm,Rk
+                if (n)
+                {
+                    const int src = pool[rng.Below(static_cast<uint32_t>(n))];
+                    // A jump table leaves a code address in r0 (mova) and r1 (the entry) on the paths
+                    // through a case, and arithmetic carries it to r2 and r3. Passed on as an argument it
+                    // is a pointer the callee may store through: into the program's own literal pool
+                    // (seed 104955: the callee's 'mov.w r1,@r6' wrote the word a later 'jmp @r2' loaded,
+                    // and the run restarted the function until the step limit). An integer in its place;
+                    // the draws are the same, so every other program of a seed is unchanged.
+                    w = codeInRegs && src < 4 ? uint16_t(0xE000 | reg << 8 | (0x20 + src))
+                                              : uint16_t(0x6003 | reg << 8 | src << 4);   // mov Rm,Rk
+                }
             }
             else if (r >= 70 && !saves.empty())
                 w = uint16_t(0x6003 | reg << 8 | saves[rng.Below(static_cast<uint32_t>(saves.size()))].second << 4);   // mov Rsaved,Rk
@@ -851,6 +896,7 @@ struct Gen
 
         disc = true;
         noR0 = f.noR0;
+        codeInRegs = table;
         selReg = f.sel;
         frame = f.frame;
         fp = f.fp;
@@ -1022,6 +1068,9 @@ struct Gen
             else items.push_back(MakeMem(-1, false));
         }
         if (rng.Chance(30)) f.tail.push_back(MakeSimple(-1, true, false));
+        // mac, in one program of eight; never ahead of the pointer registers' literals
+        if (macRng.Chance(12))
+            items.insert(items.begin() + 1 + macRng.Below(static_cast<uint32_t>(items.size())), MakeMac());
         return p;
     }
 };
@@ -1523,6 +1572,8 @@ struct TraceRec
     uint32_t addr;
     uint64_t value = 0;   // what was read or written; not part of the identity
     int depth = 0;        // how many calls deep the instruction ran: 0 is the function itself, more is a callee
+    int step = 0;         // which executed instruction of the run made it (not part of the identity): two accesses of
+                          // one step are one instruction's operands (mac), the same access of two steps is a loop
     bool operator<(const TraceRec& o) const
     {
         return std::tie(insn, write, size, addr) < std::tie(o.insn, o.write, o.size, o.addr);
@@ -1544,6 +1595,7 @@ struct Env
     std::vector<Poll> polls;
     std::vector<TraceRec> trace;
     int depth = 0;    // set by the machine before each instruction
+    int step = 0;     // ...and the instruction's position in the run
     static bool IsRam(uint32_t a)
     {
         const uint32_t top = a >> 24;
@@ -1554,7 +1606,7 @@ struct Env
     uint64_t Read(uint32_t a, int size, uint32_t insn)
     {
         const uint64_t v = ReadValue(a, size);
-        trace.push_back({ insn, false, size, a, v, depth });
+        trace.push_back({ Canon(insn), false, size, a, v, depth, step });
         return v;
     }
 
@@ -1576,6 +1628,17 @@ struct Env
         }
         if (hwMode == 0) return 0;
         if (hwMode == 1) return mask;
+        // Memory that is neither work RAM nor a register (the BIOS area, which the program reaches
+        // through a pointer it has tested to be 0): a value of its own, by address. The hardware's
+        // sequence is not advanced by a read of ordinary memory, or a run that makes one more such
+        // read (a perturbed argument, A3-1) would see other values from the registers after it, and
+        // behave differently for a reason the decompiler is right to leave out.
+        if (!InHardwareRange(a))
+        {
+            uint64_t h = (static_cast<uint64_t>(a) + 0x9E3779B97F4A7C15ull) * 0xBF58476D1CE4E5B9ull;
+            h ^= h >> 31;
+            return ((h * 0x94D049BB133111EBull) >> 32) & mask;
+        }
         hwState ^= hwState >> 12;
         hwState ^= hwState << 25;
         hwState ^= hwState >> 27;
@@ -1589,7 +1652,7 @@ struct Env
 
     void Write(uint32_t a, int size, uint64_t v, uint32_t insn)
     {
-        trace.push_back({ insn, true, size, a, v, depth });
+        trace.push_back({ Canon(insn), true, size, a, v, depth, step });
         if (IsRam(a)) Store(a, size, v);
     }
 };
@@ -1755,7 +1818,8 @@ public:
                 mSnap->ReadU16(pc, op);
                 const sfe::DisassembledInstruction ins = sfe::Sh2Decode(pc, op);
                 env.depth = depth;
-                out.pcs.push_back(pc);
+                env.step = i;
+                out.pcs.push_back(Env::Canon(pc));   // a callee reached through the cache-through mirror is the function at the canonical address (A4-6)
                 out.depths.push_back(depth);
                 // The delay slot runs with the branch, at the depth it was called from.
                 if (ins.IsCall) ++depth;
@@ -1882,6 +1946,38 @@ bool PrintedPast(const MemoryAccess& m, const std::vector<MemoryAccess>& accesse
     return false;
 }
 
+
+// The addresses of one execution's accesses (the same instruction, direction and size, in order) that
+// no ledger entry stands for. An entry stands for one access, never two: mac.l and mac.w read two
+// operands in one instruction, and one printed operand must not excuse a lost second (ledger A5-5,
+// which the host's Accounts closes the same way). An entry with a constant address stands only for an
+// access at that address; one through a pointer stands for any. Exact pairs are made first, so an
+// access through a pointer does not take a constant one's entry; then the accesses the decompiler
+// must list ('mustList': a parameter's memory, hardware, marked memory) take the entries through a
+// pointer before the ones it may fold into a variable (a mac reading ordinary RAM beside a parameter's
+// memory has one entry, and it is the parameter's).
+std::vector<uint32_t> UnaccountedAddresses(const std::vector<const MemoryAccess*>& entries, const std::vector<uint32_t>& addrs,
+                                           const std::function<bool(uint32_t)>& mustList)
+{
+    std::vector<char> used(entries.size(), 0), done(addrs.size(), 0);
+    for (int round = 0; round < 3; ++round)
+        for (size_t i = 0; i < addrs.size(); ++i)
+        {
+            if (done[i]) continue;
+            if (round == 1 && !mustList(addrs[i])) continue;
+            for (size_t j = 0; j < entries.size() && !done[i]; ++j)
+            {
+                if (used[j]) continue;
+                const MemoryAccess& e = *entries[j];
+                if (round == 0 ? !(e.direct && e.address == addrs[i]) : e.direct) continue;
+                used[j] = done[i] = 1;
+            }
+        }
+    std::vector<uint32_t> lost;
+    for (size_t i = 0; i < addrs.size(); ++i)
+        if (!done[i]) lost.push_back(addrs[i]);
+    return lost;
+}
 
 // The output says, on this instruction, that its access is missing because the code around it was
 // removed as unreachable: the caution itself (the same test as Sh2DecompilerTests.cpp's).
@@ -2359,11 +2455,26 @@ bool GroupAddrs(const std::vector<Line>& lines, const std::vector<LineLabels>& l
 
 // What the SE_GENERATED_MUTATE modes do to a result before it is checked: each simulates one defect
 // that one family of checks exists to find, so a run can show the check sees it.
-std::string gMutateKind;   // "", "ledger", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data"
+std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data"
 void Mutate(DecompileResult& r, const Subject& s, int fi)
 {
     if (gMutateKind.empty() || r.status != DecompileStatus::Ok) return;
     if (gMutateKind == "ledger") { if (!r.accesses.empty()) r.accesses.erase(r.accesses.begin()); }
+    else if (gMutateKind == "second")
+    {
+        // Lose the second of two entries of one instruction (mac's two operands): the first still has
+        // the same instruction, direction and size, which must not excuse the access that lost its own.
+        for (size_t i = 0; i < r.accesses.size(); ++i)
+        {
+            bool twin = false;
+            for (size_t j = 0; j < r.accesses.size() && !twin; ++j)
+                twin = j != i && r.accesses[j].insn == r.accesses[i].insn && r.accesses[j].write == r.accesses[i].write &&
+                       r.accesses[j].size == r.accesses[i].size;
+            if (!twin) continue;
+            r.accesses.erase(r.accesses.begin() + i);
+            break;
+        }
+    }
     else if (gMutateKind == "params") { if (r.prototype.known && !r.prototype.params.empty()) r.prototype.params.pop_back(); }
     else if (gMutateKind == "ret")
     {
@@ -2453,12 +2564,30 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // (instruction, direction, size) -> the addresses it touched
         std::map<std::tuple<uint32_t, bool, int>, std::vector<uint32_t>> seen;
         for (const TraceRec& t : trace) seen[std::make_tuple(t.insn, t.write, t.size)].push_back(t.addr);
+        // ...and, of those, the accesses the ledger does not account for: per execution of the instruction
+        // (a run's step), the entries of its instruction, direction and size are spent one per access.
+        std::map<std::tuple<uint32_t, bool, int>, std::vector<uint32_t>> lost;
+        for (const RunOut& run : runs)
+        {
+            std::map<std::tuple<int, uint32_t, bool, int>, std::vector<uint32_t>> steps;
+            for (const TraceRec& t : run.trace)
+                if (t.depth == 0) steps[std::make_tuple(t.step, t.insn, t.write, t.size)].push_back(t.addr);
+            for (const auto& st : steps)
+            {
+                std::vector<const MemoryAccess*> entries;
+                for (const MemoryAccess& m : r.accesses)
+                    if (m.insn == std::get<1>(st.first) && m.write == std::get<2>(st.first) && m.size == std::get<3>(st.first))
+                        entries.push_back(&m);
+                std::vector<uint32_t>& out = lost[std::make_tuple(std::get<1>(st.first), std::get<2>(st.first), std::get<3>(st.first))];
+                for (uint32_t a : UnaccountedAddresses(entries, st.second, [&](uint32_t x) { return InScratch(x) || InHardwareRange(x) || inMarked(x); }))
+                    if (std::find(out.begin(), out.end(), a) == out.end()) out.push_back(a);
+            }
+        }
         for (const auto& entry : seen)
         {
             const uint32_t insn = std::get<0>(entry.first);
             const bool write = std::get<1>(entry.first);
             const int size = std::get<2>(entry.first);
-            const std::vector<uint32_t>& addrs = entry.second;
             if (subject.UnitOf(insn) < 0)
             {
                 add("trace-outside", "the emulator accessed memory from " + Hex(insn) + ", outside the function");
@@ -2468,10 +2597,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             // A PC-relative load (mov.l or mov.w @(disp,pc)): a literal-pool word, folded by design.
             const uint16_t word = subject.WordAt(insn);
             if (!write && ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000)) continue;
-            bool listed = false;
-            for (const MemoryAccess& m : r.accesses)
-                if (m.insn == insn && m.write == write && m.size == size) listed = true;
-            if (listed) continue;
+            // Which of the accesses no ledger entry stands for, one entry to each, execution by execution.
+            const std::vector<uint32_t>& addrs = lost[entry.first];
+            if (addrs.empty()) continue;
 
             // A local: the stack is the function's own, a variable (A11-1). Only an access through r15
             // or the frame pointer is one; a pointer into the stack handed to a callee is listed.
@@ -2586,6 +2714,28 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (static_cast<size_t>(j) < results.size() && results[j].status == DecompileStatus::Ok) addCallees(results[j]);
             }
         }
+        // A jump the output warns of as a tail call, or the engine of as an indirect jump it treats as a call
+        // (a table whose guard admits one index, read as a pointer in RAM), hands the rest of the run to code
+        // that is not part of this function: the warning says so, and names where when it knows. What a run
+        // executes after it is named by that warning, unless another run executed the same instruction
+        // before any such jump (A4-5: the design is a call and a return, not flow into the destination).
+        std::set<uint32_t> afterTail, beforeTail;
+        {
+            auto addPc = [&](std::set<uint32_t>& into, uint32_t pc) {
+                into.insert(pc);
+                if (sfe::Sh2Decode(pc, subject.WordAt(pc)).HasDelaySlot) into.insert(pc + 2);
+            };
+            for (const RunOut& run : runs)
+            {
+                size_t cut = run.pcs.size();
+                for (size_t k = 0; k < run.pcs.size() && cut == run.pcs.size(); ++k)
+                    if (run.depths[k] == 0)
+                        for (const FlowWarning& w : r.flowWarnings)
+                            if (w.address == run.pcs[k] && (w.kind == FlowWarning::TailJump || w.text.find("Treating indirect jump as call") != std::string::npos))
+                                cut = k + 1;
+                for (size_t k = 0; k < run.pcs.size(); ++k) addPc(k < cut ? beforeTail : afterTail, run.pcs[k]);
+            }
+        }
         std::set<uint32_t> outsideBody;   // executed, in no part of this function's body and in no function it calls
         std::set<uint32_t> everything = executed;
         everything.insert(executedDeep.begin(), executedDeep.end());
@@ -2611,6 +2761,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (named)
             {
                 count("flow.outside-but-named");
+                continue;
+            }
+            if (afterTail.count(pc) && !beforeTail.count(pc))
+            {
+                count("flow.outside-after-tail-jump");
                 continue;
             }
             add("outside-body", "the instruction at " + Hex(pc) + " (function " + std::to_string(u) + ") was executed and is not in the body" +
@@ -3473,7 +3628,7 @@ void TestGenerated()
                     "tables=%d (entries %d, cases %d, shared entries %d, default entries %d; destinations traced %d, printed %d, inert %d, warned %d) "
                     "bra loops fwd/back=%d/%d data skips=%d shared exits=%d exits below the entry=%d slot pops=%d ret in slot=%d; "
                     "lent prototypes=%d (void %d, returning %d) withheld=%d; parameter checks=%d (candidates %d, perturbed runs %d, insensitive %d); "
-                    "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d; runs=%d\n",
+                    "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d (after a tail jump %d); runs=%d\n",
                     n("module.v2"), n("fn"), n("fn.end.rts"), n("fn.end.tail"), n("fn.end.fall"), n("fn.returns"), n("fn.void"), n("fn.pushed"),
                     n("fn.pr.stack"), n("fn.pr.reg"), n("fn.frame"), n("fn.fp"), n("spill"), n("stack.ld.plain") + n("stack.ld.disp") + n("stack.ld.indexed"),
                     n("stack.st.plain") + n("stack.st.disp") + n("stack.st.indexed"), c("stack.exempt"), n("call.bsr"), n("call.jsr"), n("call.arg_in_slot"),
@@ -3481,7 +3636,7 @@ void TestGenerated()
                     c("table.destination"), c("table.printed"), c("table.inert"), c("table.warned"), n("loop.bra"), n("loop.back"), n("bra.data"), n("fn.shared_exit"),
                     n("fn.exit_below"), n("fn.slot_pop"), n("fn.ret_in_slot"), c("proto.lent"), c("ret.void"), c("ret.claimed"), c("proto.withheld"),
                     c("param.checked"), c("param.candidate"), c("param.perturbed-runs"), c("param.insensitive"), c("preserved.checked"),
-                    c("flow.executed"), c("flow.into-said"), c("flow.into-silent"), c("flow.outside-but-named"), c("runs"));
+                    c("flow.executed"), c("flow.into-said"), c("flow.into-silent"), c("flow.outside-but-named"), c("flow.outside-after-tail-jump"), c("runs"));
         std::printf("withheld why:");
         for (const auto& k : counts)
             if (k.first.compare(0, 14, "proto.withheld") == 0 && k.first.size() > 14) std::printf(" %s=%d", k.first.c_str() + 15, k.second);

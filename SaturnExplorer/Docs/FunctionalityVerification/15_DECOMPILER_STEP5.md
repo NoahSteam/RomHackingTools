@@ -2665,3 +2665,640 @@ failure, and the XML reader and the action tree are the sites to make exception-
 stream change has no cell. `Disassemble` still has no sweep. Windows and macOS: the matrix forks and is POSIX only;
 the vendored change touches `error.hh`, which `se-sleighc` includes too (its `ostringstream`s now throw on a failed
 allocation, which it does not expect to see), and the MSVC build of it was not run here.
+
+## Area 4, round 1: the second hop and the table read
+
+Fixer, branch `review/4-flow-fix`, fix commit `d140d0e`, on `6736a36`. Ledger rows A4-2 and A4-3 are `fixed d140d0e`; the A5-5
+hole in the generator (the round 2 fixer's note "For the generator owner") is closed and mac is in the grammar. Two engine
+patches, 0021 and 0024 (the vendored tree is patches 0001 to 0024; `vendor.py` on the pinned Ghidra reproduces it exactly,
+checked in a copy); the host changes are in `Sh2Decompiler.cpp` (the body, the tail-jump search, the jump tables handed to
+`ReturnCheck`).
+
+### 1. A4-2: the second hop
+
+*Root cause.* Everything the host knew of "what flow reached" came from the p-code of the first flow (`ScanRawPcode`, taken
+right after `followFlow`) and from the p-code that survived the actions. A restart in the actions (here a literal the
+second `jmp @r2` goes through folds only once the actions have run) clears the function and follows the flow again, and
+that flow reaches further: F0 reaches F1 in the first flow, F2 only in the second. What the actions then removed as dead
+(F2's `add #-0x40,r15` at its entry and `add #0x40,r15`; a `tst`/`bf` whose arms meet) was in neither list. So the entry of
+F2 was not in the body (`InBody(entry)` false: no "flow runs into" warning for it), and `body` left out code the program ran.
+The warning loop itself was right for every entry its test saw; the input was wrong.
+
+*Fix.* Patch 0021: `Funcdata::flowInsns` (`FlowInsn { addr, halted }`, `getFlowInsns()`) is filled from `FlowInfo::visited` when
+`followFlow` returns and cleared with the function, so after a restart it holds the last flow's instructions, p-code or none,
+kept or removed. `FlowInfo::artificialHalt` notes where flow stopped for bad or unimplemented data. The host takes `body` from
+it (halted ones left out, as before), and searches it, not the first flow's list, for `jmp`/`braf` taken for tail calls. The
+same patch records the indirect jumps' destinations as the last flow recovered them (`Funcdata::flowTables`,
+`getFlowTables()`), which `ReturnCheck` now has beside the first flow's and the final ones. `IntoFunction` fires for every known entry the body holds
+with no change to its loop. `DECOMPILER_GUIDE.md`'s row for the warning now says "one line for each such entry" and
+that an entry counts even when its first instruction is dead; the header comment of `DecompileResult::body` says the same.
+
+*Suite.* `TestFlowReachedBody` (new): the ledger's 24 words (F0 jumps into F1, F1 into F2; the request lends F2's and F1's
+signatures as the panel does): both entries warned, nothing else, body `[F0, F0+0x10) [F1, F1+0x0A) [F2, F2+0x0C)`, F2's two
+dead `add`s in it; the same with F2 opening on a dead `tst`/`bf`; F2 itself warns of nothing; with F2 not named the second jump
+is a tail call to an address nobody named (no flow into it: one warning, F2 not in the body).
+
+### 2. A4-3: the table read
+
+*Root cause.* The reviewer suspected a hold or a use that kept the read as a variable; it is neither. Patch 0013 refuses to fold a
+switch's bound check into the switch when the switch block holds a LOAD other than the table lookup, and exempts the lookup
+because the switch stands for it. That is true only while nothing else reads the lookup's value. In the fixture the join after
+the switch stores `extu.b r1,r2`, r1 being 2 on the default path and the table entry on the others, so the lookup is the code's
+own read of a value it uses. Upstream's `noInterveningStatement` (the check that the block makes no value used outside it) is
+meant to refuse that: it did, until the actions narrowed the use to a SUBPIECE of the lookup in the switch block, which the
+function skips over together with COPY whatever uses the output. The guard was folded, the read stayed in the switch's block,
+and the block ran for the default path too.
+
+*Fix.* Patch 0024: `JumpBasic::foldInOneGuard` also refuses when the lookup's value (followed through the model's own path
+ops, `pathMeld`) has a use outside the table's calculation. The guard stays an `if` and the read stays under it; a lookup
+nothing else reads folds as before (`switchFold`: still folded, one `SwitchLookup` record).
+
+*Suite.* `switchUsed` (the ledger's 28 words, moved to 0x0600B400 because the original base is `poll`'s): `Ledger` with the reads
+`{ Rd(0,2), Rd(0,4), Wr(0,2) }`, whose `FoldedIntoSwitch` invariant is the oracle; `if (` and no `default:` in the text; the lookup's
+access is not in the block of the read ahead of the guard; no `SwitchLookup` record for it; `ReferenceOk`.
+
+### 3. The generator
+
+- **The A5-5 hole.** The "dropped" check treated a ledger entry with the same instruction, direction and size as covering
+  every trace access. It now spends one entry per access: the accesses are grouped by the execution of the instruction that made
+  them (`TraceRec::step`, the position in the run, not part of the identity: two accesses of one step are one instruction's operands,
+  the same access of two steps is a loop), and each group is matched one to one with the entries, by address where the entry has a
+  constant one (exact pairs first), then the accesses the decompiler must list (a parameter's memory, hardware, marked memory)
+  before the ones it may fold into a variable. `SE_GENERATED_MUTATE=second` loses the second of two entries of one instruction
+  and passes only if reported.
+- **mac.l / mac.w** `@Rm+,@Rn+`, in one program of eight of version 1, from a stream of its own so every other program of a
+  seed is the same as before. The operands are among r4 to r7 (a literal pointer only if aligned for the width), the same register
+  in one case in seven.
+
+### 4. Matrix
+
+**Mutation** (the fix reverted, the checks fail; restored, they pass). The host and the one engine guard were switched off by a
+temporary environment variable in a scratch build, not by editing the patches:
+
+| Reverted | Fails |
+|---|---|
+| the body and the tail-jump search from the first flow's p-code plus what survived the actions (patch 0021's list unused) | `TestFlowReachedBody`: 6 checks (both warnings, the body, the entry and the dead `add`, for both fixtures); generator seeds 2226 and 3049 (`outside-body`, `lent-incomplete:executed-outside-body`) |
+| one `IntoFunction` warning only | `TestFlowReachedBody`: 2 checks; seeds 2226 and 3049 (`into-function`) |
+| the return check without the last flow's tables | `TestFlowReachedBody`: the 2 signature checks (the generator is silent: a withheld signature is the safe side) |
+| the lookup's use check in `foldInOneGuard` (patch 0024) | `switchUsed`: 3 checks (`Ledger`'s `FoldedIntoSwitch`, the `if (`, the blocks); seeds 1009, 1968, 2522, 2677, 2876 (`folded-into-switch`) |
+| the generator's "dropped" check as it was (any entry of the instruction, direction and size covers a trace access) | `SE_GENERATED_MUTATE=second` reports 0 of 1,000 version 1 seeds and the run fails; with the one-to-one check it reports 83 of 1,000 |
+
+**Matrix** (RelWithDebInfo, gcc; the machine ran other work, load average 5 to 8):
+
+| | |
+|---|---|
+| `ctest` | 94 of 94 passed (69 s with -j2) |
+| Generated test, default (300 seeds) | passes |
+| `SE_GENERATED_SEEDS=5000` (both grammars, 2,500 each) | 0 failing seeds, 0 findings (78 s). mac in 287 of the 2,500 version 1 programs (137 `mac.l`, 150 `mac.w`) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` | 0 failing seeds, 0 findings (87 s); the ledger's 15 failing seeds and 74 findings (13 seeds A4-3, 2 seeds A4-2) are gone. 9,854 functions, 11,045 prototypes lent (4,375 void, 6,670 returning; 804 withheld, 825 before), 1,838 "flow runs into" warnings none missing for an entry in the body (1,820 before); 779 parameter candidates, all insensitive; 43,160 emulator runs |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups: **the same as the previous master; 0 of 839 outputs changed** (`SE_GAME_OUT`, compared file by file). The body and the lend/withhold of every function were also compared with the old logic (a scratch build): no difference but the two new fixtures. 5,650 ms against 5,634 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups: **the same; 0 of 1,554 outputs changed**, bodies and lends unchanged. 19,571 ms against 18,591 |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` (`detect_leaks=1`) | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report; the suite passes (18 s), and with `SE_GAME_HWRAM=hwram007.bin` (839 functions, 138 s) |
+
+**Wrong in the first drafts, so a later reader does not repeat them.** The first draft of the one-to-one "dropped" check matched the
+trace accesses of a `mac` in trace order, so an access of ordinary RAM, which the decompiler may fold, took the one entry that belonged
+to the parameter's memory read beside it: 27 failing seeds in 5,000, all false. The accesses the decompiler must list now take the entries
+first. The ledger's guess for A4-3 (a use or a hold keeping the read as a variable) was half right: the load is flagged and not held;
+it is a use, of a kind the fold check did not see. A debug print of the switch block's ops
+and the uses of each was what showed the SUBPIECE. A build killed half way leaves objects another compiler process finished after the
+header changed (the ASan build overflowed a `Funcdata` allocated by a `database.cc` compiled before `funcdata.hh` grew): the headers
+were touched and everything was rebuilt before the matrix was run.
+
+**Not done.**
+- The pre-action scan (`ScanRawPcode`: the A3 delay-slot check, the literal pools to mark read-only) still reads the first flow of a pass
+  only. A function jumped into after a restart's flow has its literal words read as memory, not folded, and its delay-slot PC-relative
+  loads are not looked at. Not reproduced: a third function that read a hardware register through its own literal was not absorbed
+  (the engine took the jump to it for a call), so I could not build the case; the worst it would be is a literal word read as
+  memory, which is held and listed, not lost.
+- The generator's `SaidMissing` is still true for any removal caution on the instruction, not one caution per lost access as the host's
+  `SaidCount` is; mac is in version 1 only (version 2's registers-hold-a-value discipline would need it taught).
+- `noInterveningStatement` still passes a COPY or SUBPIECE whatever uses its output. Patch 0024 closes it for the one op that matters
+  to us (the lookup, the only load a guard may be folded over); an ALU op there has no effect to repeat.
+
+## Area 2, round 2 review
+
+Branch `review/2-round2-review`, at `253f058`. Reviewer only: no source or test changed. Two findings, both P1
+and both outside what any oracle can see: **A2-9** (`trapa` is modelled as a call whose return leaves r15 8
+bytes low, so stack reads after it are wrong) and **A2-10** (r4-r7, T, MACH and MACL read after a call as their
+value before it). Everything the brief listed for the spec, the reference model, the oracle and patches 0019 and
+0020 held.
+
+*Tools.* The two suites as shipped (`SaturnExplorerSh2DecodeTests`, `SaturnExplorerSh2SemanticsTests`: both pass),
+plus a scratch probe outside the tree that compiles `Sh2DecodeTests.cpp` into one file with its own `main`, so it
+can use the oracle's reference (`ExecRef`, `RunRef`, `RunCase`, `GenCase`) and the emulator harness, and drive
+`Sh2Decompiler` on hand-written words. Nothing of it is committed; every result below that comes from it says how
+to rebuild the case.
+
+### 1. The reference model against Mednafen
+
+Re-derived each of the 124 runnable ops from `sh7095_ops.inc` and the PC rules of `sh7095.inc` (`DelayBranch`,
+`UCDelayBranch`, `CondRelDelayBranch`, `Exception`), line by line against `ExecRef`, and the same ops against
+`superh.sinc` (SH-2 constructors only). No case where the model and the spec agree with each other but not with
+Mednafen. Held:
+
+- DIV0S, DIV0U, DIV1 (Q = msb ^ M ^ carry, T = (Q == M), Rm read after the shift); the spec's arithmetic-select
+  form of DIV1 is equivalent (checked by hand and by the decompiled sequence in section 5).
+- MAC.L: 64-bit accumulate, with S the 48-bit bound and the direction from the sign of `m0 ^ m1` (not of the
+  product, so a zero product with a negative factor saturates low; spec and model both do this). MAC.W: with S,
+  MACL only, `MACH |= 1` on overflow and MACH otherwise untouched; without S, 64-bit. `Sh2SemanticsTests`'
+  `RefMacL`/`RefMacW`/`RefDiv1` agree with both. The JIT helpers `SH7095_JIT_MACL_Arith`/`MACW_Arith`
+  (`sh7095.inc`) are the same statements.
+- DMULS/DMULU, MUL.L, MULS.W/MULU.W; ADDC/SUBC/NEGC (carry from bit 32), ADDV/SUBV (the two sign tests);
+  EXTS/EXTU, SWAP.B/W, XTRCT (with Rn = Rm); ROTL/ROTR/ROTCL/ROTCR, the shifts (`shal` and `shll` one op).
+- `tas.b`, and the GBR read-modify-writes (`and.b`, `or.b`, `xor.b`; `tst.b` reads only).
+- `trapa`: SR pushed first, then the address after `trapa` (`z->PC -= 2` before `Exception`), vector at VBR +
+  imm*4, SR unchanged. `rte`: PC then SR popped, `SR = new & 0x3F3`, then `DelayBranch`. `ldc`/`ldc.l` to SR
+  mask with `0x3F3`, to GBR and VBR do not; `stc`, `sts`, `lds` and their `.l` forms; `clrt`, `sett`, `clrmac`.
+  Register order in Mednafen's `CtrlRegs` (SR, GBR, VBR) and `SysRegs` (MACH, MACL, PR) matches the oracle's index.
+- SHAD and SHLD do not exist on the SH-2: Mednafen leaves them illegal and the decode oracle finds SLEIGH
+  accepting nothing outside Mednafen's 53,752 words.
+- Access widths and counts, which the differential run does not compare (it compares values and written words):
+  the probe translated one word of every op and listed its LOADs and STOREs. Every op matches Mednafen's operand
+  size and count (MAC two reads, the GBR operations read then write, `tas.b` read then write, `rte` two 4-byte
+  reads, `trapa` two 4-byte writes then one read).
+
+Mednafen's fused fast paths (`FUSE_COND_BRANCH`, `FUSE_LOAD_CMPTST_BRANCH`, `_LOW_ACCURACY_` only) compute the same
+T as the unfused ops; the reference follows the unfused ones, as it should.
+
+### 2. The oracle's normalisation and coverage
+
+- *Immediates modulo 256.* The one rewrite that hides a real difference in text: `Sh2Disasm` prints `mov #0xFC,r0`,
+  `add #0x80,r2`, `cmp/eq #0x80,r0` and SLEIGH `mov #-0x4,r0`, `add -0x80,r2`. Held: the encoding and the value
+  the CPU uses are the same, `Sh2Disasm` follows the Renesas manual's own convention (`MOV #H'80,R1` leaves
+  `R1 = H'FFFFFF80`), the execution half checks the sign extension, and the SLEIGH listing is not shown anywhere
+  in the app (`Sh2Decompiler::Disassemble` has no caller outside the tests). `trapa 0x12` against `#0x12` and the
+  missing `#` on SLEIGH's logical immediates are the same (unused) listing.
+- *Operand fields.* Registers in both positions, the implied R0 and GBR, displacement scale (decimal byte counts),
+  PC-relative addresses at both alignments and branch targets with their wrap are all in the compared text;
+  `shal`/`shll` is one op. Nothing else is folded.
+- *Undefined words.* Validity is compared on all 65,536 words at three layouts. A word decoded with the slot
+  context that patch 0005 sets is not part of the decode half, so the probe ran every slot-legal word Mednafen
+  defines (44,213) in the slot of each of the ten delayed branches, T clear and set (884,260 cases, section 3):
+  every one translates and runs.
+- *The known-limit rule for A2-4.* Tight: `RunRef(..., specSlotPc)` changes only the PC a slot sees after a taken
+  branch other than `bra`/`bsr`, and a case is excused only if every register, the next PC and every written word
+  then agree, so a second cause in the same case still fails (an SR mask, a wrong target, a not-taken slot, a
+  regression of patch 0005). The decompiler side pins only the 8 named shapes; the probe decompiled every cell the
+  default run counts as known (480 distinct cells), from its branch, each alone in otherwise zeroed memory (in the
+  oracle's nop-filled image every decompile runs the flow out to its instruction limit): 480 of 480 marked
+  unsupported.
+- A longer run, `SE_DECODE_CASES=40000 SE_DECODE_SEED=4242` with `SE_MEDNAFEN_SS` set: 5,200,000 cases, 0 differ,
+  37,896 known (A2-4), the transcribed word table equal to `sh7095_idecodetab.inc`, 15.8 s.
+
+### 3. Delay slots and the PC
+
+- *Every slot word in every delayed branch.* The probe placed each of the 44,213 slot-legal words after `bra`,
+  `bsr`, `bt/s`, `bf/s`, `braf`, `bsrf`, `jmp`, `jsr`, `rts` and `rte`, at both alignments, and ran one random case
+  with T clear and one with T set: 0 differ; the known-limit cases (8,448 for each conditional branch, about 16,890
+  for each register-target branch) are exactly the PC-relative slots after a taken branch. This covers the slot
+  reading or writing the branch's own register, `rts` with `lds ...,pr` in the slot, `bt/s` not taken with a slot
+  that writes T, and `rte` with a slot that reads SR, writes PR or moves r15.
+- *A slot that is a jump target.* A function that enters at a `bra` slot and loops back to the `bra` (`A00E D104
+  4415 89FB 000B 6013` from 06009000, entry 06009002, literals 0x11111111 at 06009014 and 0x22222222 at 06009030):
+  both paths fold the right literal (`if (param_1 < 1) return 0x11111111; return 0x22222222;`), unflagged and
+  right. A `jmp @r2` through a literal, and a `braf r0` after `mov #4,r0`, into a `bra` slot: both flagged
+  unsupported (the resolved jump is a jump table, so `ScanRawPcode` sees the target).
+- *A branch to its own slot* (`bt/s`, `bf/s`, `bra` with displacement -1): decompiled as the hardware runs it (the
+  slot twice when taken), with the engine's overlap warning.
+- *`bsrf`/`braf` at the top of the address space*: covered by `PickTarget`'s top and bottom targets; agrees.
+- *Cached parses and context.* `Sleigh::obtainContext` reuses a cached parse without comparing the context it was
+  resolved under, so a `bra` slot parsed before the `bra` commits its context would keep the slot's own PC. The
+  flow cannot reach it: a slot parsed first (as the entry) is followed by its fall-through, which evicts it before
+  the `bra` is translated; a slot parsed first as a jump target is flagged. `ReturnCheck` can see either context on
+  a second pass, but takes every load from a constant address as memory (`Loaded`), so the literal's address does
+  not matter there. Held by argument; no oracle exercises it.
+
+### 4. Patches 0019 and 0020
+
+- 0019: the `rte` order (SR before the slot) and the masks are exercised by every slot word above; no difference.
+- 0020: a history sweep of 400,000 translations over 48 contiguous `[branch, slot]` pairs (no `bra`/`bsr`, whose slot
+  is meant to translate differently once the branch has committed), in four request orders: any address, a
+  three-address cycle over branches and slots, branches and slots of four neighbouring pairs (jumps into the middle
+  of a cached pair), and branch-or-slot at random. 0 translations differ from a cold one. With patch 0020 reverted
+  (a scratch copy of `sleigh.cc` linked into the probe) the same sweep finds 285, so it has teeth. `ReturnCheck::Step`
+  re-steps in address order; with translation independent of history its order cannot matter.
+
+### 5. The decompiler's view
+
+Decompiled shapes the emulator gets right, and read the output against the hardware: MAC.W with S set and MACL
+from an argument (the saturation test, `0x7fffffff`/`0x80000000` by the product's sign), MAC.L with S set (48-bit
+bounds, direction from `m0 ^ m1`); `div0u ; div1 r5,r4 ; div1 r5,r4 ; rotcl r4` (the printed C transcribed and run
+on 200,000 inputs against the reference: identical); 64-bit `addc` and `negc` chains, `shll ; rotcl`, `addv`,
+`subv` and `cmp/str` into `movt`; `rte ; movt r0` (reads the stacked SR's T); `bt/s` not taken with `sett` in the
+slot; `jmp`/`jsr` whose slot overwrites the target register (the target is the old value). All read as the
+hardware behaves. Two do not, and no oracle compares a printed value with a run:
+
+- **A2-9**, `trapa`. The spec makes it `call [vector]` after pushing 8 bytes, and the default prototype keeps r15
+  across a call, so after it the decompiler's r15 is 8 lower than the hardware's (the handler's `rte` pops them).
+  `sts.l pr,@-r15 ; mov.l r4,@-r15 ; trapa #1 ; mov.l @r15+,r0 ; lds.l @r15+,pr ; rts ; nop` prints
+  `return 0x6009006;`, the address `trapa` pushed, where the hardware returns r4.
+- **A2-10**, a register the cspec neither keeps nor kills (r4-r7, SR, MACH, MACL) is merged across a call into
+  one variable, so `mov #5,r7 ; bsr f ; nop ; mov r7,r0` prints `xVar1 = 5; func(); return xVar1;` and a
+  `bt` on a T returned by the callee is printed as decided by the T from before the call. r2, which the cspec
+  kills, prints `extraout_r2`. Likely area 3's to fix (the cspec); filed here for the T flag.
+
+Seen on the way, not filed: a `rts` in the delay slot of a `rts` makes the request fail with the engine's text
+"Could not obtain cached delay slot instruction": an illegal slot, already accepted under A2-8 (b), and reported,
+not silent.
+
+### 6. Held, in one line each
+
+- The reference model: every op equal to Mednafen; no shared transcription error with the spec.
+- Access widths and counts of every op's p-code: equal to Mednafen's.
+- Decode normalisation: only spelling folded (the immediate sign is the Renesas convention; the SLEIGH listing is unused).
+- Undefined words: compared on all words; every defined slot-legal word also translates and runs in each delayed slot.
+- The A2-4 known-limit rule: excuses nothing but the one rule; decompiler flagging checked on every known cell.
+- Delay slots: all slot words after all delayed branches agree (884,260 cases); slot-as-target, branch-to-own-slot,
+  slot writes the branch register, top-of-memory `braf`/`bsrf`.
+- Patch 0019 (`rte` order and masks) and patch 0020 (LRU): history sweep clean, and fails with 0020 reverted.
+- MAC saturation, DIV1 sequences, carry chains and SR-reading slots read correctly in the pseudocode.
+
+## Area 5 round 3 and area 4 round 2 review
+
+Reviewer, branch `review/5-round3-review`, at `d781cb7` (patches 0001 to 0024). Findings only; no source or test
+changed. Every fixture is in `Docs/Decompiler/REVIEW_LEDGER.md` (A5-9 to A5-17, A4-4 to A4-6, and A3-1 for the area 3
+owner) with its words or replay line, the current and expected output and the oracle's verdict. Reproduced with
+`SaturnExplorerSh2GeneratedTests` (`SE_GENERATED_WORDS`, `_FUNCS`, `_TABLES`, `_DATA`, `_RETURNS`, `_POLL`,
+`SE_GENERATED_VERBOSE=1`), RelWithDebInfo, gcc. Mednafen read for each width rule: `sh7095.inc` (`SH7095_OnChipRegWrite_u8`,
+`_u16`, `_u32`, `SH7095_OnChipRegRead_INLINE_u8`, `_u16`, `_u32`, `SH7095_BSC_BusWrite_u32`, `_BusRead_u32`), `ss.c`
+(`BusRW_DB_CS0_u8_W0`, `_u8_W1`, `_u16_W1`, the FRT trigger region), `scu.inc` (`SCU_RegRW_DB_u8_W0` to `_u32_W1`,
+`SCU_FromSH2_BusRW_DB_u8_W0`, `_u16_W0`, `ABus_Read`, `ABusRW_DB_u16_W0_SH1`), `vdp1.c` (`WriteReg`, `ReadReg`, `VDP1_Write8_DB`),
+`vdp2.c` (`RegsRead`, `RW_W8`), `smpc.c` (`SMPC_Read`, `SMPC_Write`), `cdb.c` (`CDB_Read`).
+
+**Area 5 is not clean.** No P1 in the register handling itself; seven P2, all of one kind: a width or a lane the map does not
+model, so the line prints a part of the register, or names two, with no caution or the wrong one. None has an instance in
+either save state. The one P1 of the round (A4-4) is a control-flow error that removes a hardware write.
+
+**Not held.**
+
+- **A4-4 (P1).** A jump table one of whose entries is the default's own destination: once the bound check is folded into the
+  switch, the join is decided from the switch block's register values (`mova`'s r0) on the default path too. A reachable block
+  holding a hardware write is removed as unreachable, no caution says so (the all-volatile reference run removes the same
+  block, so the removal check has nothing to compare), and a signature is lent with a wrong return. Found by the generator in 2
+  of 15,000 version 2 seeds (68620, 107923); a 25-word fixture. With the entry pointing to its own `bra join`, the output is
+  right, so the shared destination is the trigger; the fixer's note on patch 0024 (`noInterveningStatement` passes a COPY
+  whatever uses it) names the likely root.
+- **A5-9 (P2).** A 4-byte access to the 8- and 16-bit on-chip registers below 0xFFFFFF00 is a CPU address error (Mednafen sets
+  `SH7095_PEX_CPUADDR`, a read returns 0); the output says "one 4-byte write covers SH2_ICR and SH2_IPRA", or nothing
+  (`xVar1 = _SH2_VCRWDT;`).
+- **A5-10 (P2).** A 16-bit access there reaches only the register at the word's own address, with the value's low byte; the odd
+  register is neither written nor read. The "covers SH2_TIER and SH2_FTCSR" caution and the FTCSR arming note are wrong; a
+  word at 0xFFFFFE90 or 0xFFFFFE70 does nothing and prints by address with no note.
+- **A5-11 (P2).** A byte or word write to the SCU's DSP ports (PPAF, PPD, PDA, PDD) writes the whole register from the data bus
+  (unmasked, unlike every other SCU register); printed `SCU_PPD._3_1_ = 3;` with no note.
+- **A5-12 (P2).** A 4-byte write to BCR1 to RTCOR without 0xA55A in the upper half does nothing; printed `SH2_BCR1 = 3;`. The
+  round 2 fixer saw it and did not put it in the ledger.
+- **A5-13 (P2).** A byte write to MINIT or SINIT sends no signal (the CS0 byte path is empty there); a long sends two. Printed
+  `MINIT._0_1_ = 3;` and `_MINIT = 3;` with no note.
+- **A5-14 (P2).** A 4-byte access over one 16-bit register and an unnamed half (VDP2 PRIR and the reserved word after it,
+  RAMCTL after the reserved 0x0C, VDP1 ENDR, SCSP DMEAL, a long read of CD_HIRQ) gets no caution: the "covers" caution needs two
+  named registers. `_VDP2_PRIR = 3;` writes PRIR with 0.
+- **A5-15 (P2).** Narrow reads on the A and B bus are 32-bit bus reads in Mednafen: a word read of VDP2_TVMD also reads
+  VDP2_EXTEN (which latches HCNT and VCNT), a word read of the CD FIFO at 0x25818000 pops two words. Nothing says so.
+- **A5-16 (P3).** Read kinds the map lacks: EXTEN's latch and TVSTAT's flag clear on read, SCU_AIACK reads 0, SH2_CCR's read
+  mirrors 0xFFFFFE93-0xFFFFFE9F, a byte write to VDP2 color RAM writes the whole entry.
+- **A5-17 (P3).** A byte at an even SMPC address prints as a part of the register beside it since the word views
+  (`SMPC_COMREG._0_1_ = 0x19;`); the caution says it does nothing.
+- **A4-5 (P3).** An indirect jump whose one destination is known only after the first flow, to code nothing else reaches and that
+  returns, is taken for a tail call (`braf` over data, `jmp @r1` through a literal, a table whose guard admits one index):
+  warned at the jump, signature withheld, but the destination is not in the body and the shown function is `void`. The generator
+  rejects it (`outside-body`).
+- **A4-6 (P3).** The generator reports `trace-outside` for a callee reached through the cache-through mirror (its `UnitOf` does not
+  canonicalize); the output is right.
+- **A3-1 (P3, for the area 3 owner).** The generator's `param-dropped` check counts a read through a pointer register on the path
+  where the code tested it to be 0 (address 0, ordinary memory): seeds 101046 and 107035. The output is right.
+
+**Held**, one line each:
+
+1. A5-3's rules, each against Mednafen: a byte write to VDP1 and VDP2 registers writes the whole word (VRAM is masked, the
+   registers are not); a word write to a 32-bit on-chip register at +0 writes it whole, at +2 nothing; a word read returns the
+   low half at both; a byte access is an address error; the BSC takes no word write. Through the mirrors (DVCR at 0xFFFFFF28,
+   DVSR at 0xFFFF7F00) the caution is right. No false alarm found among the existing cautions.
+2. A5-4's SMPC lane rules: a word at the even address (cached, cache-through, 0x3010001E through bits 28-27, 0x2017FF9E in the
+   last 128-byte repeat), a long over two registers (0x2010001C, 0x00100080, a long read of 0x20100020), word and long reads
+   through GBR (`mov.w @(0x62,gbr)` names SMPC_SF), a byte at the odd address unchanged. An even-address byte read calls
+   `SMPC_Read` of the same register, which has no side effect, so "returns 0xFF" is the whole story. Only A5-17.
+3. A5-5's matching by address: `mac.l` with one constant register operand and one through a pointer, both removed with
+   unreachable code: two cautions, one by name and one "through a pointer"; both operands through pointers: two. A frame record
+   (`AccessFate::frame`) is any record outside the ram space, which only the stack's folds are; no shape makes one stand for a bus
+   access.
+4. Patch 0021: a restart that reaches less than the first flow could not be built (a restart re-follows with more tables, and no
+   callee is ever lent as not returning). `bsrf` to a known function, a backward `braf`, a `braf` into an `else` that falls into
+   the join, and the SH compilers' `mov.w @(r0,r4),r0 ; braf r0` switch of three entries are right (0 findings). Flow into the
+   middle of another known function gets no warning, by design (only entries are known). The scan before the actions still
+   reads the first flow only (the round 1 fixer's note): not built here either: in the one attempt the second hop was taken for a call when
+   the third function read a register through its own literal.
+5. Patch 0024: the lookup used across the default through a MULTIEQUAL with a second guard (`cmp/pz ; bf ; cmp/gt ; bt`), the
+   lookup used by one case only, and a hardware read between two guards all keep their reads under the guards (0 findings).
+   The switchFold control on the game corpus: 27 and 155 switch lookups, as before. A4-4 is a COPY in the switch block, not
+   the lookup.
+6. The generator's holes, one hand-made module each: `mac.l` in a module (a callee `clrmac ; mac.l @r5+,@r4+`): 0 findings, two
+   reads listed. The address of a local handed to a callee: 0 findings (the caller is withheld, "a return not to its caller":
+   conservative, a question for area 3). A fifth argument on the stack: 0 findings (the callee withheld, "an incoming argument
+   outside its signature"; the call prints five arguments). Recursion and mutual recursion, with the depth clamped: 0 findings,
+   both withheld. A mirrored callee: A4-6. `SaidMissing` per instruction: no module can reach it. An unmarked poll is answered
+   only in the marked request's run, where nothing is removed, so no run reaches code the default request removed (the A5-5 `mac`
+   after a poll: "0 of 3 runs finished", the trace stops at the poll). The check is dead in practice. A4-4 is the first shape
+   where the emulator runs removed code, through flow rather than a poll; its findings are `removed-unsaid`, which `SaidMissing`
+   would excuse for any caution on the instruction.
+
+**For the coordinator.**
+
+- Area 3: an unknown or withheld callee is printed as leaving r1 and r4-r7 unchanged (the cspec's `killedbycall` names only r2
+  and r3). The clamped recursion prints `return iVar1;` with `iVar1 = (param_1 & 3) - 1`, where every run returns 0. The signature
+  is withheld, so nothing wrong is lent, but the text reads as a value. Not filed as a row (area 3, and Ghidra's default for an
+  unknown effect).
+- Seed 104955 (version 2) fails the generator's own contract (`generator:no-return`, modes 1 and 3), not the decompiler's.
+- The default 300 seeds and the A4-2/A4-3 seeds do not reach A4-4 (about 1 in 7,500 version 2 seeds), so the ctest entry stays
+  green; the nightly run of 20,000 will meet it.
+
+**Runs.**
+
+| | |
+|---|---|
+| Generator, both grammars, `SE_GENERATED_FIRST=60001`, 10,000 seeds | 1 failing seed (68620, A4-4), 2 findings; 132,679 accesses traced; 194 s |
+| Generator, version 2, `SE_GENERATED_FIRST=100001`, 10,000 seeds | 4 failing seeds: 107923 (A4-4), 101046 and 107035 (A3-1), 104955 (`generator:no-return`); 173 s |
+| Hand-made replays | about 50, listed in the ledger rows; the A5 ones give 0 findings (the generator has no register widths) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+| Width instances in the corpus | none: no `_SH2_` long or word over the on-chip byte registers, no narrow SCU DSP, MINIT or SINIT write, no `covers` caution; only `SH2_BCR1._2_2_` (right) |
+
+## Areas 2 and 3, round 2: trapa's stack and the registers a call kills
+
+Branch `review/2-3-callconv-fix`, from `276a4b4`. Fixes the two P1 findings of "Area 2, round 2 review" (ledger A2-9 and
+A2-10), which no oracle could see because none compares a printed value with a run, and adds the oracle that does. Two
+patches, both to the spec: `0025-sleigh-trapa-stack.patch` and `0026-cspec-call-clobbers.patch`. The coordinator's addendum
+(the round-3 review of areas 4 and 5 found A2-10 from the other side: a call to an unknown or withheld function printed as if it
+left r1 and r4-r7 alone, and a recursive function printed a wrong value) is covered: r0 and r1 are in the list, and a
+recursion fixture is in the oracle.
+
+### A2-9: trapa (patch 0025)
+
+*Cause.* `trapa` is `r15 -= 4; *r15 = sr; r15 -= 4; *r15 = inst_next; call [*(vbr + imm*4)]`, and the cspec keeps r15 across a
+call, so the decompiler's r15 after it was 8 below the hardware's: the handler's `rte` pops both words. A register saved before
+the trap and restored after it read back the address `trapa` pushed (`return 0x6009006;`), and a word at r15 read the pushed SR
+(`return in_sr;`).
+
+*Fix.* `r15 = r15 + 8` after the `call` in `trapa`. The differential run needs the push and nothing else, and it gets it: the
+p-code emulator ends an instruction at its call (`EmulatePcodeCache::executeInstruction` loops until `instruction_start`, and
+`executeCall` sets the next address), so the op after the call is never run by it, and the state the emulator reaches after
+`trapa` alone is still Mednafen's (r15 down 8, SR and `inst_next` pushed, PC at the vector). The decompiler carries on after a
+call and sees the 8 bytes given back. `rte` is untouched, so decompiling a handler still pops PC and SR. A cspec route was
+looked at and not taken: `callfixup` matches a callee by name and this call is through the vector table, and `extrapop` is per
+model, not per call, so it would change every call.
+
+*Result.* `4F22 2F46 C301 60F6 4F26 000B 0009` prints `return param_1;`; `C320 60F2 000B 0009` prints
+`return in_stack_00000000;` (the caller's word) and with `50F1` `in_stack_00000004`; the entry r15 read after a trap is
+`&xStack00000000`. Corpus: the one function with a `trapa` in each image (`06024ACC` and `0606476C`) no longer prints
+the pushes it made for the handler, as the stores are dead once the read of the pushed address is gone (one access fewer
+"through a pointer" per image, accounted as folded into ordinary memory).
+
+### A2-10: what a call leaves (patch 0026)
+
+*Cause.* The default prototype's `killedbycall` held r2 and r3. A register in neither list has the unknown effect, which the
+engine prints as the value before the call. The review listed r4-r7, SR and MACH/MACL; the addendum added r1 (and r0): they are
+outputs only while the return is open or 64-bit, so once a signature is lent as void or 32-bit, `guardCalls` no longer
+treats them as outputs and r1 read as before the call as well (`f` lent void, `mov #5,r1 ; bsr f ; mov r1,r0` printed
+`return 5;`).
+
+*Fix.* `killedbycall`: r0, r1, r2, r3, r4-r7, MACH, MACL, SR. The SH ABI of both compilers has r0-r7 and MACH/MACL
+caller-saved and T clobbered; the engine tracks SR whole, so SR is killed, which also leaves the interrupt mask and S, Q, M
+unknown after a call (a callee can change them with `ldc`). VBR joins GBR in
+`unaffected`: no compiled code touches it, and without an entry it was in the same unknown state r4 was. `unaffected` r8-r14,
+r15 and GBR are as before. A lent prototype keeps the default model's lists (`ApplyPrototype` sets `pieces.model =
+arch.defaultfp`), so lending changes none of this; the lent fixtures confirm it.
+
+*What the text now says.* `xVar1 = 5; func(); return xVar1;` is `func(); return extraout_r7;`; the T fixture is
+`if ((extraout_sr & 1) == 1)`; MACL and MACH read `extraout_macl` and `extraout_mach`; r8 (callee-saved) still reads 5; an
+argument held in r8 across a call is still `param_1`; the recursion `f(n)` that sets r1 or r7 before calling itself and a base case
+that sets it differently prints `extraout_r1` / `extraout_r7` (its signature is withheld, "it calls itself", as before).
+
+*Prototype inference.* A register read after a call is a call output (`isExtraOut`), and `WithholdReason` refuses to lend a
+signature on one ("it uses r4 after calling X, which is not known to return it", already there for r0-r3). So a caller that
+reads r4-r7 after a call is no longer lent a signature, and in isolation it has lost the parameter: the old text read the
+entry value through the call, the new reads the callee's. On the other side, the call's arguments are now shown: with an unknown effect the engine
+left r4-r7 out of a call's argument list when the call looked to modify them.
+
+### The oracle: a printed value against a run (`TestCallsAndTraps`)
+
+`Sh2DecompilerTests.cpp` runs each fixture on the p-code emulator (the shipped translator, the callee or a `rte ; nop` trap
+handler in memory, VBR pointing at a table of handlers), twice or more with different inputs, and evaluates the pseudocode's
+`return` for the same inputs (`PseudoEval`: straight-line code, `if`/`else`, 32-bit integer expressions, the parameters taken
+from r4-r7), and requires the register the code returned to be among the values the text can return. Limits: a value it cannot
+know (a call's result, `extraout_rN`, a memory read) agrees with anything, so it finds a text that states a wrong value, never
+one that states too little (the expected-text checks beside it pin that); loops, `goto` and `switch` are rejected loudly; casts
+are ignored and compares are signed; the inputs are a few points, not a proof. Its own checks run first: the pre-fix texts of the
+four ledger fixtures are evaluated and must be flagged, and a loop must be rejected, so a broken evaluator cannot make everything
+agree. The fixtures: the two trapa fixtures of the ledger, trapa with a local, two traps in a row, the entry r15; r4, r5, r6
+and r7 after a call that sets them; the ledger's r7 and T fixtures word for word; T set by the callee; MACL; MACH; r1, r2
+(controls); r8 across a call and an argument kept in r8 (controls); a `trapa` after a call (VBR is not `extraout_vbr`);
+recursion through r1 and through r7; r7 and r1 with the callee's signature lent; and a pinned limit, below.
+
+`SaturnExplorerSh2SemanticsTests` gets `TestTrapaStack`: the emulator enters the handler with r15 down 8, SR at r15+4 and the
+next address at r15, and the handler's `rte` returns with r15 and SR as they were.
+
+`TestPrototypeEligibility`'s caller that stores a register's low word after a call held r4 and r5 across the call, which the
+cspec now reads as `extraout_r4`/`extraout_r5`; it holds them in r8 and r9 now (same intent: a sub-word store of a register the
+caller owns keeps its signature), and checks the text. `TestGameCode`'s `SE_GAME_OUT` files also say whether a signature is
+lent or why it is withheld, so two builds' outputs differ where that changes.
+
+### Mutation
+
+Each spec change reverted alone (or one entry of the list dropped), the sla regenerated, the suites run:
+
+| Reverted | `Sh2DecompilerTests` | `Sh2SemanticsTests`, `Sh2DecodeTests`, generator (600 seeds) |
+|---|---|---|
+| patch 0025 (no pop after the call) | fails: the ledger's a and b, the local, the two traps and r15 fixtures, each with the oracle (`the code returned 11111111, the pseudocode returns 06009006`) and the expected text | pass: **the decode test's differential run does not see the trapa change**, as designed (one instruction, and the emulator never runs the op) |
+| patch 0026 (whole) | fails: `vbr` text, r4-r7, r7, T (both), MACL, MACH, with the oracle on each | pass |
+| r0 and r1 dropped | fails: the lent r1 fixture, text and oracle (`returns 00000005`, the code returned 7) | pass |
+| SR dropped | fails: both T fixtures, text and oracle | pass |
+| MACH and MACL dropped | fails: MACL and MACH, text and oracle | pass |
+| r4-r7 dropped | fails: the four argument registers, r7, the r7 recursion, the lent r7 and r4 limit | pass |
+| VBR dropped | fails: the two `unaff_vbr` texts | pass |
+
+So the area-2 oracle and the generator cannot see either defect, which is the finding's own claim; only the new check can.
+
+### Corpus
+
+Both images (`SE_GAME_HWRAM` hwram007 and hwram008), every ledger count 0, 16 and 20 reads "missing and said" (code
+removed as unreachable) as before. Against the previous master (`SE_GAME_OUT` compared file by file):
+
+| | functions | text differs | declaration (signature line) differs | call sites with more arguments | with fewer |
+|---|---|---|---|---|---|
+| 007 | 839 | 87 | 14 | 74 | 1 |
+| 008 | 1554 | 136 | 20 | 112 | 0 |
+
+`extraout_` names appear in the changed functions (r4 in 57 and 90, r7 in 35 and 60, r6, r5, SR in 10 and 11, MACL in 6 in the second);
+`in_sr` is gone from the 10 and 11 functions that had it (it became `extraout_sr`). Three read, with the disassembly:
+
+- `06024ACC` (007): `cmp/gt r1,r4 ; bf ; trapa 0x9` after five calls. Before: the pushes of the trap and a read of the pushed
+  word were printed, `in_sr & 0xfffffffe | ...` carried a T from before the calls, and `param_1` was compared. Now the trap is a
+  call through `unaff_vbr + 0x24`, the T logic is `(*(uint2 *)(unaff_gbr + 0x80) & 0x10) != 0`, and r4 after the calls is
+  `extraout_r4`. Right for A2-9 and for T; the function lost its parameter, which is the ABI's answer (the author saved r5-r7 and
+  not r4 around calls elsewhere, and may count on the callees keeping it: not decidable here).
+- `0600847E` (007): a call to `060198DE`, which is eleven `shar r4`: a shift-by-11 helper that returns in r4. Before:
+  `iVar2 = func_0x060198de(); param_1[2] = iVar1 + iVar2;`, the sum with r4 as it was before the helper shifted it: a wrong value,
+  silent. Now `iVar1 = func_0x060198de(iVar1); param_1[2] = extraout_r4 + iVar1;`: the argument is shown, and the shifted r4 is
+  the unknown it should be. This is the A2-10 defect in the game's own code (74 and 112 call sites gain an argument; the
+  `060198DE`/`E4`/`E6` and `0605A12C`/`26` helpers are the common ones).
+- `06027844` (007): five calls with r5-r7 pushed around some and r4 not, then `func_0x06026174(param_1, ...)`. Now
+  `extraout_r4` and no parameter. The old text may have been right if the callees keep r4 (they are hand-written); the new one is
+  honest and loses information. This is the limit below, seen in code.
+
+### Limits, and what is left
+
+- A callee verified to keep r4-r7 (`CallEffects.preserved`, which `ReturnCheck` proves and the host already uses to prove a return
+  address) is not told apart from one that does not: the default model's lists are per model, and `FuncProto` takes an effect list
+  only through its XML decoder. Pinned by the `r4 kept by the callee (limit)` fixture. The remedy is a small engine patch
+  (a setter for the effect list) and `ApplyPrototype` marking `preserved` registers unaffected for a lent callee; it needs the
+  engine and `Sh2Decompiler.cpp`, which this round was not to touch. Measured cost: of the generator's 5,648 lent prototypes
+  (3,000 seeds), 207 (3.7%) are no longer lent, all for "it uses rN after calling ...".
+- The corpus runs lend nothing (every function is decompiled alone), so it does not measure lending; the generator does.
+- `trapa` through a handler that does not return (a debugger trap) is modelled as returning, as every call is.
+- VBR unaffected is a judgement, as GBR's was: a callee that loads VBR is read as not changing it.
+
+### Matrix (RelWithDebInfo)
+
+`SlaFreshnessTests`, `Sh2SemanticsTests`, `Sh2DecodeTests`, `Sh2DecompilerTests` pass; `Sh2GeneratedTests` passes at the default
+300 seeds and at 3,000 (both grammars, 1,500 each; 0 failing seeds, 0 findings); the game corpus above; `vendor.py` on the pinned
+Ghidra (`918d44e`, a sparse checkout) reproduces the committed tree, `sh-2.sla` aside, with 0025 and 0026 applied. The whole
+`ctest`: 95 of 95 pass (RelWithDebInfo, the final spec data).
+
+## Area 4, round 2: the default that is also a case
+
+Fixer, branch `review/4-round2-fix`, fix commit `c34ac94`, on `5ecc36d` (patches 0001 to 0024; this adds 0027, and
+`vendor.py` on a sparse clone of the pinned Ghidra (`918d44e`) reproduces the vendored tree exactly with it). Ledger rows A4-4
+(P1), A4-6 and A3-1 are `fixed c34ac94`; A4-5 is `accepted` with the reasoning below. The generator's own contract bug (seed
+104955, `generator:no-return`) is fixed. The engine change is one function (`JumpBasic::foldInOneGuard`), about 14 functional
+lines; the rest is the generator and a test block.
+
+### 1. A4-4: the mechanism
+
+The fixture (`mov #4,r0` on the default path; `mova table,r0` in the switch block; a join that tests `r0 & 0x10` and writes
+SCU_IST under it) has a MULTIEQUAL at the join: r0 = (the guard block's edge: the 4 of `mov #4,r0`; the switch block's edge: the
+`mova` COPY, `#0x6009014`). Entry 1 of the table is the join itself, so when `foldInOneGuard` folds the bound check into the
+switch the guard's target is already one of the switch block's destinations (`pos != sizeOut`), and it takes its second branch:
+it sets the guard `CBRANCH`'s condition to a constant (the branch now always enters the switch block) and marks the existing
+destination as the default. The edge from the guard block into the join is then dead and goes, and with it the MULTIEQUAL's input
+4: the join keeps one edge, the switch block's, and r0 at the join is the `mova` address for the default path as well. Then
+`tst #0x10,r0` folds to a constant, `bf` is always taken, the write is unreachable and removed ("Removing unreachable block"), and
+the function returns `0x6009014` for every index (the emulator returns 4 for an index of 2 or more). Nothing refused it because
+`noInterveningStatement` (upstream's "the switch block makes no value used outside it") passes a COPY or SUBPIECE whatever uses
+its output, and the `mova` is such a COPY: the round 1 fixer's note on patch 0024 named it. A temporary print in the fold showed
+the two inputs: `r0(0x06009002:2)` against `r0(0x06009010:12) = #0x6009014`, the second defined in the switch block.
+
+The other branch of the fold (`pos == sizeOut`: the guard's target is not a destination yet) is right, and the ledger's control
+(entry 1 at its own `bra join`) is that branch: `pushBranch` moves the guard block's out edge to the switch block and the join's
+MULTIEQUAL keeps its input for that edge, so the default path still carries its own 4 whatever the switch block computes.
+
+*Fix, patch 0027.* When the guard's target is already a destination, the fold is refused if any MULTIEQUAL of that block takes a
+different Varnode from the edge of the guard block and from the edge of the switch block. The guard stays an `if`, which assigns
+the default path's values. Not under `loadsNotDuplicated`: it is a miscompile of the upstream fold, whatever is done with loads.
+The fixed output of the 25 words, which the generator checks against the emulator:
+
+```
+uVar1 = 4;
+if (param_1 < 2) { uVar1 = 0x6009014; switch(param_1) { case 0: uVar1 = 0x6009014; } }
+if ((uVar1 & 0x10) == 0) { SCU_IST._0_1_ = (char)uVar1; }
+return uVar1;
+```
+
+*Suite.* `TestDefaultAlsoCase` (a separate block after `TestFlowReachedBody`, with its own snapshot): the ledger's 25 words at
+0x06009000: `Ledger` `{ Wr(SCU_IST, 1) }`, the write's block in the body, no `Unreachable` record, no removal warning, `& 0x10` and
+`SCU_IST` in the text, `if (param_1 < 2)` and `= 4;`, not `return 0x6009014;`, `ReferenceOk`; the control (entry 1 at its own
+`bra join`); and a default that is also a case whose join reads nothing the switch block computed (`rts ; mov #5,r0`), which must
+still fold into a `switch` with no `if`.
+
+*Oracle.* The generator replay of the 25 words (ledger A4-4): 0 findings (the trace writes SCU_IST once, the output lists it
+once); seeds 68620 and 107923 pass. The switchFold control stays folded; the corpus's switch lookups are 27 and 155, as before.
+
+### 2. A4-5: accepted, from the design
+
+An indirect jump with one destination known after the first flow is a *tail call*: the engine turns it into a call and the host
+warns "taken for a tail call to X, assumed to return to this function's caller". The code at X is a function of its own. That is
+the design's rule for every jump the flow does not follow, and the suite already pins it from the other side:
+`TestFlowReachedBody` has the second jump into an address nobody named, with the verdict "a tail call to it, not flow into it: one
+warning, and nothing of F2 in the body". Putting the destination in the body for the three shapes of the row would make the body
+disagree with the pseudocode, which shows a call there and not the code, and would make the panel's "address in this function"
+test and the mapping (area 7) claim instructions the output does not contain. The signature is withheld (it calls an address
+whose signature is not known, or "an indirect call it does not resolve"), so nothing wrong is lent; and the destination is
+visible by naming it (a function start at X: the callee is decompiled, and a caller lent its signature prints
+`func_0x0600900a(param_1)`; `TestTailJumpToUnreachedCode`). So:
+
+- The warning says more: "...; the code there is not part of this function's body" (also for an address the code computes;
+  an uncaptured destination keeps its "what runs there is not shown"), and the `DECOMPILER_GUIDE.md` row says the same and how
+  to see the code.
+- The generator's `outside-body` check takes what a run executes after a jump the output warns of as a tail call (or the engine
+  of as an indirect jump it treats as a call: shape c, a table whose guard admits one index and whose word the engine reads as a
+  pointer in RAM) as named by that warning, unless another run executed the same instruction before any such jump. The
+  lent-prototype check still sees those instructions as outside the body: a signature lent with one is `lent-incomplete`.
+  Shapes a, b and c of the row give 0 findings; the control with two entries stays a switch.
+- Not changed: shape c would read `return 2;` if the table's word were known to be read-only. The host marks only the literal
+  pools of PC-relative loads as read-only; a table reached through `mova` is read as ordinary memory, because a table in RAM may
+  be edited. Marking it is a design change with its own risk (a table the code patches), and the output now says what it is
+  (a call through a word in RAM). Left as it is.
+
+### 3. The generator: A4-6, A3-1, seed 104955
+
+- **A4-6.** The trace's instruction addresses (`TraceRec::insn`, the run's `pcs`) are canonical (`Env::Canon`), so a callee run
+  through the cache-through mirror is function 1 at its canonical address and not "outside every function". The row's replay: 0
+  findings.
+- **A3-1.** The finding was not the check but the world it perturbs. A read of memory that is neither work RAM nor a register
+  (the BIOS area: `mov.b @r5,r1` with r5 = 0) drew the next value of the hardware's pseudo-random sequence, so a perturbed run
+  that made one read more saw other values from the registers after it, the traces differed in a *value* and the check called r5 a
+  parameter. Ordinary non-RAM memory now has a value of its own by address, and the sequence is advanced only by hardware.
+  Seeds 107035 and 101046 pass; the perturbation check is otherwise as it was (a read of hardware or of the parameter's own memory
+  through the perturbed register still counts).
+- **Seed 104955.** The second grammar's discipline says a register "holds a value" when every path to the instruction defines
+  it, and after a jump table it kept r1 as the bound. On the paths through a case r0 is the `mova` address and r1 the table entry
+  (a code address); a call's argument `mov r1,r6` after `add #0x6B,r1` passed a pointer into the program's own literal pool to a
+  callee that stored through it (`mov.w r1,@r6` wrote the low half of the literal a later `jmp @r2` loaded), and the run restarted
+  the function until the step limit. A function with a jump table now passes r0 to r3 on as arguments only as an integer
+  (`mov #imm,Rk` in its place; the draws are the same, so every other program of a seed is unchanged: 107923 is the same
+  program, 68620 differs in one word, `mov r0,r5` to `mov #0x20,r5`). The no-return finding says where the run stopped.
+
+### 4. Matrix
+
+**Mutation** (reverted by a temporary environment variable in a scratch build, not by editing the patch or the checks; restored,
+all pass):
+
+| Reverted | Fails |
+|---|---|
+| patch 0027's check | `TestDefaultAlsoCase`: 5 checks (ledger, body and no removal, text, `if (param_1 < 2)`, not `return 0x6009014;`); the 25-word replay (`dropped:W1:hardware:removed-unsaid`); seeds 68620 (two writes, hardware) and 107923 (param); the corpus is unchanged |
+| the check made to refuse every fold of this shape | `TestDefaultAlsoCase`: 1 check (the fold that must still happen prints `switch(` and no `if (`) |
+| canonical trace addresses | the mirror replay: 1 finding (`trace-outside`) |
+| the value of ordinary non-RAM memory by address | seeds 107035 and 101046 (`param-dropped:r5`, `r7`) |
+| the tail-jump naming rule | the row's shapes a, b and c: 3, 3 and 2 `outside-body` findings |
+| integer arguments from a table function's r0 to r3 | seed 104955 (`generator:no-return`) |
+
+**Matrix** (RelWithDebInfo, gcc; the machine ran other work):
+
+| | |
+|---|---|
+| `ctest` | 95 of 95 passed (59 s with -j3) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` | 0 failing seeds, 0 findings (184 s). 9,854 functions, 11,046 prototypes lent (4,375 void, 6,671 returning; 803 withheld), 779 parameter candidates all insensitive, 43,160 emulator runs |
+| `SE_GENERATED_SEEDS=5000` (both grammars) | 0 failing seeds, 0 findings (178 s) |
+| `SE_GENERATED_FIRST=60001 SE_GENERATED_SEEDS=10000` (the A4-4 window, both grammars) | 0 failing seeds, 0 findings (250 s); the review run had 1 (68620) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=100001 SE_GENERATED_SEEDS=10000` | 0 failing seeds, 0 findings (247 s); the review run had 4 (107923, 101046, 107035, 104955) |
+| Seeds 68620, 107923, 104955, 101046, 107035 (`SE_GENERATED_SEED`, `SE_GENERATED_GRAMMAR=2`, and with the default choice) | each passes; the 68620 and 107923 programs still reach A4-4 (the mutation above fails both) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups; **0 of 839 outputs changed** against the same build with patch 0027 off (`SE_GAME_OUT`, compared file by file; the patch refuses no fold in the corpus). 6,846 ms against 6,954 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups; **0 of 1,554 outputs changed**. 22,022 ms against 22,721 |
+| `vendor.py` on a sparse clone of `918d44e` | reproduces the vendored tree exactly (84 library sources, 94 headers, 5 spec files; patches 0001 to 0027, less the numbers other branches hold) |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` (`detect_leaks=1`) | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report; the suite passes (17 s), and with `SE_GAME_HWRAM=hwram007.bin` (839 functions, 128 s) |
+
+**Wrong in the first drafts, so a later reader does not repeat them.** The first fix for seed 104955 cleared r0 and r1 from the
+"holds a value" set after a table. That changed the draws of every later choice, so seeds 68620 and 107923 stopped being the
+programs of the ledger (A4-4 no longer reproduced from the seed); the integer-argument form keeps the draws. A first version of
+patch 0027 also skipped a MULTIEQUAL whose output nothing reads, to keep folds that a dead merge would refuse; it never fired
+(neither the suite nor the two corpus images changed with it removed) and was dropped. The first guess for 104955, a runaway loop in the program, was wrong: the instruction histogram of the unfinished run showed the whole
+function executed 28 times, and printing the first pass's writes found the store into the literal pool.
+
+**Not done.**
+- `noInterveningStatement` is as upstream: a COPY or SUBPIECE whose output is used outside the block still passes. Patch 0027
+  closes the one place it matters (a join that is the guard's target and also a case); the other branch of the fold keeps
+  the default path's values by moving the edge, as the control and the corpus show. A fold elsewhere that depends on the same
+  blind spot is not known.
+- A mirrored callee is still not in the generator's grammar (a new literal kind would shift every stream); the replay line
+  covers it.
+- The mova-reached table as read-only memory (shape c of A4-5), above.
+- The scan before the actions still reads the first flow only (round 1's note), and the A4-5 shapes did not change that.

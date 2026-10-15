@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  */
 #include "funcdata.hh"
 
@@ -107,6 +108,8 @@ void Funcdata::clear(void)
   clearCallSpecs();
   clearJumpTables();
   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
+  flowInsns.clear();		// SaturnExplorer: the next flow records its own
+  flowTables.clear();
   flowOps = 0;
   // Do not clear overrides
   heritage.clear();

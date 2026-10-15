@@ -1,0 +1,174 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.hh
+index 0a4ce08..054212f 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  */
+ /// \file flow.hh
+ /// \brief Utilities for following control-flow in p-code generated from machine instructions
+@@ -90,6 +92,7 @@
+   vector<PcodeOp *> tablelist;		///< List of BRANCHIND ops (preparing for jump table recovery)
+   vector<PcodeOp *> injectlist;		///< List of p-code ops that need injection
+   map<Address,VisitStat> visited;	///< Map of machine instructions that have been visited so far
++  set<Address> haltedinsn;		///< Addresses where flow stopped for bad or unimplemented data (SaturnExplorer)
+   list<PcodeOp *> block_edge1;		///< Source p-code op (Edges between basic blocks)
+   list<PcodeOp *> block_edge2;		///< Destination p-code op (Edges between basic blocks)
+   uint4 insn_count;			///< Number of instructions flowed through
+@@ -152,6 +155,7 @@
+   PcodeOp *branchTarget(PcodeOp *op) const;	///< Find the target referred to by a given BRANCH or CBRANCH
+   void updateTarget(PcodeOp *oldOp,PcodeOp *newOp);	///< Update the branch target for an inlined p-code op
+   void generateOps(void);			///< Generate raw control-flow from the function's base address
++  void recordInstructions(vector<FlowInsn> &res) const;	///< List the instructions visited (SaturnExplorer)
+   void generateBlocks(void);			///< Generate basic blocks from the raw control-flow
+   bool testHardInlineRestrictions(Funcdata *inlinefd,PcodeOp *op,Address &retaddr);
+   bool checkEZModel(void) const;		///< Check if \b this flow matches the EX in-lining model
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+index 785d52a..3e70531 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/flow.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
++ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  */
+ #include "flow.hh"
+ 
+@@ -615,7 +616,27 @@
+   data.opSetInput(haltop,data.newConstant(4,1),0);
+   if (flag != 0)
+     data.opMarkHalt(haltop,flag); // What kind of halt
++  if ((flag & (PcodeOp::badinstruction | PcodeOp::unimplemented)) != 0)
++    haltedinsn.insert(addr);	// SaturnExplorer: no instruction ran here
+   return haltop;
++}
++
++/// SaturnExplorer: every instruction the flow translated, in address order, whether or not it made
++/// p-code (a nop makes none) and whether or not a later action removes what it made. A delayed
++/// branch is one entry; its slot is translated with it. The flow of a restarted function is a new
++/// flow, so the last one's list is the function's.
++/// \param res receives the instructions
++void FlowInfo::recordInstructions(vector<FlowInsn> &res) const
++
++{
++  res.clear();
++  map<Address,VisitStat>::const_iterator iter;
++  for(iter=visited.begin();iter!=visited.end();++iter) {
++    FlowInsn rec;
++    rec.addr = (*iter).first;
++    rec.halted = haltedinsn.find(rec.addr) != haltedinsn.end();
++    res.push_back(rec);
++  }
+ }
+ 
+ /// A set of bytes is \b reinterpreted if there are at least two
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+index 6e236ac..9f179ef 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
++ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -60,6 +61,18 @@
+   bool store;			///< \b true for a write, \b false for a read
+   int4 size;			///< Number of bytes accessed
+   AccessFate fate;		///< How it ended
++};
++
++/// \brief One instruction the flow translated (SaturnExplorer)
++struct FlowInsn {
++  Address addr;			///< The address of the instruction
++  bool halted;			///< \b true if flow stopped here: bad data or an unimplemented instruction, no real instruction
++};
++
++/// \brief An indirect jump the flow recovered the destinations of (SaturnExplorer)
++struct FlowTable {
++  Address op;			///< The address of the indirect jump
++  vector<Address> dests;	///< Where it goes
+ };
+ 
+ /// \brief Container for data structures associated with a single function
+@@ -113,6 +126,8 @@
+   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
+   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
+   vector<AccessRecord> accessFates;	///< How each LOAD and STORE that ended did (SaturnExplorer); cleared with the function
++  vector<FlowTable> flowTables;	///< Every indirect jump the last flow recovered, before any action resolves one to a goto (SaturnExplorer); cleared with the function
++  vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
+   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
+   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
+ 
+@@ -200,6 +215,8 @@
+   bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
+   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
+   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
++  const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
++  const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
+   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
+   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
+   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+index 66570f6..fc87778 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
++ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -107,6 +108,8 @@
+   clearCallSpecs();
+   clearJumpTables();
+   accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
++  flowInsns.clear();		// SaturnExplorer: the next flow records its own
++  flowTables.clear();
+   flowOps = 0;
+   // Do not clear overrides
+   heritage.clear();
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+index c8d2333..22bf681 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
++ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -789,6 +790,7 @@
+   flow.setMaximumInstructions(glb->max_instructions);
+   flow.generateOps();
+   flowOps = obank.getUniqId();	// SaturnExplorer: the ops so far are the flow's; recordAccessFate keeps only their fates
++  flow.recordInstructions(flowInsns);	// SaturnExplorer: the instructions, as translated, before any action removes some
+   size = flow.getSize();
+   // Cannot keep track of function sizes in general because of non-contiguous functions
+   //  glb->symboltab->update_size(name,size);
+@@ -796,6 +798,14 @@
+   flow.generateBlocks();
+   flags |= blocks_generated;
+   switchOverJumpTables(flow);
++  flowTables.clear();		// SaturnExplorer: the destinations, as recovered, before an action turns a table of one into a goto
++  for(int4 i=0;i<jumpvec.size();++i) {
++    FlowTable rec;
++    rec.op = jumpvec[i]->getOpAddress();
++    for(int4 j=0;j<jumpvec[i]->numEntries();++j)
++      rec.dests.push_back(jumpvec[i]->getAddressByIndex(j));
++    flowTables.push_back(rec);
++  }
+   if (flow.hasUnimplemented())
+     flags |= unimplemented_present;
+   if (flow.hasBadData())

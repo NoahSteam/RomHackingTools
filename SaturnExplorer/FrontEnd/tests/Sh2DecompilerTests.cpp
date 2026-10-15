@@ -15,13 +15,17 @@
 
 #include "AllocFailure.h"
 #include "Decompiler/SaturnArchitecture.h"
+#include "emulate.hh"    // the p-code emulator, for the call oracle
 #include "funcdata.hh"   // Funcdata, for the 0004 patch test
+#include "memstate.hh"
 #include "Decompiler/Sh2Decompiler.h"
 #include "Decompiler/SaturnHardwareMap.h"
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstring>
+#include <map>
 #include <stdexcept>
 #include <cstdlib>
 #include <sstream>
@@ -943,6 +947,29 @@ void TestHardwareVolatility()
                                                                   0xC703, 0x4108,
                                                                   0x011E,     // mov.l @(r0,r1),r1
                                                                   0x412B, 0x0009 });
+    // A switch whose table read is used after it (review of the generator's second grammar, A4-3). The
+    // bound check folds into the switch as its default and the table read would stand for the lookup,
+    // but the join after the switch uses the register the entry was loaded into (2 from the default
+    // path, the entry from the cases), so the read is the code's own and it is made only for an
+    // index in range. Folded, it printed ahead of the switch and made for every index. Three cases
+    // that do nothing, each a 'bra join'; the join stores the low byte of r1.
+    const Fixture switchUsed = { 0x0600B400u, { 0x6341,     // mov.w @r4,r3   unused
+                                                0xE102,     // mov #2,r1
+                                                0x3716,     // cmp/hi r1,r7
+                                                0x8911,     // bt join
+                                                0x4708,     // shll2 r7
+                                                0xC702,     // mova table,r0
+                                                0x017E,     // mov.l @(r0,r7),r1   the table read, in range only
+                                                0x412B,     // jmp @r1
+                                                0x0009, 0x0009,
+                                                0x0600, 0xB420, 0x0600, 0xB424, 0x0600, 0xB428,   // the table
+                                                0xA004, 0x0009, 0xA002, 0x0009, 0xA000, 0x0009,   // the cases: bra join
+                                                0x621C,     // join: extu.b r1,r2
+                                                0xE00E,     // mov #14,r0
+                                                0x0525,     // mov.w r2,@(r0,r5)
+                                                0x000B,     // rts
+                                                0xE056 },   //   mov #0x56,r0
+                                  0x38, 0 };
     // A mailbox in work RAM, not marked: the write is forwarded to the poll, the loop never ends as
     // analysed, and the engine removes the hardware write after it as unreachable. Found by the
     // reference run on game code (review of 0e3cd12): the output must say what is missing and why.
@@ -1370,7 +1397,7 @@ void TestHardwareVolatility()
                               &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice,
                               &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
-                              &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
+                              &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead, &switchUsed,
                               &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &ptrFromRam, &switchSameDest, &ptrSavedInRam,
                               &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer,
                               &deadXor, &deadCmp, &deadMarked, &deadPtr, &pollThenRead, &twoTests, &twoTestsWrite, &deadAnd,
@@ -1960,6 +1987,24 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Rd(0, 4) }));
     CHECK(FateAt(r, AccessFate::SwitchLookup, 0x0600A38Cu, false) == 1);   // the table's read, which the switch stands for
     CHECK(Has(r.Text(), "default:") && !Has(r.Text(), "if ("));
+    // The table read's value is used after the switch: the read is the code's, kept, and made under
+    // the guard (an if), not folded into the switch ahead of every index.
+    r = run("switch: the table read's value used after the switch", switchUsed);
+    CHECK(Ledger(r, { Rd(0, 2), Rd(0, 4), Wr(0, 2) }));
+    CHECK(FateAt(r, AccessFate::SwitchLookup, 0x0600B40Cu, false) == 0);
+    CHECK(Has(r.Text(), "if (") && !Has(r.Text(), "default:"));
+    {
+        const MemoryAccess* guarded = nullptr;
+        const MemoryAccess* before = nullptr;
+        for (const MemoryAccess& m : r.accesses)
+        {
+            if (m.insn == 0x0600B40Cu) guarded = &m;
+            if (m.insn == 0x0600B400u) before = &m;
+        }
+        CHECK(guarded && guarded->printed == 1 && !guarded->conditionalInPrint);
+        // The unused read ahead of the guard is not in the lookup's block: the guard was not folded over it.
+        CHECK(guarded && before && guarded->block != before->block);
+    }
     // A guard on one read does not bound a switch on a second read of the same pointer: both reads
     // stay, the guard is an if, and the table (unbounded now) is not recovered, so nothing is lent.
     r = run("switch: the selector is a second read of the guarded pointer", switchSecondRead);
@@ -2736,6 +2781,9 @@ void TestGameCode()
             {
                 std::fprintf(o, "status %d\n", int(r.status));
                 for (const std::string& w : r.warnings) std::fprintf(o, "// warning: %s\n", w.c_str());
+                // Whether its signature is lent to callers, so two builds' outputs also differ where that changes.
+                if (!r.prototypeWithheld.empty()) std::fprintf(o, "// signature withheld: %s\n", r.prototypeWithheld.c_str());
+                else if (r.prototype.known) std::fprintf(o, "// signature lent\n");
                 std::fputs(r.Text().c_str(), o);
                 std::fclose(o);
             }
@@ -3295,6 +3343,233 @@ void TestFlowUncertainty()
     CHECK(r.badDataAt.empty());
 }
 
+// Flow that leaves a function through a jump into another known function, and from there through a
+// second jump into a third (review of the generator's second grammar, A4-2). The first jump is
+// resolved when the flow is first followed, the second only after a restart in the actions has
+// folded the literal it jumps through, and that restart follows the flow again. Two things followed
+// from reading the first flow alone: the entry the second jump reaches was not in the body when the
+// actions removed its first instruction as dead (an 'add #-0x40,r15' whose frame is never used),
+// so no "flow runs into" warning was made for it; and any instruction the later flow reached that
+// the actions then removed was in no part of the body, though the code ran it. The body is what
+// the last flow translated, whether or not the p-code survived (patch 0021), and every known entry
+// in it is warned about.
+void TestFlowReachedBody()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    using Ranges = std::vector<std::pair<uint32_t, uint32_t>>;
+    auto into = [](const DecompileResult& r, uint32_t at) {
+        int n = 0;
+        for (const FlowWarning& w : r.flowWarnings)
+            n += w.kind == FlowWarning::IntoFunction && w.address == at && Has(w.text, "another function's entry");
+        return n;
+    };
+    auto intoCount = [](const DecompileResult& r) {
+        int n = 0;
+        for (const FlowWarning& w : r.flowWarnings) n += w.kind == FlowWarning::IntoFunction;
+        return n;
+    };
+    // F0 (+0x00): saves r12 and PR in a register, stores r2 through r4, restores, and 'jmp @r3' to F1
+    // (+0x14): 'sts.l pr,@-r15 ; mov.l @(pool),r2 ; lds.l @r15+,pr ; jmp @r2' to F2 (+0x24), the
+    // third, which is given. Each jump goes through a literal pool word.
+    auto chain = [&](uint32_t base, std::initializer_list<uint16_t> f2) {
+        Place(hw, base, { 0x2FC6,     // mov.l r12,@-r15
+                          0x0C2A,     // sts pr,r12
+                          0x2426,     // mov.l r2,@-r4
+                          0xD302,     // mov.l @(pool),r3   -> F1
+                          0x4C2A,     // lds r12,pr
+                          0x6CF6,     // mov.l @r15+,r12
+                          0x432B,     // jmp @r3
+                          0x0009,     //   nop
+                          uint16_t((base + 0x14) >> 16), uint16_t(base + 0x14),
+                          0x4F22,     // F1: sts.l pr,@-r15
+                          0xD202,     // mov.l @(pool),r2   -> F2
+                          0x4F26,     // lds.l @r15+,pr
+                          0x422B,     // jmp @r2
+                          0x0009,     //   nop
+                          0x0009,
+                          uint16_t((base + 0x24) >> 16), uint16_t(base + 0x24) });
+        Place(hw, base + 0x24, f2);
+    };
+    // F2 takes a frame it never uses: the first and the next-to-last instruction are dead.
+    const uint32_t a = 0x06009000u;
+    chain(a, { 0x7FC0,      // add #-0x40,r15
+               0x6252,      // mov.l @r5,r2
+               0x6070,      // mov.b @r7,r0
+               0x7F40,      // add #0x40,r15
+               0x000B, 0x0009 });
+    // F2 opens with a test and a branch whose arms meet: both removed as dead.
+    const uint32_t b = 0x06009100u;
+    chain(b, { 0x2448,      // tst r4,r4
+               0x8BFF,      // bf next
+               0x6252,      // mov.l @r5,r2
+               0x6070,      // mov.b @r7,r0
+               0x000B, 0x0009 });
+    auto snap = MakeSnapshot(hw);
+    // As the panel asks: the later functions decompiled first, what they learned lent to the caller.
+    auto request = [&](uint32_t base, bool second) {
+        DecompileRequest q = Request(base);
+        q.knownFunctions.push_back(base + 0x14);
+        if (second) q.knownFunctions.push_back(base + 0x24);
+        for (uint32_t callee : { base + 0x24, base + 0x14 })
+        {
+            if (callee == base + 0x24 && !second) continue;   // a function nobody named is lent nothing
+            const DecompileResult c = d.Decompile(snap, Request(callee));
+            if (c.prototype.known) q.prototypes.emplace_back(callee, c.prototype);
+        }
+        return q;
+    };
+
+    DecompileResult r = d.Decompile(snap, request(a, true));
+    Print("two hops", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, a + 0x14) == 1 && into(r, a + 0x24) == 1 && intoCount(r) == 2);
+    // Everything the flow reached, the entry's 'add #-0x40,r15' and the 'add #0x40,r15' included.
+    CHECK(r.body == (Ranges{ { a, a + 0x10 }, { a + 0x14, a + 0x1E }, { a + 0x24, a + 0x30 } }));
+    CHECK(r.InBody(a + 0x24) && r.InBody(a + 0x2A));
+    // The jumps are gotos once the actions have folded their literals; the signature is lent, as the
+    // destinations the flow recovered are known to the return check (patch 0021), not only the ones left at the end.
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+    // Only the first function known: the second jump goes to an address nobody named, which the engine
+    // cannot follow (it is a tail call to it, not flow into it). One warning, and nothing of F2 in the body.
+    r = d.Decompile(snap, request(a, false));
+    Print("two hops, the second function not named", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, a + 0x14) == 1 && intoCount(r) == 1);
+    CHECK(!r.InBody(a + 0x24) && r.InBody(a + 0x14));
+    // The entry of F2 is no "other" function for itself.
+    r = d.Decompile(snap, request(a + 0x24, true));
+    CHECK(r.status == DecompileStatus::Ok && intoCount(r) == 0 && r.warnings.empty());
+
+    r = d.Decompile(snap, request(b, true));
+    Print("two hops, a dead test and branch", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, b + 0x14) == 1 && into(r, b + 0x24) == 1 && intoCount(r) == 2);
+    CHECK(r.body == (Ranges{ { b, b + 0x10 }, { b + 0x14, b + 0x1E }, { b + 0x24, b + 0x30 } }));
+    CHECK(r.InBody(b + 0x24) && r.InBody(b + 0x26));   // the tst and the bf
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+}
+
+// ===== Area 4, round 2: the default that is also a case (A4-4), the tail jump to code nothing else reaches
+// (A4-5, a decision, not a fix) =============================================================================
+// A jump table one of whose entries is the default's own destination. The bound check folds into
+// the switch as its default, which makes the guard's branch always enter the switch block, so the
+// edge from the guard into the join goes; the join keeps the edge from the switch block, which
+// carries what the switch block computed (`mova`'s address in r0) and the default path took it too.
+// The switch block holds no statement (`noInterveningStatement`), but it passes a COPY whatever uses
+// its output. Patch 0027 refuses the fold when a value the join reads differs between the two edges.
+void TestDefaultAlsoCase()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    const uint32_t scuIst = 0x25FE00A4u;
+    // mov.l @(pool),r7 ; mov #4,r0 ; mov #2,r1 ; cmp/hs r1,r4 ; bt join ; shll2 r4 ; mova table,r0 ;
+    // mov.l @(r0,r4),r1 ; jmp @r1 ; nop ; table (2 entries) ; the pool (SCU_IST) ; case 0: bra join ;
+    // nop ; case 1: bra join ; nop ; join: tst #0x10,r0 ; bf skip ; mov.b r0,@r7 ; skip: rts ; nop.
+    // The default path reaches the join with r0 = 4, the switch path with r0 = the mova address, so
+    // `tst #0x10` is nonzero on the default path (4 & 0x10 = 0: the write is made) and 0x14 & 0x10 on the
+    // cases (the mova address 0x06009014: 0x10 set, no write).
+    auto program = [&](uint32_t base, uint32_t entry1) {
+        Place(hw, base, { 0xD706, 0xE004, 0xE102, 0x3412, 0x890E, 0x4408, 0xC701, 0x014E, 0x412B, 0x0009,
+                          uint16_t((base + 0x20) >> 16), uint16_t(base + 0x20),    // table: case 0
+                          uint16_t(entry1 >> 16), uint16_t(entry1),                // ...entry 1
+                          uint16_t(scuIst >> 16), uint16_t(scuIst),                // the pool
+                          0xA002, 0x0009,                                          // 0x20: case 0: bra join
+                          0xA000, 0x0009,                                          // 0x24: bra join
+                          0xC810, 0x8B00, 0x2700, 0x000B, 0x0009 });               // 0x28: join
+    };
+    const uint32_t a = 0x06009000u, b = 0x06009100u;
+    program(a, a + 0x28);   // entry 1 is the join itself, the default's destination
+    program(b, b + 0x24);   // the control: entry 1 is its own 'bra join'
+    auto snap = MakeSnapshot(hw);
+    auto run = [&](const char* label, uint32_t base) {
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+        return r;
+    };
+    auto removedAsUnreachable = [](const DecompileResult& r) {
+        for (const std::string& w : r.warnings)
+            if (Has(w, "Removing unreachable block")) return true;
+        return false;
+    };
+
+    DecompileResult r = run("default is also a case", a);
+    // The join's test reads the default path's r0 (4) as well as the switch path's: the write is
+    // reachable, listed once and printed under a test, and nothing is removed.
+    CHECK(Ledger(r, { Wr(scuIst, 1) }));
+    CHECK(r.InBody(a + 0x2C) && FateAt(r, AccessFate::Unreachable, 0, true) == 0 && !removedAsUnreachable(r));
+    CHECK(Has(r.Text(), "& 0x10") && Has(r.Text(), "SCU_IST"));
+    // The guard stays an if ahead of the switch: the 4 the default path carries is assigned there.
+    CHECK(Has(r.Text(), "if (param_1 < 2)") && Has(r.Text(), "= 4;"));
+    CHECK(!Has(r.Text(), "return 0x6009014;"));
+    // The control: the same code with entry 1 at its own 'bra join' was always right.
+    r = run("the control, entry 1 at its own bra", b);
+    CHECK(Ledger(r, { Wr(scuIst, 1) }));
+    CHECK(r.InBody(b + 0x2C) && !removedAsUnreachable(r));
+    CHECK(Has(r.Text(), "& 0x10") && Has(r.Text(), "SCU_IST"));
+
+    // A default that is also a case where the join reads nothing the switch block computed: the fold
+    // stays (the join is `rts ; mov #5,r0`, the mova's r0 and the table entry in r1 are dead there).
+    // case 0 stores r5 through r6 and goes to the join; entry 1 and the default are the join.
+    std::vector<uint8_t> hw2;
+    const uint32_t c = 0x06009000u;
+    Place(hw2, c, { 0xE102, 0x3412, 0x8908, 0x4408, 0xC701, 0x014E, 0x412B, 0x0009,    // as above, no pool
+                    0x0600, 0x901C, 0x0600, 0x9018,                                       // 0x10: table: case 0, the join
+                    0x000B, 0xE005,                                                       // 0x18: join: rts ; mov #5,r0
+                    0xAFFC, 0x2652 });                                                    // 0x1C: case 0: bra join ; mov.l r5,@r6
+    auto snap2 = MakeSnapshot(hw2);
+    r = d.Decompile(snap2, Request(c));
+    Print("default is also a case, nothing differs", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(Ledger(r, { Wr(0, 4) }));
+    CHECK(Has(r.Text(), "switch(") && !Has(r.Text(), "if ("));
+}
+
+// A4-5, accepted by the design: an indirect jump with one destination, known only after the first
+// flow, to code nothing else reaches, is a tail call. The destination is a function of its own: not
+// in the body (the same rule that keeps an unnamed third function out in TestFlowReachedBody), named
+// in the warning, and the signature is withheld, so nothing wrong is lent. Naming the entry shows it.
+void TestTailJumpToUnreachedCode()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    auto tail = [](const DecompileResult& r, uint32_t at, const char* text) {
+        for (const FlowWarning& w : r.flowWarnings)
+            if (w.kind == FlowWarning::TailJump && w.address == at && Has(w.text, text)) return true;
+        return false;
+    };
+    // mov #4,r0 ; braf r0 ; nop ; two data words ; add #1,r4 ; rts ; mov r4,r0
+    const uint32_t a = 0x06009000u;
+    Place(hw, a, { 0xE004, 0x0023, 0x0009, 0xFFFF, 0xFFFF, 0x7401, 0x000B, 0x6043 });
+    // mov.l @(pool),r1 ; jmp @r1 ; nop ; data ; the pool (the destination) ; add #1,r4 ; rts ; mov r4,r0
+    const uint32_t b = 0x06009100u;
+    Place(hw, b, { 0xD101, 0x412B, 0x0009, 0xFFFF, 0x0600, 0x910C, 0x7401, 0x000B, 0x6043, 0x0009 });
+    auto snap = MakeSnapshot(hw);
+
+    DecompileResult r = d.Decompile(snap, Request(a));
+    Print("braf over data to code that returns", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(tail(r, a + 2, "braf is taken for a tail call to 0x0600900A") && tail(r, a + 2, "not part of this function's body"));
+    CHECK(!r.InBody(a + 0x0A) && r.InBody(a + 2) && !r.prototype.known && Has(r.prototypeWithheld, "0x0600900A"));
+    r = d.Decompile(snap, Request(b));
+    Print("jmp through a literal over data to code that returns", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(tail(r, b + 2, "jmp is taken for a tail call to 0x0600910C") && tail(r, b + 2, "not part of this function's body"));
+    CHECK(!r.InBody(b + 0x0C) && !r.prototype.known);
+    // Named as a function of its own, the destination is decompiled as one, and a caller lent its signature
+    // calls it with the argument (the caller's own signature stays withheld: the jump is still unresolved).
+    DecompileRequest q = Request(a + 0x0A);
+    const DecompileResult callee = d.Decompile(snap, q);
+    CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known && Has(callee.Text(), "param_1 + 1"));
+    q = Request(a);
+    q.prototypes.emplace_back(a + 0x0A, callee.prototype);
+    r = d.Decompile(snap, q);
+    Print("the destination named and lent", r);
+    CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x0600900a(param_1)"));
+}
+
 // The engine paths the control-flow review could only check by reading the source. Two are reached
 // end to end: the restart limit alone (no jump table involved) and a call the engine treats as never
 // returning (through the test hook: nothing in SE marks one). The third, a failed second-stage
@@ -3645,10 +3920,14 @@ void TestPrototypeEligibility()
                              0x4F26,                              // lds.l @r15+,pr
                              0x000B,                              // rts
                              0x0009 });                           //   nop
+    // (r4 and r5 are held in r8 and r9 over the call: ledger A2-10 made r4-r7 unknown after a call,
+    // as the SH ABI has them, so the caller that stored through r4 itself would read extraout_r4.)
     Place(hw, wordStoreCaller, { 0x4F22,                              // sts.l pr,@-r15
-                                 Bsr(wordStoreCaller + 2, voidLeaf),  // bsr voidLeaf
+                                 0x6843,                              // mov r4,r8
+                                 0x6953,                              // mov r5,r9
+                                 Bsr(wordStoreCaller + 6, voidLeaf),  // bsr voidLeaf
                                  0x0009,                              //   nop
-                                 0x2451,                              // mov.w r5,@r4   r5's low word
+                                 0x2891,                              // mov.w r9,@r8   r9's low word
                                  0x4F26,                              // lds.l @r15+,pr
                                  0x000B,                              // rts
                                  0x0009 });                           //   nop
@@ -3779,6 +4058,871 @@ void TestPrototypeEligibility()
         const DecompileResult r2 = d.Decompile(snap, q);
         Print("stores a register's low word around a call", r2);
         CHECK(r2.prototype.known && r2.prototypeWithheld.empty());
+        CHECK(Has(r2.Text(), "*param_1 = param_2;"));
+    }
+}
+
+// ---- Review of area 2, round 2: what a call and a trap leave in the registers --------------
+//
+// No other oracle compares a printed value with a run: the access ledger and the generator's
+// checks look at which memory is touched and which parameters are claimed, never at what the text
+// says a register holds after a call. This one runs a fixture on the p-code emulator (the shipped
+// translator, the callee and the trap handler present) and evaluates the pseudocode's returns for
+// the same inputs, then requires the register the code returned to be among them.
+//
+// Limits, deliberate: the pseudocode is evaluated, not compiled -- straight-line code, `if`/`else`
+// and `return` over 32-bit integer expressions; a loop, a goto, a switch or an operator it does
+// not know fails the check loudly rather than passing. A value it cannot know (a call's result,
+// `extraout_rN`, a read of memory, an input register) is "unknown" and agrees with any run, so
+// the check finds a pseudocode that states a wrong value, never one that states too little; the
+// fixtures' expected text pins the second. Casts are ignored, compares are signed. A condition
+// that is unknown makes both arms possible. The run starts from one set of inputs per call (a
+// few), not from every input: it is a witness, not a proof.
+
+// One run of a snapshot's code. Memory is the snapshot, writes go to an overlay; every register
+// starts as the caller sets it.
+class RunMachine
+{
+public:
+    explicit RunMachine(const std::shared_ptr<MemorySnapshot>& snap) : mSnap(snap)
+    {
+        mArch.reset(new SaturnArchitecture(mSnap, &mErrors));
+        mArch->Initialise(20000, nullptr);
+        ghidra::Translate* t = const_cast<ghidra::Translate*>(mArch->translate);
+        mRam = t->getDefaultCodeSpace();
+        mImage.reset(new ghidra::MemoryImage(mRam, 8, 4096, mArch->loader));
+        mRamState.reset(new ghidra::MemoryPageOverlay(mRam, 8, 4096, mImage.get()));
+        mRegs.reset(new ghidra::MemoryHashOverlay(t->getSpaceByName("register"), 8, 4096, 4096, nullptr));
+        mTemps.reset(new ghidra::MemoryHashOverlay(t->getUniqueSpace(), 8, 4096, 4096, nullptr));
+        mState.reset(new ghidra::MemoryState(t));
+        mState->setMemoryBank(mRamState.get());
+        mState->setMemoryBank(mRegs.get());
+        mState->setMemoryBank(mTemps.get());
+        mBreaks.reset(new ghidra::BreakTableCallBack(t));
+        mEmu.reset(new ghidra::EmulatePcodeCache(t, mState.get(), mBreaks.get()));
+    }
+    ~RunMachine()
+    {
+        mEmu.reset();
+        mBreaks.reset();
+        mState.reset();
+    }
+    void Set(const char* reg, uint32_t v) { mState->setValue(reg, v); }
+    uint32_t Get(const char* reg) const { return static_cast<uint32_t>(mState->getValue(reg)); }
+    // From 'start' until the next instruction is at 'stop'. False if it never gets there.
+    bool Run(uint32_t start, uint32_t stop, int limit = 400)
+    {
+        mEmu->setExecuteAddress(ghidra::Address(mRam, start));
+        mEmu->setHalt(false);
+        for (int i = 0; i < limit; ++i)
+        {
+            mEmu->executeInstruction();
+            if (mEmu->getExecuteAddress().getOffset() == stop) return true;
+        }
+        return false;
+    }
+
+private:
+    std::ostringstream mErrors;
+    std::shared_ptr<MemorySnapshot> mSnap;
+    std::unique_ptr<SaturnArchitecture> mArch;
+    ghidra::AddrSpace* mRam = nullptr;
+    std::unique_ptr<ghidra::MemoryImage> mImage;
+    std::unique_ptr<ghidra::MemoryPageOverlay> mRamState;
+    std::unique_ptr<ghidra::MemoryHashOverlay> mRegs, mTemps;
+    std::unique_ptr<ghidra::MemoryState> mState;
+    std::unique_ptr<ghidra::BreakTableCallBack> mBreaks;
+    std::unique_ptr<ghidra::EmulatePcodeCache> mEmu;
+};
+
+// The pseudocode, evaluated.
+class PseudoEval
+{
+public:
+    struct Val
+    {
+        bool known = false;
+        uint32_t v = 0;
+    };
+    struct Outcome
+    {
+        bool value = false;   // false: `return;` or falling off the end
+        Val v;
+    };
+
+    // 'args' are the values of param_1, param_2, ... (r4, r5, ...).
+    PseudoEval(const std::string& text, const std::vector<uint32_t>& args) : mArgs(args)
+    {
+        Lex(text);
+        // The header: everything up to the body's opening brace.
+        while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
+        if (mPos >= mTok.size())
+        {
+            mError = "no body";
+            return;
+        }
+        ++mPos;
+        mBody = Block();
+        if (mError.empty() && mPos < mTok.size()) mError = "text after the body";
+    }
+
+    // Every value the function can return; empty, with an Error(), if the text is not understood.
+    std::vector<Outcome> Run()
+    {
+        std::vector<Outcome> out;
+        if (!mError.empty()) return out;
+        std::map<std::string, Val> env;
+        Exec({ { &mBody, 0 } }, env, out, 0);
+        return out;
+    }
+    const std::string& Error() const { return mError; }
+
+private:
+    struct Node;
+    using Seq = std::vector<Node>;
+    struct Node
+    {
+        enum Kind { Assign, If, Return, Skip } kind = Skip;
+        std::string var;
+        size_t expr = 0, exprEnd = 0;   // the expression's tokens (Assign, the If's condition, Return)
+        bool hasExpr = false;
+        std::shared_ptr<Seq> yes, no;
+    };
+    struct Frame
+    {
+        const Seq* seq;
+        size_t next;
+    };
+    struct Cursor
+    {
+        size_t pos, end;
+    };
+
+    void Lex(const std::string& s)
+    {
+        size_t i = 0;
+        while (i < s.size())
+        {
+            const char c = s[i];
+            if (std::isspace(static_cast<unsigned char>(c)))
+            {
+                ++i;
+                continue;
+            }
+            if (c == '/' && i + 1 < s.size() && s[i + 1] == '*')   // a comment
+            {
+                const size_t end = s.find("*/", i + 2);
+                i = end == std::string::npos ? s.size() : end + 2;
+                continue;
+            }
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '_')
+            {
+                size_t j = i;
+                while (j < s.size() && (std::isalnum(static_cast<unsigned char>(s[j])) || s[j] == '_')) ++j;
+                mTok.push_back(s.substr(i, j - i));
+                i = j;
+                continue;
+            }
+            static const char* const two[] = { "<<", ">>", "==", "!=", "<=", ">=", "&&", "||", "->" };
+            bool done = false;
+            for (const char* t : two)
+                if (s.compare(i, 2, t) == 0)
+                {
+                    mTok.push_back(t);
+                    i += 2;
+                    done = true;
+                    break;
+                }
+            if (done) continue;
+            mTok.push_back(std::string(1, c));
+            ++i;
+        }
+    }
+
+    // A type name as the printer writes them: int, uint4, xunknown4, undefined2, char, code, ...
+    static bool IsType(const std::string& t)
+    {
+        static const char* const prefixes[] = { "int", "uint", "char", "uchar", "short", "ushort", "long", "ulong", "bool",
+                                                "code", "byte", "xunknown", "unknown", "undefined", "void", "unsigned",
+                                                "signed", "ulonglong", "longlong" };
+        for (const char* p : prefixes)
+        {
+            const size_t n = std::strlen(p);
+            if (t.compare(0, n, p) != 0) continue;
+            bool digits = true;
+            for (size_t i = n; i < t.size(); ++i) digits = digits && std::isdigit(static_cast<unsigned char>(t[i]));
+            if (digits) return true;
+        }
+        return false;
+    }
+
+    // A block up to its closing brace, which is consumed.
+    Seq Block()
+    {
+        Seq seq;
+        while (mError.empty() && mPos < mTok.size() && mTok[mPos] != "}") seq.push_back(Statement());
+        if (mPos < mTok.size()) ++mPos;
+        return seq;
+    }
+
+    void SkipTo(const char* stop)
+    {
+        int depth = 0;
+        while (mPos < mTok.size())
+        {
+            const std::string& t = mTok[mPos];
+            if (t == "(") ++depth;
+            else if (t == ")") --depth;
+            else if (depth == 0 && t == stop) return;
+            ++mPos;
+        }
+        mError = "unterminated statement";
+    }
+
+    Seq Arm()
+    {
+        if (mPos < mTok.size() && mTok[mPos] == "{")
+        {
+            ++mPos;
+            return Block();
+        }
+        Seq s;
+        s.push_back(Statement());
+        return s;
+    }
+
+    Node Statement()
+    {
+        Node n;
+        const std::string t = mTok[mPos];
+        if (t == "if")
+        {
+            n.kind = Node::If;
+            mPos += 2;   // if (
+            n.expr = mPos;
+            int depth = 1;
+            while (mPos < mTok.size())
+            {
+                if (mTok[mPos] == "(") ++depth;
+                else if (mTok[mPos] == ")" && --depth == 0) break;
+                ++mPos;
+            }
+            n.exprEnd = mPos;
+            n.hasExpr = true;
+            ++mPos;
+            n.yes = std::make_shared<Seq>(Arm());
+            if (mPos < mTok.size() && mTok[mPos] == "else")
+            {
+                ++mPos;
+                n.no = std::make_shared<Seq>(Arm());
+            }
+            return n;
+        }
+        if (t == "return")
+        {
+            n.kind = Node::Return;
+            ++mPos;
+            n.expr = mPos;
+            SkipTo(";");
+            n.exprEnd = mPos;
+            n.hasExpr = n.exprEnd > n.expr;
+            ++mPos;
+            return n;
+        }
+        if (t == "while" || t == "do" || t == "for" || t == "goto" || t == "switch" || t == "break" || t == "continue" ||
+            (mPos + 1 < mTok.size() && mTok[mPos + 1] == ":"))
+        {
+            mError = "unsupported statement: " + t;
+            mPos = mTok.size();
+            return n;
+        }
+        // A declaration: names and stars only, at least two names (`xunknown4 xVar1;`).
+        {
+            size_t k = mPos;
+            int names = 0;
+            bool decl = true;
+            while (decl && k < mTok.size() && mTok[k] != ";")
+            {
+                const std::string& u = mTok[k];
+                if (std::isalpha(static_cast<unsigned char>(u[0])) || u[0] == '_') ++names;
+                else if (u != "*" && u != ",") decl = false;
+                ++k;
+            }
+            if (decl && names >= 2 && k < mTok.size())
+            {
+                mPos = k + 1;
+                return n;
+            }
+        }
+        // `name = expr;`
+        if (mPos + 1 < mTok.size() && mTok[mPos + 1] == "=" && (std::isalpha(static_cast<unsigned char>(t[0])) || t[0] == '_'))
+        {
+            n.kind = Node::Assign;
+            n.var = t;
+            mPos += 2;
+            n.expr = mPos;
+            SkipTo(";");
+            n.exprEnd = mPos;
+            n.hasExpr = true;
+            ++mPos;
+            return n;
+        }
+        // Anything else is a call or a store: it changes no local.
+        SkipTo(";");
+        ++mPos;
+        return n;
+    }
+
+    // ---- expressions ----
+    static int Prec(const std::string& op)
+    {
+        if (op == "||") return 1;
+        if (op == "&&") return 2;
+        if (op == "|") return 3;
+        if (op == "^") return 4;
+        if (op == "&") return 5;
+        if (op == "==" || op == "!=") return 6;
+        if (op == "<" || op == ">" || op == "<=" || op == ">=") return 7;
+        if (op == "<<" || op == ">>") return 8;
+        if (op == "+" || op == "-") return 9;
+        if (op == "*" || op == "/" || op == "%") return 10;
+        return -1;
+    }
+
+    Val Apply(const std::string& op, const Val& a, const Val& b)
+    {
+        // A short circuit or an absorbing operand decides without the other side.
+        if (op == "&&" && ((a.known && !a.v) || (b.known && !b.v))) return Val{ true, 0 };
+        if (op == "||" && ((a.known && a.v) || (b.known && b.v))) return Val{ true, 1 };
+        if (op == "&" && ((a.known && !a.v) || (b.known && !b.v))) return Val{ true, 0 };
+        if (!a.known || !b.known) return Val();
+        const uint32_t x = a.v, y = b.v;
+        const int32_t sx = static_cast<int32_t>(x), sy = static_cast<int32_t>(y);
+        uint32_t r = 0;
+        if (op == "+") r = x + y;
+        else if (op == "-") r = x - y;
+        else if (op == "*") r = x * y;
+        else if (op == "/")
+        {
+            if (!y) return Val();
+            r = static_cast<uint32_t>(sx / sy);
+        }
+        else if (op == "%")
+        {
+            if (!y) return Val();
+            r = static_cast<uint32_t>(sx % sy);
+        }
+        else if (op == "&") r = x & y;
+        else if (op == "|") r = x | y;
+        else if (op == "^") r = x ^ y;
+        else if (op == "<<") r = y < 32 ? x << y : 0;
+        else if (op == ">>") r = y < 32 ? static_cast<uint32_t>(sx >> y) : 0;
+        else if (op == "==") r = x == y;
+        else if (op == "!=") r = x != y;
+        else if (op == "<") r = sx < sy;
+        else if (op == ">") r = sx > sy;
+        else if (op == "<=") r = sx <= sy;
+        else if (op == ">=") r = sx >= sy;
+        else if (op == "&&") r = x && y;
+        else if (op == "||") r = x || y;
+        else mError = "unsupported operator " + op;
+        return Val{ true, r };
+    }
+
+    void SkipGroup(Cursor& c)
+    {
+        int depth = 0;
+        while (c.pos < c.end)
+        {
+            if (mTok[c.pos] == "(") ++depth;
+            else if (mTok[c.pos] == ")" && --depth == 0)
+            {
+                ++c.pos;
+                return;
+            }
+            ++c.pos;
+        }
+    }
+
+    Val ParseUnary(Cursor& c, const std::map<std::string, Val>& env)
+    {
+        if (c.pos >= c.end)
+        {
+            mError = "expression ends early";
+            return Val();
+        }
+        const std::string t = mTok[c.pos++];
+        if (t == "-")
+        {
+            const Val v = ParseUnary(c, env);
+            return v.known ? Val{ true, 0u - v.v } : Val();
+        }
+        if (t == "!")
+        {
+            const Val v = ParseUnary(c, env);
+            return v.known ? Val{ true, v.v ? 0u : 1u } : Val();
+        }
+        if (t == "~")
+        {
+            const Val v = ParseUnary(c, env);
+            return v.known ? Val{ true, ~v.v } : Val();
+        }
+        if (t == "*" || t == "&")   // a memory read or an address: unknown
+        {
+            ParseUnary(c, env);
+            return Val();
+        }
+        if (t == "(")
+        {
+            // A cast: type words and stars, `)`, then an operand.
+            size_t k = c.pos;
+            bool cast = k < c.end && IsType(mTok[k]);
+            while (cast && k < c.end && mTok[k] != ")")
+            {
+                if (!(IsType(mTok[k]) || mTok[k] == "*")) cast = false;
+                ++k;
+            }
+            if (cast && k < c.end)
+            {
+                c.pos = k + 1;
+                return ParseUnary(c, env);
+            }
+            const Val v = ParseExpr(c, env, 1);
+            if (c.pos < c.end && mTok[c.pos] == ")") ++c.pos;
+            else mError = "unbalanced parentheses";
+            if (c.pos < c.end && mTok[c.pos] == "(")   // (f)(args): an indirect call
+            {
+                SkipGroup(c);
+                return Val();
+            }
+            return v;
+        }
+        if (std::isdigit(static_cast<unsigned char>(t[0])))
+        {
+            char* endp = nullptr;
+            const unsigned long long v = std::strtoull(t.c_str(), &endp, 0);
+            for (; endp && *endp; ++endp)
+                if (*endp != 'u' && *endp != 'U' && *endp != 'l' && *endp != 'L')
+                {
+                    mError = "number " + t;
+                    break;
+                }
+            return Val{ true, static_cast<uint32_t>(v) };
+        }
+        // A name; followed by `(` it is a call, whose result is unknown.
+        if (c.pos < c.end && mTok[c.pos] == "(")
+        {
+            SkipGroup(c);
+            return Val();
+        }
+        if (t.compare(0, 6, "param_") == 0)
+        {
+            const size_t i = static_cast<size_t>(std::atoi(t.c_str() + 6));
+            if (i >= 1 && i <= mArgs.size()) return Val{ true, mArgs[i - 1] };
+            return Val();
+        }
+        const auto it = env.find(t);
+        return it == env.end() ? Val() : it->second;
+    }
+
+    Val ParseExpr(Cursor& c, const std::map<std::string, Val>& env, int minPrec)
+    {
+        Val lhs = ParseUnary(c, env);
+        while (c.pos < c.end)
+        {
+            const std::string op = mTok[c.pos];
+            const int p = Prec(op);
+            if (p < 0 || p < minPrec) break;
+            ++c.pos;
+            const Val rhs = ParseExpr(c, env, p + 1);
+            lhs = Apply(op, lhs, rhs);
+        }
+        return lhs;
+    }
+
+    Val Eval(const Node& n, const std::map<std::string, Val>& env)
+    {
+        Cursor c{ n.expr, n.exprEnd };
+        const Val v = ParseExpr(c, env, 1);
+        if (c.pos != c.end && mError.empty()) mError = "text left in an expression";
+        return v;
+    }
+
+    void Exec(std::vector<Frame> frames, std::map<std::string, Val> env, std::vector<Outcome>& out, int depth)
+    {
+        if (depth > 16)
+        {
+            mError = "too many unknown branches";
+            return;
+        }
+        while (mError.empty())
+        {
+            while (!frames.empty() && frames.back().next >= frames.back().seq->size()) frames.pop_back();
+            if (frames.empty())
+            {
+                out.push_back(Outcome());   // fell off the end
+                return;
+            }
+            const Node& n = (*frames.back().seq)[frames.back().next++];
+            switch (n.kind)
+            {
+            case Node::Skip: break;
+            case Node::Assign: env[n.var] = Eval(n, env); break;
+            case Node::Return:
+            {
+                Outcome o;
+                o.value = n.hasExpr;
+                if (n.hasExpr) o.v = Eval(n, env);
+                out.push_back(o);
+                return;
+            }
+            case Node::If:
+            {
+                const Val c = Eval(n, env);
+                static const Seq empty;
+                const Seq* yes = n.yes.get();
+                const Seq* no = n.no ? n.no.get() : &empty;
+                if (c.known)
+                {
+                    frames.push_back({ c.v ? yes : no, 0 });
+                    break;
+                }
+                std::vector<Frame> other = frames;
+                frames.push_back({ yes, 0 });
+                other.push_back({ no, 0 });
+                Exec(other, env, out, depth + 1);
+                break;
+            }
+            }
+        }
+    }
+
+    std::vector<std::string> mTok;
+    size_t mPos = 0;
+    std::vector<uint32_t> mArgs;
+    Seq mBody;
+    std::string mError;
+};
+
+// A fixture for the call oracle: code from 'base' (entered at 'base'); the trap handler and the
+// vector table VBR points to are placed beside it.
+struct CallFixture
+{
+    std::string name;
+    uint32_t base;
+    std::vector<uint16_t> code;
+};
+
+constexpr uint32_t kRunSentinel = 0x0600FF00u;   // PR on entry: the run ends when it is the next instruction
+constexpr uint32_t kRunStack = 0x0600F000u;
+constexpr uint32_t kRunVbr = 0x06009800u;        // 256 vectors, all holding kRunHandler
+constexpr uint32_t kRunHandler = 0x06009C00u;    // rte ; nop
+
+std::shared_ptr<MemorySnapshot> CallSnapshot(const CallFixture& f, uint64_t serial)
+{
+    std::vector<uint8_t> hw;
+    size_t off = f.base - 0x06000000u;
+    for (uint16_t w : f.code)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    for (uint32_t vec = 0; vec < 0x100; ++vec) dts::Put32(hw, kRunVbr - 0x06000000u + vec * 4, kRunHandler);
+    dts::Put16(hw, kRunHandler - 0x06000000u, 0x002B);        // rte
+    dts::Put16(hw, kRunHandler - 0x06000000u + 2, 0x0009);    //   nop
+    dts::Put16(hw, kRunSentinel - 0x06000000u, 0x0009);       // the emulator decodes the instruction it stops at
+    return MakeSnapshot(hw, serial);
+}
+
+// The function run with r4..r7 = args and the other registers set to distinct values; r0 at its return.
+bool CallRunResult(const std::shared_ptr<MemorySnapshot>& snap, const CallFixture& f, const std::vector<uint32_t>& args,
+                   uint32_t& r0)
+{
+    try
+    {
+        RunMachine m(snap);
+        for (int i = 0; i < 16; ++i) m.Set(("r" + std::to_string(i)).c_str(), 0x1000u + 0x111u * i);
+        for (size_t i = 0; i < args.size() && i < 4; ++i) m.Set(("r" + std::to_string(4 + i)).c_str(), args[i]);
+        m.Set("r15", kRunStack);
+        m.Set("pr", kRunSentinel);
+        m.Set("vbr", kRunVbr);
+        m.Set("sr", 0);
+        if (!m.Run(f.base, kRunSentinel)) return false;
+        r0 = m.Get("r0");
+        return true;
+    }
+    catch (ghidra::LowlevelError& e)
+    {
+        std::printf("  oracle %s: the emulator stopped: %s\n", f.name.c_str(), e.explain.c_str());
+        return false;
+    }
+}
+
+// Whether the pseudocode may return 'value' for these inputs: some path returns a value it cannot
+// know, returns nothing, or returns exactly that. 'why' says what it does return when not.
+bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint32_t value, std::string& why)
+{
+    PseudoEval eval(text, args);
+    const std::vector<PseudoEval::Outcome> outs = eval.Run();
+    if (!eval.Error().empty())
+    {
+        why = "cannot evaluate the pseudocode (" + eval.Error() + ")";
+        return false;
+    }
+    char buf[16];
+    for (const PseudoEval::Outcome& o : outs)
+    {
+        if (!o.value || !o.v.known || o.v.v == value) return true;
+        std::snprintf(buf, sizeof buf, " %08X", o.v.v);
+        why += buf;
+    }
+    why = "returns" + why;
+    return outs.empty();
+}
+
+// The code run on the emulator for each input, against the pseudocode evaluated for the same.
+bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemorySnapshot>& snap, const CallFixture& f,
+                         const std::vector<std::vector<uint32_t>>& inputs)
+{
+    bool ok = true;
+    for (const std::vector<uint32_t>& args : inputs)
+    {
+        uint32_t ran = 0;
+        if (!CallRunResult(snap, f, args, ran))
+        {
+            std::printf("  oracle %s: the code did not return on the emulator\n", f.name.c_str());
+            return false;
+        }
+        std::string why;
+        if (!MayReturn(r.Text(), args, ran, why))
+        {
+            std::printf("  oracle %s: the code returned %08X for r4=%08X, the pseudocode %s\n", f.name.c_str(), ran,
+                        args.empty() ? 0u : args[0], why.c_str());
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+// Ledger A2-9 (trapa) and A2-10 (what a call leaves in r4-r7, T, MACH and MACL), both from the
+// round-2 review of area 2. The handler of every trap is `rte ; nop` (CallSnapshot).
+void TestCallsAndTraps()
+{
+    Sh2Decompiler d(gConfig);
+
+    // The oracle can fail: the texts the engine printed for the review's fixtures before the fix,
+    // evaluated, state values the code does not return; an unknown value agrees with any run.
+    {
+        std::string why;
+        CHECK(!MayReturn("int f(void)\n{\n  int xVar1;\n  xVar1 = 5;\n  func_0x06009020();\n  return xVar1;\n}", {}, 7, why));
+        CHECK(MayReturn("int f(void)\n{\n  int xVar1;\n  xVar1 = 5;\n  func_0x06009020();\n  return xVar1;\n}", {}, 5, why));
+        CHECK(!MayReturn("int f(void)\n{\n  uint1 uVar1;\n  uVar1 = 1;\n  func_0x06009020();\n  if ((uVar1 & 1) == 1) {\n"
+                         "    return 1;\n  }\n  return 0;\n}", {}, 0, why));
+        CHECK(!MayReturn("int f(void)\n{\n  int4 in_vbr;\n  (**(code **)(in_vbr + 4))();\n  return 0x6009006;\n}", {}, 0x1234, why));
+        CHECK(MayReturn("int f(int param_1)\n{\n  (**(code **)(in_vbr + 4))();\n  return param_1;\n}", { 0x1234 }, 0x1234, why));
+        CHECK(MayReturn("int f(void)\n{\n  int extraout_r7;\n  func_0x06009020();\n  return extraout_r7;\n}", {}, 7, why));
+        CHECK(MayReturn("int f(int param_1)\n{\n  if (param_1 < 4) {\n    return 1;\n  }\n  return 2;\n}", { 1 }, 1, why));
+        CHECK(!MayReturn("int f(int param_1)\n{\n  if (param_1 < 4) {\n    return 1;\n  }\n  return 2;\n}", { 9 }, 1, why));
+        CHECK(!MayReturn("int f(int param_1)\n{\n  while (param_1 != 0) {\n    param_1 = param_1 - 1;\n  }\n  return 0;\n}", { 1 }, 0, why));
+    }
+
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u } };
+    uint64_t serial = 100;
+    // Decompile, require the oracle's agreement, and return the result for the text checks.
+    auto run = [&](const CallFixture& f, const std::vector<std::vector<uint32_t>>* with = nullptr) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(PseudoAgreesWithRun(r, snap, f, with ? *with : inputs));
+        return r;
+    };
+    const uint32_t base = 0x06009000u;
+    // The ledger's callee is at 0x06009020 (word 16): rts, then its delay slot's instruction.
+    auto withCallee = [&](std::vector<uint16_t> caller, std::vector<uint16_t> callee) {
+        caller.resize(16, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        return caller;
+    };
+
+    // ---- A2-9: trapa -------------------------------------------------------------------------
+    // The 8 bytes it pushes are popped by the handler's rte, so every stack access after it is
+    // where the code put it. a: a register saved before and restored after, with PR.
+    {
+        const CallFixture a = { "trapa, saved register", base, { 0x4F22, 0x2F46, 0xC301, 0x60F6, 0x4F26, 0x000B, 0x0009 } };
+        const DecompileResult r = run(a);
+        CHECK(Has(r.Text(), "return param_1;"));
+        CHECK(Has(r.Text(), "(**(code **)(unaff_vbr + 4))();"));   // the trap is still a call through the vector
+        CHECK(!Has(r.Text(), "0x6009006"));
+    }
+    {
+        const CallFixture b = { "trapa, word at r15", base, { 0xC320, 0x60F2, 0x000B, 0x0009 } };
+        const DecompileResult r = run(b);
+        CHECK(Has(r.Text(), "return in_stack_00000000;"));   // the caller's word, not the address trapa pushed
+        const CallFixture c = { "trapa, word at r15+4", base, { 0xC320, 0x50F1, 0x000B, 0x0009 } };
+        const DecompileResult rc = run(c);
+        CHECK(Has(rc.Text(), "return in_stack_00000004;"));   // not the SR it pushed (`return in_sr;`)
+        // A word the code wrote itself, round a trap that reads nothing of its own.
+        const CallFixture w = { "trapa, local", base, { 0x7FFC, 0x2F42, 0xC305, 0x60F2, 0x7F04, 0x000B, 0x0009 } };
+        const DecompileResult rw = run(w);
+        CHECK(Has(rw.Text(), "return param_1;"));
+        // Two traps in a row give back 8 bytes each.
+        const CallFixture t2 = { "two traps", base, { 0x4F22, 0x2F46, 0xC301, 0xC302, 0x60F6, 0x4F26, 0x000B, 0x0009 } };
+        const DecompileResult r2 = run(t2);
+        CHECK(Has(r2.Text(), "return param_1;"));
+        // r15 itself: the stack pointer after the trap is the one before it.
+        const CallFixture sp = { "trapa, r15", base, { 0xC301, 0x60F3, 0x000B, 0x0009 } };
+        const DecompileResult rs = run(sp);
+        CHECK(Has(rs.Text(), "return &xStack00000000;"));   // the entry r15 itself
+    }
+
+    // ---- A2-10: what a call leaves in the registers ------------------------------------------
+    // r4-r7, T (sr), MACH and MACL are caller-saved in the SH ABI: a call leaves them unknown, as it
+    // already left r1, r2, r3, so the text must not read as if the callee had not touched them.
+    {
+        for (int reg = 4; reg <= 7; ++reg)
+        {
+            const uint16_t setReg = uint16_t(0xE005 | (reg << 8)), readIt = uint16_t(0x6003 | (reg << 4));
+            const uint16_t callee = uint16_t(0xE007 | (reg << 8));
+            const std::string name = "r" + std::to_string(reg) + " after a call";
+            const CallFixture f = { name, base,
+                                    withCallee({ 0x4F22, setReg, 0xB00C, 0x0009, readIt, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, callee }) };
+            const DecompileResult r = run(f);
+            CHECK(Has(r.Text(), ("return extraout_r" + std::to_string(reg) + ";").c_str()));
+            CHECK(!Has(r.Text(), "xVar1 = 5"));
+        }
+        // The ledger's own r7 fixture, word for word.
+        const CallFixture r7 = { "ledger A2-10 a", base,
+                                 { 0x4F22, 0xE705, 0xB00C, 0x0009, 0x6073, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009,
+                                   0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x000B, 0xE707 } };
+        const DecompileResult rr = run(r7);
+        CHECK(Has(rr.Text(), "return extraout_r7;"));
+        // T: sett ; bsr f ; nop ; bt L -- f: rts ; clrt. The branch is on f's T.
+        const CallFixture t = { "ledger A2-10 b", base,
+                                { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x8902, 0x4F26, 0x000B, 0xE000, 0x4F26, 0x000B, 0xE001,
+                                  0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x000B, 0x0008 } };
+        const DecompileResult rt = run(t);
+        CHECK(Has(rt.Text(), "extraout_sr"));
+        CHECK(!Has(rt.Text(), "uVar1 = 1;"));
+        // ...and with T set by the callee and cleared by the caller before the call.
+        const CallFixture t2 = { "T set by the callee", base,
+                                 { 0x4F22, 0x0008, 0xB00C, 0x0009, 0x8902, 0x4F26, 0x000B, 0xE000, 0x4F26, 0x000B, 0xE001,
+                                   0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x000B, 0x0018 } };
+        const DecompileResult rt2 = run(t2);
+        CHECK(Has(rt2.Text(), "extraout_sr"));
+        // MACL and MACH, set by the caller and by the callee.
+        const CallFixture macl = { "macl after a call", base,
+                                   withCallee({ 0x4F22, 0xE005, 0x401A, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x001A },
+                                              { 0xE007, 0x401A, 0x000B, 0x0009 }) };
+        CHECK(Has(run(macl).Text(), "return extraout_macl;"));
+        const CallFixture mach = { "mach after a call", base,
+                                   withCallee({ 0x4F22, 0xE005, 0x400A, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x000A },
+                                              { 0xE007, 0x400A, 0x000B, 0x0009 }) };
+        CHECK(Has(run(mach).Text(), "return extraout_mach;"));
+        // Controls. r2, r1 and r3 were killed already; r8 and r9 are the callee-saved registers, a
+        // value held in them across the call is the value after it; VBR is a system register the
+        // compilers never touch, so the trap vector read after a call is the one read before.
+        const CallFixture r2 = { "r2 after a call", base,
+                                 withCallee({ 0x4F22, 0xE205, 0xB00C, 0x0009, 0x6023, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE207 }) };
+        CHECK(Has(run(r2).Text(), "return extraout_r2;"));
+        const CallFixture r1 = { "r1 after a call", base,
+                                 withCallee({ 0x4F22, 0xE105, 0xB00C, 0x0009, 0x6013, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE107 }) };
+        CHECK(Has(run(r1).Text(), "return extraout_r1;"));
+        const CallFixture r8 = { "r8 across a call", base,
+                                 withCallee({ 0x4F22, 0xE805, 0xB00C, 0x0009, 0x6083, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        CHECK(Has(run(r8).Text(), "return 5;"));
+        // An argument held in r8 over the call stays the argument.
+        const CallFixture kept = { "argument kept in r8", base,
+                                   withCallee({ 0x4F22, 0x6843, 0xB00C, 0x0009, 0x6083, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        CHECK(Has(run(kept).Text(), "return param_1;"));
+        const CallFixture vbr = { "trapa after a call", base,
+                                  withCallee({ 0x4F22, 0xB00D, 0x0009, 0xC303, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        const DecompileResult rv = run(vbr);
+        CHECK(Has(rv.Text(), "unaff_vbr + 0xc") && !Has(rv.Text(), "extraout_vbr"));
+    }
+
+    // ---- Recursion ---------------------------------------------------------------------------
+    // f(n): r1 = 5 ; if (n != 0) { f(n - 1); } ... return r1, with the base case setting r1 = 7. The
+    // call is to the function itself, whose effects nobody has proved, so r1 after it is unknown;
+    // the hardware returns 7 for every n. (The signature is withheld: "it calls itself".)
+    {
+        const CallFixture f = { "recursion changes r1", base,
+                                { 0x4F22, 0x2448, 0x8907, 0xE105, 0x74FF, 0xBFF9, 0x0009, 0x6013, 0x4F26, 0x000B, 0x0009,
+                                  0xE107, 0x6013, 0x4F26, 0x000B, 0x0009 } };
+        const std::vector<std::vector<uint32_t>> depths = { { 0 }, { 1 }, { 3 } };
+        const DecompileResult r = run(f, &depths);
+        CHECK(Has(r.prototypeWithheld, "calls itself"));
+        CHECK(!Has(r.Text(), "return 5;"));
+        CHECK(Has(r.Text(), "extraout_r1"));
+        // The same through r7 (the argument registers the recursion rewrites), which the base case
+        // sets and the other path sets differently before the call.
+        const CallFixture g = { "recursion changes r7", base,
+                                { 0x4F22, 0x2448, 0x8907, 0xE705, 0x74FF, 0xBFF9, 0x0009, 0x6073, 0x4F26, 0x000B, 0x0009,
+                                  0xE707, 0x6073, 0x4F26, 0x000B, 0x0009 } };
+        const DecompileResult rg = run(g, &depths);
+        CHECK(Has(rg.prototypeWithheld, "calls itself"));
+        CHECK(Has(rg.Text(), "extraout_r7"));
+    }
+
+    // ---- Lent prototypes ---------------------------------------------------------------------
+    // ApplyPrototype gives a callee's function object the default model, so a lent signature does
+    // not change what the call leaves in the registers: the callee that sets r7 still leaves r7
+    // unknown, and a caller that reads it is not lent a signature on a value no signature gives.
+    {
+        const CallFixture f = { "r7 after a call, callee lent", base,
+                                withCallee({ 0x4F22, 0xE705, 0xB00C, 0x0009, 0x6073, 0x4F26, 0x000B, 0x0009 },
+                                           { 0x000B, 0xE707 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+        CHECK(callee.prototype.known && callee.prototype.ret.kind == TypeKind::Void);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(0x06009020u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("r7 after a call, callee lent", r);
+        CHECK(Has(r.Text(), "return extraout_r7;"));
+        CHECK(!Has(r.Text(), "xVar1 = 5"));
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "r7") && Has(r.prototypeWithheld, "not known to return it"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+    }
+    // r1 is an output register only for a 64-bit return: with the callee's signature lent as void
+    // (or a 32-bit return) the engine no longer takes r1 for a possible output, and without a
+    // killed-by-call entry it read, after the call, as the value before it.
+    {
+        const CallFixture f = { "r1 after a call, callee lent", base,
+                                withCallee({ 0x4F22, 0xE105, 0xB00C, 0x0009, 0x6013, 0x4F26, 0x000B, 0x0009 },
+                                           { 0x000B, 0xE107 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+        CHECK(callee.prototype.known && callee.prototype.ret.kind == TypeKind::Void);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(0x06009020u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("r1 after a call, callee lent", r);
+        CHECK(Has(r.Text(), "return extraout_r1;"));
+        CHECK(!Has(r.Text(), "return 5;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+    }
+    // A known limit, pinned so a change to it is seen: a callee that provably keeps r4 (a leaf that
+    // never touches it) is not told apart from one that does. The cspec's kill is per model, not
+    // per callee, so the caller that relies on it reads extraout_r4, drops the parameter from its
+    // own signature and is not lent one. Hand-written helpers that return in r4 (a shift by a
+    // constant) are the other side of it: the same rule now shows their result.
+    {
+        const CallFixture f = { "r4 kept by the callee", base,
+                                withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+        CHECK(callee.prototype.known && (callee.prototype.effects.preserved & (1u << 4)));
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(0x06009020u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print("r4 kept by the callee (limit)", r);
+        CHECK(Has(r.Text(), "return extraout_r4;"));
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "r4"));
+        // ...which is still a value the run does not contradict: unknown agrees with any.
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
     }
 }
 
@@ -4174,11 +5318,15 @@ int main(int argc, char** argv)
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
         RUN(TestFlowUncertainty());
+        RUN(TestFlowReachedBody());
+        RUN(TestDefaultAlsoCase());
+        RUN(TestTailJumpToUnreachedCode());
         RUN(TestEngineEdgePaths());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
         RUN(TestCalleePrototypes());
         RUN(TestPrototypeEligibility());
+        RUN(TestCallsAndTraps());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

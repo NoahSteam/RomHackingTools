@@ -49,7 +49,12 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0019-sleigh-sr-rte.patch` | `ldc`/`ldc.l` to SR keep only T, S, I3-I0, Q and M (`0x3F3`); `rte` masks the stacked SR the same way and restores it before its delay slot, not after. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 | `0020-sleigh-cache-lru.patch` | `DisassemblyCache::getParserContext` makes a hit the newest entry (least recently used, not oldest allocated). A delayed branch whose tree was cached but whose slot's was not took its own tree for the slot and was built from the slot's parse. |
 | `0022-sleigh-scan-64bit-literal.patch` | The SLEIGH compiler's scanner parses numeric literals as 64-bit on every platform (`std::stoull`), so the spec's 64-bit constants build on Windows. |
+| `0021-flow-instructions.patch` | `Funcdata` records every instruction the last flow translated (`getFlowInsns()`: the address, and whether flow halted there for bad or unimplemented data), taken from `FlowInfo::visited` as `followFlow` returns and cleared with the function; likewise the indirect jumps whose destinations it recovered (`getFlowTables()`). A restart in the actions follows the flow again, so the last flow is the function's; the host reads the body and the jumps from it, not from the p-code that survived the actions. |
 | `0023-allocation-failure-order.patch` | An allocation failure unwinds cleanly: the printer's emitter and encoder are replaced allocation first, the blocks of a collapsed set (a recovered switch) change owner only after the allocation that can fail, the engine's `ostringstream` throws instead of cutting text short, and the cheap leaks on the way out are closed (`Architecture`, `OptionDatabase`, `DisassemblyCache`, `Varnode`, `PcodeOp`, `Comment`, `Datatype`, `BlockCopy`). |
+| `0024-switch-lookup-used.patch` | `JumpBasic::foldInOneGuard` (under `loadsNotDuplicated`) does not fold a guard into a switch when the switch's table lookup has a use outside the table's own calculation: the register the entry was loaded into, read after the switch. `noInterveningStatement` lets a COPY or SUBPIECE of the lookup through whatever uses its output, and the folded switch then printed the lookup ahead of every index. |
+| `0025-sleigh-trapa-stack.patch` | `trapa` gives r15 its 8 bytes back after the call (the handler's `rte` pops them), so the stack after a trap is where the caller left it. The emulator never runs the op (it ends an instruction at a call), so the differential run still sees the two pushes. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
+| `0026-cspec-call-clobbers.patch` | `superh.cspec`: a call kills r0, r1, r4-r7, MACH, MACL and SR (T), as the SH ABI has them caller-saved, and keeps VBR; before, a register in neither list read after a call as the value before it. `Sh2SpecData.h` is regenerated. |
+| `0027-switch-default-is-case.patch` | `JumpBasic::foldInOneGuard` does not fold a guard into a switch when the guard's target is also one of the switch's destinations and a value the destination reads differs between the guard's edge and the switch block's (a `mova`'s r0): the default path took the switch block's value, and a reachable block was removed as unreachable. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -94,6 +99,12 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once, in order, unconditionally);
   - 0011: `Sh2DecompilerTests` under UBSan with vptr.
   - 0017: `TestHardwareVolatility` (every reference-run access of a fixture is printed, folded, or removed with said code) and `TestGameCode` (0 dropped).
+  - 0021: `TestFlowReachedBody` (a jump into a second function and from there into a third: both warned, the dead first instruction in the body), and the generator's `outside-body` check.
+  - 0022: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
+  - 0025: `TestCallsAndTraps` (a register saved before a `trapa` and restored after it comes back; a word at r15 is the caller's) and `TestTrapaStack` in `SaturnExplorerSh2SemanticsTests` (the emulator enters the handler with the two words pushed). `SaturnExplorerSh2DecodeTests` does not see it; that is expected.
+  - 0026: `TestCallsAndTraps` (r0, r1, r4-r7, T, MACH and MACL after a call are `extraout_`; VBR is not), and the generator's lent-prototype checks.
+  - 0024: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
+  - 0027: `TestDefaultAlsoCase` (the default that is also a case: the write under the join's test stays, the control still folds), and the generator's replay of ledger A4-4 (seeds 68620 and 107923).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
