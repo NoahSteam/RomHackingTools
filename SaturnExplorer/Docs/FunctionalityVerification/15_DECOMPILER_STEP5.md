@@ -1435,3 +1435,178 @@ call an injection replaces) is not recorded: none is a block's access. The defau
 configuration (no build type) compiles the host unoptimised, and `DecompilerRunnerTests` then takes
 156 s before this change and 162 s after, over its 120 s timeout; with `RelWithDebInfo` it takes
 64 s. MSVC and macOS builds are unverified, as are the sanitizers (the CI agent's).
+
+## Area 1, oracle: the invalidation model (`review/1-invalidation`)
+
+`SaturnExplorerDecompilerModelTests` (`FrontEnd/tests/DecompilerModelTests.cpp`, one `ctest` entry of the
+same name) is the oracle of area 1 of `Docs/Decompiler/REVIEW_PROGRAM.md`: snapshot, cache and
+engine-input invalidation. A seeded RNG drives a sequence of 20 to 60 operations against the real
+panel, runner and engine; after each step, once the runner is idle, and for every result as it is
+installed, the shown result is compared with a from-scratch decompilation of the inputs of that moment.
+A failure prints the seed, the operations so far, the inputs, and the expected and actual key, text and
+stale state. It found three things, none in the snapshot key or the panel's install rule (below).
+
+**Level: the panel, with the real runner and engine behind it.** `DecompilerPanel::Update` and `Draw`
+run under `ImGuiHarness` exactly as in `DecompilerPanelTests`; Refresh, Stop and the entry box are
+clicked and typed, everything else goes through the panel's and runner's public interface (`Shown`,
+`ShownStale`, `HeldKey`, `Pending`, `Submissions`; `InvalidateSession` and `ResetSession` as
+`App::ResetSessionDebugState` calls them). A runner-only model is not enough for the invariant: the
+learned prototypes lent to callers, the LRU, the held snapshot, the refresh policy and the stale mark
+live in the panel, and only the panel can show "a result for superseded inputs was installed" or "a
+stale result carries no mark". The runner's side (generation and epoch filtering, the too-large memo,
+cancel) is exercised through the panel. What the harness stands in for is `App`: it builds the
+`DecompilerView` the way `App::BuildDecompilerView` does (source id, derive serial, frame, a recorded
+frame's stable identity) and keeps the promise `App` makes, that a key names one set of bytes.
+
+**The world.** A 1 MiB work RAM image with 3 to 5 functions of seven (built from Fixture 1's caller and
+plain loads and stores, each after an `rts ; nop`): A reads `*r4` and returns it plus 2; B stores r4
+through r5; P writes 3 to a mailbox and polls it (kept only if the mailbox is volatile; otherwise the
+loop is endless as analysed and the `*r5` read after it is gone, so its signature differs); Q stores r4
+in a mailbox and reads it back; C calls A, B, P or Q through a literal pool word; D calls C; E calls a
+function at 0x700 in the BIOS image. Each function has "sites": bytes an edit may rewrite (a register
+number, a constant, the callee's address, the mailbox), every value giving a valid function whose
+signature or callee may change. Three images (builds) of the same code, three recorded frames per
+recording, two BIOS images, four volatile lists, four names, user function starts at each entry and four
+bytes in.
+
+**The operations** (state-independent, so a sequence can be cut): edit a byte (a callee's signature, a
+caller's callee, a constant); scrub to a recorded frame and back; Refresh; reconnect (same bytes, new
+source, session ended: `InvalidateSession` and `ResetSession`); replace the source (another image, as a
+dump, paused or running, with a frame of no source between); BIOS none, A, B (a new object each time:
+a reload of the same bytes must not look like a change); the volatile list; a function's name; a
+function start; select a function (typed into the entry box); Stop; hide and show the panel; the
+emulator runs, pauses, advances a frame; the CPU. A step may *hold* the engine (a gate on the runner's
+phase observer), so that several changes land with a request in flight; *finish* then lets the engine
+complete everything and deliver nothing, and the next operation changes an input before the panel
+collects the answers (the case the panel's own install checks exist for). *Starve* (seeds divisible by
+six, with a one-second budget) refreshes the shown function and holds the engine past the budget, so
+the runner answers "too large". A library of short motifs aims at the dependencies: a callee shown, its
+caller, a change, the caller again; the volatile list changing what P's signature is; a chain D, C, A; a
+BIOS function and another image; a result finishing and then a rename, a start, a volatile list, an
+edit, a scrub, a BIOS image or a reconnect landing before the panel looks.
+
+**The model.** `Oracle::Run` is a from-scratch `Sh2Decompiler::Decompile`, on the test thread while the
+runner is idle (the worker is blocked on its condition variable; asserted by `Busy()`), of a snapshot the
+test captures itself, with the request the panel would build: names, function starts, the parsed
+volatile list, the entry and the lent prototypes. `Oracle::Full(callee)` is the prototype a callee lends
+when its own callees are lent theirs, recursively, or none if its decompilation does not vouch for
+one. The panel lends what it has learned in this session for these inputs, which is any subset of
+the current ones, so the answers a shown caller may have are the 2^k from-scratch runs lending each
+subset; a prototype from a previous revision of a callee, or learned under another volatile list or
+function set, matches none unless it happens to give the same text. The model also mirrors the one
+policy the panel states in its header: the snapshot a running emulator's panel holds lags until
+Refresh, a selection, a new source or a BIOS change (everywhere else it follows the view at once).
+
+**What is checked.**
+
+1. For every result as it is installed (found by watching `Shown()` each frame): it is installed only
+   while the snapshot held is what is on screen (a hidden panel must not install an answer for memory
+   that has moved); its key is the key of the inputs it was asked under, which are the inputs of the
+   frame it was installed in (so a superseded request is never installed); its entry, status, text,
+   warnings, callees and prototype equal one of the model's candidates. The runner's "too large" is
+   accepted for the request that was held past the budget, and for its memo while the function's bytes
+   and its callees' are unchanged and nothing has since decompiled it.
+2. At each step's end, with the runner idle: no request is outstanding; the snapshot the panel holds is
+   the one the refresh policy says (`HeldKey`); a result is shown; the stale mark equals the model's
+   (inputs shown differ from inputs now) in both directions, except that a running emulator's lag is
+   stale by design and a question the user Stopped stays stale until Refresh; a result that is not
+   stale is exactly a candidate answer for the inputs now.
+3. With the engine held, after the panel has had frames: a shown result made from other inputs than the
+   ones now says stale (so a missed invalidation shows even where nothing is asked yet).
+4. Refresh with a function selected asks the runner (its force flag survives); a request cancelled by
+   Stop while the engine held it installs nothing.
+5. At the end of a sequence a callee-first walk through every function (with Refresh where a Stop left
+   the question "asked already") leaves each one showing exactly the from-scratch answer with every
+   callee prototype lent.
+
+**Runs.** `ctest -R DecompilerModel`: 18 seeds, then the shrunk sequence of each open finding of the
+ledger (`kPinned`); `WILL_FAIL TRUE` while A1-1 and A1-2 stand. `SE_MODEL_SEEDS=<n>` runs seeds 1 to n
+(a long run; per-seed lines only below 60); `SE_MODEL_SEED=<k>` runs one seed with every step printed
+(`SE_MODEL_TEXT=1` adds the shown text; `SE_MODEL_LIST=1` prints the sequence without running it;
+`SE_MODEL_SKIP=3,5` and `SE_MODEL_STEPS=<n>` cut it, which is how a failure is shrunk by hand);
+`SE_MODEL_SCRIPT="select A; starve; edit A 0 1" SE_MODEL_WORLD=A SE_MODEL_IMAGE=0` runs a sequence
+written out (the words are in `ParseScript`); `SE_MODEL_NOSTARVE=1` leaves the budget operations out.
+
+**Default run** (`ctest -R DecompilerModel`, RelWithDebInfo, a 4-core container shared with other
+work): 18 seeds and the two pinned sequences, 12.2 s. 738 operations (105 of them without effect: a
+Stop with nothing outstanding, a selection while the panel is hidden), 83 held steps, 42
+finish-then-change races, 4 stops, 5 budget stalls; 422 results checked at install, 733 idle checks,
+239 held-engine stale checks, 72 callee-first walks; the panel made 193 captures and 512 submissions,
+discarded 23 answers and served 25 from its cache; the model ran the engine 480 times (2,857 memo
+hits). Every random seed passes; the two pinned sequences fail, so the binary exits 1 and `ctest`
+reports Passed through `WILL_FAIL`.
+
+**Long run** (`SE_MODEL_SEEDS=1500`, 937 s): 58,208 operations, 33,659 results checked at install,
+58,047 idle checks, 19,032 held-engine stale checks, 6,400 walks, 4,109 finish-then-change races,
+321 stops, 156 budget stalls, 39,664 submissions, 1,968 discarded answers, 1,840 cache hits. 43 seeds
+fail, every one of them a seed divisible by six (the ones with a budget stall) and every one a "TOO
+LARGE" failure (A1-1 or A1-2); the other 1,250 seeds are clean.
+
+**Mutation check.** The model is only as good as what it catches. 31 hand-made breaks of the code under
+test (one expression each, in `DecompilerPanel.h/.cpp` and `DecompilerRunner.cpp`; reverted after each),
+100 seeds apiece with the budget operations off:
+
+| Break | Seeds that fail (of 100) | First check that fires |
+|---|---|---|
+| a lent prototype need not be of the snapshot held | 8 | text |
+| ...nor of the function set and volatile list it was learned under | 3 | text |
+| ...the lending id leaves out the volatile list | 2 | text |
+| stale mark ignores the function set / the volatile list | 1 / 4 | stale shown as current |
+| answer accepted without the names / function set / volatile list it was asked under | 5 / 2 / 5 | text, stale forever |
+| answer accepted for a snapshot the panel no longer holds | 34 | key |
+| answer accepted while the held snapshot is not on screen (a hidden panel) | 7 | on screen |
+| user function starts left out of the function set | 66 | stale shown as current |
+| volatile list hashed to nothing / left out of the question | 57 / 70 | stale shown as current, not refreshed |
+| deriveSerial left out of the view's identity (an edit is not a change) | 94 | held |
+| a running emulator ignores a BIOS change / a source change | 18 / 7 | held |
+| the cache ignores prototypes lent / names / function set / volatile list / key | 26 / 13 / 64 / 55 / 96 | converged, not refreshed |
+| Stop does not cancel | 11 | stop |
+| Refresh does not force a new question | 76 | refresh |
+| the stale mark ignores the names generation | 0 | |
+| answer accepted without the lent-prototype hash | 0 | |
+| answer accepted from another runner epoch / the runner's epoch not bumped / the runner's latest-generation filter removed | 0 / 0 / 0 | |
+| `ResetSession` keeps the learned prototypes / the cache | 0 / 0 | |
+| the cascade that drops prototypes learned from an obsolete one | 0 | |
+
+23 of the 31 are caught. The eight survivors are layers behind other layers, which is how the code is
+built ("the panel checks all of them itself, because the runner cannot know..."): the names generation
+in the stale mark is shadowed by the outstanding request; the lent-prototype hash in `Accept` cannot
+move without the target moving, which supersedes the request; the epoch is checked by the runner, by
+`ResetSession` (pending cleared) and by `Accept`; learned prototypes and the cache carry the snapshot
+key, which a session change moves; the cascade needs a callee's signature to change under unchanged
+inputs. A break in one such layer is invisible unless another is broken too, and the harness cannot
+break two things at once. They are listed, not hidden.
+
+**What it found.** Three things, in `Docs/Decompiler/REVIEW_LEDGER.md`:
+
+- **A1-1 (P2)** and **A1-2 (P2)**: the runner's too-large memo (`mTooLarge`, keyed by the entry as
+  asked and the volatile list, cleared only by `InvalidateSession`) outlives the bytes it was reached
+  for and a successful retry. A function that ran out of budget is answered "too large ... (not
+  retried automatically; use Refresh)" for the bytes edited since (its own, a callee's, another
+  recorded frame's), carrying the edited snapshot's key; and after a Refresh has decompiled it, any
+  later request that is not a Refresh (a rename, an edit) is answered the same way without running
+  the engine. `select A; starve; edit A 0 1` and `select A; starve; refresh; name A 1`, world A; the
+  first through a callee as `select D; starve; edit C 2 1`, world D,C,A, and through a scrub as
+  `select A; starve; scrub 1`, world A, image 1.
+- **A1-3 (P3)**: after Stop, choosing the same function again (typing its entry) asks nothing: the
+  question is "asked already" until Refresh, and the old function stays on screen stale. It is the
+  rule `Accept` documents, so the model excuses a stale result after a Stop; recorded for the fixer
+  to accept or change.
+
+Nothing was found in the snapshot key, the install rule, the cache keys, the lent-prototype
+provenance, the refresh policy for a running emulator, or the stale mark: 1,250 seeds without a
+budget operation, and the break table above, say they were exercised.
+
+**Not covered.** The function finder (Follow PC, "Decompile" from Assembly, call-stack hints,
+selecting by an address inside a function; the model types an entry, so the finder's rule that a user
+start is never overridden does not enter), auto-refresh and its debounce, registers and the halt hint,
+mirror entries (0x26xxxxxx), low work RAM and the Sh2Dump regions, the user-note overlay, BIOS file
+loading, the worker's failure paths (allocation, thread, cancel acknowledgement: area 6), and `App`
+itself: the harness builds `DecompilerView` the way `App::BuildDecompilerView` does, but a key that
+names the wrong bytes in `App` (a scrub frame's identity, `se_derive_serial`) is invisible to it. The
+model accepts any subset of the current callee prototypes as "lent" for a shown caller, so a
+prototype that should have been lent and was not is caught only by the final walk, which follows the
+documented Refresh after a Stop. The one-second budget is wall-clock: on a machine so slow that an
+ordinary decompilation takes a tenth of a second, a budget seed could see a spurious "too large". No
+production source was edited: the runner and panel are driven through their public interfaces and the
+runner's tests-only phase observer.
