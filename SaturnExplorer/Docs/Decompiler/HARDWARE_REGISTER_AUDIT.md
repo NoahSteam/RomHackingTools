@@ -21,6 +21,9 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
   listed here, and nothing new. Re-read by hand from the handlers: the mirror periods (VDP2
   `A & 0x1FE`, SCU `A & 0xFC`, SMPC `(A & 0x7F) >> 1`), `SCU_IST` reading the pending set, and
   `SCU_PDD` advancing the DSP's address on a read while the DSP is stopped.
+- **Re-run in area 5 round 3** against the same sources: 21 of 337 registers differ, all of them "not decoded
+  by Mednafen" (the serial interface and the UBC); `SCU_AIACK` now agrees (write-only), and `VDP2_EXTEN`,
+  `VDP2_TVSTAT` are `ok` with their read effects in the map.
 
 ## Disagreements
 
