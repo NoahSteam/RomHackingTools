@@ -274,7 +274,7 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp)
-        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics)
+        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics Sh2Generated)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp ${SE_DECOMPILER_TEST_SOURCES})
             target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
             target_link_libraries(SaturnExplorer${name}Tests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
@@ -316,6 +316,9 @@ if(SE_ENABLE_DECOMPILER)
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT 60)
         set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
+        # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0).
+        # The default run is 300 seeds; SE_GENERATED_SEEDS=<n> runs a long one.
+        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
     endif()
 endif()
 
