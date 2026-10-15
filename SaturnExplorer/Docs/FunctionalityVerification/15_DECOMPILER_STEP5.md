@@ -1840,3 +1840,88 @@ Not run: the sanitizer jobs and the timing comparison (the whole-program matrix 
 - CI's `-R` filters name tests one by one and do not select `SaturnExplorerSh2DecodeTests`; adding it is a CI change.
 - Patch 0018 (`coreaction.cc`, another agent) and these two add rows at the end of the same two tables
   (`patches/README.md`, `VENDOR.md`): expect a trivial textual conflict, resolved by keeping both.
+
+## Area 5, round 2 review
+
+Reviewer, branch `review/5-round2-review`, at `1c0e752` (patches 0001 to 0020). Findings only; no source or
+test changed. Every fixture is in `Docs/Decompiler/REVIEW_LEDGER.md` (A5-3 to A5-8) with its words, current
+and expected output and the oracle's verdict. Reproduced with `SaturnExplorerSh2GeneratedTests`
+(`SE_GENERATED_WORDS`, `SE_GENERATED_VERBOSE=1`) and, for the signature, with `TestGameCode` on a 1 MiB image
+holding the same words after a `sts.l pr,@-r15 ; nop` prologue (`SE_GAME_ONLY`), RelWithDebInfo, gcc.
+
+**Not held.**
+
+- **A5-5 (P2).** The removal caution and the conservation oracle find an access by (instruction, direction,
+  width). An instruction with two accesses of one kind can hide one behind the other: `mac.l @r1+,@r2+` with
+  SCU_IST and an ordinary RAM word as operands, after a poll that folds, leaves the records `R4 folded` and
+  `R4 unreachable` on one instruction; `NoteRemovedAccesses` takes the fold for the whole key, says nothing,
+  and lends the signature; `ReferenceOk` and `TestGameCode` count the read Folded. Same with a register read in
+  the slot of an `rte` (the slot's access carries the `rte`'s address, beside its two folded stack pops). With
+  both operands registers, or `rts` for `rte`, both are said and the signature is withheld. Narrow reach, no
+  corpus instance; no oracle sees it.
+- **A5-3 (P2).** No width rule: a byte write to a VDP2 or VDP1 register (Mednafen writes the whole 16-bit
+  register, the other byte from the bus), a word or byte access to the 32-bit on-chip modules (Mednafen: a word
+  write at FF04 sets all of DVDNT and divides, at FF06 nothing; a word read returns the low half at either
+  address; a byte access is an address error) print as a part of the register (`VDP2_TVMD._1_1_ = 3;`,
+  `SH2_DVDNT._2_2_ = 3;`) with no note. No oracle models register widths.
+- **A5-4 (P2).** SMPC registers are decoded on the low byte lane: a 16-bit write at 0x2010001E is an
+  SMPC_COMREG write (an SMPC command) in Mednafen; the output says `Ram2010001e = 0x19;`. The same write in
+  removed code is said as "the write of SMPC_COMREG". An even-address byte write does nothing; a long at
+  0x2010001C is two register writes.
+- **A5-6 (P3).** Both reads of a `mac` are flagged `repeatedOnPath`: the generator fails on any mac
+  (`SE_GENERATED_WORDS="045F 000B 0009 0009"`, `n:repeated` twice) and `Ledger` cannot hold a mac fixture.
+- **A5-7 (P3).** The removal caution names the first register only and no width ("the write of VDP2_TVMD" for a
+  4-byte write over TVMD and EXTEN).
+- **A5-8 (P3).** 0x00300000-0x003FFFFF is treated as a repeat of low work RAM; Mednafen (VA0/VA1) maps nothing
+  there (reads 0xFFFF). Ordinary memory either way; a candidate for accepted.
+
+**Held**, one line each:
+
+1. Conservation, opcode changes: in the decompile group only `RuleLoadVarnode`/`RuleStoreVarnode` turn a flow
+   LOAD or STORE into something else. The other rules that touch one (`RuleSplitLoad`/`Store`, `RuleDoubleLoad`,
+   `RuleDoubleStore` -- grouped `doubleprecis`, named `doublestore` --, `RuleExpandLoad`, `RuleStringStore`)
+   are disabled by name, and no output of either save state carries the "not found" warning;
+   `RuleStructOffset0` changes the pointer only; `SplitDatatype`'s load and store paths are reached only from
+   the disabled rules; `LaneDivide` and `PreferSplitManager` need laned registers or split records the SH-2
+   spec does not have.
+2. Accesses the engine makes after flow (a call's stack parameters through `opStackLoad`) get no record
+   (`time >= flowOps`); the user-op exception covers only `replaceVolatile`'s ops, made from flow accesses.
+3. Copied blocks: `nodeSplit`'s one caller is `ActionReturnSplit`, whose `isSplittable` admits only
+   COPY, RETURN and MULTIEQUAL: no access is ever copied.
+4. Flow's silent removals: `deleteRemainingOps` drops ops after a BRANCH, BRANCHIND or RETURN inside one
+   instruction (no SH-2 instruction has a memory op after its branch: the slot comes first), and the removal
+   after inlining needs inlining, which SE never asks for. Neither holds an access.
+5. Restarts: `Funcdata::clear` clears the records and `PcodeOpBank::clear` resets op numbering, and the
+   records are made again. A question, not a finding: `RecordFlow` is taken after the first `followFlow`,
+   so after a restart whose flow differs (a multistage jump table) `origBlock`/`origOrder` describe ops of a
+   flow that no longer exists; only the ordering oracles read them. Production always runs the first pass,
+   whose literals let the printed pass recover a literal-bounded table at flow time, the usual cause of such a
+   restart; a restart is not visible from outside the engine, so none was observed either way.
+6. Patch 0018 on stray reads: none found. Stack loads fold (spacebase), literal and constant ordinary reads
+   fold and go; dead reads through a MULTIEQUAL, in the slots of `bt/s` and `bra`, in a counted loop, after
+   `x ^ x`, print once where made. Still lost: none found.
+7. Patch 0018's condexe guard: `testRemovability` also refuses an op writing an address-tied Varnode (a
+   STORE made a COPY), so writes were never at risk there.
+8. The seeded reference run: same literals and callees, so the same flow; all-volatile does not stop table
+   recovery (the table read is a LOAD at a non-constant address, which no volatility touches).
+9. Removed accesses through a hardware base plus an index are said ("the write through a pointer"); user marks
+   reach cache-through and every 1 MiB repeat, LWRAM included.
+10. Width and count: `tas.b`, `and.b`/`or.b`/`tst.b #imm,@(r0,gbr)` and `mov.l @(disp,gbr)` with GBR loaded
+    from a literal print at their width, named, read before write; a GBR poll of SMPC_SF stays a loop with the
+    read in it. `mac.l`/`mac.w` read Rm first, as Mednafen (`MAC_L`, "Order confirmed").
+11. The map against Mednafen, re-derived from `ss.c`, `vdp1.c`, `vdp2.c`, `scu.inc` and `sh7095.inc`: VDP2
+    `A & 0x1FE`; the CD block where `(A & 0x7FFF) < 0x1000`, `(A & 0x3F) >> 2`; SCU byte writes masked
+    (`SCU_RegRW_DB_u8_W1`); partition 4 is the cache data array like 6 (ordinary memory); `SH2_BCR1._2_2_`
+    (word reads at 0xFFFFFFE2, 2 functions per save state) is right. Differences: A5-3, A5-4, A5-8.
+
+**Runs.**
+
+| | |
+|---|---|
+| Generator, unfenced, `SE_GENERATED_FIRST=40001`, 20,000 seeds | 0 findings, 196,860 accesses traced, 291 s |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+
+**For the coordinator.** The merge of `review/2-semantics-fix` (`1c0e752`) put ledger rows A5-1, A5-2 and A4-1
+back to `open` with their original fixture text; at `7fbbd1c` they read `fixed 28908ee` with the suite's fixture
+names. The record above ("Area 5, round 1") still says fixed. This review did not touch those rows.
