@@ -890,6 +890,31 @@ void TestHardwareVolatility()
                                                         0x0002, 0x0000,                   // the bound
                                                         0x2010, 0x0063, 0x2600, 0x1000 },
                                          0x58, 0 };
+    // Two tests of the mailbox, each always one way, cutting both edges into a region of two blocks
+    // where the second has the live second test as a flow predecessor: the engine cuts the edges
+    // (ActionDeterminedBranch) and removes the blocks in the next action, before anything splices
+    // them, so each is warned by its own start and both writes are said.
+    const Fixture twoCuts = { 0x0600A700u, { 0xD10A,     // mov.l @(40,pc),r1   -> the mailbox
+                                             0xE001, 0x2102,     // mailbox = 1
+                                             0x6012, 0x2008,     // tst mailbox
+                                             0x8904,             // bt A
+                                             0x6012, 0x2008,     // tst mailbox again
+                                             0x8905,             // bt B
+                                             0x000B, 0x0009,     // rts
+                                             0xD204, 0xE300, 0x2230,     // A: SMPC_SF = 0, falls into B
+                                             0x0009,
+                                             0xD202, 0xE301, 0x2230,     // B: SMPC_SF = 1
+                                             0x000B, 0x0009,
+                                             0x2010, 0x0063, 0x2600, 0x1000 },
+                              0x30, 0 };
+    // A jump through a pointer kept in work RAM. Marked, or in the reference run, that read is a
+    // volatile read, and the engine tries its assisted jump model on it first; the failed model was
+    // leaked (patch 0016; LeakSanitizer on this suite and on the game code).
+    const Fixture jmpPointer = { 0x0600A740u, { 0xD101,     // mov.l @(4,pc),r1   -> 0x26001000
+                                                0x6112,     // mov.l @r1,r1       the pointer
+                                                0x412B,     // jmp @r1
+                                                0x0009 },
+                                 0x08, 0x26001000u };
     // A test of the mailbox taken always one way, with no loop: the caution must not claim one.
     const Fixture forwardFold = { 0x0600A680u, { 0xD105,     // mov.l @(20,pc),r1   -> the mailbox
                                                  0xE001, 0x2102,     // mailbox = 1
@@ -1100,7 +1125,7 @@ void TestHardwareVolatility()
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
                               &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
                               &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &switchSameDest, &ptrSavedInRam,
-                              &litSwitchAfterPoll, &forwardFold })
+                              &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1578,6 +1603,20 @@ void TestHardwareVolatility()
                           Wr(0x20100063u, 1) }));
         CHECK(ReferenceOk(d, snap, q, r));
         CHECK(Has(r.Text(), "switch(*param_1)") && !WarnsAbout(r, "missing"));
+    }
+    r = run("two tests of the mailbox, two removed blocks, the second with a live flow predecessor", twoCuts);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidMissing(r, 0x0600A71Au) && SaidMissing(r, 0x0600A722u) && !r.prototype.known);
+    CHECK(r.removedInsns.size() == 8);   // both blocks, by their own warnings
+    r = run("a jump through a pointer kept in RAM", jmpPointer);
+    CHECK(Has(r.prototypeWithheld, "indirect call"));
+    {
+        DecompileRequest q = Request(jmpPointer.base);
+        q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
+        r = d.Decompile(snap, q);
+        Print("...marked: the pointer read stays", r);
+        CHECK(Ledger(r, { Rd(0x26001000u, 4) }));
+        CHECK(ReferenceOk(d, snap, q, r));
     }
     // No loop: the caution says a branch, not a loop.
     r = run("a test of the mailbox taken always one way", forwardFold);

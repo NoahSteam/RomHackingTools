@@ -1811,12 +1811,17 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     bool any = false;
     for (const MemoryAccess& m : rr.accesses)
     {
-        if (!std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn)) continue;   // reached: folded, if anything
-        if (m.direct && !InHardwareRange(m.address) && !isMarked(m.address)) continue;             // ordinary memory
+        if (m.direct && !InHardwareRange(m.address) && !isMarked(m.address)) continue;   // ordinary memory
         bool shown = false;
         for (const MemoryAccess& x : r.accesses)
             if (x.insn == m.insn && x.write == m.write && x.size == m.size) shown = true;
         if (shown) continue;
+        // A pointer read from ordinary memory may have folded -- when its code was reached. In the
+        // removed code it is missing for that reason. A register or marked access that is missing is
+        // said whether or not its block is among those recorded: the record is read from the engine's
+        // warnings, one per block as the engine saw it, and a hardware access must not depend on it.
+        const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn);
+        if (!m.direct && m.pointerFromOrdinaryMemory && !removed) continue;
         std::string what = " through a pointer";
         if (m.direct)
         {

@@ -43,6 +43,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0013-jumptable-loads.patch` | Under the same policy: a switch's guard is not folded into the switch when the switch block holds a load other than the table lookup (the read would print for the guarded-out values), and two loads from one pointer are two values, so a guard on one does not bound a switch on the other and the guard's read is not dropped. |
 | `0014-keep-unused-loads-late.patch` | Under `keepUnusedLoads`, `lastChanceLoad` holds an unused load in every heritage pass, not only the first: a load whose consumer, a store to a global, is removed as overwritten in a later pass was removed with it. |
 | `0015-proto-param-replace-order.patch` | A prototype parameter's replacement is allocated before the old one is freed (an allocation failure there was a double free at teardown); and a switch's table-lookup flag (0014) goes only on the loads between the switch variable and the jump, not on a selector read from memory. |
+| `0016-jumpassisted-leak.patch` | A failed assisted jump model (tried when an indirect jump's address is a volatile read) is freed instead of leaked. |
 
 MSVC and Apple clang needed no patch beyond these.
 

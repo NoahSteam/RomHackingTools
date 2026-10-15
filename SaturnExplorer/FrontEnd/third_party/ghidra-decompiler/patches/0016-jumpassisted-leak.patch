@@ -1,0 +1,24 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+index 8e6d0f4..a2345dc 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: a switch's guard is not folded over a load, and does not bound a second load (patches/0013-jumptable-loads.patch).
+  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
++ * Modified for SaturnExplorer: a failed assisted jump model is freed (patches/0016-jumpassisted-leak.patch).
+  */
+ #include "jumptable.hh"
+ #include "emulate.hh"
+@@ -2376,6 +2377,11 @@ void JumpTable::recoverModel(Funcdata *fd,const JumpModel *matchModel)
+       jmodel = jassisted;
+       if (jmodel->recoverModel(fd,indirect,matchModel,maxTableSize))
+ 	return;
++      // SaturnExplorer: the failed model was leaked (48 bytes per indirect jump whose address is a
++      // volatile read: a jump through a pointer kept in memory the user marked, or any such jump in
++      // the all-volatile reference run).
++      delete jassisted;
++      jmodel = (JumpModel *)0;
+     }
+   }
+   JumpBasic *jbasic = new JumpBasic(this);
