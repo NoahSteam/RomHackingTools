@@ -61,7 +61,8 @@
 //      accesses it joined, one made without the other.)
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
-//      this one calls (or that function's body), or a flow warning names it.
+//      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
+//      a tail call, or an indirect jump treated as a call, names what the run executes after it).
 //   5. The entry of another function inside the body has a "flow runs into" warning; no data word skipped
 //      by a bra is in the body.
 //   6. Each index of a jump table that a run dispatched with reaches a case that holds the code the
