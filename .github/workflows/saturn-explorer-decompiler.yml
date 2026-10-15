@@ -102,6 +102,7 @@ jobs:
           SaturnExplorerSh2DecompilerTests SaturnExplorerSh2DecompilerEngineTests
           SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerPanelTests
           SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2SemanticsTests
+          SaturnExplorerSh2DecodeTests SaturnExplorerSh2GeneratedTests
           SaturnExplorerSlaFreshnessTests
 
       # Always succeeds: the next step judges the logs, so one run shows every binary's reports.

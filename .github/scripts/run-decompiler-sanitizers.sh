@@ -63,6 +63,10 @@ run SaturnExplorerSh2DecompilerEngineTests \
   "$build/bin/SaturnExplorerSh2DecompilerEngineTests" "$(scratch decompiler_engine_test)"
 run SaturnExplorerSh2SemanticsTests \
   "$build/bin/SaturnExplorerSh2SemanticsTests" "$(scratch decompiler_Sh2Semantics_test)"
+run SaturnExplorerSh2DecodeTests \
+  "$build/bin/SaturnExplorerSh2DecodeTests" "$(scratch decompiler_Sh2Decode_test)"
+run SaturnExplorerSh2GeneratedTests \
+  "$build/bin/SaturnExplorerSh2GeneratedTests" "$(scratch decompiler_Sh2Generated_test)"
 run SaturnExplorerSh2DecompilerTests \
   "$build/bin/SaturnExplorerSh2DecompilerTests" "$(scratch decompiler_Sh2Decompiler_test)"
 run SaturnExplorerSh2DecompilerFixtureTests \
