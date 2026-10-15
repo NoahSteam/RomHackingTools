@@ -48,3 +48,6 @@ __pycache__/
 *.db-shm
 *.db-wal
 *.recipe
+
+# Agent worktrees (review program branches are checked out here while agents run)
+.claude/worktrees/
