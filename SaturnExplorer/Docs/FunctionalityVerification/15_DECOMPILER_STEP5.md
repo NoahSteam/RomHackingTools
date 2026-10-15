@@ -2414,3 +2414,129 @@ checks).
 | New cautions on game code | none: A5-3 and A5-4 add 0 notes to the 839 and 1,554 outputs (`SE_GAME_OUT`); no partial register access, no `Ram2010`/`Ram0010` line, in either (the 16 and 20 removal cautions now carry the width) |
 | Generated test | passes (`ctest`); mac words give 0 findings |
 | ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report (`detect_leaks=1`); suite passes |
+
+## Area 6, oracle: the fault-injection matrix
+
+`SaturnExplorerDecompilerFaultTests` (`FrontEnd/tests/DecompilerFaultTests.cpp`, branch `review/6-lifecycle`, POSIX
+only because it forks) is the oracle `REVIEW_PROGRAM.md` asks for in area 6: allocation `k` fails for every `k`,
+the cancel flag goes up at every point of a run, and the runner's Stop, supersede, invalidate, budget, disable and
+destroy happen with the worker held at every phase entry. Every cell runs in a child process; a crash, a hang, a
+sanitizer report, a leak or an exit through static destruction from a damaged engine is a finding, not the end of the
+test. No engine, spec or runner source was changed (the runner and one engine file were mutated for the checks
+below and restored); no test seam was added: the existing `SetPhaseHookForTests` and
+`SetBeforeReferenceHookForTests` give the phase entries, and the allocator that the test replaces gives the rest
+(it counts, fails one allocation, or raises the cancel flag at one, which is the "op count" hook the brief allowed for).
+
+**Machinery.** The parent spawns itself (`--driver`, `--runner`, `--runner-oom`, the `--engine-oom` pattern). A
+driver warms one engine until two runs agree to the allocation, then `fork()`s a cell per `k` from that state, so
+thousands of cells cost minutes, not a translator build each; a cell reports through its exit status and its output,
+the driver kills it after `SE_FAULT_TIMEOUT` seconds (default 120), and the parent kills a driver after 10 minutes
+(4 hours in full). A cell that leaves through `exit()` when its engine is damaged is caught by an `atexit` trap
+registered after the translator's statics. Under ASan each cell ends with `__lsan_do_recoverable_leak_check()`,
+since `_Exit` skips the exit-time check. Reproduce one cell with
+`SaturnExplorerDecompilerFaultTests <scratch> --cell <family> <fixture> <k>` (it prints the failing allocation's
+stack); `<family>` is `alloc`, `cancel-enter`, `cancel-alloc`, `cancel-us`, `cancel-oom` (`<k>` is
+`cancel allocation * 8 + index into {0,1,2,4,8,64,512,4096}`), `runner` (`<kind> <entry>`) or `runner-oom`
+(`<fixture> <entry> <j>`). `k` is an allocation index of one `Decompile` on a warm engine; the counts are the same in
+the RelWithDebInfo and the ASan+UBSan build (gcc 13.3): mailbox 33,119, jumptable 32,080, fixture1 19,913, diamonds
+411,659. Environment: `SE_FAULT_FULL=1` (whole matrix), `SE_FAULT_DENSE=<n>` (the dense prefix of the alloc sweep,
+default 3,000; `100000` makes it every `k`), `SE_FAULT_JOBS`, `SE_FAULT_TIMEOUT`, `SE_FAULT_KEEP=1` (logs),
+`SE_FAULT_ONLY=alloc,cancel-oom,...` (job-label prefixes), `SE_FAULT_EXIT=static` (a damaged engine leaves through
+`SleighArchitecture::shutdown()` and `exit()`, as the application would, instead of `_Exit`), `SE_FAULT_LEAKS=0` (no
+per-cell leak check).
+
+**Fixtures** (one snapshot): `mailbox` (TestHardwareVolatility's `mailboxFold`: code is removed, so the reference run
+happens: 14 phase entries), `jumptable` (a 4-way switch through a table: 9 entries), `fixture1` (a call through a
+literal pool, two passes), `diamonds` (150 diamonds, one pass: a long action tree). Every request carries a name, a
+known function and an unrelated volatile range, so that some allocations are made before the engine's first phase.
+
+### The cells
+
+| Family | Cell | Invariants checked |
+|---|---|---|
+| `alloc` | allocation `k` of a `Decompile` throws, mailbox and jumptable | no exception escapes; `Failed("out of memory")` (or `Ok` with the baseline's output if a `nothrow` allocation was absorbed); the snapshot's reference count returns; the next request is `Unavailable` ("out of memory", and `Disassemble` refuses) when the failure was inside the engine (`mWorkPhase != Idle`, seen from the phase hook) and `Ok` with the baseline's output otherwise; `_Exit` with no ASan, UBSan or LSan report |
+| `cancel-enter` | the flag goes up at the start of phase entry `e` (the phase hook), all four fixtures, plus before the run and past its end | the outcome is the one the design gives (below); a cancelled result has no lines; the same `Sh2Decompiler` then gives exactly the baseline output |
+| `cancel-alloc` | the allocator raises the flag at allocation `k` (a deterministic op count) | as above; the latency, in allocations, between the flag and the stop is recorded |
+| `cancel-us` | a second thread raises the flag `t` microseconds in (full: every 100 us across the run and 2 ms past it, so 1 ms steps are a subset) | as above, over the range of phase entries the flag can have landed in |
+| `cancel-oom` | cancel at `k`, and allocation `k + j` fails, `j` in 0..4096 | the failure may fall in the unwinding of the `CancelError`: Cancelled, Failed or Ok, never a crash; the `alloc` checks follow |
+| `runner` | `Cancel`, `Submit` while busy, `InvalidateSession`, destruction, budget expiry (with the too-large memo), `DisableLocked` and both ways back, with the worker held at every phase entry | the worker joins; exactly the expected results come back and none for a stale generation or epoch; Cancel on a queued request answers at once; the memo is keyed by entry as asked and volatile list, answers without a run, is bypassed by Refresh, mirrors and other volatile lists, and is cleared by a new session; a stuck cancel disables, a new session re-enables only when nothing runs; the next request is correct |
+| `runner-oom` | the worker fails its `j`-th allocation after being let go at phase entry `e`, a process per cell | Failed("out of memory") or the session disabled while recording; the worker answers the next request (Unavailable); no job holds the snapshot |
+
+*Where a cancel must land* (`Expected` in the test, from `Sh2Decompiler.cpp`): Flow and Actions have check-points,
+Init, Print and Teardown none. A flag raised in Flow is honoured in Flow (a check before Actions), a flag raised in
+the printing pass's Actions in Actions (a check before Print); a flag raised in Init, Print or Teardown waits for the
+next Flow; a flag raised after the last check-point completes `Ok`; a flag raised in the reference run only cuts the
+reference run short (`Ok` with the "could not be checked ... (cancelled)" warning, the signature withheld). A flag in
+the first pass's Actions is expected in Actions; it is not always (A6-6).
+
+### Size and time
+
+Machine: 4 cores, gcc 13.3, `--parallel 2` builds. "Full" is `SE_FAULT_FULL=1`, three drivers at a time.
+
+| Run | Cells | Wall time |
+|---|---|---|
+| RelWithDebInfo, default subset (what ctest runs: `ctest -R SaturnExplorerDecompilerFaultTests`) | about 750 cells in 25 jobs, plus 4 `runner-oom` processes | 14-17 s |
+| RelWithDebInfo, full, dense prefix 3,000 | about 28,700 cells: alloc 7,487; cancel-enter 45; cancel-alloc 4,582; cancel-us 1,288; cancel-oom 14,888; runner 192 scenario cells; 207 `runner-oom` processes | 284 s (245 jobs) |
+| RelWithDebInfo, `alloc` for every `k` (`SE_FAULT_DENSE=100000`) | 65,234 cells (mailbox 33,121, jumptable 32,113) | 256 s for the whole matrix with this sweep in place of the dense one (the alloc drivers take 70 s each, three at a time); 268 s for the sweep alone with `SE_FAULT_EXIT=static` |
+| ASan+UBSan, Debug, `alloc` for every `k`, no leak check | the same 65,234 cells | 1,312 s |
+| ASan+UBSan, Debug, full with leak detection: `alloc` dense prefix 3,000, `cancel-enter`, `cancel-alloc` (not diamonds), `cancel-us` (diamonds killed: it needs thousands of cells of seconds each), runner scenarios, `runner-oom`; `cancel-oom` not run in full | over 10,000 cells and 207 `runner-oom` processes | 2,584 s |
+| ASan+UBSan, Debug, the six runner scenarios in full after the budget fix | 192 cells | 59 s |
+| ASan+UBSan, Debug, default subset | as the first row | 154 s (the ctest TIMEOUT is 600) |
+
+The default subset is not under 60 s in a sanitizer build; in the plain build it is. The exhaustive run is the one
+that found A6-1 to A6-5: the dense prefix of 3,000 and the geometric tail miss all of them, which is why the subset
+**pins** one cell per finding (`kPins`: fixture, size and phase of the failing allocation, found again by size and phase
+if a build numbers allocations differently, reported as STALE if it cannot be).
+
+### Findings
+
+Ledger rows A6-1 to A6-9 (`REVIEW_LEDGER.md`); all open. The ctest entry is `WILL_FAIL` (the default subset fails on the
+pinned cells), with a comment naming the rows.
+
+| Row | Severity | What | Cells |
+|---|---|---|---|
+| A6-1 | P1 | `EmitPrettyPrint::setMarkup` frees the emitter before allocating its replacement: double free in the Print phase | 6 (mailbox 4, jumptable 2) |
+| A6-2 | P1 | `EmitMarkup::setPackedOutput`, the same | 3, and 1 with a cancel in flight |
+| A6-3 | P1 | `BlockGraph::identifyInternal` moves blocks into the new switch block before it can no longer fail: double free, any function with a recovered switch | 16 (jumptable) |
+| A6-4 | P3 | the markup stream swallows the failure; reported "unexpected exception" instead of "out of memory" | 8 |
+| A6-5 | P2 | message streams swallow the failure: `Ok`, and a truncated warning in the output (`WARNING: Removing unreac`) | 4 (1 changes the output) |
+| A6-6 | P3 | a cancel in the first pass's Actions tail is honoured in the second pass's Flow, after its uncheckable Init (40% of the fixture1 run) | 2 `cancel-alloc`, 1 `cancel-us` |
+| A6-7 to A6-9 | P3 | leaks after an in-engine allocation failure: Architecture construction (about 70% of the sampled cells), followFlow (varnodes), Actions | thousands, bounded to one failure per process |
+
+What passed: the cancel matrix has no other violation (no crash, no leak, no wrong status, the engine always
+produces the baseline output afterwards, a cancelled result never carries lines); the runner matrix has none
+(RelWithDebInfo and ASan+LSan, all entries); `runner-oom` has no ASan error and no failed check, only the leak reports
+of A6-7 to A6-9 (42 of 207 cells under LSan); with `SE_FAULT_EXIT=static` no `k` crashes in `shutdown()` or static
+destruction beyond the A6-1 to A6-3 cells themselves (patches 0002 and 0003 hold at every allocation of both
+fixtures, which `_Exit` alone would not show).
+
+*Cancel latency* (allocations between the flag and the stop, the worst cell of each class; the runs are 19,913 to
+411,659 allocations): flag in Init or Teardown about 7,970 (Architecture construction has no check-point: about 24% of
+a mailbox run, 40% of fixture1); in Flow up to 964 (jumptable), 8,685 on diamonds; in Actions up to 411 on the small
+fixtures but **116,893 of 411,659 on diamonds**, one action body; the Print phase is not interruptible by design.
+These are not findings (the header says so) but they are the numbers behind the budget and the cancel-acknowledge
+limit: a Stop on a 150-diamond function waits for more than a quarter of its run.
+
+### Mutation checks (done, then restored)
+
+| Mutant | Caught by |
+|---|---|
+| `DecompilerRunner::Poll` without the generation test | `runner supersede`: 65 checks |
+| `Poll` without the epoch test | `runner invalidate`: 23 checks |
+| `InvalidateSession` without `mTooLarge.clear()` | `runner budget` |
+| memo key without the volatile list | `runner budget`: 10 checks |
+| `RecoverLocked` without the new-session test | `runner disable`: 28 checks |
+| patch 0004 reverted (`~Funcdata` without `clearActiveOutput()`) | ASan default subset, `cancel-alloc jumptable`: LeakSanitizer in `Funcdata::initActiveOutput` |
+
+A6-1 to A6-3 are further instances of patch 0015's class (the replacement allocated after the old object is freed),
+found by the matrix itself, which is the stronger evidence for the `alloc` family; patch 0015 itself was not reverted.
+
+### Not done
+
+- The `cancel-oom` family was not run in full under ASan (RelWithDebInfo only); it is in the ASan default subset.
+- `cancel-us` on `diamonds` under ASan: killed after 40 minutes; the plain build ran all 982 cells.
+- No game-corpus function was used (the corpus is not in the repository); the largest function is the 150-diamond
+  fixture. `Sh2Decompiler::Disassemble` has no sweep (only tests call it).
+- Windows and macOS: the test forks; on other platforms it builds as a stub that reports SKIPPED.
+- Leaks (A6-7 to A6-9) were sampled, not enumerated: the sweep with leak detection ran the dense prefix of 3,000 and the
+  geometric tail, not every `k`.

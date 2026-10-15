@@ -282,6 +282,32 @@ if(SE_ENABLE_DECOMPILER)
                      COMMAND SaturnExplorer${name}Tests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_${name}_test)
         endforeach()
 
+        # Area 6's oracle (REVIEW_PROGRAM.md): fault injection as a matrix -- allocation k failing for
+        # every k, the cancel flag raised at every phase entry, allocation and millisecond, and the
+        # runner's Stop / supersede / invalidate / budget / disable / destroy with the worker held at
+        # every phase entry -- each cell in a child process. POSIX only (it forks). The default run is
+        # a deterministic subset; SE_FAULT_FULL=1 runs the whole matrix (minutes in RelWithDebInfo,
+        # much longer under the sanitizers; see 15_DECOMPILER_STEP5.md, "Area 6, oracle").
+        if(UNIX)
+            add_executable(SaturnExplorerDecompilerFaultTests
+                FrontEnd/tests/DecompilerFaultTests.cpp ${SE_DECOMPILER_TEST_SOURCES})
+            target_include_directories(SaturnExplorerDecompilerFaultTests PRIVATE FrontEnd/src FrontEnd/tests include)
+            target_link_libraries(SaturnExplorerDecompilerFaultTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+            add_test(NAME SaturnExplorerDecompilerFaultTests
+                     COMMAND SaturnExplorerDecompilerFaultTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fault_test)
+            # The leak check of a child that leaves through _Exit is made by the test itself, which
+            # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
+            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600
+                                 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
+            # WILL_FAIL while the matrix's findings stand (REVIEW_LEDGER.md, rows A6-1 .. A6-3: a freed
+            # pointer left behind when the replacement allocation fails, a crash or heap-use-after-free;
+            # A6-4, A6-5: std::ostringstream swallowing the failure; A6-6: a cancel carried into the
+            # second pass; A6-7 .. : leaks in a sanitizer build). The default subset pins one cell
+            # for each (kPins in DecompilerFaultTests.cpp), so it fails now, and the entry goes red
+            # again, to be un-fenced, once the last of them is fixed. Remove this line then.
+            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES WILL_FAIL TRUE)
+        endif()
+
         # Real game code from the spike's Yabause savestate, through the savestate driver.
         # Skips itself when the game data is not in the checkout.
         add_executable(SaturnExplorerSh2DecompilerFixtureTests
