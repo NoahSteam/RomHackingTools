@@ -609,9 +609,23 @@ bool OrdinaryDirect(const MemoryAccess& m, const std::function<bool(uint32_t)>& 
     return m.direct && !InHardwareRange(m.address) && !marked(m.address);
 }
 
+// The other half of the conservation law, which does not need the reference run. An access that
+// ended dead is a loss unless it is a direct access of ordinary memory (a variable the analysis may
+// drop: an unused global, a literal-pool word, a store the function overwrites): a read of a
+// register, of marked memory or through a pointer is kept for its effect, because it may be a
+// register's. The reference run cannot see such a loss when the engine drops the access in both
+// runs alike, as it did for a read whose value only fed an expression that folded (A5-1, A4-1).
+bool DeadIsLoss(const AccessFate& f, const std::function<bool(uint32_t)>& marked)
+{
+    return f.fate == AccessFate::Dead &&
+           !(f.constantAddress && !InHardwareRange(f.address) && !marked(f.address));
+}
+
 // The ledger's reference: the same request with every address volatile, so the output holds every
 // memory instruction the flow reaches. Each access there must be accounted for in the ordinary
-// output (AccountFor); a lost one, or a removal the output does not say, fails.
+// output (AccountFor); a lost one, or a removal the output does not say, fails. So does any access
+// the shown run's own record says ended dead that is not a direct access of ordinary memory
+// (DeadIsLoss), the reference run's list or not.
 bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const DecompileRequest& q,
                  const DecompileResult& r)
 {
@@ -642,6 +656,16 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
                     a == Account::Removed ? "removed as unreachable, and its removal is not said" : "dropped");
         ok = false;
     }
+    // ...and the shown run's own record: what ended dead, and was not a variable of ordinary memory,
+    // is a loss whether or not the reference run lists it (it may have lost the access alike).
+    for (const AccessFate& f : r.accessFates)
+        if (DeadIsLoss(f, marked))
+        {
+            std::printf("  conservation: the %s of %u bytes at %08X (%s%08X) ended dead, and is no direct access of ordinary memory\n",
+                        f.write ? "write" : "read", unsigned(f.size), f.insn, f.constantAddress ? "" : "through a pointer; ",
+                        f.address);
+            ok = false;
+        }
     return ok;
 }
 
@@ -985,6 +1009,45 @@ void TestHardwareVolatility()
                                                 0x412B,     // jmp @r1
                                                 0x0009 },
                                  0x08, 0x26001000u };
+    // Area 5, round 1 (REVIEW_LEDGER.md A5-1, A5-2, A4-1): the dead-read class. A load whose value's
+    // only consumers go in the same pass (an expression the engine folds to a constant, a store it
+    // removes, a branch it threads) was removed with them: the load was held only if it was unused
+    // when the first dead-code pass ran (patches 0009, 0014). The words, literal offset and value are
+    // the ledger's, moved from 0x06009000 to the bases here (the code is PC-relative).
+    // a: mov.l @(pool),r1 ; mov.b @r1,r0 ; xor r0,r0   (SCU_IST, a register)
+    const Fixture deadXor = { 0x0600A800u, { 0xD102, 0x6010, 0x200A, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A4 }, 0x0C, 0x25FE00A4u };
+    // b: mov.l @(pool),r6 ; mov.l @r6,r3 ; cmp/eq r3,r3 ; bt .+0   (the compare folds to true)
+    const Fixture deadCmp = { 0x0600A840u, { 0xD602, 0x6362, 0x3330, 0x89FF, 0x000B, 0x0009, 0x05FE, 0x007C }, 0x0C, 0x05FE007Cu };
+    // c, with 0x26001030-0x2600103F marked volatile: mov.w @r7,r2 ; xor r2,r2 ; mov.w r2,@r7
+    const Fixture deadMarked = { 0x0600A880u, { 0xD702, 0x6271, 0x222A, 0x2721, 0x000B, 0x0009, 0x0600, 0x1034 }, 0x0C, 0x06001034u };
+    // d, through a pointer: mov.l @r4,r0 ; xor r0,r0
+    const Fixture deadPtr = { 0x0600A8C0u, { 0x6042, 0x200A, 0x000B, 0x0009 }, 0x08, 0 };
+    // A5-2: a write, a poll of unmarked work RAM that folds to an endless loop, then a read through a
+    // pointer that A5-1 dropped: the caution that the code around it was removed names it.
+    const Fixture pollThenRead = { 0x0600A900u, { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0x8455, 0x200A, 0x000B, 0x0009,
+                                                  0x2600, 0x2180 }, 0x14, 0x26002180u };
+    // A4-1: if (c) a; read; if (c) b;  -- the engine threads the second test through the first
+    const Fixture twoTests = { 0x0600A940u, { 0xD704, 0x4515, 0x8B00, 0x7301, 0x6271, 0x4515, 0x8B00, 0x7401, 0x000B, 0x0009,
+                                              0x05F8, 0x00DE }, 0x14, 0x05F800DEu };
+    // ...with a write at the same place (mov.w r2,@r7), which was always kept
+    const Fixture twoTestsWrite = { 0x0600A980u, { 0xD704, 0x4515, 0x8B00, 0x7301, 0x2721, 0x4515, 0x8B00, 0x7401, 0x000B, 0x0009,
+                                                   0x05F8, 0x00DE }, 0x14, 0x05F800DEu };
+    // Two more consumers that die with the read: an AND with 0, and a store to the stack that nothing
+    // reads. (deadStack is a control: the read was held before patch 0018, since its store dies at
+    // the pass that first sees it. The game code's stack stores die at a later pass, through a stack
+    // variable the next write covers, after the pass that saw the read used: deadXor's state.)
+    const Fixture deadAnd = { 0x0600A9C0u, { 0xD102, 0x6010, 0xC900, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A4 }, 0x0C, 0x25FE00A4u };
+    const Fixture deadStack = { 0x0600AA00u, { 0x6142,     // mov.l @r4,r1
+                                               0x2F16,     // mov.l r1,@-r15     a store nothing reads
+                                               0x7F04,     // add #4,r15
+                                               0x000B, 0x0009 }, 0x0C, 0 };
+    // ...and a read shifted out of its register: both shifts consume no bit of it, so at the first
+    // dead-code pass it is reached but consumed by nothing (a mask of 0), a state the unused-load
+    // test did not see (this is the shape of the 31 and 34 reads of the game code that ended dead).
+    const Fixture deadShift = { 0x0600AA40u, { 0x6042,     // mov.l @r4,r0
+                                               0x4028,     // shll16 r0
+                                               0x4028,     // shll16 r0          r0 = 0
+                                               0x000B, 0x0009 }, 0x0C, 0 };
     // A test of the mailbox taken always one way, with no loop: the caution must not claim one.
     const Fixture forwardFold = { 0x0600A680u, { 0xD105,     // mov.l @(20,pc),r1   -> the mailbox
                                                  0xE001, 0x2102,     // mailbox = 1
@@ -1195,7 +1258,9 @@ void TestHardwareVolatility()
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
                               &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
                               &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &ptrFromRam, &switchSameDest, &ptrSavedInRam,
-                              &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer })
+                              &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer,
+                              &deadXor, &deadCmp, &deadMarked, &deadPtr, &pollThenRead, &twoTests, &twoTestsWrite, &deadAnd,
+                              &deadStack, &deadShift })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1614,6 +1679,49 @@ void TestHardwareVolatility()
     CHECK(FateAt(r, AccessFate::FoldedOrdinary, 0x0600A784u, false) == 1);
     CHECK(FateAt(r, AccessFate::FoldedOrdinary, 0x0600A788u, true) == 1 && FateAt(r, AccessFate::FoldedOrdinary, 0x0600A78Cu, true) == 1);
     CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && FateAt(r, AccessFate::Dead, 0x0600A786u, false) == 0);
+
+    // Area 5, round 1: a read stays when its value's only consumers go. Each of these was dropped from
+    // the output and the ledger with no note, in the reference run alike.
+    r = run("a register read, then xor r0,r0", deadXor);
+    CHECK(Ledger(r, { Rd(0x25FE00A4u, 1) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && Has(r.Text(), "SCU_IST"));
+    r = run("a register read, then cmp/eq r3,r3", deadCmp);
+    CHECK(Ledger(r, { Rd(0x05FE007Cu, 4) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0);
+    r = run("a register read, then and #0,r0", deadAnd);
+    CHECK(Ledger(r, { Rd(0x25FE00A4u, 1) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && Has(r.Text(), "SCU_IST"));
+    {
+        DecompileRequest q = Request(deadMarked.base);
+        q.volatileMemory.emplace_back(0x26001030u, 0x2600103Fu);
+        r = d.Decompile(snap, q);
+        Print("marked RAM read, then xor r2,r2, then written back", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Ledger(r, { Rd(0x06001034u, 2), Wr(0x06001034u, 2) }));
+        CHECK(ReferenceOk(d, snap, q, r));
+        CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0);
+    }
+    r = run("a read through a pointer, then xor r0,r0", deadPtr);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && Has(r.Text(), "*param_1"));
+    r = run("a read through a pointer shifted out of its register", deadShift);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && Has(r.Text(), "*param_1"));
+    r = run("a read through a pointer stored to a stack slot nothing reads", deadStack);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && Has(r.Text(), "*param_1"));
+    // The caution that removed code is missing a read has to name it (A5-2).
+    r = run("a poll of unmarked RAM that folds, then a read through a pointer, then xor r0,r0", pollThenRead);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the read through a pointer here is missing"));
+    CHECK(FateAt(r, AccessFate::Unreachable, 0x0600A90Cu, false) == 1 && FateAt(r, AccessFate::Dead, 0, false) == 0);
+    // A4-1: a test of one condition, a read, a test of the same condition. The read is outside any if.
+    r = run("if (c) a; hardware read; if (c) b;", twoTests);
+    CHECK(Ledger(r, { Rd(0x05F800DEu, 2) }));
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && !Has(r.Text(), "if ("));
+    r = run("the same with a write at the read's place", twoTestsWrite);
+    CHECK(Ledger(r, { Wr(0x05F800DEu, 2) }));
+    CHECK(!Has(r.Text(), "if ("));
 
     // The folded poll: nothing is shown after it, and the missing write is said, with the cause.
     r = run("mailbox poll on unmarked RAM removes a hardware write", mailboxFold);
@@ -2082,7 +2190,7 @@ void TestGameCode()
     int fateCount[4] = { 0, 0, 0, 0 };
     int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
     int foldedLookup = 0, removedOrdinary = 0;
-    int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0;
+    int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0, deadLost = 0;
     const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
@@ -2155,9 +2263,11 @@ void TestGameCode()
         for (const AccessFate& f : r.accessFates)
         {
             ++fateCount[int(f.fate)];
-            // What ended dead is no access the output lost when the reference run lists nothing there
-            // (both runs drop it alike). Counted for the record: a read through a pointer may be a
-            // register's; one at a constant address of hardware or marked memory would be a real loss.
+            // What ended dead is no access the output lost only if it is a direct access of ordinary
+            // memory: the reference run cannot list a loss that both runs share, so the record is the
+            // check (DeadIsLoss; before patch 0018, 31 and 34 reads through a pointer were such losses).
+            // The kinds are counted for the record.
+            if (DeadIsLoss(f, noneMarked)) ++deadLost;
             if (f.fate == AccessFate::Dead && !f.write)
             {
                 if (!f.constantAddress) ++deadPointerReads;
@@ -2268,10 +2378,11 @@ void TestGameCode()
     std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
                 "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
                 foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
-    std::printf("  ended dead, with nothing for the reference run to list: %d reads through a pointer, %d reads of constant "
-                "addresses of ordinary memory, %d of hardware, %d writes\n", deadPointerReads, deadConstantReads, deadHardwareReads,
-                deadWrites);
+    std::printf("  ended dead: %d reads through a pointer, %d reads of constant addresses of ordinary memory, %d of "
+                "hardware, %d writes; %d of them are no direct access of ordinary memory\n", deadPointerReads, deadConstantReads,
+                deadHardwareReads, deadWrites, deadLost);
     CHECK(dropped == 0);
+    CHECK(deadLost == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);
     CHECK(outOfOrder == 0);

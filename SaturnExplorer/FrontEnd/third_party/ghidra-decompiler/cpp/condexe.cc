@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a read of volatile memory is not removed with the block it is in (patches/0018-hold-every-load.patch).
  */
 #include "condexe.hh"
 
@@ -377,6 +379,11 @@ bool ConditionalExecution::testRemovability(PcodeOp *op)
     if ((op->code()==CPUI_LOAD)||(op->code()==CPUI_STORE))
       return false;
     if (op->code()==CPUI_INDIRECT) return false;
+    // SaturnExplorer: a read of volatile memory is a memory access like a LOAD. RuleLoadVarnode makes
+    // it a COPY of the volatile Varnode, which ActionVarnodeProps replaces with a user op only on the
+    // next pass of the main loop, after this action: an unused one is not an op to remove.
+    for(int4 i=0;i<op->numInput();++i)
+      if (op->getIn(i)->isVolatile()) return false;
 
     vn = op->getOut();
     if (vn->isAddrTied()) return false;

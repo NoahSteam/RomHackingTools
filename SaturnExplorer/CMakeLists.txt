@@ -317,12 +317,10 @@ if(SE_ENABLE_DECOMPILER)
                              PROPERTIES TIMEOUT 60)
         set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
         # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0).
-        # The default run is 300 seeds; SE_GENERATED_SEEDS=<n> runs a long one.
-        # Expected to fail while the generator's open findings stand (REVIEW_LEDGER.md: A5-1, A4-1,
-        # dropped reads whose value feeds a folded expression). WILL_FAIL inverts the verdict, so
-        # ctest stays green on master and goes red the day the fix lands -- the signal to remove
-        # this property. The nightly CI job runs the binary directly and reports the real result.
-        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
+        # The default run is 300 seeds; SE_GENERATED_SEEDS=<n> runs a long one. It passes: the
+        # dropped reads it found (REVIEW_LEDGER.md: A5-1, A5-2, A4-1) are fixed by patch 0018, and
+        # a failure now is a regression or a new class. The nightly CI job runs 20000 seeds.
+        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
         # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default
         # run is 2,000 cases per form; SE_DECODE_CASES=<n> runs more. Expected to fail while A2-1 to
