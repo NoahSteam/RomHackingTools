@@ -322,10 +322,10 @@ if(SE_ENABLE_DECOMPILER)
         # data in code, checked for areas 3 and 4 as well (Step 5 record, "Areas 3 and 4, oracle"). The
         # default run is 300 seeds, odd ones version 1 and even ones version 2, in about 5 seconds;
         # SE_GENERATED_SEEDS=<n> runs a long one. It passes: the dropped reads it found (A5-1, A5-2, A4-1)
-        # are fixed by patch 0018. The version 2 grammar finds A4-2 and A4-3 (REVIEW_LEDGER.md), which
-        # the default seeds do not reach (about 1 in 400 version 2 seeds), so this entry is not WILL_FAIL
-        # yet; the nightly job (20000 seeds) is red until they are fixed. A failure now is a regression or
-        # a new class. The nightly CI job runs 20000 seeds.
+        # are fixed by patch 0018, and the version 2 grammar's A4-2 and A4-3 (REVIEW_LEDGER.md; about 1 in
+        # 400 version 2 seeds) by patches 0021 and 0022, so a failure now is a regression or a new class.
+        # Version 1 also has mac.l / mac.w, and its "dropped" check spends one ledger entry per access. The
+        # nightly CI job runs 20000 seeds.
         set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
         # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default

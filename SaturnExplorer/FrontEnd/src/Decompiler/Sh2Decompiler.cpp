@@ -220,10 +220,11 @@ Prototype PrototypeOf(const ghidra::Funcdata& fd)
 // the others take what it can return, its stores through what it was handed hit what they may, and
 // what it lets out escapes. All of it joins this function's own summary. A callee whose effects
 // are unknown is taken to do anything.
-// Each indirect jump's recovered destinations, by the jump's address: as flow recovered them, and
-// as the function holds them at the end. Both, because the actions can remove a table they have
-// resolved -- one destination becomes a plain goto (RuleSwitchSingle) -- while the jump itself is
-// still in the instruction it came from.
+// Each indirect jump's recovered destinations, by the jump's address: as the first flow recovered
+// them (AddJumpTables, called twice), as the last flow did (AddFlowTables), and as the function
+// holds them at the end. All of them, because the actions can remove a table they have resolved --
+// one destination becomes a plain goto (RuleSwitchSingle) -- while the jump itself is still in the
+// instruction it came from.
 using JumpDests = std::map<uint32_t, std::set<uint32_t>>;
 
 void AddJumpTables(ghidra::Funcdata& fd, JumpDests& dests)
@@ -234,6 +235,18 @@ void AddJumpTables(ghidra::Funcdata& fd, JumpDests& dests)
         std::set<uint32_t>& d = dests[static_cast<uint32_t>(table->getOpAddress().getOffset())];
         for (ghidra::int4 j = 0; j < table->numEntries(); ++j)
             d.insert(static_cast<uint32_t>(table->getAddressByIndex(j).getOffset()));
+    }
+}
+
+// ...and the ones the last flow recovered (patch 0021). A restart in the actions follows the flow
+// again, and the tables it recovers reach further than the first flow's; one the actions resolve to
+// a goto is gone by the end, and is in neither of the other two.
+void AddFlowTables(const ghidra::Funcdata& fd, JumpDests& dests)
+{
+    for (const ghidra::FlowTable& t : fd.getFlowTables())
+    {
+        std::set<uint32_t>& d = dests[static_cast<uint32_t>(t.op.getOffset())];
+        for (const ghidra::Address& a : t.dests) d.insert(static_cast<uint32_t>(a.getOffset()));
     }
 }
 
@@ -803,8 +816,7 @@ struct RawScan
     std::vector<std::pair<uint32_t, int>> readonly;   // (address, size) ranges to mark
     bool unsupported = false;
     uint32_t unsupportedAt = 0;
-    std::set<uint32_t> insns;   // every instruction with p-code, before any action removes some
-    std::set<uint32_t> halted;  // ...of which these failed to decode: flow stopped at them
+    std::set<uint32_t> insns;   // every instruction with p-code after the first flow, before any action removes some
 };
 
 // Literal pools and A3. SLEIGH emits "tmp = #addr; Rn = *(ram, tmp)" for mov.w/mov.l
@@ -827,8 +839,6 @@ RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
     {
         const uint32_t a = static_cast<uint32_t>(it->second->getAddr().getOffset());
         insns.insert(a);
-        if (it->second->getHaltType() & (ghidra::PcodeOp::badinstruction | ghidra::PcodeOp::unimplemented))
-            scan.halted.insert(a);
     }
     // The patch hands the slot its PC by address, so a slot that anything in the function also
     // jumps straight to would get the slot's PC on that path too. Such code is flagged rather than
@@ -1590,10 +1600,11 @@ bool DecompileResult::InBody(uint32_t canonical) const
 namespace
 {
 
-// The instructions flow reached, as merged [lo, hi) ranges. 'insns' holds every instruction that
-// had p-code at some point; nop has none, and a delay slot's p-code carries its branch's address,
-// so both are added here. The caller leaves out the instructions flow halted at (memory not there,
-// or not decoding), and a delay slot is added only when it decodes.
+// The instructions flow reached, as merged [lo, hi) ranges. 'insns' holds every instruction the
+// flow translated (patch 0021); a delay slot is translated with its branch, so it is added here,
+// and a run of nops after an instruction that falls through is kept in case a nop was not recorded.
+// The caller leaves out the instructions flow halted at (memory not there, or not decoding), and a
+// delay slot is added only when it decodes.
 std::vector<std::pair<uint32_t, uint32_t>> BodyRanges(const std::set<uint32_t>& insns, const MemorySnapshot& snap)
 {
     std::set<uint32_t> all;
@@ -2137,12 +2148,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.unimplemented = fd->hasUnimplemented();
         r.unsupported = scan.unsupported;
         r.unsupportedAt = canonicalOf(scan.unsupportedAt);
-        // The body: what flow reached, now (a restart in the actions can flow further) and before
-        // the actions removed what they found dead.
-        std::set<uint32_t> insns = scan.insns;
-        for (auto it = fd->beginOpMain(); it != fd->endOpMain(); ++it)
-            insns.insert(static_cast<uint32_t>(it->second->getAddr().getOffset()));
-        for (uint32_t h : scan.halted) insns.erase(h);
+        // The body: what the function's last flow translated, before any action removed what it found
+        // dead (patch 0021). A restart in the actions follows the flow again and can reach further
+        // than the scan above did (a jump into a second function is only resolved then), and what
+        // that flow reached is the function's whether or not the p-code survived: the entry's
+        // 'add #-0x40,r15' of a function jumped into, a test and branch whose arms meet.
+        std::set<uint32_t> insns;
+        for (const ghidra::FlowInsn& fi : fd->getFlowInsns())
+            if (!fi.halted) insns.insert(static_cast<uint32_t>(fi.addr.getOffset()));
         r.body = BodyRanges(insns, *snapshot);
         for (uint32_t w : scan.literalWords) r.literalPools.push_back(canonicalOf(w));
         std::sort(r.literalPools.begin(), r.literalPools.end());
@@ -2236,8 +2249,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
         // An indirect jump the engine turned into a call without a word: a table of one entry, which
         // it takes for a thunk -- a tail call, with a return assumed after it. Every other way an
-        // indirect jump ends up (a table, a call, a return) is recorded at its address.
-        for (uint32_t a : scan.insns)
+        // indirect jump ends up (a table, a call, a return) is recorded at its address. Of every
+        // instruction the last flow translated, not just the first flow's: a jump reached after a
+        // restart is as much a tail call.
+        for (uint32_t a : insns)
         {
             uint16_t op = 0;
             if (!snapshot->ReadU16(a, op)) continue;
@@ -2315,6 +2330,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (r.prototypeWithheld.empty()) 
         {
             AddJumpTables(*fd, flowTables);
+            AddFlowTables(*fd, flowTables);
             r.prototypeWithheld = WithholdReason(*fd, prototypes, exec, entry, flowTables, effects);
         }
         if (r.prototypeWithheld.empty())

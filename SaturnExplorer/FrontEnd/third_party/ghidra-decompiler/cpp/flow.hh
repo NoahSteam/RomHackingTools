@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  */
 /// \file flow.hh
 /// \brief Utilities for following control-flow in p-code generated from machine instructions
@@ -90,6 +92,7 @@ private:
   vector<PcodeOp *> tablelist;		///< List of BRANCHIND ops (preparing for jump table recovery)
   vector<PcodeOp *> injectlist;		///< List of p-code ops that need injection
   map<Address,VisitStat> visited;	///< Map of machine instructions that have been visited so far
+  set<Address> haltedinsn;		///< Addresses where flow stopped for bad or unimplemented data (SaturnExplorer)
   list<PcodeOp *> block_edge1;		///< Source p-code op (Edges between basic blocks)
   list<PcodeOp *> block_edge2;		///< Destination p-code op (Edges between basic blocks)
   uint4 insn_count;			///< Number of instructions flowed through
@@ -152,6 +155,7 @@ public:
   PcodeOp *branchTarget(PcodeOp *op) const;	///< Find the target referred to by a given BRANCH or CBRANCH
   void updateTarget(PcodeOp *oldOp,PcodeOp *newOp);	///< Update the branch target for an inlined p-code op
   void generateOps(void);			///< Generate raw control-flow from the function's base address
+  void recordInstructions(vector<FlowInsn> &res) const;	///< List the instructions visited (SaturnExplorer)
   void generateBlocks(void);			///< Generate basic blocks from the raw control-flow
   bool testHardInlineRestrictions(Funcdata *inlinefd,PcodeOp *op,Address &retaddr);
   bool checkEZModel(void) const;		///< Check if \b this flow matches the EX in-lining model

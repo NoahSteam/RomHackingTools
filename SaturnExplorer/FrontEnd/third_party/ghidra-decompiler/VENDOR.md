@@ -48,6 +48,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0018-hold-every-load.patch` | Under `keepUnusedLoads`, `lastChanceLoad` holds every load, not only the ones unused when it runs: a load whose use a rule folds away later (`xor r0,r0`, `cmp/eq r3,r3`, an AND with 0) or whose only consumer is dead in the same pass was removed with its use, a register or marked read included. A recovered switch's table lookup is released from the hold. `ConditionalExecution` no longer removes an op that reads a volatile Varnode (a read in transit between its LOAD and its user op) with the block it is in. |
 | `0019-sleigh-sr-rte.patch` | `ldc`/`ldc.l` to SR keep only T, S, I3-I0, Q and M (`0x3F3`); `rte` masks the stacked SR the same way and restores it before its delay slot, not after. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 | `0020-sleigh-cache-lru.patch` | `DisassemblyCache::getParserContext` makes a hit the newest entry (least recently used, not oldest allocated). A delayed branch whose tree was cached but whose slot's was not took its own tree for the slot and was built from the slot's parse. |
+| `0021-flow-instructions.patch` | `Funcdata` records every instruction the last flow translated (`getFlowInsns()`: the address, and whether flow halted there for bad or unimplemented data), taken from `FlowInfo::visited` as `followFlow` returns and cleared with the function; likewise the indirect jumps whose destinations it recovered (`getFlowTables()`). A restart in the actions follows the flow again, so the last flow is the function's; the host reads the body and the jumps from it, not from the p-code that survived the actions. |
+| `0022-switch-lookup-used.patch` | `JumpBasic::foldInOneGuard` (under `loadsNotDuplicated`) does not fold a guard into a switch when the switch's table lookup has a use outside the table's own calculation: the register the entry was loaded into, read after the switch. `noInterveningStatement` lets a COPY or SUBPIECE of the lookup through whatever uses its output, and the folded switch then printed the lookup ahead of every index. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -92,6 +94,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0010: `TestHardwareVolatility` (the access ledgers: every access printed once, in order, unconditionally);
   - 0011: `Sh2DecompilerTests` under UBSan with vptr.
   - 0017: `TestHardwareVolatility` (every reference-run access of a fixture is printed, folded, or removed with said code) and `TestGameCode` (0 dropped).
+  - 0021: `TestFlowReachedBody` (a jump into a second function and from there into a third: both warned, the dead first instruction in the body), and the generator's `outside-body` check.
+  - 0022: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
