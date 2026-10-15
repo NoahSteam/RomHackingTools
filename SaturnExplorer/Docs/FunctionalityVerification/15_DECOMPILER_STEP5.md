@@ -2490,8 +2490,9 @@ if a build numbers allocations differently, reported as STALE if it cannot be).
 
 ### Findings
 
-Ledger rows A6-1 to A6-9 (`REVIEW_LEDGER.md`); all open. The ctest entry is `WILL_FAIL` (the default subset fails on the
-pinned cells), with a comment naming the rows.
+Ledger rows A6-1 to A6-9 (`REVIEW_LEDGER.md`); all open when the oracle was written, fixed or accepted by "Area 6, round 1"
+below. The ctest entry was `WILL_FAIL` (the default subset failed on the pinned cells), with a comment naming the rows; it is
+not any more.
 
 | Row | Severity | What | Cells |
 |---|---|---|---|
@@ -2540,3 +2541,127 @@ found by the matrix itself, which is the stronger evidence for the `alloc` famil
 - Windows and macOS: the test forks; on other platforms it builds as a stub that reports SKIPPED.
 - Leaks (A6-7 to A6-9) were sampled, not enumerated: the sweep with leak detection ran the dense prefix of 3,000 and the
   geometric tail, not every `k`.
+
+## Area 6, round 1: allocation failure in the printer and the switch block; streams that swallow
+
+Branch `review/6-lifecycle-fix`, fix in `d41c806`. Ledger rows A6-1 to A6-6 and A6-8 are `fixed`; A6-7 and A6-9 are fixed at
+their cheap sites and `accepted` at the rest, with the bound stated; A12-6 (the runner test's 50 ms follow-up) is
+`fixed`. `SaturnExplorerDecompilerFaultTests` passes its default subset and its ctest entry has lost `WILL_FAIL`. The
+engine change is patch 0023 (`patches/0023-allocation-failure-order.patch`, 11 files, about 160 functional lines); 0021 is
+taken by another branch and is not in this tree.
+
+**Root causes.**
+
+- *A6-1, A6-2 (P1): the replacement is allocated after the old object is freed* -- patch 0015's class again, in the
+  Print phase. `EmitPrettyPrint::setMarkup` did `delete lowlevel; lowlevel = new EmitMarkup;`, and
+  `EmitMarkup::setPackedOutput` (and `setOutputStream`) `delete encoder; encoder = new PackedEncode(*s);`. When the `new`
+  throws, the freed pointer is still in the member and the destructor frees it again as the `Architecture` is torn
+  down. Now the replacement is made first (and, for the emitter, given its stream), the old object is deleted after, and
+  a failure leaves the old one in place.
+- *A6-3 (P1): blocks owned twice.* `BlockGraph::identifyInternal` moved the case blocks into the new switch block one
+  `addBlock` at a time (`parent` set, then `push_back`) and only then rebuilt its own list without them. A failed
+  `push_back` left blocks in both lists, and the `unique_ptr<BlockSwitch>` of `newBlockSwitch` and the function's
+  `BlockGraph::clear` freed them twice. Now the one allocation of the move -- room in the new block's list -- is made
+  first (`ident->list.reserve`), nothing between there and the end of the loop can throw, and our own list is compacted in
+  place (no `newlist`, so no second allocation). Every `newBlock*` now holds the block under construction in a
+  `unique_ptr` until `identifyInternal` has returned, which is also what made the `BlockList`/`BlockInfLoop` leak of
+  A6-9 go away; `newBlockCopy` the same until `addBlock` has returned.
+- *A6-4, A6-5 (P3, P2): streams that swallow.* libstdc++'s `basic_ostream` catches a `std::bad_alloc` thrown while its
+  buffer grows and only sets `badbit`. The engine builds the text of every warning, comment, name and message in an
+  `ostringstream`, so the failure cut the text short and reported nothing: `Ok`, and `/* WARNING: Removing unreac */`
+  in the pseudocode (A6-5); the markup stream of the Print phase did the same, and a later parse of the cut markup
+  threw something that was none of the handled exception types ("unexpected exception", A6-4). The engine's
+  `ostringstream` is now a class of its own (`error.hh`, in place of the using-declaration; `filemanage.hh` repeated
+  the declaration and includes `error.hh` instead) whose constructor sets `exceptions(badbit)`, which makes the
+  insertion rethrow the original `bad_alloc`. The host does the same for the two streams it hands the engine
+  (`runPass`'s `errors` and `markup`, and `Disassemble`'s `errors`) and, before it builds anything from either, checks
+  `bad()` and throws `std::bad_alloc` -- so the output is never built from a stream that has failed. The failure then
+  leaves `Decompile` through the `std::bad_alloc` handler: `Failed("out of memory")` with the engine marked damaged, like
+  any other allocation failure in the engine.
+- *A6-6 (P3): a cancel in the first pass's Actions tail.* `runPass` returned from the non-printing branch before any
+  check-point, so a flag raised there waited through the second pass's Init and was honoured in its Flow. The branch
+  now calls `checkCancel()` before it returns: the cancel is honoured at the pass boundary, `cancelledIn` is Actions as
+  the matrix's oracle always said it should be, and the second pass's Architecture is never built. A flag raised
+  after that check (in the pass's Teardown) still waits for the next Flow, as it should (nothing in Teardown is
+  interruptible). `Sh2Decompiler.cpp`'s changes are the stream masks and that call.
+- *A12-6.* `TestDisableOnUnacknowledgedCancel` ran its follow-up requests under the stuck request's 50 ms budget (61 ms
+  of work on the Windows Debug runner: "too large"). The budget is now ten times a `Small()` run measured on a generous
+  runner first (50 ms at least), the way `TestBudget` already derives its own. The matrix's own budget and disable
+  scenarios had the same shape (their follow-up runs under 6 times the measured request and failed once under a
+  parallel build: "status 5"); they use 12 times now.
+
+**Leaks (A6-7 to A6-9).** The sweep with leak detection is the survey: `SE_FAULT_LEAKLIST=1` (new) prints the innermost
+frames of every leak instead of judging it. Fixed, because the fix is local and the order of operations in the failing
+function is obvious: the print language and the options of a failed `Architecture` constructor
+(`Architecture::Architecture`, `OptionDatabase::registerOption` and `OptionDatabase`'s constructor -- the first version of
+the fix missed `ElementId::find`, which the survey found), `DisassemblyCache::initialize`, `TypeFactory::insert`,
+`VarnodeBank::create` and `createDef`, `PcodeOpBank::create` (an op is owned by the lists; `optree` only indexes it) and
+`markAlive`/`markDead`/`insertAfterDead` (the same erase-then-allocate shape as A6-1, with `std::list` nodes: the new node is
+made before the old one is dropped; the survey found this one too), `CommentDatabaseInternal::addComment*`, `newBlockCopy`
+and the `newBlock*` family. Accepted, each by the frames of its
+allocation stack (`AcceptedLeaks` in the test; every frame of an entry must occur in the stack, in order; a leak that
+matches none fails its cell, so this is not the blanket of LeakSanitizer's own suppressions, which match one frame):
+the XML reader (`xml_parse`, `xml_tree`: the parser's values live on bison's stack, and a throw drops them), the action
+tree (`ActionDatabase::universalAction` builds hundreds of `new Action`/`new Rule` into raw lists; `deriveAction` clones
+it), the prototype models decoded from the compiler spec (`Architecture::parseCompilerConfig`), `findAddJoin`,
+`ContextInternal::FreeArray::reset`, the host's register loop (`Scope::addSymbol`/`addMapPoint`, whose
+`addSymbolInternal`/`addMap` insert into several indexes, so freeing in a handler would double-free a half-inserted
+symbol), and the conflict symbol `ActionNameVars::linkSymbols` makes. All of them are in `Architecture` construction or
+initialisation or in one action, after which the engine is refused, so there is at most one such leak per process: a few
+hundred bytes to about 30 KB. `coreaction.cc` was not touched (another branch is editing it), so the Action sites would
+have been accepted in any case.
+
+**Other delete-then-new and move-then-allocate shapes** (`grep` over the vendored sources; the matrix reaches none of
+them): `Varnode::calcCover` (`delete cover; cover = new Cover`; only called with a null cover), `TypeCode::setPrototype`
+(`delete proto; proto = new FuncProto()`; `proto` is null at its one call), `FuncProto::setParamshift`
+(`delete store; store = new ProtoStoreInternal`; only for a spec with a parameter shift, which this one has not),
+`JumpTable::setOverride` (`jumptable.cc`: another branch's file; user overrides, which the host does not use) and
+`PrintJava`'s constructor (Java only). Left as they are: none is reachable by a fixture, and the patch README's rule is a
+test that fails without a fix. `Scope::addUnassigned` reads `entry->symbol` after `delete entry` (an upstream
+use-after-free on the dynamic-symbol path, `isGlobal()` only); nothing in this decompiler calls it. Every other
+`BlockGraph` mover (`buildCopy`, the `newBlock*`) was read: they allocate before they attach and own what they allocate,
+now. No further move-then-allocate shape was searched for beyond `block.cc`.
+
+**Pinning.** The old `kPins` named an allocation by its index and found it again within 400 of it; a merge since the
+oracle was written had shifted every one by more than 1,000 (mailbox 33,119 allocations then, 35,420 now): of the eight,
+three resolved to a neighbour of the same size that does not crash, and five to nothing (reported STALE, which fails the
+run, so the default subset failed for the wrong reason). A pin is now `{fixture, phase, ordinal of the
+phase entry, size, rank among that size in the entry}` -- stable under any change elsewhere in the run -- and
+`--cell alloc <fixture> <k>` prints the coordinates of its allocation (`PIN-AT`). 31 pins: 16 for A6-1 to A6-5, 15 for the
+leaks that are fixed (seen only under LeakSanitizer; in a plain build they are cells that pass). A fix that adds or
+removes allocations just before a pin makes it resolve to a neighbour of the same phase and size; the mutation runs
+below are made with the mutated engine, where the pins resolve to the defect.
+
+**Mutation** (a copy of the tree, one change reverted, `ninja` incremental, RelWithDebInfo, `SE_FAULT_ONLY=alloc` or the
+named job; restored and verified identical afterwards):
+
+| Reverted | Cells that fail |
+|---|---|
+| `prettyprint.cc` (A6-1, A6-2) | 5 crash (SIGSEGV): mailbox print #0 48 B #22, 40 B #77 and 16 B #1, print #1 48 B #20; jumptable print #0 48 B #26 |
+| `block.cc` (A6-3; also `newBlock*`) | 4 crash: jumptable actions #0 16 B #72, 32 B #59, 16 B #138 and actions #1 16 B #72 |
+| the host's `markup.exceptions(badbit)` and `bad()` check (A6-4) | 3 fail "unexpected exception": mailbox print #0 513 B and 1025 B, jumptable print #0 513 B |
+| `error.hh` and `filemanage.hh`, the engine's `ostringstream` (A6-5) | 4 fail: mailbox actions #0 ("a throwing allocation failure is reported, not swallowed") and #1 (`WARNING: Removing unreac`), jumptable followFlow #0 and #1 |
+| the `checkCancel()` of the pass boundary (A6-6) | 2 fail: `cancel-alloc fixture1` 10662, 10663 ("expected Cancelled-in-Actions but got cancelledIn followFlow") |
+| the host's `errors` stream mask and `bad()` check | none: the `errors` stream never reaches 513 bytes in these fixtures, so no cell grows it. It is the defensive twin of the `markup` change, not pinned |
+| all the leak fixes of patch 0023 at once (`architecture.cc`, `options.cc`, `sleigh.cc`, `varnode.cc`, `op.cc`, `comment.cc`, `type.cc`, and `newBlockCopy`'s `unique_ptr`) | ASan + LeakSanitizer, `SE_FAULT_ONLY=alloc`: 24 cells leak and fail (mailbox 18, jumptable 6), at every fixed site: `Architecture::Architecture` / `OptionDatabase` (`PrintCCapability::buildLanguage`), `DisassemblyCache::initialize`, `TypeFactory::findAdd`, `PcodeOpBank::create` (from `PcodeEmitFd::dump` and `cloneOp`; and `markAlive`), `VarnodeBank::create` (`newConstant`, `newVarnode`) and `createDef`, `newBlockCopy`, `addCommentNoDuplicate` |
+| every engine and host change (the tree before this commit, the 16 pins of A6-1 to A6-5) | default subset: 3 of 25 jobs fail: 9 crash cells, 7 invariant cells in `alloc`, and the 2 `cancel-alloc fixture1` cells |
+
+**Runs.**
+
+- RelWithDebInfo, the full `alloc` sweep for every `k` (`SE_FAULT_FULL=1 SE_FAULT_DENSE=100000 SE_FAULT_ONLY=alloc`,
+  4 shards): mailbox 35,422 cells and jumptable 33,646, **0 failed** (a `Failed("out of memory")` or the baseline's output
+  for each; 5,665 + 3,183 per shard are failures inside the engine or the reference run; every damaged engine refused the
+  next request), 135 s. The same sweep on the unfixed tree (the baseline build, numbering as in this commit) fails 37
+  cells: 25 crashes (A6-1 to A6-3: mailbox 6, jumptable 19), 8 "unexpected exception" (A6-4) and 4 swallowed failures (A6-5).
+- ASan + UBSan, gcc 13.3, Debug, the default subset with `detect_leaks=1`: 25 of 25 jobs pass, 126 s (ctest's limit is
+  600). Accepted leaks tolerated in it: A6-7 8 + 8 (`alloc`) and 15 + 14 (`cancel-oom`), A6-9 1.
+- ASan + UBSan, Debug, `alloc` with leak detection (`SE_FAULT_FULL=1 SE_FAULT_ONLY=alloc`, 4 shards: the dense prefix of 3,000, the geometric tail, 65 allocations around every phase entry, the end): mailbox 3,887 cells and jumptable 3,616, **0 failed**, no ASan or UBSan report. Leaks tolerated by `AcceptedLeaks`: A6-7 4,662 cells (2,331 per fixture) and A6-9 3; every other leak would have failed its cell. (The first run of this survey, before the fix to `markAlive`, found three such cells: an op taken out of the dead list and not yet in the alive list when `insert` threw.) 1,002 s.
+- `ctest` (whole, RelWithDebInfo): **95 of 95 pass** (64.7 s with `-j2`; the first run, before the last restore of the vendored sources, 70.6 s): `SaturnExplorerDecompilerFaultTests` 16-18 s (no `WILL_FAIL`), `DecompilerRunnerTests` 40-51 s, `Sh2DecompilerTests` 1.7 s, `Sh2DecompilerEngineTests`, `SlaFreshnessTests` and `DecompilerModelTests` among the rest. `se-sleighc` (the SLEIGH compiler, which includes `error.hh`) was built with the new class; `se-regen-sla` was not run.
+- The game corpus, `hwram008.bin`, once: `SE_GAME_HWRAM=.../h/hwram008.bin bin/SaturnExplorerSh2DecompilerTests <scratch>`: 1,554 functions, 1,554 ok, 0 failed, 0 other; every count 0 (0 not printed exactly once, 0 instructions with more accesses than they make, 0 accesses of another width, 0 statements with two reads, 0 reads printed past another access or a call, 0 printed as conditional, 0 pairs out of the code's order, 0 joined into a switch across a branch, 0 accesses dropped against the reference run, 0 functions without a reference, 0 ended dead); the 20 "missing and said" and the engine's records (38,700 folded, 20 unreachable, 155 switch lookups) are those of the last recorded run on this file. 34.2 s.
+
+**Not done.** The cancel-latency numbers are as before. The leaks accepted are bounded by the host's refusal of the engine
+after the first in-engine failure; if that policy ever changes (the engine rebuilt in process), they are a leak per
+failure, and the XML reader and the action tree are the sites to make exception-safe first. The host's `errors`
+stream change has no cell. `Disassemble` still has no sweep. Windows and macOS: the matrix forks and is POSIX only;
+the vendored change touches `error.hh`, which `se-sleighc` includes too (its `ostringstream`s now throw on a failed
+allocation, which it does not expect to see), and the MSVC build of it was not run here.
