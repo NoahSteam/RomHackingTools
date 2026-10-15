@@ -1435,3 +1435,135 @@ call an injection replaces) is not recorded: none is a block's access. The defau
 configuration (no build type) compiles the host unoptimised, and `DecompilerRunnerTests` then takes
 156 s before this change and 162 s after, over its 120 s timeout; with `RelWithDebInfo` it takes
 64 s. MSVC and macOS builds are unverified, as are the sanitizers (the CI agent's).
+
+## Area 2, oracle: exhaustive decode and differential execution
+
+`SaturnExplorerSh2DecodeTests` (`FrontEnd/tests/Sh2DecodeTests.cpp`, branch `review/2-semantics`) is the
+oracle `REVIEW_PROGRAM.md` asks for in area 2, SH-2 semantics and SLEIGH correctness. Mednafen's SH-2 core
+(`ss/sh7095.inc`, `sh7095_ops.inc`, `sh7095_opdefs.inc`, `sh7095_idecodetab.inc`) is the hardware reference. The
+test reads no Mednafen file by default and the repository holds a transcription, not a copy;
+`SE_MEDNAFEN_SS=<ss dir>` makes a run re-check the transcribed word-to-op table against
+`sh7095_idecodetab.inc` (all 65,536 words equal when this was written). One ctest entry, marked `WILL_FAIL`
+while its findings stand (`REVIEW_LEDGER.md`, A2-1 to A2-8), so master stays green. The default run takes about
+1.2 s (RelWithDebInfo). `SE_DECODE_CASES=<n>` runs more cases per form (60,000 per form, 7.8 million cases, took
+20 s); `SE_DECODE_SEED`, `SE_DECODE_FORM=<text>` (only the forms whose name contains it), `SE_DECODE_SHOW=<n>`
+(failing cases printed per form), `SE_DECODE_DUMP="<hex words>"` (the three decoders' text for those words)
+and `SE_DECODE_PCODE=1` (the p-code of the selected named shapes) are for reproducing a finding.
+
+### 1. Exhaustive decode
+
+Every word 0x0000..0xFFFF is decoded by three decoders and the results compared:
+
+- **SLEIGH**: the translator the decompiler uses (the checked-in `sh-2.sla` through `SaturnArchitecture`), one
+  `printAssembly` per word, mnemonic and operand text kept separate; an undecodable word throws and is
+  "undefined".
+- **`Sh2Disasm`**: the debugger's decoder, `Sh2Decode`, with its mnemonic, operand text and flags (`IsBranch`,
+  `IsCall`, `IsReturn`, `IsConditional`, `HasDelaySlot`, `HasBranchTarget`/`BranchTarget`).
+- **Mednafen**: a table of its 125 ops (name, mnemonic, operand kinds, bytes of memory touched) and 141
+  mask/value patterns saying which word is which op. The patterns were generated from `sh7095_idecodetab.inc`
+  and verified equal on all 65,536 words; Mednafen defines 53,752 of them.
+
+*Normalisation.* The decoders spell operands differently, so each text is rewritten into one normal form and
+only spelling is removed: case and spaces; the optional `#`; an 8-bit immediate compared modulo 256 (`add #-4`
+is `#0xFC` in `Sh2Disasm`, `-0x4` in SLEIGH; the sign extension is the execution half's business);
+displacements as decimal byte counts (already scaled); a PC-relative operand as the address it reads
+(`@(0xA,pc)` and `@(0xA)` both); branch targets as absolute 32-bit addresses; `shal` is `shll` (Mednafen
+decodes 4n20 and 4n00 as one op, `SHLL_REG`, because they are one operation). The mnemonic, the registers, the
+`@` forms and the operand order are compared as written. The expected flags are the ones `Sh2Disasm.h`
+defines (Mednafen has none).
+
+*Layouts.* A PC-relative operand and a wrapping branch target depend on the address, so each word is decoded
+at four: RAM at 0 mod 4 and at 2 mod 4 (a nop on the other side), address 0 (a 256 KB region at the bottom,
+where a backward branch wraps below zero) and, for `Sh2Disasm` alone, 0xFFFC0000 upwards (where a forward
+one wraps past 2^32; the snapshot refuses code there, so the engine cannot be asked).
+
+*Result.* SLEIGH agrees with Mednafen on all 65,536 words in the three layouts it can be asked in: the same
+53,752 defined, the same mnemonic and operands, nothing accepted that Mednafen leaves illegal. `Sh2Disasm`
+agrees on validity and operands everywhere, including the wrap at both ends, and differs in two ways: A2-6
+(`bt.s`/`bf.s` for `bt/s`/`bf/s`, 512 words) and A2-7 (`trapa` is not marked `IsBranch`, 256 words).
+
+### 2. Differential execution
+
+*The two sides.* The emulator side is the vendored `EmulatePcodeCache` on the shipped translator: registers in
+the register space, and a `MemoryBank` for RAM whose unwritten bytes are a hash of (case seed, address), so any
+address reads as something definite and no memory has to be filled in; the 8-byte words an instruction wrote
+are logged. The reference side is `ExecRef`, a transcription of `sh7095_ops.inc` for every runnable op (all
+but `sleep`), with the PC of `sh7095.inc`: an instruction runs with z->PC = its address + 4; a taken delayed
+branch makes it target + 2 while the slot runs; a delayed branch not taken leaves slot address + 4. Reads and
+writes go to flat big-endian memory (the same hash). A case is compared on r0-r15, SR (T, S, Q, M, I and the
+rest), GBR, VBR, MACH, MACL, PR, the next PC (where the emulator's execute address ends up, whether or not the
+target can be fetched) and every aligned 8-byte word either side wrote.
+
+*Forms.* Every Mednafen op except `sleep` is a form (124), plus a second copy of the six relative branches
+(`bt`, `bf`, `bt/s`, `bf/s`, `bra`, `bsr`) with the code at address 0 so that a backward branch wraps below
+zero: 130 forms, 2,000 cases each, 260,000 cases, from a fixed seed. They cover each ALU, shift, compare,
+extension, swap, multiply, MAC and DIV form; `mov` in every addressing mode (`@Rn`, `@Rn+`, `@-Rn`,
+`@(disp,Rn)`, `@(R0,Rn)`, `@(disp,GBR)`, `@(disp,PC)`, `mova`); the bit operations on `@(R0,GBR)`; `tas.b`;
+`ldc`, `lds`, `stc`, `sts` and their `.l` forms for SR, GBR, VBR, MACH, MACL and PR; `trapa` and `rte`; and
+every branch, taken and not taken, with its delay slot.
+
+*Words, states, slots.* A form with at most 512 encodings runs on all of them (so every Rn/Rm aliasing); a
+larger one on the extremes of each field (all zero, all one, the sign bit, the bit below it) and a random
+fill, 512 in all. PC-relative forms are placed at both alignments. Each case draws a cell and then a random
+state: every register from a pool biased to carry and saturation values; SR within the bits that exist; the
+registers an instruction addresses memory through, aligned to its access size, from RAM (55%), the bottom of
+the address space (so a pre-decrement wraps below zero), the top (so an increment, an index or a displacement
+carries past 2^32), constants and anywhere; register-target branches to near, far, bottom and top addresses. A
+delayed branch has 512 cells, each with its own slot, half drawn from a list of instructions that make a slot's
+effect visible (`add #imm`, `sett`, `clrt`, `movt`, `sts pr`, `lds pr`, a store, the PC-relative loads and
+`mova`, `cmp/eq`, `ldc sr`, a post-increment load) and half from any non-branch op; a slot run twice or not at
+all changes a register or a flag, so the result differs.
+
+*Named shapes.* Eighteen fixed cases (registers and stack written out) pin the findings and their controls:
+`ldc` to SR, `rte` with a slot that sets, clears or reads T, and a PC-relative load in the slot of each
+delayed branch, taken and not taken.
+
+*Result.* 114 of the 130 forms agree with Mednafen on all 2,000 cases: every ALU, shift, compare, extension,
+swap, multiply, MAC and DIV form, every `mov` form at every addressing mode, the bit operations, `tas.b`,
+`trapa`, `lds`/`stc`/`sts` and their `.l` forms, and `bt`/`bf` in full (displacement sign, wrap at 0). The 16
+that differ do so for the reasons in the ledger:
+
+| Form | Cases that differ (of 2,000) | Why |
+|---|---|---|
+| `ldc Rn,SR/GBR/VBR`, `ldc.l @Rn+,...` | 610, 657 | A2-1: SR mask |
+| `rte` | 1,159 | A2-2 timing, A2-3 mask, A2-4 slot PC |
+| `bt/s`, `bf/s` (RAM, address 0) | 234, 192, 190, 165 | A2-4 slot PC; A2-1 through an `ldc` slot |
+| `braf`, `bsrf`, `jmp`, `jsr`, `rts` | 283, 264, 353, 353, 270 | A2-4; A2-1 through an `ldc` slot |
+| `bra`, `bsr` (RAM, address 0) | 76, 41, 58, 97 | A2-1 only, through an `ldc` slot; the slot PC is right (patch 0005) |
+
+Each failing case is tagged with what its slot was (`slot PC-relative`, `slot ldc to SR`, `slot other`), so a
+cause shows as a count: when A2-1 and A2-4 are fixed `bra`, `bsr` and the SR rows drop to zero, and `rte` is
+left with A2-2 and A2-3. No failure falls outside the causes in the ledger.
+
+### 3. Translation depends on history (A2-5)
+
+A stray `next` difference (1 case in 60,000, `bt/s` at address 0) showed that the same bytes could translate
+to different p-code. `TestTranslationHistory` pins it for every delayed cell: translate the slot, the branch,
+one other instruction, the branch again, and compare the two translations of the branch. All 5,632 delayed
+cells (every delayed form) differ: the second translation is the slot's p-code alone (`rts` 4 ops, then 1;
+`bt/s` 7, then 3). Cause: `Sleigh`'s cache of parse trees has two entries when a language's delay slots are one
+instruction (`sleigh.cc:576-582`), a lookup that hits does not advance the ring, and the delay-slot lookup that
+follows a miss takes the entry holding the branch's own tree. Whether decompiler flow reaches the sequence (the
+slot as a jump target, then the branch translated twice) is not established.
+
+### 4. How far to trust it
+
+*Mutation check.* 20 single-line changes to the reference (addv's overflow term, MAC.L's saturation direction,
+the `@Rm+` write order, a displacement scale, a sign extension, negc's T, the sign of `bf`'s and `bra`'s
+displacement, `bsr`'s PR, the PC a slot sees, `tas.b`'s written value, `@Rm+`'s step, the `@-Rn` alias, `xor.b`,
+a store address, `bt`'s condition, `dt`'s T, DIV1's borrow, `swap.b`, `mova`'s alignment, `trapa`'s pushed PC)
+were each caught, in the form that was changed. The mutations are not in the repository; they are cheap to
+repeat by editing `ExecRef`.
+
+*Not modelled, so not seen (A2-8).* Address errors for misaligned accesses and odd jump targets, illegal
+instruction and illegal slot exceptions, `sleep` (a user op), `tas.b`'s bus lock, interrupts and their
+one-instruction delay after `ldc`/`lds`, code at the top of the address space, and the bus: the reference
+memory is flat. Every case uses aligned addresses and even jump targets, and a delay slot never holds a
+branch. The decoder's treatment of a PC-relative operand after a delayed branch (`Sh2DecodeAfterBranch`) is not
+part of the comparison; `Sh2OperandHoverTests` and `Sh2FunctionFinderTests` cover it.
+
+*Build and run.* `cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo && cmake --build build --parallel 2
+--target SaturnExplorerSh2DecodeTests SaturnExplorerSh2SemanticsTests`, then
+`build/bin/SaturnExplorerSh2DecodeTests <scratch dir>` (a non-zero exit while A2-1 to A2-7 stand).
+`Sh2SemanticsTests` is unchanged and passes. CI's `-R` filters name the existing tests one by one and do not
+select this one; adding it is the coordinator's call.
