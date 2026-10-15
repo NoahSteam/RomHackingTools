@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
+ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -4275,6 +4276,7 @@ int4 RuleLoadVarnode::applyOp(PcodeOp *op,Funcdata &data)
   size = op->getOut()->getSize();
   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
   newvn = data.newVarnode(size,baseoff,offoff);
+  data.recordAccessFold(op,newvn);	// SaturnExplorer: the op lives on as the COPY, so its time survives
   data.opSetInput(op,newvn,0);
   data.opRemoveInput(op,1);
   data.opSetOpcode(op, CPUI_COPY );
@@ -4317,6 +4319,7 @@ int4 RuleStoreVarnode::applyOp(PcodeOp *op,Funcdata &data)
   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
   Address addr(baseoff,offoff);
   data.newVarnodeOut(size, addr,op);
+  data.recordAccessFold(op,op->getOut());	// SaturnExplorer: the op lives on as the COPY. Recorded here, while the STORE's inputs are whole
   op->getOut()->setStackStore();	// Mark as originally coming from CPUI_STORE
   data.opRemoveInput(op,1);
   data.opRemoveInput(op,0);

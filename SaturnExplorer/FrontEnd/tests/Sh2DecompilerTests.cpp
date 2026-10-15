@@ -47,6 +47,12 @@ void Print(const char* label, const DecompileResult& r)
         std::printf("  access: %s %s %08X size %u at %08X%s%s printed %d time(s), %d line(s), %d token(s)\n", m.write ? "write" : "read",
                     m.direct ? "direct" : "via pointer", m.address, unsigned(m.size), m.insn, m.inLoop ? " in loop" : "",
                     m.returned ? " returned" : "", m.printed, m.printedLines, m.printedTokens);
+    for (const AccessFate& f : r.accessFates)
+    {
+        static const char* const names[] = { "folded into ordinary memory", "dead", "removed with unreachable code", "the switch's table" };
+        std::printf("  ended: %s of %u bytes at %08X (%s%08X): %s\n", f.write ? "write" : "read", unsigned(f.size), f.insn,
+                    f.constantAddress ? "" : "through a pointer; ", f.address, names[int(f.fate)]);
+    }
     for (const Line& l : r.lines)
     {
         if (l.firstAddr) std::printf("  %-50s ; %08X\n", l.text.c_str(), l.firstAddr);
@@ -543,10 +549,69 @@ bool PrintedPast(const MemoryAccess& m, const std::vector<MemoryAccess>& accesse
     return false;
 }
 
+// How many of the engine's records are of this fate on this instruction and direction (insn 0:
+// any instruction).
+int FateAt(const DecompileResult& r, AccessFate::Kind fate, uint32_t insn, bool write)
+{
+    int n = 0;
+    for (const AccessFate& f : r.accessFates)
+        n += f.fate == fate && (insn == 0 || f.insn == insn) && f.write == write;
+    return n;
+}
+
+// The conservation law (program phase 0): every memory access the flow makes is accounted for
+// exactly once. The reference run (every address volatile) lists each one the flow reaches; the
+// shown output accounts for an access of it -- found by instruction, direction and width -- as
+//   Printed: it is in r.accesses;
+//   Folded: the engine made it a direct access of ordinary memory (a variable the analysis may
+//     forward or drop), or it was the read of a recovered switch's table (the switch stands for it);
+//   Removed: it went with a block the engine removed as unreachable;
+//   Dropped: it ended dead, or the engine has no record of it. That is a lost access.
+// A Removed access must be said by the removal caution unless it was a direct access of ordinary
+// memory, which is no loss. 'marked' says whether an address is memory the request marks volatile.
+enum class Account { Printed, Folded, Removed, Dropped };
+const char* AccountName(Account a)
+{
+    switch (a)
+    {
+    case Account::Printed: return "printed";
+    case Account::Folded: return "folded";
+    case Account::Removed: return "removed";
+    default: return "dropped";
+    }
+}
+
+Account AccountFor(const DecompileResult& r, const MemoryAccess& m, const std::function<bool(uint32_t)>& marked)
+{
+    for (const MemoryAccess& x : r.accesses)
+        if (x.insn == m.insn && x.write == m.write && x.size == m.size) return Account::Printed;
+    bool folded = false, removed = false;
+    for (const AccessFate& f : r.accessFates)
+    {
+        if (f.insn != m.insn || f.write != m.write || f.size != m.size) continue;
+        switch (f.fate)
+        {
+        case AccessFate::FoldedOrdinary:
+            // A fold of a register or of marked memory would have been a real access: it is not ordinary.
+            if (!(f.constantAddress && (InHardwareRange(f.address) || marked(f.address)))) folded = true;
+            break;
+        case AccessFate::SwitchLookup: folded = true; break;
+        case AccessFate::Unreachable: removed = true; break;
+        case AccessFate::Dead: break;
+        }
+    }
+    return folded ? Account::Folded : removed ? Account::Removed : Account::Dropped;
+}
+
+// A Removed access that needs no word: a direct access of ordinary memory.
+bool OrdinaryDirect(const MemoryAccess& m, const std::function<bool(uint32_t)>& marked)
+{
+    return m.direct && !InHardwareRange(m.address) && !marked(m.address);
+}
+
 // The ledger's reference: the same request with every address volatile, so the output holds every
-// memory instruction the flow reaches. An access there that is missing from the ordinary output must
-// be one of ordinary memory at a constant address (which folds into a variable); anything else --
-// a hardware register, memory the user marked, a read or write through a pointer -- was dropped.
+// memory instruction the flow reaches. Each access there must be accounted for in the ordinary
+// output (AccountFor); a lost one, or a removal the output does not say, fails.
 bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const DecompileRequest& q,
                  const DecompileResult& r)
 {
@@ -569,22 +634,12 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     bool ok = true;
     for (const MemoryAccess& m : rr.accesses)
     {
-        // Ordinary memory at a constant address may fold, and is no loss when its code is removed.
-        if (m.direct && !InHardwareRange(m.address) && !marked(m.address)) continue;
-        // An access the output's analysis reached but did not list, through a pointer read from
-        // ordinary memory: the pointer folded (to a constant the output shows direct, or to
-        // ordinary memory it dropped). One in code that analysis removed as unreachable is missing
-        // for that reason, whatever its pointer came from, and must be said.
-        const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn);
-        if (!removed && m.pointerFromOrdinaryMemory) continue;
-        bool found = false;
-        for (const MemoryAccess& x : r.accesses)
-            if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
-        if (found) continue;
-        if (removed && SaidMissing(r, m.insn)) continue;
-        std::printf("  reference: the %s of %u bytes at %08X (%s%08X) has no access in the output%s\n", m.write ? "write" : "read",
+        const Account a = AccountFor(r, m, marked);
+        if (a == Account::Printed || a == Account::Folded) continue;
+        if (a == Account::Removed && (OrdinaryDirect(m, marked) || SaidMissing(r, m.insn))) continue;
+        std::printf("  reference: the %s of %u bytes at %08X (%s%08X) is %s in the output\n", m.write ? "write" : "read",
                     unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address,
-                    removed ? ", and its removal is not said" : "");
+                    a == Account::Removed ? "removed as unreachable, and its removal is not said" : "dropped");
         ok = false;
     }
     return ok;
@@ -839,6 +894,21 @@ void TestHardwareVolatility()
                                                       0xE100,     // mov #0,r1
                                                       0x2212,     // mov.l r1,@r2       global = 0: the first store is dead
                                                       0x000B, 0x0009, 0x0009 }, 0x10, 0x26001000u };
+    // Program phase 0 (conservation). The storeOverwritten shape with the pointer read from ordinary
+    // work RAM instead of a register. In the reference run (every address volatile) the pointer is a
+    // volatile read, so the access stays a read through a pointer; the old oracle excused any such
+    // access that was missing from reached code ("the pointer may have folded"), and so would not
+    // have seen the read go. Here the pointer does not fold (the function never stores it), the read
+    // is held for its effect, and the engine's record says what became of every access.
+    const Fixture ptrFromRam = { 0x0600A780u, { 0xD204,     // mov.l @(16,pc),r2  -> 0x26001000, the global
+                                                0xD305,     // mov.l @(20,pc),r3  -> 0x26002000, a slot holding a pointer
+                                                0x6332,     // mov.l @r3,r3       the pointer, from ordinary memory
+                                                0x6132,     // mov.l @r3,r1       the read through it
+                                                0x2212,     // mov.l r1,@r2       global = *p
+                                                0xE100,     // mov #0,r1
+                                                0x2212,     // mov.l r1,@r2       global = 0: the first store is dead
+                                                0x000B, 0x0009, 0x0009,
+                                                0x2600, 0x1000, 0x2600, 0x2000 }, 0x1C, 0 };
     // Review of 0c2dd20. A switch whose cases all coincide is removed as a switch with one
     // destination; its selector, read from memory, must stay (the lookup flag landed on it).
     const Fixture switchSameDest = { 0x0600A500u, { 0x6442,     // mov.l @r4,r4   the selector
@@ -1124,7 +1194,7 @@ void TestHardwareVolatility()
                               &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
                               &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
-                              &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &switchSameDest, &ptrSavedInRam,
+                              &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &ptrFromRam, &switchSameDest, &ptrSavedInRam,
                               &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer })
     {
         size_t off = f->base - 0x06000000u;
@@ -1533,11 +1603,23 @@ void TestHardwareVolatility()
     r = run("a read stored to a global the function overwrites", storeOverwritten);
     CHECK(Ledger(r, { Rd(0, 4) }));
     CHECK(Has(r.Text(), "*param_1"));
+    // ...and the engine's record: both stores to the global became direct writes of ordinary memory
+    // (the first then removed as overwritten), and nothing else ended.
+    CHECK(FateAt(r, AccessFate::FoldedOrdinary, 0x0600A4C4u, true) == 1 && FateAt(r, AccessFate::FoldedOrdinary, 0x0600A4C8u, true) == 1);
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) + FateAt(r, AccessFate::Dead, 0, true) == 0);
+    CHECK(FateAt(r, AccessFate::Unreachable, 0, false) + FateAt(r, AccessFate::Unreachable, 0, true) == 0);
+    r = run("the same, the pointer read from ordinary RAM", ptrFromRam);
+    CHECK(Ledger(r, { Rd(0, 4) }));
+    // The slot read and the two stores folded; the read through the pointer was held, not dropped.
+    CHECK(FateAt(r, AccessFate::FoldedOrdinary, 0x0600A784u, false) == 1);
+    CHECK(FateAt(r, AccessFate::FoldedOrdinary, 0x0600A788u, true) == 1 && FateAt(r, AccessFate::FoldedOrdinary, 0x0600A78Cu, true) == 1);
+    CHECK(FateAt(r, AccessFate::Dead, 0, false) == 0 && FateAt(r, AccessFate::Dead, 0x0600A786u, false) == 0);
 
     // The folded poll: nothing is shown after it, and the missing write is said, with the cause.
     r = run("mailbox poll on unmarked RAM removes a hardware write", mailboxFold);
     CHECK(Ledger(r, {}));
     CHECK(WarnsAbout(r, "0600A48E: the write of SMPC_SF here is missing") && WarnsAbout(r, "marked volatile"));
+    CHECK(FateAt(r, AccessFate::Unreachable, 0x0600A48Eu, true) == 1);   // SMPC_SF = 0, removed with its block
     CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
     CHECK(HasNote(r, "the write of SMPC_SF here is missing", true));
     {
@@ -1607,7 +1689,12 @@ void TestHardwareVolatility()
     r = run("two tests of the mailbox, two removed blocks, the second with a live flow predecessor", twoCuts);
     CHECK(Ledger(r, {}));
     CHECK(SaidMissing(r, 0x0600A71Au) && SaidMissing(r, 0x0600A722u) && !r.prototype.known);
-    CHECK(r.removedInsns.size() == 8);   // both blocks, by their own warnings
+    {
+        // Both blocks' accesses went with them, each recorded as removed with unreachable code.
+        int unreachable = 0;
+        for (const AccessFate& f : r.accessFates) unreachable += f.fate == AccessFate::Unreachable;
+        CHECK(unreachable >= 2);
+    }
     r = run("a jump through a pointer kept in RAM", jmpPointer);
     CHECK(Has(r.prototypeWithheld, "indirect call"));
     {
@@ -1644,6 +1731,7 @@ void TestHardwareVolatility()
     // With only the table load in the block, the guard is still folded into the switch's default.
     r = run("switch: the control, folded", switchFold);
     CHECK(Ledger(r, { Rd(0, 4) }));
+    CHECK(FateAt(r, AccessFate::SwitchLookup, 0x0600A38Cu, false) == 1);   // the table's read, which the switch stands for
     CHECK(Has(r.Text(), "default:") && !Has(r.Text(), "if ("));
     // A guard on one read does not bound a switch on a second read of the same pointer: both reads
     // stay, the guard is an if, and the table (unbounded now) is not recovered, so nothing is lent.
@@ -1989,6 +2077,13 @@ void TestGameCode()
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
     int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0, outOfOrder = 0, folded = 0, dropped = 0,
         noReference = 0, droppedSaid = 0;
+    // The conservation law over the corpus: the engine's records by fate, and the reference run's
+    // accesses by how the shown output accounts for them.
+    int fateCount[4] = { 0, 0, 0, 0 };
+    int accountCount[4] = { 0, 0, 0, 0 };   // Printed, Folded, Removed, Dropped
+    int foldedLookup = 0, removedOrdinary = 0;
+    int deadPointerReads = 0, deadHardwareReads = 0, deadConstantReads = 0, deadWrites = 0;
+    const std::function<bool(uint32_t)> noneMarked = [](uint32_t) { return false; };
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
@@ -2053,8 +2148,27 @@ void TestGameCode()
                                     r.accesses[i].insn, r.accesses[j].insn, entry);
                 }
         }
-        // Every memory instruction the flow reaches has an access, unless it is ordinary memory at a
-        // constant address: the reference run (every address volatile) lists them all.
+        // Every memory instruction the flow reaches is accounted for exactly once: the reference run
+        // (every address volatile) lists them all, and each is printed, folded into ordinary
+        // memory, the read of a switch's table, or removed with unreachable code that the output
+        // says (AccountFor). A dead or unrecorded one is dropped.
+        for (const AccessFate& f : r.accessFates)
+        {
+            ++fateCount[int(f.fate)];
+            // What ended dead is no access the output lost when the reference run lists nothing there
+            // (both runs drop it alike). Counted for the record: a read through a pointer may be a
+            // register's; one at a constant address of hardware or marked memory would be a real loss.
+            if (f.fate == AccessFate::Dead && !f.write)
+            {
+                if (!f.constantAddress) ++deadPointerReads;
+                else if (InHardwareRange(f.address)) ++deadHardwareReads;
+                else ++deadConstantReads;
+            }
+            if (f.fate == AccessFate::Dead && f.write) ++deadWrites;
+            if (std::getenv("SE_GAME_FATES") && f.fate != AccessFate::FoldedOrdinary)
+                std::printf("  fate %d: %s of %u bytes at %08X (%s%08X) in %08X\n", int(f.fate), f.write ? "write" : "read",
+                            unsigned(f.size), f.insn, f.constantAddress ? "" : "through a pointer; ", f.address, entry);
+        }
         {
             DecompileRequest ref = Request(entry);
             ref.allMemoryVolatile = true;
@@ -2063,18 +2177,34 @@ void TestGameCode()
             else
                 for (const MemoryAccess& m : rr.accesses)
                 {
-                    if (m.direct && !InHardwareRange(m.address)) continue;   // ordinary memory: folds, or goes with removed code
-                    const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), m.insn);
-                    if (!removed && m.pointerFromOrdinaryMemory) continue;   // reached: the pointer folded (as ReferenceOk)
-                    bool found = false;
-                    for (const MemoryAccess& x : r.accesses)
-                        if (x.insn == m.insn && x.write == m.write && x.size == m.size) found = true;
-                    if (found) continue;
-                    if (removed && SaidMissing(r, m.insn)) ++droppedSaid;   // removed as unreachable, and the output says so
-                    else if (++dropped <= 10)
-                        std::printf("  the %s of %u bytes at %08X (%s%08X) has no access in %08X%s\n", m.write ? "write" : "read",
-                                    unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address, entry,
-                                    removed ? " (removed, not said)" : "");
+                    const Account a = AccountFor(r, m, noneMarked);
+                    ++accountCount[int(a)];
+                    if (a == Account::Printed) continue;
+                    if (a == Account::Folded)
+                    {
+                        // Counted apart: a switch's table lookup is listed by the reference only when the
+                        // shown run recovered the switch and the reference did not.
+                        for (const AccessFate& f : r.accessFates)
+                            if (f.insn == m.insn && f.write == m.write && f.size == m.size && f.fate == AccessFate::SwitchLookup)
+                            {
+                                ++foldedLookup;
+                                break;
+                            }
+                        continue;
+                    }
+                    if (a == Account::Removed)
+                    {
+                        if (OrdinaryDirect(m, noneMarked)) ++removedOrdinary;   // no loss: a variable in removed code
+                        else if (SaidMissing(r, m.insn)) ++droppedSaid;         // removed as unreachable, and the output says so
+                        else if (++dropped <= 10)
+                            std::printf("  the %s of %u bytes at %08X (%s%08X) is removed as unreachable in %08X, and not said\n",
+                                        m.write ? "write" : "read", unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ",
+                                        m.address, entry);
+                        continue;
+                    }
+                    if (++dropped <= 10)
+                        std::printf("  the %s of %u bytes at %08X (%s%08X) is dropped in %08X\n", m.write ? "write" : "read",
+                                    unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address, entry);
                 }
         }
         for (size_t i = 0; i < r.accesses.size(); ++i)
@@ -2133,6 +2263,14 @@ void TestGameCode()
                 "order, %d joined into a switch across a branch\n", moved, shortCircuit, outOfOrder, folded);
     std::printf("  %d accesses dropped against the reference run, %d missing and said (code removed as unreachable); "
                 "%d functions without a reference\n", dropped, droppedSaid, noReference);
+    std::printf("  the engine's records: %d folded into ordinary memory, %d dead, %d unreachable, %d switch lookups\n",
+                fateCount[0], fateCount[1], fateCount[2], fateCount[3]);
+    std::printf("  the reference run's accesses: %d printed, %d folded (%d of them a switch lookup), %d removed (%d of ordinary "
+                "memory, %d said), %d dropped\n", accountCount[int(Account::Printed)], accountCount[int(Account::Folded)],
+                foldedLookup, accountCount[int(Account::Removed)], removedOrdinary, droppedSaid, accountCount[int(Account::Dropped)]);
+    std::printf("  ended dead, with nothing for the reference run to list: %d reads through a pointer, %d reads of constant "
+                "addresses of ordinary memory, %d of hardware, %d writes\n", deadPointerReads, deadConstantReads, deadHardwareReads,
+                deadWrites);
     CHECK(dropped == 0);
     CHECK(noReference == 0);
     CHECK(folded == 0);

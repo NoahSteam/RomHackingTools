@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
+ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  */
 #include "funcdata.hh"
 
@@ -105,12 +106,128 @@ void Funcdata::clear(void)
   vbank.clear();
   clearCallSpecs();
   clearJumpTables();
+  accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
+  flowOps = 0;
   // Do not clear overrides
   heritage.clear();
   covermerge.clear();
 #ifdef OPACTION_DEBUG
   opactdbg_count = 0;
 #endif
+}
+
+/// SaturnExplorer: is the op one of the function's memory accesses? A LOAD or STORE is. So is a
+/// volatile read or write user op, which replaceVolatile makes of a LOAD or STORE at a volatile
+/// address; and so, in the time between RuleLoadVarnode or RuleStoreVarnode and replaceVolatile,
+/// is the COPY of a volatile Varnode they leave. A COPY of anything else is not.
+/// \param op is the given op
+/// \param store is set to \b true if it writes memory
+/// \param size is set to the number of bytes accessed
+/// \param addr is set to the constant address accessed, or an invalid Address if the pointer is not constant
+/// \return \b true if the op is a memory access
+bool Funcdata::isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const
+
+{
+  addr = Address();
+  switch(op->code()) {
+  case CPUI_LOAD:
+    store = false;
+    size = (op->getOut() != (Varnode *)0) ? op->getOut()->getSize() : 0;
+    break;
+  case CPUI_STORE:
+    store = true;
+    size = (op->numInput() > 2 && op->getIn(2) != (Varnode *)0) ? op->getIn(2)->getSize() : 0;
+    break;
+  case CPUI_CALLOTHER:
+    {
+      // An input can be missing: an op in a block being removed has lost those that came from ops
+      // destroyed before it. blockRemoveInternal records its accesses first for that reason.
+      if (op->numInput() < 2 || op->getIn(0) == (Varnode *)0 || !op->getIn(0)->isConstant()) return false;
+      const UserPcodeOp *u = glb->userops.getOp((uint4)op->getIn(0)->getOffset());
+      if (u == (const UserPcodeOp *)0) return false;
+      if (u->getType() == UserPcodeOp::volatile_read) {
+	store = false;
+	size = (op->getOut() != (Varnode *)0) ? op->getOut()->getSize() : 0;
+      }
+      else if (u->getType() == UserPcodeOp::volatile_write) {
+	store = true;
+	size = (op->numInput() > 2 && op->getIn(2) != (Varnode *)0) ? op->getIn(2)->getSize() : 0;
+      }
+      else
+	return false;
+      if (op->getIn(1) != (Varnode *)0)
+	addr = op->getIn(1)->getAddr();
+      return true;
+    }
+  case CPUI_COPY:
+    {
+      const Varnode *vn = (op->numInput() > 0) ? op->getIn(0) : (const Varnode *)0;
+      const Varnode *outvn = op->getOut();
+      if (vn == (const Varnode *)0 || outvn == (const Varnode *)0) return false;
+      if (vn->isVolatile() && !vn->isConstant() && !(vn->isReadOnly() && glb->readonlypropagate)) {
+	store = false;		// A read: the COPY's input is the volatile location
+	size = vn->getSize();
+	addr = vn->getAddr();
+	return true;
+      }
+      if (outvn->isVolatile() && !(outvn->isReadOnly() && glb->readonlypropagate)) {
+	store = true;		// A write: the COPY's output is
+	size = outvn->getSize();
+	addr = outvn->getAddr();
+	return true;
+      }
+      return false;
+    }
+  default:
+    return false;
+  }
+  if (op->numInput() > 1 && op->getIn(0) != (Varnode *)0 && op->getIn(1) != (Varnode *)0 && op->getIn(1)->isConstant())
+    addr = Address(op->getIn(0)->getSpaceFromConst(),op->getIn(1)->getOffset());
+  return true;
+}
+
+/// SaturnExplorer: a host that shows a function's memory accesses accounts for each one the flow
+/// made by this record. It is made before anything is changed, so an allocation failure here
+/// leaves the op as it was.
+/// \param op is the memory access, still whole
+/// \param store is \b true if it writes memory
+/// \param size is the number of bytes accessed
+/// \param addr is the constant address accessed, or an invalid Address
+/// \param fate is how it ended
+void Funcdata::recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate)
+
+{
+  // Only the flow's accesses are accounted for. A user op for a volatile access is made by
+  // replaceVolatile, after the flow, from a LOAD or STORE (or the COPY it became) that was the flow's.
+  // Loads and stores that rules and actions make (a call's stack parameters, say) are not the code's.
+  if (op->code() != CPUI_CALLOTHER && op->getTime() >= flowOps)
+    return;
+  AccessRecord rec;
+  rec.time = op->getTime();
+  rec.pc = op->getAddr();
+  rec.addr = addr;
+  rec.store = store;
+  rec.size = size;
+  rec.fate = fate;
+  accessFates.push_back(rec);
+}
+
+/// SaturnExplorer: RuleLoadVarnode and RuleStoreVarnode turn a LOAD or STORE at a constant address
+/// into a COPY of the Varnode there. If that memory is volatile the COPY is replaced later by a user
+/// op (replaceVolatile), which is a real access and stays in the p-code, so nothing is recorded.
+/// Otherwise the access is now an ordinary variable that data-flow may forward or remove.
+/// \param op is the LOAD or STORE, not yet changed
+/// \param vn is the Varnode at the address accessed
+void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
+
+{
+  if (vn->isVolatile() && !(vn->isReadOnly() && glb->readonlypropagate))
+    return;
+  bool store;
+  int4 size;
+  Address addr;
+  if (!isMemoryAccess(op,store,size,addr)) return;
+  recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
 }
 
 /// The comment is added to the global database, indexed via its placement address and

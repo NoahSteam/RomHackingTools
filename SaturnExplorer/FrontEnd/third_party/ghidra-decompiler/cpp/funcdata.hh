@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -37,6 +39,28 @@ extern ElementId ELEM_FUNCTION;		///< Marshaling element \<function>
 extern ElementId ELEM_HIGHLIST;		///< Marshaling element \<highlist>
 extern ElementId ELEM_JUMPTABLELIST;	///< Marshaling element \<jumptablelist>
 extern ElementId ELEM_VARNODES;		///< Marshaling element \<varnodes>
+
+/// \brief How a memory access the flow made ended (SaturnExplorer)
+///
+/// A host that shows a function's memory accesses must be able to account for every one the flow
+/// made: it is still in the p-code (a LOAD, a STORE, or the user op that models a volatile read or
+/// write), or it ended in one of these ways. Funcdata records each access that stops being one.
+enum AccessFate {
+  fate_folded_ordinary,		///< Made a direct read or write (a COPY) of ordinary memory: a variable, not a volatile location
+  fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
+  fate_unreachable,		///< Destroyed with the unreachable block it was in
+  fate_switch_lookup		///< The read of a recovered switch's table: the switch stands for it
+};
+
+/// \brief One memory access of the flow and how it ended (SaturnExplorer)
+struct AccessRecord {
+  uintm time;			///< PcodeOp::getTime(): the op's identity when it ended (for a LOAD or STORE, the flow's)
+  Address pc;			///< The address of the instruction the op belongs to
+  Address addr;			///< The constant address accessed, or an invalid Address if the pointer was not constant
+  bool store;			///< \b true for a write, \b false for a read
+  int4 size;			///< Number of bytes accessed
+  AccessFate fate;		///< How it ended
+};
 
 /// \brief Container for data structures associated with a single function
 ///
@@ -88,6 +112,9 @@ class Funcdata {
 
   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
+  vector<AccessRecord> accessFates;	///< How each LOAD and STORE that ended did (SaturnExplorer); cleared with the function
+  uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
+  bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
 
   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
@@ -170,6 +197,10 @@ public:
   bool isDoublePrecisOn(void) const { return ((flags & double_precis_on)!=0); }	///< Is double precision analysis enabled
   bool hasNoStructBlocks(void) const { return (sblocks.getSize() == 0); }	///< Return \b true if no block structuring was performed
   void clear(void);						///< Clear out old disassembly
+  bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
+  void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
+  void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
+  const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
   void startProcessing(void);					///< Start processing for this function

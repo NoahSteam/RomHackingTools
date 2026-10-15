@@ -1025,11 +1025,16 @@ void Check(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const 
 
             std::string provenance;
             for (const std::string& f : from) provenance += (provenance.empty() ? "" : "+") + f;
-            const bool removed = std::binary_search(r.removedInsns.begin(), r.removedInsns.end(), insn);
-            add(std::string("dropped:") + (write ? "W" : "R") + std::to_string(size) + ":" + provenance + (removed ? ":removed-unsaid" : ""),
+            // How the engine says the access ended (patch 0017's record), for the finding's label.
+            std::string fate;
+            for (const AccessFate& f : r.accessFates)
+                if (f.insn == insn && f.write == write && f.size == size)
+                    fate = f.fate == AccessFate::Unreachable ? "removed-unsaid" : f.fate == AccessFate::Dead ? "dead" :
+                           f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup";
+            add(std::string("dropped:") + (write ? "W" : "R") + std::to_string(size) + ":" + provenance + (fate.empty() ? "" : ":" + fate),
                 std::string("the ") + (write ? "write" : "read") + " of " + std::to_string(size) + " byte(s) at " + Hex(insn) + " (" +
                     Hex(addrs[0]) + (addrs.size() > 1 ? ", ..." : "") + "; " + provenance + ") has no access in the output" +
-                    (removed ? "; its code was removed and the output does not say so" : ""));
+                    (fate.empty() ? std::string("; the engine has no record of it") : "; the engine's record says: " + fate));
         }
         for (const MemoryAccess& m : r.accesses)
         {
@@ -1069,10 +1074,13 @@ void Check(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const 
           << r.elapsedMs << " ms\n";
         for (const std::string& w : r.warnings) o << "  warning: " << w << "\n";
         for (const HardwareNote& n : r.hardwareNotes) o << "  note " << Hex(n.address) << (n.caution ? " (caution)" : "") << ": " << n.text << "\n";
-        if (!r.removedInsns.empty())
+        if (!r.accessFates.empty())
         {
-            o << "  removed:";
-            for (uint32_t x : r.removedInsns) o << " " << Hex(x);
+            o << "  fates:";
+            for (const AccessFate& f : r.accessFates)
+                o << " " << Hex(f.insn) << (f.write ? "W" : "R") << int(f.size) << "="
+                  << (f.fate == AccessFate::Unreachable ? "unreachable" : f.fate == AccessFate::Dead ? "dead" :
+                      f.fate == AccessFate::FoldedOrdinary ? "folded" : "switch-lookup");
             o << "\n";
         }
         o << "  ledger:\n";

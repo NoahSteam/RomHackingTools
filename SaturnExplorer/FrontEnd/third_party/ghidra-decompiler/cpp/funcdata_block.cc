@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -315,6 +316,18 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
   }
   bblocks.removeFromFlow(bb);
 
+  // SaturnExplorer: the memory accesses removed with an unreachable block are recorded as such,
+  // whether or not a warning is issued (the flow's own silent removal comes through here as well).
+  // All of them first: destroying an op unsets the inputs of the ops that read its output, and a
+  // STORE would no longer know its width. (A do-nothing block holds no access, only MULTIEQUALs.)
+  for(iter=bb->beginOp();iter!=bb->endOp();++iter) {
+    bool isstore;
+    int4 accsize;
+    Address accaddr;
+    if (isMemoryAccess(*iter,isstore,accsize,accaddr))
+      recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
+  }
+  accessesRecorded = true;
   desc_warning = false;
   iter = bb->beginOp();
   while(iter!=bb->endOp()) {	// Finally remove all the ops
@@ -336,6 +349,7 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
     iter++;			// Increment iterator before unlinking
     opDestroy(op);		// No longer has descendants
   }
+  accessesRecorded = false;
   bblocks.removeBlock(bb);	// Remove the block altogether
 }
 
