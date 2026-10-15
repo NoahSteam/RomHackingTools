@@ -1316,6 +1316,11 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         a.inLoop = o->getParent() && inLoop(o->getParent());
         a.returned = !a.write && returnedVns.count(value) != 0;
         auto p = printed.find(o);
+        // A read in array form (p[i]) prints no token of its own: the index expression's op prints
+        // the brackets. Its lines are then the pointer expression's.
+        if (p == printed.end() && !a.write && o->code() == ghidra::CPUI_LOAD && o->getIn(1)->isWritten() &&
+            o->getIn(1)->isImplied())
+            p = printed.find(o->getIn(1)->getDef());
         if (p != printed.end())
         {
             a.printedLines = static_cast<int>(p->second.first.size());
@@ -1333,6 +1338,8 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
                 if (!use) break;
                 if ((use->code() == ghidra::CPUI_BOOL_AND || use->code() == ghidra::CPUI_BOOL_OR) && use->getSlot(v) == 1)
                     a.conditionalInPrint = true;
+                // ...or printed in another block, which runs only on the paths that reach it.
+                if (use->getParent() != o->getParent()) a.conditionalInPrint = true;
                 at = use;
                 a.through.push_back(static_cast<uint32_t>(use->getTime()) + 1);
                 v = use->getOut();

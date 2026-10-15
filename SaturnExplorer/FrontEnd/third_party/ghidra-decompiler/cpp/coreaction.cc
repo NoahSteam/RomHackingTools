@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+ * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -3572,6 +3573,10 @@ bool ActionMarkImplied::checkImpliedCover(Funcdata &data,Varnode *vn)
       // The right operand of && and || is printed as evaluated only when the left one does not
       // decide: a load there would appear conditional though the code always makes it.
       if ((use->code() == CPUI_BOOL_AND || use->code() == CPUI_BOOL_OR) && use->getSlot(cur) == 1)
+	return false;
+      // Printed in another block, the load would appear to happen only when that block does: a
+      // read before a branch, used on one side of it, would print inside that side.
+      if (use->getParent() != op->getParent())
 	return false;
       Varnode *out = use->getOut();
       if (out == (Varnode *)0 || !out->isImplied() || out->isExplicit()) break;

@@ -16,6 +16,11 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
   sources; listed below.
 - **The audit catches errors.** Putting the old SCSP_MVOL (read/write) and a planted SCU_IMS
   (read/write) back into a copy of the table makes the script report both.
+- **Re-run for the review at `5670323`** against the same beetle-saturn sources (`mednafen/ss`,
+  with its `.c` files given the `.cpp` names the script expects): the same 22 differences, all
+  listed here, and nothing new. Re-read by hand from the handlers: the mirror periods (VDP2
+  `A & 0x1FE`, SCU `A & 0xFC`, SMPC `(A & 0x7F) >> 1`), `SCU_IST` reading the pending set, and
+  `SCU_PDD` advancing the DSP's address on a read while the DSP is stopped.
 
 ## Disagreements
 

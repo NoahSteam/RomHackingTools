@@ -909,3 +909,72 @@ the argument `*p - *p`) and the game-code order checks report 1,656 and 1,283.
 - **The earlier review of `f212a8d`** reported the two ordering failures that `47ae113` already
   fixes.
 
+
+### Review of `5670323`: a load's place in the output
+
+The external review of `5670323` listed areas rather than findings, so this round is an
+adversarial pass of our own over the engine paths that print or move a load, with a fixture for
+each shape. Two more shapes were found, both in the class the earlier rounds describe: a read
+that is printed somewhere other than where the code makes it. Both are fixed by patch 0012, under
+the `loadsNotDuplicated` policy, and the ledger now rejects both classes rather than the shapes.
+
+- **P1: for-loop recovery moved a read past another read.** `BlockWhileDo::finalTransform`
+  moves the statement that steps the loop variable, and the one that initialises it, to the end
+  of their blocks so that they can print in the `for` header. `PcodeOp::isMoveable` already
+  refused to move a load past a store, a user op or a call, but let it cross another load. For
+  `body: mov.l @r4,r4; mov.l @r5,r1` (p = *p, then x = *q) the output was
+  `for (; p != 0; p = *p) { x = *q; }`: C runs the step after the body, so the two reads are in
+  the other order. The initialiser move did the same to a read before the loop. Through two FIFO
+  or mailbox pointers that is a different program. A load now cannot cross a load; such a loop
+  prints as `while` with both reads in place, and a loop whose step is already its body's last
+  statement still prints as a `for`.
+- **P1: a read printed inside one side of a branch.** An implied expression prints where its
+  value is used, which the engine allows to be a later block. `mov.l @r4,r1; tst r5,r5; bt L`,
+  with r1 used only at L, printed `if (param_2 == 0) { return *param_1; } return 0;`: the read
+  the code always makes appears made on one path. The same with the read in the branch's delay
+  slot. `checkImpliedCover` now keeps a load explicit when any use in its implied chain is in
+  another block. In the game's work RAM this hoisted 16 reads out of a `&&` clause (one of them a
+  sound RAM read, `*(Ram25a00414 + 0x25a00060)`, that had looked conditional on a RAM flag) or a
+  call argument into the block where they happen; every other output is unchanged.
+- **Why the ledger accepted both.** It compared printed lines with instruction order, which the
+  `for` header defeats (the step prints above the body and runs after it), and it skipped a read
+  whose statement is in another block instead of calling it conditional.
+  - `MovedInBlock`: two accesses through pointers in one block must be in the order their ops
+    were created, since a block is one straight run of instructions (or runs the engine joined),
+    and nothing but a move changes that. Register accesses are user ops the engine made later,
+    so they are not compared; they are never moved (`isMoveable` refuses user ops).
+  - `conditionalInPrint` is also set for a read whose statement is in another block than the
+    read.
+  - A read printed in array form (`p[1]`) has no token of its own: the index expression prints
+    the brackets. Its lines are now the pointer expression's, so the line checks see it.
+  - `TestGameCode` counts both: 0 and 0 on both save states.
+- **Other shapes tried, each now a fixture, none defective:** `tas.b` on a register (one read
+  then one write, both kept), a GBR-relative read, a read in a return's delay slot, one byte of a
+  4-byte read and a 4-byte read stored as a byte (the read keeps its width), two stores through
+  one pointer (both kept), a compound assignment through pointers, two reads as a call's
+  arguments, and nested booleans (`!(a && *p)`, `a && (b && *p)`: the read stays before the
+  expression). The other op movers in the engine were read: `ConditionalExecution` refuses loads,
+  stores and calls; `moveRespectingCover` crosses only COPY and CAST; the rest re-insert a
+  converted MULTIEQUAL or INDIRECT at the same logical place.
+- **Register map.** `tools/audit_hardware_map.py` re-run against beetle-saturn's `mednafen/ss`
+  (upstream Mednafen's tarball is not reachable from the build host): the same 22 recorded
+  differences, nothing new. Re-read by hand: the mirror periods (VDP2 `A & 0x1FE`, SCU `A & 0xFC`,
+  SMPC `(A & 0x7F) >> 1`), `SCU_IST` returning the pending set, `SCU_PPAF` clearing V, E and the
+  DSP interrupt on a read, and `SCU_PDD` advancing the DSP address on a read while it is stopped.
+
+Mutation, each rebuilt and run: without the `isMoveable` rule the two for-loop fixtures fail
+(`06009F84 was moved after 06009F86 in block 2`); without the cross-block rule the two
+branch fixtures fail (the read's statement is in block 1, and the ledger calls it conditional).
+
+Matrix, rerun whole:
+
+| Check | Result |
+|---|---|
+| Fixtures (`Sh2DecompilerTests`, 13 new) and the whole suite | 91 of 91 tests pass. |
+| Range model | 0 disagreements (unchanged). |
+| Game code, two save states (839 and 1,554 prologues) | 839/839 and 1,554/1,554 decompile; 0 of every ledger count: duplicated, wrong width, two reads in a statement, printed past another access, conditional, moved within a block. 16 outputs differ from `5670323`, all the hoisted reads above. |
+| Against `c4927c1` on the same images | 223 of 839 and 476 of 1,554 outputs differ (the earlier rounds' changes plus these 16; sampled: reads into variables, named registers, polls reading into a variable). Time 4,934 -> 4,895 ms and 15,618 -> 17,195 ms (about -1% and +10%); the worst function 2.5 s either way. |
+| Sanitizers | gcc ASan + UBSan (vptr included) builds of `Sh2DecompilerTests` (game code included), `DecompilerPanelTests`, `DecompilerRunnerTests`, `Sh2DecompilerEngineTests` and `Sh2DecompilerFixtureTests`: no ASan error; UBSan reports only the two upstream SLEIGH shift sites (`address.hh:605`, `slghpatexpress.cc:979`), as before. The clang runtime is not installed on this host, so clang was not used. |
+
+Unverified: switch selectors read from memory, MSVC and macOS builds, LeakSanitizer, and the
+string and pointer-inference positive controls from the consolidated round.

@@ -202,7 +202,8 @@ struct MemoryAccess
     uint32_t id = 0;                // this access's op, as numbered in 'through'
     std::vector<uint32_t> through;  // the ops its implied value passes through to that statement
     // Printed in the right operand of && or ||, so shown as made only when the left operand does
-    // not decide -- though the instruction always makes it.
+    // not decide, or printed in a block other than the one it happens in, so shown as made only
+    // on the paths reaching that block -- though the instruction always makes it.
     bool conditionalInPrint = false;
     // Where it happens and where it is printed, as block index and order within the block.
     int block = -1, statementBlock = -1;

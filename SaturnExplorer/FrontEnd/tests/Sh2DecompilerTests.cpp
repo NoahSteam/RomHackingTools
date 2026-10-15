@@ -453,6 +453,17 @@ bool Unordered(const MemoryAccess& a, const MemoryAccess& b)
     return !feeds(a, b) && !feeds(b, a);
 }
 
+// Two accesses in one block, the second made after the first but placed before it. The accesses
+// through pointers are the LOAD and STORE ops the code was translated into, created in the order
+// they are made (a block is one straight run of instructions, or runs the engine joined end to
+// end); a volatile register access is an op the engine made later, so only those two kinds are
+// compared, and only with each other. Ops stay where they are made unless the engine moves one.
+bool MovedInBlock(const MemoryAccess& a, const MemoryAccess& b)
+{
+    if (a.direct || b.direct || a.block < 0 || a.block != b.block) return false;
+    return (a.id < b.id) != (a.order < b.order);
+}
+
 struct Op
 {
     bool write;
@@ -467,7 +478,10 @@ Op Wr(uint32_t a, uint8_t size, bool loop = false) { return Op{ true, a, size, l
 bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
 {
     std::vector<MemoryAccess> got = r.accesses;
-    std::stable_sort(got.begin(), got.end(), [](const MemoryAccess& x, const MemoryAccess& y) { return x.insn < y.insn; });
+    // In instruction order; one instruction's own accesses (tas.b reads then writes) in op order.
+    std::stable_sort(got.begin(), got.end(), [](const MemoryAccess& x, const MemoryAccess& y) {
+        return x.insn != y.insn ? x.insn < y.insn : x.order < y.order;
+    });
     bool ok = got.size() == want.size();
     for (size_t i = 0; ok && i < got.size(); ++i)
     {
@@ -477,18 +491,43 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
              g.inLoop == w.loop && g.returned == w.returned && g.printed == 1 && g.printedLines >= 1 && !g.repeatedOnPath &&
              !g.conditionalInPrint;
     }
-    // Printed in the order the code makes them (the fixtures are straight-line code), and no two
-    // reads in one statement: C leaves the order of two reads in one expression open.
+    // Printed in the order the code makes them, and no two reads in one statement: C leaves the
+    // order of two reads in one expression open. Within one block the engine's op order is the
+    // printed order of the statements (a for loop's iterator prints in the header but is the
+    // block's last op, and runs last), so there the accesses must still be in the order they were
+    // made: the engine moved one otherwise (review at 5670323). Across blocks the output lines
+    // decide.
     for (size_t i = 1; ok && i < got.size(); ++i)
     {
         const MemoryAccess& a = got[i - 1];
         const MemoryAccess& b = got[i];
-        if (a.firstLine < 0 || b.firstLine < 0) continue;
-        if (b.firstLine < a.firstLine || Unordered(a, b))
+        if (Unordered(a, b))
+        {
+            std::printf("  ledger: %08X and %08X are read in one statement\n", a.insn, b.insn);
+            ok = false;
+        }
+        else if (MovedInBlock(a, b))
+        {
+            std::printf("  ledger: %08X was moved after %08X in block %d\n", a.insn, b.insn, a.block);
+            ok = false;
+        }
+        else if (a.block != b.block && a.firstLine >= 0 && b.firstLine >= 0 && b.firstLine < a.firstLine)
         {
             std::printf("  ledger: %08X printed on line %d, %08X on line %d\n", a.insn, a.firstLine, b.insn, b.firstLine);
             ok = false;
         }
+    }
+    // A read printed where its value is used, later in its block, must not pass another access.
+    for (const MemoryAccess& m : got)
+    {
+        if (!ok || m.write || m.statement == m.id || m.block < 0 || m.block != m.statementBlock) continue;
+        for (const MemoryAccess& o : got)
+            if (o.id != m.id && o.block == m.block && o.order > m.order && o.order < m.statementOrder &&
+                std::find(m.through.begin(), m.through.end(), o.id) == m.through.end())
+            {
+                std::printf("  ledger: the read at %08X is printed past the access at %08X\n", m.insn, o.insn);
+                ok = false;
+            }
     }
     if (!ok)
     {
@@ -700,6 +739,66 @@ void TestHardwareVolatility()
                                                 0x000B,   // F: rts
                                                 0xE000 }, //    mov #0,r0
                                  0x14, 0 };
+    // For-loop recovery (review at 5670323): the statement that steps the loop variable, and the one
+    // that initialises it, are moved to the end of their blocks so they can print in the for header.
+    // A read moved past another read would read in the other order. First the step is not the
+    // body's last statement; then it is (a genuine for loop); then the initialiser is not last.
+    const Fixture forStep = { 0x06009F80u, { 0xA002,     // bra test
+                                             0x0009,     //   nop
+                                             0x6442,     // body: mov.l @r4,r4   p = *p (steps the loop)
+                                             0x6152,     //       mov.l @r5,r1   x = *q
+                                             0x2448,     // test: tst r4,r4
+                                             0x8BFB,     //       bf body
+                                             0x000B,     // rts
+                                             0x6013 },   //   mov r1,r0        return x
+                              0x10, 0 };
+    const Fixture forStepLast = { 0x06009FC0u, { 0xA002, 0x0009,
+                                                 0x6152,     // body: mov.l @r5,r1   x = *q
+                                                 0x6442,     //       mov.l @r4,r4   p = *p, last
+                                                 0x2448, 0x8BFB, 0x000B, 0x6013 }, 0x10, 0 };
+    // A read made before a branch and used on one side of it (review at 5670323): printed on that
+    // side, it would appear made only there. Once with the read in the branch's delay slot.
+    const Fixture sideRead = { 0x0600A040u, { 0x6142,     // mov.l @r4,r1    the read, always made
+                                              0x2558,     // tst r5,r5
+                                              0x8902,     // bt L
+                                              0xE000,     // mov #0,r0
+                                              0x000B, 0x0009,
+                                              0x6013,     // L: mov r1,r0    the only use
+                                              0x000B, 0x0009, 0x0009 }, 0x14, 0 };
+    const Fixture slotRead = { 0x0600A080u, { 0x2558,     // tst r5,r5
+                                              0x8D03,     // bt/s L
+                                              0x6142,     //   mov.l @r4,r1  in the slot: made either way
+                                              0xE000,     // mov #0,r0
+                                              0x000B, 0x0009,
+                                              0x6013,     // L: mov r1,r0
+                                              0x000B, 0x0009, 0x0009 }, 0x14, 0 };
+    const Fixture forInit = { 0x0600A000u, { 0x6442,     // mov.l @r4,r4   p = *p (initialises the loop)
+                                             0x6152,     // mov.l @r5,r1   x = *q
+                                             0xA001,     // bra test
+                                             0x0009,     //   nop
+                                             0x6442,     // body: mov.l @r4,r4
+                                             0x2448,     // test: tst r4,r4
+                                             0x8BFC,     //       bf body
+                                             0x000B,     // rts
+                                             0x6013 },   //   mov r1,r0
+                              0x14, 0 };
+    // The rest of the instruction forms and expression shapes (review at 5670323): a read-modify-
+    // write in one instruction on a register; a GBR-relative read; a read in a return's delay slot;
+    // a 4-byte read of which one byte is used, and one stored as a byte; two stores through one
+    // pointer; a compound assignment through pointers; two reads as a call's arguments.
+    const Fixture tasReg = simple(0x0600A0C0u, { 0x411B }, 0x20100063u);                 // tas.b @r1
+    const Fixture gbrRead = { 0x0600A100u, { 0xC400, 0x000B, 0x0009, 0x0009 }, 0x08, 0 };  // mov.b @(0,gbr),r0
+    const Fixture rtsSlot = { 0x0600A140u, { 0x000B, 0x6042, 0x0009, 0x0009 }, 0x08, 0 };  // rts; mov.l @r4,r0
+    const Fixture byteOfLong = { 0x0600A180u, { 0x6042, 0x600C, 0x000B, 0x0009 }, 0x08, 0 };    // extu.b of a 4-byte read
+    const Fixture longToByte = { 0x0600A1C0u, { 0x6042, 0x2500, 0x000B, 0x0009 }, 0x08, 0 };    // mov.b r0,@r5 of a 4-byte read
+    const Fixture twoStores = { 0x0600A200u, { 0xE001, 0x2402, 0xE002, 0x2402, 0x000B, 0x0009 }, 0x0C, 0 };   // *p = 1; *p = 2
+    const Fixture compound = { 0x0600A240u, { 0x6042, 0x6152, 0x310C, 0x2512, 0x000B, 0x0009 }, 0x0C, 0 };    // *q += *p
+    const Fixture callArgs = { 0x0600A280u, { 0x6442,     // mov.l @r4,r4
+                                              0x6552,     // mov.l @r5,r5
+                                              0xD102,     // mov.l @(8,pc),r1   -> a BIOS entry: opaque
+                                              0x410B,     // jsr @r1
+                                              0x0009,     //   nop
+                                              0x000B, 0x0009, 0x0009 }, 0x10, 0x00000600u };
     // Analysis data reads: a pointer to a string in captured memory, returned.
     const Fixture strPtr = { 0x06009B00u, { 0xD001, 0x000B, 0x0009, 0x0009 }, 0x08, 0x06009B40u };
     // Diagnostics by direction: the same registers written instead of read, and read instead of written.
@@ -715,7 +814,8 @@ void TestHardwareVolatility()
                               &hwramMirrorMailbox, &shadow, &pdd, &ptrMailbox,
                               &rmw, &reuse, &argTwice, &argUnused, &argEcho, &argRmw,
                               &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice,
-                              &andRead, &orRead, &andByte, &twoBools, &branchRead })
+                              &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
+                              &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1074,6 +1174,41 @@ void TestHardwareVolatility()
     r = run("word store through a byte pointer", wordToBytes);
     CHECK(Ledger(r, { Rd(0, 1, false, true), Wr(0, 2) }));
 
+    // The loop step read before another read stays before it; the genuine for loop still prints
+    // as one; the initialiser read stays before the read after it.
+    r = run("for loop: the step read is not the body's last", forStep);
+    CHECK(Ledger(r, { Rd(0, 4, true), Rd(0, 4, true, true) }));
+    r = run("for loop: the step read is the body's last", forStepLast);
+    CHECK(Ledger(r, { Rd(0, 4, true, true), Rd(0, 4, true) }));
+    CHECK(Has(r.Text(), "for ("));
+    r = run("for loop: the initialiser read is not its block's last", forInit);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4, false, true), Rd(0, 4, true) }));
+    // The read stays in the block it is made in, before the branch, not inside one side of it.
+    r = run("read before a branch, used on one side", sideRead);
+    CHECK(Ledger(r, { Rd(0, 4, false, true) }));
+    CHECK(!r.accesses.empty() && r.accesses[0].block == 0 && r.accesses[0].statementBlock == 0);
+    r = run("read in a conditional branch's delay slot, used on one side", slotRead);
+    CHECK(Ledger(r, { Rd(0, 4, false, true) }));
+    CHECK(!r.accesses.empty() && r.accesses[0].block == 0 && r.accesses[0].statementBlock == 0);
+
+    r = run("tas.b on a register", tasReg);
+    CHECK(Ledger(r, { Rd(0x20100063u, 1), Wr(0x20100063u, 1) }));
+    CHECK(Count(r.Text(), "SMPC_SF") >= 2);
+    r = run("GBR-relative read", gbrRead);
+    CHECK(Ledger(r, { Rd(0, 1, false, true) }));
+    r = run("read in a return's delay slot", rtsSlot);
+    CHECK(Ledger(r, { Rd(0, 4, false, true) }));
+    r = run("one byte of a 4-byte read", byteOfLong);
+    CHECK(Ledger(r, { Rd(0, 4) }));   // the read keeps its width; the narrowing is in the expression
+    r = run("a 4-byte read stored as a byte", longToByte);
+    CHECK(Ledger(r, { Rd(0, 4, false, true), Wr(0, 1) }));
+    r = run("two stores through one pointer", twoStores);
+    CHECK(Ledger(r, { Wr(0, 4), Wr(0, 4) }));
+    r = run("compound assignment through pointers", compound);
+    CHECK(Ledger(r, { Rd(0, 4, false, true), Rd(0, 4), Wr(0, 4) }));
+    r = run("two reads as call arguments", callArgs);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+
     r = run("one read tested on two paths", twoPaths);
     CHECK(Ledger(r, { Rd(0x25F80004u, 2) }));
 
@@ -1395,7 +1530,7 @@ void TestGameCode()
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     int n = 0, ok = 0, failed = 0, other = 0, withAccesses = 0, direct = 0, pointer = 0, twice = 0, notes = 0, cautions = 0;
-    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0;
+    int duplicated = 0, wrongWidth = 0, unordered = 0, moved = 0, shortCircuit = 0, outOfOrder = 0;
     double total = 0, worst = 0;
     uint32_t worstAt = 0;
     for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
@@ -1447,6 +1582,12 @@ void TestGameCode()
         for (const MemoryAccess& m : r.accesses)
             if (m.conditionalInPrint && ++shortCircuit <= 10)
                 std::printf("  read at %08X printed in the right operand of && or || in %08X\n", m.insn, entry);
+        // An access the engine moved past another in its block (MovedInBlock).
+        for (size_t i = 0; i < r.accesses.size(); ++i)
+            for (size_t j = i + 1; j < r.accesses.size(); ++j)
+                if (MovedInBlock(r.accesses[i], r.accesses[j]) && ++outOfOrder <= 10)
+                    std::printf("  accesses at %08X and %08X are out of order in block %d in %08X\n", r.accesses[i].insn,
+                                r.accesses[j].insn, r.accesses[i].block, entry);
         for (size_t i = 0; i < r.accesses.size(); ++i)
             for (size_t j = i + 1; j < r.accesses.size(); ++j)
                 if (Unordered(r.accesses[i], r.accesses[j]) && ++unordered <= 10)
@@ -1499,7 +1640,9 @@ void TestGameCode()
                 "exactly once; notes %d, cautions %d\n", withAccesses, direct, pointer, twice, notes, cautions);
     std::printf("  %d instructions with more accesses than they make, %d accesses of another width, %d statements "
                 "with two reads\n", duplicated, wrongWidth, unordered);
-    std::printf("  %d reads printed past another access, %d printed as conditional\n", moved, shortCircuit);
+    std::printf("  %d reads printed past another access, %d printed as conditional, %d moved within a block\n", moved,
+                shortCircuit, outOfOrder);
+    CHECK(outOfOrder == 0);
     CHECK(shortCircuit == 0);
     CHECK(unordered == 0);
     CHECK(moved == 0);

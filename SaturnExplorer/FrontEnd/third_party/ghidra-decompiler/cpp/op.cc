@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -210,6 +212,10 @@ bool PcodeOp::isMoveable(const PcodeOp *point) const
       return false;	// Don't move special ops
   }
   if (parent != point->parent) return false;	// Not in the same block
+  // SaturnExplorer: a load is read where the code reads it. For-loop recovery moves the iterator
+  // and initializer statements to the end of their blocks; a load moved past another load (the
+  // only other memory operation this allows it to cross) would read in the other order.
+  bool loadsKeepOrder = movingLoad && parent->getFuncdata()->getArch()->loadsNotDuplicated;
   if (output != (Varnode *)0) {
     // Output cannot be moved past an op that reads it
     list<PcodeOp *>::const_iterator iter = output->beginDescend();
@@ -250,6 +256,7 @@ bool PcodeOp::isMoveable(const PcodeOp *point) const
     if (op->getEvalType() == PcodeOp::special) {
       switch (op->code()) {
 	case CPUI_LOAD:
+	  if (loadsKeepOrder) return false;
 	  if (output != (Varnode *)0) {
 	    if (output->isAddrTied()) return false;
 	  }
