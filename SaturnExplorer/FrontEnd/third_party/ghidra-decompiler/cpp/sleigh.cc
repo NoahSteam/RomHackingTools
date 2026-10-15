@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
  * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
+ * Modified for SaturnExplorer: a parse-tree cache that fails to initialise frees what it made (patches/0023-allocation-failure-order.patch).
  */
 #include "sleigh.hh"
 #include "loadimage.hh"
@@ -451,13 +452,26 @@ void DisassemblyCache::initialize(int4 min,int4 hashsize)
   uintb masktest = coveringmask((uintb)mask);
   if (masktest != (uintb)mask)	// -hashsize- must be a power of 2
     throw LowlevelError("Bad windowsize for disassembly cache");
-  list = new ParserContext *[minimumreuse];
+  // SaturnExplorer: the constructor that calls this never completes if it throws, so its
+  // destructor (free) does not run: whatever was made so far is freed here.
+  list = new ParserContext *[minimumreuse]();
   nextfree = 0;
-  hashtable = new ParserContext *[hashsize];
-  for(int4 i=0;i<minimumreuse;++i) {
+  hashtable = (ParserContext **)0;
+  try {
+    hashtable = new ParserContext *[hashsize];
+    for(int4 i=0;i<minimumreuse;++i) {
 	ParserContext *pos = new ParserContext(contextcache,translate);
 	list[i] = pos;
 	pos->initialize(constspace);
+    }
+  } catch(...) {
+    for(int4 i=0;i<minimumreuse;++i)
+      delete list[i];
+    delete [] list;
+    list = (ParserContext **)0;
+    delete [] hashtable;
+    hashtable = (ParserContext **)0;
+    throw;
   }
   ParserContext *pos = list[0];
   for(int4 i=0;i<hashsize;++i)

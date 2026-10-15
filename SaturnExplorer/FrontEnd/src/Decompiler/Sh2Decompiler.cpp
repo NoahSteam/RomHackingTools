@@ -1929,6 +1929,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
+        errors.exceptions(std::ios::badbit);   // an allocation failure must not just cut the text short
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, request.maxInstructions, cancel, errors);
         // Declared after the Architecture so it is destroyed first: Teardown is reported as the
         // pass's Architecture starts to go, whichever way the pass ends.
@@ -2128,7 +2129,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     (*targets)[c].insert(static_cast<uint32_t>(t));
             }
         }
-        if (!print) return std::string();
+        if (!print)
+        {
+            // The pass boundary: a cancel raised in the tail of these actions is honoured here, in
+            // Actions, not carried through the next pass's Init (Architecture construction has no
+            // check-point of its own) into its Flow.
+            checkCancel();
+            return std::string();
+        }
 
         checkCancel();
         Enter(DecompilePhase::Print);
@@ -2324,12 +2332,16 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
 
         std::ostringstream markup;
+        markup.exceptions(std::ios::badbit);   // a std::bad_alloc inside an insertion is rethrown, not swallowed
         arch->print->setOutputStream(&markup);
         arch->print->setMarkup(true);
         arch->print->setPackedOutput(true);
         arch->print->docFunction(fd);
         arch->print->setMarkup(false);
         std::map<const ghidra::PcodeOp*, std::pair<std::set<size_t>, int>> printed;
+        // Never read the text of a stream that failed: with the exception mask above nothing
+        // reaches here with badbit set, and this says so if that ever stops being true.
+        if (markup.bad()) throw std::bad_alloc();
         r.lines = LinesFromMarkup(markup.str(), *fd, arch.get(), &printed);
         r.accesses = Accesses(*fd, printed, canonicalOf, flow);
         // How each flow access that is no longer a LOAD or STORE ended (patch 0017). The engine
@@ -2360,6 +2372,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         }
         r.calls = Calls(*fd, flow, canonicalOf);
         r.flowSuccessors = flow.successors;
+        if (errors.bad()) throw std::bad_alloc();
         const std::string e = errors.str();
         if (!e.empty()) r.warnings.push_back(e);
         return std::string("ok");
@@ -2412,6 +2425,7 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
     try
     {
         std::ostringstream errors;
+        errors.exceptions(std::ios::badbit);
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, 20000, nullptr, errors);
         ghidra::Address a(arch->getDefaultCodeSpace(), address);
         for (int i = 0; i < count; ++i)

@@ -13,6 +13,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the blocks of a collapsed set change owner only after every allocation of the move has succeeded, and a block under construction is owned until it is attached (patches/0023-allocation-failure-order.patch).
  */
 #include "block.hh"
 #include "funcdata.hh"
@@ -954,6 +956,11 @@ void BlockGraph::identifyInternal(BlockGraph *ident,const vector<FlowBlock *> &n
 
 {
   vector<FlowBlock *>::const_iterator iter;
+  // SaturnExplorer: the only allocation of the move is the room in the new block's list, and it is
+  // made before any block changes hands. addBlock cannot then throw half way, which left blocks in
+  // both lists (the new block's and this one's) and freed them twice when the new block was
+  // destroyed by the unwinding. Our own list is compacted in place, not rebuilt.
+  ident->list.reserve(ident->list.size() + nodes.size());
   for(iter=nodes.begin();iter!=nodes.end();++iter) {
 #ifdef BLOCKCONSISTENT_DEBUG
     if ((*iter)->parent != this)
@@ -963,14 +970,15 @@ void BlockGraph::identifyInternal(BlockGraph *ident,const vector<FlowBlock *> &n
     ident->addBlock(*iter);	// Maintain order of blocks
     ident->flags |= ((*iter)->flags & (f_interior_gotoout | f_interior_gotoin));
   }
-  vector<FlowBlock *> newlist;
-  for(iter=list.begin();iter!=list.end();++iter) { // Remove -nodes- from our list
-    if (!(*iter)->isMark())
-      newlist.push_back(*iter);
+  size_t kept = 0;
+  for(size_t i=0;i<list.size();++i) { // Remove -nodes- from our list
+    FlowBlock *bl = list[i];
+    if (!bl->isMark())
+      list[kept++] = bl;
     else
-      (*iter)->clearMark();
+      bl->clearMark();
   }
-  list = newlist;
+  list.erase(list.begin()+kept,list.end());
 
   ident->selfIdentify();
 }
@@ -1686,7 +1694,8 @@ BlockBasic *BlockGraph::newBlockBasic(Funcdata *fd)
 BlockCopy *BlockGraph::newBlockCopy(FlowBlock *bl)
 
 {
-  BlockCopy *ret = new BlockCopy(bl);
+  unique_ptr<BlockCopy> uret( new BlockCopy(bl) );	// SaturnExplorer: owned until attached
+  BlockCopy *ret = uret.get();
   ret->intothis = bl->intothis;
   ret->outofthis = bl->outofthis;
   ret->immed_dom = bl->immed_dom;
@@ -1698,6 +1707,7 @@ BlockCopy *BlockGraph::newBlockCopy(FlowBlock *bl)
   if (ret->outofthis.size() > 2)
     ret->flags |= f_switch_out;	// Make sure switch is marked (even if not produced by INDIRECT) as it is needed for structuring
   addBlock(ret);
+  uret.release();
   return ret;
 }
 
@@ -1707,10 +1717,11 @@ BlockCopy *BlockGraph::newBlockCopy(FlowBlock *bl)
 BlockGoto *BlockGraph::newBlockGoto(FlowBlock *bl)
 
 {
-  BlockGoto *ret = new BlockGoto(bl->getOut(0));
+  unique_ptr<BlockGoto> uret( new BlockGoto(bl->getOut(0)) );
   vector<FlowBlock *> nodes;
   nodes.push_back(bl);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockGoto *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(1);
   removeEdge(ret,ret->getOut(0));	// Treat out edge as if it didn't exist
@@ -1736,11 +1747,12 @@ BlockMultiGoto *BlockGraph::newBlockMultiGoto(FlowBlock *bl,int4 outedge)
       ret->setDefaultGoto();
   }
   else {
-    ret = new BlockMultiGoto(bl);
+    unique_ptr<BlockMultiGoto> uret( new BlockMultiGoto(bl) );
     int4 origSizeOut = bl->sizeOut();
     vector<FlowBlock *> nodes;
     nodes.push_back(bl);
-    identifyInternal(ret,nodes);
+    identifyInternal(uret.get(),nodes);
+    ret = uret.release();
     addBlock(ret);
     ret->addEdge(targetbl);
     if (targetbl != bl)	{
@@ -1767,8 +1779,9 @@ BlockList *BlockGraph::newBlockList(const vector<FlowBlock *> &nodes)
   int4 outforce = nodes.back()->sizeOut();
   if (outforce==2)
     out0 = nodes.back()->getOut(0);
-  BlockList *ret = new BlockList();
-  identifyInternal(ret,nodes);
+  unique_ptr<BlockList> uret( new BlockList() );
+  identifyInternal(uret.get(),nodes);
+  BlockList *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(outforce);
   if (ret->sizeOut()==2)
@@ -1788,10 +1801,11 @@ BlockCondition *BlockGraph::newBlockCondition(FlowBlock *b1,FlowBlock *b2)
   const FlowBlock *out0 = b2->getOut(0);
   vector<FlowBlock *> nodes;
   OpCode opc = (b1->getFalseOut() == b2) ? CPUI_INT_OR : CPUI_INT_AND;
-  BlockCondition *ret = new BlockCondition(opc);
+  unique_ptr<BlockCondition> uret( new BlockCondition(opc) );
   nodes.push_back(b1);
   nodes.push_back(b2);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockCondition *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(2);	// All conditions must have two outputs
   ret->forceFalseEdge(out0);	// Preserve the condition
@@ -1809,9 +1823,10 @@ BlockIfGoto *BlockGraph::newBlockIfGoto(FlowBlock *cond)
 
   const FlowBlock *out0 = cond->getOut(0);
   vector<FlowBlock *> nodes;
-  BlockIfGoto *ret = new BlockIfGoto(cond->getOut(1));	// Goto block with specific target
+  unique_ptr<BlockIfGoto> uret( new BlockIfGoto(cond->getOut(1)) );	// Goto block with specific target
   nodes.push_back(cond);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockIfGoto *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(2);
   ret->forceFalseEdge(out0);		// Preserve the condition
@@ -1827,10 +1842,11 @@ BlockIf *BlockGraph::newBlockIf(FlowBlock *cond,FlowBlock *tc)
 
 {
   vector<FlowBlock *> nodes;
-  BlockIf *ret = new BlockIf();
+  unique_ptr<BlockIf> uret( new BlockIf() );
   nodes.push_back(cond);
   nodes.push_back(tc);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockIf *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(1);
   return ret;
@@ -1845,11 +1861,12 @@ BlockIfElse *BlockGraph::newBlockIfElse(FlowBlock *cond,FlowBlock *tc,FlowBlock 
 
 {
   vector<FlowBlock *> nodes;
-  BlockIfElse *ret = new BlockIfElse();
+  unique_ptr<BlockIfElse> uret( new BlockIfElse() );
   nodes.push_back(cond);
   nodes.push_back(tc);
   nodes.push_back(fc);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockIfElse *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(1);
   return ret;
@@ -1859,11 +1876,12 @@ BlockIfNoExit *BlockGraph::newBlockIfNoExit(FlowBlock *cond,FlowBlock *tc,FlowBl
 
 {
   vector<FlowBlock *> nodes;
-  BlockIfNoExit *ret = new BlockIfNoExit();
+  unique_ptr<BlockIfNoExit> uret( new BlockIfNoExit() );
   nodes.push_back(cond);
   nodes.push_back(tc);
   nodes.push_back(fc);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockIfNoExit *ret = uret.release();
   addBlock(ret);
   return ret;
 }
@@ -1876,10 +1894,11 @@ BlockWhileDo *BlockGraph::newBlockWhileDo(FlowBlock *cond,FlowBlock *cl)
 
 {
   vector<FlowBlock *> nodes;
-  BlockWhileDo *ret = new BlockWhileDo();
+  unique_ptr<BlockWhileDo> uret( new BlockWhileDo() );
   nodes.push_back(cond);
   nodes.push_back(cl);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockWhileDo *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(1);
   return ret;
@@ -1892,9 +1911,10 @@ BlockDoWhile *BlockGraph::newBlockDoWhile(FlowBlock *condcl)
 
 {
   vector<FlowBlock *> nodes;
-  BlockDoWhile *ret = new BlockDoWhile();
+  unique_ptr<BlockDoWhile> uret( new BlockDoWhile() );
   nodes.push_back(condcl);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockDoWhile *ret = uret.release();
   addBlock(ret);
   ret->forceOutputNum(1);
   return ret;
@@ -1907,9 +1927,10 @@ BlockInfLoop *BlockGraph::newBlockInfLoop(FlowBlock *body)
 
 {
   vector<FlowBlock *> nodes;
-  BlockInfLoop *ret = new BlockInfLoop();
+  unique_ptr<BlockInfLoop> uret( new BlockInfLoop() );
   nodes.push_back(body);
-  identifyInternal(ret,nodes);
+  identifyInternal(uret.get(),nodes);
+  BlockInfLoop *ret = uret.release();
   addBlock(ret);
   return ret;
 }

@@ -1,0 +1,678 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/prettyprint.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/prettyprint.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/prettyprint.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/prettyprint.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the emitter and encoder replacements are allocated before the old ones are freed (patches/0023-allocation-failure-order.patch).
+  */
+ #include "prettyprint.hh"
+ #include "funcdata.hh"
+@@ -342,21 +344,28 @@
+ void EmitMarkup::setOutputStream(ostream *t)
+ 
+ {
++  // SaturnExplorer: the replacement is made before the old encoder is freed. An allocation failure
++  // leaves the old one in place; the destructor frees whatever \b encoder holds, so it must never
++  // hold a freed pointer.
++  Encoder *replacement = new PackedEncode(*t);
+   if (encoder != (Encoder *)0)
+     delete encoder;
+   s = t;
+-  encoder = new PackedEncode(*s);
++  encoder = replacement;
+ }
+ 
+ void EmitMarkup::setPackedOutput(bool val)
+ 
+ {
+   if (encoder == (Encoder *)0) return;
+-  delete encoder;
++  // SaturnExplorer: allocate first, as in setOutputStream.
++  Encoder *replacement;
+   if (val)
+-    encoder = new PackedEncode(*s);
++    replacement = new PackedEncode(*s);
+   else
+-    encoder = new XmlEncode(*s);
++    replacement = new XmlEncode(*s);
++  delete encoder;
++  encoder = replacement;
+ }
+ 
+ int4 TokenSplit::countbase = 0;
+@@ -1248,12 +1257,22 @@
+ 
+ {
+   ostream *t = lowlevel->getOutputStream();
+-  delete lowlevel;
++  // SaturnExplorer: the replacement is built, and given the stream, before the old emitter is freed.
++  // \b lowlevel is freed by the destructor, so a failed allocation must leave it pointing at a live
++  // emitter.
++  Emit *replacement;
+   if (val)
+-    lowlevel = new EmitMarkup;
++    replacement = new EmitMarkup;
+   else
+-    lowlevel = new EmitNoMarkup;
+-  lowlevel->setOutputStream(t);
++    replacement = new EmitNoMarkup;
++  try {
++    replacement->setOutputStream(t);
++  } catch(...) {
++    delete replacement;
++    throw;
++  }
++  delete lowlevel;
++  lowlevel = replacement;
+ }
+ 
+ void EmitPrettyPrint::setMaxLineSize(int4 val)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/block.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/block.cc
+@@ -13,6 +13,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: the blocks of a collapsed set change owner only after every allocation of the move has succeeded, and a block under construction is owned until it is attached (patches/0023-allocation-failure-order.patch).
+  */
+ #include "block.hh"
+ #include "funcdata.hh"
+@@ -954,6 +956,11 @@
+ 
+ {
+   vector<FlowBlock *>::const_iterator iter;
++  // SaturnExplorer: the only allocation of the move is the room in the new block's list, and it is
++  // made before any block changes hands. addBlock cannot then throw half way, which left blocks in
++  // both lists (the new block's and this one's) and freed them twice when the new block was
++  // destroyed by the unwinding. Our own list is compacted in place, not rebuilt.
++  ident->list.reserve(ident->list.size() + nodes.size());
+   for(iter=nodes.begin();iter!=nodes.end();++iter) {
+ #ifdef BLOCKCONSISTENT_DEBUG
+     if ((*iter)->parent != this)
+@@ -963,14 +970,15 @@
+     ident->addBlock(*iter);	// Maintain order of blocks
+     ident->flags |= ((*iter)->flags & (f_interior_gotoout | f_interior_gotoin));
+   }
+-  vector<FlowBlock *> newlist;
+-  for(iter=list.begin();iter!=list.end();++iter) { // Remove -nodes- from our list
+-    if (!(*iter)->isMark())
+-      newlist.push_back(*iter);
++  size_t kept = 0;
++  for(size_t i=0;i<list.size();++i) { // Remove -nodes- from our list
++    FlowBlock *bl = list[i];
++    if (!bl->isMark())
++      list[kept++] = bl;
+     else
+-      (*iter)->clearMark();
++      bl->clearMark();
+   }
+-  list = newlist;
++  list.erase(list.begin()+kept,list.end());
+ 
+   ident->selfIdentify();
+ }
+@@ -1686,7 +1694,8 @@
+ BlockCopy *BlockGraph::newBlockCopy(FlowBlock *bl)
+ 
+ {
+-  BlockCopy *ret = new BlockCopy(bl);
++  unique_ptr<BlockCopy> uret( new BlockCopy(bl) );	// SaturnExplorer: owned until attached
++  BlockCopy *ret = uret.get();
+   ret->intothis = bl->intothis;
+   ret->outofthis = bl->outofthis;
+   ret->immed_dom = bl->immed_dom;
+@@ -1698,6 +1707,7 @@
+   if (ret->outofthis.size() > 2)
+     ret->flags |= f_switch_out;	// Make sure switch is marked (even if not produced by INDIRECT) as it is needed for structuring
+   addBlock(ret);
++  uret.release();
+   return ret;
+ }
+ 
+@@ -1707,10 +1717,11 @@
+ BlockGoto *BlockGraph::newBlockGoto(FlowBlock *bl)
+ 
+ {
+-  BlockGoto *ret = new BlockGoto(bl->getOut(0));
++  unique_ptr<BlockGoto> uret( new BlockGoto(bl->getOut(0)) );
+   vector<FlowBlock *> nodes;
+   nodes.push_back(bl);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockGoto *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(1);
+   removeEdge(ret,ret->getOut(0));	// Treat out edge as if it didn't exist
+@@ -1736,11 +1747,12 @@
+       ret->setDefaultGoto();
+   }
+   else {
+-    ret = new BlockMultiGoto(bl);
++    unique_ptr<BlockMultiGoto> uret( new BlockMultiGoto(bl) );
+     int4 origSizeOut = bl->sizeOut();
+     vector<FlowBlock *> nodes;
+     nodes.push_back(bl);
+-    identifyInternal(ret,nodes);
++    identifyInternal(uret.get(),nodes);
++    ret = uret.release();
+     addBlock(ret);
+     ret->addEdge(targetbl);
+     if (targetbl != bl)	{
+@@ -1767,8 +1779,9 @@
+   int4 outforce = nodes.back()->sizeOut();
+   if (outforce==2)
+     out0 = nodes.back()->getOut(0);
+-  BlockList *ret = new BlockList();
+-  identifyInternal(ret,nodes);
++  unique_ptr<BlockList> uret( new BlockList() );
++  identifyInternal(uret.get(),nodes);
++  BlockList *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(outforce);
+   if (ret->sizeOut()==2)
+@@ -1788,10 +1801,11 @@
+   const FlowBlock *out0 = b2->getOut(0);
+   vector<FlowBlock *> nodes;
+   OpCode opc = (b1->getFalseOut() == b2) ? CPUI_INT_OR : CPUI_INT_AND;
+-  BlockCondition *ret = new BlockCondition(opc);
++  unique_ptr<BlockCondition> uret( new BlockCondition(opc) );
+   nodes.push_back(b1);
+   nodes.push_back(b2);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockCondition *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(2);	// All conditions must have two outputs
+   ret->forceFalseEdge(out0);	// Preserve the condition
+@@ -1809,9 +1823,10 @@
+ 
+   const FlowBlock *out0 = cond->getOut(0);
+   vector<FlowBlock *> nodes;
+-  BlockIfGoto *ret = new BlockIfGoto(cond->getOut(1));	// Goto block with specific target
++  unique_ptr<BlockIfGoto> uret( new BlockIfGoto(cond->getOut(1)) );	// Goto block with specific target
+   nodes.push_back(cond);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockIfGoto *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(2);
+   ret->forceFalseEdge(out0);		// Preserve the condition
+@@ -1827,10 +1842,11 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockIf *ret = new BlockIf();
++  unique_ptr<BlockIf> uret( new BlockIf() );
+   nodes.push_back(cond);
+   nodes.push_back(tc);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockIf *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(1);
+   return ret;
+@@ -1845,11 +1861,12 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockIfElse *ret = new BlockIfElse();
++  unique_ptr<BlockIfElse> uret( new BlockIfElse() );
+   nodes.push_back(cond);
+   nodes.push_back(tc);
+   nodes.push_back(fc);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockIfElse *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(1);
+   return ret;
+@@ -1859,11 +1876,12 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockIfNoExit *ret = new BlockIfNoExit();
++  unique_ptr<BlockIfNoExit> uret( new BlockIfNoExit() );
+   nodes.push_back(cond);
+   nodes.push_back(tc);
+   nodes.push_back(fc);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockIfNoExit *ret = uret.release();
+   addBlock(ret);
+   return ret;
+ }
+@@ -1876,10 +1894,11 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockWhileDo *ret = new BlockWhileDo();
++  unique_ptr<BlockWhileDo> uret( new BlockWhileDo() );
+   nodes.push_back(cond);
+   nodes.push_back(cl);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockWhileDo *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(1);
+   return ret;
+@@ -1892,9 +1911,10 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockDoWhile *ret = new BlockDoWhile();
++  unique_ptr<BlockDoWhile> uret( new BlockDoWhile() );
+   nodes.push_back(condcl);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockDoWhile *ret = uret.release();
+   addBlock(ret);
+   ret->forceOutputNum(1);
+   return ret;
+@@ -1907,9 +1927,10 @@
+ 
+ {
+   vector<FlowBlock *> nodes;
+-  BlockInfLoop *ret = new BlockInfLoop();
++  unique_ptr<BlockInfLoop> uret( new BlockInfLoop() );
+   nodes.push_back(body);
+-  identifyInternal(ret,nodes);
++  identifyInternal(uret.get(),nodes);
++  BlockInfLoop *ret = uret.release();
+   addBlock(ret);
+   return ret;
+ }
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/error.hh
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
++ * Modified for SaturnExplorer: ostringstream reports an allocation failure (patches/0023-allocation-failure-order.patch).
+  */
+ /// \file error.hh
+ /// \brief Base class for error handling facilities
+@@ -52,7 +53,6 @@
+ using std::ifstream;
+ using std::ofstream;
+ using std::istringstream;
+-using std::ostringstream;
+ using std::ios;
+ using std::dec;
+ using std::hex;
+@@ -70,6 +70,18 @@
+ using std::forward_as_tuple;
+ using std::unique_ptr;
+ 
++/// \brief A string stream that does not swallow an allocation failure
++///
++/// SaturnExplorer: libstdc++ (and libc++) catch a \b std::bad_alloc thrown while the buffer of an
++/// \b std::ostringstream grows, and only set the stream's badbit, so the text is cut short and
++/// nothing is reported: a warning ("Removing unreac"), a name, a number. The engine builds the text
++/// of its warnings, comments and messages in these. Setting badbit as an exception mask makes the
++/// insertion rethrow the original exception, which the host reports as an out-of-memory failure.
++class ostringstream : public std::ostringstream {
++public:
++  ostringstream(void) { exceptions(std::ios_base::badbit); }
++};
++
+ 
+ /// \brief The lowest level error generated by the decompiler
+ ///
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/filemanage.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/filemanage.hh
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/filemanage.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/filemanage.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: ostringstream is the engine's, which reports an allocation failure (patches/0023-allocation-failure-order.patch).
+  */
+ // Generic (POSIX) class for searching files and managing paths
+ 
+@@ -23,13 +25,13 @@
+ #include <iostream>
+ #include <sstream>
+ #include <fstream>
++#include "error.hh"
+ 
+ namespace ghidra {
+ 
+ using std::vector;
+ using std::string;
+ using std::ifstream;
+-using std::ostringstream;
+ 
+ class FileManage {
+   vector<string> pathlist;	// List of paths to search for files
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/architecture.cc
+@@ -17,6 +17,7 @@
+  * Modified for SaturnExplorer: translator owned by the Architecture before initialize (patches/0003-translator-ownership-on-init-failure.patch).
+  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
+  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
++ * Modified for SaturnExplorer: a constructor that fails frees its print language (patches/0023-allocation-failure-order.patch).
+  */
+ // Set up decompiler for specific architectures
+ 
+@@ -174,8 +175,15 @@
+   symboltab = (Database *)0;
+   context = (ContextDatabase *)0;
+   print = PrintLanguageCapability::getDefault()->buildLanguage(this);
+-  printlist.push_back(print);
+-  options = new OptionDatabase(this);
++  try {
++    printlist.push_back(print);
++    options = new OptionDatabase(this);
++  } catch(...) {
++    // SaturnExplorer: the destructor of an object whose constructor throws never runs, and
++    // nothing else owns the print language yet.
++    delete print;
++    throw;
++  }
+   loadersymbols_parsed = false;
+   cancelRequested = (std::atomic<bool> *)0;
+   keepUnusedLoads = false;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/options.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/options.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/options.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/options.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a failed OptionDatabase constructor frees the options it registered (patches/0023-allocation-failure-order.patch).
+  */
+ #include "options.hh"
+ #include "funcdata.hh"
+@@ -85,8 +87,13 @@
+ void OptionDatabase::registerOption(ArchOption *option)
+ 
+ {
+-  uint4 id = ElementId::find(option->getName(),0);	// Option name must match a known element name
+-  optionmap[id] = option;
++  try {
++    uint4 id = ElementId::find(option->getName(),0);	// Option name must match a known element name
++    optionmap[id] = option;
++  } catch(...) {
++    delete option;		// SaturnExplorer: not yet in the map, so nothing else frees it
++    throw;
++  }
+ }
+ 
+ /// Register all possible ArchOption objects with this database and set-up the parsing map.
+@@ -95,6 +102,7 @@
+ 
+ {
+   glb = g;
++  try {
+   registerOption(new OptionExtraPop());
+   registerOption(new OptionReadOnly());
+   registerOption(new OptionIgnoreUnimplemented());
+@@ -133,6 +141,14 @@
+   registerOption(new OptionNamespaceStrategy());
+   registerOption(new OptionSplitDatatypes());
+   registerOption(new OptionNanIgnore());
++  } catch(...) {
++    // SaturnExplorer: the destructor of an object whose constructor throws never runs
++    map<uint4,ArchOption *>::iterator iter;
++    for(iter=optionmap.begin();iter!=optionmap.end();++iter)
++      delete (*iter).second;
++    optionmap.clear();
++    throw;
++  }
+ }
+ 
+ OptionDatabase::~OptionDatabase(void)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/sleigh.cc
+@@ -15,6 +15,7 @@
+  *
+  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
+  * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
++ * Modified for SaturnExplorer: a parse-tree cache that fails to initialise frees what it made (patches/0023-allocation-failure-order.patch).
+  */
+ #include "sleigh.hh"
+ #include "loadimage.hh"
+@@ -451,13 +452,26 @@
+   uintb masktest = coveringmask((uintb)mask);
+   if (masktest != (uintb)mask)	// -hashsize- must be a power of 2
+     throw LowlevelError("Bad windowsize for disassembly cache");
+-  list = new ParserContext *[minimumreuse];
++  // SaturnExplorer: the constructor that calls this never completes if it throws, so its
++  // destructor (free) does not run: whatever was made so far is freed here.
++  list = new ParserContext *[minimumreuse]();
+   nextfree = 0;
+-  hashtable = new ParserContext *[hashsize];
+-  for(int4 i=0;i<minimumreuse;++i) {
++  hashtable = (ParserContext **)0;
++  try {
++    hashtable = new ParserContext *[hashsize];
++    for(int4 i=0;i<minimumreuse;++i) {
+ 	ParserContext *pos = new ParserContext(contextcache,translate);
+ 	list[i] = pos;
+ 	pos->initialize(constspace);
++    }
++  } catch(...) {
++    for(int4 i=0;i<minimumreuse;++i)
++      delete list[i];
++    delete [] list;
++    list = (ParserContext **)0;
++    delete [] hashtable;
++    hashtable = (ParserContext **)0;
++    throw;
+   }
+   ParserContext *pos = list[0];
+   for(int4 i=0;i<hashsize;++i)
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varnode.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a Varnode that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
+  */
+ #include "varnode.hh"
+ #include "funcdata.hh"
+@@ -1254,8 +1256,13 @@
+   Varnode *vn = new Varnode(s,m,ct);
+   
+   vn->create_index = create_index++;
+-  vn->lociter = loc_tree.insert(vn).first; // Frees can always be inserted without duplication
+-  vn->defiter = def_tree.insert(vn).first;
++  try {
++    vn->lociter = loc_tree.insert(vn).first; // Frees can always be inserted without duplication
++  } catch(...) {
++    delete vn;			// SaturnExplorer: nothing owns it yet
++    throw;
++  }
++  vn->defiter = def_tree.insert(vn).first;	// (in loc_tree now, which owns it)
+   return vn;
+ }
+ 
+@@ -1408,7 +1415,16 @@
+   Varnode *vn = new Varnode(s,m,ct);
+   vn->create_index = create_index++;
+   vn->setDef(op);
+-  return xref(vn);
++  try {
++    return xref(vn);
++  } catch(...) {
++    // SaturnExplorer: xref flags a Varnode as inserted once it is in the sorted lists, which own it
++    // from then on; a failure before that leaves it with nobody (xref is also used to reinsert a
++    // Varnode that other ops point to, so it cannot free the one it is given itself).
++    if ((vn->flags & Varnode::insert)==0)
++      delete vn;
++    throw;
++  }
+ }
+ 
+ /// The new Varnode will be assigned from the \e unique space, and
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/op.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
++ * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
+  */
+ #include "op.hh"
+ #include "funcdata.hh"
+@@ -991,9 +992,16 @@
+ 
+ {
+   PcodeOp *op = new PcodeOp(inputs,SeqNum(pc,uniqid++));
+-  optree[op->getSeqNum()] = op;
+-  op->setFlag(PcodeOp::dead);		// Start out life as dead
+-  op->insertiter = deadlist.insert(deadlist.end(),op);
++  try {
++    optree[op->getSeqNum()] = op;
++    op->setFlag(PcodeOp::dead);		// Start out life as dead
++    op->insertiter = deadlist.insert(deadlist.end(),op);
++  } catch(...) {
++    // SaturnExplorer: the lists own an op (optree only indexes it), so until it is in one it is ours
++    optree.erase(op->getSeqNum());
++    delete op;
++    throw;
++  }
+   return op;
+ }
+ 
+@@ -1011,9 +1019,16 @@
+   if (sq.getTime() >= uniqid)
+     uniqid = sq.getTime() + 1;
+ 
+-  optree[op->getSeqNum()] = op;
+-  op->setFlag(PcodeOp::dead);		// Start out life as dead
+-  op->insertiter = deadlist.insert(deadlist.end(),op);
++  try {
++    optree[op->getSeqNum()] = op;
++    op->setFlag(PcodeOp::dead);		// Start out life as dead
++    op->insertiter = deadlist.insert(deadlist.end(),op);
++  } catch(...) {
++    // SaturnExplorer: the lists own an op (optree only indexes it), so until it is in one it is ours
++    optree.erase(op->getSeqNum());
++    delete op;
++    throw;
++  }
+   return op;
+ }
+ 
+@@ -1090,9 +1105,12 @@
+ void PcodeOpBank::markAlive(PcodeOp *op)
+ 
+ {
++  // SaturnExplorer: the node in the new list is made before the old one is dropped. The lists own
++  // their ops, so a failed insertion after the erase left an op in neither (and the op leaked).
++  list<PcodeOp *>::iterator newiter = alivelist.insert(alivelist.end(),op);
+   deadlist.erase(op->insertiter);
+   op->clearFlag(PcodeOp::dead);
+-  op->insertiter = alivelist.insert(alivelist.end(),op);
++  op->insertiter = newiter;
+ }
+ 
+ /// The PcodeOp is moved out of the \e alive list into the \e dead list. The
+@@ -1101,9 +1119,10 @@
+ void PcodeOpBank::markDead(PcodeOp *op)
+ 
+ {
++  list<PcodeOp *>::iterator newiter = deadlist.insert(deadlist.end(),op);	// SaturnExplorer: before the erase, as markAlive
+   alivelist.erase(op->insertiter);
+   op->setFlag(PcodeOp::dead);
+-  op->insertiter = deadlist.insert(deadlist.end(),op);
++  op->insertiter = newiter;
+ }
+ 
+ /// The op is moved to right after a specified op in the \e dead list.
+@@ -1114,10 +1133,11 @@
+ {
+   if ((!op->isDead())||(!prev->isDead()))
+     throw LowlevelError("Dead move called on ops which aren't dead");
+-  deadlist.erase(op->insertiter);
+   list<PcodeOp *>::iterator iter = prev->insertiter;
+   ++iter;
+-  op->insertiter = deadlist.insert(iter,op);
++  list<PcodeOp *>::iterator newiter = deadlist.insert(iter,op);	// SaturnExplorer: before the erase, as markAlive
++  deadlist.erase(op->insertiter);
++  op->insertiter = newiter;
+ }
+ 
+ /// \brief Move a sequence of PcodeOps to a point in the \e dead list.
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/comment.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/comment.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/comment.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/comment.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a comment that cannot be stored is freed (patches/0023-allocation-failure-order.patch).
+  */
+ #include "comment.hh"
+ #include "funcdata.hh"
+@@ -190,7 +192,12 @@
+     if (((*iter)->getAddr() == ad)&&((*iter)->getFuncAddr()==fad))
+       newcom->uniq = (*iter)->getUniq() + 1;
+   }
+-  commentset.insert(newcom);
++  try {
++    commentset.insert(newcom);
++  } catch(...) {
++    delete newcom;		// SaturnExplorer: not stored, so nothing else owns it
++    throw;
++  }
+ }
+ 
+ bool CommentDatabaseInternal::addCommentNoDuplicate(uint4 tp,const Address &fad,
+@@ -214,7 +221,12 @@
+     else
+       break;
+   }
+-  commentset.insert(newcom);
++  try {
++    commentset.insert(newcom);
++  } catch(...) {
++    delete newcom;		// SaturnExplorer: not stored, so nothing else owns it
++    throw;
++  }
+   return true;
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/type.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/type.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/type.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/type.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a data-type that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
+  */
+ #include "type.hh"
+ #include "funcdata.hh"
+@@ -3899,7 +3901,13 @@
+ void TypeFactory::insert(Datatype *newtype)
+ 
+ {
+-  pair<DatatypeSet::iterator,bool> insres = tree.insert(newtype);
++  pair<DatatypeSet::iterator,bool> insres;
++  try {
++    insres = tree.insert(newtype);
++  } catch(...) {
++    delete newtype;		// SaturnExplorer: insert owns the type it is given (it frees a duplicate)
++    throw;
++  }
+   if (!insres.second) {
+     ostringstream s;
+     s << "Shared type id: " << hex << newtype->getId() << endl;

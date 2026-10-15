@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
+ * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -991,9 +992,16 @@ PcodeOp *PcodeOpBank::create(int4 inputs,const Address &pc)
 
 {
   PcodeOp *op = new PcodeOp(inputs,SeqNum(pc,uniqid++));
-  optree[op->getSeqNum()] = op;
-  op->setFlag(PcodeOp::dead);		// Start out life as dead
-  op->insertiter = deadlist.insert(deadlist.end(),op);
+  try {
+    optree[op->getSeqNum()] = op;
+    op->setFlag(PcodeOp::dead);		// Start out life as dead
+    op->insertiter = deadlist.insert(deadlist.end(),op);
+  } catch(...) {
+    // SaturnExplorer: the lists own an op (optree only indexes it), so until it is in one it is ours
+    optree.erase(op->getSeqNum());
+    delete op;
+    throw;
+  }
   return op;
 }
 
@@ -1011,9 +1019,16 @@ PcodeOp *PcodeOpBank::create(int4 inputs,const SeqNum &sq)
   if (sq.getTime() >= uniqid)
     uniqid = sq.getTime() + 1;
 
-  optree[op->getSeqNum()] = op;
-  op->setFlag(PcodeOp::dead);		// Start out life as dead
-  op->insertiter = deadlist.insert(deadlist.end(),op);
+  try {
+    optree[op->getSeqNum()] = op;
+    op->setFlag(PcodeOp::dead);		// Start out life as dead
+    op->insertiter = deadlist.insert(deadlist.end(),op);
+  } catch(...) {
+    // SaturnExplorer: the lists own an op (optree only indexes it), so until it is in one it is ours
+    optree.erase(op->getSeqNum());
+    delete op;
+    throw;
+  }
   return op;
 }
 
@@ -1090,9 +1105,12 @@ void PcodeOpBank::changeOpcode(PcodeOp *op,TypeOp *newopc)
 void PcodeOpBank::markAlive(PcodeOp *op)
 
 {
+  // SaturnExplorer: the node in the new list is made before the old one is dropped. The lists own
+  // their ops, so a failed insertion after the erase left an op in neither (and the op leaked).
+  list<PcodeOp *>::iterator newiter = alivelist.insert(alivelist.end(),op);
   deadlist.erase(op->insertiter);
   op->clearFlag(PcodeOp::dead);
-  op->insertiter = alivelist.insert(alivelist.end(),op);
+  op->insertiter = newiter;
 }
 
 /// The PcodeOp is moved out of the \e alive list into the \e dead list. The
@@ -1101,9 +1119,10 @@ void PcodeOpBank::markAlive(PcodeOp *op)
 void PcodeOpBank::markDead(PcodeOp *op)
 
 {
+  list<PcodeOp *>::iterator newiter = deadlist.insert(deadlist.end(),op);	// SaturnExplorer: before the erase, as markAlive
   alivelist.erase(op->insertiter);
   op->setFlag(PcodeOp::dead);
-  op->insertiter = deadlist.insert(deadlist.end(),op);
+  op->insertiter = newiter;
 }
 
 /// The op is moved to right after a specified op in the \e dead list.
@@ -1114,10 +1133,11 @@ void PcodeOpBank::insertAfterDead(PcodeOp *op,PcodeOp *prev)
 {
   if ((!op->isDead())||(!prev->isDead()))
     throw LowlevelError("Dead move called on ops which aren't dead");
-  deadlist.erase(op->insertiter);
   list<PcodeOp *>::iterator iter = prev->insertiter;
   ++iter;
-  op->insertiter = deadlist.insert(iter,op);
+  list<PcodeOp *>::iterator newiter = deadlist.insert(iter,op);	// SaturnExplorer: before the erase, as markAlive
+  deadlist.erase(op->insertiter);
+  op->insertiter = newiter;
 }
 
 /// \brief Move a sequence of PcodeOps to a point in the \e dead list.

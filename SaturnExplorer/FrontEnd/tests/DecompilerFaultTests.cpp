@@ -35,7 +35,9 @@
 //          SE_FAULT_JOBS (parallel drivers, 1), SE_FAULT_TIMEOUT (seconds per cell, 120),
 //          SE_FAULT_KEEP=1 (keep the drivers' logs in <scratch>/logs), SE_FAULT_ONLY=alloc,cancel-enter,...
 //          (only the jobs whose label starts with one of these), SE_FAULT_EXIT=static (a damaged engine
-//          leaves through SleighArchitecture::shutdown() and exit() instead of _Exit)
+//          leaves through SleighArchitecture::shutdown() and exit() instead of _Exit), SE_FAULT_LEAKS=0 (no
+//          per-cell leak check), SE_FAULT_LEAKLIST=1 (a sanitizer build prints every leak's innermost frames
+//          as LEAK-SIG and fails none: how the accepted-leak table is written)
 #include "DecompilerTestSupport.h"
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -376,9 +378,9 @@ enum Outcome : unsigned
 // check-points are in Flow (the engine's, and ours before Actions) and in Actions (the engine's,
 // and ours before Print); Init, Print and Teardown have none (Sh2Decompiler.h). A cancel in the
 // reference run is the check being cut short, not the request: the result is Ok. The comment at
-// Sh2Decompiler.cpp's checkCancel says a cancel in a phase is honoured in that phase; the one
-// exception is the Actions of the first pass, which does not print and has no check-point after
-// its action tree (the cancel lands in the second pass's Flow).
+// Sh2Decompiler.cpp's checkCancel says a cancel in a phase is honoured in that phase. The Actions
+// of the first pass, which does not print, were the one exception (the cancel landed in the second
+// pass's Flow, after its uncheckable Init: A6-6); runPass now checks at the pass boundary.
 unsigned Expected(const Log& L, int s)
 {
     if (s < 0) return kCancelFlow;   // up before the run: the first Flow
@@ -388,11 +390,9 @@ unsigned Expected(const Log& L, int s)
     {
         const bool prints = s + 1 < L.n && L.phase[s + 1] == DecompilePhase::Print;
         if (prints) return L.inRef[s] ? kOkRefCut : kCancelActions;
-        // The first pass has no check-point after its action tree (Sh2Decompiler.cpp returns before
-        // checkCancel when the pass does not print), so a flag raised in the tail of it is carried
-        // into the second pass: its Init (uncheckable) and then its Flow. The comment at checkCancel
-        // says a cancel is "never carried into the next one's work"; A6-6 records that it is. It is
-        // not excused here.
+        // The first pass has no Print after it, so its check-point is at the pass boundary
+        // (Sh2Decompiler.cpp runPass): a flag raised in the tail of its actions is honoured there, in
+        // Actions, and not carried through the next pass's Init into its Flow (A6-6).
         return kCancelActions;
     }
     for (int j = s + 1; j < L.n; ++j)
@@ -833,6 +833,166 @@ bool ExitStatic()
     return v && std::string(v) == "static";
 }
 
+// ---- the leaks that are accepted (REVIEW_LEDGER.md, rows A6-7 .. A6-9) ----------------------------
+//
+// An allocation failure inside the engine leaves the process refusing the engine for good (the host
+// marks it damaged), so a leak the failure causes is bounded: once per process, a few hundred bytes
+// to about 30 KB. The engine owns what it builds through raw pointers that the unwinding does not
+// reach, in places (the XML reader's parse stack, the action tree, the rule pool) where making them
+// exception-safe is a rewrite, not a patch. Each such site is named below by frames of the leaking
+// allocation's stack: a leak is accepted only if every frame of one entry occurs in its stack, in
+// the order written, innermost first. A leak that matches none fails the cell, so a new one -- or one
+// of the sites below in a place it was not seen -- is found. (Not LeakSanitizer's own suppressions:
+// they match one frame, which would excuse every leak that passes through it.)
+#ifdef SE_FAULT_ASAN
+struct AcceptedLeak
+{
+    const char* row;
+    std::vector<const char*> frames;
+};
+const std::vector<AcceptedLeak>& AcceptedLeaks()
+{
+    static const std::vector<AcceptedLeak> v = {
+        // A6-7: the Architecture is built, and its spec read, from raw pointers
+        { "A6-7 spec XML", { "ghidra::xml_parse(" } },                          // the XML reader's parse stack (bison values)
+        { "A6-7 spec XML", { "ghidra::xml_tree(" } },
+        { "A6-7 action tree", { "ghidra::ActionDatabase::universalAction(" } },   // the default action tree: raw Action and Rule pointers
+        { "A6-7 action tree", { "ghidra::ActionDatabase::deriveAction(" } },      // its clone for the current action
+        { "A6-7 compiler spec", { "ghidra::Architecture::parseCompilerConfig(" } },   // prototype models decoded from the cspec
+        { "A6-7 compiler spec", { "ghidra::AddrSpaceManager::findAddJoin(" } },
+        { "A6-7 context", { "ghidra::ContextInternal::FreeArray::reset(" } },
+        { "A6-7 host register loop", { "ghidra::Scope::addMapPoint(", "Sh2Decompiler::DecompileInto(" } },   // Scope::addSymbol / addMapPoint
+        { "A6-7 host register loop", { "ghidra::Scope::addSymbol(", "Sh2Decompiler::DecompileInto(" } },
+        // A6-9: a symbol and its map entry made for a conflict, owned by neither until addMap returns
+        { "A6-9 conflict symbol", { "ghidra::Scope::addSymbolWithConflict(", "ghidra::ActionNameVars::linkSymbols(" } },
+    };
+    return v;
+}
+
+struct LeakStack
+{
+    bool direct = false;
+    std::vector<std::string> frames;   // "#3 0x... in ghidra::Foo::bar(...) /path/file.cc:12", innermost first
+};
+
+std::vector<LeakStack> ParseLeaks(const std::string& report)
+{
+    std::vector<LeakStack> leaks;
+    bool in = false;
+    for (const std::string& l : Lines(report))
+    {
+        if (l.compare(0, 11, "Direct leak") == 0 || l.compare(0, 13, "Indirect leak") == 0)
+        {
+            LeakStack s;
+            s.direct = l[0] == 'D';
+            leaks.push_back(s);
+            in = true;
+        }
+        else if (in && l.find("#") != std::string::npos && l.find("#") < 8)
+            leaks.back().frames.push_back(l);
+        else if (in && l.find_first_not_of(" \t") == std::string::npos)
+            in = false;
+    }
+    return leaks;
+}
+
+// The row of the first entry whose frames all occur, in order, in the stack; null if none.
+const char* AcceptedRow(const LeakStack& s)
+{
+    for (const AcceptedLeak& a : AcceptedLeaks())
+    {
+        size_t at = 0;
+        bool all = true;
+        for (const char* f : a.frames)
+        {
+            while (at < s.frames.size() && s.frames[at].find(f) == std::string::npos) ++at;
+            if (at == s.frames.size())
+            {
+                all = false;
+                break;
+            }
+            ++at;
+        }
+        if (all) return a.row;
+    }
+    return nullptr;
+}
+
+// Runs LeakSanitizer's check with its report taken into a file: leaks that are all accepted print one
+// "LEAK-ACCEPTED" line per row, and any other leak puts the whole report on stderr as LeakSanitizer
+// would, for the parent to classify.
+int CheckedLeaks()
+{
+    std::fflush(nullptr);
+    FILE* tmp = std::tmpfile();
+    const int saved = dup(2);
+    if (!tmp || saved < 0)
+        return __lsan_do_recoverable_leak_check() ? kExitLeak : 0;
+    dup2(fileno(tmp), 2);
+    const int found = __lsan_do_recoverable_leak_check();
+    dup2(saved, 2);
+    close(saved);
+    std::string report;
+    if (found)
+    {
+        std::fflush(tmp);
+        std::rewind(tmp);
+        char buf[8192];
+        for (size_t n; (n = std::fread(buf, 1, sizeof buf, tmp)) > 0;) report.append(buf, n);
+    }
+    std::fclose(tmp);
+    if (!found) return 0;
+    std::map<std::string, long> rows;
+    long other = 0;
+    const char* list = std::getenv("SE_FAULT_LEAKLIST");
+    const bool survey = list && list[0] && list[0] != '0';
+    for (const LeakStack& s : ParseLeaks(report))
+    {
+        if (survey)
+        {
+            // A survey of what leaks, for writing the accepted list: one line per leak, its innermost
+            // engine and host frames (no allocator, no standard library), no verdict.
+            std::string sig = s.direct ? "D" : "I";
+            int taken = 0;
+            for (const std::string& f : s.frames)
+            {
+                size_t b = f.find(" in ");
+                if (b == std::string::npos) continue;
+                std::string fn = f.substr(b + 4);
+                const size_t paren = fn.find('(');
+                if (paren != std::string::npos) fn.erase(paren);
+                if (fn.compare(0, 5, "std::") == 0 || fn.find("std::") != std::string::npos || fn.compare(0, 8, "__gnu_cxx") == 0 ||
+                    fn.compare(0, 8, "Allocate") == 0 || fn.compare(0, 12, "operator new") == 0 || fn.compare(0, 6, "malloc") == 0 ||
+                    fn.find("DecompilerFaultTests") != std::string::npos)
+                    continue;
+                if (fn.find("RunOnce") != std::string::npos || fn.find("RunAllocCell") != std::string::npos || fn.find("ForkCell") != std::string::npos)
+                    break;
+                sig += " < " + fn;
+                if (++taken == 5) break;
+            }
+            std::printf("LEAK-SIG %s\n", sig.c_str());
+            continue;
+        }
+        const char* row = AcceptedRow(s);
+        if (row) ++rows[row];
+        else ++other;
+    }
+    if (survey)
+    {
+        std::fflush(stdout);
+        return 0;
+    }
+    if (other || rows.empty())
+    {
+        if (write(2, report.data(), report.size()) < 0) {}
+        return kExitLeak;
+    }
+    for (const auto& r : rows) std::printf("LEAK-ACCEPTED %s x%ld\n", r.first.c_str(), r.second);
+    std::fflush(stdout);
+    return 0;
+}
+#endif
+
 int LeakCheck()
 {
 #ifdef SE_FAULT_ASAN
@@ -841,7 +1001,7 @@ int LeakCheck()
     const char* v = std::getenv("SE_FAULT_LEAKS");
     if (v && v[0] == '0') return 0;
     // _Exit skips the sanitizer's exit-time check, so make it now.
-    if (__lsan_do_recoverable_leak_check()) return kExitLeak;
+    return CheckedLeaks();
 #endif
     return 0;
 }
@@ -852,6 +1012,34 @@ int LeakCheck()
     const int leak = LeakCheck();
     std::fflush(nullptr);
     std::_Exit(dts::Failures() ? kExitInvariant : leak);
+}
+
+// The entry of the baseline log that allocation k falls in (-1: before the first), its ordinal among
+// the entries of the same phase name, and the allocation's rank among those of its size in the entry.
+struct PinCoords
+{
+    int entry = -1;
+    int ord = 0;
+    int nth = 0;
+    long lo = 0;
+    long hi = 0;
+};
+
+PinCoords CoordsOf(const Ctx& c, long k)
+{
+    PinCoords p;
+    const Log& L = c.base.log;
+    for (int e = 0; e < L.n; ++e)
+        if (L.allocAt[e] <= k) p.entry = e;
+    if (p.entry < 0) return p;
+    for (int e = 0; e < p.entry; ++e)
+        if (L.phase[e] == L.phase[p.entry]) ++p.ord;
+    p.lo = L.allocAt[p.entry];
+    p.hi = p.entry + 1 < L.n ? L.allocAt[p.entry + 1] : c.base.allocs;
+    if (k < long(c.base.sizes.size()))
+        for (long i = p.lo; i < k; ++i)
+            if (c.base.sizes[size_t(i)] == c.base.sizes[size_t(k)]) ++p.nth;
+    return p;
 }
 
 // ================================================================================================
@@ -872,6 +1060,14 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
     const long refsBefore = c.snap.use_count();
     bool escaped = false;
     DecompileResult r;
+    if (fa::gTrace && cancelAt < 0 && k < long(c.base.sizes.size()))
+    {
+        // How a pin for this allocation is written (kPins).
+        const PinCoords pc = CoordsOf(c, k);
+        std::printf("PIN-AT %s k=%ld: { \"%s\", \"%s\", %d, %u, %d, ... }\n", c.fix->name, k, c.fix->name,
+                    pc.entry < 0 ? "?" : PhaseName(c.base.log.phase[pc.entry]), pc.ord, c.base.sizes[size_t(k)], pc.nth);
+        std::fflush(stdout);
+    }
     fa::Arm(k, cancelAt);
     try
     {
@@ -1204,47 +1400,72 @@ std::string CellClass(const std::string& out)
 }
 
 // The allocation sites where the exhaustive sweep found a defect (REVIEW_LEDGER.md, rows A6-1 ..
-// A6-5), in every run of the matrix, the default subset included: the allocation of 'size' bytes,
-// 'k' in the build that found it, in 'phase'. A different build or engine may number allocations
-// differently, so a pin is found again by (size, phase) near its old index; one that no longer
-// resolves is reported, so that it is re-pinned rather than silently dropped.
+// A6-5), in every run of the matrix, the default subset included. A site is named by where it falls
+// in a run and not by its index, which any change to the engine or the host shifts (a merge moved
+// every one of them by more than a thousand): the 'ord'-th entry of 'phase' in the baseline log
+// (counting the reference run's entries too), and in it the 'nth' allocation (from 0) of 'size'
+// bytes. One that no longer resolves is reported STALE and fails, so that it is re-pinned rather
+// than silently dropped. `--cell alloc <fixture> <k>` prints the coordinates of its allocation
+// ("PIN-AT"), which is how a pin is written. The coordinates below are those of the engine as the
+// defects were found; a fix that changes the allocations around a site makes its pin resolve to a
+// neighbour, which is still a cell of the same phase and size (the mutation checks in the Step 5
+// record revert each fix and show these cells fail again).
 struct Pin
 {
     const char* fixture;
-    long k;
-    uint32_t size;
     const char* phase;
+    int ord;
+    uint32_t size;
+    int nth;
     const char* what;
 };
 const Pin kPins[] = {
-    { "mailbox", 21058, 48, "print", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
-    { "mailbox", 21074, 40, "print", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
-    { "mailbox", 21060, 16, "print", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
-    { "jumptable", 11342, 16, "actions", "A6-3 BlockGraph::identifyInternal: list growth fails with blocks half moved (newBlockSwitch)" },
-    { "jumptable", 23628, 16, "actions", "A6-3 BlockGraph::identifyInternal, second pass" },
-    { "mailbox", 21067, 513, "print", "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
-    { "mailbox", 18426, 513, "actions", "A6-5 the warning text stream swallows the failure: a truncated warning, status Ok" },
-    { "jumptable", 8305, 513, "followFlow", "A6-5 the jump-table message stream swallows the failure, status Ok" },
+    { "mailbox", "print", 0, 48, 22, "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
+    { "mailbox", "print", 0, 40, 77, "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
+    { "mailbox", "print", 1, 48, 20, "A6-1 the same, in the reference run's print" },
+    { "jumptable", "print", 0, 48, 26, "A6-1 the same, on the jumptable fixture" },
+    { "mailbox", "print", 0, 16, 1, "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
+    { "jumptable", "actions", 0, 16, 72, "A6-3 BlockGraph::identifyInternal: list growth fails with blocks half moved (newBlockSwitch)" },
+    { "jumptable", "actions", 0, 32, 59, "A6-3 the same, the growth after it" },
+    { "jumptable", "actions", 0, 16, 138, "A6-3 the same, the next switch block" },
+    { "jumptable", "actions", 1, 16, 72, "A6-3 the same, second pass" },
+    { "mailbox", "print", 0, 513, 0, "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
+    { "mailbox", "print", 0, 1025, 0, "A6-4 the same, one growth later" },
+    { "jumptable", "print", 0, 513, 0, "A6-4 the same, on the jumptable fixture" },
+    { "mailbox", "actions", 0, 513, 0, "A6-5 a warning's stream swallows the failure, status Ok (first pass)" },
+    { "mailbox", "actions", 1, 513, 0, "A6-5 the same in the printing pass: 'WARNING: Removing unreac', status Ok" },
+    { "jumptable", "followFlow", 0, 513, 0, "A6-5 the jump-table message stream swallows the failure, status Ok" },
+    { "jumptable", "followFlow", 1, 513, 0, "A6-5 the same in the second pass" },
+    // The leaks fixed on the way (patch 0023), seen under LeakSanitizer (a sanitizer build; in a plain one they are cells that pass):
+    { "mailbox", "init", 0, 56, 0, "A6-7 Architecture::Architecture: the print language is freed when the constructor fails" },
+    { "mailbox", "init", 0, 20, 0, "A6-7 OptionDatabase::registerOption: the option is freed when it cannot be registered" },
+    { "mailbox", "init", 0, 17, 0, "A6-7 OptionDatabase::OptionDatabase: the options registered so far are freed" },
+    { "mailbox", "init", 0, 512, 0, "A6-7 DisassemblyCache::initialize: what it made is freed when it fails" },
+    { "mailbox", "init", 0, 40, 52, "A6-7 TypeFactory::insert: the data-type is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 24, 0, "A6-8 PcodeOpBank::create: the op is freed when it cannot be listed" },
+    { "mailbox", "followFlow", 0, 24, 95, "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
+    { "jumptable", "followFlow", 0, 24, 140, "A6-8 PcodeOpBank::create (by cloneOp) and markAlive, on the jumptable fixture" },
+    { "mailbox", "followFlow", 0, 40, 0, "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 40, 2, "A6-8 VarnodeBank::create: the same" },
+    { "mailbox", "actions", 0, 40, 0, "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
+    { "mailbox", "actions", 0, 24, 235, "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
+    { "mailbox", "actions", 1, 24, 236, "A6-9 the same, in the printing pass" },
+    { "mailbox", "actions", 0, 40, 216, "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
+    { "mailbox", "actions", 1, 40, 216, "A6-9 the same, in the printing pass" },
 };
-
-const char* PhaseOfK(const Ctx& c, long k)
-{
-    const char* where = "before the engine";
-    for (int i = 0; i < c.base.log.n; ++i)
-        if (c.base.log.allocAt[i] <= k) where = PhaseName(c.base.log.phase[i]);
-    return where;
-}
 
 long ResolvePin(const Ctx& c, const Pin& p)
 {
-    auto matches = [&](long k) {
-        return k >= 0 && k < long(c.base.sizes.size()) && c.base.sizes[size_t(k)] == p.size && std::string(PhaseOfK(c, k)) == p.phase;
-    };
-    if (matches(p.k)) return p.k;
-    for (long d = 1; d <= 400; ++d)
+    const Log& L = c.base.log;
+    int ord = 0;
+    for (int e = 0; e < L.n; ++e)
     {
-        if (matches(p.k - d)) return p.k - d;
-        if (matches(p.k + d)) return p.k + d;
+        if (std::string(PhaseName(L.phase[e])) != p.phase || ord++ != p.ord) continue;
+        const long hi = e + 1 < L.n ? L.allocAt[e + 1] : c.base.allocs;
+        int n = 0;
+        for (long k = L.allocAt[e]; k < hi && k < long(c.base.sizes.size()); ++k)
+            if (c.base.sizes[size_t(k)] == p.size && n++ == p.nth) return k;
+        return -1;
     }
     return -1;
 }
@@ -1385,8 +1606,8 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
         {
             if (fixture != p.fixture) continue;
             const long k = ResolvePin(c, p);
-            std::printf("PIN %s %s: allocation %ld (%u bytes, %s) -> %s\n", p.fixture, p.what, k, p.size, p.phase,
-                        k == p.k ? "as found" : k < 0 ? "STALE" : "moved");
+            std::printf("PIN %s %s: %s #%d, %u bytes #%d -> allocation %ld%s\n", p.fixture, p.what, p.phase, p.ord, p.size, p.nth, k,
+                        k < 0 ? " STALE" : "");
             if (k < 0)
             {
                 ++sum.failed;
@@ -1415,6 +1636,14 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
         {
             const std::string cls = CellClass(run.out);
             ++sum.classes[cls];
+            // The accepted leaks of this cell (LeakCheck): kept visible, one count per row.
+            for (const std::string& ln : Lines(run.out))
+            {
+                if (ln.compare(0, 14, "LEAK-ACCEPTED ") == 0)
+                    ++sum.classes["leak-accepted:" + ln.substr(14, ln.find(' ', 14) - 14)];
+                if (ln.compare(0, 9, "LEAK-SIG ") == 0)
+                    ++sum.classes["leak-sig " + ln.substr(9)];
+            }
             const size_t lp = run.out.find(" lat=");
             if (lp != std::string::npos)
             {
@@ -1770,7 +1999,10 @@ void ScenarioDestroy(const std::string& config, RunnerCtx& rc, long e)
 void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
 {
     RunnerOptions o;
-    o.budgetSeconds = std::max(0.05, 6.0 * rc.requestMs / 1000.0);   // a request that is merely slow must not expire it
+    // A request that is merely slow must not expire it: the follow-up request of a cell runs under the
+    // same budget (the runner's options are fixed at construction), and under load (a parallel build, ctest -j) a
+    // run takes several times its measured length. The DecompilerRunnerTests disable case had the same flake (A12-6).
+    o.budgetSeconds = std::max(0.05, 12.0 * rc.requestMs / 1000.0);
     o.cancelAckSeconds = 600;
     const double spinMs = o.budgetSeconds * 1000.0 + 150.0;   // held for longer than the budget
     DecompilerRunner runner(config, o);
@@ -1867,7 +2099,7 @@ void ScenarioBudget(const std::string& config, RunnerCtx& rc, long e)
 void ScenarioDisable(const std::string& config, RunnerCtx& rc, long e, bool invalidateFirst)
 {
     RunnerOptions o;
-    o.budgetSeconds = std::max(0.05, 6.0 * rc.requestMs / 1000.0);
+    o.budgetSeconds = std::max(0.05, 12.0 * rc.requestMs / 1000.0);   // the follow-up request runs under it too (see ScenarioBudget)
     o.cancelAckSeconds = 0.15;
     DecompilerRunner runner(config, o);
     uint64_t g = 0;

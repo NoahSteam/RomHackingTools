@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the emitter and encoder replacements are allocated before the old ones are freed (patches/0023-allocation-failure-order.patch).
  */
 #include "prettyprint.hh"
 #include "funcdata.hh"
@@ -342,21 +344,28 @@ void EmitMarkup::closeParen(const string &paren,int4 id)
 void EmitMarkup::setOutputStream(ostream *t)
 
 {
+  // SaturnExplorer: the replacement is made before the old encoder is freed. An allocation failure
+  // leaves the old one in place; the destructor frees whatever \b encoder holds, so it must never
+  // hold a freed pointer.
+  Encoder *replacement = new PackedEncode(*t);
   if (encoder != (Encoder *)0)
     delete encoder;
   s = t;
-  encoder = new PackedEncode(*s);
+  encoder = replacement;
 }
 
 void EmitMarkup::setPackedOutput(bool val)
 
 {
   if (encoder == (Encoder *)0) return;
-  delete encoder;
+  // SaturnExplorer: allocate first, as in setOutputStream.
+  Encoder *replacement;
   if (val)
-    encoder = new PackedEncode(*s);
+    replacement = new PackedEncode(*s);
   else
-    encoder = new XmlEncode(*s);
+    replacement = new XmlEncode(*s);
+  delete encoder;
+  encoder = replacement;
 }
 
 int4 TokenSplit::countbase = 0;
@@ -1248,12 +1257,22 @@ void EmitPrettyPrint::setMarkup(bool val)
 
 {
   ostream *t = lowlevel->getOutputStream();
-  delete lowlevel;
+  // SaturnExplorer: the replacement is built, and given the stream, before the old emitter is freed.
+  // \b lowlevel is freed by the destructor, so a failed allocation must leave it pointing at a live
+  // emitter.
+  Emit *replacement;
   if (val)
-    lowlevel = new EmitMarkup;
+    replacement = new EmitMarkup;
   else
-    lowlevel = new EmitNoMarkup;
-  lowlevel->setOutputStream(t);
+    replacement = new EmitNoMarkup;
+  try {
+    replacement->setOutputStream(t);
+  } catch(...) {
+    delete replacement;
+    throw;
+  }
+  delete lowlevel;
+  lowlevel = replacement;
 }
 
 void EmitPrettyPrint::setMaxLineSize(int4 val)

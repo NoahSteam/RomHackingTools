@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a data-type that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
  */
 #include "type.hh"
 #include "funcdata.hh"
@@ -3899,7 +3901,13 @@ Datatype *TypeFactory::findNoName(Datatype &ct)
 void TypeFactory::insert(Datatype *newtype)
 
 {
-  pair<DatatypeSet::iterator,bool> insres = tree.insert(newtype);
+  pair<DatatypeSet::iterator,bool> insres;
+  try {
+    insres = tree.insert(newtype);
+  } catch(...) {
+    delete newtype;		// SaturnExplorer: insert owns the type it is given (it frees a duplicate)
+    throw;
+  }
   if (!insres.second) {
     ostringstream s;
     s << "Shared type id: " << hex << newtype->getId() << endl;

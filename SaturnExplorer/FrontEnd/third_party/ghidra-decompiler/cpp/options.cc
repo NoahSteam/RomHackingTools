@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a failed OptionDatabase constructor frees the options it registered (patches/0023-allocation-failure-order.patch).
  */
 #include "options.hh"
 #include "funcdata.hh"
@@ -85,8 +87,13 @@ bool ArchOption::onOrOff(const string &p)
 void OptionDatabase::registerOption(ArchOption *option)
 
 {
-  uint4 id = ElementId::find(option->getName(),0);	// Option name must match a known element name
-  optionmap[id] = option;
+  try {
+    uint4 id = ElementId::find(option->getName(),0);	// Option name must match a known element name
+    optionmap[id] = option;
+  } catch(...) {
+    delete option;		// SaturnExplorer: not yet in the map, so nothing else frees it
+    throw;
+  }
 }
 
 /// Register all possible ArchOption objects with this database and set-up the parsing map.
@@ -95,6 +102,7 @@ OptionDatabase::OptionDatabase(Architecture *g)
 
 {
   glb = g;
+  try {
   registerOption(new OptionExtraPop());
   registerOption(new OptionReadOnly());
   registerOption(new OptionIgnoreUnimplemented());
@@ -133,6 +141,14 @@ OptionDatabase::OptionDatabase(Architecture *g)
   registerOption(new OptionNamespaceStrategy());
   registerOption(new OptionSplitDatatypes());
   registerOption(new OptionNanIgnore());
+  } catch(...) {
+    // SaturnExplorer: the destructor of an object whose constructor throws never runs
+    map<uint4,ArchOption *>::iterator iter;
+    for(iter=optionmap.begin();iter!=optionmap.end();++iter)
+      delete (*iter).second;
+    optionmap.clear();
+    throw;
+  }
 }
 
 OptionDatabase::~OptionDatabase(void)

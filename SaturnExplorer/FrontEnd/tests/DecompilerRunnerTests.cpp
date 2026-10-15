@@ -577,9 +577,27 @@ void TestCoalescing()
 // decompilation is disabled, with a reason, and nothing new is started.
 void TestDisableOnUnacknowledgedCancel()
 {
+    // The stuck request needs only a budget that expires, but the follow-up requests below run on
+    // this runner too, under the same budget: a constant 50 ms is about one Small() run in a
+    // Windows Debug build (61 ms measured: "too large", 1 in 20 runs, A12-6). So the budget is
+    // ten times a measured Small() run on a generous runner, and 50 ms at least.
+    double smallMs = 0;
+    {
+        DecompilerRunner probe(gConfig, Generous());
+        for (int i = 0; i < 2; ++i)   // the first is the slower one; take the worse of two
+        {
+            const auto t0 = Clock::now();
+            probe.Submit(9, gSnap, Small());
+            DecompileResult r;
+            CHECK(WaitResult(probe, r));
+            smallMs = std::max(smallMs, MsSince(t0));
+        }
+    }
     RunnerOptions options;
-    options.budgetSeconds = 0.05;
+    options.budgetSeconds = std::max(0.05, smallMs * 10 / 1000.0);
     options.cancelAckSeconds = 0.2;
+    std::printf("  a Small() run takes %.1f ms: budget %.0f ms for the stuck request and the follow-ups\n", smallMs,
+                options.budgetSeconds * 1000);
     DecompilerRunner runner(gConfig, options);
     PhaseGate gate;
     runner.SetPhaseObserverForTests(gate.Observer());

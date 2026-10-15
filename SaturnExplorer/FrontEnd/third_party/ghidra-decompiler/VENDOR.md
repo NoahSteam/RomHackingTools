@@ -49,6 +49,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0019-sleigh-sr-rte.patch` | `ldc`/`ldc.l` to SR keep only T, S, I3-I0, Q and M (`0x3F3`); `rte` masks the stacked SR the same way and restores it before its delay slot, not after. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 | `0020-sleigh-cache-lru.patch` | `DisassemblyCache::getParserContext` makes a hit the newest entry (least recently used, not oldest allocated). A delayed branch whose tree was cached but whose slot's was not took its own tree for the slot and was built from the slot's parse. |
 | `0022-sleigh-scan-64bit-literal.patch` | The SLEIGH compiler's scanner parses numeric literals as 64-bit on every platform (`std::stoull`), so the spec's 64-bit constants build on Windows. |
+| `0023-allocation-failure-order.patch` | An allocation failure unwinds cleanly: the printer's emitter and encoder are replaced allocation first, the blocks of a collapsed set (a recovered switch) change owner only after the allocation that can fail, the engine's `ostringstream` throws instead of cutting text short, and the cheap leaks on the way out are closed (`Architecture`, `OptionDatabase`, `DisassemblyCache`, `Varnode`, `PcodeOp`, `Comment`, `Datatype`, `BlockCopy`). |
 
 MSVC and Apple clang needed no patch beyond these.
 

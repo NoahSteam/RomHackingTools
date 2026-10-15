@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a Varnode that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
  */
 #include "varnode.hh"
 #include "funcdata.hh"
@@ -1254,8 +1256,13 @@ Varnode *VarnodeBank::create(int4 s,const Address &m,Datatype *ct)
   Varnode *vn = new Varnode(s,m,ct);
   
   vn->create_index = create_index++;
-  vn->lociter = loc_tree.insert(vn).first; // Frees can always be inserted without duplication
-  vn->defiter = def_tree.insert(vn).first;
+  try {
+    vn->lociter = loc_tree.insert(vn).first; // Frees can always be inserted without duplication
+  } catch(...) {
+    delete vn;			// SaturnExplorer: nothing owns it yet
+    throw;
+  }
+  vn->defiter = def_tree.insert(vn).first;	// (in loc_tree now, which owns it)
   return vn;
 }
 
@@ -1408,7 +1415,16 @@ Varnode *VarnodeBank::createDef(int4 s,const Address &m, Datatype *ct,PcodeOp *o
   Varnode *vn = new Varnode(s,m,ct);
   vn->create_index = create_index++;
   vn->setDef(op);
-  return xref(vn);
+  try {
+    return xref(vn);
+  } catch(...) {
+    // SaturnExplorer: xref flags a Varnode as inserted once it is in the sorted lists, which own it
+    // from then on; a failure before that leaves it with nobody (xref is also used to reinsert a
+    // Varnode that other ops point to, so it cannot free the one it is given itself).
+    if ((vn->flags & Varnode::insert)==0)
+      delete vn;
+    throw;
+  }
 }
 
 /// The new Varnode will be assigned from the \e unique space, and

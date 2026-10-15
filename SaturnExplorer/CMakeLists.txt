@@ -299,13 +299,10 @@ if(SE_ENABLE_DECOMPILER)
             # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
             set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600
                                  ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
-            # WILL_FAIL while the matrix's findings stand (REVIEW_LEDGER.md, rows A6-1 .. A6-3: a freed
-            # pointer left behind when the replacement allocation fails, a crash or heap-use-after-free;
-            # A6-4, A6-5: std::ostringstream swallowing the failure; A6-6: a cancel carried into the
-            # second pass; A6-7 .. : leaks in a sanitizer build). The default subset pins one cell
-            # for each (kPins in DecompilerFaultTests.cpp), so it fails now, and the entry goes red
-            # again, to be un-fenced, once the last of them is fixed. Remove this line then.
-            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES WILL_FAIL TRUE)
+            # The default subset pins one cell for each finding of the sweep (kPins in
+            # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-9), so it fails again if one
+            # comes back. It was WILL_FAIL until patch 0023 and the host's stream and pass-boundary
+            # fixes closed them.
         endif()
 
         # Real game code from the spike's Yabause savestate, through the savestate driver.

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a comment that cannot be stored is freed (patches/0023-allocation-failure-order.patch).
  */
 #include "comment.hh"
 #include "funcdata.hh"
@@ -190,7 +192,12 @@ void CommentDatabaseInternal::addComment(uint4 tp,const Address &fad,
     if (((*iter)->getAddr() == ad)&&((*iter)->getFuncAddr()==fad))
       newcom->uniq = (*iter)->getUniq() + 1;
   }
-  commentset.insert(newcom);
+  try {
+    commentset.insert(newcom);
+  } catch(...) {
+    delete newcom;		// SaturnExplorer: not stored, so nothing else owns it
+    throw;
+  }
 }
 
 bool CommentDatabaseInternal::addCommentNoDuplicate(uint4 tp,const Address &fad,
@@ -214,7 +221,12 @@ bool CommentDatabaseInternal::addCommentNoDuplicate(uint4 tp,const Address &fad,
     else
       break;
   }
-  commentset.insert(newcom);
+  try {
+    commentset.insert(newcom);
+  } catch(...) {
+    delete newcom;		// SaturnExplorer: not stored, so nothing else owns it
+    throw;
+  }
   return true;
 }
 

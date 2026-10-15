@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: ostringstream is the engine's, which reports an allocation failure (patches/0023-allocation-failure-order.patch).
  */
 // Generic (POSIX) class for searching files and managing paths
 
@@ -23,13 +25,13 @@
 #include <iostream>
 #include <sstream>
 #include <fstream>
+#include "error.hh"
 
 namespace ghidra {
 
 using std::vector;
 using std::string;
 using std::ifstream;
-using std::ostringstream;
 
 class FileManage {
   vector<string> pathlist;	// List of paths to search for files

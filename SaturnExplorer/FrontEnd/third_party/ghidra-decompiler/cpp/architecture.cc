@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: translator owned by the Architecture before initialize (patches/0003-translator-ownership-on-init-failure.patch).
  * Modified for SaturnExplorer: unused loads kept until shown to be ordinary memory (patches/0009-keep-unused-loads.patch).
  * Modified for SaturnExplorer: a load is read once and in place, never duplicated or moved past another memory operation (patches/0010-load-not-duplicated.patch).
+ * Modified for SaturnExplorer: a constructor that fails frees its print language (patches/0023-allocation-failure-order.patch).
  */
 // Set up decompiler for specific architectures
 
@@ -174,8 +175,15 @@ Architecture::Architecture(void)
   symboltab = (Database *)0;
   context = (ContextDatabase *)0;
   print = PrintLanguageCapability::getDefault()->buildLanguage(this);
-  printlist.push_back(print);
-  options = new OptionDatabase(this);
+  try {
+    printlist.push_back(print);
+    options = new OptionDatabase(this);
+  } catch(...) {
+    // SaturnExplorer: the destructor of an object whose constructor throws never runs, and
+    // nothing else owns the print language yet.
+    delete print;
+    throw;
+  }
   loadersymbols_parsed = false;
   cancelRequested = (std::atomic<bool> *)0;
   keepUnusedLoads = false;
