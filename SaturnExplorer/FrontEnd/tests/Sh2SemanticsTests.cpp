@@ -382,6 +382,43 @@ void TestDiv1()
     CHECK(bad == 0);
 }
 
+// Ledger A2-9: trapa pushes SR and then the address after it, and its handler's rte pops them. The
+// emulator ends the instruction at the call, so what it runs is the push alone -- the state the
+// handler is entered with, which is what Mednafen reaches (the decode test compares exactly that).
+// The spec also gives r15 its 8 bytes back after the call, for the decompiler, which carries on
+// after a call; the emulator must never run that op, or the handler would be entered with the
+// caller's r15 and its rte would pop the caller's stack.
+void TestTrapaStack()
+{
+    const uint32_t handler = kCode + 0x20, vbr = kData, sp = kData + 0x100;
+    // trapa #5 ; nop ... and the handler: rte ; nop
+    std::vector<uint16_t> words(18, 0x0009);
+    words[0] = 0xC305;
+    words[16] = 0x002B;
+    auto start = [&](Machine& m) {
+        m.Set("vbr", vbr);
+        m.Set("r15", sp);
+        m.Set("sr", 0x000003F3u);
+        m.Poke(vbr + 5 * 4, 4, handler);
+    };
+    {
+        Machine m(words);
+        start(m);
+        CHECK(m.Run(kCode, handler));
+        CHECK(m.Get("r15") == sp - 8);                 // entered with SR and the return address pushed
+        CHECK(m.Peek(sp - 4, 4) == 0x000003F3u);       // SR first
+        CHECK(m.Peek(sp - 8, 4) == kCode + 2);         // then the address of the next instruction
+        CHECK(m.Get("sr") == 0x000003F3u);             // SR itself is unchanged
+    }
+    {
+        Machine m(words);
+        start(m);
+        CHECK(m.Run(kCode, kCode + 2));                // the handler's rte comes back
+        CHECK(m.Get("r15") == sp);                     // ...with both words popped
+        CHECK(m.Get("sr") == 0x000003F3u);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -412,6 +449,7 @@ int main(int argc, char** argv)
         RUN(TestXorB());
         RUN(TestPredecrementStoreAlias());
         RUN(TestDiv1());
+        RUN(TestTrapaStack());
     }
     catch (ghidra::LowlevelError& e)
     {
