@@ -13,6 +13,7 @@ front end, and a patched Mednafen that talks to it over a local socket.
 | Log panel, tracepoints, execution actions | `EXECUTION_ACTIONS.md` |
 | SH-2 decompiler panel: using it, demo | `DECOMPILER_GUIDE.md`, `Docs/Decompiler/DEMO.md` |
 | SH-2 decompiler: design, plan, spike | `Docs/Decompiler/DESIGN.md`, `Docs/Decompiler/PLAN.md`, `Docs/Decompiler/SPIKE_RESULTS.md` |
+| SH-2 decompiler: the review program (areas, oracles, roles, done) | `Docs/Decompiler/REVIEW_PROGRAM.md`, `Docs/Decompiler/REVIEW_LEDGER.md` |
 | Bumping the vendored Ghidra decompiler | `FrontEnd/third_party/ghidra-decompiler/VENDOR.md` → "Bumping Ghidra — checklist" |
 | Third-party licences that must ship | `Integration/DISTRIBUTION.md` → "Shipping Saturn Explorer itself" |
 
@@ -100,7 +101,9 @@ Before exporting any SH-2 register, check whether `sh7095.inc` writes it uncondi
 
 ## Conventions
 
-- Commit directly to `master` and push. No branches or PRs.
+- Commit directly to `master` and push. No branches or PRs -- except agents working an area of
+  the review program (`Docs/Decompiler/REVIEW_PROGRAM.md`), which commit on `review/*` or
+  `program/*` branches that the coordinator merges.
 - C++14 in Core and the savestate driver (they build for the web too).
 - Comments explain *why* — the hardware quirk, the reason a guard exists. The code already
   says what it does.
