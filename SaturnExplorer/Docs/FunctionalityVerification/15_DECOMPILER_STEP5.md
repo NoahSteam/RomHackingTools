@@ -2253,3 +2253,82 @@ known prototype below is lent); the call's printed argument count against the le
 checked); the generated test under ASan; MSVC and macOS builds. The default seeds do not reach A4-2 and
 A4-3 (about 1 in 400 version 2 seeds), so the ctest entry is green and the nightly job (20,000 seeds) is
 red until they are fixed.
+
+## Area 5, round 2: fixes
+
+Fixer, branch `review/5-round2-fix`, fix commit `342263f`. Ledger rows A5-3 to A5-7 are fixed, A5-8 is accepted,
+and the A5-4 row, whose code spans held a `|` that broke the table, is mended. No engine patch: every root cause
+was in the host (the map, `HardwareNotes`, `NoteRemovedAccesses`, `Accesses`) or in the test oracle, so
+the vendored tree is unchanged (patches 0001 to 0020). Mednafen (`ss.c`, `smpc.c`, `vdp1.c`, `vdp2.c`, `sh7095.inc`)
+was re-read for each rule; the audit document has them (`HARDWARE_REGISTER_AUDIT.md`, "Access width and lane").
+
+**A5-3, A5-4: the access-kind table gets a second axis.** `HardwareRegister::narrow` (`NarrowAccess`) says what an
+access narrower than the register does when the bus does not just take the bytes it carries; `NarrowAccessEffects`
+turns the kind into a caution; `HardwareNotes` adds it on the instruction, naming the register and the width. Every
+register of a kind gets the rule, from the block it is in (the on-chip block splits at 0xFFFFFF00):
+
+| Kind | Registers | What the access does (Mednafen) | Caution |
+|---|---|---|---|
+| `WholeOnByte` | VDP1, VDP2 | a byte write writes the whole 16-bit register, the other byte from the data bus (`WriteReg`, `RegsWrite`) | "a 1-byte write to VDP2_TVMD writes the whole 16-bit register: ..." |
+| `OnChipLong` | the divider, the DMAC | a word write at the register's address writes it whole (DVDNT, DVDNTL also divide); at +2 nothing; a word read returns the low half at +0 and +2; a byte access is a CPU address error | one caution per case |
+| `OnChipKeyedLong` | BCR1 to RTCOR | no word write is taken: only a 4-byte write with 0xA55A above | "does nothing: it is set only by ..." |
+| `OnChipWord` | the UBC | a byte access is an address error | the same |
+| `ByteLane` | the SMPC | registers on the low lane at odd addresses: a word at the even address is a write of the low byte (or a read of 0xFF00 or the register); a byte at an even address does nothing (reads 0xFF); a long is two 16-bit accesses, bits 23-16 then bits 7-0 | one per register |
+
+The SMPC word write also prints as the register now. Each SMPC register is registered a second time as a 2-byte
+symbol at the even address (`SaturnHardwareWordViews`, both partitions, volatile); the engine takes the smallest symbol
+that holds the access, so a byte at the odd address still finds the byte symbol, and `mov.w r0,@r1` at 0x2010001E
+prints `SMPC_COMREG = 0x19;` with the caution that it is a byte write. A long is not named on the line (it covers
+two registers, no single symbol can); the caution names each. The "covers REG1 and REG2" caution is not made for the
+SMPC, the lane note replaces it. The ledger lists every access at its real width.
+Also found, not fixed: the BSC's keyed long write (BCR1 to RTCOR with a key other than 0xA55A is ignored) is not
+checked, only the word write that never works.
+
+**A5-5: one to one.** `NoteRemovedAccesses` and the tests' `Accounts` (replacing `AccountFor`) match each access of
+the reference run with one shown access or one engine record, never one for two, by instruction, direction and width
+and by address where both sides have a constant one (exact pairs first, so an access through a pointer does not take
+a constant one's record). `AccessFate::frame` marks a fold into the function's own stack frame (the record's address is
+the frame offset, -4 for a pop: `constantAddress` is now false for it, the engine's space is read in `DecompileInto`);
+such a record matches nothing, and `DeadIsLoss` ignores it. `ReferenceOk` and `TestGameCode` spend one removal
+caution per removed access (`SaidCount`).
+Fixtures: `macRemoved`, `macRemovedSecond`, `macRemovedBoth`, `rteSlot` (with its two frame folds), control `rtsSlot2`; and
+made-up records for the oracle itself (a fold does not excuse a second access; one printed access likewise; a frame
+fold at -4 is not a register).
+
+**A5-6: mac.** `Accesses` now allows as many accesses of an instruction and direction on a path as the flow had LOADs or
+STOREs for it, less the ones that ended another way (mac.l has two). `repeatedOnPath` is unchanged for one-access
+instructions, and `TestGameCode` no longer exempts mac by opcode. Fixtures `macPtr`, `macWPtr`, `macSame`, `macReg` with `Ledger`.
+*What the generator must change* (`Sh2GeneratedTests.cpp`, not edited here): nothing for the flag itself, since it reads
+`repeatedOnPath`: `SE_GENERATED_WORDS="045F 000B 0009 0009"` (also `445F`, `044F`) now gives 0 findings. mac can go into
+the grammar, with its trace expecting two reads of one instruction. But the "dropped" check lists a trace access as
+printed when any ledger entry has the same (instruction, direction, size) -- the A5-5 hole, in the generator: it
+should count (a ledger entry spent per trace access, by address when both have one), or one printed operand of a
+mac excuses a lost second.
+
+**A5-7: caution naming.** The removal caution reads "the N-byte write of A and B here is missing" (all registers
+`HardwareRegistersCovering` finds, `RegisterNames`; an unnamed address in hex; "through a pointer" with the width).
+The earlier fixtures' strings read "the 1-byte write of SMPC_SF ...". The guide's table does not quote them.
+
+**A5-8: accepted.** Mednafen's low work RAM (`ss.c`, `A & 0x100000` in 0x00200000-0x003FFFFF) is not mapped for VA0
+and VA1 (reads 0xFFFF, writes dropped) and mirrors for VA2. It is ordinary memory either way, no register is
+involved, and a user mark reaching the mirror is a harmless superset: the aliases stay.
+
+**Mutation checks** (the fix reverted, the suite fails; restored, it passes), all in `TestHardwareVolatility` and
+`TestHardwareMap`: the `WholeOnByte` rule off: the three VDP fixtures and the sweep; the on-chip word rule off:
+`divWordHigh`, `divWordLow`, `divWordReadHigh`, `bscWord` and the sweep; the on-chip byte rule and the SMPC word
+rule off: `divByte`, `divByteRead`, `ubcByte`, `smpcWord`, `smpcWordRead`, the mirror fixture and the sweep; the SMPC word views not registered:
+`smpcWord` and `smpcWordRead` (the line); the removal match without address and multiplicity: `macRemoved`,
+`macRemovedSecond`, `rteSlot`, `ReferenceOk` on them; the allowed count fixed at 1: `macPtr`, `macWPtr`, `macSame`, `macReg`;
+the caution naming the first register: `removedLong`; the oracle without the frame rule: its made-up cases (three
+checks).
+
+**Matrix** (RelWithDebInfo, gcc):
+
+| | |
+|---|---|
+| `ctest` | 93 of 93 passed (about 66 s with -j3) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+| New cautions on game code | none: A5-3 and A5-4 add 0 notes to the 839 and 1,554 outputs (`SE_GAME_OUT`); no partial register access, no `Ram2010`/`Ram0010` line, in either (the 16 and 20 removal cautions now carry the width) |
+| Generated test | passes (`ctest`); mac words give 0 findings |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report (`detect_leaks=1`); suite passes |

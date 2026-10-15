@@ -54,6 +54,32 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
   - Byte writes at FE80-FE83 have no effect.
 
   Source: sh7095.inc `OnChipRegWrite_u16`, SH7604 §12.2.4.
+- **Access width and lane** (area 5 round 2, A5-3 and A5-4; `NarrowAccess` in the map, said by
+  `NarrowAccessEffects`). What an access narrower than its register does, re-read from Mednafen:
+  - **SMPC** (ss.c `BusRW_DB_CS0_*`): the registers sit on the low lane of the 16-bit bus at the
+    odd addresses, decoded as `(A & 0x7F) >> 1`. A word write at the even address calls
+    `SMPC_Write` with the low byte (a word write at `0x2010001E` is a `SMPC_COMREG` write, an SMPC
+    command); a byte write at an even address does nothing (`A & 1` is tested); a long is two
+    16-bit bus accesses, so `0x2010001C` writes register `0x0E` with bits 23-16 and `SMPC_COMREG`
+    with bits 7-0. Reads: a word is `0xFF00 | SMPC_Read` (a word read at `0x20100060` is
+    `0xFF00 | SMPC_SR`), a byte at an even address reads `0xFF`. The table's 1-byte entries at odd
+    addresses stay as they are (the SMPC manual's), the decompiler also names each register at the
+    even address as a 2-byte word view (`SaturnHardwareWordViews`), and every SMPC row below is
+    unchanged and ok.
+  - **VDP1, VDP2** (vdp1.c `VDP1_Write8_DB`, vdp2.c `RW_W8`): a byte write to a register calls
+    `WriteReg`/`RegsWrite` with the whole 16-bit bus word, so the other byte is whatever was last on
+    the data bus. A byte read returns the byte. (`WholeOnByte`.)
+  - **On-chip, `0xFFFFFF00` and up** (sh7095.inc, the `A & 0x100` half of `OnChipRegWrite_u8/u16`
+    and `OnChipRegRead_INLINE_u8/u16`): a word write at a 32-bit register's own address writes the
+    whole register with the 16-bit value (`DVDNT` and `DVDNTL` also start a division) and a word
+    write at `+2` does nothing; a word read returns the low half at both; any byte access sets a CPU
+    address error. The bus state controller (`0xFFFFFFE0` and up) takes no word write at all: only a
+    4-byte write with `0xA55A` in the upper half sets a register (`OnChipKeyedLong`; the long write
+    itself is not checked, a wrong key is not diagnosed). A byte access to a 16-bit register in the
+    same half (the UBC, which Mednafen does not otherwise decode) is the same address error
+    (`OnChipWord`). Below `0xFFFFFF00` a byte write is taken by lane and needs no rule.
+  - **SCU, SCSP, CD block**: a byte write is masked or taken by lane (`SCU_RegRW_DB_u8_W1`,
+    `SCSP_NE16_RW`, `CDB_Write_DBM`); no rule.
 - **Split fields:**
   - SCSP MSLC/CA, DTLG, SCIPD, MCIPD (scsp.inc);
   - SCU IST, PPAF (scu.inc);
