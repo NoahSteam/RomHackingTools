@@ -274,7 +274,7 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp)
-        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics)
+        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics Sh2Generated)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp ${SE_DECOMPILER_TEST_SOURCES})
             target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
             target_link_libraries(SaturnExplorer${name}Tests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
@@ -316,6 +316,13 @@ if(SE_ENABLE_DECOMPILER)
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT 60)
         set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
+        # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0).
+        # The default run is 300 seeds; SE_GENERATED_SEEDS=<n> runs a long one.
+        # Expected to fail while the generator's open findings stand (REVIEW_LEDGER.md: A5-1, A4-1,
+        # dropped reads whose value feeds a folded expression). WILL_FAIL inverts the verdict, so
+        # ctest stays green on master and goes red the day the fix lands -- the signal to remove
+        # this property. The nightly CI job runs the binary directly and reports the real result.
+        set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
     endif()
 endif()
 

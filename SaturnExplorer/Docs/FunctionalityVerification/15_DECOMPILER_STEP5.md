@@ -1209,3 +1209,104 @@ reachable in SE's setup, which has no `char *` types, so the guard has nothing t
 for the next review, not changed: a `jmp @rN` through a pointer kept in unmarked work RAM prints as
 a call to the address the snapshot holds there (`(*pcRam00000000)()` when it is 0), the value at
 the moment of the capture.
+
+
+## Program Phase 0: the generator (`program/generator`)
+
+`SaturnExplorerSh2GeneratedTests` (`FrontEnd/tests/Sh2GeneratedTests.cpp`, one `ctest` entry,
+`SaturnExplorerSh2GeneratedTests`) generates random SH-2 functions from a small grammar, runs
+each on the vendored p-code emulator for the memory accesses it really makes, decompiles it, and
+checks the decompiler's access ledger (`DecompileResult::accesses`) against that trace. It is the
+program's instrument for finding failure classes without a human reviewer
+(`Docs/Decompiler/REVIEW_PROGRAM.md`, Phase 0). Generation is a pure function of the seed.
+
+**Grammar.** 3 to 14 items after two pointer loads: ALU (`mov #imm`, `mov`, `add`, `sub`, `and`,
+`or`, `xor`, `shll2`, `extu.b`, `extu.w`, into r0-r3 only); loads and stores of byte, word and
+long through r4/r5 (scratch RAM parameters) and r6/r7 (pointers loaded from a literal pool word,
+placed after the code and 4-aligned) as `@Rn`, `@(disp,Rn)`, `@(r0,Rn)`, `@Rm+`/`@-Rn` (r4/r5
+only) and `tas.b`; the literal is a hardware register or range address (from
+`SaturnHardwareRegisters`/`HardwareRanges`, cached or cache-through), an ordinary RAM address
+(`0x2600xxxx`, sometimes `0x0600xxxx`) or a mailbox (16 bytes at `0x26001000`+, which the second
+request marks volatile); a forward `bt`/`bf` or `bt/s`/`bf/s` (with a delay-slot instruction)
+over one to three instructions, which may reload a pointer; a counted loop (`mov #n,r3 ; body ;
+dt r3 ; bf`); at most one mailbox write-then-poll (write first or not, polling for bit 0 clear or
+set, on a mailbox, a hardware register or unmarked RAM); `rts` with a `nop` or an instruction in
+the slot. r15 is never touched and a delay slot never holds a PC-relative load or a branch.
+
+**Ground truth.** `TracingEmulate` is an `EmulatePcodeCache` that hooks `executeLoad` and
+`executeStore`, so each record has the exact width and the p-code op's instruction address (a
+delay slot's access carries the branch's address, as the decompiler's ledger does). A
+`MemoryBank` cannot give that: it sees aligned 8-byte words. High work RAM (both partitions, every
+1 MiB repeat) is real; every other address is "hardware": reads return a default (zeros, ones or
+pseudo-random by run), writes are dropped, all logged. Three runs with different register and
+hardware inputs are united. A polled address reads busy twice and then ready, as if another
+processor answered, when it is hardware, or memory the request marks volatile (in that request's
+run only); an unmarked work-RAM poll has no one answering (it folds in the decompiler, by design),
+so that run may stop at the step limit (2,000 instructions), and what follows did not run.
+
+**Check**, per seed, for the default request and again with the mailbox marked volatile when the
+program has one: status is `Ok` and the result is not unsupported, unimplemented, truncated or
+holding bad data; every traced (instruction, read or write, size) has an entry in the ledger, or
+is a literal-pool load (folded by design), or an access to ordinary memory at a constant address
+(a literal-derived pointer; the address is not hardware, not marked, and not in the scratch area
+the parameters point into), or is in code the output says it removed (`SaidMissing`: a caution
+containing "here is missing"); every listed access is printed once, is not `repeatedOnPath` or
+`conditionalInPrint`, and the ledger's ordering invariants hold (`Unordered`, `OutOfFlowOrder`,
+`FoldedIntoSwitch`, `PrintedPast`, copied from `Sh2DecompilerTests.cpp`). Everything else is a
+dropped access. A failing seed prints its words as a `Fixture` (the pool among the words, the
+literal offset and value of the first pool word), the literals, a disassembly, the trace, the
+ledger, the notes and the decompiled text, and the first findings are shrunk (items removed, a
+`bt/s` made plain, a loop made one pass) to the smallest program that still fails the same way.
+
+**Running.** `SaturnExplorerSh2GeneratedTests <scratch dir>`, with `SE_GENERATED_SEEDS=<n>` (default
+300), `SE_GENERATED_FIRST=<k>` (a nightly run moves it), `SE_GENERATED_SEED=<k>` (one seed, with
+everything printed), `SE_GENERATED_SHRINK=<n>` (default 3), `SE_GENERATED_VERBOSE=1`,
+`SE_GENERATED_MUTATE=1` (deletes the first ledger entry of every decompilation; the run passes
+only if the check reports it: 278 of 300 seeds do, the rest list nothing that must be listed),
+`SE_GENERATED_FENCE=selfops|folds` (keeps the triggers of A5-1 out of the grammar, so a long run
+can look past it) and `SE_GENERATED_WORDS="D102 6010 ..."` (one hand-written function, with
+`SE_GENERATED_VOLATILE=<first>-<last>` and `SE_GENERATED_POLL=<address>[:until-set]`), which is how
+a finding is reduced by hand.
+
+**Default run** (300 seeds, `ctest -R Generated`, RelWithDebInfo on a 4-core container; a Debug build
+takes 5.8 s with shrinking off): 4.6 s, 2.4 s of it in the decompiler (about 16 ms a seed, with
+three or six emulator runs and one or two decompilations). The summary line:
+
+```
+SUMMARY: seeds=300 first=1 shapes covered: alu=1082 loads=885 stores=740 (plain 793 disp 530
+indexed 230 inc/dec 72) tas=134 widths b/w/l=618/539/602 literal pointers hw/ram/mailbox=394/244/325
+skips=393 (delayed 132) loops=179 polls=204 (write first 138, until set 70; mailbox 131 hw 55 ram 18)
+rts slot insn=82; second requests (mailbox marked)=216; traced accesses=3002; unfinished emulator
+runs=236; failing seeds=2; findings=2 (4946 ms total, 2430 ms in the decompiler, 16.5 ms per seed)
+```
+
+**The test fails, by design, until the findings below are fixed**: seeds 51 and 65 are A5-1. Longer
+runs: 3,000 seeds, 40 failing seeds and 62 findings, every one a dropped read (the ordering and
+printing invariants never fired); with `SE_GENERATED_FENCE=folds`, 20,000 seeds: 12 failing seeds
+and 18 findings, 5 of them A4-1 and the rest A5-1 reached through a counter a loop left at 0 or a
+byte stored to unmarked RAM (about 1 seed in 1,700). No dropped write, no wrong width, and no
+status other than `Ok` in 23,000 seeds.
+
+**Findings** (`Docs/Decompiler/REVIEW_LEDGER.md` has the fixtures, current and expected):
+
+- **A5-1 (P2).** A read whose value feeds only an expression the engine folds to a constant
+  (`xor r0,r0`, `sub`, `cmp/eq Rn,Rn`, a test against a register a loop left at 0) is dropped from
+  the output and the ledger with no note: hardware registers, marked memory, and reads through a
+  pointer alike. `mov.b @r1,r0 ; mov #0,r0` keeps the read. The all-volatile reference run loses the
+  same reads, so `ReferenceOk` cannot see the class.
+- **A5-2 (P3).** The "here is missing" caution shares that blind spot: in code removed after a poll
+  that folds, a read A5-1 dropped is not named.
+- **A4-1 (P2).** `if (c) a; hardware read; if (c) b;` prints no read at all.
+
+Wrong in the first drafts of the check, so a later reader does not repeat them: a delay slot's
+access belongs to the branch's address (the ledger's, and the emulator's op address), not the slot's;
+whether a pointer is a literal's is judged by the address the run touched (the scratch area is
+the parameters'), not by every literal that could reach the register on paths that never ran (the
+decompiler knows some cannot); an unmarked RAM poll must not be answered by the emulator's other
+processor, or the code after it runs in the trace and not in the analysis; an address that wraps
+past 2^32 is a plain constant, not hardware.
+
+Not done: calls (`jsr`/`bsr`, lent prototypes), jump tables and `switch`, and `bra`, in the
+grammar (the brief's later version); a nightly job (CI is another branch); the MSVC build of this
+file (it compiles without warnings under `-Wall -Wextra` on gcc); a wider fence than `folds`
+(a store-forwarded constant still reaches A5-1).
