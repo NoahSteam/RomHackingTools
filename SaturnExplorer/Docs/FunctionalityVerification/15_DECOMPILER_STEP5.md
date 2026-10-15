@@ -2649,3 +2649,113 @@ were touched and everything was rebuilt before the matrix was run.
   `SaidCount` is; mac is in version 1 only (version 2's registers-hold-a-value discipline would need it taught).
 - `noInterveningStatement` still passes a COPY or SUBPIECE whatever uses its output. Patch 0024 closes it for the one op that matters
   to us (the lookup, the only load a guard may be folded over); an ALU op there has no effect to repeat.
+
+## Area 5 round 3 and area 4 round 2 review
+
+Reviewer, branch `review/5-round3-review`, at `d781cb7` (patches 0001 to 0024). Findings only; no source or test
+changed. Every fixture is in `Docs/Decompiler/REVIEW_LEDGER.md` (A5-9 to A5-17, A4-4 to A4-6, and A3-1 for the area 3
+owner) with its words or replay line, the current and expected output and the oracle's verdict. Reproduced with
+`SaturnExplorerSh2GeneratedTests` (`SE_GENERATED_WORDS`, `_FUNCS`, `_TABLES`, `_DATA`, `_RETURNS`, `_POLL`,
+`SE_GENERATED_VERBOSE=1`), RelWithDebInfo, gcc. Mednafen read for each width rule: `sh7095.inc` (`SH7095_OnChipRegWrite_u8`,
+`_u16`, `_u32`, `SH7095_OnChipRegRead_INLINE_u8`, `_u16`, `_u32`, `SH7095_BSC_BusWrite_u32`, `_BusRead_u32`), `ss.c`
+(`BusRW_DB_CS0_u8_W0`, `_u8_W1`, `_u16_W1`, the FRT trigger region), `scu.inc` (`SCU_RegRW_DB_u8_W0` to `_u32_W1`,
+`SCU_FromSH2_BusRW_DB_u8_W0`, `_u16_W0`, `ABus_Read`, `ABusRW_DB_u16_W0_SH1`), `vdp1.c` (`WriteReg`, `ReadReg`, `VDP1_Write8_DB`),
+`vdp2.c` (`RegsRead`, `RW_W8`), `smpc.c` (`SMPC_Read`, `SMPC_Write`), `cdb.c` (`CDB_Read`).
+
+**Area 5 is not clean.** No P1 in the register handling itself; seven P2, all of one kind: a width or a lane the map does not
+model, so the line prints a part of the register, or names two, with no caution or the wrong one. None has an instance in
+either save state. The one P1 of the round (A4-4) is a control-flow error that removes a hardware write.
+
+**Not held.**
+
+- **A4-4 (P1).** A jump table one of whose entries is the default's own destination: once the bound check is folded into the
+  switch, the join is decided from the switch block's register values (`mova`'s r0) on the default path too. A reachable block
+  holding a hardware write is removed as unreachable, no caution says so (the all-volatile reference run removes the same
+  block, so the removal check has nothing to compare), and a signature is lent with a wrong return. Found by the generator in 2
+  of 15,000 version 2 seeds (68620, 107923); a 25-word fixture. With the entry pointing to its own `bra join`, the output is
+  right, so the shared destination is the trigger; the fixer's note on patch 0024 (`noInterveningStatement` passes a COPY
+  whatever uses it) names the likely root.
+- **A5-9 (P2).** A 4-byte access to the 8- and 16-bit on-chip registers below 0xFFFFFF00 is a CPU address error (Mednafen sets
+  `SH7095_PEX_CPUADDR`, a read returns 0); the output says "one 4-byte write covers SH2_ICR and SH2_IPRA", or nothing
+  (`xVar1 = _SH2_VCRWDT;`).
+- **A5-10 (P2).** A 16-bit access there reaches only the register at the word's own address, with the value's low byte; the odd
+  register is neither written nor read. The "covers SH2_TIER and SH2_FTCSR" caution and the FTCSR arming note are wrong; a
+  word at 0xFFFFFE90 or 0xFFFFFE70 does nothing and prints by address with no note.
+- **A5-11 (P2).** A byte or word write to the SCU's DSP ports (PPAF, PPD, PDA, PDD) writes the whole register from the data bus
+  (unmasked, unlike every other SCU register); printed `SCU_PPD._3_1_ = 3;` with no note.
+- **A5-12 (P2).** A 4-byte write to BCR1 to RTCOR without 0xA55A in the upper half does nothing; printed `SH2_BCR1 = 3;`. The
+  round 2 fixer saw it and did not put it in the ledger.
+- **A5-13 (P2).** A byte write to MINIT or SINIT sends no signal (the CS0 byte path is empty there); a long sends two. Printed
+  `MINIT._0_1_ = 3;` and `_MINIT = 3;` with no note.
+- **A5-14 (P2).** A 4-byte access over one 16-bit register and an unnamed half (VDP2 PRIR and the reserved word after it,
+  RAMCTL after the reserved 0x0C, VDP1 ENDR, SCSP DMEAL, a long read of CD_HIRQ) gets no caution: the "covers" caution needs two
+  named registers. `_VDP2_PRIR = 3;` writes PRIR with 0.
+- **A5-15 (P2).** Narrow reads on the A and B bus are 32-bit bus reads in Mednafen: a word read of VDP2_TVMD also reads
+  VDP2_EXTEN (which latches HCNT and VCNT), a word read of the CD FIFO at 0x25818000 pops two words. Nothing says so.
+- **A5-16 (P3).** Read kinds the map lacks: EXTEN's latch and TVSTAT's flag clear on read, SCU_AIACK reads 0, SH2_CCR's read
+  mirrors 0xFFFFFE93-0xFFFFFE9F, a byte write to VDP2 color RAM writes the whole entry.
+- **A5-17 (P3).** A byte at an even SMPC address prints as a part of the register beside it since the word views
+  (`SMPC_COMREG._0_1_ = 0x19;`); the caution says it does nothing.
+- **A4-5 (P3).** An indirect jump whose one destination is known only after the first flow, to code nothing else reaches and that
+  returns, is taken for a tail call (`braf` over data, `jmp @r1` through a literal, a table whose guard admits one index):
+  warned at the jump, signature withheld, but the destination is not in the body and the shown function is `void`. The generator
+  rejects it (`outside-body`).
+- **A4-6 (P3).** The generator reports `trace-outside` for a callee reached through the cache-through mirror (its `UnitOf` does not
+  canonicalize); the output is right.
+- **A3-1 (P3, for the area 3 owner).** The generator's `param-dropped` check counts a read through a pointer register on the path
+  where the code tested it to be 0 (address 0, ordinary memory): seeds 101046 and 107035. The output is right.
+
+**Held**, one line each:
+
+1. A5-3's rules, each against Mednafen: a byte write to VDP1 and VDP2 registers writes the whole word (VRAM is masked, the
+   registers are not); a word write to a 32-bit on-chip register at +0 writes it whole, at +2 nothing; a word read returns the
+   low half at both; a byte access is an address error; the BSC takes no word write. Through the mirrors (DVCR at 0xFFFFFF28,
+   DVSR at 0xFFFF7F00) the caution is right. No false alarm found among the existing cautions.
+2. A5-4's SMPC lane rules: a word at the even address (cached, cache-through, 0x3010001E through bits 28-27, 0x2017FF9E in the
+   last 128-byte repeat), a long over two registers (0x2010001C, 0x00100080, a long read of 0x20100020), word and long reads
+   through GBR (`mov.w @(0x62,gbr)` names SMPC_SF), a byte at the odd address unchanged. An even-address byte read calls
+   `SMPC_Read` of the same register, which has no side effect, so "returns 0xFF" is the whole story. Only A5-17.
+3. A5-5's matching by address: `mac.l` with one constant register operand and one through a pointer, both removed with
+   unreachable code: two cautions, one by name and one "through a pointer"; both operands through pointers: two. A frame record
+   (`AccessFate::frame`) is any record outside the ram space, which only the stack's folds are; no shape makes one stand for a bus
+   access.
+4. Patch 0021: a restart that reaches less than the first flow could not be built (a restart re-follows with more tables, and no
+   callee is ever lent as not returning). `bsrf` to a known function, a backward `braf`, a `braf` into an `else` that falls into
+   the join, and the SH compilers' `mov.w @(r0,r4),r0 ; braf r0` switch of three entries are right (0 findings). Flow into the
+   middle of another known function gets no warning, by design (only entries are known). The scan before the actions still
+   reads the first flow only (the round 1 fixer's note): not built here either: in the one attempt the second hop was taken for a call when
+   the third function read a register through its own literal.
+5. Patch 0024: the lookup used across the default through a MULTIEQUAL with a second guard (`cmp/pz ; bf ; cmp/gt ; bt`), the
+   lookup used by one case only, and a hardware read between two guards all keep their reads under the guards (0 findings).
+   The switchFold control on the game corpus: 27 and 155 switch lookups, as before. A4-4 is a COPY in the switch block, not
+   the lookup.
+6. The generator's holes, one hand-made module each: `mac.l` in a module (a callee `clrmac ; mac.l @r5+,@r4+`): 0 findings, two
+   reads listed. The address of a local handed to a callee: 0 findings (the caller is withheld, "a return not to its caller":
+   conservative, a question for area 3). A fifth argument on the stack: 0 findings (the callee withheld, "an incoming argument
+   outside its signature"; the call prints five arguments). Recursion and mutual recursion, with the depth clamped: 0 findings,
+   both withheld. A mirrored callee: A4-6. `SaidMissing` per instruction: no module can reach it. An unmarked poll is answered
+   only in the marked request's run, where nothing is removed, so no run reaches code the default request removed (the A5-5 `mac`
+   after a poll: "0 of 3 runs finished", the trace stops at the poll). The check is dead in practice. A4-4 is the first shape
+   where the emulator runs removed code, through flow rather than a poll; its findings are `removed-unsaid`, which `SaidMissing`
+   would excuse for any caution on the instruction.
+
+**For the coordinator.**
+
+- Area 3: an unknown or withheld callee is printed as leaving r1 and r4-r7 unchanged (the cspec's `killedbycall` names only r2
+  and r3). The clamped recursion prints `return iVar1;` with `iVar1 = (param_1 & 3) - 1`, where every run returns 0. The signature
+  is withheld, so nothing wrong is lent, but the text reads as a value. Not filed as a row (area 3, and Ghidra's default for an
+  unknown effect).
+- Seed 104955 (version 2) fails the generator's own contract (`generator:no-return`, modes 1 and 3), not the decompiler's.
+- The default 300 seeds and the A4-2/A4-3 seeds do not reach A4-4 (about 1 in 7,500 version 2 seeds), so the ctest entry stays
+  green; the nightly run of 20,000 will meet it.
+
+**Runs.**
+
+| | |
+|---|---|
+| Generator, both grammars, `SE_GENERATED_FIRST=60001`, 10,000 seeds | 1 failing seed (68620, A4-4), 2 findings; 132,679 accesses traced; 194 s |
+| Generator, version 2, `SE_GENERATED_FIRST=100001`, 10,000 seeds | 4 failing seeds: 107923 (A4-4), 101046 and 107035 (A3-1), 104955 (`generator:no-return`); 173 s |
+| Hand-made replays | about 50, listed in the ledger rows; the A5 ones give 0 findings (the generator has no register widths) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+| Width instances in the corpus | none: no `_SH2_` long or word over the on-chip byte registers, no narrow SCU DSP, MINIT or SINIT write, no `covers` caution; only `SH2_BCR1._2_2_` (right) |
