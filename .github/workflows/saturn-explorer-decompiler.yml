@@ -1,0 +1,250 @@
+name: Saturn Explorer Decompiler Review Checks
+
+# The three CI additions of the SH-2 decompiler review program
+# (SaturnExplorer/Docs/Decompiler/REVIEW_PROGRAM.md, Phase 0 and "Continuous integration"):
+#
+#   sanitizers      gcc ASan + UBSan + LeakSanitizer over the decompiler test binaries.
+#   vendored-tree   the committed engine is exactly the pinned upstream commit plus patches/.
+#   generator-nightly   the random SH-2 function generator, long run (nightly and on demand).
+#
+# Windows, macOS and macOS-under-Rosetta decompiler builds and tests already run in
+# saturn-explorer-verify.yml and are not repeated here. This file is Linux only.
+#
+# Environment contract of the generator target (SaturnExplorerSh2GeneratedTests):
+#   SE_GENERATED_SEEDS  how many seeds to run (the nightly sets 20000; unset means the short
+#                       run that ctest does).
+#   SE_GENERATED_SEED   run exactly this one seed (to replay a failure the log printed); it
+#                       takes precedence over SE_GENERATED_SEEDS.
+# Like the other decompiler tests, the binary takes a scratch directory as its one argument.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'SaturnExplorer/**'
+      - '.github/workflows/saturn-explorer-decompiler.yml'
+      - '.github/scripts/**'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'SaturnExplorer/**'
+      - '.github/workflows/saturn-explorer-decompiler.yml'
+      - '.github/scripts/**'
+  # Scheduled workflows run on the default branch only, so the nightly starts once this file is
+  # on master. 02:37 UTC: off the hour, when the shared runners are busiest.
+  schedule:
+    - cron: '37 2 * * *'
+  workflow_dispatch:
+    inputs:
+      seeds:
+        description: 'Generator: number of seeds (SE_GENERATED_SEEDS)'
+        default: '20000'
+      seed:
+        description: 'Generator: one seed to replay (SE_GENERATED_SEED); overrides the count'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------------------
+  # Areas 6 and 12 (lifecycle, platforms): no memory error, leak or undefined behaviour in the
+  # decompiler suites (the invariant of area 6). Builds are --parallel 4, as in saturn-explorer-verify.yml.
+  #
+  # Only gcc: its libasan/libubsan ship with the compiler, so nothing is installed. The SDL
+  # frontend is switched off (there is no display or GL on the runner and no test below needs
+  # it), which also means no apt step. -DCMAKE_CXX_FLAGS reaches the vendored engine, the
+  # sleigh compiler and the tests alike; the engine's CMakeLists only adds -O2 to Debug, so the
+  # sanitizer flags survive. UBSan here includes -fsanitize=vptr (part of "undefined" in C++).
+  #
+  # SaturnExplorerSlaFreshnessTests is built and run, but its result is informational: it runs
+  # se-sleighc (upstream's SLEIGH compiler) as a child, and that compiler is not clean under the
+  # sanitizers (an invalid downcast, an out-of-range enum load, a few leaked bytes), which makes
+  # the test fail for reasons outside the engine. The other six binaries gate the job. The log is
+  # uploaded in the artifact under informational/.
+  #
+  # Time: an ASan build of the engine is a few minutes; the runner test is the slow one under
+  # ASan (about 6 minutes on a local machine). The step summary lists each binary's wall time.
+  # ---------------------------------------------------------------------------------------
+  sanitizers:
+    name: Decompiler tests under ASan + UBSan + LSan (Linux, gcc)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ubuntu 24.04 runners run kernels whose default ASLR entropy (vm.mmap_rnd_bits=32) makes
+      # some libasan versions die at start-up with DEADLYSIGNAL; the usual fix is 28 bits.
+      - name: Lower ASLR entropy for the sanitizer runtime
+        working-directory: .
+        run: sudo sysctl -w vm.mmap_rnd_bits=28 || true
+
+      - name: Configure (Debug, ASan + UBSan)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+          -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-omit-frame-pointer"
+
+      # Built on its own first only so its build time is visible in the log.
+      - name: Build decompiler engine (timed)
+        run: time cmake --build build --parallel 4 --target SaturnExplorerGhidraDecomp
+
+      - name: Build decompiler tests (timed)
+        run: >
+          time cmake --build build --parallel 4 --target
+          SaturnExplorerSh2DecompilerTests SaturnExplorerSh2DecompilerEngineTests
+          SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerPanelTests
+          SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2SemanticsTests
+          SaturnExplorerSlaFreshnessTests
+
+      # Always succeeds: the next step judges the logs, so one run shows every binary's reports.
+      - name: Run the tests, capturing each log
+        run: bash ../.github/scripts/run-decompiler-sanitizers.sh build sanitizer-logs
+
+      # Fails on any AddressSanitizer / LeakSanitizer report, any non-zero exit, and any UBSan
+      # "runtime error" other than the two accepted upstream SLEIGH shifts (address.hh:605,
+      # slghpatexpress.cc:979; Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md).
+      - name: Check the logs for sanitizer reports
+        run: bash ../.github/scripts/check-sanitizer-logs.sh sanitizer-logs
+
+      - name: Upload sanitizer logs (including informational/)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-logs
+          path: SaturnExplorer/sanitizer-logs
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------------------
+  # Area 10 (vendored patches): the vendored engine is exactly upstream's pinned commit plus
+  # patches/. vendor.py rewrites the directory it lives in, so it runs in a copy; the copy is
+  # then diffed against the committed tree. sh-2.sla is a build product that vendor.py does not
+  # touch (SaturnExplorerSlaFreshnessTests covers it), so it is left out of the diff.
+  # ---------------------------------------------------------------------------------------
+  vendored-tree:
+    name: Vendored tree = pinned Ghidra + patches (Linux)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
+
+      - name: Read the pinned commit
+        id: pin
+        run: |
+          vend=SaturnExplorer/FrontEnd/third_party/ghidra-decompiler
+          commit="$(sed -n 's/^PINNED_COMMIT = "\([0-9a-f]\{40\}\)".*/\1/p' "$vend/vendor.py")"
+          test -n "$commit" || { echo "::error::PINNED_COMMIT not found in vendor.py"; exit 1; }
+          # VENDOR.md names the same commit; a bump that updates one and not the other is a bug.
+          grep -q "$commit" "$vend/VENDOR.md" || { echo "::error::VENDOR.md does not name $commit"; exit 1; }
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "Pinned Ghidra commit: $commit"
+
+      # The two upstream directories vendor.py reads (UPSTREAM_CPP, UPSTREAM_SPEC) and the two
+      # licence files it copies. A blobless sparse clone fetches only those few MB.
+      - name: Sparse-clone Ghidra at the pinned commit
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/NationalSecurityAgency/ghidra.git "$RUNNER_TEMP/ghidra"
+          cd "$RUNNER_TEMP/ghidra"
+          git sparse-checkout set --no-cone /Ghidra/Features/Decompiler/src/decompile/cpp/ /Ghidra/Processors/SuperH/data/languages/ /LICENSE /NOTICE
+          git checkout "${{ steps.pin.outputs.commit }}"
+          test "$(git rev-parse HEAD)" = "${{ steps.pin.outputs.commit }}"
+
+      - name: Rebuild the tree with vendor.py in a copy
+        run: |
+          cp -a SaturnExplorer/FrontEnd/third_party/ghidra-decompiler "$RUNNER_TEMP/rebuilt"
+          python3 -I "$RUNNER_TEMP/rebuilt/vendor.py" "$RUNNER_TEMP/ghidra"
+
+      # Any difference fails: a hand-edited vendored file, a patch that was not recorded in
+      # patches/, a stale file vendor.py no longer produces, or a stale sources.cmake.
+      - name: Diff against the committed tree
+        run: |
+          if diff -r -u -x sh-2.sla "$RUNNER_TEMP/rebuilt" SaturnExplorer/FrontEnd/third_party/ghidra-decompiler > "$RUNNER_TEMP/vendor.diff"; then
+            echo "The committed tree is exactly upstream ${{ steps.pin.outputs.commit }} plus patches/."
+          else
+            head -c 200000 "$RUNNER_TEMP/vendor.diff"
+            echo "::error::The committed vendored tree differs from vendor.py's output (diff above; left side is the rebuilt tree)."
+            exit 1
+          fi
+
+      - name: Upload the diff
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendor-diff
+          path: ${{ runner.temp }}/vendor.diff
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------
+  # Areas 1-5 and 11 (breadth): the random-function generator, long run. The target is written on
+  # branch program/generator; until it is merged the probe step finds no such target, says so
+  # in a notice, and the build/run/upload steps are skipped, so the workflow is valid (and
+  # green) before the merge. Once the target exists the steps are ordinary hard steps
+  # (continue-on-error is left at its default, false): a generator violation fails the job.
+  #
+  # RelWithDebInfo: optimised like the engine always is, with assertions kept (no NDEBUG
+  # surprises) and symbols for the stack of a failure. No sanitizers: the sanitizers job owns
+  # that, and a 20000-seed run under ASan would not finish overnight.
+  # ---------------------------------------------------------------------------------------
+  generator-nightly:
+    name: Generator, long run (Linux)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      SE_GENERATED_SEEDS: ${{ github.event.inputs.seeds || '20000' }}
+      SE_GENERATED_SEED: ${{ github.event.inputs.seed || '' }}
+    defaults:
+      run:
+        working-directory: SaturnExplorer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (RelWithDebInfo)
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_SDL2=ON
+
+      - name: Check that the generator target exists
+        id: probe
+        run: |
+          if cmake --build build --target help | grep -q -w 'SaturnExplorerSh2GeneratedTests'; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Generator skipped::SaturnExplorerSh2GeneratedTests is not defined in this checkout (branch program/generator is not merged yet); the nightly run is skipped."
+          fi
+
+      - name: Build the generator (timed)
+        if: steps.probe.outputs.present == 'true'
+        run: time cmake --build build --parallel 4 --target SaturnExplorerSh2GeneratedTests
+
+      # Run directly rather than through ctest: ctest's per-test TIMEOUT is for the short run.
+      # SE_GENERATED_SEEDS / SE_GENERATED_SEED come from the job env (see the top of the file).
+      - name: Run the generator
+        if: steps.probe.outputs.present == 'true'
+        run: |
+          mkdir -p generator-logs
+          rm -rf build/generated_test
+          set -o pipefail
+          echo "SE_GENERATED_SEEDS=$SE_GENERATED_SEEDS SE_GENERATED_SEED=$SE_GENERATED_SEED"
+          time build/bin/SaturnExplorerSh2GeneratedTests "$PWD/build/generated_test" 2>&1 | tee generator-logs/generator.log
+
+      - name: Upload the generator log
+        if: always() && steps.probe.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: generator-log
+          path: SaturnExplorer/generator-logs
+          if-no-files-found: warn
+          retention-days: 30

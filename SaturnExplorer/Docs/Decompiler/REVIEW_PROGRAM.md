@@ -24,6 +24,17 @@ reviewer's job is to find what the oracle cannot see, not to find bugs one at a 
 The game corpus (work RAM of two save states) is not in the repository and stays a local run,
 recorded in the round's section.
 
+### Continuous integration
+
+`.github/workflows/saturn-explorer-decompiler.yml` adds three Linux jobs. The Windows, macOS and
+Rosetta jobs stay in `saturn-explorer-verify.yml`.
+
+| Job | Runs | Proves |
+|---|---|---|
+| `sanitizers` | Every push and pull request touching `SaturnExplorer/`. gcc, Debug, `-fsanitize=address,undefined`; builds and runs the Sh2Decompiler, Sh2DecompilerEngine, Sh2DecompilerFixture, DecompilerPanel, DecompilerRunner and Sh2Semantics tests with leak detection on, and the SlaFreshness test informationally. | No AddressSanitizer or LeakSanitizer report and no UBSan error (vptr included) in the decompiler suites, game code included. The only UBSan lines tolerated are the two upstream SLEIGH shifts, `address.hh:605` and `slghpatexpress.cc:979`, matched by file and line in `.github/scripts/check-sanitizer-logs.sh` (a suppressions file would hide a new shift anywhere in the same file). A Ghidra bump that moves them fails the job until the patterns are re-confirmed. The job is slow: the runner test is the long pole under ASan (about 6 minutes locally), and the step summary lists each binary's time. SlaFreshness runs `se-sleighc`, upstream's SLEIGH compiler, as a child, and that compiler is itself not clean under the sanitizers (an invalid downcast to `LabelSymbol` at `slgh_compile.cc:2340`, a load of an out-of-range enum at `semantics.hh:88`, a few leaked bytes), so the test fails under them; its log is kept under `informational/` and does not gate. Logs are uploaded as the `sanitizer-logs` artifact. |
+| `vendored-tree` | Same triggers. Sparse-clones Ghidra at `PINNED_COMMIT`, runs `vendor.py` in a copy of the vendored directory, and diffs the copy against the committed tree (`sh-2.sla` excluded; it is a build product checked by `SaturnExplorerSlaFreshnessTests`). | The committed engine, spec files, `sources.cmake` and licence files are exactly the pinned upstream plus `patches/`: no hand edit, no unrecorded patch, no stale file. It also checks that `VENDOR.md` names the same commit. |
+| `generator-nightly` | 02:37 UTC every night (on the default branch) and on manual dispatch (inputs `seeds`, `seed`). Builds `SaturnExplorerSh2GeneratedTests` in RelWithDebInfo and runs it with `SE_GENERATED_SEEDS=20000`; uploads the log as `generator-log`. `SE_GENERATED_SEED=<n>` replays one seed. | The generator finds no violation over 20000 seeds. Until `program/generator` merges, the job finds no such target, prints a notice and skips its build and run steps; once the target exists they are hard steps and a violation fails the job. |
+
 ## The cycle
 
 Two agents per area, never the same agent reviewing its own fix.
