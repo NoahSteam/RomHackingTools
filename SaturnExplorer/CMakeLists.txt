@@ -316,10 +316,16 @@ if(SE_ENABLE_DECOMPILER)
                              SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerFixtureTests
                              PROPERTIES TIMEOUT 60)
         set_tests_properties(SaturnExplorerDecompilerRunnerTests PROPERTIES TIMEOUT 120)
-        # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0).
-        # The default run is 300 seeds; SE_GENERATED_SEEDS=<n> runs a long one. It passes: the
-        # dropped reads it found (REVIEW_LEDGER.md: A5-1, A5-2, A4-1) are fixed by patch 0018, and
-        # a failure now is a regression or a new class. The nightly CI job runs 20000 seeds.
+        # Random SH-2 functions against the emulator's access trace (REVIEW_PROGRAM.md, Phase 0), in two
+        # grammars: version 1, one function with loads, stores, branches, loops and polls; version 2, modules
+        # of functions with a stack, calls with lent prototypes, tail calls, jump tables, shared exits and
+        # data in code, checked for areas 3 and 4 as well (Step 5 record, "Areas 3 and 4, oracle"). The
+        # default run is 300 seeds, odd ones version 1 and even ones version 2, in about 5 seconds;
+        # SE_GENERATED_SEEDS=<n> runs a long one. It passes: the dropped reads it found (A5-1, A5-2, A4-1)
+        # are fixed by patch 0018. The version 2 grammar finds A4-2 and A4-3 (REVIEW_LEDGER.md), which
+        # the default seeds do not reach (about 1 in 400 version 2 seeds), so this entry is not WILL_FAIL
+        # yet; the nightly job (20000 seeds) is red until they are fixed. A failure now is a regression or
+        # a new class. The nightly CI job runs 20000 seeds.
         set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
         # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default
