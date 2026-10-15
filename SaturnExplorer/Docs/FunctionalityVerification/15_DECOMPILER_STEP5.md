@@ -2928,4 +2928,4 @@ removed as unreachable) as before. Against the previous master (`SE_GAME_OUT` co
 `SlaFreshnessTests`, `Sh2SemanticsTests`, `Sh2DecodeTests`, `Sh2DecompilerTests` pass; `Sh2GeneratedTests` passes at the default
 300 seeds and at 3,000 (both grammars, 1,500 each; 0 failing seeds, 0 findings); the game corpus above; `vendor.py` on the pinned
 Ghidra (`918d44e`, a sparse checkout) reproduces the committed tree, `sh-2.sla` aside, with 0025 and 0026 applied. The whole
-`ctest`: CTESTRESULT.
+`ctest`: 95 of 95 pass (RelWithDebInfo, the final spec data).
