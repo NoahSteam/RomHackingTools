@@ -274,7 +274,7 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/src/Sha256.cpp
             FrontEnd/src/FileWrite.cpp
             FrontEnd/src/Debug/Sh2Disasm.cpp)
-        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics Sh2Generated)
+        foreach(name Sh2Decompiler DecompilerRunner Sh2Semantics Sh2Decode Sh2Generated)
             add_executable(SaturnExplorer${name}Tests FrontEnd/tests/${name}Tests.cpp ${SE_DECOMPILER_TEST_SOURCES})
             target_include_directories(SaturnExplorer${name}Tests PRIVATE FrontEnd/src FrontEnd/tests include)
             target_link_libraries(SaturnExplorer${name}Tests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
@@ -323,6 +323,15 @@ if(SE_ENABLE_DECOMPILER)
         # ctest stays green on master and goes red the day the fix lands -- the signal to remove
         # this property. The nightly CI job runs the binary directly and reports the real result.
         set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
+        # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
+        # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default
+        # run is 2,000 cases per form; SE_DECODE_CASES=<n> runs more. Expected to fail while A2-1 to
+        # A2-3 (ldc/ldc.l SR mask, rte's SR timing and mask), A2-4 (a PC-relative slot after bt/s, bf/s,
+        # jmp, jsr, rts, braf, bsrf, rte), A2-5 (translation depends on the ring of cached parse trees),
+        # A2-6 and A2-7 (Sh2Disasm's bt.s/bf.s spelling and trapa flags) stand. WILL_FAIL inverts the
+        # verdict, so ctest stays green on master and goes red the day the last of them is fixed -- the
+        # signal to remove this property.
+        set_tests_properties(SaturnExplorerSh2DecodeTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
     endif()
 endif()
 
