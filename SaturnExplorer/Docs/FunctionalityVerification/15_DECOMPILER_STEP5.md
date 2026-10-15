@@ -2414,3 +2414,141 @@ checks).
 | New cautions on game code | none: A5-3 and A5-4 add 0 notes to the 839 and 1,554 outputs (`SE_GAME_OUT`); no partial register access, no `Ram2010`/`Ram0010` line, in either (the 16 and 20 removal cautions now carry the width) |
 | Generated test | passes (`ctest`); mac words give 0 findings |
 | ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report (`detect_leaks=1`); suite passes |
+
+## Area 2, round 2 review
+
+Branch `review/2-round2-review`, at `253f058`. Reviewer only: no source or test changed. Two findings, both P1
+and both outside what any oracle can see: **A2-9** (`trapa` is modelled as a call whose return leaves r15 8
+bytes low, so stack reads after it are wrong) and **A2-10** (r4-r7, T, MACH and MACL read after a call as their
+value before it). Everything the brief listed for the spec, the reference model, the oracle and patches 0019 and
+0020 held.
+
+*Tools.* The two suites as shipped (`SaturnExplorerSh2DecodeTests`, `SaturnExplorerSh2SemanticsTests`: both pass),
+plus a scratch probe outside the tree that compiles `Sh2DecodeTests.cpp` into one file with its own `main`, so it
+can use the oracle's reference (`ExecRef`, `RunRef`, `RunCase`, `GenCase`) and the emulator harness, and drive
+`Sh2Decompiler` on hand-written words. Nothing of it is committed; every result below that comes from it says how
+to rebuild the case.
+
+### 1. The reference model against Mednafen
+
+Re-derived each of the 124 runnable ops from `sh7095_ops.inc` and the PC rules of `sh7095.inc` (`DelayBranch`,
+`UCDelayBranch`, `CondRelDelayBranch`, `Exception`), line by line against `ExecRef`, and the same ops against
+`superh.sinc` (SH-2 constructors only). No case where the model and the spec agree with each other but not with
+Mednafen. Held:
+
+- DIV0S, DIV0U, DIV1 (Q = msb ^ M ^ carry, T = (Q == M), Rm read after the shift); the spec's arithmetic-select
+  form of DIV1 is equivalent (checked by hand and by the decompiled sequence in section 5).
+- MAC.L: 64-bit accumulate, with S the 48-bit bound and the direction from the sign of `m0 ^ m1` (not of the
+  product, so a zero product with a negative factor saturates low; spec and model both do this). MAC.W: with S,
+  MACL only, `MACH |= 1` on overflow and MACH otherwise untouched; without S, 64-bit. `Sh2SemanticsTests`'
+  `RefMacL`/`RefMacW`/`RefDiv1` agree with both. The JIT helpers `SH7095_JIT_MACL_Arith`/`MACW_Arith`
+  (`sh7095.inc`) are the same statements.
+- DMULS/DMULU, MUL.L, MULS.W/MULU.W; ADDC/SUBC/NEGC (carry from bit 32), ADDV/SUBV (the two sign tests);
+  EXTS/EXTU, SWAP.B/W, XTRCT (with Rn = Rm); ROTL/ROTR/ROTCL/ROTCR, the shifts (`shal` and `shll` one op).
+- `tas.b`, and the GBR read-modify-writes (`and.b`, `or.b`, `xor.b`; `tst.b` reads only).
+- `trapa`: SR pushed first, then the address after `trapa` (`z->PC -= 2` before `Exception`), vector at VBR +
+  imm*4, SR unchanged. `rte`: PC then SR popped, `SR = new & 0x3F3`, then `DelayBranch`. `ldc`/`ldc.l` to SR
+  mask with `0x3F3`, to GBR and VBR do not; `stc`, `sts`, `lds` and their `.l` forms; `clrt`, `sett`, `clrmac`.
+  Register order in Mednafen's `CtrlRegs` (SR, GBR, VBR) and `SysRegs` (MACH, MACL, PR) matches the oracle's index.
+- SHAD and SHLD do not exist on the SH-2: Mednafen leaves them illegal and the decode oracle finds SLEIGH
+  accepting nothing outside Mednafen's 53,752 words.
+- Access widths and counts, which the differential run does not compare (it compares values and written words):
+  the probe translated one word of every op and listed its LOADs and STOREs. Every op matches Mednafen's operand
+  size and count (MAC two reads, the GBR operations read then write, `tas.b` read then write, `rte` two 4-byte
+  reads, `trapa` two 4-byte writes then one read).
+
+Mednafen's fused fast paths (`FUSE_COND_BRANCH`, `FUSE_LOAD_CMPTST_BRANCH`, `_LOW_ACCURACY_` only) compute the same
+T as the unfused ops; the reference follows the unfused ones, as it should.
+
+### 2. The oracle's normalisation and coverage
+
+- *Immediates modulo 256.* The one rewrite that hides a real difference in text: `Sh2Disasm` prints `mov #0xFC,r0`,
+  `add #0x80,r2`, `cmp/eq #0x80,r0` and SLEIGH `mov #-0x4,r0`, `add -0x80,r2`. Held: the encoding and the value
+  the CPU uses are the same, `Sh2Disasm` follows the Renesas manual's own convention (`MOV #H'80,R1` leaves
+  `R1 = H'FFFFFF80`), the execution half checks the sign extension, and the SLEIGH listing is not shown anywhere
+  in the app (`Sh2Decompiler::Disassemble` has no caller outside the tests). `trapa 0x12` against `#0x12` and the
+  missing `#` on SLEIGH's logical immediates are the same (unused) listing.
+- *Operand fields.* Registers in both positions, the implied R0 and GBR, displacement scale (decimal byte counts),
+  PC-relative addresses at both alignments and branch targets with their wrap are all in the compared text;
+  `shal`/`shll` is one op. Nothing else is folded.
+- *Undefined words.* Validity is compared on all 65,536 words at three layouts. A word decoded with the slot
+  context that patch 0005 sets is not part of the decode half, so the probe ran every slot-legal word Mednafen
+  defines (44,213) in the slot of each of the ten delayed branches, T clear and set (884,260 cases, section 3):
+  every one translates and runs.
+- *The known-limit rule for A2-4.* Tight: `RunRef(..., specSlotPc)` changes only the PC a slot sees after a taken
+  branch other than `bra`/`bsr`, and a case is excused only if every register, the next PC and every written word
+  then agree, so a second cause in the same case still fails (an SR mask, a wrong target, a not-taken slot, a
+  regression of patch 0005). The decompiler side pins only the 8 named shapes; the probe decompiled every cell the
+  default run counts as known (480 distinct cells), from its branch, each alone in otherwise zeroed memory (in the
+  oracle's nop-filled image every decompile runs the flow out to its instruction limit): 480 of 480 marked
+  unsupported.
+- A longer run, `SE_DECODE_CASES=40000 SE_DECODE_SEED=4242` with `SE_MEDNAFEN_SS` set: 5,200,000 cases, 0 differ,
+  37,896 known (A2-4), the transcribed word table equal to `sh7095_idecodetab.inc`, 15.8 s.
+
+### 3. Delay slots and the PC
+
+- *Every slot word in every delayed branch.* The probe placed each of the 44,213 slot-legal words after `bra`,
+  `bsr`, `bt/s`, `bf/s`, `braf`, `bsrf`, `jmp`, `jsr`, `rts` and `rte`, at both alignments, and ran one random case
+  with T clear and one with T set: 0 differ; the known-limit cases (8,448 for each conditional branch, about 16,890
+  for each register-target branch) are exactly the PC-relative slots after a taken branch. This covers the slot
+  reading or writing the branch's own register, `rts` with `lds ...,pr` in the slot, `bt/s` not taken with a slot
+  that writes T, and `rte` with a slot that reads SR, writes PR or moves r15.
+- *A slot that is a jump target.* A function that enters at a `bra` slot and loops back to the `bra` (`A00E D104
+  4415 89FB 000B 6013` from 06009000, entry 06009002, literals 0x11111111 at 06009014 and 0x22222222 at 06009030):
+  both paths fold the right literal (`if (param_1 < 1) return 0x11111111; return 0x22222222;`), unflagged and
+  right. A `jmp @r2` through a literal, and a `braf r0` after `mov #4,r0`, into a `bra` slot: both flagged
+  unsupported (the resolved jump is a jump table, so `ScanRawPcode` sees the target).
+- *A branch to its own slot* (`bt/s`, `bf/s`, `bra` with displacement -1): decompiled as the hardware runs it (the
+  slot twice when taken), with the engine's overlap warning.
+- *`bsrf`/`braf` at the top of the address space*: covered by `PickTarget`'s top and bottom targets; agrees.
+- *Cached parses and context.* `Sleigh::obtainContext` reuses a cached parse without comparing the context it was
+  resolved under, so a `bra` slot parsed before the `bra` commits its context would keep the slot's own PC. The
+  flow cannot reach it: a slot parsed first (as the entry) is followed by its fall-through, which evicts it before
+  the `bra` is translated; a slot parsed first as a jump target is flagged. `ReturnCheck` can see either context on
+  a second pass, but takes every load from a constant address as memory (`Loaded`), so the literal's address does
+  not matter there. Held by argument; no oracle exercises it.
+
+### 4. Patches 0019 and 0020
+
+- 0019: the `rte` order (SR before the slot) and the masks are exercised by every slot word above; no difference.
+- 0020: a history sweep of 400,000 translations over 48 contiguous `[branch, slot]` pairs (no `bra`/`bsr`, whose slot
+  is meant to translate differently once the branch has committed), in four request orders: any address, a
+  three-address cycle over branches and slots, branches and slots of four neighbouring pairs (jumps into the middle
+  of a cached pair), and branch-or-slot at random. 0 translations differ from a cold one. With patch 0020 reverted
+  (a scratch copy of `sleigh.cc` linked into the probe) the same sweep finds 285, so it has teeth. `ReturnCheck::Step`
+  re-steps in address order; with translation independent of history its order cannot matter.
+
+### 5. The decompiler's view
+
+Decompiled shapes the emulator gets right, and read the output against the hardware: MAC.W with S set and MACL
+from an argument (the saturation test, `0x7fffffff`/`0x80000000` by the product's sign), MAC.L with S set (48-bit
+bounds, direction from `m0 ^ m1`); `div0u ; div1 r5,r4 ; div1 r5,r4 ; rotcl r4` (the printed C transcribed and run
+on 200,000 inputs against the reference: identical); 64-bit `addc` and `negc` chains, `shll ; rotcl`, `addv`,
+`subv` and `cmp/str` into `movt`; `rte ; movt r0` (reads the stacked SR's T); `bt/s` not taken with `sett` in the
+slot; `jmp`/`jsr` whose slot overwrites the target register (the target is the old value). All read as the
+hardware behaves. Two do not, and no oracle compares a printed value with a run:
+
+- **A2-9**, `trapa`. The spec makes it `call [vector]` after pushing 8 bytes, and the default prototype keeps r15
+  across a call, so after it the decompiler's r15 is 8 lower than the hardware's (the handler's `rte` pops them).
+  `sts.l pr,@-r15 ; mov.l r4,@-r15 ; trapa #1 ; mov.l @r15+,r0 ; lds.l @r15+,pr ; rts ; nop` prints
+  `return 0x6009006;`, the address `trapa` pushed, where the hardware returns r4.
+- **A2-10**, a register the cspec neither keeps nor kills (r4-r7, SR, MACH, MACL) is merged across a call into
+  one variable, so `mov #5,r7 ; bsr f ; nop ; mov r7,r0` prints `xVar1 = 5; func(); return xVar1;` and a
+  `bt` on a T returned by the callee is printed as decided by the T from before the call. r2, which the cspec
+  kills, prints `extraout_r2`. Likely area 3's to fix (the cspec); filed here for the T flag.
+
+Seen on the way, not filed: a `rts` in the delay slot of a `rts` makes the request fail with the engine's text
+"Could not obtain cached delay slot instruction": an illegal slot, already accepted under A2-8 (b), and reported,
+not silent.
+
+### 6. Held, in one line each
+
+- The reference model: every op equal to Mednafen; no shared transcription error with the spec.
+- Access widths and counts of every op's p-code: equal to Mednafen's.
+- Decode normalisation: only spelling folded (the immediate sign is the Renesas convention; the SLEIGH listing is unused).
+- Undefined words: compared on all words; every defined slot-legal word also translates and runs in each delayed slot.
+- The A2-4 known-limit rule: excuses nothing but the one rule; decompiler flagging checked on every known cell.
+- Delay slots: all slot words after all delayed branches agree (884,260 cases); slot-as-target, branch-to-own-slot,
+  slot writes the branch register, top-of-memory `braf`/`bsrf`.
+- Patch 0019 (`rte` order and masks) and patch 0020 (LRU): history sweep clean, and fails with 0020 reverted.
+- MAC saturation, DIV1 sequences, carry chains and SR-reading slots read correctly in the pseudocode.
