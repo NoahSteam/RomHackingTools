@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *
- * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch).
+ * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch);
+ * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
  */
 #include "fspec.hh"
 #include "funcdata.hh"
@@ -3681,6 +3682,20 @@ void FuncProto::decodeEffect(void)
   }
   if (hasNew)
     sort(effectlist.begin(),effectlist.end(),EffectRecord::compareByAddress);
+}
+
+/// The given records replace the ProtoModel's effect for the storage each names, exactly as the
+/// \<unaffected> and \<killedbycall> elements of a decoded \<prototype> do, and the effect of
+/// everything else stays the model's. A call to a function with \b this prototype then leaves
+/// the storage as these say, where the model's list is for every function of the model. An empty
+/// list clears the overrides. A record that partly overlaps one of the model's is an error.
+/// The model must be set.
+/// \param overrides is the list of EffectRecords to apply on top of the model's
+void FuncProto::setEffects(const vector<EffectRecord> &overrides)
+
+{
+  effectlist = overrides;
+  decodeEffect();
 }
 
 /// VarnodeData read into \e likelytrash by decode() are additional registers over

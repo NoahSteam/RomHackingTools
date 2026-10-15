@@ -175,6 +175,39 @@ ghidra::Datatype* TypeOf(ghidra::TypeFactory& types, const TypeShape& shape)
     }
 }
 
+// Whether a lent prototype also lends the effects its analysis proved (the registers it keeps).
+// Tests only: off, a lent callee leaves r0-r7, MACH, MACL and SR as the default model does.
+bool gLendEffectsForTests = true;
+
+// The registers the default model's killedbycall list (patch 0026) names that a callee can be proved
+// to keep, as CallEffects::preserved bits: r2-r7, SR, MACH, MACL. (r8-r14, GBR, VBR and r15 are
+// unaffected for every callee already; PR is the return address.) Not r0 and r1: they are the
+// return registers, and what the engine's return recovery takes for a value depends on what a call
+// leaves in them -- a caller whose r0 and r1 pass through callees that keep them has a "real" value
+// in both at its own return, so a function that only leaves temporaries there was given a return
+// (2 signatures lost in the corpus, none gained; the generator's lending is the same without them).
+struct KilledRegister
+{
+    int bit;
+    const char* name;
+};
+constexpr KilledRegister kKilledByCall[] = { { 2, "r2" }, { 3, "r3" }, { 4, "r4" }, { 5, "r5" }, { 6, "r6" }, { 7, "r7" },
+                                             { 16, "sr" }, { 19, "mach" }, { 20, "macl" } };
+
+// Lend 'proto''s proved effects with its signature: the registers ReturnCheck found equal to their
+// entry values at every return are unaffected by a call to this function, where the model would
+// have them killed and the caller would read extraout_rN and lose the parameter it passed through.
+// Everything not proved keeps the model's effect.
+void LendEffects(ghidra::Architecture& arch, ghidra::FuncProto& fp, const Prototype& proto)
+{
+    if (!gLendEffectsForTests || !proto.known) return;
+    std::vector<ghidra::EffectRecord> kept;
+    for (const KilledRegister& k : kKilledByCall)
+        if ((proto.effects.preserved >> k.bit) & 1u)
+            kept.emplace_back(arch.translate->getRegister(k.name), ghidra::EffectRecord::unaffected);
+    if (!kept.empty()) fp.setEffects(kept);
+}
+
 // Lock 'fd' to 'proto': the caller's call site then copies it instead of guessing.
 void ApplyPrototype(ghidra::Architecture& arch, ghidra::Funcdata& fd, const Prototype& proto)
 {
@@ -189,6 +222,7 @@ void ApplyPrototype(ghidra::Architecture& arch, ghidra::Funcdata& fd, const Prot
     }
     pieces.firstVarArgSlot = -1;
     fd.getFuncProto().setPieces(pieces);
+    LendEffects(arch, fd.getFuncProto(), proto);
 }
 
 Prototype PrototypeOf(const ghidra::Funcdata& fd)
@@ -1127,6 +1161,11 @@ EngineWarning ClassifyEngineWarning(const std::string& comment)
     w.keep = !scratch || w.casesMissing;
     w.text = text;
     return w;
+}
+
+void Sh2Decompiler::SetLendEffectsForTests(bool lend)
+{
+    gLendEffectsForTests = lend;
 }
 
 void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)

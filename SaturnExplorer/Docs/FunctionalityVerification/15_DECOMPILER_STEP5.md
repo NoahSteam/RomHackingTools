@@ -2587,3 +2587,124 @@ function executed 28 times, and printing the first pass's writes found the store
   covers it.
 - The mova-reached table as read-only memory (shape c of A4-5), above.
 - The scan before the actions still reads the first flow only (round 1's note), and the A4-5 shapes did not change that.
+
+## Area 3, round 1: the effects a callee proves are lent
+
+Branch `review/3-callee-effects`, from `72eeb36`. Fixes ledger A3-2 (P3, but it decided whether patch 0026 cost users their
+parameters): a callee whose analysis proved it keeps r4-r7 was lent only its signature, and the default model's `killedbycall`
+list (patch 0026) then made the caller read `extraout_rN`, lose the parameter from its own signature and be withheld ("it uses r4
+after calling X, which is not known to return it"). One engine patch, `0028-funcproto-set-effects.patch`, and `ApplyPrototype`.
+
+### What the engine needed
+
+Upstream gives a `FuncProto` an effect list only through the XML a `<prototype>` is decoded from: `effectlist` is private and
+`decodeEffect` (which merges the overrides into the model's list) is private too; there is no setter and the model override
+(`setModel`) swaps the whole list for the model's. So patch 0028 adds `FuncProto::setEffects(const vector<EffectRecord>&)`: the
+records replace the model's effect for the storage each names, the rest stays the model's (it stores them and calls
+`decodeEffect`, as the decoder does); an empty list clears them. Six functional lines. A call site takes its callee's prototype
+with `FuncProto::copy` (`ActionDefaultParams`), which copies `effectlist`, and `hasEffect` (used by `guardCalls` in heritage)
+reads it, so nothing else in the engine changed.
+
+`ApplyPrototype` (Sh2Decompiler.cpp) now calls `LendEffects` after `setPieces`: for a lent prototype that is `known`, every
+register of r2-r7, SR, MACH and MACL whose bit is set in `Prototype::effects.preserved` (proved by `ReturnCheck` on every path)
+is marked `unaffected`; everything else keeps the model's `killedbycall`. The lent effects were already part of the prototype
+(`Prototype::effects`), of the panel's `ShapeOf` hash and of the runner's request digest, so no cache key changed.
+
+One decision, made on measurement: **r0 and r1 are not lent**. They are the return registers, and the engine's own return
+recovery for the caller depends on what the calls leave in them. With r0 and r1 lent, two corpus functions (`06056130`,
+`06056136` in image 008; sr-saving wrappers whose r0/r1 are only temporaries) lost a lent `void` signature, because r0 and r1 now
+came through the callees as "real" values and the engine gave the function a `uint8` return (withheld: it uses sr after a call).
+Without them no function loses anything, and the generator's lending is identical (6,660 lent either way). Also measured:
+dropping r2 and r3 as well changes no signature count but leaves 19 more texts with `extraout_r2/r3` where the callee keeps them
+(one was a `jsr @r2` that stayed indirect because r2 passed through a helper), so they stay in.
+
+### The oracle
+
+`TestCallsAndTraps`, "A3-2" (every fixture run on the p-code emulator against the evaluated pseudocode, as the section above):
+the callee keeps r4 (and the old `r4 kept by the callee (limit)` fixture flips: `return param_1;`, signature lent with one
+parameter, no `extraout`); r5 and r6 (`param_2`, `param_3`); r7 read alone (`in_r7`, no longer `extraout_r7`); r2 and r3 stored
+after the call (`in_rN`); MACL and MACH (`param_1`); T (`sett` before, `bt` after: `return 1;`, no `extraout_sr`); a callee that
+returns a value and keeps r4. Controls: the same callee with the effects not lent (the test hook `SetLendEffectsForTests(false)`)
+reads `extraout_r4`/`r7`/`r2`/`r3`; nothing lent at all reads `extraout_r4`; a prototype that is not `known` lends nothing; a callee
+that sets r4 in its delay slot still makes the caller read `extraout_r4` (withheld) while its r5 stays `param_2`; a callee that
+keeps r4 on one path only (`cmp/eq ; bt ; mov #7,r4`) is not proved and kills it; r1 kept by the callee is still `extraout_r1`.
+`TestPrototypeEligibility`'s `uses r0 after a void callee` is unchanged (r0 is not lent), with a comment.
+
+Generator (`Sh2GeneratedTests.cpp`): check 11, `effects-ignored:<reg>`: when every function a function calls was lent a signature
+whose `preserved` has r2-r7, SR, MACH or MACL, the function's text never reads that register as `extraout_<reg>`; counted as
+`lent.honoured.checked` (11,578 in 3,000 seeds). The mutation mode `SE_GENERATED_MUTATE=honour` adds such a line to every result
+and the check reports it (149 of 300 seeds). The existing check 10 (`CallEffects::preserved` against the emulator's final registers) is unchanged
+and green.
+
+`Sh2DecompilerTests.cpp` also gets `TestGameLending` (`SE_GAME_LEND=1` with `SE_GAME_HWRAM`; `SE_GAME_OUT` receives
+`lend_before/` and `lend_after/`): every function decompiled after the functions it calls, each proved signature lent to the next
+requests as the panel does (`DecompilerPanel::Learn`/`Lendable`: all learned prototypes, keyed by the address called, here both
+the cached and the uncached alias), once with the effects not lent and once lent. It covers the prologue functions
+`TestGameCode` has plus every high-work-RAM function they call (the leaves that never save PR, which are the ones that keep r4).
+
+### Numbers
+
+Generator, grammar 2, 3,000 seeds (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000`), before (master) and after:
+
+| | lent prototypes | withheld | "uses rN after calling X" (r6 + r7) | "it calls X, whose signature is not known" (the cascade) | failing seeds / findings |
+|---|---|---|---|---|---|
+| before | 6,263 (void 2,498, returning 3,765) | 899 | 414 (181 + 233), plus r0 93 and r1 11 | 121 | 0 / 0 |
+| after | 6,660 (void 2,661, returning 3,999) | 502 | 136 (45 + 91), r0 0, r1 11 | 83 | 0 / 0 |
+
+The previous round measured 207 of 5,648 lent signatures lost to this (3.7%); on this sample 397 more are lent (+6.3%, the callers
+and the callers of those). The r0 cases that were withheld before went with them: they were callers of callees that were not lent.
+What is still withheld is a callee that really sets r6 or r7.
+
+Game corpus, lending run (callees first, `TestGameLending`), both images:
+
+| | 007 before | 007 after | 008 before | 008 after |
+|---|---|---|---|---|
+| functions (prologues + the called ones in HWRAM) | 1,733 | 1,733 | 2,998 | 2,998 |
+| signatures lent | 617 | 680 | 1,005 | 1,083 |
+| parameters in them | 780 | 845 | 1,208 | 1,302 |
+| withheld "uses a register after calling" | 93 | 39 | 143 | 77 |
+| functions lent a callee's signature that keeps some of r4-r7 | 844 | 876 | 1,500 | 1,534 |
+| ...of which keep their own signature (parameters kept) | 249 | 308 | 432 | 506 |
+| ...of which print `extraout_r4-7` | 114 | 81 | 186 | 134 |
+| functions printing `extraout_r4-7` | 129 | 96 | 201 | 149 |
+
+Text changes: 297 (007) and 559 (008) functions; 63 and 78 gain a lent signature, none loses one; 35 and 49 gain parameters,
+none loses; `extraout_r4-7` is gone from 33 and 52 functions and new in none. (One called address in each image is no function
+the engine can decompile; the result is a failed status in both runs.) Example, `06008204` (007): the call
+`func_0x06031598(iVar2,extraout_r4 + extraout_r0,param_3)` becomes `...,param_3,param_2)`, r5 kept across a helper being the
+fourth argument. The standalone corpus (`SE_GAME_OUT`, nothing lent, 839 and 1,554 functions) is byte-identical to master, as it must
+be: the change is in what is lent.
+
+### Mutation
+
+Each reverted alone (the source restored after), `Sh2DecompilerTests` rebuilt and run:
+
+| Reverted | `Sh2DecompilerTests` | generator (300 seeds, grammar 2) |
+|---|---|---|
+| `LendEffects` returns at once (no effects lent; also what reverting patch 0028 amounts to) | fails 21 checks: the r4 fixture (flipped), r5, r6, r7, r2, r3, MACL, MACH, T, the returning callee, the r5-with-clobbering-callee | fails: 32 seeds, 42 `effects-ignored` findings (r6, r7) |
+| r4-r7 dropped from the lent list | fails the r4, r5, r6, r7, returning-callee and r5 fixtures | not run |
+| MACH and MACL dropped | fails the MACL and MACH fixtures | not run |
+| SR dropped | fails the T fixture | not run |
+| r2 and r3 dropped | fails the two r2/r3 fixtures | not run |
+| r0 and r1 lent as well | fails `uses r0 after a void callee` and the r1 fixture | not run |
+| the proof ignored (all of them lent for every known callee) | fails 9 checks: the callee that sets r4 or r7 and the one-path callee read the wrong value, with the oracle on the first two (`PseudoAgreesWithRun`) | not run (the generator has no execution-vs-text check) |
+
+### Matrix (RelWithDebInfo, gcc)
+
+The whole `ctest`: 95 of 95 pass (the generated suite at its default 300 seeds). `Sh2GeneratedTests` at 3,000 seeds of grammar 2:
+0 failing seeds, 0 findings. The game corpus, both images (`SE_GAME_HWRAM` hwram007 and hwram008): every ledger count 0, the
+dropped accesses 0, 16 and 20 reads "missing and said" as before. gcc Debug with `-fsanitize=address,undefined`, `Sh2DecompilerTests`
+with `detect_leaks=1`: exit 0, all passed, no report beyond `address.hh:605` and `slghpatexpress.cc:979`. `vendor.py` on the pinned Ghidra
+(`918d44e`, the sparse checkout in the scratchpad) with 0028 applied reproduces the committed tree, `sh-2.sla` aside (the patch
+touches no spec).
+
+### Limits, and what is left
+
+- A callee's effects are only as good as `ReturnCheck`'s modelling of its registers; the generator's check 10 compares them with the emulator's
+  final registers, and nothing new was found.
+- r0 and r1 stay killed for every callee (above). The caller that relies on a callee leaving r0 or r1 alone still reads `extraout_r0/r1`
+  and is withheld; 11 generated cases (r1) and the corpus remainder are of this kind or of a callee that really changes the register.
+- The effects are lent per callee address with the signature, so they follow the same rules (a mirror is lent under its own key; a
+  signature learned under another volatile list is not lent).
+- The corpus still has 39 and 77 functions withheld on "uses a register after calling": callers of helpers that change the register
+  (or whose own signature is not lent).

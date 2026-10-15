@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
  */
 /// \file fspec.hh
 /// \brief Definitions for specifying functions prototypes
@@ -1411,6 +1413,7 @@ public:
   void setScope(Scope *s,const Address &startpoint);			///< Set a backing symbol Scope for \b this
   void setInternal(ProtoModel *m,Datatype *vt);				///< Set internal backing storage for \b this
   void setModel(ProtoModel *m);						///< Set the prototype model for \b this
+  void setEffects(const vector<EffectRecord> &overrides);		///< Override the model's side-effects for the storage named
   bool hasModel(void) const { return (model != (ProtoModel *)0); }	///< Does \b this prototype have a model
 
   bool hasMatchingModel(const ProtoModel *op2) const { return (model == op2); }	///< Does \b this use the given model

@@ -79,6 +79,9 @@
 //   9. A return is claimed only if r0 is written on every run before the return; a function the
 //      generator made to return r0 does not claim to return nothing.
 //   10. A register CallEffects::preserved names has the value it started with at every return.
+//   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
+//       calls was lent a signature that keeps r2-r7, MACH, MACL or SR, the text never reads that register
+//       as a call's output (extraout_<reg>), whatever else the function does or is lent itself.
 //   And the generator's own contract (not the decompiler's): a version 2 function returns, restores
 //   r8-r15 and ends with PR as it began.
 // The ground truth is emulator runs with different inputs (registers, what hardware reads
@@ -95,7 +98,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data
+//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data|honour
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
@@ -2455,7 +2458,7 @@ bool GroupAddrs(const std::vector<Line>& lines, const std::vector<LineLabels>& l
 
 // What the SE_GENERATED_MUTATE modes do to a result before it is checked: each simulates one defect
 // that one family of checks exists to find, so a run can show the check sees it.
-std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data"
+std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data", "honour"
 void Mutate(DecompileResult& r, const Subject& s, int fi)
 {
     if (gMutateKind.empty() || r.status != DecompileStatus::Ok) return;
@@ -2491,6 +2494,13 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
     else if (gMutateKind == "warn") { r.flowWarnings.clear(); }
     else if (gMutateKind == "preserved") { if (r.prototype.known) r.prototype.effects.preserved = (1u << 22) - 1; }
     else if (gMutateKind == "lent") { r.prototype.known = true; r.prototypeWithheld.clear(); }
+    else if (gMutateKind == "honour")
+    {
+        // A caller that ignores the effects it was lent reads a kept register as a call's output.
+        Line l;
+        l.text = "  return extraout_r4 + extraout_r5 + extraout_r6 + extraout_r7 + extraout_macl + extraout_mach + extraout_sr;";
+        r.lines.push_back(l);
+    }
     else if (gMutateKind == "data")
         for (const FnInfo& f : s.fns)
             if (!f.layout.data.empty()) r.body.push_back(f.layout.data[0]);
@@ -2974,6 +2984,30 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             for (char& c : why)
                 if (c == ' ') c = '_';
             count("proto.withheld:" + why);
+        }
+        // A lent preserved set is honoured by the caller's text: the registers every callee keeps
+        // (CallEffects::preserved of each, among those the default model kills: r2-r7, SR, MACH, MACL)
+        // are never a call's output in what this function prints, lent or not itself. Only when every
+        // call is to a function that was lent: one that is not, or the function itself, kills them all.
+        if (!r.calledAt.empty())
+        {
+            uint32_t keptByAll = ~0u;
+            for (uint32_t c : r.calledAt)
+            {
+                const auto l = lent.find(c);
+                keptByAll &= (l == lent.end() || c == fn.layout.entry) ? 0u : l->second.effects.preserved;
+            }
+            static const struct { int bit; const char* name; } kKilled[] = { { 2, "r2" }, { 3, "r3" }, { 4, "r4" }, { 5, "r5" }, { 6, "r6" },
+                                                                             { 7, "r7" }, { 16, "sr" }, { 19, "mach" }, { 20, "macl" } };
+            const std::string text = r.Text();
+            for (const auto& k : kKilled)
+            {
+                if (!((keptByAll >> k.bit) & 1u)) continue;
+                count("lent.honoured.checked");
+                if (text.find(std::string("extraout_") + k.name) != std::string::npos)
+                    add(std::string("effects-ignored:") + k.name, std::string("every function it calls was lent a signature that keeps ") + k.name +
+                                                                       ", and the text reads " + k.name + " after a call as the call's output (extraout_" + k.name + ")");
+            }
         }
 
         // The generator's own contract: a version 2 function returns, restores what it saved, and ends

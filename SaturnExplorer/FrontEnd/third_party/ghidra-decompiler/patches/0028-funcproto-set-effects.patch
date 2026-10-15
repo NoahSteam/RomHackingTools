@@ -1,0 +1,56 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
+index c58532b..891e7ca 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.cc
+@@ -13,7 +13,8 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
+- * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch).
++ * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch);
++ * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
+  */
+ #include "fspec.hh"
+ #include "funcdata.hh"
+@@ -3683,6 +3684,20 @@ void FuncProto::decodeEffect(void)
+     sort(effectlist.begin(),effectlist.end(),EffectRecord::compareByAddress);
+ }
+ 
++/// The given records replace the ProtoModel's effect for the storage each names, exactly as the
++/// \<unaffected> and \<killedbycall> elements of a decoded \<prototype> do, and the effect of
++/// everything else stays the model's. A call to a function with \b this prototype then leaves
++/// the storage as these say, where the model's list is for every function of the model. An empty
++/// list clears the overrides. A record that partly overlaps one of the model's is an error.
++/// The model must be set.
++/// \param overrides is the list of EffectRecords to apply on top of the model's
++void FuncProto::setEffects(const vector<EffectRecord> &overrides)
++
++{
++  effectlist = overrides;
++  decodeEffect();
++}
++
+ /// VarnodeData read into \e likelytrash by decode() are additional registers over
+ /// what is already in ProtoModel.  Make \e likelytrash in \b this a complete list by
+ /// merging in everything from ProtoModel.
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.hh
+index efd0d5a..cbac403 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/fspec.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
+  */
+ /// \file fspec.hh
+ /// \brief Definitions for specifying functions prototypes
+@@ -1411,6 +1413,7 @@ public:
+   void setScope(Scope *s,const Address &startpoint);			///< Set a backing symbol Scope for \b this
+   void setInternal(ProtoModel *m,Datatype *vt);				///< Set internal backing storage for \b this
+   void setModel(ProtoModel *m);						///< Set the prototype model for \b this
++  void setEffects(const vector<EffectRecord> &overrides);		///< Override the model's side-effects for the storage named
+   bool hasModel(void) const { return (model != (ProtoModel *)0); }	///< Does \b this prototype have a model
+ 
+   bool hasMatchingModel(const ProtoModel *op2) const { return (model == op2); }	///< Does \b this use the given model
