@@ -2897,3 +2897,144 @@ either save state. The one P1 of the round (A4-4) is a control-flow error that r
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
 | Width instances in the corpus | none: no `_SH2_` long or word over the on-chip byte registers, no narrow SCU DSP, MINIT or SINIT write, no `covers` caution; only `SH2_BCR1._2_2_` (right) |
+
+## Areas 2 and 3, round 2: trapa's stack and the registers a call kills
+
+Branch `review/2-3-callconv-fix`, from `276a4b4`. Fixes the two P1 findings of "Area 2, round 2 review" (ledger A2-9 and
+A2-10), which no oracle could see because none compares a printed value with a run, and adds the oracle that does. Two
+patches, both to the spec: `0025-sleigh-trapa-stack.patch` and `0026-cspec-call-clobbers.patch`. The coordinator's addendum
+(the round-3 review of areas 4 and 5 found A2-10 from the other side: a call to an unknown or withheld function printed as if it
+left r1 and r4-r7 alone, and a recursive function printed a wrong value) is covered: r0 and r1 are in the list, and a
+recursion fixture is in the oracle.
+
+### A2-9: trapa (patch 0025)
+
+*Cause.* `trapa` is `r15 -= 4; *r15 = sr; r15 -= 4; *r15 = inst_next; call [*(vbr + imm*4)]`, and the cspec keeps r15 across a
+call, so the decompiler's r15 after it was 8 below the hardware's: the handler's `rte` pops both words. A register saved before
+the trap and restored after it read back the address `trapa` pushed (`return 0x6009006;`), and a word at r15 read the pushed SR
+(`return in_sr;`).
+
+*Fix.* `r15 = r15 + 8` after the `call` in `trapa`. The differential run needs the push and nothing else, and it gets it: the
+p-code emulator ends an instruction at its call (`EmulatePcodeCache::executeInstruction` loops until `instruction_start`, and
+`executeCall` sets the next address), so the op after the call is never run by it, and the state the emulator reaches after
+`trapa` alone is still Mednafen's (r15 down 8, SR and `inst_next` pushed, PC at the vector). The decompiler carries on after a
+call and sees the 8 bytes given back. `rte` is untouched, so decompiling a handler still pops PC and SR. A cspec route was
+looked at and not taken: `callfixup` matches a callee by name and this call is through the vector table, and `extrapop` is per
+model, not per call, so it would change every call.
+
+*Result.* `4F22 2F46 C301 60F6 4F26 000B 0009` prints `return param_1;`; `C320 60F2 000B 0009` prints
+`return in_stack_00000000;` (the caller's word) and with `50F1` `in_stack_00000004`; the entry r15 read after a trap is
+`&xStack00000000`. Corpus: the one function with a `trapa` in each image (`06024ACC` and `0606476C`) no longer prints
+the pushes it made for the handler, as the stores are dead once the read of the pushed address is gone (one access fewer
+"through a pointer" per image, accounted as folded into ordinary memory).
+
+### A2-10: what a call leaves (patch 0026)
+
+*Cause.* The default prototype's `killedbycall` held r2 and r3. A register in neither list has the unknown effect, which the
+engine prints as the value before the call. The review listed r4-r7, SR and MACH/MACL; the addendum added r1 (and r0): they are
+outputs only while the return is open or 64-bit, so once a signature is lent as void or 32-bit, `guardCalls` no longer
+treats them as outputs and r1 read as before the call as well (`f` lent void, `mov #5,r1 ; bsr f ; mov r1,r0` printed
+`return 5;`).
+
+*Fix.* `killedbycall`: r0, r1, r2, r3, r4-r7, MACH, MACL, SR. The SH ABI of both compilers has r0-r7 and MACH/MACL
+caller-saved and T clobbered; the engine tracks SR whole, so SR is killed, which also leaves the interrupt mask and S, Q, M
+unknown after a call (a callee can change them with `ldc`). VBR joins GBR in
+`unaffected`: no compiled code touches it, and without an entry it was in the same unknown state r4 was. `unaffected` r8-r14,
+r15 and GBR are as before. A lent prototype keeps the default model's lists (`ApplyPrototype` sets `pieces.model =
+arch.defaultfp`), so lending changes none of this; the lent fixtures confirm it.
+
+*What the text now says.* `xVar1 = 5; func(); return xVar1;` is `func(); return extraout_r7;`; the T fixture is
+`if ((extraout_sr & 1) == 1)`; MACL and MACH read `extraout_macl` and `extraout_mach`; r8 (callee-saved) still reads 5; an
+argument held in r8 across a call is still `param_1`; the recursion `f(n)` that sets r1 or r7 before calling itself and a base case
+that sets it differently prints `extraout_r1` / `extraout_r7` (its signature is withheld, "it calls itself", as before).
+
+*Prototype inference.* A register read after a call is a call output (`isExtraOut`), and `WithholdReason` refuses to lend a
+signature on one ("it uses r4 after calling X, which is not known to return it", already there for r0-r3). So a caller that
+reads r4-r7 after a call is no longer lent a signature, and in isolation it has lost the parameter: the old text read the
+entry value through the call, the new reads the callee's. On the other side, the call's arguments are now shown: with an unknown effect the engine
+left r4-r7 out of a call's argument list when the call looked to modify them.
+
+### The oracle: a printed value against a run (`TestCallsAndTraps`)
+
+`Sh2DecompilerTests.cpp` runs each fixture on the p-code emulator (the shipped translator, the callee or a `rte ; nop` trap
+handler in memory, VBR pointing at a table of handlers), twice or more with different inputs, and evaluates the pseudocode's
+`return` for the same inputs (`PseudoEval`: straight-line code, `if`/`else`, 32-bit integer expressions, the parameters taken
+from r4-r7), and requires the register the code returned to be among the values the text can return. Limits: a value it cannot
+know (a call's result, `extraout_rN`, a memory read) agrees with anything, so it finds a text that states a wrong value, never
+one that states too little (the expected-text checks beside it pin that); loops, `goto` and `switch` are rejected loudly; casts
+are ignored and compares are signed; the inputs are a few points, not a proof. Its own checks run first: the pre-fix texts of the
+four ledger fixtures are evaluated and must be flagged, and a loop must be rejected, so a broken evaluator cannot make everything
+agree. The fixtures: the two trapa fixtures of the ledger, trapa with a local, two traps in a row, the entry r15; r4, r5, r6
+and r7 after a call that sets them; the ledger's r7 and T fixtures word for word; T set by the callee; MACL; MACH; r1, r2
+(controls); r8 across a call and an argument kept in r8 (controls); a `trapa` after a call (VBR is not `extraout_vbr`);
+recursion through r1 and through r7; r7 and r1 with the callee's signature lent; and a pinned limit, below.
+
+`SaturnExplorerSh2SemanticsTests` gets `TestTrapaStack`: the emulator enters the handler with r15 down 8, SR at r15+4 and the
+next address at r15, and the handler's `rte` returns with r15 and SR as they were.
+
+`TestPrototypeEligibility`'s caller that stores a register's low word after a call held r4 and r5 across the call, which the
+cspec now reads as `extraout_r4`/`extraout_r5`; it holds them in r8 and r9 now (same intent: a sub-word store of a register the
+caller owns keeps its signature), and checks the text. `TestGameCode`'s `SE_GAME_OUT` files also say whether a signature is
+lent or why it is withheld, so two builds' outputs differ where that changes.
+
+### Mutation
+
+Each spec change reverted alone (or one entry of the list dropped), the sla regenerated, the suites run:
+
+| Reverted | `Sh2DecompilerTests` | `Sh2SemanticsTests`, `Sh2DecodeTests`, generator (600 seeds) |
+|---|---|---|
+| patch 0025 (no pop after the call) | fails: the ledger's a and b, the local, the two traps and r15 fixtures, each with the oracle (`the code returned 11111111, the pseudocode returns 06009006`) and the expected text | pass: **the decode test's differential run does not see the trapa change**, as designed (one instruction, and the emulator never runs the op) |
+| patch 0026 (whole) | fails: `vbr` text, r4-r7, r7, T (both), MACL, MACH, with the oracle on each | pass |
+| r0 and r1 dropped | fails: the lent r1 fixture, text and oracle (`returns 00000005`, the code returned 7) | pass |
+| SR dropped | fails: both T fixtures, text and oracle | pass |
+| MACH and MACL dropped | fails: MACL and MACH, text and oracle | pass |
+| r4-r7 dropped | fails: the four argument registers, r7, the r7 recursion, the lent r7 and r4 limit | pass |
+| VBR dropped | fails: the two `unaff_vbr` texts | pass |
+
+So the area-2 oracle and the generator cannot see either defect, which is the finding's own claim; only the new check can.
+
+### Corpus
+
+Both images (`SE_GAME_HWRAM` hwram007 and hwram008), every ledger count 0, 16 and 20 reads "missing and said" (code
+removed as unreachable) as before. Against the previous master (`SE_GAME_OUT` compared file by file):
+
+| | functions | text differs | declaration (signature line) differs | call sites with more arguments | with fewer |
+|---|---|---|---|---|---|
+| 007 | 839 | 87 | 14 | 74 | 1 |
+| 008 | 1554 | 136 | 20 | 112 | 0 |
+
+`extraout_` names appear in the changed functions (r4 in 57 and 90, r7 in 35 and 60, r6, r5, SR in 10 and 11, MACL in 6 in the second);
+`in_sr` is gone from the 10 and 11 functions that had it (it became `extraout_sr`). Three read, with the disassembly:
+
+- `06024ACC` (007): `cmp/gt r1,r4 ; bf ; trapa 0x9` after five calls. Before: the pushes of the trap and a read of the pushed
+  word were printed, `in_sr & 0xfffffffe | ...` carried a T from before the calls, and `param_1` was compared. Now the trap is a
+  call through `unaff_vbr + 0x24`, the T logic is `(*(uint2 *)(unaff_gbr + 0x80) & 0x10) != 0`, and r4 after the calls is
+  `extraout_r4`. Right for A2-9 and for T; the function lost its parameter, which is the ABI's answer (the author saved r5-r7 and
+  not r4 around calls elsewhere, and may count on the callees keeping it: not decidable here).
+- `0600847E` (007): a call to `060198DE`, which is eleven `shar r4`: a shift-by-11 helper that returns in r4. Before:
+  `iVar2 = func_0x060198de(); param_1[2] = iVar1 + iVar2;`, the sum with r4 as it was before the helper shifted it: a wrong value,
+  silent. Now `iVar1 = func_0x060198de(iVar1); param_1[2] = extraout_r4 + iVar1;`: the argument is shown, and the shifted r4 is
+  the unknown it should be. This is the A2-10 defect in the game's own code (74 and 112 call sites gain an argument; the
+  `060198DE`/`E4`/`E6` and `0605A12C`/`26` helpers are the common ones).
+- `06027844` (007): five calls with r5-r7 pushed around some and r4 not, then `func_0x06026174(param_1, ...)`. Now
+  `extraout_r4` and no parameter. The old text may have been right if the callees keep r4 (they are hand-written); the new one is
+  honest and loses information. This is the limit below, seen in code.
+
+### Limits, and what is left
+
+- A callee verified to keep r4-r7 (`CallEffects.preserved`, which `ReturnCheck` proves and the host already uses to prove a return
+  address) is not told apart from one that does not: the default model's lists are per model, and `FuncProto` takes an effect list
+  only through its XML decoder. Pinned by the `r4 kept by the callee (limit)` fixture. The remedy is a small engine patch
+  (a setter for the effect list) and `ApplyPrototype` marking `preserved` registers unaffected for a lent callee; it needs the
+  engine and `Sh2Decompiler.cpp`, which this round was not to touch. Measured cost: of the generator's 5,648 lent prototypes
+  (3,000 seeds), 207 (3.7%) are no longer lent, all for "it uses rN after calling ...".
+- The corpus runs lend nothing (every function is decompiled alone), so it does not measure lending; the generator does.
+- `trapa` through a handler that does not return (a debugger trap) is modelled as returning, as every call is.
+- VBR unaffected is a judgement, as GBR's was: a callee that loads VBR is read as not changing it.
+
+### Matrix (RelWithDebInfo)
+
+`SlaFreshnessTests`, `Sh2SemanticsTests`, `Sh2DecodeTests`, `Sh2DecompilerTests` pass; `Sh2GeneratedTests` passes at the default
+300 seeds and at 3,000 (both grammars, 1,500 each; 0 failing seeds, 0 findings); the game corpus above; `vendor.py` on the pinned
+Ghidra (`918d44e`, a sparse checkout) reproduces the committed tree, `sh-2.sla` aside, with 0025 and 0026 applied. The whole
+`ctest`: 95 of 95 pass (RelWithDebInfo, the final spec data).

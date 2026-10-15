@@ -2,6 +2,7 @@
 # Modified for SaturnExplorer: bra/bsr give their delay slot the PC it executes at (patches/0005-sleigh-delay-slot-pc.patch);
 # SH-2 semantics corrected: PR before the slot, MAC.L/MAC.W, XOR.B, @-Rn and DIV1 operand order (patches/0006-sleigh-sh2-semantics.patch).
 # SR loads keep only the bits the SH-2 has and rte restores SR before its delay slot (patches/0019-sleigh-sr-rte.patch).
+# trapa gives back the 8 bytes its handler's rte pops, after the call (patches/0025-sleigh-trapa-stack.patch).
 
 define endian=big;
 
@@ -1894,6 +1895,13 @@ define pcodeop Sleep_Standby;
 
     dest = *(vbr + (imm_00_07 * 4));
     call [dest];
+
+    # The handler returns with rte, which pops the PC and SR pushed above, so r15 is back where it
+    # was when the trap returns (Mednafen: Exception pushes 8 bytes, rte pops 8). This op follows the
+    # call: an emulator ends the instruction at the call and never runs it, so the push stays as
+    # the hardware leaves it on the way into the handler, and the decompiler, which continues
+    # after a call, sees the stack as the caller finds it.
+    r15 = r15 + 8;
 }
 
 @if defined(FPU)
