@@ -1137,6 +1137,15 @@ void Sh2Decompiler::SetBeforeReferenceHookForTests(std::function<void()> hook)
 namespace
 {
 
+// "A", "A and B", "A, B and C": every register an access covers, in order.
+std::string RegisterNames(const std::vector<const HardwareRegister*>& regs)
+{
+    std::string names;
+    for (size_t i = 0; i < regs.size(); ++i)
+        names += (i == 0 ? "" : i + 1 == regs.size() ? " and " : ", ") + std::string(regs[i]->name);
+    return names;
+}
+
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
 // register area is a volatile read or write by now (the symbols and ranges are volatile), so
 // those ops are the accesses, at the address and width the code used. A read through a pointer
@@ -1187,10 +1196,11 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 if (write) written.insert(reg);
                 if (read && reg->split) splitReads.emplace_back(insn, reg);
             }
-            if (regs.size() > 1)
+            // The SMPC's registers sit on the lane of a 16-bit bus: a word or long that reaches
+            // several is a run of byte accesses, said below by lane, not a register pair.
+            if (regs.size() > 1 && regs[0]->narrow != NarrowAccess::ByteLane)
             {
-                std::string names = regs[0]->name;
-                for (size_t i = 1; i < regs.size(); ++i) names += (i + 1 == regs.size() ? " and " : ", ") + std::string(regs[i]->name);
+                const std::string names = RegisterNames(regs);
                 const char* whole = DocumentedWideAccess(at, size);
                 if (whole)
                     note(insn, std::string(whole) + ": one " + std::to_string(size) + "-byte " + (read ? "read" : "write") +
@@ -1200,6 +1210,10 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                                    " (shown under the first)", true);
             }
         }
+        // What the access's width does to the registers it reaches that the line does not say: a
+        // byte write to a 16-bit VDP register, a word or byte access to a 32-bit on-chip one, a
+        // word at an SMPC register (A5-3, A5-4). The access-kind table decides, per register.
+        for (const NarrowEffect& e : NarrowAccessEffects(at, size, write)) note(insn, e.text, true);
         if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
@@ -1529,11 +1543,28 @@ std::vector<MemoryAccess> Accesses(const ghidra::Funcdata& fd,
         }
         return false;
     };
-    for (size_t i = 0; i < out.size(); ++i)
-        for (size_t j = 0; j < out.size(); ++j)
+    // An instruction can make several accesses of one kind -- mac's two operand reads, the two
+    // stack pops of an rte beside the read in its slot -- and the flow had a LOAD or STORE for each.
+    // One of them reaching another is then no copy: 'made' is how many the flow had, less those that
+    // ended some other way (folded into a variable, removed), and a path with that many before
+    // an access holds one too many (A5-6; before, any two of a kind flagged mac's operands).
+    std::map<std::pair<uint32_t, bool>, int> made;
+    for (const auto& k : flow.accessesByInsn) made[k.first] = static_cast<int>(k.second.size());
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+        --made[std::make_pair(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())), rec.store)];
+    for (size_t j = 0; j < out.size(); ++j)
+    {
+        if (!outOps[j]->getParent()) continue;
+        const int allowed = std::max(1, made[std::make_pair(out[j].insn, out[j].write)]);
+        std::vector<size_t> before;
+        for (size_t i = 0; i < out.size(); ++i)
             if (i != j && out[i].insn == out[j].insn && out[i].write == out[j].write && outOps[i]->getParent() &&
-                outOps[j]->getParent() && reaches(outOps[i], outOps[j]))
-                out[i].repeatedOnPath = out[j].repeatedOnPath = true;
+                reaches(outOps[i], outOps[j]))
+                before.push_back(i);
+        if (static_cast<int>(before.size()) < allowed) continue;
+        out[j].repeatedOnPath = true;
+        for (size_t i : before) out[i].repeatedOnPath = true;
+    }
     return out;
 }
 
@@ -1734,32 +1765,66 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
             if (h.first <= a && a <= h.last) return true;
         return false;
     };
-    bool any = false;
-    for (const MemoryAccess& m : rr.accesses)
-    {
-        if (m.direct && !InHardwareRange(m.address) && !isMarked(m.address)) continue;   // ordinary memory
-        bool shown = false;
-        for (const MemoryAccess& x : r.accesses)
-            if (x.insn == m.insn && x.write == m.write && x.size == m.size) shown = true;
-        if (shown) continue;
-        // How the shown pass ended this instruction's load or store: folded into a variable of
-        // ordinary memory (or the read of a switch's table) is no loss; removed with unreachable
-        // code is what is said here. Anything else is no removal and has no cause to give.
-        bool conserved = false, removed = false;
-        for (const AccessFate& f : r.accessFates)
+    // Each access of the reference run is matched with one thing the shown pass did with it, one to
+    // one: a shown access (printed), or one of the engine's records of an access that went (folded
+    // into a variable of ordinary memory, the read of a switch's table, removed with unreachable
+    // code). They are found by instruction, direction and width, and by address wherever both sides
+    // have a constant one. Two accesses of one instruction -- mac's two operands, an rte's stack
+    // pops beside the access in its slot -- would otherwise excuse one another: the access of
+    // ordinary memory that folded accounted for the register read that was removed (A5-5). Matches
+    // by address come first, so an access through a pointer does not take the record of a constant
+    // one. A fold into the function's own frame is a variable, not a bus access: no match.
+    enum Outcome : uint8_t { Unmatched, Printed, Conserved, Removed };
+    std::vector<Outcome> outcome(rr.accesses.size(), Unmatched);
+    std::vector<char> shownUsed(r.accesses.size(), 0), fateUsed(r.accessFates.size(), 0);
+    auto fits = [](bool mKnown, uint32_t mAddress, bool known, uint32_t address, int pass) {
+        const bool both = mKnown && known;
+        return pass == 0 ? both && mAddress == address : !both;
+    };
+    for (int pass = 0; pass < 2; ++pass)
+        for (size_t i = 0; i < rr.accesses.size(); ++i)
         {
-            if (f.insn != m.insn || f.write != m.write || f.size != m.size) continue;
-            conserved |= f.fate == AccessFate::FoldedOrdinary || f.fate == AccessFate::SwitchLookup;
-            removed |= f.fate == AccessFate::Unreachable;
+            const MemoryAccess& m = rr.accesses[i];
+            if (outcome[i] != Unmatched) continue;
+            for (size_t k = 0; k < r.accesses.size() && outcome[i] == Unmatched; ++k)
+            {
+                const MemoryAccess& x = r.accesses[k];
+                if (shownUsed[k] || x.insn != m.insn || x.write != m.write || x.size != m.size) continue;
+                if (!fits(m.direct, m.address, x.direct, x.address, pass)) continue;
+                shownUsed[k] = 1;
+                outcome[i] = Printed;
+            }
+            // Conserved before removed: a record that says the access was only a variable.
+            for (int want = 0; want < 2 && outcome[i] == Unmatched; ++want)
+                for (size_t k = 0; k < r.accessFates.size() && outcome[i] == Unmatched; ++k)
+                {
+                    const AccessFate& f = r.accessFates[k];
+                    if (fateUsed[k] || f.frame || f.insn != m.insn || f.write != m.write || f.size != m.size) continue;
+                    const bool conserves = f.fate == AccessFate::FoldedOrdinary || f.fate == AccessFate::SwitchLookup;
+                    if (want == 0 ? !conserves : f.fate != AccessFate::Unreachable) continue;
+                    if (!fits(m.direct, m.address, f.constantAddress, f.address, pass)) continue;
+                    fateUsed[k] = 1;
+                    outcome[i] = want == 0 ? Conserved : Removed;
+                }
         }
-        if (conserved || !removed) continue;
+    bool any = false;
+    for (size_t i = 0; i < rr.accesses.size(); ++i)
+    {
+        const MemoryAccess& m = rr.accesses[i];
+        if (m.direct && !InHardwareRange(m.address) && !isMarked(m.address)) continue;   // ordinary memory
+        // Removed with unreachable code is what is said here. Printed, folded into a variable or a
+        // switch, or ended some other way (no removal, no cause to give) is not.
+        if (outcome[i] != Removed) continue;
+        // Every register the access covers, and its width: a 4-byte write over two registers is
+        // not the write of the first (A5-7).
         std::string what = " through a pointer";
         if (m.direct)
         {
             const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(m.address, m.size);
-            what = " of " + (regs.empty() ? Hex8(m.address) : std::string(regs[0]->name));
+            what = " of " + (regs.empty() ? Hex8(m.address) : RegisterNames(regs));
         }
-        const std::string text = std::string("the ") + (m.write ? "write" : "read") + what + " here is missing: " + cause;
+        const std::string text = "the " + std::to_string(m.size) + "-byte " + (m.write ? "write" : "read") + what +
+                                 " here is missing: " + cause;
         r.hardwareNotes.push_back(HardwareNote{ m.insn, text, true });
         r.warnings.push_back(Hex8(m.insn) + ": " + text);
         any = true;
@@ -1960,6 +2025,22 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             {
                 if (onChip && partition) continue;
                 ghidra::SymbolEntry* e = global->addSymbol(registers[i].name, type, ghidra::Address(ram, at | partition),
+                                                           ghidra::Address());
+                global->setAttribute(e->getSymbol(), ghidra::Varnode::volatil);
+            }
+        }
+        // The SMPC's registers again as the 16-bit words they sit in, at the even address: a word
+        // access there is a write of the register's low byte (ss.c), so it prints as the register,
+        // not as work RAM at an address (A5-4). The byte symbol above is the smaller container, so
+        // a byte access still finds that one.
+        size_t viewCount = 0;
+        const HardwareRegister* views = SaturnHardwareWordViews(viewCount);
+        for (size_t i = 0; i < viewCount; ++i)
+        {
+            ghidra::Datatype* type = arch->types->getBase(views[i].size, ghidra::TYPE_UINT);
+            for (uint32_t partition : { 0x00000000u, 0x20000000u })
+            {
+                ghidra::SymbolEntry* e = global->addSymbol(views[i].name, type, ghidra::Address(ram, views[i].address | partition),
                                                            ghidra::Address());
                 global->setAttribute(e->getSymbol(), ghidra::Varnode::volatil);
             }
@@ -2267,8 +2348,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             case ghidra::fate_switch_lookup: f.fate = AccessFate::SwitchLookup; break;
             default: f.fate = AccessFate::Dead; break;
             }
-            f.constantAddress = !rec.addr.isInvalid();
-            if (f.constantAddress) f.address = static_cast<uint32_t>(rec.addr.getOffset());
+            // A fold into the stack frame records the Varnode's address in the stack space: an
+            // offset (-4 for a pop), which no bus address is (A5-5).
+            if (!rec.addr.isInvalid())
+            {
+                f.address = static_cast<uint32_t>(rec.addr.getOffset());
+                f.constantAddress = rec.addr.getSpace() == ram;
+                f.frame = !f.constantAddress;
+            }
             r.accessFates.push_back(f);
         }
         r.calls = Calls(*fd, flow, canonicalOf);

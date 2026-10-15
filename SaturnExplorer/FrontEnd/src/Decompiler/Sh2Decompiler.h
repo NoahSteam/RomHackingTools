@@ -241,7 +241,12 @@ struct AccessFate
     uint8_t size = 0;
     Kind fate = Dead;
     uint32_t address = 0;   // the constant address, as the code uses it, when the pointer was one; else 0
-    bool constantAddress = false;
+    bool constantAddress = false;   // 'address' is a bus address (the engine's default code space)
+    // The fold went into the function's own stack frame (a push, a pop, a local): 'address' is then
+    // the frame offset, not a bus address -- never a register, never memory another processor
+    // reaches -- and constantAddress is false. It accounts for no bus access (A5-5: the offset -4 of
+    // a pop was read as a register, and a pop was taken for the read in an rte's delay slot).
+    bool frame = false;
 };
 
 // A call in the final p-code: an access's order relative to it matters as much as to another access.

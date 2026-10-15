@@ -436,6 +436,14 @@ bool HasNote(const DecompileResult& r, const char* what, bool caution = true)
     return false;
 }
 
+// ...and on this instruction.
+bool HasNoteAt(const DecompileResult& r, uint32_t insn, const char* what, bool caution = true)
+{
+    for (const HardwareNote& n : r.hardwareNotes)
+        if (n.address == insn && Has(n.text, what) && n.caution == caution) return true;
+    return false;
+}
+
 bool WarnsAbout(const DecompileResult& r, const char* what)
 {
     for (const std::string& w : r.warnings)
@@ -446,12 +454,15 @@ bool WarnsAbout(const DecompileResult& r, const char* what)
 // The output says, on this instruction, that its access is missing because the code around it was
 // removed as unreachable: the caution itself, not any warning that happens to print the address
 // (the engine prints its own in lowercase, and an address of digits alone matches either).
-bool SaidMissing(const DecompileResult& r, uint32_t insn)
+int SaidCount(const DecompileResult& r, uint32_t insn)
 {
-    for (const HardwareNote& n : r.hardwareNotes)
-        if (n.address == insn && n.caution && Has(n.text, "here is missing")) return true;
-    return false;
+    int n = 0;
+    for (const HardwareNote& h : r.hardwareNotes)
+        n += h.address == insn && h.caution && Has(h.text, "here is missing");
+    return n;
 }
+
+bool SaidMissing(const DecompileResult& r, uint32_t insn) { return SaidCount(r, insn) > 0; }
 
 // The access ledger (consolidated review): the memory operations the SH-2 code makes, written
 // from the instructions, compared with DecompileResult::accesses in instruction order -- kind,
@@ -581,26 +592,60 @@ const char* AccountName(Account a)
     }
 }
 
-Account AccountFor(const DecompileResult& r, const MemoryAccess& m, const std::function<bool(uint32_t)>& marked)
+// How the shown output accounts for each access of the reference run, one to one (A5-5). An access
+// of the shown output, or a record of one that went, pairs with a reference access of the same
+// instruction, direction and width -- and, when both have a constant address, the same address --
+// and with no other: two accesses of one instruction (mac's operands; an rte's stack pops beside the
+// read in its slot) must not excuse each other. Pairs by address are made before the rest, so an
+// access through a pointer does not take the record of a constant one. A fold into the function's
+// own frame (AccessFate::frame) is a variable, no bus access, and pairs with nothing; its
+// 'address' is a frame offset (-4 for a pop), not an address.
+std::vector<Account> Accounts(const DecompileResult& r, const std::vector<MemoryAccess>& reference,
+                              const std::function<bool(uint32_t)>& marked)
 {
-    for (const MemoryAccess& x : r.accesses)
-        if (x.insn == m.insn && x.write == m.write && x.size == m.size) return Account::Printed;
-    bool folded = false, removed = false;
-    for (const AccessFate& f : r.accessFates)
-    {
-        if (f.insn != m.insn || f.write != m.write || f.size != m.size) continue;
-        switch (f.fate)
+    std::vector<Account> out(reference.size(), Account::Dropped);
+    std::vector<char> done(reference.size(), 0), shownUsed(r.accesses.size(), 0), fateUsed(r.accessFates.size(), 0);
+    for (int byAddress = 1; byAddress >= 0; --byAddress)
+        for (size_t i = 0; i < reference.size(); ++i)
         {
-        case AccessFate::FoldedOrdinary:
-            // A fold of a register or of marked memory would have been a real access: it is not ordinary.
-            if (!(f.constantAddress && (InHardwareRange(f.address) || marked(f.address)))) folded = true;
-            break;
-        case AccessFate::SwitchLookup: folded = true; break;
-        case AccessFate::Unreachable: removed = true; break;
-        case AccessFate::Dead: break;
+            if (done[i]) continue;
+            const MemoryAccess& m = reference[i];
+            // Whether a candidate with (known, address) pairs with m in this round.
+            auto pairs = [&](bool known, uint32_t address) {
+                const bool both = m.direct && known;
+                return byAddress ? both && address == m.address : !both;
+            };
+            for (size_t k = 0; k < r.accesses.size() && !done[i]; ++k)
+            {
+                const MemoryAccess& x = r.accesses[k];
+                if (shownUsed[k] || x.insn != m.insn || x.write != m.write || x.size != m.size || !pairs(x.direct, x.address)) continue;
+                shownUsed[k] = done[i] = 1;
+                out[i] = Account::Printed;
+            }
+            // A variable or a switch's table (conserved) before code removed as unreachable.
+            for (int removed = 0; removed < 2 && !done[i]; ++removed)
+                for (size_t k = 0; k < r.accessFates.size() && !done[i]; ++k)
+                {
+                    const AccessFate& f = r.accessFates[k];
+                    if (fateUsed[k] || f.frame || f.insn != m.insn || f.write != m.write || f.size != m.size) continue;
+                    if (!pairs(f.constantAddress, f.address)) continue;
+                    if (!removed)
+                    {
+                        // A fold of a register or of marked memory would have been a real access: it is not ordinary.
+                        if (f.fate == AccessFate::FoldedOrdinary && f.constantAddress && (InHardwareRange(f.address) || marked(f.address)))
+                            continue;
+                        if (f.fate != AccessFate::FoldedOrdinary && f.fate != AccessFate::SwitchLookup) continue;
+                        out[i] = Account::Folded;
+                    }
+                    else
+                    {
+                        if (f.fate != AccessFate::Unreachable) continue;
+                        out[i] = Account::Removed;
+                    }
+                    fateUsed[k] = done[i] = 1;
+                }
         }
-    }
-    return folded ? Account::Folded : removed ? Account::Removed : Account::Dropped;
+    return out;
 }
 
 // A Removed access that needs no word: a direct access of ordinary memory.
@@ -617,13 +662,14 @@ bool OrdinaryDirect(const MemoryAccess& m, const std::function<bool(uint32_t)>& 
 // runs alike, as it did for a read whose value only fed an expression that folded (A5-1, A4-1).
 bool DeadIsLoss(const AccessFate& f, const std::function<bool(uint32_t)>& marked)
 {
-    return f.fate == AccessFate::Dead &&
+    // A record in the function's own frame has an offset for an address (-4 reads as a register).
+    return f.fate == AccessFate::Dead && !f.frame &&
            !(f.constantAddress && !InHardwareRange(f.address) && !marked(f.address));
 }
 
 // The ledger's reference: the same request with every address volatile, so the output holds every
 // memory instruction the flow reaches. Each access there must be accounted for in the ordinary
-// output (AccountFor); a lost one, or a removal the output does not say, fails. So does any access
+// output (Accounts); a lost one, or a removal the output does not say, fails. So does any access
 // the shown run's own record says ended dead that is not a direct access of ordinary memory
 // (DeadIsLoss), the reference run's list or not.
 bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const DecompileRequest& q,
@@ -646,11 +692,14 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
         return false;
     };
     bool ok = true;
-    for (const MemoryAccess& m : rr.accesses)
+    const std::vector<Account> accounts = Accounts(r, rr.accesses, marked);
+    std::map<uint32_t, int> said;   // the removal cautions on an instruction, spent one per removed access
+    for (size_t i = 0; i < rr.accesses.size(); ++i)
     {
-        const Account a = AccountFor(r, m, marked);
+        const MemoryAccess& m = rr.accesses[i];
+        const Account a = accounts[i];
         if (a == Account::Printed || a == Account::Folded) continue;
-        if (a == Account::Removed && (OrdinaryDirect(m, marked) || SaidMissing(r, m.insn))) continue;
+        if (a == Account::Removed && (OrdinaryDirect(m, marked) || ++said[m.insn] <= SaidCount(r, m.insn))) continue;
         std::printf("  reference: the %s of %u bytes at %08X (%s%08X) is %s in the output\n", m.write ? "write" : "read",
                     unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address,
                     a == Account::Removed ? "removed as unreachable, and its removal is not said" : "dropped");
@@ -1048,6 +1097,71 @@ void TestHardwareVolatility()
                                                0x4028,     // shll16 r0
                                                0x4028,     // shll16 r0          r0 = 0
                                                0x000B, 0x0009 }, 0x0C, 0 };
+    // Area 5, round 2 (A5-3): an access narrower than the register it reaches. Each is mov #3,r0 then
+    // the access at base+4 on r1 = the literal (the ledger's fixtures a to d, with the effect Mednafen
+    // has: sh7095.inc OnChipReg*, vdp1.c VDP1_Write8_DB, vdp2.c RW_W8).
+    const std::vector<uint16_t> movb = { 0xE003, 0x2100 }, movw = { 0xE003, 0x2101 };
+    const Fixture vdp2Byte1 = simple(0x0600AB00u, movb, 0x25F80001u);       // VDP2_TVMD._1_1_ = 3
+    const Fixture vdp2Byte0 = simple(0x0600AB40u, movb, 0x25F80000u);       // ...the other byte of it
+    const Fixture vdp1Byte = simple(0x0600AB80u, movb, 0x25D00001u);        // VDP1_TVMR, write-only
+    const Fixture vdp2ByteRead = simple(0x0600ABC0u, { 0x6010 }, 0x25F80001u);   // mov.b @r1,r0: a part is read as it is
+    const Fixture vdp2Word = simple(0x0600AC00u, movw, 0x25F80000u);        // control: the whole register
+    const Fixture divWordLow = simple(0x0600AC40u, movw, 0xFFFFFF06u);      // SH2_DVDNT._2_2_ = 3: nothing
+    const Fixture divWordHigh = simple(0x0600AC80u, movw, 0xFFFFFF04u);     // SH2_DVDNT._0_2_ = 3: DVDNT = 3, divides
+    const Fixture divByte = simple(0x0600ACC0u, movb, 0xFFFFFF04u);         // an address error
+    const Fixture divByteRead = simple(0x0600AD00u, { 0x6010 }, 0xFFFFFF07u);
+    const Fixture divWordReadHigh = simple(0x0600AD40u, { 0x6011 }, 0xFFFFFF04u);   // the low half, not the high
+    const Fixture divWordReadLow = simple(0x0600AD80u, { 0x6011 }, 0xFFFFFF06u);    // control: the low half
+    const Fixture divLong = simple(0x0600ADC0u, { 0xE003, 0x2102 }, 0xFFFFFF04u);   // control: 32 bits
+    const Fixture bscWord = simple(0x0600AE00u, movw, 0xFFFFFFE0u);         // SH2_BCR1: keyed long only
+    const Fixture ubcByte = simple(0x0600AE40u, movb, 0xFFFFFF40u);         // SH2_BARAH, 16 bits
+    // A5-4: the SMPC is a byte device on the low lane of the 16-bit bus. Its registers are at the odd
+    // addresses; a word at the even address beside one is a write of its low byte (ss.c).
+    const Fixture smpcWord = simple(0x0600AE80u, { 0xE019, 0x2101 }, 0x2010001Eu);      // SMPC_COMREG = 0x19
+    const Fixture smpcByteEven = simple(0x0600AEC0u, { 0xE019, 0x2100 }, 0x2010001Eu);   // does nothing
+    const Fixture smpcByteOdd = simple(0x0600AF00u, { 0xE019, 0x2100 }, 0x2010001Fu);    // control
+    const Fixture smpcLong = simple(0x0600AF40u, { 0xE019, 0x2102 }, 0x2010001Cu);       // two 16-bit writes
+    const Fixture smpcLongPair = simple(0x0600AF80u, { 0xE019, 0x2102 }, 0x20100000u);   // IREG0 and IREG1
+    const Fixture smpcWordRead = simple(0x0600AFC0u, { 0x6011 }, 0x20100060u);           // 0xFF00 | SMPC_SR
+    const Fixture smpcWordMirror = simple(0x0600B000u, { 0xE019, 0x2101 }, 0x2010009Eu); // 128 bytes up
+    const Fixture smpcByteEvenRead = simple(0x0600B040u, { 0x6010 }, 0x20100060u);       // 0xFF
+    // A5-5 and A5-6: an instruction with two accesses of one kind. mac.l's two operands (mac.w the
+    // same, 2 bytes), the second of ordinary memory; the first, SCU_IST, in code the analysis removes
+    // (a poll of unmarked RAM that folds to an endless loop). The ledger's fixture A5-5 a, and its
+    // control with SCU_IMS in place of 0x26003000's partner.
+    const std::vector<uint16_t> macPoll = { 0xD705, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD103, 0xD204 };
+    auto macAfterPoll = [&](uint32_t base, uint16_t mac, uint32_t first, uint32_t second) {
+        std::vector<uint16_t> code = macPoll;
+        for (uint16_t w : { mac, uint16_t(0x001A), uint16_t(0x000B), uint16_t(0x0009) }) code.push_back(w);
+        for (uint32_t w : { 0x26002180u, first, second })
+        {
+            code.push_back(uint16_t(w >> 16));
+            code.push_back(uint16_t(w));
+        }
+        return Fixture{ base, code, 0x18, 0x26002180u };   // the poll's literal; the others follow it
+    };
+    const Fixture macRemoved = macAfterPoll(0x0600B100u, 0x021F, 0x25FE00A4u, 0x26003000u);   // SCU_IST, RAM
+    const Fixture macRemovedBoth = macAfterPoll(0x0600B140u, 0x021F, 0x25FE00A4u, 0x25FE00A0u);   // SCU_IST, SCU_IMS
+    const Fixture macRemovedSecond = macAfterPoll(0x0600B180u, 0x021F, 0x26003000u, 0x25FE00A4u);   // RAM, SCU_IST
+    // ...and the same in the slot of an rte, beside its two stack pops: mov.l @(pool),r1 ; rte ; mov.l @r1,r2
+    const Fixture rteSlot = { 0x0600B1C0u, { 0xD705, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD103, 0x002B, 0x6212, 0x0009,
+                                             0x0009, 0x0009, 0x2600, 0x2180, 0x25FE, 0x00A4 }, 0x18, 0x26002180u };
+    const Fixture rtsSlot2 = { 0x0600B200u, { 0xD705, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD103, 0x000B, 0x6212, 0x0009,
+                                              0x0009, 0x0009, 0x2600, 0x2180, 0x25FE, 0x00A4 }, 0x18, 0x26002180u };
+    // mac.l @r5+,@r4+ and mac.w through pointers; with the same pointer for both operands; with registers
+    const Fixture macPtr = { 0x0600B240u, { 0x045F, 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };
+    const Fixture macWPtr = { 0x0600B280u, { 0x445F, 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };
+    const Fixture macSame = { 0x0600B2C0u, { 0x044F, 0x000B, 0x0009, 0x0009 }, 0x0C, 0 };
+    const Fixture macReg = { 0x0600B300u, { 0xD103, 0xD204, 0x021F, 0x001A, 0x000B, 0x0009, 0x0009, 0x0009,
+                                            0x25FE, 0x00A4, 0x25FE, 0x00C8 }, 0x10, 0x25FE00A4u };   // SCU_IST, SCU_VER
+    // A5-7: the removal caution names every register the removed access covers, and its width. The
+    // ledger's fixture (a 4-byte write over VDP2_TVMD and VDP2_EXTEN, after the poll), and a byte write.
+    const Fixture removedLong = { 0x0600B340u, { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD102, 0x2142, 0x000B, 0x0009,
+                                                 0x2600, 0x2180, 0x25F8, 0x0000 }, 0x14, 0x26002180u };
+    const Fixture removedByte = { 0x0600B380u, { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD102, 0x2140, 0x000B, 0x0009,
+                                                 0x2600, 0x2180, 0x25F8, 0x0001 }, 0x14, 0x26002180u };
+    const Fixture removedWord = { 0x0600B3C0u, { 0xD704, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD102, 0x2141, 0x000B, 0x0009,
+                                                 0x2600, 0x2180, 0x2010, 0x001E }, 0x14, 0x26002180u };   // SMPC_COMREG by word
     // A test of the mailbox taken always one way, with no loop: the caution must not claim one.
     const Fixture forwardFold = { 0x0600A680u, { 0xD105,     // mov.l @(20,pc),r1   -> the mailbox
                                                  0xE001, 0x2102,     // mailbox = 1
@@ -1260,7 +1374,12 @@ void TestHardwareVolatility()
                               &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &ptrFromRam, &switchSameDest, &ptrSavedInRam,
                               &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer,
                               &deadXor, &deadCmp, &deadMarked, &deadPtr, &pollThenRead, &twoTests, &twoTestsWrite, &deadAnd,
-                              &deadStack, &deadShift })
+                              &deadStack, &deadShift,
+                              &vdp2Byte1, &vdp2Byte0, &vdp1Byte, &vdp2ByteRead, &vdp2Word, &divWordLow, &divWordHigh, &divByte,
+                              &divByteRead, &divWordReadHigh, &divWordReadLow, &divLong, &bscWord, &ubcByte,
+                              &smpcWord, &smpcByteEven, &smpcByteOdd, &smpcLong, &smpcLongPair, &smpcWordRead, &smpcWordMirror,
+                              &smpcByteEvenRead, &macRemoved, &macRemovedBoth, &macRemovedSecond, &rteSlot, &rtsSlot2, &macPtr,
+                              &macWPtr, &macSame, &macReg, &removedLong, &removedByte, &removedWord })
     {
         size_t off = f->base - 0x06000000u;
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
@@ -1713,7 +1832,7 @@ void TestHardwareVolatility()
     // The caution that removed code is missing a read has to name it (A5-2).
     r = run("a poll of unmarked RAM that folds, then a read through a pointer, then xor r0,r0", pollThenRead);
     CHECK(Ledger(r, {}));
-    CHECK(SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the read through a pointer here is missing"));
+    CHECK(SaidMissing(r, 0x0600A90Cu) && HasNote(r, "the 1-byte read through a pointer here is missing"));
     CHECK(FateAt(r, AccessFate::Unreachable, 0x0600A90Cu, false) == 1 && FateAt(r, AccessFate::Dead, 0, false) == 0);
     // A4-1: a test of one condition, a read, a test of the same condition. The read is outside any if.
     r = run("if (c) a; hardware read; if (c) b;", twoTests);
@@ -1726,10 +1845,10 @@ void TestHardwareVolatility()
     // The folded poll: nothing is shown after it, and the missing write is said, with the cause.
     r = run("mailbox poll on unmarked RAM removes a hardware write", mailboxFold);
     CHECK(Ledger(r, {}));
-    CHECK(WarnsAbout(r, "0600A48E: the write of SMPC_SF here is missing") && WarnsAbout(r, "marked volatile"));
+    CHECK(WarnsAbout(r, "0600A48E: the 1-byte write of SMPC_SF here is missing") && WarnsAbout(r, "marked volatile"));
     CHECK(FateAt(r, AccessFate::Unreachable, 0x0600A48Eu, true) == 1);   // SMPC_SF = 0, removed with its block
     CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
-    CHECK(HasNote(r, "the write of SMPC_SF here is missing", true));
+    CHECK(HasNote(r, "the 1-byte write of SMPC_SF here is missing", true));
     {
         DecompileRequest q = Request(mailboxFold.base);
         q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
@@ -1767,7 +1886,7 @@ void TestHardwareVolatility()
     // The pointer saved in RAM: the write through it is in the removed code, so it is said.
     r = run("mailbox poll, the hardware pointer saved in RAM", ptrSavedInRam);
     CHECK(Ledger(r, {}));
-    CHECK(SaidMissing(r, 0x0600A554u) && HasNote(r, "the write through a pointer here is missing") && !Has(r.Text(), "of through"));
+    CHECK(SaidMissing(r, 0x0600A554u) && HasNote(r, "the 1-byte write through a pointer here is missing") && !Has(r.Text(), "of through"));
     CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
     {
         DecompileRequest q = Request(ptrSavedInRam.base);
@@ -1783,7 +1902,7 @@ void TestHardwareVolatility()
     r = run("mailbox poll, then a literal-bounded switch writing SMPC_SF", litSwitchAfterPoll);
     CHECK(Ledger(r, {}));
     CHECK(SaidMissing(r, 0x0600A636u) && SaidMissing(r, 0x0600A63Eu) && SaidMissing(r, 0x0600A646u) && SaidMissing(r, 0x0600A60Eu));
-    CHECK(HasNote(r, "the write of SMPC_SF here is missing") && !r.prototype.known);
+    CHECK(HasNote(r, "the 1-byte write of SMPC_SF here is missing") && !r.prototype.known);
     {
         DecompileRequest q = Request(litSwitchAfterPoll.base);
         q.volatileMemory.emplace_back(0x26001000u, 0x26001003u);
@@ -1862,6 +1981,180 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Wr(0x25D00010u, 2) }));
     CHECK(Has(r.Text(), "VDP1_EDSR = param_1;"));
     CHECK(HasNote(r, "writes VDP1_EDSR, which is read-only"));
+
+    // Area 5, round 2, A5-3: an access narrower than its register. The ledger lists it at its real
+    // width, the line is as the engine prints it, and a caution on the instruction says what the
+    // hardware does (Mednafen): the access-kind table decides, for every register of the kind.
+    r = run("a byte write to a 16-bit VDP2 register", vdp2Byte1);
+    CHECK(Ledger(r, { Wr(0x25F80001u, 1) }));
+    CHECK(Has(r.Text(), "VDP2_TVMD._1_1_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600AB04u, "a 1-byte write to VDP2_TVMD writes the whole 16-bit register: its other byte is whatever was last on the data bus"));
+    CHECK(WarnsAbout(r, "0x0600AB04: a 1-byte write to VDP2_TVMD"));
+    r = run("...the other byte of it", vdp2Byte0);
+    CHECK(Ledger(r, { Wr(0x25F80000u, 1) }) && Has(r.Text(), "VDP2_TVMD._0_1_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600AB44u, "a 1-byte write to VDP2_TVMD writes the whole 16-bit register"));
+    r = run("a byte write to a 16-bit VDP1 register", vdp1Byte);
+    CHECK(Ledger(r, { Wr(0x25D00001u, 1) }) && Has(r.Text(), "VDP1_TVMR._1_1_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600AB84u, "a 1-byte write to VDP1_TVMR writes the whole 16-bit register"));
+    r = run("a byte read of a 16-bit VDP2 register: the part is read as it is", vdp2ByteRead);
+    CHECK(Ledger(r, { Rd(0x25F80001u, 1, false, true) }) && r.hardwareNotes.empty());
+    r = run("a word write to a 16-bit VDP2 register: the plain access", vdp2Word);
+    CHECK(Ledger(r, { Wr(0x25F80000u, 2) }) && r.hardwareNotes.empty() && Has(r.Text(), "VDP2_TVMD = 3;"));
+
+    r = run("a word write to the high half of a 32-bit on-chip register", divWordHigh);
+    CHECK(Ledger(r, { Wr(0xFFFFFF04u, 2) }) && Has(r.Text(), "SH2_DVDNT._0_2_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600AC84u, "a 2-byte write to SH2_DVDNT, a 32-bit register, writes the whole register with the 16-bit value (upper half 0) and starts a 32-by-32 division"));
+    r = run("a word write to the low half of a 32-bit on-chip register", divWordLow);
+    CHECK(Ledger(r, { Wr(0xFFFFFF06u, 2) }) && Has(r.Text(), "SH2_DVDNT._2_2_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600AC44u, "a 2-byte write to the low half of SH2_DVDNT, a 32-bit register, does nothing"));
+    r = run("a byte write to a 32-bit on-chip register", divByte);
+    CHECK(Ledger(r, { Wr(0xFFFFFF04u, 1) }) && Has(r.Text(), "SH2_DVDNT._0_1_ = 3;"));
+    CHECK(HasNoteAt(r, 0x0600ACC4u, "a 1-byte write to SH2_DVDNT, a 32-bit register, is an address error on the SH-2"));
+    r = run("a byte read of a 32-bit on-chip register", divByteRead);
+    CHECK(Ledger(r, { Rd(0xFFFFFF07u, 1, false, true) }));
+    CHECK(HasNoteAt(r, 0x0600AD02u, "a 1-byte read of SH2_DVDNT, a 32-bit register, is an address error on the SH-2"));
+    r = run("a word read at the high half of a 32-bit on-chip register", divWordReadHigh);
+    CHECK(Ledger(r, { Rd(0xFFFFFF04u, 2, false, true) }) && Has(r.Text(), "SH2_DVDNT._0_2_"));
+    CHECK(HasNoteAt(r, 0x0600AD42u, "a 2-byte read at SH2_DVDNT, a 32-bit register, returns its low 16 bits, not the upper half"));
+    r = run("a word read at the low half: what Mednafen returns at either", divWordReadLow);
+    CHECK(Ledger(r, { Rd(0xFFFFFF06u, 2, false, true) }) && r.hardwareNotes.empty());
+    r = run("a long write to the 32-bit register: the plain access", divLong);
+    CHECK(Ledger(r, { Wr(0xFFFFFF04u, 4) }) && r.hardwareNotes.empty());
+    r = run("a word write to a keyed 32-bit register", bscWord);
+    CHECK(Ledger(r, { Wr(0xFFFFFFE0u, 2) }));
+    CHECK(HasNoteAt(r, 0x0600AE04u, "a 2-byte write to SH2_BCR1, a 32-bit register, does nothing: it is set only by a 4-byte write with 0xA55A"));
+    r = run("a byte write to a 16-bit on-chip register at 0xFFFFFF00 and up", ubcByte);
+    CHECK(Ledger(r, { Wr(0xFFFFFF40u, 1) }));
+    CHECK(HasNoteAt(r, 0x0600AE44u, "a 1-byte write to SH2_BARAH, a 16-bit register, is an address error on the SH-2"));
+
+    // A5-4: the SMPC is a byte device on the low lane. The word write names the register on the line,
+    // and says it is a byte write; the byte at the even address does nothing; a long is two bus writes.
+    r = run("a word write at the even address beside SMPC_COMREG", smpcWord);
+    CHECK(Ledger(r, { Wr(0x2010001Eu, 2) }));
+    CHECK(Has(r.Text(), "SMPC_COMREG = 0x19;") && !Has(r.Text(), "Ram2010001e"));
+    CHECK(HasNoteAt(r, 0x0600AE84u, "a 2-byte write to SMPC_COMREG is a byte write: the register takes the low byte of the value and the high byte goes nowhere"));
+    r = run("a byte write at the even address", smpcByteEven);
+    CHECK(Ledger(r, { Wr(0x2010001Eu, 1) }));
+    CHECK(HasNoteAt(r, 0x0600AEC4u, "a 1-byte write at the even address beside SMPC_COMREG does nothing"));
+    r = run("a byte write at the odd address: the register", smpcByteOdd);
+    CHECK(Ledger(r, { Wr(0x2010001Fu, 1) }) && Has(r.Text(), "SMPC_COMREG = 0x19;") && r.hardwareNotes.empty());
+    r = run("a long write: two 16-bit bus writes", smpcLong);
+    CHECK(Ledger(r, { Wr(0x2010001Cu, 4) }));
+    CHECK(HasNoteAt(r, 0x0600AF44u, "a 4-byte write reaching SMPC_COMREG is two 16-bit bus writes: the register takes bits 7-0 of the value"));
+    r = run("a long write over two SMPC registers", smpcLongPair);
+    CHECK(Ledger(r, { Wr(0x20100000u, 4) }));
+    CHECK(HasNoteAt(r, 0x0600AF84u, "a 4-byte write reaching SMPC_IREG0 is two 16-bit bus writes: the register takes bits 23-16 of the value"));
+    CHECK(HasNoteAt(r, 0x0600AF84u, "a 4-byte write reaching SMPC_IREG1 is two 16-bit bus writes: the register takes bits 7-0 of the value"));
+    CHECK(!HasNote(r, "covers"));   // the lane note says it, not a register pair
+    r = run("a word read at the even address beside SMPC_SR", smpcWordRead);
+    CHECK(Ledger(r, { Rd(0x20100060u, 2, false, true) }) && Has(r.Text(), "SMPC_SR"));
+    CHECK(HasNoteAt(r, 0x0600AFC2u, "a 2-byte read of SMPC_SR returns 0xFF00 or the register"));
+    r = run("a byte read at the even address beside SMPC_SR", smpcByteEvenRead);
+    CHECK(Ledger(r, { Rd(0x20100060u, 1, false, true) }));
+    CHECK(HasNoteAt(r, 0x0600B042u, "a 1-byte read at the even address beside SMPC_SR returns 0xFF, not the register"));
+    r = run("a word write through the SMPC's mirror", smpcWordMirror);
+    CHECK(Ledger(r, { Wr(0x2010009Eu, 2) }) && Has(r.Text(), "Ram2010009e"));
+    CHECK(HasNoteAt(r, 0x0600B004u, "0x2010009E is SMPC_COMREG through a mirror", false));
+    CHECK(HasNoteAt(r, 0x0600B004u, "a 2-byte write to SMPC_COMREG is a byte write"));
+
+    // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.
+    r = run("mac.l @r5+,@r4+ through pointers", macPtr);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+    CHECK(Has(r.Text(), "*param_2") && Has(r.Text(), "*param_1"));
+    r = run("mac.w through pointers", macWPtr);
+    CHECK(Ledger(r, { Rd(0, 2), Rd(0, 2) }));
+    r = run("mac.l @r4+,@r4+: one pointer, two reads", macSame);
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
+    r = run("mac.l of two registers", macReg);
+    CHECK(Ledger(r, { Rd(0x25FE00A4u, 4), Rd(0x25FE00C8u, 4) }));
+
+    // A5-5: two accesses of one instruction are not each other's account. A mac.l whose first operand
+    // is SCU_IST and second ordinary RAM, after a poll of unmarked RAM that folds: the RAM read folds,
+    // the register read goes with the removed code, and that is said.
+    r = run("mac.l after a poll that folds: a register and a variable", macRemoved);
+    CHECK(Ledger(r, {}));
+    CHECK(SaidCount(r, 0x0600B110u) == 1 && HasNoteAt(r, 0x0600B110u, "the 4-byte read of SCU_IST here is missing"));
+    CHECK(FateAt(r, AccessFate::Unreachable, 0x0600B110u, false) == 1 && FateAt(r, AccessFate::FoldedOrdinary, 0x0600B110u, false) == 1);
+    CHECK(!r.prototype.known && Has(r.prototypeWithheld, "removed as unreachable"));
+    r = run("...with the register second", macRemovedSecond);
+    CHECK(SaidCount(r, 0x0600B190u) == 1 && HasNoteAt(r, 0x0600B190u, "the 4-byte read of SCU_IST here is missing") && !r.prototype.known);
+    r = run("...with two registers: both are said", macRemovedBoth);
+    CHECK(SaidCount(r, 0x0600B150u) == 2 && HasNoteAt(r, 0x0600B150u, "the 4-byte read of SCU_IST here is missing") &&
+          HasNoteAt(r, 0x0600B150u, "the 4-byte read of SCU_IMS here is missing") && !r.prototype.known);
+    r = run("a register read in the slot of an rte, beside its two stack pops", rteSlot);
+    CHECK(SaidCount(r, 0x0600B1CEu) == 1 && HasNoteAt(r, 0x0600B1CEu, "the 4-byte read of SCU_IST here is missing") && !r.prototype.known);
+    {
+        // The pops are folds into the function's own frame: offsets, not bus addresses.
+        int frames = 0;
+        for (const AccessFate& f : r.accessFates) frames += f.frame && !f.constantAddress && f.fate == AccessFate::FoldedOrdinary;
+        CHECK(frames == 2);
+    }
+    r = run("...with an rts for the rte: the control", rtsSlot2);
+    CHECK(SaidCount(r, 0x0600B20Eu) == 1 && HasNoteAt(r, 0x0600B20Eu, "the 4-byte read of SCU_IST here is missing"));
+    // The oracle itself: it must not let one access excuse another. Records and accesses are made up.
+    {
+        const std::function<bool(uint32_t)> none = [](uint32_t) { return false; };
+        auto rd = [](uint32_t insn, uint32_t address) {
+            MemoryAccess m;
+            m.insn = insn;
+            m.direct = address != 0;
+            m.address = address;
+            m.size = 4;
+            return m;
+        };
+        auto fate = [](uint32_t insn, AccessFate::Kind kind, uint32_t address, bool frame = false) {
+            AccessFate f;
+            f.insn = insn;
+            f.size = 4;
+            f.fate = kind;
+            f.address = address;
+            f.constantAddress = address != 0 && !frame;
+            f.frame = frame;
+            return f;
+        };
+        const uint32_t at = 0x06009010u;
+        DecompileResult fake;
+        // mac's two operands: the variable that folded is the second's account, not the register's.
+        fake.accessFates = { fate(at, AccessFate::FoldedOrdinary, 0x26003000u), fate(at, AccessFate::Unreachable, 0x25FE00A4u) };
+        std::vector<Account> a = Accounts(fake, { rd(at, 0x25FE00A4u), rd(at, 0x26003000u) }, none);
+        CHECK(a[0] == Account::Removed && a[1] == Account::Folded);
+        a = Accounts(fake, { rd(at, 0x26003000u), rd(at, 0x25FE00A4u) }, none);   // in the other order
+        CHECK(a[0] == Account::Folded && a[1] == Account::Removed);
+        // one fold is one account: the second access of the instruction has none
+        fake.accessFates = { fate(at, AccessFate::FoldedOrdinary, 0x26003000u) };
+        a = Accounts(fake, { rd(at, 0x25FE00A4u), rd(at, 0x26003000u) }, none);
+        CHECK(a[0] == Account::Dropped && a[1] == Account::Folded);
+        a = Accounts(fake, { rd(at, 0), rd(at, 0) }, none);   // two through pointers, one record
+        CHECK(a[0] == Account::Folded && a[1] == Account::Dropped);
+        // one shown access is one account too
+        fake.accessFates.clear();
+        fake.accesses = { rd(at, 0x25FE00A4u) };
+        a = Accounts(fake, { rd(at, 0x25FE00A4u), rd(at, 0x25FE00A4u) }, none);
+        CHECK(a[0] == Account::Printed && a[1] == Account::Dropped);
+        // a pop in the frame is no bus access: the offset -4 is not the register at 0xFFFFFFFC, and the
+        // pop is not the account of the read in an rte's slot
+        fake.accesses.clear();
+        fake.accessFates = { fate(at, AccessFate::FoldedOrdinary, 0xFFFFFFFCu, true), fate(at, AccessFate::FoldedOrdinary, 0, true) };
+        a = Accounts(fake, { rd(at, 0x25FE00A4u) }, none);
+        CHECK(a[0] == Account::Dropped);
+        fake.accessFates = { fate(at, AccessFate::Dead, 0xFFFFFFFCu, true) };
+        CHECK(!DeadIsLoss(fake.accessFates[0], none));
+        fake.accessFates[0].frame = false;
+        fake.accessFates[0].constantAddress = true;   // the same number as a bus address is a register
+        CHECK(DeadIsLoss(fake.accessFates[0], none));
+        // the removal said once is said for one removed access
+        fake.accessFates = { fate(at, AccessFate::Unreachable, 0x25FE00A4u), fate(at, AccessFate::Unreachable, 0x25FE00A0u) };
+        a = Accounts(fake, { rd(at, 0x25FE00A0u), rd(at, 0x25FE00A4u) }, none);
+        CHECK(a[0] == Account::Removed && a[1] == Account::Removed);
+    }
+
+    // A5-7: the removal caution names every register the access covers, and its width.
+    r = run("a 4-byte write over two registers, removed", removedLong);
+    CHECK(SaidMissing(r, 0x0600B34Eu) && HasNoteAt(r, 0x0600B34Eu, "the 4-byte write of VDP2_TVMD and VDP2_EXTEN here is missing"));
+    r = run("a byte write, removed", removedByte);
+    CHECK(HasNoteAt(r, 0x0600B38Eu, "the 1-byte write of VDP2_TVMD here is missing"));
+    r = run("a word write at an SMPC register, removed", removedWord);
+    CHECK(HasNoteAt(r, 0x0600B3CEu, "the 2-byte write of SMPC_COMREG here is missing"));
 }
 
 // The map itself: names through every alias the bus decodes, widths, access kinds, and the
@@ -1893,6 +2186,85 @@ void TestHardwareMap()
     CHECK(name(0x21000000u) == "MINIT");
     CHECK(name(0x21800000u) == "SINIT");
     CHECK(name(0xFFFFFF04u) == "SH2_DVDNT");
+    // The access-kind table's narrow-access axis (A5-3, A5-4): which kind each block's registers have,
+    // and what the kind says of an access. Mednafen: vdp1.c, vdp2.c, ss.c, sh7095.inc.
+    {
+        auto kind = [](uint32_t a) { const HardwareRegister* r = FindHardwareRegister(a); return r ? r->narrow : NarrowAccess::Part; };
+        CHECK(kind(0x05F80000u) == NarrowAccess::WholeOnByte && kind(0x05D00000u) == NarrowAccess::WholeOnByte);
+        CHECK(kind(0x0010001Fu) == NarrowAccess::ByteLane);
+        CHECK(kind(0xFFFFFF04u) == NarrowAccess::OnChipLong && kind(0xFFFFFF80u) == NarrowAccess::OnChipLong);
+        CHECK(kind(0xFFFFFFE0u) == NarrowAccess::OnChipKeyedLong && kind(0xFFFFFFF8u) == NarrowAccess::OnChipKeyedLong);
+        CHECK(kind(0xFFFFFF40u) == NarrowAccess::OnChipWord);
+        CHECK(kind(0xFFFFFE60u) == NarrowAccess::Part);   // IPRB: a byte write is taken by lane (below 0xFFFFFF00)
+        CHECK(kind(0xFFFFFE10u) == NarrowAccess::Part);   // TIER
+        CHECK(kind(0x05FE00A4u) == NarrowAccess::Part && kind(0x05B00400u) == NarrowAccess::Part &&
+              kind(0x05890008u) == NarrowAccess::Part);    // SCU masks, the SCSP and the CD block take the bytes given
+        // Every register of a kind gets its rule: sample each block.
+        size_t n = 0;
+        const HardwareRegister* all = SaturnHardwareRegisters(n);
+        size_t vdpBytes = 0, laneWords = 0, longs = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            const HardwareRegister& g = all[i];
+            const uint32_t at = g.address | (g.address < 0xE0000000u ? 0x20000000u : 0u);
+            if (g.narrow == NarrowAccess::WholeOnByte)
+            {
+                vdpBytes += NarrowAccessEffects(at + 1, 1, true).size() == 1 && NarrowAccessEffects(at, 1, true).size() == 1 &&
+                            NarrowAccessEffects(at, 1, false).empty() && NarrowAccessEffects(at, 2, true).empty();
+            }
+            else if (g.narrow == NarrowAccess::ByteLane)
+            {
+                laneWords += NarrowAccessEffects(at - 1, 2, true).size() == 1 && NarrowAccessEffects(at - 1, 2, false).size() == 1 &&
+                             NarrowAccessEffects(at - 1, 1, true).size() == 1 && NarrowAccessEffects(at, 1, true).empty();
+            }
+            else if (g.narrow == NarrowAccess::OnChipLong || g.narrow == NarrowAccess::OnChipKeyedLong)
+            {
+                longs += NarrowAccessEffects(at, 1, true).size() == 1 && NarrowAccessEffects(at + 3, 1, false).size() == 1 &&
+                         NarrowAccessEffects(at, 2, true).size() == 1 && NarrowAccessEffects(at + 2, 2, true).size() == 1 &&
+                         NarrowAccessEffects(at, 4, true).empty();
+            }
+        }
+        size_t wantVdp = 0, wantLane = 0, wantLong = 0;
+        for (size_t i = 0; i < n; ++i)
+        {
+            wantVdp += all[i].narrow == NarrowAccess::WholeOnByte;
+            wantLane += all[i].narrow == NarrowAccess::ByteLane;
+            wantLong += all[i].narrow == NarrowAccess::OnChipLong || all[i].narrow == NarrowAccess::OnChipKeyedLong;
+        }
+        CHECK(wantVdp > 100 && wantLane == 48 && wantLong > 20);   // VDP1 + VDP2, the SMPC's 48 registers, the 32-bit on-chip ones
+        CHECK(vdpBytes == wantVdp && laneWords == wantLane && longs == wantLong);
+        // The word views: one per SMPC register, at the even address, 2 bytes, the register's name.
+        size_t vn = 0;
+        const HardwareRegister* views = SaturnHardwareWordViews(vn);
+        CHECK(vn == wantLane);
+        for (size_t i = 0; i < vn; ++i)
+        {
+            const HardwareRegister* odd = FindHardwareRegister(views[i].address + 1);
+            CHECK(odd && std::string(odd->name) == views[i].name && !(views[i].address & 1) && views[i].size == 2 &&
+                  odd->address == views[i].address + 1);
+        }
+        // An access that is the plain access the code wrote says nothing; a long to DVDNT, a word to a VDP register.
+        CHECK(NarrowAccessEffects(0x25F80000u, 2, true).empty() && NarrowAccessEffects(0xFFFFFF04u, 4, false).empty());
+        CHECK(NarrowAccessEffects(0xFFFFFF06u, 2, false).empty());   // the low half is what a read at +2 returns
+        CHECK(NarrowAccessEffects(0xFFFFFE11u, 1, true).empty());    // a byte register
+        CHECK(NarrowAccessEffects(0x04000000u, 1, true).empty());    // nothing there
+        // Said by name, width and effect (the text is the output's).
+        auto only = [](uint32_t a, uint32_t size, bool write) {
+            const std::vector<NarrowEffect> e = NarrowAccessEffects(a, size, write);
+            return e.size() == 1 ? e[0].text : std::string("<") + std::to_string(e.size()) + ">";
+        };
+        CHECK(Has(only(0x25F80001u, 1, true), "1-byte write to VDP2_TVMD writes the whole 16-bit register"));
+        CHECK(Has(only(0xFFFFFF04u, 2, true), "starts a 32-by-32 division") && Has(only(0xFFFFFF14u, 2, true), "starts a 64-by-32 division"));
+        CHECK(!Has(only(0xFFFFFF00u, 2, true), "division"));   // DVSR
+        CHECK(Has(only(0x20100060u, 2, false), "returns 0xFF00 or the register"));
+        CHECK(Has(only(0x0010001Eu, 1, true), "even address beside SMPC_COMREG does nothing"));
+        // A long over two SMPC registers: each gets its half's low byte.
+        {
+            const std::vector<NarrowEffect> e = NarrowAccessEffects(0x20100000u, 4, true);
+            CHECK(e.size() == 2 && Has(e[0].text, "SMPC_IREG0") && Has(e[0].text, "bits 23-16") &&
+                  Has(e[1].text, "SMPC_IREG1") && Has(e[1].text, "bits 7-0"));
+        }
+    }
     CHECK(name(0xFFFFFE11u) == "SH2_FTCSR");
     CHECK(name(0xE0004104u) == "SH2_DVDNT");    // on-chip upper half: only bit 14 matters
     CHECK(name(0xE0004011u) == "");             // the lower half needs bits 28 and 12 as well
@@ -2259,7 +2631,7 @@ void TestGameCode()
         // Every memory instruction the flow reaches is accounted for exactly once: the reference run
         // (every address volatile) lists them all, and each is printed, folded into ordinary
         // memory, the read of a switch's table, or removed with unreachable code that the output
-        // says (AccountFor). A dead or unrecorded one is dropped.
+        // says (Accounts). A dead or unrecorded one is dropped.
         for (const AccessFate& f : r.accessFates)
         {
             ++fateCount[int(f.fate)];
@@ -2285,9 +2657,13 @@ void TestGameCode()
             const DecompileResult rr = d.Decompile(snap, ref);
             if (rr.status != DecompileStatus::Ok) ++noReference;
             else
-                for (const MemoryAccess& m : rr.accesses)
+            {
+                const std::vector<Account> accounts = Accounts(r, rr.accesses, noneMarked);
+                std::map<uint32_t, int> said;   // the removal cautions on an instruction, spent one per removed access
+                for (size_t ai = 0; ai < rr.accesses.size(); ++ai)
                 {
-                    const Account a = AccountFor(r, m, noneMarked);
+                    const MemoryAccess& m = rr.accesses[ai];
+                    const Account a = accounts[ai];
                     ++accountCount[int(a)];
                     if (a == Account::Printed) continue;
                     if (a == Account::Folded)
@@ -2305,7 +2681,7 @@ void TestGameCode()
                     if (a == Account::Removed)
                     {
                         if (OrdinaryDirect(m, noneMarked)) ++removedOrdinary;   // no loss: a variable in removed code
-                        else if (SaidMissing(r, m.insn)) ++droppedSaid;         // removed as unreachable, and the output says so
+                        else if (++said[m.insn] <= SaidCount(r, m.insn)) ++droppedSaid;   // removed as unreachable, and the output says so
                         else if (++dropped <= 10)
                             std::printf("  the %s of %u bytes at %08X (%s%08X) is removed as unreachable in %08X, and not said\n",
                                         m.write ? "write" : "read", unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ",
@@ -2316,6 +2692,7 @@ void TestGameCode()
                         std::printf("  the %s of %u bytes at %08X (%s%08X) is dropped in %08X\n", m.write ? "write" : "read",
                                     unsigned(m.size), m.insn, m.direct ? "" : "through a pointer; ", m.address, entry);
                 }
+            }
         }
         for (size_t i = 0; i < r.accesses.size(); ++i)
             for (size_t j = i + 1; j < r.accesses.size(); ++j)
@@ -2342,8 +2719,9 @@ void TestGameCode()
         {
             const uint32_t off = pi.first - 0x06000000u;
             const uint16_t op = off + 1 < hw.size() ? uint16_t(hw[off] << 8 | hw[off + 1]) : 0;
-            const bool mac = (op & 0xF00F) == 0x000F || (op & 0xF00F) == 0x400F;
-            if ((pi.second.first > 0 && !mac) || pi.second.second > 0)
+            // mac.l and mac.w read twice, two accesses: repeatedOnPath no longer flags them (A5-6),
+            // so they need no exemption here.
+            if (pi.second.first > 0 || pi.second.second > 0)
             {
                 if (++duplicated <= 10)
                     std::printf("  %d reads, %d writes at %08X (op %04X) in %08X\n", pi.second.first, pi.second.second,
