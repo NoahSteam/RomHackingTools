@@ -2821,6 +2821,221 @@ void TestGameCode()
     CHECK(failed == 0);
 }
 
+// The corpus as the panel decompiles it, with lending. TestGameCode decompiles each function alone,
+// so it lends nothing and cannot show what a lent signature does to a caller. The panel lends every
+// signature it has learned (DecompilerPanel::Learn, Lendable) to the next function it decompiles; this
+// decompiles every function after the functions it calls (the order of a first run's calledAt, a cycle
+// broken where it is entered) and does the same, twice: without the effects each signature proved
+// (what lending was before patch 0028) and with them, then compares. SE_GAME_LEND=1 with
+// SE_GAME_HWRAM; SE_GAME_OUT also receives lend_before/ and lend_after/ with each function's text.
+void TestGameLending()
+{
+    const char* path = std::getenv("SE_GAME_HWRAM");
+    if (!path || !std::getenv("SE_GAME_LEND")) return;
+    const char* outDir = std::getenv("SE_GAME_OUT");
+    std::vector<uint8_t> hw(0x100000u);
+    FILE* f = std::fopen(path, "rb");
+    CHECK(f != nullptr);
+    if (!f) return;
+    const size_t got = std::fread(hw.data(), 1, hw.size(), f);
+    std::fclose(f);
+    CHECK(got == hw.size());
+    auto snap = MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+
+    // The functions: every prologue (sts.l pr,@-r15) as TestGameCode has them, and every function in
+    // high work RAM they call, transitively -- the leaves that never save PR, the ones that keep r4-r7.
+    std::vector<uint32_t> entries;
+    for (uint32_t k = 0; k + 1 < hw.size(); k += 2)
+        if (hw[k] == 0x4F && hw[k + 1] == 0x22) entries.push_back(0x06000000u + k);
+    const std::vector<uint32_t> prologues = entries;
+    std::map<uint32_t, size_t> index;
+    for (size_t i = 0; i < entries.size(); ++i) index[entries[i]] = i;
+    auto indexOf = [&](uint32_t a) {
+        if ((a & 0xDFF00000u) != 0x06000000u) return SIZE_MAX;   // high work RAM, cached or not
+        auto it = index.find(0x06000000u | (a & 0x000FFFFFu));
+        return it == index.end() ? SIZE_MAX : it->second;
+    };
+
+    // The first pass: each alone, for who calls whom.
+    std::vector<std::vector<uint32_t>> calls;
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        const DecompileResult r = d.Decompile(snap, Request(entries[i]));
+        calls.push_back(r.calledAt);
+        for (uint32_t c : r.calledAt)
+            if (indexOf(c) == SIZE_MAX && (c & 0xDFF00000u) == 0x06000000u)
+            {
+                const uint32_t canonical = 0x06000000u | (c & 0x000FFFFFu);
+                index[canonical] = entries.size();
+                entries.push_back(canonical);
+            }
+    }
+    // Callees first: a post-order walk.
+    std::vector<size_t> order;
+    {
+        std::vector<char> state(entries.size(), 0);
+        for (size_t root = 0; root < entries.size(); ++root)
+        {
+            if (state[root]) continue;
+            std::vector<std::pair<size_t, size_t>> stack = { { root, 0 } };
+            state[root] = 1;
+            while (!stack.empty())
+            {
+                const size_t at = stack.back().first;
+                if (stack.back().second < calls[at].size())
+                {
+                    const size_t c = indexOf(calls[at][stack.back().second++]);
+                    if (c != SIZE_MAX && !state[c])
+                    {
+                        state[c] = 1;
+                        stack.push_back({ c, 0 });
+                    }
+                    continue;
+                }
+                state[at] = 2;
+                order.push_back(at);
+                stack.pop_back();
+            }
+        }
+    }
+    CHECK(order.size() == entries.size());
+
+    struct Row
+    {
+        bool ok = false, failed = false, known = false;
+        std::string withheld, text;
+        size_t params = 0;
+        uint32_t preserved = 0;
+        int lentCallees = 0;         // callees whose signature it was lent
+        int keepingCallees = 0;      // ...of which keep some of r4-r7
+        bool extraout = false;       // the text has a call's r4-r7 as extraout_rN
+    };
+    auto pass = [&](bool lendEffects, const char* label) {
+        Sh2Decompiler::SetLendEffectsForTests(lendEffects);
+        std::vector<Row> rows(entries.size());
+        std::map<uint32_t, Prototype> learned;
+        double ms = 0;
+        if (outDir)
+        {
+            char dir[512];
+            std::snprintf(dir, sizeof dir, "%s/lend_%s", outDir, label);
+            sfe::MakeDirectory(dir);
+        }
+        for (size_t i : order)
+        {
+            DecompileRequest rq = Request(entries[i]);
+            // Keyed by the address a call runs at: a signature learned at the cached address is
+            // lent to a call through the uncached one too (the panel learns what it was asked for).
+            for (const auto& kv : learned)
+            {
+                rq.prototypes.emplace_back(kv);
+                rq.prototypes.emplace_back(kv.first | 0x20000000u, kv.second);
+            }
+            const DecompileResult r = d.Decompile(snap, rq);
+            ms += r.elapsedMs;
+            Row& row = rows[i];
+            row.ok = r.status == DecompileStatus::Ok;
+            row.failed = r.status == DecompileStatus::Failed;
+            row.known = row.ok && r.prototype.known;
+            row.withheld = r.prototypeWithheld;
+            row.params = r.prototype.params.size();
+            row.preserved = r.prototype.effects.preserved;
+            row.text = r.Text();
+            for (uint32_t c : r.calledAt)
+            {
+                auto l = learned.find(c & ~0x20000000u);
+                if (l == learned.end()) continue;
+                ++row.lentCallees;
+                if (l->second.effects.preserved & 0xF0u) ++row.keepingCallees;
+            }
+            for (int reg = 4; reg < 8; ++reg)
+                if (row.text.find("extraout_r" + std::to_string(reg)) != std::string::npos) row.extraout = true;
+            if (row.known) learned[entries[i]] = r.prototype;
+            if (outDir)
+            {
+                char name[512];
+                std::snprintf(name, sizeof name, "%s/lend_%s/%08X.c", outDir, label, entries[i]);
+                if (FILE* o = std::fopen(name, "w"))
+                {
+                    if (!row.withheld.empty()) std::fprintf(o, "// signature withheld: %s\n", row.withheld.c_str());
+                    else if (row.known) std::fprintf(o, "// signature lent\n");
+                    std::fputs(row.text.c_str(), o);
+                    std::fclose(o);
+                }
+            }
+        }
+        std::printf("  [%s] %.0f ms in the decompiler\n", label, ms);
+        return rows;
+    };
+    const std::vector<Row> before = pass(false, "before");
+    const std::vector<Row> after = pass(true, "after");
+    Sh2Decompiler::SetLendEffectsForTests(true);
+
+    auto summarize = [&](const std::vector<Row>& rows, const char* label) {
+        int ok = 0, known = 0, afterCall = 0, withLent = 0, withKeeping = 0, keepingKnown = 0, keepingExtraout = 0, extraout = 0;
+        int keepers = 0;
+        size_t params = 0;
+        for (const Row& r : rows)
+        {
+            ok += r.ok;
+            known += r.known;
+            params += r.params;
+            keepers += r.known && (r.preserved & 0xF0u) != 0;
+            afterCall += r.withheld.find("after calling") != std::string::npos;
+            withLent += r.lentCallees > 0;
+            extraout += r.extraout;
+            if (r.keepingCallees > 0)
+            {
+                ++withKeeping;
+                keepingKnown += r.known;
+                keepingExtraout += r.extraout;
+            }
+        }
+        std::printf("  [%s] %zu functions, %d ok; signatures lent (known) %d (%zu parameters in all), %d of them keep some of r4-r7;\n"
+                    "         withheld \"uses a register after calling\" %d; %d were lent a callee's signature, %d of them one that keeps "
+                    "r4-r7 (%d of those lent, %d with extraout_r4-7 in the text); %d functions print extraout_r4-7\n",
+                    label, rows.size(), ok, known, params, keepers, afterCall, withLent, withKeeping, keepingKnown, keepingExtraout,
+                    extraout);
+    };
+    summarize(before, "before");
+    summarize(after, "after");
+    int textDiffers = 0, gainedSignature = 0, lostSignature = 0, moreParams = 0, fewerParams = 0, lessExtraout = 0, moreExtraout = 0;
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        const Row& b = before[i];
+        const Row& a = after[i];
+        textDiffers += b.text != a.text;
+        gainedSignature += !b.known && a.known;
+        lostSignature += b.known && !a.known;
+        moreParams += a.params > b.params;
+        fewerParams += a.params < b.params;
+        lessExtraout += b.extraout && !a.extraout;
+        moreExtraout += !b.extraout && a.extraout;
+        if (std::getenv("SE_GAME_LEND_LIST") && b.text != a.text)
+            std::printf("    %08X: known %d -> %d, params %zu -> %zu, extraout %d -> %d\n", entries[i], b.known, a.known, b.params,
+                        a.params, b.extraout, a.extraout);
+    }
+    std::printf("  lending the proved effects changes the text of %d functions: %d gain a lent signature, %d lose one; %d gain "
+                "parameters, %d lose some; extraout_r4-7 gone from %d, new in %d\n",
+                textDiffers, gainedSignature, lostSignature, moreParams, fewerParams, lessExtraout, moreExtraout);
+    // A callee found by a call can be an address that holds no function (a computed target the first
+    // pass took for constant): the engine reports that as a failed result, in both runs alike. The
+    // prologue functions TestGameCode decompiles never fail.
+    int notFunctions = 0;
+    for (size_t i = 0; i < entries.size(); ++i)
+    {
+        CHECK(before[i].failed == after[i].failed && before[i].ok == after[i].ok);
+        if (before[i].failed)
+        {
+            ++notFunctions;
+            std::printf("    %08X: not a function the engine can decompile\n", entries[i]);
+            CHECK(std::find(prologues.begin(), prologues.end(), entries[i]) == prologues.end());
+        }
+    }
+    std::printf("  %d of the called addresses are no decompilable function\n", notFunctions);
+}
+
 // A branch out of the captured region: the function is marked truncated where it left, naming
 // the area, instead of the whole decompilation failing on the first unreadable byte.
 void TestTruncatedFlow()
@@ -3931,6 +4146,8 @@ void TestPrototypeEligibility()
         q.prototypes.emplace_back(voidLeaf, leafR.prototype);
         const DecompileResult r1 = d.Decompile(snap, q);
         Print("uses r0 after a void callee", r1);
+        // (The callee keeps r0 too, CallEffects::preserved, and that is not lent: r0 and r1 are the
+        // return registers, A3-2.)
         CHECK(Has(r1.Text(), "extraout_r0"));
         CHECK(!r1.prototype.known && Has(r1.prototypeWithheld, "not known to return it") && Has(r1.prototypeWithheld, "r0"));
         q = Request(wordStoreCaller);
@@ -4748,8 +4965,9 @@ void TestCallsAndTraps()
 
     // ---- Lent prototypes ---------------------------------------------------------------------
     // ApplyPrototype gives a callee's function object the default model, so a lent signature does
-    // not change what the call leaves in the registers: the callee that sets r7 still leaves r7
-    // unknown, and a caller that reads it is not lent a signature on a value no signature gives.
+    // not by itself change what the call leaves in the registers: the callee that sets r7 still
+    // leaves r7 unknown, and a caller that reads it is not lent a signature on a value no signature
+    // gives. (What the callee was proved to keep is lent with it: A3-2, below.)
     {
         const CallFixture f = { "r7 after a call, callee lent", base,
                                 withCallee({ 0x4F22, 0xE705, 0xB00C, 0x0009, 0x6073, 0x4F26, 0x000B, 0x0009 },
@@ -4784,25 +5002,157 @@ void TestCallsAndTraps()
         CHECK(!Has(r.Text(), "return 5;"));
         CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
     }
-    // A known limit, pinned so a change to it is seen: a callee that provably keeps r4 (a leaf that
-    // never touches it) is not told apart from one that does. The cspec's kill is per model, not
-    // per callee, so the caller that relies on it reads extraout_r4, drops the parameter from its
-    // own signature and is not lent one. Hand-written helpers that return in r4 (a shift by a
-    // constant) are the other side of it: the same rule now shows their result.
+    // ---- A3-2: the effects a callee proves are lent with its signature (patch 0028) ----------
+    // A callee verified to keep r4-r7, MACH, MACL or SR at every return (CallEffects::preserved,
+    // proved by ReturnCheck) is lent those effects with its signature: a call to it does not kill
+    // them, so the caller reads them as they were and keeps the parameter it passed through. Before,
+    // the default model's killedbycall (patch 0026) applied to every lent callee, the caller read
+    // extraout_r4, lost the parameter and was withheld ("it uses r4 after calling X"). Only what was
+    // proved counts: a register the callee changes on any path stays killed. Each fixture runs on
+    // the emulator, and the evaluated text must agree.
     {
+        // lend: the callee (0x06009020) decompiled first, its signature and effects lent to the caller.
+        struct Lent
+        {
+            DecompileResult callee, caller;
+        };
+        auto lend = [&](const CallFixture& f, bool known = true) {
+            auto snap = CallSnapshot(f, ++serial);
+            Lent l;
+            l.callee = d.Decompile(snap, Request(0x06009020u));
+            DecompileRequest q = Request(f.base);
+            Prototype p = l.callee.prototype;
+            p.known = p.known && known;
+            q.prototypes.emplace_back(0x06009020u, p);
+            l.caller = d.Decompile(snap, q);
+            Print(f.name.c_str(), l.caller);
+            CHECK(l.caller.status == DecompileStatus::Ok);
+            CHECK(PseudoAgreesWithRun(l.caller, snap, f, inputs));
+            return l;
+        };
+        // r4: a leaf that never touches it. The caller returns what it passed in r4.
         const CallFixture f = { "r4 kept by the callee", base,
                                 withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
-        auto snap = CallSnapshot(f, ++serial);
-        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
-        CHECK(callee.prototype.known && (callee.prototype.effects.preserved & (1u << 4)));
-        DecompileRequest q = Request(f.base);
-        q.prototypes.emplace_back(0x06009020u, callee.prototype);
-        const DecompileResult r = d.Decompile(snap, q);
-        Print("r4 kept by the callee (limit)", r);
-        CHECK(Has(r.Text(), "return extraout_r4;"));
-        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "r4"));
-        // ...which is still a value the run does not contradict: unknown agrees with any.
-        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+        const Lent l = lend(f);
+        CHECK(l.callee.prototype.known);
+        constexpr uint32_t kKeptByLeaf = 0xFFu | (1u << 16) | (1u << 19) | (1u << 20);   // r0-r7, SR, MACH, MACL
+        CHECK((l.callee.prototype.effects.preserved & kKeptByLeaf) == kKeptByLeaf);
+        CHECK(Has(l.caller.Text(), "return param_1;"));
+        CHECK(!Has(l.caller.Text(), "extraout"));
+        CHECK(l.caller.prototype.known && l.caller.prototypeWithheld.empty() && l.caller.prototype.params.size() == 1);
+        // What was lent is the callee's own: the caller's text is the same with the signature lent
+        // and none of its effects, bar the parameter it loses (the switch is the test hook).
+        Sh2Decompiler::SetLendEffectsForTests(false);
+        const Lent without = lend(f);
+        Sh2Decompiler::SetLendEffectsForTests(true);
+        CHECK(Has(without.caller.Text(), "return extraout_r4;"));
+        CHECK(!without.caller.prototype.known && Has(without.caller.prototypeWithheld, "r4"));
+        // Control: the callee's signature not lent at all, the model's kill stands.
+        {
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print("r4 kept by the callee, nothing lent", r);
+            CHECK(Has(r.Text(), "return extraout_r4;"));
+            CHECK(!r.prototype.known);
+            CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+        }
+        // Control: a prototype the host does not call known lends nothing, effects included.
+        {
+            const Lent notKnown = lend(f, false);
+            CHECK(Has(notKnown.caller.Text(), "return extraout_r4;"));
+            CHECK(!notKnown.caller.prototype.known);
+        }
+        // r5 and r6, each read after the call: the matching parameter of the caller's signature.
+        for (int reg = 5; reg <= 6; ++reg)
+        {
+            const CallFixture g = { "r" + std::to_string(reg) + " kept by the callee", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, uint16_t(0x6003 | (reg << 4)), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, 0x0009 }) };
+            const Lent lg = lend(g);
+            const std::string param = "param_" + std::to_string(reg - 3);
+            CHECK(Has(lg.caller.Text(), ("return " + param + ";").c_str()));
+            CHECK(!Has(lg.caller.Text(), "extraout"));
+            CHECK(lg.caller.prototype.known && lg.caller.prototype.params.size() == static_cast<size_t>(reg - 3));
+        }
+        // r2 and r3 are no parameters: kept by the callee they read after the call as the caller's own
+        // register (an input), not as a value the call made.
+        for (int reg = 2; reg <= 3; ++reg)
+        {
+            const CallFixture g = { "r" + std::to_string(reg) + " kept by the callee", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, uint16_t(0x2002 | (4 << 8) | (reg << 4)), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, 0x0009 }) };   // mov.l rN,@r4 after the call
+            const Lent lg = lend(g);
+            CHECK(Has(lg.caller.Text(), ("= in_r" + std::to_string(reg) + ";").c_str()) && !Has(lg.caller.Text(), "extraout"));
+            Sh2Decompiler::SetLendEffectsForTests(false);
+            CHECK(Has(lend(g).caller.Text(), ("= extraout_r" + std::to_string(reg) + ";").c_str()));
+            Sh2Decompiler::SetLendEffectsForTests(true);
+        }
+        // r7 alone is a read of an input the engine does not take for a parameter without r4-r6 (a
+        // caller that only reads r7 is `in_r7` with its signature withheld, lent or not): what lending
+        // changes is that it is no longer the callee's r7 (extraout_r7).
+        {
+            const CallFixture g = { "r7 kept by the callee", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6073, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+            const Lent lg = lend(g);
+            CHECK(Has(lg.caller.Text(), "return in_r7;") && !Has(lg.caller.Text(), "extraout"));
+            Sh2Decompiler::SetLendEffectsForTests(false);
+            CHECK(Has(lend(g).caller.Text(), "return extraout_r7;"));
+            Sh2Decompiler::SetLendEffectsForTests(true);
+        }
+        // MACL and MACH: set from the argument by the caller, read after the call.
+        const CallFixture macl = { "macl kept by the callee", base,
+                                   withCallee({ 0x4F22, 0x441A, 0xB00C, 0x0009, 0x001A, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        const Lent lmacl = lend(macl);
+        CHECK(Has(lmacl.caller.Text(), "return param_1;") && !Has(lmacl.caller.Text(), "extraout"));
+        CHECK(lmacl.caller.prototype.known);
+        const CallFixture mach = { "mach kept by the callee", base,
+                                   withCallee({ 0x4F22, 0x440A, 0xB00C, 0x0009, 0x000A, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        const Lent lmach = lend(mach);
+        CHECK(Has(lmach.caller.Text(), "return param_1;") && !Has(lmach.caller.Text(), "extraout"));
+        CHECK(lmach.caller.prototype.known);
+        // T: sett ; bsr f ; nop ; bt L -- f keeps SR, so the branch is on the T from before the call.
+        const CallFixture t = { "T kept by the callee", base,
+                                { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x8902, 0x4F26, 0x000B, 0xE000, 0x4F26, 0x000B, 0xE001,
+                                  0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x000B, 0x0009 } };
+        const Lent lt = lend(t);
+        CHECK(!Has(lt.caller.Text(), "extraout_sr") && Has(lt.caller.Text(), "return 1;"));   // the T it set
+        // r1 (and r0) are the return registers: kept by the callee and proved so, they are still the
+        // model's kill (see LendEffects), as they were before this change.
+        const CallFixture r1 = { "r1 kept by the callee", base,
+                                 withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6013, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+        const Lent lr1 = lend(r1);
+        CHECK(lr1.callee.prototype.effects.preserved & (1u << 1));
+        CHECK(Has(lr1.caller.Text(), "return extraout_r1;"));
+        // A callee that returns a value keeps r4 all the same, and r0 is its return.
+        const CallFixture ret = { "r4 kept by a callee that returns", base,
+                                  withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6143, 0x301C, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE005 }) };
+        const Lent lret = lend(ret);
+        CHECK(lret.callee.prototype.known && lret.callee.prototype.ret.kind != TypeKind::Void);
+        CHECK((lret.callee.prototype.effects.preserved & (1u << 4)) && !(lret.callee.prototype.effects.preserved & 1u));
+        CHECK(Has(lret.caller.Text(), "param_1") && !Has(lret.caller.Text(), "extraout"));
+        CHECK(lret.caller.prototype.known && lret.caller.prototype.params.size() == 1);
+
+        // Controls: what the callee changes stays killed. r4 set in the callee's delay slot: the
+        // caller reads the callee's r4, and r5, which that callee keeps, stays its parameter.
+        const CallFixture clobbers = { "r4 clobbered by the callee", base,
+                                       withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE407 }) };
+        const Lent lc = lend(clobbers);
+        CHECK(!(lc.callee.prototype.effects.preserved & (1u << 4)) && (lc.callee.prototype.effects.preserved & (1u << 5)));
+        CHECK(Has(lc.caller.Text(), "return extraout_r4;"));
+        CHECK(!lc.caller.prototype.known && Has(lc.caller.prototypeWithheld, "r4"));
+        const CallFixture other = { "r5 kept by a callee that clobbers r4", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6053, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE407 }) };
+        const Lent lo = lend(other);
+        CHECK(Has(lo.caller.Text(), "return param_2;") && !Has(lo.caller.Text(), "extraout"));
+        CHECK(lo.caller.prototype.known && lo.caller.prototype.params.size() == 2);
+        // A callee that keeps r4 on one path only is not proved: cmp/eq #0,r0 ; bt L ; mov #7,r4 ; L: rts ; nop.
+        const CallFixture onePath = { "r4 kept on one path only", base,
+                                      withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 },
+                                                 { 0x8800, 0x8900, 0xE407, 0x000B, 0x0009 }) };
+        const Lent lp = lend(onePath);
+        CHECK(!(lp.callee.prototype.effects.preserved & (1u << 4)));
+        CHECK(Has(lp.caller.Text(), "return extraout_r4;"));
+        CHECK(!lp.caller.prototype.known);
     }
 }
 
@@ -5194,6 +5544,7 @@ int main(int argc, char** argv)
         RUN(TestHardwareMap());
         RUN(TestVolatileRangesAgainstModel());
         RUN(TestGameCode());
+        RUN(TestGameLending());
         RUN(TestTruncatedFlow());
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());

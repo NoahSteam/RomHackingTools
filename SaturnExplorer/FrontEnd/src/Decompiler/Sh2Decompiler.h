@@ -381,6 +381,10 @@ public:
     // that path -- flow ending at the call, ReturnCheck ending the path there -- is exercised.
     // Process-wide; set it before Decompile and clear it after.
     static void SetNoReturnForTests(const std::set<uint32_t>& entries);
+    // Tests only: whether a lent signature also lends the effects its analysis proved (the registers
+    // it keeps, so a caller reads them as they were instead of extraout_rN). On unless cleared: the
+    // lending measurements run both ways. Process-wide.
+    static void SetLendEffectsForTests(bool lend);
     // Tests only: called as each phase begins, in every pass, including the reference run's (which
     // the observer is not told of); and just before the reference run starts. Process-wide.
     static void SetPhaseHookForTests(std::function<void(DecompilePhase)> hook);
