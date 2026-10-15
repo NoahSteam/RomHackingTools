@@ -94,7 +94,8 @@ const Reg kVdp1[] = {
 // back (TVSTAT, HCNT and VCNT are status); everything from CYCA0L up is write-only (the manual,
 // register by register; Mednafen vdp2.cpp RegsRead).
 const Reg kVdp2[] = {
-    { 0x000, "VDP2_TVMD", RW }, { 0x002, "VDP2_EXTEN", RW }, { 0x004, "VDP2_TVSTAT", RO },
+    { 0x000, "VDP2_TVMD", RW }, { 0x002, "VDP2_EXTEN", RW, 0, nullptr, "a read latches HCNT and VCNT while EXLTEN is 0" },
+    { 0x004, "VDP2_TVSTAT", RO, 0, nullptr, "a read clears EXLTFG" },
     { 0x006, "VDP2_VRSIZE", RW }, { 0x008, "VDP2_HCNT", RO }, { 0x00A, "VDP2_VCNT", RO },
     { 0x00E, "VDP2_RAMCTL", RW }, { 0x010, "VDP2_CYCA0L", WO }, { 0x012, "VDP2_CYCA0U", WO },
     { 0x014, "VDP2_CYCA1L", WO }, { 0x016, "VDP2_CYCA1U", WO }, { 0x018, "VDP2_CYCB0L", WO },
@@ -145,8 +146,10 @@ const Reg kVdp2[] = {
 };
 
 // SCU: DMA levels 0-2, DSP, timers, interrupts, A-bus (Sega "SCU User's Manual"). Read back, per
-// Mednafen scu.inc: the DMA addresses, DSTA, PPAF, PDD, IST, AIACK, RSEL and VER; every other
-// register reads 0, which is why SBL keeps its own copy of IMS.
+// Mednafen scu.inc: the DMA addresses, DSTA, PPAF, PDD, IST, RSEL and VER; every other register
+// reads 0, which is why SBL keeps its own copy of IMS. AIACK is among them (SCU_RegRW_DB_u*_W0
+// case 0xA8: `*DB = 0; //ABusIAck`): the manual lists it read/write, the emulator SE runs does not
+// read it back, so it is write-only here (A5-16).
 const Reg kScu[] = {
     { 0x000, "SCU_D0R", RW }, { 0x004, "SCU_D0W", RW }, { 0x008, "SCU_D0C", WO }, { 0x00C, "SCU_D0AD", WO },
     { 0x010, "SCU_D0EN", WO }, { 0x014, "SCU_D0MD", WO }, { 0x020, "SCU_D1R", RW }, { 0x024, "SCU_D1W", RW },
@@ -154,12 +157,18 @@ const Reg kScu[] = {
     { 0x040, "SCU_D2R", RW }, { 0x044, "SCU_D2W", RW }, { 0x048, "SCU_D2C", WO }, { 0x04C, "SCU_D2AD", WO },
     { 0x050, "SCU_D2EN", WO }, { 0x054, "SCU_D2MD", WO }, { 0x060, "SCU_DSTP", WO }, { 0x07C, "SCU_DSTA", RO },
     { 0x080, "SCU_PPAF", RW, 0, "a write controls the DSP program; a read returns its status",
-      "a read clears the DSP's V and E flags and its end interrupt" },
-    { 0x084, "SCU_PPD", WO }, { 0x088, "SCU_PDA", WO }, { 0x08C, "SCU_PDD", RW, 0, nullptr,
+      "a read clears the DSP's V and E flags and its end interrupt", nullptr,
+      "controls the DSP from the whole 32-bit value: execute, pause, step, load the program counter" },
+    { 0x084, "SCU_PPD", WO, 0, nullptr, nullptr, nullptr,
+      "loads one DSP program word at the program counter and advances it (only while the DSP is stopped)" },
+    { 0x088, "SCU_PDA", WO, 0, nullptr, nullptr, nullptr, "sets the DSP data RAM address" },
+    { 0x08C, "SCU_PDD", RW, 0, nullptr,
       "while the DSP is stopped, a read returns data and advances the address (PDA); while it runs, "
-      "it returns 0xFFFFFFFF and advances nothing" },
+      "it returns 0xFFFFFFFF and advances nothing", nullptr,
+      "stores one word at the DSP data RAM address and advances it (only while the DSP is stopped)" },
     { 0x090, "SCU_T0C", WO }, { 0x094, "SCU_T1S", WO }, { 0x098, "SCU_T1MD", WO }, { 0x0A0, "SCU_IMS", WO },
-    { 0x0A4, "SCU_IST", RW, 0, "a write of 0 clears that interrupt; a read returns the pending ones" }, { 0x0A8, "SCU_AIACK", RW }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
+    { 0x0A4, "SCU_IST", RW, 0, "a write of 0 clears that interrupt; a read returns the pending ones" },
+    { 0x0A8, "SCU_AIACK", WO }, { 0x0B0, "SCU_ASR0", WO }, { 0x0B4, "SCU_ASR1", WO },
     { 0x0B8, "SCU_AREF", WO }, { 0x0C4, "SCU_RSEL", RW }, { 0x0C8, "SCU_VER", RO },
 };
 
@@ -173,7 +182,7 @@ const Reg kCdBlock[] = {
     { 0x001C, "CD_CR2", RW, 0, "a write is the command; a read is the response" },
     { 0x0020, "CD_CR3", RW, 0, "a write is the command; a read is the response" },
     { 0x0024, "CD_CR4", RW, 0, "a write is the command; a read is the response",
-      "a read marks the response as read" },
+      "a read marks the response as read", nullptr, "starts the command" },
 };
 const Reg kCdFifo[] = { { 0x0000, "CD_DATATRNS", RW, 4, nullptr, "a read takes the next data off the FIFO" } };
 
@@ -227,12 +236,14 @@ const uint32_t kVdp2Base = 0x05F80000u, kScuBase = 0x05FE0000u, kCdBase = 0x0589
 const uint32_t kCdFifoBase = 0x05818000u, kMinitBase = 0x01000000u, kSinitBase = 0x01800000u;
 const uint32_t kOnChipBase = 0xFFFFFE00u;
 
-// The narrow-access kind of each block (NarrowAccess). VDP1 and VDP2 write a register whole from
-// a byte write (vdp1.c VDP1_Write8_DB -> WriteReg, vdp2.c RW_W8 -> RegsWrite); the SMPC is a
-// byte device on the low lane (ss.c); the SCU masks a byte write (SCU_RegRW_DB_u8_W1), the CD
-// block (CDB_Write_DBM) and the SCSP (SCSP_NE16_RW) write the bytes they are given. The on-chip
-// block is split in Build: from 0xFFFFFF00 up, Mednafen's handlers (the A & 0x100 half of
-// sh7095.inc's OnChipReg*) take a register as a whole.
+// The width family of each block (NarrowAccess). VDP1 and VDP2 write a register whole from a byte
+// write (vdp1.c VDP1_Write8_DB -> WriteReg, vdp2.c RW_W8 -> RegsWrite); the SMPC is a byte device
+// on the low lane (ss.c); the SCU masks a byte write (SCU_RegRW_DB_u8_W1) except in its DSP ports,
+// and the SCSP (SCSP_NE16_RW) writes the bytes it is given; the CD block answers every 4 bytes
+// (scu.inc ABusRW_DB_*, cdb.c CDB_Write_DBM); MINIT and SINIT are the CS0 "FRT trigger region"
+// (ss.c). The on-chip block is split in Build: from 0xFFFFFF00 up, Mednafen's handlers (the
+// A & 0x100 half of sh7095.inc's OnChipReg*) take a register as a whole; below it they take it by
+// lane, and a longword is an address error.
 #define SE_BLOCK(base, size, regs, narrow) { base, size, regs, sizeof(regs) / sizeof(regs[0]), narrow }
 const Block kBlocks[] = {
     SE_BLOCK(kSmpcBase, 1, kSmpc, NarrowAccess::ByteLane),
@@ -240,10 +251,10 @@ const Block kBlocks[] = {
     SE_BLOCK(kVdp1Base, 2, kVdp1, NarrowAccess::WholeOnByte),
     SE_BLOCK(kVdp2Base, 2, kVdp2, NarrowAccess::WholeOnByte),
     SE_BLOCK(kScuBase, 4, kScu, NarrowAccess::Part),
-    SE_BLOCK(kCdBase, 2, kCdBlock, NarrowAccess::Part),
-    SE_BLOCK(kCdFifoBase, 4, kCdFifo, NarrowAccess::Part),
-    SE_BLOCK(kMinitBase, 2, kMinit, NarrowAccess::Part),
-    SE_BLOCK(kSinitBase, 2, kSinit, NarrowAccess::Part),
+    SE_BLOCK(kCdBase, 2, kCdBlock, NarrowAccess::CdWindow),
+    SE_BLOCK(kCdFifoBase, 4, kCdFifo, NarrowAccess::CdWindow),
+    SE_BLOCK(kMinitBase, 2, kMinit, NarrowAccess::Strobe),
+    SE_BLOCK(kSinitBase, 2, kSinit, NarrowAccess::Strobe),
     SE_BLOCK(kOnChipBase, 0, kOnChip, NarrowAccess::Part),
 };
 #undef SE_BLOCK
@@ -257,9 +268,18 @@ std::vector<HardwareRegister> Build()
             const Reg& r = b.regs[i];
             const uint8_t size = r.size ? r.size : b.size;
             NarrowAccess narrow = b.narrow;
-            if (b.base == kOnChipBase && r.offset >= 0x100)
-                narrow = size == 4 ? (r.offset >= 0x1E0 ? NarrowAccess::OnChipKeyedLong : NarrowAccess::OnChipLong)
-                                   : size == 2 ? NarrowAccess::OnChipWord : NarrowAccess::Part;
+            if (b.base == kScuBase && r.offset >= 0x80 && r.offset <= 0x8C)
+                narrow = NarrowAccess::ScuPort;   // PPAF, PPD, PDA, PDD: scu.inc takes *DB whole for these
+            if (b.base == kOnChipBase)
+            {
+                if (r.offset >= 0x100)
+                    narrow = size == 4 ? (r.offset >= 0x1E0 ? NarrowAccess::OnChipKeyedLong : NarrowAccess::OnChipLong)
+                                       : NarrowAccess::OnChipWord;
+                else if (r.offset < 0x10)
+                    narrow = NarrowAccess::OnChipSci;   // SMR..RDR: sh7095.inc has no case for them
+                else
+                    narrow = size == 2 ? NarrowAccess::OnChipHalf : NarrowAccess::OnChipByte;
+            }
             HardwareRegister reg{ b.base + r.offset, size, r.name, r.access, r.split, r.onRead, r.about };
             reg.narrow = narrow;
             reg.onWrite = r.onWrite;
@@ -295,6 +315,35 @@ const std::vector<HardwareRegister>& WordViews()
 {
     static const std::vector<HardwareRegister> views = BuildWordViews();
     return views;
+}
+
+// ...and the word's other byte, the high lane, which no register uses: a row of the width table
+// (a byte there does nothing, reads 0xFF) but not a symbol -- the engine takes the smallest symbol
+// at an address for an access of any width, so a 1-byte symbol beside the 2-byte one would print
+// every word write as the unused lane (tried, A5-17).
+std::vector<HardwareRegister> BuildUnusedLanes()
+{
+    // The names must outlive the table and not move: sized once, filled in place.
+    static std::vector<std::string> names;
+    names.clear();
+    names.reserve(WordViews().size());
+    std::vector<HardwareRegister> out;
+    for (const HardwareRegister& v : WordViews())
+    {
+        char name[32];
+        std::snprintf(name, sizeof name, "SMPC_UNUSED_%02X", unsigned(v.address & 0x7Fu));
+        names.emplace_back(name);
+        HardwareRegister pad{ v.address, 1, names.back().c_str(), RegisterAccess::ReadWrite, nullptr, nullptr, nullptr };
+        pad.narrow = NarrowAccess::ByteLane;
+        out.push_back(pad);
+    }
+    return out;
+}
+
+const std::vector<HardwareRegister>& UnusedLanes()
+{
+    static const std::vector<HardwareRegister> lanes = BuildUnusedLanes();
+    return lanes;
 }
 
 // The bus areas that hold registers rather than memory, as 27-bit bus addresses
@@ -362,6 +411,9 @@ bool HardwareAlias(uint32_t address, uint32_t& canonical)
         // bytes and its write ports alike.
         if (offset >= 0x120u && offset < 0x140u) offset -= 0x20u;
         if (offset >= 0x088u && offset < 0x08Cu) offset -= 0x08u;
+        // CCR reads back at 0xFFFFFE92-0xFFFFFE9F (sh7095.inc OnChipRegRead_INLINE_u8, case 0x92 ... 0x9F);
+        // a write there does nothing ("No 0x93...0x9F mirrors for writes"; the width table says so).
+        if (offset > 0x092u && offset <= 0x09Fu) offset = 0x092u;
         canonical = kOnChipBase + offset;
         return true;
     }
@@ -414,89 +466,428 @@ const HardwareRegister* SaturnHardwareWordViews(size_t& count)
     return WordViews().data();
 }
 
+// ---- The width table ---------------------------------------------------------------------------
+
+namespace
+{
+struct RuleInfo
+{
+    char category;
+    const char* name;
+    const char* source;
+};
+
+// In WidthRule's order. 'source' is where in Mednafen (the reference SE runs) the rule is read from.
+const RuleInfo kRuleInfo[] = {
+    { 'a', "Plain", "the register's own handler: scu.inc SCU_RegRW_DB_u*, SS_SCSP_RW_u*, vdp1.c ReadReg/WriteReg, vdp2.c RegsRead/RegsWrite, sh7095.inc OnChipReg*, cdb.c CDB_Read/CDB_Write_DBM" },
+    { 'a', "HalfOfLong", "scu.inc SCU_FromSH2_BusRW_DB_u32_W*: the B bus is BBusRW_DB_u16_*_SH0 at A then _SH1 at A|2, high half first" },
+    { '-', "AccessKind", "(none: the register's kind -- write-only, read-only -- says it)" },
+    { 'b', "ByteWritesWord", "scu.inc BBusRW_DB_u8_W1_SH0 -> vdp1.c VDP1_Write8_DB / vdp2.c VDP2_Write8_DB: WriteReg / RegsWrite(A, *DB), the 16-bit lane of the data bus (RW_W8's byte mask is VRAM's only)" },
+    { 'b', "PortWritesWhole", "scu.inc SCU_RegRW_DB_u8_W1 / _u16_W1 cases 0x80-0x8C: *DB is used whole, the mask every other case applies is not" },
+    { 'b', "NarrowReadWhole", "scu.inc SCU_RegRW_DB_u*_W0 cases 0x80, 0x8C: the whole 32-bit read happens, the CPU takes its part" },
+    { 'b', "WordWritesLong", "sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: the register takes V (DVDNT, DVDNTL also divide)" },
+    { 'b', "FifoPopsTwice", "scu.inc ABus_Read(A & ~3): ABusRW_DB_u16_W0_SH0 and _SH1 both reach CDB_Read(0) when bit 19 of A is clear" },
+    { 'c', "HalfBesideGap", "as HalfOfLong; the other half is a word nothing in the map names" },
+    { 'c', "SmpcLaneWrite", "ss.c BusRW_DB_CS0_u16_W1: SMPC_Write((A & 0x7F) >> 1, low byte of the half); a long is two of them" },
+    { 'c', "SmpcLaneRead", "ss.c BusRW_DB_CS0_u16_W0: 0xFF00 | SMPC_Read((A & 0x7F) >> 1); a long is two of them" },
+    { 'c', "EvenByteWrite", "sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 clear: switch (A & 0xFF) has the even address only; TIER = V (uint8_t)" },
+    { 'c', "EvenByteRead", "sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 clear: ret is the register at the word's own address" },
+    { 'c', "LowHalfRead", "sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 set: A &= 0xFE, ret = the 32-bit register truncated" },
+    { 'c', "CdLongWrite", "scu.inc ABus_Write_DB32_u32: ABusRW_DB_u16_W1_SH0 at A, _SH1 at A|2; both decode (A & 0x3F) >> 2 to one CDB_Write_DBM" },
+    { 'c', "CdLongRead", "scu.inc ABus_Read: ABusRW_DB_u16_W0_SH1 reads only if !(A & 0x80000), so the register window keeps the first value in both halves" },
+    { 'd', "SmpcPadWrite", "ss.c BusRW_DB_CS0_u8_W1: SMPC_Write only if (A & 1)" },
+    { 'd', "SmpcPadRead", "ss.c BusRW_DB_CS0_u8_W0: the high lane of the 16-bit word reads 0xFF" },
+    { 'd', "OddByteWrite", "sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 clear: no case at the odd address of a word (A is even)" },
+    { 'd', "OddByteRead", "sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 clear: no case at the odd address of a word" },
+    { 'd', "LongHalfWrite", "sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: A &= 0xFE, and the cases are the registers' own addresses" },
+    { 'd', "KeyedWordWrite", "sh7095.inc SH7095_OnChipRegWrite_u16 cases 0xE0-0xF8: break (only the _u32 write checks 0xA55A)" },
+    { 'd', "StrobeByte", "ss.c BusRW_DB_CS0_u8_W1, \"FRT trigger region\": the block is empty (only _u16_W1 calls SH7095_SetFTI)" },
+    { 'd', "MirrorWrite", "sh7095.inc OnChipRegWrite_u*: case 0x92 only (\"No 0x93...0x9F mirrors for writes\")" },
+    { 'e', "AddressError", "sh7095.inc SH7095_SetPEX(z, SH7095_PEX_CPUADDR): OnChipRegWrite_u8 / RegRead_u8 with A & 0x100 set, OnChipRegWrite_u32 / RegRead_u32 with it clear" },
+    { 'f', "StrobeLong", "sh7095.inc SH7095_BSC_BusWrite_u32 (CS0): two BusRW_DB_CS0_u16_W1, each SH7095_SetFTI" },
+    { 'f', "CdByteWrite", "cdb.c CDB_Write_DBM case 0x9: CommandPending only if mask == 0xFFFF" },
+    { 'v', "KeyedWrite", "sh7095.inc OnChipRegWrite_u16 cases 0x80, 0x82 (the key in the upper byte); _u32 cases 0xE0-0xF8 ((V & 0xFFFF0000) == 0xA55A0000)" },
+    { '?', "Undecoded", "sh7095.inc has no case for the serial interface: no rule is claimed" },
+};
+static_assert(sizeof(kRuleInfo) / sizeof(kRuleInfo[0]) == size_t(WidthRule::Undecoded) + 1, "one RuleInfo per WidthRule");
+
+WidthCell MakeCell(WidthRule rule, uint8_t flags, unsigned hi = 0, unsigned lo = 0)
+{
+    WidthCell c;
+    c.rule = rule;
+    c.flags = flags;
+    c.hi = static_cast<uint8_t>(hi);
+    c.lo = static_cast<uint8_t>(lo);
+    return c;
+}
+
+// A long on a 16-bit register of the 16-bit buses: two 16-bit accesses, high half first; the
+// register takes one half, and the other is the register beside it or nothing the map names.
+WidthCell HalfCell(const HardwareRegister& r, uint8_t flags)
+{
+    const uint32_t other = (r.address & ~3u) | ((r.address & 2u) ^ 2u);
+    const bool high = !(r.address & 2u);
+    return MakeCell(FindHardwareRegister(other) ? WidthRule::HalfOfLong : WidthRule::HalfBesideGap, flags,
+                    high ? 31 : 15, high ? 16 : 0);
+}
+
+// The B bus's 16-bit registers (SCSP, VDP1, VDP2). A write is one 16-bit access (a long: two); a
+// read is a 32-bit bus read, SH0 at A and SH1 at A|2, so the register 2 bytes on is read as well
+// when A has bit 1 clear, and this one twice when it is set (scu.inc BBusRW_DB_u16_W0_SH0, _SH1).
+WidthCell BBus16(const HardwareRegister& r, uint32_t w, bool write, int32_t off, bool whole)
+{
+    if (w == 4) return HalfCell(r, kWidthEffect);
+    if (write) return MakeCell(w == 1 && whole ? WidthRule::ByteWritesWord : WidthRule::Plain, kWidthEffect);
+    const uint32_t a = r.address + off;
+    return MakeCell(WidthRule::Plain, kWidthEffect | ((a & 2u) ? kWidthReadsTwice : kWidthReadsNext));
+}
+
+std::string NameAt(uint32_t canonical)
+{
+    const HardwareRegister* r = FindHardwareRegister(canonical);
+    return r ? r->name : std::string();
+}
+
+std::string Hex8s(uint32_t a)
+{
+    char b[16];
+    std::snprintf(b, sizeof b, "0x%08X", a);
+    return b;
+}
+
+std::string Bits(unsigned hi, unsigned lo)
+{
+    return "bits " + std::to_string(hi) + "-" + std::to_string(lo);
+}
+
+// The caution a cell gives, or "" when it has none. The wording of the round 2 fixtures is kept.
+std::string WidthText(const HardwareRegister& r, const WidthCell& c, uint32_t w, bool write, uint32_t access)
+{
+    const std::string name = r.name;
+    const std::string width = std::to_string(w) + "-byte";
+    const std::string dir = write ? "write to " : "read of ";
+    const std::string bitsOf = std::to_string(unsigned(r.size) * 8) + "-bit";
+    const std::string article = r.size == 1 ? "an " : "a ";
+    switch (c.rule)
+    {
+    case WidthRule::Plain:
+    case WidthRule::HalfOfLong:
+    case WidthRule::AccessKind:
+    case WidthRule::KeyedWrite:
+    case WidthRule::Undecoded:
+        return std::string();
+    case WidthRule::ByteWritesWord:
+        return "a 1-byte write to " + name + " writes the whole 16-bit register: its other byte is whatever was last on the data bus";
+    case WidthRule::PortWritesWhole:
+        return "a " + width + " write to " + name + " writes the whole 32-bit register: its other bytes are whatever was last on "
+               "the data bus (the SCU masks the byte and word writes of every other register, not the DSP ports)" +
+               (r.onWrite ? std::string(" and ") + r.onWrite : std::string());
+    case WidthRule::NarrowReadWhole:
+        return "a " + width + " read of " + name + " is a read of the whole 32-bit register: what a read does to it happens in "
+               "full, and only the bytes asked for are returned";
+    case WidthRule::WordWritesLong:
+        return "a 2-byte write to " + name + ", a 32-bit register, writes the whole register with the 16-bit value (upper half 0)" +
+               (r.onWrite ? std::string(" and ") + r.onWrite : std::string());
+    case WidthRule::FifoPopsTwice:
+        return "a " + width + " read of " + name + " takes two 16-bit words off the FIFO: the 32-bit bus reads it twice and the "
+               "access returns only part of them (the register window at 0x25898000 reads it once)";
+    case WidthRule::HalfBesideGap:
+    {
+        const unsigned oh = c.hi == 31 ? 15 : 31, ol = c.hi == 31 ? 0 : 16;
+        const uint32_t other = (access & ~3u) | ((r.address & 2u) ^ 2u);
+        return write ? "a 4-byte write over " + name + " is two 16-bit bus writes, high half first: " + name + " takes " +
+                           Bits(c.hi, c.lo) + " of the value, and " + Bits(oh, ol) + " go to the word at " + Hex8s(other) +
+                           ", which is no register in the map"
+                     : "a 4-byte read over " + name + " is two 16-bit bus reads: " + name + " is " + Bits(c.hi, c.lo) +
+                           " of the result, and " + Bits(oh, ol) + " are the word at " + Hex8s(other) +
+                           ", which is no register in the map";
+    }
+    case WidthRule::SmpcLaneWrite:
+        if (w == 2)
+            return "a 2-byte write to " + name + " is a byte write: the register takes the low byte of the value and the high byte "
+                   "goes nowhere (the SMPC is a byte device on the low lane of the 16-bit bus)";
+        return "a 4-byte write reaching " + name + " is two 16-bit bus writes: the register takes " + Bits(c.hi, c.lo) +
+               " of the value, and the other byte of each half goes nowhere (the SMPC is a byte device on the low lane)";
+    case WidthRule::SmpcLaneRead:
+        if (w == 2)
+            return "a 2-byte read of " + name + " returns 0xFF00 or the register: the SMPC is a byte device on the low lane of "
+                   "the 16-bit bus, and the high byte reads as 0xFF";
+        return "a 4-byte read of " + name + " is two 16-bit bus reads: the register is " + Bits(c.hi, c.lo) +
+               " of the result, and the other byte of each half reads as 0xFF (the SMPC is a byte device on the low lane)";
+    case WidthRule::SmpcPadWrite:
+    case WidthRule::SmpcPadRead:
+    {
+        const std::string beside = NameAt(r.address | 1u);
+        return c.rule == WidthRule::SmpcPadWrite
+                   ? "a 1-byte write at the even address beside " + beside + " does nothing: the SMPC is a byte device on the low "
+                     "lane of the 16-bit bus, and its registers are at the odd addresses"
+                   : "a 1-byte read at the even address beside " + beside + " returns 0xFF, not the register: the SMPC is a byte "
+                     "device on the low lane of the 16-bit bus, and its registers are at the odd addresses";
+    }
+    case WidthRule::EvenByteWrite:
+    {
+        const std::string next = NameAt(r.address + 1);
+        return "a 2-byte write to " + name + ", an 8-bit register, reaches only it, with the low byte of the value (bits 7-0, the "
+               "byte a big-endian word has at the odd address)" +
+               (next.empty() ? std::string() : "; " + next + ", the register beside it, is not written") +
+               (r.onWrite ? std::string(" and ") + r.onWrite : std::string());
+    }
+    case WidthRule::EvenByteRead:
+    {
+        const std::string next = NameAt(r.address + 1);
+        return "a 2-byte read at " + name + ", an 8-bit register, returns only it, in bits 7-0" +
+               (next.empty() ? std::string() : "; " + next + ", the register beside it, is not read");
+    }
+    case WidthRule::OddByteWrite:
+    case WidthRule::OddByteRead:
+    {
+        const std::string prev = NameAt(r.address - 1);
+        const bool wr = c.rule == WidthRule::OddByteWrite;
+        return "a 2-byte " + std::string(wr ? "write" : "read") + " at the even address beside " + name + " does not " +
+               (wr ? "write" : "read") + " it: a word reaches only the register at its own address" +
+               (prev.empty() ? std::string(wr ? ", and there is none" : ", and there is none (it reads 0)")
+                             : " (" + prev + (wr ? ")" : ", in bits 7-0)"));
+    }
+    case WidthRule::LowHalfRead:
+        return "a 2-byte read at " + name + ", a 32-bit register, returns its low 16 bits, not the upper half this address "
+               "suggests (a read at +2 returns them too)";
+    case WidthRule::LongHalfWrite:
+        return "a 2-byte write to the low half of " + name + ", a 32-bit register, does nothing: a word takes effect only at "
+               "the register's own address";
+    case WidthRule::KeyedWordWrite:
+        return "a 2-byte write to " + name + ", a 32-bit register, does nothing: it is set only by a 4-byte write with 0xA55A in "
+               "the upper half";
+    case WidthRule::AddressError:
+        if (w == 4)
+            return "a 4-byte " + dir + name + ", " + article + bitsOf + " register, is an address error on the SH-2: the "
+                   "registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only";
+        return "a " + width + " " + dir + name + ", " + article + bitsOf + " register, is an address error on the SH-2: it is "
+               "accessed whole";
+    case WidthRule::MirrorWrite:
+        return "a " + width + " write at " + Hex8s(access) + " does nothing: " + name + " reads back at 0xFFFFFE93-0xFFFFFE9F, but "
+               "takes writes at 0xFFFFFE92 only";
+    case WidthRule::StrobeByte:
+        return "a 1-byte write to " + name + " does nothing: the signal to the other CPU takes a 16-bit write (the CS0 byte "
+               "path ignores the FRT trigger region)";
+    case WidthRule::StrobeLong:
+        return "a 4-byte write to " + name + " is two 16-bit bus writes, so it signals the other CPU twice (its input capture "
+               "takes the second)";
+    case WidthRule::CdLongWrite:
+        return "a 4-byte write to " + name + " is two 16-bit writes to the same register (the CD block answers every 4 bytes): it "
+               "is written with bits 31-16 and then with bits 15-0, which it keeps, and a write that has an effect happens twice";
+    case WidthRule::CdLongRead:
+        return "a 4-byte read of " + name + " reads it once and returns it in both halves (the CD block ignores the second "
+               "16-bit access in its register window)";
+    case WidthRule::CdByteWrite:
+        return "a 1-byte write to " + name + " stores that byte only: it does not start the command, which takes a 16-bit write";
+    }
+    return std::string();
+}
+
+bool IsPad(const HardwareRegister& r) { return r.narrow == NarrowAccess::ByteLane && r.size == 1 && !(r.address & 1u); }
+}  // namespace
+
+WidthCell WidthCellFor(const HardwareRegister& r, uint32_t w, bool write, int32_t off, uint32_t access)
+{
+    // The register's kind answers the direction it does not have.
+    if (!IsPad(r) && ((write && r.access == RegisterAccess::ReadOnly) || (!write && r.access == RegisterAccess::WriteOnly)))
+        return MakeCell(WidthRule::AccessKind, 0);
+    const uint8_t eff = kWidthEffect;
+    switch (r.narrow)
+    {
+    case NarrowAccess::Part:
+        if (r.size == 4) return MakeCell(WidthRule::Plain, eff);   // the SCU: one access of any width, a write masked to its bytes
+        return BBus16(r, w, write, off, false);                    // the SCSP
+    case NarrowAccess::WholeOnByte:
+        return BBus16(r, w, write, off, true);
+    case NarrowAccess::ByteLane:
+        if (IsPad(r)) return MakeCell(write ? WidthRule::SmpcPadWrite : WidthRule::SmpcPadRead, 0);
+        if (w == 1) return MakeCell(WidthRule::Plain, eff);
+        if (w == 2) return MakeCell(write ? WidthRule::SmpcLaneWrite : WidthRule::SmpcLaneRead, eff, 7, 0);
+        return off == -1 ? MakeCell(write ? WidthRule::SmpcLaneWrite : WidthRule::SmpcLaneRead, eff, 23, 16)
+                         : MakeCell(write ? WidthRule::SmpcLaneWrite : WidthRule::SmpcLaneRead, eff, 7, 0);
+    case NarrowAccess::ScuPort:
+        if (write) return MakeCell(w == 4 ? WidthRule::Plain : WidthRule::PortWritesWhole, eff);
+        return MakeCell(w < 4 && (r.onRead || r.about) ? WidthRule::NarrowReadWhole : WidthRule::Plain, eff);
+    case NarrowAccess::CdWindow:
+    {
+        const bool second = !(access & 0x80000u);   // the FIFO window: the CD block does not ignore the second access
+        if (r.size == 4)   // the FIFO: two words in its own window, one in the register window
+        {
+            if (!write && w < 4 && second) return MakeCell(WidthRule::FifoPopsTwice, eff);
+            if (!write && w == 4 && !second) return MakeCell(WidthRule::CdLongRead, eff, 31, 0);   // one word, in both halves
+            return MakeCell(WidthRule::Plain, eff);
+        }
+        if (write)
+        {
+            if (w == 4) return MakeCell(WidthRule::CdLongWrite, eff, 31, 0);
+            if (w == 1 && r.onWrite) return MakeCell(WidthRule::CdByteWrite, 0);
+            return MakeCell(WidthRule::Plain, eff);
+        }
+        if (w == 4 && !second) return MakeCell(WidthRule::CdLongRead, eff, 31, 0);
+        return MakeCell(WidthRule::Plain, eff | (second ? kWidthReadsTwice : 0));
+    }
+    case NarrowAccess::Strobe:
+        if (!write) return MakeCell(WidthRule::Plain, 0);
+        if (w == 1) return MakeCell(WidthRule::StrobeByte, 0);
+        return MakeCell(w == 4 ? WidthRule::StrobeLong : WidthRule::Plain, eff);
+    case NarrowAccess::OnChipLong:
+    case NarrowAccess::OnChipKeyedLong:
+    {
+        const bool keyed = r.narrow == NarrowAccess::OnChipKeyedLong;
+        if (w == 1) return MakeCell(WidthRule::AddressError, 0);
+        if (write)
+        {
+            if (w == 4) return MakeCell(keyed ? WidthRule::KeyedWrite : WidthRule::Plain, keyed ? 0 : eff);
+            if (keyed) return MakeCell(WidthRule::KeyedWordWrite, 0);
+            return off == 0 ? MakeCell(WidthRule::WordWritesLong, eff, 15, 0) : MakeCell(WidthRule::LongHalfWrite, 0);
+        }
+        return w == 2 && off == 0 ? MakeCell(WidthRule::LowHalfRead, eff, 15, 0) : MakeCell(WidthRule::Plain, eff);
+    }
+    case NarrowAccess::OnChipWord:   // the UBC, which Mednafen does not decode: the SH7604 manual's byte rule
+        if (w == 1) return MakeCell(WidthRule::AddressError, 0);
+        if (w == 4) return HalfCell(r, eff);
+        return MakeCell(WidthRule::Plain, eff);
+    case NarrowAccess::OnChipHalf:
+        return MakeCell(w == 4 ? WidthRule::AddressError : WidthRule::Plain, w == 4 ? 0 : eff);
+    case NarrowAccess::OnChipSci:
+        return w == 1 ? MakeCell(WidthRule::Plain, eff) : MakeCell(WidthRule::Undecoded, 0);
+    case NarrowAccess::OnChipByte:
+    {
+        if (w == 4) return MakeCell(WidthRule::AddressError, 0);
+        if (write && w <= 2 && r.address == 0xFFFFFE92u && (access & 0x1FFu) != 0x92u)
+            return MakeCell(WidthRule::MirrorWrite, 0);
+        if (write && r.access == RegisterAccess::KeyedWrite) return MakeCell(WidthRule::KeyedWrite, 0);   // the watchdog
+        if (w == 1) return MakeCell(WidthRule::Plain, eff);
+        const bool even = !(r.address & 1u);
+        if (write) return even ? MakeCell(WidthRule::EvenByteWrite, eff, 7, 0) : MakeCell(WidthRule::OddByteWrite, 0);
+        return even ? MakeCell(WidthRule::EvenByteRead, eff, 7, 0) : MakeCell(WidthRule::OddByteRead, 0);
+    }
+    }
+    return MakeCell(WidthRule::Plain, eff);
+}
+
+char WidthCategory(WidthRule rule) { return kRuleInfo[size_t(rule)].category; }
+const char* WidthRuleName(WidthRule rule) { return kRuleInfo[size_t(rule)].name; }
+const char* WidthRuleSource(WidthRule rule) { return kRuleInfo[size_t(rule)].source; }
+
+const char* WidthFamilyName(NarrowAccess family)
+{
+    switch (family)
+    {
+    case NarrowAccess::Part: return "Part";
+    case NarrowAccess::WholeOnByte: return "WholeOnByte";
+    case NarrowAccess::ByteLane: return "ByteLane";
+    case NarrowAccess::OnChipLong: return "OnChipLong";
+    case NarrowAccess::OnChipKeyedLong: return "OnChipKeyedLong";
+    case NarrowAccess::OnChipWord: return "OnChipWord";
+    case NarrowAccess::OnChipByte: return "OnChipByte";
+    case NarrowAccess::OnChipHalf: return "OnChipHalf";
+    case NarrowAccess::OnChipSci: return "OnChipSci";
+    case NarrowAccess::ScuPort: return "ScuPort";
+    case NarrowAccess::CdWindow: return "CdWindow";
+    case NarrowAccess::Strobe: return "Strobe";
+    }
+    return "?";
+}
+
+std::vector<WidthProbe> WidthTable()
+{
+    std::vector<const HardwareRegister*> rows;
+    for (const HardwareRegister& r : Table()) rows.push_back(&r);
+    for (const HardwareRegister& v : UnusedLanes())
+        if (v.size == 1) rows.push_back(&v);   // the SMPC's unused lanes
+    std::stable_sort(rows.begin(), rows.end(),
+                     [](const HardwareRegister* x, const HardwareRegister* y) { return x->address < y->address; });
+    std::vector<WidthProbe> out;
+    for (const HardwareRegister* r : rows)
+    {
+        // The CD FIFO answers in two windows (bit 19 of the address); the CCR's write mirrors are
+        // other addresses of the same register.
+        std::vector<uint32_t> bases = { r->address };
+        if (r->narrow == NarrowAccess::CdWindow && r->size == 4) bases.push_back(r->address + 0x80000u);
+        for (uint32_t base : bases)
+            for (uint32_t w : { 1u, 2u, 4u })
+                for (int write = 1; write >= 0; --write)
+                {
+                    if (w != 1 && IsPad(*r)) continue;   // a wider access reaches the register beside it, which says so
+                    const uint64_t start = r->address & ~(w - 1);
+                    for (uint64_t a = start; a < uint64_t(r->address) + r->size; a += w)   // 64 bits: RTCOR ends at 2^32
+                    {
+                        const int32_t off = static_cast<int32_t>(static_cast<uint32_t>(a) - r->address);
+                        const uint32_t access = base + static_cast<uint32_t>(off);
+                        out.push_back(WidthProbe{ r, w, write != 0, off, access, WidthCellFor(*r, w, write != 0, off, access) });
+                    }
+                }
+        if (r->address == 0xFFFFFE92u)
+            for (uint32_t w : { 1u, 2u })
+            {
+                const uint32_t access = 0xFFFFFE93u + (w - 1);   // the first mirror at the width's alignment: 0xFE93, 0xFE94
+                out.push_back(WidthProbe{ r, w, true, 0, access, WidthCellFor(*r, w, true, 0, access) });
+            }
+    }
+    return out;
+}
+
+std::vector<CoveredRegister> CoveredRegisters(uint32_t address, uint32_t size, bool write)
+{
+    std::vector<CoveredRegister> out;
+    uint32_t first = 0;
+    if (size == 0 || !HardwareAlias(address, first)) return out;
+    // A byte at an even SMPC address reaches the bus word's unused lane.
+    if (size == 1 && !(first & 1u))
+        for (const HardwareRegister& v : UnusedLanes())
+            if (v.size == 1 && v.address == first)
+            {
+                out.push_back(CoveredRegister{ &v, WidthCellFor(v, 1, write, 0, address) });
+                break;
+            }
+    for (const HardwareRegister* reg : HardwareRegistersCovering(address, size))
+    {
+        const int32_t off = static_cast<int32_t>(first) - static_cast<int32_t>(reg->address);
+        out.push_back(CoveredRegister{ reg, WidthCellFor(*reg, size, write, off, address) });
+    }
+    return out;
+}
+
 std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, bool write)
 {
     std::vector<NarrowEffect> out;
-    uint32_t first = 0;
-    if (size == 0 || !HardwareAlias(address, first)) return out;
+    const std::vector<CoveredRegister> covered = CoveredRegisters(address, size, write);
+    if (covered.empty()) return out;
     const std::string width = std::to_string(size) + "-byte";
-    auto say = [&](const HardwareRegister* reg, const std::string& text) { out.push_back(NarrowEffect{ reg, text }); };
+    auto say = [&](const HardwareRegister* reg, const std::string& text, bool caution) {
+        out.push_back(NarrowEffect{ reg, text, caution });
+    };
 
-    // The SMPC is a byte device on the low lane of a 16-bit bus: a byte at the even address reaches
-    // nothing, so no register covers it; the register beside it is named (ss.c, BusRW_DB_CS0_u8_W1
-    // writes only when A & 1; _u8_W0 reads the high lane as 0xFF).
-    if (size == 1 && !(first & 1u))
+    // A long over registers that each take their half: the manuals document some of them as one
+    // register (the scroll values, the UBC's addresses), the rest are a pair accessed as one.
+    size_t halves = 0;
+    for (const CoveredRegister& c : covered) halves += c.cell.rule == WidthRule::HalfOfLong;
+    if (covered.size() > 1 && halves == covered.size())
     {
-        const HardwareRegister* beside = FindHardwareRegister(first | 1u);
-        if (beside && beside->narrow == NarrowAccess::ByteLane && beside->address == (first | 1u))
-            say(beside, write ? "a 1-byte write at the even address beside " + std::string(beside->name) +
-                                    " does nothing: the SMPC is a byte device on the low lane of the 16-bit bus, and its "
-                                    "registers are at the odd addresses"
-                              : "a 1-byte read at the even address beside " + std::string(beside->name) +
-                                    " returns 0xFF, not the register: the SMPC is a byte device on the low lane of the "
-                                    "16-bit bus, and its registers are at the odd addresses");
+        std::string names;
+        for (size_t i = 0; i < covered.size(); ++i)
+            names += (i == 0 ? "" : i + 1 == covered.size() ? " and " : ", ") + std::string(covered[i].reg->name);
+        const char* whole = DocumentedWideAccess(address, size);
+        if (whole)
+            say(covered[0].reg, std::string(whole) + ": one " + width + (write ? " write" : " read") + " of " + names +
+                                    ", as documented (shown under the first)", false);
+        else
+            say(covered[0].reg, "one " + width + (write ? " write" : " read") + " covers " + names + " (shown under the first)", true);
     }
 
-    for (const HardwareRegister* reg : HardwareRegistersCovering(address, size))
+    for (const CoveredRegister& c : covered)
     {
-        const std::string name = reg->name;
-        // Where the access starts, relative to the register (negative: it starts below it).
-        const int64_t off = static_cast<int64_t>(first) - static_cast<int64_t>(reg->address);
-        switch (reg->narrow)
+        const std::string text = WidthText(*c.reg, c.cell, size, write, address);
+        if (!text.empty()) say(c.reg, text, true);
+        // The B bus reads 32 bits: the register 2 bytes on is read as well, effect and all.
+        if ((c.cell.flags & kWidthReadsNext) && size < 4)
         {
-        case NarrowAccess::Part:
-            break;
-        case NarrowAccess::WholeOnByte:
-            if (size == 1 && write)
-                say(reg, "a 1-byte write to " + name + " writes the whole 16-bit register: its other byte is whatever "
-                         "was last on the data bus");
-            break;
-        case NarrowAccess::ByteLane:
-            // Registers sit at odd addresses; an aligned word or long reaches them by lane.
-            if (size == 2 && off == -1)
-                say(reg, write ? "a 2-byte write to " + name + " is a byte write: the register takes the low byte of the "
-                                 "value and the high byte goes nowhere (the SMPC is a byte device on the low lane of the "
-                                 "16-bit bus)"
-                               : "a 2-byte read of " + name + " returns 0xFF00 or the register: the SMPC is a byte device "
-                                 "on the low lane of the 16-bit bus, and the high byte reads as 0xFF");
-            else if (size == 4 && (off == -1 || off == -3))
-            {
-                const char* bits = off == -1 ? "bits 23-16" : "bits 7-0";
-                say(reg, write ? "a 4-byte write reaching " + name + " is two 16-bit bus writes: the register takes " + bits +
-                                     " of the value, and the other byte of each half goes nowhere (the SMPC is a byte device "
-                                     "on the low lane)"
-                               : "a 4-byte read of " + name + " is two 16-bit bus reads: the register is " + bits +
-                                     " of the result, and the other byte of each half reads as 0xFF (the SMPC is a byte "
-                                     "device on the low lane)");
-            }
-            break;
-        case NarrowAccess::OnChipLong:
-        case NarrowAccess::OnChipKeyedLong:
-        case NarrowAccess::OnChipWord:
-        {
-            const bool lng = reg->narrow != NarrowAccess::OnChipWord;
-            const std::string kind = lng ? "32-bit" : "16-bit";
-            if (size == 1)
-            {
-                say(reg, "a 1-byte " + std::string(write ? "write to " : "read of ") + name + ", a " + kind +
-                         " register, is an address error on the SH-2: it is accessed whole");
-                break;
-            }
-            if (!lng || size != 2) break;
-            if (write && reg->narrow == NarrowAccess::OnChipKeyedLong)
-                say(reg, "a 2-byte write to " + name + ", a 32-bit register, does nothing: it is set only by a 4-byte write "
-                         "with 0xA55A in the upper half");
-            else if (write && off == 0)
-                say(reg, "a 2-byte write to " + name + ", a 32-bit register, writes the whole register with the 16-bit value "
-                         "(upper half 0)" + (reg->onWrite ? std::string(" and ") + reg->onWrite : std::string()));
-            else if (write && off == 2)
-                say(reg, "a 2-byte write to the low half of " + name + ", a 32-bit register, does nothing: a word takes "
-                         "effect only at the register's own address");
-            else if (!write && off == 0)
-                say(reg, "a 2-byte read at " + name + ", a 32-bit register, returns its low 16 bits, not the upper half "
-                         "this address suggests (a read at +2 returns them too)");
-            break;
-        }
+            const HardwareRegister* next = FindHardwareRegister(address | 2u);
+            if (next && next != c.reg && next->onRead && next->access != RegisterAccess::WriteOnly)
+                say(next, "a " + width + " read at " + std::string(c.reg->name) + " also reads " + next->name +
+                              " (the bus reads 32 bits): " + next->onRead, false);
         }
     }
     return out;
@@ -536,6 +927,29 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
 {
     uint32_t a = 0;
     ignored = false;
+    // The bus state controller (BCR1 to RTCOR): a 4-byte write takes effect only with 0xA55A in its
+    // upper half (sh7095.inc SH7095_OnChipRegWrite_u32, `(V & 0xFFFF0000) == 0xA55A0000`); the
+    // word and byte writes never do (the width table's KeyedWordWrite and AddressError).
+    if (size == 4 && HardwareAlias(address, a) && a >= 0xFFFFFFE0u && a <= 0xFFFFFFF8u && !(a & 3u))
+    {
+        const HardwareRegister* reg = FindHardwareRegister(a);
+        const std::string name = reg ? reg->name : "the bus state controller";
+        char b[160];
+        if (!valueKnown)
+            text = name + " takes a 4-byte write only with 0xA55A in its upper half; any other value does nothing";
+        else if ((value & 0xFFFF0000u) == 0xA55A0000u)
+        {
+            std::snprintf(b, sizeof b, " keyed write: the low half 0x%04X is taken (0xA55A in the upper half is the key)", value & 0xFFFFu);
+            text = name + b;
+        }
+        else
+        {
+            std::snprintf(b, sizeof b, " without 0xA55A in the upper half (it is 0x%04X): the write does nothing", value >> 16);
+            text = "write to " + name + b;
+            ignored = true;
+        }
+        return true;
+    }
     if (size != 2 || !HardwareAlias(address, a) || (a != 0xFFFFFE80u && a != 0xFFFFFE82u)) return false;
     // SH7604 12.2.4: WTCNT and WTCSR are written by a word at FE80 whose upper byte is the key
     // (0x5A for WTCNT, 0xA5 for WTCSR); RSTCSR by a word at FE82, 0xA500 clearing WOVF and 0x5A

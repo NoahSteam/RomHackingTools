@@ -282,6 +282,19 @@ if(SE_ENABLE_DECOMPILER)
                      COMMAND SaturnExplorer${name}Tests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_${name}_test)
         endforeach()
 
+        # Area 5 round 3: the hardware width table -- every register, three widths, both directions, what
+        # Mednafen's handler does -- printed and compared with the checked-in golden file, and its rules
+        # table with the copy in HARDWARE_REGISTER_AUDIT.md. Pure: no engine linked. SE_UPDATE_GOLDEN=1
+        # rewrites both (15_DECOMPILER_STEP5.md, "Area 5, round 3: the width table").
+        add_executable(SaturnExplorerHardwareWidthTableTests
+            FrontEnd/tests/HardwareWidthTableTests.cpp
+            FrontEnd/src/Decompiler/SaturnHardwareMap.cpp)
+        target_include_directories(SaturnExplorerHardwareWidthTableTests PRIVATE FrontEnd/src)
+        add_test(NAME SaturnExplorerHardwareWidthTableTests
+                 COMMAND SaturnExplorerHardwareWidthTableTests
+                     ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/HardwareWidthTable.golden.txt
+                     ${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/HARDWARE_REGISTER_AUDIT.md)
+
         # Area 6's oracle (REVIEW_PROGRAM.md): fault injection as a matrix -- allocation k failing for
         # every k, the cancel flag raised at every phase entry, allocation and millisecond, and the
         # runner's Stop / supersede / invalidate / budget / disable / destroy with the worker held at

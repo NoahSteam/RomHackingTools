@@ -1184,6 +1184,14 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         const uint32_t size = static_cast<uint32_t>(value->getSize());
         const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
         const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(at, size);
+        // The width table's cell for each register the access reaches: whether its own read or
+        // write effect happens at this width (a word read of the byte beside FTCSR does not read it).
+        const std::vector<CoveredRegister> covered = CoveredRegisters(at, size, write);
+        auto effectHappens = [&](const HardwareRegister* reg) {
+            for (const CoveredRegister& c : covered)
+                if (c.reg == reg) return (c.cell.flags & kWidthEffect) != 0;
+            return true;
+        };
         std::string text;
         bool ignored = false;
         if (write && KeyedWrite(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset()), text, ignored))
@@ -1201,29 +1209,17 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                                    "-byte write: it is written by a keyed word at " +
                                    (std::string(reg->name) == "SH2_RSTCSR" ? "0xFFFFFE82" : "0xFFFFFE80") +
                                    "; this write does nothing", true);
-                if (read && reg->onRead) note(insn, std::string(reg->name) + ": " + reg->onRead, false);
+                if (read && reg->onRead && effectHappens(reg)) note(insn, std::string(reg->name) + ": " + reg->onRead, false);
                 if (reg->about) note(insn, std::string(reg->name) + ": " + reg->about, false);
                 if (write) written.insert(reg);
-                if (read && reg->split) splitReads.emplace_back(insn, reg);
-            }
-            // The SMPC's registers sit on the lane of a 16-bit bus: a word or long that reaches
-            // several is a run of byte accesses, said below by lane, not a register pair.
-            if (regs.size() > 1 && regs[0]->narrow != NarrowAccess::ByteLane)
-            {
-                const std::string names = RegisterNames(regs);
-                const char* whole = DocumentedWideAccess(at, size);
-                if (whole)
-                    note(insn, std::string(whole) + ": one " + std::to_string(size) + "-byte " + (read ? "read" : "write") +
-                                   " of " + names + ", as documented (shown under the first)", false);
-                else
-                    note(insn, "one " + std::to_string(size) + "-byte " + (read ? "read" : "write") + " covers " + names +
-                                   " (shown under the first)", true);
+                if (read && reg->split && effectHappens(reg)) splitReads.emplace_back(insn, reg);
             }
         }
         // What the access's width does to the registers it reaches that the line does not say: a
-        // byte write to a 16-bit VDP register, a word or byte access to a 32-bit on-chip one, a
-        // word at an SMPC register (A5-3, A5-4). The access-kind table decides, per register.
-        for (const NarrowEffect& e : NarrowAccessEffects(at, size, write)) note(insn, e.text, true);
+        // long over a pair, a byte write to a 16-bit VDP register, a word or byte access to an
+        // on-chip one, a word at an SMPC register, the register the 32-bit bus reads as well. The
+        // width table decides, per register, and writes the cautions (NarrowAccessEffects).
+        for (const NarrowEffect& e : NarrowAccessEffects(at, size, write)) note(insn, e.text, e.caution);
         if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
