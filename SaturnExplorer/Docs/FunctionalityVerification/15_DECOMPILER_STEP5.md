@@ -1209,3 +1209,128 @@ reachable in SE's setup, which has no `char *` types, so the guard has nothing t
 for the next review, not changed: a `jmp @rN` through a pointer kept in unmarked work RAM prints as
 a call to the address the snapshot holds there (`(*pcRam00000000)()` when it is 0), the value at
 the moment of the capture.
+
+## Program Phase 0: the conservation oracle
+
+The review of `0c2dd20` ended with two exemptions in the reference-run oracle that a reviewer had
+to probe by hand: `MemoryAccess::pointerFromOrdinaryMemory` ("a pointer read from ordinary memory
+may have folded, so a missing access through it is excused when its code was reached") and
+`DecompileResult::removedInsns` (the blocks the engine removed, parsed from the `Removing
+unreachable block` warning text and closed over the flow graph). Both are gone. The engine now
+records how every flow-time LOAD and STORE ended (patch 0017), and the oracle is a conservation
+law: **every memory access the flow makes is accounted for exactly once.** Branch
+`program/conservation`.
+
+**What the engine records.** `Funcdata::getAccessFates()`: for each memory access of the flow that
+stopped being a LOAD or STORE, `{ time, pc, addr, store, size, fate }`, cleared with the function (a
+restart clears it with the ops it describes, so it matches the final p-code; the host matches by
+instruction, not by op time, for the same reason). The fates:
+
+| Fate | How it ends | Recorded in |
+|---|---|---|
+| `fate_folded_ordinary` | `RuleLoadVarnode` / `RuleStoreVarnode` made it a direct read or write (a COPY) of a Varnode that is not volatile: a variable data-flow may forward or remove. A volatile address is not recorded here: `replaceVolatile` makes a user op of it, a real access that stays in the p-code and is listed. | the two rules, through `Funcdata::recordAccessFold` |
+| `fate_unreachable` | removed with an unreachable block, whether or not a warning is issued; the silent removal in flow generation comes through the same function | `blockRemoveInternal`, which records every access of the block before it destroys any op (destroying one unsets the inputs of the ops that read its output, so a STORE later in the block no longer knows its width; the first game-code run crashed on exactly that) |
+| `fate_switch_lookup` | the table read of a recovered switch (`PcodeOp::jumptable_lookup`, patches 0014 and 0015); the switch stands for it | `opDestroy` |
+| `fate_dead` | any other `opDestroy` of one | `opDestroy` |
+
+Two deviations from the brief's list of hook sites, both to leave no path unrecorded rather than to
+enumerate them. The destroy-time records are in `Funcdata::opDestroy` itself (its 60-odd callers
+include dead code, copy propagation, block removal, and the `double`, `subflow` and `prefersplit`
+transformations), not in `ActionDeadCode` and `JumpBasic::foldInNormalization`; `jumptable.cc` and
+`coreaction.cc` are unchanged. And what counts as an access is wider than LOAD and STORE: the
+volatile read and write user ops, and the COPY of a volatile Varnode in the interval between a rule
+and `replaceVolatile` -- a hardware write in a removed block is one or the other, never a STORE,
+and a record limited to LOAD and STORE (the first version) saw none of the hardware writes the
+mailbox fixtures lose to a removed block. Only ops the flow made (their time is below the op count at the end of `followFlow`) are
+recorded: rules and actions also make loads and stores (a call's stack parameters) which are not
+the code's, and one of them folding would otherwise account for a real access with the same
+instruction and width. An instrumented build confirmed that on every fixture and both save states
+the only opcode changes of a flow LOAD or STORE are those two rules (122,222 LOAD and 37,601 STORE
+conversions of flow ops on the second save state; none from any other function).
+
+**The host.** `DecompileResult::accessFates` (`AccessFate`: canonical instruction, direction, width,
+fate, constant address), filled in the printed pass next to `accesses`. The rule, in three places
+(`NoteRemovedAccesses`, `ReferenceOk` and `TestGameCode`, the last two through one shared
+`AccountFor`): for each access of the reference run, find it in the shown run by instruction,
+direction and width:
+
+- in `accesses`: **printed**;
+- a `FoldedOrdinary` or `SwitchLookup` record: **folded** (a `FoldedOrdinary` at a hardware or marked
+  address would not be ordinary, and does not count);
+- an `Unreachable` record: **removed**. It must be said by the removal caution (production: said by
+  `NoteRemovedAccesses`; tests: `SaidMissing`), unless it is a direct access of ordinary memory;
+- a `Dead` record, or none: **dropped**, which fails the oracle.
+
+`NoteRemovedAccesses` now runs when any access has an `Unreachable` record, not when the warnings
+name a block, and says exactly the removed hardware, marked and pointer accesses. Removed with
+their computation: `pointerFromOrdinaryMemory`, `removedInsns`, `RemovedInstructions`, the warning
+parse, and `FlowRecord`'s block starts and instruction lists. The caution's wording and the single
+seeded reference pass are unchanged. Direct accesses of ordinary memory are now checked too (they
+used to be skipped): each must be printed, folded, or removed.
+
+**Fixtures** (`TestHardwareVolatility`). `ptrFromRam`: `storeOverwritten` with the pointer read from
+ordinary work RAM instead of a register. The pointer does not fold (the function never stores it),
+the read is held for its effect, and the output is `xVar1 = *pxRam26002000;`. It is the shape the old
+exemption excused: in the reference run the pointer is a volatile read of ordinary memory, so the
+access stays a read through a pointer that is `pointerFromOrdinaryMemory` and in reached code. The
+records are asserted in `storeOverwritten`, `ptrFromRam`, `mailboxFold` and `switchFold`, and
+`twoCuts` asserts its removals are recorded. `Print` lists a result's records.
+
+**Mutation**, each rebuilt and run (fixtures, then the 839-function save state; the 1,554-function
+one for the store hook):
+
+| Mutation | Result |
+|---|---|
+| `RuleStoreVarnode` hook off | 11 fixture failures (`storeOverwritten`, `ptrFromRam` and every fixture with a store to a global); game code: 905 and 3,925 accesses dropped on the two save states |
+| `RuleLoadVarnode` hook off | 11 fixture failures; 969 dropped on the first save state |
+| record in `blockRemoveInternal` off | `mailboxFold`, `ptrSavedInRam`, `litSwitchAfterPoll`, `twoCuts` and `forwardFold` fail the oracle and the caution checks (23 failures, with the allocation-failure children that check the caution); the 16 removed accesses of the first save state are dropped |
+| switch-lookup fate off | the record check in `switchFold` fails; no oracle result changes (the reference run lists the lookup in no function of either save state) |
+| patch 0014 reverted | `storeOverwritten` and `ptrFromRam` fail (9 failures); the game code is unaffected on the first save state (0 dropped) |
+
+The last row is the one that matters for the fixture. A copy of the tree before this change, with
+`ptrFromRam` added and patch 0014 reverted, gives `ReferenceOk` **true** for `ptrFromRam` under the
+old oracle (excused; the Ledger and the text still reject it) and false for `storeOverwritten`
+(its pointer is a register). Under the conservation rule `ReferenceOk` is false for both.
+
+**Game code**, two save states, built `RelWithDebInfo`; every ledger count 0.
+
+| | 839 prologues | 1,554 prologues |
+|---|---|---|
+| decompile | 839/839 | 1,554/1,554 |
+| dropped against the reference run | 0 | 0 |
+| missing and said (removed as unreachable) | 16 | 20 |
+| records, all functions: folded into ordinary memory | 14,831 | 38,678 |
+| ...dead | 41 | 60 |
+| ...unreachable | 16 | 20 |
+| ...switch lookup | 27 | 155 |
+| reference-run accesses: printed | 5,038 | 18,855 |
+| ...folded (a switch lookup among them) | 1,874 (0) | 7,390 (0) |
+| ...removed (ordinary memory / said) | 16 (0 / 16) | 20 (0 / 20) |
+| ...dropped | 0 | 0 |
+| time | 5,368 ms | 19,791 ms |
+
+The 16 and 20 unreachable records are the missing-and-said accesses, one for one. Time is +2% and
++1% against the last round's 5,242 and 19,649 ms. The 91 tests pass (`ctest`, 64 s).
+
+**What the records show that the reference run cannot.** The oracle compares with the reference
+run's list, so an access lost in both runs alike is invisible to it; the records are not. 41 and 60
+flow loads ended dead with nothing for the reference run to list: 10 and 26 are reads at constant
+addresses of ordinary memory (literal-pool words and unused globals; no loss), none of hardware or
+marked memory, no write, and **31 and 34 are reads through a pointer** (listed by `SE_GAME_FATES=1`,
+counted in the `TestGameCode` summary line "ended dead"). The one examined, `0x060228B4`, is `-O0`
+code that copies bytes through a pointer into a stack buffer; four of its six byte reads through
+`param_2` ended dead and the output shows two. A likely mechanism, not confirmed: the load's only
+consumer is a stack store removed in the same dead-code pass, so the load is never unused at a pass
+where `ActionDeadCode::lastChanceLoad` could hold it (patch 0014 holds a load that becomes unused in
+a *later* pass). Through a pointer the memory may be a register's. Not fixed, not failing: the
+brief's failure is a dropped access against the reference run, and these are in neither run. They
+are the next input for area 5, and a ledger row.
+
+**Limits.** An access is found in the shown run by instruction, direction and width, so when the
+engine copies a block, one live or folded copy accounts for a dropped one (the printed ledger still
+requires each copy on one path to print once). A load or store that a rule makes and a later action
+removes is not tracked (it is not the code's). `opDestroyRaw` during flow (ops after a halt, the
+call an injection replaces) is not recorded: none is a block's access. The default `cmake`
+configuration (no build type) compiles the host unoptimised, and `DecompilerRunnerTests` then takes
+156 s before this change and 162 s after, over its 120 s timeout; with `RelWithDebInfo` it takes
+64 s. MSVC and macOS builds are unverified, as are the sanitizers (the CI agent's).

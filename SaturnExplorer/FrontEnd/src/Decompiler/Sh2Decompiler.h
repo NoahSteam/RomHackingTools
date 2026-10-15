@@ -225,14 +225,23 @@ struct MemoryAccess
     int origBlock = -1;
     uint32_t origOrder = 0;
     bool inSwitchBlock = false;   // the final block ends in the jump of a switch
-    // Through a pointer whose value comes from a read of ordinary memory at a constant address
-    // (not a register, not memory the request marks volatile). In the reference run
-    // (DecompileRequest::allMemoryVolatile) that read stays a read, so the access stays through a
-    // pointer; an ordinary run may know the memory's value (the function stored it) and fold the
-    // access into a variable, which the ledger does not list -- when the code is reached at all.
-    // An access in code the ordinary run removed as unreachable (DecompileResult::removedInsns) is
-    // missing for that reason, whatever the pointer came from (review of 0c2dd20).
-    bool pointerFromOrdinaryMemory = false;
+};
+
+// How one of the flow's LOAD or STORE ops ended, when it did not stay one: the engine's record
+// (Funcdata::getAccessFates), by instruction.
+struct AccessFate
+{
+    // FoldedOrdinary: made a direct read or write of ordinary memory, a variable the analysis may
+    // forward or drop. Dead: removed as unused (or by a transformation that is none of the others).
+    // Unreachable: removed with the unreachable block it was in. SwitchLookup: the read of a
+    // recovered switch's table; the switch stands for it.
+    enum Kind : uint8_t { FoldedOrdinary, Dead, Unreachable, SwitchLookup };
+    uint32_t insn = 0;      // the instruction, canonical
+    bool write = false;
+    uint8_t size = 0;
+    Kind fate = Dead;
+    uint32_t address = 0;   // the constant address, as the code uses it, when the pointer was one; else 0
+    bool constantAddress = false;
 };
 
 // A call in the final p-code: an access's order relative to it matters as much as to another access.
@@ -286,11 +295,13 @@ struct DecompileResult
     std::vector<Line> lines;
     std::vector<CallSite> calls;                      // the calls, for the ledger's order checks
     std::vector<std::vector<int>> flowSuccessors;     // the flow's basic blocks before any action: each one's successors
-    // The instructions (canonical, sorted) in the flow's blocks that the analysis removed as
-    // unreachable: those its warnings name, and the ones only reachable through them. Code that
-    // was reached but folded away is not here. What the reference run lists at these instructions
-    // is missing from the output because it was removed, whatever its pointer came from.
-    std::vector<uint32_t> removedInsns;
+    // How each memory access the flow made that is no longer one in the p-code ended (the engine
+    // records it, patch 0017). With the printed accesses above, they account for every LOAD and
+    // STORE of the flow: an access of the all-volatile reference run (DecompileRequest::
+    // allMemoryVolatile) is conserved when it is printed here, or ended folded into a variable of
+    // ordinary memory, or as the read of a switch's table, or was removed with unreachable code --
+    // which the removal caution says. One that ended dead, or has no record, was dropped.
+    std::vector<AccessFate> accessFates;
     std::vector<uint32_t> callees;        // constant call targets, canonical, sorted
     // ...and the addresses they are called at (a mirror when the call goes through one), sorted:
     // what DecompileRequest::prototypes is keyed by, since a callee's signature can depend on the

@@ -1,0 +1,307 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+index 580502e..66570f6 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: the destructor frees the return-recovery state (patches/0004-funcdata-frees-active-output.patch).
++ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -105,6 +106,8 @@ void Funcdata::clear(void)
+   vbank.clear();
+   clearCallSpecs();
+   clearJumpTables();
++  accessFates.clear();		// SaturnExplorer: they describe the ops just destroyed
++  flowOps = 0;
+   // Do not clear overrides
+   heritage.clear();
+   covermerge.clear();
+@@ -113,6 +116,120 @@ void Funcdata::clear(void)
+ #endif
+ }
+ 
++/// SaturnExplorer: is the op one of the function's memory accesses? A LOAD or STORE is. So is a
++/// volatile read or write user op, which replaceVolatile makes of a LOAD or STORE at a volatile
++/// address; and so, in the time between RuleLoadVarnode or RuleStoreVarnode and replaceVolatile,
++/// is the COPY of a volatile Varnode they leave. A COPY of anything else is not.
++/// \param op is the given op
++/// \param store is set to \b true if it writes memory
++/// \param size is set to the number of bytes accessed
++/// \param addr is set to the constant address accessed, or an invalid Address if the pointer is not constant
++/// \return \b true if the op is a memory access
++bool Funcdata::isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const
++
++{
++  addr = Address();
++  switch(op->code()) {
++  case CPUI_LOAD:
++    store = false;
++    size = (op->getOut() != (Varnode *)0) ? op->getOut()->getSize() : 0;
++    break;
++  case CPUI_STORE:
++    store = true;
++    size = (op->numInput() > 2 && op->getIn(2) != (Varnode *)0) ? op->getIn(2)->getSize() : 0;
++    break;
++  case CPUI_CALLOTHER:
++    {
++      // An input can be missing: an op in a block being removed has lost those that came from ops
++      // destroyed before it. blockRemoveInternal records its accesses first for that reason.
++      if (op->numInput() < 2 || op->getIn(0) == (Varnode *)0 || !op->getIn(0)->isConstant()) return false;
++      const UserPcodeOp *u = glb->userops.getOp((uint4)op->getIn(0)->getOffset());
++      if (u == (const UserPcodeOp *)0) return false;
++      if (u->getType() == UserPcodeOp::volatile_read) {
++	store = false;
++	size = (op->getOut() != (Varnode *)0) ? op->getOut()->getSize() : 0;
++      }
++      else if (u->getType() == UserPcodeOp::volatile_write) {
++	store = true;
++	size = (op->numInput() > 2 && op->getIn(2) != (Varnode *)0) ? op->getIn(2)->getSize() : 0;
++      }
++      else
++	return false;
++      if (op->getIn(1) != (Varnode *)0)
++	addr = op->getIn(1)->getAddr();
++      return true;
++    }
++  case CPUI_COPY:
++    {
++      const Varnode *vn = (op->numInput() > 0) ? op->getIn(0) : (const Varnode *)0;
++      const Varnode *outvn = op->getOut();
++      if (vn == (const Varnode *)0 || outvn == (const Varnode *)0) return false;
++      if (vn->isVolatile() && !vn->isConstant() && !(vn->isReadOnly() && glb->readonlypropagate)) {
++	store = false;		// A read: the COPY's input is the volatile location
++	size = vn->getSize();
++	addr = vn->getAddr();
++	return true;
++      }
++      if (outvn->isVolatile() && !(outvn->isReadOnly() && glb->readonlypropagate)) {
++	store = true;		// A write: the COPY's output is
++	size = outvn->getSize();
++	addr = outvn->getAddr();
++	return true;
++      }
++      return false;
++    }
++  default:
++    return false;
++  }
++  if (op->numInput() > 1 && op->getIn(0) != (Varnode *)0 && op->getIn(1) != (Varnode *)0 && op->getIn(1)->isConstant())
++    addr = Address(op->getIn(0)->getSpaceFromConst(),op->getIn(1)->getOffset());
++  return true;
++}
++
++/// SaturnExplorer: a host that shows a function's memory accesses accounts for each one the flow
++/// made by this record. It is made before anything is changed, so an allocation failure here
++/// leaves the op as it was.
++/// \param op is the memory access, still whole
++/// \param store is \b true if it writes memory
++/// \param size is the number of bytes accessed
++/// \param addr is the constant address accessed, or an invalid Address
++/// \param fate is how it ended
++void Funcdata::recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate)
++
++{
++  // Only the flow's accesses are accounted for. A user op for a volatile access is made by
++  // replaceVolatile, after the flow, from a LOAD or STORE (or the COPY it became) that was the flow's.
++  // Loads and stores that rules and actions make (a call's stack parameters, say) are not the code's.
++  if (op->code() != CPUI_CALLOTHER && op->getTime() >= flowOps)
++    return;
++  AccessRecord rec;
++  rec.time = op->getTime();
++  rec.pc = op->getAddr();
++  rec.addr = addr;
++  rec.store = store;
++  rec.size = size;
++  rec.fate = fate;
++  accessFates.push_back(rec);
++}
++
++/// SaturnExplorer: RuleLoadVarnode and RuleStoreVarnode turn a LOAD or STORE at a constant address
++/// into a COPY of the Varnode there. If that memory is volatile the COPY is replaced later by a user
++/// op (replaceVolatile), which is a real access and stays in the p-code, so nothing is recorded.
++/// Otherwise the access is now an ordinary variable that data-flow may forward or remove.
++/// \param op is the LOAD or STORE, not yet changed
++/// \param vn is the Varnode at the address accessed
++void Funcdata::recordAccessFold(const PcodeOp *op,const Varnode *vn)
++
++{
++  if (vn->isVolatile() && !(vn->isReadOnly() && glb->readonlypropagate))
++    return;
++  bool store;
++  int4 size;
++  Address addr;
++  if (!isMemoryAccess(op,store,size,addr)) return;
++  recordAccessFate(op,store,size,vn->getAddr(),fate_folded_ordinary);
++}
++
+ /// The comment is added to the global database, indexed via its placement address and
+ /// the entry address of the function. The emitter will attempt to place the comment
+ /// before the source expression that maps most closely to the address.
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+index 5007fb2..6e236ac 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  */
+ #ifndef __FUNCDATA_HH__
+ #define __FUNCDATA_HH__
+@@ -38,6 +40,28 @@ extern ElementId ELEM_HIGHLIST;		///< Marshaling element \<highlist>
+ extern ElementId ELEM_JUMPTABLELIST;	///< Marshaling element \<jumptablelist>
+ extern ElementId ELEM_VARNODES;		///< Marshaling element \<varnodes>
+ 
++/// \brief How a memory access the flow made ended (SaturnExplorer)
++///
++/// A host that shows a function's memory accesses must be able to account for every one the flow
++/// made: it is still in the p-code (a LOAD, a STORE, or the user op that models a volatile read or
++/// write), or it ended in one of these ways. Funcdata records each access that stops being one.
++enum AccessFate {
++  fate_folded_ordinary,		///< Made a direct read or write (a COPY) of ordinary memory: a variable, not a volatile location
++  fate_dead,			///< Destroyed as dead, or by any transformation that is not one of the others
++  fate_unreachable,		///< Destroyed with the unreachable block it was in
++  fate_switch_lookup		///< The read of a recovered switch's table: the switch stands for it
++};
++
++/// \brief One memory access of the flow and how it ended (SaturnExplorer)
++struct AccessRecord {
++  uintm time;			///< PcodeOp::getTime(): the op's identity when it ended (for a LOAD or STORE, the flow's)
++  Address pc;			///< The address of the instruction the op belongs to
++  Address addr;			///< The constant address accessed, or an invalid Address if the pointer was not constant
++  bool store;			///< \b true for a write, \b false for a read
++  int4 size;			///< Number of bytes accessed
++  AccessFate fate;		///< How it ended
++};
++
+ /// \brief Container for data structures associated with a single function
+ ///
+ /// This class holds the primary data structures for decompiling a function. In particular it holds
+@@ -88,6 +112,9 @@ class Funcdata {
+ 
+   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
+   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
++  vector<AccessRecord> accessFates;	///< How each LOAD and STORE that ended did (SaturnExplorer); cleared with the function
++  uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
++  bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
+ 
+   VarnodeBank vbank;		///< Container of Varnode objects for \b this function
+   PcodeOpBank obank;		///< Container of PcodeOp objects for \b this function
+@@ -170,6 +197,10 @@ public:
+   bool isDoublePrecisOn(void) const { return ((flags & double_precis_on)!=0); }	///< Is double precision analysis enabled
+   bool hasNoStructBlocks(void) const { return (sblocks.getSize() == 0); }	///< Return \b true if no block structuring was performed
+   void clear(void);						///< Clear out old disassembly
++  bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
++  void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
++  void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
++  const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
+   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
+   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header
+   void startProcessing(void);					///< Start processing for this function
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+index c2f9420..694ad3c 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_block.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
++ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -315,6 +316,18 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
+   }
+   bblocks.removeFromFlow(bb);
+ 
++  // SaturnExplorer: the memory accesses removed with an unreachable block are recorded as such,
++  // whether or not a warning is issued (the flow's own silent removal comes through here as well).
++  // All of them first: destroying an op unsets the inputs of the ops that read its output, and a
++  // STORE would no longer know its width. (A do-nothing block holds no access, only MULTIEQUALs.)
++  for(iter=bb->beginOp();iter!=bb->endOp();++iter) {
++    bool isstore;
++    int4 accsize;
++    Address accaddr;
++    if (isMemoryAccess(*iter,isstore,accsize,accaddr))
++      recordAccessFate(*iter,isstore,accsize,accaddr,unreachable ? fate_unreachable : fate_dead);
++  }
++  accessesRecorded = true;
+   desc_warning = false;
+   iter = bb->beginOp();
+   while(iter!=bb->endOp()) {	// Finally remove all the ops
+@@ -336,6 +349,7 @@ void Funcdata::blockRemoveInternal(BlockBasic *bb,bool unreachable)
+     iter++;			// Increment iterator before unlinking
+     opDestroy(op);		// No longer has descendants
+   }
++  accessesRecorded = false;
+   bblocks.removeBlock(bb);	// Remove the block altogether
+ }
+ 
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+index d29c4a1..c8d2333 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_op.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  */
+ #include "funcdata.hh"
+ #include "flow.hh"
+@@ -208,6 +210,13 @@ void Funcdata::opDestroy(PcodeOp *op)
+     debugModCheck(op);
+ #endif
+ 
++  // SaturnExplorer: a memory access that goes ends here, whichever rule or action destroys it (the
++  // other way one ends is RuleLoadVarnode or RuleStoreVarnode keeping the op as a COPY of ordinary memory).
++  bool isstore;
++  int4 accsize;
++  Address accaddr;
++  if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
++    recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
+   if (op->getOut() != (Varnode *)0)
+     destroyVarnode(op->getOut());
+   for(int4 i=0;i<op->numInput();++i) {
+@@ -779,6 +788,7 @@ void Funcdata::followFlow(const Address &baddr,const Address &eaddr)
+   flow.setFlags(fl);
+   flow.setMaximumInstructions(glb->max_instructions);
+   flow.generateOps();
++  flowOps = obank.getUniqId();	// SaturnExplorer: the ops so far are the flow's; recordAccessFate keeps only their fates
+   size = flow.getSize();
+   // Cannot keep track of function sizes in general because of non-contiguous functions
+   //  glb->symboltab->update_size(name,size);
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+index 68bf77b..3aecfad 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
++ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -4275,6 +4276,7 @@ int4 RuleLoadVarnode::applyOp(PcodeOp *op,Funcdata &data)
+   size = op->getOut()->getSize();
+   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
+   newvn = data.newVarnode(size,baseoff,offoff);
++  data.recordAccessFold(op,newvn);	// SaturnExplorer: the op lives on as the COPY, so its time survives
+   data.opSetInput(op,newvn,0);
+   data.opRemoveInput(op,1);
+   data.opSetOpcode(op, CPUI_COPY );
+@@ -4317,6 +4319,7 @@ int4 RuleStoreVarnode::applyOp(PcodeOp *op,Funcdata &data)
+   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
+   Address addr(baseoff,offoff);
+   data.newVarnodeOut(size, addr,op);
++  data.recordAccessFold(op,op->getOut());	// SaturnExplorer: the op lives on as the COPY. Recorded here, while the STORE's inputs are whole
+   op->getOut()->setStackStore();	// Mark as originally coming from CPUI_STORE
+   data.opRemoveInput(op,1);
+   data.opRemoveInput(op,0);

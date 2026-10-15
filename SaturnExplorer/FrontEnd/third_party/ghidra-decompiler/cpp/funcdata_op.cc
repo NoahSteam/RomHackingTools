@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -208,6 +210,13 @@ void Funcdata::opDestroy(PcodeOp *op)
     debugModCheck(op);
 #endif
 
+  // SaturnExplorer: a memory access that goes ends here, whichever rule or action destroys it (the
+  // other way one ends is RuleLoadVarnode or RuleStoreVarnode keeping the op as a COPY of ordinary memory).
+  bool isstore;
+  int4 accsize;
+  Address accaddr;
+  if (!accessesRecorded && isMemoryAccess(op,isstore,accsize,accaddr))
+    recordAccessFate(op,isstore,accsize,accaddr,op->isJumptableLookup() ? fate_switch_lookup : fate_dead);
   if (op->getOut() != (Varnode *)0)
     destroyVarnode(op->getOut());
   for(int4 i=0;i<op->numInput();++i) {
@@ -779,6 +788,7 @@ void Funcdata::followFlow(const Address &baddr,const Address &eaddr)
   flow.setFlags(fl);
   flow.setMaximumInstructions(glb->max_instructions);
   flow.generateOps();
+  flowOps = obank.getUniqId();	// SaturnExplorer: the ops so far are the flow's; recordAccessFate keeps only their fates
   size = flow.getSize();
   // Cannot keep track of function sizes in general because of non-contiguous functions
   //  glb->symboltab->update_size(name,size);
