@@ -679,6 +679,29 @@ if(BUILD_TESTING)
         add_test(NAME SaturnExplorerDecompilerPanelTests
                  COMMAND SaturnExplorerDecompilerPanelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_panel_test)
         set_tests_properties(SaturnExplorerDecompilerPanelTests PROPERTIES TIMEOUT 60)
+
+        # Area 1 of the review program (REVIEW_PROGRAM.md): random sequences of edit, scrub, Refresh,
+        # reconnect, source replacement and prototype change against the real panel, runner and
+        # engine, checked against a from-scratch recomputation. A fixed set of seeds by default;
+        # SE_MODEL_SEEDS=<n> runs a long one, SE_MODEL_SEED=<k> replays one with every step printed.
+        add_executable(SaturnExplorerDecompilerModelTests
+            FrontEnd/tests/DecompilerModelTests.cpp
+            FrontEnd/src/DecompilerPanel.cpp
+            FrontEnd/src/Theme.cpp
+            ${SE_DECOMPILER_TEST_SOURCES}
+            ${SE_IMGUI_CORE}
+        )
+        target_include_directories(SaturnExplorerDecompilerModelTests
+            PRIVATE FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        target_link_libraries(SaturnExplorerDecompilerModelTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+        add_test(NAME SaturnExplorerDecompilerModelTests
+                 COMMAND SaturnExplorerDecompilerModelTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_model_test)
+        # Expected to fail while the model's open findings stand (REVIEW_LEDGER.md: A1-1 and A1-2, the
+        # runner's too-large memo outliving the bytes it was reached for and a successful Refresh; the
+        # default run ends with their shrunk sequences, kPinned). WILL_FAIL inverts the verdict, so
+        # ctest stays green on master and goes red the day the fix lands -- the signal to remove this
+        # property and the matching kPinned lines.
+        set_tests_properties(SaturnExplorerDecompilerModelTests PROPERTIES TIMEOUT 120 WILL_FAIL TRUE)
     endif()
 
     # Frame identity in the scrub view: what a refresh shows as the ring evicts, and which frame staged
