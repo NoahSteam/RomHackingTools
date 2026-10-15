@@ -1438,6 +1438,8 @@ configuration (no build type) compiles the host unoptimised, and `DecompilerRunn
 
 ## Area 2, oracle: exhaustive decode and differential execution
 
+*Round 1 of the fixes ("Area 2, round 1: SR, rte and the parse-tree ring", below) fixed A2-1, A2-2, A2-3, A2-5, A2-6 and A2-7 and removed the `WILL_FAIL` fence described here; A2-4 is now a reported known limit.*
+
 `SaturnExplorerSh2DecodeTests` (`FrontEnd/tests/Sh2DecodeTests.cpp`, branch `review/2-semantics`) is the
 oracle `REVIEW_PROGRAM.md` asks for in area 2, SH-2 semantics and SLEIGH correctness. Mednafen's SH-2 core
 (`ss/sh7095.inc`, `sh7095_ops.inc`, `sh7095_opdefs.inc`, `sh7095_idecodetab.inc`) is the hardware reference. The
@@ -1681,6 +1683,164 @@ commands were run locally); the generator under ASan; `deadStack` does not separ
 its absence (kept as the control, with the game code's own functions as the real check); the push
 for a load reached with mask 0 is exercised by `deadShift` only.
 
+## Area 2, round 1: SR, rte and the parse-tree ring
+
+Branch `review/2-semantics-fix`, fixes in `4d37623` (patches 0019 and 0020, `Sh2Disasm`, the oracle). Ledger rows
+A2-1, A2-2, A2-3, A2-5, A2-6 and A2-7 are `fixed 4d37623`; A2-4 (the PC a slot reads after a taken branch other
+than `bra`/`bsr`) and A2-8 were not part of this round. `SaturnExplorerSh2DecodeTests` passes with no fence:
+`WILL_FAIL` is removed from its ctest entry (the generated test's property is another agent's).
+
+### 1. The spec: patch 0019 (A2-1, A2-2, A2-3)
+
+All three are in `superh.sinc` and follow Mednafen (`sh7095_ops.inc`: `LDC`/`LDC_L` end with `z->SR &= 0x3F3`; `RTE`
+reads the PC and the SR off the stack, sets `z->SR = new_SR & 0x3F3`, and only then calls `DelayBranch`).
+
+| Row | Spec before | Spec now |
+|---|---|---|
+| A2-1 | `ldc Rm,SR`, `ldc.l @Rm+,SR`: `& 0x0FFF0FFF` | `& 0x000003F3` (T, S, I3-I0, Q, M) |
+| A2-3 | `rte`: stacked SR `& 0x000063F3` | `& 0x000003F3` (bits 13 and 14 are the SH-2A's `CS` and `BO`) |
+| A2-2 | `rte`: `delayslot(1); pc = _pc; sr = _sr;` | `sr = _sr; delayslot(1); pc = _pc;` |
+
+*Ordering.* Patch 0006 solved the same question for PR in `bsr`, `bsrf` and `jsr`: the register the hardware writes
+before the slot (`pr = inst_start + 4`) is assigned before `delayslot(1)`, and what the branch does after the slot
+(`call`, `goto`) stays after it. `rte` follows that: SR is assigned before the slot, `pc = _pc` and `return [pc]`
+after. A slot that reads T (`movt`) sees the restored one, and a slot that writes T (`sett`, `clrt`) is not undone by
+the restore. `ldc` to GBR and VBR are not masked, in Mednafen or here (the control shape agrees).
+
+*Procedure* (`patches/README.md` and `VENDOR.md`): `superh.sinc` edited with the "Modified for SaturnExplorer" notice
+extended (one more line, as 0006 did); `cmake --build . --target se-regen-sla` regenerated `sh-2.sla` and
+`Sh2SpecData.h` (regenerating again from the same spec gives byte-identical files); the patch is a `git diff` with
+upstream paths (`a/Ghidra/Processors/SuperH/data/languages/superh.sinc`) between a copy of the file taken before the
+edit and the edited one, proved with `git apply --check` and `git apply` on that copy under
+`GIT_CEILING_DIRECTORIES` (the result is byte-identical to the working copy); and `python3 -I vendor.py` on the
+pinned Ghidra checkout (`918d44e`) applied all 19 patches and rewrote the vendored tree with no difference from the
+working copy. Rows added to `patches/README.md` and `VENDOR.md`; `SaturnExplorerSlaFreshnessTests` passes.
+
+### 2. `Sh2Disasm` (A2-6, A2-7)
+
+`bt/s` and `bf/s` are spelled as Renesas and the SLEIGH listing spell them (`Sh2Disasm.cpp`); `Sh2Operands.cpp`
+matched `"bt.s"` to word its "if T set" comment and now matches `"bt/s"`. Nothing else in `FrontEnd`, `Core`, `web`
+or the docs depends on the old spelling (`grep -i 'bt\.s\|bf\.s'` over the tree: the header comments and one test
+comment, all updated; no golden listing holds it; `Sh2AccessWidth` reads the character before the last one, and
+`/s` is no different from `.s` there). `trapa` is now `IsBranch` as well as `IsCall`. Its consumers: `Sh2FunctionFinder`
+tests `IsCall` before `IsBranch` in the reachability walk and excludes calls in the scan that reads `IsBranch` for
+tail jumps, and `Sh2Decompiler.cpp` (the body ranges) excludes `IsCall`; so the only effects are that a `trapa` between a literal load
+and its use ends `LiteralInRegister`'s backward search (it reads "a branch or call in between" in its own comment) and
+that a `trapa` in a delay slot makes the `rts` before it data (a branch cannot be a slot).
+
+### 3. The oracle after the fixes
+
+- `WILL_FAIL` is gone from `SaturnExplorerSh2DecodeTests`; the default run takes 1.2 s (RelWithDebInfo).
+- **A2-4 is a known limit, not a failure.** After a taken `bt/s`, `bf/s`, `jmp`, `jsr`, `rts`, `braf`, `bsrf` or `rte`
+  the spec places a PC-relative slot's literal from the slot's own address + 4, the hardware from the target + 2, and a
+  register-target branch cannot be fixed in SLEIGH. The decompiler marks such a function unsupported
+  (`ScanRawPcode`), so the row stays as it was. For the test to pass without hiding anything, a case that differs from
+  the hardware reference is run once more against a reference with that single rule (`RunRef(..., specSlotPc)`); it is
+  counted as a known limit only if every register, the next PC and every memory word then agree exactly, so any other
+  difference in the same case still fails. Over the default run 1,780 of 260,000 cases (10 forms, 8 of 18 shapes) are
+  known and 0 differ. `TestKnownLimitIsFlagged` decompiles each of the 8 shapes from its branch and requires
+  `unsupported`: if the host stops marking them, the test fails.
+- `TestRecycledTreeInDecompiler` is the decompiler-level fixture for A2-5 (section 5).
+- Longer run: `SE_DECODE_CASES=30000 SE_DECODE_SEED=77` (3,900,000 cases, 9.7 s) with `SE_MEDNAFEN_SS` set: the
+  transcribed word table equals `sh7095_idecodetab.inc` on all 65,536 words, 0 cases differ, 28,341 are the known limit.
+
+### 4. Mutation
+
+Each fix was reverted alone and the oracle run (the spec mutations regenerate `sh-2.sla` with `se-regen-sla`):
+
+| Reverted | Result |
+|---|---|
+| all three spec hunks | 6 shapes differ (`ldc`, `ldc.l`, `rte; nop`, `rte; sett`, `rte; clrt`, `rte; movt`); `ldc` 610 and `ldc.l` 657 of 2,000 cases, `rte` 1,015 |
+| A2-1 only (`ldc` masks back to `0x0FFF0FFF`) | the `ldc` and `ldc.l` shapes differ; 610 and 657 of 2,000 cases |
+| A2-2 only (`sr = _sr` after the slot) | `rte; sett`, `rte; clrt`, `rte; movt r2` differ; `rte` 371 of 2,000 |
+| A2-3 only (`rte` mask `0x63F3`) | `rte; nop; stacked SR = FFFFFFFF` differs; `rte` 750 of 2,000 |
+| patch 0020 (`sleigh.cc` as before) | `TestRecycledTreeInDecompiler` fails (signature withheld: "an indirect jump it does not resolve"); `TestTranslationHistory`: 5,632 of 5,632 cells differ |
+| A2-6 (`"bt.s"`, `"bf.s"`) | decode comparison: 2,048 disagreements in 2 groups |
+| A2-7 (`trapa` without `IsBranch`) | decode comparison: 1,024 disagreements in 1 group |
+
+Every mutation is caught by the check the fix is pinned by, and each restoration passes.
+
+### 5. A2-5: can the decompiler translate a delayed branch, its slot, another instruction, then the branch again?
+
+**Yes, and it did.** Verdict: reachable, fixed as patch 0020 (`4d37623`).
+
+*Where an instruction is translated.* The engine has one caller of `Translate::oneInstruction`, `FlowInfo::processInstruction`
+(`flow.cc`), and `FlowInfo` translates each address once (`visited` stops a second visit), so within one flow the
+sequence slot, branch, other, branch cannot happen; jump-table recovery clones the raw p-code (`Funcdata::truncatedFlow`)
+and does not translate again, and the engine has no inline or injection users here. The host has two: `Disassemble`,
+which prints a run of distinct addresses with `printAssembly`, and `ReturnCheck::Step` (`Sh2Decompiler.cpp`), the
+signature check that walks the function's instructions again after the flow, in its own order (a worklist ordered by
+address, an instruction stepped again whenever the state reaching it changed). `printAssembly` builds the disassembly
+state and has no slot; the walk in `ReturnCheck` is the one that can ask twice.
+
+*What the ring needs.* `DisassemblyCache` hands out the entry allocated longest ago on a miss; a hit left the order alone.
+`oneInstruction(A)` asks for A and then A+2 (the slot). The tree of A is recycled when A is a hit, A+2 a miss, and A's
+entry is the next to hand out. With two entries that needs A to be the older of the two last allocations, which happens
+when A was allocated while A+2 was already cached (A+2 was the newest allocation: translated as an instruction of its
+own, last in the flow) and one plain instruction was translated since. No legal program needs a branch in a delay slot
+for this; it needs the slot to be a jump target, the function to start at the delayed branch, and a loop back to it.
+
+*The function* (base `06009000`; this is `TestRecycledTreeInDecompiler`):
+
+```
+0000  A002   bra   Z          entry; its slot is the word at 0002
+0002  7201   add   #1,r2     slot, and the target of 'bt S'
+0004  412B   jmp   @r1       P: a return, r1 is PR on every path that reaches it
+0006  0009   nop
+0008  8BFA   bf    A         Z: loop back to the branch
+000A  012A   sts   pr,r1
+000C  89F9   bt    S         (the slot as an instruction of its own)
+000E  89F9   bt    P
+0010  000B   rts
+0012  0009   nop
+```
+
+The flow's translations, in order: `0, 8, A, C, E, 10, 4, 2` (the slot `2` last, its run ends at the already-visited `4`).
+`ReturnCheck` then steps `0` (the branch misses, its slot is a hit: the slot's tree is the newest), `8` (one plain
+instruction, which takes the slot's entry), and `0` again: the branch is a hit, the slot a miss, the miss takes the
+branch's entry (an instrumented build printed `RECYCLED 06009000`). The branch is then built from its slot's parse,
+`add #1,r2` alone, so the walk goes on to `4` with r1 unchanged, finds `jmp @r1` with r1 not holding PR, and the
+signature is withheld ("an indirect jump it does not resolve") for a function that returns to its caller on every path.
+With the patch the same run translates `0, 8, 0, A, C, 2, 4, E, 10`, nothing is recycled and the signature is lent.
+
+*What I could and could not show.* The observable effect is a conservative one, a lost signature, because what a
+recycled step drops (the branch, the call, the return) is joined into states the first visit of the same instruction
+already set; I did not find a way to a wrong lent signature, and do not claim there is none. The row was P1 by
+the rule for a silent wrong result (no warning, and it first showed as a stray `next` difference in the random run);
+a lost call, branch or return in the pass that decides prototypes is the kind of defect this program exists to remove,
+so it is fixed rather than accepted. The coordinator may re-triage it.
+
+*The fix* (`sleigh.cc`, 8 functional lines): a hit makes the entry the newest (the list is rotated), so the cache is
+least recently used instead of oldest allocated. A larger ring is not a fix: a tree can always be the oldest, and the
+sequence needs only more plain instructions in between; upstream sizes the ring at 2 when `maxdelayslotbytes` is 1 and 8
+otherwise (`Sleigh::initialize`), relying on the promise in `getParserContext`'s own comment that n different addresses get
+n different trees while n is at most the size, which a hit on the oldest entry breaks. An LRU order restores it for every size.
+
+### 6. The matrix
+
+`cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo`, `--parallel 2`, whole tree built, whole `ctest`:
+
+| Check | Result |
+|---|---|
+| `ctest` | 93 of 93 passed in 125 s |
+| `SaturnExplorerSlaFreshnessTests` | passed |
+| `SaturnExplorerSh2SemanticsTests` | passed (0.3 s) |
+| `SaturnExplorerSh2DecompilerTests` | passed (1.2 s; its fixtures exercise the spec) |
+| `SaturnExplorerSh2DecodeTests` | passed (1.2 s), no fence; the generated test's `WILL_FAIL` is untouched and still fails as expected |
+| game corpus, `hwram008.bin` | 1,554 functions, 1,554 ok; 0 not printed exactly once, 0 accesses of another width, 0 statements with two reads, 0 reads printed past another access, 0 printed as conditional, 0 out of order, 0 joined into a switch, 0 dropped; 20 missing and said (unreachable code) |
+| game corpus, `hwram007.bin` | 839 functions, 839 ok; the same counts 0; 16 missing and said |
+| `vendor.py` on the pinned checkout | 19 patches apply, the vendored tree is unchanged |
+
+Not run: the sanitizer jobs and the timing comparison (the whole-program matrix at the coordinator).
+
+### 7. Not done, and for the coordinator
+
+- A2-4 stays open (a spec cannot place the slot's PC after a register-target branch; the host flags it, and the oracle
+  now pins the flag). A2-8 is accepted as written.
+- CI's `-R` filters name tests one by one and do not select `SaturnExplorerSh2DecodeTests`; adding it is a CI change.
+- Patch 0018 (`coreaction.cc`, another agent) and these two add rows at the end of the same two tables
+  (`patches/README.md`, `VENDOR.md`): expect a trivial textual conflict, resolved by keeping both.
+
 ## Area 12, Windows run 1
 
 Master at `7fbbd1c`, branch `review/12-windows`. Windows 11 Home 10.0.26200, Visual Studio Community
@@ -1784,3 +1944,17 @@ A12-4):
 | Decompiler-off build | Starts and responds; closed with WM_CLOSE it exits in 0.2 s; it leaves the saved `volatile` line as it was. Its panel was not looked at: screen access to that build was declined on this machine |
 
 Settings files were restored afterwards (hash-checked).
+
+**After merging master at `1c0e752`** (patches 0019 and 0020, the `Sh2Disasm` spellings) into
+this branch: the Debug build is clean, with no new MSVC warning in `sleigh.cc`, `Sh2Disasm.*`,
+`Sh2Operands.cpp` or the changed tests. `Sh2DecompilerTests`, `Sh2DecompilerEngineTests`,
+`Sh2SemanticsTests`, `Sh2DecodeTests`, `Sh2GeneratedTests`, `Sh2DecompilerFixtureTests`,
+`Sh2OperandHoverTests` and `DecompilerPanelTests` pass. `SlaFreshnessTests` still fails (A12-3;
+the lines are now 1144, 1145, 1147, 1169). The full `ctest` run showed a second failure,
+`DecompilerRunnerTests`, which turned out to be intermittent and already present before the
+merge (A12-6): fixture 1 must finish inside the 50 ms budget of the disable test's runner, and in
+Windows Debug it takes about 61 ms of wall time. Side by side, 20 runs each: 1 failing run at
+`7fbbd1c`, 4 at the merge. The Release build was not rebuilt after the merge.
+
+Left over on this machine: `SakuraTaisen2/.../OhrimeMiniGame/saturn_explorer_watches.json` (an
+empty watch list the app wrote beside the savestate on exit; untracked, not committed).

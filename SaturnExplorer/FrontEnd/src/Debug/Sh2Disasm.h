@@ -26,7 +26,7 @@ struct DisassembledInstruction
     bool                    IsBranch = false;         // any control-flow change
     bool                    IsCall = false;           // bsr/bsrf/jsr/trapa
     bool                    IsReturn = false;         // rts/rte
-    bool                    IsConditional = false;    // bt/bf/bt.s/bf.s
+    bool                    IsConditional = false;    // bt/bf/bt/s/bf/s
     bool                    IsValid = false;          // false -> illegal/unknown opcode
     bool                    HasDelaySlot = false;     // the next instruction runs before the branch lands
     // PC-relative operand. Operands holds the address as if the instruction were reached any ordinary
@@ -51,7 +51,7 @@ DisassembledInstruction Sh2Decode(uint32_t address, uint16_t opcode);
 // something memory shows -- another path may jump straight to it -- so the operand is not resolved to
 // one absolute address. It is shown as "@(disp,pc)", flagged PcRelAmbiguous, with the address for
 // each way it can be reached: PcRelDirectAddress, and PcRelSlotAddress when the branch destination is
-// static (bra/bsr/bt.s/bf.s; not jmp/jsr/braf/bsrf/rts/rte). A caller that knows execution really is
+// static (bra/bsr/bt/s/bf/s; not jmp/jsr/braf/bsrf/rts/rte). A caller that knows execution really is
 // in the slot may resolve it itself from those.
 DisassembledInstruction Sh2DecodeAfterBranch(uint32_t address, uint16_t opcode,
                                              const DisassembledInstruction& branch);

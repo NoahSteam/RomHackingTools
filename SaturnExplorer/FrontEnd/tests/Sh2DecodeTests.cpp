@@ -20,6 +20,12 @@
 // error, illegal instruction, illegal slot), SLEEP (a user op), misaligned accesses, code at the
 // top of the address space, and anything that depends on the bus rather than flat memory.
 //
+// One difference from the hardware is known and accepted (ledger A2-4): after a taken delayed branch
+// other than bra and bsr the spec cannot place a PC-relative slot's literal. The oracle runs a case
+// that differs a second time against a reference with that one rule, counts it as a known limit if
+// that agrees exactly (any other difference in the same case still fails), and checks that the
+// decompiler marks a function with such a slot unsupported.
+//
 // usage: SaturnExplorerSh2DecodeTests <scratch dir>
 // environment: SE_DECODE_CASES=<n>   differential cases per form (default 2000)
 //              SE_DECODE_SEED=<n>    seed of the differential run (default fixed)
@@ -33,6 +39,7 @@
 
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/SaturnArchitecture.h"
+#include "Decompiler/Sh2Decompiler.h"
 #include "emulate.hh"
 #include "memstate.hh"
 
@@ -1026,14 +1033,22 @@ Flow ExecRef(Cpu& c, Mem& m, uint16_t w, uint32_t PC)
 }
 
 // An instruction at 'A' (and its slot) from the register file 'c'. Returns the next address.
-uint32_t RunRef(Cpu& c, Mem& m, uint32_t A, uint16_t w0, uint16_t w1)
+//
+// 'specSlotPc' selects the one place the spec is known to differ from the hardware (A2-4): after a
+// taken branch other than bra and bsr the spec computes a PC-relative slot's address from the
+// slot's own address + 4, where the hardware uses the branch target + 2. The decompiler marks a
+// function with such a slot unsupported (ScanRawPcode); the oracle accepts a difference only if it
+// is exactly this one, and checks that the marking is there.
+uint32_t RunRef(Cpu& c, Mem& m, uint32_t A, uint16_t w0, uint16_t w1, bool specSlotPc = false)
 {
     const uint32_t PC = A + 4;
     const Flow f = ExecRef(c, m, w0, PC);
     if (!f.delayed) return f.taken ? f.target : A + 2;
     // The slot runs with z->PC = target + 2 after a taken branch (UCDelayBranch / DelayBranch set
     // PC to the target and the post-switch PC += 2 follows), and its own address + 4 otherwise.
-    ExecRef(c, m, w1, f.taken ? f.target + 2 : PC + 2);
+    const int op = gOpOf[w0];
+    const bool specFixed = op == 0x68 || op == 0x6A;   // bra, bsr: the target is in the instruction (patch 0005)
+    ExecRef(c, m, w1, f.taken && !(specSlotPc && !specFixed) ? f.target + 2 : PC + 2);
     return f.taken ? f.target : A + 4;
 }
 
@@ -1517,6 +1532,7 @@ struct Outcome
     std::string why;
     std::string sig;      // which parts of the result differ ("" if none)
     std::string detail;   // and how
+    bool known = false;   // differs from the hardware only as A2-4 does (see RunRef); sig is then empty
 };
 
 // One case on both sides, compared: r0-r15, SR, GBR, VBR, MACH, MACL, PR, the next PC and every
@@ -1524,10 +1540,6 @@ struct Outcome
 Outcome RunCase(EmuMachine& mach, const Cell& cell, const Case& k)
 {
     Outcome o;
-    Cpu ref = k.cpu;
-    Mem refMem = k.mem;
-    const uint32_t refNext = RunRef(ref, refMem, cell.addr, cell.w[0], cell.w[1]);
-
     Mem emuMem = k.mem;
     mach.Bank().mem = &emuMem;
     mach.Bank().inserted.clear();
@@ -1536,37 +1548,58 @@ Outcome RunCase(EmuMachine& mach, const Cell& cell, const Case& k)
     if (!o.ran) return o;
     Cpu emu;
     mach.Store(emu);
+    const std::vector<uint32_t> ew = mach.Bank().InsertedWords();
 
-    char b[160];
-    bool gpr = false;
-    for (int r = 0; r < kRegs; ++r)
-        if (ref.v[r] != emu.v[r])
+    // The emulator's result against the reference; the reference runs on a copy of the case.
+    auto compare = [&](bool specSlotPc, std::string& sig, std::string& detail) {
+        Cpu ref = k.cpu;
+        Mem refMem = k.mem;
+        const uint32_t refNext = RunRef(ref, refMem, cell.addr, cell.w[0], cell.w[1], specSlotPc);
+        char b[160];
+        bool gpr = false;
+        for (int r = 0; r < kRegs; ++r)
+            if (ref.v[r] != emu.v[r])
+            {
+                if (r < 16) gpr = true;
+                else sig += std::string(sig.empty() ? "" : ",") + kRegNames[r];
+                std::snprintf(b, sizeof b, "%s want %08X got %08X; ", kRegNames[r], ref.v[r], emu.v[r]);
+                detail += b;
+            }
+        if (gpr) sig = std::string("r0-r15") + (sig.empty() ? "" : ",") + sig;
+        if (refNext != emuNext)
         {
-            if (r < 16) gpr = true;
-            else o.sig += std::string(o.sig.empty() ? "" : ",") + kRegNames[r];
-            std::snprintf(b, sizeof b, "%s want %08X got %08X; ", kRegNames[r], ref.v[r], emu.v[r]);
-            o.detail += b;
+            sig += std::string(sig.empty() ? "" : ",") + "next";
+            std::snprintf(b, sizeof b, "next want %08X got %08X; ", refNext, emuNext);
+            detail += b;
         }
-    if (gpr) o.sig = std::string("r0-r15") + (o.sig.empty() ? "" : ",") + o.sig;
-    if (refNext != emuNext)
+        const std::vector<uint32_t> rw = refMem.WrittenWords();
+        bool memDiff = rw != ew;
+        if (!memDiff)
+            for (uint32_t a : rw)
+                if (refMem.Word(a) != emuMem.Word(a)) memDiff = true;
+        if (memDiff)
+        {
+            sig += std::string(sig.empty() ? "" : ",") + "mem";
+            detail += "memory written: want";
+            for (uint32_t a : rw) detail += " " + Hex8(a) + "=" + Bytes8(refMem.Word(a));
+            detail += "; got";
+            for (uint32_t a : ew) detail += " " + Hex8(a) + "=" + Bytes8(emuMem.Word(a));
+            detail += "; ";
+        }
+    };
+    compare(false, o.sig, o.detail);
+    if (!o.sig.empty())
     {
-        o.sig += std::string(o.sig.empty() ? "" : ",") + "next";
-        std::snprintf(b, sizeof b, "next want %08X got %08X; ", refNext, emuNext);
-        o.detail += b;
-    }
-    const std::vector<uint32_t> rw = refMem.WrittenWords(), ew = mach.Bank().InsertedWords();
-    bool memDiff = rw != ew;
-    if (!memDiff)
-        for (uint32_t a : rw)
-            if (refMem.Word(a) != emuMem.Word(a)) memDiff = true;
-    if (memDiff)
-    {
-        o.sig += std::string(o.sig.empty() ? "" : ",") + "mem";
-        o.detail += "memory written: want";
-        for (uint32_t a : rw) o.detail += " " + Hex8(a) + "=" + Bytes8(refMem.Word(a));
-        o.detail += "; got";
-        for (uint32_t a : ew) o.detail += " " + Hex8(a) + "=" + Bytes8(emuMem.Word(a));
-        o.detail += "; ";
+        // A delayed branch that differs: is it exactly the spec's known slot PC (A2-4)? Only then is it
+        // not a finding here; anything else in the same case, an SR bit say, still fails.
+        std::string sig, detail;
+        compare(true, sig, detail);
+        if (sig.empty())
+        {
+            o.known = true;
+            o.sig.clear();
+            o.detail.clear();
+        }
     }
     return o;
 }
@@ -1649,9 +1682,10 @@ void BuildShapes(Layout& L, std::vector<Shape>& out)
 //
 // The translator caches parse trees in a small ring (DisassemblyCache: 2 entries for a language whose
 // delay slots are one instruction, as SH-2's are). Translating an instruction again can hit its
-// cached tree while the lookup for its delay slot misses and takes the ring's next entry, which is
-// the instruction's own tree: the branch is then built from its slot's parse. The test: for every
-// delayed cell, translate [slot, branch, one unrelated instruction, branch] and compare the two
+// cached tree while the lookup for its delay slot misses and takes the ring's next entry; when the
+// ring evicted in order of allocation that was the instruction's own tree, and the branch was built
+// from its slot's parse (A2-5, fixed by patch 0020: a hit makes the entry the newest). The test: for
+// every delayed cell, translate [slot, branch, one unrelated instruction, branch] and compare the two
 // translations of the branch with each other and with a cold one.
 long TestTranslationHistory(EmuMachine& mach, const std::vector<Form>& forms, const char* filter, int show)
 {
@@ -1695,6 +1729,66 @@ long TestTranslationHistory(EmuMachine& mach, const std::vector<Form>& forms, co
     return bad;
 }
 
+// A2-4 is accepted because the host flags it: a function that reaches a PC-relative load or mova in the
+// delay slot of a branch other than bra and bsr is marked unsupported, and its literal is not folded.
+// Pinned for the shapes the differential run found: decompiled from the branch, the result says so.
+void TestKnownLimitIsFlagged(const std::shared_ptr<MemorySnapshot>& snap,
+                             const std::vector<std::pair<std::string, uint32_t>>& shapes)
+{
+    Sh2Decompiler d(gConfig);
+    int flagged = 0;
+    for (const auto& s : shapes)
+    {
+        DecompileRequest q;
+        q.entry = s.second;
+        const DecompileResult r = d.Decompile(snap, q);
+        std::printf("A2-4 shape %-44s decompiled from %08X: %s\n", s.first.c_str(), s.second,
+                    r.unsupported ? "marked unsupported" : "NOT MARKED");
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.unsupported);
+        flagged += r.unsupported ? 1 : 0;
+    }
+    std::printf("known limit A2-4: %d of %zu shapes marked unsupported by the decompiler\n", flagged, shapes.size());
+    CHECK(!shapes.empty());
+}
+
+// A2-5 as the decompiler reaches it. The signature check (ReturnCheck) walks the function's
+// instructions again, after the flow has been through them, in its own order, and so can ask for a
+// delayed branch whose cached tree is the oldest while its slot's is gone. The function: a delayed
+// branch at its entry, whose slot is also a jump target, and a loop back to the branch.
+//
+//   A  0x00  bra Z          entry; the slot is the instruction at 0x02
+//   S  0x02  add #1,r2      the slot, also reached by 'bt S'
+//   P  0x04  jmp @r1        a return (r1 is PR here on every path that reaches it)
+//      0x06  nop
+//   Z  0x08  bf A           loop back to the branch
+//      0x0A  sts pr,r1
+//      0x0C  bt S           (the slot as an instruction of its own: the flow ends on it)
+//      0x0E  bt P
+//      0x10  rts
+//      0x12  nop
+//
+// The flow follows 0x00, 0x08, 0x0A..0x10, 0x04, then 0x02 last. ReturnCheck then steps 0x00 (the slot's
+// tree is the newest), 0x08 (a plain instruction: the oldest, the slot's, goes), and 0x00 again: the
+// branch is a hit, its slot a miss, and the miss took the branch's own tree, so the branch was built
+// from its slot's parse and flowed to 0x04 with r1 not holding PR, which "does not resolve" and withheld
+// a signature the function is entitled to. Without patch 0020 this fixture withholds it.
+void TestRecycledTreeInDecompiler()
+{
+    const uint32_t base = 0x06009000u;
+    const uint16_t code[] = { 0xA002, 0x7201, 0x412B, 0x0009, 0x8BFA, 0x012A, 0x89F9, 0x89F9, 0x000B, 0x0009 };
+    std::vector<uint8_t> hw;
+    for (size_t i = 0; i < sizeof code / sizeof code[0]; ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, code[i]);
+    auto snap = dts::MakeSnapshot(hw);
+    Sh2Decompiler d(gConfig);
+    DecompileRequest q;
+    q.entry = base;
+    const DecompileResult r = d.Decompile(snap, q);
+    std::printf("A2-5 in the decompiler: status %d, signature withheld: [%s]\n", int(r.status), r.prototypeWithheld.c_str());
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(r.prototypeWithheld.empty());
+}
+
 void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int show)
 {
     const auto t0 = std::chrono::steady_clock::now();
@@ -1712,13 +1806,15 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
     low.bytes = layout.low;
     snap->regions.push_back(std::move(low));
     snap->key.regionSetHash = snap->ComputeRegionSetHash();
-    EmuMachine mach(snap);
+    std::unique_ptr<EmuMachine> machPtr(new EmuMachine(snap));
+    EmuMachine& mach = *machPtr;
     std::printf("%zu forms, %ld cases each, seed %llu; code placed in %u bytes of HWRAM and %u at address 0 (%.0f ms)\n",
                 forms.size(), casesPerForm, static_cast<unsigned long long>(seed), layout.hwNext - 0x4000,
                 layout.lowNext, dts::MsSince(t0));
 
     const long historyBad = TestTranslationHistory(mach, forms, filter, show);
     long shapeFails = 0;
+    std::vector<std::pair<std::string, uint32_t>> knownShapes;   // A2-4 shapes: the decompiler must flag them
     const char* pcode = std::getenv("SE_DECODE_PCODE");   // print the p-code of the shapes selected by SE_DECODE_FORM
     for (const Shape& s : shapes)
     {
@@ -1730,16 +1826,21 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
         }
         const Outcome o = RunCase(mach, s.cell, s.k);
         if (!o.ran) std::printf("SHAPE %s: could not run (%s)\n", s.name.c_str(), o.why.c_str());
+        else if (o.known)
+        {
+            std::printf("SHAPE %s: known limit (A2-4: the slot's PC)\n", s.name.c_str());
+            knownShapes.emplace_back(s.name, s.cell.addr);
+        }
         else if (o.sig.empty()) std::printf("SHAPE %s: agrees\n", s.name.c_str());
         else std::printf("SHAPE %s: DIFFERS %s\n         %s\n", s.name.c_str(), o.sig.c_str(), o.detail.c_str());
         if (!o.ran || !o.sig.empty()) ++shapeFails;
     }
 
-    long totalCases = 0, totalFails = 0, failingForms = 0, unrunnable = 0, pcodeDumps = 0;
+    long totalCases = 0, totalFails = 0, failingForms = 0, unrunnable = 0, pcodeDumps = 0, totalKnown = 0;
     for (const Form& f : forms)
     {
         if (filter && f.name.find(filter) == std::string::npos) continue;
-        long cases = 0, fails = 0, notRun = 0;
+        long cases = 0, fails = 0, notRun = 0, known = 0;
         std::map<std::string, long> signatures;   // which parts of the result differed -> how often
         std::vector<std::string> examples;
         Rng frng(seed ^ (uint64_t(f.op) << 40) ^ std::hash<std::string>()(f.name));
@@ -1756,6 +1857,7 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
                     examples.push_back("  " + o.why + " (word " + Hex8(cell.w[0]).substr(6) + " at " + Hex8(cell.addr) + ")");
                 continue;
             }
+            if (o.known) ++known;
             if (o.sig.empty()) continue;
             if (pcode && o.sig.find("next") != std::string::npos && ++pcodeDumps <= 3)
             {
@@ -1782,7 +1884,10 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
         }
         totalCases += cases;
         totalFails += fails;
+        totalKnown += known;
         unrunnable += notRun;
+        if (known) std::printf("form %-34s %ld of %ld cases differ only as A2-4 does (a PC-relative slot after a taken branch)\n",
+                               f.name.c_str(), known, cases);
         if (fails || notRun)
         {
             ++failingForms;
@@ -1793,13 +1898,20 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
             for (const std::string& e : examples) std::printf("%s\n", e.c_str());
         }
     }
-    std::printf("differential execution: %ld cases, %ld differ, %ld could not run, %ld of %zu forms fail; %zu named shapes, %ld differ (%.1f s)\n",
-                totalCases, totalFails, unrunnable, failingForms, forms.size(), shapes.size(), shapeFails,
+    std::printf("differential execution: %ld cases, %ld differ, %ld more differ only as the known limit A2-4, %ld could not run, "
+                "%ld of %zu forms fail; %zu named shapes, %ld differ (%.1f s)\n",
+                totalCases, totalFails, totalKnown, unrunnable, failingForms, forms.size(), shapes.size(), shapeFails,
                 dts::MsSince(t0) / 1000.0);
     CHECK(totalFails == 0);
     CHECK(unrunnable == 0);
     CHECK(shapeFails == 0);
     CHECK(historyBad == 0);
+
+    // The known limit stays safe only while the decompiler says so: each shape, decompiled from its
+    // branch, must come back unsupported (ScanRawPcode: a PC-relative slot after a delayed branch the
+    // spec cannot place). The machine goes first -- the decompiler resets the process-wide translator.
+    machPtr.reset();
+    if (!filter) TestKnownLimitIsFlagged(snap, knownShapes);
 }
 
 }  // namespace
@@ -1843,6 +1955,7 @@ int main(int argc, char** argv)
         const uint64_t seed = env ? std::strtoull(env, nullptr, 10) : 20260101ull;
         env = std::getenv("SE_DECODE_SHOW");
         const int show = env ? static_cast<int>(std::strtol(env, nullptr, 10)) : 2;
+        RUN(TestRecycledTreeInDecompiler());
         RUN(TestExecution(cases, seed, std::getenv("SE_DECODE_FORM"), show));
 
     }
