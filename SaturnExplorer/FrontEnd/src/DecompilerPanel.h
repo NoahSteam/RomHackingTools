@@ -228,6 +228,7 @@ private:
     struct Outstanding
     {
         bool active = false;
+        bool cancelled = false;      // Stop was pressed: the runner has been told, the answer is not wanted
         uint64_t generation = 0;
         uint64_t epoch = 0;
         decomp::SnapshotKey key;
@@ -285,6 +286,7 @@ private:
     bool mExplicit = false;
     bool mForceSubmit = false;       // Refresh: ask again even if the question is unchanged
     bool mRetryTooLarge = false;     // Refresh: including an entry that ran out of budget
+    bool mAskAgain = false;          // the entry box's Enter: asked even when this question was asked before
     bool mCancelRequested = false;   // Stop
 
     ViewId mViewId;                  // the view this frame

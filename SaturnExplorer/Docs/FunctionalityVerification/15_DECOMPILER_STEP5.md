@@ -2101,6 +2101,88 @@ ordinary decompilation takes a tenth of a second, a budget seed could see a spur
 production source was edited: the runner and panel are driven through their public interfaces and the
 runner's tests-only phase observer.
 
+## Area 1, round 1: the too-large memo
+
+Branch `review/1-invalidation-fix`, fix in `@FIX@`. Ledger rows A1-1 and A1-2 are `fixed`; A1-3 is `fixed` (the
+panel half of the rule, below). `SaturnExplorerDecompilerModelTests` passes its default run with `WILL_FAIL` removed
+from its ctest entry; its pinned sequences stay in the default run as regression pins.
+
+**Root cause (A1-1, A1-2).** The runner kept its record of requests that ran out of budget as a set of
+(entry, volatile list) that only `InvalidateSession` emptied. It was a verdict about one set of bytes, names and
+lent prototypes stored under a key that named none of them, and nothing erased it when a run completed. So an edit
+to the function, a callee or the recorded frame, a rename, a function start or different lent prototypes was answered
+"too large (not retried automatically; use Refresh)" without running the engine, with the *new* snapshot's key (it
+read as a verdict on the bytes on screen); and after a Refresh had shown that the function fits, the next ordinary
+ask was answered the same way.
+
+**The fix (`DecompilerRunner.cpp/.h`).** The memo is now an honest cache. `MakeRequestKey` digests (two independent
+64-bit lanes, 128 bits) everything a result depends on: the snapshot's key (source, derive serial, frame, region
+set and BIOS contents), the entry as asked (a mirror is another question), the names with their text, the function
+starts, the lent prototypes (callee address and the whole signature and call effects), the volatile list,
+`registerCallees`, `maxInstructions` and `allMemoryVolatile`. `Submit` computes it before the lock (the names can be a
+symbol file) and stores it in the `Job`; `mTooLarge` is a `std::set` of those keys. A run that ends on the budget
+inserts its key (in the current epoch); a run of the same key that completes with any other status -- `Ok`, `NoCode`,
+`Failed`, `Unavailable`, `Cancelled` -- erases it. `InvalidateSession` still clears it. `VolatileKey` is gone.
+Consequence, deliberate: the same bytes under a new key (a live game's next frame, a scrub to a frame that happens
+to hold the same code) are a new question and are attempted again, up to the budget. The runner cannot know the
+bytes are the same without knowing what the function reads, and the old memo's "same code under a new key" answer
+was exactly the case that answered an edit with a stale verdict. The panel only asks when its question changes, and
+a running emulator's held snapshot does not move until Refresh, so a slow function is still not retried every frame.
+A Refresh that is Stopped half way also erases the memo of that question (any status), so the next ask after it is
+attempted, not answered from the verdict the interrupted run was about to renew.
+
+**A1-3 (`DecompilerPanel.cpp/.h`), fixed rather than accepted.** The rule "the same question is not asked again until
+Refresh" exists to stop the panel asking the same question every frame (a failure is shown, not retried; after Stop
+nothing re-asks). It was never meant to refuse the user. Enter in the entry box now sets `mAskAgain`, taken once in
+the next `Update`: it re-asks a question that has been asked before (a cache hit when the answer is cached, the
+runner's memo for a too-large one, the engine otherwise). It is dropped while the very question is outstanding and
+wanted (a second Enter would only cancel and restart it); a request the user has Stopped (`Outstanding::cancelled`)
+does not count as outstanding, so Stop followed at once by Enter asks afresh. Nothing else changed: the panel still
+never re-asks by itself, and `DecompilerPanelTests` `TestEntriesAndNoRetryLoops` (60 idle frames, no submissions)
+passes unchanged. Not Enter: Follow PC, the context menu and the finder keep the rule, as before. User-visible:
+`DECOMPILER_GUIDE.md` (the entry-box row and the "too large" row).
+
+**The model.** `TooLargeMemo` is now the list of the signatures that were stalled (snapshot identity, entry, names,
+starts, volatile list); a "too large" answer is excused only for a signature `Same` as one of them, and a later
+non-too-large answer for the same signature removes it. The old byte comparison over the reachable functions (which
+excused the same code under another key) is gone. The Stop excuse still stands for a question Stopped and then left
+alone, but a `select` (the Enter in the box) clears it, and the callee-first walk, which used to click Refresh after
+a Stop, now fails (`WALK`) if typing a function's entry does not show it. `kPinned` holds five sequences, all in the
+default run: A1-1 `select A; starve; edit A 0 1`; A1-1 through a callee `select D; starve; edit C 2 1` (world D,C,A) and
+through a scrub `select A; starve; scrub 1` (world A, image 1); A1-2 `select A; starve; refresh; name A 1`; A1-3
+`hold; select A; stop; wait; select A` (world C,A). The first four fail with TOO LARGE
+on the runner before the fix, and A1-3 fails (NOT REFRESHED: the panel still shows C, stale) on the panel without
+`mAskAgain` (the mutations below); all five pass after. The three A1-1 and the A1-2 scripts were also reproduced
+first on the unfixed tree with the unchanged model.
+
+**Tests added outside the model, and what they are.** `DecompilerRunnerTests.cpp`, `TestBudget`: one block (about 40
+lines, after the volatile-list check) that submits the same over-budget function under another snapshot key, with a
+name, with a function start and with a lent prototype (each must run: `RunsStarted` +1), the same question again
+(answered at once, no run), and a Refresh stopped half way followed by a plain ask (runs again). `DecompilerPanelTests.cpp`:
+`TestEnterAsksAgain` (Enter asks once after a failure and does not loop; Enter after Stop shows the new function,
+not stale). CMake: `WILL_FAIL` removed from the model's ctest entry, comment rewritten.
+
+**Mutation.** Revert the runner change (the old `DecompilerRunner.cpp/.h`, panel kept): the pinned A1-1 (three) and
+A1-2 fail with TOO LARGE, default seed 6 fails, A1-3 passes; six checks of `TestBudget` fail (the four "another
+question" runs, the stale ask and the stopped Refresh). Take out only the erase on completion: `TestBudget` fails
+(`RunsStarted() == runs + 9`), the model does not -- the erase matters only when the question is asked again after the
+panel's cache has dropped its Ok answer (more than `kCacheSize` = 8 other answers in between), which no generated
+sequence does; the runner test is the check for it. Take `!askAgain` out of the panel's `q == mAsked` test: the
+pinned A1-3, seeds 6 and 15 of the default run (NOT REFRESHED) and both `TestEnterAsksAgain` blocks fail.
+
+**Runs** (RelWithDebInfo). `ctest -R "DecompilerModel|DecompilerRunner|DecompilerPanel"`: 3 of 3 pass (runner 48.8 s,
+panel 2.6 s, model 16.4 s: 18 seeds, 755 operations, 7 budget stalls, 438 results checked at install, 80 walks, five
+pinned sequences). `SE_MODEL_SEEDS=300` (165 s): 0 of 300 fail -- 11,907 operations, 29 budget stalls, 6,879 results
+checked at install, 1,330 walks, 8,153 submissions, 1,490 cache hits; the previous long run's 43 failures were all
+budget seeds (divisible by six; 60, 84, 174, 186 and 222 are named in the ledger), and all of those in this range
+pass now.
+
+**Not done.** The memo's key includes the snapshot key, so it cannot serve "the same code in a new frame"; if a
+live game's slow function turns out to re-run on every Refresh-less scrub step, the remedy is a hash of the bytes the
+function and its callees read, which only the engine knows (a result field), not a looser key. Cancelled-run erasure
+is the literal reading of "any status" and could be narrowed to completed runs if a stopped Refresh turns out to
+cost users a second wait.
+
 ## Areas 3 and 4, oracle: the generator's second grammar
 
 Branch `review/3-4-generator`: `FrontEnd/tests/Sh2GeneratedTests.cpp`, and the comment on the ctest entry in

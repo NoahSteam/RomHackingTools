@@ -13,7 +13,7 @@ Design and rationale: `Docs/Decompiler/DESIGN.md`. Build plan and what was built
 
 | From | How |
 |---|---|
-| The panel | Turn on **Follow PC**: it shows the function the chosen CPU is in. Or type an entry address (hex, any mirror, e.g. `06004000`) and press Enter. A mirror is decompiled as code running there: `26004000` runs the same bytes through the cache-through area, so a `mova` there yields a `0x26…` pointer. The function keeps its canonical name. |
+| The panel | Turn on **Follow PC**: it shows the function the chosen CPU is in. Or type an entry address (hex, any mirror, e.g. `06004000`) and press Enter. A mirror is decompiled as code running there: `26004000` runs the same bytes through the cache-through area, so a `mova` there yields a `0x26…` pointer. The function keeps its canonical name. Enter always asks: after **Stop**, or after a failure, typing the same entry again and pressing Enter decompiles it, where without Enter the panel does not ask the same question again by itself. |
 | SH-2 Assembly | Right-click a line → **Decompile Here**. |
 | Call Stack | Right-click a frame → **Decompile**. |
 | Registers | In the **SH-2** tab, right-click the **PC value** (not its label) → **Decompile**. |
@@ -65,7 +65,7 @@ The output is always for a specific snapshot. If what you are looking at changes
 | **0x…: one 4-byte write covers REG1 and REG2** (amber) | One access spans two registers that the manuals do not document as a pair. The output names only the first, with a `_` prefix. Documented pairs, such as the VDP2 scroll values, are explained on the line instead. | Check what the code meant to write. |
 | **0x…: watchdog write with key …: ignored** (amber) | A word write to the watchdog's ports at `0xFFFFFE80`/`0xFFFFFE82` with a key the hardware rejects. | Check the value. |
 | **N more warnings** | More than four of the amber lines above. | Hover for the rest. |
-| **too large to decompile within 10 s** | The time budget ran out. | **Refresh** retries once on demand. It is not retried automatically. |
+| **too large to decompile within 10 s** | The time budget ran out. | **Refresh** retries once on demand. The same question is not retried automatically (the panel answers it at once, without running the engine), but any change to what the output depends on asks again: an edit to the function or to one it calls, another frame, a rename, a function start, the volatile list. |
 | **Decompiler disabled for this session** | A cancelled run did not stop in time, or the engine failed badly. | Restart Saturn Explorer. The rest of the app is unaffected. |
 | **Decompiler unavailable: <path>** | The language files could not be written to the config directory. | Fix permissions on that directory and restart. |
 

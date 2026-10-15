@@ -25,7 +25,74 @@ std::atomic<bool> gEngineOwned(false);
 void (*gRecordHook)() = nullptr;
 std::atomic<bool> gFailThreadStart(false);
 
+// Two independent 64-bit FNV-style lanes over the same words.
+struct Digest
+{
+    uint64_t a = 1469598103934665603ull, b = 0x9E3779B97F4A7C15ull;
+    void Mix(uint64_t v)
+    {
+        a = (a ^ v) * 1099511628211ull;
+        b = (b + v + 0x9E3779B97F4A7C15ull) * 0xFF51AFD7ED558CCDull;
+        b ^= b >> 29;
+    }
+    void MixString(const std::string& s)
+    {
+        Mix(s.size());
+        for (unsigned char ch : s) Mix(ch);
+    }
+    void Mix(const TypeShape& t)
+    {
+        Mix((uint64_t(t.kind) << 24) | (uint64_t(t.size) << 16) | (uint64_t(t.pointee) << 8) | t.pointeeSize);
+    }
+};
+
 }  // namespace
+
+DecompilerRunner::RequestKey DecompilerRunner::MakeRequestKey(const SnapshotKey& snapshotKey,
+                                                              const DecompileRequest& request)
+{
+    Digest d;
+    d.Mix(snapshotKey.sourceId);
+    d.Mix(snapshotKey.deriveSerial);
+    d.Mix(snapshotKey.frameNumber);
+    d.Mix(snapshotKey.regionSetHash);
+    d.Mix(request.entry);   // as asked, not canonical: another mirror is another question
+    d.Mix(request.names.size());
+    for (const auto& n : request.names)
+    {
+        d.Mix(n.first);
+        d.MixString(n.second);
+    }
+    d.Mix(request.knownFunctions.size());
+    for (uint32_t f : request.knownFunctions) d.Mix(f);
+    d.Mix(request.prototypes.size());
+    for (const auto& p : request.prototypes)
+    {
+        d.Mix(p.first);
+        d.Mix(p.second.known);
+        d.Mix(p.second.ret);
+        d.Mix(p.second.params.size());
+        for (const TypeShape& t : p.second.params) d.Mix(t);
+        d.Mix(p.second.effects.preserved);
+        d.Mix(p.second.effects.storesThrough);
+        d.Mix(p.second.effects.outOrigins);
+        d.Mix(p.second.effects.leaks);
+        d.Mix(p.second.effects.frameValues);
+    }
+    d.Mix(request.registerCallees);
+    d.Mix(request.maxInstructions);
+    d.Mix(request.volatileMemory.size());
+    for (const auto& r : request.volatileMemory)
+    {
+        d.Mix(r.first);
+        d.Mix(r.second);
+    }
+    d.Mix(request.allMemoryVolatile);
+    RequestKey k;
+    k.lo = d.a;
+    k.hi = d.b;
+    return k;
+}
 
 const size_t DecompilerRunner::kWorkerStackBytes;
 
@@ -149,6 +216,8 @@ DecompilerRunner::~DecompilerRunner()
 uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot> snapshot, DecompileRequest request,
                                   bool retryTooLarge)
 {
+    // Hashed before the lock: the names can be a whole imported symbol file.
+    const RequestKey memoKey = MakeRequestKey(snapshot ? snapshot->key : SnapshotKey(), request);
     std::lock_guard<std::mutex> lock(mMutex);
     if (mDisabled) return 0;
     const uint64_t generation = mNextGeneration++;
@@ -160,10 +229,10 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
     if (mRunning && mRunningJob.slot == slot) RequestCancelLocked(CancelReason::Superseded);
 
     uint32_t entry = 0;
-    // By the address asked for, not the canonical one: run through another mirror, PC-derived
-    // values differ and so may the code reached.
-    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(std::make_pair(request.entry, VolatileKey(request))) &&
-        !retryTooLarge)
+    // The memo answers the question that ran out of budget and no other: the key holds the snapshot
+    // and every engine input, and the entry as asked (run through another mirror, PC-derived values
+    // differ and so may the code reached).
+    if (CanonicalAddress(request.entry, entry) && mTooLarge.count(memoKey) && !retryTooLarge)
     {
         DecompileResult r;
         r.status = DecompileStatus::TooLarge;
@@ -183,6 +252,7 @@ uint64_t DecompilerRunner::Submit(int slot, std::shared_ptr<const MemorySnapshot
     job.slot = slot;
     job.snapshot = std::move(snapshot);
     job.request = std::move(request);
+    job.memoKey = memoKey;
     mQueue.push_back(std::move(job));
     mWake.notify_all();
     return generation;
@@ -284,15 +354,6 @@ bool DecompilerRunner::Poll(DecompileResult& out)
         return true;
     }
     return false;
-}
-
-uint64_t DecompilerRunner::VolatileKey(const DecompileRequest& request)
-{
-    uint64_t h = 1469598103934665603ull;
-    for (const auto& r : request.volatileMemory)
-        for (uint32_t v : { r.first, r.second })
-            h = (h ^ v) * 1099511628211ull;
-    return h;
 }
 
 void DecompilerRunner::InvalidateSession()
@@ -419,7 +480,13 @@ void DecompilerRunner::WorkerMain()
                 std::snprintf(b, sizeof b, "too large to decompile within %g s", mOptions.budgetSeconds);
                 r.status = DecompileStatus::TooLarge;
                 r.error = b;
-                if (job.epoch == mEpoch) mTooLarge.insert(std::make_pair(r.requestedEntry, VolatileKey(job.request)));
+                if (job.epoch == mEpoch) mTooLarge.insert(job.memoKey);
+            }
+            else
+            {
+                // A run of this very request has completed (it fits, or failed, or was stopped): the
+                // memo of an earlier run out of budget is overtaken and must not answer the next ask.
+                mTooLarge.erase(job.memoKey);
             }
             mDone.push_back(std::make_pair(job.epoch, std::move(r)));
             RecoverLocked();

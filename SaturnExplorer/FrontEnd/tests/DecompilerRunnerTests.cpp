@@ -417,6 +417,50 @@ void TestBudget()
     CHECK(WaitResult(runner, again));
     CHECK(again.status == DecompileStatus::TooLarge);
     CHECK(runner.RunsStarted() == runs + 3);
+    // Review of area 1 (A1-1, A1-2): the memo is an answer to one question -- the snapshot's key and
+    // every input of the request -- not to the entry. Other bytes (another key), another name,
+    // another function start or another lent prototype are other questions, each attempted.
+    {
+        auto edited = std::make_shared<MemorySnapshot>(*gSnap);
+        ++edited->key.deriveSerial;
+        runner.Submit(0, edited, Big(dts::kDiamondsBase));
+        CHECK(WaitResult(runner, again));
+        CHECK(again.status == DecompileStatus::TooLarge);
+        CHECK(runner.RunsStarted() == runs + 4);
+        DecompileRequest named = Big(dts::kDiamondsBase);
+        named.names.emplace_back(dts::kDiamondsBase, "alpha");
+        runner.Submit(0, gSnap, named);
+        CHECK(WaitResult(runner, again));
+        CHECK(runner.RunsStarted() == runs + 5);
+        DecompileRequest started = Big(dts::kDiamondsBase);
+        started.knownFunctions.push_back(dts::kDiamondsBase + 4);
+        runner.Submit(0, gSnap, started);
+        CHECK(WaitResult(runner, again));
+        CHECK(runner.RunsStarted() == runs + 6);
+        DecompileRequest lent = Big(dts::kDiamondsBase);
+        lent.prototypes.emplace_back(dts::kFixture1AddOne, Prototype());
+        runner.Submit(0, gSnap, lent);
+        CHECK(WaitResult(runner, again));
+        CHECK(runner.RunsStarted() == runs + 7);
+        // ...and the very question is still answered from the memo.
+        runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
+        CHECK(WaitResult(runner, again, 5));
+        CHECK(again.status == DecompileStatus::TooLarge);
+        CHECK(runner.RunsStarted() == runs + 7);
+        // A run of that very question that completes, with any status, overtakes the memo: an explicit
+        // Refresh stopped half way is such a run, and the next plain ask is attempted, not answered
+        // "too large" from the old verdict.
+        runner.Submit(0, gSnap, Big(dts::kDiamondsBase), true);
+        const auto t1 = Clock::now();
+        while (runner.RunsStarted() < runs + 8 && MsSince(t1) < 30000.0) std::this_thread::yield();
+        runner.Cancel(0);
+        CHECK(WaitResult(runner, again));
+        std::printf("  stopped Refresh of a too-large entry: %s\n", again.status == DecompileStatus::Cancelled ? "cancelled" : "finished");
+        runner.Submit(0, gSnap, Big(dts::kDiamondsBase));
+        CHECK(WaitResult(runner, again));
+        CHECK(runner.RunsStarted() == runs + 9);
+        CHECK(again.status == DecompileStatus::TooLarge);   // and the budget stops it again, which is remembered
+    }
 
     // The immediate TooLarge answer still supersedes what the same requester had queued.
     PhaseGate gate;
