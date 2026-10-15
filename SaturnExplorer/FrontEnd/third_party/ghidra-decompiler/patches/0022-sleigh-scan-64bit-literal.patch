@@ -1,0 +1,22 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/slghscan.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/slghscan.cc
+index a8545a5..1915cf3 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/slghscan.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/slghscan.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: numeric literals are parsed as 64-bit on every platform (patches/0022-sleigh-scan-64bit-literal.patch).
+  */
+ 
+ #define  YY_INT_ALIGNED short int
+@@ -1582,7 +1584,7 @@ int4 scan_number(char *numtext,SLEIGHSTYPE *lval,int4 radix,bool signednum)
+ {
+   uintb val;
+   try {
+-    val = std::stoul(numtext,(size_t *)0,radix);
++    val = std::stoull(numtext,(size_t *)0,radix);	// SaturnExplorer: unsigned long is 32-bit on Windows; the spec has 64-bit constants
+   }
+   catch(...) {
+     return BADINTEGER;

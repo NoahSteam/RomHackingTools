@@ -239,9 +239,9 @@ void TestBoundaries()
 
     // Flow the finder cannot follow, and several returns between the symbol and the address: the
     // scan answers.
-    FinderHints far;
-    far.symbols.insert(farSw);
-    g = FindFunctionContaining(*s, farFn + 4, far);
+    FinderHints farHints;   // not 'far': <windows.h> defines it away (Windows run 1, A12-2)
+    farHints.symbols.insert(farSw);
+    g = FindFunctionContaining(*s, farFn + 4, farHints);
     std::printf("  unfollowable, far: %08X from %s\n", g.entry, EntrySourceName(g.source));
     CHECK(g.ok && g.entry == farFn && g.source == EntrySource::RtsScan);
 

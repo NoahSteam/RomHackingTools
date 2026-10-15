@@ -1288,7 +1288,12 @@ std::vector<uint16_t> PoolWords(int op, Rng& rng, size_t maxN)
     for (const Pat& p : kPats)
         if (p.op == op) ps.push_back(&p);
     size_t total = 0;
-    for (const Pat* p : ps) total += size_t(1) << __builtin_popcount(~p->mask & 0xFFFF);
+    auto popCount16 = [](unsigned v) {   // MSVC has no __builtin_popcount (Windows run 1, A12-1)
+        int n = 0;
+        for (v &= 0xFFFFu; v; v &= v - 1) ++n;
+        return n;
+    };
+    for (const Pat* p : ps) total += size_t(1) << popCount16(~p->mask & 0xFFFF);
     std::vector<uint16_t> out;
     if (total <= maxN)
     {
