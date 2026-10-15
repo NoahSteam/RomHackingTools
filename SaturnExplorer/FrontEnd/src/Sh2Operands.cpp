@@ -283,7 +283,7 @@ std::string Sh2Comment(const DisassembledInstruction& ins, const se_sh2_regs& re
         char loc[24]; std::snprintf(loc, sizeof(loc), "loc_%08X", ins.BranchTarget);
         if (ins.IsCall) return std::string("call ") + loc;
         if (ins.IsConditional)
-            return std::string((m == "bt" || m == "bt.s") ? "if T set -> " : "if T clear -> ") + loc;
+            return std::string((m == "bt" || m == "bt/s") ? "if T set -> " : "if T clear -> ") + loc;
         return std::string("-> ") + loc;
     }
     if (m == "jmp" || m == "braf")  return std::string("jump ") + o;

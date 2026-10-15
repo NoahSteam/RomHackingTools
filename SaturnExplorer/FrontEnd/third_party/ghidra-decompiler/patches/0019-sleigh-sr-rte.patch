@@ -1,0 +1,48 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.sinc b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+index 6125a6b..2d6a639 100644
+--- a/Ghidra/Processors/SuperH/data/languages/superh.sinc
++++ b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+@@ -1,6 +1,7 @@
+ # All assembly defintions taken from: http://www.shared-ptr.com/sh_insns.html
+ # Modified for SaturnExplorer: bra/bsr give their delay slot the PC it executes at (patches/0005-sleigh-delay-slot-pc.patch);
+ # SH-2 semantics corrected: PR before the slot, MAC.L/MAC.W, XOR.B, @-Rn and DIV1 operand order (patches/0006-sleigh-sh2-semantics.patch).
++# SR loads keep only the bits the SH-2 has and rte restores SR before its delay slot (patches/0019-sleigh-sr-rte.patch).
+ 
+ define endian=big;
+ 
+@@ -1674,12 +1675,13 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ :ldc    rm_08_11,sr  is sr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00001110 
+ {
+-    sr = rm_08_11 & 0x0FFF0FFF;
++    # T, S, I3-I0, Q and M are the bits an SH-2 has (Mednafen: z->SR &= 0x3F3).
++    sr = rm_08_11 & 0x000003F3;
+ }
+ 
+ :ldc.l  @rm_08_11+,sr  is sr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00000111 
+ {
+-    sr = *rm_08_11 & 0x0FFF0FFF;
++    sr = *rm_08_11 & 0x000003F3;
+     rm_08_11 = rm_08_11 + 4;
+     
+ }
+@@ -1768,13 +1770,17 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+     _pc:4 = *r15;
+     r15 = r15 + 4;
+     
+-    _sr:4 = *r15 & 0x000063F3;
++    # Only T, S, I3-I0, Q and M come back; bits 13 and 14 are SH-2A's (Mednafen: SR = stacked & 0x3F3).
++    _sr:4 = *r15 & 0x000003F3;
+     r15  = r15 + 4;
+     
++    # SR is restored before the delay slot runs, the branch target is taken after it: a slot
++    # that reads T sees the restored one, and a slot that writes T is not undone by the restore.
++    sr = _sr;
++
+     delayslot(1);
+     
+     pc = _pc;
+-    sr = _sr;
+     
+     return [pc];
+ }

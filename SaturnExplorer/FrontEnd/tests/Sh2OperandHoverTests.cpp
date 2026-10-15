@@ -399,7 +399,7 @@ void TestPcRelativeOperandAfterADelayedBranchIsNotAssertedAsOneAddress()
 void TestPcRelativeOperandAfterAnIndirectBranchHasNoSlotAddress()
 {
     const DisassembledInstruction rts = Sh2Decode(0x06000100, 0x000B);
-    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt.s: destination static
+    const DisassembledInstruction bts = Sh2Decode(0x06000100, 0x8D10);   // bt/s: destination static
     const DisassembledInstruction bt  = Sh2Decode(0x06000100, 0x8900);   // no delay slot
     CHECK(rts.HasDelaySlot && bts.HasDelaySlot && !bt.HasDelaySlot);
     const se_sh2_regs r = TestRegs();
