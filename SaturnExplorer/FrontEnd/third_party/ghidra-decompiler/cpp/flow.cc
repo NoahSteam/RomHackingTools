@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  */
 #include "flow.hh"
 
@@ -615,7 +616,27 @@ PcodeOp *FlowInfo::artificialHalt(const Address &addr,uint4 flag)
   data.opSetInput(haltop,data.newConstant(4,1),0);
   if (flag != 0)
     data.opMarkHalt(haltop,flag); // What kind of halt
+  if ((flag & (PcodeOp::badinstruction | PcodeOp::unimplemented)) != 0)
+    haltedinsn.insert(addr);	// SaturnExplorer: no instruction ran here
   return haltop;
+}
+
+/// SaturnExplorer: every instruction the flow translated, in address order, whether or not it made
+/// p-code (a nop makes none) and whether or not a later action removes what it made. A delayed
+/// branch is one entry; its slot is translated with it. The flow of a restarted function is a new
+/// flow, so the last one's list is the function's.
+/// \param res receives the instructions
+void FlowInfo::recordInstructions(vector<FlowInsn> &res) const
+
+{
+  res.clear();
+  map<Address,VisitStat>::const_iterator iter;
+  for(iter=visited.begin();iter!=visited.end();++iter) {
+    FlowInsn rec;
+    rec.addr = (*iter).first;
+    rec.halted = haltedinsn.find(rec.addr) != haltedinsn.end();
+    res.push_back(rec);
+  }
 }
 
 /// A set of bytes is \b reinterpreted if there are at least two

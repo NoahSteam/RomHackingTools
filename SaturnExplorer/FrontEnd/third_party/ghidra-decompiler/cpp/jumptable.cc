@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: a recovered switch's table lookup is flagged (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: a failed assisted jump model is freed (patches/0016-jumpassisted-leak.patch).
  * Modified for SaturnExplorer: a recovered switch's table lookup is not held with the other loads (patches/0018-hold-every-load.patch).
+ * Modified for SaturnExplorer: a guard is not folded over a table lookup whose value is used (patches/0024-switch-lookup-used.patch).
  */
 #include "jumptable.hh"
 #include "emulate.hh"
@@ -1467,6 +1468,31 @@ bool JumpBasic::foldInOneGuard(Funcdata *fd,GuardRecord &guard,JumpTable *jump)
       PcodeOp *bop = *iter;
       if (bop->code() == CPUI_LOAD && !bop->isJumptableLookup() && tableOps.find(bop) == tableOps.end())
 	return false;
+      if (bop->code() == CPUI_LOAD && bop->isJumptableLookup()) {
+	// The switch stands for the table lookup only while nothing else reads its value. A value that
+	// later code uses (the register the entry was loaded into) keeps the read, and folded it would
+	// be made on the guard's default path too, for an index the table does not have.
+	// noInterveningStatement does not see it: it passes a COPY or SUBPIECE whatever uses its output.
+	vector<Varnode *> uses;
+	uses.push_back(bop->getOut());
+	for(int4 w=0;w<uses.size();++w) {
+	  list<PcodeOp *>::const_iterator diter;
+	  for(diter=uses[w]->beginDescend();diter!=uses[w]->endDescend();++diter) {
+	    PcodeOp *dop = *diter;
+	    if (dop == jump->getIndirectOp()) continue;
+	    int4 j;
+	    for(j=0;j<pathMeld.numOps();++j)
+	      if (pathMeld.getOp(j) == dop) break;
+	    if (j == pathMeld.numOps()) return false;	// Used outside the table's own calculation
+	    Varnode *outvn = dop->getOut();
+	    if (outvn == (Varnode *)0) continue;
+	    int4 k;
+	    for(k=0;k<uses.size();++k)
+	      if (uses[k] == outvn) break;
+	    if (k == uses.size()) uses.push_back(outvn);
+	  }
+	}
+      }
     }
   }
   if (pos == switchbl->sizeOut()) {

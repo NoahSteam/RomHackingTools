@@ -326,6 +326,9 @@ struct DecompileResult
 
     // The instructions flow reached, as [lo, hi) canonical ranges, sorted and merged. A function is
     // not one range from its entry: a shared epilogue can sit below the entry, a tail far above it.
+    // It is what the last flow translated (patch 0021), whether or not the actions kept the p-code of
+    // an instruction: an entry of another function whose first instruction was dead is in it, and
+    // every known entry in it has a FlowWarning::IntoFunction, those reached by a second jump too.
     std::vector<std::pair<uint32_t, uint32_t>> body;
     bool InBody(uint32_t canonical) const;
     uint32_t bodyBytes = 0;        // the span from the lowest instruction to the end of the highest

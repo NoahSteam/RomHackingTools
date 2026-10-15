@@ -943,6 +943,29 @@ void TestHardwareVolatility()
                                                                   0xC703, 0x4108,
                                                                   0x011E,     // mov.l @(r0,r1),r1
                                                                   0x412B, 0x0009 });
+    // A switch whose table read is used after it (review of the generator's second grammar, A4-3). The
+    // bound check folds into the switch as its default and the table read would stand for the lookup,
+    // but the join after the switch uses the register the entry was loaded into (2 from the default
+    // path, the entry from the cases), so the read is the code's own and it is made only for an
+    // index in range. Folded, it printed ahead of the switch and made for every index. Three cases
+    // that do nothing, each a 'bra join'; the join stores the low byte of r1.
+    const Fixture switchUsed = { 0x0600B400u, { 0x6341,     // mov.w @r4,r3   unused
+                                                0xE102,     // mov #2,r1
+                                                0x3716,     // cmp/hi r1,r7
+                                                0x8911,     // bt join
+                                                0x4708,     // shll2 r7
+                                                0xC702,     // mova table,r0
+                                                0x017E,     // mov.l @(r0,r7),r1   the table read, in range only
+                                                0x412B,     // jmp @r1
+                                                0x0009, 0x0009,
+                                                0x0600, 0xB420, 0x0600, 0xB424, 0x0600, 0xB428,   // the table
+                                                0xA004, 0x0009, 0xA002, 0x0009, 0xA000, 0x0009,   // the cases: bra join
+                                                0x621C,     // join: extu.b r1,r2
+                                                0xE00E,     // mov #14,r0
+                                                0x0525,     // mov.w r2,@(r0,r5)
+                                                0x000B,     // rts
+                                                0xE056 },   //   mov #0x56,r0
+                                  0x38, 0 };
     // A mailbox in work RAM, not marked: the write is forwarded to the poll, the loop never ends as
     // analysed, and the engine removes the hardware write after it as unreachable. Found by the
     // reference run on game code (review of 0e3cd12): the output must say what is missing and why.
@@ -1370,7 +1393,7 @@ void TestHardwareVolatility()
                               &strPtr, &ppafWrite, &istWrite, &wtcntRead, &tvstatRead, &ptmrWrite, &indexRmw, &twoPaths, &wordToBytes, &readThenCommand, &fifoTwice,
                               &andRead, &orRead, &andByte, &twoBools, &branchRead, &forStep, &forStepLast, &forInit, &sideRead, &slotRead,
                               &tasReg, &gbrRead, &rtsSlot, &byteOfLong, &longToByte, &twoStores, &compound, &callArgs,
-                              &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead,
+                              &lowRamMirrorMailbox, &switchRead, &switchSlotRead, &switchFold, &switchSecondRead, &switchUsed,
                               &backSplice, &forCondBody, &mailboxFold, &storeOverwritten, &ptrFromRam, &switchSameDest, &ptrSavedInRam,
                               &litSwitchAfterPoll, &forwardFold, &twoCuts, &jmpPointer,
                               &deadXor, &deadCmp, &deadMarked, &deadPtr, &pollThenRead, &twoTests, &twoTestsWrite, &deadAnd,
@@ -1960,6 +1983,24 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Rd(0, 4) }));
     CHECK(FateAt(r, AccessFate::SwitchLookup, 0x0600A38Cu, false) == 1);   // the table's read, which the switch stands for
     CHECK(Has(r.Text(), "default:") && !Has(r.Text(), "if ("));
+    // The table read's value is used after the switch: the read is the code's, kept, and made under
+    // the guard (an if), not folded into the switch ahead of every index.
+    r = run("switch: the table read's value used after the switch", switchUsed);
+    CHECK(Ledger(r, { Rd(0, 2), Rd(0, 4), Wr(0, 2) }));
+    CHECK(FateAt(r, AccessFate::SwitchLookup, 0x0600B40Cu, false) == 0);
+    CHECK(Has(r.Text(), "if (") && !Has(r.Text(), "default:"));
+    {
+        const MemoryAccess* guarded = nullptr;
+        const MemoryAccess* before = nullptr;
+        for (const MemoryAccess& m : r.accesses)
+        {
+            if (m.insn == 0x0600B40Cu) guarded = &m;
+            if (m.insn == 0x0600B400u) before = &m;
+        }
+        CHECK(guarded && guarded->printed == 1 && !guarded->conditionalInPrint);
+        // The unused read ahead of the guard is not in the lookup's block: the guard was not folded over it.
+        CHECK(guarded && before && guarded->block != before->block);
+    }
     // A guard on one read does not bound a switch on a second read of the same pointer: both reads
     // stay, the guard is an if, and the table (unbounded now) is not recovered, so nothing is lent.
     r = run("switch: the selector is a second read of the guarded pointer", switchSecondRead);
@@ -3295,6 +3336,113 @@ void TestFlowUncertainty()
     CHECK(r.badDataAt.empty());
 }
 
+// Flow that leaves a function through a jump into another known function, and from there through a
+// second jump into a third (review of the generator's second grammar, A4-2). The first jump is
+// resolved when the flow is first followed, the second only after a restart in the actions has
+// folded the literal it jumps through, and that restart follows the flow again. Two things followed
+// from reading the first flow alone: the entry the second jump reaches was not in the body when the
+// actions removed its first instruction as dead (an 'add #-0x40,r15' whose frame is never used),
+// so no "flow runs into" warning was made for it; and any instruction the later flow reached that
+// the actions then removed was in no part of the body, though the code ran it. The body is what
+// the last flow translated, whether or not the p-code survived (patch 0021), and every known entry
+// in it is warned about.
+void TestFlowReachedBody()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    using Ranges = std::vector<std::pair<uint32_t, uint32_t>>;
+    auto into = [](const DecompileResult& r, uint32_t at) {
+        int n = 0;
+        for (const FlowWarning& w : r.flowWarnings)
+            n += w.kind == FlowWarning::IntoFunction && w.address == at && Has(w.text, "another function's entry");
+        return n;
+    };
+    auto intoCount = [](const DecompileResult& r) {
+        int n = 0;
+        for (const FlowWarning& w : r.flowWarnings) n += w.kind == FlowWarning::IntoFunction;
+        return n;
+    };
+    // F0 (+0x00): saves r12 and PR in a register, stores r2 through r4, restores, and 'jmp @r3' to F1
+    // (+0x14): 'sts.l pr,@-r15 ; mov.l @(pool),r2 ; lds.l @r15+,pr ; jmp @r2' to F2 (+0x24), the
+    // third, which is given. Each jump goes through a literal pool word.
+    auto chain = [&](uint32_t base, std::initializer_list<uint16_t> f2) {
+        Place(hw, base, { 0x2FC6,     // mov.l r12,@-r15
+                          0x0C2A,     // sts pr,r12
+                          0x2426,     // mov.l r2,@-r4
+                          0xD302,     // mov.l @(pool),r3   -> F1
+                          0x4C2A,     // lds r12,pr
+                          0x6CF6,     // mov.l @r15+,r12
+                          0x432B,     // jmp @r3
+                          0x0009,     //   nop
+                          uint16_t((base + 0x14) >> 16), uint16_t(base + 0x14),
+                          0x4F22,     // F1: sts.l pr,@-r15
+                          0xD202,     // mov.l @(pool),r2   -> F2
+                          0x4F26,     // lds.l @r15+,pr
+                          0x422B,     // jmp @r2
+                          0x0009,     //   nop
+                          0x0009,
+                          uint16_t((base + 0x24) >> 16), uint16_t(base + 0x24) });
+        Place(hw, base + 0x24, f2);
+    };
+    // F2 takes a frame it never uses: the first and the next-to-last instruction are dead.
+    const uint32_t a = 0x06009000u;
+    chain(a, { 0x7FC0,      // add #-0x40,r15
+               0x6252,      // mov.l @r5,r2
+               0x6070,      // mov.b @r7,r0
+               0x7F40,      // add #0x40,r15
+               0x000B, 0x0009 });
+    // F2 opens with a test and a branch whose arms meet: both removed as dead.
+    const uint32_t b = 0x06009100u;
+    chain(b, { 0x2448,      // tst r4,r4
+               0x8BFF,      // bf next
+               0x6252,      // mov.l @r5,r2
+               0x6070,      // mov.b @r7,r0
+               0x000B, 0x0009 });
+    auto snap = MakeSnapshot(hw);
+    // As the panel asks: the later functions decompiled first, what they learned lent to the caller.
+    auto request = [&](uint32_t base, bool second) {
+        DecompileRequest q = Request(base);
+        q.knownFunctions.push_back(base + 0x14);
+        if (second) q.knownFunctions.push_back(base + 0x24);
+        for (uint32_t callee : { base + 0x24, base + 0x14 })
+        {
+            if (callee == base + 0x24 && !second) continue;   // a function nobody named is lent nothing
+            const DecompileResult c = d.Decompile(snap, Request(callee));
+            if (c.prototype.known) q.prototypes.emplace_back(callee, c.prototype);
+        }
+        return q;
+    };
+
+    DecompileResult r = d.Decompile(snap, request(a, true));
+    Print("two hops", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, a + 0x14) == 1 && into(r, a + 0x24) == 1 && intoCount(r) == 2);
+    // Everything the flow reached, the entry's 'add #-0x40,r15' and the 'add #0x40,r15' included.
+    CHECK(r.body == (Ranges{ { a, a + 0x10 }, { a + 0x14, a + 0x1E }, { a + 0x24, a + 0x30 } }));
+    CHECK(r.InBody(a + 0x24) && r.InBody(a + 0x2A));
+    // The jumps are gotos once the actions have folded their literals; the signature is lent, as the
+    // destinations the flow recovered are known to the return check (patch 0021), not only the ones left at the end.
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+    // Only the first function known: the second jump goes to an address nobody named, which the engine
+    // cannot follow (it is a tail call to it, not flow into it). One warning, and nothing of F2 in the body.
+    r = d.Decompile(snap, request(a, false));
+    Print("two hops, the second function not named", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, a + 0x14) == 1 && intoCount(r) == 1);
+    CHECK(!r.InBody(a + 0x24) && r.InBody(a + 0x14));
+    // The entry of F2 is no "other" function for itself.
+    r = d.Decompile(snap, request(a + 0x24, true));
+    CHECK(r.status == DecompileStatus::Ok && intoCount(r) == 0 && r.warnings.empty());
+
+    r = d.Decompile(snap, request(b, true));
+    Print("two hops, a dead test and branch", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(into(r, b + 0x14) == 1 && into(r, b + 0x24) == 1 && intoCount(r) == 2);
+    CHECK(r.body == (Ranges{ { b, b + 0x10 }, { b + 0x14, b + 0x1E }, { b + 0x24, b + 0x30 } }));
+    CHECK(r.InBody(b + 0x24) && r.InBody(b + 0x26));   // the tst and the bf
+    CHECK(r.prototype.known && r.prototypeWithheld.empty());
+}
+
 // The engine paths the control-flow review could only check by reading the source. Two are reached
 // end to end: the restart limit alone (no jump table involved) and a call the engine treats as never
 // returning (through the test hook: nothing in SE marks one). The third, a failed second-stage
@@ -4174,6 +4322,7 @@ int main(int argc, char** argv)
         RUN(TestCancelledBeforeStart());
         RUN(TestManyUncapturedBranches());
         RUN(TestFlowUncertainty());
+        RUN(TestFlowReachedBody());
         RUN(TestEngineEdgePaths());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());

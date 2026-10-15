@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+ * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  */
 #ifndef __FUNCDATA_HH__
 #define __FUNCDATA_HH__
@@ -60,6 +61,18 @@ struct AccessRecord {
   bool store;			///< \b true for a write, \b false for a read
   int4 size;			///< Number of bytes accessed
   AccessFate fate;		///< How it ended
+};
+
+/// \brief One instruction the flow translated (SaturnExplorer)
+struct FlowInsn {
+  Address addr;			///< The address of the instruction
+  bool halted;			///< \b true if flow stopped here: bad data or an unimplemented instruction, no real instruction
+};
+
+/// \brief An indirect jump the flow recovered the destinations of (SaturnExplorer)
+struct FlowTable {
+  Address op;			///< The address of the indirect jump
+  vector<Address> dests;	///< Where it goes
 };
 
 /// \brief Container for data structures associated with a single function
@@ -113,6 +126,8 @@ class Funcdata {
   vector<FuncCallSpecs *> qlst;	///< List of calls this function makes
   vector<JumpTable *> jumpvec;	///< List of jump-tables for this function
   vector<AccessRecord> accessFates;	///< How each LOAD and STORE that ended did (SaturnExplorer); cleared with the function
+  vector<FlowTable> flowTables;	///< Every indirect jump the last flow recovered, before any action resolves one to a goto (SaturnExplorer); cleared with the function
+  vector<FlowInsn> flowInsns;	///< Every instruction the last flow translated, before any action removed code (SaturnExplorer); cleared with the function
   uintm flowOps = 0;		///< The ops with a lower time were made by the flow; the rest by rules and actions (SaturnExplorer)
   bool accessesRecorded = false;	///< Set while a block is removed: its accesses were recorded before any op was destroyed
 
@@ -200,6 +215,8 @@ public:
   bool isMemoryAccess(const PcodeOp *op,bool &store,int4 &size,Address &addr) const;	///< Is the op a memory access, and of what (SaturnExplorer)
   void recordAccessFate(const PcodeOp *op,bool store,int4 size,const Address &addr,AccessFate fate);	///< Record how a memory access ended (SaturnExplorer)
   void recordAccessFold(const PcodeOp *op,const Varnode *vn);	///< Record a LOAD or STORE made a direct access of ordinary memory (SaturnExplorer)
+  const vector<FlowTable> &getFlowTables(void) const { return flowTables; }	///< Every indirect jump the last flow recovered (SaturnExplorer)
+  const vector<FlowInsn> &getFlowInsns(void) const { return flowInsns; }	///< Every instruction the last flow translated (SaturnExplorer)
   const vector<AccessRecord> &getAccessFates(void) const { return accessFates; }	///< Every LOAD and STORE that ended, and how (SaturnExplorer)
   void warning(const string &txt,const Address &ad) const;	///< Add a warning comment in the function body
   void warningHeader(const string &txt) const;			///< Add a warning comment as part of the function header

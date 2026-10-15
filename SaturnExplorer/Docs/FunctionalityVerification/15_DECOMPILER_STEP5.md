@@ -2540,3 +2540,112 @@ found by the matrix itself, which is the stronger evidence for the `alloc` famil
 - Windows and macOS: the test forks; on other platforms it builds as a stub that reports SKIPPED.
 - Leaks (A6-7 to A6-9) were sampled, not enumerated: the sweep with leak detection ran the dense prefix of 3,000 and the
   geometric tail, not every `k`.
+
+## Area 4, round 1: the second hop and the table read
+
+Fixer, branch `review/4-flow-fix`, fix commit `d140d0e`, on `6736a36`. Ledger rows A4-2 and A4-3 are `fixed d140d0e`; the A5-5
+hole in the generator (the round 2 fixer's note "For the generator owner") is closed and mac is in the grammar. Two engine
+patches, 0021 and 0024 (the vendored tree is patches 0001 to 0024; `vendor.py` on the pinned Ghidra reproduces it exactly,
+checked in a copy); the host changes are in `Sh2Decompiler.cpp` (the body, the tail-jump search, the jump tables handed to
+`ReturnCheck`).
+
+### 1. A4-2: the second hop
+
+*Root cause.* Everything the host knew of "what flow reached" came from the p-code of the first flow (`ScanRawPcode`, taken
+right after `followFlow`) and from the p-code that survived the actions. A restart in the actions (here a literal the
+second `jmp @r2` goes through folds only once the actions have run) clears the function and follows the flow again, and
+that flow reaches further: F0 reaches F1 in the first flow, F2 only in the second. What the actions then removed as dead
+(F2's `add #-0x40,r15` at its entry and `add #0x40,r15`; a `tst`/`bf` whose arms meet) was in neither list. So the entry of
+F2 was not in the body (`InBody(entry)` false: no "flow runs into" warning for it), and `body` left out code the program ran.
+The warning loop itself was right for every entry its test saw; the input was wrong.
+
+*Fix.* Patch 0021: `Funcdata::flowInsns` (`FlowInsn { addr, halted }`, `getFlowInsns()`) is filled from `FlowInfo::visited` when
+`followFlow` returns and cleared with the function, so after a restart it holds the last flow's instructions, p-code or none,
+kept or removed. `FlowInfo::artificialHalt` notes where flow stopped for bad or unimplemented data. The host takes `body` from
+it (halted ones left out, as before), and searches it, not the first flow's list, for `jmp`/`braf` taken for tail calls. The
+same patch records the indirect jumps' destinations as the last flow recovered them (`Funcdata::flowTables`,
+`getFlowTables()`), which `ReturnCheck` now has beside the first flow's and the final ones. `IntoFunction` fires for every known entry the body holds
+with no change to its loop. `DECOMPILER_GUIDE.md`'s row for the warning now says "one line for each such entry" and
+that an entry counts even when its first instruction is dead; the header comment of `DecompileResult::body` says the same.
+
+*Suite.* `TestFlowReachedBody` (new): the ledger's 24 words (F0 jumps into F1, F1 into F2; the request lends F2's and F1's
+signatures as the panel does): both entries warned, nothing else, body `[F0, F0+0x10) [F1, F1+0x0A) [F2, F2+0x0C)`, F2's two
+dead `add`s in it; the same with F2 opening on a dead `tst`/`bf`; F2 itself warns of nothing; with F2 not named the second jump
+is a tail call to an address nobody named (no flow into it: one warning, F2 not in the body).
+
+### 2. A4-3: the table read
+
+*Root cause.* The reviewer suspected a hold or a use that kept the read as a variable; it is neither. Patch 0013 refuses to fold a
+switch's bound check into the switch when the switch block holds a LOAD other than the table lookup, and exempts the lookup
+because the switch stands for it. That is true only while nothing else reads the lookup's value. In the fixture the join after
+the switch stores `extu.b r1,r2`, r1 being 2 on the default path and the table entry on the others, so the lookup is the code's
+own read of a value it uses. Upstream's `noInterveningStatement` (the check that the block makes no value used outside it) is
+meant to refuse that: it did, until the actions narrowed the use to a SUBPIECE of the lookup in the switch block, which the
+function skips over together with COPY whatever uses the output. The guard was folded, the read stayed in the switch's block,
+and the block ran for the default path too.
+
+*Fix.* Patch 0024: `JumpBasic::foldInOneGuard` also refuses when the lookup's value (followed through the model's own path
+ops, `pathMeld`) has a use outside the table's calculation. The guard stays an `if` and the read stays under it; a lookup
+nothing else reads folds as before (`switchFold`: still folded, one `SwitchLookup` record).
+
+*Suite.* `switchUsed` (the ledger's 28 words, moved to 0x0600B400 because the original base is `poll`'s): `Ledger` with the reads
+`{ Rd(0,2), Rd(0,4), Wr(0,2) }`, whose `FoldedIntoSwitch` invariant is the oracle; `if (` and no `default:` in the text; the lookup's
+access is not in the block of the read ahead of the guard; no `SwitchLookup` record for it; `ReferenceOk`.
+
+### 3. The generator
+
+- **The A5-5 hole.** The "dropped" check treated a ledger entry with the same instruction, direction and size as covering
+  every trace access. It now spends one entry per access: the accesses are grouped by the execution of the instruction that made
+  them (`TraceRec::step`, the position in the run, not part of the identity: two accesses of one step are one instruction's operands,
+  the same access of two steps is a loop), and each group is matched one to one with the entries, by address where the entry has a
+  constant one (exact pairs first), then the accesses the decompiler must list (a parameter's memory, hardware, marked memory)
+  before the ones it may fold into a variable. `SE_GENERATED_MUTATE=second` loses the second of two entries of one instruction
+  and passes only if reported.
+- **mac.l / mac.w** `@Rm+,@Rn+`, in one program of eight of version 1, from a stream of its own so every other program of a
+  seed is the same as before. The operands are among r4 to r7 (a literal pointer only if aligned for the width), the same register
+  in one case in seven.
+
+### 4. Matrix
+
+**Mutation** (the fix reverted, the checks fail; restored, they pass). The host and the one engine guard were switched off by a
+temporary environment variable in a scratch build, not by editing the patches:
+
+| Reverted | Fails |
+|---|---|
+| the body and the tail-jump search from the first flow's p-code plus what survived the actions (patch 0021's list unused) | `TestFlowReachedBody`: 6 checks (both warnings, the body, the entry and the dead `add`, for both fixtures); generator seeds 2226 and 3049 (`outside-body`, `lent-incomplete:executed-outside-body`) |
+| one `IntoFunction` warning only | `TestFlowReachedBody`: 2 checks; seeds 2226 and 3049 (`into-function`) |
+| the return check without the last flow's tables | `TestFlowReachedBody`: the 2 signature checks (the generator is silent: a withheld signature is the safe side) |
+| the lookup's use check in `foldInOneGuard` (patch 0024) | `switchUsed`: 3 checks (`Ledger`'s `FoldedIntoSwitch`, the `if (`, the blocks); seeds 1009, 1968, 2522, 2677, 2876 (`folded-into-switch`) |
+| the generator's "dropped" check as it was (any entry of the instruction, direction and size covers a trace access) | `SE_GENERATED_MUTATE=second` reports 0 of 1,000 version 1 seeds and the run fails; with the one-to-one check it reports 83 of 1,000 |
+
+**Matrix** (RelWithDebInfo, gcc; the machine ran other work, load average 5 to 8):
+
+| | |
+|---|---|
+| `ctest` | 94 of 94 passed (69 s with -j2) |
+| Generated test, default (300 seeds) | passes |
+| `SE_GENERATED_SEEDS=5000` (both grammars, 2,500 each) | 0 failing seeds, 0 findings (78 s). mac in 287 of the 2,500 version 1 programs (137 `mac.l`, 150 `mac.w`) |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` | 0 failing seeds, 0 findings (87 s); the ledger's 15 failing seeds and 74 findings (13 seeds A4-3, 2 seeds A4-2) are gone. 9,854 functions, 11,045 prototypes lent (4,375 void, 6,670 returning; 804 withheld, 825 before), 1,838 "flow runs into" warnings none missing for an entry in the body (1,820 before); 779 parameter candidates, all insensitive; 43,160 emulator runs |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups: **the same as the previous master; 0 of 839 outputs changed** (`SE_GAME_OUT`, compared file by file). The body and the lend/withhold of every function were also compared with the old logic (a scratch build): no difference but the two new fixtures. 5,650 ms against 5,634 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups: **the same; 0 of 1,554 outputs changed**, bodies and lends unchanged. 19,571 ms against 18,591 |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` (`detect_leaks=1`) | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report; the suite passes (18 s), and with `SE_GAME_HWRAM=hwram007.bin` (839 functions, 138 s) |
+
+**Wrong in the first drafts, so a later reader does not repeat them.** The first draft of the one-to-one "dropped" check matched the
+trace accesses of a `mac` in trace order, so an access of ordinary RAM, which the decompiler may fold, took the one entry that belonged
+to the parameter's memory read beside it: 27 failing seeds in 5,000, all false. The accesses the decompiler must list now take the entries
+first. The ledger's guess for A4-3 (a use or a hold keeping the read as a variable) was half right: the load is flagged and not held;
+it is a use, of a kind the fold check did not see. A debug print of the switch block's ops
+and the uses of each was what showed the SUBPIECE. A build killed half way leaves objects another compiler process finished after the
+header changed (the ASan build overflowed a `Funcdata` allocated by a `database.cc` compiled before `funcdata.hh` grew): the headers
+were touched and everything was rebuilt before the matrix was run.
+
+**Not done.**
+- The pre-action scan (`ScanRawPcode`: the A3 delay-slot check, the literal pools to mark read-only) still reads the first flow of a pass
+  only. A function jumped into after a restart's flow has its literal words read as memory, not folded, and its delay-slot PC-relative
+  loads are not looked at. Not reproduced: a third function that read a hardware register through its own literal was not absorbed
+  (the engine took the jump to it for a call), so I could not build the case; the worst it would be is a literal word read as
+  memory, which is held and listed, not lost.
+- The generator's `SaidMissing` is still true for any removal caution on the instruction, not one caution per lost access as the host's
+  `SaidCount` is; mac is in version 1 only (version 2's registers-hold-a-value discipline would need it taught).
+- `noInterveningStatement` still passes a COPY or SUBPIECE whatever uses its output. Patch 0024 closes it for the one op that matters
+  to us (the lookup, the only load a guard may be folded over); an ALU op there has no effect to repeat.
