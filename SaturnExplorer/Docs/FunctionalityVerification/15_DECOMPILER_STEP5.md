@@ -2103,7 +2103,7 @@ runner's tests-only phase observer.
 
 ## Area 1, round 1: the too-large memo
 
-Branch `review/1-invalidation-fix`, fix in `@FIX@`. Ledger rows A1-1 and A1-2 are `fixed`; A1-3 is `fixed` (the
+Branch `review/1-invalidation-fix`, fix in `f5958a2`. Ledger rows A1-1 and A1-2 are `fixed`; A1-3 is `fixed` (the
 panel half of the rule, below). `SaturnExplorerDecompilerModelTests` passes its default run with `WILL_FAIL` removed
 from its ctest entry; its pinned sequences stay in the default run as regression pins.
 
