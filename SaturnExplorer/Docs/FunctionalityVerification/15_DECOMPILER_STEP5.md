@@ -1280,7 +1280,7 @@ rts slot insn=82; second requests (mailbox marked)=216; traced accesses=3002; un
 runs=236; failing seeds=2; findings=2 (4946 ms total, 2430 ms in the decompiler, 16.5 ms per seed)
 ```
 
-**The test fails, by design, until the findings below are fixed**: seeds 51 and 65 are A5-1. Longer
+**The test failed, by design, until the findings below were fixed** (all three are fixed in "Area 5, round 1: the dead-read class" at the end of this file, and `WILL_FAIL` is gone): seeds 51 and 65 were A5-1. Longer
 runs: 3,000 seeds, 40 failing seeds and 62 findings, every one a dropped read (the ordering and
 printing invariants never fired); with `SE_GENERATED_FENCE=folds`, 20,000 seeds: 12 failing seeds
 and 18 findings, 5 of them A4-1 and the rest A5-1 reached through a counter a loop left at 0 or a
@@ -1435,3 +1435,117 @@ call an injection replaces) is not recorded: none is a block's access. The defau
 configuration (no build type) compiles the host unoptimised, and `DecompilerRunnerTests` then takes
 156 s before this change and 162 s after, over its 120 s timeout; with `RelWithDebInfo` it takes
 64 s. MSVC and macOS builds are unverified, as are the sanitizers (the CI agent's).
+
+
+## Area 5, round 1: the dead-read class
+
+Fixer, branch `review/5-dead-reads`. Ledger rows A5-1, A5-2 and A4-1, and the 31 and 34 reads
+through a pointer that the conservation record showed `dead` in the game code, are one class: **a
+load whose value's only consumers disappear in the same dead-code pass or just after it is removed
+with them**, with no note and no entry in the access ledger. Patch 0018 (`0018-hold-every-load.patch`).
+
+**Root cause.** `Architecture::keepUnusedLoads` (patches 0009, 0014) holds a load for its effect
+through `ActionDeadCode::lastChanceLoad`, which sets `autolive_hold` on the load's output. The hold
+was placed only on a load whose output the dead-code pass had *not reached* (`isConsumeVacuous` is
+set by any `pushConsumed`, whatever the mask). Two ways a read still escaped it, both found by
+stopping the engine at the destroy (`gdb` on `Funcdata::opDestroy` for the load, then a print in
+`lastChanceLoad`):
+
+1. **Used at the first pass, unused after a rule.** `mov.b @r1,r0 ; xor r0,r0`, `mov.l @r6,r3 ;
+   cmp/eq r3,r3`, and the game code's byte copies into a local buffer. At the first pass the load
+   is consumed (`consume=ff`, flag set), so it is not held. The rule pool then folds the use away
+   (`RuleTrivialArith`: `x ^ x` is 0, `x == x` is true; a stack store the next write covers dies a
+   pass later), the load's output has no descendant and no hold, and `RuleEarlyRemoval` destroys it
+   (a break there shows exactly that). `lastChanceLoad` runs again at every pass (patch 0014), but
+   the load is gone before the next one.
+2. **Reached, consumed by nothing.** `mov.l @r4,r0 ; shll16 r0 ; shll16 r0`, an `and` with 0: the
+   mask that reaches the load is 0, the flag is set, so it was skipped, and the final loop of
+   `ActionDeadCode::apply` destroyed it (`neverConsumed`, which also puts a constant 0 where the
+   load's pointer was read).
+
+A third state of the same read is separate code: the reads of **A4-1** are not loads at the time.
+`RuleLoadVarnode` makes a load of a constant address a COPY of the volatile Varnode, which
+`ActionVarnodeProps` turns into the user op (`replaceVolatile`) only on the next pass of the main
+loop, and `ActionConditionalExe` runs between: `ConditionalExecution::testRemovability` refuses a
+LOAD, a STORE, a call and an INDIRECT but took this COPY for an ordinary op, and removed it with
+the block it was in (the second of two tests of one condition; the block held nothing else). The
+other half of the brief's hypothesis, a `volatile_read` CALLOTHER whose output goes unused, does not
+lose the read: a CALLOTHER is a call (`isCall`), `RuleEarlyRemoval` and `ActionDeadCode` leave it,
+and `opUnsetOutput` only drops its output.
+
+**The patch.** About 12 functional lines in `coreaction.cc`, `condexe.cc`, `jumptable.cc`.
+`lastChanceLoad`, under `keepUnusedLoads`, holds *every* load (`setAutoLiveHold`) and pushes it as
+consumed when nothing consumes it (`getConsume() == 0`, which covers the unused and the reached-by-
+mask-0 loads); the hold is kept while the output is a LOAD (0009), so a constant or volatile address
+becomes a direct access or a user op and the existing rules decide. The one load not held is a
+recovered switch's table lookup, which gave `foldInNormalization` a hold before it was recognised, so
+it clears it. `testRemovability` refuses an op that reads a volatile Varnode. Without the push, a
+load reached with mask 0 is held but its pointer is read as 0 (mutation M5, below).
+
+**Fixtures** (`TestHardwareVolatility`, the ledger's moved to bases `0x0600A800` and up; the
+code is PC-relative, so the words and literals are verbatim): `deadXor` (A5-1 a), `deadCmp` (b),
+`deadMarked` (c, request volatile `0x26001030-0x2600103F`), `deadPtr` (d), `pollThenRead` (A5-2:
+`SaidMissing` on `0x0600A90C`, engine record `Unreachable` there), `twoTests` (A4-1: ledger
+`{ Rd(0x05F800DE, 2) }`, no `if` in the text) and `twoTestsWrite` (its control); mine: `deadAnd`
+(`and #0,r0`, state 2), `deadShift` (`shll16` twice, state 2), `deadStack` (a read stored to the stack
+and never used: **a control**, it was already held: the store dies at the first pass). Ledger c's
+text gives `Rd(0x26001034, 2)`; the engine reports the literal as written, `0x06001034`, which the
+fixture asserts.
+
+**Oracles.** (1) `DeadIsLoss(AccessFate, marked)`: a record of fate `Dead` is a loss unless it is a
+direct access of ordinary memory (constant address, not hardware, not marked). `ReferenceOk`
+applies it to the shown run's own records, so it fails whether or not the reference run lists the
+access (the reference run is all-volatile and lost the same reads, which is why the conservation
+law was blind to the class); `TestGameCode` counts it (`deadLost`) and `CHECK(deadLost == 0)`.
+Every fixture that goes through `run` or `ReferenceOk` is now covered, not only the new ones. (2)
+The fixtures above. (3) `SaturnExplorerSh2GeneratedTests` passes unfenced and its `WILL_FAIL` is
+gone from `CMakeLists.txt`.
+
+**Mutation** (tests kept, engine reverted; each rebuilt and run: fixtures, both save states, the
+generator's 300 seeds):
+
+| Revert | Fixtures | Game code | Generator (300) |
+|---|---|---|---|
+| all of 0018 | 24 failures: `deadXor`, `deadCmp`, `deadAnd`, `deadMarked`, `deadPtr`, `deadShift`, `pollThenRead`, `twoTests`, each by its ledger, by `FateAt(Dead)` and by `ReferenceOk` (the new conservation clause: `the read ... ended dead, and is no direct access of ordinary memory`); `twoTestsWrite` and `deadStack` pass | `deadLost` = 31 and 34, `CHECK` fails; the reference run still lists **0 dropped** (the old oracle is blind to it, as the ledger said) | 2 failing seeds, 2 findings (seeds 51 and 65, A5-1) |
+| the `condexe.cc` guard only | 3 failures, `twoTests` | none | none (A4-1 needs the folds-fenced 20,000-seed run, seed 7826) |
+| the hold (`coreaction.cc`, `jumptable.cc`) only | 21 failures, every fixture but `twoTests` | 31 and 34 again | 2 findings |
+| M4: the original test (a load reached by the pass is skipped), the rest held | the xor, cmp, `and`, marked, pointer and `pollThenRead` fixtures | 4 dead reads in `0x060228B4` | not run |
+| M5: every load held, pushed only when the pass did not reach it | passes every fixture that existed then; the `deadShift` words fail in the generator | | |
+
+(M4 and M5 are what separated the two states. A first M5, hold with no push at all, failed 15
+existing fixtures, the unused reads of 0009 among them: the hold alone does not keep a load in the
+pass that sets it.) For the full revert the checks that caught it: the new fixtures (by ledger,
+by `FateAt` and by `ReferenceOk`'s new clause), the game-corpus `deadLost` check, and the generator.
+
+**Matrix**, `RelWithDebInfo`, gcc, 4 cores shared with other sessions:
+
+| | |
+|---|---|
+| `ctest` (92 tests) | 92 of 92 pass, 124 s (`DecompilerRunnerTests` 73 s); `SaturnExplorerSh2GeneratedTests` 4.4 s, no `WILL_FAIL` |
+| Game code, 839 prologues / 1,554 | 839/839 and 1,554/1,554; every count 0; 16 and 20 missing and said (unchanged); records: dead 41 -> **0** and 60 -> **0** (reads through a pointer 31 -> 0 and 34 -> 0; reads of constant ordinary addresses 10 -> 0 and 26 -> 0: held until the address folds, then recorded as folded); reference run: printed 5,038 -> 5,068 and 18,855 -> 18,893; `deadLost` 0 |
+| Outputs changed against the previous master (`559bdea`) | 14 of 839 and 17 of 1,554: reads that were dropped are now printed (`xVar2 = *unaff_r10;`, byte copies into a local buffer: all six reads of `0x060228B4` print where four of six did), and the variable numbering moves with them |
+| Time (previous master vs this branch, back to back, three rounds each, load 1.3 to 2.4) | image 1: 5,587 / 5,287 / 5,253 ms -> 5,524 / 5,081 / 5,078 ms; image 2: 20,509 / 20,996 / 20,633 -> 20,171 / 20,091 / 19,825 ms. No measurable change (about -3% on both, inside the noise of a shared machine) |
+| Vendored tree (the CI `vendored-tree` job, locally) | sparse clone at `918d44e`, `vendor.py` in a copy: applies 0001 to 0018, `diff -r` against the committed tree is empty |
+| Patch applied to the pre-edit copies | `git apply --check`, then `git apply`, to copies of `condexe.cc`, `coreaction.cc`, `jumptable.cc` as committed at `559bdea`: clean, and the results are byte-identical to the committed files |
+| gcc ASan + UBSan (`-fsanitize=address,undefined`, Debug), `ASAN_OPTIONS=detect_leaks=1`, `Sh2DecompilerTests` | fixtures (with the new ones) and both save states (62.8 s and 246.9 s of decompiling): no ASan error, no leak; UBSan reports only the two known sites, `address.hh:605` and `slghpatexpress.cc:979` |
+
+**Generator** (`SaturnExplorerSh2GeneratedTests`, RelWithDebInfo; before: 2 failing seeds of 300, 40
+of 3,000, 12 of 20,000 folds-fenced):
+
+| Run | Seeds | Result |
+|---|---|---|
+| default | 300 | 0 findings, 4.5 s |
+| unfenced | 3,000 | 0 findings, 42.7 s, 29,509 accesses traced |
+| `SE_GENERATED_FENCE=folds` | 20,000 | 0 findings, 271 s (A4-1 and the rest of what the fence kept out are in range) |
+| unfenced, `SE_GENERATED_FIRST=20001` | 20,000 | 0 findings, 278 s, 195,980 accesses traced |
+
+No finding of any kind in these runs; the `selfops` and `folds` fences are no longer needed to get
+a clean run. The grammar's reach is the limit now (see A11-1).
+
+**Remaining.** Ledger rows A5-1, A5-2 and A4-1 are `fixed 28908ee`. One new row, **A11-1** (open,
+P3): the generator never touches r15, so the shape the game code showed was out of its reach, and
+the grammar cannot be widened until its ledger treats the function's own frame as folded. Nothing
+else open from this round. Not done: MSVC and macOS builds; the CI sanitizer job (the same
+commands were run locally); the generator under ASan; `deadStack` does not separate the patch from
+its absence (kept as the control, with the game code's own functions as the real check); the push
+for a load reached with mask 0 is exercised by `deadShift` only.
