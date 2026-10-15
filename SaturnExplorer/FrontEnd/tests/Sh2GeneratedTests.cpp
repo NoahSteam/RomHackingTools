@@ -287,6 +287,7 @@ struct Gen
     bool disc = false;
     uint32_t defined = 0;     // bit n: Rn holds a value here, on every path
     bool noR0 = false;        // the function never writes r0 itself
+    bool codeInRegs = false;  // the function has a jump table: r0 and r1 may hold a code address on the way out of it
     int selReg = -1;          // a register holding an integer (a jump table's index), never a pointer
     int frame = 0;            // bytes of locals the function has
     bool fp = false;          // locals are addressed through r14
@@ -750,7 +751,18 @@ struct Gen
                 int pool[16], n = 0;
                 for (int i = 0; i < 8; ++i)
                     if ((def >> i) & 1u) pool[n++] = i;
-                if (n) w = uint16_t(0x6003 | reg << 8 | pool[rng.Below(static_cast<uint32_t>(n))] << 4);   // mov Rm,Rk
+                if (n)
+                {
+                    const int src = pool[rng.Below(static_cast<uint32_t>(n))];
+                    // A jump table leaves a code address in r0 (mova) and r1 (the entry) on the paths
+                    // through a case, and arithmetic carries it to r2 and r3. Passed on as an argument it
+                    // is a pointer the callee may store through: into the program's own literal pool
+                    // (seed 104955: the callee's 'mov.w r1,@r6' wrote the word a later 'jmp @r2' loaded,
+                    // and the run restarted the function until the step limit). An integer in its place;
+                    // the draws are the same, so every other program of a seed is unchanged.
+                    w = codeInRegs && src < 4 ? uint16_t(0xE000 | reg << 8 | (0x20 + src))
+                                              : uint16_t(0x6003 | reg << 8 | src << 4);   // mov Rm,Rk
+                }
             }
             else if (r >= 70 && !saves.empty())
                 w = uint16_t(0x6003 | reg << 8 | saves[rng.Below(static_cast<uint32_t>(saves.size()))].second << 4);   // mov Rsaved,Rk
@@ -883,6 +895,7 @@ struct Gen
 
         disc = true;
         noR0 = f.noR0;
+        codeInRegs = table;
         selReg = f.sel;
         frame = f.frame;
         fp = f.fp;
@@ -1592,7 +1605,7 @@ struct Env
     uint64_t Read(uint32_t a, int size, uint32_t insn)
     {
         const uint64_t v = ReadValue(a, size);
-        trace.push_back({ insn, false, size, a, v, depth, step });
+        trace.push_back({ Canon(insn), false, size, a, v, depth, step });
         return v;
     }
 
@@ -1614,6 +1627,17 @@ struct Env
         }
         if (hwMode == 0) return 0;
         if (hwMode == 1) return mask;
+        // Memory that is neither work RAM nor a register (the BIOS area, which the program reaches
+        // through a pointer it has tested to be 0): a value of its own, by address. The hardware's
+        // sequence is not advanced by a read of ordinary memory, or a run that makes one more such
+        // read (a perturbed argument, A3-1) would see other values from the registers after it, and
+        // behave differently for a reason the decompiler is right to leave out.
+        if (!InHardwareRange(a))
+        {
+            uint64_t h = (static_cast<uint64_t>(a) + 0x9E3779B97F4A7C15ull) * 0xBF58476D1CE4E5B9ull;
+            h ^= h >> 31;
+            return ((h * 0x94D049BB133111EBull) >> 32) & mask;
+        }
         hwState ^= hwState >> 12;
         hwState ^= hwState << 25;
         hwState ^= hwState >> 27;
@@ -1627,7 +1651,7 @@ struct Env
 
     void Write(uint32_t a, int size, uint64_t v, uint32_t insn)
     {
-        trace.push_back({ insn, true, size, a, v, depth, step });
+        trace.push_back({ Canon(insn), true, size, a, v, depth, step });
         if (IsRam(a)) Store(a, size, v);
     }
 };
@@ -1794,7 +1818,7 @@ public:
                 const sfe::DisassembledInstruction ins = sfe::Sh2Decode(pc, op);
                 env.depth = depth;
                 env.step = i;
-                out.pcs.push_back(pc);
+                out.pcs.push_back(Env::Canon(pc));   // a callee reached through the cache-through mirror is the function at the canonical address (A4-6)
                 out.depths.push_back(depth);
                 // The delay slot runs with the branch, at the depth it was called from.
                 if (ins.IsCall) ++depth;
@@ -2689,6 +2713,28 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (static_cast<size_t>(j) < results.size() && results[j].status == DecompileStatus::Ok) addCallees(results[j]);
             }
         }
+        // A jump the output warns of as a tail call, or the engine of as an indirect jump it treats as a call
+        // (a table whose guard admits one index, read as a pointer in RAM), hands the rest of the run to code
+        // that is not part of this function: the warning says so, and names where when it knows. What a run
+        // executes after it is named by that warning, unless another run executed the same instruction
+        // before any such jump (A4-5: the design is a call and a return, not flow into the destination).
+        std::set<uint32_t> afterTail, beforeTail;
+        {
+            auto addPc = [&](std::set<uint32_t>& into, uint32_t pc) {
+                into.insert(pc);
+                if (sfe::Sh2Decode(pc, subject.WordAt(pc)).HasDelaySlot) into.insert(pc + 2);
+            };
+            for (const RunOut& run : runs)
+            {
+                size_t cut = run.pcs.size();
+                for (size_t k = 0; k < run.pcs.size() && cut == run.pcs.size(); ++k)
+                    if (run.depths[k] == 0)
+                        for (const FlowWarning& w : r.flowWarnings)
+                            if (w.address == run.pcs[k] && (w.kind == FlowWarning::TailJump || w.text.find("Treating indirect jump as call") != std::string::npos))
+                                cut = k + 1;
+                for (size_t k = 0; k < run.pcs.size(); ++k) addPc(k < cut ? beforeTail : afterTail, run.pcs[k]);
+            }
+        }
         std::set<uint32_t> outsideBody;   // executed, in no part of this function's body and in no function it calls
         std::set<uint32_t> everything = executed;
         everything.insert(executedDeep.begin(), executedDeep.end());
@@ -2714,6 +2760,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (named)
             {
                 count("flow.outside-but-named");
+                continue;
+            }
+            if (afterTail.count(pc) && !beforeTail.count(pc))
+            {
+                count("flow.outside-after-tail-jump");
                 continue;
             }
             add("outside-body", "the instruction at " + Hex(pc) + " (function " + std::to_string(u) + ") was executed and is not in the body" +
@@ -3576,7 +3627,7 @@ void TestGenerated()
                     "tables=%d (entries %d, cases %d, shared entries %d, default entries %d; destinations traced %d, printed %d, inert %d, warned %d) "
                     "bra loops fwd/back=%d/%d data skips=%d shared exits=%d exits below the entry=%d slot pops=%d ret in slot=%d; "
                     "lent prototypes=%d (void %d, returning %d) withheld=%d; parameter checks=%d (candidates %d, perturbed runs %d, insensitive %d); "
-                    "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d; runs=%d\n",
+                    "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d (after a tail jump %d); runs=%d\n",
                     n("module.v2"), n("fn"), n("fn.end.rts"), n("fn.end.tail"), n("fn.end.fall"), n("fn.returns"), n("fn.void"), n("fn.pushed"),
                     n("fn.pr.stack"), n("fn.pr.reg"), n("fn.frame"), n("fn.fp"), n("spill"), n("stack.ld.plain") + n("stack.ld.disp") + n("stack.ld.indexed"),
                     n("stack.st.plain") + n("stack.st.disp") + n("stack.st.indexed"), c("stack.exempt"), n("call.bsr"), n("call.jsr"), n("call.arg_in_slot"),
@@ -3584,7 +3635,7 @@ void TestGenerated()
                     c("table.destination"), c("table.printed"), c("table.inert"), c("table.warned"), n("loop.bra"), n("loop.back"), n("bra.data"), n("fn.shared_exit"),
                     n("fn.exit_below"), n("fn.slot_pop"), n("fn.ret_in_slot"), c("proto.lent"), c("ret.void"), c("ret.claimed"), c("proto.withheld"),
                     c("param.checked"), c("param.candidate"), c("param.perturbed-runs"), c("param.insensitive"), c("preserved.checked"),
-                    c("flow.executed"), c("flow.into-said"), c("flow.into-silent"), c("flow.outside-but-named"), c("runs"));
+                    c("flow.executed"), c("flow.into-said"), c("flow.into-silent"), c("flow.outside-but-named"), c("flow.outside-after-tail-jump"), c("runs"));
         std::printf("withheld why:");
         for (const auto& k : counts)
             if (k.first.compare(0, 14, "proto.withheld") == 0 && k.first.size() > 14) std::printf(" %s=%d", k.first.c_str() + 15, k.second);

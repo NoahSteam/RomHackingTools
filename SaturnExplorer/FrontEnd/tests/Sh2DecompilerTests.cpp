@@ -3443,6 +3443,126 @@ void TestFlowReachedBody()
     CHECK(r.prototype.known && r.prototypeWithheld.empty());
 }
 
+// ===== Area 4, round 2: the default that is also a case (A4-4), the tail jump to code nothing else reaches
+// (A4-5, a decision, not a fix) =============================================================================
+// A jump table one of whose entries is the default's own destination. The bound check folds into
+// the switch as its default, which makes the guard's branch always enter the switch block, so the
+// edge from the guard into the join goes; the join keeps the edge from the switch block, which
+// carries what the switch block computed (`mova`'s address in r0) and the default path took it too.
+// The switch block holds no statement (`noInterveningStatement`), but it passes a COPY whatever uses
+// its output. Patch 0027 refuses the fold when a value the join reads differs between the two edges.
+void TestDefaultAlsoCase()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    const uint32_t scuIst = 0x25FE00A4u;
+    // mov.l @(pool),r7 ; mov #4,r0 ; mov #2,r1 ; cmp/hs r1,r4 ; bt join ; shll2 r4 ; mova table,r0 ;
+    // mov.l @(r0,r4),r1 ; jmp @r1 ; nop ; table (2 entries) ; the pool (SCU_IST) ; case 0: bra join ;
+    // nop ; case 1: bra join ; nop ; join: tst #0x10,r0 ; bf skip ; mov.b r0,@r7 ; skip: rts ; nop.
+    // The default path reaches the join with r0 = 4, the switch path with r0 = the mova address, so
+    // `tst #0x10` is nonzero on the default path (4 & 0x10 = 0: the write is made) and 0x14 & 0x10 on the
+    // cases (the mova address 0x06009014: 0x10 set, no write).
+    auto program = [&](uint32_t base, uint32_t entry1) {
+        Place(hw, base, { 0xD706, 0xE004, 0xE102, 0x3412, 0x890E, 0x4408, 0xC701, 0x014E, 0x412B, 0x0009,
+                          uint16_t((base + 0x20) >> 16), uint16_t(base + 0x20),    // table: case 0
+                          uint16_t(entry1 >> 16), uint16_t(entry1),                // ...entry 1
+                          uint16_t(scuIst >> 16), uint16_t(scuIst),                // the pool
+                          0xA002, 0x0009,                                          // 0x20: case 0: bra join
+                          0xA000, 0x0009,                                          // 0x24: bra join
+                          0xC810, 0x8B00, 0x2700, 0x000B, 0x0009 });               // 0x28: join
+    };
+    const uint32_t a = 0x06009000u, b = 0x06009100u;
+    program(a, a + 0x28);   // entry 1 is the join itself, the default's destination
+    program(b, b + 0x24);   // the control: entry 1 is its own 'bra join'
+    auto snap = MakeSnapshot(hw);
+    auto run = [&](const char* label, uint32_t base) {
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+        return r;
+    };
+    auto removedAsUnreachable = [](const DecompileResult& r) {
+        for (const std::string& w : r.warnings)
+            if (Has(w, "Removing unreachable block")) return true;
+        return false;
+    };
+
+    DecompileResult r = run("default is also a case", a);
+    // The join's test reads the default path's r0 (4) as well as the switch path's: the write is
+    // reachable, listed once and printed under a test, and nothing is removed.
+    CHECK(Ledger(r, { Wr(scuIst, 1) }));
+    CHECK(r.InBody(a + 0x2C) && FateAt(r, AccessFate::Unreachable, 0, true) == 0 && !removedAsUnreachable(r));
+    CHECK(Has(r.Text(), "& 0x10") && Has(r.Text(), "SCU_IST"));
+    // The guard stays an if ahead of the switch: the 4 the default path carries is assigned there.
+    CHECK(Has(r.Text(), "if (param_1 < 2)") && Has(r.Text(), "= 4;"));
+    CHECK(!Has(r.Text(), "return 0x6009014;"));
+    // The control: the same code with entry 1 at its own 'bra join' was always right.
+    r = run("the control, entry 1 at its own bra", b);
+    CHECK(Ledger(r, { Wr(scuIst, 1) }));
+    CHECK(r.InBody(b + 0x2C) && !removedAsUnreachable(r));
+    CHECK(Has(r.Text(), "& 0x10") && Has(r.Text(), "SCU_IST"));
+
+    // A default that is also a case where the join reads nothing the switch block computed: the fold
+    // stays (the join is `rts ; mov #5,r0`, the mova's r0 and the table entry in r1 are dead there).
+    // case 0 stores r5 through r6 and goes to the join; entry 1 and the default are the join.
+    std::vector<uint8_t> hw2;
+    const uint32_t c = 0x06009000u;
+    Place(hw2, c, { 0xE102, 0x3412, 0x8908, 0x4408, 0xC701, 0x014E, 0x412B, 0x0009,    // as above, no pool
+                    0x0600, 0x901C, 0x0600, 0x9018,                                       // 0x10: table: case 0, the join
+                    0x000B, 0xE005,                                                       // 0x18: join: rts ; mov #5,r0
+                    0xAFFC, 0x2652 });                                                    // 0x1C: case 0: bra join ; mov.l r5,@r6
+    auto snap2 = MakeSnapshot(hw2);
+    r = d.Decompile(snap2, Request(c));
+    Print("default is also a case, nothing differs", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(Ledger(r, { Wr(0, 4) }));
+    CHECK(Has(r.Text(), "switch(") && !Has(r.Text(), "if ("));
+}
+
+// A4-5, accepted by the design: an indirect jump with one destination, known only after the first
+// flow, to code nothing else reaches, is a tail call. The destination is a function of its own: not
+// in the body (the same rule that keeps an unnamed third function out in TestFlowReachedBody), named
+// in the warning, and the signature is withheld, so nothing wrong is lent. Naming the entry shows it.
+void TestTailJumpToUnreachedCode()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    auto tail = [](const DecompileResult& r, uint32_t at, const char* text) {
+        for (const FlowWarning& w : r.flowWarnings)
+            if (w.kind == FlowWarning::TailJump && w.address == at && Has(w.text, text)) return true;
+        return false;
+    };
+    // mov #4,r0 ; braf r0 ; nop ; two data words ; add #1,r4 ; rts ; mov r4,r0
+    const uint32_t a = 0x06009000u;
+    Place(hw, a, { 0xE004, 0x0023, 0x0009, 0xFFFF, 0xFFFF, 0x7401, 0x000B, 0x6043 });
+    // mov.l @(pool),r1 ; jmp @r1 ; nop ; data ; the pool (the destination) ; add #1,r4 ; rts ; mov r4,r0
+    const uint32_t b = 0x06009100u;
+    Place(hw, b, { 0xD101, 0x412B, 0x0009, 0xFFFF, 0x0600, 0x910C, 0x7401, 0x000B, 0x6043, 0x0009 });
+    auto snap = MakeSnapshot(hw);
+
+    DecompileResult r = d.Decompile(snap, Request(a));
+    Print("braf over data to code that returns", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(tail(r, a + 2, "braf is taken for a tail call to 0x0600900A") && tail(r, a + 2, "not part of this function's body"));
+    CHECK(!r.InBody(a + 0x0A) && r.InBody(a + 2) && !r.prototype.known && Has(r.prototypeWithheld, "0x0600900A"));
+    r = d.Decompile(snap, Request(b));
+    Print("jmp through a literal over data to code that returns", r);
+    CHECK(r.status == DecompileStatus::Ok);
+    CHECK(tail(r, b + 2, "jmp is taken for a tail call to 0x0600910C") && tail(r, b + 2, "not part of this function's body"));
+    CHECK(!r.InBody(b + 0x0C) && !r.prototype.known);
+    // Named as a function of its own, the destination is decompiled as one, and a caller lent its signature
+    // calls it with the argument (the caller's own signature stays withheld: the jump is still unresolved).
+    DecompileRequest q = Request(a + 0x0A);
+    const DecompileResult callee = d.Decompile(snap, q);
+    CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known && Has(callee.Text(), "param_1 + 1"));
+    q = Request(a);
+    q.prototypes.emplace_back(a + 0x0A, callee.prototype);
+    r = d.Decompile(snap, q);
+    Print("the destination named and lent", r);
+    CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x0600900a(param_1)"));
+}
+
 // The engine paths the control-flow review could only check by reading the source. Two are reached
 // end to end: the restart limit alone (no jump table involved) and a call the engine treats as never
 // returning (through the test hook: nothing in SE marks one). The third, a failed second-stage
@@ -4323,6 +4443,8 @@ int main(int argc, char** argv)
         RUN(TestManyUncapturedBranches());
         RUN(TestFlowUncertainty());
         RUN(TestFlowReachedBody());
+        RUN(TestDefaultAlsoCase());
+        RUN(TestTailJumpToUnreachedCode());
         RUN(TestEngineEdgePaths());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());

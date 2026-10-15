@@ -2285,7 +2285,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             if (!call) continue;
             r.flowWarnings.push_back(FlowWarning{ FlowWarning::TailJump, canonicalOf(a),
                                                   std::string(jmp ? "jmp" : "braf") + " is taken for a tail call to " + where +
-                                                      ", assumed to return to this function's caller" });
+                                                      ", assumed to return to this function's caller" +
+                                                      // Said whether or not the destination is captured: it is a call here, the code there
+                                                      // is a function of its own and not in the body (A4-5; name its entry to see it).
+                                                      (where.find('(') == std::string::npos ? "; the code there is not part of this function's body" : "") });
         }
         for (ghidra::int4 t = 0; t < fd->numJumpTables(); ++t) tableIncomplete |= fd->getJumpTable(t)->isPartial();
         std::sort(r.badDataAt.begin(), r.badDataAt.end());
