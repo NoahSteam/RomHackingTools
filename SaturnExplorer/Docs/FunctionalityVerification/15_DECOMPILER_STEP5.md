@@ -1840,3 +1840,156 @@ Not run: the sanitizer jobs and the timing comparison (the whole-program matrix 
 - CI's `-R` filters name tests one by one and do not select `SaturnExplorerSh2DecodeTests`; adding it is a CI change.
 - Patch 0018 (`coreaction.cc`, another agent) and these two add rows at the end of the same two tables
   (`patches/README.md`, `VENDOR.md`): expect a trivial textual conflict, resolved by keeping both.
+
+## Areas 3 and 4, oracle: the generator's second grammar
+
+Branch `review/3-4-generator`: `FrontEnd/tests/Sh2GeneratedTests.cpp`, and the comment on the ctest entry in
+`CMakeLists.txt`. Ledger: A11-1 is `fixed 3a89718`; two rows are new, A4-2 and A4-3. No area 3 finding:
+11,024 lent prototypes over 5,000 modules, none wrong.
+
+### 1. The grammar (version 2)
+
+Version 1 is untouched (one function, no stack; the same programs for the same seeds). Version 2 makes a
+module of one to three functions laid out one after the other; each is built from version 1's items and
+these. The default run takes the odd seeds as version 1 and the even ones as version 2
+(`SE_GENERATED_GRAMMAR=1|2` picks one).
+
+- **Stack.** r15 starts at `0x06040000`. A function pushes r8-r14 (`mov.l Rn,@-r15`) and PR
+  (`sts.l pr,@-r15`, or `sts pr,Rn` into a pushed register), takes a frame (`add #-n,r15`, with r14 as
+  frame pointer in 30%: `add #n,r14 ; mov r14,r15` to release), addresses locals as `@(disp,r15)` /
+  `@(disp,r14)` / `@(r0,Rn)` with a constant index / `@r15` in every width, spills r1-r5 around a block
+  (push, items, pop), and restores everything by `rts`; the last pop (or the return value's `mov`) may be
+  `rts`'s delay slot. The harness checks r8-r15 and PR at the end of every run (a violation is reported
+  as `generator:*`, not as the decompiler's).
+- **Calls.** Callees come after callers. `bsr` with the right displacement, or `mov.l @(pool),Rn ; jsr @Rn`
+  with the callee's address in the pool; 0-4 arguments in r4-r7, the last sometimes set in the delay slot;
+  arguments kept across calls in r8-r11 and put back after (`mov r8,r4`); a call is sometimes the skipped
+  part of a branch; PR is saved around nested calls. A function either writes r0 as its result on every
+  path (the last write is a `mov #imm`, a register copy, an extension or a load, before the epilogue or in
+  `rts`'s slot) or never writes r0 itself. Tail calls: `jmp @Rn` after the epilogue has restored PR and the
+  registers (`lds.l @r15+,pr` / `lds Rn,pr`, the pops, the last as the slot). Fall-through: a frameless
+  function with no `rts` that runs into the next one.
+- **Flow.** `bra` forward to a loop test at the bottom with `bf` back; `bra` backward with an exit in the
+  middle (`dt ; bt out ; bra top`); 1-4 data words skipped by `bra` (an `rts`, an invalid word and random
+  words among them); a jump table through `mova + shll2 + mov.l @(r0,Rn) + jmp @Rn` with 3-6 entries
+  (some shared by two entries, some going to the default), `cmp/hi` against the last index or `cmp/hs`
+  against the count, `bt default`, the cases each ending in `bra join`, on an integer register the harness
+  sets; a shared exit reached by two `bra` (each with a nop or an instruction in its slot); the exit placed
+  before the entry (so the body is not one range from the entry).
+
+Each function is a declarative record (pushed registers, frame, ending, items), so the shrinker removes
+items, replaces a construct by its contents, turns `jsr` into `bsr`, drops the shared exit and the
+exit-before-entry, and removes a function nothing refers to. A failing seed prints the line that replays
+it: `SE_GENERATED_WORDS`, with `SE_GENERATED_FUNCS="start/entry/end,..."`, `SE_GENERATED_TABLES`,
+`SE_GENERATED_DATA` and `SE_GENERATED_RETURNS` for a module.
+
+### 2. The checks
+
+Per function, against the emulator's runs of that function from its entry (4 inputs for version 2; a jump
+table adds one run per index). Functions are decompiled last first, and what each learned (`prototype`,
+when `known`) is lent to the ones before it through `DecompileRequest::prototypes`, as the panel does;
+`knownFunctions` holds every entry. Once with the default request and once with the mailbox marked, when
+the module has one.
+
+- **Area 5, unchanged**, over the accesses the function made itself (not at a deeper call depth: a callee's
+  accesses are its own, and a function that calls another and also jumps into it would otherwise be held to
+  the callee's). **A11-1:** an access in the stack area (`0x0603E000-0x06041000`) through r15 or r14 is a
+  local and exempt; a pointer into the stack handed to a callee is not. `FoldedIntoSwitch` now reports only
+  what a run shows: a run that made one of the two accesses without the other (a branch whose condition is
+  constant joins them rightly: the first draft reported that as a finding).
+- **Area 4.** (a) Every instruction executed (the delay slot of a delayed branch included) is in
+  `body`, or in a function this one calls (or that function's body), or a flow warning names it. (b) The
+  entry of another function inside the body has a `FlowWarning::IntoFunction` at it. (c) No data word
+  skipped by a `bra` is in the body. (d) Each index a run dispatched a jump table with reaches the label of
+  the printed switch that holds the code the index runs: its own `case N:` (labels carry the address their
+  code starts at), or the `default:` of a switch whose bound check the engine took out, or what follows the
+  switch when the index leaves it; required when that code does something the ledger lists, or a warning
+  says cases may be missing.
+- **Area 3**, for a `known` prototype. (e) `known` and `prototypeWithheld` agree; it is not lent when the
+  analysis is incomplete (truncated, unsupported, unimplemented, bad data, a table case missing, an
+  executed instruction outside the body). (f) Every one of r4-r7 the function reads before writing (taken
+  from the p-code of the run: every op's register inputs and outputs, the callees' too) that the
+  prototype's parameter list does not reach must not matter: the function is run again with that register
+  changed (+0x200, then 0), and if what it does to hardware, marked memory and memory through the
+  parameter pointers (the accesses and values; r0 when it returns something) changes, the finding is
+  `param-dropped:rN`. Stack traffic, literal-pool and table reads, and ordinary memory at a constant
+  address do not count (the decompiler may drop them), or the check reports dead reads. (g) A return is
+  claimed only if r0 is written on every run; a function the generator made to return r0 claims one.
+  (h) A register `CallEffects::preserved` names ends every run with the value it started with
+  (r0-r15, sr, pr).
+
+### 3. Numbers
+
+Default run (`ctest -R Generated`, RelWithDebInfo, 4 cores): 300 seeds, 150 of each grammar, 4.7 s
+(3.2 s in the decompiler), green. Version 2 costs about 16 ms a seed, version 1 about 13.
+
+```
+SUMMARY: seeds=300 (grammar 1: 150, grammar 2: 150) ... failing seeds=0; findings=0 (4532 ms total, 3241 ms in the decompiler)
+SUMMARY2: modules=150 functions=299 (end rts/tail/fall=253/33/13; returning 156, void 143) pushes=427
+pr stack/reg=70/28 frames=162 (frame pointer 51) spills=95 locals ld/st=68/31 (stack accesses exempt 1723)
+calls bsr/jsr=83/56 (arg in slot 51, args restored 139) tables=37 (entries 154, cases 109, shared entries 28,
+default entries 17; destinations traced 204, printed 126) bra loops fwd/back=53/59 data skips=54
+shared exits=63 exits below the entry=82 slot pops=117 ret in slot=53; lent prototypes=593 (void 192,
+returning 401) withheld=47; parameter checks=593 (candidates 29, perturbed runs 222, insensitive 29);
+preserved checks=593; flow: instructions executed=16674, into-function said/silent=56/0; runs=1993
+```
+
+`SE_GENERATED_SEEDS=5000` (both grammars, 2,500 each; 69 s): 9 failing seeds, all version 2: A4-3 in 8 and
+A4-2 in 1. Version 1: no finding in 2,500 seeds. `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` (81 s,
+16.2 ms a seed): 15 failing seeds, 74 findings, 13 seeds A4-3 (`folded-into-switch`) and 2 seeds A4-2
+(`outside-body`: 2226 and 3049); 9,854 functions, 8,380 ending in `rts`, 913 in a tail call, 561 falling
+through; 11,024 prototypes lent (4,368 void, 6,656 returning), 825 withheld; 1,375 jump tables with 8,023
+traced dispatches (4,537 reach a printed case, 3,486 run code that does nothing the ledger lists and may
+be merged); 2,503 `bsr` and 1,686 `jsr`; 49,928 local accesses exempted; 344,628 executed instructions
+accounted for; 1,820 "flow runs into" warnings, none missing for an entry in the body; parameter checks:
+778 candidates (a register read before it is written that the prototype does not reach), 6,290 perturbed
+runs, all 778 insensitive; 43,160 emulator runs; no `generator:*` finding.
+
+Mutation (the checks checked; `SE_GENERATED_MUTATE=<kind>` damages every result as that defect would; 300
+version 2 seeds; the run passes only if the check reports it): `ledger` (first ledger entry deleted) 287;
+`params` (last parameter dropped) 278; `ret` (void and returning swapped) 209; `body` (last body range
+dropped) 300; `cases` (case lines deleted) 50; `warn` (flow warnings deleted) 90; `preserved` (all registers
+claimed preserved) 296; `lent` (withheld reasons cleared) 33; `data` (a data range added to the body) 91.
+Version 1, `SE_GENERATED_MUTATE=1`: 277 of 300.
+
+### 4. Findings
+
+- **A4-2 (P2).** Flow that runs through a second jump into another function is shown as part of the
+  first with no warning, and `body` omits what the actions removed after a restart that flowed further.
+  Fixture in the ledger row (24 words, three functions). The first hop is warned; the second is not. The
+  signature is withheld there, so no wrong prototype is lent.
+- **A4-3 (P2).** The read of a jump table's entry is printed before the switch and unconditionally, when
+  the code makes it only for an index in range (the bound check was folded into the switch). 28 words in the
+  ledger row.
+- **No area 3 row.** Nothing found: no wrong parameter list, no invented return, no wrong `preserved`, no
+  prototype lent for an incomplete analysis. Incomplete analyses are withheld with a reason (825 of
+  11,849); the commonest reasons are code removed as unreachable that holds hardware accesses, an incoming
+  argument outside the signature (`mov.l @r7,r0` alone), a return not to the caller, a callee with no
+  signature, and a register used after a call that is not known to return it.
+
+### 5. Wrong in the first drafts of the checks, so a later reader does not repeat them
+
+A frame pointer must release the frame with `add #n,r14 ; mov r14,r15` (the first epilogue did
+`mov r14,r15` alone, and `lds Rn,pr` is `0x402A`, not `0x400A`, which is `lds Rn,mach`); a machine made
+before a decompilation must not run after it (a decompilation takes the engine's global translator over;
+the runner makes a new one); a case label can carry a cast (`case (xunknown4 *)0x2:`), and a bounded
+switch prints its commonest destination as `default:`, so a label-per-index check is wrong, as is one that
+reads the first `switch` of the text when a callee's was inlined (the switch line carries the address of its
+`jmp`); an index that leaves the switch has no label at all (its code is what follows); a table whose entries
+all go to one place has no switch ("Switch with 1 destination removed", warned); the accesses of a
+function that is both called and jumped into belong to the callee when run at a deeper call depth;
+`param-dropped` must not count a dead read of ordinary memory, a literal-pool load or stack traffic as
+a difference; `mov r0,r0` is not a write of r0; a loop counter must not be the destination of a load that
+a rewritten store turned into (a store with no register holding a value becomes a load).
+
+### 6. Not done
+
+The fixes (A4-2, A4-3); passing the address of a local to a callee (the callee's stores through it are the
+case `ReturnCheck`'s escape tracking exists for, but a callee's `@-Rn` forms and displacements would
+overflow the frame, and a corrupted return is the program's, not the decompiler's); arguments on the stack
+(a fifth argument); polls and unmarked RAM polls in version 2; mirrors (a callee reached at `0x26...`);
+recursion and mutual recursion (the call graph is acyclic); the panel's `Lendable` dependency rule (every
+known prototype below is lent); the call's printed argument count against the lent prototype (not
+checked); the generated test under ASan; MSVC and macOS builds. The default seeds do not reach A4-2 and
+A4-3 (about 1 in 400 version 2 seeds), so the ctest entry is green and the nightly job (20,000 seeds) is
+red until they are fixed.
