@@ -6646,3 +6646,128 @@ The generator's replay of the fixtures:
   a row of its own.
 
 **Done criteria.** Area 3 has six P2 rows this round (A3-18 to A3-23). It needs a fix round and then two consecutive clean review rounds.
+
+## Area 6, round 4 review
+
+Reviewer: branch `review/6-round4-review`, from master `30112ac` and merged up to `5c7a036` (docs only since). No source, patch or suite
+changed. New ledger rows A6-31 to A6-36: one P2 (A6-35, the CI gate's cancel-us flake) and five P3. No P1: across about 180,000 cells
+(about 40,000 of them under ASan + UBSan + LeakSanitizer) there is no crash, no use-after-free, no double free, no leak outside the
+accepted Init rows, and no UBSan line outside the allow-list.
+
+**How.** Two scratch builds with gcc 13.3: RelWithDebInfo with the main build's options (`SE_ENABLE_DECOMPILER=ON`, `SE_WEB_LIVE=OFF`),
+and the CI's Debug `-fsanitize=address,undefined -fno-omit-frame-pointer` (with `-g1` for the disk, `CMAKE_CXX_FLAGS_DEBUG`), the cells
+under `ASAN_OPTIONS=detect_leaks=1`. The probes ran from scratch copies of `DecompilerFaultTests.cpp`, compiled with the fault target's
+flags and linked against its objects. Each copy is the suite plus one change, named in the row it supports:
+- `lend`, `lendm`, `lendx` and `hwreg`, four fixtures (the words are in A6-36);
+- `ColdDisasm` passing a `stopped` flag and checking it (A6-31);
+- the config directory listed after a cold cell's first request (A6-33);
+- a second `Sh2Decompiler` after the first request;
+- `--runner-oom` reading `SE_FAULT_STICKY`;
+- `cancel-enter` with its raise attributed one entry early (A6-35);
+- the hwram008 image as a fixture.
+
+The machine was shared with three other reviewers (load 5 to 9).
+
+### What held
+
+- **The default subset.** RelWithDebInfo: 42 of 42 jobs, 3,814 driver cells, 66 s. ASan + UBSan + LSan: 42 of 42, 3,851 cells, 485 s.
+  In both, every one of the 79 pins is `site ok`: none MOVED, none STALE. No cell has a UBSan line outside the allow-list (a cell with one
+  fails as `ubsan`).
+- **The CI budget (A6-19).** CI run #43 on `30112ac` took 346.7 s for the default subset's 42 jobs (the coordinator's figure). Here it
+  took 485 s, at load 5.5 to 8, with a RelWithDebInfo sweep running beside it. The `ctest` limit is 600 s, so the margin is 253 s (42%)
+  in CI and 115 s (19%) locally under load.
+  - The CI does not run the binary through `ctest`. `run-decompiler-sanitizers.sh` invokes it directly, so the limits that apply there
+    are the suite's own 600 s per job and the job's 90 minutes.
+  - The longest single job is `cold mailbox` at 188 s locally (with `cold-disasm` at 178 s): a factor of 3.2 under the per-job limit.
+  - The `ctest` limit matters only to someone who runs `ctest` on a sanitizer build, and there it is the tight one.
+- **Every k under ASan + LSan, the round 3 shapes, on the real binary.** All 0 failed and 0 leaked. That is 18,104 cells, and the
+  three round 3 fixtures are clean:
+  - `jumptable` Flow: 5,262 cells;
+  - `dag` Actions and Print: 4,989;
+  - `loopbrk` Actions and Print: 7,853.
+- **Every k in RelWithDebInfo.** All 0 failed: 7,712 cells.
+  - `disasm`: 3,856 cells (3,852 stopped, 2 stopped-before-engine, 2 no-failure).
+  - `disasm-sticky`: 3,856 cells, the same classes. The listing's `BuildArchitecture` is all of these.
+- **The full cancel families on `dag` and `loopbrk`.** These were not rerun after round 3's fix. `cancel-enter`, `cancel-alloc` and
+  `cancel-oom`, RelWithDebInfo: 15,426 cells, 0 failed.
+- **The `stopped-before-engine` path, warm, under sustained exhaustion from k = 0.** `disasm-sticky` cells 0 and 1 are
+  `stopped-before-engine` in both builds, with the engine undamaged and the next requests correct.
+- **The pin census against mutated pins.** These were scratch edits of one row each (A6-34). A pin whose coordinates drift by one is
+  MOVED onto the right allocation. A pin naming the wrong function is STALE and fails the run. What does not hold is in A6-34.
+- **The size check across the markup boundary.**
+  - `--diffruns stack 60`: run N+1 is identical to the baseline; the 59 later runs differ at allocation 21297 (1,128 bytes against 1,124).
+  - `--diffruns diamonds 30`: N+1 identical; 11 later runs differ at 407220 (25,833 against 25,831).
+  - The baseline is the run the cells make, and diamonds' Warm settles.
+- **Cold families.**
+  - The default `cold` and `cold-disasm` sweeps pass in both builds (1,105 cells each; 882 library-interrupted, with each of the three
+    library steps reached).
+  - A second `Sh2Decompiler` with another config directory, made after the first request, answers exactly as the first instance's next
+    request does, Decompile and Disassemble alike: 2,210 cells, 0 failed. The library stage and the damage flag are process-wide, as
+    designed.
+  - `SE_FAULT_EXIT=static` on `alloc`, `cancel-oom`, `disasm` and `cold`: 21 jobs, 0 failed, 45 s.
+- **The runner under sustained exhaustion.**
+  - All 126 `runner-oom mailbox` cells (14 entries, 9 offsets), with `SE_FAULT_STICKY=1` reaching the child through the probe: 0 failed.
+  - Every one is `disabled-while-recording`. The worker survives, the session is disabled with its reason, and nothing is installed.
+  - The default `runner` scenarios and `runner-oom` cells pass in both builds.
+- **New ground: lending and hardware notes (the paths of A6-36).** No defect.
+  - RelWithDebInfo, every k: `lend` 30,473 cells, `lendx` 32,846, `lendm` 28,843.
+  - ASan + LSan, every k: `lend` allocations 8500-12580 and 21000-27718 (10,798 cells), `lendx` 8500-13700 (5,200), `hwreg` Print
+    (1,899).
+  - Full `cancel-alloc` and `cancel-oom` on `lend` and `hwreg`: 15,476 cells.
+  - All 0 failed. The fixtures print what they are for:
+    - `lendm` calls `func_0x06005000` through 0x26005000 with the lent `int4 *`;
+    - `lendx` passes the second parameter and applies the extra pop;
+    - `hwreg` prints `puVar2 = &VDP2_TVMD; ... puVar2 = &VDP2_EXTEN;`.
+- **The largest game function.** The hwram008 image as a fixture, at 0x0604F422, the corpus's slowest function (4 s, 9,257,678
+  allocations a run). The default cells of `alloc`, `cancel-alloc`, `cancel-us`, `cancel-oom` and `cancel-enter`: 296 cells, 0 failed,
+  RelWithDebInfo.
+- **The corpus.** `SE_GAME_HWRAM=hwram008.bin SaturnExplorerSh2DecompilerTests`: 1,554 of 1,554 ok, all passed, 50 s.
+- **By reading.**
+  - `HardwareNotes` and `PointerResolver` run inside the Print phase, so a failure in them damages the engine and is reported, as
+    designed.
+  - The host's `std::function`s are built from `[&]` lambdas that fit the small buffer.
+  - The phase observer copy in `WorkerMain` is guarded.
+  - A cancel during an Interrupted or Refused `StartLibrary` is not consulted. The request is Unavailable with the reason, which is right.
+  - A Stop that loses the race with the end of a run publishes the run's Ok result for the current generation, and the cancel oracle
+    allows Ok after the last entry.
+  - The engine's `catch(...)` sites all rethrow.
+  - The LRU cache of patch 0020 allocates nothing.
+
+### What failed
+
+| Row | Severity | What | Cells |
+|---|---|---|---|
+| A6-35 | P2 | The `cancel-us` oracle attributes a raise to the entry the hook last counted; the host's check-point comes before the next hook. At the first pass's end the window is the destruction of `runPass`'s locals, wide under ASan. The engine's `cancelledIn` is right; the gate is red one CI run in three | CI #43 `cancel-us jumptable 42000`, #45 `cancel-us fixture1 34000`; deterministic stand-in `cancel-enter` attributed one entry early: jumptable and fixture1 p = 2, 3, 6, 7 |
+| A6-31 | P3 | `Disassemble`'s `StartLibrary` catch returns "<out of memory while preparing ...>" without setting `stopped`. Under sustained exhaustion it returns an empty listing, unflagged. `cold-disasm` passes no flag, so the matrix cannot see it | cold-disasm with the flag checked: 173 of 1,105 |
+| A6-32 | P3 | `StartLibrary`'s refusal text is allocated after the stage is Interrupted. Under sustained exhaustion the first request is a plain `Failed("out of memory")` (or an empty listing), not the restart reason | `SE_FAULT_STICKY=1` cold: 882 of 1,105 (+ coverage); cold-disasm 1,060 |
+| A6-33 | P3 | An exception during the spec bundle's staging leaves `<hash>.tmp-<pid>` (19 KB) in the config directory for good | cold, empty config, k = 61..83 (cell 141: all five files) |
+| A6-34 | P3 | A MOVED pin never fails the run. An ordinal the site lacks is MOVED, not STALE; a wrong ordinal moves the cell off the defect | `createTraces#1`: allocation 10957 instead of 10949, exit 0; `FuncProto::copy#7`: MOVED, exit 0 |
+| A6-36 | P3 | No fixture lends a prototype or reaches a hardware register, and `--runner-oom` ignores `SE_FAULT_STICKY`. The probes found no defect; the row is the coverage | the four fixtures' words in the row |
+
+**On the coordinator's two hypotheses for the CI cell.** Both failing cells were raised during the first pass's end, actions#2 to
+teardown#3. Neither was raised at the Flow-to-Actions boundary, and neither involves jump-table recovery:
+- `Enter` is only called by `runPass`.
+- Recovery inside Actions does not enter Flow, and its `CancelError` is rethrown (`funcdata_block.cc:550`) and reported as Actions.
+- fixture1 has no table.
+
+The deterministic stand-in shows all four windows. Only the one at the pass's end is wide: `TeardownNote` is declared right after the
+Architecture, so the `FlowRecord`, `RawScan`, `JumpDests` and the rest are destroyed between the pass-boundary `checkCancel()` and the
+Teardown hook.
+
+### Real callers of `Disassemble`
+
+There are none outside the tests. `Sh2DecompilerTests.cpp:3324` and `:7971`, `Sh2DecompilerFixtureTests.cpp:141` and
+`Sh2GeneratedTests.cpp:2868` call it with `stopped == nullptr`, for diagnostics and comparisons. Each would take a cut-short listing for
+the whole one, but none runs under a failing allocator. Only the fault suite's `disasm` family passes the flag.
+
+### Not covered
+
+- Windows and macOS; the panel under exhaustion.
+- Every k of `alloc` under ASan for the fixtures other than `jumptable`, `dag` and `loopbrk`.
+- `diamonds` every k.
+- Every k of the game function: 9.3 million allocations a run, a few seconds each.
+- The flake rate of `cancel-us` locally: the stand-in replaces the measurement.
+- A cold failure in the second pass's translator reset, beyond the cold family's geometric spread after the library: the 28 to 42
+  failed-in-engine cells.
+- The rows left listed by round 3: A6-18 (unreached), `installJumpTable` and the two table clones, the `TypeFactory` re-inserts, the
+  `clearJumpTables` copy, and the printer's `countbase` (its overflow after some 60 million prints was not run).
