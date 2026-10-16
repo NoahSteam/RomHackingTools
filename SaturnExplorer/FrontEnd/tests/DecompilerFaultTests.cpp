@@ -1848,6 +1848,7 @@ bool PrepareCold(ColdCtx& c, const std::string& scratch, const std::string& fixt
             fa::gCensusWantN = long(want.size());
             fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
             fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+            fa::gCensusSize = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kCensusCap)));
             fa::gCensusN = 0;
             fa::gCensus = true;
 #endif
@@ -2232,9 +2233,9 @@ struct Pin
 };
 const Pin kPins[] = {
     { "mailbox", "print", 0, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
-    { "mailbox", "print", 0, 40, 77, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
+    { "mailbox", "print", 0, 40, 81, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
     { "mailbox", "print", 1, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, in the reference run's print" },
-    { "jumptable", "print", 0, 48, 42, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, on the jumptable fixture" },
+    { "jumptable", "print", 0, 48, 26, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, on the jumptable fixture" },
     { "mailbox", "print", 0, 16, 1, "EmitMarkup::setPackedOutput#0", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
     { "jumptable", "actions", 0, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 BlockGraph::identifyInternal: the room made in the new switch block before any block moves (first switch)" },
     { "jumptable", "actions", 0, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 the same, the next switch block" },
