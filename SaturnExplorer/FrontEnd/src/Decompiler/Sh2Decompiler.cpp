@@ -405,6 +405,11 @@ private:
         int64_t v = 0;               // Reg: the register's index; Sp: the offset; Imm: the constant
         uint32_t from = origin::kAll;   // Fuzzy: what it can come from
         uint32_t direct = origin::kAll;   // Fuzzy: ...of that, what it was computed from here, not what a call returned (A3-7)
+        // Fuzzy: a stack address plus an index, with the offset the address had before it (from r15 on entry): the value
+        // points at or above it, taking the index as non-negative as the engine's own pointer arithmetic does (A3-9).
+        static constexpr int64_t kNoBase = INT64_MIN;
+        int64_t stackBase = kNoBase;
+        int64_t Base() const { return kind == Sp ? v : kind == Fuzzy ? stackBase : kNoBase; }
         static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
         static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
         static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
@@ -424,7 +429,7 @@ private:
         // share one set of origins (everything any of the callee's registers can come from), so a value that
         // only a call made says nothing about the registers it was passed.
         uint32_t Direct() const { return kind == Fuzzy ? direct : Origins(); }
-        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || (from == o.from && direct == o.direct)); }
+        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase)); }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
     struct State
@@ -532,7 +537,8 @@ private:
         if (from.escaped && !into.escaped) into.escaped = changed = true;
         auto merge = [&changed](Value& a, const Value& b) {
             if (a == b) return;
-            const Value m = Value::From(a.Origins() | b.Origins(), a.Direct() | b.Direct());
+            Value m = Value::From(a.Origins() | b.Origins(), a.Direct() | b.Direct());
+            if (a.Base() != Value::kNoBase && b.Base() != Value::kNoBase) m.stackBase = std::min(a.Base(), b.Base());
             if (m == a) return;
             a = m;
             changed = true;
@@ -597,10 +603,13 @@ private:
     void NoteFrameEscape(const State& s)
     {
         const Value v = Get(s, mReg[2]);
-        // Only an address known exactly: one with an index added to it has no offset to declare, and
-        // declaring the whole frame would make an array of every local.
-        if (v.kind != Value::Sp) return;
-        if (!mEscaped || v.v < mEscapeLow) mEscapeLow = v.v;
+        // An address with an index added to it (a returned structure that is an array element) points at or above
+        // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
+        // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
+        // make an array of every local.
+        const int64_t base = v.Base();
+        if (base == Value::kNoBase) return;
+        if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
     }
 
@@ -813,8 +822,19 @@ private:
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
                 // An index added to a stack address stays in the stack (the engine's own stack analysis
-                // takes pointer arithmetic so too): somewhere in it, not the index's memory.
-                else if (x.kind == Value::Sp || (!sub && y.kind == Value::Sp)) r = Value::From(origin::kStack);
+                // takes pointer arithmetic so too): somewhere in it, not the index's memory. Where from is
+                // kept (A3-9: `a[i] = f()` passes the address of an element in r2): the base address, with
+                // a constant added to it later added to the base, and the index taken as not negative.
+                else if (x.Base() != Value::kNoBase || (!sub && y.Base() != Value::kNoBase))
+                {
+                    r = Value::From(origin::kStack);
+                    if (!sub && x.Base() != Value::kNoBase && y.Base() == Value::kNoBase)
+                        r.stackBase = Wrap(x.Base() + (y.kind == Value::Imm ? y.v : 0));
+                    else if (!sub && y.Base() != Value::kNoBase && x.Base() == Value::kNoBase)
+                        r.stackBase = Wrap(y.Base() + (x.kind == Value::Imm ? x.v : 0));
+                    else if (sub && y.kind == Value::Imm)
+                        r.stackBase = Wrap(x.Base() - y.v);
+                }
                 Set(s, op.out, r);
                 break;
             }

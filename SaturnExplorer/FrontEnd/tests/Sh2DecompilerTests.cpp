@@ -4847,7 +4847,7 @@ private:
     using Seq = std::vector<Node>;
     struct Node
     {
-        enum Kind { Assign, If, Return, Switch, Break, Skip } kind = Skip;
+        enum Kind { Assign, If, Return, Switch, Break, Skip, Call } kind = Skip;
         std::string var;
         size_t expr = 0, exprEnd = 0;   // the expression's tokens (Assign, the If's condition, Return, a Switch's selector)
         bool hasExpr = false;
@@ -5312,8 +5312,14 @@ private:
             mPos = mTok.size();
             return n;
         }
-        // Anything else is a call or a store: it changes no local.
-        SkipTo(";");
+        // Anything else is a call or a store: it changes no register local. A call may write a stack local
+        // (the engine keeps one that a call could reach, A3-9), so the evaluator forgets those.
+        {
+            const size_t from = mPos;
+            SkipTo(";");
+            for (size_t k = from; k < mPos && k < mTok.size(); ++k)
+                if (mTok[k] == "(") n.kind = Node::Call;
+        }
         ++mPos;
         return n;
     }
@@ -5689,7 +5695,26 @@ private:
         Cursor c{ n.expr, n.exprEnd };
         const Val v = ParseExpr(c, env, 1);
         if (c.pos != c.end && mError.empty()) mError = "text left in an expression";
+        for (size_t k = n.expr; k < n.exprEnd && k < mTok.size(); ++k)
+            if (mTok[k] == "(" && k > n.expr && (std::isalnum(static_cast<unsigned char>(mTok[k - 1][0])) || mTok[k - 1][0] == '_' || mTok[k - 1] == ")"))
+                mCalled = true;   // `f(...)`, `(*f)(...)`: a call in the expression
         return v;
+    }
+
+    // A stack local (`xStack_c`, `iStack_8`): memory the code can reach through a pointer, which a call may have written.
+    static bool IsStackLocal(const std::string& name)
+    {
+        const size_t at = name.find("Stack_");
+        if (at == std::string::npos || at + 6 >= name.size()) return false;
+        for (size_t i = at + 6; i < name.size(); ++i)
+            if (!std::isxdigit(static_cast<unsigned char>(name[i]))) return false;
+        return true;
+    }
+    void ForgetStackLocals(std::map<std::string, Val>& env)
+    {
+        for (auto& e : env)
+            if (IsStackLocal(e.first)) e.second = Unk(e.second.size, e.second.sg);
+        mCalled = false;
     }
 
     void Exec(std::vector<Frame> frames, std::map<std::string, Val> env, std::vector<Outcome>& out, int depth)
@@ -5711,9 +5736,11 @@ private:
             switch (n.kind)
             {
             case Node::Skip: break;
+            case Node::Call: ForgetStackLocals(env); break;
             case Node::Assign:
             {
                 const Val v = Eval(n, env);
+                if (mCalled) ForgetStackLocals(env);
                 const auto ty = mTypes.find(n.var);
                 env[n.var] = ty == mTypes.end() ? v : Convert(v, ty->second);
                 break;
@@ -5725,6 +5752,7 @@ private:
                 if (n.hasExpr)
                 {
                     o.v = Eval(n, env);
+                    mCalled = false;
                     if (mRet.size > 0) o.v = Convert(o.v, mRet);
                     if (o.v.known && o.v.size > 4 && mError.empty()) mError = "a 64-bit return, which r0 alone does not hold";
                 }
@@ -5744,6 +5772,7 @@ private:
                 // Where execution starts: the label that matches, else the default's, else after the switch.
                 // An unknown selector tries each label and the default, as an unknown condition tries both arms.
                 const Val sel = Promote(Eval(n, env));
+                if (mCalled) ForgetStackLocals(env);
                 const uint64_t mask = Mask(sel.size);
                 std::vector<long> starts;   // an index into the body, or -1: past the switch
                 long deflt = -1;
@@ -5769,6 +5798,7 @@ private:
             case Node::If:
             {
                 const Val c = Eval(n, env);
+                if (mCalled) ForgetStackLocals(env);
                 static const Seq empty;
                 const Seq* yes = n.yes.get();
                 const Seq* no = n.no ? n.no.get() : &empty;
@@ -5794,6 +5824,7 @@ private:
     Ty mRet;                            // the return type
     Seq mBody;
     std::string mError;
+    bool mCalled = false;   // the expression last evaluated made a call
 };
 
 // A fixture for the call oracle: code from 'base' (entered at 'base'); the trap handler and the
@@ -6162,6 +6193,11 @@ void TestCallsAndTraps()
                                "  case '\\xff':\n    return 4;\n  default:\n    return 5;\n  }\n}";
         CHECK(MayReturn(sw, { 2 }, 9, why) && !MayReturn(sw, { 2 }, 5, why) && MayReturn(sw, { 0xFF }, 4, why) && MayReturn(sw, { 0x1FF }, 4, why));
         CHECK(MayReturn(sw, { 0 }, 7, why) && MayReturn(sw, { 3 }, 5, why));
+        // A stack local is memory a call may have written: the engine keeps one a call could reach (A3-9); a register local is not.
+        const std::string stackLocal = "int f(void)\n{\n  int xStack_c;\n  xStack_c = 5;\n  func_0x06009020();\n  return xStack_c;\n}";
+        CHECK(MayReturn(stackLocal, {}, 7, why) && MayReturn(stackLocal, {}, 5, why));
+        CHECK(!MayReturn("int f(void)\n{\n  int xStack_c;\n  xStack_c = 5;\n  return xStack_c;\n}", {}, 7, why));
+        CHECK(!MayReturn("int f(void)\n{\n  int xVar1;\n  xVar1 = 5;\n  func_0x06009020();\n  return xVar1;\n}", {}, 7, why));
         // A return of a narrow type compares as many low bytes as it has.
         CHECK(MayReturn("uint1 f(uint param_1)\n{\n  return (uint1)param_1;\n}", { 0x1FF }, 0xFFFFFFFFu, why));
         CHECK(!MayReturn("uint1 f(uint param_1)\n{\n  return (uint1)param_1;\n}", { 0x1FF }, 0xFE, why));
@@ -6789,6 +6825,56 @@ void TestCallsAndTraps()
             const Lent l4 = lend(viaR4);
             CHECK(l4.callee.prototype.known && l4.callee.prototype.params.size() == 1);
             CHECK(!Has(l4.caller.Text(), "return 5;"));
+        }
+        // ---- A3-9 (round 4): the address of an array element in r2 --------------------------------------------
+        // `a[i] = f()` for a returned structure passes frame address + index in r2. ReturnCheck declared only an
+        // exact frame address, so the two locals here were the caller's own, the callee's write through r2 was
+        // taken for none and the read after the call printed the value stored before (`return 10;` where the code
+        // returns 12 for the index 0 and for 4). The address now keeps the offset it was made from, and that is the
+        // alias's lower bound whatever index is added.
+        {
+            std::vector<uint16_t> a = { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x6043, 0xC904, 0x62F3, 0x320C, 0xB015, 0x0009, 0x60F2,
+                                        0x51F1, 0x301C, 0x7F08, 0x4F26, 0x000B, 0x0009 };   // mov r4,r0 ; and #4,r0 ; mov r15,r2 ; add r0,r2 ; bsr g
+            a.resize(32, 0x0009);
+            a.insert(a.end(), { 0xE107, 0x000B, 0x2212 });   // g: mov #7,r1 ; rts ; mov.l r1,@r2
+            const std::vector<std::vector<uint32_t>> idx = { { 0 }, { 4 }, { 0x11111111u } };
+            const CallFixture g = { "structure return through r2 plus a masked index", base, a };
+            auto snap = CallSnapshot(g, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(g.base));
+            Print(g.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!Has(r.Text(), "return 10;") && Has(r.Text(), "iStack_c + iStack_8"));   // the read after the call is not folded
+            CHECK(PseudoAgreesWithRun(r, snap, g, idx));
+            CHECK(!r.prototype.known);   // the callee is not lent (it reads r2), and so is the caller not
+            // ...with the callee decompiled first and lent: it reads r2, so it is withheld, the same text.
+            const DecompileResult callee = d.Decompile(snap, Request(0x06009040u));
+            CHECK(!callee.prototype.known && Has(callee.prototypeWithheld, "reads r2"));
+            // The index a parameter, added whole (the run keeps to the two words the indices 0 and 4 reach).
+            std::vector<uint16_t> b = a;
+            b[5] = 0x62F3;    // mov r15,r2
+            b[6] = 0x324C;    // add r4,r2
+            b[7] = b[8] = 0x0009;
+            const CallFixture h = { "structure return through r2 plus a parameter", base, b };
+            auto snapH = CallSnapshot(h, ++serial);
+            const DecompileResult rh = d.Decompile(snapH, Request(h.base));
+            Print(h.name.c_str(), rh);
+            CHECK(!Has(rh.Text(), "return 10;") && Has(rh.Text(), "iStack_c + iStack_8"));
+            CHECK(PseudoAgreesWithRun(rh, snapH, h, { { 0 }, { 4 } }));
+            // Control: a frame address plus an index that the callee does not read (r2 is dead in a lent callee):
+            // the locals are the caller's own, as before.
+            std::vector<uint16_t> q = a;
+            q.resize(32, 0x0009);
+            q.insert(q.end(), { 0x000B, 0x0009 });
+            const CallFixture quiet = { "frame address plus an index, callee that ignores it", base, q };
+            auto snapQ = CallSnapshot(quiet, ++serial);
+            const DecompileResult calleeQ = d.Decompile(snapQ, Request(0x06009040u));
+            DecompileRequest qq = Request(quiet.base);
+            qq.prototypes.emplace_back(0x06009040u, calleeQ.prototype);
+            const DecompileResult callerQ = d.Decompile(snapQ, qq);
+            Print(quiet.name.c_str(), callerQ);
+            CHECK(calleeQ.prototype.known && callerQ.prototype.known);
+            CHECK(Has(callerQ.Text(), "return 10;"));
+            CHECK(PseudoAgreesWithRun(callerQ, snapQ, quiet, idx));
         }
         // ---- A3-6 (round 3), accepted: an absolute address is never in the stack -------------------------------
         // ReturnCheck, like the engine's own stack analysis, takes a store through a constant address to land
