@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
+ * Modified for SaturnExplorer: a cloned action tree that cannot be completed or registered is freed (patches/0032-allocation-failure-order-2.patch).
  */
 #include "action.hh"
 #include "funcdata.hh"
@@ -399,13 +400,25 @@ Action *ActionGroup::clone(const ActionGroupList &grouplist) const
   ActionGroup *res = (ActionGroup *)0;
   vector<Action *>::const_iterator iter;
   Action *ac;
-  for(iter=list.begin();iter!=list.end();++iter) {
-    ac = (*iter)->clone(grouplist);
-    if (ac != (Action *)0) {
-      if (res == (ActionGroup *)0)
-	res = new ActionGroup(flags,getName());
-      res->addAction(ac);
+  // SaturnExplorer: the copy is owned by nobody until it is returned, so an allocation failure frees what
+  // has been built (a group deletes its members) and the member in hand if the group does not hold it yet
+  try {
+    for(iter=list.begin();iter!=list.end();++iter) {
+      ac = (*iter)->clone(grouplist);
+      if (ac != (Action *)0) {
+	try {
+	  if (res == (ActionGroup *)0)
+	    res = new ActionGroup(flags,getName());
+	  res->addAction(ac);
+	} catch(...) {
+	  delete ac;
+	  throw;
+	}
+      }
     }
+  } catch(...) {
+    delete res;
+    throw;
   }
   return res;
 }
@@ -537,13 +550,23 @@ Action *ActionRestartGroup::clone(const ActionGroupList &grouplist) const
   ActionGroup *res = (ActionGroup *)0;
   vector<Action *>::const_iterator iter;
   Action *ac;
-  for(iter=list.begin();iter!=list.end();++iter) {
-    ac = (*iter)->clone(grouplist);
-    if (ac != (Action *)0) {
-      if (res == (ActionGroup *)0)
-	res = new ActionRestartGroup(flags,getName(),maxrestarts);
-      res->addAction(ac);
+  try {		// SaturnExplorer: as ActionGroup::clone
+    for(iter=list.begin();iter!=list.end();++iter) {
+      ac = (*iter)->clone(grouplist);
+      if (ac != (Action *)0) {
+	try {
+	  if (res == (ActionGroup *)0)
+	    res = new ActionRestartGroup(flags,getName(),maxrestarts);
+	  res->addAction(ac);
+	} catch(...) {
+	  delete ac;
+	  throw;
+	}
+      }
     }
+  } catch(...) {
+    delete res;
+    throw;
   }
   return res;
 }
@@ -899,13 +922,26 @@ Action *ActionPool::clone(const ActionGroupList &grouplist) const
   ActionPool *res = (ActionPool *)0;
   vector<Rule *>::const_iterator iter;
   Rule *rl;
-  for(iter=allrules.begin();iter!=allrules.end();++iter) {
-    rl = (*iter)->clone(grouplist);
-    if (rl != (Rule *)0) {
-      if (res == (ActionPool *)0)
-	res = new ActionPool(flags,getName());
-      res->addRule(rl);
+  try {		// SaturnExplorer: as ActionGroup::clone
+    for(iter=allrules.begin();iter!=allrules.end();++iter) {
+      rl = (*iter)->clone(grouplist);
+      if (rl != (Rule *)0) {
+	try {
+	  if (res == (ActionPool *)0)
+	    res = new ActionPool(flags,getName());
+	  res->addRule(rl);
+	} catch(...) {
+	  // addRule lists the rule first, and then indexes it by op-code: a failure in the second step
+	  // leaves the pool holding it
+	  if (res == (ActionPool *)0 || res->allrules.empty() || res->allrules.back() != rl)
+	    delete rl;
+	  throw;
+	}
+      }
     }
+  } catch(...) {
+    delete res;
+    throw;
   }
   return res;
 }
@@ -1152,7 +1188,12 @@ Action *ActionDatabase::deriveAction(const string &baseaction, const string &grp
   Action *newact = act->clone( curgrp );
 
   // Register the action with the name of the group it was derived from
-  registerAction(grp,newact);
+  try {
+    registerAction(grp,newact);
+  } catch(...) {
+    delete newact;	// SaturnExplorer: nothing holds it yet
+    throw;
+  }
   return newact;
 }
 

@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a Varnode that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: a Varnode the lists cannot take back is kept, and a Cover is replaced with the allocation first (patches/0032-allocation-failure-order-2.patch).
  */
 #include "varnode.hh"
 #include "funcdata.hh"
@@ -257,9 +258,10 @@ void Varnode::calcCover(void) const
 
 {
   if (hasCover()) {
+    Cover *newcover = new Cover;	// SaturnExplorer: before the old one is freed
     if (cover != (Cover *)0)
       delete cover;
-    cover = new Cover;
+    cover = newcover;
     setFlags(Varnode::coverdirty);
   }
 }
@@ -1240,6 +1242,9 @@ void VarnodeBank::clear(void)
 
   loc_tree.clear();
   def_tree.clear();
+  for(int4 i=0;i<limbo.size();++i)
+    delete limbo[i];
+  limbo.clear();
   uniqid = uniqbase;		// Reset counter to base value
   create_index = 0;		// Reset varnode creation index
 }
@@ -1317,6 +1322,19 @@ Varnode *VarnodeBank::xref(Varnode *vn)
   return vn;
 }
 
+/// SaturnExplorer: the sorted lists own their Varnodes, and a Varnode that setInput, setDef or makeFree
+/// has taken out of them and cannot put back (the insertion allocates) belongs to nobody: the ops that
+/// read and define it still point at it, so it cannot be freed on the spot, and it would leak. It is
+/// kept here, with room reserved before it left the lists, and freed with them by clear().
+/// \param vn is the Varnode that was taken out of the lists
+void VarnodeBank::keepOrphan(Varnode *vn)
+
+{
+  VarnodeLocSet::iterator iter = loc_tree.find(vn);
+  if (iter != loc_tree.end() && *iter == vn) return;	// The list holds it again (the failure was in def_tree)
+  limbo.push_back(vn);					// Cannot throw: the caller reserved the room
+}
+
 /// The Varnode is removed from the cross-referencing lists and reinserted as
 /// as if it were not defined by any PcodeOp and not an input to the function.
 /// If the Varnode was originally a PcodeOp output, this must be explicitly cleared.
@@ -1324,14 +1342,20 @@ Varnode *VarnodeBank::xref(Varnode *vn)
 void VarnodeBank::makeFree(Varnode *vn)
 
 {
+  limbo.reserve(limbo.size()+1);	// SaturnExplorer: see keepOrphan
   loc_tree.erase(vn->lociter);
   def_tree.erase(vn->defiter);
 
   vn->setDef((PcodeOp *)0);	// Clear things that make vn non-free
   vn->clearFlags(Varnode::insert|Varnode::input|Varnode::indirect_creation);
 
-  vn->lociter = loc_tree.insert(vn).first; // Re-insert as free varnode
-  vn->defiter = def_tree.insert(vn).first;
+  try {
+    vn->lociter = loc_tree.insert(vn).first; // Re-insert as free varnode
+    vn->defiter = def_tree.insert(vn).first;
+  } catch(...) {
+    keepOrphan(vn);
+    throw;
+  }
 }
 
 /// Any PcodeOps that read \b oldvn are changed to read \b newvn
@@ -1371,11 +1395,17 @@ Varnode *VarnodeBank::setInput(Varnode *vn)
   if (vn->isConstant())
     throw LowlevelError("Making input out of constant varnode");
 
+  limbo.reserve(limbo.size()+1);	// SaturnExplorer: see keepOrphan
   loc_tree.erase(vn->lociter);	// Erase the free version of varnode
   def_tree.erase(vn->defiter);
 
   vn->setInput();		// Set the input flag
-  return xref(vn);
+  try {
+    return xref(vn);
+  } catch(...) {
+    keepOrphan(vn);
+    throw;
+  }
 }
 
 /// The Varnode must initially be \e free. It will be removed
@@ -1396,11 +1426,17 @@ Varnode *VarnodeBank::setDef(Varnode *vn,PcodeOp *op)
     throw LowlevelError(s.str());
   }
 
+  limbo.reserve(limbo.size()+1);	// SaturnExplorer: see keepOrphan
   loc_tree.erase(vn->lociter);
   def_tree.erase(vn->defiter);
 
   vn->setDef(op);		// Change the varnode to be defined
-  return xref(vn);
+  try {
+    return xref(vn);
+  } catch(...) {
+    keepOrphan(vn);
+    throw;
+  }
 }
 
 /// The new Varnode object will already be put in the \e definition list as if

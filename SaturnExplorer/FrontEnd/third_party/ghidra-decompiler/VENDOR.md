@@ -56,6 +56,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0026-cspec-call-clobbers.patch` | `superh.cspec`: a call kills r0, r1, r4-r7, MACH, MACL and SR (T), as the SH ABI has them caller-saved, and keeps VBR; before, a register in neither list read after a call as the value before it. `Sh2SpecData.h` is regenerated. |
 | `0027-switch-default-is-case.patch` | `JumpBasic::foldInOneGuard` does not fold a guard into a switch when the guard's target is also one of the switch's destinations and a value the destination reads differs between the guard's edge and the switch block's (a `mova`'s r0): the default path took the switch block's value, and a reachable block was removed as unreachable. |
 | `0028-funcproto-set-effects.patch` | `FuncProto::setEffects`: the host sets one prototype's side-effect overrides (the registers a callee was proved to keep are unaffected by a call to it, where patch 0026 has the model kill them for every callee). |
+| `0032-allocation-failure-order-2.patch` | More allocation-failure ordering (area 6, round 2): `FuncProto::copy` and the two `ProtoStore*::clone` functions clone before they free; `HighVariable::mergeInternal` builds the merged list before it moves any Varnode; `VarnodeBank` (`setInput`, `setDef`, `makeFree`) and `ScopeInternal::renameSymbol` keep what they cannot put back; `PcodeOpBank::destroy`, `MapState::addRange`, `addSymbolInternal`, `addMapPoint` and `addSymbolWithConflict` leave nothing owned by nobody; four unreached `delete X; X = new` sites reordered (`setParamshift`, `TypeCode::setPrototype`, `Varnode::calcCover`, `circularqueue::setMax`); the cloned action tree, `newBlock*`, the virtual root, the call sites, `PackedDecode`'s buffers and `Database::attachScope` leave nothing leaked after a failure. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -107,6 +108,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0024: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
   - 0027: `TestDefaultAlsoCase` (the default that is also a case: the write under the join's test stays, the control still folds), and the generator's replay of ledger A4-4 (seeds 68620 and 107923).
   - 0028: `TestCallsAndTraps` ("A3-2": a lent callee that keeps r4-r7, MACH, MACL or SR leaves them the caller's own; one that changes them does not), and the generator's `effects-ignored` check.
+  - 0032: `SaturnExplorerDecompilerFaultTests` (its default subset pins the allocations of the patched functions by name and fails if one is gone; reverting `fspec.cc` or `variable.cc` crashes pinned cells; the leak pins need an ASan + LeakSanitizer build, `DecompilerFaultTests.cpp`'s header says how).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

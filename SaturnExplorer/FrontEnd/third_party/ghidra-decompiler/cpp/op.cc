@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a load is not moved past another load (patches/0012-load-in-place.patch).
  * Modified for SaturnExplorer: a PcodeOp that cannot be inserted or moved between lists is not lost (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: a PcodeOp that cannot be put on the final list is not lost; one that cannot be listed is freed (patches/0032-allocation-failure-order-2.patch).
  */
 #include "op.hh"
 #include "funcdata.hh"
@@ -1042,9 +1043,16 @@ PcodeOp *PcodeOpBank::createIndirect(int4 inputs,const Address &addr)
 
 {
   PcodeOp *op = new PcodeOp(2,SeqNum(addr,uniqid++));
-  alttree[op->getSeqNum()] = op;
-  op->setFlag(PcodeOp::dead);		// Start out life as dead
-  op->insertiter = deadlist.insert(deadlist.end(),op);
+  try {
+    alttree[op->getSeqNum()] = op;
+    op->setFlag(PcodeOp::dead);		// Start out life as dead
+    op->insertiter = deadlist.insert(deadlist.end(),op);
+  } catch(...) {
+    // SaturnExplorer: as in create, the lists own an op and the tree only indexes it
+    alttree.erase(op->getSeqNum());
+    delete op;
+    throw;
+  }
   return op;
 }
 
@@ -1072,13 +1080,16 @@ void PcodeOpBank::destroy(PcodeOp *op)
   if (!op->isDead())
     throw LowlevelError("Deleting integrated op");
 
+  // SaturnExplorer: the op is put on the final list first, the only step that allocates. The lists own
+  // their ops, so taking it out of them and then failing to add it here lost it. (It is on both lists for
+  // the erasures below, which cannot fail.)
+  deadandgone.push_back(op);
   if (op->code() == CPUI_INDIRECT)
     alttree.erase(op->getSeqNum());
   else
     optree.erase(op->getSeqNum());
   deadlist.erase(op->insertiter);
   removeFromCodeList(op);
-  deadandgone.push_back(op);
 }
 
 /// The PcodeOp is assigned the new op-code, which may involve moving it

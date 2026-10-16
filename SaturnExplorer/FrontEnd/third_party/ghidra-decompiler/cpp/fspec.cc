@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a parameter's replacement is allocated before the old one is freed (patches/0015-proto-param-replace-order.patch);
  * a host can set a function's side-effect overrides (patches/0028-funcproto-set-effects.patch).
+ * Modified for SaturnExplorer: a prototype is copied, and its store replaced, with the allocation first and the old object freed after (patches/0032-allocation-failure-order-2.patch).
  */
 #include "fspec.hh"
 #include "funcdata.hh"
@@ -3285,11 +3286,18 @@ ProtoStore *ProtoStoreSymbol::clone(void) const
 {
   ProtoStoreSymbol *res;
   res = new ProtoStoreSymbol(scope,restricted_usepoint);
-  delete res->outparam;
-  if (outparam != (ProtoParameter *)0)
-    res->outparam = outparam->clone();
-  else
-    res->outparam = (ProtoParameter *)0;
+  try {
+    // SaturnExplorer: the copy of the parameter is made before the constructor's one is freed, and the
+    // store is not lost if the copy fails
+    ProtoParameter *copy = (ProtoParameter *)0;
+    if (outparam != (ProtoParameter *)0)
+      copy = outparam->clone();
+    delete res->outparam;
+    res->outparam = copy;
+  } catch(...) {
+    delete res;
+    throw;
+  }
   return res;
 }
 
@@ -3410,16 +3418,23 @@ ProtoStore *ProtoStoreInternal::clone(void) const
 
 {
   ProtoStoreInternal *res = new ProtoStoreInternal(voidtype);
-  delete res->outparam;
-  if (outparam != (ProtoParameter *)0)
-    res->outparam = outparam->clone();
-  else
-    res->outparam = (ProtoParameter *)0;
-  for(int4 i=0;i<inparam.size();++i) {
-    ProtoParameter *param = inparam[i];
-    if (param != (ProtoParameter *)0)
-      param = param->clone();
-    res->inparam.push_back(param);
+  try {
+    // SaturnExplorer: as ProtoStoreSymbol::clone, and nothing a failed copy made is left behind
+    ProtoParameter *copy = (ProtoParameter *)0;
+    if (outparam != (ProtoParameter *)0)
+      copy = outparam->clone();
+    delete res->outparam;
+    res->outparam = copy;
+    res->inparam.reserve(inparam.size());
+    for(int4 i=0;i<inparam.size();++i) {
+      ProtoParameter *param = inparam[i];
+      if (param != (ProtoParameter *)0)
+        param = param->clone();
+      res->inparam.push_back(param);	// cannot throw: the room was made above
+    }
+  } catch(...) {
+    delete res;
+    throw;
   }
   return res;
 }
@@ -3760,21 +3775,26 @@ void FuncProto::paramShift(int4 paramshift)
   vector<ParameterPieces> pieces;
   model->assignParameterStorage(proto,pieces,false);
 
-  delete store;
-
   // This routine always converts -this- to have a ProtoStoreInternal
-  store = new ProtoStoreInternal(typefactory->getTypeVoid());
-
-  store->setOutput(pieces[0]);
-  uint4 j=0;
-  for(uint4 i=1;i<pieces.size();++i) {
-    if ((pieces[i].flags & ParameterPieces::hiddenretparm) != 0) {
-       store->setInput(i-1,"rethidden",pieces[i]);
-       continue;   // increment i but not j
+  // SaturnExplorer: the new store is built before the old one is freed, so a failure leaves \b store a valid object
+  ProtoStore *newstore = new ProtoStoreInternal(typefactory->getTypeVoid());
+  try {
+    newstore->setOutput(pieces[0]);
+    uint4 j=0;
+    for(uint4 i=1;i<pieces.size();++i) {
+      if ((pieces[i].flags & ParameterPieces::hiddenretparm) != 0) {
+         newstore->setInput(i-1,"rethidden",pieces[i]);
+         continue;   // increment i but not j
+      }
+      newstore->setInput(j,proto.innames[j],pieces[i]);
+      j = j + 1;
     }
-    store->setInput(j,proto.innames[j],pieces[i]);
-    j = j + 1;
+  } catch(...) {
+    delete newstore;
+    throw;
   }
+  delete store;
+  store = newstore;
   setInputLock(true);
   setDotdotdot(proto.firstVarArgSlot >= 0);
 }
@@ -3809,17 +3829,24 @@ FuncProto::FuncProto(void)
 void FuncProto::copy(const FuncProto &op2)
 
 {
+  // SaturnExplorer: everything that allocates is done first. The old store is freed only once its
+  // replacement exists; a failed clone left the freed pointer in \b store and ~FuncProto freed it again.
+  ProtoStore *newstore = (ProtoStore *)0;
+  if (op2.store != (ProtoStore *)0)
+    newstore = op2.store->clone();
+  try {
+    effectlist = op2.effectlist;
+    likelytrash = op2.likelytrash;
+  } catch(...) {
+    delete newstore;
+    throw;
+  }
   model = op2.model;
   extrapop = op2.extrapop;
   flags = op2.flags;
   if (store != (ProtoStore *)0)
     delete store;
-  if (op2.store != (ProtoStore *)0)
-    store = op2.store->clone();
-  else
-    store = (ProtoStore *)0;
-  effectlist = op2.effectlist;
-  likelytrash = op2.likelytrash;
+  store = newstore;
   injectid = op2.injectid;
 }
 

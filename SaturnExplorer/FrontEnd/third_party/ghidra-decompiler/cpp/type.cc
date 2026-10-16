@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a data-type that cannot be inserted is freed (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: a prototype is replaced with the allocation first, and the "void" data-type is freed if the tree cannot take it (patches/0032-allocation-failure-order-2.patch).
  */
 #include "type.hh"
 #include "funcdata.hh"
@@ -3144,9 +3145,10 @@ void TypeCode::setPrototype(TypeFactory *tfact,const PrototypePieces &sig,Dataty
 {
   factory = tfact;
   flags |= variable_length;
+  FuncProto *newproto = new FuncProto();	// SaturnExplorer: before the old one is freed
   if (proto != (FuncProto *)0)
     delete proto;
-  proto = new FuncProto();
+  proto = newproto;
   proto->setInternal(sig.model,voidtype);
 
   proto->updateAllTypes(sig);
@@ -4102,7 +4104,12 @@ TypeVoid *TypeFactory::getTypeVoid(void)
   TypeVoid tv;
   tv.id = Datatype::hashName(tv.name);
   ct = (TypeVoid *)tv.clone();
-  tree.insert(ct);
+  try {
+    tree.insert(ct);
+  } catch(...) {
+    delete ct;		// SaturnExplorer: the tree owns a data-type only once it holds it
+    throw;
+  }
   nametree.insert(ct);
   typecache[0][TYPE_VOID-TYPE_FLOAT] = ct; // Cache this particular type ourselves
   return ct;

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a RangeHint the list cannot take is freed (patches/0032-allocation-failure-order-2.patch).
  */
 #include "varmap.hh"
 #include "funcdata.hh"
@@ -1031,7 +1033,12 @@ void MapState::addRange(uintb st,Datatype *ct,uint4 fl,RangeHint::RangeType rt,i
   sst = sign_extend(sst,spaceid->getAddrSize()*8-1);
   sst = (intb)AddrSpace::addressToByte(sst,spaceid->getWordSize());
   RangeHint *newRange = new RangeHint(st,ct->getSize(),sst,ct,fl,rt,hi);
-  maplist.push_back(newRange);
+  try {
+    maplist.push_back(newRange);
+  } catch(...) {
+    delete newRange;		// SaturnExplorer: the list owns a hint only once it holds it
+    throw;
+  }
 #ifdef OPACTION_DEBUG
   if (debugon) {
     ostringstream s;
@@ -1200,7 +1207,12 @@ bool MapState::initialize(void)
   sst = (intb)AddrSpace::addressToByte(sst,spaceid->getWordSize());
   // Add extra range to bound any final open entry
   RangeHint *termRange = new RangeHint(high,1,sst,defaultType,0,RangeHint::endpoint,-2);
-  maplist.push_back(termRange);
+  try {
+    maplist.push_back(termRange);
+  } catch(...) {
+    delete termRange;		// SaturnExplorer: as in addRange
+    throw;
+  }
 
   stable_sort(maplist.begin(),maplist.end(),RangeHint::compareRanges);
   reconcileDatatypes();

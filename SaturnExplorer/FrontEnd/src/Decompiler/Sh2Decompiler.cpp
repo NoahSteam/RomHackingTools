@@ -2470,14 +2470,16 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                                     uint32_t address, int count)
 {
-    // Every way into the engine checks this: disassembly builds an Architecture too, which would
-    // reset the same possibly half-reset translator.
-    if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };
-    std::string error;
-    if (!SaturnArchitecture::StartLibrary(mConfigDir, error)) return std::vector<std::string>{ "<" + error + ">" };
+    // Never throws, whatever the heap does (A6-16): an allocation failure ends the listing with a line that
+    // says so, and the engine is not touched again. Everything that can allocate is inside the try.
     AsmLines em;
     try
     {
+        // Every way into the engine checks this: disassembly builds an Architecture too, which would
+        // reset the same possibly half-reset translator.
+        if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };
+        std::string error;
+        if (!SaturnArchitecture::StartLibrary(mConfigDir, error)) return std::vector<std::string>{ "<" + error + ">" };
         std::ostringstream errors;
         errors.exceptions(std::ios::badbit);
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, 20000, nullptr, errors);
@@ -2501,10 +2503,18 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
     catch (...)
     {
         // Out of memory inside the engine (or anything else not its own): treated as Decompile
-        // treats it -- the engine may be damaged, so nothing touches it again.
+        // treats it -- the engine may be damaged, so nothing touches it again. The listing so far is
+        // cut short, and says so: a caller reading it would otherwise take it for the whole.
         gEngineDamaged = true;
+        try
+        {
+            em.lines.push_back("<stopped: out of memory or an unexpected exception>");
+        }
+        catch (...)
+        {
+        }
     }
-    return em.lines;
+    return std::move(em.lines);   // a move: a copy would allocate outside the try
 }
 
 }  // namespace decomp

@@ -306,16 +306,22 @@ if(SE_ENABLE_DECOMPILER)
                 FrontEnd/tests/DecompilerFaultTests.cpp ${SE_DECOMPILER_TEST_SOURCES})
             target_include_directories(SaturnExplorerDecompilerFaultTests PRIVATE FrontEnd/src FrontEnd/tests include)
             target_link_libraries(SaturnExplorerDecompilerFaultTests PRIVATE SaturnExplorerGhidraDecomp Threads::Threads)
+            # The pins of the fault matrix check which function made the allocation they name (dladdr on a
+            # backtrace), which needs the executable's functions in its dynamic symbol table (A6-12).
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                target_link_options(SaturnExplorerDecompilerFaultTests PRIVATE -rdynamic)
+            endif()
             add_test(NAME SaturnExplorerDecompilerFaultTests
                      COMMAND SaturnExplorerDecompilerFaultTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fault_test)
             # The leak check of a child that leaves through _Exit is made by the test itself, which
             # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
             set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600
                                  ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
-            # The default subset pins one cell for each finding of the sweep (kPins in
-            # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-9), so it fails again if one
-            # comes back. It was WILL_FAIL until patch 0023 and the host's stream and pass-boundary
-            # fixes closed them.
+            # The default subset pins cells for each finding of the sweep (kPins in
+            # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-15), each with the name of the
+            # function whose allocation it fails, so it fails again if one comes back or if a pin no
+            # longer leads to its site. It was WILL_FAIL until patch 0023 and the host's stream and
+            # pass-boundary fixes closed the first nine.
         endif()
 
         # Real game code from the spike's Yabause savestate, through the savestate driver.

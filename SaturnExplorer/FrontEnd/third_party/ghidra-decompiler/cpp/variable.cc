@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the merged list of a HighVariable is built before its Varnodes change owner (patches/0032-allocation-failure-order-2.patch).
  */
 #include "variable.hh"
 #include "op.hh"
@@ -652,6 +654,16 @@ void HighVariable::mergeInternal(HighVariable *tv2,bool isspeculative)
     }
   }
 
+  if ((!isspeculative)&&((numMergeClasses!=1)||(tv2->numMergeClasses!=1)))
+    throw LowlevelError("Making a non-speculative merge after speculative merges have occurred");
+
+  // SaturnExplorer: the merged member list is built before any Varnode changes owner. Moving the
+  // Varnodes first and allocating after left them pointing at \b this while \b tv2 still listed them, and
+  // when the allocation failed each was removed from a HighVariable that had already been freed.
+  vector<Varnode *> merged(inst.size()+tv2->inst.size(),(Varnode *)0);
+  std::merge(inst.begin(),inst.end(),tv2->inst.begin(),tv2->inst.end(),merged.begin(),compareJustLoc);
+
+  // Nothing below allocates, until the covers are merged.
   if (isspeculative) {
     for(i=0;i<tv2->inst.size();++i) {
       Varnode *vn = tv2->inst[i];
@@ -660,22 +672,24 @@ void HighVariable::mergeInternal(HighVariable *tv2,bool isspeculative)
     numMergeClasses += tv2->numMergeClasses;
   }
   else {
-    if ((numMergeClasses!=1)||(tv2->numMergeClasses!=1))
-      throw LowlevelError("Making a non-speculative merge after speculative merges have occurred");
     for(i=0;i<tv2->inst.size();++i) {
       Varnode *vn = tv2->inst[i];
       vn->setHigh(this,vn->getMergeGroup());
     }
   }
-  vector<Varnode *> instcopy(inst);
-  inst.resize(inst.size()+tv2->inst.size(),(Varnode *)0);
-  std::merge(instcopy.begin(),instcopy.end(),tv2->inst.begin(),tv2->inst.end(),inst.begin(),compareJustLoc);
+  inst.swap(merged);
   tv2->inst.clear();
 
-  if (((highflags&coverdirty)==0)&&((tv2->highflags&coverdirty)==0))
-    internalCover.merge(tv2->internalCover);
-  else
-    highflags |= coverdirty;
+  try {
+    if (((highflags&coverdirty)==0)&&((tv2->highflags&coverdirty)==0))
+      internalCover.merge(tv2->internalCover);
+    else
+      highflags |= coverdirty;
+  } catch(...) {
+    highflags |= coverdirty;		// the cover is rebuilt from the members when it is next needed
+    delete tv2;				// it has no members left, and nothing else refers to it
+    throw;
+  }
 
   delete tv2;
 }

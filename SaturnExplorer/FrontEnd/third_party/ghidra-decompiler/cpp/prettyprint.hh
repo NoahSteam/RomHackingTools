@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the circular queue is reallocated with the allocation first (patches/0032-allocation-failure-order-2.patch).
  */
 /// \file prettyprint.hh
 /// \brief Routines for emitting high-level (C) language syntax in a well formatted way.
@@ -1016,9 +1018,10 @@ void circularqueue<_type>::setMax(int4 sz)
 
 {
   if (max != sz) {
+    _type *newcache = new _type [ sz ];	// SaturnExplorer: before the old queue is freed
     delete [] cache;
     max = sz;
-    cache = new _type [ sz ];
+    cache = newcache;
   }
   left = 1;			// This operation empties queue
   right = 0;
