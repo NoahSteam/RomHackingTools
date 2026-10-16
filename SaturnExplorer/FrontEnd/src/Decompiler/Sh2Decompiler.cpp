@@ -22,6 +22,7 @@
 #include <new>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace sfe
 {
@@ -1848,6 +1849,8 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, int depth = 0)
             if (other->isConstant() && (other->getOffset() & ~mask) == 0) continue;
             return false;
         }
+        case ghidra::CPUI_RETURN:   // (r0 left in the return register by a poll is no use of the value: the decompiler returns it whatever the code meant)
+            continue;
         case ghidra::CPUI_INT_ZEXT:
         case ghidra::CPUI_INT_SEXT:
         case ghidra::CPUI_COPY:
@@ -2579,6 +2582,7 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     std::vector<HardwareRange> marked;
     for (const auto& v : request.volatileMemory)
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) marked.push_back(h);
+    for (const auto& h : r.aliasedMemory) marked.push_back(HardwareRange{ h.first, h.second });
     auto isMarked = [&](uint32_t a) {
         for (const HardwareRange& h : marked)
             if (h.first <= a && a <= h.last) return true;
@@ -2687,7 +2691,7 @@ std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghid
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
         const ghidra::PcodeOp* o = *it;
-        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant() || !o->getIn(1)->isConstant()) continue;
+        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
         const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
         if (!u || (u->getType() != ghidra::UserPcodeOp::volatile_read && u->getType() != ghidra::UserPcodeOp::volatile_write)) continue;
         const uint32_t address = static_cast<uint32_t>(o->getIn(1)->getOffset());
@@ -2729,8 +2733,7 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
         members.push_back(m);
     };
     for (const ConstAccess& c : known) add(c, true);
-    for (const ConstAccess& c : seen) add(c, false);
-    std::sort(members.begin(), members.end(), [](const Member& x, const Member& y) {
+    for (const ConstAccess& c : seen) add(c, false);    std::sort(members.begin(), members.end(), [](const Member& x, const Member& y) {
         return std::tie(x.bytes.kind, x.bytes.first, x.bytes.last) < std::tie(y.bytes.kind, y.bytes.first, y.bytes.last);
     });
     auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
@@ -2754,7 +2757,7 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
         if (!m.flagged || m.isKnown) continue;
         known.push_back(m.access);
         // (a purge is volatile already; it is only the evidence)
-        if (m.access.address != m.bus && (m.access.address >> 29) == 2) continue;
+        if (m.access.address != m.access.bus && (m.access.address >> 29) == 2) continue;
         out.push_back(HardwareRange{ m.access.address & ~3u, (m.access.address + m.access.size - 1) | 3u });
     }
     return out;
@@ -2850,9 +2853,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return false;
     };
 
+    // Ordinary memory the function reaches under more than one address (A5-52, A5-53), found after a pass's actions from the accesses the
+    // engine folded into variables, and made volatile for the passes after it: the engine keys memory by address, and would forward a store
+    // past a write to the other name of the same word. Found in a pass that prints, it makes that pass give way to another.
+    std::vector<ConstAccess> aliasKnown;
+    std::vector<HardwareRange> aliasRanges;
+    bool aliasRetry = false;
+    constexpr int kAliasRounds = 6;
+
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
-    // literals applied, actions run. 'print' adds the markup output.
-    auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets) {
+    // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
+    // actions showed memory with two names that is not yet volatile ('aliasRetry').
+    auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
         errors.exceptions(std::ios::badbit);   // an allocation failure must not just cut the text short
@@ -3040,6 +3052,21 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
+
+        if (!request.allMemoryVolatile)
+        {
+            const std::vector<HardwareRange> fresh = NewAliasedRanges(ConstantAccesses(*fd, ram), aliasKnown);
+            for (const HardwareRange& h : fresh)
+            {
+                aliasRanges.push_back(h);
+                userVolatile.push_back(h);
+            }
+            if (!fresh.empty() && print && mayRetry)
+            {
+                aliasRetry = true;
+                return std::string();
+            }
+        }
 
         if (targets)
         {
@@ -3339,14 +3366,20 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     }
     else if (request.registerCallees)
     {
-        runPass(CalleeAliases(), false, &first);
+        runPass(CalleeAliases(), false, &first, false);
     }
     if (seedOut)
     {
         seedOut->literals = knownLiterals;
         seedOut->callees = first;
     }
-    printed = runPass(first, true, &callees);
+    for (int round = 0;; ++round)
+    {
+        aliasRetry = false;
+        printed = runPass(first, true, &callees, round < kAliasRounds);
+        if (!aliasRetry) break;
+    }
+    for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
     if (printed.empty())
     {
         r.status = DecompileStatus::NoCode;

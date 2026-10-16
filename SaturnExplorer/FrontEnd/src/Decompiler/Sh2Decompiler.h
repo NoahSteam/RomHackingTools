@@ -348,6 +348,12 @@ struct DecompileResult
     std::vector<FlowWarning> flowWarnings;   // every one is in warnings too
     std::vector<HardwareNote> hardwareNotes; // the cautions are in warnings too
     std::vector<MemoryAccess> accesses;      // in p-code order
+    // Ordinary memory the host made volatile for this function (A5-50, A5-52, A5-53): a word it reaches under two addresses of the bus
+    // (the cached and cache-through partitions, bits 28-27, the repeats of work RAM and VDP memory) is two memories to the engine's data
+    // flow, which would forward a store past a write to the other name; and a byte store to colour RAM writes the whole entry. Each range
+    // is a constant address the function accesses, outward to whole longwords. Accesses in them are printed as they are, in the ledger,
+    // as the user's volatile ranges are.
+    std::vector<std::pair<uint32_t, uint32_t>> aliasedMemory;
     bool unsupported = false;      // A3: a PC-relative load or mova in a delay slot
     uint32_t unsupportedAt = 0;    // the slot instruction's address
     bool unimplemented = false;    // the spec has no semantics for an instruction
