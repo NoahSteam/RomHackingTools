@@ -1615,6 +1615,7 @@ void TestHardwareVolatility()
         add("a5_37a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x1104, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0000, 0x25FE, 0x0020, 0x0000, 0x0101 }, 0x14, 0x25FE0000u);
         add("a5_37b", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x1101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x25FE, 0x0030, 0x0000, 0x0101 }, 0x14, 0x25FE0010u);
         add("a5_37c", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0x8512, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0000, 0x05F8, 0x0002 }, 0x14, 0x05F80000u);
+        add("a5_37_mirror", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x1104, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0100, 0x25FE, 0x0120, 0x0000, 0x0101 }, 0x14, 0x25FE0100u);   // the same through the mirrors 0x25FE0100, 0x25FE0120
         add("a5_37d", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0x71FC, 0xD003, 0x2102, 0x000B, 0x0009, 0x25FE, 0x0014, 0x25FE, 0x0034, 0x0000, 0x0101 }, 0x14, 0x25FE0014u);
         // A5-38: a merged pointer whose values are register aliases (printed as numbers).
         add("a5_38a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0110, 0x25FE, 0x0130, 0x0000, 0x0101 }, 0x14, 0x25FE0110u);
@@ -2728,6 +2729,10 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
         CHECK(HasNote(r, "if the pointer holds 0x05F80006 (VDP2_VRSIZE): a read of VDP2_VRSIZE through the cached partition is a cache read", true));
         CHECK(!HasNote(r, "latches HCNT and VCNT", false) && !HasNote(r, "if the index is 0", false));
+        r = R5("a5_37_mirror", "puVar1[4] = 0x101 from the mirrors 0x25FE0100 and 0x25FE0120: SCU_D0EN and SCU_D1EN through their mirrors");
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0110 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0130 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        CHECK(!HasNote(r, "through a mirror (shown by address)", false));   // the access is printed as puVar1[4], not by address
         r = R5("a5_37d", "puVar1[-1] = 0x101 from &SCU_D0MD or &SCU_D1MD: SCU_D0EN or SCU_D1EN");
         CHECK(Has(r.Text(), "puVar1[-1] = 0x101;"));
         CHECK(HasNote(r, "if the pointer holds 0x25FE0010 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set", false) && HasNote(r, "if the pointer holds 0x25FE0030 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set", false));
