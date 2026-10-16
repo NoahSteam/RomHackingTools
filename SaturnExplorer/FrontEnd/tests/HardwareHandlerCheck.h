@@ -198,7 +198,9 @@ inline void CheckOnChip(const Cases& c, const std::vector<WidthProbe>& table, co
         case WidthRule::OddByteWrite:
         case WidthRule::OddByteRead:
         case WidthRule::LongHalfWrite:
+        case WidthRule::LongHalfRead:
         case WidthRule::KeyedWordWrite:
+        case WidthRule::KeyedByteWrite:
         case WidthRule::MirrorWrite:
             if (meaningful) pr.Add(CellName(p) + ": the table says nothing reaches the register, the handler decodes it" + where);
             break;
