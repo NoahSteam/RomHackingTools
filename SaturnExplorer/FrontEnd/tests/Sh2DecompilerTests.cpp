@@ -6451,6 +6451,41 @@ void TestCallsAndTraps()
         CHECK(!MayReturn("int f(int param_1)\n{\n  while (param_1 != 0) {\n    param_1 = param_1 - 1;\n  }\n  return 0;\n}", { 1 }, 0, why));
     }
 
+    // ---- Round 5: the evaluator knows what the run gave the code on entry ------------------------------
+    // `in_` and `unaff_` names are the registers' starting values, `in_stack_` and a local nothing assigned the words the stack
+    // held, and `extraout_` (what a call returned) stays unknown. Before, all of them were unknown and agreed with any run, so a
+    // text that named the wrong register, or read the slot a callee pushed, was accepted (A3-15).
+    {
+        std::string why;
+        CallFixture dummy = { "entry", 0x06009000u, { 0x000B, 0x0009 } };
+        PseudoEval::Entry e;
+        e.regs = RunEntryRegisters({ 0x5555u });
+        e.snap = CallSnapshot(dummy, 99);
+        e.sp = kRunStack;
+        const std::string r8 = "uint f(void)\n{\n  uint unaff_r8;\n  return unaff_r8;\n}";
+        CHECK(MayReturn(r8, { 0x5555u }, 0x1888, why, true, &e) && !MayReturn(r8, { 0x5555u }, 0x1999, why, true, &e));
+        CHECK(MayReturn(r8, { 0x5555u }, 0x1999, why));   // no entry state: unknown, agrees with any
+        const std::string r4 = "uint f(void)\n{\n  uint in_r4;\n  return in_r4 + 1;\n}";
+        CHECK(MayReturn(r4, { 0x5555u }, 0x5556, why, true, &e) && !MayReturn(r4, { 0x5555u }, 0x1445, why, true, &e));
+        const std::string sr = "uint f(void)\n{\n  uint in_sr;\n  return in_sr | 0xf0;\n}";
+        CHECK(MayReturn(sr, {}, 0xF0, why, true, &e) && !MayReturn(sr, {}, 0, why, true, &e));
+        const std::string retaddr = "uint f(void)\n{\n  uint unaff_retaddr;\n  return unaff_retaddr;\n}";
+        CHECK(MayReturn(retaddr, {}, kRunSentinel, why, true, &e) && !MayReturn(retaddr, {}, 1, why, true, &e));
+        // The slot a callee pushed is not the word the run started with.
+        const std::string local = "uint f(void)\n{\n  uint xStack_8;\n  func_0x06009020();\n  return xStack_8;\n}";
+        CHECK(MayReturn(local, {}, 0, why, true, &e) && !MayReturn(local, {}, 0x22222222, why, true, &e));
+        CHECK(MayReturn(local, {}, 0x22222222, why));
+        // ...but a local the text assigned is unknown after a call, and one whose address is taken may have been written by it.
+        const std::string assigned = "uint f(void)\n{\n  uint xStack_8;\n  xStack_8 = 5;\n  func_0x06009020();\n  return xStack_8;\n}";
+        CHECK(MayReturn(assigned, {}, 7, why, true, &e));
+        const std::string taken = "uint f(void)\n{\n  uint xStack_8;\n  func_0x06009020(&xStack_8);\n  return xStack_8;\n}";
+        CHECK(MayReturn(taken, {}, 7, why, true, &e));
+        const std::string pushed = "uint f(void)\n{\n  return in_stack_00000004;\n}";
+        CHECK(MayReturn(pushed, {}, 0, why, true, &e) && !MayReturn(pushed, {}, 9, why, true, &e));
+        const std::string out = "uint f(void)\n{\n  uint extraout_r7;\n  func_0x06009020();\n  return extraout_r7;\n}";
+        CHECK(MayReturn(out, {}, 0x1777, why, true, &e) && MayReturn(out, {}, 5, why, true, &e));   // what a call returned: unknown
+    }
+
     // ---- A3-11: the evaluator reads what the text says ----------------------------------------
     // Text it used to accept for a run it does not agree with ...
     {
