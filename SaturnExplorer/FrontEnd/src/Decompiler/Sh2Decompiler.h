@@ -153,7 +153,10 @@ struct Line
 
 // Where the engine is within one decompilation. Two passes repeat Init..Actions; only the last
 // prints. The cancel check-points are in Flow and Actions; Init, Print and Teardown have none
-// (PLAN.md A4), so a cancel requested there takes effect at the next check-point, if any.
+// (PLAN.md A4), so a cancel requested there takes effect at the next check-point, if any. The
+// first pass's last check-point comes after its Teardown (its Architecture is gone), and is
+// reported as Actions, the phase the pass was in: a cancel raised while that pass was torn down is
+// honoured at once, not carried through the second pass's Init into its Flow (A6-35).
 enum class DecompilePhase : uint8_t { Idle, Init, Flow, Actions, Print, Teardown };
 const char* PhaseName(DecompilePhase phase);
 

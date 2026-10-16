@@ -118,8 +118,12 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     static std::mutex m;
     static Stage stage = Stage::Fresh;
     static std::string firstError;                    // Refused
-    static const char* interruptedBy = nullptr;       // Interrupted: a literal, so recording it cannot fail
+    static std::string interruptedText;               // Interrupted: made before the first global write
     std::lock_guard<std::mutex> lock(m);
+    // What the call that moved the stage hands back, swapped into 'error' (no allocation), so that the request that
+    // met the failure says what the next ones will say even when the heap is gone (A6-32): the texts are all made
+    // before the stage changes, and moved (not copied) into place after it.
+    std::string firstReport;
     if (stage == Stage::Fresh)
     {
         // An exception from here to the vector below leaves the stage Fresh: nothing global was written.
@@ -128,12 +132,20 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
         {
             std::string text = bundle.error.empty() ? std::string("Decompiler unavailable: the language files could not be prepared")
                                                     : std::move(bundle.error);
-            firstError = std::move(text);
+            std::string keep = text;
+            firstError = std::move(keep);
+            firstReport = std::move(text);
             stage = Stage::Refused;
         }
         else
         {
             const std::vector<std::string> paths{ bundle.dir };
+            const auto text = [](const char* by) {
+                return std::string("Decompiler unavailable: the engine's library did not finish starting (") + by +
+                       "); restart Saturn Explorer to decompile again";
+            };
+            std::string oomText = text("out of memory"), otherText = text("an unexpected exception");
+            std::string oomKeep = oomText, otherKeep = otherText;
             stage = Stage::Interrupted;   // from the first global write; Ready only once the last has been made
             try
             {
@@ -142,11 +154,13 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
             }
             catch (std::bad_alloc&)
             {
-                interruptedBy = "out of memory";
+                interruptedText = std::move(oomKeep);
+                firstReport = std::move(oomText);
             }
             catch (...)
             {
-                interruptedBy = "an unexpected exception";
+                interruptedText = std::move(otherKeep);
+                firstReport = std::move(otherText);
             }
         }
     }
@@ -156,13 +170,14 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
         error.clear();
         return true;
     case Stage::Refused:
-        error = firstError;
+        if (!firstReport.empty()) error.swap(firstReport);
+        else error = firstError;
         return false;
     default:
         // Every call says it, the first included: the request that met the failure is told what the next
         // ones will be told, and neither is "out of memory" with an engine that looks usable.
-        error = std::string("Decompiler unavailable: the engine's library did not finish starting (") +
-                (interruptedBy ? interruptedBy : "interrupted") + "); restart Saturn Explorer to decompile again";
+        if (!firstReport.empty()) error.swap(firstReport);
+        else error = interruptedText;
         return false;
     }
 }

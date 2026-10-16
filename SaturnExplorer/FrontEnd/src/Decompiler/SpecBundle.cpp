@@ -85,6 +85,26 @@ std::string Extract(const std::string& dir, const std::string& manifest,
     const std::string tmp = dir + ".tmp-" + std::to_string(ProcessId());
     if (!RemoveEntry(tmp)) return "cannot clear the staging directory " + tmp;
     if (!MakeDirectory(tmp)) return "cannot create " + tmp;
+    // Whichever way this function is left, the staging directory goes with it unless it was moved into place: an
+    // exception (a failed allocation in a Join, in the staged Verify's read) used to leave it for good, up to 19 KB a
+    // time, and no later process removes another pid's (A6-33). The removal is best effort and must not throw out of a
+    // destructor that may be running during unwinding.
+    struct StagingGuard
+    {
+        const std::string& dir;
+        bool armed;
+        ~StagingGuard()
+        {
+            if (!armed) return;
+            try
+            {
+                RemoveEntry(dir);
+            }
+            catch (...)
+            {
+            }
+        }
+    } guard{ tmp, true };
 
     std::string error;
     for (const SpecFileData& f : files)
@@ -113,6 +133,7 @@ std::string Extract(const std::string& dir, const std::string& manifest,
         RemoveEntry(tmp);
         return "cannot move " + tmp + " to " + dir;
     }
+    guard.armed = false;   // published: the directory is no longer the staging one
     return std::string();
 }
 
