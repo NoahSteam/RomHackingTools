@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
  * Modified for SaturnExplorer: an input that is a piece of a register is named with the byte it starts at (patches/0037-engine-division-piece-and-input-names.patch).
+ * Modified for SaturnExplorer: the bytes of a register the function keeps are named with the byte they start at, as an input's are (patches/0044-engine-round5-printed-value-fixes.patch).
  */
 #include "database.hh"
 #include "funcdata.hh"

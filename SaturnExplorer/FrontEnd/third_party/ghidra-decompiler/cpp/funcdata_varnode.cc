@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
  */
 #include "funcdata.hh"
 
