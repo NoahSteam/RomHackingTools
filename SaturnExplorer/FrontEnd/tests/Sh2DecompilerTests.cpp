@@ -5261,12 +5261,16 @@ void TestSignedGuardTable()
     const std::vector<uint16_t> zeroExtended = { 0x644C, 0xD204, 0xE102, 0x3417, 0x890C, 0x4408, 0xC702, 0x014E, 0x412B, 0x0009, 0x0600, 0x9030,
                                                  0x0600, 0x9028, 0x0600, 0x902C, 0x0600, 0x9030, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001,
                                                  0x000B, 0xE002 };
+    // exts.b r4,r4 first: the index is the low byte as a signed number, so the signed bound lets 0x80 to 0xFF through.
+    std::vector<uint16_t> signExtended = zeroExtended;
+    signExtended[0] = 0x644E;
     struct Case
     {
         const char* name;
         std::vector<uint16_t> code;
         bool recovered;   // the switch is shown and the signature lent
         bool zeroExtended = false;
+        bool truncated = false;   // not recovered: a switch over the byte, said to miss cases (the engine's own sanity check)
     };
     const std::vector<Case> cases = {
         { "table, cmp/gt only", oneGuard(0xE102, 0x3417), false },
@@ -5275,6 +5279,7 @@ void TestSignedGuardTable()
         { "table, cmp/hs (control)", oneGuard(0xE103, 0x3412), true },
         { "table, cmp/pz and cmp/gt (control)", twoGuards, true },
         { "table, zero-extended index and cmp/gt (control)", zeroExtended, true, true },
+        { "table, sign-extended index and cmp/gt", signExtended, false, false, true },
     };
     // The oracle reads a switch (it could not before) and can fail on the text this engine printed before
     // patch 0029: three cases and a default, which the hardware contradicts for index -1 (it returns 2).
@@ -5306,9 +5311,10 @@ void TestSignedGuardTable()
         const DecompileResult r = d.Decompile(snap, Request(base));
         Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
-        // The text is checked against the emulator, index by index (negatives included).
-        CHECK(PseudoAgreesWithRun(r, snap, f, c.zeroExtended ? byteIndices : indices));
-        CHECK(Has(r.Text(), "switch(") == c.recovered);
+        // The text is checked against the emulator, index by index (negatives included). (A truncated switch is on a
+        // signed char, whose case labels the evaluator does not read.)
+        if (!c.truncated) CHECK(PseudoAgreesWithRun(r, snap, f, c.zeroExtended ? byteIndices : indices));
+        CHECK(Has(r.Text(), "switch(") == (c.recovered || c.truncated));
         CHECK(r.prototype.known == c.recovered);
         CHECK(r.prototypeWithheld.empty() == c.recovered);
         uint32_t minusOne = 0;
@@ -5323,9 +5329,17 @@ void TestSignedGuardTable()
             // Index -1 reads the word before the table, case 2's address; the guard does not exclude it. Said: the
             // jump is not resolved, the larger indices still reach the default through the engine's own test.
             CHECK(minusOne == 2);
-            CHECK(WarnsAbout(r, "Could not recover jumptable") && WarnsAbout(r, "Treating indirect jump as call"));
-            CHECK(Has(r.prototypeWithheld, "indirect"));
-            CHECK(!Has(r.Text(), "case ") && !Has(r.Text(), "default"));
+            if (c.truncated)
+            {
+                // The byte is the switch variable and the table is cut at the words that are code: said, and not lent.
+                CHECK(WarnsAbout(r, "cases may be missing") && Has(r.prototypeWithheld, "jump table"));
+            }
+            else
+            {
+                CHECK(WarnsAbout(r, "Could not recover jumptable") && WarnsAbout(r, "Treating indirect jump as call"));
+                CHECK(Has(r.prototypeWithheld, "indirect"));
+                CHECK(!Has(r.Text(), "case ") && !Has(r.Text(), "default"));
+            }
             // Nothing is lent, so no caller is told it can pass any index.
             DecompileRequest q = Request(base);
             CHECK(!d.Decompile(snap, q).prototype.known);
