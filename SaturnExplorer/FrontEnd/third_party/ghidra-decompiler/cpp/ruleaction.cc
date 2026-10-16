@@ -7796,18 +7796,27 @@ int4 RulePositiveDiv::applyOp(PcodeOp *op,Funcdata &data)
 /// reasons about the exact value, not the wrapped one) and wrong as a result: `x / 7 * 4` came out as
 /// `(uint4)((uint8)x * 0x124924925 >> 0x21) & 0xfffffffc`, which differs for x >= 0x38000000.
 /// \param multConst is the new (up to 128-bit) multiplier
-/// \param xbits is the number of significant bits of the multiplied value
+/// \param xbits is the number of significant bits of the multiplied value (for a signed one, without the sign)
 /// \param size is the size of the multiply in bytes
+/// \param isSigned is \b true if the multiplied value is sign-extended
 /// \return \b true if the product cannot overflow
-static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4 size)
+static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4 size,bool isSigned)
 
 {
   int4 bits;
-  if (multConst[1] != 0)
-    bits = 128 - count_leading_zeros((uintb)multConst[1]);
-  else
-    bits = 64 - count_leading_zeros((uintb)multConst[0]);
-  return (int4)xbits + bits <= 8 * size;
+  if (size > 8) {
+    bits = (multConst[1] != 0) ? 128 - count_leading_zeros((uintb)multConst[1]) : 64 - count_leading_zeros((uintb)multConst[0]);
+  }
+  else {
+    // The constant the multiply holds is the low 'size' bytes (the addition carries out of them, as the rule's does),
+    // and for a signed multiply a negative constant is the size of its magnitude.
+    uintb mask = calc_mask(size);
+    uintb v = multConst[0] & mask;
+    if (isSigned && signbit_negative(v,size))
+      v = (~v + 1) & mask;
+    bits = 64 - count_leading_zeros(v);
+  }
+  return (int4)xbits + bits <= 8 * size - (isSigned ? 1 : 0);
 }
 
 /// \brief Is every reader of a rewritten division term a shift that RuleDivOpt will turn into a division?
@@ -7898,7 +7907,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
     if ((addop->getIn(0)!=x)&&(addop->getIn(1)!=x))
       continue;
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
-    if (!divTermProductFits(multConst,xbits,extvn->getSize()) &&
+    if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT) &&
 	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT))
       continue;
 
@@ -8041,7 +8050,7 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
     // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
     uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
-    if (!divTermProductFits(newConst,xbits,zextvn->getSize()) &&
+    if (!divTermProductFits(newConst,xbits,zextvn->getSize(),false) &&
 	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT))
       continue;
     multConst[0] = newConst[0];

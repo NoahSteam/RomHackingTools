@@ -5160,7 +5160,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::vector<size_t> cand;
         for (size_t i : all)
             if (out[i].cls == "mismatch" && !out[i].upperBits &&
-                (out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos))
+                (out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos ||
+                 std::regex_search(out[i].text, std::regex("\\._\\d+_\\d+_"))))
                 cand.push_back(i);
         if (!cand.empty())
         {
