@@ -5245,3 +5245,107 @@ states a folded value that the code does not return.
 - The evaluator reads a call as unknown and stack locals as memory after a call: it cannot tell a call that writes a local from one that does not.
 - The generator's pointer rule follows register numbers, not values: a callee that moves its r4 into r6 for a callee of its own which dereferences r6 is not seen (not found in 9,000 seeds).
 - Not run under the sanitizers: `Sh2DecodeTests`, `SlaFreshness`.
+
+## Areas 2 and 3, integration
+
+Fixer, branch `review/2-3-integration`, from the merge `c358822` of `review/2-round3-fix` (patches 0033, 0034; the printed-C oracle and the
+wide opcode alphabet) and `review/3-round3-fix` (the lent effects that kill, rule (a)/(b), `NoteFrameEscape`, patch 0030; the conventions
+grammar). Two branches built in parallel from different bases; the merge compiled and passed its own halves but not each other's tests. A
+second merge, `review/3-4-round4-fix` (areas 3/4 round 4), was brought in after the fixes below and merged without a source conflict (the
+two docs by `merge_docs.py`). No patch, no ledger row changed disposition; no engine file touched. The host change is in `Sh2Decompiler.cpp`
+only (below).
+
+### What interacted
+
+1. **The wide alphabet changes the registers the conventions grammar thought only it changed.** `mul.l`, `muls.w`, `mulu.w`, `dmuls.l`,
+   `dmulu.l`, `clrmac`, `lds mach/macl`, `ldc gbr/vbr` change MACH, MACL, GBR or VBR for good, and the self-check
+   (`generator:state-saved`, `generator:callee-saved`) compares those at the return with `Func::clobbers`, which only the conventions items
+   filled in: 288 failing seeds of 3,000 (grammar 2), `state-saved` 281 + 49 findings. And the `@(disp,GBR)` items read GBR on purpose,
+   which `Func::reads` did not say: `kept-read:gbr` (9 findings): a premise of check 12 (the generator's functions read GBR only on purpose),
+   not a decompiler fault. `RunFunction` set GBR to one scratch address for every mode, which the area 3 checks (a function that loads it with
+   what it already was) cannot tell from a change.
+2. **`Write_SR/GBR/VBR` keep the read of what an `ldc` loads from.** Before, the engine dropped an `ldc` nothing read, and its source with it. Now
+   the source is an input, and rule (a) (inputs outside r4-r7 withhold) sees it:
+   - `rts ; ldc r1,gbr` (the ledger's A3-3 b) is a callee that reads r1, an input no signature passes: it is withheld (correctly, A3-5), and so is
+     its caller. The fixture expected it lent with GBR killed because the engine used to drop the read.
+   - Every function that saves GBR or SR and puts it back, or changes some of SR's bits and keeps the rest, reads the register on entry: 5 more
+     withheld by "reads sr on entry" and 3 more by "reads gbr on entry" on image 007 than for area 3 alone, and `A2-13 critical section` (the
+     compiler's interrupt-mask idiom) from two parameters to withheld.
+
+### What changed
+
+- **Generator** (`Sh2GeneratedTests.cpp`): `StateWritten`/`StateRead` say which state registers an op of `kRegOps` changes and reads; `MakeWideAlu` and the
+  GBR memory items add them to `wideClobbers`/`wideReads`, which `MakeFunc` ORs into `Func::clobbers`, `effClobbers` and `reads` (so a caller that
+  calls such a function observes the change, check 12's premise holds, and replay lines carry the masks). GBR starts at `kScratchGbr + 0x20 * mode`:
+  scratch memory for the GBR accesses, a value of its own per mode for checks 10 and 12. A new exemption in the dropped-access check: a call to an
+  unlent function that changes r8-r14, GBR or VBR leaves them kept in the engine's model, so a branch on such a register is folded and the code it
+  guards can be removed as unreachable (seed 301832 of the 300001 window: a conventions callee withheld for a r1 read changes r12, the caller
+  branches on its restored r12). That is A3-3's limit for an unlent callee, not a flow finding; counted as `dropped.after-unlent-changer` (12 in
+  6,000 seeds).
+- **Host** (`Sh2Decompiler.cpp`, `WithholdReason` only; `ReturnCheck`, `PseudoEval` untouched, so the round 4 merge is textual): `EntryStateUse` follows the
+  entry value of SR, GBR or VBR through copies, phis and any operation; it is machine state, not an input, when every path ends in a `Write_<REG>` of
+  the same register (GBR saved and restored; SR read-modify-write), or, for SR only, is returned or stored as the whole value or the whole with bits set
+  (`or` with a constant: the critical section returns `in_sr | 0xf0`). A branch, a compare, a load address, a call argument, or a field of it (`and`)
+  returned or stored makes it an input. The same test is applied to what a call left in SR/GBR/VBR (`Write_SR(extraout_sr & 0xf0 | ...)`, the mask
+  raised round a call), which the "register read after a call" rule would otherwise withhold. The old test looked only at the direct uses of the
+  input and let any copy through, so a function that copies SR and tests its S bit (`uVar8 = in_sr; ... (uVar8 >> 1 & 1)`, the saturating
+  multiply-accumulate at `0602671C` and `060663BC`) was lent with a hidden input; it is withheld now.
+- **Tests** (`Sh2DecompilerTests.cpp`): the GBR-from-r1 fixture pins the callee and caller withheld, the oracle not asked (the text is the model's, as for
+  any unlent callee that changes a register it keeps); new fixtures for GBR/VBR set and restored (lent, GBR preserved), GBR advanced (lent, killed),
+  GBR returned or used as an address (withheld), SR raised and returned with no write (withheld), SR restored and its T or a field returned (withheld),
+  and the mask raised after a call that sets T (lent).
+
+### Decisions
+
+- The ledger's A3-3 b fixture is no longer a case the fix can reach: the callee is withheld, the caller is withheld, and the caller's text keeps GBR as
+  the model has it (`return param_1;`, the run returns r1). Nothing incomplete is lent, which is the rule; the text of a caller of an unlent callee is
+  the model's, a limit already pinned for r8 and by A3-6. The same load from a parameter (`ldc r5,gbr`) is lent with GBR killed (the loop above it).
+  Carrying the callee's effects while withholding its signature was not done.
+- The critical section is lent returning `in_sr | 0xf0`: r0 holds the raised mask on exit, and the engine keeps it as the return. The rule lends it because
+  every use of the entry SR is a write back or the whole with bits set; `stc sr,r0 ; or #0xF0,r0 ; rts` with no write is withheld, and so is anything
+  that returns a field of SR (`and #3`).
+
+### Mutation
+
+Each change reverted alone, `Sh2DecompilerTests` rebuilt (the generator for its two rows):
+
+| Reverted | Fails |
+|---|---|
+| `Write_SR` not counted as a write back | 6 checks: the critical section, the mask after a call, GBR/VBR restored, GBR advanced |
+| GBR and VBR not treated as write-back registers | 4 (GBR, VBR restore; GBR advanced) |
+| an `and` result may be returned or stored | 2 (T returned after a restore, field returned) |
+| an `or` with a constant is a field | 1 (the critical section) |
+| a transformed SR need not reach a write | 1 (SR raised and returned) |
+| the call's SR/GBR/VBR exemption removed | 1 (the mask after a call) |
+| rule (a) off (the input scan skipped) | 26 incl. the new GBR-from-r1 callee |
+| `ReturnCheck` without the `Write_*` condition (area 2's host line) | 20 |
+| generator: wide state clobbers not registered | 24 of 300 seeds, 242 findings `state-saved` |
+| generator: GBR items not marked as reads | 9 of 3,000 seeds, `kept-read:gbr` |
+| generator: the unlent-changer exemption removed | seed 301832, 1 finding in the 300001 window |
+
+### Matrix
+
+Combined tree (this branch with `review/3-4-round4-fix` merged), RelWithDebInfo, gcc:
+
+- Whole `ctest`: 97 of 97.
+- Generator, grammar 2, 3,000 seeds: 0 failing, 0 findings (lent 4,475 of 5,941 functions: the GBR memory items withhold 976 as inputs, so area 3's
+  checks see fewer lent functions than their 5,809: input candidates 341 against 425, check 12 260 against 292). Grammar 1, 1,000 seeds: 0.
+  Window `SE_GENERATED_FIRST=300001 SE_GENERATED_SEEDS=6000`: 0 findings after the exemption above (one, seed 301832, before).
+- Printed-C: default run in `ctest`; `SE_GENERATED_SEEDS=3000`: 3,017 functions, 0 findings (2,410 compared, 270 `void-return`, 268 skipped calls).
+- Corpus, standalone, both images: every ledger count 0, 16 and 20 missing and said, 839 and 1,554 functions ok.
+- Lending (`SE_GAME_LEND=1`): 007 610 lent (area 3 alone, built here for the comparison: 611), 008 1,006 (1,007); area 3 reported 612 and 1,008 from
+  its own base. Against area 3 alone the lent set differs by one function per image, and the cascade through it: `0602671C` / `060663BC` (the S-bit
+  reader above, withheld "reads sr on entry"; its two callers `060266E8`, `06026708` / `06066388`, `060663A8` were withheld "a return not to its caller"
+  and are now withheld on the callee) and `06003800` (withheld both ways; the `Write_SR` makes the flow take `06003840` in as its own code). Before
+  `EntryStateUse` was applied to GBR, VBR and what a call left (SR only, direct uses), 600 and 989 were lent: 11 and 18 lost to the `Write_*` reads
+  (SR and GBR read on entry, `uses sr after calling`, and their callers); the ones read are the mask or restore idiom and are lent again. Every
+  function that changed signature was read.
+- gcc Debug, ASan + UBSan, `detect_leaks=1`: `Sh2DecompilerTests` (all), `Sh2GeneratedTests` 150 seeds and the printed-C run exit 0; the only reports are
+  `address.hh:605` and `slghpatexpress.cc:979`. Not run under the sanitizers this round: the other five suites of the CI list.
+
+### Not done
+
+- A callee withheld for a hidden input does not lend the effects it proved; its caller's text keeps the model's registers (above).
+- `ldc.l @Rm+,gbr/vbr/sr` forms and the `rte` restore are exercised by the generator's alphabet only through `ldc Rm,...`.
+- The generator's lent coverage fell (GBR items withhold their functions); a grammar draw that keeps GBR accesses to non-convention modules would
+  restore area 3's counts if they are wanted.
