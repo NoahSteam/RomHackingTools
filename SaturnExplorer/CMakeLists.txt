@@ -316,7 +316,8 @@ if(SE_ENABLE_DECOMPILER)
                      COMMAND SaturnExplorerDecompilerFaultTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_fault_test)
             # The leak check of a child that leaves through _Exit is made by the test itself, which
             # needs LeakSanitizer on in a sanitizer build (it is harmless in any other).
-            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600
+            # SKIP_RETURN_CODE: where the matrix cannot run (it prints SKIPPED) ctest reports it skipped, not passed.
+            set_tests_properties(SaturnExplorerDecompilerFaultTests PROPERTIES TIMEOUT 600 SKIP_RETURN_CODE 77
                                  ENVIRONMENT "ASAN_OPTIONS=detect_leaks=1")
             # The default subset pins cells for each finding of the sweep (kPins in
             # DecompilerFaultTests.cpp; REVIEW_LEDGER.md, rows A6-1 .. A6-15), each with the name of the

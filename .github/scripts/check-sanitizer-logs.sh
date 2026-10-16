@@ -8,6 +8,8 @@
 # .github/workflows/saturn-explorer-decompiler.yml.
 #
 # Fails when, in any log:
+#   * a binary on the EXPECTED list has no log or exit status (the runner did not run it);
+#   * a log is empty, or lacks its binary's pass line ("all passed"; the fault matrix's "fault matrix: 0 of N job(s) failed");
 #   * a test binary exited non-zero (a failed assertion, or ASan/LSan aborting the process);
 #   * AddressSanitizer or LeakSanitizer reported anything;
 #   * UBSan printed a "runtime error:" line that is not one of the ALLOWED sites below.
@@ -28,6 +30,33 @@ ALLOWED=(
 )
 allow_re="$(IFS='|'; echo "${ALLOWED[*]}")"
 
+# The binaries the runner must have run. A log that is not there is a failure: a binary the runner
+# (or the workflow's build list) no longer covers would otherwise pass unseen, which is how
+# SaturnExplorerDecompilerFaultTests stayed out of the gate (A12-11). Keep in step with
+# run-decompiler-sanitizers.sh. SE_SANITIZER_ONLY (an extended regex, as for the runner) narrows
+# the list for a local partial run.
+EXPECTED=(
+  SaturnExplorerSh2DecompilerEngineTests
+  SaturnExplorerSh2SemanticsTests
+  SaturnExplorerSh2DecodeTests
+  SaturnExplorerSh2GeneratedTests
+  SaturnExplorerSh2PrintedCTests
+  SaturnExplorerSh2DecompilerTests
+  SaturnExplorerSh2DecompilerFixtureTests
+  SaturnExplorerDecompilerPanelTests
+  SaturnExplorerDecompilerRunnerTests
+  SaturnExplorerDecompilerFaultTests
+)
+
+# The line each binary prints when, and only when, all of its tests passed: dts::Finish's "all passed" (and the older
+# binaries' own), the fault matrix's summary.
+pass_re() {
+  case "$1" in
+    SaturnExplorerDecompilerFaultTests) echo '^fault matrix: 0 of [0-9]+ job\(s\) failed' ;;
+    *) echo '^all passed$' ;;
+  esac
+}
+
 shopt -s nullglob
 logs=("$dir"/*.log)
 if [ "${#logs[@]}" -eq 0 ]; then
@@ -36,6 +65,13 @@ if [ "${#logs[@]}" -eq 0 ]; then
 fi
 
 fail=0
+for name in "${EXPECTED[@]}"; do
+  if [ -n "${SE_SANITIZER_ONLY:-}" ] && ! [[ "$name" =~ $SE_SANITIZER_ONLY ]]; then continue; fi
+  if [ ! -f "$dir/$name.log" ] || [ ! -f "$dir/$name.rc" ]; then
+    echo "::error::$name has no log or no exit status in $dir: the runner did not run it"
+    fail=1
+  fi
+done
 for log in "${logs[@]}"; do
   name="$(basename "$log" .log)"
   rc_file="${log%.log}.rc"
@@ -55,6 +91,16 @@ for log in "${logs[@]}"; do
   if [ -n "$bad" ]; then
     printf '%s\n' "$bad"
     echo "::error::$name: UBSan runtime error outside the accepted upstream sites (above)"
+    fail=1
+  fi
+
+  # An empty log, or one without its binary's own pass line, is a failure whatever the exit status says: a binary that
+  # left without running its tests (or a log truncated, or an empty file with rc 0) must not pass (A6-20).
+  if [ ! -s "$log" ]; then
+    echo "::error::$name: the log is empty"
+    fail=1
+  elif ! grep -q -E "$(pass_re "$name")" "$log"; then
+    echo "::error::$name: no pass line ($(pass_re "$name")) in the log: it did not finish its tests"
     fail=1
   fi
 

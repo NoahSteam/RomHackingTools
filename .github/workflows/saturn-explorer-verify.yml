@@ -135,6 +135,11 @@ jobs:
   macos-x86_64-decompiler:
     name: Decompiler engine + tests (macOS x86_64 under Rosetta)
     runs-on: macos-latest
+    # One list drives the build, the -R regex and the check that each selected test was built, so the
+    # three cannot drift apart (A12-10: Sh2DecodeTests and Sh2GeneratedTests were selected and not built,
+    # and ctest ended "Not Run"). Each name is the middle of SaturnExplorer<name>Tests.
+    env:
+      SE_ROSETTA_TESTS: SlaFreshness Sh2DecompilerEngine SavestateShape MemorySnapshot Sh2FunctionFinder Sh2Decompiler Sh2Semantics Sh2Decode Sh2Generated Sh2DecompilerFixture DecompilerRunner DecompilerPanel
     defaults:
       run:
         working-directory: SaturnExplorer
@@ -147,22 +152,26 @@ jobs:
       - name: Build decompiler engine (timed)
         run: time cmake --build build-x86_64 --parallel 4 --target SaturnExplorerGhidraDecomp
       - name: Build decompiler tests
-        run: >
-          cmake --build build-x86_64 --parallel 4 --target
-          SaturnExplorerSlaFreshnessTests SaturnExplorerSh2DecompilerEngineTests
-          SaturnExplorerSavestateShapeTests SaturnExplorerMemorySnapshotTests
-          SaturnExplorerSh2FunctionFinderTests SaturnExplorerSh2DecompilerTests
-          SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerRunnerTests
-          SaturnExplorerDecompilerPanelTests SaturnExplorerSh2SemanticsTests
+        run: |
+          targets=""
+          for n in $SE_ROSETTA_TESTS; do targets="$targets SaturnExplorer${n}Tests"; done
+          echo "Building:$targets"
+          cmake --build build-x86_64 --parallel 4 --target $targets
       - name: Verify the binaries are x86_64
         run: |
           lipo -archs build-x86_64/bin/SaturnExplorerSh2DecompilerEngineTests | grep -qx x86_64
           lipo -archs build-x86_64/bin/se-sleighc | grep -qx x86_64
           lipo -archs build-x86_64/bin/SaturnExplorerDecompilerRunnerTests | grep -qx x86_64
+          lipo -archs build-x86_64/bin/SaturnExplorerSh2DecodeTests | grep -qx x86_64
+          lipo -archs build-x86_64/bin/SaturnExplorerSh2GeneratedTests | grep -qx x86_64
+      # Fails, naming the test, when a test the next step selects has no executable (instead of CTest's "Not Run").
+      - name: Check that every selected test was built
+        run: bash ../.github/scripts/check-selected-tests-built.sh build-x86_64 $SE_ROSETTA_TESTS
       - name: Run the decompiler tests under Rosetta
-        run: >
-          ctest --test-dir build-x86_64 --output-on-failure -V
-          -R 'SaturnExplorer(SlaFreshness|Sh2DecompilerEngine|SavestateShape|MemorySnapshot|Sh2FunctionFinder|Sh2Decompiler|Sh2Semantics|Sh2Decode|Sh2Generated|Sh2DecompilerFixture|DecompilerRunner|DecompilerPanel)Tests'
+        run: |
+          alt=""
+          for n in $SE_ROSETTA_TESTS; do alt="${alt:+$alt|}$n"; done
+          ctest --test-dir build-x86_64 --output-on-failure -V -R "SaturnExplorer($alt)Tests"
 
   # The distributable macOS bundle and DMG, ad-hoc signed (BUILD.md's recipe as written, no
   # identity given). Developer ID signing and notarisation need a certificate and stay a manual,

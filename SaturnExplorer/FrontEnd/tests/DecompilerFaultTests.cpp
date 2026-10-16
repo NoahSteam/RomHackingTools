@@ -60,8 +60,9 @@
 
 int main()
 {
+    // 77 is ctest's SKIP_RETURN_CODE for this test: reported as skipped, not as a pass (A6-19).
     std::printf("DecompilerFaultTests: SKIPPED (the matrix forks a process per cell; POSIX only)\n");
-    return 0;
+    return 77;
 }
 
 #else
@@ -87,11 +88,20 @@ int main()
 #include <sstream>
 #include <thread>
 
-#if defined(__GLIBC__)
+// A feature test, not a libc name: glibc and macOS both have backtrace (<execinfo.h>), dladdr (<dlfcn.h>) and
+// abi::__cxa_demangle (<cxxabi.h>), and the pins' identity check (A6-12) needs all three. It was `__GLIBC__`, which left
+// every pin "identity not checked" on macOS (A6-19). A platform without them, musl say, is told so loudly below.
+#if defined(__has_include)
+#if __has_include(<execinfo.h>) && __has_include(<dlfcn.h>) && __has_include(<cxxabi.h>)
+#define SE_FAULT_BACKTRACE 1
+#endif
+#elif defined(__GLIBC__)
+#define SE_FAULT_BACKTRACE 1
+#endif
+#ifdef SE_FAULT_BACKTRACE
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
-#define SE_FAULT_BACKTRACE 1
 #endif
 
 #if defined(__SANITIZE_ADDRESS__)
@@ -2604,6 +2614,14 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
             {
                 ++sum.failed;
                 ++sum.classes["FAIL:stale-pin"];
+            }
+            else if (r.note.compare(0, 8, "identity") == 0 && !std::getenv("SE_FAULT_NO_IDENTITY"))
+            {
+                // Without a backtrace a pin that slides onto a neighbour passes (A6-12's oracle switched off): say so as a
+                // failure, once per pin, rather than a note in a log nobody reads. SE_FAULT_NO_IDENTITY=1 accepts it.
+                std::printf("FAIL pin %s %s: its site cannot be checked on this platform (set SE_FAULT_NO_IDENTITY=1 to accept)\n", p.fixture, p.what);
+                ++sum.failed;
+                ++sum.classes["FAIL:pin-identity-unchecked"];
             }
             else if (r.note.compare(0, 5, "MOVED") == 0)
                 ++sum.classes["pin-moved"];
