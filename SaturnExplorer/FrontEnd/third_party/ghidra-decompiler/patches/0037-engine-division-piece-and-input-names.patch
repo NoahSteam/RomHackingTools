@@ -1,0 +1,188 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
+index 768a24c..4ca1be7 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/database.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
++ * Modified for SaturnExplorer: an input that is a piece of a register is named with the byte it starts at (patches/0037-engine-division-piece-and-input-names.patch).
+  */
+ #include "database.hh"
+ #include "funcdata.hh"
+@@ -2697,8 +2698,25 @@ string ScopeInternal::buildVariableName(const Address &addr,
+       s << "in_" << addr.getSpace()->getName() << '_';
+       s << setw(8) << setfill('0') << hex << addr.getOffset();
+     }
+-    else
++    else {
+       s << "in_" << regname;
++      // SaturnExplorer: the input is a piece of the register (the four bytes cmp/str compares), which would be named like
++      // the register and told apart only by a counter. The byte it starts at, counted from the least significant, is
++      // part of the name: `in_r3_b3` is r3's most significant byte, `in_r3` its least (patches/0037-engine-division-piece-and-input-names.patch).
++      try {
++	const VarnodeData &reg(glb->translate->getRegister(regname));
++	if (reg.space == addr.getSpace() && (reg.size != sz || reg.offset != addr.getOffset()) &&
++	    addr.getOffset() >= reg.offset && addr.getOffset() + sz <= reg.offset + reg.size) {
++	  int4 lsb = addr.isBigEndian() ? (int4)(reg.offset + reg.size - addr.getOffset() - sz) : (int4)(addr.getOffset() - reg.offset);
++	  if (lsb != 0) {		// the least significant piece keeps the register's name, as the parameter of a byte does
++	    s << "_b" << dec << lsb;
++	    if (sz > 1)
++	      s << "w" << sz;
++	  }
++	}
++      } catch(LowlevelError &err) {
++      }
++    }
+   }
+   else if ((flags & Varnode::input)!=0) { // Regular parameter
+     s << "param_" << dec << index;
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+index 4ab1270..b17f5cd 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
+  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
++ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+  */
+ #include "ruleaction.hh"
+ #include "coreaction.hh"
+@@ -7787,6 +7788,67 @@ int4 RulePositiveDiv::applyOp(PcodeOp *op,Funcdata &data)
+   return 1;
+ }
+ 
++/// \brief Does the product of a rewritten division term fit the multiply that is about to hold it?
++///
++/// RuleDivTermAdd and RuleDivTermAdd2 fold a correction term into the multiplier: `x*c + (x<<n)` becomes `x*(c+2^n)`.
++/// The new constant has one bit more than a compiler's 32-bit magic number, so for a 32-bit \b x in an 8-byte multiply the
++/// true product needs up to 65 bits and the 8-byte multiply wraps. That is harmless on the way to a division (RuleDivOpt
++/// reasons about the exact value, not the wrapped one) and wrong as a result: `x / 7 * 4` came out as
++/// `(uint4)((uint8)x * 0x124924925 >> 0x21) & 0xfffffffc`, which differs for x >= 0x38000000.
++/// \param multConst is the new (up to 128-bit) multiplier
++/// \param xbits is the number of significant bits of the multiplied value (for a signed one, without the sign)
++/// \param size is the size of the multiply in bytes
++/// \param isSigned is \b true if the multiplied value is sign-extended
++/// \return \b true if the product cannot overflow
++static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4 size,bool isSigned)
++
++{
++  int4 bits;
++  if (size > 8) {
++    bits = (multConst[1] != 0) ? 128 - count_leading_zeros((uintb)multConst[1]) : 64 - count_leading_zeros((uintb)multConst[0]);
++  }
++  else {
++    // The constant the multiply holds is the low 'size' bytes (the addition carries out of them, as the rule's does),
++    // and for a signed multiply a negative constant is the size of its magnitude.
++    uintb mask = calc_mask(size);
++    uintb v = multConst[0] & mask;
++    if (isSigned && signbit_negative(v,size))
++      v = (~v + 1) & mask;
++    bits = 64 - count_leading_zeros(v);
++  }
++  return (int4)xbits + bits <= 8 * size - (isSigned ? 1 : 0);
++}
++
++/// \brief Is every reader of a rewritten division term a shift that RuleDivOpt will turn into a division?
++///
++/// A product that does not fit (divTermProductFits) is only an intermediate, valid as the exact value RuleDivOpt reasons
++/// about. It may be left in the data-flow only if each reader shifts it right by a constant so that the whole is a
++/// division by a constant; a reader that does anything else (a mask where the shift and the scaling that follows it were
++/// merged, a return, a store) would print the wrapped product.
++/// \param outvn is the value the term replaces
++/// \param n is the shift already in the new term
++/// \param multConst is the new multiplier
++/// \param xbits is the number of significant bits of the multiplied value
++/// \param shiftopc is the right shift the readers must be (unsigned or signed)
++/// \return \b true if all readers form a division
++static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc)
++
++{
++  list<PcodeOp *>::const_iterator iter = outvn->beginDescend();
++  if (iter == outvn->endDescend()) return false;
++  for(;iter!=outvn->endDescend();++iter) {
++    PcodeOp *rdop = *iter;
++    if (rdop->code() != shiftopc || rdop->getIn(0) != outvn) return false;
++    Varnode *cvn = rdop->getIn(1);
++    if (!cvn->isConstant()) return false;
++    uintb total = n + cvn->getOffset();
++    if (total > 127) return false;
++    uint8 y[2] = { multConst[0], multConst[1] };	// calcDivisor works on its copy (it subtracts one)
++    if (!RuleDivOpt::isDivision((uint4)total,y,xbits)) return false;
++  }
++  return true;
++}
++
+ /// \class RuleDivTermAdd
+ /// \brief Simplify expressions associated with optimized division expressions
+ ///
+@@ -7836,6 +7898,7 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
+   leftshift128(power,power,n);		// power = 2^n
+   add128(multConst,power,multConst);	// multConst += 2^n
+   Varnode *x = extop->getIn(0);
++  uint4 xbits = (opc == CPUI_INT_SEXT) ? x->getSize() * 8 - 1 : 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
+ 
+   list<PcodeOp *>::const_iterator iter;
+   for(iter=op->getOut()->beginDescend();iter!=op->getOut()->endDescend();++iter) {
+@@ -7843,6 +7906,10 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
+     if (addop->code() != CPUI_INT_ADD) continue;
+     if ((addop->getIn(0)!=x)&&(addop->getIn(1)!=x))
+       continue;
++    // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
++    if (!divTermProductFits(multConst,xbits,extvn->getSize(),opc == CPUI_INT_SEXT) &&
++	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT))
++      continue;
+ 
+     // Construct the new constant
+     Varnode *newConstVn = data.newExtendedConstant(extvn->getSize(), multConst, op);
+@@ -7979,7 +8046,15 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
+     uint8 pow[2];
+     set_u128(pow, 1);
+     leftshift128(pow,pow,n);		// Calculate 2^n
+-    add128(multConst, pow, multConst);	// multConst = multConst + 2^n
++    uint8 newConst[2];
++    add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
++    // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
++    uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
++    if (!divTermProductFits(newConst,xbits,zextvn->getSize(),false) &&
++	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT))
++      continue;
++    multConst[0] = newConst[0];
++    multConst[1] = newConst[1];
+     PcodeOp *newmultop = data.newOp(2,op->getAddr());
+     data.opSetOpcode(newmultop,CPUI_INT_MULT);
+     Varnode *newmultvn = data.newUniqueOut(zextvn->getSize(),newmultop);
+@@ -10588,6 +10663,11 @@ int4 RulePiecePathology::applyOp(PcodeOp *op,Funcdata &data)
+   OpCode opc = subOp->code();
+   if (opc == CPUI_SUBPIECE) {
+     if (subOp->getIn(1)->getOffset() == 0) return 0;
++    // SaturnExplorer: the pathology is a partial write to the register a SUBPIECE of itself fills in
++    // (`retreg = CONCAT(SUBPIECE(retreg,#4),smallval)`). A concatenation that is built elsewhere -- the bytes of a
++    // register stored to the stack, a byte put into them, the longword loaded back -- is not one, and calling it so
++    // truncated the function's return to the small piece (patches/0037-engine-division-piece-and-input-names.patch).
++    if (op->getOut()->characterizeOverlap(*subOp->getIn(0)) == 0) return 0;
+     if (!isPathology(subOp->getIn(0),data)) return 0;
+   }
+   else if (opc == CPUI_INDIRECT) {
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.hh
+index 0f14b57..b459275 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/ruleaction.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
+  */
+ /// \file ruleaction.hh
+ /// \brief This is the basic set of transformation Rule objects.
+@@ -1277,6 +1279,7 @@ public:
+   virtual void getOpList(vector<uint4> &oplist) const;
+   virtual int4 applyOp(PcodeOp *op,Funcdata &data);
+   static Varnode *findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode &extopc);
++  static bool isDivision(uint4 n,uint8 *y,uint4 xsize) { return calcDivisor(n,y,xsize) != 0; }	///< Is the multiply-and-shift a division?
+ };
+ 
+ class RuleSignDiv2 : public Rule {

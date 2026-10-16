@@ -7716,6 +7716,105 @@ void TestArea2Round3()
     }
 }
 
+// Area 2, round 4 (ledger A2-21 .. A2-24): a division scaled by its last shift, a byte put into a stacked longword, SR
+// stored through a pointer and loaded back, and what an rte restores. The compiled-C differential
+// (SaturnExplorerSh2PrintedCTests) runs the A2-21 and A2-22 fixtures against the emulator; these are their text and signature checks.
+void TestArea2Round4()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 400;
+    auto decompile = [&](const char* label, const std::vector<uint16_t>& words) {
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : words)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw, ++serial), Request(0x06009000u));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+
+    // A2-21: x / 7 * 4 is `t = mulhu(x, c) ; (((x - t) >> 1) + t) >> 2 << 2`. The shift pair merges into a mask, RuleDivOpt
+    // no longer sees a division, and RuleDivTermAdd2's 65-bit product, in an 8-byte multiply, was printed.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4409, 0x4408, 0x000B, 0x6043, 0x2492, 0x4925 },
+                                                std::vector<uint16_t>{ 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4401, 0x000B, 0x6043, 0x0009, 0x2492, 0x4925 },
+                                                std::vector<uint16_t>{ 0xD102, 0x3415, 0x000A, 0x4001, 0x000B, 0x304C, 0x1234, 0x5678 },
+                                                std::vector<uint16_t>{ 0xD102, 0x314D, 0x000A, 0x4021, 0x000B, 0x304C, 0x1234, 0x5678 } })
+    {
+        const DecompileResult r = decompile("A2-21 overflowing product", words);
+        CHECK(!Has(r.Text(), "0x124924925") && !Has(r.Text(), "0x212345678"));
+    }
+    {
+        // ...and the quotient alone is still recovered as a division (the product is only an intermediate there)
+        const DecompileResult r = decompile("A2-21 control: x / 7", { 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4409, 0x000B, 0x6043, 0x0009, 0x2492, 0x4925 });
+        CHECK(Has(r.Text(), "param_1 / 7"));
+    }
+
+    {
+        // A product that does fit stays folded: mulhs(x, c) + x is x * (c + 2^32) >> 32, a 63-bit product of a 31-bit value and a 32-bit
+        // constant in a signed 8-byte multiply (the guard once refused every such rewrite and the divisions by 60 and 7 of the game image lost
+        // their recovered division), and the signed division by 7 is still a division
+        const DecompileResult r = decompile("A2-21 control: the signed product that fits", { 0xD102, 0x314D, 0x000A, 0x304C, 0x000B, 0x0009, 0xB60B, 0x60B7 });
+        CHECK(Has(r.Text(), "0xb60b60b7"));
+        const DecompileResult q = decompile("A2-21 control: signed x / 7", { 0xD106, 0x341D, 0x000A, 0x304C, 0x4021, 0x4021, 0x6203, 0x4200, 0xE200, 0x302E,
+                                                                              0x6003, 0x000B, 0x0009, 0x0009, 0x9249, 0x2493 });
+        CHECK(Has(q.Text(), "param_1 / 7"));
+    }
+
+    // A2-22: a longword stored to the stack, a byte or word of it overwritten, the longword loaded back. The part of r0 that
+    // is still the stored register was dropped (RulePiecePathology took the concatenation for a partial write to a register
+    // the function never wrote): the return is the whole longword.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0x7FFC, 0x2F42, 0x6053, 0x80F3, 0x60F2, 0x000B, 0x7F04 },
+                                                std::vector<uint16_t>{ 0x6053, 0x2F46, 0x80F2, 0x60F6, 0x000B, 0x0009 },
+                                                std::vector<uint16_t>{ 0x6053, 0x2F46, 0x80F1, 0x60F6, 0x000B, 0x0009 },
+                                                std::vector<uint16_t>{ 0x6053, 0x2F46, 0x81F1, 0x60F6, 0x000B, 0x0009 } })
+    {
+        const DecompileResult r = decompile("A2-22 stack insert", words);
+        CHECK(r.prototype.known && r.prototype.ret.size == 4 && r.prototype.params.size() == 2);
+        CHECK(!Has(r.Text(), "return param_2;"));
+    }
+    {
+        const DecompileResult r = decompile("A2-22 byte at 3", { 0x7FFC, 0x2F42, 0x6053, 0x80F3, 0x60F2, 0x000B, 0x7F04 });
+        CHECK(Has(r.Text(), "CONCAT31") && Has(r.Text(), "param_2"));
+    }
+
+    // A2-23: SR stored through a pointer and loaded back. The engine does not forward a store through a pointer to the load, so the
+    // reload is no descendant of the entry SR: the function is withheld, not lent without the T it reads.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0x0002, 0x2402, 0x6042, 0x000B, 0xC901 },   // stc sr,r0 ; mov.l r0,@r4 ; mov.l @r4,r0 ; rts ; and #1,r0
+                                                std::vector<uint16_t>{ 0x4403, 0x6042, 0x000B, 0xC901 } })        // stc.l sr,@-r4 ; mov.l @r4,r0 ; rts ; and #1,r0
+    {
+        const DecompileResult r = decompile("A2-23 SR through a pointer", words);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "sr"));
+    }
+    {
+        // ...but SR only stored (nothing can read it back here) is still machine state: lent
+        const DecompileResult r = decompile("A2-23 control: SR stored only", { 0x0102, 0x2412, 0x000B, 0x0009 });   // stc sr,r1 ; mov.l r1,@r4 ; rts
+        CHECK(r.prototype.known);
+    }
+
+    // A2-24: rte restores SR and PC from the stack; a handler that changes the stacked words changes where and how the
+    // interrupted code resumes. The restores are user ops, so the stores that feed them stay.
+    {
+        const DecompileResult r = decompile("A2-24 stacked SR", { 0x51F1, 0xE201, 0x212B, 0x1F11, 0x002B, 0x0009 });
+        CHECK(Has(r.Text(), "Write_SR(") && Has(r.Text(), "| 1") && Has(r.Text(), "Rte_PC("));
+    }
+    {
+        const DecompileResult r = decompile("A2-24 stacked PC", { 0x61F2, 0x7102, 0x2F12, 0x002B, 0x0009 });
+        CHECK(Has(r.Text(), "Rte_PC(") && Has(r.Text(), "+ 2"));
+    }
+
+    // A2-25: cmp/str on a register that is not a parameter compares its four bytes; each input is named with the byte it is
+    // (counted from the least significant), not by a counter that tells nothing.
+    {
+        const DecompileResult r = decompile("A2-25 cmp/str r6,r3", { 0x236C, 0x000B, 0x0029 });
+        CHECK(Has(r.Text(), "in_r3;") && Has(r.Text(), "in_r3_b1") && Has(r.Text(), "in_r3_b2") && Has(r.Text(), "in_r3_b3"));
+        CHECK(!Has(r.Text(), "in_r3_00") && !Has(r.Text(), "in_r3_01"));
+    }
+}
+
 void TestAllocationFailureIsReported()
 {
     if (!dts::kInjectionUsable)
@@ -8119,6 +8218,7 @@ int main(int argc, char** argv)
         RUN(TestPrototypeEligibility());
         RUN(TestCallsAndTraps());
         RUN(TestArea2Round3());
+        RUN(TestArea2Round4());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

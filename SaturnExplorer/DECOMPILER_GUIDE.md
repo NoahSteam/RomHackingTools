@@ -96,7 +96,10 @@ The output is always for a specific snapshot. If what you are looking at changes
   signed `x` means a zero extension. Read the types, not C's promotion rules.
 - A write to SR, GBR or VBR (`ldc`) is shown as a call, `Write_SR(value)`, `Write_GBR(value)`, `Write_VBR(value)`, where the
   code makes it: the interrupt mask, the base of the GBR accesses and the vector table are the caller's business, and the
-  register the value comes from stays a parameter. A return in both r0 and r1 is shown as an 8-byte value (`CONCAT44(r0, r1)`,
+  register the value comes from stays a parameter. `rte` shows what it restores the same way: `Write_SR(stacked SR & 0x3f3)` and
+  `Rte_PC(stacked PC)`, so a handler that changes the words it will return through keeps its stores. An input that is a byte of a
+  register the function reads (the four bytes `cmp/str` compares) is named with the byte, counted from the least significant:
+  `in_r3` is the low byte, `in_r3_b3` the most significant. A return in both r0 and r1 is shown as an 8-byte value (`CONCAT44(r0, r1)`,
   `(uint8)x`) even when r1 is only a scratch register the function left a value in: the code does not say which.
 - The pseudocode describes the instructions of an ordinary run. It does not model what the CPU does when it cannot
   carry one out, and it does not say so:
