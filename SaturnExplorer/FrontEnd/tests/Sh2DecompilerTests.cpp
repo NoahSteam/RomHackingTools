@@ -1606,6 +1606,11 @@ void TestHardwareVolatility()
         add("a5_33_through", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x2000, 0x1000 }, 0x10, 0x20001000u);   // ...through the cache-through partition
         add("a5_33_ram", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1000 }, 0x10, 0x06001000u);   // control: work RAM
         add("a5_34", { 0xD102, 0xE005, 0x2102, 0x000B, 0x0009, 0x0009, 0x6000, 0x0010 }, 0x0C, 0x60000010u);   // a long write to the address array, entry 1
+        // A5-45 (the nightly run, seed 19409 shrunk): a pointer merged from the SMPC's word view of OREG0 (the symbol at the even address
+        // 0x00100020, `&SMPC_OREG0`) and a RAM address; mov.l lit0,r6 ; cmp/eq r2,r3 ; bt L ; mov.l lit1,r6 ; L: mov.w @r6,r2.
+        add("a5_45", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6261, 0x000B, 0x0009, 0x0009, 0x0010, 0x0020, 0x2600, 0x2080 }, 0x10, 0x00100020u);
+        add("a5_45_through", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6261, 0x000B, 0x0009, 0x0009, 0x2010, 0x0020, 0x2600, 0x2080 }, 0x10, 0x20100020u);   // the cache-through partition
+        add("a5_45_byte", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6260, 0x000B, 0x0009, 0x0009, 0x0010, 0x0021, 0x2600, 0x2080 }, 0x10, 0x00100021u);   // control: the byte register's own address, mov.b
     }
     for (const auto* group : { &r4, &r5 })
         for (const auto& x : *group)
@@ -2678,6 +2683,16 @@ void TestHardwareVolatility()
         CHECK(r.hardwareNotes.empty());
         r = R5("a5_34", "a long write to 0x60000010");
         CHECK(HasNote(r, "an access at 0x60000010 is the cache address array, not a memory access: entry 1 of the way SH2_CCR selects; a write sets its tag (from the address, valid is bit 2 inverted) and its LRU bits (bits 9-4 of the value), a read returns tag, valid and LRU", false));
+
+        // A5-45: the SMPC registers are also symbols at the even address, the 16-bit word they sit in; a pointer at it prints `&SMPC_OREG0`
+        // and is followed like a pointer at a register's own address (PrintsAsRegister knew only the latter).
+        r = R5("a5_45", "a word read through a pointer that is &SMPC_OREG0 (the word view) or a RAM address");
+        CHECK(Has(r.Text(), "&SMPC_OREG0"));
+        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
+        r = R5("a5_45_through", "the same through the cache-through partition");
+        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
+        r = R5("a5_45_byte", "control: a byte read at the register's own address");
+        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.

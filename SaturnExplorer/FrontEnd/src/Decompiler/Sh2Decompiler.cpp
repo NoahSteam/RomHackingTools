@@ -1547,6 +1547,12 @@ PointerValues ConstantsOf(const ghidra::Varnode* start)
 // -1, an offset, an address in an unnamed part of a register area), which is not a claim that the pointer reaches a register.
 bool PrintsAsRegister(uint32_t address)
 {
+    // ...and the SMPC's registers as the 16-bit words they sit in, at the even address (SaturnHardwareWordViews): `&SMPC_OREG0` is
+    // 0x00100020, one below the byte register's own address (A5-45: a merged pointer holding it was not followed).
+    size_t viewCount = 0;
+    const HardwareRegister* views = SaturnHardwareWordViews(viewCount);
+    for (size_t i = 0; i < viewCount; ++i)
+        if ((address >> 29) <= 1 && (address & 0x1FFFFFFFu) == views[i].address) return true;
     const HardwareRegister* r = FindHardwareRegister(address);
     uint32_t canonical = 0;
     if (!r || !HardwareAlias(address, canonical) || canonical != r->address) return false;
