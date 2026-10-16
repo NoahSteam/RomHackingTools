@@ -4811,3 +4811,99 @@ addresses only (A5-29), no value (A5-31), and `F` read for the SMPC only (A5-32)
 | Generator replays of A5-28 to A5-32 | 0 findings each (the oracle accepts all of them) |
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 12, cautions 16 (as round 4) |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 27, cautions 20 (as round 4) |
+
+## Area 5, round 5: registers through pointers, misaligned on-chip accesses, what follows an address error
+
+Fixer, branch `review/5-round5-fix` from master `ec7751d`; fix commit `9d794e3`, tests `427af9e`. Ledger rows A5-28 to A5-32 are fixed; the
+reviewer's questions added A5-33 and A5-34 (fixed) and A5-35 and A5-36 (accepted). The work is in `SaturnHardwareMap.{h,cpp}`, inside
+`HardwareNotes` in `Sh2Decompiler.cpp`, in `derive_handler_cases.py` and `HardwareHandlerCheck.h` (oracle), and in rule 3b of the generator.
+No engine patch (0001 to 0031 unchanged; 0035 not needed). Every fixture of the five rows was reproduced first on the unfixed
+code (a scratch harness linked against the master objects), then the oracle was widened and run against the unfixed map: **490
+disagreements** (96 misaligned probes whose reached registers are wrong, 29 long accesses said to reach more than the handler reaches,
+the cells of the same probes, IPRB and VCRD at +1), before any rule was touched.
+
+### Root causes
+
+| Row | Root cause | Fix |
+|---|---|---|
+| A5-28 (P2) | `HardwareNotes` looked only at the volatile ops the engine makes for a constant address. A pointer merged from register literals is not constant, so its load or store stays a plain LOAD or STORE (patches/0009), and the notes keyed on the op, not on what the output shows (`&REG`). The generator's rule 3b was written for the same blind spot and excused it. | `ConstantsOf` walks the pointer varnode through COPY, CAST, MULTIEQUAL, `PTRSUB(0, address)` (how the engine writes `&REG`) and, as bases, PTRADD / INT_ADD; a bare number is never a pointer to a register (the first version counted `param_1 + -0xc`, 0xFFFFFFF4, as an index from SH2_RTCNT: three false cautions in hwram008, found by comparing every output of both images with master's, fixture `a5_28_rawconst`), so only the `PTRSUB` form counts, filtered by `PrintsAsRegister` (a register named at its symbol's address); each is run through the same per-access code as a direct access (`account`: cache caution, read effects, width cautions, write effects), with the text prefixed "if the pointer holds 0x... (REG)" (and " (it may hold other values too)" when a path is not a constant). A pointer indexed from a register is said for the register as "if the index is 0 (the pointer is based at ...)". A pointer access does not count as a write for the split-read note. Rule 3b: an indirect read the emulator traced at a cached register whose register name appears as `&REG` in the output must be said (`cache.read.pointer.said` / `...unsaid`); only a pointer that names no register is excused (`cache.read.anonymous`). |
+| A5-29 (P3) | `AccessAddress` kept every partition-7 address as given. True below `0xFFFFFF00` only; above it the handlers align the address themselves (`A &= 0xFE` / `0xFC`); below it, the table's aligned cells were used for an address the handler decodes as given. | `AccessAddress`: aligned down from `0xFFFFFF00` up, as given below. `HardwareRegistersReached` / `CoveredRegisters`: below it a word at an odd address and every long reach the register at their own address only (a long read none). `WidthCellFor`: a word at an odd 8-bit register's own address is `EvenByte*` (it was `OddByte*`), at the watchdog's odd registers `KeyedByteWrite`. The misaligned caution says which half it is. |
+| A5-30 (P3) | The cases file kept one flag per group of labels; the lane mask applied to one label (`& mask & 0xFF00`) was not in it. | The parser evaluates the branch's `mask` / `shift` statements per label and lists a label the mask kills as its own inert group; the table has `ReservedByteWrite` for IPRB and VCRD at +1 (a read there returns 0). |
+| A5-31 (P3) | The address-error cautions were generated per register from the cell, and a cell says "address error", not what the handler then does. | Byte accesses at `0xFFFFFF00` and up: the text of the cell says what Mednafen then does (`AfterByteError`: a write stores `V | V << 8` and does the register's write effect, a division; a read returns bits 15-8; the bus state controller ignores a byte write; the UBC has no handler). Longs below `0xFFFFFF00`: one caution for the access (`NarrowAccessEffects`), on the register at its own address, saying what is stored (bits 7-0, or bits 15-8 into a 16-bit register's high byte, nothing at an odd address or at the watchdog) and which registers under its other bytes are not written; a read says it returns 0 and reads none. `WriteEffects` lets a long write to CCR purge (it did for byte and word only). |
+| A5-32 (P3) | The check read `F` (a write stores a constant whatever is written) for the SMPC only; `WriteEffects` knew PTMR and CCR only. | `WriteEffects`: VDP1_ENDR (any write, at any width reaching it), SCU_DnEN (bits 8 and 0, start factor 7; only the lane that carries bit 0 counts, a byte at +3, a word at +2, a long), SCU_AIACK and SCU_DSTP (bit 0), SCU_T1MD (bit 0 clear resets timer 0). The check requires a text for every register whose handler has `F`, in `scu.wr32` and `vdp1.wr` (PPAF is excused by its `split` text; the SCSP common block's `F` is bookkeeping and stays unchecked). |
+| A5-33 | A store to the BIOS ROM was ordinary memory: the ROM takes no write. | A caution made from the engine's access record (fate "folded into ordinary memory", a store, a constant address in `0x00000000`-`0x000FFFFF` through either partition). |
+| A5-34 | An access to the cache address array was volatile but said nothing. | A note (entry, way, what a write and a read do). |
+
+### The reviewer's questions, decided
+
+- **BIOS ROM writes folded as ordinary memory.** Area 5 (the bus map says what is not RAM; area 2 is the semantics of instructions). A defect in the shape
+  (`mov.b 5,@ROM ; mov.b @ROM,r0` returns 5), none in either corpus (no store and no folded load in the range, measured with the
+  engine's access records: 839 and 1,554 functions). The range cannot be made volatile, since a decompiled BIOS function reads its literal pool and its tables from it and they must fold;
+  so it is said, not corrected: A5-33, fixed by a caution.
+- **Cache arrays as ordinary memory.** The address array (`0x6xxxxxxx`) is already volatile, because it lies in `0x40000000`-`0x7FFFFFFF`; it only said nothing: A5-34, a note. The data array (`0x8xxxxxxx`, `0xCxxxxxxx`) is ordinary memory, which is exact when the
+  cache is used as RAM and wrong when a cache fill overwrites it, which depends on CCR: A5-35, accepted, no instance in either corpus.
+- **SCU byte lanes judged per register, not per lane.** The width table's SCU cells stay per register (value blind spot, as the reviewer said; the bits that reach a
+  register are what the check cannot see). The new write effects are per lane, where the effect depends on it (a word at +0 or a byte at +0 carries neither bit of DnEN).
+- **`0x25FE0000` printed as `&SCU_D0R`.** Cosmetic (a number that is a register's address); no row. With A5-28 it says nothing as a pointer (only loads and stores are followed).
+
+### Mutation checks
+
+Each entry below was broken in a scratch copy of the source, the three test binaries relinked against it, and the width table test, the decompiler suite and (A5-28) the
+generator on the ledger's words run; "handler" is the number of disagreements with Mednafen's handlers, "golden" whether the golden file or the audit's rules table fails.
+
+| Entry broken | Handler | Golden | Fixture CHECKs | Generator |
+|---|---|---|---|---|
+| no notes for pointer accesses (the unfixed A5-28) | 0 | passes | 9 | 1 finding on the ledger's words (`SE_GENERATED_WORDS`; 0 before) |
+| a bare number counts as a pointer to a register (`param_1 + -0xc`) | 0 | passes | 1 | |
+| `PrintsAsRegister` accepts any hardware-range address | 0 | passes | 0 (equivalent: the engine's `&REG` form exists only at a symbol's address, and a bare number is ignored before it) | |
+| no indexed bases | 0 | passes | 2 | |
+| a merged pointer treated as certain (no "if the pointer holds") | 0 | passes | 8 | |
+| no "it may hold other values too" | 0 | passes | 1 | |
+| a pointer write counts for the split-read note | 0 | passes | 1 | |
+| no BIOS ROM caution | 0 | passes | 2 | |
+| on-chip address as given at every half (round 4's rule, A5-29) | 290 | passes | 7 | |
+| below `0xFFFFFF00` the access reaches every register under it | 166 | passes | 2 | |
+| a long reaches the registers under all four bytes | 131 | passes | 1 | |
+| no `ReservedByteWrite` | 2 | fails | 2 | |
+| a word at an odd register's own address is `OddByte*` | 20 | passes | 5 | |
+| a word at WTCNT's address is the key port | 4 | passes | 0 (HardwareNotes' own keyed caution says it; only the check sees the cell) | |
+| no text after a byte address error | 0 | passes | 3 | |
+| a long read not said to return 0 | 0 | passes | 1 | |
+| a long write's "writes only REG" text removed | 0 | fails | 4 | |
+| a long write to CCR does not purge | 1 | passes | 1 | |
+| no VDP1_ENDR note | 1 | passes | 2 | |
+| no SCU_DnEN note | 3 | passes | 5 | |
+| DnEN note without bit 8 | 0 | passes | 1 | |
+| SCU lane ignored (DnEN, AIACK, DSTP, T1MD) | 0 | passes | 2 | |
+| no SCU_AIACK note | 1 | passes | 1 | |
+| no SCU_DSTP note | 1 | passes | 1 | |
+| no SCU_T1MD note | 1 | passes | 1 | |
+| no address array note | 0 | passes | 1 | |
+| the old cases file (no per-label masks) with the new table | 4 | passes | 0 | |
+| the widened check against the unfixed map | 490 | | | |
+
+Every mutation is caught by at least one of them; the generator's rule 3b is the only witness for nothing but the A5-28 row (the ledger's words, which the
+round 4 rule accepted).
+
+### Matrix
+
+| | |
+|---|---|
+| Golden file | regenerated after the rules were right (`SE_UPDATE_GOLDEN=1`) and read: 337 registers, 3,038 cells, rules 32 -> 33 (`ReservedByteWrite`); the only cell lines that moved are IPRB `w1@1` and VCRD `w1@1` (`Plain` -> `ReservedByteWrite`); the audit's rules table follows (`Plain` 811 -> 809, class d 164 -> 166) |
+| Handler check | 0 disagreements: 952 on-chip cells (the table's 526 and 426 from the misaligned probes), 490 SCU cells, 228 block registers, 1,792 aligned and 1,280 misaligned on-chip address probes, 2,597 bus probes, 8 write-effect registers; `MednafenHandlerCases.txt` 3 lines changed, 1 added (`bus.onchipbyte`); `derive_handler_cases.py --check` current |
+| `ctest` | 96 of 96 passed (80 s with -j2). `SaturnExplorerLiveExporterRobustnessTests` failed once under -j3 load ("silent client connected", a socket timing check) and passes alone and in the -j2 run; no decompiler code is involved |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 12 -> 14, cautions 16 -> 16 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 27 -> 29, cautions 20 -> 20 |
+| Corpus text that changed (master's output beside the new one's, every function of both images compared, pseudocode, warnings, cautions and notes) | the pseudocode, the warnings and the cautions of all 839 and 1,554 outputs are byte-identical; four note lines appeared, each read: `VDP1_ENDR = 0;` at `hwram007` 060056E6 (0600571E) and `hwram008` 0600572A (06005762): "VDP1_ENDR: any write ends the drawing in progress, whatever is written"; `(&SCU_D0EN)[param_1 * 8] = 0x101;` at 0601B7B4 (0601B86E) and 0605A964 (0605AA1E): "if the index is 0 (the pointer is based at 0x25FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register)". (A first version also printed three cautions in `hwram008` at 0604A60A, 0604A61A, 0604ABDA, 0604ABE6: `*(int2 *)(param_1 + -0xc)` read as an index from SH2_RTCNT; fixed, `a5_28_rawconst`.) No register read through a merged pointer in either image: A5-28 has no corpus instance, as the review said |
+| Generator | `SE_GENERATED_SEEDS=3000` `SE_GENERATED_GRAMMAR=2`: 0 findings; cached-partition register reads said 173 direct and 39 through a pointer the output names as `&REG`, 33 through a pointer that names none (excused); the ledger's A5-28 words: 0 findings (and 1 with the pointer notes switched off) |
+| ASan + UBSan + LSan, gcc Debug | `Sh2DecompilerTests`, `HardwareWidthTableTests` and `Sh2GeneratedTests` (300 seeds), `detect_leaks=1`: no AddressSanitizer or LeakSanitizer report; the only UBSan lines are the two tolerated sites (`address.hh:605`, 2; `slghpatexpress.cc:979`, 5); all pass |
+
+
+### Not done
+
+- A pointer indexed from a register is said for the register itself only (A5-36): which register the index selects is not worked out (SCU_D1EN, SCU_D2EN at +0x20, +0x40).
+- A store to the BIOS ROM is cautioned, the later read is not corrected (A5-33); the cache data array stays ordinary memory (A5-35).
+- The cache caution still cannot know CCR.CE is clear for a function; SCI / UBC stay claimed from the manual.
+- Value-independent write effects of the SCSP common block (`F`) are not said (bookkeeping, not an effect a note would help with).
+- The bits of the value that reach a register, the keys, the FIFO pops and the text of every caution remain with the hand fixtures and the golden file.
+- The slave CPU's view (one map for both CPUs) was not probed.
