@@ -20,6 +20,7 @@
  * Modified for SaturnExplorer: a guard is not folded over a table lookup whose value is used (patches/0024-switch-lookup-used.patch).
  * Modified for SaturnExplorer: a guard is not folded into a switch whose case is the guard's own target when the paths carry different values there (patches/0027-switch-default-is-case.patch).
  * Modified for SaturnExplorer: a switch variable is not assumed non-negative when its guard is signed (patches/0029-jumptable-signed-guard.patch).
+ * Modified for SaturnExplorer: a jump-table model is owned from the moment it is made, and the old one is freed last (patches/0040-jumptable-tracedag-allocation-failure.patch).
  */
 #include "jumptable.hh"
 #include "emulate.hh"
@@ -1770,9 +1771,10 @@ bool JumpBasic::sanityCheck(Funcdata *fd,PcodeOp *indop,vector<Address> &address
 JumpModel *JumpBasic::clone(JumpTable *jt) const
 
 {
-  JumpBasic *res = new JumpBasic(jt);
+  // SaturnExplorer: the copy is freed if its range cannot be cloned (area 6, A6-21).
+  unique_ptr<JumpBasic> res(new JumpBasic(jt));
   res->jrange = (JumpValuesRange *)jrange->clone();	// We only need to clone the JumpValues
-  return res;
+  return res.release();
 }
 
 void JumpBasic::clear(void)
@@ -1910,9 +1912,9 @@ void JumpBasic2::findUnnormalized(uint4 maxaddsub,uint4 maxleftright,uint4 maxex
 JumpModel *JumpBasic2::clone(JumpTable *jt) const
 
 {
-  JumpBasic2 *res = new JumpBasic2(jt);
+  unique_ptr<JumpBasic2> res(new JumpBasic2(jt));
   res->jrange = (JumpValuesRange *)jrange->clone();	// We only need to clone the JumpValues
-  return res;
+  return res.release();
 }
 
 void JumpBasic2::clear(void)
@@ -2164,14 +2166,14 @@ void JumpBasicOverride::buildLabels(Funcdata *fd,vector<Address> &addresstable,v
 JumpModel *JumpBasicOverride::clone(JumpTable *jt) const
 
 {
-  JumpBasicOverride *res = new JumpBasicOverride(jt);
+  unique_ptr<JumpBasicOverride> res(new JumpBasicOverride(jt));
   res->adset = adset;
   res->values = values;
   res->addrtable = addrtable;
   res->startingvalue = startingvalue;
   res->normaddress = normaddress;
   res->hash = hash;
-  return res;
+  return res.release();
 }
 
 void JumpBasicOverride::clear(void)
@@ -2373,10 +2375,10 @@ bool JumpAssisted::foldInGuards(Funcdata *fd,JumpTable *jump)
 JumpModel *JumpAssisted::clone(JumpTable *jt) const
 
 {
-  JumpAssisted *clone = new JumpAssisted(jt);
+  unique_ptr<JumpAssisted> clone(new JumpAssisted(jt));
   clone->userop = userop;
   clone->sizeIndices = sizeIndices;
-  return clone;
+  return clone.release();
 }
 
 void JumpTable::saveModel(void)
@@ -2419,6 +2421,7 @@ void JumpTable::recoverModel(Funcdata *fd,const JumpModel *matchModel)
       return;
     }
     delete jmodel;		// Otherwise this is an old attempt we should remove
+    jmodel = (JumpModel *)0;	// SaturnExplorer: not left dangling if the next allocation fails (area 6, A6-18)
   }
   Varnode *vn = indirect->getIn(0);
   if (vn->isWritten()) {
@@ -2439,8 +2442,11 @@ void JumpTable::recoverModel(Funcdata *fd,const JumpModel *matchModel)
   jmodel = jbasic;
   if (jmodel->recoverModel(fd,indirect,matchModel,maxTableSize))
     return;
-  jmodel = new JumpBasic2(this);
-  ((JumpBasic2 *)jmodel)->initializeStart(jbasic->getPathMeld());
+  // SaturnExplorer: the second model is built, and given the first's path, before the table takes it; a failure in
+  // either leaves the first model in place and owned (it was leaked, and then freed twice, otherwise; A6-18).
+  unique_ptr<JumpBasic2> jbasic2(new JumpBasic2(this));
+  jbasic2->initializeStart(jbasic->getPathMeld());
+  jmodel = jbasic2.release();
   delete jbasic;
   if (jmodel->recoverModel(fd,indirect,matchModel,maxTableSize))
     return;
@@ -2629,14 +2635,16 @@ bool JumpTable::isOverride(void) const
 void JumpTable::setOverride(const vector<Address> &addrtable,const Address &naddr,uintb h,uintb sv)
 
 {
-  if (jmodel != (JumpModel *)0)
-    delete jmodel;
-
-  JumpBasicOverride *jumpOverride;
-  jmodel = jumpOverride = new JumpBasicOverride(this);
+  // SaturnExplorer: the override is built before the old model is freed, and the table owns it as soon as it
+  // exists (area 6, A6-18): a failed allocation left the freed model in place, to be freed again.
+  unique_ptr<JumpBasicOverride> jumpOverride(new JumpBasicOverride(this));
   jumpOverride->setAddresses(addrtable);
   jumpOverride->setNorm(naddr,h);
   jumpOverride->setStartingValue(sv);
+  JumpModel *old = jmodel;
+  jmodel = jumpOverride.release();
+  if (old != (JumpModel *)0)
+    delete old;
 }
 
 /// \brief Get the index of the i-th address table entry that corresponds to the given basic-block

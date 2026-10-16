@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+ * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -852,9 +853,10 @@ void Funcdata::truncatedFlow(const Funcdata *fd,const FlowInfo *flow)
     PcodeOp *newop = findOp(indop->getSeqNum());
     if (newop == (PcodeOp *)0)
       throw LowlevelError("Could not trace jumptable across partial clone");
-    JumpTable *jtclone = new JumpTable(*jiter);
+    unique_ptr<JumpTable> jtclone(new JumpTable(*jiter));
     jtclone->setIndirectOp(newop);
-    jumpvec.push_back(jtclone);
+    jumpvec.push_back(jtclone.get());
+    jtclone.release();
   }
 
   FlowInfo partialflow(*this,obank,bblocks,qlst,flow); // Clone the flow
@@ -926,8 +928,9 @@ int4 Funcdata::inlineFlow(Funcdata *inlinefd,FlowInfo &flow,PcodeOp *callop)
     res = 1;
     vector<JumpTable *>::const_iterator jiter; // Clone any jumptables from inline piece
     for(jiter=inlinefd->jumpvec.begin();jiter!=inlinefd->jumpvec.end();++jiter) {
-      JumpTable *jtclone = new JumpTable(*jiter);
-      jumpvec.push_back(jtclone);
+      unique_ptr<JumpTable> jtclone(new JumpTable(*jiter));
+      jumpvec.push_back(jtclone.get());
+      jtclone.release();
     }
     flow.inlineClone(inlineflow,retaddr);
 

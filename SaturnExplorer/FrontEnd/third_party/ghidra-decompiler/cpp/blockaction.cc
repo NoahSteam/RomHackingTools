@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the structurer's goto choice (TraceDAG) frees what it made when an allocation fails (patches/0040-jumptable-tracedag-allocation-failure.patch).
  */
 #include "blockaction.hh"
 #include "funcdata.hh"
@@ -502,7 +504,10 @@ void TraceDAG::BranchPoint::createTraces(void)
   int4 sizeout = top->sizeOut();
   for(int4 i=0;i<sizeout;++i) {
     if (!top->isLoopDAGOut(i)) continue;
-    paths.push_back( new BlockTrace(this,paths.size(),i) );
+    // SaturnExplorer: a trace the list cannot take is freed (area 6, A6-22)
+    unique_ptr<BlockTrace> newtrace(new BlockTrace(this,paths.size(),i));
+    paths.push_back( newtrace.get() );
+    newtrace.release();
   }
 }
 
@@ -570,7 +575,14 @@ TraceDAG::BranchPoint::BranchPoint(BlockTrace *parenttrace)
   pathout = parenttrace->pathout;
   ismark = false;
   top = parenttrace->destnode;
-  createTraces();
+  try {
+    createTraces();
+  }
+  catch(...) {			// The destructor does not run for a constructor that throws:
+    for(int4 i=0;i<paths.size();++i)	// the traces made so far are ours to free
+      delete paths[i];
+    throw;
+  }
 }
 
 TraceDAG::BranchPoint::~BranchPoint(void)
@@ -839,10 +851,11 @@ bool TraceDAG::checkOpen(BlockTrace *trace)
 list<TraceDAG::BlockTrace *>::iterator TraceDAG::openBranch(BlockTrace *parent)
 
 {
-  BranchPoint *newbranch = new BranchPoint( parent );
-  parent->derivedbp = newbranch;
+  // SaturnExplorer (area 6, A6-22): the new branch point is freed unless the list of branch points owns it, and the list
+  // takes it before the parent trace is changed, so a failed push_back leaves the trace as it was.
+  unique_ptr<BranchPoint> owner( new BranchPoint( parent ) );
+  BranchPoint *newbranch = owner.get();
   if (newbranch->paths.size() == 0) { // No new traces, return immediately to parent trace
-    delete newbranch;
     parent->derivedbp = (BranchPoint *)0;
     parent->flags |= BlockTrace::f_terminal; // marking it as terminal
     parent->bottom = (FlowBlock *)0;
@@ -850,8 +863,10 @@ list<TraceDAG::BlockTrace *>::iterator TraceDAG::openBranch(BlockTrace *parent)
     parent->edgelump = 0;
     return parent->activeiter;
   }
-  removeActive(parent);
   branchlist.push_back( newbranch );
+  owner.release();
+  parent->derivedbp = newbranch;
+  removeActive(parent);
   for(int4 i=0;i<newbranch->paths.size();++i)
     insertActive(newbranch->paths[i]);
   return newbranch->paths[0]->activeiter;
@@ -967,13 +982,15 @@ TraceDAG::~TraceDAG(void)
 void TraceDAG::initialize(void)
 
 {
-  BranchPoint *rootBranch = new BranchPoint(); // Create a virtual BranchPoint for all entry points
-  branchlist.push_back(rootBranch);
+  // SaturnExplorer (area 6, A6-22): each object is owned by the list that is to hold it before anything else can fail.
+  unique_ptr<BranchPoint> owner(new BranchPoint()); // Create a virtual BranchPoint for all entry points
+  branchlist.push_back(owner.get());
+  BranchPoint *rootBranch = owner.release();
 
   for(uint4 i=0;i<rootlist.size();++i) {	// Find the entry points
-    BlockTrace *newtrace = new BlockTrace(rootBranch,rootBranch->paths.size(),rootlist[i]);
-    rootBranch->paths.push_back(newtrace);
-    insertActive(newtrace);
+    unique_ptr<BlockTrace> newtrace(new BlockTrace(rootBranch,rootBranch->paths.size(),rootlist[i]));
+    rootBranch->paths.push_back(newtrace.get());
+    insertActive(newtrace.release());
   }
 }
 

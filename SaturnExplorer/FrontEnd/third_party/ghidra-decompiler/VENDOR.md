@@ -64,6 +64,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0034-sleigh-control-register-writes.patch` | `ldc` to SR, GBR and VBR (and `ldc.l`) call the user ops `Write_SR`, `Write_GBR`, `Write_VBR` with the value written, so a write that outlives the function stays in the pseudocode and its source stays a parameter. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 | `0037-engine-division-piece-and-input-names.patch` | `RuleDivTermAdd`/`RuleDivTermAdd2` keep a 33-bit-multiplier product that wraps an 8-byte multiply only when every reader is a right shift that completes a division (a scaled quotient printed the wrapped product); `RulePiecePathology` needs the concatenation to write the register the SUBPIECE reads (a stack insert dropped the untouched bytes from the return); an input piece of a register is named with its byte (`in_r3_b3`). Ledger A2-21, A2-22, A2-25. |
 | `0038-sleigh-rte-restores.patch` | `rte` calls `Write_SR(_sr)` and a new user op `Rte_PC(_pc)`, so the restores of SR and PC, and the stores a handler made to the stacked words, stay in the code. `sh-2.sla` and `Sh2SpecData.h` regenerated. Ledger A2-24. |
+| `0040-jumptable-tracedag-allocation-failure.patch` | More allocation-failure ordering (area 6, round 3): a recovered `JumpTable` is held until `jumpvec` owns it (and the clones of one, and `JumpBasic::clone` and its siblings, are `unique_ptr`s until they are returned); `JumpTable::recoverModel` and `setOverride` no longer free the old model before the new one exists (unreachable from the host); `TraceDAG::initialize`, `BranchPoint::BranchPoint` (`createTraces`) and `openBranch` own what they make until a list takes it. Found by the sweeps of `jumptable`'s Flow and of the new `dag` and `loopbrk` fixtures. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -123,6 +124,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0034: `TestArea2Round3` (`Write_SR`, `Write_GBR`, `Write_VBR` in the text, the register a parameter), `SaturnExplorerSh2PrintedCTests` (the writes against the registers the run ends with), and the four emulator harnesses' `Sh2EmulatorHooks.h`.
   - 0037: `TestArea2Round4` (A2-21 words print no wrapped product, `x / 7` is a division; the A2-22 stack inserts return 4 bytes; `cmp/str` bytes are `in_r3_bN`) and `SaturnExplorerSh2PrintedCTests` (the division and stack fixtures and the widened register-only grammar against the emulator).
   - 0038: `TestArea2Round4` (`Write_SR(` and `Rte_PC(` keep the handler's stores to the stacked SR and PC), `SlaFreshnessTests`, and `Sh2EmulatorHooks.h` for `Rte_PC`.
+  - 0040: `SaturnExplorerDecompilerFaultTests` (its default subset pins the allocations of the patched functions by name and ordinal; the leak pins need an ASan + LeakSanitizer build, as 0032's do; reverting `jumptable.cc`, `funcdata_block.cc` or `blockaction.cc` makes the pinned cells leak).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.
