@@ -4003,3 +4003,130 @@ CD_HIRQ `w4`, `r4`; CD_CR4 `w1` (`CdByteWrite`: `mask == 0xFFFF`).
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 7, cautions 16 |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 22, cautions 20 |
 | Direct accesses to the hardware areas by partition (both images; sound RAM included) | 0x2xxxxxxx 108 and 170, on-chip 25 and 30, associative purge 2 and 2, cached 0: no instance of A5-19; no word read of a DMAC register (A5-18), no CCR word, no byte to the CD FIFO; the 31 SMPC_SF writes are all of 1 |
+
+
+## Area 5, round 4: the independent check, and A5-18 to A5-27
+
+Fixer, branch `review/5-round4-fix` from master `4b690b1`, fix commit `5b01226`. Ledger rows A5-18 to A5-27 are fixed (none accepted); the work is in
+`SaturnHardwareMap.{h,cpp}` and, inside `HardwareNotes`, `Sh2Decompiler.cpp`. No engine patch (0001 to 0028 unchanged). The
+oracle was built first, run against the unfixed map, and found the reviewer's rows and three more gaps before any rule was touched.
+
+**The root cause the reviewer named.** `HardwareWidthTable.golden.txt` is printed from `WidthCellFor`, so it cannot disagree with it:
+eleven DMAC cells were wrong in the golden file and the test passed. Every other root cause below is a case the table had no cell for
+or a fact about the bus that no cell models (the cache, alignment, a gap), and nothing compared those with Mednafen either.
+
+### The independent check
+
+- `Docs/Decompiler/tools/derive_handler_cases.py <mednafen>/mednafen/ss` reads Mednafen's handlers and writes
+  `FrontEnd/tests/MednafenHandlerCases.txt` (44 lines, checked in; `--check <file>` re-derives and fails on a stale copy). It
+  never reads the map. It parses `sh7095.inc` (the six on-chip handlers, each in its `A & 0x100` halves: the switch labels grouped by
+  shared body, the mask each applies, whether the branch raises an address error before decoding, whether a case does something with
+  the access, has a read effect, starts a division, a DMA, VDP1 drawing or sets CCR), `scu.inc` (`SCU_RegRW_DB_u8/u16/u32_W0/W1`, one
+  switch per width), `vdp1.c`, `vdp2.c` and `vdp2_render.c`, `smpc.c`, `cdb.c`, `scsp.inc`, and states the CPU bus's own facts
+  (`MemRead`/`MemWrite`: a misaligned access raises the address error and is made aligned down, case 0 is the cache, a write goes
+  through, case 7 decodes the partition by the on-chip handlers, cases 2 and 5 purge). The Mednafen tree at the review path has the
+  `.c` names the old audit script (`audit_hardware_map.py`, written for `.cpp`) does not find; the new script takes either.
+- `FrontEnd/tests/HardwareHandlerCheck.h`, called from `SaturnExplorerHardwareWidthTableTests` (third argument, the cases file),
+  compares: every **on-chip cell** (526 cells with a handler: 393 whose rule says the access reaches the register, 133 whose rule says
+  it does not or is an address error) with the case labels at that width and half, the register's group, `pex`, and its own read or
+  write effect (a flag armed, a latch, a division) happening exactly when the case has it; every **SCU cell** (490) with the width's
+  own switch, decoded and doing something or not; every **VDP1, VDP2, SMPC, CD block and SCSP register and direction** (228) with its
+  switch and its read effect; the **bus facts** (2,597 probes: every register misaligned at 2 and 4 bytes, read through the cached
+  partition, through the cache-through one, written through the cached one, the on-chip partition from eight prefixes);
+  and **every aligned address of 0xFFFFFE00-0xFFFFFFFF**, named or not, at three widths and both directions (1,792 probes): "address
+  error" exactly when the handler raises one. The SCI and the UBC are claimed from the manual and checked to stay undecoded (21).
+- **What it checks that the golden file does not:** that a rule's claim (reaches / does not reach / address error / effect happens)
+  is true of Mednafen's labels. **What it cannot see:** which bits of the value reach the register (`[15-0]`), the lane rules of the
+  16-bit buses (SMPC, SCSP, CD, MINIT/SINIT, backup RAM), the keys of the keyed writes, FIFO pops, filler values (`0xFF`, `0x00FF`,
+  the divider's shadow), VDP2 colour RAM, value-independent write effects other than SMPC_SF (VDP1 `ENDR`, SCU `AIACK`/`T1MD`, the SCSP
+  common block: `F` in the cases file, not said), a DMA transfer starting on a write to CHCR or DMAOR (excused in the test, with the
+  reason: it is the register's purpose), and the text of any caution. Those stay with the hand fixtures and the golden file.
+- **It fails on the A5-18 cells before the fix:** unfixed it reported 2,584 disagreements: the 11 DMAC cells at +2 (`SH2_SAR0 r2@2 ...
+  the handler has no case that does`, and the same for DAR0, TCR0, CHCR0 (also the read effect), SAR1, DAR1, TCR1, CHCR1, VCRDMA0,
+  VCRDMA1, DMAOR), 16 byte-read cells of CHCR0/CHCR1/DMAOR/RTCSR whose arming does happen (A5-24), 8 divider byte writes whose
+  division happens (A5-24), WTCSR and RSTCSR read effects with no `onRead` (A5-21), the CCR purge unsaid (A5-20 neighbour), 72
+  cached-partition register reads (A5-19), the misaligned accesses (A5-25), the unnamed on-chip addresses (A5-27, 90+90+50+49), 7
+  bus-partition probes per register (the question below), and four it also found that were not rows: `SCU_VER` is a constant read the
+  first classifier took for filler (script fix), the watchdog's byte writes are not keyed writes (A5-21 part 3), and two cells of
+  the keyed word port that must be judged at the port's case. Fixed and passing: 0.
+
+### Root causes and fixes
+
+| Row | Root cause | Fix |
+|---|---|---|
+| A5-18 (P2) | One rule `OnChipLong` for three handlers; sh7095.inc has the +2 word case for the divider and the bus state controller, not for the DMAC (cases 0x80, 0x84, 0x88, 0x8C, 0x90, 0x94, 0x98, 0x9C, 0xA0, 0xA8, 0xB0 only) | New family `OnChipDmac` (SAR0 to DMAOR), rule `LongHalfRead` (d): a word read at +2 returns 0, reads nothing, arms nothing. The +0 caution says "a read at +2 returns 0 and reads nothing" for the DMAC and keeps "returns them too" for the divider |
+| A5-19 (P2) | The table has no model of the bus before the register: a read through `0x0xxxxxxx` is a cache read with CCR.CE (hit: no bus access; miss: the 16-byte line, each register read with its effect), exactly as the games set it | `NarrowAccessEffects` gives every read of a register area (or backup RAM) through the cached partition a caution: "a read of REG through the cached partition is a cache read when the cache is on (SH2_CCR.CE) ... the whole 16-byte line ... read it through 0x2xxxxxxx to bypass the cache". Decided: no state about CCR is kept, so the caution cannot know a function runs with the cache off; writes get none (they are written through, `MemWrite` case 0 falls into case 1). The generator is aware: new rule 3b, every register read its emulator traces at an address below `0x20000000` that the output shows at that constant address must carry a cache-read caution on its instruction (769 said, 98 reads through merged pointers excused: a plain load names no register, patches/0009). Its emulator has no cache and the literal choice was left as it was: half the register literals stay cached addresses and are now checked, not suppressed |
+| A5-20 (P3) | The text of `EvenByteRead` did not know the CCR reads back in both bytes; `NameAt(addr+1)` found the register's own mirror; the word beside RSTCSR reads `0x00FF` | CCR text, `NameBeside` (a register other than itself), `0x00FF` beside RSTCSR |
+| A5-21 (P3) | WTCSR and RSTCSR had no `onRead`; the keyed WTCSR note ignored TME; a byte write was a `KeyedWrite` cell | `onRead` on both ("a read arms clearing OVF / WOVF"); the note stores `V & 0x67` and says TME clear = OVF cleared whatever a read saw and WTCNT reset, TME set = OVF only if armed and SBYCR's SBY cleared; rule `KeyedByteWrite` and `KeyedPortCaution`: "this write does not write it, and it cancels a pending SH2_RSTCSR WOVF clear (a read arms it)" (also on an ignored keyed word) |
+| A5-22 (P3) | No `onWrite` for SMPC_SF | `onWrite` plus `noteWrite`: every write to SF says it sets SF to 1, except a write of 1 (the line says it) |
+| A5-23 (P3) | A byte write to the CD FIFO was `Plain` | Rule `FifoByteWrite` (b), both windows |
+| A5-24 (P3) | The byte `AddressError` cells of the 32-bit on-chip registers had the effect flag off; Mednafen raises the error and then makes the access | The cells keep `kWidthEffect` (golden `AddressError*`, no `!`); `HardwareNotes` prints the arming note beside the caution |
+| A5-25 (P3) | `CoveredRegisters` took the misaligned address as given | `AccessAddress` (aligned down, except on-chip, which decodes the address as given); every consumer uses it; a caution "a misaligned N-byte write at ... is an address error on the SH-2 ...; the access is made at ... (REG)"; the "through a mirror" note is not made for a misaligned access |
+| A5-26 (P3) | Backup RAM was ordinary memory | In `kBusAreas` (volatile, never folded, through both partitions and the bus repeats), with a caution per width and lane (byte at an even address: nothing / `0xFF`; word write keeps the low byte; long: two of them) |
+| A5-27 (P3) | The table has rows for registers only | A generic caution for an on-chip access that is an address error (a long below `0xFFFFFF00`, a byte above) when no register's cell already said so; the check probes every aligned address of the area, named or not |
+
+**The reviewer's two questions.** *Which reference wins for `0xE0000000-0xFFFFFFFF`?* Mednafen: its `MemRead`/`MemWrite` case 7 hands the
+whole partition to the on-chip handlers, which look at bit 8 and the low byte, so 0xFFFF8E10 is `SH2_TIER` there. The manual's bit 14
+(and bits 28 and 12 for the low half) is real hardware's, where the rest read garbage; the decompiler describes the emulator the tool
+runs and every other round took Mednafen where the two differ (the 0xA partition, SCU_AIACK). `HardwareAlias` now decodes by `A & 0x1FF`;
+an address that is not the register's own prints by address with "0x... is REG through a mirror". Fixture `q_alias`; the check's
+bus probes (eight prefixes per register) pin it. The SCI's byte `Plain` stays from the manual (Mednafen ignores it) and the check
+holds both families at "undecoded" so a Mednafen that grew a handler would fail. *Missing notes:* added, because cheap, as value
+notes (`WriteEffects`) and an access note: `SH2_CCR` with CP set purges the whole cache ("CP (bit 4) is set, so this write purges the
+whole cache"; unknown value: "a write with CP set purges"), a write to `VDP1_PTMR` with bit 0 set starts drawing, and an access
+through `0x4xxxxxxx` or `0xAxxxxxxx` is an associative purge of the cache line for the address (a read returns all ones). Not done:
+the same for CCR bits other than CP, and a model of CCR's state for the cache caution.
+
+### Mutation checks
+
+Every rule entry below was broken in the source, the three binaries rebuilt, and the golden file, the independent check, the
+fixtures and (A5-19) the generator run; restored, all pass. "Handler" is the number of disagreements with Mednafen's handlers.
+
+| Entry broken | Handler check | Golden | Fixture CHECKs | Generator |
+|---|---|---|---|---|
+| DMAC word read at +2 reaches the register (A5-18) | 14 | fails | 5 | |
+| byte `AddressError` cell loses the effect flag (A5-24) | 24 | fails | 1 | |
+| no cache caution (A5-19) | 72 | passes | 3 | 32 findings |
+| WTCSR without `onRead` (A5-21) | 2 | fails | 1 | |
+| keyed byte write a `KeyedWrite` cell (A5-21) | 3 | fails | 3 | |
+| WTCSR note ignores TME (A5-21) | passes | fails | 2 | |
+| SMPC_SF without `noteWrite` (A5-22) | 1 | passes | 1 | |
+| FIFO byte write plain (A5-23) | passes | fails | 1 | |
+| no misaligned caution (A5-25) | 1,756 | passes | 2 | |
+| backup RAM not a hardware area (A5-26) | passes | passes | 4 | |
+| backup RAM says nothing (A5-26) | passes | passes | 2 | |
+| no unnamed-address error (A5-27) | 279 | passes | 1 | |
+| CCR word read as before (A5-20) | passes | passes | 1 | |
+| `NameBeside` finds the CCR mirror (A5-20) | passes | passes | 1 | |
+| partition 7 needs bit 14 again (the question) | 360 | passes | 2 | |
+| no CCR purge note | passes | passes | 1 | |
+| no PTMR start note | passes | passes | 1 | |
+| no associative purge note | passes | passes | 2 | |
+| `HardwareNotes` gate on the cell's effect flag inverted | passes | passes | 17 | |
+| the cases file gains a DMAC +2 case (the oracle itself) | 1 | passes | 0 | |
+
+The first run of the last row passed: the check's list of "claims nothing" rules lacked `LongHalfRead` and `KeyedByteWrite`, so a
+Mednafen that decoded the DMAC at +2 would have gone unseen. Added, rerun: caught. Mutations whose only witness is a fixture (the
+notes, backup RAM) are as strong as their fixture: the independent check does not see lanes, notes or text, and says so above.
+
+### Matrix
+
+| | |
+|---|---|
+| Golden file | regenerated after the rules were right (`SE_UPDATE_GOLDEN=1`) and read line by line: 337 registers, 3,038 cells; rules 29 -> 32 (`FifoByteWrite`, `LongHalfRead`, `KeyedByteWrite`), families 12 -> 13 (`OnChipDmac`); the DMAC rows (`r2@2=LongHalfRead`, byte reads `AddressError*`), the divider byte writes `AddressError*`, CHCR/DMAOR/RTCSR byte reads `*` where they were `!`, WTCSR/RSTCSR `r1=Plain*`, the three watchdog byte writes `KeyedByteWrite`, the FIFO byte writes `FifoByteWrite`, SMPC_SF writes `*`, and the keyed-write section's text. Nothing else moved |
+| `ctest` | 96 of 96 passed (83 s with -j3), `SaturnExplorerHardwareWidthTableTests` (with the handler check), `SaturnExplorerSh2DecompilerTests` and `SaturnExplorerSh2GeneratedTests` among them |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 7 -> 12, cautions 16 -> 16 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 22 -> 27, cautions 20 -> 20 |
+| Corpus text that changed (the master binary's output beside the new one's, every function compared) | the pseudocode, the warnings and the cautions of all 839 and 1,554 outputs are byte-identical; only note lines appeared, five in each image, each read. `hwram007`: `06003C46` and `060340FE` gain "an access at 0x46003304 is an associative purge, not a memory access: it invalidates the cache line for 0x06003300" (the slave idle loop's purge; true, `SH7095_Cache_AssocPurge`); `060258AC` (two) and `06025910` gain "SH2_CCR: CP (bit 4) is set, so this write purges the whole cache" on writes of `0x11` (CE and CP; true). `hwram008`: the same, in `06003C46` and `0607513E` (purge), `0606554C` (two) and `060655B0` (CCR) |
+| Generator | `ctest` short run passes; `SE_GENERATED_SEEDS=3000`: 0 findings, 769 cached-partition register reads said, 98 through merged pointers excused |
+| ASan + UBSan + LSan, gcc Debug | `Sh2DecompilerTests`, `HardwareWidthTableTests` and `Sh2GeneratedTests` (300 seeds), `detect_leaks=1`: no AddressSanitizer or LeakSanitizer report; the only UBSan lines are the two tolerated sites (`address.hh:605`, `slghpatexpress.cc:979`); all pass |
+
+### Not done
+
+- The SCI's and the UBC's cells stay from the manual (no Mednafen handler); the check only holds them undecoded.
+- Value-independent write effects other than SMPC_SF (`F` in the cases file: VDP1 `ENDR`, SCU `AIACK`, `T1MD`, SCSP common block) are not said; a
+  DMA start on a write to CHCR or DMAOR is not said (excused in the test).
+- The lane rules of the 16-bit buses, the bits that reach a register, the keys, the FIFO pops, and the text of every caution are
+  pinned by hand fixtures and the golden file only.
+- The cache caution cannot know CCR.CE is clear for a function (it would need the CCR state, which is a flow property, not a map property).
+- VDP2 colour RAM byte writes (A5-16 part 4) stay accepted.
