@@ -336,7 +336,9 @@ public:
     bool FrameEscape(uint32_t& offset) const
     {
         if (!mEscaped) return false;
-        offset = static_cast<uint32_t>(mEscapeLow);
+        // An address made from a base that was given up (a loop that moves it, an index that may be negative)
+        // points anywhere in the frame: from its lowest slot, the lowest offset r15 or a stack address held.
+        offset = static_cast<uint32_t>(mEscapedLow ? std::min(mEscapeLow, mLowestSp) : mEscapeLow);
         return true;
     }
 
@@ -360,7 +362,9 @@ public:
         mOut = 0;
         mLeaks = 0;
         mFrameValues = 0;
+        mLowestSp = 0;
         std::map<uint32_t, State> in;
+        std::map<uint32_t, int> changes;   // how often the state at an address grew
         std::set<uint32_t> work;
         in[mExec] = start;
         work.insert(mExec);
@@ -378,6 +382,10 @@ public:
                 auto f = in.find(o.first);
                 if (f == in.end()) in.emplace(o.first, std::move(o.second));
                 else if (!Join(f->second, o.second)) continue;
+                // A loop that moves a stack address keeps lowering its base: each pass is a new, lower one, and
+                // the walk would run to its step limit (A3-16). After a few, the bases at that address are
+                // given up for "the frame's lowest slot".
+                else if (++changes[o.first] > kWidenAfter) Widen(f->second);
                 work.insert(o.first);
             }
         }
@@ -393,6 +401,7 @@ public:
 
 private:
     static constexpr size_t kMaxSteps = 200000;
+    static constexpr int kWidenAfter = 6;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
     static constexpr int kR15 = 15, kSr = 16, kPr = 21;
     // r0-r3, r8-r14, GBR, VBR, MACH, MACL: the registers whose entry value no signature passes (r4-r7 are
@@ -408,6 +417,10 @@ private:
         // Fuzzy: a stack address plus an index, with the offset the address had before it (from r15 on entry): the value
         // points at or above it, taking the index as non-negative as the engine's own pointer arithmetic does (A3-9).
         static constexpr int64_t kNoBase = INT64_MIN;
+        // ...or "from the frame's lowest slot": a base a loop kept lowering (A3-16) or an index that may be negative
+        // (A3-17) leaves no lower bound but the frame's own. The least base there is, so a join with it is it.
+        static constexpr int64_t kLowBase = INT64_MIN + 1;
+        static int64_t MoveBase(int64_t base, int64_t by) { return base == kLowBase ? kLowBase : Wrap(base + by); }
         int64_t stackBase = kNoBase;
         int64_t Base() const { return kind == Sp ? v : kind == Fuzzy ? stackBase : kNoBase; }
         static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
@@ -487,7 +500,7 @@ private:
         return Value();
     }
 
-    void Set(State& s, const ghidra::VarnodeData& vn, const Value& v) const
+    void Set(State& s, const ghidra::VarnodeData& vn, const Value& v)
     {
         for (auto it = s.vars.begin(); it != s.vars.end();)
         {
@@ -496,6 +509,7 @@ private:
             it = overlap ? s.vars.erase(it) : std::next(it);
         }
         s.vars[KeyOf(vn)] = v;
+        if (v.kind == Value::Sp && v.v < mLowestSp) mLowestSp = v.v;
         // Below r15 is free stack: a callee's pushes and any interrupt write there. A slot the
         // stack pointer rises past holds anything from then on.
         if (KeyOf(vn) == KeyOf(mReg[kR15]))
@@ -528,6 +542,16 @@ private:
     {
         const uint32_t o = addr.Origins();
         return (o & origin::kStack) || (s.escaped && (o & origin::kMemory));
+    }
+
+    // The stack-address bases of every value in 'st' given up for the lowest slot (see Run).
+    static void Widen(State& st)
+    {
+        auto widen = [](Value& v) {
+            if (v.kind == Value::Fuzzy && v.stackBase != Value::kNoBase) v.stackBase = Value::kLowBase;
+        };
+        for (auto& v : st.vars) widen(v.second);
+        for (auto& v : st.slots) widen(v.second);
     }
 
     // Keeps in 'into' what both states agree on, the rest as its origins; true when 'into' changed.
@@ -609,7 +633,8 @@ private:
         // make an array of every local.
         const int64_t base = v.Base();
         if (base == Value::kNoBase) return;
-        if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
+        if (base == Value::kLowBase) mEscapedLow = true;
+        else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
     }
 
@@ -829,11 +854,11 @@ private:
                 {
                     r = Value::From(origin::kStack);
                     if (!sub && x.Base() != Value::kNoBase && y.Base() == Value::kNoBase)
-                        r.stackBase = Wrap(x.Base() + (y.kind == Value::Imm ? y.v : 0));
+                        r.stackBase = Value::MoveBase(x.Base(), y.kind == Value::Imm ? y.v : 0);
                     else if (!sub && y.Base() != Value::kNoBase && x.Base() == Value::kNoBase)
-                        r.stackBase = Wrap(y.Base() + (x.kind == Value::Imm ? x.v : 0));
+                        r.stackBase = Value::MoveBase(y.Base(), x.kind == Value::Imm ? x.v : 0);
                     else if (sub && y.kind == Value::Imm)
-                        r.stackBase = Wrap(x.Base() - y.v);
+                        r.stackBase = Value::MoveBase(x.Base(), -y.v);
                 }
                 Set(s, op.out, r);
                 break;
@@ -918,7 +943,10 @@ private:
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
-    int64_t mEscapeLow = 0;
+    bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
+    int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
+    int64_t mLowestSp = 0;      // the lowest stack offset any register or slot held
+
 };
 
 // How the entry value of SR, GBR or VBR is used, for WithholdReason. Since patch 0034 an `ldc` into one of them stays in the
@@ -1114,6 +1142,14 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     // (LendEffects); one that varies between returns, or is not a constant, cannot be lent.
     if (!((effects.preserved >> 15) & 1u) && effects.spDelta == CallEffects::kSpUnknown)
         return "it leaves r15 changed by an amount that is not the same at every return";
+    // ...and a constant difference below where it began is words the callee pushed and left (`rts ; mov.l r5,@-r15`): a
+    // value handed to its caller through the stack. The signature has registers only, and the engine takes the callee's
+    // store for a write into its own frame, so the register stored is no input and the caller, which pops the word,
+    // reads a local nothing wrote (A3-15). No compiler leaves a push, and neither corpus image lends one: withheld, and
+    // so is the caller. (A callee that pops its caller's words, a positive difference, reads them: that is an incoming
+    // stack argument, which is withheld above.)
+    if (!((effects.preserved >> 15) & 1u) && effects.spDelta < 0)
+        return "it leaves r15 lower than it found it (words pushed for its caller)";
     return std::string();
 }
 
