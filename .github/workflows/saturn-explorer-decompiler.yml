@@ -241,6 +241,16 @@ jobs:
           echo "SE_GENERATED_SEEDS=$SE_GENERATED_SEEDS SE_GENERATED_SEED=$SE_GENERATED_SEED"
           time build/bin/SaturnExplorerSh2GeneratedTests "$PWD/build/generated_test" 2>&1 | tee generator-logs/generator.log
 
+      # The printed-C differential (SaturnExplorerSh2PrintedCTests in ctest): the register-only grammar's
+      # text compiled with the runner's gcc and compared with the emulator. Exit 77 is "no compiler", a failure here.
+      - name: Run the printed-C differential
+        if: steps.probe.outputs.present == 'true'
+        run: |
+          mkdir -p generator-logs
+          rm -rf build/printedc_test
+          set -o pipefail
+          time SE_GENERATED_PRINTEDC=only build/bin/SaturnExplorerSh2GeneratedTests "$PWD/build/printedc_test" 2>&1 | tee generator-logs/printedc.log
+
       - name: Upload the generator log
         if: always() && steps.probe.outputs.present == 'true'
         uses: actions/upload-artifact@v4

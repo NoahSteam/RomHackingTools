@@ -59,6 +59,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0029-jumptable-signed-guard.patch` | `JumpBasic::calcRange` does not assume the switch value is non-negative: a table bounded only by a signed compare (`cmp/gt`, `cmp/ge`) is no longer recovered as 0 to the bound; the jump is reported as unresolved and the signature withheld (ledger A4-7). |
 | `0030-host-stack-alias.patch` | `ScopeLocal::declareHostAlias`: the host declares a pointer into the stack frame that no Varnode shows (the address of a returned structure, in r2, which the calling convention has no input for), so the locals from that offset up are aliased and a call may write them. |
 | `0031-access-past-space-end.patch` | A LOAD or STORE whose constant address and size run past the end of the space stays a LOAD or STORE instead of failing the function ("beyond end of address space", ledger A2-11). |
+| `0033-engine-printed-value-fixes.patch` | Three printed-value defects: a return in the join space (r0:r1) is consumed whole, not narrowed to its low half (r1) and printed as the 4-byte return (r0); a boolean-typed constant other than 0 and 1 is printed as the integer, not `true`; an input replaced by a subvariable flow's temporary that an operation still reads is read zero-extended from the logical input, not as an input no register holds. |
+| `0034-sleigh-control-register-writes.patch` | `ldc` to SR, GBR and VBR (and `ldc.l`) call the user ops `Write_SR`, `Write_GBR`, `Write_VBR` with the value written, so a write that outlives the function stays in the pseudocode and its source stays a parameter. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -113,6 +115,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0029: `TestSignedGuardTable` (a table bounded only by `cmp/gt` or `cmp/ge` is an unresolved jump, warned, withheld; `cmp/hi`, `cmp/pz` with `cmp/gt` and a zero-extended index are still switches), and the generator's `table-case` check for index -1 (grammar 2's signed bound checks).
   - 0030: `TestCallsAndTraps` ("A3-4": a callee that writes the caller's local through r2 is seen to: the read after the call is the local, not the value stored before it).
   - 0031: `TestAccessPastSpaceEnd` (a constant access past 0xFFFFFFFF decompiles and is printed; the last longword and byte of the space are folded as before), and the generator's seed 219488.
+  - 0033: `TestArea2Round3` (an 8-byte return of r0:r1, no `== true`, no `unaff_1...`) and `SaturnExplorerSh2PrintedCTests` (the printed value of 300 register-only functions, compiled with the system C compiler, against the emulator).
+  - 0034: `TestArea2Round3` (`Write_SR`, `Write_GBR`, `Write_VBR` in the text, the register a parameter), `SaturnExplorerSh2PrintedCTests` (the writes against the registers the run ends with), and the four emulator harnesses' `Sh2EmulatorHooks.h`.
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

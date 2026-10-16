@@ -1,0 +1,115 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+index 06e54e9..98d85b4 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/coreaction.cc
+@@ -18,6 +18,7 @@
+  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
+  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
+  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
++ * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
+  */
+ #include "coreaction.hh"
+ #include "condexe.hh"
+@@ -4156,7 +4157,14 @@ uintb ActionDeadCode::gatherConsumedReturn(Funcdata &data)
+     if (returnOp->isDead()) continue;
+     if (returnOp->numInput() > 1) {
+       Varnode *vn = returnOp->getIn(1);
+-      consumeVal |= minimalmask(vn->getNZMask());
++      // SaturnExplorer: a return in the join space (r0:r1, the high half in r0) is consumed whole. Its
++      // non-zero bits could be only the low half, and the value would be narrowed to that half, but the
++      // low half is r1, which is not where a 4-byte return is (r0): the narrowed value would be printed
++      // as the function's return and lent as a 4-byte one in the wrong register (patch 0033).
++      if (vn->getSpace()->getType() == IPTR_JOIN)
++	consumeVal |= calc_mask(vn->getSize());
++      else
++	consumeVal |= minimalmask(vn->getNZMask());
+     }
+   }
+   int4 val = data.getFuncProto().getReturnBytesConsumed();
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
+index 9c6db91..01872ff 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/printc.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a boolean-typed constant other than 0 and 1 is printed as the integer it is (patches/0033-engine-printed-value-fixes.patch).
+  */
+ #include "printc.hh"
+ #include "funcdata.hh"
+@@ -1543,7 +1545,7 @@ void PrintC::pushType(const Datatype *ct)
+ /// \brief Push a \b true or \b false token to the RPN stack
+ ///
+ /// A single Atom representing the boolean value is emitted
+-/// \param val is the boolean value (non-zero for \b true)
++/// \param val is the boolean value (0 for \b false, 1 for \b true; any other value is printed as the integer it is)
+ /// \param ct is the data-type associated with the value
+ /// \param tag is the type of token to associate with the boolean value
+ /// \param vn is the Varnode holding the value
+@@ -1551,7 +1553,9 @@ void PrintC::pushType(const Datatype *ct)
+ void PrintC::pushBoolConstant(uintb val,const TypeBase *ct,tagtype tag,
+ 				 const Varnode *vn,const PcodeOp *op)
+ {
+-  if (val != 0)
++  if (val > 1)	// SaturnExplorer: not a boolean. A flag compared with 2 is not "== true" (patch 0033)
++    push_integer(val,ct->getSize(),false,tag,vn,op,0);
++  else if (val != 0)
+     pushAtom(Atom(KEYWORD_TRUE,tag,EmitMarkup::const_color,op,vn,val));
+   else
+     pushAtom(Atom(KEYWORD_FALSE,tag,EmitMarkup::const_color,op,vn,val));
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
+index 5769939..2e9bb98 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/subflow.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
+  */
+ #include "subflow.hh"
+ #include "funcdata.hh"
+@@ -1542,6 +1544,40 @@ void SubvariableFlow::doReplacement(void)
+       }
+     }
+   }
++
++  // SaturnExplorer: an input that was replaced by a temporary (replaceInput) may still be read by an
++  // operation the flow left in place: the original operation of a node whose result has readers outside
++  // the flow, which is kept and rewired to the temporary. The temporary is a second input that nothing
++  // defines, so it printed as an input no register holds ("unaff_10000008"). Those readers only use the
++  // bits of the logical value, the flow having been accepted on that, so they read the logical input
++  // extended instead (patch 0033).
++  map<Varnode *,ReplaceVarnode>::iterator riter;
++  for(riter=varmap.begin();riter!=varmap.end();++riter) {
++    Varnode *temp = (*riter).second.vn;
++    Varnode *logical = (*riter).second.replacement;
++    if (temp == (Varnode *)0 || logical == (Varnode *)0 || !temp->isInput()) continue;
++    if (temp->getSpace()->getType() != IPTR_INTERNAL) continue;
++    bool live = false;		// a reader that is not itself a dead remnant of the flow
++    list<PcodeOp *>::const_iterator oiter;
++    for(oiter=temp->beginDescend();oiter!=temp->endDescend();++oiter) {
++      PcodeOp *reader = *oiter;
++      Varnode *rout = reader->getOut();
++      if (rout == (Varnode *)0 || !rout->hasNoDescend() || rout->isAddrForce() || rout->isPersist()) {
++	live = true;
++	break;
++      }
++    }
++    if (!live) continue;
++    BlockBasic *entry = (BlockBasic *)fd->getBasicBlocks().getBlock(0);
++    PcodeOp *zextOp = fd->newOp(1,fd->getAddress());
++    fd->opSetOpcode(zextOp,CPUI_INT_ZEXT);
++    Varnode *zextOut = fd->newUniqueOut(temp->getSize(),zextOp);
++    fd->opSetInput(zextOp,logical,0);
++    fd->opInsertBegin(zextOp,entry);
++    fd->totalReplace(temp,zextOut);
++    fd->deleteVarnode(temp);
++    (*riter).second.vn = zextOut;
++  }
+ }
+ 
+ void RuleSubvarAnd::getOpList(vector<uint4> &oplist) const

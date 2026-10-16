@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a boolean-typed constant other than 0 and 1 is printed as the integer it is (patches/0033-engine-printed-value-fixes.patch).
  */
 #include "printc.hh"
 #include "funcdata.hh"
@@ -1543,7 +1545,7 @@ void PrintC::pushType(const Datatype *ct)
 /// \brief Push a \b true or \b false token to the RPN stack
 ///
 /// A single Atom representing the boolean value is emitted
-/// \param val is the boolean value (non-zero for \b true)
+/// \param val is the boolean value (0 for \b false, 1 for \b true; any other value is printed as the integer it is)
 /// \param ct is the data-type associated with the value
 /// \param tag is the type of token to associate with the boolean value
 /// \param vn is the Varnode holding the value
@@ -1551,7 +1553,9 @@ void PrintC::pushType(const Datatype *ct)
 void PrintC::pushBoolConstant(uintb val,const TypeBase *ct,tagtype tag,
 				 const Varnode *vn,const PcodeOp *op)
 {
-  if (val != 0)
+  if (val > 1)	// SaturnExplorer: not a boolean. A flag compared with 2 is not "== true" (patch 0033)
+    push_integer(val,ct->getSize(),false,tag,vn,op,0);
+  else if (val != 0)
     pushAtom(Atom(KEYWORD_TRUE,tag,EmitMarkup::const_color,op,vn,val));
   else
     pushAtom(Atom(KEYWORD_FALSE,tag,EmitMarkup::const_color,op,vn,val));

@@ -67,6 +67,11 @@ run SaturnExplorerSh2DecodeTests \
   "$build/bin/SaturnExplorerSh2DecodeTests" "$(scratch decompiler_Sh2Decode_test)"
 run SaturnExplorerSh2GeneratedTests \
   "$build/bin/SaturnExplorerSh2GeneratedTests" "$(scratch decompiler_Sh2Generated_test)"
+# The printed-C differential (a mode of the same binary): the generated functions' text compiled with the system
+# compiler and compared with the emulator. It exits 77 when no C compiler is found (ctest reports that as skipped);
+# the job counts any non-zero exit as a failure, so a runner without a compiler fails here instead of passing.
+run SaturnExplorerSh2PrintedCTests \
+  env SE_GENERATED_PRINTEDC=only "$build/bin/SaturnExplorerSh2GeneratedTests" "$(scratch decompiler_Sh2PrintedC_test)"
 run SaturnExplorerSh2DecompilerTests \
   "$build/bin/SaturnExplorerSh2DecompilerTests" "$(scratch decompiler_Sh2Decompiler_test)"
 run SaturnExplorerSh2DecompilerFixtureTests \
