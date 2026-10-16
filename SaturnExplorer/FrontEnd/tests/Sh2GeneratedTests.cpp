@@ -424,6 +424,8 @@ struct Gen
     // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
     // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
     Rng wideRng;
+    // ...and one for the frame walk (a loop that moves a stack address, round 5 A3-16): whether a function has one and where.
+    Rng frameRng;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -444,7 +446,7 @@ struct Gen
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -953,6 +955,26 @@ struct Gen
         return it;
     }
 
+    // A frame address in r2 walked down the frame by a loop that stores through it (`mov.l r1,@-r2`), then cleared: the address
+    // is lowered at every pass, which A3-9's bases never settled on (ledger A3-16, 3.4 s and a function withheld "too many paths").
+    // r1 is the counter and ends 0, r2 ends 0: both are scratch that later items may use. T changes.
+    Item MakeFrameWalk()
+    {
+        Item it;
+        it.type = Item::Alu;
+        it.shape = "frame.walk";
+        const int steps = std::min(frame / 4, 3);
+        it.words = { 0x62F3,                                  // mov r15,r2
+                     uint16_t(0x7200 | frame),                // add #frame,r2: the top of the locals
+                     uint16_t(0xE100 | steps),                // mov #steps,r1
+                     0x2216,                                  // L: mov.l r1,@-r2
+                     0x4110,                                  //    dt r1
+                     0x8BFC,                                  //    bf L
+                     0xE200 };                                // mov #0,r2
+        defined |= 0x6u;
+        return it;
+    }
+
     // push Rn ; block ; pop Rn
     Item MakeSpill()
     {
@@ -1307,6 +1329,8 @@ struct Gen
         }
         for (int i = 0; i < nCalls; ++i) plan.insert(plan.begin() + rng.Below(static_cast<uint32_t>(plan.size() + 1)), 'C');
         if (table) plan.insert(plan.begin() + rng.Below(static_cast<uint32_t>(plan.size() + 1)), 'T');
+        // A walk of a frame address down the frame, by a loop (A3-16): drawn from a stream of its own, so no other draw moves.
+        if (f.frame && frameRng.Chance(20)) plan.insert(plan.begin() + frameRng.Below(static_cast<uint32_t>(plan.size() + 1)), 'F');
 
         for (char c : plan)
         {
@@ -1337,6 +1361,7 @@ struct Gen
             case 'p': f.items.push_back(MakeSpill()); break;
             case 'd': f.items.push_back(MakeDataSkip()); break;
             case 'T': f.items.push_back(MakeTable(idx)); break;
+            case 'F': f.items.push_back(MakeFrameWalk()); break;
             default:
             {
                 const int callee = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
@@ -3812,6 +3837,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             for (char& c : why)
                 if (c == ' ') c = '_';
             count("proto.withheld:" + why);
+            // A limit of the analysis, not a property of any program the grammar makes (round 5, A3-16: a loop that moves a stack
+            // address ran ReturnCheck to its step limit and lost the signature).
+            if (r.prototypeWithheld.find("too many paths") != std::string::npos)
+                add("lend-too-many-paths", "the signature is withheld: " + r.prototypeWithheld);
         }
         // A lent preserved set is honoured by the caller's text: the registers every callee keeps
         // (CallEffects::preserved of each, among those the default model kills: r2-r7, SR, MACH, MACL)
@@ -5295,13 +5324,13 @@ void TestGenerated()
     if (v2seeds)
     {
         std::printf("SUMMARY2: modules=%d functions=%d (end rts/tail/fall=%d/%d/%d; returning %d, void %d) pushes=%d pr stack/reg=%d/%d frames=%d (frame pointer %d) "
-                    "spills=%d locals ld/st=%d/%d (stack accesses exempt %d) calls bsr/jsr=%d/%d (arg in slot %d, args restored %d) "
+                    "spills=%d frame walks=%d locals ld/st=%d/%d (stack accesses exempt %d) calls bsr/jsr=%d/%d (arg in slot %d, args restored %d) "
                     "tables=%d (entries %d, cases %d, shared entries %d, default entries %d; destinations traced %d, printed %d, inert %d, warned %d) "
                     "bra loops fwd/back=%d/%d data skips=%d shared exits=%d exits below the entry=%d slot pops=%d ret in slot=%d; "
                     "lent prototypes=%d (void %d, returning %d) withheld=%d; parameter checks=%d (candidates %d, perturbed runs %d, insensitive %d); "
                     "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d (after a tail jump %d); runs=%d\n",
                     n("module.v2"), n("fn"), n("fn.end.rts"), n("fn.end.tail"), n("fn.end.fall"), n("fn.returns"), n("fn.void"), n("fn.pushed"),
-                    n("fn.pr.stack"), n("fn.pr.reg"), n("fn.frame"), n("fn.fp"), n("spill"), n("stack.ld.plain") + n("stack.ld.disp") + n("stack.ld.indexed"),
+                    n("fn.pr.stack"), n("fn.pr.reg"), n("fn.frame"), n("fn.fp"), n("spill"), n("frame.walk"), n("stack.ld.plain") + n("stack.ld.disp") + n("stack.ld.indexed"),
                     n("stack.st.plain") + n("stack.st.disp") + n("stack.st.indexed"), c("stack.exempt"), n("call.bsr"), n("call.jsr"), n("call.arg_in_slot"),
                     n("call.restores"), n("table"), n("table.entries"), n("table.cases"), n("table.entry_shared"), n("table.entry_default"),
                     c("table.destination"), c("table.printed"), c("table.inert"), c("table.warned"), n("loop.bra"), n("loop.back"), n("bra.data"), n("fn.shared_exit"),

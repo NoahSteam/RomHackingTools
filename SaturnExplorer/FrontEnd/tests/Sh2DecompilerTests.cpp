@@ -5143,10 +5143,24 @@ public:
         Val v;
     };
 
+    // What the run gave the code on entry (A3-15, round 5): every register has a known value, and so does every
+    // stack word (the snapshot's, below and above the entry r15). The names the engine gives these -- `in_r8`,
+    // `unaff_r8`, `in_sr`, `in_stack_00000004`, and a stack local nothing in the text assigned (`xStack_8`, the
+    // slot a callee pushed) -- read as those values. `extraout_rN` stays unknown: it is what a call returned.
+    struct Entry
+    {
+        std::map<std::string, uint32_t> regs;   // "r0" ... "r15", "sr", "gbr", "vbr", "mach", "macl", "pr"
+        std::shared_ptr<MemorySnapshot> snap;   // the stack words
+        uint32_t sp = 0;                        // r15 on entry
+    };
+    void SetEntry(const Entry* e) { mEntry = e; }
+
     // 'args' are the values of param_1, param_2, ... (r4, r5, ...).
     PseudoEval(const std::string& text, const std::vector<uint32_t>& args) : mArgs(args)
     {
         Lex(text);
+        for (size_t i = 0; i + 1 < mTok.size(); ++i)
+            if (mTok[i] == "&") mAddrTaken.insert(mTok[i + 1]);   // a local whose address is taken: a call may write it
         // The header: everything up to the body's opening brace.
         while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
         if (mPos >= mTok.size())
@@ -6010,6 +6024,10 @@ private:
         const auto it = env.find(t);
         if (it != env.end()) return it->second;
         const auto ty = mTypes.find(t);
+        {
+            Val init;
+            if (EntryValue(t, ty != mTypes.end() ? &ty->second : nullptr, init)) return init;
+        }
         if (ty != mTypes.end()) return Convert(Unk(4, Unknown), ty->second);   // declared, never assigned
         // A parameter the header does not declare (a fragment): the register's value as an int.
         if (t.compare(0, 6, "param_") == 0)
@@ -6044,6 +6062,43 @@ private:
             if (mTok[k] == "(" && k > n.expr && (std::isalnum(static_cast<unsigned char>(mTok[k - 1][0])) || mTok[k - 1][0] == '_' || mTok[k - 1] == ")"))
                 mCalled = true;   // `f(...)`, `(*f)(...)`: a call in the expression
         return v;
+    }
+
+    // The value the run gave a name the code reads without writing it (see Entry), when it can be said.
+    bool EntryValue(const std::string& name, const Ty* ty, Val& out) const
+    {
+        if (mEntry == nullptr) return false;
+        if (name.compare(0, 9, "in_stack_") == 0 || IsStackLocal(name))
+        {
+            if (ty != nullptr && ty->size != 4) return false;
+            if (mEntry->snap == nullptr) return false;
+            int64_t off = 0;
+            if (name.compare(0, 9, "in_stack_") == 0)
+            {
+                if (name.size() != 17) return false;
+                char* endp = nullptr;
+                off = static_cast<int64_t>(std::strtoul(name.c_str() + 9, &endp, 16));
+                if (*endp != '\0') return false;
+            }
+            else
+            {
+                if (mAddrTaken.count(name)) return false;
+                off = -static_cast<int64_t>(std::strtoul(name.c_str() + name.find("Stack_") + 6, nullptr, 16));
+            }
+            uint32_t word = 0;
+            if (!mEntry->snap->ReadU32(static_cast<uint32_t>(mEntry->sp + off), word)) return false;
+            out = Make(word, 4, Unsigned);
+            if (ty != nullptr) out = Convert(out, *ty);
+            return true;
+        }
+        const char* reg = name.compare(0, 3, "in_") == 0 ? name.c_str() + 3 : name.compare(0, 6, "unaff_") == 0 ? name.c_str() + 6 : nullptr;
+        if (reg == nullptr) return false;
+        if (std::strcmp(reg, "retaddr") == 0) reg = "pr";   // the engine's name for PR on entry
+        const auto r = mEntry->regs.find(reg);
+        if (r == mEntry->regs.end()) return false;
+        out = Make(r->second, 4, Unsigned);
+        if (ty != nullptr) out = Convert(out, *ty);
+        return true;
     }
 
     // A stack local (`xStack_c`, `iStack_8`): memory the code can reach through a pointer, which a call may have written.
@@ -6166,6 +6221,8 @@ private:
     size_t mPos = 0;
     std::vector<uint32_t> mArgs;
     std::map<std::string, Ty> mTypes;   // the declared type of each parameter and local
+    const Entry* mEntry = nullptr;
+    std::set<std::string> mAddrTaken;   // names after a `&`
     Ty mRet;                            // the return type
     Seq mBody;
     std::string mError;
@@ -6205,6 +6262,23 @@ std::shared_ptr<MemorySnapshot> CallSnapshot(const CallFixture& f, uint64_t seri
     return MakeSnapshot(hw, serial);
 }
 
+// The registers on entry to a run: r0-r15 distinct (0x1000 + 0x111 i), r4..r7 the arguments, r15 the stack, PR the sentinel,
+// VBR the vector table, SR, GBR, MACH and MACL zero. The evaluator reads `in_` and `unaff_` names from the same table.
+std::map<std::string, uint32_t> RunEntryRegisters(const std::vector<uint32_t>& args)
+{
+    std::map<std::string, uint32_t> regs;
+    for (int i = 0; i < 16; ++i) regs["r" + std::to_string(i)] = 0x1000u + 0x111u * i;
+    for (size_t i = 0; i < args.size() && i < 4; ++i) regs["r" + std::to_string(4 + i)] = args[i];
+    regs["r15"] = kRunStack;
+    regs["pr"] = kRunSentinel;
+    regs["vbr"] = kRunVbr;
+    regs["sr"] = 0;
+    regs["gbr"] = 0;
+    regs["mach"] = 0;
+    regs["macl"] = 0;
+    return regs;
+}
+
 // The function run with r4..r7 = args and the other registers set to distinct values; r0 at its return.
 bool CallRunResult(const std::shared_ptr<MemorySnapshot>& snap, const CallFixture& f, const std::vector<uint32_t>& args,
                    uint32_t& r0)
@@ -6212,12 +6286,7 @@ bool CallRunResult(const std::shared_ptr<MemorySnapshot>& snap, const CallFixtur
     try
     {
         RunMachine m(snap);
-        for (int i = 0; i < 16; ++i) m.Set(("r" + std::to_string(i)).c_str(), 0x1000u + 0x111u * i);
-        for (size_t i = 0; i < args.size() && i < 4; ++i) m.Set(("r" + std::to_string(4 + i)).c_str(), args[i]);
-        m.Set("r15", kRunStack);
-        m.Set("pr", kRunSentinel);
-        m.Set("vbr", kRunVbr);
-        m.Set("sr", 0);
+        for (const auto& kv : RunEntryRegisters(args)) m.Set(kv.first.c_str(), kv.second);
         if (!m.Run(f.base, kRunSentinel)) return false;
         r0 = m.Get("r0");
         return true;
@@ -6234,9 +6303,10 @@ bool CallRunResult(const std::shared_ptr<MemorySnapshot>& snap, const CallFixtur
 // (`return;`, or falling off the end) agrees only when r0 is no result at all ('resultInR0' false): the
 // code leaves its value there, and a text that states none dropped it. 'why' says what it does return when not.
 bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint32_t value, std::string& why,
-               bool resultInR0 = true)
+               bool resultInR0 = true, const PseudoEval::Entry* entry = nullptr)
 {
     PseudoEval eval(text, args);
+    eval.SetEntry(entry);
     const std::vector<PseudoEval::Outcome> outs = eval.Run();
     if (!eval.Error().empty())
     {
@@ -6276,7 +6346,11 @@ bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemoryS
             return false;
         }
         std::string why;
-        if (!MayReturn(r.Text(), args, ran, why, !f.noResult))
+        PseudoEval::Entry entry;
+        entry.regs = RunEntryRegisters(args);
+        entry.snap = snap;
+        entry.sp = kRunStack;
+        if (!MayReturn(r.Text(), args, ran, why, !f.noResult, &entry))
         {
             std::printf("  oracle %s: the code returned %08X for r4=%08X, the pseudocode %s\n", f.name.c_str(), ran,
                         args.empty() ? 0u : args[0], why.c_str());
@@ -6471,6 +6545,41 @@ void TestCallsAndTraps()
         CHECK(MayReturn("int f(int param_1)\n{\n  if (param_1 < 4) {\n    return 1;\n  }\n  return 2;\n}", { 1 }, 1, why));
         CHECK(!MayReturn("int f(int param_1)\n{\n  if (param_1 < 4) {\n    return 1;\n  }\n  return 2;\n}", { 9 }, 1, why));
         CHECK(!MayReturn("int f(int param_1)\n{\n  while (param_1 != 0) {\n    param_1 = param_1 - 1;\n  }\n  return 0;\n}", { 1 }, 0, why));
+    }
+
+    // ---- Round 5: the evaluator knows what the run gave the code on entry ------------------------------
+    // `in_` and `unaff_` names are the registers' starting values, `in_stack_` and a local nothing assigned the words the stack
+    // held, and `extraout_` (what a call returned) stays unknown. Before, all of them were unknown and agreed with any run, so a
+    // text that named the wrong register, or read the slot a callee pushed, was accepted (A3-15).
+    {
+        std::string why;
+        CallFixture dummy = { "entry", 0x06009000u, { 0x000B, 0x0009 } };
+        PseudoEval::Entry e;
+        e.regs = RunEntryRegisters({ 0x5555u });
+        e.snap = CallSnapshot(dummy, 99);
+        e.sp = kRunStack;
+        const std::string r8 = "uint f(void)\n{\n  uint unaff_r8;\n  return unaff_r8;\n}";
+        CHECK(MayReturn(r8, { 0x5555u }, 0x1888, why, true, &e) && !MayReturn(r8, { 0x5555u }, 0x1999, why, true, &e));
+        CHECK(MayReturn(r8, { 0x5555u }, 0x1999, why));   // no entry state: unknown, agrees with any
+        const std::string r4 = "uint f(void)\n{\n  uint in_r4;\n  return in_r4 + 1;\n}";
+        CHECK(MayReturn(r4, { 0x5555u }, 0x5556, why, true, &e) && !MayReturn(r4, { 0x5555u }, 0x1445, why, true, &e));
+        const std::string sr = "uint f(void)\n{\n  uint in_sr;\n  return in_sr | 0xf0;\n}";
+        CHECK(MayReturn(sr, {}, 0xF0, why, true, &e) && !MayReturn(sr, {}, 0, why, true, &e));
+        const std::string retaddr = "uint f(void)\n{\n  uint unaff_retaddr;\n  return unaff_retaddr;\n}";
+        CHECK(MayReturn(retaddr, {}, kRunSentinel, why, true, &e) && !MayReturn(retaddr, {}, 1, why, true, &e));
+        // The slot a callee pushed is not the word the run started with.
+        const std::string local = "uint f(void)\n{\n  uint xStack_8;\n  func_0x06009020();\n  return xStack_8;\n}";
+        CHECK(MayReturn(local, {}, 0, why, true, &e) && !MayReturn(local, {}, 0x22222222, why, true, &e));
+        CHECK(MayReturn(local, {}, 0x22222222, why));
+        // ...but a local the text assigned is unknown after a call, and one whose address is taken may have been written by it.
+        const std::string assigned = "uint f(void)\n{\n  uint xStack_8;\n  xStack_8 = 5;\n  func_0x06009020();\n  return xStack_8;\n}";
+        CHECK(MayReturn(assigned, {}, 7, why, true, &e));
+        const std::string taken = "uint f(void)\n{\n  uint xStack_8;\n  func_0x06009020(&xStack_8);\n  return xStack_8;\n}";
+        CHECK(MayReturn(taken, {}, 7, why, true, &e));
+        const std::string pushed = "uint f(void)\n{\n  return in_stack_00000004;\n}";
+        CHECK(MayReturn(pushed, {}, 0, why, true, &e) && !MayReturn(pushed, {}, 9, why, true, &e));
+        const std::string out = "uint f(void)\n{\n  uint extraout_r7;\n  func_0x06009020();\n  return extraout_r7;\n}";
+        CHECK(MayReturn(out, {}, 0x1777, why, true, &e) && MayReturn(out, {}, 5, why, true, &e));   // what a call returned: unknown
     }
 
     // ---- A3-11: the evaluator reads what the text says ----------------------------------------
@@ -6985,27 +7094,41 @@ void TestCallsAndTraps()
             CHECK(Has(lg.caller.Text(), (std::string("return extraout_") + name + ";").c_str()));
             CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, name));
         }
-        // r15: the callee leaves 4 bytes of its own on the stack (add #-4,r15 ; rts ; mov.l r5,@r15) and the
-        // caller pops them.
+        // r15: the callee leaves 4 bytes of its own on the stack (add #-4,r15 ; rts ; mov.l r5,@r15) and the caller
+        // pops them. Round 3 lent both, with the callee's r15 difference as its extrapop; the caller returns the
+        // callee's r5 (the word it popped), and its lent signature had no parameter for it: the callee's store is below
+        // its own entry r15, a dead store of the engine's, so r5 was no input, and the caller read a local nothing wrote.
+        // The oracle took that local for unknown. A3-15 (round 5): a negative difference is a value handed through the
+        // stack, which a signature of registers cannot carry; the callee is withheld and so is its caller. The run
+        // proves the return (r5), and the oracle, which now reads the unwritten local as the word the run started with,
+        // rejects the caller's text (the model's, as for any unlent callee).
         {
             const CallFixture g = { "r15 lowered by the callee", base,
                                     withCallee({ 0x0E2A, 0x2F46, 0xB00C, 0x0009, 0x60F6, 0x4E2A, 0x000B, 0x0009 },
                                                { 0x7FFC, 0x000B, 0x2F52 }) };
-            const Lent lg = lend(g);
-            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> 15) & 1u));
-            CHECK(lg.callee.prototype.effects.spDelta == -4);
-            // The caller pops what the callee left (its r5, the second argument): not its own pushed r4.
-            // The engine reads the slot below the caller's frame, where the callee's word is.
-            CHECK(!Has(lg.caller.Text(), "return param_1;"));
-            CHECK(Has(lg.caller.Text(), "xStack_8"));
-            // The caller itself ends 4 bytes lower than it began (it popped one of two pushes): lent so.
-            CHECK(lg.caller.prototype.known && lg.caller.prototype.effects.spDelta == -4);
-            Sh2Decompiler::SetLendEffectsForTests(false);
+            const Lent lg = lend(g, true, false);
+            CHECK(!lg.callee.prototype.known && Has(lg.callee.prototypeWithheld, "lower"));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "not known"));
+            uint32_t ran = 0;
+            CHECK(CallRunResult(CallSnapshot(g, ++serial), g, inputs[0], ran) && ran == 0x22222222u);   // r5, the second argument
+            CHECK(Has(lg.caller.Text(), "return param_1;"));   // the model's r15: the word the caller pushed
             auto snap = CallSnapshot(g, ++serial);
-            DecompileRequest q = Request(g.base);
-            q.prototypes.emplace_back(0x06009020u, lg.callee.prototype);
-            CHECK(Has(d.Decompile(snap, q).Text(), "return param_1;"));   // the model's r15: the word the caller pushed
-            Sh2Decompiler::SetLendEffectsForTests(true);
+            CHECK(!PseudoAgreesWithRun(lg.caller, snap, g, inputs));   // the text reads the unwritten local, the word the run started with
+            // The ledger's A3-15 fixture: pushes with `mov.l r5,@-r15` in rts's slot, popped into r0 by the caller.
+            const CallFixture h = { "register pushed by the callee and popped by the caller", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x60F6, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x2F56 }) };
+            const Lent lh = lend(h, true, false);
+            CHECK(!lh.callee.prototype.known && Has(lh.callee.prototypeWithheld, "lower"));
+            CHECK(!lh.caller.prototype.known);
+            CHECK(Has(lh.caller.Text(), "unaff_retaddr"));   // the model pops the saved PR; the run pops r5
+            CHECK(!PseudoAgreesWithRun(lh.caller, CallSnapshot(h, ++serial), h, inputs));
+            // Controls: a callee that pops what its caller pushed (add #4,r15 after it read nothing) is lent as before, and
+            // so is the caller that pushed it.
+            const CallFixture pop = { "callee pops the caller's push", base,
+                                      withCallee({ 0x4F22, 0x2F46, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x7F04 }) };
+            const Lent lp = lend(pop, true, false);
+            CHECK(lp.callee.prototype.known && lp.callee.prototype.effects.spDelta == 4);
+            CHECK(lp.caller.prototype.known);
         }
         // ...and a callee that moves r15 by an amount that depends on an argument cannot say where it leaves
         // it: not lent, and so not its caller either.
@@ -7306,6 +7429,159 @@ void TestCallsAndTraps()
             CHECK(Has(caller.Text(), "return param_1;") && caller.prototype.known);
             uint32_t ran = 0;
             CHECK(CallRunResult(snap, g, inputs[0], ran) && ran == 7u);   // not param_1: the accepted limit
+        }
+        // ---- A3-13 (round 5): a value put in r0 before a call to a callee that keeps r0 -----------------------------
+        // The engine kills r0 at every call, so the copy before the call is dead and the return is dropped; ReturnCheck sees
+        // r0 as the function's own value (a parameter, a constant, a sum), and rule (b) asked only registers no signature
+        // passes. A value this function put in r0 and a callee left there is a return the engine does not see: withheld.
+        // Compiled code does it as scratch (cmp/eq #imm,r0 before a call): the cost is in the corpus numbers.
+        {
+            struct Carried
+            {
+                const char* what;
+                std::vector<uint16_t> caller;
+            };
+            const Carried cases[] = {
+                { "r4 copied to r0 before a call that keeps r0", { 0x4F22, 0x6043, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "r5 copied to r0 before the call", { 0x4F22, 0x6053, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "a constant put in r0 before the call", { 0x4F22, 0xE005, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "r4 + r5 in r0, the sum finished in the delay slot", { 0x4F22, 0x6043, 0xB00C, 0x305C, 0x4F26, 0x000B, 0x0009 } },
+            };
+            for (const Carried& c : cases)
+            {
+                const CallFixture g = { c.what, base, withCallee(c.caller, { 0x000B, 0x0009 }) };
+                const Lent lg = lend(g, true, false);
+                CHECK(lg.callee.prototype.known);
+                CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "across a call that keeps r0"));
+                CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(g, ++serial), g, inputs));   // the text returns nothing, the code r4 / r5 / 5 / r4 + r5
+            }
+            // Controls. A callee that does not keep r0 (it sets it): the engine sees the callee's value, and the caller is lent.
+            const CallFixture sets = { "r0 set by the callee after the caller's copy", base,
+                                       withCallee({ 0x4F22, 0x6043, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE005, 0x000B, 0xE007 }) };
+            // (mov #5,r0 ; rts ; mov #7,r0: the callee's r0 is 7)
+            CHECK(lend(sets).caller.prototype.known);
+            // The value put in r0 after the call is the engine's own return.
+            const CallFixture after = { "r4 copied to r0 after the call", base,
+                                         withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+            CHECK(lend(after).caller.prototype.known);
+            // `jsr @r0`: compiled code leaves the callee's address in r0 and the callee that keeps r0 leaves it there. Not a
+            // return: lent. (mov.l @(3,pc),r0 ; jsr @r0 ; nop ; ... the literal is the callee's address.)
+            const CallFixture jsr = { "callee's address in r0 for jsr @r0", base,
+                                      withCallee({ 0x4F22, 0xD003, 0x400B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9020 }, { 0x000B, 0x0009 }) };
+            auto snapJ = CallSnapshot(jsr, ++serial);
+            const DecompileResult calleeJ = d.Decompile(snapJ, Request(0x06009020u));
+            DecompileRequest qj = Request(jsr.base);
+            qj.prototypes.emplace_back(0x06009020u, calleeJ.prototype);
+            const DecompileResult callerJ = d.Decompile(snapJ, qj);
+            Print(jsr.name.c_str(), callerJ);
+            CHECK(calleeJ.prototype.known && callerJ.prototype.known);
+        }
+        // ---- A3-14 (round 5): a join of entry values the engine drops -------------------------------------------------
+        // `phi(in_sr, in_sr | 0xf0)` and `phi(in_r0, in_r0 + 1)` print as no return at all (the engine takes a return made only of
+        // inputs no signature passes for none), and the function was lent `void f(void)`, losing r4, which chooses the path.
+        // The SR shape is what `sr = get_cr(); if (!x) sr &= 0xf0; return sr;` compiles to. Withheld.
+        {
+            struct Joined
+            {
+                const char* what;
+                std::vector<uint16_t> code;
+                const char* reg;
+            };
+            const Joined cases[] = {
+                { "SR or'ed with 0xf0 on one path", { 0x0002, 0x4411, 0x8900, 0xCBF0, 0x000B, 0x0009 }, "sr" },
+                { "SR and'ed with 0xf0 on one path", { 0x0002, 0x2448, 0x8900, 0xC9F0, 0x000B, 0x0009 }, "sr" },
+                { "r0 incremented on one path", { 0x2448, 0x8900, 0x7001, 0x000B, 0x0009 }, "r0" },
+            };
+            for (const Joined& c : cases)
+            {
+                const CallFixture g = { c.what, base, c.code };
+                auto snap = CallSnapshot(g, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(g.base));
+                Print(g.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok);
+                CHECK(!r.prototype.known && Has(r.prototypeWithheld, (std::string("computed from ") + c.reg + " on entry").c_str()));
+                CHECK(!PseudoAgreesWithRun(r, snap, g, inputs));   // the engine's text returns nothing
+            }
+            // Accepted, pinned: a path that leaves r0 alone and another that sets it to a constant (`phi(in_r0, 5)`) is lent
+            // `void` as before. It hides the caller's r0 behind the constant, but compiled code leaves exactly this as scratch: the
+            // rule that withholds it (a join with r0's entry value, whatever the other path) takes 15 functions of image 007 and
+            // 24 of image 008 out of the lent set, every one a void function with a scratch r0. The interrupt-mask idiom's plain
+            // transform of SR left in r0 (06010054) is not a join either, and stays lent.
+            const CallFixture alone = { "r0 left alone on one path, set to a constant on the other", base, { 0x2448, 0x8900, 0xE005, 0x000B, 0x0009 } };
+            auto snapA = CallSnapshot(alone, ++serial);
+            const DecompileResult ra = d.Decompile(snapA, Request(alone.base));
+            Print(alone.name.c_str(), ra);
+            CHECK(ra.prototype.known);
+        }
+        // ---- A3-16 (round 5): a loop that moves a stack address down -----------------------------------------------
+        // A3-9 made a join of two stack addresses keep the lower base; a loop that lowers an address each pass never
+        // settled, ReturnCheck ran to its step limit (3.4 s for 11 instructions) and withheld the function "too many
+        // paths", and the probe for a frame address in r2 never got past the loop, so the alias was not declared and
+        // the read after the call was folded (`return 10;` where the code returns 12). After a few growths at one
+        // address the bases there are given up for the frame's lowest slot.
+        {
+            // a: a leaf that clears four words of its frame with `mov.l r0,@-r1`. Lent in milliseconds.
+            const CallFixture a = { "loop that moves a stack address down", base,
+                                    { 0x7FF0, 0x61F3, 0x7110, 0xE204, 0xE000, 0x4210, 0x8FFD, 0x2106, 0x7F10, 0x000B, 0x0009 } };
+            auto snapA = CallSnapshot(a, ++serial);
+            const DecompileResult ra = d.Decompile(snapA, Request(a.base));
+            Print(a.name.c_str(), ra);
+            CHECK(ra.status == DecompileStatus::Ok);
+            CHECK(ra.prototype.known && ra.prototypeWithheld.empty());
+            CHECK(ra.elapsedMs < 1000);   // 3,393 ms and withheld before
+            // b: the frame of A3-9's two words, r2 walked down from r15 + 8 to r15 by a loop, then passed to a callee
+            // that writes through it. The callee reads r2 (not lent), so the alias has to be declared for the read
+            // after the call not to fold.
+            std::vector<uint16_t> bw = { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x62F3, 0x7208, 0xE102, 0x4110, 0x8FFD, 0x72FC, 0xB013,
+                                         0x0009, 0x60F2, 0x51F1, 0x301C, 0x7F08, 0x4F26, 0x000B, 0x0009 };
+            bw.resize(32, 0x0009);
+            bw.insert(bw.end(), { 0xE107, 0x000B, 0x2212 });   // g: mov #7,r1 ; rts ; mov.l r1,@r2
+            const CallFixture b = { "frame address walked down by a loop, then passed in r2", base, bw };
+            auto snapB = CallSnapshot(b, ++serial);
+            const DecompileResult rb = d.Decompile(snapB, Request(b.base));
+            Print(b.name.c_str(), rb);
+            CHECK(rb.status == DecompileStatus::Ok);
+            CHECK(rb.elapsedMs < 1000);   // 5,223 ms before
+            CHECK(!Has(rb.Text(), "return 10;"));   // the code returns 12
+            uint32_t ran = 0;
+            CHECK(CallRunResult(snapB, b, inputs[0], ran) && ran == 12u);
+            CHECK(Has(rb.Text(), "iStack_c + iStack_8"));   // both words read after the call (the evaluator reads no loop)
+            // Control: the same walk upward, from r15 - 8 to r15, converged before and still does.
+            std::vector<uint16_t> cw = bw;
+            cw[6] = 0x72F8;    // add #-8,r2
+            cw[10] = 0x7204;   // add #4,r2
+            const CallFixture c = { "frame address walked up by a loop, then passed in r2", base, cw };
+            auto snapC = CallSnapshot(c, ++serial);
+            const DecompileResult rc = d.Decompile(snapC, Request(c.base));
+            Print(c.name.c_str(), rc);
+            CHECK(rc.elapsedMs < 1000 && !Has(rc.Text(), "return 10;") && Has(rc.Text(), "iStack_c + iStack_8"));
+        }
+        // ---- A3-17 (round 5): a negative or a subtracted index from a frame address ---------------------------------
+        // Round 4 took an index added to a frame address as not negative, and dropped the base for a subtracted
+        // register, so `p - i` and `p + (-1)` from the address of the second local reached the one below it, which the
+        // declared alias did not cover: the read after the call was folded (`return 5;` where the code returns 7).
+        // An index that is not a constant gives up the base for the frame's lowest slot (p - i, and p + i for an i that may
+        // be negative, are ordinary C when p points into an array).
+        {
+            const std::vector<uint16_t> callee = { 0xE107, 0x000B, 0x2212 };   // g: mov #7,r1 ; rts ; mov.l r1,@r2
+            for (const bool subtract : { false, true })
+            {
+                const CallFixture g = { subtract ? "frame address minus an index, in r2" : "frame address plus a negative index, in r2", base,
+                                        withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x62F3, 0x7204, uint16_t(subtract ? 0x3248 : 0x324C), 0xB006,
+                                                     0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 }, callee) };
+                // add: r2 = r15 + 4 + r4, so r4 = -4 reaches the word at r15 (the code returns 7); sub: r2 = r15 + 4 - r4, so
+                // r4 = 4 does.
+                const std::vector<std::vector<uint32_t>> reach = { { 0 }, { subtract ? 4u : 0xFFFFFFFCu } };
+                auto snap = CallSnapshot(g, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(g.base));
+                Print(g.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok);
+                CHECK(!Has(r.Text(), "return 5;"));
+                CHECK(PseudoAgreesWithRun(r, snap, g, reach));
+                uint32_t ran = 0;
+                CHECK(CallRunResult(snap, g, reach[1], ran) && ran == 7u);
+                CHECK(!r.prototype.known);   // the callee reads r2: withheld, and so is the caller
+            }
         }
         // The evaluator reads an array local as memory (it cannot know what a call wrote to it).
         {
