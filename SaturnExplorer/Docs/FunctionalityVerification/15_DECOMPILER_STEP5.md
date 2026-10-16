@@ -6771,3 +6771,104 @@ the whole one, but none runs under a failing allocator. Only the fault suite's `
   failed-in-engine cells.
 - The rows left listed by round 3: A6-18 (unreached), `installJumpTable` and the two table clones, the `TypeFactory` re-inserts, the
   `clearJumpTables` copy, and the printer's `countbase` (its overflow after some 60 million prints was not run).
+
+## Area 2, round 5 review
+
+Reviewer, branch `review/2-round5-review`, on master `30112ac` (merged forward to `5c7a036`, documentation only: the binaries are the same).
+Findings only, no fixes. New ledger rows: **A2-31 to A2-36 (P2)**, **A2-37 to A2-39 (P3)**. No P1 is filed, but A2-31 is the widest finding
+of the round and is P1 if the coordinator takes the "r0 is returned" reading for compiled `int` functions (see the row). Area 2 is not clean
+this round: six P2s, four of them in the oracle or found through it.
+
+### 1. The round-4 fixes, verified
+
+Every fixture of `TestArea2Round4` reproduces (`SaturnExplorerSh2DecompilerTests`, whole suite: all passed). Then neighbours, through
+`SE_GENERATED_PRINTEDC_WORDS` (hand words, assembled by a scratch assembler) and `SE_GENERATED_WORDS`:
+
+- **A2-21 holds for the shapes it was about.** 895 compiler-shaped divisions: unsigned d = 3..0x7FFFFFFF (27 divisors) with 13 tails each (the
+  quotient, the remainder through `mul.l`, `<< 3`, `* 4` by two `add`s, `* 12`, `* 4 | 1`, compared with `cmp/eq` and `cmp/hi`, `extu.w`/`exts.b` of
+  the quotient, `r5 + q * 16`, `q << 1`, `q << 16`), the 16- and 8-bit dividends (`extu.w`, `extu.b`), the pre-shifted even divisors
+  (`shlr` first, a 31-bit multiplier), signed d = 3..1000 and -3..-100 with five sign corrections (`shll ; addc`, `shlr` by 31, `shll ; movt`,
+  the dividend's sign, `cmp/pz ; subc`) plain, `* 4`, `* 8` and the remainder, `exts.w`/`exts.b` dividends, and the 16-bit `muls.w`/`mulu.w`
+  forms with 16-bit magic numbers: **all 895 agree**. The `RuleDivOpt` acceptance path (`divTermIsDivided`) breaks at one place: a total shift
+  of 64, which only divisors at or above 2^31 in the add form reach (**A2-32**). Of 48 more large unsigned shapes 41 agree (the 7 that fail are A2-32); all 24 large signed ones agree.
+- **A2-22 holds.** 119 stack inserts: every stored register r0-r7 (r0, r1 as inputs too), inserts through r0, r5, r6 at bytes 1-3, words at 0
+  and 2, a byte at 0 by `mov.b Rm,@r15`, the second longword of an 8-byte frame (bytes 4-7, loaded and not loaded), the load into r1 then r0,
+  a word or byte loaded from a piece, two inserts, `@-r15` frames, r0 stored and its own low byte inserted: all agree (2 `narrow-c`, A2-19's
+  `(int4)` of a 2-byte value). The copy-to-r1 form (`... rts ; mov r0,r1`) is still `void`, and it is **lent** (`known, 0 param(s), void`), which
+  is not A3-5's withheld class but A2-31's.
+- **A2-23 holds for what it fixed** (both fixtures withheld; a pointer loaded from memory and a store through GBR are withheld, conservatively),
+  **but the store-only control is wrong across a call** (**A2-35**).
+- **A2-24 holds** for stores to the stacked words before `rte`; a store in the slot is rightly not seen (the restore reads first, Mednafen
+  `RTE`); `rte ; ldc r4,vbr` prints `Write_VBR(param_1)`; `ldc r4,gbr ; rte` prints `Write_GBR`; `rte ; movt r0` returns the restored T. **A slot that
+  writes T is not shown** (**A2-36**). `Rte_PC` is not in `ReturnCheck`; every `rte` function is withheld ("an incoming argument outside its
+  signature"), so that changes nothing today.
+- **A2-25 holds for r0-r7** (`cmp/str r1,r2`: `in_r1`, `in_r1_b1`..`b3`; `cmp/str r6,r0` uses shifts of `in_r0`), **not for r8-r15** (**A2-37**).
+- **A2-26 holds**: the upper-bits check sees the A2-22 shapes, GBR and VBR are drawn.
+
+### 2. New findings
+
+- **A2-31 (P2)**: the `rts` delay slot decides whether r0 is returned. `nop` is `r0 = r0` in the spec, and upstream's `onlyOpUse` rejects a
+  return candidate that has any other use (a branch through `cmp/eq #imm,r0`, a load or store, a call output); the COPY of a `nop` slot hides
+  that, any other slot does not. `return g(p);` with the usual `lds.l @r15+,pr ; rts ; mov.l @r15+,r14` prints `g(p); return;` and is lent
+  `void` even when g is lent as returning; the same code with the pop before `rts` and a `nop` slot returns the value. Fixtures in the row
+  (wrapper, null check, `return ++*p`, compare with `cmp/eq #5,r0`, the A2-22 copy to r1), each with its one-word control. The generator
+  rejects each (`return-dropped`) when told the intent; neither oracle reaches it on its own. Image 008 with lending: 131 entries `void`
+  ending in a call to a callee that returns, all with a filled slot, 41 lent; replacing only the slot by a `nop` adds a return to 324 of 397
+  `void` functions of image 007 and 778 of 963 of image 008.
+- **A2-32 (P2)**: `x / 0xFFFFFFFE` (multiplier 3, add form, shift 64) prints `return 0;` and drops the parameter; `0xFFFFFFFC`, `0xFFFFFFF0` too.
+  The grammar draws `0xFFFFFFFE`; the shipped check fails on it at four seeds with two functions per seed.
+- **A2-33 (P2, oracle)**: `narrow-c` is set without any second reading whenever the text declares a 1- or 2-byte variable, or the difference is
+  in the high word and a `(uint8)` appears anywhere. Seeds 3404 and 9223, inside the round-4 10,000-seed run, are A2-32's wrong value counted
+  `narrow-c`.
+- **A2-34 (P2, oracle)**: `void-return` is never a failure, but 74 of 265 (seeds 1-3000) and 492 of 1,755 (seeds 1-10000, two each) are lent.
+- **A2-35 (P2)**: SR stored through a pointer and not read back in the function is lent without SR; its caller reads the word and loses its
+  compare (generator: `param-dropped:r5`, `r6`).
+- **A2-36 (P2)**: `rte ; sett` (or `clrt`, a compare) returns the slot's T to the interrupted code; the text shows the stacked SR.
+- **A2-37 (P3)**: `unaff_r8`, `unaff_r8_00` .. for `cmp/str` on r8-r15.
+- **A2-38 (P3, oracle)**: the grammar's `braf` item is always `skipped:call-or-stack`, so `braf` is never value-checked.
+- **A2-39 (P3, oracle)**: two classes the shipped oracle fails that are its own (an A2-19 reading of `bool - 1 >> n`; a wrapped field
+  assignment), both only at two functions per seed.
+
+### 3. Looked at and clean
+
+- **SLEIGH semantics against Mednafen**, read side by side (`superh.sinc`, `sh7095_ops.inc`, and the transcribed reference of
+  `Sh2DecodeTests.cpp`): `mac.l`/`mac.w` with and without S (48-bit and 32-bit saturation, MACH bit 0, the product's sign deciding the
+  bound), `div0s`/`div0u`/`div1` (Q and T updates, Rm read after the shift), `rotcl`/`rotcr`, `swap.b`/`swap.w`, `xtrct`, `dmuls.l`/`dmulu.l`,
+  `addc`/`subc`/`negc` (the carry out of 33 bits), `addv`/`subv`, `cmp/str`, `tas.b`, `braf`/`bsrf` (target from the PC before the slot, PR before
+  the slot), `ldc`/`stc`/`lds`/`sts` and their `.l` forms: the spec agrees with Mednafen and the transcription agrees with Mednafen.
+  `Sh2SemanticsTests` passes. Texts read against the run: `clrmac ; mac.w ; mac.w ; sts macl,r0` (S from `in_sr`, the saturation bounds),
+  `clrmac ; mac.l ; sts mach,r0`, `tas.b` (T from the old byte, `| 0x80`), a trap's T (`extraout_sr & 1`, honest).
+- `shad`, `shld`, `pref`, `clips`, `divs`/`divu` are SH-2A or SH-3 and later: the spec defines them under `SH_VERSION == "2A"` only, so
+  `sh-2.sla` does not decode them (as Mednafen).
+- The printed-C inputs: 22 edge values swept through r4-r7, r0, r1 and T both ways, then random 32- and 16-bit values; the sign boundaries of
+  8, 16 and 32 bits are in the pool (`0x7F`, `0x80`, `0xFF`, `0x7FFF`, `0x8000`, `0xFFFF8000`, `0xFFFFFF80`, `0x7FFFFFFF`, `0x80000000`,
+  `0x80000001`). Not in it: `0xFFFF7FFF` and `0xFFFFFF7F` (a negative value whose low half is positive). SR is compared in S and I3-I0 only,
+  and MACH/MACL not at all at the end: neither is an ABI output.
+- A2-4 (PC-relative loads in delay slots) is unchanged: flagged unsupported, nothing new.
+
+### 4. Runs
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerSh2DecompilerTests` (all) | all passed |
+| `SaturnExplorerSh2SemanticsTests` | all passed |
+| generator, grammar 2, seeds 1-3000 | 5,941 functions, 0 findings |
+| printed-C, seeds 1-3000 (one each) | 3,060 functions, 0 findings (2,524 agree, 3 `narrow-c`, 268 `skipped:call-or-stack`, 265 `void-return`) |
+| printed-C, seeds 1-10000, two each, scratch `gen_strict` (A2-33's routes sent to the second reading, a lent `void-return` failing) | 20,060 functions: 21 `mismatch` (17 that were `narrow-c`, A2-32 x4, A2-39a), 3 `not-compilable` (A2-39b), 492 `void-return-LENT`, 1,263 `void-return`, 1,737 skipped calls |
+| hand corpora through printed-C | divisions 895 + 48 + 24 (the 7 A2-32 shapes the only failures), stack inserts 119 |
+| game corpus, images 007 and 008 | 839 and 1,554 functions ok, every ledger count 0, 16 and 20 missing and said, as round 4 |
+| image 008 with `SE_GAME_LEND` | 2,997 functions; the A2-31 count above |
+| `slotscan` (scratch: each `void` function's `rts` slot replaced by `nop`) | 324 of 397 (007), 778 of 963 (008) gain a return; none of them lent in the unlent run (they call unknown callees) |
+
+Scratch tools (not in the suites): an SH-2 assembler for fixtures, the division and stack corpora, `gen_strict` (a copy of
+`Sh2GeneratedTests.cpp` with two lines changed), `slotscan`, a lending scan of `SE_GAME_OUT`, nop-minimizers over the generator and the
+printed-C check.
+
+### 5. Not covered
+
+- A2-33's three unexplained strict mismatches (seeds 3619 #1, 8685 #0, 8889 #1): read, not concluded; 3619 is probably the harness's
+  `(int4)` of a 3-byte field.
+- Whether each of image 008's 41 lent `void` wrappers (A2-31) returns a value in the source: not decidable from the code.
+- `SaturnExplorerSh2DecodeTests` was not rebuilt or rerun this round; the sanitizers; interrupts and the slot-illegal exception (A2-8);
+  `SE_GENERATED_ALPHABET=specials`; the generator's long run.
+- The root cause of A2-32 inside `RuleDivOpt` (which divisor it takes for a 64-bit shift): the fixer's.
