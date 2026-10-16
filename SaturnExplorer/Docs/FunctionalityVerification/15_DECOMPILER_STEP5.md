@@ -6418,3 +6418,130 @@ Patches 0037 and 0038 also moved the print-phase ranks of two A6-1 pins (`EmitPr
 - `vendor.py` in a copy: identical.
 
 **Not done.** No sanitizer run of the merged head (each branch ran its own); CI runs it. The ledger has no row for the two merge defects: both are integration of two correct fixes, recorded here. The reviewers' questions the fixers left (SCSP slot registers and KYONEX, the displaced on-chip pointer's type, `phi(in_r0, constant)`, the `TypeFactory` re-inserts, the printer's `countbase`) carry to the next rounds.
+
+## Area 3, round 6 review
+
+Reviewer, branch `review/3-round6-review`, on master `30112ac`. Findings only, no fixes. New ledger rows: A3-18 to A3-23 (P2), A3-24 to A3-28 (P3).
+No area 4 row.
+
+The instrument was a scratch driver, not committed: the suite's own file with its `main` replaced, which reads fixtures from a text file
+(words at addresses, the callees to decompile and lend first, in order, the inputs and any register on entry). It prints each result
+and its prototype and effects, runs the code on the emulator (r0 and r1 at the return) and evaluates the text with `MayReturn` and the
+run's entry state, as `PseudoAgreesWithRun` does. Every finding that the generator can express was replayed with
+`SE_GENERATED_WORDS`/`FUNCS`/`RETURNS`. The build was RelWithDebInfo with the main build's options.
+
+### Round 5, verified
+
+- **The suite.** `Sh2DecompilerTests` passes at `30112ac`. The A3-13 to A3-17 fixtures and the evaluator's entry-value tests print what
+  the record says. The four carried variants are withheld "it holds a value in r0 across a call that keeps r0". A3-14 a, b and c are
+  withheld "computed from sr / r0 on entry". The A3-15 ledger fixture has both functions withheld, and the oracle rejects the caller
+  (`unaff_retaddr`, the run returns r5). A3-16 a is lent in milliseconds. A3-16 b prints `iStack_c + iStack_8`. A3-17 a and b agree
+  with the run.
+- **The widening (A3-16).** These held:
+  - A walk down by a register step (`sub r5,r2` in the loop) passed in r2 to an unlent callee: the alias is declared and the text
+    reads both words after the call (12 as run).
+  - A walk upward.
+  - A walk that converges.
+  - Pushing in a loop leaves r15 unknown, and the function is withheld on r15, not on the step limit.
+
+  Neither corpus image has "too many paths" among its reasons. The holes are where the widening does not apply:
+  - a frame address handed to a lent callee in r4 (A3-22);
+  - a frame address joined with a non-address (A3-26);
+  - the parameter area, which the engine never aliases (A3-23).
+- **The negative difference (A3-15).** Each of these is withheld, and so is its caller:
+  - a callee that pops its caller's word and returns it ("an incoming argument outside its signature");
+  - a callee that pushes for its caller;
+  - a caller reached through a second callee that calls the pushing one and pops the word itself.
+
+  Callees that pop and re-push a different word, or that store at or above their entry r15 without moving it, are A3-21: the rule
+  is by the sign of the difference, not by the store.
+- **The carried rule (A3-13).** These are withheld:
+  - a value carried through two calls;
+  - a value carried on one path only;
+  - a carried value finished in the call's delay slot.
+
+  `rts ; add #1,r0` after the call is withheld on `extraout_r0`. A callee that returns in r0 makes the caller's value its own and
+  lends right. A value put in r0 after the call is lent right. The holes:
+  - the `jsr @r0` exemption also covers what the delay slot writes into r0 (A3-18);
+  - a value a call returned is not "own", so holding it across a second call is not counted (A3-19).
+- **The joins (A3-14).** These are withheld: MACL joined with MACL + 1, r0 incremented in a loop, and r1-r3 or r8-r14 joined with
+  anything (the generic rule (b)). `phi(in_r0, 5)` is lent as pinned. The holes:
+  - the same acceptance lends `phi(in_r0, r4)` with no parameters, `int f(int a,int b){ if (b) return a; }` (A3-20);
+  - a branch on a constant makes the r0-alone path infeasible (A3-25).
+- **The evaluator's entry state.** It reads the entry registers and stack words. It rejects a correct text of the A3-4 class (A3-28).
+- **The other conventions the brief listed.** These were right or withheld:
+  - The 8-byte return: a lent `dmulu` callee, its caller returning r1 (`(int4)xVar1`, as run). r1 written on one path only: the
+    engine keeps a 4-byte return.
+  - A callee testing all of r4 (`tst r4,r4 ; movt r0`, and `cmp/eq #5,r0` after `mov r4,r0`) under a caller that passes `r5 << 8`:
+    the parameter is `int4`, the caller's argument whole, and the oracle agrees.
+  - A fifth parameter read with `mov.l @(4,r15),r0` after the callee's push: lent with 5 parameters, and the caller's pushed 9 shows
+    as the fifth argument (as run).
+  - A callee that reads only its second stack argument, or a stack argument with r4-r7 unused: withheld.
+  - A `bra` tail branch into a lent callee: followed into its code, lent right. A `jmp` tail call is always withheld (A3-27).
+
+### Corpus (`SE_GAME_LEND=1`)
+
+- **Lending counts.** Image 007 lends 600 signatures (786 parameters) and image 008 lends 984 (1,223), the round 5 numbers. Every
+  ledger count is 0, and the suite passes on both images.
+- **The carried rule.** It withholds 8 functions of image 007 and 20 of image 008 directly. These were read against their
+  disassembly:
+  - `0602D92C` is a byte loaded for `cmp/eq #8,r0`, held across a `jsr` to a memset-like callee.
+  - `0600D4CC` and `0602F7EC` are scratch r0 across calls.
+
+  The withheld reason is true of the code.
+- **Functions still lent.** Two were read against their disassembly:
+  - `0600A996` (007) is a mid-prologue entry. Its last call is `jsr @r0`, and the address left in r0 is exempt: lent `void`, right.
+  - `06009972` (008) returns 0 or 1. Its `*(pxRam0608b568 + 1)` is the code's `add #2` on a 2-byte pointer, so it is right.
+- **The `jsr @r0` shape of A3-18.** `jsr @r0` with r0 written in the slot occurs 6 times in each image (`jsr @r0 ; mov.l @r15+,r0`,
+  `jsr @r0 ; mov.w @(0x88,gbr),r0`). Every function holding one is withheld for another reason.
+- **The reason "a return not to its caller".** Image 007 has 96 such functions and 008 has 125. Of these, 45 and 18 pass a local's
+  address to a callee (A3-24).
+
+### Runs
+
+- `Sh2DecompilerTests` passes.
+- Generator, grammar 2, 3,000 seeds from 1: 0 failing, 5,941 functions, 624 frame walks.
+- Generator, both grammars, 6,000 seeds from 600001: 0 failing.
+- The corpus as above.
+
+The generator's replay of the fixtures:
+
+| Fixture | Finding |
+|---|---|
+| A3-18 | `return-dropped` |
+| A3-19 | `return-dropped` |
+| A3-21 | `param-dropped:r5` |
+| A3-25 | `return-dropped` |
+| A3-20 | 0 findings with the function marked as not returning (the class is invisible to check 8); `return-dropped` when marked as returning |
+| A3-22, A3-23 | no finding: the signature is right and no check compares the printed value |
+
+`PseudoAgreesWithRun` rejects every P2 fixture except A3-22 c, whose `do` loop it cannot read; the run is the check there.
+
+### Findings
+
+| Row | Severity | Finding |
+|---|---|---|
+| A3-18 | P2 | `jsr @r0 ; mov r4,r0` (or `mov #5,r0`) before a callee that keeps r0 is lent `void f(void)`; it returns r4 (5). |
+| A3-19 | P2 | `bsr h ; nop ; bsr g ; nop`, h returning 7 and g keeping r0, is lent `void f(void)`; it returns 7. |
+| A3-20 | P2 | `tst r5,r5 ; bt L ; mov r4,r0 ; L: rts` is lent `void f(void)`; the signature drops r4 and r5. The generator cannot see it. |
+| A3-21 | P2 | A callee `rts ; mov.l r5,@r15` (difference 0) is lent with no parameters. Its caller, with PR in a register, is lent `return 5;`; it returns r5. The variants pop then push, or write @(4,r15). |
+| A3-22 | P2 | A frame address plus an index (a, b), or walked down by a loop (c), passed in r4 to a lent callee that writes through it. The caller is lent with the local folded (`return 5;` / `return 10;`; the run gives 7 / 12). |
+| A3-23 | P2 | `g(&param_5); return param_5 + ...` is lent with the entry value of the stack parameter; the run gives the callee's 7. The engine never aliases the parameter area, even when the host declares it. |
+| A3-24 | P3 | A compiled `f(&local)` to a lent callee that stores through it is withheld "a return not to its caller". This is 45 and 18 corpus functions, and it hides A3-22 and A3-23 in compiled code. |
+| A3-25 | P3 | `phi(in_r0, 5)` with the r0-alone path infeasible (a constant test) is lent `void`; it returns 5. |
+| A3-26 | P3 | `r2 = cond ? &local : 0` to an unlent callee loses the base; withheld, the text is folded. |
+| A3-27 | P3 | A `jmp` tail call to a lent callee is always withheld "an indirect jump it does not resolve". A fix must count r0 as carried across it. |
+| A3-28 | P3 | The evaluator rejects the correct text of an A3-4 escape (`func(); return xStack_8;`). The same text is wrong for A3-15, and the text gives no sign of the escape. |
+
+### Not covered
+
+- **Mutual recursion.** Each function is withheld while the other is unlent. A stale prototype lent across an edit is area 1's sequence
+  oracle, not probed here.
+- **Callees reached through a jump table.** Only the `bra` and `jmp` tails were probed.
+- **Interrupts between a callee's store into its caller's frame and the caller's read.** The emulator takes none.
+- **The sanitizers.** They were not run; nothing was changed.
+- **The cost of the refinements suggested for A3-19, A3-20 and A3-21.** Each needs a host change.
+- **The `register0x0000003c` printing** (A3-22 c, A3-16 a). It is the engine having lost the base, so it is a symptom of A3-22 here, not
+  a row of its own.
+
+**Done criteria.** Area 3 has six P2 rows this round (A3-18 to A3-23). It needs a fix round and then two consecutive clean review rounds.
