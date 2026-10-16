@@ -2911,6 +2911,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // A pointer into the frame in r2 at a call the engine cannot give an input in r2 (A3-4): said to
         // the engine now, while the code that made it is still there to be found. (Only the pass that
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
+        std::set<uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -2923,9 +2924,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 fd->getScopeLocal()->declareHostAlias(from);
                 // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;`
                 // would take the local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own
-                // flow warnings do not collect.
-                for (uint32_t site : probe.EscapeSites())
-                    arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+                // flow warnings do not collect; put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
+                escapeSites = probe.EscapeSites();
             }
         }
         for (const auto& ro : scan.readonly)
@@ -2950,6 +2950,23 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
+        // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
+        // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
+        for (uint32_t site : escapeSites)
+        {
+            bool lentCallee = false;
+            for (ghidra::int4 i = 0; i < fd->numCalls() && !lentCallee; ++i)
+            {
+                const ghidra::FuncCallSpecs* cs = fd->getCallSpecs(i);
+                if (cs->getOp() == nullptr || static_cast<uint32_t>(cs->getOp()->getAddr().getOffset()) != site) continue;
+                const ghidra::Address at = cs->getEntryAddress();
+                if (at.isInvalid() || at.getSpace() != ram) continue;
+                const auto p = prototypes.find(static_cast<uint32_t>(at.getOffset()));
+                lentCallee = p != prototypes.end() && p->second.known;
+            }
+            if (!lentCallee)
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+        }
 
         if (targets)
         {

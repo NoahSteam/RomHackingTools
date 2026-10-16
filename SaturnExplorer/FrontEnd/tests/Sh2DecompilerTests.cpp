@@ -7682,6 +7682,20 @@ void TestCallsAndTraps()
             CHECK(agrees(rc[2], c, inputs));
         }
 
+        // A3-19, pinned: a result some instruction has read (copied to r1) before the call that keeps r0 is not carried: compiled code
+        // leaves it in r0 as scratch (the corpus's void callers of a bool function: 2 and 6 more would be withheld).
+        {
+            const std::vector<uint16_t> h = { 0x000B, 0xE007 }, g = { 0x000B, 0x0009 };
+            std::vector<uint16_t> w = { 0x4F22, 0xB00D, 0x0009, 0x6103, 0xB012, 0x0009, 0x4F26, 0x000B, 0x0009 };
+            w.resize(16, 0x0009);
+            w.insert(w.end(), h.begin(), h.end());
+            w.resize(24, 0x0009);
+            w.insert(w.end(), g.begin(), g.end());
+            const CallFixture used = { "a3_19 control: the result was read before the second call", base, w };
+            const std::vector<DecompileResult> ru = lendAll(used, { 0x06009020u, 0x06009030u });
+            CHECK(ru[2].prototype.known && ru[2].prototype.ret.kind == TypeKind::Void);
+        }
+
         // ---- A3-20: a join of r0's entry value with a parameter -------------------------------------------------------------
         // `int f(int a, int b) { if (b) return a; }`: the engine takes the join for no return and drops both parameters.
         {
@@ -7917,6 +7931,14 @@ void TestCallsAndTraps()
             CHECK(!MayReturn(body, {}, 7, why, true, &e));
             const std::string noted = "xunknown4 f(void)\n{\n  xunknown4 xStack_8;\n\n  /* a frame address is in r2 here, in none of the arguments: x */\n  func_0x06009020();\n  return xStack_8;\n}";
             CHECK(MayReturn(noted, {}, 7, why, true, &e));
+            // The note is for a callee that may read r2: a `jsr @r0` through a literal to a lent callee (the probe cannot tell before the
+            // literal folds) has none, and the same call to a callee that is not lent has it (A3-32).
+            const CallFixture j = { "a3_28: jsr through a literal with a frame address in r2", base,
+                                    withCallee({ 0x4F22, 0x7FFC, 0x62F3, 0xD003, 0x400B, 0x0009, 0x7F04, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9020 }, keeper) };
+            const Lent lj = lend(j, true, false);
+            CHECK(lj.caller.prototype.known && !Has(lj.caller.Text(), "a frame address is in r2 here"));
+            const Lent lu = lend(j, false, false);
+            CHECK(!lu.caller.prototype.known && Has(lu.caller.Text(), "a frame address is in r2 here"));
             // The parameter area: the same through a stack word at or above r15.
             const CallFixture k = { "a3_28: a stack parameter written through r2", base,
                                     withCallee({ 0x082A, 0xE905, 0x1F90, 0x62F3, 0xB00A, 0x0009, 0x60F2, 0x309C, 0x482A, 0x000B, 0x0009 }, { 0xE107, 0x000B, 0x2212 }) };
