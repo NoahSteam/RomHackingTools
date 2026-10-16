@@ -1613,6 +1613,10 @@ bool FiredIn(const char* frame)
 }
 #endif
 
+// The steps of startDecompilerLibrary a failure is reported by (the sweep must reach each: a step that allocates
+// and is not covered is a step whose failure nobody has seen).
+const char* const kLibrarySteps[] = { "AttributeId::initialize", "ElementId::initialize", "CapabilityPoint::initializeAll" };
+
 bool WriteBaseFile(const std::string& file, const ColdMode& m)
 {
     FILE* f = std::fopen(file.c_str(), "wb");
@@ -1821,12 +1825,17 @@ int RunColdCell(ColdCtx& c, long cell)
     const bool nothrow = fa::gFiredNothrow.load();
     const bool inEngine = gProbe.engineEntered.load();
     bool inLibrary = false;
+    bool inMaterialise = false;
     bool siteKnown = false;
+    const char* step = "-";
 #ifdef SE_FAULT_BACKTRACE
     if (fired)
     {
         siteKnown = true;
         inLibrary = FiredIn("startDecompilerLibrary");
+        inMaterialise = FiredIn("MaterialiseSh2SpecBundle");
+        for (const char* st : kLibrarySteps)
+            if (step[0] == '-' && FiredIn(st)) step = st;
     }
 #endif
 #ifdef SE_FAULT_ASAN
@@ -1883,6 +1892,9 @@ int RunColdCell(ColdCtx& c, long cell)
         Expect(!(kind == kFailedBefore && inLibrary), "a failure inside the library's start-up is not reported as a plain out-of-memory (the next request would meet half-built global tables)", detail);
         Expect(!(kind != kRefusedLibrary && inLibrary), "a failure inside startDecompilerLibrary refuses the engine", detail);
         Expect(!(kind == kRefusedLibrary && siteKnown && !inLibrary), "only a failure inside startDecompilerLibrary refuses the engine for good", detail);
+        // The spec materialisation is filesystem work that touches no engine global: its failure costs this request and nothing
+        // after it -- for a listing as for a decompilation (the listing used to mark the engine damaged for it).
+        Expect(!(inMaterialise && kind != kFailedBefore), "a failure while the language files are prepared is transient: the engine is neither damaged nor refused", detail);
     }
 
     // The second request, and the other kind of request after it.
@@ -1921,12 +1933,23 @@ int RunColdCell(ColdCtx& c, long cell)
         Expect(c.disasmFirst ? list == base.listing : list.size() == size_t(kDisasmCount) && list[0].compare(0, 1, "<") != 0,
                "the next listing is correct", list.empty() ? std::string("(empty)") : list[0]);
     }
-    std::printf("CELL %s %s k=%ld mode=%s class=%s inEngine=%d inLibrary=%d next=%d refs=0\n", c.disasmFirst ? "cold-disasm" : "cold", c.fix->name, k,
-                mode ? "empty-config" : "extracted-config", cls.c_str(), inEngine ? 1 : 0, siteKnown ? int(inLibrary) : -1, int(dec.status));
+    std::printf("CELL %s %s k=%ld mode=%s class=%s inEngine=%d inLibrary=%d step=%s next=%d\n", c.disasmFirst ? "cold-disasm" : "cold", c.fix->name, k,
+                mode ? "empty-config" : "extracted-config", cls.c_str(), inEngine ? 1 : 0, siteKnown ? int(inLibrary) : -1, step, int(dec.status));
     if (mode == 1) dts::RemoveTree(cfg);
     gMustNotExit = damaged;
     std::fflush(nullptr);
     if (!damaged) return dts::Failures() ? kExitInvariant : 0;
+    if (ExitStatic())
+    {
+        // The application's way out after the library did not start: the runner's destructor shuts the translator
+        // registry down and the process runs its static destruction over tables that were half filled.
+        const int leak = LeakCheck();
+        if (leak && !dts::Failures()) ++dts::Failures();
+        gMustNotExit = false;
+        ghidra::SleighArchitecture::shutdown();
+        std::fflush(nullptr);
+        return dts::Failures() ? kExitInvariant : 0;
+    }
     LeaveDamaged();
 }
 
@@ -2617,6 +2640,9 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
                 if (ln.compare(0, 9, "LEAK-SIG ") == 0)
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
+            if (isCold)
+                for (const char* st : kLibrarySteps)
+                    if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
             const size_t lp = run.out.find(" lat=");
             if (lp != std::string::npos)
             {
@@ -2661,11 +2687,21 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
         // The sweep must have reached the class it exists for: a cell that failed inside startDecompilerLibrary and was
         // refused. (Without a backtrace it cannot say where a failure fell, and the class is then not demanded.)
 #ifdef SE_FAULT_BACKTRACE
-        if (shards == 1 && sum.classes["library-interrupted"] == 0)
+        if (shards == 1)
         {
-            std::printf("FAIL %s %s: no cell failed inside startDecompilerLibrary (the library start-up is not covered)\n", family.c_str(), fixture.c_str());
-            ++sum.failed;
-            ++sum.classes["FAIL:cold-coverage"];
+            std::vector<std::string> missing;
+            if (sum.classes["library-interrupted"] == 0) missing.push_back("any step");
+            for (const char* st : kLibrarySteps)
+                if (sum.classes[std::string("step:") + st] == 0) missing.push_back(st);
+            if (!missing.empty())
+            {
+                std::string list;
+                for (const std::string& m : missing) list += (list.empty() ? "" : ", ") + m;
+                std::printf("FAIL %s %s: no cell failed inside startDecompilerLibrary at: %s (the library start-up is not covered)\n", family.c_str(),
+                            fixture.c_str(), list.c_str());
+                ++sum.failed;
+                ++sum.classes["FAIL:cold-coverage"];
+            }
         }
 #endif
     }

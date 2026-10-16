@@ -5,6 +5,8 @@
 #include "libdecomp.hh"
 
 #include <mutex>
+#include <new>
+#include <string>
 #include <vector>
 
 namespace sfe
@@ -99,22 +101,70 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
 {
     // The library's registries and spec path are process-global; registering the directory twice
     // would only lengthen the search, but a second, different directory would make which files
-    // win depend on order. So the first outcome stands for the process.
+    // win depend on order. So the first outcome stands for the process -- once it is an outcome.
+    //
+    // Fresh        nothing has touched an engine global. Spec materialisation is filesystem work, so a
+    //              failure in it (an allocation included) is a failure of this request only: the next one
+    //              starts again from here.
+    // Ready        the library is started.
+    // Refused      the spec bundle cannot be written or verified; 'firstError' says where.
+    // Interrupted  startDecompilerLibrary threw part-way. It fills process-global tables (attribute and
+    //              element ids, the capability lists, the spec search path) by appending, with no way to
+    //              see how far it got or to undo it, so running it again would register some twice and a
+    //              skipped step would be missing for good (what the second request used to find was an
+    //              empty print-language list: "No print languages registered"). The process refuses the
+    //              engine from then on, as it does after an allocation failure inside it, and says why.
+    enum class Stage { Fresh, Ready, Refused, Interrupted };
     static std::mutex m;
-    static bool started = false;
-    static bool ok = false;
-    static std::string firstError;
+    static Stage stage = Stage::Fresh;
+    static std::string firstError;                    // Refused
+    static const char* interruptedBy = nullptr;       // Interrupted: a literal, so recording it cannot fail
     std::lock_guard<std::mutex> lock(m);
-    if (!started)
+    if (stage == Stage::Fresh)
     {
-        started = true;
-        const SpecBundleResult bundle = MaterialiseSh2SpecBundle(configDir);
-        ok = bundle.ok;
-        if (ok) ghidra::startDecompilerLibrary(std::vector<std::string>{ bundle.dir });
-        else firstError = bundle.error;
+        // An exception from here to the vector below leaves the stage Fresh: nothing global was written.
+        SpecBundleResult bundle = MaterialiseSh2SpecBundle(configDir);
+        if (!bundle.ok)
+        {
+            std::string text = bundle.error.empty() ? std::string("Decompiler unavailable: the language files could not be prepared")
+                                                    : std::move(bundle.error);
+            firstError = std::move(text);
+            stage = Stage::Refused;
+        }
+        else
+        {
+            const std::vector<std::string> paths{ bundle.dir };
+            stage = Stage::Interrupted;   // from the first global write; Ready only once the last has been made
+            try
+            {
+                ghidra::startDecompilerLibrary(paths);
+                stage = Stage::Ready;
+            }
+            catch (std::bad_alloc&)
+            {
+                interruptedBy = "out of memory";
+            }
+            catch (...)
+            {
+                interruptedBy = "an unexpected exception";
+            }
+        }
     }
-    error = firstError;
-    return ok;
+    switch (stage)
+    {
+    case Stage::Ready:
+        error.clear();
+        return true;
+    case Stage::Refused:
+        error = firstError;
+        return false;
+    default:
+        // Every call says it, the first included: the request that met the failure is told what the next
+        // ones will be told, and neither is "out of memory" with an engine that looks usable.
+        error = std::string("Decompiler unavailable: the engine's library did not finish starting (") +
+                (interruptedBy ? interruptedBy : "interrupted") + "); restart Saturn Explorer to decompile again";
+        return false;
+    }
 }
 
 }  // namespace decomp

@@ -2917,7 +2917,28 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
         // reset the same possibly half-reset translator.
         if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };
         std::string error;
-        if (!SaturnArchitecture::StartLibrary(mConfigDir, error)) return std::vector<std::string>{ "<" + error + ">" };
+        bool started = false;
+        try
+        {
+            started = SaturnArchitecture::StartLibrary(mConfigDir, error);
+        }
+        catch (...)
+        {
+            // Out of memory preparing the language files, before anything of the engine's was touched
+            // (StartLibrary writes no global until its last step, and says so itself when that step is
+            // the one that failed): this listing is cut short, the engine is not damaged, and the next
+            // request starts again -- as for Decompile, whose boundary treats an exception in the Idle
+            // phase the same way (A6-30).
+            try
+            {
+                em.lines.push_back("<out of memory while preparing the decompiler; try again>");
+            }
+            catch (...)
+            {
+            }
+            return std::move(em.lines);
+        }
+        if (!started) return std::vector<std::string>{ "<" + error + ">" };
         std::ostringstream errors;
         errors.exceptions(std::ios::badbit);
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, 20000, nullptr, errors);
