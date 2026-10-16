@@ -3899,3 +3899,107 @@ model still has no registers, so auto-refresh, Follow PC and the halt hint are c
 tooltip for an entry the box cannot take is not reached by the model (it types only valid entries) and is read, not run. The "unimplemented"
 indicator and `DecompileStatus::Disabled` are unchanged from the round 2 review (unreachable on this spec; produced by nothing). The
 speed regression the review noted (a function over the budget re-runs the full budget on every scrubbed or stepped frame) is untouched.
+
+## Area 5, round 4 review
+
+Reviewer, branch `review/5-round4-review`, at `6ae4727` (master). Findings only; no source or test changed. Every fixture is in
+`Docs/Decompiler/REVIEW_LEDGER.md` (A5-18 to A5-27) with its words, current and expected output and the Mednafen lines that
+prove it; in the ledger's code quotes `or` stands for the C bar, which the table cannot hold. Reproduced on a RelWithDebInfo
+gcc build with a scratch harness linked against the decompiler's objects (words at 0x06009000, the corpus by function) and
+with `SaturnExplorerSh2GeneratedTests` (`SE_GENERATED_WORDS`). Mednafen read for each rule from the sources the table was
+derived from (`mednafen/ss`): `sh7095.inc` (`OnChipRegWrite_u8`, `_u16`, `_u32`, `OnChipRegRead_INLINE_u8`, `_u16`, `_u32`,
+`BSC_BusRead/Write_u8/u16/u32`, `MemRead`, `MemWrite`), `ss.c` (`BusRW_DB_CS0_*`), `scu.inc` (`SCU_FromSH2_BusRW_DB_*`,
+`SCU_RegRW_DB_u8_W0/W1`, `BBusRW_DB_*`, `ABusRW_DB_*`, `ABus_Read`, `ABus_Write_DB32_*`), `vdp1.c` (`WriteReg`, `ReadReg`,
+`VDP1_Write8_DB`, `_Write16_DB`, `_Read16_DB`), `vdp2.c` (`RegsWrite`, `RegsRead`, `RW_W8`, `RW_R16`), `smpc.c` (`SMPC_Write`,
+`SMPC_Read`), `cdb.c` (`CDB_Read`, `CDB_Write_DBM`), `scsp.inc` (`SS_SCSP_RW_u8_W0/W1`).
+
+**Area 5 is not clean: two P2, eight P3.** Round 3 built the table right where its rule matches Mednafen's case list; the two
+P2 are a family whose case list differs from its neighbours' (the DMAC) and a path the table does not model at all (the cache).
+
+**Not held.**
+
+- **A5-18 (P2).** A word read at +2 of a DMAC register returns 0 and arms nothing (`OnChipRegRead_INLINE_u16` has no case at
+  0x82 ... 0xB2); the output prints `SH2_CHCR0._2_2_` with the arming note, and the +0 caution claims "a read at +2 returns them
+  too". The divider and the BSC have the +2 cases, which is why one `OnChipLong` rule fits them and not the DMAC: 11 golden
+  cells are wrong and the golden test passes, since it is printed from the rule function.
+- **A5-19 (P2).** A register read through the cached partition (0x05F80004, 0x05818000, 0x00100063) is a cache read
+  (`MemRead` case 0 with CCR.CE, which the games set): a hit makes no bus access, a miss reads the whole 16-byte line. The
+  output is the same as through 0x2xxxxxxx, with no caution. Half the generator's register literals are cached addresses and
+  its emulator has no cache, so no oracle sees it.
+- **A5-20 (P3).** Word accesses to SH2_CCR: the read returns CCR in both bytes, and the caution names "SH2_CCR, the register
+  beside it" (its own read mirror); a word read at 0xFFFFFE82 reads 0x00FF, not 0.
+- **A5-21 (P3).** The watchdog: no arming note on a read of WTCSR or RSTCSR; a keyed WTCSR write with TME clear clears OVF and
+  resets WTCNT, which the note does not say; a byte write "does nothing" but disarms RSTCSR's WOVF clear.
+- **A5-22 (P3).** Any write to SMPC_SF sets SF; `SMPC_SF = 0;` says nothing.
+- **A5-23 (P3).** A byte write to the CD FIFO pushes a whole 16-bit word.
+- **A5-24 (P3).** The byte-access `AddressError` cells of the 32-bit on-chip registers carry `!`, but Mednafen makes the access
+  after raising the error; `HardwareNotes` drops the true arming note of a byte read of CHCR0 on that flag.
+- **A5-25 (P3).** A misaligned register access is an address error that reaches the aligned register (a long at 0x25FE00A2
+  writes SCU_IMS); printed `ram0x25fe00a2 = 3;` with nothing said.
+- **A5-26 (P3).** Backup RAM is a byte device on the low lane, treated as ordinary memory: `mov.b` 5 then `mov.b` back at
+  0x20180000 prints `return 5;`, Mednafen reads 0xFF.
+- **A5-27 (P3).** A long access to an unnamed on-chip address below 0xFFFFFF00 is an address error, unsaid (the round 3
+  fixer's "not done", now a row).
+
+**Cells checked against the handler**, 40, one or more per family; held unless a row is named: DVSR `w1`, `w2@0`
+(`WordWritesLong`), `w2@2`, `r2@0` (`LowHalfRead`), `r2@2`; DVDNT `w2@0` (divides), `w1` (A5-24); SAR0, CHCR0, DMAOR, VCRDMA0
+`r2@2` (A5-18), `w2@2`, CHCR0 `r1` (A5-24); BCR1 `w2` (`KeyedWordWrite`), `r2@0`, `r2@2`, `w4` (keyed: the BSC section of the
+golden file against `OnChipRegWrite_u32` 0xE0-0xF8); RTCSR `r2@2` (arms: case 0xF2); TIER `w2`, `r2`; FTCSR `r2@-1`
+(`OddByteRead!`); DRCR0 and SBYCR `w2@-1` (no case at 0x70, 0x90); WTCNT `r2@-1` (returns WTCSR); RSTCSR `r2@-1` (A5-20); CCR
+`w2`, `r2` (A5-20), the write mirrors 0xFE93/0xFE94 (`MirrorWrite`); IPRB, ICR `w1`, `r1`, `w4` (`AddressError`); SMPC_COMREG
+`w2@-1`, `w4@-3` (low lane, bits 23-16 then 7-0); SMPC_SF `r2@-1`, `w1` (A5-22); the even lane at 0x1E (`SmpcPad*`); MINIT
+`w1`, `w2`, `w4`; SCSP_MIBUF `r1`, `r2`, `r4` (pops, reads MOBUF too); SCSP_SCIEB `r1` (`x2`); SCSP_MSLC_CA `w4`
+(`HalfBesideGap`: 0x40A is case 0x05, nothing); VDP1_TVMR `w1` (`ByteWritesWord`: `WriteReg(..., DB)`); VDP1_ENDR `w4` (0x0E is
+no case); VDP2_TVMD `r2` (reads EXTEN: latch), EXTEN `r` (`x2`), TVSTAT `r` (clears EXLTFG), RAMCTL and PRIR `w4`
+(`HalfBesideGap`); SCU_D0R, SCU_IST `w1` (masked: `IPending &= *DB or ~mask`), SCU_AIACK `r` (reads 0), SCU_PPAF `w1`, `r1`
+(whole); CD_DATATRNS `r1`, `r2` (`FifoPopsTwice` at bit 19 clear), `r4` in the register window (`CdLongRead`), `w1` (A5-23);
+CD_HIRQ `w4`, `r4`; CD_CR4 `w1` (`CdByteWrite`: `mask == 0xFFFF`).
+
+**Held**, one line each:
+
+1. The mirrors: VDP2 `A & 0x1FE` within 0x05E00000-0x05FBFFFF (`RW_W8`, `RegsRead`), VDP1 registers not repeated (`which` has
+   cases 0-6 and 8-0xB only), SMPC `(A & 0x7F) >> 1`, SCU `A & 0xFC`, the CD window `(A & 0x7FFF) < 0x1000`, `(A & 0x3F) >> 2`,
+   MINIT/SINIT by bit 23, the divider at +0x20, the watchdog at +8, the CCR's read mirrors; the 0x2 cache-through bit (case 1
+   of `MemRead`/`MemWrite`) and bits 28-27.
+2. The keyed cells ('v'): the BSC's long write takes the low half only with 0xA55A above (`OnChipRegWrite_u32` 0xE0-0xF8), its
+   word write never (`_u16` `break`); the watchdog words at FE80/FE82 and their mirrors FE88/FE8A pick the register by the
+   upper byte. A5-21 is about what the note leaves out, not the key.
+3. `HardwareNotes`' gate on the cell's effect flag is right for the cells below 0xFFFFFF00 (a word at TIER reads no FTCSR, a
+   long there returns 0 without reaching the switch); only the 0xFFFFFF00 byte cells are wrong (A5-24).
+4. Read side effects and the oracle: no folded, duplicated or dropped hardware read found (patch 0018); the B bus's `x2`
+   (EXTEN latches twice, a CD register read twice in the FIFO window) has no effect that a second read changes, so it is
+   rightly not said.
+5. The conservation oracle: `Accounts` excuses a fold only of ordinary memory (`InHardwareRange` or a mark refuses it),
+   `DeadIsLoss` refuses every dead read of a register, a mark or a pointer; both corpora: 0 dead, every removal said.
+6. Writes through the cached partition are write-through (`MemWrite` case 0 falls into case 1): the cached-partition rows
+   cover reads only.
+7. The game corpus, read by function against the disassembly: the FRT setup at 060716A8 (IPRA, IPRB, TIER, the FTCSR poll and
+   clear), the CCR writes at 0606554C (`SH2_CCR = 0x11;`: cache on and purged), the divider sequences at 060642EE, 06065BC0,
+   06065C94 (DVSR, DVDNTH, DVDNTL, then DVDNTL_SHADOW), the slave idle loop at 06003C46 (FTCSR, SINIT word, the associative
+   purge at 0x46003304): every access printed once at its width and address, the cautions and notes as listed.
+
+**For the coordinator.**
+
+- The golden file is the table, not a check of it: it is printed from `WidthCellFor`, so a rule that does not match Mednafen's
+  case list passes (A5-18 sat in 11 golden lines). An independent oracle would derive, per handler, the set of `A & 0xFF` cases
+  Mednafen decodes at each width (the switch labels of `sh7095.inc`, `scu.inc`, `smpc.c`, `vdp2.c`) and compare it with every
+  cell that claims the access reaches a register.
+- Questions without a fixture: Mednafen decodes the whole 0xE0000000-0xFFFFFFFF partition by `A & 0x1FF` (`MemRead` case 7),
+  `HardwareAlias` only where bit 14 is set (and bits 28 and 12 below 0x100), per `SaturnMemory.txt`, so 0xFFFF8E10 is TIER in
+  Mednafen and unnamed here: which reference wins? The SCI's byte cells claim `Plain` from the manual; Mednafen ignores the SCI.
+  No `onWrite` says that a CCR write with CP set purges the cache, that a write to 0x4xxxxxxx purges a line (the corpus' slave
+  loop does exactly that before polling 0x06003304), or that a PTMR write starts VDP1 drawing.
+- The generator has no width or cache model: its register accesses use the register's own width (`NewLit`), so narrow
+  accesses are rare, and half its register literals are cached addresses. It cannot see A5-18 to A5-27; the golden file and
+  the hand fixtures are the only width oracle.
+
+**Runs.**
+
+| | |
+|---|---|
+| `SaturnExplorerHardwareWidthTableTests` | passes: 337 registers, 3,038 cells (with A5-18's 11 wrong cells) |
+| `SaturnExplorerSh2DecompilerTests` | all passed |
+| Generator replays of A5-18 a and A5-19 a | 0 findings each (the oracle accepts both) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 7, cautions 16 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 22, cautions 20 |
+| Direct accesses to the hardware areas by partition (both images; sound RAM included) | 0x2xxxxxxx 108 and 170, on-chip 25 and 30, associative purge 2 and 2, cached 0: no instance of A5-19; no word read of a DMAC register (A5-18), no CCR word, no byte to the CD FIFO; the 31 SMPC_SF writes are all of 1 |
