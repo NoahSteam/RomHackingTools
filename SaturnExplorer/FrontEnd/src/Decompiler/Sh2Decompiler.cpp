@@ -2285,7 +2285,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         JumpDests flowTables;
         AddJumpTables(*fd, flowTables);
         // A pointer into the frame in r2 at a call the engine cannot give an input in r2 (A3-4): said to
-        // the engine now, while the code that made it is still there to be found.
+        // the engine now, while the code that made it is still there to be found. (Only the pass that
+        // prints: the first one learns who is called, and a function without a call has nothing to say.)
+        if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
             probe.SetTolerant();
