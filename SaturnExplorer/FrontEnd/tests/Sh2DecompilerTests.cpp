@@ -6704,6 +6704,53 @@ void TestCallsAndTraps()
             CHECK(lg.caller.prototype.known && lg.caller.prototypeWithheld.empty());
         }
 
+        // ---- A3-7 (round 4): a dropped return in a function that calls -------------------------------------------
+        // `bsr g ; ... ; rts ; mov r8,r0` returns the caller's r8 across a call that keeps it, and the engine drops
+        // that return as it drops the leaf's (`return;`). Rule (b) asked only paths that had made no call, so the
+        // function was lent `void` and the input was lost. It asks every path now: what a call returned is no read of
+        // an input (Value::Direct), what this function copied to r0 from a register that holds one is. The text is
+        // still `return;` (the engine's), so the oracle rejects it; the signature is withheld.
+        {
+            struct Dropped
+            {
+                const char* what;
+                std::vector<uint16_t> caller;
+                const char* reg;
+            };
+            const Dropped cases[] = {
+                { "r8 returned after a lent call", { 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x6083, 0x0009 }, "r8" },
+                { "macl returned after a lent call", { 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x001A, 0x0009 }, "macl" },
+                { "gbr returned after a lent call", { 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0012, 0x0009 }, "gbr" },
+                // the call on one path only: the path with r4 = 0 makes none
+                { "macl returned, call on one path", { 0x4F22, 0x2448, 0x8901, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x001A }, "macl" },
+                // the value copied before the call, kept across it by a callee that keeps r0 (this one does)
+                { "r9 copied to r0 before the call", { 0x4F22, 0x6093, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, "r9" },
+            };
+            for (const Dropped& c : cases)
+            {
+                const CallFixture g = { c.what, base, withCallee(c.caller, { 0x000B, 0x0009 }) };
+                auto snap = CallSnapshot(g, ++serial);
+                const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+                CHECK(callee.prototype.known);
+                DecompileRequest q = Request(g.base);
+                q.prototypes.emplace_back(0x06009020u, callee.prototype);
+                const DecompileResult r = d.Decompile(snap, q);
+                Print(c.what, r);
+                CHECK(r.status == DecompileStatus::Ok);
+                CHECK(!r.prototype.known && Has(r.prototypeWithheld, (std::string("computed from ") + c.reg + " on entry").c_str()));
+                CHECK(!PseudoAgreesWithRun(r, snap, g, inputs));   // the text states no return where the code returns the register
+            }
+            // Controls: the function that saves r8, calls and returns the callee's value is lent; so is the one
+            // that returns a value it computed from a parameter after the call.
+            const CallFixture saves = { "r8 saved around a call, the callee's value returned", base,
+                                        withCallee({ 0x4F22, 0x2F86, 0xB00C, 0x0009, 0x68F6, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0xE005 }) };
+            const Lent ls = lend(saves);
+            CHECK(ls.callee.prototype.known && ls.caller.prototype.known && ls.caller.prototype.ret.kind != TypeKind::Void);
+            const CallFixture later = { "parameter returned after a call", base,
+                                        withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+            CHECK(lend(later).caller.prototype.known);
+        }
+
         // ---- A3-4 (round 3): the address of a returned structure, in r2 ----------------------------------------
         // The SH ABI of both compilers passes it in r2, and the engine's calling convention has no input
         // there: `mov r15,r2` is dead code, the local's address never reaches the call, and the call was
