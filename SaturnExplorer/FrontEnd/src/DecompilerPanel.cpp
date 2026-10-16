@@ -102,6 +102,8 @@ DecompilerPanel::ViewId DecompilerPanel::IdOf(const DecompilerView& view)
 void DecompilerPanel::SetTarget(const Target& target)
 {
     mTarget = target;
+    // Another question: a refusal belonged to the one before it.
+    mEntryRefused = false;
     mResolved = false;
     mExplicit = true;
 }
@@ -267,7 +269,10 @@ bool DecompilerPanel::ShownOutdatedByView() const
 bool DecompilerPanel::ShownStale() const
 {
     if (!mShownValid) return false;
-    return ShownOutdatedByView() || mPending.active || mShownNamesGeneration != mNamesGeneration ||
+    // Stale is a property of the output against the inputs on screen. A request outstanding for the
+    // very question shown (Refresh on current output) does not make it so: "decompiling..." says
+    // that, and GetStaleReason tells a coming replacement from one nobody is asking for (A8-3).
+    return ShownOutdatedByView() || mShownNamesGeneration != mNamesGeneration ||
            mShownVolatileHash != mVolatileHash ||   // decompiled under another volatile list
            mShownFunctions != mFunctions ||         // or another function set: after a Stop nothing re-asks (review of 0e3cd12)
            (mResolved && (!mEntryOk || mShown.requestedEntry != mEntry));
@@ -301,13 +306,66 @@ std::string DecompilerPanel::StaleTooltip() const
     case StaleReason::NeedsRefresh:
         break;
     }
-    if (mViewKind == DecompViewKind::LiveRunning && ShownOutdatedByView())
-        return "The emulator has moved on since this was decompiled. Press Refresh.";
+    // A target that finds no function says what the user can change (A8-2): the followed PC, the
+    // registers, the address asked about -- the entry box only when it is what was refused. Ahead of
+    // the running emulator's lag: the failure is why a refresh alone would not help.
     if (mResolved && !mEntryOk)
+    {
+        char b[320];
+        switch (mEntryFailure)
+        {
+        case EntryFailure::NoRegisters:
+            return "This output is from an earlier state. This source has no registers for Follow PC to read\n"
+                   "(see the message below). Turn Follow PC off and press Enter on an entry, or press Refresh\n"
+                   "once it has registers.";
+        case EntryFailure::NotFound:
+            if (mTarget.kind == TargetKind::FollowPc)
+                return "This output is from an earlier state. Follow PC finds no function at the PC (see the\n"
+                       "message below). Step or run the emulator to move the PC and press Refresh, or turn Follow\n"
+                       "PC off to keep a function.";
+            std::snprintf(b, sizeof b,
+                          "This output is from an earlier state. No function was found containing 0x%08X, the\n"
+                          "address you asked about (see the message below). Ask about another address, or press\n"
+                          "Enter in the entry box to decompile a function by its entry.",
+                          mTarget.address);
+            return b;
+        case EntryFailure::Refused:
+        case EntryFailure::NotCode:
+        case EntryFailure::None:
+            break;
+        }
         return "This output is from an earlier state, and the entry box names no function to replace it\n"
                "(see the message below). Correct the entry and press Enter.";
+    }
+    if (mViewKind == DecompViewKind::LiveRunning && ShownOutdatedByView())
+        return "The emulator has moved on since this was decompiled. Press Refresh.";
     return "This output is from an earlier state and nothing is being decompiled. Press Enter in the\n"
            "entry box or Refresh to replace it.";
+}
+
+const char* const DecompilerPanel::kRefusedEntryMessage = "Type the function's entry as a hex address, e.g. 06004000.";
+
+FinderHints DecompilerPanel::FinderHintsFor(const DecompilerInputs& inputs) const
+{
+    FinderHints hints;
+    if (inputs.bounds) hints.userEntries = inputs.bounds->Entries();
+    if (inputs.names)
+        for (const auto& n : *inputs.names) hints.symbols.insert(n.first);
+    if (inputs.callSites) inputs.callSites(mSnap->key, hints.callSiteTargets);
+    for (const auto& c : mCallees)
+        if (c.second == mSnap->key) hints.callees.insert(c.first);
+    return hints;
+}
+
+bool DecompilerPanel::PcStillInTooLargeFunction(uint32_t pc, uint32_t canonicalPc, const DecompilerInputs& inputs) const
+{
+    // A too-large answer has no body to test the PC against, and no extent: the engine was stopped
+    // before it knew one. The question to ask instead is the one a refresh would put: which entry
+    // Follow PC resolves this PC to. When that is the entry that ran out of budget, asking again
+    // is the same question with the same fate (A1-6).
+    if (!mSnap) return false;
+    const EntryGuess g = FindFunctionContaining(*mSnap, pc, FinderHintsFor(inputs));
+    return g.ok && g.entry + (pc - canonicalPc) == mShownAsked;
 }
 
 void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
@@ -323,7 +381,18 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
     mEntryError.clear();
     mEntryDoubt.clear();
     mHaveAnchor = false;
+    mEntryFailure = EntryFailure::None;
     char b[200];
+
+    // A refused entry is still the question until the entry is changed (A8-4): whatever else moves
+    // -- an edit, a frame, a function start -- re-resolving must not bring the old target back and
+    // show it as current while the box still holds the refused text.
+    if (mEntryRefused)
+    {
+        mEntryError = kRefusedEntryMessage;
+        mEntryFailure = EntryFailure::Refused;
+        return;
+    }
 
     if (mTarget.kind == TargetKind::Entry)
     {
@@ -336,6 +405,7 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         {
             std::snprintf(b, sizeof b, "0x%08X is not code memory: %s", mTarget.address, why.c_str());
             mEntryError = b;
+            mEntryFailure = EntryFailure::NotCode;
             return;
         }
         mEntryOk = true;
@@ -353,23 +423,18 @@ void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
         {
             std::snprintf(b, sizeof b, "This source has no %s SH-2 registers to follow.", mCpu ? "slave" : "master");
             mEntryError = b;
+            mEntryFailure = EntryFailure::NoRegisters;
             return;
         }
         anchor = mSnap->regs[mCpu].pc;
     }
 
-    FinderHints hints;
-    if (inputs.bounds) hints.userEntries = inputs.bounds->Entries();
-    if (inputs.names)
-        for (const auto& n : *inputs.names) hints.symbols.insert(n.first);
-    if (inputs.callSites) inputs.callSites(mSnap->key, hints.callSiteTargets);
-    for (const auto& c : mCallees)
-        if (c.second == mSnap->key) hints.callees.insert(c.first);
-    const EntryGuess g = FindFunctionContaining(*mSnap, anchor, hints);
+    const EntryGuess g = FindFunctionContaining(*mSnap, anchor, FinderHintsFor(inputs));
     if (!g.ok)
     {
         std::snprintf(b, sizeof b, "No function found containing 0x%08X: %s", anchor, g.why.c_str());
         mEntryError = b;
+        mEntryFailure = EntryFailure::NotFound;
         return;
     }
     // The finder answers in canonical addresses; the entry is asked for in the mirror the anchor
@@ -517,6 +582,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
     mShown = std::move(result);
     mShownValid = true;
     mShownSnapId = snapId;
+    mShownAsked = mEntry;   // both callers install the answer for the entry wanted now
     mShownNamesGeneration = namesGeneration;
     mShownVolatileHash = mVolatileHash;   // both callers install only answers asked under it
     mShownFunctions = mFunctions;         // ...and under the function set in force
@@ -685,7 +751,19 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                     const bool known = mViewHavePc[mCpu] && CanonicalAddress(pc, canonical);
                     // The body is canonical; the PC is inside only in the mirror the function ran in.
                     const uint32_t delta = mShownValid ? mShown.requestedEntry - mShown.entry : 0u;
-                    autoDue = known && (!mShownValid || pc - delta != canonical || !mShown.InBody(canonical));
+                    if (mShownValid && mShown.status == DecompileStatus::TooLarge)
+                    {
+                        // No body to be inside of: the PC is inside while Follow PC would resolve it to
+                        // the entry that ran out of budget. That takes a finder pass, so it is asked
+                        // once per debounce interval, not every frame the PC sits there (A1-6).
+                        if (mTick - mTooLargeCheckTick >= kAutoRefreshFrames)
+                        {
+                            mTooLargeCheckTick = mTick;
+                            autoDue = known && !PcStillInTooLargeFunction(pc, canonical, inputs);
+                        }
+                    }
+                    else
+                        autoDue = known && (!mShownValid || pc - delta != canonical || !mShown.InBody(canonical));
                     // A PC no answer holds (a hole flow never reached: an unrecovered switch's case,
                     // or an answer that failed) is refreshed for once, not every interval while it
                     // sits there.
@@ -705,7 +783,7 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
                 // BIOS that is not mapped): retried once the PC has moved, on the auto-refresh cadence,
                 // whether or not auto-refresh is on -- there is no shown answer to keep stable.
                 bool unanswered = false;
-                if (mTarget.kind == TargetKind::FollowPc && mSnap && mResolved && !mEntryOk &&
+                if (mTarget.kind == TargetKind::FollowPc && mSnap && mResolved && !mEntryOk && !mEntryRefused &&
                     !mPending.active && mSnap->haveRegs[mCpu] && view.haveRegs[mCpu] &&
                     view.regs[mCpu].pc != mSnap->regs[mCpu].pc && mTick - mCaptureTick >= kAutoRefreshFrames)
                     unanswered = true;
@@ -959,9 +1037,13 @@ void DecompilerPanel::DrawHeader(const DecompilerView& view, const DecompilerRun
         }
         else
         {
+            // The refusal is the question until the entry changes (A8-4); the target is not touched,
+            // so a later Follow PC or Containing target is still the one asked for after it.
+            mEntryRefused = true;
             mResolved = true;
             mEntryOk = false;
-            mEntryError = "Type the function's entry as a hex address, e.g. 06004000.";
+            mEntryFailure = EntryFailure::Refused;
+            mEntryError = kRefusedEntryMessage;
         }
     }
     mEntryActive = ImGui::IsItemActive();

@@ -14,7 +14,9 @@
 //     once and the request re-run: those only move when the user did something.
 //   * A running emulator moves every frame. Its snapshot is kept, and the output shown with a
 //     stale badge, until Refresh -- or, opt in, an auto-refresh at most every kAutoRefreshFrames
-//     frames and only once the followed PC has left the function shown. Choosing, reloading or
+//     frames and only once the followed PC has left the function shown (for a function that ran
+//     out of budget, which has no body to be inside of: once Follow PC no longer resolves the PC to
+//     its entry, so it is not run again every interval for as long as the game stays in it). Choosing, reloading or
 //     dropping a BIOS image is a user action: it is followed at once on every kind of source.
 //
 // A result is installed only when it still answers the question being asked: the request the
@@ -280,6 +282,12 @@ private:
 
     void SetTarget(const Target& target);
     void Resolve(const DecompilerInputs& inputs);
+    // The finder's hints for the snapshot held (the user's starts, names, call stack, callees found).
+    decomp::FinderHints FinderHintsFor(const DecompilerInputs& inputs) const;
+    // A too-large answer being shown: does Follow PC still resolve this PC to the entry that ran out
+    // of budget? Then asking again is the same question (A1-6).
+    bool PcStillInTooLargeFunction(uint32_t pc, uint32_t canonicalPc, const DecompilerInputs& inputs) const;
+    static const char* const kRefusedEntryMessage;
     void Install(decomp::DecompileResult& result, const ViewId& snapId, uint64_t namesGeneration);
     const CacheEntry* CacheFind(const Question& q);
     void CachePut(const Question& q, const decomp::DecompileResult& r, const ViewId& snapId);
@@ -310,6 +318,7 @@ private:
     std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds
     ViewId mSnapId;
     uint64_t mTick = 0, mCaptureTick = 0;
+    uint64_t mTooLargeCheckTick = 0;   // when auto-refresh last asked whether the PC is still in the too-large function
     bool mAutoPcValid = false;       // the PC the last auto-refresh was for: not refreshed for again (ResetSession forgets it)
     uint32_t mAutoPc = 0;
 
@@ -323,6 +332,12 @@ private:
     decomp::EntrySource mEntrySource = decomp::EntrySource::None;
     int mEntryConfidence = 0;
     std::string mEntryError;
+    // Why no entry was found, so the stale badge can name the cause for the target kind (A8-2).
+    enum class EntryFailure : uint8_t { None, Refused, NotCode, NoRegisters, NotFound };
+    EntryFailure mEntryFailure = EntryFailure::None;
+    // The entry box refused what was typed and the target is unchanged: the refusal stays the question
+    // until the entry changes (SetTarget), however often the old target would resolve again (A8-4).
+    bool mEntryRefused = false;
     std::string mEntryDoubt;         // the finder's doubt about mEntry
     bool mHaveAnchor = false;        // the entry was found for an address (a PC, a line asked about)...
     uint32_t mAnchor = 0;            // ...this one, which the function found must reach
@@ -390,6 +405,7 @@ private:
     decomp::DecompileResult mShown;
     bool mShownValid = false;
     ViewId mShownSnapId;
+    uint32_t mShownAsked = 0;          // the entry asked for when the shown answer was installed (a too-large one has no body to say)
     uint64_t mShownNamesGeneration = 0;
     uint64_t mShownVolatileHash = 0;   // the volatile list the shown answer was asked under
     uint64_t mShownFunctions = 0;      // ...and the function set (names and starts), so a change after a Stop still shows as stale
