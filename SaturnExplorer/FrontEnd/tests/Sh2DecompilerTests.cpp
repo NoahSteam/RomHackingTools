@@ -5289,6 +5289,11 @@ void TestSignedGuardTable()
                         { 1 }, 8, why));   // falls through from case 1 to case 2, then leaves
         CHECK(!MayReturn("int f(int param_1)\n{\n  switch(param_1) {\n  case 0xffffffff:\n    return 5;\n  default:\n"
                          "    return 6;\n  }\n}", { 0xFFFFFFFFu }, 6, why));
+        // A break inside an if leaves the switch, not only the if.
+        const char* const nested = "int f(int param_1)\n{\n  int x;\n  x = 0;\n  switch(param_1) {\n  case 1:\n    if (param_1 == 1) {\n"
+                                   "      break;\n    }\n    x = 7;\n  case 2:\n    x = 9;\n  }\n  return x;\n}";
+        CHECK(MayReturn(nested, { 1 }, 0, why) && !MayReturn(nested, { 1 }, 9, why));
+        CHECK(MayReturn(nested, { 2 }, 9, why) && MayReturn(nested, { 3 }, 0, why));
     }
     // r4 = 3 is past the bound, 0xFFFFFFFF is -1, 0x80000000 the most negative.
     const std::vector<std::vector<uint32_t>> indices = { { 0 }, { 1 }, { 2 }, { 3 }, { 0xFFFFFFFFu }, { 0x80000000u }, { 0x7FFFFFFFu } };
