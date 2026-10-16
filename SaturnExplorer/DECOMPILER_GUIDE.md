@@ -78,6 +78,13 @@ The output is always for a specific snapshot. If what you are looking at changes
 ## Limits
 
 - The output is pseudocode for reading, not source that compiles.
+  Arithmetic on a value narrower than `int` is printed at the width the code does it (`(int4)-param_1` with a
+  one-byte `param_1` negates a byte), where C would widen it first; and a widening cast such as `(uint8)x` of a
+  signed `x` means a zero extension. Read the types, not C's promotion rules.
+- A write to SR, GBR or VBR (`ldc`) is shown as a call, `Write_SR(value)`, `Write_GBR(value)`, `Write_VBR(value)`, where the
+  code makes it: the interrupt mask, the base of the GBR accesses and the vector table are the caller's business, and the
+  register the value comes from stays a parameter. A return in both r0 and r1 is shown as an 8-byte value (`CONCAT44(r0, r1)`,
+  `(uint8)x`) even when r1 is only a scratch register the function left a value in: the code does not say which.
 - Function boundaries are found heuristically, from a known entry or backwards to the previous `rts` plus slot. The scan skips literal pools and `mova` jump tables, and steps past a function that ends in a tail jump. A known entry keeps an address after an `rts` when flow from the entry reaches it (an early return). What the finder cannot settle is shown as an amber line. Expect to correct some entries with **Set Function Start Here**.
 - Indirect calls stay indirect unless you are halted on them (see above).
 - Only one level of pointer type is recovered for signatures. Structures are not inferred.

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: an input replaced by a temporary that an operation still reads is read extended from the logical input (patches/0033-engine-printed-value-fixes.patch).
  */
 #include "subflow.hh"
 #include "funcdata.hh"
@@ -1541,6 +1543,40 @@ void SubvariableFlow::doReplacement(void)
 	break;
       }
     }
+  }
+
+  // SaturnExplorer: an input that was replaced by a temporary (replaceInput) may still be read by an
+  // operation the flow left in place: the original operation of a node whose result has readers outside
+  // the flow, which is kept and rewired to the temporary. The temporary is a second input that nothing
+  // defines, so it printed as an input no register holds ("unaff_10000008"). Those readers only use the
+  // bits of the logical value, the flow having been accepted on that, so they read the logical input
+  // extended instead (patch 0033).
+  map<Varnode *,ReplaceVarnode>::iterator riter;
+  for(riter=varmap.begin();riter!=varmap.end();++riter) {
+    Varnode *temp = (*riter).second.vn;
+    Varnode *logical = (*riter).second.replacement;
+    if (temp == (Varnode *)0 || logical == (Varnode *)0 || !temp->isInput()) continue;
+    if (temp->getSpace()->getType() != IPTR_INTERNAL) continue;
+    bool live = false;		// a reader that is not itself a dead remnant of the flow
+    list<PcodeOp *>::const_iterator oiter;
+    for(oiter=temp->beginDescend();oiter!=temp->endDescend();++oiter) {
+      PcodeOp *reader = *oiter;
+      Varnode *rout = reader->getOut();
+      if (rout == (Varnode *)0 || !rout->hasNoDescend() || rout->isAddrForce() || rout->isPersist()) {
+	live = true;
+	break;
+      }
+    }
+    if (!live) continue;
+    BlockBasic *entry = (BlockBasic *)fd->getBasicBlocks().getBlock(0);
+    PcodeOp *zextOp = fd->newOp(1,fd->getAddress());
+    fd->opSetOpcode(zextOp,CPUI_INT_ZEXT);
+    Varnode *zextOut = fd->newUniqueOut(temp->getSize(),zextOp);
+    fd->opSetInput(zextOp,logical,0);
+    fd->opInsertBegin(zextOp,entry);
+    fd->totalReplace(temp,zextOut);
+    fd->deleteVarnode(temp);
+    (*riter).second.vn = zextOut;
   }
 }
 

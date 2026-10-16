@@ -16,6 +16,7 @@
 #include "AllocFailure.h"
 #include "Decompiler/SaturnArchitecture.h"
 #include "emulate.hh"    // the p-code emulator, for the call oracle
+#include "Sh2EmulatorHooks.h"
 #include "funcdata.hh"   // Funcdata, for the 0004 patch test
 #include "memstate.hh"
 #include "Decompiler/Sh2Decompiler.h"
@@ -4524,6 +4525,7 @@ public:
         mState->setMemoryBank(mRegs.get());
         mState->setMemoryBank(mTemps.get());
         mBreaks.reset(new ghidra::BreakTableCallBack(t));
+        dts::HookSh2Userops(*mBreaks);
         mEmu.reset(new ghidra::EmulatePcodeCache(t, mState.get(), mBreaks.get()));
     }
     ~RunMachine()
@@ -5486,6 +5488,102 @@ void TestCallsAndTraps()
 
 // Out of memory anywhere before the engine starts -- preparing the request, the name map --
 // comes back as a failed result, never as an exception; the next request is unaffected.
+// Area 2, round 3 (ledger A2-12 .. A2-15): the printed value of register-only code against what it does. The
+// compiled-C differential in Sh2GeneratedTests.cpp (SaturnExplorerSh2PrintedCTests) runs the same fixtures
+// against the emulator for 24 inputs each; these are their text and signature checks.
+void TestArea2Round3()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 300;
+    auto decompile = [&](const char* label, const std::vector<uint16_t>& words) {
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : words)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw, ++serial), Request(0x06009000u));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+
+    // A2-12: r0 = 0 with r1 holding a value derived from an input. The 8-byte return (r0:r1, high half in r0) was
+    // narrowed to its low half, r1, and r1's value printed as the 4-byte return, which is r0. The join is
+    // consumed whole now: the value returned is the whole pair, r0 = 0 in the high half.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0x6153, 0xE000, 0x000B, 0x0009 },
+                                                std::vector<uint16_t>{ 0x6153, 0x7101, 0xE000, 0x000B, 0x0009 },
+                                                std::vector<uint16_t>{ 0x6153, 0x4501, 0x8D01, 0x4129, 0x324D, 0xE200, 0x000B, 0x6023 } })
+    {
+        const DecompileResult r = decompile("A2-12 r0 = 0, r1 dirty", words);
+        CHECK(r.prototype.known);
+        CHECK(r.prototype.ret.size == 8);
+        CHECK(!Has(r.Text(), "return param_2;"));
+        CHECK(!Has(r.Text(), "return param_2 + 1;"));
+        CHECK(!Has(r.Text(), "return param_2 >> 0x10;"));
+    }
+
+    // A2-14: addv's overflow test with one addend known. `src == 2` on a flag printed as `== true`, so the
+    // test read as a tautology; the constant is printed as it is.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0xE501, 0x345F, 0x000B, 0x0029 },
+                                                std::vector<uint16_t>{ 0x4501, 0x345F, 0x000B, 0x0029 },
+                                                std::vector<uint16_t>{ 0x655D, 0x345F, 0x000B, 0x0029 },
+                                                std::vector<uint16_t>{ 0x4501, 0x354F, 0x000B, 0x0029 } })
+    {
+        const DecompileResult r = decompile("A2-14 addv", words);
+        CHECK(!Has(r.Text(), "== true"));
+        CHECK(Has(r.Text(), "== 2"));
+    }
+
+    // A2-15: shlr ; rotcl with one byte of the result used. The T bit put back by rotcl is the argument's bit 0; the
+    // text read an input at a unique-space address ("unaff_10000008") no register holds.
+    {
+        const DecompileResult r = decompile("A2-15 shlr, rotcl, extu.b", { 0x4401, 0x4424, 0x000B, 0x604C });
+        CHECK(!Has(r.Text(), "unaff_1"));
+        CHECK(Has(r.Text(), "param_1 & 1"));
+    }
+    {
+        const DecompileResult r = decompile("A2-15 control: 32-bit", { 0x4401, 0x4424, 0x000B, 0x6043 });
+        CHECK(!Has(r.Text(), "unaff_1"));
+    }
+
+    // A2-13: a write to SR, GBR or VBR is a side effect the caller sees. It stays in the code, in order, with the
+    // value written, and the register it is written from stays a parameter of the lent signature.
+    {
+        const DecompileResult r = decompile("A2-13 ldc r4,vbr", { 0x442E, 0x000B, 0x0009 });
+        CHECK(Has(r.Text(), "Write_VBR(param_1);"));
+        CHECK(r.prototype.known && r.prototype.params.size() == 1);
+    }
+    {
+        const DecompileResult r = decompile("A2-13 ldc r4,gbr", { 0x441E, 0x000B, 0x0009 });
+        CHECK(Has(r.Text(), "Write_GBR(param_1);"));
+        CHECK(r.prototype.known && r.prototype.params.size() == 1);
+    }
+    {
+        const DecompileResult r = decompile("A2-13 ldc r4,sr", { 0x440E, 0x000B, 0x0009 });
+        CHECK(Has(r.Text(), "Write_SR(param_1 & 0x3f3);"));   // the mask the CPU applies (patch 0019)
+        CHECK(r.prototype.known && r.prototype.params.size() == 1);
+    }
+    {
+        // di: stc sr,r0 ; or #0xF0,r0 ; ldc r0,sr
+        const DecompileResult r = decompile("A2-13 di", { 0x0002, 0xCBF0, 0x400E, 0x000B, 0x0009 });
+        CHECK(Has(r.Text(), "Write_SR("));
+        CHECK(Has(r.Text(), "0xf0"));
+    }
+    {
+        // An interrupt-masked store: both writes are in the text, in order, round the store.
+        const DecompileResult r = decompile("A2-13 critical section", { 0x0102, 0x6013, 0xCBF0, 0x400E, 0x2452, 0x410E, 0x000B, 0x0009 });
+        const std::string text = r.Text();
+        const size_t first = text.find("Write_SR(");
+        const size_t store = text.find("*param_1 = param_2;");
+        const size_t second = first == std::string::npos ? first : text.find("Write_SR(", first + 1);
+        CHECK(first != std::string::npos && store != std::string::npos && second != std::string::npos);
+        CHECK(first < store && store < second);
+        CHECK(r.prototype.known && r.prototype.params.size() == 2);
+    }
+}
+
 void TestAllocationFailureIsReported()
 {
     if (!dts::kInjectionUsable)
@@ -5886,6 +5984,7 @@ int main(int argc, char** argv)
         RUN(TestCalleePrototypes());
         RUN(TestPrototypeEligibility());
         RUN(TestCallsAndTraps());
+        RUN(TestArea2Round3());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());

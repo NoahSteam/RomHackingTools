@@ -38,6 +38,19 @@
 //     default) and a cmp/hi or cmp/hs bound check, a shared exit reached by two bra, and an exit
 //     placed before the entry.
 //
+// The ALU alphabet of both grammars is wider than the first eleven ops (area 2, round 3): one ALU item in four
+// is drawn, from a stream of its own, from kRegOps -- carry and overflow arithmetic (addc addv subc subv negc), div0u div1,
+// the multiplies (mul.l muls.w mulu.w dmuls.l dmulu.l), exts swap xtrct, the rotates and shifts, movt sett clrt
+// clrmac, sts/lds of MACH and MACL, stc/ldc of SR, GBR and VBR, the #imm,r0 logic and compare, cmp/ge gt pz str -- and
+// one memory item in ten is a GBR access (and.b / or.b / xor.b / tst.b #imm,@(r0,GBR), mov.x @(disp,GBR),r0 and back,
+// GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (they need
+// a vector table and a handler laid out beside the function, and rte pops the stack), bsrf (a callee at a distance known
+// only after layout: the call grammar's), and stc/sts inside the cases of a jump table (ledger A2-16).
+// Version 3 is not a program of that kind but a register-only function (kRegOps and bt/bf/bt/s/bf/s and braf over
+// one to three instructions, r0-r7, returning r0) checked by TestPrintedC, which compiles the text the decompiler
+// prints for it with the system C compiler and compares what it returns with the emulator's r0 (r0:r1 for an
+// 8-byte return) for 32 inputs, and the control registers the Write_* calls leave with the ones the run ends with.
+//
 // The check, per function (and again with the mailbox marked volatile when the program has one),
 // against the emulator's runs of that function from its entry: 4 inputs for version 2 (3 for version 1),
 // and for a jump table one more per index. A decompilation is of the last function first; what it
@@ -101,6 +114,9 @@
 //   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data|honour
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
+//   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
+//   SE_GENERATED_ALPHABET=narrow  only the original eleven ALU ops (what the generator emitted before round 3 of area 2)
+//   SE_GENERATED_PRINTEDC=1|only  the printed-C differential (see TestPrintedC); SE_C_COMPILER names the compiler
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
 //   SE_GENERATED_WORDS="D102 6010 ..."  check one hand-written function (hex words from the entry,
 //                            literal pool among them) instead of generated ones; with
@@ -116,6 +132,7 @@
 #include "Debug/Sh2Disasm.h"
 #include "Decompiler/Sh2Decompiler.h"
 #include "emulate.hh"
+#include "Sh2EmulatorHooks.h"
 #include "memstate.hh"
 
 #include <algorithm>
@@ -123,8 +140,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <functional>
 #include <map>
+#include <memory>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <tuple>
@@ -151,6 +171,7 @@ const uint32_t kScratch4 = 0x06020100u;   // r4/r5 point into scratch RAM, away 
 const uint32_t kScratch5 = 0x06021100u;
 const uint32_t kScratch6 = 0x06022100u;   // r6/r7 before any literal is loaded into them
 const uint32_t kScratch7 = 0x06023100u;
+const uint32_t kScratchGbr = 0x06024100u;  // GBR on entry: the base of the @(disp,GBR) and @(r0,GBR) accesses
 const uint32_t kStackTop = 0x06040000u;   // r15 on entry (version 2 uses the stack)
 const uint32_t kStackLo = 0x0603E000u;    // the stack area: every access in [kStackLo, kStackHi) through r15 or the frame
 const uint32_t kStackHi = 0x06041000u;    // pointer is a local, folded by design (A11-1)
@@ -184,6 +205,51 @@ std::string Hex(uint32_t v, int digits = 8)
     std::snprintf(b, sizeof b, "%0*X", digits, v);
     return b;
 }
+
+// ---- The ALU alphabet beyond the original eleven ops ---------------------------------------------
+// form: M Rm,Rn   N Rn   Z no operand   I #imm,r0   A #imm,Rn.   flags: what the op reads and writes.
+enum : uint8_t { kReadsN = 1, kReadsM = 2, kWritesN = 4, kReadsR0 = 8, kWritesR0 = 16 };
+struct OpDef
+{
+    const char* name;
+    uint16_t base;
+    char form;
+    uint8_t flags;
+};
+
+// Every instruction that is not a memory access, a PC-relative or a delayed branch, and does not move PR
+// or the stack (trapa, rte and bsrf need a handler or a callee laid out beside the function; mac.l and
+// mac.w, the loads and stores and the GBR operations are memory, which the printed-C oracle does not model).
+const OpDef kRegOps[] = {
+    { "add", 0x300C, 'M', 7 }, { "addc", 0x300E, 'M', 7 }, { "addv", 0x300F, 'M', 7 },
+    { "sub", 0x3008, 'M', 7 }, { "subc", 0x300A, 'M', 7 }, { "subv", 0x300B, 'M', 7 },
+    { "and", 0x2009, 'M', 7 }, { "or", 0x200B, 'M', 7 }, { "xor", 0x200A, 'M', 7 },
+    { "tst", 0x2008, 'M', 3 }, { "not", 0x6007, 'M', 6 }, { "neg", 0x600B, 'M', 6 },
+    { "negc", 0x600A, 'M', 6 }, { "cmp/eq", 0x3000, 'M', 3 }, { "cmp/hs", 0x3002, 'M', 3 },
+    { "cmp/ge", 0x3003, 'M', 3 }, { "cmp/hi", 0x3006, 'M', 3 }, { "cmp/gt", 0x3007, 'M', 3 },
+    { "cmp/str", 0x200C, 'M', 3 }, { "div0s", 0x2007, 'M', 3 }, { "div1", 0x3004, 'M', 7 },
+    { "mul.l", 0x0007, 'M', 3 }, { "muls.w", 0x200F, 'M', 3 }, { "mulu.w", 0x200E, 'M', 3 },
+    { "exts.b", 0x600E, 'M', 6 }, { "exts.w", 0x600F, 'M', 6 }, { "extu.b", 0x600C, 'M', 6 },
+    { "extu.w", 0x600D, 'M', 6 }, { "swap.b", 0x6008, 'M', 6 }, { "swap.w", 0x6009, 'M', 6 },
+    { "xtrct", 0x200D, 'M', 7 }, { "dmuls.l", 0x300D, 'M', 3 }, { "dmulu.l", 0x3005, 'M', 3 },
+    { "mov", 0x6003, 'M', 6 }, { "mov", 0x6003, 'M', 6 }, { "add", 0x300C, 'M', 7 },
+    { "rotl", 0x4004, 'N', 5 }, { "rotr", 0x4005, 'N', 5 }, { "rotcl", 0x4024, 'N', 5 },
+    { "rotcr", 0x4025, 'N', 5 }, { "shal", 0x4020, 'N', 5 }, { "shar", 0x4021, 'N', 5 },
+    { "shll", 0x4000, 'N', 5 }, { "shlr", 0x4001, 'N', 5 }, { "shll2", 0x4008, 'N', 5 },
+    { "shlr2", 0x4009, 'N', 5 }, { "shll8", 0x4018, 'N', 5 }, { "shlr8", 0x4019, 'N', 5 },
+    { "shll16", 0x4028, 'N', 5 }, { "shlr16", 0x4029, 'N', 5 }, { "dt", 0x4010, 'N', 5 },
+    { "cmp/pz", 0x4011, 'N', 1 }, { "cmp/pl", 0x4015, 'N', 1 }, { "movt", 0x0029, 'N', 4 },
+    { "movt", 0x0029, 'N', 4 }, { "sts mach", 0x000A, 'N', 4 }, { "sts macl", 0x001A, 'N', 4 },
+    { "lds mach", 0x400A, 'N', 1 }, { "lds macl", 0x401A, 'N', 1 }, { "stc sr", 0x0002, 'N', 4 },
+    { "stc gbr", 0x0012, 'N', 4 }, { "stc vbr", 0x0022, 'N', 4 }, { "ldc sr", 0x400E, 'N', 1 },
+    { "ldc gbr", 0x401E, 'N', 1 }, { "ldc vbr", 0x402E, 'N', 1 }, { "sett", 0x0018, 'Z', 0 },
+    { "clrt", 0x0008, 'Z', 0 }, { "div0u", 0x0019, 'Z', 0 }, { "clrmac", 0x0028, 'Z', 0 },
+    { "and", 0xC900, 'I', 24 }, { "or", 0xCB00, 'I', 24 }, { "xor", 0xCA00, 'I', 24 },
+    { "tst", 0xC800, 'I', 8 }, { "cmp/eq", 0x8800, 'I', 8 }, { "add", 0x7000, 'A', 5 },
+    { "mov", 0xE000, 'A', 4 },
+};
+const size_t kRegOpCount = sizeof kRegOps / sizeof kRegOps[0];
+bool gNarrowAlphabet = false;   // SE_GENERATED_ALPHABET=narrow: only the original eleven ALU ops
 
 // ---- The program model ----------------------------------------------------------------------
 
@@ -282,6 +348,13 @@ struct Gen
     // A stream of its own for mac: the other items' draws, and so every program a seed made before mac
     // was in the grammar, are unchanged; mac only adds an item.
     Rng macRng;
+    // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
+    // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
+    Rng wideRng;
+    // Inside the bodies of a jump table's cases no stc / sts (a special register copied into a general one):
+    // a case that does so before the shared exit makes the recovered switch print on the loaded address, not
+    // the index (ledger A2-16, area 4's jump-table recovery, open).
+    bool inTable = false;
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -297,7 +370,7 @@ struct Gen
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), wideRng(seed ^ 0x77696465414C5521ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -403,6 +476,51 @@ struct Gen
         return w;
     }
 
+    // The ops the narrow alphabet never had (carry and overflow arithmetic, DIV, the multiplies, extensions,
+    // swaps, rotates and shifts, T and MAC moves, the #imm,r0 logic, ldc/stc of SR, GBR and VBR), with the
+    // destination 'n' and the source 'm' the caller drew. Reads only registers that hold a value (version
+    // 2), writes r0 only if the function may, and never the loop counter (n was chosen to avoid it).
+    // False: nothing of the alphabet fits here, and the narrow op is made.
+    bool MakeWideAlu(int n, int m, uint32_t imm, Item& it)
+    {
+        it.type = Item::Alu;
+        const OpDef* op = nullptr;
+        for (int tries = 0; tries < 8 && !op; ++tries)
+        {
+            const OpDef* cand = &kRegOps[wideRng.Below(static_cast<uint32_t>(kRegOpCount))];
+            if (inTable && (std::strncmp(cand->name, "stc", 3) == 0 || std::strncmp(cand->name, "sts", 3) == 0)) continue;
+            if (disc)
+            {
+                if ((cand->flags & kReadsN) && !Def(n)) continue;
+                if ((cand->flags & kReadsR0) && !Def(0)) continue;
+                if ((cand->flags & kWritesR0) && noR0) continue;
+                if (cand->flags & kReadsM)
+                {
+                    const int s = PickSrc(m, 5);
+                    if (s < 0) continue;
+                    m = s;
+                }
+            }
+            op = cand;
+        }
+        if (!op) return false;
+        switch (op->form)
+        {
+        case 'M': it.words = { uint16_t(op->base | n << 8 | m << 4) }; break;
+        case 'N': it.words = { uint16_t(op->base | n << 8) }; break;
+        case 'I': it.words = { uint16_t(op->base | imm) }; break;
+        case 'A': it.words = { uint16_t(op->base | n << 8 | imm) }; break;
+        default: it.words = { op->base }; break;
+        }
+        it.shape = "alu.wide";
+        if (disc)
+        {
+            if (op->flags & kWritesN) defined |= 1u << n;
+            if (op->flags & kWritesR0) defined |= 1u;
+        }
+        return true;
+    }
+
     Item MakeAlu(int avoid)
     {
         Item it;
@@ -433,6 +551,11 @@ struct Gen
                 if (m < 0) choice = 0;
             }
         }
+        if (!gNarrowAlphabet && !gFenceFolds && !gFenceSelfOps && wideRng.Chance(25))
+        {
+            Item wide;
+            if (MakeWideAlu(n, m, imm, wide)) return wide;
+        }
         if (choice == 0) everConst[n] = true;
         switch (choice)
         {
@@ -453,10 +576,41 @@ struct Gen
     }
 
     // A load or store. 'single': exactly one instruction word (a delay slot).
+    // The GBR-based accesses: and.b / or.b / xor.b / tst.b #imm,@(r0,GBR) after a mov #k,r0, and the
+    // mov.b / mov.w / mov.l @(disp,GBR),r0 and back. GBR is set to scratch RAM by the runner and the code
+    // never writes it, so the address is a pointer the decompiler cannot know (unaff_gbr + k).
+    bool MakeGbrMem(bool single, Item& it)
+    {
+        if (single || gNarrowAlphabet || gFenceFolds || gFenceSelfOps) return false;
+        const bool logic = wideRng.Chance(50);
+        const uint32_t k = wideRng.Below(16), imm = wideRng.Below(256);
+        if (logic)
+        {
+            if (disc && noR0) return false;
+            static const uint16_t kOps[] = { 0xCD00, 0xCF00, 0xCE00, 0xCC00 };   // and.b or.b xor.b tst.b
+            const uint32_t which = wideRng.Below(4);
+            it.words = { uint16_t(0xE000 | k), uint16_t(kOps[which] | imm) };
+            it.shape = "mem.gbr.logic";
+            it.width = 1;
+            everConst[0] = true;
+            if (disc) defined |= 1u;
+            return true;
+        }
+        const bool write = wideRng.Chance(40);
+        const uint32_t w = 1u << wideRng.Below(3), disp = wideRng.Below(16);
+        if (disc && (write ? !Def(0) : noR0)) return false;
+        it.words = { uint16_t((write ? 0xC000 : 0xC400) | (w == 1 ? 0 : w == 2 ? 0x100 : 0x200) | disp) };
+        it.shape = write ? "mem.gbr.st" : "mem.gbr.ld";
+        it.width = static_cast<int>(w);
+        if (disc && !write) defined |= 1u;
+        return true;
+    }
+
     Item MakeMem(int avoid, bool single)
     {
         Item it;
         it.type = Item::Mem;
+        if (wideRng.Chance(10) && MakeGbrMem(single, it)) return it;
         int base = 4 + static_cast<int>(rng.Below(4));
         bool write = rng.Chance(45);
         if (disc)
@@ -819,6 +973,7 @@ struct Gen
             cases = 1;
         }
         const uint32_t before = defined;
+        inTable = true;
         for (int c = 0; c < cases; ++c)
         {
             std::vector<Item> body;
@@ -829,6 +984,7 @@ struct Gen
         }
         const int kids = static_cast<int>(rng.Below(3));
         for (int i = 0; i < kids; ++i) it.kids.push_back(MakeSimple(-1, false, true));
+        inTable = false;
         defined = before | 2u;   // r1 holds the bound on every path
         return it;
     }
@@ -1791,6 +1947,7 @@ public:
         mState->setMemoryBank(mRegs.get());
         mState->setMemoryBank(mTemps.get());
         mBreaks.reset(new ghidra::BreakTableCallBack(t));
+        dts::HookSh2Userops(*mBreaks);
         mEmu.reset(new TracingEmulate(t, mState.get(), mBreaks.get(), env));
     }
     ~Machine()
@@ -2266,7 +2423,7 @@ public:
         for (int r = 0; r < 16; ++r) mM->Set(("r" + std::to_string(r)).c_str(), out.init[r]);
         mM->Set("pr", kSentinel);
         mM->Set("sr", 0);
-        mM->Set("gbr", 0);
+        mM->Set("gbr", kScratchGbr);
         mM->Set("vbr", 0);
         mM->Set("mach", 0);
         mM->Set("macl", 0);
@@ -3391,6 +3548,67 @@ void CountShapes(const std::vector<Item>& items, std::map<std::string, int>& sha
     }
 }
 
+// ---- Opcode coverage: which instructions the generated programs contain ---------------------------
+// (SE_GENERATED_COVERAGE=1.) Counted from the items' words, never the literal pools, tables or data words
+// that follow the code, plus the instructions the layout itself adds (branches, rts, the stack traffic).
+std::string MnemonicOfWord(uint16_t w)
+{
+    const sfe::DisassembledInstruction ins = sfe::Sh2Decode(kCode, w);
+    return ins.IsValid ? ins.Mnemonic : std::string("(invalid)");
+}
+
+void CountWords(const std::vector<uint16_t>& words, std::map<std::string, int>& m)
+{
+    for (uint16_t w : words) ++m[MnemonicOfWord(w)];
+}
+
+void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& m)
+{
+    for (const Item& it : items)
+    {
+        CountWords(it.words, m);
+        CountWords(it.setup, m);
+        CountWords(it.slotWords, m);
+        CountWords(it.after, m);
+        switch (it.type)
+        {
+        case Item::Skip:
+            m[it.delayed ? (it.onTrue ? "bt/s" : "bf/s") : (it.onTrue ? "bt" : "bf")] += 1;
+            CountWords({ it.cond }, m);
+            break;
+        case Item::Loop: m["dt"] += 1; m["bf"] += 1; m["mov"] += 1; break;
+        case Item::Call: m[it.viaJsr ? "jsr" : "bsr"] += 1; break;
+        case Item::Table: m["mova"] += 1; m["shll2"] += 1; m["jmp"] += 1; m["cmp/hi"] += 1; break;
+        case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
+        case Item::DataSkip: m["bra"] += 1; break;
+        default: break;
+        }
+        CountMnemonics(it.slot, m);
+        CountMnemonics(it.kids, m);
+        for (const std::vector<Item>& c : it.cases) CountMnemonics(c, m);
+    }
+}
+
+void CountProgramMnemonics(const Program& p, std::map<std::string, int>& m)
+{
+    for (const Func& f : p.fns)
+    {
+        CountMnemonics(f.items, m);
+        CountMnemonics(f.pathA, m);
+        CountMnemonics(f.pathB, m);
+        CountMnemonics(f.tail, m);
+        CountWords(f.argSave, m);
+        CountWords(f.slotA, m);
+        CountWords(f.slotB, m);
+        m["rts"] += 1;
+        if (f.retWord) CountWords({ f.retWord }, m);
+        if (f.savePr) { m["sts.l"] += 1; m["lds.l"] += 1; }
+        if (f.prReg >= 0) { m["sts"] += 1; m["lds"] += 1; }
+        if (!f.pushed.empty()) { m["mov.l"] += 2 * static_cast<int>(f.pushed.size()); }
+        if (f.end == Func::TailJump) m["jmp"] += 1;
+    }
+}
+
 void CountProgram(const Program& p, std::map<std::string, int>& shapes)
 {
     ++shapes[p.version == 2 ? "module.v2" : "module.v1"];
@@ -3541,6 +3759,674 @@ Subject RawSubject(const char* raw)
     return s;
 }
 
+// ---- Grammar 3: register-only functions, the printed C against the emulator ----------------------
+// The oracle behind A2-12, A2-14 and A2-15 (REVIEW_LEDGER.md): nothing else compared the value a
+// function's pseudocode returns with a run of its code. A function of register-only ALU code is
+// decompiled; its text is compiled with the system C compiler, with the engine's types and helpers
+// (CONCATxy, SUBxy, ZEXTxy, SEXTxy, CARRY4, SCARRY4, SBORROW4 ...) defined as the engine defines them,
+// and every input register (in_rN, in_sr, in_mach, in_macl, unaff_rN) given the value the emulator's
+// run started with; the C function is called with the same r4-r7 and its value is compared with the
+// emulator's r0 (r0 and r1 for an 8-byte return). The emulator is the spec: Sh2DecodeTests holds it
+// equal to Mednafen op by op.
+//   SE_GENERATED_PRINTEDC=1|only   run it (only: and nothing else; ctest's entry for it sets 'only')
+//   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 22 walk the edge values through r4-r7)
+//   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
+//   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
+//   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
+// Without a C compiler the run says so loudly and exits 77, which ctest reports as skipped.
+// A mismatch on a function whose text declares a 1- or 2-byte variable or parameter is counted
+// apart ('narrow-c'): the engine prints sub-int arithmetic at its own width (`(int4)-param_1` with
+// `char param_1` negates a byte) and ISO C widens it, so the difference is in the reading, not the
+// value (15_DECOMPILER_STEP5.md, "Area 2, round 3: ...", question 1).
+
+std::string gScratch;
+
+struct RegItem
+{
+    std::vector<uint16_t> w;
+    std::string shape;
+};
+
+struct RegFn
+{
+    std::vector<RegItem> items;
+    uint16_t slot = 0x0009;   // rts's delay slot
+    std::vector<uint16_t> Words() const
+    {
+        std::vector<uint16_t> out;
+        for (const RegItem& i : items) out.insert(out.end(), i.w.begin(), i.w.end());
+        out.push_back(0x000B);
+        out.push_back(slot);
+        return out;
+    }
+};
+
+uint16_t RegOpWord(Rng& rng, std::string& shape)
+{
+    const OpDef& op = kRegOps[rng.Below(static_cast<uint32_t>(kRegOpCount))];
+    const uint32_t n = rng.Below(8), m = rng.Below(8);
+    static const uint32_t kImm[] = { 0, 1, 2, 0x7F, 0x80, 0xFF, 0xFE, 0x10 };
+    const uint32_t imm = rng.Chance(60) ? kImm[rng.Below(8)] : rng.Below(256);
+    shape = op.name;
+    switch (op.form)
+    {
+    case 'M': return static_cast<uint16_t>(op.base | n << 8 | m << 4);
+    case 'N': return static_cast<uint16_t>(op.base | n << 8);
+    case 'I': return static_cast<uint16_t>(op.base | imm);
+    case 'A': return static_cast<uint16_t>(op.base | n << 8 | imm);
+    default: return op.base;
+    }
+}
+
+RegFn GenRegFn(uint64_t seed, int k)
+{
+    Rng rng(seed * 7919u + static_cast<uint64_t>(k) + 0x5EEDu);
+    RegFn f;
+    const int length = 5 + static_cast<int>(rng.Below(16));
+    int words = 0;
+    // Most functions start by copying their arguments into r0-r3, as compiled code does; the others
+    // read r0-r3 as the inputs they are (the text then names them in_r0 .. in_r3).
+    if (rng.Chance(75))
+    {
+        RegItem copies;
+        copies.w = { 0x6043, 0x6153, 0x6263, 0x6373 };
+        copies.shape = "mov";
+        f.items.push_back(copies);
+    }
+    while (words < length)
+    {
+        RegItem it;
+        const uint32_t r = rng.Below(100);
+        std::string shape;
+        if (r < 14)   // bt / bf / bt/s / bf/s over one or two instructions
+        {
+            if (rng.Chance(50))
+            {
+                it.w.push_back(RegOpWord(rng, shape));   // something to set T
+                it.shape = shape + "+";
+            }
+            const bool delayed = rng.Chance(40), onTrue = rng.Chance(50);
+            const uint32_t skipped = 1 + rng.Below(2);
+            it.w.push_back(static_cast<uint16_t>((delayed ? (onTrue ? 0x8D00 : 0x8F00) : (onTrue ? 0x8900 : 0x8B00)) | (delayed ? skipped : skipped - 1)));
+            if (delayed) it.w.push_back(RegOpWord(rng, shape));
+            for (uint32_t i = 0; i < skipped; ++i) it.w.push_back(RegOpWord(rng, shape));
+            it.shape += delayed ? (onTrue ? "bt/s" : "bf/s") : (onTrue ? "bt" : "bf");
+        }
+        else if (r < 16)   // braf over one to three instructions: mov #2n,Rx ; braf Rx ; slot ; n skipped
+        {
+            const uint32_t x = rng.Below(8), skipped = 1 + rng.Below(3);
+            it.w.push_back(static_cast<uint16_t>(0xE000 | x << 8 | 2 * skipped));
+            it.w.push_back(static_cast<uint16_t>(0x0023 | x << 8));
+            it.w.push_back(RegOpWord(rng, shape));
+            for (uint32_t i = 0; i < skipped; ++i) it.w.push_back(RegOpWord(rng, shape));
+            it.shape = "braf";
+        }
+        else
+        {
+            it.w.push_back(RegOpWord(rng, shape));
+            it.shape = shape;
+        }
+        words += static_cast<int>(it.w.size());
+        f.items.push_back(it);
+    }
+    const uint32_t s = rng.Below(100);
+    std::string shape;
+    f.slot = s < 70 ? static_cast<uint16_t>(0x6003 | rng.Below(8) << 4) : s < 90 ? RegOpWord(rng, shape) : uint16_t(0x0009);
+    return f;
+}
+
+// The compiler: SE_C_COMPILER, else the first of cc, gcc, clang that answers --version.
+std::string FindCCompiler()
+{
+    if (const char* env = std::getenv("SE_C_COMPILER"))
+        if (*env) return env;
+    for (const char* cc : { "cc", "gcc", "clang" })
+        if (std::system((std::string(cc) + " --version > /dev/null 2>&1").c_str()) == 0) return cc;
+    return std::string();
+}
+
+// The names the engine prints for C, as C: sized integer types and the piece operations
+// (the engine's own definitions, `ghidra/Ghidra/Features/Decompiler/src/decompile/datatests/` style).
+std::string CHeader()
+{
+    std::ostringstream o;
+    o << "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n"
+         "typedef unsigned char undefined; typedef unsigned char undefined1; typedef unsigned short undefined2;\n"
+         "typedef unsigned int undefined3; typedef unsigned int undefined4; typedef unsigned long long undefined8;\n"
+         "typedef unsigned char byte; typedef unsigned char uchar; typedef unsigned short ushort; typedef unsigned int uint;\n"
+         "typedef unsigned int uint3; typedef long long longlong; typedef unsigned long long ulonglong;\n"
+         "typedef unsigned char bool; typedef unsigned short word; typedef unsigned int dword; typedef unsigned long long qword;\n"
+         "typedef int int3; typedef signed char int1; typedef short int2; typedef int int4; typedef long long int8;\n"
+         "typedef unsigned char uint1; typedef unsigned short uint2; typedef unsigned int uint4; typedef unsigned long long uint8;\n"
+         "typedef unsigned char xunknown1; typedef unsigned short xunknown2; typedef unsigned int xunknown4; typedef unsigned long long xunknown8;\n"
+         "#define true 1\n#define false 0\n"
+         "#define CARRY4(a, b) ((uint32_t)((uint32_t)(a) + (uint32_t)(b)) < (uint32_t)(a))\n"
+         "#define CARRY1(a, b) ((uint8_t)((uint8_t)(a) + (uint8_t)(b)) < (uint8_t)(a))\n"
+         "#define SCARRY4(a, b) (((int32_t)(a) >= 0) == ((int32_t)(b) >= 0) && (((int32_t)((uint32_t)(a) + (uint32_t)(b)) >= 0) != ((int32_t)(a) >= 0)))\n"
+         "#define SCARRY1(a, b) (((int8_t)(a) >= 0) == ((int8_t)(b) >= 0) && (((int8_t)((uint8_t)(a) + (uint8_t)(b)) >= 0) != ((int8_t)(a) >= 0)))\n"
+         "#define SBORROW4(a, b) (((int32_t)(a) >= 0) != ((int32_t)(b) >= 0) && (((int32_t)((uint32_t)(a) - (uint32_t)(b)) >= 0) != ((int32_t)(a) >= 0)))\n"
+         "#define SBORROW1(a, b) (((int8_t)(a) >= 0) != ((int8_t)(b) >= 0) && (((int8_t)((uint8_t)(a) - (uint8_t)(b)) >= 0) != ((int8_t)(a) >= 0)))\n";
+    auto mask = [](int bytes) -> std::string {
+        char b[32];
+        std::snprintf(b, sizeof b, "0x%sULL", std::string(static_cast<size_t>(bytes) * 2, 'F').c_str());
+        return b;
+    };
+    for (int a = 1; a <= 7; ++a)
+        for (int b = 1; a + b <= 8; ++b)
+            o << "#define CONCAT" << a << b << "(a, b) ((((unsigned long long)(a) & " << mask(a) << ") << " << 8 * b
+              << ") | ((unsigned long long)(b) & " << mask(b) << "))\n";
+    for (int a = 2; a <= 8; ++a)
+        for (int b = 1; b < a; ++b)
+            o << "#define SUB" << a << b << "(v, o) ((((unsigned long long)(v)) >> ((o) * 8)) & " << mask(b) << ")\n";
+    for (int a = 1; a <= 7; ++a)
+        for (int b = a + 1; b <= 8; ++b)
+        {
+            o << "#define ZEXT" << a << b << "(v) ((unsigned long long)(v) & " << mask(a) << ")\n";
+            o << "#define SEXT" << a << b << "(v) ((long long)(((unsigned long long)(v)) << " << 64 - 8 * a << ") >> " << 64 - 8 * a << ")\n";
+        }
+    // The control register writes: the user ops record the last value written, to compare with the registers the run ended with.
+    o << "static unsigned int g_in[16];\n"
+         "static unsigned int g_wsr, g_wgbr, g_wvbr;\n"
+         "static void Write_SR(unsigned long long v) { g_wsr = (unsigned int)v; }\n"
+         "static void Write_GBR(unsigned long long v) { g_wgbr = (unsigned int)v; }\n"
+         "static void Write_VBR(unsigned long long v) { g_wvbr = (unsigned int)v; }\n";
+    return o.str();
+}
+
+struct CVerdict
+{
+    std::string cls;      // "" agrees; else the class of the disagreement
+    std::string detail;
+    std::string text;
+    bool compared = false;
+    bool voidReturn = false;
+    bool narrow = false;
+    int mismatches = 0;
+};
+
+struct CCase
+{
+    std::string name;
+    std::vector<uint16_t> words;
+};
+
+uint32_t CalleeSaved(int r) { return 0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u; }
+
+bool IsFailing(const CVerdict& v)
+{
+    return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls.compare(0, 8, "skipped:") != 0;
+}
+
+// Decompiles each case, runs it on the emulator for 'nIn' inputs, compiles every text together and runs the
+// comparison. A text that does not compile alone is told apart by compiling the cases one by one.
+std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& cases, int nIn, const std::string& cc, uint64_t inputSeed,
+                                    int batchNo)
+{
+    struct Prepared
+    {
+        std::string name, cText, mainText;
+        bool ready = false;
+    };
+    std::vector<CVerdict> out(cases.size());
+    std::vector<Prepared> prep(cases.size());
+    for (size_t ci = 0; ci < cases.size(); ++ci)
+    {
+        const CCase& c = cases[ci];
+        CVerdict& v = out[ci];
+        Prepared& pr = prep[ci];
+        pr.name = "f" + std::to_string(ci);
+        std::vector<uint8_t> hw;
+        for (size_t i = 0; i < c.words.size(); ++i) dts::Put16(hw, kCode - 0x06000000u + 2 * i, c.words[i]);
+        dts::Put16(hw, kSentinel - 0x06000000u, 0x0009);
+        dts::Put16(hw, kSentinel - 0x06000000u + 2, 0x0009);
+        auto snap = dts::MakeSnapshot(hw, 1000 + ci);
+        DecompileRequest q;
+        q.entry = kCode;
+        const DecompileResult r = d.Decompile(snap, q);
+        v.text = r.Text();
+        if (r.status != DecompileStatus::Ok || r.unsupported || r.truncated)
+        {
+            v.cls = "undecompiled";
+            v.detail = "status " + std::to_string(int(r.status)) + (r.unsupported ? " unsupported" : "") + (r.truncated ? " truncated" : "");
+            continue;
+        }
+        std::string text = v.text;
+        if (text.find("unaff_") != std::string::npos || text.find("in_") != std::string::npos)
+        {
+            // A name made of an address is a varnode outside every register: an input no register holds (A2-15).
+            static const std::regex unique("\\b(unaff|in)_[0-9a-f]{6,8}\\b");
+            std::smatch m;
+            if (std::regex_search(text, m, unique))
+            {
+                v.cls = "input-outside-registers";
+                v.detail = "the text reads '" + m.str() + "', which is no register";
+                continue;
+            }
+        }
+        const size_t firstName = text.find("func_0x");
+        const bool callsSomething = firstName != std::string::npos && text.find("func_0x", firstName + 1) != std::string::npos;   // a second name: a call
+        // The oracle models registers only: a function that reads or writes memory (a pointer parameter, a dereference)
+        // is not run (the host's pointers are 64-bit and its memory is not the machine's).
+        static const std::regex memoryRe("\\*[A-Za-z_(]");
+        if (std::regex_search(text, memoryRe))
+        {
+            v.cls = "skipped:memory";
+            continue;
+        }
+        if (text.find("halt_baddata") != std::string::npos || text.find("(code *)") != std::string::npos ||
+            text.find("extraout_") != std::string::npos || text.find("in_stack") != std::string::npos ||
+            callsSomething)
+        {
+            v.cls = "skipped:call-or-stack";
+            continue;
+        }
+        static const std::regex decl("func_0x[0-9a-fA-F]+");
+        text = std::regex_replace(text, decl, pr.name);
+        // Every input the text names, as a local holding what the run started with.
+        static const std::regex input("^(\\s*)((?:\\w+\\s+)+)((?:in|unaff)_\\w+);\\s*$");
+        std::istringstream lines(text);
+        std::string line, rebuilt;
+        bool unknownInput = false;
+        while (std::getline(lines, line))
+        {
+            std::smatch m;
+            // A declaration, not `return in_r1;`.
+            if (std::regex_match(line, m, input) && m[2].str().compare(0, 6, "return") != 0 && m[2].str().compare(0, 4, "goto") != 0)
+            {
+                const std::string name = m[3];
+                std::string value;
+                int num = -1;
+                if (std::sscanf(name.c_str() + (name.compare(0, 3, "in_") == 0 ? 4 : 7), "%d", &num) == 1 && num >= 0 && num <= 15 &&
+                    (name == "in_r" + std::to_string(num) || name == "unaff_r" + std::to_string(num)))
+                    value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(CalleeSaved(num)) + "u";
+                else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
+                else if (name == "in_mach" || name == "unaff_mach") value = "g_in[9]";
+                else if (name == "in_macl" || name == "unaff_macl") value = "g_in[10]";
+                else if (name == "unaff_gbr" || name == "unaff_vbr" || name == "in_gbr" || name == "in_vbr") value = "0";
+                else
+                {
+                    unknownInput = true;
+                    v.detail = "the text reads '" + name + "', an input the harness cannot give";
+                    value = "0";
+                }
+                line = m[1].str() + m[2].str() + name + " = " + value + ";";
+            }
+            rebuilt += line + "\n";
+        }
+        if (unknownInput)
+        {
+            v.cls = "skipped:unknown-input";
+            continue;
+        }
+        pr.cText = rebuilt;
+        // The signature: the return type and how many parameters.
+        const size_t at = pr.cText.find(pr.name + "(");
+        if (at == std::string::npos)
+        {
+            v.cls = "skipped:no-declaration";
+            continue;
+        }
+        const size_t close = pr.cText.find(')', at);
+        const std::string plist = pr.cText.substr(at + pr.name.size() + 1, close - at - pr.name.size() - 1);
+        int nParams = 0;
+        if (plist.find_first_not_of(" \t") != std::string::npos && plist != "void") nParams = 1 + static_cast<int>(std::count(plist.begin(), plist.end(), ','));
+        const size_t lineStart = pr.cText.rfind('\n', at);
+        const std::string ret = pr.cText.substr(lineStart == std::string::npos ? 0 : lineStart + 1, at - (lineStart == std::string::npos ? 0 : lineStart + 1));
+        v.voidReturn = ret.find("void") != std::string::npos;
+        static const std::regex narrow("\\b(char|uchar|byte|short|ushort|uint1|int1|uint2|int2|xunknown1|xunknown2|undefined1|undefined2)\\s+\\w+\\s*[;,)]");
+        v.narrow = std::regex_search(pr.cText, narrow);
+        // The run: the emulator from the entry for nIn inputs.
+        Rng ir(inputSeed ^ (static_cast<uint64_t>(ci) * 0x9E3779B97F4A7C15ull) ^ c.words.size());
+        const uint32_t pool[] = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
+                                  0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33 };
+        const uint32_t poolSize = sizeof pool / sizeof pool[0];
+        int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
+        auto draw = [&]() -> uint32_t {
+            const uint32_t k = ir.Below(4);
+            if (k == 0) return pool[ir.Below(poolSize)];
+            if (k == 1) return ir.Next() & 0xFFFF;
+            return ir.Next();
+        };
+        Env env;
+        env.ram = snap->regions[1].bytes;
+        std::unique_ptr<Machine> machine(new Machine(snap, &env));
+        std::ostringstream rows;
+        int kept = 0;
+        bool r0Changed = false;
+        for (int k = 0; k < nIn; ++k)
+        {
+            uint32_t in[11];
+            for (int i = 0; i < 8; ++i) in[i] = draw();
+            in[8] = draw() & 0x3F3u;
+            in[9] = draw();
+            in[10] = draw();
+            if (sweep < static_cast<int>(poolSize))
+            {
+                for (int i = 4; i < 8; ++i) in[i] = pool[(sweep + 5 * (i - 4) + (i - 4) * (i - 4)) % poolSize];
+                in[0] = pool[(sweep + 11) % poolSize];
+                in[1] = pool[(sweep * 3 + 1) % poolSize];
+                in[8] = (sweep & 1) ? (in[8] | 1u) : (in[8] & ~1u);   // T both ways
+                ++sweep;
+            }
+            for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in[i]);
+            for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
+            machine->Set("r15", kStackTop);
+            machine->Set("pr", kSentinel);
+            machine->Set("sr", in[8]);
+            machine->Set("gbr", 0);
+            machine->Set("vbr", 0);
+            machine->Set("mach", in[9]);
+            machine->Set("macl", in[10]);
+            RunOut run;
+            env.trace.clear();
+            if (!machine->Run(kCode, kSentinel, kStepLimit, run, env)) continue;
+            if (run.fin[0] != in[0]) r0Changed = true;
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "      { 0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu },\n",
+                          in[0], in[1], in[2], in[3], in[4], in[5], in[6], in[7], in[8], in[9], in[10], run.fin[0], run.fin[1], run.finSr,
+                          machine->Get("gbr"), machine->Get("vbr"));
+            rows << buf;
+            ++kept;
+        }
+        if (!kept)
+        {
+            v.cls = "skipped:emulator-unfinished";
+            continue;
+        }
+        std::ostringstream m;
+        m << "  { /* " << pr.name << " */\n    static const unsigned int D[][16] = {\n" << rows.str() << "    };\n    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
+        m << "      memcpy(g_in, D[k], sizeof g_in[0] * 11);\n";
+        std::ostringstream call;
+        call << pr.name << "(";
+        for (int i = 0; i < nParams && i < 4; ++i) call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
+        call << ")";
+        // The control registers: the last SR, GBR, VBR written through Write_*, or what they were, against the run's.
+        // (SR is compared in its S and interrupt-mask bits, which only ldc changes.)
+        const std::string ctl = "      if ((g_wsr & 0xF2u) != (D[k][13] & 0xF2u) || g_wgbr != D[k][14] || g_wvbr != D[k][15]) { printf(\"MISMATCH " + pr.name +
+            " control registers: pseudo sr=%08X gbr=%08X vbr=%08X, run sr=%08X gbr=%08X vbr=%08X\\n\", g_wsr, g_wgbr, g_wvbr, D[k][13], D[k][14], D[k][15]); ++bad_" +
+            pr.name + "; }\n";
+        m << "      g_wsr = g_in[8]; g_wgbr = 0; g_wvbr = 0;\n";
+        if (v.voidReturn) m << "      " << call.str() << ";\n" << ctl;
+        else
+        {
+            m << "      unsigned long long g64 = (unsigned long long)" << call.str() << ";\n";
+            m << "      int rsz = (int)sizeof(" << call.str() << ");\n";
+            m << "      unsigned int rmask = rsz >= 4 ? 0xFFFFFFFFu : (1u << (8 * rsz)) - 1;\n";
+            m << "      unsigned int got = rsz == 8 ? (unsigned int)(g64 >> 32) : (unsigned int)g64 & rmask;\n";
+            m << "      unsigned int want = rsz == 8 ? D[k][11] : D[k][11] & rmask;\n";
+            m << "      if (got != want || (rsz == 8 && (unsigned int)g64 != D[k][12])) { printf(\"MISMATCH " << pr.name
+              << " r4=%08X r5=%08X r6=%08X r7=%08X size=%d%s run=%08X:%08X pseudo=%08X:%08X\\n\", g_in[4], g_in[5], g_in[6], g_in[7], rsz, "
+                 "(rsz == 8 && (unsigned int)g64 == D[k][12]) ? \" high-word-only\" : \"\", D[k][11], D[k][12], "
+                 "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n";
+            m << ctl;
+        }
+        m << "    }\n  }\n";
+        pr.mainText = m.str();
+        pr.ready = true;
+        v.compared = !v.voidReturn;
+        v.detail = std::to_string(kept) + " inputs";
+        // A function that returns nothing but whose r0 ended as something other than it began: a return the
+        // signature dropped (A3-5, another row's class: counted, not failed here).
+        if (v.voidReturn && r0Changed) v.cls = "void-return";
+    }
+    // Compile and run.
+    auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled) -> std::string {
+        std::ostringstream src;
+        src << CHeader();
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << prep[i].cText << "\n";
+        src << "int main(void) {\n";
+        for (size_t i : which) src << prep[i].mainText;
+        int total = 0;
+        (void)total;
+        src << "  int bad = 0;\n";
+        for (size_t i : which) src << "  bad += bad_" << prep[i].name << ";\n";
+        src << "  printf(\"BAD %d\\n\", bad);\n  return 0;\n}\n";
+        const std::string base = dts::Join(gScratch, "printedc_" + std::to_string(batchNo) + "_" + tag);
+        const std::string cfile = base + ".c", bin = base + ".bin", clog = base + ".log", rlog = base + ".out";
+        {
+            std::ofstream f(cfile);
+            f << src.str();
+        }
+        const std::string compileCmd = cc + " -O0 -fwrapv -fsigned-char -w -std=gnu11 -o " + bin + " " + cfile + " > " + clog + " 2>&1";
+        compiled = std::system(compileCmd.c_str()) == 0;
+        if (!compiled)
+        {
+            std::ifstream f(clog);
+            std::stringstream ss;
+            ss << f.rdbuf();
+            log = ss.str();
+            return std::string();
+        }
+        std::system((bin + " > " + rlog + " 2>&1").c_str());
+        std::ifstream f(rlog);
+        std::stringstream ss;
+        ss << f.rdbuf();
+        // The program ends with "BAD <n>"; without it the run died (a signal) or never finished.
+        if (ss.str().find("\nBAD ") == std::string::npos && ss.str().compare(0, 4, "BAD ") != 0) compiled = false, log = "the compiled program did not finish: " + ss.str().substr(0, 200);
+        return ss.str();
+    };
+    std::vector<size_t> all;
+    for (size_t i = 0; i < prep.size(); ++i)
+        if (prep[i].ready) all.push_back(i);
+    if (all.empty()) return out;
+    auto apply = [&](const std::string& run) {
+        std::istringstream in(run);
+        std::string line;
+        while (std::getline(in, line))
+        {
+            if (line.compare(0, 9, "MISMATCH ") != 0) continue;
+            const size_t sp = line.find(' ', 9);
+            const std::string name = line.substr(9, sp - 9);
+            for (size_t i = 0; i < prep.size(); ++i)
+                if (prep[i].ready && prep[i].name == name)
+                {
+                    CVerdict& v = out[i];
+                    if (++v.mismatches == 1) v.detail = line.substr(9);
+                    // Only the high word of an 8-byte value differs and the text widens with a C cast ((uint8)x of a signed
+                    // x sign-extends in C, the engine means a zero extension): the reading of the cast, not the value.
+                    const bool widenOnly = line.find("high-word-only") != std::string::npos &&
+                                           (v.text.find("(uint8)") != std::string::npos || v.text.find("(int8)") != std::string::npos);
+                    if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
+                }
+        }
+    };
+    std::string log;
+    bool compiled = false;
+    const std::string run = compileRun(all, "all", log, compiled);
+    if (compiled) apply(run);
+    else
+        for (size_t i : all)   // one at a time: which text is not C, which one dies
+        {
+            std::string one;
+            bool ok = false;
+            const std::string r = compileRun({ i }, prep[i].name, one, ok);
+            if (ok) apply(r);
+            else
+            {
+                const bool died = one.compare(0, 19, "the compiled progra") == 0;
+                out[i].cls = died ? "crashed" : "not-compilable";
+                std::istringstream l(one);
+                std::string first;
+                while (std::getline(l, first))
+                    if (died || first.find("error") != std::string::npos) break;
+                out[i].detail = first;
+            }
+        }
+    return out;
+}
+
+std::string WordsText(const std::vector<uint16_t>& w)
+{
+    std::string s;
+    for (size_t i = 0; i < w.size(); ++i) s += (i ? " " : "") + Hex(w[i], 4);
+    return s;
+}
+
+// Drops one item at a time while the function still fails the same way.
+RegFn ShrinkRegFn(Sh2Decompiler& d, const std::string& cc, RegFn f, const std::string& cls, int nIn)
+{
+    for (int round = 0; round < 40; ++round)
+    {
+        std::vector<CCase> cands;
+        std::vector<RegFn> fns;
+        for (size_t i = 0; i < f.items.size() && f.items.size() > 1; ++i)
+        {
+            RegFn g = f;
+            g.items.erase(g.items.begin() + static_cast<long>(i));
+            fns.push_back(g);
+        }
+        if (f.slot != 0x0009)
+        {
+            RegFn g = f;
+            g.slot = 0x0009;
+            fns.push_back(g);
+        }
+        for (size_t i = 0; i < fns.size(); ++i) cands.push_back({ "s" + std::to_string(i), fns[i].Words() });
+        if (cands.empty()) break;
+        const std::vector<CVerdict> v = CheckPrintedC(d, cands, nIn, cc, 0x51ED, 9000 + round);
+        bool progressed = false;
+        for (size_t i = 0; i < v.size(); ++i)
+            if (v[i].cls == cls)
+            {
+                f = fns[i];
+                progressed = true;
+                break;
+            }
+        if (!progressed) break;
+    }
+    return f;
+}
+
+// The ledger's fixtures for the printed-C differential: always checked, ahead of the generated functions, so a
+// regression of one of these fixes fails the default run whatever the seeds draw (REVIEW_LEDGER.md).
+struct PrintedCFixture
+{
+    const char* name;
+    std::vector<uint16_t> words;
+};
+const PrintedCFixture kPrintedCFixtures[] = {
+    { "A2-12 r0 = 0, r1 = r5", { 0x6153, 0xE000, 0x000B, 0x0009 } },
+    { "A2-12 r1 = r5 + 1", { 0x6153, 0x7101, 0xE000, 0x000B, 0x0009 } },
+    { "A2-12 r0 = 0 on one path", { 0x6153, 0x4501, 0x8D01, 0x4129, 0x324D, 0xE200, 0x000B, 0x6023 } },
+    { "A2-12 r0 = 0x11, r1 dirty", { 0xE011, 0x6153, 0x000B, 0x0009 } },
+    { "A2-14 addv, known addend", { 0xE501, 0x345F, 0x000B, 0x0029 } },
+    { "A2-14 addv, shlr", { 0x4501, 0x345F, 0x000B, 0x0029 } },
+    { "A2-14 addv, extu.w", { 0x655D, 0x345F, 0x000B, 0x0029 } },
+    { "A2-14 addv, swapped", { 0x4501, 0x354F, 0x000B, 0x0029 } },
+    { "A2-15 shlr, rotcl, extu.b", { 0x4401, 0x4424, 0x000B, 0x604C } },
+    { "A2-15 control, 32-bit", { 0x4401, 0x4424, 0x000B, 0x6043 } },
+    { "A2-13 critical section, no store", { 0x0102, 0x6013, 0xCBF0, 0x400E, 0x6243, 0x410E, 0x000B, 0x0009 } },
+    { "A2-13 di", { 0x0002, 0xCBF0, 0x400E, 0x000B, 0x0009 } },
+    { "A2-13 ldc r4,vbr", { 0x442E, 0x000B, 0x0009 } },
+    { "A2-13 ldc r4,gbr", { 0x441E, 0x000B, 0x0009 } },
+    { "A2-13 ldc r4,sr", { 0x440E, 0x000B, 0x0009 } },
+    { "dmuls.l ; sts mach,r0 ; sts macl,r1", { 0x354D, 0x000A, 0x011A, 0x000B, 0x0009 } },
+    { "64-bit addc chain", { 0x0008, 0x346E, 0x357E, 0x6143, 0x000B, 0x6053 } },
+};
+
+void TestPrintedC()
+{
+    const std::string cc = FindCCompiler();
+    if (cc.empty())
+    {
+        std::printf("SKIPPED: no C compiler found (tried SE_C_COMPILER, cc, gcc, clang). The printed-C differential did NOT run.\n");
+        std::fflush(stdout);
+        std::_Exit(77);
+    }
+    std::printf("printed-C differential with '%s'\n", cc.c_str());
+    Sh2Decompiler d(gConfig);
+    const int nIn = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_INPUTS", 32));
+    std::vector<CCase> cases;
+    std::vector<RegFn> fns;
+    const bool hand = std::getenv("SE_GENERATED_PRINTEDC_WORDS") != nullptr;
+    if (hand)
+    {
+        std::stringstream all(std::getenv("SE_GENERATED_PRINTEDC_WORDS"));
+        std::string one;
+        int k = 0;
+        while (std::getline(all, one, ';'))
+        {
+            CCase c;
+            c.name = "hand" + std::to_string(k++);
+            std::istringstream in(one);
+            std::string tok;
+            while (in >> tok) c.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+            cases.push_back(c);
+        }
+    }
+    else
+    {
+        for (const PrintedCFixture& f : kPrintedCFixtures) cases.push_back({ f.name, f.words });
+        fns.resize(cases.size());   // fixtures have no item list (not shrunk)
+        const long single = EnvNumber("SE_GENERATED_SEED", 0);
+        const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
+        const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
+        const long per = EnvNumber("SE_GENERATED_PRINTEDC_PER", 1);
+        for (long seed = first; seed < first + seeds; ++seed)
+            for (long k = 0; k < per; ++k)
+            {
+                fns.push_back(GenRegFn(static_cast<uint64_t>(seed), static_cast<int>(k)));
+                cases.push_back({ "seed" + std::to_string(seed) + "_" + std::to_string(k), fns.back().Words() });
+            }
+    }
+    if (EnvNumber("SE_GENERATED_COVERAGE", 0) != 0)
+    {
+        // CountWords is declared below this function's grammar; the register-only words are all code.
+        std::map<std::string, int> mn;
+        for (const CCase& c : cases)
+            for (uint16_t w : c.words) ++mn[sfe::Sh2Decode(kCode, w).Mnemonic];
+        std::printf("coverage (register-only grammar): %zu distinct mnemonics over %zu functions:", mn.size(), cases.size());
+        for (const auto& k : mn) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    std::vector<CVerdict> verdicts;
+    // Batches of 200, so one text that stalls the compiler costs one batch.
+    for (size_t at = 0; at < cases.size(); at += 200)
+    {
+        const size_t end = std::min(cases.size(), at + 200);
+        std::vector<CCase> part(cases.begin() + static_cast<long>(at), cases.begin() + static_cast<long>(end));
+        std::vector<CVerdict> v = CheckPrintedC(d, part, nIn, cc, 0xC0DE, static_cast<int>(at / 200));
+        verdicts.insert(verdicts.end(), v.begin(), v.end());
+    }
+    std::map<std::string, int> classes;
+    int compared = 0, shrunk = 0;
+    const long shrinkCount = EnvNumber("SE_GENERATED_SHRINK", 3);
+    for (size_t i = 0; i < verdicts.size(); ++i)
+    {
+        const CVerdict& v = verdicts[i];
+        compared += v.compared ? 1 : 0;
+        ++classes[v.cls.empty() ? "agrees" : v.cls];
+        if (hand || EnvNumber("SE_GENERATED_VERBOSE", 0) >= 2) std::printf("%s: %s%s\n%s\n", cases[i].name.c_str(), v.cls.empty() ? "agrees" : v.cls.c_str(), v.detail.empty() ? "" : (" (" + v.detail + ")").c_str(), v.text.c_str());
+        if (!IsFailing(v))
+        {
+            // Said, not failed: the classes that are another row's or a limit of the instrument.
+            if (!v.cls.empty() && EnvNumber("SE_GENERATED_VERBOSE", 0) != 0)
+                std::printf("%s [%s] %s\n  words: %s\n%s\n", cases[i].name.c_str(), v.cls.c_str(), v.detail.c_str(),
+                            WordsText(cases[i].words).c_str(), v.text.c_str());
+            continue;
+        }
+        std::printf("FINDING [%s] %s\n  words: %s\n  detail: %s\n", v.cls.c_str(), cases[i].name.c_str(), WordsText(cases[i].words).c_str(), v.detail.c_str());
+        std::printf("  replay: SE_GENERATED_PRINTEDC=only SE_GENERATED_PRINTEDC_WORDS=\"%s\"\n", WordsText(cases[i].words).c_str());
+        if (!hand && shrunk < shrinkCount && !fns[i].items.empty())
+        {
+            ++shrunk;
+            const RegFn small = ShrinkRegFn(d, cc, fns[i], v.cls, nIn);
+            const std::vector<CVerdict> again = CheckPrintedC(d, { { "small", small.Words() } }, nIn, cc, 0x51ED, 8999);
+            std::printf("  shrunk: SE_GENERATED_PRINTEDC_WORDS=\"%s\"\n%s\n  detail: %s\n", WordsText(small.Words()).c_str(), again[0].text.c_str(),
+                        again[0].detail.c_str());
+        }
+        else if (!hand)
+            std::printf("%s\n", v.text.c_str());
+    }
+    int failing = 0;
+    for (const CVerdict& v : verdicts) failing += IsFailing(v) ? 1 : 0;
+    std::printf("printed-C: functions=%zu compared=%d inputs each=%d (%.0f ms) classes:", verdicts.size(), compared, nIn, dts::MsSince(t0));
+    for (const auto& c : classes) std::printf(" %s=%d", c.first.c_str(), c.second);
+    std::printf("\n");
+    CHECK(failing == 0);
+}
+
 // A version 2 program that fits: a re-draw when a pool or a branch is out of reach.
 Program MakeV2(uint64_t seed)
 {
@@ -3560,6 +4446,10 @@ void TestGenerated()
         gMutateKind = std::strcmp(mutate, "1") == 0 ? "ledger" : mutate;
         gMutate = !gMutateKind.empty() && gMutateKind != "0";
         if (gMutateKind == "0") gMutateKind.clear();
+    }
+    {
+        const char* alphabet = std::getenv("SE_GENERATED_ALPHABET");
+        gNarrowAlphabet = alphabet && std::strcmp(alphabet, "narrow") == 0;
     }
     if (const char* fence = std::getenv("SE_GENERATED_FENCE"))
     {
@@ -3587,6 +4477,8 @@ void TestGenerated()
     const long grammar = EnvNumber("SE_GENERATED_GRAMMAR", 0);
 
     std::map<std::string, int> shapes, classes, counts;
+    std::map<std::string, int> mnemonics;
+    const bool coverage = EnvNumber("SE_GENERATED_COVERAGE", 0) != 0;
     int failing = 0, totalFindings = 0, unfinished = 0, volatileRuns = 0, shrunk = 0, v1seeds = 0, v2seeds = 0;
     size_t traced = 0;
     double decompileMs = 0;
@@ -3597,6 +4489,7 @@ void TestGenerated()
         const Program p = v2 ? MakeV2(static_cast<uint64_t>(seed)) : Generate(static_cast<uint64_t>(seed));
         (v2 ? v2seeds : v1seeds) += 1;
         CountProgram(p, shapes);
+        if (coverage) CountProgramMnemonics(p, mnemonics);
         const bool detail = verbose || failing < detailLimit;
         Report rep = Evaluate(d, p, detail);
         unfinished += rep.unfinishedRuns;
@@ -3644,6 +4537,12 @@ void TestGenerated()
                   n("width.4"), n("litptr.hw") + n("poll.hw"), n("litptr.ram") + n("poll.ram"), n("litptr.mbox") + n("poll.mbox"), sum("skip."),
                   n("skip.bt_s") + n("skip.bf_s"), n("loop"), sum("poll.h") + sum("poll.r") + sum("poll.m"), n("poll.write_first"),
                   n("poll.until_set"), n("poll.mbox"), n("poll.hw"), n("poll.ram"), n("rts.slot_insn"));
+    if (coverage)
+    {
+        std::printf("coverage: %zu distinct mnemonics over %ld seeds:", mnemonics.size(), seeds);
+        for (const auto& k : mnemonics) std::printf(" %s=%d", k.first.c_str(), k.second);
+        std::printf("\n");
+    }
     std::printf("finding classes (seeds):");
     for (const auto& cl : classes) std::printf(" %s=%d", cl.first.c_str(), cl.second);
     std::printf("\nshapes:");
@@ -3706,9 +4605,13 @@ int main(int argc, char** argv)
         std::printf("FATAL: %s\n", error.c_str());
         return 3;
     }
+    gScratch = scratch;
     try
     {
-        RUN(TestGenerated());
+        const char* printedC = std::getenv("SE_GENERATED_PRINTEDC");
+        const bool printedOnly = printedC && std::strcmp(printedC, "only") == 0;
+        if (printedC && *printedC && std::strcmp(printedC, "0") != 0) RUN(TestPrintedC());
+        if (!printedOnly) RUN(TestGenerated());
     }
     catch (ghidra::LowlevelError& e)
     {
@@ -3720,6 +4623,6 @@ int main(int argc, char** argv)
         std::printf("FATAL: uncaught std::exception: %s\n", e.what());
         return 3;
     }
-    dts::RemoveTree(scratch);
+    if (!std::getenv("SE_GENERATED_KEEP")) dts::RemoveTree(scratch);   // SE_GENERATED_KEEP=1: keep the compiled C files to read
     return dts::Finish("Sh2GeneratedTests", start);
 }

@@ -363,6 +363,16 @@ if(SE_ENABLE_DECOMPILER)
         # Version 1 also has mac.l / mac.w, and its "dropped" check spends one ledger entry per access. The
         # nightly CI job runs 20000 seeds.
         set_tests_properties(SaturnExplorerSh2GeneratedTests PROPERTIES TIMEOUT 120)
+        # The printed-C differential (15_DECOMPILER_STEP5.md, "Area 2, round 3: ..."): register-only generated
+        # functions, decompiled, their text compiled with the system C compiler and its return value compared with
+        # the emulator's. The same executable, told by the environment to run only that. SE_GENERATED_SEEDS=<n>
+        # makes it longer. Without a C compiler it exits 77 and ctest reports it skipped (never passed).
+        if(UNIX)
+            add_test(NAME SaturnExplorerSh2PrintedCTests
+                     COMMAND SaturnExplorerSh2GeneratedTests ${CMAKE_CURRENT_BINARY_DIR}/decompiler_PrintedC_test)
+            set_tests_properties(SaturnExplorerSh2PrintedCTests PROPERTIES TIMEOUT 300 SKIP_RETURN_CODE 77
+                                 ENVIRONMENT "SE_GENERATED_PRINTEDC=only")
+        endif()
         # Area 2's oracle: all 65,536 words decoded three ways, and every instruction form run against
         # a reference model transcribed from Mednafen (REVIEW_LEDGER.md rows A2-1 .. A2-8). The default
         # run is 2,000 cases per form; SE_DECODE_CASES=<n> runs more. It passes: A2-1 to A2-3 (SR),

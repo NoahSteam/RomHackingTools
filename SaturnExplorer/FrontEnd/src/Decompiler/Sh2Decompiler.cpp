@@ -716,9 +716,14 @@ private:
                 if (mNoReturn.count(a)) continue;   // the path ends in the callee
                 break;
             case ghidra::CPUI_CALLOTHER:
-                // sleep (Sleep_Standby) changes no register or memory; any other user op, anything.
-                if (mFd.getArch()->userops.getOp(static_cast<ghidra::uint4>(op.in[0].offset))->getName() != "Sleep_Standby")
-                    Apply(s, CallEffects());
+                // sleep (Sleep_Standby) changes no register or memory, nor do the control register writes (Write_SR,
+                // Write_GBR, Write_VBR: the register itself is written by the instruction's own p-code, the user
+                // op only keeps the write in the code); any other user op, anything.
+                {
+                    const std::string& userOp = mFd.getArch()->userops.getOp(static_cast<ghidra::uint4>(op.in[0].offset))->getName();
+                    if (userOp != "Sleep_Standby" && userOp != "Write_SR" && userOp != "Write_GBR" && userOp != "Write_VBR")
+                        Apply(s, CallEffects());
+                }
                 if (op.hasOut) Set(s, op.out, Value());
                 break;
             case ghidra::CPUI_BRANCH:

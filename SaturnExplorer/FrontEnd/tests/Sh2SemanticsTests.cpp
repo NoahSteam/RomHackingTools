@@ -12,6 +12,7 @@
 
 #include "Decompiler/SaturnArchitecture.h"
 #include "emulate.hh"
+#include "Sh2EmulatorHooks.h"
 #include "memstate.hh"
 
 #include <cstring>
@@ -55,6 +56,7 @@ public:
         mState->setMemoryBank(mRegs.get());
         mState->setMemoryBank(mTemps.get());
         mBreaks.reset(new ghidra::BreakTableCallBack(t));
+        dts::HookSh2Userops(*mBreaks);
         mEmu.reset(new ghidra::EmulatePcodeCache(t, mState.get(), mBreaks.get()));
     }
     ~Machine()

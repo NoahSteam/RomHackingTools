@@ -56,6 +56,8 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0026-cspec-call-clobbers.patch` | `superh.cspec`: a call kills r0, r1, r4-r7, MACH, MACL and SR (T), as the SH ABI has them caller-saved, and keeps VBR; before, a register in neither list read after a call as the value before it. `Sh2SpecData.h` is regenerated. |
 | `0027-switch-default-is-case.patch` | `JumpBasic::foldInOneGuard` does not fold a guard into a switch when the guard's target is also one of the switch's destinations and a value the destination reads differs between the guard's edge and the switch block's (a `mova`'s r0): the default path took the switch block's value, and a reachable block was removed as unreachable. |
 | `0028-funcproto-set-effects.patch` | `FuncProto::setEffects`: the host sets one prototype's side-effect overrides (the registers a callee was proved to keep are unaffected by a call to it, where patch 0026 has the model kill them for every callee). |
+| `0033-engine-printed-value-fixes.patch` | Three printed-value defects: a return in the join space (r0:r1) is consumed whole, not narrowed to its low half (r1) and printed as the 4-byte return (r0); a boolean-typed constant other than 0 and 1 is printed as the integer, not `true`; an input replaced by a subvariable flow's temporary that an operation still reads is read zero-extended from the logical input, not as an input no register holds. |
+| `0034-sleigh-control-register-writes.patch` | `ldc` to SR, GBR and VBR (and `ldc.l`) call the user ops `Write_SR`, `Write_GBR`, `Write_VBR` with the value written, so a write that outlives the function stays in the pseudocode and its source stays a parameter. Changes `superh.sinc`; `sh-2.sla` and `Sh2SpecData.h` are regenerated from it. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -107,6 +109,8 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0024: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
   - 0027: `TestDefaultAlsoCase` (the default that is also a case: the write under the join's test stays, the control still folds), and the generator's replay of ledger A4-4 (seeds 68620 and 107923).
   - 0028: `TestCallsAndTraps` ("A3-2": a lent callee that keeps r4-r7, MACH, MACL or SR leaves them the caller's own; one that changes them does not), and the generator's `effects-ignored` check.
+  - 0033: `TestArea2Round3` (an 8-byte return of r0:r1, no `== true`, no `unaff_1...`) and `SaturnExplorerSh2PrintedCTests` (the printed value of 300 register-only functions, compiled with the system C compiler, against the emulator).
+  - 0034: `TestArea2Round3` (`Write_SR`, `Write_GBR`, `Write_VBR` in the text, the register a parameter), `SaturnExplorerSh2PrintedCTests` (the writes against the registers the run ends with), and the four emulator harnesses' `Sh2EmulatorHooks.h`.
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

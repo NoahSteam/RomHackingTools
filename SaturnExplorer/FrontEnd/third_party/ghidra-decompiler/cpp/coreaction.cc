@@ -18,6 +18,7 @@
  * Modified for SaturnExplorer: a load is printed in the block it is made in (patches/0012-load-in-place.patch).
  * Modified for SaturnExplorer: an unused load is held in every pass, not only the first (patches/0014-keep-unused-loads-late.patch).
  * Modified for SaturnExplorer: every load is held, not only the unused ones (patches/0018-hold-every-load.patch).
+ * Modified for SaturnExplorer: a return in the join space is consumed whole, never narrowed to its low half (patches/0033-engine-printed-value-fixes.patch).
  */
 #include "coreaction.hh"
 #include "condexe.hh"
@@ -4156,7 +4157,14 @@ uintb ActionDeadCode::gatherConsumedReturn(Funcdata &data)
     if (returnOp->isDead()) continue;
     if (returnOp->numInput() > 1) {
       Varnode *vn = returnOp->getIn(1);
-      consumeVal |= minimalmask(vn->getNZMask());
+      // SaturnExplorer: a return in the join space (r0:r1, the high half in r0) is consumed whole. Its
+      // non-zero bits could be only the low half, and the value would be narrowed to that half, but the
+      // low half is r1, which is not where a 4-byte return is (r0): the narrowed value would be printed
+      // as the function's return and lent as a 4-byte one in the wrong register (patch 0033).
+      if (vn->getSpace()->getType() == IPTR_JOIN)
+	consumeVal |= calc_mask(vn->getSize());
+      else
+	consumeVal |= minimalmask(vn->getNZMask());
     }
   }
   int4 val = data.getFuncProto().getReturnBytesConsumed();

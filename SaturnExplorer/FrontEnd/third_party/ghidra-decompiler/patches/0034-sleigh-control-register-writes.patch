@@ -1,0 +1,77 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.sinc b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+index b05b5c9..0d7305d 100644
+--- a/Ghidra/Processors/SuperH/data/languages/superh.sinc
++++ b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+@@ -3,6 +3,7 @@
+ # SH-2 semantics corrected: PR before the slot, MAC.L/MAC.W, XOR.B, @-Rn and DIV1 operand order (patches/0006-sleigh-sh2-semantics.patch).
+ # SR loads keep only the bits the SH-2 has and rte restores SR before its delay slot (patches/0019-sleigh-sr-rte.patch).
+ # trapa gives back the 8 bytes its handler's rte pops, after the call (patches/0025-sleigh-trapa-stack.patch).
++# ldc to SR, GBR and VBR also call a user op that carries the value written (patches/0034-sleigh-control-register-writes.patch).
+ 
+ define endian=big;
+ 
+@@ -1674,22 +1675,34 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ @endif
+ 
++# A load of SR, GBR or VBR is a side effect the caller sees (the interrupt mask, the base of the GBR
++# accesses, the vector table), and nothing in the function need read the register afterwards. Each load
++# also calls one of these, so that it stays in the code, in order, with the value written
++# (patches/0034-sleigh-control-register-writes.patch).
++define pcodeop Write_SR;
++define pcodeop Write_GBR;
++define pcodeop Write_VBR;
++
+ :ldc    rm_08_11,sr  is sr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00001110 
+ {
+     # T, S, I3-I0, Q and M are the bits an SH-2 has (Mednafen: z->SR &= 0x3F3).
+-    sr = rm_08_11 & 0x000003F3;
++    local value:4 = rm_08_11 & 0x000003F3;
++    sr = value;
++    Write_SR(value);
+ }
+ 
+ :ldc.l  @rm_08_11+,sr  is sr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00000111 
+ {
+-    sr = *rm_08_11 & 0x000003F3;
++    local value:4 = *rm_08_11 & 0x000003F3;
++    sr = value;
+     rm_08_11 = rm_08_11 + 4;
+-    
++    Write_SR(value);
+ }
+ 
+ :ldc    rm_08_11,gbr  is gbr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00011110 
+ {
+     gbr = rm_08_11;
++    Write_GBR(rm_08_11);
+ }
+ 
+ @if SH_VERSION == "2A"
+@@ -1701,19 +1714,24 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ :ldc.l  @rm_08_11+,gbr  is gbr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00010111 
+ {
+-    gbr = *rm_08_11;
++    local value:4 = *rm_08_11;
++    gbr = value;
+     rm_08_11 = rm_08_11 + 4;
++    Write_GBR(value);
+ }
+ 
+ :ldc    rm_08_11,vbr  is vbr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00101110 
+ {
+     vbr = rm_08_11;
++    Write_VBR(rm_08_11);
+ }
+ 
+ :ldc.l  @rm_08_11+,vbr  is vbr & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00100111 
+ {
+-    vbr = *rm_08_11;
++    local value:4 = *rm_08_11;
++    vbr = value;
+     rm_08_11 = rm_08_11 + 4;
++    Write_VBR(value);
+ }
+ 
+ :lds    rm_08_11,mach  is mach & opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00001010 
