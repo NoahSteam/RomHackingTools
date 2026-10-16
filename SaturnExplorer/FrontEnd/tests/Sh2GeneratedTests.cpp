@@ -3273,8 +3273,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         // a lent callee is known to change is not read as kept. The generator's functions never read their own
         // entry r8-r14, GBR or VBR but on purpose (Func::reads), so the text of one that calls such a callee
         // shows the register's entry value (`unaff_r13`, `in_gbr`) only if a call was taken to leave it alone:
-        // after the call it reads the callee's value, which prints as `extraout_r13`.
-        if (!r.calledAt.empty())
+        // after the call it reads the callee's value, which prints as `extraout_r13`. Only when every function it
+        // calls was lent a signature (as in check 11): a call to one that was not leaves the register as the
+        // calling convention has it, kept, however much the code there changes it.
+        bool everyCalleeLent = !r.calledAt.empty();
+        for (uint32_t c : r.calledAt)
+        {
+            const auto l = lent.find(c);
+            if (l == lent.end() || c == fn.layout.entry || !l->second.known) everyCalleeLent = false;
+        }
+        if (everyCalleeLent)
         {
             static const struct { int bit; const char* name; } kKept[] = { { 8, "r8" }, { 9, "r9" }, { 10, "r10" }, { 11, "r11" }, { 12, "r12" },
                                                                            { 13, "r13" }, { 14, "r14" }, { 17, "gbr" }, { 18, "vbr" } };

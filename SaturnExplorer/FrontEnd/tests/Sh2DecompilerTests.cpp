@@ -5593,6 +5593,29 @@ void TestCallsAndTraps()
             CHECK(!Has(lg.caller.Text(), "return param_1;"));
             CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, name));
         }
+        // The ledger's own b: `rts ; ldc r1,gbr`. The callee reads r1 and changes GBR; nothing in the callee observes
+        // GBR, so the engine drops the load and with it the read: no input is left to withhold on (A3-5 does not
+        // apply), and the change is the caller's to see.
+        {
+            const CallFixture g = { "GBR loaded from r1 by the callee", base,
+                                    withCallee({ 0x4F22, 0x441E, 0xB00C, 0x0009, 0x0012, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x411E }) };
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> 17) & 1u));
+            CHECK(Has(lg.caller.Text(), "return extraout_gbr;") && !Has(lg.caller.Text(), "return param_1;"));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "gbr"));
+        }
+        // MACH and MACL, which the model kills for every callee: set by a lent callee, they are its values.
+        for (int h = 0; h <= 1; ++h)
+        {
+            const CallFixture g = { h ? "MACH set by the callee" : "MACL set by the callee", base,
+                                    withCallee({ 0x4F22, uint16_t(h ? 0x440A : 0x441A), 0xB00C, 0x0009, uint16_t(h ? 0x000A : 0x001A), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, uint16_t(h ? 0x450A : 0x451A) }) };   // lds r5,mach / lds r5,macl
+            const Lent lg = lend(g);
+            const char* name = h ? "mach" : "macl";
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> (h ? 19 : 20)) & 1u));
+            CHECK(Has(lg.caller.Text(), (std::string("return extraout_") + name + ";").c_str()));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, name));
+        }
         // r15: the callee leaves 4 bytes of its own on the stack (add #-4,r15 ; rts ; mov.l r5,@r15) and the
         // caller pops them.
         {
@@ -5653,6 +5676,11 @@ void TestCallsAndTraps()
             { "r8", { 0x4F22, 0x6843, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x6083 }, "r8" },       // mov r8,r0
             { "r14 as a pointer", { 0x4F22, 0x6E43, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x60E2, 0x000B, 0x0009 }, "r14" },   // mov.l @r14,r0
             { "GBR", { 0x4F22, 0x441E, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xC600, 0x000B, 0x0009 }, "gbr" },   // mov.l @(0,gbr),r0
+            // T branched on, no value of it in r0: only the input the engine keeps shows it
+            { "T branched on", { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 },
+              { 0x8902, 0xE001, 0x000B, 0x0009, 0xE002, 0x000B, 0x0009 }, "sr" },   // bt L ; mov #1,r0 ; rts ; nop ; L: mov #2,r0 ; rts ; nop
+            // the whole SR, but computed from: the interrupt mask a caller set up
+            { "SR masked", { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x0002, 0xC9F0, 0x000B, 0x0009 }, "sr" },   // stc sr,r0 ; and #0xF0,r0 ; rts
         };
         for (const Input& in : reads)
         {
@@ -5688,6 +5716,18 @@ void TestCallsAndTraps()
             const CallFixture sr = { "SR copied to r0 in rts's slot", base, withCallee(noSetup, { 0x000B, 0x0002 }) };
             const Lent lsr = lend(sr);
             CHECK(!lsr.callee.prototype.known && Has(lsr.callee.prototypeWithheld, "computed from sr on entry"));
+        }
+
+        // A caller whose callee's registers share one set of origins is not a function that returns them (the
+        // first form of the dropped-return rule withheld 23 corpus functions that save r8 and call): the callee
+        // reads r8 only to save it and scratches r1 with a copy, then sets r0.
+        {
+            const CallFixture g = { "void caller of a callee that scratches r1 from r8", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x2F86, 0x6183, 0xE805, 0xE003, 0x000B, 0x68F6 }) };   // push r8 ; mov r8,r1 ; mov #5,r8 ; mov #3,r0 ; rts ; pop r8
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && ((lg.callee.prototype.effects.preserved >> 8) & 1u));
+            CHECK(lg.caller.prototype.known && lg.caller.prototypeWithheld.empty());
         }
 
         // ---- A3-4 (round 3): the address of a returned structure, in r2 ----------------------------------------
