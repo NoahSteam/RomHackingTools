@@ -3742,3 +3742,74 @@ image 008 that reports every lent prototype whose `preserved` misses a register 
 - `SE_GAME_LEND=1` (`TestGameLending`) was not rerun as such. The scratch lending run covers the same order and lending on
   image 008 (2,998 functions, 1,004 lent). Image 007 was not run.
 - Grammar 1 and longer generator windows. Not these areas; the fixers' runs stand.
+
+## Areas 1 and 8, round 2: the question that got no answer, and the badge that cannot say why
+
+Branch `review/1-8-round2-fix`, fix in `a4153ad`. Ledger rows A1-4, A1-5 and A8-1 are `fixed`. The open question of the round 2
+review (`mAutoPc` and a session reset) is a real hole and is fixed in the same commit. All five `kOpen` fixtures are moved into
+`kPinned`; `kOpen` is empty (a sentinel entry) and `SE_MODEL_OPEN=1` runs nothing.
+
+**Root cause (A1-4, A1-5).** One rule broken twice: `mAsked` means "this question was put and its answer, or its failure, is what is on
+screen". Two paths recorded a question as asked that nobody answered. (1) `Accept` threw away the answer to the outstanding request when
+the panel no longer held what it was asked under (a closed panel, the view moved) and cleared `mPending`, but not `mAsked`; the inputs
+returning to that question before the panel was shown again found it "asked already". (2) `Update` set `mAsked = q` before looking at
+`runner.Disabled()`, so a question formed while the runner was off was recorded without a request, and the runner's recovery (a new
+session, the stuck request ended) left it never asked.
+
+**Fixes (`DecompilerPanel.cpp`).** (1) A discarded answer to the outstanding request clears `mAsked`, except when the user Stopped it
+(`mPending.cancelled`): the Stop is the user's answer, and A1-3's rule (not asked again until Enter or Refresh) stands. A panel that
+is shown asks the new question in the same `Update`, so nothing changes for it. (2) `mAsked = q` is set after the cache lookup and the
+disabled check, i.e. only when the question is sent or answered from the cache. A disabled runner leaves it unrecorded, so each
+frame re-forms the question and does nothing until the runner takes requests again. This costs one `Question` build per frame while
+disabled and sends nothing (`Submissions()` is unchanged; the control "A1-5 (control, disabled)" runs through it).
+
+**A8-1: the stale reason.** `DecompilerPanel::GetStaleReason()` returns `None`, `Pending` (a replacement was asked for and is coming),
+`Stopped` (the user stopped it, including a Stop the runner has not yet acknowledged), `Disabled` (the runner is off for the session) or
+`NeedsRefresh` (nothing outstanding, nothing will be asked on its own: a running emulator's lag, or an entry the box cannot take).
+`StaleTooltip()` is the text the badge draws, one sentence for each; only `Pending` says "its replacement is shown when it is ready". The
+model's `CheckStaleReason` runs on every idle check and every held-engine check of every sequence: the reason exists exactly when
+`ShownStale()` does; with a request outstanding the reason is Pending (or Stopped) and the tooltip promises a replacement exactly for
+Pending; with nothing outstanding the tooltip never promises one, Disabled is the reason exactly when the runner is disabled, the
+user's Stop on this very question reads Stopped, and each text names what to do (Refresh, stopped, disabled). `DECOMPILER_GUIDE.md` has a
+row for the plain **stale** badge.
+
+**The `mAutoPc` question.** `ResetSession` kept `mAutoPcValid`/`mAutoPc`, the PC the last auto-refresh was for, "not refreshed for again".
+That is a verdict about a session's PC. After a reconnect the new session's first capture is not an auto-refresh (it is taken because
+no snapshot is held), so the old value survives it, and when the followed PC later leaves the shown function and lands on that same
+value the one refresh that PC is owed is suppressed and the old function stays on screen. The model has no registers, so no model
+sequence can show it; the fix is a panel test, `TestAutoRefreshPcBelongsToTheSession` (park the PC in a hole and let it refresh; reset
+the session with a new source, PC back inside the function; PC to the hole again: one more capture), and `ResetSession` forgets the PC.
+Also considered and left out: clearing `mAsked` in `Update`'s "disabled or session ended" drop of the outstanding request. A first
+version did. No sequence distinguishes it (mutation survived), and it is dead in `App`: the runner re-enables only in a new epoch
+(`RecoverLocked`), a session ends with `InvalidateSession` plus `ResetSession` together (`App.cpp:543`), and `ResetSession` forgets
+`mAsked`. It was removed, with a comment saying why.
+
+**Mutation check** (each one expression; revert the fix, the pinned fixture fails; restored, `ctest` passes).
+
+| Break | Fails | First check |
+|---|---|---|
+| a discarded answer does not clear `mAsked` (A1-4 as it was) | "A1-4 (resume)", "(scrub)", "(BIOS)", "(start)" (4 of 4); no random seed | NOT REFRESHED |
+| `mAsked = q` before the disabled check (A1-5 as it was) | "A1-5" | NOT REFRESHED |
+| the reason is always Pending when stale | seeds 2, 3 and others, "A1-3", "A8-1 (stopped)", "A8-1 (disabled)" | STALE REASON |
+| no Disabled reason | "A1-5", "A1-5 (control, disabled)", "A8-1 (disabled)" | STALE REASON |
+| the Stop is not remembered (`mStopped` never set) | seeds 6, 15, 16, "A1-3", "A8-1 (stopped)" | STALE REASON |
+| the Stopped tooltip promises a replacement | seeds 5, 6, 15, 16, "A1-3", "A8-1 (stopped)" | STALE REASON |
+| `ResetSession` keeps the auto-refresh PC | `TestAutoRefreshPcBelongsToTheSession` | panel test |
+| a clear of `mAsked` in the `Update` drop (removed) | none | survivor, see above |
+
+The A1-4 break is invisible to the 18 default seeds and to all 320 of the long run, because the generator never closes the panel, moves
+the view and returns it before reopening; the four pinned sequences are the only check, as they were the only way the reviewer found it.
+
+**Matrix** (RelWithDebInfo, a 4-core container shared with other agents). `SaturnExplorerDecompilerModelTests` default run: 18 seeds,
+14 pinned sequences, 0 failures (808 operations, 832 idle checks, 262 held-engine stale checks, 566 submissions, 27 discarded). The
+same with `SE_MODEL_SEEDS=320` (147 s): 0 of 320 fail; 12,643 operations (1,798 without effect), 858 finish-then-change races, 69 stops,
+29 budget stalls, 7,305 results checked at install, 12,595 idle checks, 4,174 held-engine stale checks, 1,414 walks, 8,691 submissions,
+419 discarded answers, 1,584 cache hits. Full `ctest -j2`: 96 of 96 pass, among them DecompilerRunnerTests (64.6 s),
+DecompilerPanelTests, DecompilerModelTests, DecompilerFaultTests, Sh2GeneratedTests and Sh2DecompilerTests. Not run here: the game
+corpus (not in the repository), ASan/UBSan/LSan, the timing comparison against the previous master.
+
+**Not done.** `App` itself is still out of the model's reach (the scrub identity, the finder's hints, `AdoptNewEmulatorInstance`). The
+model still has no registers, so auto-refresh, Follow PC and the halt hint are covered only by `DecompilerPanelTests`. The `NeedsRefresh`
+tooltip for an entry the box cannot take is not reached by the model (it types only valid entries) and is read, not run. The "unimplemented"
+indicator and `DecompileStatus::Disabled` are unchanged from the round 2 review (unreachable on this spec; produced by nothing). The
+speed regression the review noted (a function over the budget re-runs the full budget on every scrubbed or stepped frame) is untouched.
