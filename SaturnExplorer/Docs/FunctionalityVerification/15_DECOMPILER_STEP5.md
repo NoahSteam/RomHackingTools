@@ -5111,3 +5111,80 @@ whole SR including T, which the loop's compare set; the one `Write_VBR(extraout_
 - **Merge:** patches 0033 and 0034 add two rows at the end of `patches/README.md` and `VENDOR.md` (0029 to 0032 will too: a trivial
   conflict); `Sh2Decompiler.cpp` has one changed condition (section 5); `Sh2DecompilerTests.cpp` has `TestArea2Round3` added before
   `TestAllocationFailureIsReported` and the hook line in `RunMachine`; the `.github` workflow and sanitizer script have one step each.
+
+## Areas 1 and 8, round 3: the too-large loop, the badge that blamed the box, and a refusal that was forgotten
+
+Branch `review/1-8-round3-fix`, fix in `b1e2e0e` (tests tightened in `f79e7c7`). Ledger rows A1-6, A8-2, A8-3 and A8-4 are `fixed b1e2e0e`.
+The reviewer's open question is a real finding and is recorded as **A1-7 (P3, open)**: see below. All four fixtures are directed
+`DecompilerPanelTests` sequences, as the review said, plus two model pins for A8-3.
+
+**Root causes.**
+
+- **A1-6.** The auto-refresh rule was "only once the followed PC has left the function shown", tested as `!mShown.InBody(pc)`. A
+  too-large answer has no body, so every PC had left it. Fix: while the shown answer is `TooLarge`, the panel asks the same question a
+  refresh would put -- which entry Follow PC resolves this PC to (`FindFunctionContaining` on the held snapshot, with the hints
+  `Resolve` uses, now `FinderHintsFor`) -- and the PC is inside when that is the entry that ran out of budget
+  (`mShownAsked`, recorded by `Install`, since a too-large result carries no body to say). The finder pass runs at most once per
+  `kAutoRefreshFrames` (`mTooLargeCheckTick`), not every frame the PC sits there. Leaving the function refreshes once, as before.
+- **A8-2.** `StaleTooltip` read `mResolved && !mEntryOk` as "the entry box is wrong". `Resolve` now records `EntryFailure` (refused,
+  not code, no registers, not found) and the tooltip names what to change for the target: the followed PC, the missing registers, the
+  address "Decompile" asked about; the entry-box wording stays for a refused or non-code entry. The failure branch comes before the
+  running emulator's "moved on, press Refresh", because a refresh alone would not help with the PC in the BIOS.
+- **A8-3.** `ShownStale()` counted `mPending.active`. Stale is now a property of the output against the inputs on screen (view, names,
+  volatile list, function set, entry); a request outstanding for the very question shown is "decompiling..." and
+  `StaleReason::Pending` appears only when the inputs differ. So Refresh on current output keeps full brightness and the halt hint.
+- **A8-4.** The box's refusal set `mResolved`/`mEntryOk=false` but left the target alone, so the next `Resolve` (any capture) brought
+  the old target back. `mEntryRefused` now makes `Resolve` return the refusal until `SetTarget` (a valid entry, Follow PC toggled,
+  "Decompile" from elsewhere). The retry of an unanswered Follow PC (`unanswered`) skips a refusal, so a moving PC does not copy 2 MiB
+  per interval for it.
+
+**Stepping a paused emulator inside a too-large function is not changed, and is accepted** (ledger A1-6). The brief asked that a paused
+step not re-run. A paused step is a new snapshot, so a new question, as `DECOMPILER_GUIDE.md` documents ("another frame asks again").
+Carrying the timing verdict across snapshots would also carry it across an edit that shrinks the function, and the two are
+indistinguishable at the view identity (both move only the derive serial). The cost is bounded by the user's stepping, not by time.
+
+**The model.** `CheckStaleMark` (held engine) is now two-way: a stale mark is a failure when the inputs shown are the inputs now,
+as well as required when they differ. Its one excuse is the names: the panel keys names by generation, so a rename undone is
+another generation and conservatively stale though the content is equal (`shownNamesGen`). `CheckStaleReason` accepts "Enter" as well
+as "Refresh" for a `NeedsRefresh` tooltip (the new Containing text). Pinned "A8-3" (`select A; wait; hold; refresh; wait`) and
+"A8-3 (twice)" (`select D; wait; hold; refresh; refresh; wait`). `kOpen` stays empty.
+
+**A1-7 (open, P3): the emulator-load wait re-asks a paused panel every frame.** Read in `App.cpp`: `restoreWaiting =
+mRestoreOutstanding > 0` makes a paused emulator capture every UI frame, and the `se_live_capture_unchanged` shortcut that spares a
+halted one is deliberately not applied (the restore counters are read inside that block). `mRestoreTimedOut` after 10 s only
+silences the log and lifts the recorder's wait; `mRestoreOutstanding` stays up until `ResolveRestoreWait`. Each capture runs
+`RebuildDerived`, moving `se_derive_serial` with identical bytes, so a `LivePaused` view has a new identity every frame and the panel
+captures, submits and supersedes its own run: a function longer than a frame is never shown while the wait lasts (forever against an
+emulator that never confirms). Not reproduced (needs a live server that withholds confirmation). Not fixed: the race-free fix needs
+a driver accessor for the captured snapshot's `revision` and a decompiler-only view serial (derive serial minus byte-identical
+recaptures, with no edit between), in the driver and `App`'s per-frame capture, which cannot be exercised end to end here and is
+outside the panel/test scope of this fix. A check-before-capture with `se_live_capture_unchanged` alone was rejected: a snapshot
+published between the check and the capture would be taken while counted as a repeat, which is a stale-shown-as-current. Freezing the
+view during the wait was rejected too: it would hide real changes against an emulator that applied the load but never confirmed.
+
+**Mutation check** (each one expression; revert the fix, the new test fails; restored, passes).
+
+| Break | Fails |
+|---|---|
+| TooLarge branch of `autoDue` disabled (A1-6 as it was) | `TestAutoRefreshTooLargeFunctionIsNotRerun` (5 checks: captures, submissions, `RunsStarted`, and the two that follow) |
+| `ShownStale` counts `mPending.active` again (A8-3 as it was) | `TestRefreshOfCurrentOutputIsNotStale` (4 checks); model: seeds 8, 10, 11, 13, 17 of the default 18, and both pins "A8-3" and "A8-3 (twice)" (STALE SHOWN WHILE CURRENT) |
+| `Resolve` ignores `mEntryRefused` (A8-4 as it was) | `TestRefusedEntryStandsUntilChanged` (4 checks) |
+| `unanswered` retry does not skip a refusal | `TestRefusedEntryStandsUntilChanged` (the running-emulator part) |
+| `NotFound` and `NoRegisters` recorded as `NotCode` (A8-2 as it was) | `TestStaleTooltipNamesTheCause` (7 checks: Follow PC, no registers, Containing) |
+| the running emulator's "moved on" text ahead of the failure text | `TestStaleTooltipNamesTheCause` (the running-emulator part) |
+
+Not mutation-checked: the once-per-interval throttle on the finder pass (`mTooLargeCheckTick`) changes cost, not behaviour, and no
+test counts finder calls.
+
+**Matrix** (RelWithDebInfo, a 4-core container shared with other agents, load average up to 25). `SaturnExplorerDecompilerModelTests`
+default run: 18 seeds and 16 pinned sequences, 0 failures (817 operations, 478 results checked at install, 849 idle checks, 265
+held-engine stale checks, 576 submissions, 27 discarded). `SE_MODEL_SEEDS=300` (164 s): 0 of 300 fail; 11,907 operations (1,729
+without effect), 814 finish-then-change races, 65 stops, 29 budget stalls, 6,879 results checked at install, 11,923 idle checks, 3,898
+held-engine stale checks (each now two-way), 1,330 walks, 8,144 submissions, 402 discarded answers, 1,499 cache hits.
+`DecompilerPanelTests` (4 new tests; about 5 s) and `DecompilerRunnerTests` (41.6 s): pass. Full `ctest`: 96 of 96 pass (`ctest -j2`, 109 s), among them DecompilerRunnerTests, DecompilerPanelTests, DecompilerModelTests, DecompilerFaultTests, Sh2GeneratedTests and Sh2DecompilerTests. Not run here:
+the game corpus (not in the repository), ASan/UBSan/LSan, the timing comparison against the previous master.
+
+**Not done.** A1-7 (above). Stepping inside a too-large function still asks again (accepted). The lent-prototype set is not part of
+"stale": a caller shown with an older callee signature is not marked while its re-ask runs (it was before, by the pending rule), as
+it never was when nothing was outstanding; the model's `Sig` does not carry prototypes either. `App` is still out of the model's
+reach. The "unimplemented" indicator and `DecompileStatus::Disabled` are unchanged.

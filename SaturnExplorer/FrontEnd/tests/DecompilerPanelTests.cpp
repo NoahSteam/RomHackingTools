@@ -2095,6 +2095,276 @@ void TestEntryParsing()
     CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().entry == dts::kFixture1Callee; }));
 }
 
+// Areas 1 and 8, round 3 (A1-6). With Follow PC and auto-refresh, a function the runner found too
+// large has no body, so every PC counted as having left it and it was run again every debounce
+// interval for as long as the PC stayed inside -- a core busy for as long as the game ran there.
+// The rule "only once the PC has left the function shown" holds for it too: the PC is inside while
+// Follow PC resolves it to the entry that ran out of budget.
+void TestAutoRefreshTooLargeFunctionIsNotRerun()
+{
+    RunnerOptions o;
+    o.budgetSeconds = 0.3;
+    Fixture f(o);
+    std::vector<uint8_t> image(f.backend.hw.begin(), f.backend.hw.end());
+    dts::PlaceDiamonds(image, 1000);
+    std::copy(image.begin(), image.end(), f.backend.hw.begin());
+    f.PutWord(dts::kDiamondsBase - 4, 0x000B);   // the end of the function before it, so the rts scan finds the entry
+    f.PutWord(dts::kDiamondsBase - 2, 0x0009);
+    ++f.backend.serial;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    f.regs[0].pc = dts::kDiamondsBase + 12;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    CHECK(f.PumpUntil([&] { return f.panel.Shown() && !f.panel.Pending(); }));
+    CHECK(f.Shown().status == DecompileStatus::TooLarge);
+    CHECK(f.Shown().entry == dts::kDiamondsBase);
+    f.panel.SetAutoRefresh(true);
+
+    // About two seconds of a running emulator whose PC wanders through the function: at 16 ms a
+    // frame that is three debounce intervals and, before the fix, three runs of the full budget.
+    const uint64_t runs0 = f.runner.RunsStarted(), caps0 = f.panel.Captures(), subs0 = f.panel.Submissions();
+    for (int i = 0; i < 4 * DecompilerPanel::kAutoRefreshFrames; ++i)
+    {
+        f.regs[0].pc = dts::kDiamondsBase + 12u * static_cast<uint32_t>((i * 7) % 900);
+        tick(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    CHECK(f.panel.Captures() == caps0);
+    CHECK(f.panel.Submissions() == subs0);
+    CHECK(f.runner.RunsStarted() == runs0);
+    CHECK(f.Shown().status == DecompileStatus::TooLarge && !f.panel.Pending());
+
+    // Leaving it is refreshed for once: the small function the PC is in now.
+    f.regs[0].pc = dts::kFixture1AddOne;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == caps0 + 1);
+    CHECK(f.WaitShown("+ 1"));
+    CHECK(f.Shown().entry == dts::kFixture1Caller);
+
+    // ...and coming back is a new look at the big one, which runs out of budget again.
+    f.regs[0].pc = dts::kDiamondsBase + 12 * 450;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == caps0 + 2);
+    CHECK(f.PumpUntil([&] { return f.panel.Shown() && !f.panel.Pending() && f.Shown().status == DecompileStatus::TooLarge; }));
+    const uint64_t runs1 = f.runner.RunsStarted();
+    tick(2 * DecompilerPanel::kAutoRefreshFrames);
+    CHECK(f.runner.RunsStarted() == runs1);
+}
+
+// A8-2. The stale badge's tooltip for an output nothing will replace says what to change for the
+// kind of target that found no function. The entry box still holds the shown function's entry, a
+// valid one, when Follow PC is in the BIOS, has no registers, or "Decompile" was asked about an
+// address no function holds; telling the user to correct it was wrong.
+void TestStaleTooltipNamesTheCause()
+{
+    {
+        // Follow PC, the PC in the BIOS (no image mapped).
+        Fixture f;
+        f.kind = DecompViewKind::LivePaused;
+        CHECK(f.WaitShown("+ 1"));
+        f.regs[0].pc = 0x00001FF0u;
+        ++f.frame;
+        f.Idle(3);
+        CHECK(f.panel.ShownStale() && f.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh);
+        CHECK(Has(f.panel.EntryError(), "No function found containing 0x00001FF0"));
+        const std::string tip = f.panel.StaleTooltip();
+        CHECK(Has(tip, "Follow PC finds no function at the PC"));
+        CHECK(!Has(tip, "entry box"));
+        CHECK(std::string(f.panel.EntryText()) == "06004000");   // untouched, and valid
+        // The PC returns to a function: answered, not stale, no tooltip.
+        f.regs[0].pc = dts::kFixture1AddOne;
+        ++f.frame;
+        f.Idle();   // the panel sees the new frame first: until it has, the old output is shown and not pending
+        CHECK(f.PumpUntil([&] { return !f.panel.ShownStale() && !f.panel.Pending(); }));
+        CHECK(Has(f.Shown().Text(), "+ 1") && f.panel.StaleTooltip().empty());
+    }
+    {
+        // Follow PC, no registers to follow.
+        Fixture f;
+        f.kind = DecompViewKind::LivePaused;
+        CHECK(f.WaitShown("+ 1"));
+        f.haveRegs[0] = false;
+        ++f.frame;
+        f.Idle(3);
+        CHECK(f.panel.ShownStale() && f.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh);
+        CHECK(Has(f.panel.EntryError(), "no master SH-2 registers"));
+        const std::string tip = f.panel.StaleTooltip();
+        CHECK(Has(tip, "no registers for Follow PC to read"));
+        CHECK(!Has(tip, "entry box names"));
+    }
+    {
+        // "Decompile" (Containing) on an address with no function.
+        Fixture f;
+        CHECK(f.WaitShown("+ 1"));
+        f.panel.ShowFunctionContaining(0, 0x00001FF0u);
+        f.Idle(3);
+        CHECK(f.panel.ShownStale() && f.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh);
+        const std::string tip = f.panel.StaleTooltip();
+        CHECK(Has(tip, "No function was found containing 0x00001FF0"));
+        CHECK(Has(tip, "address you asked about"));
+        CHECK(!Has(tip, "Follow PC") && !Has(tip, "entry box names"));
+    }
+    {
+        // A running emulator is stale for moving on as well, but a refresh would not help while the
+        // PC is where no function is: the tooltip names the PC, not just the lag.
+        Fixture f;
+        f.kind = DecompViewKind::LiveRunning;
+        f.trackSerial = false;
+        CHECK(f.WaitShown("+ 1"));
+        f.regs[0].pc = 0x00001FF0u;
+        ++f.frame;
+        ++f.fixedSerial;
+        f.Idle();
+        CHECK(Has(f.panel.StaleTooltip(), "The emulator has moved on"));   // before it is looked at
+        f.ClickItem("refresh");
+        f.Idle(3);
+        CHECK(f.panel.ShownStale() && !f.panel.EntryError().empty());
+        CHECK(Has(f.panel.StaleTooltip(), "Follow PC finds no function at the PC"));
+    }
+    {
+        // An entry typed that is not code memory, and one that is not an address: the box is what to fix.
+        Fixture f;
+        CHECK(f.WaitShown("+ 1"));
+        f.TypeInto("entry", "FFFFFFF0");
+        f.Idle(2);
+        CHECK(f.panel.ShownStale() && f.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh);
+        CHECK(Has(f.panel.EntryError(), "is not code memory"));
+        CHECK(Has(f.panel.StaleTooltip(), "the entry box names no function"));
+        f.TypeInto("entry", "zz");
+        f.Idle(2);
+        CHECK(f.panel.ShownStale());
+        CHECK(Has(f.panel.StaleTooltip(), "the entry box names no function"));
+    }
+}
+
+// A8-3. Refresh on output that already answers exactly the inputs on screen is not stale while the
+// replacement runs: nothing changed, "decompiling..." says a run is under way, and the output keeps
+// its full brightness and the halt hint.
+void TestRefreshOfCurrentOutputIsNotStale()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LivePaused;
+    f.PutWord(dts::kFixture1Jsr - 2, 0x6042);   // as TestRegisterHintAtHalt: a computed call
+    ++f.backend.serial;
+    f.regs[0].pc = dts::kFixture1Jsr;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    const SnapshotKey before = f.Shown().key;
+    CHECK(!f.panel.ShownStale() && f.panel.HintText() == "r0 = 0x06005000 at the halt");
+
+    f.gate.Close();
+    f.ClickItem("refresh");
+    CHECK(f.gate.WaitHeld());
+    f.Idle(2);
+    CHECK(f.panel.Pending());
+    CHECK(f.Held() == before);                                       // nothing moved
+    CHECK(!f.panel.ShownStale());                                    // the output is the answer for the inputs
+    CHECK(f.panel.GetStaleReason() == DecompilerPanel::StaleReason::None);
+    CHECK(f.panel.StaleTooltip().empty());
+    CHECK(f.panel.HintText() == "r0 = 0x06005000 at the halt");      // the hint is kept
+    f.gate.Open();
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    CHECK(!f.panel.ShownStale() && f.panel.HintText() == "r0 = 0x06005000 at the halt");
+
+    // Output for other inputs is still stale while its replacement is pending, and says it is coming.
+    f.gate.Close();
+    f.PutWord(dts::kFixture1Caller + 0x100, 0x0009);   // an edit the snapshot sees (the serial moves)
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.gate.WaitHeld());
+    f.Idle(2);
+    CHECK(f.panel.Pending() && f.panel.ShownStale());
+    CHECK(f.panel.GetStaleReason() == DecompilerPanel::StaleReason::Pending);
+    CHECK(Has(f.panel.StaleTooltip(), "its replacement is shown when it is ready"));
+    f.gate.Open();
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && !f.panel.ShownStale(); }));
+}
+
+// A8-4. An entry the box refuses stays the panel's question until the entry changes. The next
+// resolve -- which follows any capture -- used to bring the old target back and show it as current
+// while the box still said "zz".
+void TestRefusedEntryStandsUntilChanged()
+{
+    {
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown("+ 1"));
+    f.TypeInto("entry", "zz");
+    f.Idle(2);
+    CHECK(f.panel.ShownStale() && f.panel.GetStaleReason() == DecompilerPanel::StaleReason::NeedsRefresh);
+    CHECK(Has(f.panel.EntryError(), "Type the function's entry as a hex address"));
+    CHECK(std::string(f.panel.EntryText()) == "zz");
+
+    // An edit to a byte no function reads, and another frame: each captures and resolves again.
+    f.backend.hw[0x0600F000u - kHw] = 0x11;
+    ++f.backend.serial;
+    f.Idle(4);
+    ++f.frame;
+    f.Idle(4);
+    CHECK(f.panel.ShownStale());                                                      // still the refusal's output
+    CHECK(Has(f.panel.EntryError(), "Type the function's entry as a hex address"));
+    CHECK(std::string(f.panel.EntryText()) == "zz");
+    CHECK(f.panel.WantedEntry() == 0);
+    CHECK(Has(f.panel.StaleTooltip(), "the entry box names no function"));
+
+    // A start set inside the function the old target resolves to, which also re-resolves it.
+    f.bounds.SetEntry(dts::kFixture1Caller);
+    f.Idle(4);
+    CHECK(f.panel.ShownStale() && f.panel.WantedEntry() == 0);
+
+    // The user's answer: a good entry in the box.
+    f.TypeInto("entry", "06005000");
+    CHECK(f.WaitShown());
+    f.Idle(2);
+    CHECK(f.Shown().entry == dts::kFixture1Callee);
+    CHECK(!f.panel.ShownStale() && f.panel.EntryError().empty());
+
+    // Choosing another target also ends it (a Decompile from Assembly).
+    f.TypeInto("entry", "zz");
+    f.Idle(2);
+    CHECK(f.panel.ShownStale());
+    f.panel.ShowFunctionContaining(0, dts::kFixture1AddOne);
+    CHECK(f.WaitShown("+ 1"));
+    f.Idle(2);
+    CHECK(!f.panel.ShownStale() && f.panel.EntryError().empty());
+    }
+
+    // A refused entry on a followed, running emulator is not an unanswered Follow PC: the PC moving
+    // does not retry it every interval with a 2 MiB copy each.
+    Fixture g;
+    g.kind = DecompViewKind::LiveRunning;
+    g.trackSerial = false;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++g.frame;
+            ++g.fixedSerial;
+            g.Idle();
+        }
+    };
+    CHECK(g.WaitShown("+ 1"));
+    g.TypeInto("entry", "zz");   // the target stays Follow PC
+    g.Idle(2);
+    CHECK(g.panel.FollowPc() && g.panel.ShownStale());
+    const uint64_t caps = g.panel.Captures();
+    for (int i = 0; i < 3 * DecompilerPanel::kAutoRefreshFrames; ++i)
+    {
+        g.regs[0].pc = 0x00002000u + 2u * static_cast<uint32_t>(i);
+        tick(1);
+    }
+    CHECK(g.panel.Captures() == caps);
+    CHECK(Has(g.panel.EntryError(), "Type the function's entry as a hex address"));
+}
+
 // Review round 1, finding 1: a runner whose worker cannot start does not take the application
 // down: Start returns null with the reason, the engine claim is not left held (the next runner
 // starts normally), and the panel shows the reason instead of nothing.
@@ -2178,6 +2448,10 @@ int main(int argc, char** argv)
         RUN(TestRunningLiveUnansweredFollowRetries());
         RUN(TestEntryParsing());
         RUN(TestEntryBoxFollowsShownFunction());
+        RUN(TestAutoRefreshTooLargeFunctionIsNotRerun());
+        RUN(TestStaleTooltipNamesTheCause());
+        RUN(TestRefreshOfCurrentOutputIsNotStale());
+        RUN(TestRefusedEntryStandsUntilChanged());
         RUN(TestRunnerStartFailure());
     }
     catch (std::exception& e)

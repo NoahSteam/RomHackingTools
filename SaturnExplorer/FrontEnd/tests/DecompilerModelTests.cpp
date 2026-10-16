@@ -923,6 +923,7 @@ struct Rig
     uint64_t frames = 0;
     std::vector<Install> installs;
     Sig shown;               // the inputs the shown result was installed under
+    uint64_t shownNamesGen = 0;   // ...and the names generation then: the panel keys the names by it, not by content
     bool haveShown = false;
     Sig stopped;
     bool haveStopped = false;
@@ -1142,6 +1143,7 @@ struct Rig
                     if (memo.starved[i].Same(last.sig)) memo.starved.erase(memo.starved.begin() + static_cast<std::ptrdiff_t>(i));
         }
         shown = installs.back().sig;
+        shownNamesGen = namesGeneration;
         haveShown = true;
         haveStopped = false;
     }
@@ -1241,8 +1243,8 @@ struct Rig
             else if (reason == R::Stopped && !haveStopped) why = "the reason is Stopped though the user stopped nothing";
             else if (reason != R::Stopped && !runner.Disabled() && haveStopped && SigOf(held).Same(stopped))
                 why = "the user stopped this question and the badge does not say so";
-            else if (reason == R::NeedsRefresh && tip.find("Refresh") == std::string::npos)
-                why = "a stale output needing the user does not say to press Refresh";
+            else if (reason == R::NeedsRefresh && tip.find("Refresh") == std::string::npos && tip.find("Enter") == std::string::npos)
+                why = "a stale output needing the user does not say to press Refresh or Enter";
             else if (reason == R::Disabled && tip.find("disabled") == std::string::npos) why = "the Disabled tooltip does not say so";
             else if (reason == R::Stopped && tip.find("stopped") == std::string::npos) why = "the Stopped tooltip does not say so";
         }
@@ -1260,7 +1262,21 @@ struct Rig
         if (failed || !haveShown || selected == -2) return;
         ++gStats.heldChecks;
         const Sig now = ViewSig();
-        if (shown.Same(now) || panel.ShownStale()) return;
+        const bool same = shown.Same(now);
+        const bool stale = panel.ShownStale();
+        // Both ways (A8-3): stale is a property of the output against the inputs, so a request
+        // outstanding for the very inputs shown (Refresh on current output) does not make it so.
+        // The one excuse is the names: the panel keys them by generation, so a rename undone is
+        // another generation and the output conservatively stale, though the content is equal.
+        const bool namesMoved = shownNamesGen != namesGeneration;
+        if (same && stale && !namesMoved)
+        {
+            Fail("STALE SHOWN WHILE CURRENT (checked with the engine held): the result on screen was made from the "
+                 "inputs now, and is marked stale because a replacement is outstanding\n  shown under " + DescribeSig(shown) +
+                 "\n  pending " + std::to_string(panel.Pending()));
+            return;
+        }
+        if (same || stale) return;
         Fail("STALE SHOWN AS CURRENT (P1, checked with the engine held): the result on screen was made from other inputs "
              "than the ones now, and carries no stale mark\n  shown under " + DescribeSig(shown) + "\n  now          " +
              DescribeSig(now));
@@ -1951,7 +1967,7 @@ bool RunSeed(Oracle& oracle, uint64_t seed, bool verbose, const std::set<int>& s
 }
 
 // The default run: this many seeds, then the shrunk sequences of the findings fixed from this model
-// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5 and A8-1), which stay in the default run as regression pins.
+// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5, A8-1 and A8-3), which stay in the default run as regression pins.
 const uint64_t kDefaultSeeds = 18;
 
 struct Pinned
@@ -1989,6 +2005,11 @@ const Pinned kPinned[] = {
     // step of every sequence; these are the two states it first reads without a replacement coming.
     { "A8-1 (stopped)", "hold; select A; stop; wait", "C,A", 0 },
     { "A8-1 (disabled)", "select A; wedge; edit A 0 1; wait", "C,A", 0 },
+    // Refresh on output that already answers the inputs is not stale while the replacement runs (A8-3):
+    // the held-engine check forbids a stale mark when the inputs are the ones shown, not only requires
+    // one when they differ.
+    { "A8-3", "select A; wait; hold; refresh; wait", "C,A", 0 },
+    { "A8-3 (twice)", "select D; wait; hold; refresh; refresh; wait", "D,C,A", 0 },
 };
 
 // The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
