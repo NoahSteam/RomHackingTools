@@ -128,7 +128,7 @@ inline bool NotDecodedFamily(NarrowAccess f) { return f == NarrowAccess::OnChipS
 struct Stats
 {
     size_t onchipCells = 0, scuCells = 0, blockRegs = 0, unnamedAddresses = 0, busFacts = 0, reached = 0, unreached = 0, errors = 0,
-           effects = 0, undecodedRegs = 0, misaligned = 0, writeEffectRegs = 0;
+           effects = 0, undecodedRegs = 0, misaligned = 0, writeEffectRegs = 0, valueActionRegs = 0;
 };
 
 struct Problems
@@ -359,12 +359,15 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                        (write ? wrKey : rdKey) + " label 0x" + Hex(unsigned(label), 1) + (meaningful ? " does something" : " does not"));
             if (write && allowed)
             {
-                bool drawing = false, constant = false, ends = false;
+                bool drawing = false, constant = false, ends = false, valueActs = false;
                 for (const std::string& key : { wrKey, wrKey2 })
                 {
                     const Handler* h = key.empty() ? nullptr : c.Get(key);
                     const Group* g = h ? h->At(unsigned(label)) : nullptr;
                     drawing |= g && g->Has('G');
+                    // V (A5-55): the value written chooses the action -- the SCSP's DMA start (DTLG's EX), its interrupt clears (SCIRE, MCIRE),
+                    // the SMPC's command (COMREG), VDP1's manual frame change (FBCR's FCM). No line shows it, so a note must.
+                    valueActs |= g && g->Has('V');
                     constant |= g && g->Has('F') && key == "smpc.wr";
                     // VDP1's ENDR (A5-32). The SCU is judged in CheckScu; the SCSP common block's F is bookkeeping (MPROG_Dirty, a timer
                     // reload under a condition) and is not an effect a note would help with: decided, not checked.
@@ -376,6 +379,12 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                     if (WriteEffects(r.address, 2, false, 0).empty())
                         pr.Add(std::string(r.name) + ": the handler acts on a write whatever it stores (F) and WriteEffects says nothing");
                 }
+                if (valueActs)
+                {
+                    ++st.valueActionRegs;
+                    if (WriteEffects(r.address, r.size, false, 0).empty())
+                        pr.Add(std::string(r.name) + ": the handler acts on the value written (V: a latched action or cleared pending bits) and WriteEffects says nothing");
+                }
                 if (drawing && WriteEffects(r.address, 2, false, 0).empty())
                     pr.Add(std::string(r.name) + ": the handler starts drawing on a write and WriteEffects says nothing");
                 if (constant && !r.onWrite)
@@ -385,6 +394,28 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
             }
             if (!write && allowed && bool(r.onRead) != effect)
                 pr.Add(std::string(r.name) + ": " + (r.onRead ? "onRead says a read has an effect" : "the handler has a read effect and the register has no onRead") + " (" + rdKey + " label 0x" + Hex(unsigned(label), 1) + ")");
+        }
+    }
+}
+
+// The SCSP's slot registers (32 slots of 16 words below 0x400): not in the register table, they are unnamed, but a handler label can act on
+// the value there too -- word 0's KYONEX keys every slot (A5-55). Each label with V must have a WriteEffects text at every slot.
+inline void CheckScspSlots(const Cases& c, Stats& st, Problems& pr)
+{
+    const Handler* h = c.Get("scsp.slot.wr");
+    if (!h) { pr.Add("no handler scsp.slot.wr"); return; }
+    for (unsigned label = 0; label < 16; ++label)
+    {
+        const Group* g = h->At(label);
+        if (!g || !g->Has('V')) continue;
+        for (unsigned slot = 0; slot < 32; ++slot)
+        {
+            ++st.valueActionRegs;
+            const uint32_t at = 0x05B00000u + slot * 0x20u + label * 2u;
+            for (uint32_t width : { 2u, 4u })
+                if (WriteEffects(at, width, false, 0).empty())
+                    pr.Add("SCSP slot " + std::to_string(slot) + " word " + std::to_string(label) + " (" + Hex(at) + "), a " + std::to_string(width) +
+                           "-byte write: the handler acts on the value written (V) and WriteEffects says nothing");
         }
     }
 }

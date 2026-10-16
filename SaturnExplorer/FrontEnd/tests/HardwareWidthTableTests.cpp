@@ -370,6 +370,7 @@ int main(int argc, char** argv)
             hhc::CheckUndecoded(cases, st, pr);
             hhc::CheckScu(cases, table, st, pr);
             hhc::CheckBlocks(cases, st, pr);
+            hhc::CheckScspSlots(cases, st, pr);
             hhc::CheckBus(cases, table, st, pr);
             hhc::CheckOnChipAddresses(cases, st, pr);
             hhc::CheckOnChipMisaligned(cases, excused, st, pr);
@@ -384,9 +385,9 @@ int main(int argc, char** argv)
             }
             std::printf("handler check: %zu on-chip cells (%zu reach a case, %zu do not; %zu address errors), %zu SCU cells, %zu block registers, "
                         "%zu unnamed-address probes, %zu bus probes, %zu effect cells, %zu undecoded registers, %zu misaligned on-chip probes, "
-                        "%zu write-effect registers\n",
+                        "%zu write-effect registers, %zu value-triggered write targets\n",
                         st.onchipCells, st.reached, st.unreached, st.errors, st.scuCells, st.blockRegs, st.unnamedAddresses, st.busFacts, st.effects,
-                        st.undecodedRegs, st.misaligned, st.writeEffectRegs);
+                        st.undecodedRegs, st.misaligned, st.writeEffectRegs, st.valueActionRegs);
         }
     }
 
