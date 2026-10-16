@@ -5862,3 +5862,91 @@ none was printed in the 7,627 functions of this round.
 
 Interrupts and the slot-illegal exception (A2-8); the game corpus (not in this container); the sanitizers; the generator's long run;
 `SE_GENERATED_ALPHABET=specials`.
+
+## Area 6, round 3 review
+
+Reviewer: branch `review/6-round3-review`, on master `124a5eb`. No source changed. The probes ran from a scratch copy of
+`DecompilerFaultTests.cpp` (`FaultProbe.cpp`), compiled against the objects of two scratch builds with gcc 13.3: the CI's Debug ASan + UBSan
+configuration (with `-g1`) and RelWithDebInfo. New ledger rows: A6-19 to A6-24, one P2 and five P3. No P1 was found: across 30,730
+sanitizer cells there is no crash, no use-after-free, no double free, and no UBSan line outside the allow-list.
+
+**The probe.** It is the matrix plus the following:
+
+- Three fixtures. `gotos` is an irreducible loop. `loopbrk` is a counted loop with an early return. `dag` is two conditionals that share
+  both targets and are chosen by a third. The words are in A6-22.
+- `SE_PROBE_STICKY`: every allocation from k on fails.
+- `SE_PROBE_NAMELEN`: pads the request's name, to tune the markup's length.
+- `--repeat`: damages the engine, then sends N refused requests and fails each of the first 64 allocations of a refused `Decompile` and
+  `Disassemble`.
+- `--diffruns`: compares the allocation sizes of the baseline with those of the following runs.
+
+### What held
+
+- **The default subset on master.** RelWithDebInfo: 32 of 32 jobs, 28.5 s. ASan + UBSan with `detect_leaks=1`: 32 of 32, 297.5 s. No pin is
+  STALE. Two pins are MOVED: A6-1's `jumptable print #0 48 B #26` and `mailbox print #1 48 B #20` now lead to `PcodeCacher::emit` <
+  `Sleigh::oneInstruction`, an instruction decoded in Print since round 2. Each still finds its site (1 match), and that cell passes. Nothing
+  makes anyone re-pin a MOVED pin, but a moved pin still tests its site.
+- **Every k under ASan + LeakSanitizer, outside the round 2 sample:**
+
+  | Fixture | Phases | Cells | Result |
+  |---|---|---|---|
+  | `fixture1` | Flow and Actions | 6,395 | 0 failed |
+  | `gotos` | Flow, Actions and Print | 3,910 | 0 failed. Its goto comes from `labelLoops`, not `TraceDAG` |
+  | `jumptable` | Flow | 5,262 | 4 leaks (A6-21) |
+  | `dag` | Flow, Actions and Print | 6,425 | 94 leaks (A6-22) |
+  | `loopbrk` | Flow, Actions and Print | 8,738 | 8 leaks (A6-22) |
+
+  Every failure is a leak. There is no memory error.
+- **`PackedDecode::endIngest`, the last-buffer case** (patch 0032, no fixture in the tree). The probe reached it on `stack` with the name
+  padded by 922 characters, counted in the cells' numbering (A6-24 explains why it is not 932). Cells 21323 (the 1-byte end buffer) and 21324
+  (the list node) fail cleanly under ASan and leak nothing.
+- **Repeated refusal.** The engine was damaged at `mailbox` k=15000, then sent 5,000 refused requests in RelWithDebInfo: RSS 12,092 kB before
+  and after. A refusal makes one allocation (its message), and the result frees it. When that allocation fails, the request ends `Failed("out
+  of memory")`. A refused `Disassemble` whose allocations fail ends `<stopped: ...>`. Nothing escapes in any of the first 64 allocations of
+  either.
+- **Cancels on the new shape.** On `dag` in full, cancel-enter, cancel-alloc and cancel-oom (7,690 cells, RelWithDebInfo): 0 failed.
+- **A6-18 is unreachable from the host, by reading.** `JumpTable::recoverModel` frees the model only when it is entered with a model that is not an
+  override, and no entry does that:
+  - `matchModel` and `recoverMultistage` call `saveModel` first;
+  - the flow's trial table is new;
+  - a table kept with 0 entries never got a model;
+  - a restart's `clearJumpTables` deletes every table that is not an override.
+
+  `JumpTable::setOverride` has no caller in the vendored engine. It stays open, with no fixture possible.
+- **Pin identity, by reading and by `--sites`.** A frame `dladdr` cannot name is dropped and not misnamed. An inlined site or a build without
+  `-rdynamic` makes the pins STALE, which fails loudly.
+- **The allow-list.** `Sh2DecompilerTests` under ASan + UBSan exits 0. Its only UBSan lines are `address.hh:605` ("left shift of 40962 by 52 places
+  cannot be represented", the `sign_extend` idiom) and `slghpatexpress.cc:979` ("left shift of negative value -4"). These are the two accepted
+  reports, unchanged.
+
+### What failed
+
+| Row | Severity | What | Cells |
+|---|---|---|---|
+| A6-19 | P2 | No CI job runs the fault matrix with pin identity or leak checks. The sanitizer job does not build it, Windows skips it, and macOS runs it without a backtrace and without LSan | `grep DecompilerFault .github` finds nothing |
+| A6-20 | P3 | `check-sanitizer-logs.sh` passes an empty log and any subset of binaries | an empty log with `.rc` 0 passes |
+| A6-21 | P3 | Jump-table recovery leaks the table (`recoverJumpTable`'s `push_back`, `JumpBasic::clone`) on the matrix's own fixture | `jumptable` 10642, 10643, 23891, 23892 |
+| A6-22 | P3 | `TraceDAG` leaks its branch points and traces. A loop with an early return reaches it; no matrix fixture does | `dag` 94 of 6,425; `loopbrk` 8 of 8,738 |
+| A6-23 | P3 | Under sustained exhaustion, `Disassemble`'s `<stopped>` line cannot be allocated, so the listing comes back empty or cut short with no marker | sticky `disasm`: 3,852 of 3,854 |
+| A6-24 | P3 | The baseline is not the run the cells perturb: Print's sizes keep changing for two runs after `Warm`. The census and `--sites` name run N+1's allocation under the baseline's size | `--cell alloc stack 21301`: `PIN-AT` 1114 B, fails 1124 B |
+
+### Questions without a reproducer
+
+- **The markup changes after `Warm`.** The markup of the same request grows over the first runs of a new `Sh2Decompiler` and then stays put:
+  `stack` 1,114, 1,124 and 1,128 bytes; `mailbox` 840, 842 and 844. The shown text and every token (`addr`, `target`, `calledAt`) are
+  identical. A second `Sh2Decompiler` in the same process starts from 1,114 again, and the library is started once per process. What state
+  carries into the markup? This is also an area 1 question: the input of a request is not only its key.
+- **A pin's site names a function, not an allocation.** Two allocations of one size in one function cannot be told apart: for example
+  `ProtoStoreSymbol::clone` 72 B #26 (the constructor's parameter) and #27 (the copy). A shift of one between them is still `site ok`. For
+  today's pins, every allocation in the window crashes the reverted code, so nothing is hidden. A pin whose defect is one allocation (A6-1's
+  kind) inside a function that makes several of its size would not be protected.
+
+### Could not probe
+
+- `TypeFactory::setName`, `setFields`, `setPrototype`, `setEnumValues` and `recalcPointerSubmeta`, the dynamic-symbol entries,
+  `ScopeLocal::remapSymbol*`, the injection library, the emulator and the SLEIGH compiler. The host builds no struct or enum type, uses no
+  dynamic symbol and runs none of the others, so no SH-2 fixture reaches them.
+- The runner under sustained exhaustion. Its record path is the existing `DisableOomChild`; the rest was checked by reading only.
+- The race between two cancels: by reading, both take `mMutex`, and `RequestCancelLocked` keeps the first reason.
+- A child that dies mid-write, and a full pipe. Cells and drivers write to files, not pipes, and a dead cell is classified by its signal.
+- `diamonds` for every k, Windows and macOS (the matrix forks), and a deep-recursion fixture.
