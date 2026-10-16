@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+ * Modified for SaturnExplorer: a jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -504,9 +505,9 @@ JumpTable *Funcdata::installJumpTable(const Address &addr)
     if (jt->getOpAddress() == addr)
       throw LowlevelError("Trying to install over existing jumptable");
   }
-  JumpTable *newjt = new JumpTable(addr);
-  jumpvec.push_back(newjt);
-  return newjt;
+  unique_ptr<JumpTable> newjt(new JumpTable(addr));
+  jumpvec.push_back(newjt.get());
+  return newjt.release();
 }
 
 /// \brief Recover a jump-table for a given BRANCHIND using existing flow information
@@ -705,8 +706,11 @@ JumpTable *Funcdata::recoverJumpTable(Funcdata &partial,PcodeOp *op,FlowInfo *fl
     return (JumpTable *)0;
   //  if (trialjt.is_twostage())
   //    warning("Jumptable maybe incomplete. Second-stage recovery not implemented",trialjt.Opaddress());
-  jt = new JumpTable(&trialjt); // Make the jumptable permanent
-  jumpvec.push_back(jt);
+  // SaturnExplorer: the table is owned from the moment it exists. The list takes it first, and a push_back that
+  // cannot grow the list used to lose the table and its model (area 6, A6-21).
+  unique_ptr<JumpTable> permanent(new JumpTable(&trialjt)); // Make the jumptable permanent
+  jumpvec.push_back(permanent.get());
+  jt = permanent.release();
   jt->setIndirectOp(op);		// Relink table back to original op
   return jt;
 }
