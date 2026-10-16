@@ -5270,6 +5270,10 @@ std::vector<CCase> WidePrintedCFixtures()
     out.push_back({ "A2-21 (x + t) >> 2", { 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4401, 0x000B, 0x6043, 0x0009, 0x2492, 0x4925 } });
     out.push_back({ "A2-21 RuleDivTermAdd, unsigned", { 0xD102, 0x3415, 0x000A, 0x4001, 0x000B, 0x304C, 0x1234, 0x5678 } });
     out.push_back({ "A2-21 RuleDivTermAdd, signed", { 0xD102, 0x314D, 0x000A, 0x4021, 0x000B, 0x304C, 0x1234, 0x5678 } });
+    // A2-26: GBR and VBR start as something other than 0, so a text that drops or mistakes them differs from the run
+    out.push_back({ "A2-26 GBR advanced", { 0x0112, 0x7104, 0x411E, 0x000B, 0x0009 } });      // stc gbr,r1 ; add #4,r1 ; ldc r1,gbr
+    out.push_back({ "A2-26 VBR advanced", { 0x0122, 0x7108, 0x412E, 0x000B, 0x0009 } });      // stc vbr,r1 ; add #8,r1 ; ldc r1,vbr
+    out.push_back({ "A2-26 GBR from VBR", { 0x0122, 0x411E, 0x000B, 0x0009 } });             // stc vbr,r1 ; ldc r1,gbr
     // A2-22: a byte or a word put into a stacked longword and the longword loaded back
     out.push_back({ "A2-22 byte at 3", { 0x7FFC, 0x2F42, 0x6053, 0x80F3, 0x60F2, 0x000B, 0x7F04 } });
     out.push_back({ "A2-22 byte at 2", { 0x6053, 0x2F46, 0x80F2, 0x60F6, 0x000B, 0x0009 } });
