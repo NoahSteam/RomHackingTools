@@ -289,11 +289,12 @@ if(SE_ENABLE_DECOMPILER)
         add_executable(SaturnExplorerHardwareWidthTableTests
             FrontEnd/tests/HardwareWidthTableTests.cpp
             FrontEnd/src/Decompiler/SaturnHardwareMap.cpp)
-        target_include_directories(SaturnExplorerHardwareWidthTableTests PRIVATE FrontEnd/src)
+        target_include_directories(SaturnExplorerHardwareWidthTableTests PRIVATE FrontEnd/src FrontEnd/tests)
         add_test(NAME SaturnExplorerHardwareWidthTableTests
                  COMMAND SaturnExplorerHardwareWidthTableTests
                      ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/HardwareWidthTable.golden.txt
-                     ${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/HARDWARE_REGISTER_AUDIT.md)
+                     ${CMAKE_CURRENT_SOURCE_DIR}/Docs/Decompiler/HARDWARE_REGISTER_AUDIT.md
+                     ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/MednafenHandlerCases.txt)
 
         # Area 6's oracle (REVIEW_PROGRAM.md): fault injection as a matrix -- allocation k failing for
         # every k, the cancel flag raised at every phase entry, allocation and millisecond, and the

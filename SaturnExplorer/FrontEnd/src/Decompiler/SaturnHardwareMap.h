@@ -53,6 +53,7 @@ enum class NarrowAccess : uint8_t
     OnChipLong,      // a 32-bit on-chip register (0xFFFFFF00 and up): a word write takes it whole at its own address and does
                      // nothing at +2, a word read returns the low half at both, a byte access is an address error
     OnChipKeyedLong, // ...and it takes no word write at all: a 4-byte write with 0xA55A in its upper half sets it (the bus state controller)
+    OnChipDmac,      // the DMA controller (SAR0 .. DMAOR): as OnChipLong, but a word read at +2 reaches nothing and reads 0: sh7095.inc has no case at 0x82 .. 0xB2 (A5-18)
     OnChipWord,      // a 16-bit on-chip register at 0xFFFFFF00 and up (the UBC): a byte access is an address error
     OnChipByte,      // an 8-bit on-chip register below 0xFFFFFF00: a word reaches the even one only, a long is an address error
     OnChipHalf,      // a 16-bit on-chip register below 0xFFFFFF00: a long is an address error
@@ -76,6 +77,7 @@ struct HardwareRegister
     const char* about;    // set for a register only the emulator has: said of every access
     NarrowAccess narrow = NarrowAccess::Part;
     const char* onWrite = nullptr;   // set when a write does more than store a value (a division starts)
+    bool noteWrite = false;          // ...and a write to it says so as a note, unless the value written is 1 (SMPC_SF: any write sets the flag to 1)
 };
 
 // Every register, sorted by address, none overlapping.
@@ -84,10 +86,14 @@ const HardwareRegister* SaturnHardwareRegisters(size_t& count);
 // The canonical address 'address' reaches if it is in a register area: the cached and
 // cache-through partitions, bits 28-27 (not decoded), and each chip's own mirror (SMPC every 128
 // bytes, SCSP every 4 KiB, VDP2 every 512 bytes, SCU every 256 bytes, the CD block's 64-byte
-// window, the CPU-to-CPU signals across their 8 MiB); on-chip, the SH-2's partial decode of
-// 0xE0000000-0xFFFFFFFF, the divider's second copy at 0xFFFFFF20 and the watchdog's at 0xFFFFFE88. False outside them, or where
-// the bus returns garbage rather than a register (Docs/Saturn/SaturnMemory.txt). The 0xA
-// partition is not one: Mednafen sends it to the associative purge (see HardwareRanges).
+// window, the CPU-to-CPU signals across their 8 MiB); on-chip, the whole of 0xE0000000-0xFFFFFFFF
+// decoded by its low 9 bits, the divider's second copy at 0xFFFFFF20 and the watchdog's at
+// 0xFFFFFE88. Mednafen, the emulator SE runs, decodes the partition that way (sh7095.inc MemRead and
+// MemWrite case 7 pass the address to OnChipReg*, which look at bit 8 and the low byte only); the
+// hardware manual (Docs/Saturn/SaturnMemory.txt) has the registers where bit 14 is set and reads
+// garbage elsewhere, which a program meant for the console never relies on (A5 round 4: the
+// emulator is the reference). False outside the register areas. The 0xA partition is not one:
+// Mednafen sends it to the associative purge (see HardwareRanges).
 bool HardwareAlias(uint32_t address, uint32_t& canonical);
 
 // The register at 'address' through any alias, the address anywhere inside its width; or null.
@@ -139,6 +145,7 @@ enum class WidthRule : uint8_t
     NarrowReadWhole,  // a narrow read of an SCU DSP port is the whole 32-bit read, its effect in full
     WordWritesLong,   // a word write at +0 of a 32-bit on-chip register writes it whole, the upper half 0
     FifoPopsTwice,    // a narrow read of the CD FIFO in its 32-bit window pops two 16-bit words
+    FifoByteWrite,    // a byte write to the CD FIFO pushes a whole 16-bit word into the transfer
     // (c)
     HalfBesideGap,    // a long on a 16-bit register whose other half is no register in the map
     SmpcLaneWrite,    // a word or long reaches an SMPC register by lane: its bits
@@ -154,7 +161,9 @@ enum class WidthRule : uint8_t
     OddByteWrite,     // a word at the even address beside an odd on-chip byte register does not reach it
     OddByteRead,
     LongHalfWrite,    // a word write at +2 of a 32-bit on-chip register does nothing
+    LongHalfRead,     // a word read at +2 of a DMA controller register returns 0 and reads nothing (no case there)
     KeyedWordWrite,   // a word write to a keyed (bus state controller) register does nothing
+    KeyedByteWrite,   // a byte write to a watchdog register does nothing, except that it cancels a pending RSTCSR WOVF clear
     StrobeByte,       // a byte write to MINIT/SINIT sends no signal
     MirrorWrite,      // the CCR's read mirrors take no write
     // (e)
@@ -229,6 +238,22 @@ struct NarrowEffect
     bool caution = true;
 };
 std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, bool write);
+
+// The address an access of 'size' bytes at 'address' really reaches: a misaligned access is an
+// address error and is made at the address rounded down to its width (sh7095.inc MemRead and
+// MemWrite: A &= ~(sizeof(T) - 1)); the on-chip registers decode the address as given.
+uint32_t AccessAddress(uint32_t address, uint32_t size);
+
+// What a write of this value does that the line does not say, for the registers whose effect
+// depends on it: a write to SH2_CCR with CP (bit 4) set purges the whole cache, a write to
+// VDP1_PTMR with bit 0 set starts drawing. 'valueKnown' false when the value is not a constant.
+// One text per effect, each a note. Empty when the write has none.
+std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valueKnown, uint32_t value);
+
+// The caution for a write of 'size' bytes to a watchdog register (a keyed register: the byte, long
+// and odd-address writes it does not take). Every write in 0xFFFFFE80-0xFFFFFE8F, the ignored ones
+// too, cancels a pending SH2_RSTCSR WOVF clear (sh7095.inc: z->WDT.RSTCSRM = 0 in each case).
+std::string KeyedPortCaution(const HardwareRegister& r, uint32_t size);
 
 // The documented name of a 4-byte access that spans a register pair the manuals allow to be
 // accessed whole (VDP2 scroll and table addresses, the UBC's halves); null otherwise.

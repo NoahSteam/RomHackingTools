@@ -8,8 +8,13 @@
 // width-rules markers) differs from the one printed. SE_UPDATE_GOLDEN=1 rewrites both from the
 // table; read the diff before committing it.
 //
-// usage: SaturnExplorerHardwareWidthTableTests <golden file> <audit document>
+// The golden file is printed from the table, so it cannot say the table is right. The third argument,
+// MednafenHandlerCases.txt (derived from Mednafen's sources by Docs/Decompiler/tools/derive_handler_cases.py),
+// can: HardwareHandlerCheck.h compares every cell with the handler's own case labels (A5-18).
+//
+// usage: SaturnExplorerHardwareWidthTableTests <golden file> <audit document> <Mednafen handler cases>
 #include "Decompiler/SaturnHardwareMap.h"
+#include "HardwareHandlerCheck.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -101,7 +106,7 @@ std::string RulesTable(const std::vector<WidthProbe>& table)
         {
             // Through the generator itself, the way the decompiler asks for it.
             for (const NarrowEffect& e : NarrowAccessEffects(first->access, first->width, first->write))
-                if (e.reg == first->reg && e.caution)
+                if (e.reg == first->reg && e.caution && e.text.find("cache read") == std::string::npos)   // the bus's cache caution is the address's, not the cell's
                 {
                     text = e.text + "  [" + first->reg->name + ", " + (first->write ? "write" : "read") + " " +
                            std::to_string(first->width) + " @" + Hex8(first->access) + "]";
@@ -240,12 +245,12 @@ void ShowFirstDifference(const std::string& what, const std::string& want, const
 
 int main(int argc, char** argv)
 {
-    if (argc < 3)
+    if (argc < 4)
     {
-        std::printf("usage: %s <golden file> <audit document>\n", argv[0]);
+        std::printf("usage: %s <golden file> <audit document> <Mednafen handler cases>\n", argv[0]);
         return 2;
     }
-    const std::string goldenPath = argv[1], auditPath = argv[2];
+    const std::string goldenPath = argv[1], auditPath = argv[2], casesPath = argv[3];
     const bool update = std::getenv("SE_UPDATE_GOLDEN") != nullptr;
 
     const std::vector<WidthProbe> table = WidthTable();
@@ -333,6 +338,47 @@ int main(int argc, char** argv)
                     ++gFailures;
                 }
             }
+        }
+    }
+
+    // The independent check: the table against Mednafen's handlers (derive_handler_cases.py).
+    {
+        hhc::Cases cases;
+        std::string error;
+        if (!cases.Load(casesPath, error))
+        {
+            std::printf("%s\n", error.c_str());
+            ++gFailures;
+        }
+        else
+        {
+            hhc::Stats st;
+            hhc::Problems pr;
+            // Decided not to be said, with the reason: starting a DMA transfer is what a write to the channel control
+            // register or DMAOR is for, and a note on every one would bury the rare note.
+            static const std::vector<hhc::Excused> excused = {
+                { "SH2_CHCR0", "write:S", "a write to a DMA channel control register starts the transfer: the register's purpose" },
+                { "SH2_CHCR1", "write:S", "as CHCR0" },
+                { "SH2_DMAOR", "write:S", "a write that sets DME starts any channel that is ready: the register's purpose" },
+            };
+            hhc::CheckOnChip(cases, table, excused, st, pr);
+            hhc::CheckUndecoded(cases, st, pr);
+            hhc::CheckScu(cases, table, st, pr);
+            hhc::CheckBlocks(cases, st, pr);
+            hhc::CheckBus(cases, table, st, pr);
+            hhc::CheckOnChipAddresses(cases, st, pr);
+            if (!pr.list.empty())
+            {
+                std::printf("the width table disagrees with Mednafen's handlers (%zu):\n", pr.list.size());
+                const size_t shown = std::getenv("SE_HANDLER_CHECK_ALL") ? pr.list.size() : 60;
+                for (size_t i = 0; i < pr.list.size() && i < shown; ++i) std::printf("  %s\n", pr.list[i].c_str());
+                if (pr.list.size() > shown) std::printf("  ... and %zu more\n", pr.list.size() - shown);
+                gFailures += int(pr.list.size());
+            }
+            std::printf("handler check: %zu on-chip cells (%zu reach a case, %zu do not; %zu address errors), %zu SCU cells, %zu block registers, "
+                        "%zu unnamed-address probes, %zu bus probes, %zu effect cells, %zu undecoded registers\n",
+                        st.onchipCells, st.reached, st.unreached, st.errors, st.scuCells, st.blockRegs, st.unnamedAddresses, st.busFacts, st.effects,
+                        st.undecodedRegs);
         }
     }
 

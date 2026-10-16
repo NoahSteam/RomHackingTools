@@ -12,7 +12,7 @@
 
 | Cat | Rule | Mednafen | Cells | Caution (first cell) |
 |---|---|---|---|---|
-| a | Plain | the register's own handler: scu.inc SCU_RegRW_DB_u*, SS_SCSP_RW_u*, vdp1.c ReadReg/WriteReg, vdp2.c RegsRead/RegsWrite, sh7095.inc OnChipReg*, cdb.c CDB_Read/CDB_Write_DBM | 830 | (none) |
+| a | Plain | the register's own handler: scu.inc SCU_RegRW_DB_u*, SS_SCSP_RW_u*, vdp1.c ReadReg/WriteReg, vdp2.c RegsRead/RegsWrite, sh7095.inc OnChipReg*, cdb.c CDB_Read/CDB_Write_DBM | 811 | (none) |
 | a | HalfOfLong | scu.inc SCU_FromSH2_BusRW_DB_u32_W*: the B bus is BBusRW_DB_u16_*_SH0 at A then _SH1 at A\|2, high half first | 199 | one 4-byte write covers SCSP_MVOL and SCSP_RBL_RBP (shown under the first)  [SCSP_MVOL, write 4 @05B00400] |
 | - | AccessKind | (none: the register's kind -- write-only, read-only -- says it) | 983 | (none) |
 | b | ByteWritesWord | scu.inc BBusRW_DB_u8_W1_SH0 -> vdp1.c VDP1_Write8_DB / vdp2.c VDP2_Write8_DB: WriteReg / RegsWrite(A, *DB), the 16-bit lane of the data bus (RW_W8's byte mask is VRAM's only) | 292 | a 1-byte write to VDP1_TVMR writes the whole 16-bit register: its other byte is whatever was last on the data bus  [VDP1_TVMR, write 1 @05D00000] |
@@ -20,6 +20,7 @@
 | b | NarrowReadWhole | scu.inc SCU_RegRW_DB_u*_W0 cases 0x80, 0x8C: the whole 32-bit read happens, the CPU takes its part | 12 | a 1-byte read of SCU_PPAF is a read of the whole 32-bit register: what a read does to it happens in full, and only the bytes asked for are returned  [SCU_PPAF, read 1 @05FE0080] |
 | b | WordWritesLong | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: the register takes V (DVDNT, DVDNTL also divide) | 19 | a 2-byte write to SH2_DVSR, a 32-bit register, writes the whole register with the 16-bit value (upper half 0)  [SH2_DVSR, write 2 @FFFFFF00] |
 | b | FifoPopsTwice | scu.inc ABus_Read(A & ~3): ABusRW_DB_u16_W0_SH0 and _SH1 both reach CDB_Read(0) when bit 19 of A is clear | 6 | a 1-byte read of CD_DATATRNS takes two 16-bit words off the FIFO: the 32-bit bus reads it twice and the access returns only part of them (the register window at 0x25898000 reads it once)  [CD_DATATRNS, read 1 @05818000] |
+| b | FifoByteWrite | scu.inc ABusRW_DB_u8_W1_SH0 (CS2, (A & 0x7FFF) < 0x1000): CDB_Write_DBM(0, *DB, 0xFF << ...); cdb.c case 0x0 stores (FIFO[WP] &~ mask) \| (DB & mask) and advances WP, InBufOffs and TotalCounter by a word | 8 | a 1-byte write to CD_DATATRNS pushes a whole 16-bit word into the transfer (the CD block takes the byte under a byte mask and leaves the other byte of the FIFO slot as it was): the sector gets one word per write, half of it stale  [CD_DATATRNS, write 1 @05818000] |
 | c | HalfBesideGap | as HalfOfLong; the other half is a word nothing in the map names | 13 | a 4-byte write over SCSP_MSLC_CA is two 16-bit bus writes, high half first: SCSP_MSLC_CA takes bits 31-16 of the value, and bits 15-0 go to the word at 0x05B0040A, which is no register in the map  [SCSP_MSLC_CA, write 4 @05B00408] |
 | c | SmpcLaneWrite | ss.c BusRW_DB_CS0_u16_W1: SMPC_Write((A & 0x7F) >> 1, low byte of the half); a long is two of them | 30 | a 2-byte write to SMPC_IREG0 is a byte write: the register takes the low byte of the value and the high byte goes nowhere (the SMPC is a byte device on the low lane of the 16-bit bus)  [SMPC_IREG0, write 2 @00100000] |
 | c | SmpcLaneRead | ss.c BusRW_DB_CS0_u16_W0: 0xFF00 \| SMPC_Read((A & 0x7F) >> 1); a long is two of them | 72 | a 2-byte read of SMPC_OREG0 returns 0xFF00 or the register: the SMPC is a byte device on the low lane of the 16-bit bus, and the high byte reads as 0xFF  [SMPC_OREG0, read 2 @00100020] |
@@ -33,13 +34,15 @@
 | d | OddByteWrite | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 clear: no case at the odd address of a word (A is even) | 6 | a 2-byte write at the even address beside SH2_FTCSR does not write it: a word reaches only the register at its own address (SH2_TIER)  [SH2_FTCSR, write 2 @FFFFFE10] |
 | d | OddByteRead | sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 clear: no case at the odd address of a word | 9 | a 2-byte read at the even address beside SH2_FTCSR does not read it: a word reaches only the register at its own address (SH2_TIER, in bits 7-0)  [SH2_FTCSR, read 2 @FFFFFE10] |
 | d | LongHalfWrite | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: A &= 0xFE, and the cases are the registers' own addresses | 19 | a 2-byte write to the low half of SH2_DVSR, a 32-bit register, does nothing: a word takes effect only at the register's own address  [SH2_DVSR, write 2 @FFFFFF02] |
+| d | LongHalfRead | sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 set: A &= 0xFE; the DMA cases are 0x80 .. 0xB0 only, so +2 falls to default (ret = 0, no CHCRM / DMAORM clear) | 11 | a 2-byte read at +2 of SH2_SAR0, a 32-bit register, returns 0 and reads nothing: the DMA controller answers a word read at the register's own address only (what a read of it arms does not happen)  [SH2_SAR0, read 2 @FFFFFF82] |
 | d | KeyedWordWrite | sh7095.inc SH7095_OnChipRegWrite_u16 cases 0xE0-0xF8: break (only the _u32 write checks 0xA55A) | 14 | a 2-byte write to SH2_BCR1, a 32-bit register, does nothing: it is set only by a 4-byte write with 0xA55A in the upper half  [SH2_BCR1, write 2 @FFFFFFE0] |
+| d | KeyedByteWrite | sh7095.inc SH7095_OnChipRegWrite_u8 cases 0x80-0x8F: z->WDT.RSTCSRM = 0 and nothing else (only the _u16 write takes a key) | 3 | SH2_WTCSR takes no 1-byte write: it is written by a keyed word at 0xFFFFFE80; this write does not write it, and it cancels a pending SH2_RSTCSR WOVF clear (a read arms it)  [SH2_WTCSR, write 1 @FFFFFE80] |
 | d | StrobeByte | ss.c BusRW_DB_CS0_u8_W1, "FRT trigger region": the block is empty (only _u16_W1 calls SH7095_SetFTI) | 4 | a 1-byte write to MINIT does nothing: the signal to the other CPU takes a 16-bit write (the CS0 byte path ignores the FRT trigger region)  [MINIT, write 1 @01000000] |
 | d | MirrorWrite | sh7095.inc OnChipRegWrite_u*: case 0x92 only ("No 0x93...0x9F mirrors for writes") | 2 | a 1-byte write at 0xFFFFFE93 does nothing: SH2_CCR reads back at 0xFFFFFE93-0xFFFFFE9F, but takes writes at 0xFFFFFE92 only  [SH2_CCR, write 1 @FFFFFE93] |
 | e | AddressError | sh7095.inc SH7095_SetPEX(z, SH7095_PEX_CPUADDR): OnChipRegWrite_u8 / RegRead_u8 with A & 0x100 set, OnChipRegWrite_u32 / RegRead_u32 with it clear | 316 | a 4-byte write to SH2_TIER, an 8-bit register, is an address error on the SH-2: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only  [SH2_TIER, write 4 @FFFFFE10] |
 | f | StrobeLong | sh7095.inc SH7095_BSC_BusWrite_u32 (CS0): two BusRW_DB_CS0_u16_W1, each SH7095_SetFTI | 2 | a 4-byte write to MINIT is two 16-bit bus writes, so it signals the other CPU twice (its input capture takes the second)  [MINIT, write 4 @01000000] |
 | f | CdByteWrite | cdb.c CDB_Write_DBM case 0x9: CommandPending only if mask == 0xFFFF | 2 | a 1-byte write to CD_CR4 stores that byte only: it does not start the command, which takes a 16-bit write  [CD_CR4, write 1 @05890024] |
-| v | KeyedWrite | sh7095.inc OnChipRegWrite_u16 cases 0x80, 0x82 (the key in the upper byte); _u32 cases 0xE0-0xF8 ((V & 0xFFFF0000) == 0xA55A0000) | 13 | (none) |
+| v | KeyedWrite | sh7095.inc OnChipRegWrite_u16 cases 0x80, 0x82 (the key in the upper byte); _u32 cases 0xE0-0xF8 ((V & 0xFFFF0000) == 0xA55A0000) | 10 | (none) |
 | ? | Undecoded | sh7095.inc has no case for the serial interface: no rule is claimed | 22 | (none) |
 
 ## Families
@@ -49,8 +52,9 @@
 | Part | 51 | SCSP_MVOL .. SCU_VER |
 | WholeOnByte | 153 | VDP1_TVMR .. VDP2_COBB |
 | ByteLane | 48 | SMPC_IREG0 .. SMPC_EXLE |
-| OnChipLong | 19 | SH2_DVSR .. SH2_DMAOR |
+| OnChipLong | 8 | SH2_DVSR .. SH2_DVDNTL_SHADOW |
 | OnChipKeyedLong | 7 | SH2_BCR1 .. SH2_RTCOR |
+| OnChipDmac | 11 | SH2_SAR0 .. SH2_DMAOR |
 | OnChipWord | 15 | SH2_BARAH .. SH2_BRCR |
 | OnChipByte | 17 | SH2_TIER .. SH2_CCR |
 | OnChipHalf | 8 | SH2_IPRB .. SH2_VCRWDT |
@@ -61,7 +65,7 @@
 
 ## Totals
 
-337 registers, 48 unused SMPC lanes, 3038 cells: -=983 ?=22 a=1029 b=353 c=168 d=150 e=316 f=4 v=13
+337 registers, 48 unused SMPC lanes, 3038 cells: -=983 ?=22 a=1010 b=361 c=168 d=164 e=316 f=4 v=10
 
 ## Keyed writes
 
@@ -75,12 +79,12 @@ FFFFFFF8 w4 0xA55A00FF -> [note] SH2_RTCOR keyed write: the low half 0x00FF is t
 FFFFFFF0 w4 ? -> [note] SH2_RTCSR takes a 4-byte write only with 0xA55A in its upper half; any other value does nothing
 FFFFFFE0 w2 0x0000A55A -> (not a keyed write)
 FFFFFE80 w2 0x00005A12 -> [note] keyed watchdog write: requests SH2_WTCNT = 0x12 (taken while SH2_WTCSR's TME is set)
-FFFFFE80 w2 0x0000A512 -> [note] keyed watchdog write: SH2_WTCSR = 0x12 (OVF is cleared only if a read saw it set)
-FFFFFE80 w2 0x00001234 -> [caution] watchdog write with key 0x12, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored
-FFFFFE80 w2 ? -> [note] keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set), SH2_WTCSR when it is 0xA5 (OVF cleared only if a read saw it set)
+FFFFFE80 w2 0x0000A512 -> [note] keyed watchdog write: SH2_WTCSR = 0x02 (TME is clear: OVF is cleared whatever a read saw, and SH2_WTCNT is reset to 0)
+FFFFFE80 w2 0x00001234 -> [caution] watchdog write with key 0x12, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored (it still cancels a pending SH
+FFFFFE80 w2 ? -> [note] keyed watchdog write: SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set), SH2_WTCSR when it is 0xA5 (with TME clear, OVF is cleared and SH2_WTCNT reset; with TME set, OVF is cleared only if a read saw it set and SBYCR's SBY is cleared)
 FFFFFE82 w2 0x0000A500 -> [note] keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set
 FFFFFE82 w2 0x00005A60 -> [note] keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x60
-FFFFFE82 w2 0x00001234 -> [caution] SH2_RSTCSR write 0x1234 is neither 0xA500 nor 0x5A with data: ignored
+FFFFFE82 w2 0x00001234 -> [caution] SH2_RSTCSR write 0x1234 is neither 0xA500 nor 0x5A with data: ignored (it still cancels a pending WOVF clear)
 FFFFFE82 w2 ? -> [note] keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF if a read saw it set, 0x5A with data sets RSTE and RSTS
 FFFFFE80 w1 0x00000012 -> (not a keyed write)
 
@@ -169,7 +173,7 @@ FFFFFE80 w1 0x00000012 -> (not a keyed write)
 00100060 SMPC_UNUSED_60 1 RW ByteLane | w1@0=SmpcPadWrite r1@0=SmpcPadRead
 00100061 SMPC_SR 1 RO ByteLane | w1@0=AccessKind r1@0=Plain w2@-1=AccessKind r2@-1=SmpcLaneRead[7-0] w4@-1=AccessKind r4@-1=SmpcLaneRead[23-16]
 00100062 SMPC_UNUSED_62 1 RW ByteLane | w1@0=SmpcPadWrite r1@0=SmpcPadRead
-00100063 SMPC_SF 1 RW ByteLane | w1@0=Plain r1@0=Plain w2@-1=SmpcLaneWrite[7-0] r2@-1=SmpcLaneRead[7-0] w4@-3=SmpcLaneWrite[7-0] r4@-3=SmpcLaneRead[7-0]
+00100063 SMPC_SF 1 RW ByteLane | w1@0=Plain* r1@0=Plain w2@-1=SmpcLaneWrite[7-0]* r2@-1=SmpcLaneRead[7-0] w4@-3=SmpcLaneWrite[7-0]* r4@-3=SmpcLaneRead[7-0]
 00100074 SMPC_UNUSED_74 1 RW ByteLane | w1@0=SmpcPadWrite r1@0=SmpcPadRead
 00100075 SMPC_PDR1 1 RW ByteLane | w1@0=Plain r1@0=Plain w2@-1=SmpcLaneWrite[7-0] r2@-1=SmpcLaneRead[7-0] w4@-1=SmpcLaneWrite[23-16] r4@-1=SmpcLaneRead[23-16]
 00100076 SMPC_UNUSED_76 1 RW ByteLane | w1@0=SmpcPadWrite r1@0=SmpcPadRead
@@ -184,7 +188,7 @@ FFFFFE80 w1 0x00000012 -> (not a keyed write)
 0010007F SMPC_EXLE 1 WO ByteLane | w1@0=Plain r1@0=AccessKind w2@-1=SmpcLaneWrite[7-0] r2@-1=AccessKind w4@-3=SmpcLaneWrite[7-0] r4@-3=AccessKind
 01000000 MINIT 2 WO Strobe | w1@0=StrobeByte w1@1=StrobeByte r1@0=AccessKind r1@1=AccessKind w2@0=Plain r2@0=AccessKind w4@0=StrobeLong r4@0=AccessKind
 01800000 SINIT 2 WO Strobe | w1@0=StrobeByte w1@1=StrobeByte r1@0=AccessKind r1@1=AccessKind w2@0=Plain r2@0=AccessKind w4@0=StrobeLong r4@0=AccessKind
-05818000 CD_DATATRNS 4 RW CdWindow | w1@0=Plain w1@1=Plain w1@2=Plain w1@3=Plain r1@0=FifoPopsTwice* r1@1=FifoPopsTwice* r1@2=FifoPopsTwice* r1@3=FifoPopsTwice* w2@0=Plain w2@2=Plain r2@0=FifoPopsTwice* r2@2=FifoPopsTwice* w4@0=Plain r4@0=Plain* w1@0^05898000=Plain w1@1^05898001=Plain w1@2^05898002=Plain w1@3^05898003=Plain r1@0^05898000=Plain* r1@1^05898001=Plain* r1@2^05898002=Plain* r1@3^05898003=Plain* w2@0^05898000=Plain w2@2^05898002=Plain r2@0^05898000=Plain* r2@2^05898002=Plain* w4@0^05898000=Plain r4@0^05898000=CdLongRead[31-0]*
+05818000 CD_DATATRNS 4 RW CdWindow | w1@0=FifoByteWrite w1@1=FifoByteWrite w1@2=FifoByteWrite w1@3=FifoByteWrite r1@0=FifoPopsTwice* r1@1=FifoPopsTwice* r1@2=FifoPopsTwice* r1@3=FifoPopsTwice* w2@0=Plain w2@2=Plain r2@0=FifoPopsTwice* r2@2=FifoPopsTwice* w4@0=Plain r4@0=Plain* w1@0^05898000=FifoByteWrite w1@1^05898001=FifoByteWrite w1@2^05898002=FifoByteWrite w1@3^05898003=FifoByteWrite r1@0^05898000=Plain* r1@1^05898001=Plain* r1@2^05898002=Plain* r1@3^05898003=Plain* w2@0^05898000=Plain w2@2^05898002=Plain r2@0^05898000=Plain* r2@2^05898002=Plain* w4@0^05898000=Plain r4@0^05898000=CdLongRead[31-0]*
 05890008 CD_HIRQ 2 RW CdWindow | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=CdLongWrite[31-0] r4@0=CdLongRead[31-0]
 0589000C CD_HIRQMSK 2 RW CdWindow | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=CdLongWrite[31-0] r4@0=CdLongRead[31-0]
 05890018 CD_CR1 2 RW CdWindow | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=CdLongWrite[31-0] r4@0=CdLongRead[31-0]
@@ -422,20 +426,20 @@ FFFFFE66 SH2_VCRC 2 RW OnChipHalf | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain 
 FFFFFE68 SH2_VCRD 2 RW OnChipHalf | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=AddressError r4@0=AddressError
 FFFFFE71 SH2_DRCR0 1 RW OnChipByte | w1@0=Plain r1@0=Plain w2@-1=OddByteWrite r2@-1=OddByteRead w4@-1=AddressError r4@-1=AddressError
 FFFFFE72 SH2_DRCR1 1 RW OnChipByte | w1@0=Plain r1@0=Plain w2@0=EvenByteWrite[7-0] r2@0=EvenByteRead[7-0] w4@-2=AddressError r4@-2=AddressError
-FFFFFE80 SH2_WTCSR 1 KW OnChipByte | w1@0=KeyedWrite r1@0=Plain w2@0=KeyedWrite r2@0=EvenByteRead[7-0] w4@0=AddressError r4@0=AddressError
-FFFFFE81 SH2_WTCNT 1 KW OnChipByte | w1@0=KeyedWrite r1@0=Plain w2@-1=KeyedWrite r2@-1=OddByteRead w4@-1=AddressError r4@-1=AddressError
-FFFFFE83 SH2_RSTCSR 1 KW OnChipByte | w1@0=KeyedWrite r1@0=Plain w2@-1=KeyedWrite r2@-1=OddByteRead w4@-3=AddressError r4@-3=AddressError
+FFFFFE80 SH2_WTCSR 1 KW OnChipByte | w1@0=KeyedByteWrite r1@0=Plain* w2@0=KeyedWrite r2@0=EvenByteRead[7-0]* w4@0=AddressError r4@0=AddressError!
+FFFFFE81 SH2_WTCNT 1 KW OnChipByte | w1@0=KeyedByteWrite r1@0=Plain w2@-1=KeyedWrite r2@-1=OddByteRead w4@-1=AddressError r4@-1=AddressError
+FFFFFE83 SH2_RSTCSR 1 KW OnChipByte | w1@0=KeyedByteWrite r1@0=Plain* w2@-1=KeyedWrite r2@-1=OddByteRead! w4@-3=AddressError r4@-3=AddressError!
 FFFFFE91 SH2_SBYCR 1 RW OnChipByte | w1@0=Plain r1@0=Plain w2@-1=OddByteWrite r2@-1=OddByteRead w4@-1=AddressError r4@-1=AddressError
 FFFFFE92 SH2_CCR 1 RW OnChipByte | w1@0=Plain r1@0=Plain w2@0=EvenByteWrite[7-0] r2@0=EvenByteRead[7-0] w4@-2=AddressError r4@-2=AddressError w1@0^FFFFFE93=MirrorWrite w2@0^FFFFFE94=MirrorWrite
 FFFFFEE0 SH2_ICR 2 RW OnChipHalf | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=AddressError r4@0=AddressError
 FFFFFEE2 SH2_IPRA 2 RW OnChipHalf | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@-2=AddressError r4@-2=AddressError
 FFFFFEE4 SH2_VCRWDT 2 RW OnChipHalf | w1@0=Plain w1@1=Plain r1@0=Plain r1@1=Plain w2@0=Plain r2@0=Plain w4@0=AddressError r4@0=AddressError
 FFFFFF00 SH2_DVSR 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF04 SH2_DVDNT 4 RW OnChipLong | w1@0=AddressError! w1@1=AddressError! w1@2=AddressError! w1@3=AddressError! r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0]* w2@2=LongHalfWrite! r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain* r4@0=Plain
+FFFFFF04 SH2_DVDNT 4 RW OnChipLong | w1@0=AddressError* w1@1=AddressError* w1@2=AddressError* w1@3=AddressError* r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0]* w2@2=LongHalfWrite! r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain* r4@0=Plain
 FFFFFF08 SH2_DVCR 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
 FFFFFF0C SH2_VCRDIV 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
 FFFFFF10 SH2_DVDNTH 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF14 SH2_DVDNTL 4 RW OnChipLong | w1@0=AddressError! w1@1=AddressError! w1@2=AddressError! w1@3=AddressError! r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0]* w2@2=LongHalfWrite! r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain* r4@0=Plain
+FFFFFF14 SH2_DVDNTL 4 RW OnChipLong | w1@0=AddressError* w1@1=AddressError* w1@2=AddressError* w1@3=AddressError* r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0]* w2@2=LongHalfWrite! r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain* r4@0=Plain
 FFFFFF18 SH2_DVDNTH_SHADOW 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
 FFFFFF1C SH2_DVDNTL_SHADOW 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
 FFFFFF40 SH2_BARAH 2 RW OnChipWord | w1@0=AddressError w1@1=AddressError r1@0=AddressError r1@1=AddressError w2@0=Plain r2@0=Plain w4@0=HalfOfLong[31-16] r4@0=HalfOfLong[31-16]
@@ -453,21 +457,21 @@ FFFFFF72 SH2_BDRBL 2 RW OnChipWord | w1@0=AddressError w1@1=AddressError r1@0=Ad
 FFFFFF74 SH2_BDMRBH 2 RW OnChipWord | w1@0=AddressError w1@1=AddressError r1@0=AddressError r1@1=AddressError w2@0=Plain r2@0=Plain w4@0=HalfOfLong[31-16] r4@0=HalfOfLong[31-16]
 FFFFFF76 SH2_BDMRBL 2 RW OnChipWord | w1@0=AddressError w1@1=AddressError r1@0=AddressError r1@1=AddressError w2@0=Plain r2@0=Plain w4@-2=HalfOfLong[15-0] r4@-2=HalfOfLong[15-0]
 FFFFFF78 SH2_BRCR 2 RW OnChipWord | w1@0=AddressError w1@1=AddressError r1@0=AddressError r1@1=AddressError w2@0=Plain r2@0=Plain w4@0=HalfBesideGap[31-16] r4@0=HalfBesideGap[31-16]
-FFFFFF80 SH2_SAR0 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF84 SH2_DAR0 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF88 SH2_TCR0 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF8C SH2_CHCR0 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError! r1@1=AddressError! r1@2=AddressError! r1@3=AddressError! w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=Plain* w4@0=Plain r4@0=Plain*
-FFFFFF90 SH2_SAR1 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF94 SH2_DAR1 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF98 SH2_TCR1 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFF9C SH2_CHCR1 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError! r1@1=AddressError! r1@2=AddressError! r1@3=AddressError! w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=Plain* w4@0=Plain r4@0=Plain*
-FFFFFFA0 SH2_VCRDMA0 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFFA8 SH2_VCRDMA1 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=Plain r4@0=Plain
-FFFFFFB0 SH2_DMAOR 4 RW OnChipLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError! r1@1=AddressError! r1@2=AddressError! r1@3=AddressError! w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=Plain* w4@0=Plain r4@0=Plain*
+FFFFFF80 SH2_SAR0 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF84 SH2_DAR0 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF88 SH2_TCR0 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF8C SH2_CHCR0 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError* r1@1=AddressError* r1@2=AddressError* r1@3=AddressError* w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=LongHalfRead! w4@0=Plain r4@0=Plain*
+FFFFFF90 SH2_SAR1 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF94 SH2_DAR1 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF98 SH2_TCR1 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFF9C SH2_CHCR1 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError* r1@1=AddressError* r1@2=AddressError* r1@3=AddressError* w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=LongHalfRead! w4@0=Plain r4@0=Plain*
+FFFFFFA0 SH2_VCRDMA0 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFFA8 SH2_VCRDMA1 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0] r2@2=LongHalfRead w4@0=Plain r4@0=Plain
+FFFFFFB0 SH2_DMAOR 4 RW OnChipDmac | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError* r1@1=AddressError* r1@2=AddressError* r1@3=AddressError* w2@0=WordWritesLong[15-0] w2@2=LongHalfWrite r2@0=LowHalfRead[15-0]* r2@2=LongHalfRead! w4@0=Plain r4@0=Plain*
 FFFFFFE0 SH2_BCR1 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
 FFFFFFE4 SH2_BCR2 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
 FFFFFFE8 SH2_WCR 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
 FFFFFFEC SH2_MCR 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
-FFFFFFF0 SH2_RTCSR 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError! r1@1=AddressError! r1@2=AddressError! r1@3=AddressError! w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0]* r2@2=Plain* w4@0=KeyedWrite r4@0=Plain*
+FFFFFFF0 SH2_RTCSR 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError* r1@1=AddressError* r1@2=AddressError* r1@3=AddressError* w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0]* r2@2=Plain* w4@0=KeyedWrite r4@0=Plain*
 FFFFFFF4 SH2_RTCNT 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
 FFFFFFF8 SH2_RTCOR 4 RW OnChipKeyedLong | w1@0=AddressError w1@1=AddressError w1@2=AddressError w1@3=AddressError r1@0=AddressError r1@1=AddressError r1@2=AddressError r1@3=AddressError w2@0=KeyedWordWrite w2@2=KeyedWordWrite r2@0=LowHalfRead[15-0] r2@2=Plain w4@0=KeyedWrite r4@0=Plain
