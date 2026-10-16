@@ -335,6 +335,8 @@ struct Fix
 const uint32_t kMailboxBase = 0x0600A480u;
 const uint32_t kShapesBase = 0x0600B000u;
 const uint32_t kStackBase = 0x0600B100u;
+const uint32_t kLoopBreakBase = 0x0600B300u;
+const uint32_t kDagBase = 0x0600B400u;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
@@ -342,6 +344,8 @@ const Fix kFixtures[] = {
     { "diamonds", dts::kDiamondsBase, true },      // 150 branches: a long flow and a long action tree
     { "shapes", kShapesBase, false },              // loops, &&, ||, a do-while, an if/else: variables that merge (A6-11)
     { "stack", kStackBase, false },                // a stack array: local variables, restructuring, naming (A6-14, A6-15)
+    { "loopbrk", kLoopBreakBase, false },          // a counted loop that returns from inside: the structurer picks a goto with TraceDAG (A6-22)
+    { "dag", kDagBase, false },                    // two conditionals that share both targets, chosen by a third: TraceDAG's branch points (A6-22)
 };
 
 const Fix* FindFix(const std::string& name)
@@ -381,6 +385,26 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
     const uint16_t stack[] = { 0x7FF0, 0x2F42, 0x1F51, 0x6063, 0x01FE, 0x6013, 0x000B, 0x7F10 };
     off = kStackBase - 0x06000000u;
     for (uint16_t w : stack)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `loopbrk`: mov #0,r0 ; L: add #1,r0 ; cmp/pl r4 ; bt OUT ; dt r5 ; bf L ; add #5,r0 ; OUT: rts ; nop. The counted
+    // loop returns from inside it, which CollapseStructure::selectGoto gives to TraceDAG (A6-22).
+    const uint16_t loopbrk[] = { 0xE000, 0x7001, 0x4415, 0x8902, 0x4510, 0x8BFA, 0x7005, 0x000B, 0x0009 };
+    off = kLoopBreakBase - 0x06000000u;
+    for (uint16_t w : loopbrk)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `dag`: cmp/pl r4 ; bt C ; add #3,r0 ; cmp/pl r5 ; bt E ; bra D ; nop ; C: add #4,r0 ; cmp/pl r6 ; bt E ; nop ;
+    // D: add #1,r0 ; bra F ; nop ; E: add #2,r0 ; nop ; F: rts ; nop. Two conditionals that share both targets and are
+    // chosen by a third, with different work in each, so the conditional merge cannot fold them (A6-22).
+    const uint16_t dag[] = { 0x4415, 0x8904, 0x7003, 0x4515, 0x8908, 0xA004, 0x0009, 0x7004, 0x4615, 0x8903, 0x0009,
+                             0x7001, 0xA002, 0x0009, 0x7002, 0x0009, 0x000B, 0x0009 };
+    off = kDagBase - 0x06000000u;
+    for (uint16_t w : dag)
     {
         dts::Put16(hw, off, w);
         off += 2;
@@ -592,13 +616,18 @@ bool Warm(Ctx& c, const std::string& scratch, const std::string& fixture)
     InstallHooks();
     // Warm runs until two in a row agree: the first builds the translator and the library state, and
     // the translator's caches (parse-tree ring, patch 0020) settle over the next one or two. A cell
-    // forks from this state, so its run is the next in the series.
+    // forks from this state, so its run is the next in the series. "Agree" includes the size of every
+    // allocation, not only their number and the text: the markup of an unchanged listing keeps growing
+    // for two runs after the count settles (stack: 1,114, 1,124, 1,128 bytes), and a baseline taken
+    // before that names run N's sizes for allocations that run N+1 makes at other sizes, so a pin and
+    // `--sites` could name the wrong allocation (A6-24).
     long prevCount = -1;
     std::string prevSig;
     Log prevLog{};
+    std::vector<uint32_t> prevSizes;
     bool settled = false;
     std::string series;
-    for (int i = 0; i < 12 && !settled; ++i)
+    for (int i = 0; i < 16 && !settled; ++i)
     {
         gProbe.Reset();
         fa::Arm(-1);
@@ -617,11 +646,13 @@ bool Warm(Ctx& c, const std::string& scratch, const std::string& fixture)
         const Log log = gProbe.Snapshot();
         const std::string sig = Signature(w);
         series += std::to_string(n) + " ";
-        bool same = i > 0 && n == prevCount && sig == prevSig && log.n == prevLog.n;
+        const std::vector<uint32_t> sizes(fa::gSizeLog, fa::gSizeLog + std::min(n, fa::kSizeLogMax));
+        bool same = i > 0 && n == prevCount && sig == prevSig && log.n == prevLog.n && sizes == prevSizes;
         for (int k = 0; same && k < log.n; ++k) same = log.phase[k] == prevLog.phase[k] && log.allocAt[k] == prevLog.allocAt[k];
         prevCount = n;
         prevSig = sig;
         prevLog = log;
+        prevSizes = sizes;
         if (same)
         {
             settled = true;
@@ -629,7 +660,7 @@ bool Warm(Ctx& c, const std::string& scratch, const std::string& fixture)
             c.base.allocs = n;
             c.base.log = log;
             c.base.ms = ms;
-            c.base.sizes.assign(fa::gSizeLog, fa::gSizeLog + std::min(n, fa::kSizeLogMax));
+            c.base.sizes = sizes;
         }
     }
     if (!settled)
@@ -1998,6 +2029,43 @@ int SitesTool(const std::string& fixture, const std::string& scratch, const std:
 #endif
 }
 
+// `--diffruns <fixture> [runs]`: after Warm, 'runs' more runs of the same engine (50), each compared with the baseline: the
+// number of allocations and the size of each. Warm settles on these (A6-24), so the answer is "identical": a build in which
+// it is not is a baseline that is not the run the cells perturb.
+int DiffRunsTool(const std::string& fixture, const std::string& scratch, int runs)
+{
+    Ctx c;
+    if (!Warm(c, scratch, fixture)) return 2;
+    int bad = 0;
+    for (int i = 1; i <= runs; ++i)
+    {
+        gProbe.Reset();
+        fa::Arm(-1);
+        fa::gLogSizes = true;
+        const DecompileResult r = RunOnce(c);
+        fa::gLogSizes = false;
+        const long n = fa::gCount.load();
+        fa::Disarm();
+        long first = -1, diffs = 0;
+        for (long k = 0; k < std::min(n, long(c.base.sizes.size())); ++k)
+            if (fa::gSizeLog[k] != c.base.sizes[size_t(k)])
+            {
+                if (first < 0) first = k;
+                ++diffs;
+            }
+        const bool same = n == c.base.allocs && diffs == 0 && Signature(r) == c.base.sig;
+        if (!same)
+        {
+            ++bad;
+            std::printf("run N+%d: %ld allocations (baseline %ld), %ld sizes differ, first at %ld (%u vs baseline %u)%s\n", i, n, c.base.allocs, diffs,
+                        first, first >= 0 ? fa::gSizeLog[first] : 0u, first >= 0 ? c.base.sizes[size_t(first)] : 0u,
+                        Signature(r) == c.base.sig ? "" : "; the result differs");
+        }
+    }
+    std::printf("diffruns %s: %d of %d runs after the baseline differ from it\n", fixture.c_str(), bad, runs);
+    return bad ? 1 : 0;
+}
+
 std::vector<long> AllocCells(const Ctx& c, bool full, const std::vector<PinRes>& pins)
 {
     std::set<long> s;
@@ -2987,6 +3055,8 @@ int main(int argc, char** argv)
     if (arg(2) == "--sites" && argc >= 7)
         return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])));
 
+    if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
+
     // ---- one cell, in this process's driver, with the failing allocation's trace
     if (arg(2) == "--cell" && argc >= 6)
     {
@@ -3029,7 +3099,10 @@ int main(int argc, char** argv)
         if (full || std::string(f.name) != "diamonds") addDriver("alloc", f.name, shards);
     // The cancel families: the default subset keeps the four fixtures it always had; shapes and stack, added for
     // the allocation sweeps, join them in the full run (under a sanitizer they would add about two minutes).
-    auto cancelFixture = [&](const Fix& f) { return full || (std::string(f.name) != "shapes" && std::string(f.name) != "stack"); };
+    auto cancelFixture = [&](const Fix& f) {
+        return full || (std::string(f.name) != "shapes" && std::string(f.name) != "stack" && std::string(f.name) != "loopbrk" &&
+                        std::string(f.name) != "dag");
+    };
     for (const Fix& f : kFixtures)
         if (cancelFixture(f)) addDriver("cancel-enter", f.name, 1);
     for (const Fix& f : kFixtures)
