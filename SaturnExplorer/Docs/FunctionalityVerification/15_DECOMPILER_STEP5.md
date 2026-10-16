@@ -5771,3 +5771,122 @@ not 0 and every function over 300 ms.
 
 **Done criteria.** Area 3 has four P2 rows this round (A3-13 to A3-16), so it needs a fix round and then two consecutive clean review
 rounds. Area 4 has no row this round.
+
+
+## Area 3, round 5: the fixpoint, r0 across a call, joined entry values, a push left behind, the evaluator's entry state
+
+Fixer, branch `review/3-round5-fix`, from master `f5fde2d`. Commits: A3-15 and A3-16, the evaluator's entry values `2199c2e`; A3-13, A3-14, A3-17 and the
+generator `416b4fc`; the evaluator's tests `ab925a2`; this record. Ledger rows A3-13 to A3-17 are fixed. No engine patch (0036 was not needed). Every fixture was
+reproduced first against the master binary (kept for the comparisons below): A3-16 a 3,393 ms and withheld "too many paths", b 5,223 ms and `return 10;`; A3-13
+and its three variants lent `void`; A3-14 a, b, c lent `void f(void)`; A3-15 g lent with spDelta -4 and the caller with 0 parameters, the oracle accepting the
+caller; A3-17 a and b folded to `return 5;`.
+
+### Root causes and fixes (`Sh2Decompiler.cpp`)
+
+- **A3-16: the join kept the lower base, so a loop that lowers an address never settled.** `ReturnCheck::Run` counts how often the state at an address grew; after
+  six growths the stack-address bases there are given up for `Value::kLowBase` ("from the frame's lowest slot"), the least base, which a join keeps and a
+  constant does not move. `NoteFrameEscape` declares that as the lowest stack offset any register or slot held (`mLowestSp`), so the alias still starts at a real
+  frame offset and the read after the call is not folded. The leaf is lent in 3 ms (3,393 ms before) and b prints `return iStack_c + iStack_8;` (12 as run) in 7 ms.
+  A loop that moves the address up converged before and does now (control).
+- **A3-17: accepted as a fix, not a limit.** Round 4 took an index added to a frame address as not negative and dropped the base for a subtracted register. `p - i`
+  and `p + i` for a negative i are ordinary C when p points into an array, so the reasoning ("out of the object") did not hold for an address formed for a middle
+  element. Any index that is not a constant, added or subtracted, now gives up the base for `kLowBase`; a constant still moves it. a and b print a read the callee's
+  write can reach and the oracle agrees with the run (7). Cost: three functions of image 008 gain an unused declaration `xunknown1 axStack_20e [522];` (r2 = frame +
+  index, the alias now starts at the frame's bottom); nothing else in either image changes.
+- **A3-15: decided, withhold.** A negative r15 difference is a value handed to the caller through the stack; the signature has registers only, the engine takes the
+  store for the callee's own dead frame, and carrying it would mean teaching the engine that a store below the entry r15 is an output (patch 0036 territory) for a
+  shape no compiler emits (0 of 610 and 0 of 1,006 corpus signatures have a negative difference). `WithholdReason` withholds a callee that leaves r15 below where it found
+  it ("it leaves r15 lower than it found it (words pushed for its caller)"), and so its caller. Round 3's fixture "r15 lowered by the callee" asserted the wrong
+  lent caller; it now asserts both withheld, the caller's text (the model's `return param_1;`, where the run returns r5 = 0x22222222) rejected by the oracle, and a
+  control (a callee that pops its caller's push, positive difference) lent. The ledger's own fixture is in too (`unaff_retaddr`, the run returns r5).
+- **A3-13: the rule, and its cost.** The sound question is the reviewer's: count any value the function put in r0 whenever the engine's return is void. Measured, it
+  is not affordable: every compiled void function that ends with a scratch r0 (`mov #0,r0 ; mov.l r0,@r4`) is withheld; 9 existing checks fail and image 007 lends
+  454 signatures, not 610. The narrower rule is exact about why the engine drops the value: the engine **kills r0 at every call**, so a value held in r0 across a
+  call to a callee that keeps r0 is invisible to it. `Value::carried` marks an own value in r0 (not r0's entry value left alone, not what a call returned) when a
+  call whose callee keeps r0 passes over it; `Return` records it; `WithholdReason` withholds a void function whose r0 is carried at a return ("it holds a value in r0
+  across a call that keeps r0, which the engine takes for no return"). The callee's address in `jsr @r0` (`Value::callTarget`, found from the instruction's p-code: the
+  CALLIND's target is a copy of r0) is not counted: 2 of the first 12 lost signatures in image 007 were exactly that. The four variants of the row are withheld, the
+  oracle rejects the engine's text, and controls are lent (the callee sets r0; the value put in r0 after the call; `jsr @r0`).
+- **A3-14: rule (b) extended to joins.** `Value::joined` marks a value made by a join of two different values, through any operation after it; `Value::usesR0` marks a
+  value some operation of this function computed from r0's entry value. At a void function's return, a join whose origins are only SR, r0 and registers no signature
+  passes (nothing from memory or the stack, no r4-r7), is recorded as an input: SR when it holds SR's entry value on some path; r0 when it is also computed from
+  r0 (`phi(in_r0, in_r0 + 1)`). The message is the existing "its return is computed from sr (r0) on entry". a, b and c of the row are withheld; a path that leaves r0 alone
+  and another that writes a constant (`phi(in_r0, 5)`) is not, and is pinned as accepted: counting it would withhold 15 more functions of image 007 and 24 of 008, all
+  void functions with a scratch r0, and compiled code leaves exactly this. The interrupt-mask idiom's plain transform of SR left in r0 (`06010054`, `Write_SR(in_sr & 0x3f3 | 0xf0)`)
+  is not a join and is lent; a first version without the join condition withheld it.
+- **The evaluator's entry state.** `PseudoEval::Entry` gives it the run's starting registers (`RunEntryRegisters`, the same table `CallRunResult` sets) and the snapshot's
+  stack words. `in_rN`, `unaff_rN`, `in_sr`, `in_gbr`, `in_vbr`, `in_mach`, `in_macl`, `unaff_retaddr` (PR), `in_stack_00000004` and a stack local nothing in the text assigned
+  (`xStack_8`: the slot a callee pushed) read as those values; `extraout_rN` (what a call returned) stays unknown, and so does a local whose address is taken (`&xStack_8`)
+  or that the text assigned before a call. Every existing fixture passed unchanged except round 3's A3-15 caller, which the new reading rejects; that is the proof
+  the oracle can now see the class. `PseudoAgreesWithRun` passes the entry state; `MayReturn` without one reads as before.
+
+### The generator
+
+- `frame.walk` (stream of its own, `frameRng`, so no other program of a seed moves): a frame address in r2 walked down the frame by a counted loop that stores through it
+  (`mov r15,r2 ; add #frame,r2 ; mov #n,r1 ; L: mov.l r1,@-r2 ; dt r1 ; bf L ; mov #0,r2`), in one function in five that has a frame. 624 in 3,000 seeds. With the
+  fix 0 findings; with the widening off, 133 of 1,000 grammar-2 seeds fail.
+- A new finding class, `lend-too-many-paths`: a signature withheld "too many paths" is a limit of the analysis, not a property of anything the grammar makes. The row's
+  replay found 0 findings because no check saw a lost signature; this one does, without a timing threshold (the reason is deterministic).
+- A3-17 is **not** catchable by the generator: it compares accesses, flow and signatures, and the wrong value is in the text of a function that is withheld. The two
+  fixtures of the row (an `add r4,r2` with r4 = -4, a `sub r4,r2`) are in the suite with the oracle and the emulator.
+- A3-13, A3-14 and A3-15 were caught by the generator before (`return-dropped`, `input-dropped:r0`, `param-dropped:r5`); they pass now because the functions are withheld.
+
+### Mutation
+
+Each reverted alone, rebuilt, the suite run (`Sh2DecompilerTests` failing checks; the generator for its row), the source restored.
+
+| Reverted | Result |
+|---|---|
+| widening off (`kWidenAfter` huge) | 5 checks (a lent, 1,000 ms, b folded and slow); generator, 1,000 grammar-2 seeds: 133 failing, 172 findings `lend-too-many-paths` |
+| negative r15 difference lent again | 6 (callee, caller, the ledger fixture) |
+| carried value not recorded | 4 (the four variants) |
+| `jsr @r0` target counted as carried | 1 |
+| joined SR not recorded | 2 |
+| joined r0 computed from r0 not recorded | 1 |
+| r0 joined with anything counted (broad) | 1 (the pinned `phi(in_r0, 5)`) |
+| subtracted index drops the base again | 2 (b: `return 5;` and the oracle) |
+| added non-constant index non-negative again | 2 (a) |
+| both | 4 |
+| evaluator: registers unknown | 5 (the four name tests and the A3-15 ledger fixture) |
+| evaluator: stack words unknown | 2 |
+| evaluator: entry state not passed by `PseudoAgreesWithRun` | 1 (the A3-15 ledger fixture) |
+| evaluator: address-taken locals read as the start word | 1 |
+
+### Matrix
+
+Branch tip, RelWithDebInfo gcc, `-DSE_ENABLE_DECOMPILER=ON`.
+
+- Whole `ctest`: 95 of 97 on the first run on a machine at load 20+; `SaturnExplorerDecompilerRunnerTests` (timeout) and `SaturnExplorerDecompilerFaultTests` ("a cancelled
+  decompilation did not stop within 0.1 s") both pass on a rerun alone (71 s and 28 s): load, not the change. 97 of 97.
+- Generator: grammar 2, 3,000 seeds, 0 failing (5,941 functions, 624 frame walks). `SE_GENERATED_SEEDS=20000`, both grammars: 4 failing seeds, 7 findings, exactly
+  `cache-read-pointer-unsaid` 7134, 14812, 19409 and `trace-outside` 8306 (the area 5 fixer's); nothing else. Printed-C `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`: 0 findings.
+- gcc Debug, ASan + UBSan, `detect_leaks=1`: `Sh2DecompilerTests`, `Sh2GeneratedTests` (150 seeds) and the printed-C run exit 0; the only reports are `address.hh:605` and
+  `slghpatexpress.cc:979`.
+- Corpus, standalone: every ledger count 0, 16 and 20 reads missing and said, 839 and 1,554 functions ok; 0 and 3 standalone texts differ from master (the three
+  functions of image 008 above, an unused declaration).
+- Timing: `TestGameCode` image 008 (standalone, interleaved, machine at load 8): master 22.0 s and 24.1 s in the decompiler, this branch 22.2 s and 23.9 s (wall 41.8 and 45.0 s against 42.0 and 43.9 s); the slowest function, `0604F422`, 3.0-3.5 s against 3.4-4.1 s. No change beyond noise.
+
+### Lending (`SE_GAME_LEND=1`), master `f5fde2d` against this branch
+
+| | lent before | lent after | parameters before | after |
+|---|---|---|---|---|
+| image 007 | 610 | 600 | 800 | 786 |
+| image 008 | 1,006 | 984 | 1,253 | 1,223 |
+
+Lost: 10 and 22, none gained; the lent signature line is unchanged in every function lent both before and after. Every lost function was read. Seven of the ten
+in 007 and 20 of the 22 in 008 are withheld by the carried-r0 rule, and `0602E1D4`/`0602E1E0` (007) and `0606ED48`/`0606ED54` (008) because they call one of those
+(`0602D92C`, `0606E4A0`). Each is a compiled void function, many of them one function entered at two addresses: a memset-like clear (`0600D4CC`), a conditional copy
+(`0602D5E4`), a loop over eight records that calls twice per record (`0602F7EC`), a setter that calls once (`06056E40`). They leave a scratch r0 (`mov r8,r0` then
+`cmp/eq #1,r0`, a loaded constant) across a call whose callee keeps r0, so the withheld reason is true of the code and the value is junk: the cost of the sound rule,
+1.6% of the lent set in 007 and 2.2% in 008. The text of 18 and 38 functions differs from master: the callers of the lost ones (their callee is no longer lent) and the
+three above. The variants measured on the way (lent signatures lost against master in 007 and 008): carried alone 12 and 22 (2 and 0 of them the `jsr @r0` target, which is
+exempt now); with r0 joined with anything, 25 and 46; the reviewer's broad rule (any own r0 value in a void function), 156 in 007 (454 lent), and 9 existing checks fail.
+
+### Not done, limits
+
+- `PseudoEval` still cannot read a loop (`do { } while`), so the two A3-16 b/c fixtures check the text and the emulator, not the evaluated value.
+- A3-17 has no generator shape (above); the oracle on the fixtures is all that sees it.
+- A negative-difference callee is withheld, not carried: a callee that hands a value to its caller on the stack cannot be lent, and its caller's text is the model's.
+- `phi(in_r0, constant)` and its kin are accepted (pinned); the carried rule withholds some scratch-r0 compiled functions; both with the numbers above.
+- The text for A3-16 a prints the loop's pointer as `register0x0000003c = (BADSPACEBASE *)(... + -4)`, which reads as r15 being lowered: a printing question for areas 2 and 7, not raised as a row.
+- Not run under the sanitizers: the other four suites of the CI list.
