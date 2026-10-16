@@ -7725,6 +7725,18 @@ void TestCallsAndTraps()
                 CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(g, ++serial), g, inputs));
             }
             (void)pr8;
+            // Controls. A callee that spills a parameter its signature holds into its caller's home area (`mov r4,r0 ; rts ;
+            // mov.l r4,@r15`; one function of image 007 spills r7 so) is lent: no caller reads the word back.
+            const CallFixture spill = { "a3_21 control: an argument register spilled to the caller's home area", base,
+                                        withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x6043, 0x000B, 0x2F42 }) };
+            const Lent ls = lend(spill, true, false);
+            // (Its callers are withheld "a return not to its caller": the callee's store above its entry r15 is taken to reach the
+            // caller's saved PR, as before. A limit, recorded; no lent caller of the corpus's one such function was lost.)
+            CHECK(ls.callee.prototype.known && ls.callee.prototype.params.size() == 1);
+            // ...and a callee that stores a constant there is not.
+            const CallFixture konst = { "a3_21: a constant stored at the callee's entry r15", base,
+                                        withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE105, 0x000B, 0x2F12 }) };
+            CHECK(!lend(konst, true, false).callee.prototype.known);
             // Control: a callee that stores below its entry r15 (its own frame) and returns is lent.
             const CallFixture own = { "a3_21 control: the callee's own frame", base,
                                       withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x7FFC, 0x2F52, 0x000B, 0x7F04 }) };

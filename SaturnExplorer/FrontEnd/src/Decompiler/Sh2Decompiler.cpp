@@ -351,8 +351,9 @@ public:
     bool CarriedValueInReturn() const { return mCarriedInReturn; }
     // After Run(): which of r4-r7 reach r0 at a return in a join with r0's entry value (A3-20).
     uint32_t JoinedParamsInReturn() const { return mJoinedParams; }
-    // After Run(): whether the function writes at an exact offset at or above its entry r15: a word of its caller's frame (A3-21).
-    bool StoresCallerFrame() const { return mStoresCallerFrame; }
+    // After Run(): the origins of what the function writes at an exact offset at or above its entry r15, a word of its caller's frame
+    // (A3-21); a constant counts as origin::kFrame, which no signature holds. 0 when it writes none.
+    uint32_t CallerFrameStores() const { return mCallerFrameStores; }
 
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
     // function's own summary.
@@ -368,7 +369,7 @@ public:
         mInputsInReturn = 0;
         mCarriedInReturn = false;
         mJoinedParams = 0;
-        mStoresCallerFrame = false;
+        mCallerFrameStores = 0;
         mStoresThrough = 0;
         mOut = 0;
         mLeaks = 0;
@@ -447,6 +448,9 @@ private:
         // The value was the target of a `jsr @r0`: compiled code leaves the callee's address in r0 and the callee that keeps r0
         // leaves it there, which is no value anyone returns (10 of the corpus's void functions do). Never carried.
         bool callTarget = false;
+        // A value a call returned (not the function's own) that some instruction has read since: a result the function used, which compiled
+        // code leaves in r0 as scratch once it has. Held across a callee that keeps r0 and never read, it is a return (A3-19).
+        bool read = false;
         // Fuzzy: an operation of this function had r0's entry value as an operand (not merely a path that leaves r0 alone).
         bool usesR0 = false;
         // Fuzzy: made, wholly or in part, by a join of two different values (the engine's MULTIEQUAL).
@@ -477,7 +481,7 @@ private:
         uint32_t Direct() const { return kind == Fuzzy ? direct : Origins(); }
         bool operator==(const Value& o) const
         {
-            return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget &&
+            return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
                    (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase && own == o.own && usesR0 == o.usesR0 && joined == o.joined));
         }
     };
@@ -615,6 +619,7 @@ private:
             m.own = a.Own() || b.Own();
             m.carried = a.carried || b.carried;
             m.callTarget = a.callTarget && b.callTarget;
+            m.read = a.read && b.read;
             m.usesR0 = a.usesR0 || b.usesR0;
             m.joined = true;
             // A frame address joined with a value that is no stack address at all (a null pointer, a loaded pointer: `g(c ? &s : 0)`)
@@ -761,8 +766,8 @@ private:
             Value r0 = Get(s, mReg[0]);
             if (targetIsR0 || r0.callTarget)
                 r0.callTarget = true;
-            else if (!(r0.kind == Value::Reg && r0.v == 0))
-                r0.carried = true;   // whatever made it, a call's return included (A3-19); not r0's entry value left alone
+            else if (r0.OwnInR0() || (!(r0.kind == Value::Reg && r0.v == 0) && !r0.read))
+                r0.carried = true;   // a call's return included, while nothing has used it (A3-19); not r0's entry value left alone
             Set(s, mReg[0], r0);
         }
         for (int r = 0; r < kTracked; ++r)
@@ -792,7 +797,7 @@ private:
         {
             if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
             {
-                mStoresCallerFrame = true;
+                mCallerFrameStores |= v != 0 ? v : origin::kFrame;
                 mStoresThrough |= origin::kFrame;
                 mFrameValues |= v;
             }
@@ -955,6 +960,20 @@ private:
             if (++steps > 4096) return "a return not proven to go to its caller (too many paths)";
             State s = at[i];
             const Op& op = c.ops[i];
+            // r0 read by this op: a call's result in it is used (see Value::read). Not by a copy of r0 onto itself, which the spec makes of
+            // r0 around a call (`bsr`'s delayed branch).
+            if (!(op.code == ghidra::CPUI_COPY && op.hasOut && KeyOf(op.out) == KeyOf(op.in[0])))
+            {
+                const ghidra::VarnodeData& r0 = mReg[0];
+                auto f = s.vars.find(KeyOf(r0));
+                if (f != s.vars.end() && f->second.kind == Value::Fuzzy && !f->second.own && !f->second.read)
+                    for (const ghidra::VarnodeData& vn : op.in)
+                        if (vn.space == r0.space && vn.offset < r0.offset + r0.size && r0.offset < vn.offset + vn.size)
+                        {
+                            f->second.read = true;
+                            break;
+                        }
+            }
             bool falls = true;
             switch (op.code)
             {
@@ -1112,7 +1131,7 @@ private:
     int64_t mSpDelta = 0;
     bool mCarriedInReturn = false;
     uint32_t mJoinedParams = 0;   // r4-r7 (bit n: Rn) that reach r0 at a return joined with r0's entry value
-    bool mStoresCallerFrame = false;   // a store at an exact offset at or above the entry r15 (A3-21)
+    uint32_t mCallerFrameStores = 0;   // what was stored at an exact offset at or above the entry r15 (A3-21)
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
     std::set<uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2
@@ -1328,13 +1347,28 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     }
     if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID && check.CarriedValueInReturn())
         return "it holds a value in r0 across a call that keeps r0, which the engine takes for no return";
-    if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID && check.JoinedParamsInReturn() != 0)
-        return "its return joins r0's entry value with a parameter, which the engine takes for no return";
+    // ...of a parameter the signature does not hold: one it holds is passed by the caller, and compiled code leaves exactly that join
+    // as scratch in r0 (4 corpus functions of image 008 and their callers, measured).
+    if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID)
+    {
+        uint32_t held = 0;
+        for (ghidra::int4 p = 0; p < fp.numParams() && p < 4; ++p) held |= 1u << (4 + p);
+        if ((check.JoinedParamsInReturn() & ~held) != 0)
+            return "its return joins r0's entry value with a parameter it does not hold, which the engine takes for no return";
+    }
     // A word written at or above the entry r15 is a value handed to the caller through its own frame (`rts ; mov.l r5,@r15`, a
     // pop and a push of another word, `mov.l r5,@(4,r15)`): the signature has registers only, and the engine takes the store for
     // a write into the callee's dead frame, so the register stored is no input and the caller that reads the word back is
     // shown what it wrote before the call (A3-21; A3-15 is the same through a lowered r15).
-    if (check.StoresCallerFrame()) return "it writes a word of its caller's frame (a value handed back through the stack)";
+    // ...unless what it writes is a parameter the signature holds, which is how a callee spills its argument registers into the
+    // home area the caller reserved (one function of image 007 does): no caller reads that back, and a store of a register
+    // the signature does not hold (the dead store of the engine's) is the value handed back.
+    if (const uint32_t stored = check.CallerFrameStores())
+    {
+        uint32_t held = 0;
+        for (ghidra::int4 p = 0; p < fp.numParams() && p < 4; ++p) held |= 1u << (4 + p);
+        if ((stored & ~held) != 0) return "it writes a word of its caller's frame (a value handed back through the stack)";
+    }
     // r15 is not where it was on entry: the engine applies a constant difference as the call's extrapop
     // (LendEffects); one that varies between returns, or is not a constant, cannot be lent.
     if (!((effects.preserved >> 15) & 1u) && effects.spDelta == CallEffects::kSpUnknown)
