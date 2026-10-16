@@ -4743,7 +4743,11 @@ std::string CHeader(bool altReading = false)
          // The engine's field notation for a piece of a variable (`xStack_4._2_2_`: bytes 2 and 3, the first byte being the most
          // significant on this machine), as the C it means.
          "#define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))\n"
-         "#define FLD(v, o, n) (((unsigned long long)(v) >> (8 * (sizeof(v) - (o) - (n)))) & FLDMASK(n))\n"
+         // ...with the type of its size, so that (int4) of a two-byte field is the extension the engine's type means (see the second reading)
+         "#define FLDRAW(v, o, n) (((unsigned long long)(v) >> (8 * (sizeof(v) - (o) - (n)))) & FLDMASK(n))\n"
+         "#define FLDT_1(x) ((xunknown1)(x))\n#define FLDT_2(x) ((xunknown2)(x))\n#define FLDT_3(x) ((unkbyte3)(x))\n#define FLDT_4(x) ((xunknown4)(x))\n"
+         "#define FLDT_5(x) ((unsigned long long)(x))\n#define FLDT_6(x) ((unsigned long long)(x))\n#define FLDT_7(x) ((unsigned long long)(x))\n#define FLDT_8(x) ((unsigned long long)(x))\n"
+         "#define FLD(v, o, n) FLDT_##n(FLDRAW(v, o, n))\n"
          "#define SETFLD(v, o, n, e) ((v) = (__typeof__(v))(((unsigned long long)(v) & ~(FLDMASK(n) << (8 * (sizeof(v) - (o) - (n))))) | "
          "(((unsigned long long)(e) & FLDMASK(n)) << (8 * (sizeof(v) - (o) - (n))))))\n"
          "#define CARRY4(a, b) ((uint32_t)((uint32_t)(a) + (uint32_t)(b)) < (uint32_t)(a))\n"
@@ -4858,6 +4862,20 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         if (std::regex_search(text, memoryRe))
         {
             v.cls = "skipped:memory";
+            continue;
+        }
+        // Names the harness cannot give a meaning to, counted apart (they are no C either): a piece of the stack no symbol covers
+        // (`stack0xfffffffe`), and a local that is an array of bytes (`axStack_3 [3]`, assigned and returned as a value).
+        static const std::regex stackPiece("\\bstack0x[0-9a-fA-F]+\\b");
+        static const std::regex arrayLocal("\\b\\w+ \\[\\d+\\];");
+        if (std::regex_search(text, stackPiece))
+        {
+            v.cls = "skipped:stack-piece";
+            continue;
+        }
+        if (std::regex_search(text, arrayLocal))
+        {
+            v.cls = "skipped:array-local";
             continue;
         }
         if (text.find("halt_baddata") != std::string::npos || text.find("(code *)") != std::string::npos ||
