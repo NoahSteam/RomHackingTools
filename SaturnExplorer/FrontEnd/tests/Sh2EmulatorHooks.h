@@ -18,7 +18,7 @@ public:
 inline void HookSh2Userops(ghidra::BreakTableCallBack& table)
 {
     static NoEffectUserop noEffect;
-    for (const char* name : { "Write_SR", "Write_GBR", "Write_VBR" }) table.registerPcodeCallback(name, &noEffect);
+    for (const char* name : { "Write_SR", "Write_GBR", "Write_VBR", "Rte_PC" }) table.registerPcodeCallback(name, &noEffect);
 }
 
 }  // namespace dts

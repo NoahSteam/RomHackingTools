@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
+ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-rules-division-term-and-piece-pathology.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -7787,6 +7788,58 @@ int4 RulePositiveDiv::applyOp(PcodeOp *op,Funcdata &data)
   return 1;
 }
 
+/// \brief Does the product of a rewritten division term fit the multiply that is about to hold it?
+///
+/// RuleDivTermAdd and RuleDivTermAdd2 fold a correction term into the multiplier: `x*c + (x<<n)` becomes `x*(c+2^n)`.
+/// The new constant has one bit more than a compiler's 32-bit magic number, so for a 32-bit \b x in an 8-byte multiply the
+/// true product needs up to 65 bits and the 8-byte multiply wraps. That is harmless on the way to a division (RuleDivOpt
+/// reasons about the exact value, not the wrapped one) and wrong as a result: `x / 7 * 4` came out as
+/// `(uint4)((uint8)x * 0x124924925 >> 0x21) & 0xfffffffc`, which differs for x >= 0x38000000.
+/// \param multConst is the new (up to 128-bit) multiplier
+/// \param xbits is the number of significant bits of the multiplied value
+/// \param size is the size of the multiply in bytes
+/// \return \b true if the product cannot overflow
+static bool divTermProductFits(const uint8 *multConst,uint4 xbits,int4 size)
+
+{
+  int4 bits;
+  if (multConst[1] != 0)
+    bits = 128 - count_leading_zeros((uintb)multConst[1]);
+  else
+    bits = 64 - count_leading_zeros((uintb)multConst[0]);
+  return (int4)xbits + bits <= 8 * size;
+}
+
+/// \brief Is every reader of a rewritten division term a shift that RuleDivOpt will turn into a division?
+///
+/// A product that does not fit (divTermProductFits) is only an intermediate, valid as the exact value RuleDivOpt reasons
+/// about. It may be left in the data-flow only if each reader shifts it right by a constant so that the whole is a
+/// division by a constant; a reader that does anything else (a mask where the shift and the scaling that follows it were
+/// merged, a return, a store) would print the wrapped product.
+/// \param outvn is the value the term replaces
+/// \param n is the shift already in the new term
+/// \param multConst is the new multiplier
+/// \param xbits is the number of significant bits of the multiplied value
+/// \param shiftopc is the right shift the readers must be (unsigned or signed)
+/// \return \b true if all readers form a division
+static bool divTermIsDivided(Varnode *outvn,uint4 n,uint8 *multConst,uint4 xbits,OpCode shiftopc)
+
+{
+  list<PcodeOp *>::const_iterator iter = outvn->beginDescend();
+  if (iter == outvn->endDescend()) return false;
+  for(;iter!=outvn->endDescend();++iter) {
+    PcodeOp *rdop = *iter;
+    if (rdop->code() != shiftopc || rdop->getIn(0) != outvn) return false;
+    Varnode *cvn = rdop->getIn(1);
+    if (!cvn->isConstant()) return false;
+    uintb total = n + cvn->getOffset();
+    if (total > 127) return false;
+    uint8 y[2] = { multConst[0], multConst[1] };	// calcDivisor works on its copy (it subtracts one)
+    if (!RuleDivOpt::isDivision((uint4)total,y,xbits)) return false;
+  }
+  return true;
+}
+
 /// \class RuleDivTermAdd
 /// \brief Simplify expressions associated with optimized division expressions
 ///
@@ -7836,12 +7889,17 @@ int4 RuleDivTermAdd::applyOp(PcodeOp *op,Funcdata &data)
   leftshift128(power,power,n);		// power = 2^n
   add128(multConst,power,multConst);	// multConst += 2^n
   Varnode *x = extop->getIn(0);
+  uint4 xbits = (opc == CPUI_INT_SEXT) ? x->getSize() * 8 - 1 : 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
 
   list<PcodeOp *>::const_iterator iter;
   for(iter=op->getOut()->beginDescend();iter!=op->getOut()->endDescend();++iter) {
     PcodeOp *addop = *iter;
     if (addop->code() != CPUI_INT_ADD) continue;
     if ((addop->getIn(0)!=x)&&(addop->getIn(1)!=x))
+      continue;
+    // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
+    if (!divTermProductFits(multConst,xbits,extvn->getSize()) &&
+	!divTermIsDivided(addop->getOut(),n,multConst,xbits,(opc == CPUI_INT_SEXT) ? CPUI_INT_SRIGHT : CPUI_INT_RIGHT))
       continue;
 
     // Construct the new constant
@@ -7979,7 +8037,15 @@ int4 RuleDivTermAdd2::applyOp(PcodeOp *op,Funcdata &data)
     uint8 pow[2];
     set_u128(pow, 1);
     leftshift128(pow,pow,n);		// Calculate 2^n
-    add128(multConst, pow, multConst);	// multConst = multConst + 2^n
+    uint8 newConst[2];
+    add128(multConst, pow, newConst);	// the new multiplier is multConst + 2^n
+    // The new product may need more bits than the multiply has, which is only acceptable on the way to a division
+    uint4 xbits = 8*sizeof(uintb) - count_leading_zeros(x->getNZMask());
+    if (!divTermProductFits(newConst,xbits,zextvn->getSize()) &&
+	!divTermIsDivided(addop->getOut(),n+1,newConst,xbits,CPUI_INT_RIGHT))
+      continue;
+    multConst[0] = newConst[0];
+    multConst[1] = newConst[1];
     PcodeOp *newmultop = data.newOp(2,op->getAddr());
     data.opSetOpcode(newmultop,CPUI_INT_MULT);
     Varnode *newmultvn = data.newUniqueOut(zextvn->getSize(),newmultop);
@@ -10588,6 +10654,11 @@ int4 RulePiecePathology::applyOp(PcodeOp *op,Funcdata &data)
   OpCode opc = subOp->code();
   if (opc == CPUI_SUBPIECE) {
     if (subOp->getIn(1)->getOffset() == 0) return 0;
+    // SaturnExplorer: the pathology is a partial write to the register a SUBPIECE of itself fills in
+    // (`retreg = CONCAT(SUBPIECE(retreg,#4),smallval)`). A concatenation that is built elsewhere -- the bytes of a
+    // register stored to the stack, a byte put into them, the longword loaded back -- is not one, and calling it so
+    // truncated the function's return to the small piece (patches/0037-rules-division-term-and-piece-pathology.patch).
+    if (op->getOut()->characterizeOverlap(*subOp->getIn(0)) == 0) return 0;
     if (!isPathology(subOp->getIn(0),data)) return 0;
   }
   else if (opc == CPUI_INDIRECT) {

@@ -4721,10 +4721,10 @@ std::string FindCCompiler()
 
 // The names the engine prints for C, as C: sized integer types and the piece operations
 // (the engine's own definitions, `ghidra/Ghidra/Features/Decompiler/src/decompile/datatests/` style).
-std::string CHeader()
+std::string CHeader(bool altReading = false)
 {
     std::ostringstream o;
-    o << "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n"
+    o << (altReading ? "#define ALT_READING 1\n" : "") << "#include <stdio.h>\n#include <stdint.h>\n#include <string.h>\n"
          "typedef unsigned char undefined; typedef unsigned char undefined1; typedef unsigned short undefined2;\n"
          "typedef unsigned int undefined3; typedef unsigned int undefined4; typedef unsigned long long undefined8;\n"
          "typedef unsigned char byte; typedef unsigned char uchar; typedef unsigned short ushort; typedef unsigned int uint;\n"
@@ -4732,7 +4732,10 @@ std::string CHeader()
          "typedef unsigned char bool; typedef unsigned short word; typedef unsigned int dword; typedef unsigned long long qword;\n"
          "typedef int int3; typedef signed char int1; typedef short int2; typedef int int4; typedef long long int8;\n"
          "typedef unsigned char uint1; typedef unsigned short uint2; typedef unsigned int uint4; typedef unsigned long long uint8;\n"
+         // xunknown is the engine's type with no sign: unsigned in the first reading, signed in the second (see CheckPrintedC)
          "typedef unsigned char xunknown1; typedef unsigned short xunknown2; typedef unsigned int xunknown4; typedef unsigned long long xunknown8;\n"
+         "#ifdef ALT_READING\n#define xunknown1 xunknown1_alt\n#define xunknown2 xunknown2_alt\n#define xunknown4 xunknown4_alt\n#define xunknown8 xunknown8_alt\n"
+         "typedef signed char xunknown1_alt; typedef short xunknown2_alt; typedef int xunknown4_alt; typedef long long xunknown8_alt;\n#endif\n"
          "typedef unsigned int unkbyte3; typedef unsigned int unkuint3; typedef int unkint3; typedef unsigned long long unkbyte5; typedef unsigned long long unkbyte6;\n"
          "typedef unsigned long long unkbyte7; typedef unsigned long long unkuint5; typedef unsigned long long unkuint6; typedef unsigned long long unkuint7;\n"
          "typedef long long unkint5; typedef long long unkint6; typedef long long unkint7;\n"
@@ -4784,6 +4787,7 @@ struct CVerdict
     bool compared = false;
     bool voidReturn = false;
     bool narrow = false;
+    bool upperBits = false;   // a narrow return whose r0 upper bits are no extension of it (A2-26): never excused as C's reading
     int mismatches = 0;
 };
 
@@ -4807,7 +4811,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
 {
     struct Prepared
     {
-        std::string name, cText, mainText;
+        std::string name, cText, altText, mainText;
         bool ready = false;
     };
     std::vector<CVerdict> out(cases.size());
@@ -4907,7 +4911,24 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             v.cls = "skipped:unknown-input";
             continue;
         }
+        // A name the engine makes for an access wider than the symbol it starts at (`_Stack_4 = CONCAT31(...)` where only `Stack_4`
+        // and `xStack_1` are declared) is no declaration of its own: give it the widest type, so the value written is the value read.
+        {
+            static const std::regex under("\\b(_[A-Za-z]\\w*)\\b");
+            std::set<std::string> names;
+            for (std::sregex_iterator it(rebuilt.begin(), rebuilt.end(), under), end; it != end; ++it) names.insert((*it)[1].str());
+            const size_t brace = rebuilt.find("{\n");
+            std::string decls;
+            for (const std::string& n : names)
+                if (n.compare(0, 2, "__") != 0) decls += "  unsigned long long " + n + ";\n";
+            if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
+        }
         pr.cText = rebuilt;
+        // The other reading of the same text (CheckPrintedC): a cast to uint8 of a 4-byte value widens by zero extension.
+        {
+            static const std::regex wide("\\(uint8\\)(?!\\((?:u?int|u?char|byte|short|ushort|xunknown|undefined)\\w*\\))");
+            pr.altText = std::regex_replace(rebuilt, wide, "(uint8)(uint4)");
+        }
         // The signature: the return type and how many parameters.
         const size_t at = pr.cText.find(pr.name + "(");
         if (at == std::string::npos)
@@ -5026,10 +5047,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         if (v.voidReturn && r0Changed) v.cls = "void-return";
     }
     // Compile and run.
-    auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled) -> std::string {
+    auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool alt = false) -> std::string {
         std::ostringstream src;
-        src << CHeader();
-        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << prep[i].cText << "\n";
+        src << CHeader(alt);
+        for (size_t i : which) src << "static int bad_" << prep[i].name << ";\n" << (alt ? prep[i].altText : prep[i].cText) << "\n";
         src << "int main(void) {\n";
         for (size_t i : which) src << prep[i].mainText;
         int total = 0;
@@ -5083,7 +5104,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                     const bool widenOnly = line.find("high-word-only") != std::string::npos &&
                                            (v.text.find("(uint8)") != std::string::npos || v.text.find("(int8)") != std::string::npos);
                     // r0's upper bits that are no extension of a narrow return are not C's promotion: always a failure.
-                    if (line.find(" upper-bits") != std::string::npos) v.cls = "mismatch";
+                    if (line.find(" upper-bits") != std::string::npos) v.cls = "mismatch", v.upperBits = true;
                     else if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
                 }
         }
@@ -5110,6 +5131,37 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 out[i].detail = first;
             }
         }
+    // The text is not always C: a signed compare of a value the engine gives no sign (xunknown) reads as unsigned in C, and a
+    // cast of a signed 4-byte value to uint8 sign-extends where the engine means a zero extension (A2-19: the guide says what
+    // the casts mean). A text that disagrees with the run in the first reading and agrees in the second is counted apart
+    // ('narrow-c'), not failed; one that agrees in neither is a finding.
+    {
+        std::vector<size_t> cand;
+        for (size_t i : all)
+            if (out[i].cls == "mismatch" && !out[i].upperBits &&
+                (out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos))
+                cand.push_back(i);
+        if (!cand.empty())
+        {
+            std::string altLog;
+            bool altCompiled = false;
+            const std::string altRun = compileRun(cand, "alt", altLog, altCompiled, true);
+            if (altCompiled)
+            {
+                std::set<std::string> bad;
+                std::istringstream in(altRun);
+                std::string line;
+                while (std::getline(in, line))
+                    if (line.compare(0, 9, "MISMATCH ") == 0) bad.insert(line.substr(9, line.find(' ', 9) - 9));
+                for (size_t i : cand)
+                    if (bad.count(prep[i].name) == 0)
+                    {
+                        out[i].cls = "narrow-c";
+                        out[i].detail += " [agrees when xunknown is signed and (uint8) widens by zero extension]";
+                    }
+            }
+        }
+    }
     return out;
 }
 

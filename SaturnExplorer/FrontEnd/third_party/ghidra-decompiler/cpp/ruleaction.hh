@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-rules-division-term-and-piece-pathology.patch).
  */
 /// \file ruleaction.hh
 /// \brief This is the basic set of transformation Rule objects.
@@ -1277,6 +1279,7 @@ public:
   virtual void getOpList(vector<uint4> &oplist) const;
   virtual int4 applyOp(PcodeOp *op,Funcdata &data);
   static Varnode *findForm(PcodeOp *op,uint4 &n,uint8 *y,uint4 &xsize,OpCode &extopc);
+  static bool isDivision(uint4 n,uint8 *y,uint4 xsize) { return calcDivisor(n,y,xsize) != 0; }	///< Is the multiply-and-shift a division?
 };
 
 class RuleSignDiv2 : public Rule {

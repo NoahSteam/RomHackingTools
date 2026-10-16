@@ -936,7 +936,12 @@ struct StateUse
     bool ok = true, transformed = false, written = false;
 };
 
-StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* entry, const char* writeOp, bool wholeOk)
+// 'memoryMayBeRead': something in the function can read memory back -- a LOAD the engine could not fold to a variable, or a
+// call. A whole SR stored through a pointer is then not a store and nothing more (A2-23): the engine does not forward a store
+// through a pointer to the load that follows it, so the reload is no descendant of the entry value, and a function that
+// stores SR, loads it back and branches on T was lent without SR (its caller's compare was dropped from the caller's text).
+StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* entry, const char* writeOp, bool wholeOk,
+                       bool memoryMayBeRead = true)
 {
     StateUse r;
     std::set<std::pair<const ghidra::Varnode*, bool>> seen;   // (value, whether it is no longer the whole register)
@@ -964,7 +969,7 @@ StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* 
                 if (out != nullptr) work.emplace_back(out, part);
                 break;
             case ghidra::CPUI_RETURN: r.ok = wholeOk && !part; break;
-            case ghidra::CPUI_STORE: r.ok = wholeOk && !part && op->getIn(2) == vn; break;
+            case ghidra::CPUI_STORE: r.ok = wholeOk && !part && op->getIn(2) == vn && !memoryMayBeRead; break;
             case ghidra::CPUI_CALLOTHER:
                 if (arch.userops.getOp(static_cast<ghidra::uint4>(op->getIn(0)->getOffset()))->getName() == writeOp) r.written = true;
                 else r.ok = false;
@@ -990,6 +995,15 @@ StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* 
         }
     }
     return r;
+}
+
+// Whether the function can read memory back: an alive LOAD (a pointer the engine did not fold to a variable) or a call.
+bool MayReadMemory(ghidra::Funcdata& fd)
+{
+    if (fd.numCalls() > 0) return true;
+    for (auto it = fd.beginOp(ghidra::CPUI_LOAD); it != fd.endOp(ghidra::CPUI_LOAD); ++it)
+        if (!(*it)->isDead()) return true;
+    return false;
 }
 
 // The user op that writes the control register 'reg' (patch 0034), or null for any other register.
@@ -1089,7 +1103,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
             // describes wrongly. Anything computed from it (the T flag: movt, bt, addc, ...) is an input.
             if (vn->getSize() == 4 && StateWriteOp(reg) != nullptr)
             {
-                const StateUse use = EntryStateUse(*fd.getArch(), vn, StateWriteOp(reg), reg == "sr");
+                const StateUse use = EntryStateUse(*fd.getArch(), vn, StateWriteOp(reg), reg == "sr", MayReadMemory(fd));
                 if (use.ok && (reg == "sr" ? !use.transformed || use.written : use.written)) continue;
             }
             return "it reads " + (reg.empty() ? std::string("a register") : reg) + " on entry, which no signature passes";
