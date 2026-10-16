@@ -7381,6 +7381,17 @@ void TestArea2Round4()
         CHECK(Has(r.Text(), "param_1 / 7"));
     }
 
+    {
+        // A product that does fit stays folded: mulhs(x, c) + x is x * (c + 2^32) >> 32, a 63-bit product of a 31-bit value and a 32-bit
+        // constant in a signed 8-byte multiply (the guard once refused every such rewrite and the divisions by 60 and 7 of the game image lost
+        // their recovered division), and the signed division by 7 is still a division
+        const DecompileResult r = decompile("A2-21 control: the signed product that fits", { 0xD102, 0x314D, 0x000A, 0x304C, 0x000B, 0x0009, 0xB60B, 0x60B7 });
+        CHECK(Has(r.Text(), "0xb60b60b7"));
+        const DecompileResult q = decompile("A2-21 control: signed x / 7", { 0xD106, 0x341D, 0x000A, 0x304C, 0x4021, 0x4021, 0x6203, 0x4200, 0xE200, 0x302E,
+                                                                              0x6003, 0x000B, 0x0009, 0x0009, 0x9249, 0x2493 });
+        CHECK(Has(q.Text(), "param_1 / 7"));
+    }
+
     // A2-22: a longword stored to the stack, a byte or word of it overwritten, the longword loaded back. The part of r0 that
     // is still the stored register was dropped (RulePiecePathology took the concatenation for a partial write to a register
     // the function never wrote): the return is the whole longword.
