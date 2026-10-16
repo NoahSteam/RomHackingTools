@@ -1835,6 +1835,21 @@ const Pin kPins[] = {
     { "mailbox", "actions", 0, 48, 7, "BlockGraph::calcForwardDominator;Funcdata::structureReset#1", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
     { "jumptable", "init", 1, 48, 71, "Database::attachScope;Funcdata::Funcdata#1", "A6-7 Database::attachScope: the Scope is freed, and its id taken out of the map, when the parent cannot hold it (Funcdata::Funcdata)" },
     { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType#0", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
+    // Round 3 (patch 0040): jump-table recovery and the structurer's TraceDAG; leaks, seen under LeakSanitizer.
+    { "jumptable", "followFlow", 0, 64, 94, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 JumpBasic::clone: the copy of the model is freed when its range cannot be cloned" },
+    { "jumptable", "followFlow", 0, 8, 197, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 Funcdata::recoverJumpTable: the permanent table is freed when the list of tables cannot take it" },
+    { "jumptable", "followFlow", 1, 64, 94, "JumpValuesRange::clone;JumpBasic::clone#0", "A6-21 the same, second pass" },
+    { "jumptable", "followFlow", 1, 8, 197, "vector<ghidra::JumpTable*;Funcdata::recoverJumpTable#0", "A6-21 the same, second pass" },
+    { "dag", "actions", 0, 8, 148, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root BranchPoint is owned by the list before anything else can fail" },
+    { "dag", "actions", 0, 8, 149, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: a root BlockTrace is owned by its BranchPoint before the active list takes it" },
+    { "dag", "actions", 0, 8, 150, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 BranchPoint::BranchPoint (createTraces): the first trace is freed when the list of paths cannot take it" },
+    { "dag", "actions", 0, 16, 108, "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces#0", "A6-22 createTraces: the traces made so far are freed when the constructor fails" },
+    { "dag", "actions", 0, 16, 109, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch: the new BranchPoint is freed when the list cannot take it, and the parent trace is untouched" },
+    { "dag", "actions", 1, 8, 148, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 the same, second pass" },
+    { "dag", "actions", 1, 16, 109, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 the same, second pass" },
+    { "loopbrk", "actions", 0, 8, 136, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize, in a loop with an early return" },
+    { "loopbrk", "actions", 0, 8, 137, "vector<ghidra::TraceDAG::BlockTrace*;TraceDAG::initialize#0", "A6-22 TraceDAG::initialize: the root trace, in a loop with an early return" },
+    { "loopbrk", "actions", 0, 16, 102, "vector<ghidra::TraceDAG::BranchPoint*;TraceDAG::openBranch#0", "A6-22 TraceDAG::openBranch, in a loop with an early return" },
 };
 
 long ResolvePin(const Ctx& c, const Pin& p)
