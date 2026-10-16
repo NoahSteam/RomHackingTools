@@ -5667,3 +5667,107 @@ say when a pointer moves.
 | Generator, `SE_GENERATED_SEEDS=3000` `SE_GENERATED_GRAMMAR=2` | 0 findings; `cache.read.said` 160, `cache.read.pointer.said` 28, `cache.read.anonymous` 41 |
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 14, cautions 16 (as round 5) |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 29, cautions 20 (as round 5) |
+
+## Area 3, round 5 review
+
+Reviewer, branch `review/3-round5-review`, on master `124a5eb`. Findings only, no fixes. New ledger rows: A3-13 (P2), A3-14 (P2),
+A3-15 (P2), A3-16 (P2), A3-17 (P3). No area 4 row.
+
+The instrument was a scratch driver, not committed. It is a reader of fixtures in `Sh2DecompilerTests.cpp`: callees are decompiled first and
+lent, then the caller is decompiled, run on the emulator with any SR, GBR or other register on entry, and checked with `MayReturn`. It also has
+a mode that hands a text to `MayReturn` alone. The same driver was put on a build of `4210e8e` (before round 4 and the integration) to tell
+regressions from old limits. The generator's replay (`SE_GENERATED_WORDS`/`FUNCS`/`RETURNS`) was run on every fixture. The corpus was run with
+`SE_GAME_LEND=1` and `SE_GAME_OUT` on both images and both builds, with a temporary line that printed every lent prototype whose r15 delta is
+not 0 and every function over 300 ms.
+
+### What held
+
+- **`EntryStateUse`.** Each of these shapes was withheld, and the run agreed with the text:
+  - SR or'ed with a parameter and written back, its value also returned.
+  - SR written back on one path and returned on the other.
+  - SR saved with `stc sr,r1` (or `stc.l sr,@-r15`), a `tst #2,r0` made, SR restored, then `movt r0`. This returns the entry T: the
+    engine keeps `return (uint1)(in_sr & 0x3f3) & 1`, and the test follows the `ldc`'s own `& 0x3f3` past the `Write_SR` to the return.
+  - GBR used as a base on one path and restored on the other.
+  - GBR advanced and stored.
+  - `rts ; movt r0`, and `stc sr,r0 ; and #0xF0,r0` with and without a join to 0.
+- **Round 4's frame address.** These were each right:
+  - The A3-9 index scaled by `shll2` (`r15 + ((r4 & 1) << 2)`): `return iStack_c + iStack_8;`, 12 as run.
+  - A loop moving the address up.
+  - The frame address in r2 stored to a global by a withheld callee and written through by a lent one (`return xStack_8;`, 7).
+  - The same in r4 to a lent callee.
+- **Extrapop and the r15 kill.** A callee that pops its caller's word on one path only is withheld ("r15 changed by an amount that is not
+  the same"), and so is its caller. A callee that pops and returns its caller's pushed word reads a stack input and is withheld.
+- **The 8-byte return (A2-17).** A caller that returns the r1 of a lent `CONCAT44(0x11,param_2)` callee prints `(int4)xVar1`, which is
+  right. A callee whose r1 is the caller's on one path gives up the r1 half and its caller is withheld on `extraout_r1`. No shape gave a
+  4-byte caller a wrong value without an `extraout`.
+- **A3-3 b (unreachable).** A caller of a withheld callee is withheld by the first test in `WithholdReason`, and it covers every call spec.
+  The only other paths are:
+  - a user op (`trapa` is an indirect call through VBR and is withheld; `sleep` and the `Write_*` ops change nothing);
+  - a jump into the callee's body, which is then the caller's own code and its GBR write is in the caller's own text.
+
+  No shape was found where a lent caller reads the model's GBR after a withheld callee.
+- **`TestGameLending`.** Image 007 lends 610 signatures and image 008 lends 1,006 (611 and 1,007 at `4210e8e`), as the integration said.
+  The ledger counts and the suite pass. The signature changed in 38 functions of each image. All of 007's were read; 008's 38
+  are the same families, judged by their signature lines (the same mask setters, and `060663BC` with its callers `06066388` and `060663A8`):
+  - 33 of 007's are set-the-interrupt-mask functions that now take their level, because patch 0034 keeps the `ldc rN,sr` source. They are
+    `0601B328` `void f(uint4)` (`Write_SR(param_1 & 0x3f3)`), the `0601B2DC`/`0601B2E2` wrappers (`b328(param_1 << 4 | b338() & 0xffffff0f)`),
+    and `0602CB58`, `06030530`, `06023C48`/`06023C4C`, and the like. `0602CF70` takes its level in r5 (as `0602F270` does, by its signature), which the
+    disassembly confirms (`shll2 r5 ; shll2 r5 ; or r1,r5 ; ldc r5,sr`). Before, they were lent `void f(void)`, which dropped the
+    parameter. Each is right.
+  - `0602671C` is withheld on the S bit (right, as the integration says). Its callers `060266E8` and `06026708` are now withheld on it.
+  - `06003800` is now withheld for an indirect call, after the `Write_SR` flow took `06003840` in.
+  - `0601B358` is withheld both before and after. Its text now calls the BIOS's `SYS_CHGSCUIM` at `0x06000344` with its two arguments,
+    where it had five guessed ones.
+
+  The parameter count of the lent signatures rose from 767 to 800 (007) and from 1,220 to 1,253 (008) through those mask functions; the
+  integration's record gives no parameter count. Neither image lends a negative r15 delta (154 and 295 positive ones, the mid-prologue
+  entries). Neither image has "too many paths" among its reasons.
+- **`PseudoEval`.** Each of these read right: a `(char)` cast in a condition, `CONCAT22` of two narrowed parameters, `(int)(char)` of a
+  `uint1` parameter compared with -1, and a local assigned on one path only. `?:` is "cannot evaluate", an honest rejection.
+
+### What failed
+
+- **A3-13 (P2): r0 carried across a lent call.** `mov r4,r0 ; bsr g ; nop ; ... ; rts`, with g lent and keeping r0, makes the caller
+  lent `void f(void)`. It returns r4, and the same goes for r5, a constant, or `r4 + r5`. The engine kills r0 at every call
+  (`LendEffects` lends no r0). Rule (b) sees the value but asks only the registers that no signature passes. The generator reports
+  `return-dropped`. This is A3-7's fifth shape with a parameter or a constant in place of r9.
+- **A3-14 (P2): a join that the engine drops.** `phi(in_sr, in_sr | 0xf0)`, `phi(in_sr, in_sr & 0xf0)` and `phi(in_r0, in_r0 + 1)` each
+  print `return;` and are lent `void f(void)`, which loses the r4 that chooses the path. Rule (b) leaves out r0's entry and any computed SR,
+  and a join is not `Value::Reg(kSr)`. The generator reports `return-dropped` and `input-dropped:r0`. The SR shape is what C compiles from
+  `get_cr()` under an `if`.
+- **A3-15 (P2): a negative extrapop drops what was pushed.** `rts ; mov.l r5,@-r15` is lent `void f(void)` with spDelta -4. Its caller pops
+  the word, returns it, and is lent with 0 parameters. The oracle accepts the uninitialised `xStack_8`; the generator reports
+  `param-dropped:r5`. Round 3's suite fixture "r15 lowered by the callee" is this shape and pins the caller as lent.
+- **A3-16 (P2): a stack address moved down by a loop never converges.** The join keeps the lower `stackBase`, so each pass lowers it.
+  `ReturnCheck` runs to 200,000 steps (3.4 s for 11 instructions) and the function is withheld "too many paths"; at `4210e8e` the same leaf
+  was lent in 7 ms. The tolerant probe never reaches the call after such a loop, so a frame address in r2 is not declared. The text says
+  `return 10;` where the run returns 12 (it did at `4210e8e` too, without the delay). Neither corpus image has the shape.
+- **A3-17 (P3): a negative or subtracted index.** r2 = frame + 4 + r4 with r4 = -4, and r2 = frame + 4 - r4, are folded (`return 5;`, the
+  run returns 7). This is round 4's written limit, which has no ledger row yet. The function is withheld, so only the text is wrong.
+
+### Oracles
+
+- `PseudoAgreesWithRun` rejects A3-13, A3-14 and A3-17, and cannot read A3-16's `do` loop (it rejects, for that reason). It accepts
+  A3-15, because an uninitialised stack local is unknown.
+- The generator's replay rejects A3-13, A3-14 and A3-15. It passes A3-16's leaf (withheld, and no check sees a lost signature or the
+  time). Its grammar emits none of the four shapes, so the nightly run cannot find them.
+- `PseudoEval` reads `unaff_r8`, `in_r8`, `in_sr` and `extraout_rN` as unknown, although `CallRunResult` gives every register a known
+  starting value (r_i = 0x1000 + 0x111 i, SR 0). A text that names the wrong entry register would be accepted. No engine text was found that
+  does, so this is no row.
+
+### Questions without a fixture
+
+- Should rule (b) ask r0 at a return for anything this function put there (a parameter, a constant, its own entry value changed) whenever
+  the engine's return is void? A3-13 and A3-14 are its two gaps. The cost on the corpus was not measured: it needs a host change, which this
+  round does not make.
+- C4's text (A3-16 a) prints the loop's pointer as `register0x0000003c = (BADSPACEBASE *)((int4)register0x0000003c + -4);`, which reads as
+  r15 being lowered in the loop. The code lowers r1, a copy of the entry r15, and r15 is restored. Is that a printing question for area 2 or
+  area 7? It is not raised as an area 3 row.
+
+### Could not probe
+
+- How many corpus functions A3-13 or A3-14 would withhold. This needs the rule changed, which a reviewer does not do.
+- An interrupt between a callee's push and the caller's pop in the A3-15 shape. The emulator takes no interrupt there.
+
+**Done criteria.** Area 3 has four P2 rows this round (A3-13 to A3-16), so it needs a fix round and then two consecutive clean review
+rounds. Area 4 has no row this round.
