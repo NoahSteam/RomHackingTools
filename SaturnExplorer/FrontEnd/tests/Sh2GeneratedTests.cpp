@@ -3807,7 +3807,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (run.finished)
                     {
                         anyFinished = true;
-                                }
+                        if (!(run.use.written & 1u)) r0Always = false;
+                    }
                 static const int kInputs[] = { 0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20 };
                 static const char* const kStateNames[4] = { "gbr", "vbr", "mach", "macl" };
                 for (int k : kInputs)
