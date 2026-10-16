@@ -891,58 +891,81 @@ private:
     int64_t mEscapeLow = 0;
 };
 
-// How the entry value of SR is used, for WithholdReason. `ok`: every use is one that says nothing about the value -- a copy, a
-// return, a store, or a write back into SR (Write_SR, patch 0034) -- or an or with a constant (the whole value, with bits set)
-// or an and with a constant (the CPU's own mask on a load of SR, or a field of it) whose result is used so; but the field
-// only goes into a Write_SR, never out as a value (a T flag selected with `and #1` and returned is the caller's flag).
-// `masked`: some use went through an and or an or. `written`: such a value reaches a Write_SR. A function that raises the
-// interrupt mask and gives it back (`stc sr,r1 ; mov r1,r0 ; or #0xF0,r0 ; ldc r0,sr ; ... ; ldc r1,sr`, with the
-// compiler's own copy of SR) is such: the SR it reads it also writes, so no caller passes it. One that only masks it, or
-// compares it, is computed from the caller's flags.
-struct SrUse
+// How the entry value of SR, GBR or VBR is used, for WithholdReason. Since patch 0034 an `ldc` into one of them stays in the
+// code as a call of a user op (Write_SR, Write_GBR, Write_VBR), and with it the read of whatever the register was written
+// from. A function that saves the register and gives it back (`stc gbr,r1 ; ldc r4,gbr ; ... ; ldc r1,gbr`), or changes some of
+// its bits and keeps the rest (the interrupt mask: `stc sr,r1 ; ... ; or #0xF0,r0 ; ldc r0,sr ; ... ; ldc r1,sr`) reads the
+// entry value only to write it back: it is the machine's state, which no caller passes, and not an input. One whose behaviour
+// depends on it is: a branch, a compare, a load or a call argument computed from it; a value of it returned or stored (but
+// the whole of SR, or the whole with bits set, `stc sr,r0 ; or #0xF0,r0`, is the helper's idiom of A3-5 and stays lent).
+//   `ok`: every path the value takes ends in the write back, or is a whole copy (SR only: returned, stored, or with bits
+//   set by an or with a constant). `transformed`: it went through an operation, so it is not a plain copy. `written`: it
+//   reached a write back. A transformed value that reaches no write back is somebody's flags, and is an input.
+struct StateUse
 {
-    bool ok = true, masked = false, written = false;
+    bool ok = true, transformed = false, written = false;
 };
 
-SrUse SrEntryUse(const ghidra::Architecture& arch, const ghidra::Varnode* vn, int depth, bool field = false)
+StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* entry, const char* writeOp, bool wholeOk)
 {
-    SrUse r;
-    if (depth > 8)
+    StateUse r;
+    std::set<std::pair<const ghidra::Varnode*, bool>> seen;   // (value, whether it is no longer the whole register)
+    std::vector<std::pair<const ghidra::Varnode*, bool>> work;
+    work.emplace_back(entry, false);
+    while (!work.empty() && r.ok)
     {
-        r.ok = false;
-        return r;
-    }
-    for (auto use = vn->beginDescend(); use != vn->endDescend(); ++use)
-    {
-        const ghidra::PcodeOp* op = *use;
-        switch (op->code())
+        const ghidra::Varnode* vn = work.back().first;
+        const bool part = work.back().second;
+        work.pop_back();
+        if (!seen.insert(std::make_pair(vn, part)).second) continue;
+        if (seen.size() > 512)   // a value that spreads this far is computed from
         {
-        case ghidra::CPUI_COPY:
-        case ghidra::CPUI_RETURN: r.ok = r.ok && !field; break;
-        case ghidra::CPUI_STORE: r.ok = r.ok && !field && op->getIn(2) == vn; break;
-        case ghidra::CPUI_CALLOTHER:
-            if (arch.userops.getOp(static_cast<ghidra::uint4>(op->getIn(0)->getOffset()))->getName() == "Write_SR") r.written = true;
-            else r.ok = false;
-            break;
-        case ghidra::CPUI_INT_AND:
-        case ghidra::CPUI_INT_OR:
-        {
-            const ghidra::Varnode* other = op->getIn(1 - op->getSlot(vn));
-            if (!other->isConstant() || op->getOut() == nullptr)
-            {
-                r.ok = false;
-                break;
-            }
-            const SrUse sub = SrEntryUse(arch, op->getOut(), depth + 1, field || op->code() == ghidra::CPUI_INT_AND);
-            r.ok = r.ok && sub.ok;
-            r.masked = true;
-            r.written = r.written || sub.written;
+            r.ok = false;
             break;
         }
-        default: r.ok = false; break;
+        for (auto use = vn->beginDescend(); use != vn->endDescend() && r.ok; ++use)
+        {
+            const ghidra::PcodeOp* op = *use;
+            const ghidra::Varnode* out = op->getOut();
+            switch (op->code())
+            {
+            case ghidra::CPUI_COPY:
+            case ghidra::CPUI_MULTIEQUAL:
+                if (out != nullptr) work.emplace_back(out, part);
+                break;
+            case ghidra::CPUI_RETURN: r.ok = wholeOk && !part; break;
+            case ghidra::CPUI_STORE: r.ok = wholeOk && !part && op->getIn(2) == vn; break;
+            case ghidra::CPUI_CALLOTHER:
+                if (arch.userops.getOp(static_cast<ghidra::uint4>(op->getIn(0)->getOffset()))->getName() == writeOp) r.written = true;
+                else r.ok = false;
+                break;
+            case ghidra::CPUI_CBRANCH:
+            case ghidra::CPUI_BRANCHIND:
+            case ghidra::CPUI_CALL:
+            case ghidra::CPUI_CALLIND:
+            case ghidra::CPUI_LOAD:
+            case ghidra::CPUI_INDIRECT: r.ok = false; break;
+            default:
+                if (out == nullptr)
+                {
+                    r.ok = false;
+                    break;
+                }
+                // Bits set in the whole value are still the whole value, and may be returned; anything else is a field of it.
+                r.transformed = true;
+                if (op->code() == ghidra::CPUI_INT_OR && op->getIn(1 - op->getSlot(vn))->isConstant()) work.emplace_back(out, part);
+                else work.emplace_back(out, true);
+                break;
+            }
         }
     }
     return r;
+}
+
+// The user op that writes the control register 'reg' (patch 0034), or null for any other register.
+const char* StateWriteOp(const std::string& reg)
+{
+    return reg == "sr" ? "Write_SR" : reg == "gbr" ? "Write_GBR" : reg == "vbr" ? "Write_VBR" : nullptr;
 }
 
 // Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent
@@ -982,6 +1005,17 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
                                           ? ghidra::PcodeOp::getOpFromConst(ind->getIn(1)->getAddr())
                                           : nullptr;
         if (!call || (call->code() != ghidra::CPUI_CALL && call->code() != ghidra::CPUI_CALLIND)) continue;   // a user op's effect (sleep) is not a call's
+        // What a call left in SR, GBR or VBR that goes on only into a write of the same register (the interrupt mask raised
+        // around a call and put back: `Write_SR(extraout_sr & 0xf0 | ...)`) is the machine's state again, not a value the
+        // callee returns: see EntryStateUse.
+        {
+            const char* writeOp = vn->getSize() == 4 ? StateWriteOp(fd.getArch()->translate->getRegisterName(vn->getSpace(), vn->getOffset(), 4)) : nullptr;
+            if (writeOp != nullptr)
+            {
+                const StateUse use = EntryStateUse(*fd.getArch(), vn, writeOp, false);
+                if (use.ok && use.written) continue;
+            }
+        }
         std::string callee = "a call";
         {
             const ghidra::FuncCallSpecs* cs = fd.getCallSpecs(const_cast<ghidra::PcodeOp*>(call));
@@ -1023,10 +1057,10 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
             // The status register as it is -- returned or stored whole (`stc sr,r0 ; rts`, the idiom of an
             // interrupt-mask helper) -- is the machine's state, which nothing passes and nothing here
             // describes wrongly. Anything computed from it (the T flag: movt, bt, addc, ...) is an input.
-            if (reg == "sr" && vn->getSize() == 4)
+            if (vn->getSize() == 4 && StateWriteOp(reg) != nullptr)
             {
-                const SrUse use = SrEntryUse(*fd.getArch(), vn, 0);
-                if (use.ok && (!use.masked || use.written)) continue;
+                const StateUse use = EntryStateUse(*fd.getArch(), vn, StateWriteOp(reg), reg == "sr");
+                if (use.ok && (reg == "sr" ? !use.transformed || use.written : use.written)) continue;
             }
             return "it reads " + (reg.empty() ? std::string("a register") : reg) + " on entry, which no signature passes";
         }

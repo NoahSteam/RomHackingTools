@@ -6162,6 +6162,17 @@ void TestCallsAndTraps()
             CHECK(!lsr.callee.prototype.known && Has(lsr.callee.prototypeWithheld, "computed from sr on entry"));
         }
 
+        // The interrupt mask raised and put back round a call whose SR the model kills: the SR read after the call
+        // (`Write_SR(extraout_sr | 0xf0)`) goes only into a write of SR, so it is the machine's state and not a value the callee
+        // was supposed to return; the signature is lent. The oracle is not asked (the call's SR is not a value it can evaluate).
+        {
+            const CallFixture g = { "mask raised after a call that sets T", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x0002, 0xCBF0, 0x400E, 0xE000, 0x4F26, 0x000B, 0x0009 }, { 0x2448, 0x000B, 0x0009 }) };
+            const Lent lg = lend(g, true, false);
+            CHECK(lg.callee.prototype.known && lg.caller.prototype.known);
+            CHECK(Has(lg.caller.Text(), "Write_SR(extraout_sr"));
+        }
+
         // A caller whose callee's registers share one set of origins is not a function that returns them (the
         // first form of the dropped-return rule withheld 23 corpus functions that save r8 and call): the callee
         // reads r8 only to save it and scratches r1 with a copy, then sets r0.
@@ -6353,6 +6364,19 @@ void TestArea2Round3()
         // a field of it (the S and T bits), 4 bytes wide, returned after the write back
         const DecompileResult field = decompile("A2-13 SR restored, field returned", { 0x0102, 0x410E, 0x6013, 0xC903, 0x000B, 0x0009 });   // stc sr,r1 ; ldc r1,sr ; mov r1,r0 ; and #3,r0 ; rts
         CHECK(!field.prototype.known && Has(field.prototypeWithheld, "sr"));
+        // The same for GBR and VBR: saved and put back, or changed and kept, is the machine's state (lent); returned, or used as
+        // an address, is an input (withheld). Before patch 0034 the engine dropped the writes and with them the reads.
+        const DecompileResult gbrSave = decompile("A2-13 GBR set and restored", { 0x0112, 0x441E, 0x411E, 0x000B, 0x0009 });   // stc gbr,r1 ; ldc r4,gbr ; ldc r1,gbr ; rts
+        CHECK(gbrSave.prototype.known && gbrSave.prototype.params.size() == 1 && Has(gbrSave.Text(), "Write_GBR(unaff_gbr);"));
+        CHECK(((gbrSave.prototype.effects.preserved >> 17) & 1u) != 0);   // GBR ends as it began: a caller keeps it
+        const DecompileResult vbrSave = decompile("A2-13 VBR set and restored", { 0x0122, 0x442E, 0x412E, 0x000B, 0x0009 });   // stc vbr,r1 ; ldc r4,vbr ; ldc r1,vbr ; rts
+        CHECK(vbrSave.prototype.known && vbrSave.prototype.params.size() == 1 && Has(vbrSave.Text(), "Write_VBR(unaff_vbr);"));
+        const DecompileResult gbrAdd = decompile("A2-13 GBR advanced", { 0x0112, 0x7104, 0x411E, 0x000B, 0x0009 });   // stc gbr,r1 ; add #4,r1 ; ldc r1,gbr ; rts
+        CHECK(gbrAdd.prototype.known && ((gbrAdd.prototype.effects.preserved >> 17) & 1u) == 0);   // changed: a caller reads the new one
+        const DecompileResult gbrRet = decompile("A2-13 GBR returned", { 0x0012, 0x441E, 0x000B, 0x0009 });   // stc gbr,r0 ; ldc r4,gbr ; rts
+        CHECK(!gbrRet.prototype.known && Has(gbrRet.prototypeWithheld, "gbr"));
+        const DecompileResult gbrAddr = decompile("A2-13 GBR saved, then an address", { 0x0112, 0x7104, 0xC600, 0x411E, 0x000B, 0x0009 });   // stc gbr,r1 ; add #4,r1 ; mov.l @(0,gbr),r0 ; ldc r1,gbr
+        CHECK(!gbrAddr.prototype.known && Has(gbrAddr.prototypeWithheld, "gbr"));
     }
 }
 
