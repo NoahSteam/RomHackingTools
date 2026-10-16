@@ -1470,95 +1470,157 @@ std::string RegisterNames(const std::vector<const HardwareRegister*>& regs)
     return names;
 }
 
-// The constants a pointer varnode can hold when every path to it is a copy or a merge: the values the printed code names as
-// `&REG` (a pointer merged from register literals, `puVar2 = &VDP2_TVSTAT; if (c) puVar2 = &VDP2_VCNT;`). 'others' is set when
-// some path is not a constant (a parameter, a value loaded or computed): the pointer may hold something else as well.
-// 'bases' are the constants an indexed pointer starts from (`(&SCU_D0EN)[param_1 * 8]`, a PTRADD or an INT_ADD of an address and
-// something the analysis does not know): the access is at the base plus an amount, not at the base, so it is said only for the
-// index 0.
+// The addresses a pointer varnode can hold, as far as the analysis proves them: the values the printed code shows as `&REG` (`puVar2 =
+// &VDP2_TVSTAT; if (c) puVar2 = &VDP2_VCNT;`), as numbers (`pxVar1 = (xunknown4 *)0x25fe0110;`: a register's alias, A5-38) or as such a
+// base plus a constant offset (`puVar1[4]`, `add #-4,Rn`; A5-37: the access is at base + offset, a different register). Every path to the
+// pointer is a copy, a merge, or an add; 'others' is set when some path is not a known address (a parameter, a value loaded or computed, a
+// callee's output): the pointer may hold something else as well. 'steps' is set when a path runs through a cycle, a pointer stepped in a loop
+// (A5-39): it holds the first value and then others. 'bases' are the addresses an indexed pointer starts from (`(&SCU_D0EN)[param_1 * 8]`, a
+// base plus an index the analysis does not know): the access is at the base plus an amount, said only for the index 0.
 struct PointerValues
 {
-    std::set<uint32_t> constants;
+    std::map<uint32_t, bool> constants;   // address -> reached through a constant offset (printed as base[k], not as the address)
     std::set<uint32_t> bases;
     bool others = false;
+    bool steps = false;
+    bool cycle = false;   // (while walking) the value of a node still being walked: the path came back to it unchanged
 };
 
-PointerValues ConstantsOf(const ghidra::Varnode* start)
+class PointerResolver
 {
-    PointerValues out;
-    std::set<std::pair<const ghidra::Varnode*, bool>> seen;   // (varnode, reached through an index)
-    std::vector<std::pair<const ghidra::Varnode*, bool>> todo{ std::make_pair(start, false) };
-    while (!todo.empty() && seen.size() < 4096)
+public:
+    PointerValues Resolve(const ghidra::Varnode* start)
     {
-        const std::pair<const ghidra::Varnode*, bool> item = todo.back();
-        todo.pop_back();
-        if (!seen.insert(item).second) continue;
-        const ghidra::Varnode* vn = item.first;
-        const bool indexed = item.second;
-        if (vn->isConstant())
-        {
-            // A bare number, which the engine prints as a number even when it is a register's address (`param_1 + -0xc` is 0xFFFFFFF4,
-            // SH2_RTCNT's): the pointer holds something else as well. A register address the engine means as a pointer is a PTRSUB (below).
-            if (!indexed) out.others = true;
-            continue;
-        }
+        PointerValues v = Walk(start, 0);
+        if (budget_ <= 0) v.others = true;
+        v.cycle = false;
+        return v;
+    }
+
+private:
+    PointerValues Walk(const ghidra::Varnode* vn, int depth)
+    {
+        PointerValues out;
+        if (--budget_ <= 0 || depth > 96) { out.others = true; return out; }
+        // A number the pointer holds on this path: a known address. (As the addend of an unknown it is an offset, below: the engine prints
+        // `param_1 + -0xc`, 0xFFFFFFF4, as a number, and that is not a pointer to SH2_RTCNT, A5-28's rawconst.)
+        if (vn->isConstant()) { out.constants[static_cast<uint32_t>(vn->getOffset())] = false; return out; }
+        const auto memo = done_.find(vn);
+        if (memo != done_.end()) return memo->second;
+        // A path back to a node being walked, unchanged (a loop's merge of its own value) adds nothing; one that adds to it on the way
+        // (Shift, Indexed) is a pointer stepped in a loop.
+        if (active_.count(vn)) { out.cycle = true; return out; }
         const ghidra::PcodeOp* d = vn->isWritten() ? vn->getDef() : nullptr;
-        if (!d)
-        {
-            if (!indexed) out.others = true;   // (an addend nothing is known about is the index: it makes the pointer indexed, not unknown)
-            continue;
-        }
+        if (!d) { out.others = true; return out; }
+        active_.insert(vn);
         switch (d->code())
         {
         case ghidra::CPUI_COPY:
         case ghidra::CPUI_CAST:
-            todo.push_back(std::make_pair(d->getIn(0), indexed));
+            out = Walk(d->getIn(0), depth + 1);
             break;
         case ghidra::CPUI_MULTIEQUAL:
-            for (int i = 0; i < d->numInput(); ++i) todo.push_back(std::make_pair(d->getIn(i), indexed));
+            for (int i = 0; i < d->numInput(); ++i) Merge(out, Walk(d->getIn(i), depth + 1));
             break;
-        case ghidra::CPUI_PTRSUB:   // the address of a global: PTRSUB(0, address)
+        case ghidra::CPUI_PTRSUB:   // the address of a global: PTRSUB(0, address); or a base and a field offset
             if (d->getIn(0)->isConstant() && d->getIn(1)->isConstant())
-            {
-                const uint32_t v = static_cast<uint32_t>(d->getIn(0)->getOffset() + d->getIn(1)->getOffset());
-                if (indexed) out.bases.insert(v);
-                else out.constants.insert(v);
-            }
-            else if (!indexed) out.others = true;
+                out.constants[static_cast<uint32_t>(d->getIn(0)->getOffset() + d->getIn(1)->getOffset())] = false;
+            else if (d->getIn(1)->isConstant())
+                out = Shift(Walk(d->getIn(0), depth + 1), static_cast<uint32_t>(d->getIn(1)->getOffset()));
+            else
+                out.others = true;
             break;
-        case ghidra::CPUI_PTRADD:   // base + index * size: the base is where the pointer starts
-            todo.push_back(std::make_pair(d->getIn(0), true));
-            break;
-        case ghidra::CPUI_INT_ADD:   // a sum: either addend may be the base (a constant that is a number, `param_1 - 1`, is dropped by PrintsAsRegister)
-            todo.push_back(std::make_pair(d->getIn(0), true));
-            todo.push_back(std::make_pair(d->getIn(1), true));
-            break;
-        default:
-            if (!indexed) out.others = true;
+        case ghidra::CPUI_PTRADD:   // base + index * size
+        {
+            PointerValues base = Walk(d->getIn(0), depth + 1);
+            if (d->getIn(1)->isConstant())
+                out = Shift(base, static_cast<uint32_t>(d->getIn(1)->getOffset() * d->getIn(2)->getOffset()));
+            else
+                out = Indexed(base);
             break;
         }
+        case ghidra::CPUI_INT_ADD:
+        case ghidra::CPUI_INT_SUB:
+        {
+            const bool sub = d->code() == ghidra::CPUI_INT_SUB;
+            const ghidra::Varnode* a = d->getIn(0);
+            const ghidra::Varnode* b = d->getIn(1);
+            if (b->isConstant() || (!sub && a->isConstant()))
+            {
+                // A constant addend is an offset from what the other operand holds (a base shifted, an unknown stays unknown).
+                const ghidra::Varnode* base = b->isConstant() ? a : b;
+                const uint32_t k = static_cast<uint32_t>((b->isConstant() ? b : a)->getOffset());
+                out = Shift(Walk(base, depth + 1), sub ? 0u - k : k);
+            }
+            else
+            {
+                // Neither is a number: an address plus an index nothing is known about (either addend may be the address).
+                PointerValues x = Walk(a, depth + 1), y = Walk(b, depth + 1);
+                const bool anyBase = !x.constants.empty() || !x.bases.empty() || !y.constants.empty() || !y.bases.empty();
+                if (!anyBase) { Merge(out, x); Merge(out, y); out.others = true; }
+                else
+                {
+                    out = Indexed(x);
+                    if (!sub) Merge(out, Indexed(y));
+                    out.others |= x.steps || y.steps;   // (an unknown addend is the index: it makes the pointer indexed, not unknown)
+                    out.steps |= x.steps || y.steps;
+                    out.cycle |= x.cycle || y.cycle;
+                }
+            }
+            break;
+        }
+        default:
+            out.others = true;
+            break;
+        }
+        active_.erase(vn);
+        done_[vn] = out;
+        return out;
     }
-    if (!todo.empty()) out.others = true;
-    return out;
-}
 
-// Whether the printed code names a register at this address (`&VDP2_TVSTAT`): the engine names one only at the address its symbol is
-// at -- the cached and cache-through partitions for the bus, the one on-chip address -- and prints any other as a number (a sentinel
-// -1, an offset, an address in an unnamed part of a register area), which is not a claim that the pointer reaches a register.
-bool PrintsAsRegister(uint32_t address)
-{
-    // ...and the SMPC's registers as the 16-bit words they sit in, at the even address (SaturnHardwareWordViews): `&SMPC_OREG0` is
-    // 0x00100020, one below the byte register's own address (A5-45: a merged pointer holding it was not followed).
-    size_t viewCount = 0;
-    const HardwareRegister* views = SaturnHardwareWordViews(viewCount);
-    for (size_t i = 0; i < viewCount; ++i)
-        if ((address >> 29) <= 1 && (address & 0x1FFFFFFFu) == views[i].address) return true;
-    const HardwareRegister* r = FindHardwareRegister(address);
-    uint32_t canonical = 0;
-    if (!r || !HardwareAlias(address, canonical) || canonical != r->address) return false;
-    return ClassifyPartition(canonical) == Sh2Partition::OnChip ? address == canonical
-                                                                : (address >> 29) <= 1 && (address & 0x1FFFFFFFu) == canonical;
-}
+    static void Merge(PointerValues& into, const PointerValues& from)
+    {
+        for (const auto& c : from.constants)
+        {
+            auto at = into.constants.find(c.first);
+            if (at == into.constants.end()) into.constants[c.first] = c.second;
+            else at->second = at->second && c.second;
+        }
+        into.bases.insert(from.bases.begin(), from.bases.end());
+        into.others |= from.others;
+        into.steps |= from.steps;
+        into.cycle |= from.cycle;
+    }
+
+    static PointerValues Shift(const PointerValues& v, uint32_t k)
+    {
+        PointerValues out;
+        out.others = v.others;
+        out.steps = v.steps;
+        out.cycle = v.cycle;
+        if (v.cycle && k != 0) out.steps = out.others = true;
+        for (const auto& c : v.constants) out.constants[c.first + k] = c.second || k != 0;
+        for (uint32_t b : v.bases) out.bases.insert(b + k);
+        return out;
+    }
+
+    // Every address held becomes the base of an indexed pointer.
+    static PointerValues Indexed(const PointerValues& v)
+    {
+        PointerValues out;
+        out.others = v.others;
+        out.steps = v.steps;
+        out.cycle = v.cycle;
+        if (v.cycle) out.steps = out.others = true;
+        for (const auto& c : v.constants) out.bases.insert(c.first);
+        out.bases.insert(v.bases.begin(), v.bases.end());
+        return out;
+    }
+
+    int budget_ = 4096;
+    std::set<const ghidra::Varnode*> active_;
+    std::map<const ghidra::Varnode*, PointerValues> done_;
+};
 
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
 // register area at a constant address is a volatile read or write by now (the symbols and ranges
@@ -1578,7 +1640,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
     std::vector<std::pair<uint32_t, const HardwareRegister*>> splitReads;
     // One access: of 'size' bytes at the constant address 'at', made by the instruction 'insn'; 'prefix' is what a note starts
     // with when the address is one the pointer may hold (empty for a direct access, whose address is certain).
-    auto account = [&](uint32_t insn, uint32_t at, uint32_t size, bool write, const ghidra::Varnode* value, const std::string& prefix) {
+    auto account = [&](uint32_t insn, uint32_t at, uint32_t size, bool write, const ghidra::Varnode* value, const std::string& prefix, bool shownByAddress) {
         const bool read = !write;
         auto note = [&](uint32_t where, std::string text, bool caution) { noteRaw(where, prefix + text, caution); };
         // A misaligned access is an address error and is made at the aligned address (A5-25), on-chip too from 0xFFFFFF00 up; below
@@ -1637,7 +1699,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                                ? reach == canonical
                                : (reach >> 29) <= 1 && (reach & 0x1FFFFFFFu) == canonical;
         // (a misaligned access says where it lands in its own caution)
-        if (!named && reach == at) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
+        if (!named && reach == at && shownByAddress) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
     };
     for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
     {
@@ -1651,28 +1713,42 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             const bool write = o->code() == ghidra::CPUI_STORE;
             const ghidra::Varnode* value = write ? o->getIn(2) : o->getOut();
             if (!value) continue;
-            const PointerValues pv = ConstantsOf(ptr);
+            const PointerValues pv = PointerResolver().Resolve(ptr);
             const uint32_t size = static_cast<uint32_t>(value->getSize());
-            // (a pointer that starts at a register address and is indexed is said for the register itself, as "if the index is 0")
-            std::vector<std::pair<uint32_t, bool>> registers;   // (address, reached through an index)
-            for (uint32_t c : pv.constants)
-                if (PrintsAsRegister(c)) registers.emplace_back(c, false);
+            // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
+            // (A5-38); a pointer that starts at one and is indexed is said for the register itself, as "if the index is 0".
+            auto isRegister = [&](uint32_t address) {
+                return FindHardwareRegister(AccessAddress(address, size)) != nullptr || !HardwareRegistersReached(AccessAddress(address, size), size, write).empty();
+            };
+            struct Candidate { uint32_t address; bool indexed; bool shifted; };
+            std::vector<Candidate> registers;
+            for (const auto& c : pv.constants)
+                if (isRegister(c.first)) registers.push_back(Candidate{ c.first, false, c.second });
             for (uint32_t c : pv.bases)
-                if (PrintsAsRegister(c) && !pv.constants.count(c)) registers.emplace_back(c, true);
+                if (isRegister(c) && !pv.constants.count(c)) registers.push_back(Candidate{ c, true, false });
             if (registers.empty()) continue;
             const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
             const bool certain = pv.constants.size() == 1 && pv.bases.empty() && !pv.others;
-            for (const std::pair<uint32_t, bool>& rc : registers)
+            // (an address the pointer holds that is no register's is another value it may hold, as a parameter's is)
+            bool otherValues = pv.others;
+            for (const auto& c : pv.constants) otherValues |= !isRegister(c.first);
+            for (uint32_t c : pv.bases) otherValues |= !isRegister(c);
+            for (const Candidate& rc : registers)
             {
-                const HardwareRegister* r = FindHardwareRegister(AccessAddress(rc.first, size));
+                // (the register the access reaches: the SMPC's word view at an even address is no register's own address)
+                const std::vector<const HardwareRegister*> reached = HardwareRegistersReached(AccessAddress(rc.address, size), size, write);
+                const HardwareRegister* r = reached.empty() ? FindHardwareRegister(AccessAddress(rc.address, size)) : reached[0];
                 const std::string name = r ? std::string(" (") + r->name + ")" : std::string();
                 std::string prefix;
-                if (rc.second)
-                    prefix = "if the index is 0 (the pointer is based at " + Hex8(rc.first) + name + "): ";
+                if (rc.indexed)
+                    prefix = "if the index is 0 (the pointer is based at " + Hex8(rc.address) + name + "): ";
                 else if (!certain)
-                    prefix = "if the pointer holds " + Hex8(rc.first) + name + (pv.others ? " (it may hold other values too)" : "") + ": ";
-                account(insn, rc.first, size, write, value, prefix);
+                    prefix = "if the pointer holds " + Hex8(rc.address) + name + (otherValues ? " (it may hold other values too)" : "") + ": ";
+                account(insn, rc.address, size, write, value, prefix, !rc.shifted);
             }
+            if (pv.steps)
+                noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(registers[0].address) + ": the iterations after the first reach other addresses, "
+                        "other registers perhaps, which are not said", false);
             continue;
         }
         if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
@@ -1683,7 +1759,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         const ghidra::Varnode* value = read ? o->getOut() : (o->numInput() > 2 ? o->getIn(2) : nullptr);
         if (!value) continue;
         account(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), static_cast<uint32_t>(o->getIn(1)->getOffset()),
-                static_cast<uint32_t>(value->getSize()), write, value, std::string());
+                static_cast<uint32_t>(value->getSize()), write, value, std::string(), true);
     }
     // A store to the BIOS ROM (0x00000000-0x000FFFFF through either bus partition) that the engine folded into ordinary memory: the
     // ROM drops the write (ss.c BusRW_DB_CS0_u8/u16/u32_W1: the ROM branch stores nothing), but a later read of the address in this

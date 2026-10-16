@@ -84,13 +84,18 @@
 //      is printed only on some of the paths that reach it, and the ledger's ordering invariants
 //      (Sh2DecompilerTests.cpp's Ledger) hold. (FoldedIntoSwitch reports only what a run shows: two
 //      accesses it joined, one made without the other.)
-//   3b. (round 4, A5-19; round 5, A5-28) A read the emulator traced at a register through the cached partition (an address
+//   3b. (round 4, A5-19; round 5, A5-28; nightly, A5-46) A read the emulator traced at a register through the cached partition (an address
 //      below 0x20000000 that the bus decodes to a register) has a caution on its instruction saying it is a cache read:
 //      the emulator has no cache, Mednafen does, so the trace cannot show the difference and the output must say it. That
-//      holds for a read through a pointer too, when the output names the register: a pointer the engine proved to be one of
-//      several register literals prints as `&REG` (`puVar2 = &VDP2_TVSTAT;`), and the read through it is said as a direct one
-//      is. Only a read through a pointer whose printed form names no register (an address in a register, loaded or computed)
-//      is excused, counted `cache.read.anonymous`; one the output names is `cache.read.pointer.said` or `...unsaid`.
+//      holds for a read through a pointer too, when the output derives the pointer from a register address: a pointer the engine
+//      proved to be one of several register literals prints as `&REG` (`puVar2 = &VDP2_TVSTAT;`), an alias of one as a number
+//      (`(xunknown4 *)0x25fe0110`), and an offset from one as `puVar1[4]`; the read through any of them is said as a direct one
+//      is. The premise is the pointer's printed derivation (PointerPrintsFromHardware: the statement holding the read, or a variable
+//      in it, assigned such a base through assignments, call arguments left out), not a name somewhere in the output: a register
+//      named only as the argument of a call (`f(p, &VDP2_VRSIZE); x = *extraout_r6;`) is not the pointer, whose value after the
+//      call the engine does not know, counted `cache.read.pointer.unrelated`. A pointer that derives from no register address (a
+//      parameter, a loaded or computed address) is excused, counted `cache.read.anonymous`; the others are
+//      `cache.read.pointer.said` or `...unsaid`.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
@@ -433,6 +438,7 @@ struct Gen
     uint32_t defined = 0;     // bit n: Rn holds a value here, on every path
     bool noR0 = false;        // the function never writes r0 itself
     bool codeInRegs = false;  // the function has a jump table: r0 and r1 may hold a code address on the way out of it
+    uint32_t leftScratch = 0; // bit n: Rn (r1-r3) is read for the value the caller left in it, which may be the caller's jsr target (A4-15)
     int selReg = -1;          // a register holding an integer (a jump table's index), never a pointer
     int frame = 0;            // bytes of locals the function has
     bool fp = false;          // locals are addressed through r14
@@ -1066,7 +1072,7 @@ struct Gen
             args.pop_back();
         }
         it.setup = args;
-        // The generator's own contract (A4-9): an argument is never a code address or a constant that the callee (or what it
+        // The generator's own contract (A4-9, A4-15): an argument is never a code address or a constant that the callee (or what it
         // calls) stores or loads through. The jsr's target register is loaded first, so an argument copied from it is the
         // callee's address (seed 301364: written through, it overwrote the caller's next literal); a small constant is no
         // address at all (seed 305201). Both are replaced by the caller's own copy of the argument register it was entered
@@ -1083,7 +1089,11 @@ struct Gen
                 const int dst = (w >> 8) & 0xF;
                 const bool constant = (w & 0xF000) == 0xE000 && dst >= 4 && dst < 8 && ((derefs >> dst) & 1u);
                 const bool target = jsrReg >= 0 && (w & 0xF00F) == 0x6003 && static_cast<int>((w >> 4) & 0xF) == jsrReg;
-                if (constant || target) w = safeArg(w);
+                // A4-15: a scratch register this function reads for the value its caller left (r1-r3) is, to a caller that called it
+                // through jsr, that caller's target register: the callee's address (seed 8306: the callee passed it on, a callee of
+                // its own stored through it, over the literal the caller's tail jump loaded). Not passed to a callee that dereferences.
+                const bool left = (w & 0xF00F) == 0x6003 && ((leftScratch >> ((w >> 4) & 0xF)) & 1u) && dst >= 4 && dst < 8 && ((derefs >> dst) & 1u);
+                if (constant || target || left) w = safeArg(w);
             }
         };
         if (it.viaJsr)
@@ -1235,6 +1245,7 @@ struct Gen
         // before anything writes it -- r8-r14 that the function does not save, GBR, VBR, MACH, MACL -- into a
         // scratch register the later items may use. Drawn from the stream of its own.
         uint32_t convDefined = 0;
+        leftScratch = 0;
         Item convRead;
         bool hasConvRead = false;
         if (convModule && convRng.Chance(45))
@@ -1244,6 +1255,7 @@ struct Gen
             {
                 const int k = 1 + static_cast<int>(convRng.Below(3));
                 convDefined = 1u << k;
+                leftScratch = 1u << k;
                 f.reads |= 1u << k;
             }
             else
@@ -2450,6 +2462,157 @@ std::vector<uint32_t> UnaccountedAddresses(const std::vector<const MemoryAccess*
     return lost;
 }
 
+// ---- Rule 3b's premise (A5-38, A5-46): does the engine know the address the pointer holds? ----------------------------------
+// A read through a pointer is the decompiler's to say when the output shows where the pointer comes from: `&REG`, a number that is a
+// register's address (`(xunknown4 *)0x25fe0110`), a variable assigned one (`puVar2 = &VDP2_TVSTAT;`), or such a base with an offset
+// (`puVar1[4]`). The premise is the pointer's printed derivation, not a name somewhere in the output: a name that is only the argument
+// of a call (`f(p, &VDP2_VRSIZE); x = *extraout_r6;`) is not the pointer's -- r6 after the call is the engine's `extraout`, a value it
+// does not know, and a callee decompiled alone cannot know it either.
+
+// The text without the argument lists of calls (`name(...)`), which are not what the expression holds; `if (`, `while(` and casts stay.
+std::string WithoutCalls(const std::string& text)
+{
+    static const char* const keywords[] = { "if", "while", "for", "switch", "return", "sizeof" };
+    std::string out;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] == '(' && i > 0 && (std::isalnum(static_cast<unsigned char>(text[i - 1])) || text[i - 1] == '_'))
+        {
+            size_t b = i;
+            while (b > 0 && (std::isalnum(static_cast<unsigned char>(text[b - 1])) || text[b - 1] == '_')) --b;
+            const std::string word = text.substr(b, i - b);
+            bool keyword = false;
+            for (const char* k : keywords) keyword |= word == k;
+            if (!keyword)
+            {
+                int depth = 0;
+                size_t j = i;
+                for (; j < text.size(); ++j)
+                {
+                    depth += text[j] == '(';
+                    depth -= text[j] == ')';
+                    if (depth == 0) break;
+                }
+                i = j;
+                continue;
+            }
+        }
+        out += text[i];
+    }
+    return out;
+}
+
+std::vector<std::string> Identifiers(const std::string& text)
+{
+    std::vector<std::string> out;
+    for (size_t i = 0; i < text.size();)
+    {
+        if (std::isalpha(static_cast<unsigned char>(text[i])) || text[i] == '_')
+        {
+            size_t j = i;
+            while (j < text.size() && (std::isalnum(static_cast<unsigned char>(text[j])) || text[j] == '_')) ++j;
+            out.push_back(text.substr(i, j - i));
+            i = j;
+        }
+        else if (std::isdigit(static_cast<unsigned char>(text[i])))   // a number (0x25fe0110) is no identifier
+        {
+            while (i < text.size() && std::isalnum(static_cast<unsigned char>(text[i]))) ++i;
+        }
+        else ++i;
+    }
+    return out;
+}
+
+// A register's symbol (`&NAME`) or a hexadecimal number that the bus decodes to a register, in the text.
+bool NamesHardwareBase(const std::string& text)
+{
+    static std::set<std::string> names;
+    if (names.empty())
+    {
+        size_t n = 0;
+        const HardwareRegister* regs = SaturnHardwareRegisters(n);
+        for (size_t i = 0; i < n; ++i) names.insert(regs[i].name);
+        regs = SaturnHardwareWordViews(n);
+        for (size_t i = 0; i < n; ++i) names.insert(regs[i].name);
+    }
+    for (size_t at = text.find('&'); at != std::string::npos; at = text.find('&', at + 1))
+    {
+        size_t j = at + 1;
+        while (j < text.size() && (std::isalnum(static_cast<unsigned char>(text[j])) || text[j] == '_')) ++j;
+        if (names.count(text.substr(at + 1, j - at - 1))) return true;
+    }
+    for (size_t at = text.find("0x"); at != std::string::npos; at = text.find("0x", at + 2))
+    {
+        size_t j = at + 2;
+        uint64_t v = 0;
+        while (j < text.size() && std::isxdigit(static_cast<unsigned char>(text[j])) && j - at < 11)
+            v = v * 16 + static_cast<uint64_t>(std::isdigit(static_cast<unsigned char>(text[j])) ? text[j] - '0' : std::tolower(text[j]) - 'a' + 10), ++j;
+        uint32_t canon = 0;
+        if (v >= 0x00100000u && v <= 0xFFFFFFFFu && HardwareAlias(static_cast<uint32_t>(v), canon) && HardwareRegistersCovering(static_cast<uint32_t>(v), 4).size() +
+                                                                                                      HardwareRegistersCovering(static_cast<uint32_t>(v), 1).size() > 0)
+            return true;
+    }
+    return false;
+}
+
+// The read at 'insn' goes through a pointer that the output derives from a hardware base: the statement holding it names one, or a
+// variable in it is assigned one, through assignments of variables to variables. 'unrelated' is set when it does not but the output
+// names the register somewhere else (the argument of a call, another statement): counted apart, not folded into anonymous reads.
+bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const std::vector<const HardwareRegister*>& covering, bool& unrelated)
+{
+    unrelated = false;
+    std::vector<std::string> statements;
+    for (const Line& l : r.lines)
+        for (const Token& t : l.tokens)
+            if (t.addr == insn) { statements.push_back(l.text); break; }
+    bool elsewhere = false;
+    for (const HardwareRegister* reg : covering)
+        for (const Line& l : r.lines)
+            elsewhere |= l.text.find(std::string("&") + reg->name) != std::string::npos;
+    if (statements.empty()) return elsewhere;   // (the read's text was not found: the old premise, never narrower)
+    // Assignments `name = value;` in the output.
+    std::vector<std::pair<std::string, std::string>> assigns;
+    for (const Line& l : r.lines)
+    {
+        size_t b = l.text.find_first_not_of(' ');
+        if (b == std::string::npos) continue;
+        size_t e = b;
+        while (e < l.text.size() && (std::isalnum(static_cast<unsigned char>(l.text[e])) || l.text[e] == '_')) ++e;
+        if (e == b || l.text.compare(e, 3, " = ") != 0) continue;
+        std::string rhs = l.text.substr(e + 3);
+        while (!rhs.empty() && (rhs.back() == ';' || rhs.back() == ' ')) rhs.pop_back();
+        assigns.emplace_back(l.text.substr(b, e - b), rhs);
+    }
+    std::set<std::string> seen;
+    std::vector<std::string> todo;
+    for (const std::string& st : statements)
+    {
+        std::string text = st;
+        const size_t b = text.find_first_not_of(' ');
+        size_t e = b == std::string::npos ? 0 : b;
+        while (e < text.size() && (std::isalnum(static_cast<unsigned char>(text[e])) || text[e] == '_')) ++e;
+        if (b != std::string::npos && e > b && text.compare(e, 3, " = ") == 0) text = text.substr(e + 3);   // (not the variable assigned to)
+        text = WithoutCalls(text);
+        if (NamesHardwareBase(text)) return true;
+        for (const std::string& id : Identifiers(text)) todo.push_back(id);
+    }
+    while (!todo.empty() && seen.size() < 256)
+    {
+        const std::string id = todo.back();
+        todo.pop_back();
+        if (!seen.insert(id).second) continue;
+        for (const auto& a : assigns)
+        {
+            if (a.first != id) continue;
+            const std::string rhs = WithoutCalls(a.second);
+            if (NamesHardwareBase(rhs)) return true;
+            for (const std::string& q : Identifiers(rhs)) todo.push_back(q);
+        }
+    }
+    unrelated = elsewhere;
+    return false;
+}
+
 // The output says, on this instruction, that its access is missing because the code around it was
 // removed as unreachable: the caution itself (the same test as Sh2DecompilerTests.cpp's).
 bool SaidMissing(const DecompileResult& r, uint32_t insn)
@@ -3212,26 +3375,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (t.write || t.addr >= 0x20000000u || !r.InBody(t.insn) || !HardwareAlias(t.addr, canon) || canon >= 0xFFFFFE00u) continue;
             const uint16_t word = subject.WordAt(t.insn);
             if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000 || SaidMissing(r, t.insn)) continue;
-            // An access the output shows at that constant address, or a read through a pointer whose printed form names the register
-            // (`&REG`): either must be said. A pointer that names none (a parameter, a loaded or computed address) is a plain load
-            // (patches/0009) with no register for a note to be about, and is excused.
+            // An access the output shows at that constant address, or a read through a pointer the output derives from a hardware base
+            // (PointerPrintsFromHardware): either must be said. A pointer it does not (a parameter, a loaded or computed address, a
+            // callee's output) is a plain load (patches/0009) with no register for a note to be about, and is excused.
             bool shown = false;
             for (const MemoryAccess& m : r.accesses) shown |= !m.write && m.insn == t.insn && m.direct && m.address == t.addr && m.size == t.size;
-            bool named = false;
             if (!shown)
             {
-                const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(t.addr, t.size);
-                for (const HardwareRegister* reg : regs)
-                    for (const Line& l : r.lines)
-                    {
-                        const std::string needle = std::string("&") + reg->name;
-                        for (size_t at = l.text.find(needle); at != std::string::npos && !named; at = l.text.find(needle, at + 1))
-                        {
-                            const size_t end = at + needle.size();
-                            named = end >= l.text.size() || !(std::isalnum(static_cast<unsigned char>(l.text[end])) || l.text[end] == '_');
-                        }
-                    }
-                if (!named) { count("cache.read.anonymous"); continue; }
+                bool unrelated = false;
+                if (!PointerPrintsFromHardware(r, t.insn, HardwareRegistersCovering(t.addr, t.size), unrelated))
+                {
+                    count(unrelated ? "cache.read.pointer.unrelated" : "cache.read.anonymous");
+                    continue;
+                }
             }
             bool said = false;
             for (const HardwareNote& n : r.hardwareNotes)
@@ -3240,7 +3396,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (!said)
                 add(shown ? "cache-read-unsaid" : "cache-read-pointer-unsaid",
                     "the read of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " (" + Hex(t.addr) + ", the cached partition)" +
-                        (shown ? std::string() : std::string(" through a pointer the output names as &REG")) + " is not called a cache read");
+                        (shown ? std::string() : std::string(" through a pointer the output derives from a register address")) + " is not called a cache read");
         }
         for (const MemoryAccess& m : r.accesses)
         {

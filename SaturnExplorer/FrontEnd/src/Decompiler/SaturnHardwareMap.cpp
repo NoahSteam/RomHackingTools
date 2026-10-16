@@ -1051,7 +1051,9 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
     // is one caution for the access and not one for each register under its four bytes (A5-31).
     if (lowHalf && size == 4)
     {
-        const std::vector<const HardwareRegister*> under = HardwareRegistersCovering(reach, 4);
+        // (the bytes below the split only: a long at 0xFFFFFEFE has two bytes above it, in the other half, and DVSR's handler is not
+        // the one that runs, A5-41)
+        const std::vector<const HardwareRegister*> under = HardwareRegistersCovering(reach, std::min<uint32_t>(4u, 0x100u - (reach & 0xFFu)));
         const HardwareRegister* own = write ? FindHardwareRegister(reach) : nullptr;
         const HardwareRegister* head = own ? own : under.empty() ? nullptr : under[0];
         std::vector<const HardwareRegister*> others;
@@ -1295,6 +1297,12 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
     for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
         if (reg->address == 0x05D0000Cu)
             out.push_back("VDP1_ENDR: any write ends the drawing in progress, whatever is written");
+    // CD_CR4 (cdb.c CDB_Write_DBM case 0x9): `if(mask == 0xFFFF) { CommandPending = true; ...}`: a 16-bit write issues the command whatever
+    // it holds (the CS2 long write is two of them); a byte write does not (the caution of the width table says so) (A5-40).
+    if (size >= 2)
+        for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
+            if (reg->address == 0x05890024u)
+                out.push_back("CD_CR4: a 16-bit write issues the command in CD_CR1 to CD_CR4, whatever is written");
     // The SCU (scu.inc SCU_RegRW_DB_u8/u16/u32_W1, `switch(A & 0xFC)`): a write takes the bits of its lane and acts on the whole
     // register. The lane of a byte at +3 is bits 7-0, of a word at +2 bits 15-0, of a long all 32; the others carry no bit 0 or 8.
     if (a >= 0x05FE0000u && a <= 0x05FEFFFFu)
@@ -1320,6 +1328,11 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
             else if (!valueKnown) out.push_back(name + ": a write with bit 0 set " + start + ", when bit 8 is already set");
             else if (bit0) out.push_back(name + ": bit 0 is set, so this write " + start + ", when bit 8 is already set");
         }
+        // PPAF (case 0x80): every write acts on the DSP program, from the value: bit 25 pauses, else bit 26 unpauses, else bit 16 runs it
+        // and its absence stops a running program, bit 17 steps it; bit 15 loads the program counter from the value (A5-40).
+        if (reg == 0x80)
+            out.push_back("SCU_PPAF: a write acts on the DSP program whatever is written: bit 25 pauses it, else bit 26 unpauses it, "
+                          "else bit 16 set runs it and clear stops it if it runs, bit 17 steps it; bit 15 loads its program counter from the value");
         // AIACK: `if(*DB & mask & 0x0001) { ABusIProhibit = 0; ABusIRQCheck(); }`.
         if (reg == 0xA8 && lane0 && (!valueKnown || bit0))
             out.push_back(std::string("SCU_AIACK: ") + (valueKnown ? "bit 0 is set, so this write" : "a write with bit 0 set") +

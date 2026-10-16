@@ -310,14 +310,12 @@ inline void CheckScu(const Cases& c, const std::vector<WidthProbe>& table, Stats
             pr.Add(CellName(p) + ": " + key + " has a read effect and the register has no onRead");
         // A write that acts whatever (or nearly whatever) is written -- a DMA level started, the A-bus interrupt acknowledged, every
         // level stopped, timer 0 reset (`F` in the cases file) -- is said by WriteEffects for an unknown value (A5-32). Judged once per
-        // register, at the long write; the DSP control port's effects are what its `split` text says.
+        // register, at the long write.
         if (p.write && p.width == 4 && !kind && g && g->Has('F'))
         {
             ++st.writeEffectRegs;
-            if (std::string(r.name) != "SCU_PPAF" && WriteEffects(r.address, 4, false, 0).empty())
+            if (WriteEffects(r.address, 4, false, 0).empty())
                 pr.Add(std::string(r.name) + ": " + key + " acts on a write whatever it stores (F), and WriteEffects says nothing");
-            if (std::string(r.name) == "SCU_PPAF" && !r.split)
-                pr.Add("SCU_PPAF: " + key + " acts on a write (F) and the register has no split text saying what a write does");
         }
     }
 }
@@ -370,7 +368,7 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                     constant |= g && g->Has('F') && key == "smpc.wr";
                     // VDP1's ENDR (A5-32). The SCU is judged in CheckScu; the SCSP common block's F is bookkeeping (MPROG_Dirty, a timer
                     // reload under a condition) and is not an effect a note would help with: decided, not checked.
-                    ends |= g && g->Has('F') && key == "vdp1.wr";
+                    ends |= g && g->Has('F') && (key == "vdp1.wr" || key == "cd.wr");
                 }
                 if (ends)
                 {

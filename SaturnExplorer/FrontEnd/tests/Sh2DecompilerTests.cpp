@@ -1611,6 +1611,26 @@ void TestHardwareVolatility()
         add("a5_45", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6261, 0x000B, 0x0009, 0x0009, 0x0010, 0x0020, 0x2600, 0x2080 }, 0x10, 0x00100020u);
         add("a5_45_through", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6261, 0x000B, 0x0009, 0x0009, 0x2010, 0x0020, 0x2600, 0x2080 }, 0x10, 0x20100020u);   // the cache-through partition
         add("a5_45_byte", { 0xD603, 0x3320, 0x8900, 0xD603, 0x6260, 0x000B, 0x0009, 0x0009, 0x0010, 0x0021, 0x2600, 0x2080 }, 0x10, 0x00100021u);   // control: the byte register's own address, mov.b
+        // Round 6 (A5-37 to A5-41): the reviewer's fixtures, words verbatim. A5-37: a constant offset from a merged register pointer.
+        add("a5_37a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x1104, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0000, 0x25FE, 0x0020, 0x0000, 0x0101 }, 0x14, 0x25FE0000u);
+        add("a5_37b", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x1101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x25FE, 0x0030, 0x0000, 0x0101 }, 0x14, 0x25FE0010u);
+        add("a5_37c", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0x8512, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0000, 0x05F8, 0x0002 }, 0x14, 0x05F80000u);
+        add("a5_37d", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0x71FC, 0xD003, 0x2102, 0x000B, 0x0009, 0x25FE, 0x0014, 0x25FE, 0x0034, 0x0000, 0x0101 }, 0x14, 0x25FE0014u);
+        // A5-38: a merged pointer whose values are register aliases (printed as numbers).
+        add("a5_38a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD004, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0110, 0x25FE, 0x0130, 0x0000, 0x0101 }, 0x14, 0x25FE0110u);
+        add("a5_38a_direct", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0110, 0x0000, 0x0101 }, 0x0C, 0x25FE0110u);   // control: the direct write
+        add("a5_38b", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0x6011, 0xC808, 0x89FC, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0204, 0x05F8, 0x020A }, 0x18, 0x05F80204u);
+        // A5-39: a pointer stepped in a loop.
+        add("a5_39a", { 0xD104, 0xE205, 0xD004, 0x2102, 0x7104, 0x4210, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0000, 0x0000, 0x0101 }, 0x14, 0x25FE0000u);
+        add("a5_39b", { 0xD103, 0xE203, 0x6015, 0x4210, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0004 }, 0x10, 0x25F80004u);
+        // A5-40: SCU_PPAF and CD_CR4 writes.
+        add("a5_40a", { 0xD102, 0xE000, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0080 }, 0x0C, 0x25FE0080u);
+        add("a5_40b", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0x2589, 0x0024 }, 0x0C, 0x25890024u);
+        add("a5_40b_byte", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0x2589, 0x0024 }, 0x0C, 0x25890024u);   // control: a byte write does not issue it
+        // A5-41: a long below the split with bytes above it.
+        add("a5_41a", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFEFE }, 0x0C, 0xFFFFFEFEu);
+        add("a5_41a_fd", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFEFD }, 0x0C, 0xFFFFFEFDu);
+        add("a5_41b", { 0xD101, 0x6012, 0x000B, 0x0009, 0xFFFF, 0xFEFE }, 0x08, 0xFFFFFEFEu);
     }
     for (const auto* group : { &r4, &r5 })
         for (const auto& x : *group)
@@ -1939,7 +1959,8 @@ void TestHardwareVolatility()
     // caution not for a read, and a split register written without being read says nothing.
     r = run("PPAF written", ppafWrite);
     CHECK(Ledger(r, { Wr(0x25FE0080u, 4) }));
-    CHECK(r.hardwareNotes.empty());
+    CHECK(!HasNote(r, "a read returns its status", false));   // (the split-read text is for a read after the write)
+    CHECK(HasNote(r, "SCU_PPAF: a write acts on the DSP program whatever is written", false));   // A5-40
     r = run("IST written only", istWrite);
     CHECK(Ledger(r, { Wr(0x25FE00A4u, 4) }));
     CHECK(r.hardwareNotes.empty());
@@ -2684,15 +2705,70 @@ void TestHardwareVolatility()
         r = R5("a5_34", "a long write to 0x60000010");
         CHECK(HasNote(r, "an access at 0x60000010 is the cache address array, not a memory access: entry 1 of the way SH2_CCR selects; a write sets its tag (from the address, valid is bit 2 inverted) and its LRU bits (bits 9-4 of the value), a read returns tag, valid and LRU", false));
 
-        // A5-45: the SMPC registers are also symbols at the even address, the 16-bit word they sit in; a pointer at it prints `&SMPC_OREG0`
-        // and is followed like a pointer at a register's own address (PrintsAsRegister knew only the latter).
+        // A5-45 (nightly seed 19409): the word view of an SMPC register is a symbol at the even address, and a merged pointer at it is followed.
         r = R5("a5_45", "a word read through a pointer that is &SMPC_OREG0 (the word view) or a RAM address");
-        CHECK(Has(r.Text(), "&SMPC_OREG0"));
-        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
+        CHECK(Has(r.Text(), "puVar2 = &SMPC_OREG0;") && Has(r.Text(), "puVar2 = (uint2 *)0x26002080;"));
+        CHECK(HasNote(r, "if the pointer holds 0x00100020 (SMPC_OREG0) (it may hold other values too): a read of SMPC_OREG0 through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
+        CHECK(HasNote(r, "if the pointer holds 0x00100020 (SMPC_OREG0) (it may hold other values too): a 2-byte read of SMPC_OREG0 returns 0xFF00 or the register", true));
         r = R5("a5_45_through", "the same through the cache-through partition");
-        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
+        CHECK(!HasNote(r, "cache read", true) && HasNote(r, "if the pointer holds 0x20100020 (SMPC_OREG0) (it may hold other values too): a 2-byte read of SMPC_OREG0 returns 0xFF00", true));
         r = R5("a5_45_byte", "control: a byte read at the register's own address");
-        for (const HardwareNote& n : r.hardwareNotes) std::printf("NOTE %08X %d %s\n", n.address, int(n.caution), n.text.c_str());
+        CHECK(HasNote(r, "if the pointer holds 0x00100021 (SMPC_OREG0) (it may hold other values too): a read of SMPC_OREG0 through the cached partition is a cache read", true));
+
+        // A5-37: a constant offset from a merged register pointer is the register at base + offset, said as such.
+        r = R5("a5_37a", "puVar1[4] = 0x101 from &SCU_D0R or &SCU_D1R: SCU_D0EN or SCU_D1EN");
+        CHECK(Has(r.Text(), "puVar1[4] = 0x101;"));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0010 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register)", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0030 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA when its start factor (SCU_D1MD bits 2-0) is 7 (start by this register)", false));
+        CHECK(!HasNote(r, "if the index is 0", false) && !HasNote(r, "through a mirror", false));
+        r = R5("a5_37b", "puVar1[1] = 0x101 from &SCU_D0EN or &SCU_D1EN: SCU_D0MD or SCU_D1MD, which start nothing");
+        CHECK(Has(r.Text(), "puVar1[1] = 0x101;") && r.hardwareNotes.empty());
+        r = R5("a5_37c", "a word read at puVar1[2] from &VDP2_TVMD or &VDP2_EXTEN: VDP2_TVSTAT or VDP2_VRSIZE");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80006 (VDP2_VRSIZE): a read of VDP2_VRSIZE through the cached partition is a cache read", true));
+        CHECK(!HasNote(r, "latches HCNT and VCNT", false) && !HasNote(r, "if the index is 0", false));
+        r = R5("a5_37d", "puVar1[-1] = 0x101 from &SCU_D0MD or &SCU_D1MD: SCU_D0EN or SCU_D1EN");
+        CHECK(Has(r.Text(), "puVar1[-1] = 0x101;"));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0010 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set", false) && HasNote(r, "if the pointer holds 0x25FE0030 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set", false));
+
+        // A5-38: a merged pointer whose values are register aliases (printed as numbers) is said as the direct access is.
+        r = R5("a5_38a_direct", "control: the direct write to 0x25FE0110");
+        CHECK(HasNote(r, "SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false) && HasNote(r, "0x25FE0110 is SCU_D0EN through a mirror (shown by address)", false));
+        r = R5("a5_38a", "a write through a pointer that is 0x25FE0110 or 0x25FE0130");
+        CHECK(Has(r.Text(), "(xunknown4 *)0x25fe0110") && Has(r.Text(), "(xunknown4 *)0x25fe0130"));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0110 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0110 (SCU_D0EN): 0x25FE0110 is SCU_D0EN through a mirror (shown by address)", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0130 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        r = R5("a5_38b", "the cached poll through the mirrors 0x05F80204 and 0x05F8020A");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80204 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F8020A (VDP2_VCNT): a read of VDP2_VCNT through the cached partition is a cache read", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80204 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(!HasNote(r, "stepped in a loop", false));   // a loop that reads through the same pointer does not step it
+
+        // A5-39: a pointer stepped in a loop is not certain, and the registers after the first are said not to be said.
+        r = R5("a5_39a", "five stores from &SCU_D0R, stepping: the fifth is SCU_D0EN");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x25FE0000: the iterations after the first reach other addresses, other registers perhaps, which are not said", false));
+        r = R5("a5_39b", "three word reads from &VDP2_TVSTAT, stepping");
+        CHECK(HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT) (it may hold other values too): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x25F80004", false));
+
+        // A5-40: SCU_PPAF and CD_CR4 writes act whatever is written.
+        r = R5("a5_40a", "SCU_PPAF = 0");
+        CHECK(HasNote(r, "SCU_PPAF: a write acts on the DSP program whatever is written: bit 25 pauses it, else bit 26 unpauses it, else bit 16 set runs it and clear stops it if it runs, bit 17 steps it; bit 15 loads its program counter from the value", false));
+        r = R5("a5_40b", "a word write to CD_CR4");
+        CHECK(HasNote(r, "CD_CR4: a 16-bit write issues the command in CD_CR1 to CD_CR4, whatever is written", false));
+        r = R5("a5_40b_byte", "control: a byte write to CD_CR4");
+        CHECK(!HasNote(r, "issues the command", false) && HasNote(r, "a 1-byte write to CD_CR4 stores that byte only: it does not start the command", true));
+
+        // A5-41: a long below the split with bytes above it is an address error with no register under it; DVSR is not the register.
+        r = R5("a5_41a", "a long write at 0xFFFFFEFE");
+        CHECK(HasNote(r, "a 4-byte write at 0xFFFFFEFE is an address error on the SH-2: no register is named there, and the on-chip registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only; Mednafen then writes nothing", true));
+        CHECK(!HasNote(r, "SH2_DVSR", true));
+        r = R5("a5_41a_fd", "a long write at 0xFFFFFEFD");
+        CHECK(HasNote(r, "Mednafen then writes nothing", true) && !HasNote(r, "SH2_DVSR", true));
+        r = R5("a5_41b", "a long read at 0xFFFFFEFE");
+        CHECK(HasNote(r, "Mednafen then returns 0 and reads nothing", true) && !HasNote(r, "SH2_DVSR", true));
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.
