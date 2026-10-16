@@ -4351,6 +4351,9 @@ struct RegItem
 {
     std::vector<uint16_t> w;
     std::string shape;
+    // PC-relative loads (mov.l @(disp,PC),Rn) in this item: the word index in 'w' and the 32-bit constant, which the
+    // function's literal pool (after the rts and its slot) holds. The displacement is filled in by RegFn::Words.
+    std::vector<std::pair<size_t, uint32_t>> lits;
 };
 
 struct RegFn
@@ -4360,9 +4363,30 @@ struct RegFn
     std::vector<uint16_t> Words() const
     {
         std::vector<uint16_t> out;
-        for (const RegItem& i : items) out.insert(out.end(), i.w.begin(), i.w.end());
+        std::vector<std::pair<size_t, uint32_t>> lits;
+        for (const RegItem& i : items)
+        {
+            for (const auto& l : i.lits) lits.push_back(std::make_pair(out.size() + l.first, l.second));
+            out.insert(out.end(), i.w.begin(), i.w.end());
+        }
         out.push_back(0x000B);
         out.push_back(slot);
+        if (lits.empty()) return out;
+        // The pool follows the rts and its slot, longword aligned (kCode is). mov.l @(disp,PC),Rn reads the longword at
+        // ((address of the load + 4) & ~3) + 4 * disp.
+        if (out.size() % 2) out.push_back(0x0009);
+        const size_t pool = out.size();
+        for (size_t k = 0; k < lits.size(); ++k)
+        {
+            const size_t at = lits[k].first;
+            const size_t pc = (2 * at + 4) & ~static_cast<size_t>(3);
+            out[at] = static_cast<uint16_t>((out[at] & 0xFF00) | ((2 * (pool + 2 * k) - pc) / 4));
+        }
+        for (const auto& l : lits)
+        {
+            out.push_back(static_cast<uint16_t>(l.second >> 16));
+            out.push_back(static_cast<uint16_t>(l.second & 0xFFFF));
+        }
         return out;
     }
 };
@@ -4382,6 +4406,236 @@ uint16_t RegOpWord(Rng& rng, std::string& shape)
     case 'A': return static_cast<uint16_t>(op.base | n << 8 | imm);
     default: return op.base;
     }
+}
+
+// ---- The literal-pool and stack items of the register-only grammar (area 2, round 4: A2-21, A2-22, A2-26) ----------
+// The grammar had no constant wider than mov #imm and no memory, so it could reach neither the compiler's division by a
+// constant (a 32-bit magic multiplier from the literal pool, dmulu.l, the shifts) nor a byte put into a stacked longword.
+// Both are drawn from a stream of their own (the other draws of a seed are unchanged).
+
+// Hacker's Delight, magicu and magic: the multiplier and shift of x / d for a 32-bit x (d >= 2 unsigned; |d| >= 2 signed).
+struct MagicU { uint32_t m; int s; bool add; };
+MagicU MakeMagicU(uint32_t d)
+{
+    MagicU r = { 0, 0, false };
+    const uint32_t nc = 0xFFFFFFFFu - (0u - d) % d;
+    int p = 31;
+    uint32_t q1 = 0x80000000u / nc, r1 = 0x80000000u - q1 * nc, q2 = 0x7FFFFFFFu / d, r2 = 0x7FFFFFFFu - q2 * d, delta;
+    do
+    {
+        ++p;
+        if (r1 >= nc - r1) { q1 = 2 * q1 + 1; r1 = 2 * r1 - nc; }
+        else { q1 = 2 * q1; r1 = 2 * r1; }
+        if (r2 + 1 >= d - r2)
+        {
+            if (q2 >= 0x7FFFFFFFu) r.add = true;
+            q2 = 2 * q2 + 1;
+            r2 = 2 * r2 + 1 - d;
+        }
+        else
+        {
+            if (q2 >= 0x80000000u) r.add = true;
+            q2 = 2 * q2;
+            r2 = 2 * r2 + 1;
+        }
+        delta = d - 1 - r2;
+    } while (p < 64 && (q1 < delta || (q1 == delta && r1 == 0)));
+    r.m = q2 + 1;
+    r.s = p - 32;
+    return r;
+}
+
+struct MagicS { int32_t m; int s; };
+MagicS MakeMagicS(int32_t d)
+{
+    const uint32_t two31 = 0x80000000u;
+    const uint32_t ad = d < 0 ? 0u - static_cast<uint32_t>(d) : static_cast<uint32_t>(d);
+    const uint32_t t = two31 + (static_cast<uint32_t>(d) >> 31);
+    const uint32_t anc = t - 1 - t % ad;
+    int p = 31;
+    uint32_t q1 = two31 / anc, r1 = two31 - q1 * anc, q2 = two31 / ad, r2 = two31 - q2 * ad, delta;
+    do
+    {
+        ++p;
+        q1 = 2 * q1; r1 = 2 * r1;
+        if (r1 >= anc) { ++q1; r1 -= anc; }
+        q2 = 2 * q2; r2 = 2 * r2;
+        if (r2 >= ad) { ++q2; r2 -= ad; }
+        delta = ad - r2;
+    } while (q1 < delta || (q1 == delta && r1 == 0));
+    MagicS r;
+    r.m = static_cast<int32_t>(q2 + 1);
+    if (d < 0) r.m = -r.m;
+    r.s = p - 32;
+    return r;
+}
+
+// Shift register 'n' right (logical or arithmetic) or left by 'count' (0..31) with the SH-2's shlr / shlr2 / shlr8 / shlr16.
+void ShiftWords(std::vector<uint16_t>& w, int n, int count, bool left, bool arithmetic)
+{
+    const uint16_t base1 = left ? 0x4000 : arithmetic ? 0x4021 : 0x4001;   // shll / shar / shlr
+    const uint16_t base2 = left ? 0x4008 : 0x4009, base8 = left ? 0x4018 : 0x4019, base16 = left ? 0x4028 : 0x4029;
+    if (arithmetic)   // no shar2 / shar8 on the SH-2: one at a time
+    {
+        for (int i = 0; i < count; ++i) w.push_back(static_cast<uint16_t>(base1 | n << 8));
+        return;
+    }
+    while (count >= 16) { w.push_back(static_cast<uint16_t>(base16 | n << 8)); count -= 16; }
+    while (count >= 8) { w.push_back(static_cast<uint16_t>(base8 | n << 8)); count -= 8; }
+    while (count >= 2) { w.push_back(static_cast<uint16_t>(base2 | n << 8)); count -= 2; }
+    while (count >= 1) { w.push_back(static_cast<uint16_t>(base1 | n << 8)); count -= 1; }
+}
+
+// x / d scaled by a power of two, as a compiler emits it: mov.l @(lit),L ; dmulu.l L,X ; sts mach,T ; the shift (or the
+// "add" form: sub T,X ; shlr X ; add T,X ; shlr (s-1)) ; the scale. The scale is often the power of two the last shift
+// divided by (an index into a table of 4- or 16-byte entries), which merges the pair into a mask. 'scale' -1 is that one.
+RegItem DivisionItem(uint32_t d, bool isSigned, int scale, uint32_t x, uint32_t l, uint32_t t, uint32_t u, bool toR0)
+{
+    RegItem it;
+    int32_t sd = static_cast<int32_t>(d);
+    int result = -1, lastShift = 0;
+    it.w.push_back(static_cast<uint16_t>(0xD000 | l << 8));   // mov.l @(lit),L
+    if (!isSigned)
+    {
+        const MagicU mg = MakeMagicU(d);
+        it.lits.push_back(std::make_pair(size_t(0), mg.m));
+        it.w.push_back(static_cast<uint16_t>(0x3005 | x << 8 | l << 4));    // dmulu.l L,X
+        it.w.push_back(static_cast<uint16_t>(0x000A | t << 8));             // sts mach,T
+        if (!mg.add)
+        {
+            ShiftWords(it.w, static_cast<int>(t), mg.s, false, false);
+            result = static_cast<int>(t);
+            lastShift = mg.s;
+        }
+        else
+        {
+            it.w.push_back(static_cast<uint16_t>(0x3008 | x << 8 | t << 4));   // sub T,X
+            it.w.push_back(static_cast<uint16_t>(0x4001 | x << 8));            // shlr X
+            it.w.push_back(static_cast<uint16_t>(0x300C | x << 8 | t << 4));   // add T,X
+            ShiftWords(it.w, static_cast<int>(x), mg.s - 1, false, false);
+            result = static_cast<int>(x);
+            lastShift = mg.s - 1;
+        }
+        it.shape = mg.add ? "u/c.add" : "u/c";
+    }
+    else
+    {
+        const MagicS mg = MakeMagicS(sd);
+        it.lits.push_back(std::make_pair(size_t(0), static_cast<uint32_t>(mg.m)));
+        it.w.push_back(static_cast<uint16_t>(0x300D | x << 8 | l << 4));    // dmuls.l L,X
+        it.w.push_back(static_cast<uint16_t>(0x000A | t << 8));             // sts mach,T
+        if (sd > 0 && mg.m < 0) it.w.push_back(static_cast<uint16_t>(0x300C | t << 8 | x << 4));   // add X,T
+        if (sd < 0 && mg.m > 0) it.w.push_back(static_cast<uint16_t>(0x3008 | t << 8 | x << 4));   // sub X,T
+        ShiftWords(it.w, static_cast<int>(t), mg.s, false, true);
+        it.w.push_back(static_cast<uint16_t>(0x6003 | u << 8 | t << 4));    // mov T,U
+        it.w.push_back(static_cast<uint16_t>(0x4000 | u << 8));             // shll U   (T = the sign)
+        it.w.push_back(static_cast<uint16_t>(0xE000 | u << 8));             // mov #0,U
+        it.w.push_back(static_cast<uint16_t>(0x300E | t << 8 | u << 4));    // addc U,T
+        result = static_cast<int>(t);
+        lastShift = mg.s;
+        it.shape = "s/c";
+    }
+    if (scale < 0) scale = lastShift;
+    if (scale > 12) scale = 8;
+    if (scale > 0)
+    {
+        ShiftWords(it.w, result, scale, true, false);
+        it.shape += "*2^k";
+    }
+    if (toR0) it.w.push_back(static_cast<uint16_t>(0x6003 | 0 << 8 | static_cast<uint32_t>(result) << 4));   // mov R,r0
+    return it;
+}
+
+RegItem MakeDivision(Rng& rng)
+{
+    static const uint32_t kDivisors[] = { 3, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 17, 19, 21, 22, 25, 27, 28, 31, 33, 37, 41, 55, 63, 100, 127, 641,
+                                          1000, 6700417, 0x7FFFFFFF, 0x12345, 0xFFFFFFFE };
+    const bool isSigned = rng.Chance(35);
+    uint32_t d = rng.Chance(75) ? kDivisors[rng.Below(sizeof kDivisors / sizeof kDivisors[0])] : 2 + rng.Below(200);
+    if ((d & (d - 1)) == 0) d += 1;   // a power of two is a shift, not a multiply
+    if (isSigned)
+    {
+        if (d >= 0x80000000u) d >>= 1;
+        if (rng.Chance(20)) d = 0u - d;
+    }
+    const uint32_t x = rng.Below(8), l = (x + 1 + rng.Below(7)) % 8;
+    uint32_t t = rng.Below(8);
+    while (t == x || t == l) t = (t + 1) % 8;
+    uint32_t u = rng.Below(8);
+    while (u == x || u == l || u == t) u = (u + 1) % 8;
+    // The scale: the power of two the last shift divided by (a mask after the merge), or another, or none.
+    const uint32_t pick = rng.Below(10);
+    const int scale = pick < 5 ? -1 : pick < 8 ? static_cast<int>(rng.Below(5)) : 0;
+    return DivisionItem(d, isSigned, scale, x, l, t, u, rng.Chance(70));
+}
+
+// A stack item: allocate a frame, store registers into its longwords, overwrite a byte or a word of one with r0 or
+// another register, load back a longword, a word or a byte, release the frame. Every longword is written whole before it
+// is overwritten in part or read, so the run reads nothing it did not store.
+RegItem MakeStackItem(Rng& rng)
+{
+    RegItem it;
+    const uint32_t longs = 1 + rng.Below(2);   // a frame of one or two longwords
+    it.shape = "stack";
+    it.w.push_back(static_cast<uint16_t>(0x7F00 | ((0x100 - 4 * longs) & 0xFF)));   // add #-4n,r15
+    // each longword: store a register whole
+    for (uint32_t k = 0; k < longs; ++k)
+    {
+        const uint32_t m = rng.Below(8);
+        if (k == 0 && rng.Chance(50)) it.w.push_back(static_cast<uint16_t>(0x2002 | 15 << 8 | m << 4));          // mov.l Rm,@r15
+        else it.w.push_back(static_cast<uint16_t>(0x1000 | 15 << 8 | m << 4 | k));                              // mov.l Rm,@(k*4,r15)
+    }
+    // one to three overwrites
+    const uint32_t overwrites = 1 + rng.Below(3);
+    for (uint32_t i = 0; i < overwrites; ++i)
+    {
+        const uint32_t kind = rng.Below(100);
+        const uint32_t m = rng.Below(8);
+        if (kind < 45)   // mov.b r0,@(d,r15): through r0 (mov Rm,r0 first)
+        {
+            it.w.push_back(static_cast<uint16_t>(0x6003 | 0 << 8 | m << 4));
+            it.w.push_back(static_cast<uint16_t>(0x8000 | 15 << 4 | rng.Below(4 * longs)));
+        }
+        else if (kind < 80)   // mov.w r0,@(d,r15)
+        {
+            it.w.push_back(static_cast<uint16_t>(0x6003 | 0 << 8 | m << 4));
+            it.w.push_back(static_cast<uint16_t>(0x8100 | 15 << 4 | rng.Below(2 * longs)));
+        }
+        else if (kind < 90 && longs == 1)   // mov.b Rm,@r15 (byte 0, the most significant)
+            it.w.push_back(static_cast<uint16_t>(0x2000 | 15 << 8 | m << 4));
+        else if (kind < 100 && longs == 1)   // mov.w Rm,@r15
+            it.w.push_back(static_cast<uint16_t>(0x2001 | 15 << 8 | m << 4));
+        else   // a whole longword again
+            it.w.push_back(static_cast<uint16_t>(0x1000 | 15 << 8 | m << 4 | rng.Below(longs)));
+    }
+    // load back: the longword, or a part of it
+    const uint32_t d = rng.Below(8);
+    const uint32_t how = rng.Below(100);
+    if (how < 60) it.w.push_back(static_cast<uint16_t>(0x5000 | d << 8 | 15 << 4 | rng.Below(longs)));   // mov.l @(k*4,r15),Rd
+    else if (how < 70 && longs == 1) it.w.push_back(static_cast<uint16_t>(0x6002 | d << 8 | 15 << 4));   // mov.l @r15,Rd
+    else if (how < 85) it.w.push_back(static_cast<uint16_t>(0x8500 | 15 << 4 | rng.Below(2 * longs)));    // mov.w @(d,r15),r0
+    else it.w.push_back(static_cast<uint16_t>(0x8400 | 15 << 4 | rng.Below(4 * longs)));                 // mov.b @(d,r15),r0
+    if (rng.Chance(30))   // something to the loaded register before the frame goes
+    {
+        std::string shape;
+        it.w.push_back(RegOpWord(rng, shape));
+    }
+    it.w.push_back(static_cast<uint16_t>(0x7F00 | 4 * longs));   // add #4n,r15
+    return it;
+}
+
+// A literal on its own: mov.l @(lit),Rn, the constant an edge value, a magic multiplier or random.
+RegItem MakeConstant(Rng& rng)
+{
+    static const uint32_t kEdges[] = { 0, 1, 0x7FFFFFFF, 0x80000000u, 0xFFFFFFFFu, 0x24924925u, 0xAAAAAAABu, 0x55555556u, 0x0000FFFFu, 0xFFFF0000u,
+                                       0x80000001u, 0x12345678u, 0xFFFFFF00u, 0x000000FFu, 0x01010101u };
+    RegItem it;
+    const uint32_t n = rng.Below(8);
+    const uint32_t value = rng.Chance(60) ? kEdges[rng.Below(sizeof kEdges / sizeof kEdges[0])] : rng.Next();
+    it.w.push_back(static_cast<uint16_t>(0xD000 | n << 8));
+    it.lits.push_back(std::make_pair(size_t(0), value));
+    it.shape = "lit";
+    return it;
 }
 
 RegFn GenRegFn(uint64_t seed, int k)
@@ -4435,6 +4689,20 @@ RegFn GenRegFn(uint64_t seed, int k)
         words += static_cast<int>(it.w.size());
         f.items.push_back(it);
     }
+    // The literal-pool and stack items (A2-21, A2-22), from a stream of their own: the draws above are those of earlier rounds.
+    Rng wide(seed * 104729u + static_cast<uint64_t>(k) + 0xA2F4u);
+    if (EnvNumber("SE_GENERATED_PRINTEDC_WIDE", 1) != 0 && wide.Chance(35))
+    {
+        const int count = wide.Chance(25) ? 2 : 1;
+        for (int c = 0; c < count; ++c)
+        {
+            const uint32_t kind = wide.Below(100);
+            const RegItem item = kind < 40 ? MakeDivision(wide) : kind < 75 ? MakeStackItem(wide) : MakeConstant(wide);
+            // At the end, where the rts returns r0, or anywhere.
+            const size_t at = wide.Chance(50) ? f.items.size() : wide.Below(static_cast<uint32_t>(f.items.size()) + 1);
+            f.items.insert(f.items.begin() + static_cast<long>(at), item);
+        }
+    }
     const uint32_t s = rng.Below(100);
     std::string shape;
     f.slot = s < 70 ? static_cast<uint16_t>(0x6003 | rng.Below(8) << 4) : s < 90 ? RegOpWord(rng, shape) : uint16_t(0x0009);
@@ -4465,7 +4733,16 @@ std::string CHeader()
          "typedef int int3; typedef signed char int1; typedef short int2; typedef int int4; typedef long long int8;\n"
          "typedef unsigned char uint1; typedef unsigned short uint2; typedef unsigned int uint4; typedef unsigned long long uint8;\n"
          "typedef unsigned char xunknown1; typedef unsigned short xunknown2; typedef unsigned int xunknown4; typedef unsigned long long xunknown8;\n"
+         "typedef unsigned int unkbyte3; typedef unsigned int unkuint3; typedef int unkint3; typedef unsigned long long unkbyte5; typedef unsigned long long unkbyte6;\n"
+         "typedef unsigned long long unkbyte7; typedef unsigned long long unkuint5; typedef unsigned long long unkuint6; typedef unsigned long long unkuint7;\n"
+         "typedef long long unkint5; typedef long long unkint6; typedef long long unkint7;\n"
          "#define true 1\n#define false 0\n"
+         // The engine's field notation for a piece of a variable (`xStack_4._2_2_`: bytes 2 and 3, the first byte being the most
+         // significant on this machine), as the C it means.
+         "#define FLDMASK(n) ((n) >= 8 ? ~0ULL : ((1ULL << (8 * (n))) - 1))\n"
+         "#define FLD(v, o, n) (((unsigned long long)(v) >> (8 * (sizeof(v) - (o) - (n)))) & FLDMASK(n))\n"
+         "#define SETFLD(v, o, n, e) ((v) = (__typeof__(v))(((unsigned long long)(v) & ~(FLDMASK(n) << (8 * (sizeof(v) - (o) - (n))))) | "
+         "(((unsigned long long)(e) & FLDMASK(n)) << (8 * (sizeof(v) - (o) - (n))))))\n"
          "#define CARRY4(a, b) ((uint32_t)((uint32_t)(a) + (uint32_t)(b)) < (uint32_t)(a))\n"
          "#define CARRY1(a, b) ((uint8_t)((uint8_t)(a) + (uint8_t)(b)) < (uint8_t)(a))\n"
          "#define SCARRY4(a, b) (((int32_t)(a) >= 0) == ((int32_t)(b) >= 0) && (((int32_t)((uint32_t)(a) + (uint32_t)(b)) >= 0) != ((int32_t)(a) >= 0)))\n"
@@ -4588,6 +4865,11 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         }
         static const std::regex decl("func_0x[0-9a-fA-F]+");
         text = std::regex_replace(text, decl, pr.name);
+        // Field notation (`v._o_n_ = e;` and reads of it) is Ghidra's, not C's: the macros of the header say what it means.
+        static const std::regex fieldSet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_ = ([^;]*);");
+        static const std::regex fieldGet("\\b([A-Za-z_]\\w*)\\._(\\d+)_(\\d+)_");
+        text = std::regex_replace(text, fieldSet, "SETFLD($1, $2, $3, $4);");
+        text = std::regex_replace(text, fieldGet, "FLD($1, $2, $3)");
         // Every input the text names, as a local holding what the run started with.
         static const std::regex input("^(\\s*)((?:\\w+\\s+)+)((?:in|unaff)_\\w+);\\s*$");
         std::istringstream lines(text);
@@ -4608,7 +4890,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
                 else if (name == "in_mach" || name == "unaff_mach") value = "g_in[9]";
                 else if (name == "in_macl" || name == "unaff_macl") value = "g_in[10]";
-                else if (name == "unaff_gbr" || name == "unaff_vbr" || name == "in_gbr" || name == "in_vbr") value = "0";
+                else if (name == "unaff_gbr" || name == "in_gbr") value = "g_in[11]";
+                else if (name == "unaff_vbr" || name == "in_vbr") value = "g_in[12]";
                 else
                 {
                     unknownInput = true;
@@ -4661,11 +4944,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         bool r0Changed = false;
         for (int k = 0; k < nIn; ++k)
         {
-            uint32_t in[11];
+            uint32_t in[13];
             for (int i = 0; i < 8; ++i) in[i] = draw();
             in[8] = draw() & 0x3F3u;
             in[9] = draw();
             in[10] = draw();
+            // GBR and VBR start as something other than 0 (A2-26: with 0 a text that dropped either, or read the wrong one, passed)
+            in[11] = draw();
+            in[12] = draw();
             if (sweep < static_cast<int>(poolSize))
             {
                 for (int i = 4; i < 8; ++i) in[i] = pool[(sweep + 5 * (i - 4) + (i - 4) * (i - 4)) % poolSize];
@@ -4679,8 +4965,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             machine->Set("r15", kStackTop);
             machine->Set("pr", kSentinel);
             machine->Set("sr", in[8]);
-            machine->Set("gbr", 0);
-            machine->Set("vbr", 0);
+            machine->Set("gbr", in[11]);
+            machine->Set("vbr", in[12]);
             machine->Set("mach", in[9]);
             machine->Set("macl", in[10]);
             RunOut run;
@@ -4688,9 +4974,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             if (!machine->Run(kCode, kSentinel, kStepLimit, run, env)) continue;
             if (run.fin[0] != in[0]) r0Changed = true;
             char buf[256];
-            std::snprintf(buf, sizeof buf, "      { 0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu },\n",
+            std::snprintf(buf, sizeof buf, "      { 0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu },\n",
                           in[0], in[1], in[2], in[3], in[4], in[5], in[6], in[7], in[8], in[9], in[10], run.fin[0], run.fin[1], run.finSr,
-                          machine->Get("gbr"), machine->Get("vbr"));
+                          machine->Get("gbr"), machine->Get("vbr"), in[11], in[12]);
             rows << buf;
             ++kept;
         }
@@ -4700,8 +4986,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             continue;
         }
         std::ostringstream m;
-        m << "  { /* " << pr.name << " */\n    static const unsigned int D[][16] = {\n" << rows.str() << "    };\n    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
-        m << "      memcpy(g_in, D[k], sizeof g_in[0] * 11);\n";
+        m << "  { /* " << pr.name << " */\n    static const unsigned int D[][18] = {\n" << rows.str() << "    };\n    for (unsigned k = 0; k < " << kept << "; ++k) {\n";
+        m << "      memcpy(g_in, D[k], sizeof g_in[0] * 11);\n      g_in[11] = D[k][16]; g_in[12] = D[k][17];\n";
         std::ostringstream call;
         call << pr.name << "(";
         for (int i = 0; i < nParams && i < 4; ++i) call << (i ? ", " : "") << "(int)g_in[" << 4 + i << "]";
@@ -4711,7 +4997,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const std::string ctl = "      if ((g_wsr & 0xF2u) != (D[k][13] & 0xF2u) || g_wgbr != D[k][14] || g_wvbr != D[k][15]) { printf(\"MISMATCH " + pr.name +
             " control registers: pseudo sr=%08X gbr=%08X vbr=%08X, run sr=%08X gbr=%08X vbr=%08X\\n\", g_wsr, g_wgbr, g_wvbr, D[k][13], D[k][14], D[k][15]); ++bad_" +
             pr.name + "; }\n";
-        m << "      g_wsr = g_in[8]; g_wgbr = 0; g_wvbr = 0;\n";
+        m << "      g_wsr = g_in[8]; g_wgbr = g_in[11]; g_wvbr = g_in[12];\n";
         if (v.voidReturn) m << "      " << call.str() << ";\n" << ctl;
         else
         {
@@ -4720,9 +5006,13 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             m << "      unsigned int rmask = rsz >= 4 ? 0xFFFFFFFFu : (1u << (8 * rsz)) - 1;\n";
             m << "      unsigned int got = rsz == 8 ? (unsigned int)(g64 >> 32) : (unsigned int)g64 & rmask;\n";
             m << "      unsigned int want = rsz == 8 ? D[k][11] : D[k][11] & rmask;\n";
-            m << "      if (got != want || (rsz == 8 && (unsigned int)g64 != D[k][12])) { printf(\"MISMATCH " << pr.name
+            // A 1- or 2-byte return is r0's low bytes, and a caller reads it as the extension of them (a lent 'char f()'): r0's upper
+            // bits must be the zero or the sign extension, or the text dropped part of r0 (A2-26: the low bytes alone agreed).
+            m << "      int badext = 0;\n"
+                 "      if (rsz < 4) { unsigned sh = 32 - 8 * rsz; unsigned sx = (unsigned)((int)(want << sh) >> sh); badext = D[k][11] != want && D[k][11] != sx; }\n";
+            m << "      if (got != want || badext || (rsz == 8 && (unsigned int)g64 != D[k][12])) { printf(\"MISMATCH " << pr.name
               << " r4=%08X r5=%08X r6=%08X r7=%08X size=%d%s run=%08X:%08X pseudo=%08X:%08X\\n\", g_in[4], g_in[5], g_in[6], g_in[7], rsz, "
-                 "(rsz == 8 && (unsigned int)g64 == D[k][12]) ? \" high-word-only\" : \"\", D[k][11], D[k][12], "
+                 "(rsz == 8 && (unsigned int)g64 == D[k][12]) ? \" high-word-only\" : badext ? \" upper-bits\" : \"\", D[k][11], D[k][12], "
                  "got, rsz == 8 ? (unsigned int)g64 : 0u); ++bad_" << pr.name << "; }\n";
             m << ctl;
         }
@@ -4792,7 +5082,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                     // x sign-extends in C, the engine means a zero extension): the reading of the cast, not the value.
                     const bool widenOnly = line.find("high-word-only") != std::string::npos &&
                                            (v.text.find("(uint8)") != std::string::npos || v.text.find("(int8)") != std::string::npos);
-                    if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
+                    // r0's upper bits that are no extension of a narrow return are not C's promotion: always a failure.
+                    if (line.find(" upper-bits") != std::string::npos) v.cls = "mismatch";
+                    else if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
                 }
         }
     };
@@ -4890,6 +5182,54 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "64-bit addc chain", { 0x0008, 0x346E, 0x357E, 0x6143, 0x000B, 0x6053 } },
 };
 
+// The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it
+// was shifted by, and a byte or word put into a stacked longword; with their neighbours that were always right.
+std::vector<CCase> WidePrintedCFixtures()
+{
+    std::vector<CCase> out;
+    auto words = [](const RegItem& item) {
+        RegFn f;
+        f.items.push_back(item);
+        f.slot = 0x0009;
+        return f.Words();
+    };
+    // x / d * 2^k for the seven unsigned divisors the review found wrong (the scale is the last shift), x in r4, L = r1, T = r0
+    for (uint32_t d : { 7u, 14u, 19u, 21u, 27u, 28u, 31u })
+        out.push_back({ ("A2-21 u/" + std::to_string(d) + "*2^k (the last shift)"), words(DivisionItem(d, false, -1, 4, 1, 0, 2, true)) });
+    // ...and their neighbours, right before and after: the quotient alone, the scale not the last shift, signed, and other divisors
+    for (uint32_t d : { 7u, 14u, 19u, 31u })
+        out.push_back({ ("A2-21 control u/" + std::to_string(d)), words(DivisionItem(d, false, 0, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/7*2", words(DivisionItem(7, false, 1, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/7*8", words(DivisionItem(7, false, 3, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/7<<8", words(DivisionItem(7, false, 8, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/19*4", words(DivisionItem(19, false, 2, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/3*2", words(DivisionItem(3, false, -1, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/10*2", words(DivisionItem(10, false, -1, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/641", words(DivisionItem(641, false, 0, 4, 1, 0, 2, true)) });
+    out.push_back({ "A2-21 control u/6700417*4", words(DivisionItem(6700417, false, -1, 4, 1, 0, 2, true)) });
+    for (uint32_t d : { 7u, 19u, 100u })
+    {
+        out.push_back({ ("A2-21 control s/" + std::to_string(d)), words(DivisionItem(d, true, 0, 4, 1, 0, 2, true)) });
+        out.push_back({ ("A2-21 control s/" + std::to_string(d) + "*2^k"), words(DivisionItem(d, true, -1, 4, 1, 0, 2, true)) });
+    }
+    out.push_back({ "A2-21 control s/-7", words(DivisionItem(0u - 7u, true, 0, 4, 1, 0, 2, true)) });
+    // the ledger's own words: the add form (x + t) >> 2 with no scale, and RuleDivTermAdd, unsigned and signed
+    out.push_back({ "A2-21 u/7*4, the ledger's words", { 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4409, 0x4408, 0x000B, 0x6043, 0x2492, 0x4925 } });
+    out.push_back({ "A2-21 (x + t) >> 2", { 0xD104, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4401, 0x000B, 0x6043, 0x0009, 0x2492, 0x4925 } });
+    out.push_back({ "A2-21 RuleDivTermAdd, unsigned", { 0xD102, 0x3415, 0x000A, 0x4001, 0x000B, 0x304C, 0x1234, 0x5678 } });
+    out.push_back({ "A2-21 RuleDivTermAdd, signed", { 0xD102, 0x314D, 0x000A, 0x4021, 0x000B, 0x304C, 0x1234, 0x5678 } });
+    // A2-22: a byte or a word put into a stacked longword and the longword loaded back
+    out.push_back({ "A2-22 byte at 3", { 0x7FFC, 0x2F42, 0x6053, 0x80F3, 0x60F2, 0x000B, 0x7F04 } });
+    out.push_back({ "A2-22 byte at 2", { 0x6053, 0x2F46, 0x80F2, 0x60F6, 0x000B, 0x0009 } });
+    out.push_back({ "A2-22 byte at 1", { 0x6053, 0x2F46, 0x80F1, 0x60F6, 0x000B, 0x0009 } });
+    out.push_back({ "A2-22 word at 2", { 0x6053, 0x2F46, 0x81F1, 0x60F6, 0x000B, 0x0009 } });
+    out.push_back({ "A2-22 byte at 3, copied to r1", { 0x6053, 0x2F46, 0x80F3, 0x60F6, 0x000B, 0x6103 } });
+    out.push_back({ "A2-22 control: byte at 0", { 0x6053, 0x2F46, 0x80F0, 0x60F6, 0x000B, 0x0009 } });
+    out.push_back({ "A2-22 control: an operation after the load", { 0x6053, 0x2F46, 0x80F3, 0x60F6, 0x7001, 0x000B, 0x0009 } });
+    out.push_back({ "A2-22 control: through registers", { 0x6043, 0x4019, 0x4018, 0x615C, 0x201B, 0x000B, 0x0009 } });
+    return out;
+}
+
 void TestPrintedC()
 {
     const std::string cc = FindCCompiler();
@@ -4923,6 +5263,7 @@ void TestPrintedC()
     else
     {
         for (const PrintedCFixture& f : kPrintedCFixtures) cases.push_back({ f.name, f.words });
+        for (const CCase& f : WidePrintedCFixtures()) cases.push_back(f);
         fns.resize(cases.size());   // fixtures have no item list (not shrunk)
         const long single = EnvNumber("SE_GENERATED_SEED", 0);
         const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
