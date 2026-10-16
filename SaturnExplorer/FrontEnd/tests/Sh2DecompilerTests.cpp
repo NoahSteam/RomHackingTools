@@ -6350,6 +6350,9 @@ void TestArea2Round3()
         CHECK(!mask.prototype.known && Has(mask.prototypeWithheld, "sr"));
         const DecompileResult flag = decompile("A2-13 SR restored, T returned", { 0x0102, 0x410E, 0x0029, 0x000B, 0x0009 });   // stc sr,r1 ; ldc r1,sr ; movt r0 ; rts
         CHECK(!flag.prototype.known && Has(flag.prototypeWithheld, "sr"));
+        // a field of it (the S and T bits), 4 bytes wide, returned after the write back
+        const DecompileResult field = decompile("A2-13 SR restored, field returned", { 0x0102, 0x410E, 0x6013, 0xC903, 0x000B, 0x0009 });   // stc sr,r1 ; ldc r1,sr ; mov r1,r0 ; and #3,r0 ; rts
+        CHECK(!field.prototype.known && Has(field.prototypeWithheld, "sr"));
     }
 }
 
