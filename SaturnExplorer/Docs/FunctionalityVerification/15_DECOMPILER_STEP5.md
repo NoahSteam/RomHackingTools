@@ -1914,6 +1914,737 @@ holding the same words after a `sts.l pr,@-r15 ; nop` prologue (`SE_GAME_ONLY`),
     (`SCU_RegRW_DB_u8_W1`); partition 4 is the cache data array like 6 (ordinary memory); `SH2_BCR1._2_2_`
     (word reads at 0xFFFFFFE2, 2 functions per save state) is right. Differences: A5-3, A5-4, A5-8.
 
+**Runs.**
+
+| | |
+|---|---|
+| Generator, unfenced, `SE_GENERATED_FIRST=40001`, 20,000 seeds | 0 findings, 196,860 accesses traced, 291 s |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+
+**For the coordinator.** The merge of `review/2-semantics-fix` (`1c0e752`) put ledger rows A5-1, A5-2 and A4-1
+back to `open` with their original fixture text; at `7fbbd1c` they read `fixed 28908ee` with the suite's fixture
+names. The record above ("Area 5, round 1") still says fixed. This review did not touch those rows.
+
+## Area 1, oracle: the invalidation model (`review/1-invalidation`)
+
+`SaturnExplorerDecompilerModelTests` (`FrontEnd/tests/DecompilerModelTests.cpp`, one `ctest` entry of the
+same name) is the oracle of area 1 of `Docs/Decompiler/REVIEW_PROGRAM.md`: snapshot, cache and
+engine-input invalidation. A seeded RNG drives a sequence of 20 to 60 operations against the real
+panel, runner and engine; after each step, once the runner is idle, and for every result as it is
+installed, the shown result is compared with a from-scratch decompilation of the inputs of that moment.
+A failure prints the seed, the operations so far, the inputs, and the expected and actual key, text and
+stale state. It found three things, none in the snapshot key or the panel's install rule (below).
+
+**Level: the panel, with the real runner and engine behind it.** `DecompilerPanel::Update` and `Draw`
+run under `ImGuiHarness` exactly as in `DecompilerPanelTests`; Refresh, Stop and the entry box are
+clicked and typed, everything else goes through the panel's and runner's public interface (`Shown`,
+`ShownStale`, `HeldKey`, `Pending`, `Submissions`; `InvalidateSession` and `ResetSession` as
+`App::ResetSessionDebugState` calls them). A runner-only model is not enough for the invariant: the
+learned prototypes lent to callers, the LRU, the held snapshot, the refresh policy and the stale mark
+live in the panel, and only the panel can show "a result for superseded inputs was installed" or "a
+stale result carries no mark". The runner's side (generation and epoch filtering, the too-large memo,
+cancel) is exercised through the panel. What the harness stands in for is `App`: it builds the
+`DecompilerView` the way `App::BuildDecompilerView` does (source id, derive serial, frame, a recorded
+frame's stable identity) and keeps the promise `App` makes, that a key names one set of bytes.
+
+**The world.** A 1 MiB work RAM image with 3 to 5 functions of seven (built from Fixture 1's caller and
+plain loads and stores, each after an `rts ; nop`): A reads `*r4` and returns it plus 2; B stores r4
+through r5; P writes 3 to a mailbox and polls it (kept only if the mailbox is volatile; otherwise the
+loop is endless as analysed and the `*r5` read after it is gone, so its signature differs); Q stores r4
+in a mailbox and reads it back; C calls A, B, P or Q through a literal pool word; D calls C; E calls a
+function at 0x700 in the BIOS image. Each function has "sites": bytes an edit may rewrite (a register
+number, a constant, the callee's address, the mailbox), every value giving a valid function whose
+signature or callee may change. Three images (builds) of the same code, three recorded frames per
+recording, two BIOS images, four volatile lists, four names, user function starts at each entry and four
+bytes in.
+
+**The operations** (state-independent, so a sequence can be cut): edit a byte (a callee's signature, a
+caller's callee, a constant); scrub to a recorded frame and back; Refresh; reconnect (same bytes, new
+source, session ended: `InvalidateSession` and `ResetSession`); replace the source (another image, as a
+dump, paused or running, with a frame of no source between); BIOS none, A, B (a new object each time:
+a reload of the same bytes must not look like a change); the volatile list; a function's name; a
+function start; select a function (typed into the entry box); Stop; hide and show the panel; the
+emulator runs, pauses, advances a frame; the CPU. A step may *hold* the engine (a gate on the runner's
+phase observer), so that several changes land with a request in flight; *finish* then lets the engine
+complete everything and deliver nothing, and the next operation changes an input before the panel
+collects the answers (the case the panel's own install checks exist for). *Starve* (seeds divisible by
+six, with a one-second budget) refreshes the shown function and holds the engine past the budget, so
+the runner answers "too large". A library of short motifs aims at the dependencies: a callee shown, its
+caller, a change, the caller again; the volatile list changing what P's signature is; a chain D, C, A; a
+BIOS function and another image; a result finishing and then a rename, a start, a volatile list, an
+edit, a scrub, a BIOS image or a reconnect landing before the panel looks.
+
+**The model.** `Oracle::Run` is a from-scratch `Sh2Decompiler::Decompile`, on the test thread while the
+runner is idle (the worker is blocked on its condition variable; asserted by `Busy()`), of a snapshot the
+test captures itself, with the request the panel would build: names, function starts, the parsed
+volatile list, the entry and the lent prototypes. `Oracle::Full(callee)` is the prototype a callee lends
+when its own callees are lent theirs, recursively, or none if its decompilation does not vouch for
+one. The panel lends what it has learned in this session for these inputs, which is any subset of
+the current ones, so the answers a shown caller may have are the 2^k from-scratch runs lending each
+subset; a prototype from a previous revision of a callee, or learned under another volatile list or
+function set, matches none unless it happens to give the same text. The model also mirrors the one
+policy the panel states in its header: the snapshot a running emulator's panel holds lags until
+Refresh, a selection, a new source or a BIOS change (everywhere else it follows the view at once).
+
+**What is checked.**
+
+1. For every result as it is installed (found by watching `Shown()` each frame): it is installed only
+   while the snapshot held is what is on screen (a hidden panel must not install an answer for memory
+   that has moved); its key is the key of the inputs it was asked under, which are the inputs of the
+   frame it was installed in (so a superseded request is never installed); its entry, status, text,
+   warnings, callees and prototype equal one of the model's candidates. The runner's "too large" is
+   accepted for the request that was held past the budget, and for its memo while the function's bytes
+   and its callees' are unchanged and nothing has since decompiled it.
+2. At each step's end, with the runner idle: no request is outstanding; the snapshot the panel holds is
+   the one the refresh policy says (`HeldKey`); a result is shown; the stale mark equals the model's
+   (inputs shown differ from inputs now) in both directions, except that a running emulator's lag is
+   stale by design and a question the user Stopped stays stale until Refresh; a result that is not
+   stale is exactly a candidate answer for the inputs now.
+3. With the engine held, after the panel has had frames: a shown result made from other inputs than the
+   ones now says stale (so a missed invalidation shows even where nothing is asked yet).
+4. Refresh with a function selected asks the runner (its force flag survives); a request cancelled by
+   Stop while the engine held it installs nothing.
+5. At the end of a sequence a callee-first walk through every function (with Refresh where a Stop left
+   the question "asked already") leaves each one showing exactly the from-scratch answer with every
+   callee prototype lent.
+
+**Runs.** `ctest -R DecompilerModel`: 18 seeds, then the shrunk sequence of each open finding of the
+ledger (`kPinned`); `WILL_FAIL TRUE` while A1-1 and A1-2 stand. `SE_MODEL_SEEDS=<n>` runs seeds 1 to n
+(a long run; per-seed lines only below 60); `SE_MODEL_SEED=<k>` runs one seed with every step printed
+(`SE_MODEL_TEXT=1` adds the shown text; `SE_MODEL_LIST=1` prints the sequence without running it;
+`SE_MODEL_SKIP=3,5` and `SE_MODEL_STEPS=<n>` cut it, which is how a failure is shrunk by hand);
+`SE_MODEL_SCRIPT="select A; starve; edit A 0 1" SE_MODEL_WORLD=A SE_MODEL_IMAGE=0` runs a sequence
+written out (the words are in `ParseScript`); `SE_MODEL_NOSTARVE=1` leaves the budget operations out.
+
+**Default run** (`ctest -R DecompilerModel`, RelWithDebInfo, a 4-core container shared with other
+work): 18 seeds and the two pinned sequences, 12.2 s. 738 operations (105 of them without effect: a
+Stop with nothing outstanding, a selection while the panel is hidden), 83 held steps, 42
+finish-then-change races, 4 stops, 5 budget stalls; 422 results checked at install, 733 idle checks,
+239 held-engine stale checks, 72 callee-first walks; the panel made 193 captures and 512 submissions,
+discarded 23 answers and served 25 from its cache; the model ran the engine 480 times (2,857 memo
+hits). Every random seed passes; the two pinned sequences fail, so the binary exits 1 and `ctest`
+reports Passed through `WILL_FAIL`.
+
+**Long run** (`SE_MODEL_SEEDS=1500`, 937 s): 58,208 operations, 33,659 results checked at install,
+58,047 idle checks, 19,032 held-engine stale checks, 6,400 walks, 4,109 finish-then-change races,
+321 stops, 156 budget stalls, 39,664 submissions, 1,968 discarded answers, 1,840 cache hits. 43 seeds
+fail, every one of them a seed divisible by six (the ones with a budget stall) and every one a "TOO
+LARGE" failure (A1-1 or A1-2); the other 1,250 seeds are clean.
+
+**Mutation check.** The model is only as good as what it catches. 31 hand-made breaks of the code under
+test (one expression each, in `DecompilerPanel.h/.cpp` and `DecompilerRunner.cpp`; reverted after each),
+100 seeds apiece with the budget operations off:
+
+| Break | Seeds that fail (of 100) | First check that fires |
+|---|---|---|
+| a lent prototype need not be of the snapshot held | 8 | text |
+| ...nor of the function set and volatile list it was learned under | 3 | text |
+| ...the lending id leaves out the volatile list | 2 | text |
+| stale mark ignores the function set / the volatile list | 1 / 4 | stale shown as current |
+| answer accepted without the names / function set / volatile list it was asked under | 5 / 2 / 5 | text, stale forever |
+| answer accepted for a snapshot the panel no longer holds | 34 | key |
+| answer accepted while the held snapshot is not on screen (a hidden panel) | 7 | on screen |
+| user function starts left out of the function set | 66 | stale shown as current |
+| volatile list hashed to nothing / left out of the question | 57 / 70 | stale shown as current, not refreshed |
+| deriveSerial left out of the view's identity (an edit is not a change) | 94 | held |
+| a running emulator ignores a BIOS change / a source change | 18 / 7 | held |
+| the cache ignores prototypes lent / names / function set / volatile list / key | 26 / 13 / 64 / 55 / 96 | converged, not refreshed |
+| Stop does not cancel | 11 | stop |
+| Refresh does not force a new question | 76 | refresh |
+| the stale mark ignores the names generation | 0 | |
+| answer accepted without the lent-prototype hash | 0 | |
+| answer accepted from another runner epoch / the runner's epoch not bumped / the runner's latest-generation filter removed | 0 / 0 / 0 | |
+| `ResetSession` keeps the learned prototypes / the cache | 0 / 0 | |
+| the cascade that drops prototypes learned from an obsolete one | 0 | |
+
+23 of the 31 are caught. The eight survivors are layers behind other layers, which is how the code is
+built ("the panel checks all of them itself, because the runner cannot know..."): the names generation
+in the stale mark is shadowed by the outstanding request; the lent-prototype hash in `Accept` cannot
+move without the target moving, which supersedes the request; the epoch is checked by the runner, by
+`ResetSession` (pending cleared) and by `Accept`; learned prototypes and the cache carry the snapshot
+key, which a session change moves; the cascade needs a callee's signature to change under unchanged
+inputs. A break in one such layer is invisible unless another is broken too, and the harness cannot
+break two things at once. They are listed, not hidden.
+
+**What it found.** Three things, in `Docs/Decompiler/REVIEW_LEDGER.md`:
+
+- **A1-1 (P2)** and **A1-2 (P2)**: the runner's too-large memo (`mTooLarge`, keyed by the entry as
+  asked and the volatile list, cleared only by `InvalidateSession`) outlives the bytes it was reached
+  for and a successful retry. A function that ran out of budget is answered "too large ... (not
+  retried automatically; use Refresh)" for the bytes edited since (its own, a callee's, another
+  recorded frame's), carrying the edited snapshot's key; and after a Refresh has decompiled it, any
+  later request that is not a Refresh (a rename, an edit) is answered the same way without running
+  the engine. `select A; starve; edit A 0 1` and `select A; starve; refresh; name A 1`, world A; the
+  first through a callee as `select D; starve; edit C 2 1`, world D,C,A, and through a scrub as
+  `select A; starve; scrub 1`, world A, image 1.
+- **A1-3 (P3)**: after Stop, choosing the same function again (typing its entry) asks nothing: the
+  question is "asked already" until Refresh, and the old function stays on screen stale. It is the
+  rule `Accept` documents, so the model excuses a stale result after a Stop; recorded for the fixer
+  to accept or change.
+
+Nothing was found in the snapshot key, the install rule, the cache keys, the lent-prototype
+provenance, the refresh policy for a running emulator, or the stale mark: 1,250 seeds without a
+budget operation, and the break table above, say they were exercised.
+
+**Not covered.** The function finder (Follow PC, "Decompile" from Assembly, call-stack hints,
+selecting by an address inside a function; the model types an entry, so the finder's rule that a user
+start is never overridden does not enter), auto-refresh and its debounce, registers and the halt hint,
+mirror entries (0x26xxxxxx), low work RAM and the Sh2Dump regions, the user-note overlay, BIOS file
+loading, the worker's failure paths (allocation, thread, cancel acknowledgement: area 6), and `App`
+itself: the harness builds `DecompilerView` the way `App::BuildDecompilerView` does, but a key that
+names the wrong bytes in `App` (a scrub frame's identity, `se_derive_serial`) is invisible to it. The
+model accepts any subset of the current callee prototypes as "lent" for a shown caller, so a
+prototype that should have been lent and was not is caught only by the final walk, which follows the
+documented Refresh after a Stop. The one-second budget is wall-clock: on a machine so slow that an
+ordinary decompilation takes a tenth of a second, a budget seed could see a spurious "too large". No
+production source was edited: the runner and panel are driven through their public interfaces and the
+runner's tests-only phase observer.
+
+## Area 1, round 1: the too-large memo
+
+Branch `review/1-invalidation-fix`, fix in `f5958a2`. Ledger rows A1-1 and A1-2 are `fixed`; A1-3 is `fixed` (the
+panel half of the rule, below). `SaturnExplorerDecompilerModelTests` passes its default run with `WILL_FAIL` removed
+from its ctest entry; its pinned sequences stay in the default run as regression pins.
+
+**Root cause (A1-1, A1-2).** The runner kept its record of requests that ran out of budget as a set of
+(entry, volatile list) that only `InvalidateSession` emptied. It was a verdict about one set of bytes, names and
+lent prototypes stored under a key that named none of them, and nothing erased it when a run completed. So an edit
+to the function, a callee or the recorded frame, a rename, a function start or different lent prototypes was answered
+"too large (not retried automatically; use Refresh)" without running the engine, with the *new* snapshot's key (it
+read as a verdict on the bytes on screen); and after a Refresh had shown that the function fits, the next ordinary
+ask was answered the same way.
+
+**The fix (`DecompilerRunner.cpp/.h`).** The memo is now an honest cache. `MakeRequestKey` digests (two independent
+64-bit lanes, 128 bits) everything a result depends on: the snapshot's key (source, derive serial, frame, region
+set and BIOS contents), the entry as asked (a mirror is another question), the names with their text, the function
+starts, the lent prototypes (callee address and the whole signature and call effects), the volatile list,
+`registerCallees`, `maxInstructions` and `allMemoryVolatile`. `Submit` computes it before the lock (the names can be a
+symbol file) and stores it in the `Job`; `mTooLarge` is a `std::set` of those keys. A run that ends on the budget
+inserts its key (in the current epoch); a run of the same key that completes with any other status -- `Ok`, `NoCode`,
+`Failed`, `Unavailable`, `Cancelled` -- erases it. `InvalidateSession` still clears it. `VolatileKey` is gone.
+Consequence, deliberate: the same bytes under a new key (a live game's next frame, a scrub to a frame that happens
+to hold the same code) are a new question and are attempted again, up to the budget. The runner cannot know the
+bytes are the same without knowing what the function reads, and the old memo's "same code under a new key" answer
+was exactly the case that answered an edit with a stale verdict. The panel only asks when its question changes, and
+a running emulator's held snapshot does not move until Refresh, so a slow function is still not retried every frame.
+A Refresh that is Stopped half way also erases the memo of that question (any status), so the next ask after it is
+attempted, not answered from the verdict the interrupted run was about to renew.
+
+**A1-3 (`DecompilerPanel.cpp/.h`), fixed rather than accepted.** The rule "the same question is not asked again until
+Refresh" exists to stop the panel asking the same question every frame (a failure is shown, not retried; after Stop
+nothing re-asks). It was never meant to refuse the user. Enter in the entry box now sets `mAskAgain`, taken once in
+the next `Update`: it re-asks a question that has been asked before (a cache hit when the answer is cached, the
+runner's memo for a too-large one, the engine otherwise). It is dropped while the very question is outstanding and
+wanted (a second Enter would only cancel and restart it); a request the user has Stopped (`Outstanding::cancelled`)
+does not count as outstanding, so Stop followed at once by Enter asks afresh. Nothing else changed: the panel still
+never re-asks by itself, and `DecompilerPanelTests` `TestEntriesAndNoRetryLoops` (60 idle frames, no submissions)
+passes unchanged. Not Enter: Follow PC, the context menu and the finder keep the rule, as before. User-visible:
+`DECOMPILER_GUIDE.md` (the entry-box row and the "too large" row).
+
+**The model.** `TooLargeMemo` is now the list of the signatures that were stalled (snapshot identity, entry, names,
+starts, volatile list); a "too large" answer is excused only for a signature `Same` as one of them, and a later
+non-too-large answer for the same signature removes it. The old byte comparison over the reachable functions (which
+excused the same code under another key) is gone. The Stop excuse still stands for a question Stopped and then left
+alone, but a `select` (the Enter in the box) clears it, and the callee-first walk, which used to click Refresh after
+a Stop, now fails (`WALK`) if typing a function's entry does not show it. `kPinned` holds five sequences, all in the
+default run: A1-1 `select A; starve; edit A 0 1`; A1-1 through a callee `select D; starve; edit C 2 1` (world D,C,A) and
+through a scrub `select A; starve; scrub 1` (world A, image 1); A1-2 `select A; starve; refresh; name A 1`; A1-3
+`hold; select A; stop; wait; select A` (world C,A). The first four fail with TOO LARGE
+on the runner before the fix, and A1-3 fails (NOT REFRESHED: the panel still shows C, stale) on the panel without
+`mAskAgain` (the mutations below); all five pass after. The three A1-1 and the A1-2 scripts were also reproduced
+first on the unfixed tree with the unchanged model.
+
+**Tests added outside the model, and what they are.** `DecompilerRunnerTests.cpp`, `TestBudget`: one block (about 40
+lines, after the volatile-list check) that submits the same over-budget function under another snapshot key, with a
+name, with a function start and with a lent prototype (each must run: `RunsStarted` +1), the same question again
+(answered at once, no run), and a Refresh stopped half way followed by a plain ask (runs again). `DecompilerPanelTests.cpp`:
+`TestEnterAsksAgain` (Enter asks once after a failure and does not loop; Enter after Stop shows the new function,
+not stale). CMake: `WILL_FAIL` removed from the model's ctest entry, comment rewritten.
+
+**Mutation.** Revert the runner change (the old `DecompilerRunner.cpp/.h`, panel kept): the pinned A1-1 (three) and
+A1-2 fail with TOO LARGE, default seed 6 fails, A1-3 passes; six checks of `TestBudget` fail (the four "another
+question" runs, the stale ask and the stopped Refresh). Take out only the erase on completion: `TestBudget` fails
+(`RunsStarted() == runs + 9`), the model does not -- the erase matters only when the question is asked again after the
+panel's cache has dropped its Ok answer (more than `kCacheSize` = 8 other answers in between), which no generated
+sequence does; the runner test is the check for it. Take `!askAgain` out of the panel's `q == mAsked` test: the
+pinned A1-3, seeds 6 and 15 of the default run (NOT REFRESHED) and both `TestEnterAsksAgain` blocks fail.
+
+**Runs** (RelWithDebInfo). `ctest -R "DecompilerModel|DecompilerRunner|DecompilerPanel"`: 3 of 3 pass (runner 48.8 s,
+panel 2.6 s, model 16.4 s: 18 seeds, 755 operations, 7 budget stalls, 438 results checked at install, 80 walks, five
+pinned sequences). `SE_MODEL_SEEDS=300` (165 s): 0 of 300 fail -- 11,907 operations, 29 budget stalls, 6,879 results
+checked at install, 1,330 walks, 8,153 submissions, 1,490 cache hits; the previous long run's 43 failures were all
+budget seeds (divisible by six; 60, 84, 174, 186 and 222 are named in the ledger), and all of those in this range
+pass now.
+
+**Not done.** The memo's key includes the snapshot key, so it cannot serve "the same code in a new frame"; if a
+live game's slow function turns out to re-run on every Refresh-less scrub step, the remedy is a hash of the bytes the
+function and its callees read, which only the engine knows (a result field), not a looser key. Cancelled-run erasure
+is the literal reading of "any status" and could be narrowed to completed runs if a stopped Refresh turns out to
+cost users a second wait.
+
+## Areas 3 and 4, oracle: the generator's second grammar
+
+Branch `review/3-4-generator`: `FrontEnd/tests/Sh2GeneratedTests.cpp`, and the comment on the ctest entry in
+`CMakeLists.txt`. Ledger: A11-1 is `fixed 3a89718`; two rows are new, A4-2 and A4-3. No area 3 finding:
+11,024 lent prototypes over 5,000 modules, none wrong.
+
+### 1. The grammar (version 2)
+
+Version 1 is untouched (one function, no stack; the same programs for the same seeds). Version 2 makes a
+module of one to three functions laid out one after the other; each is built from version 1's items and
+these. The default run takes the odd seeds as version 1 and the even ones as version 2
+(`SE_GENERATED_GRAMMAR=1|2` picks one).
+
+- **Stack.** r15 starts at `0x06040000`. A function pushes r8-r14 (`mov.l Rn,@-r15`) and PR
+  (`sts.l pr,@-r15`, or `sts pr,Rn` into a pushed register), takes a frame (`add #-n,r15`, with r14 as
+  frame pointer in 30%: `add #n,r14 ; mov r14,r15` to release), addresses locals as `@(disp,r15)` /
+  `@(disp,r14)` / `@(r0,Rn)` with a constant index / `@r15` in every width, spills r1-r5 around a block
+  (push, items, pop), and restores everything by `rts`; the last pop (or the return value's `mov`) may be
+  `rts`'s delay slot. The harness checks r8-r15 and PR at the end of every run (a violation is reported
+  as `generator:*`, not as the decompiler's).
+- **Calls.** Callees come after callers. `bsr` with the right displacement, or `mov.l @(pool),Rn ; jsr @Rn`
+  with the callee's address in the pool; 0-4 arguments in r4-r7, the last sometimes set in the delay slot;
+  arguments kept across calls in r8-r11 and put back after (`mov r8,r4`); a call is sometimes the skipped
+  part of a branch; PR is saved around nested calls. A function either writes r0 as its result on every
+  path (the last write is a `mov #imm`, a register copy, an extension or a load, before the epilogue or in
+  `rts`'s slot) or never writes r0 itself. Tail calls: `jmp @Rn` after the epilogue has restored PR and the
+  registers (`lds.l @r15+,pr` / `lds Rn,pr`, the pops, the last as the slot). Fall-through: a frameless
+  function with no `rts` that runs into the next one.
+- **Flow.** `bra` forward to a loop test at the bottom with `bf` back; `bra` backward with an exit in the
+  middle (`dt ; bt out ; bra top`); 1-4 data words skipped by `bra` (an `rts`, an invalid word and random
+  words among them); a jump table through `mova + shll2 + mov.l @(r0,Rn) + jmp @Rn` with 3-6 entries
+  (some shared by two entries, some going to the default), `cmp/hi` against the last index or `cmp/hs`
+  against the count, `bt default`, the cases each ending in `bra join`, on an integer register the harness
+  sets; a shared exit reached by two `bra` (each with a nop or an instruction in its slot); the exit placed
+  before the entry (so the body is not one range from the entry).
+
+Each function is a declarative record (pushed registers, frame, ending, items), so the shrinker removes
+items, replaces a construct by its contents, turns `jsr` into `bsr`, drops the shared exit and the
+exit-before-entry, and removes a function nothing refers to. A failing seed prints the line that replays
+it: `SE_GENERATED_WORDS`, with `SE_GENERATED_FUNCS="start/entry/end,..."`, `SE_GENERATED_TABLES`,
+`SE_GENERATED_DATA` and `SE_GENERATED_RETURNS` for a module.
+
+### 2. The checks
+
+Per function, against the emulator's runs of that function from its entry (4 inputs for version 2; a jump
+table adds one run per index). Functions are decompiled last first, and what each learned (`prototype`,
+when `known`) is lent to the ones before it through `DecompileRequest::prototypes`, as the panel does;
+`knownFunctions` holds every entry. Once with the default request and once with the mailbox marked, when
+the module has one.
+
+- **Area 5, unchanged**, over the accesses the function made itself (not at a deeper call depth: a callee's
+  accesses are its own, and a function that calls another and also jumps into it would otherwise be held to
+  the callee's). **A11-1:** an access in the stack area (`0x0603E000-0x06041000`) through r15 or r14 is a
+  local and exempt; a pointer into the stack handed to a callee is not. `FoldedIntoSwitch` now reports only
+  what a run shows: a run that made one of the two accesses without the other (a branch whose condition is
+  constant joins them rightly: the first draft reported that as a finding).
+- **Area 4.** (a) Every instruction executed (the delay slot of a delayed branch included) is in
+  `body`, or in a function this one calls (or that function's body), or a flow warning names it. (b) The
+  entry of another function inside the body has a `FlowWarning::IntoFunction` at it. (c) No data word
+  skipped by a `bra` is in the body. (d) Each index a run dispatched a jump table with reaches the label of
+  the printed switch that holds the code the index runs: its own `case N:` (labels carry the address their
+  code starts at), or the `default:` of a switch whose bound check the engine took out, or what follows the
+  switch when the index leaves it; required when that code does something the ledger lists, or a warning
+  says cases may be missing.
+- **Area 3**, for a `known` prototype. (e) `known` and `prototypeWithheld` agree; it is not lent when the
+  analysis is incomplete (truncated, unsupported, unimplemented, bad data, a table case missing, an
+  executed instruction outside the body). (f) Every one of r4-r7 the function reads before writing (taken
+  from the p-code of the run: every op's register inputs and outputs, the callees' too) that the
+  prototype's parameter list does not reach must not matter: the function is run again with that register
+  changed (+0x200, then 0), and if what it does to hardware, marked memory and memory through the
+  parameter pointers (the accesses and values; r0 when it returns something) changes, the finding is
+  `param-dropped:rN`. Stack traffic, literal-pool and table reads, and ordinary memory at a constant
+  address do not count (the decompiler may drop them), or the check reports dead reads. (g) A return is
+  claimed only if r0 is written on every run; a function the generator made to return r0 claims one.
+  (h) A register `CallEffects::preserved` names ends every run with the value it started with
+  (r0-r15, sr, pr).
+
+### 3. Numbers
+
+Default run (`ctest -R Generated`, RelWithDebInfo, 4 cores): 300 seeds, 150 of each grammar, 4.7 s
+(3.2 s in the decompiler), green. Version 2 costs about 16 ms a seed, version 1 about 13.
+
+```
+SUMMARY: seeds=300 (grammar 1: 150, grammar 2: 150) ... failing seeds=0; findings=0 (4532 ms total, 3241 ms in the decompiler)
+SUMMARY2: modules=150 functions=299 (end rts/tail/fall=253/33/13; returning 156, void 143) pushes=427
+pr stack/reg=70/28 frames=162 (frame pointer 51) spills=95 locals ld/st=68/31 (stack accesses exempt 1723)
+calls bsr/jsr=83/56 (arg in slot 51, args restored 139) tables=37 (entries 154, cases 109, shared entries 28,
+default entries 17; destinations traced 204, printed 126) bra loops fwd/back=53/59 data skips=54
+shared exits=63 exits below the entry=82 slot pops=117 ret in slot=53; lent prototypes=593 (void 192,
+returning 401) withheld=47; parameter checks=593 (candidates 29, perturbed runs 222, insensitive 29);
+preserved checks=593; flow: instructions executed=16674, into-function said/silent=56/0; runs=1993
+```
+
+`SE_GENERATED_SEEDS=5000` (both grammars, 2,500 each; 69 s): 9 failing seeds, all version 2: A4-3 in 8 and
+A4-2 in 1. Version 1: no finding in 2,500 seeds. `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=5000` (81 s,
+16.2 ms a seed): 15 failing seeds, 74 findings, 13 seeds A4-3 (`folded-into-switch`) and 2 seeds A4-2
+(`outside-body`: 2226 and 3049); 9,854 functions, 8,380 ending in `rts`, 913 in a tail call, 561 falling
+through; 11,024 prototypes lent (4,368 void, 6,656 returning), 825 withheld; 1,375 jump tables with 8,023
+traced dispatches (4,537 reach a printed case, 3,486 run code that does nothing the ledger lists and may
+be merged); 2,503 `bsr` and 1,686 `jsr`; 49,928 local accesses exempted; 344,628 executed instructions
+accounted for; 1,820 "flow runs into" warnings, none missing for an entry in the body; parameter checks:
+778 candidates (a register read before it is written that the prototype does not reach), 6,290 perturbed
+runs, all 778 insensitive; 43,160 emulator runs; no `generator:*` finding.
+
+Mutation (the checks checked; `SE_GENERATED_MUTATE=<kind>` damages every result as that defect would; 300
+version 2 seeds; the run passes only if the check reports it): `ledger` (first ledger entry deleted) 287;
+`params` (last parameter dropped) 278; `ret` (void and returning swapped) 209; `body` (last body range
+dropped) 300; `cases` (case lines deleted) 50; `warn` (flow warnings deleted) 90; `preserved` (all registers
+claimed preserved) 296; `lent` (withheld reasons cleared) 33; `data` (a data range added to the body) 91.
+Version 1, `SE_GENERATED_MUTATE=1`: 277 of 300.
+
+### 4. Findings
+
+- **A4-2 (P2).** Flow that runs through a second jump into another function is shown as part of the
+  first with no warning, and `body` omits what the actions removed after a restart that flowed further.
+  Fixture in the ledger row (24 words, three functions). The first hop is warned; the second is not. The
+  signature is withheld there, so no wrong prototype is lent.
+- **A4-3 (P2).** The read of a jump table's entry is printed before the switch and unconditionally, when
+  the code makes it only for an index in range (the bound check was folded into the switch). 28 words in the
+  ledger row.
+- **No area 3 row.** Nothing found: no wrong parameter list, no invented return, no wrong `preserved`, no
+  prototype lent for an incomplete analysis. Incomplete analyses are withheld with a reason (825 of
+  11,849); the commonest reasons are code removed as unreachable that holds hardware accesses, an incoming
+  argument outside the signature (`mov.l @r7,r0` alone), a return not to the caller, a callee with no
+  signature, and a register used after a call that is not known to return it.
+
+### 5. Wrong in the first drafts of the checks, so a later reader does not repeat them
+
+A frame pointer must release the frame with `add #n,r14 ; mov r14,r15` (the first epilogue did
+`mov r14,r15` alone, and `lds Rn,pr` is `0x402A`, not `0x400A`, which is `lds Rn,mach`); a machine made
+before a decompilation must not run after it (a decompilation takes the engine's global translator over;
+the runner makes a new one); a case label can carry a cast (`case (xunknown4 *)0x2:`), and a bounded
+switch prints its commonest destination as `default:`, so a label-per-index check is wrong, as is one that
+reads the first `switch` of the text when a callee's was inlined (the switch line carries the address of its
+`jmp`); an index that leaves the switch has no label at all (its code is what follows); a table whose entries
+all go to one place has no switch ("Switch with 1 destination removed", warned); the accesses of a
+function that is both called and jumped into belong to the callee when run at a deeper call depth;
+`param-dropped` must not count a dead read of ordinary memory, a literal-pool load or stack traffic as
+a difference; `mov r0,r0` is not a write of r0; a loop counter must not be the destination of a load that
+a rewritten store turned into (a store with no register holding a value becomes a load).
+
+### 6. Not done
+
+The fixes (A4-2, A4-3); passing the address of a local to a callee (the callee's stores through it are the
+case `ReturnCheck`'s escape tracking exists for, but a callee's `@-Rn` forms and displacements would
+overflow the frame, and a corrupted return is the program's, not the decompiler's); arguments on the stack
+(a fifth argument); polls and unmarked RAM polls in version 2; mirrors (a callee reached at `0x26...`);
+recursion and mutual recursion (the call graph is acyclic); the panel's `Lendable` dependency rule (every
+known prototype below is lent); the call's printed argument count against the lent prototype (not
+checked); the generated test under ASan; MSVC and macOS builds. The default seeds do not reach A4-2 and
+A4-3 (about 1 in 400 version 2 seeds), so the ctest entry is green and the nightly job (20,000 seeds) is
+red until they are fixed.
+
+## Area 5, round 2: fixes
+
+Fixer, branch `review/5-round2-fix`, fix commit `342263f`. Ledger rows A5-3 to A5-7 are fixed, A5-8 is accepted,
+and the A5-4 row, whose code spans held a `|` that broke the table, is mended. No engine patch: every root cause
+was in the host (the map, `HardwareNotes`, `NoteRemovedAccesses`, `Accesses`) or in the test oracle, so
+the vendored tree is unchanged (patches 0001 to 0020). Mednafen (`ss.c`, `smpc.c`, `vdp1.c`, `vdp2.c`, `sh7095.inc`)
+was re-read for each rule; the audit document has them (`HARDWARE_REGISTER_AUDIT.md`, "Access width and lane").
+
+**A5-3, A5-4: the access-kind table gets a second axis.** `HardwareRegister::narrow` (`NarrowAccess`) says what an
+access narrower than the register does when the bus does not just take the bytes it carries; `NarrowAccessEffects`
+turns the kind into a caution; `HardwareNotes` adds it on the instruction, naming the register and the width. Every
+register of a kind gets the rule, from the block it is in (the on-chip block splits at 0xFFFFFF00):
+
+| Kind | Registers | What the access does (Mednafen) | Caution |
+|---|---|---|---|
+| `WholeOnByte` | VDP1, VDP2 | a byte write writes the whole 16-bit register, the other byte from the data bus (`WriteReg`, `RegsWrite`) | "a 1-byte write to VDP2_TVMD writes the whole 16-bit register: ..." |
+| `OnChipLong` | the divider, the DMAC | a word write at the register's address writes it whole (DVDNT, DVDNTL also divide); at +2 nothing; a word read returns the low half at +0 and +2; a byte access is a CPU address error | one caution per case |
+| `OnChipKeyedLong` | BCR1 to RTCOR | no word write is taken: only a 4-byte write with 0xA55A above | "does nothing: it is set only by ..." |
+| `OnChipWord` | the UBC | a byte access is an address error | the same |
+| `ByteLane` | the SMPC | registers on the low lane at odd addresses: a word at the even address is a write of the low byte (or a read of 0xFF00 or the register); a byte at an even address does nothing (reads 0xFF); a long is two 16-bit accesses, bits 23-16 then bits 7-0 | one per register |
+
+The SMPC word write also prints as the register now. Each SMPC register is registered a second time as a 2-byte
+symbol at the even address (`SaturnHardwareWordViews`, both partitions, volatile); the engine takes the smallest symbol
+that holds the access, so a byte at the odd address still finds the byte symbol, and `mov.w r0,@r1` at 0x2010001E
+prints `SMPC_COMREG = 0x19;` with the caution that it is a byte write. A long is not named on the line (it covers
+two registers, no single symbol can); the caution names each. The "covers REG1 and REG2" caution is not made for the
+SMPC, the lane note replaces it. The ledger lists every access at its real width.
+Also found, not fixed: the BSC's keyed long write (BCR1 to RTCOR with a key other than 0xA55A is ignored) is not
+checked, only the word write that never works.
+
+**A5-5: one to one.** `NoteRemovedAccesses` and the tests' `Accounts` (replacing `AccountFor`) match each access of
+the reference run with one shown access or one engine record, never one for two, by instruction, direction and width
+and by address where both sides have a constant one (exact pairs first, so an access through a pointer does not take
+a constant one's record). `AccessFate::frame` marks a fold into the function's own stack frame (the record's address is
+the frame offset, -4 for a pop: `constantAddress` is now false for it, the engine's space is read in `DecompileInto`);
+such a record matches nothing, and `DeadIsLoss` ignores it. `ReferenceOk` and `TestGameCode` spend one removal
+caution per removed access (`SaidCount`).
+Fixtures: `macRemoved`, `macRemovedSecond`, `macRemovedBoth`, `rteSlot` (with its two frame folds), control `rtsSlot2`; and
+made-up records for the oracle itself (a fold does not excuse a second access; one printed access likewise; a frame
+fold at -4 is not a register).
+
+**A5-6: mac.** `Accesses` now allows as many accesses of an instruction and direction on a path as the flow had LOADs or
+STOREs for it, less the ones that ended another way (mac.l has two). `repeatedOnPath` is unchanged for one-access
+instructions, and `TestGameCode` no longer exempts mac by opcode. Fixtures `macPtr`, `macWPtr`, `macSame`, `macReg` with `Ledger`.
+*What the generator must change* (`Sh2GeneratedTests.cpp`, not edited here): nothing for the flag itself, since it reads
+`repeatedOnPath`: `SE_GENERATED_WORDS="045F 000B 0009 0009"` (also `445F`, `044F`) now gives 0 findings. mac can go into
+the grammar, with its trace expecting two reads of one instruction. But the "dropped" check lists a trace access as
+printed when any ledger entry has the same (instruction, direction, size) -- the A5-5 hole, in the generator: it
+should count (a ledger entry spent per trace access, by address when both have one), or one printed operand of a
+mac excuses a lost second.
+
+**A5-7: caution naming.** The removal caution reads "the N-byte write of A and B here is missing" (all registers
+`HardwareRegistersCovering` finds, `RegisterNames`; an unnamed address in hex; "through a pointer" with the width).
+The earlier fixtures' strings read "the 1-byte write of SMPC_SF ...". The guide's table does not quote them.
+
+**A5-8: accepted.** Mednafen's low work RAM (`ss.c`, `A & 0x100000` in 0x00200000-0x003FFFFF) is not mapped for VA0
+and VA1 (reads 0xFFFF, writes dropped) and mirrors for VA2. It is ordinary memory either way, no register is
+involved, and a user mark reaching the mirror is a harmless superset: the aliases stay.
+
+**Mutation checks** (the fix reverted, the suite fails; restored, it passes), all in `TestHardwareVolatility` and
+`TestHardwareMap`: the `WholeOnByte` rule off: the three VDP fixtures and the sweep; the on-chip word rule off:
+`divWordHigh`, `divWordLow`, `divWordReadHigh`, `bscWord` and the sweep; the on-chip byte rule and the SMPC word
+rule off: `divByte`, `divByteRead`, `ubcByte`, `smpcWord`, `smpcWordRead`, the mirror fixture and the sweep; the SMPC word views not registered:
+`smpcWord` and `smpcWordRead` (the line); the removal match without address and multiplicity: `macRemoved`,
+`macRemovedSecond`, `rteSlot`, `ReferenceOk` on them; the allowed count fixed at 1: `macPtr`, `macWPtr`, `macSame`, `macReg`;
+the caution naming the first register: `removedLong`; the oracle without the frame rule: its made-up cases (three
+checks).
+
+**Matrix** (RelWithDebInfo, gcc):
+
+| | |
+|---|---|
+| `ctest` | 93 of 93 passed (about 66 s with -j3) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,842 folded, 0 dead, 16 unreachable, 27 switch lookups |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,700 folded, 0 dead, 20 unreachable, 155 switch lookups |
+| New cautions on game code | none: A5-3 and A5-4 add 0 notes to the 839 and 1,554 outputs (`SE_GAME_OUT`); no partial register access, no `Ram2010`/`Ram0010` line, in either (the 16 and 20 removal cautions now carry the width) |
+| Generated test | passes (`ctest`); mac words give 0 findings |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` | clean beyond the two tolerated UBSan lines (`address.hh:605`, `slghpatexpress.cc:979`); no AddressSanitizer or LeakSanitizer report (`detect_leaks=1`); suite passes |
+
+## Area 6, oracle: the fault-injection matrix
+
+`SaturnExplorerDecompilerFaultTests` (`FrontEnd/tests/DecompilerFaultTests.cpp`, branch `review/6-lifecycle`, POSIX
+only because it forks) is the oracle `REVIEW_PROGRAM.md` asks for in area 6: allocation `k` fails for every `k`,
+the cancel flag goes up at every point of a run, and the runner's Stop, supersede, invalidate, budget, disable and
+destroy happen with the worker held at every phase entry. Every cell runs in a child process; a crash, a hang, a
+sanitizer report, a leak or an exit through static destruction from a damaged engine is a finding, not the end of the
+test. No engine, spec or runner source was changed (the runner and one engine file were mutated for the checks
+below and restored); no test seam was added: the existing `SetPhaseHookForTests` and
+`SetBeforeReferenceHookForTests` give the phase entries, and the allocator that the test replaces gives the rest
+(it counts, fails one allocation, or raises the cancel flag at one, which is the "op count" hook the brief allowed for).
+
+**Machinery.** The parent spawns itself (`--driver`, `--runner`, `--runner-oom`, the `--engine-oom` pattern). A
+driver warms one engine until two runs agree to the allocation, then `fork()`s a cell per `k` from that state, so
+thousands of cells cost minutes, not a translator build each; a cell reports through its exit status and its output,
+the driver kills it after `SE_FAULT_TIMEOUT` seconds (default 120), and the parent kills a driver after 10 minutes
+(4 hours in full). A cell that leaves through `exit()` when its engine is damaged is caught by an `atexit` trap
+registered after the translator's statics. Under ASan each cell ends with `__lsan_do_recoverable_leak_check()`,
+since `_Exit` skips the exit-time check. Reproduce one cell with
+`SaturnExplorerDecompilerFaultTests <scratch> --cell <family> <fixture> <k>` (it prints the failing allocation's
+stack); `<family>` is `alloc`, `cancel-enter`, `cancel-alloc`, `cancel-us`, `cancel-oom` (`<k>` is
+`cancel allocation * 8 + index into {0,1,2,4,8,64,512,4096}`), `runner` (`<kind> <entry>`) or `runner-oom`
+(`<fixture> <entry> <j>`). `k` is an allocation index of one `Decompile` on a warm engine; the counts are the same in
+the RelWithDebInfo and the ASan+UBSan build (gcc 13.3): mailbox 33,119, jumptable 32,080, fixture1 19,913, diamonds
+411,659. Environment: `SE_FAULT_FULL=1` (whole matrix), `SE_FAULT_DENSE=<n>` (the dense prefix of the alloc sweep,
+default 3,000; `100000` makes it every `k`), `SE_FAULT_JOBS`, `SE_FAULT_TIMEOUT`, `SE_FAULT_KEEP=1` (logs),
+`SE_FAULT_ONLY=alloc,cancel-oom,...` (job-label prefixes), `SE_FAULT_EXIT=static` (a damaged engine leaves through
+`SleighArchitecture::shutdown()` and `exit()`, as the application would, instead of `_Exit`), `SE_FAULT_LEAKS=0` (no
+per-cell leak check).
+
+**Fixtures** (one snapshot): `mailbox` (TestHardwareVolatility's `mailboxFold`: code is removed, so the reference run
+happens: 14 phase entries), `jumptable` (a 4-way switch through a table: 9 entries), `fixture1` (a call through a
+literal pool, two passes), `diamonds` (150 diamonds, one pass: a long action tree). Every request carries a name, a
+known function and an unrelated volatile range, so that some allocations are made before the engine's first phase.
+
+### The cells
+
+| Family | Cell | Invariants checked |
+|---|---|---|
+| `alloc` | allocation `k` of a `Decompile` throws, mailbox and jumptable | no exception escapes; `Failed("out of memory")` (or `Ok` with the baseline's output if a `nothrow` allocation was absorbed); the snapshot's reference count returns; the next request is `Unavailable` ("out of memory", and `Disassemble` refuses) when the failure was inside the engine (`mWorkPhase != Idle`, seen from the phase hook) and `Ok` with the baseline's output otherwise; `_Exit` with no ASan, UBSan or LSan report |
+| `cancel-enter` | the flag goes up at the start of phase entry `e` (the phase hook), all four fixtures, plus before the run and past its end | the outcome is the one the design gives (below); a cancelled result has no lines; the same `Sh2Decompiler` then gives exactly the baseline output |
+| `cancel-alloc` | the allocator raises the flag at allocation `k` (a deterministic op count) | as above; the latency, in allocations, between the flag and the stop is recorded |
+| `cancel-us` | a second thread raises the flag `t` microseconds in (full: every 100 us across the run and 2 ms past it, so 1 ms steps are a subset) | as above, over the range of phase entries the flag can have landed in |
+| `cancel-oom` | cancel at `k`, and allocation `k + j` fails, `j` in 0..4096 | the failure may fall in the unwinding of the `CancelError`: Cancelled, Failed or Ok, never a crash; the `alloc` checks follow |
+| `runner` | `Cancel`, `Submit` while busy, `InvalidateSession`, destruction, budget expiry (with the too-large memo), `DisableLocked` and both ways back, with the worker held at every phase entry | the worker joins; exactly the expected results come back and none for a stale generation or epoch; Cancel on a queued request answers at once; the memo is keyed by entry as asked and volatile list, answers without a run, is bypassed by Refresh, mirrors and other volatile lists, and is cleared by a new session; a stuck cancel disables, a new session re-enables only when nothing runs; the next request is correct |
+| `runner-oom` | the worker fails its `j`-th allocation after being let go at phase entry `e`, a process per cell | Failed("out of memory") or the session disabled while recording; the worker answers the next request (Unavailable); no job holds the snapshot |
+
+*Where a cancel must land* (`Expected` in the test, from `Sh2Decompiler.cpp`): Flow and Actions have check-points,
+Init, Print and Teardown none. A flag raised in Flow is honoured in Flow (a check before Actions), a flag raised in
+the printing pass's Actions in Actions (a check before Print); a flag raised in Init, Print or Teardown waits for the
+next Flow; a flag raised after the last check-point completes `Ok`; a flag raised in the reference run only cuts the
+reference run short (`Ok` with the "could not be checked ... (cancelled)" warning, the signature withheld). A flag in
+the first pass's Actions is expected in Actions; it is not always (A6-6).
+
+### Size and time
+
+Machine: 4 cores, gcc 13.3, `--parallel 2` builds. "Full" is `SE_FAULT_FULL=1`, three drivers at a time.
+
+| Run | Cells | Wall time |
+|---|---|---|
+| RelWithDebInfo, default subset (what ctest runs: `ctest -R SaturnExplorerDecompilerFaultTests`) | about 750 cells in 25 jobs, plus 4 `runner-oom` processes | 14-17 s |
+| RelWithDebInfo, full, dense prefix 3,000 | about 28,700 cells: alloc 7,487; cancel-enter 45; cancel-alloc 4,582; cancel-us 1,288; cancel-oom 14,888; runner 192 scenario cells; 207 `runner-oom` processes | 284 s (245 jobs) |
+| RelWithDebInfo, `alloc` for every `k` (`SE_FAULT_DENSE=100000`) | 65,234 cells (mailbox 33,121, jumptable 32,113) | 256 s for the whole matrix with this sweep in place of the dense one (the alloc drivers take 70 s each, three at a time); 268 s for the sweep alone with `SE_FAULT_EXIT=static` |
+| ASan+UBSan, Debug, `alloc` for every `k`, no leak check | the same 65,234 cells | 1,312 s |
+| ASan+UBSan, Debug, full with leak detection: `alloc` dense prefix 3,000, `cancel-enter`, `cancel-alloc` (not diamonds), `cancel-us` (diamonds killed: it needs thousands of cells of seconds each), runner scenarios, `runner-oom`; `cancel-oom` not run in full | over 10,000 cells and 207 `runner-oom` processes | 2,584 s |
+| ASan+UBSan, Debug, the six runner scenarios in full after the budget fix | 192 cells | 59 s |
+| ASan+UBSan, Debug, default subset | as the first row | 154 s (the ctest TIMEOUT is 600) |
+
+The default subset is not under 60 s in a sanitizer build; in the plain build it is. The exhaustive run is the one
+that found A6-1 to A6-5: the dense prefix of 3,000 and the geometric tail miss all of them, which is why the subset
+**pins** one cell per finding (`kPins`: fixture, size and phase of the failing allocation, found again by size and phase
+if a build numbers allocations differently, reported as STALE if it cannot be).
+
+### Findings
+
+Ledger rows A6-1 to A6-9 (`REVIEW_LEDGER.md`); all open. The ctest entry is `WILL_FAIL` (the default subset fails on the
+pinned cells), with a comment naming the rows.
+
+| Row | Severity | What | Cells |
+|---|---|---|---|
+| A6-1 | P1 | `EmitPrettyPrint::setMarkup` frees the emitter before allocating its replacement: double free in the Print phase | 6 (mailbox 4, jumptable 2) |
+| A6-2 | P1 | `EmitMarkup::setPackedOutput`, the same | 3, and 1 with a cancel in flight |
+| A6-3 | P1 | `BlockGraph::identifyInternal` moves blocks into the new switch block before it can no longer fail: double free, any function with a recovered switch | 16 (jumptable) |
+| A6-4 | P3 | the markup stream swallows the failure; reported "unexpected exception" instead of "out of memory" | 8 |
+| A6-5 | P2 | message streams swallow the failure: `Ok`, and a truncated warning in the output (`WARNING: Removing unreac`) | 4 (1 changes the output) |
+| A6-6 | P3 | a cancel in the first pass's Actions tail is honoured in the second pass's Flow, after its uncheckable Init (40% of the fixture1 run) | 2 `cancel-alloc`, 1 `cancel-us` |
+| A6-7 to A6-9 | P3 | leaks after an in-engine allocation failure: Architecture construction (about 70% of the sampled cells), followFlow (varnodes), Actions | thousands, bounded to one failure per process |
+
+What passed: the cancel matrix has no other violation (no crash, no leak, no wrong status, the engine always
+produces the baseline output afterwards, a cancelled result never carries lines); the runner matrix has none
+(RelWithDebInfo and ASan+LSan, all entries); `runner-oom` has no ASan error and no failed check, only the leak reports
+of A6-7 to A6-9 (42 of 207 cells under LSan); with `SE_FAULT_EXIT=static` no `k` crashes in `shutdown()` or static
+destruction beyond the A6-1 to A6-3 cells themselves (patches 0002 and 0003 hold at every allocation of both
+fixtures, which `_Exit` alone would not show).
+
+*Cancel latency* (allocations between the flag and the stop, the worst cell of each class; the runs are 19,913 to
+411,659 allocations): flag in Init or Teardown about 7,970 (Architecture construction has no check-point: about 24% of
+a mailbox run, 40% of fixture1); in Flow up to 964 (jumptable), 8,685 on diamonds; in Actions up to 411 on the small
+fixtures but **116,893 of 411,659 on diamonds**, one action body; the Print phase is not interruptible by design.
+These are not findings (the header says so) but they are the numbers behind the budget and the cancel-acknowledge
+limit: a Stop on a 150-diamond function waits for more than a quarter of its run.
+
+### Mutation checks (done, then restored)
+
+| Mutant | Caught by |
+|---|---|
+| `DecompilerRunner::Poll` without the generation test | `runner supersede`: 65 checks |
+| `Poll` without the epoch test | `runner invalidate`: 23 checks |
+| `InvalidateSession` without `mTooLarge.clear()` | `runner budget` |
+| memo key without the volatile list | `runner budget`: 10 checks |
+| `RecoverLocked` without the new-session test | `runner disable`: 28 checks |
+| patch 0004 reverted (`~Funcdata` without `clearActiveOutput()`) | ASan default subset, `cancel-alloc jumptable`: LeakSanitizer in `Funcdata::initActiveOutput` |
+
+A6-1 to A6-3 are further instances of patch 0015's class (the replacement allocated after the old object is freed),
+found by the matrix itself, which is the stronger evidence for the `alloc` family; patch 0015 itself was not reverted.
+
+### Not done
+
+- The `cancel-oom` family was not run in full under ASan (RelWithDebInfo only); it is in the ASan default subset.
+- `cancel-us` on `diamonds` under ASan: killed after 40 minutes; the plain build ran all 982 cells.
+- No game-corpus function was used (the corpus is not in the repository); the largest function is the 150-diamond
+  fixture. `Sh2Decompiler::Disassemble` has no sweep (only tests call it).
+- Windows and macOS: the test forks; on other platforms it builds as a stub that reports SKIPPED.
+- Leaks (A6-7 to A6-9) were sampled, not enumerated: the sweep with leak detection ran the dense prefix of 3,000 and the
+  geometric tail, not every `k`.
+
+## Area 6, round 1: allocation failure in the printer and the switch block; streams that swallow
+
+Branch `review/6-lifecycle-fix`, fix in `d41c806`. Ledger rows A6-1 to A6-6 and A6-8 are `fixed`; A6-7 and A6-9 are fixed at
+their cheap sites and `accepted` at the rest, with the bound stated; A12-6 (the runner test's 50 ms follow-up) is
+`fixed`. `SaturnExplorerDecompilerFaultTests` passes its default subset and its ctest entry has lost `WILL_FAIL`. The
+engine change is patch 0023 (`patches/0023-allocation-failure-order.patch`, 11 files, about 160 functional lines); 0021 is
+taken by another branch and is not in this tree.
+
+**Root causes.**
+
+- *A6-1, A6-2 (P1): the replacement is allocated after the old object is freed* -- patch 0015's class again, in the
+  Print phase. `EmitPrettyPrint::setMarkup` did `delete lowlevel; lowlevel = new EmitMarkup;`, and
+  `EmitMarkup::setPackedOutput` (and `setOutputStream`) `delete encoder; encoder = new PackedEncode(*s);`. When the `new`
+  throws, the freed pointer is still in the member and the destructor frees it again as the `Architecture` is torn
+  down. Now the replacement is made first (and, for the emitter, given its stream), the old object is deleted after, and
+  a failure leaves the old one in place.
+- *A6-3 (P1): blocks owned twice.* `BlockGraph::identifyInternal` moved the case blocks into the new switch block one
+  `addBlock` at a time (`parent` set, then `push_back`) and only then rebuilt its own list without them. A failed
+  `push_back` left blocks in both lists, and the `unique_ptr<BlockSwitch>` of `newBlockSwitch` and the function's
+  `BlockGraph::clear` freed them twice. Now the one allocation of the move -- room in the new block's list -- is made
+  first (`ident->list.reserve`), nothing between there and the end of the loop can throw, and our own list is compacted in
+  place (no `newlist`, so no second allocation). Every `newBlock*` now holds the block under construction in a
+  `unique_ptr` until `identifyInternal` has returned, which is also what made the `BlockList`/`BlockInfLoop` leak of
+  A6-9 go away; `newBlockCopy` the same until `addBlock` has returned.
+- *A6-4, A6-5 (P3, P2): streams that swallow.* libstdc++'s `basic_ostream` catches a `std::bad_alloc` thrown while its
+  buffer grows and only sets `badbit`. The engine builds the text of every warning, comment, name and message in an
+  `ostringstream`, so the failure cut the text short and reported nothing: `Ok`, and `/* WARNING: Removing unreac */`
+  in the pseudocode (A6-5); the markup stream of the Print phase did the same, and a later parse of the cut markup
+  threw something that was none of the handled exception types ("unexpected exception", A6-4). The engine's
+  `ostringstream` is now a class of its own (`error.hh`, in place of the using-declaration; `filemanage.hh` repeated
+  the declaration and includes `error.hh` instead) whose constructor sets `exceptions(badbit)`, which makes the
+  insertion rethrow the original `bad_alloc`. The host does the same for the two streams it hands the engine
+  (`runPass`'s `errors` and `markup`, and `Disassemble`'s `errors`) and, before it builds anything from either, checks
+  `bad()` and throws `std::bad_alloc` -- so the output is never built from a stream that has failed. The failure then
+  leaves `Decompile` through the `std::bad_alloc` handler: `Failed("out of memory")` with the engine marked damaged, like
+  any other allocation failure in the engine.
+- *A6-6 (P3): a cancel in the first pass's Actions tail.* `runPass` returned from the non-printing branch before any
+  check-point, so a flag raised there waited through the second pass's Init and was honoured in its Flow. The branch
+  now calls `checkCancel()` before it returns: the cancel is honoured at the pass boundary, `cancelledIn` is Actions as
+  the matrix's oracle always said it should be, and the second pass's Architecture is never built. A flag raised
+  after that check (in the pass's Teardown) still waits for the next Flow, as it should (nothing in Teardown is
+  interruptible). `Sh2Decompiler.cpp`'s changes are the stream masks and that call.
+- *A12-6.* `TestDisableOnUnacknowledgedCancel` ran its follow-up requests under the stuck request's 50 ms budget (61 ms
+  of work on the Windows Debug runner: "too large"). The budget is now ten times a `Small()` run measured on a generous
+  runner first (50 ms at least), the way `TestBudget` already derives its own. The matrix's own budget and disable
+  scenarios had the same shape (their follow-up runs under 6 times the measured request and failed once under a
+  parallel build: "status 5"); they use 12 times now.
+
+**Leaks (A6-7 to A6-9).** The sweep with leak detection is the survey: `SE_FAULT_LEAKLIST=1` (new) prints the innermost
+frames of every leak instead of judging it. Fixed, because the fix is local and the order of operations in the failing
+function is obvious: the print language and the options of a failed `Architecture` constructor
+(`Architecture::Architecture`, `OptionDatabase::registerOption` and `OptionDatabase`'s constructor -- the first version of
+the fix missed `ElementId::find`, which the survey found), `DisassemblyCache::initialize`, `TypeFactory::insert`,
+`VarnodeBank::create` and `createDef`, `PcodeOpBank::create` (an op is owned by the lists; `optree` only indexes it) and
+`markAlive`/`markDead`/`insertAfterDead` (the same erase-then-allocate shape as A6-1, with `std::list` nodes: the new node is
+made before the old one is dropped; the survey found this one too), `CommentDatabaseInternal::addComment*`, `newBlockCopy`
+and the `newBlock*` family. Accepted, each by the frames of its
+allocation stack (`AcceptedLeaks` in the test; every frame of an entry must occur in the stack, in order; a leak that
+matches none fails its cell, so this is not the blanket of LeakSanitizer's own suppressions, which match one frame):
+the XML reader (`xml_parse`, `xml_tree`: the parser's values live on bison's stack, and a throw drops them), the action
+tree (`ActionDatabase::universalAction` builds hundreds of `new Action`/`new Rule` into raw lists; `deriveAction` clones
+it), the prototype models decoded from the compiler spec (`Architecture::parseCompilerConfig`), `findAddJoin`,
+`ContextInternal::FreeArray::reset`, the host's register loop (`Scope::addSymbol`/`addMapPoint`, whose
+`addSymbolInternal`/`addMap` insert into several indexes, so freeing in a handler would double-free a half-inserted
+symbol), and the conflict symbol `ActionNameVars::linkSymbols` makes. All of them are in `Architecture` construction or
+initialisation or in one action, after which the engine is refused, so there is at most one such leak per process: a few
+hundred bytes to about 30 KB. `coreaction.cc` was not touched (another branch is editing it), so the Action sites would
+have been accepted in any case.
+
+**Other delete-then-new and move-then-allocate shapes** (`grep` over the vendored sources; the matrix reaches none of
+them): `Varnode::calcCover` (`delete cover; cover = new Cover`; only called with a null cover), `TypeCode::setPrototype`
+(`delete proto; proto = new FuncProto()`; `proto` is null at its one call), `FuncProto::setParamshift`
+(`delete store; store = new ProtoStoreInternal`; only for a spec with a parameter shift, which this one has not),
+`JumpTable::setOverride` (`jumptable.cc`: another branch's file; user overrides, which the host does not use) and
+`PrintJava`'s constructor (Java only). Left as they are: none is reachable by a fixture, and the patch README's rule is a
+test that fails without a fix. `Scope::addUnassigned` reads `entry->symbol` after `delete entry` (an upstream
+use-after-free on the dynamic-symbol path, `isGlobal()` only); nothing in this decompiler calls it. Every other
+`BlockGraph` mover (`buildCopy`, the `newBlock*`) was read: they allocate before they attach and own what they allocate,
+now. No further move-then-allocate shape was searched for beyond `block.cc`.
+
+**Pinning.** The old `kPins` named an allocation by its index and found it again within 400 of it; a merge since the
+oracle was written had shifted every one by more than 1,000 (mailbox 33,119 allocations then, 35,420 now): of the eight,
+three resolved to a neighbour of the same size that does not crash, and five to nothing (reported STALE, which fails the
+run, so the default subset failed for the wrong reason). A pin is now `{fixture, phase, ordinal of the
+phase entry, size, rank among that size in the entry}` -- stable under any change elsewhere in the run -- and
+`--cell alloc <fixture> <k>` prints the coordinates of its allocation (`PIN-AT`). 31 pins: 16 for A6-1 to A6-5, 15 for the
+leaks that are fixed (seen only under LeakSanitizer; in a plain build they are cells that pass). A fix that adds or
+removes allocations just before a pin makes it resolve to a neighbour of the same phase and size; the mutation runs
+below are made with the mutated engine, where the pins resolve to the defect.
+
+**Mutation** (a copy of the tree, one change reverted, `ninja` incremental, RelWithDebInfo, `SE_FAULT_ONLY=alloc` or the
+named job; restored and verified identical afterwards):
+
+| Reverted | Cells that fail |
+|---|---|
+| `prettyprint.cc` (A6-1, A6-2) | 5 crash (SIGSEGV): mailbox print #0 48 B #22, 40 B #77 and 16 B #1, print #1 48 B #20; jumptable print #0 48 B #26 |
+| `block.cc` (A6-3; also `newBlock*`) | 4 crash: jumptable actions #0 16 B #72, 32 B #59, 16 B #138 and actions #1 16 B #72 |
+| the host's `markup.exceptions(badbit)` and `bad()` check (A6-4) | 3 fail "unexpected exception": mailbox print #0 513 B and 1025 B, jumptable print #0 513 B |
+| `error.hh` and `filemanage.hh`, the engine's `ostringstream` (A6-5) | 4 fail: mailbox actions #0 ("a throwing allocation failure is reported, not swallowed") and #1 (`WARNING: Removing unreac`), jumptable followFlow #0 and #1 |
+| the `checkCancel()` of the pass boundary (A6-6) | 2 fail: `cancel-alloc fixture1` 10662, 10663 ("expected Cancelled-in-Actions but got cancelledIn followFlow") |
+| the host's `errors` stream mask and `bad()` check | none: the `errors` stream never reaches 513 bytes in these fixtures, so no cell grows it. It is the defensive twin of the `markup` change, not pinned |
+| all the leak fixes of patch 0023 at once (`architecture.cc`, `options.cc`, `sleigh.cc`, `varnode.cc`, `op.cc`, `comment.cc`, `type.cc`, and `newBlockCopy`'s `unique_ptr`) | ASan + LeakSanitizer, `SE_FAULT_ONLY=alloc`: 24 cells leak and fail (mailbox 18, jumptable 6), at every fixed site: `Architecture::Architecture` / `OptionDatabase` (`PrintCCapability::buildLanguage`), `DisassemblyCache::initialize`, `TypeFactory::findAdd`, `PcodeOpBank::create` (from `PcodeEmitFd::dump` and `cloneOp`; and `markAlive`), `VarnodeBank::create` (`newConstant`, `newVarnode`) and `createDef`, `newBlockCopy`, `addCommentNoDuplicate` |
+| every engine and host change (the tree before this commit, the 16 pins of A6-1 to A6-5) | default subset: 3 of 25 jobs fail: 9 crash cells, 7 invariant cells in `alloc`, and the 2 `cancel-alloc fixture1` cells |
+
 **Merged tree.** After the first runs below, master moved (patches 0021 and 0024-0027, regenerated spec data; merged
 as `4c838c5`, then `e7b4b9e`'s ledger row). The old index-based pins of the oracle had gone STALE there; the
 phase/size/rank pins of this round all resolve on the merged tree (31 of 31, none STALE), and the five mutations were
