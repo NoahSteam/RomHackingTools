@@ -5950,3 +5950,77 @@ sanitizer cells there is no crash, no use-after-free, no double free, and no UBS
 - The race between two cancels: by reading, both take `mMutex`, and `RequestCancelLocked` keeps the first reason.
 - A child that dies mid-write, and a full pipe. Cells and drivers write to files, not pipes, and a dead cell is classified by its signal.
 - `diamonds` for every k, Windows and macOS (the matrix forks), and a deep-recursion fixture.
+
+## Nightly, 20,000 seeds at 124a5eb: the merged-pointer class, a word view, and a literal the program overwrote
+
+Fixer, branch `review/nightly-20k-fix` from master `124a5eb`, merged with `b941845` (the area 5 round 6 review, A5-37 to A5-41, whose cause is the
+same code as the nightly's three cache seeds). Ledger rows A5-37 to A5-41 and the new A5-45, A5-46, A4-15 are fixed. The run `SE_GENERATED_SEEDS=20000`
+(both grammars) had 4 failing seeds: 7134 and 14812 (grammar 2) and 19409 (grammar 1) `cache-read-pointer-unsaid`, 8306 (grammar 2) `trace-outside`.
+Commits: `e8d472e` (the host and the generator), follow-ups `a5d8228` (any register-area address counts), `e6fe7d5` (the stepped-pointer note),
+`c6fb2a4` (a mirror fixture), `85a49db` (rule 3b reads the instruction's own tokens; the ledger rows) and the commit that adds this section.
+No engine patch (0035 not needed).
+
+### Causes and dispositions
+
+| Seed / row | Who was wrong | Cause | Fix |
+|---|---|---|---|
+| 19409 (A5-45) | the host | The SMPC registers are also symbols at the even address, the 16-bit word they sit in (`SaturnHardwareWordViews`). A merged pointer holding 0x00100020 prints `&SMPC_OREG0`; `PrintsAsRegister` admitted only the table's addresses (0x00100021), so `HardwareNotes` followed nothing. | Not a special case: the resolver below follows every address the pointer holds that the bus decodes to a register area; `PrintsAsRegister` is removed. |
+| 7134, 14812 (A5-46) | the oracle | `func_0x06009048(param_1,param_2,&VDP2_VRSIZE); xVar2 = *extraout_r6;`: the register is the argument of a call and the read is through the same register after it, whose value after the call the engine does not know (a callee with no lent effects; the code runs on into that callee, which is decompiled alone). The host cannot know it and says nothing about it, rightly. Rule 3b asked for `&REG` anywhere in the output. | Rule 3b's premise is exact: the pointer's printed derivation (`PointerPrintsFromHardware`) -- the read instruction's own tokens, or a variable in them assigned (through assignments, call arguments left out) a `&REG`, a register address as a number, or such a base with an offset. A register named only elsewhere is counted `cache.read.pointer.unrelated` (3 in 20,000 seeds), not `cache.read.anonymous` (80); the anonymous excuse is not widened. |
+| 8306 (A4-15) | the generator | Not a decompiler fault: the emulator executed 0600906E because the run overwrote the literal at 0600906C. Function 0 calls function 1 with `jsr @r1`, so r1 holds function 1's address; function 1 reads r1 for the value its caller left, copies it to r5 and calls function 2, which does `mov.b r2,@-r5`, over the last byte of function 0's literal; the tail `jmp @r1` then loads the changed word. The decompiler read the image's literal, as it must. A4-9's class. | A function that reads r1-r3 for its caller's value (`leftScratch`) never copies it into an argument register a callee, or what it calls, dereferences (`fixArgs`, no rng draw: no other program of a seed changes). The shrunk fixture is not a program the generator makes (shrinking removed a `mov #8,r1` that had masked it); the seed pins the contract. |
+| A5-37 (P2) | the host | `ConstantsOf` kept the base of a PTRADD / INT_ADD and dropped a constant addend, so `puVar1[4]` was said as "if the index is 0" for the base registers. | `PointerResolver`: a constant offset shifts the base (the access is at base + offset); an unknown index makes the base an indexed one (A5-36's text, unchanged). The note names the effective register; "through a mirror (shown by address)" is not said for an address that is printed as `puVar1[4]`. |
+| A5-38 (P3) | the host and the oracle | A bare constant on a path was treated as "another value"; right for `param_1 + -0xc` (an addend), wrong for a constant the pointer holds (`0x25fe0110`). Rule 3b excused the cached poll as anonymous because it keyed on the printed name. | A constant the pointer holds is a known address; as the addend of an unknown it is still an offset (`a5_28_rawconst` holds). Rule 3b: see A5-46. |
+| A5-39 (P3) | the host | A pointer stepped in a loop was said as if certain; the registers after the first are not said. | A path that comes back to a node under evaluation after an add is a stepped pointer: "(it may hold other values too)", and a note that the iterations after the first reach other addresses, said for a pointer that starts at a named register (a walk through the SCSP DSP program area, where no register is named, has nothing to be missed: the first version noted two such walks in each corpus). A self-merge in a loop (a poll) steps nothing. The five-store loop to SCU_D0EN is not worked out (the trip count is not used): said as not said, as A5-36. |
+| A5-40 (P3) | the host and the check | SCU_PPAF (every write acts on the DSP program) and CD_CR4 (a 16-bit write issues the command) said nothing on a write; the handler check exempted PPAF for its `split` text and did not read `cd.wr`'s `F`. | `WriteEffects` says both; the check requires a text for PPAF without the exemption and for `cd.wr` `F` (write-effect registers 8 -> 9). |
+| A5-41 (P3) | the host | A long at 0xFFFFFEFE/FD got a second caution naming SH2_DVSR: the registers "under" the long were counted across the split. | The bytes counted stop at the half's end (`0x100 - (A & 0xFF)`): no register, "Mednafen then writes nothing" / "returns 0 and reads nothing". |
+
+Rule 3b needed two more fixes after the first widening. Seed 347 of the 3,000-seed grammar-2 window (a program the changed generator now makes) had
+`if ((uint2 *)(int4)*param_3 != &VDP2_CYCB0U)`, where the register is the comparison's other operand, from another instruction: the statement-level
+premise flagged it, the read's own tokens (`Token::addr`) do not. And the first version of the host change followed only registers that are named; a read
+at an unnamed SCSP register through a displaced pointer (seed 2213, 05B0043C) was then silent: any address in a register area counts, named or not.
+(Both appeared only because the first premise was run over 20,000 seeds: 18 failing seeds at `e8d472e`, 0 at `a5d8228`.)
+
+### Mutation checks
+
+Each entry was applied to the source (`mut.py`), the decompiler suite, the width-table test and the generator on seeds 8306, 7134, 19409 and the
+words of A5-37c and A5-38b rebuilt and run, and restored.
+
+| Mutation | Suite CHECKs failing | Width table | Generator |
+|---|---|---|---|
+| addresses followed only at a table register's own address (the round 5 rule) | 18 (`a5_45*`, `a5_37a`, `a5_38*`, `a5_28_through`, ...) | passes | seed 19409 and the A5-38b words fail (`cache-read-pointer-unsaid`) |
+| a constant offset dropped (the unfixed A5-37) | 8 (`a5_37a`, `b`, `c`, `d`) | passes | 0 findings (blind, as the review said: the base's cache caution is on the same instruction) |
+| a constant the pointer holds counts as unknown | 6 (`a5_38a`, `a5_38b`) | passes | the A5-38b words fail |
+| a cycle through an add is not a stepped pointer | 3 (`a5_39a`, `a5_39b`) | passes | 0 |
+| any cycle makes the pointer unknown (a poll's self-merge) | 10 (`a5_28` family, `a5_38b`) | passes | 0 |
+| no SCU_PPAF write text | 2 | fails (PPAF) | 0 |
+| no CD_CR4 write text | 1 | fails (CR4) | 0 |
+| bytes under the misaligned long counted across the split | 4 (`a5_41*`) | passes | 0 |
+| the "shown by address" line kept for a displaced pointer | 1 (`a5_37_mirror`, added for it: the first mutation run found no fixture for it) | passes | 0 |
+| rule 3b keyed on the register named anywhere (the old premise) | 0 | passes | seeds 7134 and 14812 fail again |
+| rule 3b without the call-argument strip | 0 | passes | 0: not caught on these seeds; no generated program assigns a call's result from a call with `&REG` in its arguments |
+| rule 3b without the chain through assignments | 0 | passes | 0: not caught; the oracle is then blind to `puVar2 = &REG` pointers (they count as anonymous); the counter `cache.read.pointer.said` (435 in 20,000 seeds) is what shows it |
+| the jsr contract without `left` | 0 | passes | seed 8306 fails again (`trace-outside`) |
+
+### Matrix
+
+| | |
+|---|---|
+| Suite fixtures | `a5_45`, `a5_45_through`, `a5_45_byte`; `a5_37a`-`d`, `a5_37_mirror`; `a5_38a`, `a5_38a_direct`, `a5_38b`; `a5_39a`, `b`; `a5_40a`, `b`, `b_byte`; `a5_41a`, `a_fd`, `b`; the PPAF-written test now expects the PPAF text |
+| `ctest` | 97 of 97 passed (before the last, generator-only commit) |
+| Width-table test | 337 registers, 3,038 cells, passes; 9 write-effect registers (was 8) |
+| Generator, `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 0 findings (the unfixed run: 4); `cache.read.said` 4,687, `cache.read.pointer.said` 435, `cache.read.pointer.unrelated` 3, `cache.read.anonymous` 80 |
+| Generator, `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 findings; pointer said 53, anonymous 16, direct said 160 |
+| Printed C, `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 3,017 functions, 2,410 compared, 2,477 agree (before the last, generator-only commit) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 14 -> 16, cautions 16 |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 29 -> 31, cautions 20 |
+| Corpus text that changed (master's build beside this one's, every function of both images, pseudocode, warnings, cautions and notes) | pseudocode, warnings and cautions byte-identical. Four note lines appeared, each read: "SCU_PPAF: a write acts on the DSP program whatever is written: ..." at `hwram007` 06033D80 and 06033D90 (function 06033D5A) and `hwram008` 06074E14 and 06074E24 (function 06074DEE): `SCU_PPAF = 0;` and `SCU_PPAF = param_1 or 0x8000;`, the two A5-40 instances. (The first version of the stepped-pointer note added two more in each image, at the SCSP DSP program area, 0602FE5E/0602FE70 and 0606FA76/0606FA88: removed, see A5-39.) |
+| ASan + UBSan + LSan, gcc Debug | `Sh2DecompilerTests`, `HardwareWidthTableTests` and `Sh2GeneratedTests` (300 seeds), `detect_leaks=1`: no AddressSanitizer or LeakSanitizer report; UBSan only at the two tolerated sites (`address.hh:605`, `slghpatexpress.cc:979`); all pass |
+
+### Not done
+
+- The registers after the first of a stepped pointer (the five-store loop reaches SCU_D0EN) are said not to be said, not worked out (A5-36's limit).
+- A merged on-chip pointer used with a displacement prints its values as signed numbers (`iVar1 = -0x80`); it is now followed when the values are known
+  constants, but whether the printed type is this area's stays with the coordinator (round 6's question).
+- The round 6 reviewer's other two questions (SCSP slot registers, KYONEX) are not in this branch.
+- A callee-returned pointer (`*extraout_r6`) is not said: the host cannot know the value; the generator now says so (`cache.read.pointer.unrelated`).
+- `SE_GENERATED_WORDS` of seed 8306 still reports `trace-outside`: the words are a self-modifying program, outside the model; the seed is the test.
+- The ctest and printed-C runs were on `c6fb2a4`; the last code commit (`85a49db`) changed only the generator's rule 3b, which the 20,000-seed, 3,000-seed and ASan generator runs cover.
