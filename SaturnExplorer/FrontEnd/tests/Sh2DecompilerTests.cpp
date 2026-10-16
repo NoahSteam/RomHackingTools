@@ -6155,6 +6155,7 @@ void TestCallsAndTraps()
         std::string why;
         // A `return;` states no value: right only for a function whose r0 is no result (the fixture says so).
         const std::string bare = "void f(void)\n{\n  func_0x06009020();\n  return;\n}";
+        why.clear();
         CHECK(!MayReturn(bare, {}, 7, why) && Has(why, "nothing"));
         CHECK(MayReturn(bare, {}, 7, why, false));
         CHECK(!MayReturn("void f(void)\n{\n  func_0x06009020();\n}", {}, 7, why));   // falling off the end is the same
@@ -6181,10 +6182,14 @@ void TestCallsAndTraps()
         CHECK(MayReturn("uint f(uint param_1)\n{\n  return ZEXT24(SUB42(param_1,0));\n}", { 0x12348000 }, 0x8000, why));
         CHECK(MayReturn("int f(uint param_1)\n{\n  return SEXT24(SUB42(param_1,0));\n}", { 0x12348000 }, 0xFFFF8000u, why));
         // ...what it has no rule for is an error, not an unknown value.
+        why.clear();
         CHECK(!MayReturn("uint f(uint param_1)\n{\n  return FROBNICATE4(param_1);\n}", { 1 }, 1, why) && Has(why, "cannot evaluate"));
+        why.clear();
         CHECK(!MayReturn("uint f(uint param_1)\n{\n  return CONCAT55(param_1,param_1);\n}", { 1 }, 1, why) && Has(why, "cannot evaluate"));
+        why.clear();
         CHECK(!MayReturn("ulonglong f(uint param_1)\n{\n  return 1;\n}", { 1 }, 1, why) && Has(why, "64-bit"));
-        CHECK(!MayReturn("int f(int param_1)\n{\n  param_1 += 1;\n  return param_1;\n}", { 1 }, 2, why) && Has(why, "cannot evaluate"));
+        why.clear();
+        CHECK(!MayReturn("int f(int param_1)\n{\n  param_1 += 1;\n  return param_1;\n}", { 1 }, 2, why) && Has(why, "an assignment this evaluator does not read"));
         // ...and text it used to reject. A parameter assigned under an if, the other path reading it as it was:
         const std::string underIf = "int4 f(int4 param_1,int4 param_2)\n{\n  if (param_2 != 0) {\n    param_1 = param_1 + 1;\n  }\n"
                                     "  return param_1 + 1;\n}";
@@ -6214,6 +6219,13 @@ void TestCallsAndTraps()
                                "  case '\\xff':\n    return 4;\n  default:\n    return 5;\n  }\n}";
         CHECK(MayReturn(sw, { 2 }, 9, why) && !MayReturn(sw, { 2 }, 5, why) && MayReturn(sw, { 0xFF }, 4, why) && MayReturn(sw, { 0x1FF }, 4, why));
         CHECK(MayReturn(sw, { 0 }, 7, why) && MayReturn(sw, { 3 }, 5, why));
+        // / and % read their operands as the declarations say: -7 / 2 is -3 signed, 0x7FFFFFFC unsigned
+        const std::string sdiv = "int f(int param_1)\n{\n  return param_1 / 2;\n}", udiv = "uint f(uint param_1)\n{\n  return param_1 / 2;\n}";
+        CHECK(MayReturn(sdiv, { 0xFFFFFFF9u }, 0xFFFFFFFDu, why) && !MayReturn(sdiv, { 0xFFFFFFF9u }, 0x7FFFFFFCu, why));
+        CHECK(MayReturn(udiv, { 0xFFFFFFF9u }, 0x7FFFFFFCu, why) && !MayReturn(udiv, { 0xFFFFFFF9u }, 0xFFFFFFFDu, why));
+        CHECK(MayReturn("int f(int param_1)\n{\n  return param_1 % 4;\n}", { 0xFFFFFFF9u }, 0xFFFFFFFDu, why));
+        CHECK(MayReturn("uint f(uint param_1)\n{\n  return param_1 % 4;\n}", { 0xFFFFFFF9u }, 1, why) &&
+              !MayReturn("uint f(uint param_1)\n{\n  return param_1 % 4;\n}", { 0xFFFFFFF9u }, 0xFFFFFFFDu, why));
         // A stack local is memory a call may have written: the engine keeps one a call could reach (A3-9); a register local is not.
         const std::string stackLocal = "int f(void)\n{\n  int xStack_c;\n  xStack_c = 5;\n  func_0x06009020();\n  return xStack_c;\n}";
         CHECK(MayReturn(stackLocal, {}, 7, why) && MayReturn(stackLocal, {}, 5, why));
