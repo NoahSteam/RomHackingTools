@@ -14,6 +14,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
+ * Modified for SaturnExplorer: an input that is a piece of a register is named with the byte it starts at (patches/0037-engine-division-piece-and-input-names.patch).
  */
 #include "database.hh"
 #include "funcdata.hh"
@@ -2697,8 +2698,25 @@ string ScopeInternal::buildVariableName(const Address &addr,
       s << "in_" << addr.getSpace()->getName() << '_';
       s << setw(8) << setfill('0') << hex << addr.getOffset();
     }
-    else
+    else {
       s << "in_" << regname;
+      // SaturnExplorer: the input is a piece of the register (the four bytes cmp/str compares), which would be named like
+      // the register and told apart only by a counter. The byte it starts at, counted from the least significant, is
+      // part of the name: `in_r3_b3` is r3's most significant byte, `in_r3` its least (patches/0037-engine-division-piece-and-input-names.patch).
+      try {
+	const VarnodeData &reg(glb->translate->getRegister(regname));
+	if (reg.space == addr.getSpace() && (reg.size != sz || reg.offset != addr.getOffset()) &&
+	    addr.getOffset() >= reg.offset && addr.getOffset() + sz <= reg.offset + reg.size) {
+	  int4 lsb = addr.isBigEndian() ? (int4)(reg.offset + reg.size - addr.getOffset() - sz) : (int4)(addr.getOffset() - reg.offset);
+	  if (lsb != 0) {		// the least significant piece keeps the register's name, as the parameter of a byte does
+	    s << "_b" << dec << lsb;
+	    if (sz > 1)
+	      s << "w" << sz;
+	  }
+	}
+      } catch(LowlevelError &err) {
+      }
+    }
   }
   else if ((flags & Varnode::input)!=0) { // Regular parameter
     s << "param_" << dec << index;

@@ -16,7 +16,7 @@
  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
- * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-rules-division-term-and-piece-pathology.patch).
+ * Modified for SaturnExplorer: RuleDivTermAdd and RuleDivTermAdd2 keep a product that overflows only for a division; RulePiecePathology needs the register it names (patches/0037-engine-division-piece-and-input-names.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -10657,7 +10657,7 @@ int4 RulePiecePathology::applyOp(PcodeOp *op,Funcdata &data)
     // SaturnExplorer: the pathology is a partial write to the register a SUBPIECE of itself fills in
     // (`retreg = CONCAT(SUBPIECE(retreg,#4),smallval)`). A concatenation that is built elsewhere -- the bytes of a
     // register stored to the stack, a byte put into them, the longword loaded back -- is not one, and calling it so
-    // truncated the function's return to the small piece (patches/0037-rules-division-term-and-piece-pathology.patch).
+    // truncated the function's return to the small piece (patches/0037-engine-division-piece-and-input-names.patch).
     if (op->getOut()->characterizeOverlap(*subOp->getIn(0)) == 0) return 0;
     if (!isPathology(subOp->getIn(0),data)) return 0;
   }

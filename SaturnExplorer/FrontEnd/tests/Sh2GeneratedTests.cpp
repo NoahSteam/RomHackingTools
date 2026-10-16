@@ -4891,6 +4891,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 if (std::sscanf(name.c_str() + (name.compare(0, 3, "in_") == 0 ? 4 : 7), "%d", &num) == 1 && num >= 0 && num <= 15 &&
                     (name == "in_r" + std::to_string(num) || name == "unaff_r" + std::to_string(num)))
                     value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(CalleeSaved(num)) + "u";
+                else if (name.compare(0, 4, "in_r") == 0 && std::regex_match(name, std::regex("in_r[0-7]_b[0-3]")))
+                    // a byte of a register (cmp/str compares four): named with the byte it is, counted from the least significant (A2-25)
+                    value = "((g_in[" + name.substr(4, 1) + "] >> " + std::to_string(8 * (name[7] - '0')) + ") & 0xFF)";
                 else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
                 else if (name == "in_mach" || name == "unaff_mach") value = "g_in[9]";
                 else if (name == "in_macl" || name == "unaff_macl") value = "g_in[10]";
@@ -5274,6 +5277,9 @@ std::vector<CCase> WidePrintedCFixtures()
     out.push_back({ "A2-26 GBR advanced", { 0x0112, 0x7104, 0x411E, 0x000B, 0x0009 } });      // stc gbr,r1 ; add #4,r1 ; ldc r1,gbr
     out.push_back({ "A2-26 VBR advanced", { 0x0122, 0x7108, 0x412E, 0x000B, 0x0009 } });      // stc vbr,r1 ; add #8,r1 ; ldc r1,vbr
     out.push_back({ "A2-26 GBR from VBR", { 0x0122, 0x411E, 0x000B, 0x0009 } });             // stc vbr,r1 ; ldc r1,gbr
+    // A2-25: cmp/str on a register that is not a parameter: its four bytes are inputs named with the byte they are
+    out.push_back({ "A2-25 cmp/str r6,r3", { 0x236C, 0x000B, 0x0029 } });
+    out.push_back({ "A2-25 cmp/str r2,r3 (neither a parameter)", { 0x232C, 0x000B, 0x0029 } });
     // A2-22: a byte or a word put into a stacked longword and the longword loaded back
     out.push_back({ "A2-22 byte at 3", { 0x7FFC, 0x2F42, 0x6053, 0x80F3, 0x60F2, 0x000B, 0x7F04 } });
     out.push_back({ "A2-22 byte at 2", { 0x6053, 0x2F46, 0x80F2, 0x60F6, 0x000B, 0x0009 } });

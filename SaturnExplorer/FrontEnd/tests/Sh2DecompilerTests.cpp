@@ -7422,6 +7422,14 @@ void TestArea2Round4()
         const DecompileResult r = decompile("A2-24 stacked PC", { 0x61F2, 0x7102, 0x2F12, 0x002B, 0x0009 });
         CHECK(Has(r.Text(), "Rte_PC(") && Has(r.Text(), "+ 2"));
     }
+
+    // A2-25: cmp/str on a register that is not a parameter compares its four bytes; each input is named with the byte it is
+    // (counted from the least significant), not by a counter that tells nothing.
+    {
+        const DecompileResult r = decompile("A2-25 cmp/str r6,r3", { 0x236C, 0x000B, 0x0029 });
+        CHECK(Has(r.Text(), "in_r3;") && Has(r.Text(), "in_r3_b1") && Has(r.Text(), "in_r3_b2") && Has(r.Text(), "in_r3_b3"));
+        CHECK(!Has(r.Text(), "in_r3_00") && !Has(r.Text(), "in_r3_01"));
+    }
 }
 
 void TestAllocationFailureIsReported()
