@@ -1717,8 +1717,11 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             const uint32_t size = static_cast<uint32_t>(value->getSize());
             // The addresses the pointer can hold that are a register's, by its symbol or by an alias the engine prints as a number
             // (A5-38); a pointer that starts at one and is indexed is said for the register itself, as "if the index is 0".
+            // (an address the bus decodes to a register area, named or not: the cache caution and the width cautions are about the access,
+            // and an unnamed register in a SCSP or VDP2 block is read through the cache as a named one is)
             auto isRegister = [&](uint32_t address) {
-                return FindHardwareRegister(AccessAddress(address, size)) != nullptr || !HardwareRegistersReached(AccessAddress(address, size), size, write).empty();
+                uint32_t canonical = 0;
+                return HardwareAlias(AccessAddress(address, size), canonical);
             };
             struct Candidate { uint32_t address; bool indexed; bool shifted; };
             std::vector<Candidate> registers;
