@@ -1848,16 +1848,30 @@ protected:
             op->getOutput()->space == op->getInput(0)->space && op->getOutput()->offset == op->getInput(0)->offset &&
             op->getOutput()->size == op->getInput(0)->size)
             return;
+        // The word of the instruction this op belongs to, for the one read that is not a read of the value:
+        // a push of the register (`mov.l Rn,@-r15`) saves it. Whatever the callee-saved or spilled register held
+        // is on the stack for the code to find, but the value is not an input of the code that pushed it: a later
+        // read of an uninitialised local that happens to be that slot (the generator has them) is a dependence
+        // on the stack's garbage, which is no register to pass.
+        uint16_t word = 0;
+        if (mEnv != nullptr)
+        {
+            const uint32_t at = static_cast<uint32_t>(op->getAddr().getOffset()) & 0xFFFFFu;
+            if (at + 1 < mEnv->ram.size()) word = static_cast<uint16_t>(mEnv->ram[at] << 8 | mEnv->ram[at + 1]);
+        }
         for (int i = 0; i < op->numInput(); ++i)
         {
             const ghidra::VarnodeData* vn = op->getInput(i);
             if (vn->space != mRegSpace) continue;
             for (int r = 0; r < kUse; ++r)
+            {
+                if (r < 16 && (word & 0xFF0Fu) == 0x2F06u && static_cast<int>((word >> 4) & 0xFu) == r) continue;   // the push
                 for (int b = 0; b < 4; ++b)
                 {
                     const ghidra::uintb at = mRegOff[r] + b;
                     if (at >= vn->offset && at < vn->offset + vn->size && !((mWrittenBytes[r] >> b) & 1)) mUse.readFirst |= 1u << r;
                 }
+            }
         }
         const ghidra::VarnodeData* out = op->getOutput();
         if (out && out->space == mRegSpace)

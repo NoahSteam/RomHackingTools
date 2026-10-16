@@ -1755,7 +1755,8 @@ void TestKnownLimitIsFlagged(const std::shared_ptr<MemorySnapshot>& snap,
 // branch at its entry, whose slot is also a jump target, and a loop back to the branch.
 //
 //   A  0x00  bra Z          entry; the slot is the instruction at 0x02
-//   S  0x02  add #1,r2      the slot, also reached by 'bt S'
+//   S  0x02  tst r4,r4      the slot, also reached by 'bt S' (it sets T and reads a parameter: the original 'add #1,r2' read an r2 and a T that the
+//                           branches then tested, inputs no signature passes, A3-5)
 //   P  0x04  jmp @r1        a return (r1 is PR here on every path that reaches it)
 //      0x06  nop
 //   Z  0x08  bf A           loop back to the branch
@@ -1773,7 +1774,7 @@ void TestKnownLimitIsFlagged(const std::shared_ptr<MemorySnapshot>& snap,
 void TestRecycledTreeInDecompiler()
 {
     const uint32_t base = 0x06009000u;
-    const uint16_t code[] = { 0xA002, 0x7201, 0x412B, 0x0009, 0x8BFA, 0x012A, 0x89F9, 0x89F9, 0x000B, 0x0009 };
+    const uint16_t code[] = { 0xA002, 0x2448, 0x412B, 0x0009, 0x8BFA, 0x012A, 0x89F9, 0x89F9, 0x000B, 0x0009 };
     std::vector<uint8_t> hw;
     for (size_t i = 0; i < sizeof code / sizeof code[0]; ++i) dts::Put16(hw, base - 0x06000000u + 2 * i, code[i]);
     auto snap = dts::MakeSnapshot(hw);
