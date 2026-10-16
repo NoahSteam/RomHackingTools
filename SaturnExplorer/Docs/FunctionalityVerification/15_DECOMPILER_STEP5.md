@@ -5111,3 +5111,137 @@ whole SR including T, which the loop's compare set; the one `Write_VBR(extraout_
 - **Merge:** patches 0033 and 0034 add two rows at the end of `patches/README.md` and `VENDOR.md` (0029 to 0032 will too: a trivial
   conflict); `Sh2Decompiler.cpp` has one changed condition (section 5); `Sh2DecompilerTests.cpp` has `TestArea2Round3` added before
   `TestAllocationFailureIsReported` and the hook line in `RunMachine`; the `.github` workflow and sanitizer script have one step each.
+
+## Areas 3 and 4, round 4
+
+Fixer, branch `review/3-4-round4-fix`, from master `4210e8e`. Commits: oracle `4f67521`, `c16f914`; A3-7 `dd90913`; A3-9 `9f9318d`; A3-8 and A3-10
+accepted and pinned `7a61e6f`; A3-12 `e4274b0`; A4-8 and A4-9 `e1f6b4c`. Ledger rows A3-7, A3-9, A3-11, A3-12, A4-8 and A4-9 are fixed; A3-8 and A3-10
+are accepted with their reasons. No engine patch (0036 was not needed). Every fixture was reproduced first, against the master binary: the three
+A3-7 shapes (the oracle accepted all three, the generator rejected them), A3-9 (the emulator returns 12, the text said `return 10;`), the A3-8
+replay (0 findings), seeds 301364 and 305201 (`generator:no-return`, `emulator-error`), and the A3-11 texts (each wrong verdict of the row).
+
+### The oracle first (A3-11)
+
+`PseudoEval` was a 32-bit signed interpreter that knew no declaration. It types its values now: a parameter or local has the width and sign its
+declaration gives it and every assignment converts to it (a `char` parameter is the register's low byte, signed); a cast truncates or extends;
+`<`, `>`, `/`, `%` and `>>` read their operands unsigned when the C rules say so (a literal over `0x7FFFFFFF` is a `uint4`); arithmetic is 64-bit
+when an operand is 8 bytes (`dmuls.l`'s `(int4)((uint8)((int8)b * (int8)a) >> 0x20)`); a parameter assigned to holds the new value, under an `if` too;
+`true` and `false` are 1 and 0; `'\x02'` is a character constant, in an expression and as a case label (matched modulo the selector's width);
+`CONCATnm`, `SUBnm`, `ZEXTnm`, `SEXTnm`, `CARRYn`, `SCARRYn` and `SBORROWn` are evaluated. A type with no sign (`xunknown4`, `undefined4`) is read both ways
+and is unknown when the two disagree, which agrees with any run: the evaluator never states a verdict it cannot support. What it cannot read is an
+**error**, which fails the check, not an unknown value: an operator of the `NAME4` shape it has no rule for, a CONCAT wider than 8 bytes, a 64-bit
+return (r0 alone does not hold it), `x += 1` and `x++`. A call may write a stack local (`xStack_c`, `iStack_8`: the engine keeps one a call could
+reach, A3-9), so those are unknown after a call; register locals (`xVar1`) are not.
+
+`MayReturn` and `PseudoAgreesWithRun` no longer accept `return;` for any value: a function that returns nothing agrees with a run only if the fixture says
+r0 is no result (`CallFixture::noResult`, default false). The fixture is the proof: one existing fixture needed it (the r2 and r3 "kept by the callee"
+callers, which end `mov.l rN,@r4`; the emulator returns r0's starting value, 0x1000, unchanged). Every other existing fixture passed unchanged. The verdicts
+of the row are pinned: the wrong accepts (bare return, `false`, reassigned parameter, `(char)` width, `CONCAT31`, `SUB41`) as texts, the wrong rejects
+(parameter reassigned under an `if`, `shlr` on a `uint4`, `cmp/hs` and `cmp/hi`, the `dmuls.l` high word) as code run on the emulator against the
+engine's real output, the `char` case label as text. A weakness of the first version of those tests was found by mutation: the reason string was
+appended across checks, so a check on "cannot evaluate" passed on an earlier check's text; it is cleared before each now (`c16f914`).
+
+### The rows in the host
+
+- **A3-7: the rule asked only paths with no call.** `State::called` was set at the join, so the call on one path hid the other, and the call
+  itself hid everything: `bsr g ; ... ; rts ; mov r8,r0` (g lent, keeps r8) is a function whose return is a register no signature passes,
+  and the engine drops the copy as it drops the leaf's. The reason `called` existed is real: a call's outputs share one set of origins (everything any
+  of the callee's registers can come from), so r0 after a call has the callee's other registers among its origins; that is no read of an input.
+  Replaced by the distinction itself: a `Value` carries `direct`, the origins computed by this function's own instructions, and a call's outputs
+  have `direct = 0`. `Return` asks r0's `direct` origins on every path, with or without a call, exact copies (`mov r8,r0`, `sts macl,r0`, `stc gbr,r0`) included.
+  The three shapes of the row and a fourth (`mov r9,r0` before the call, the callee keeps r0) are withheld ("its return is computed from r8 on entry")
+  and the text is still the engine's `return;`, which the oracle now rejects. Controls: a function that saves r8, calls and returns the callee's value, and
+  one that returns a parameter after the call, are lent.
+- **A3-9: the exact address only.** `Value` keeps, for an address made of a stack address plus anything, the offset it was made from (`stackBase`); a
+  constant added later moves it, an index leaves it (taken as non-negative, as the engine's own pointer arithmetic is), a subtraction of
+  anything but a constant drops it, and a join keeps the lower. `NoteFrameEscape` declares that offset. The alias is "every local from there up", so
+  the index and its bound do not matter. The row's fixture (index `r4 & 4`) and a second with the parameter added whole are no longer folded: the
+  text is `return iStack_c + iStack_8;` with both stores before the call (the engine does not make an array of two scalars; patch 0030 declares the alias
+  and the call is guarded, which is what prevents the fold). The round 3 first version, the whole frame for an inexact address, printed
+  `axStack_80000000 [2147483580]` because it had lost the base; the base is kept now, so the declared offset is a real frame offset.
+- **A3-10: accepted.** The corpus decides: a frame address is in r3 at a call to an unlent callee at 36 (007) and 53 (008) call sites, in r2 at
+  39 and 74, in r14 at 852 and 2,068 (the frame pointer). GCC's SH static chain is r3, and is the only compiler convention that puts a frame pointer
+  there (nested functions); Hitachi's and SN's compilers have none, and r2 is the one hidden pointer of the ABI. A rule over r3 would alias the
+  locals of those 36 and 53 functions for a convention nothing in the corpus uses. Pinned in `TestCallsAndTraps` (the run returns 7, the text 5, the
+  signature is withheld).
+- **A3-8: accepted.** The exception is for machine state; the T flag the caller set is the only way a lent getter's result depends on the
+  caller. Compiled code cannot do it (T is caller-saved), the 20 getters of image 007 are mask helpers whose callers mask the I bits, and the
+  alternative (a `readsSr` bit in `CallEffects`, in `ShapeOf`, in two digests, and withholding every caller that has set T before such a call)
+  buys nothing for compiled code and costs the callers that merely compared something earlier. Pinned in `TestCallsAndTraps`: the run depends on
+  r6 and r7 (1 for r6 = r7, 0 otherwise), the caller is lent with no parameters. The generator reports the replay by hand (A3-12); its grammar does not
+  emit the shape.
+- **A4-8: the flow boundary set.** `entries` for "flow runs into" came from `knownFunctions`, names and call targets; it takes the lent prototypes'
+  addresses too (host side, `Sh2Decompiler.cpp`; the panel's request assembly is untouched, it already passes `prototypes`). A mirror address is
+  canonicalised; a prototype that is not known lends nothing and adds no entry; one outside the body adds no warning.
+- **A4-9: the generator's contract.** Two causes, one fix. A call's arguments are drawn before the jsr's target register is chosen, so a `mov r1,r4` in
+  the delay slot copied the callee's address (seed 301364: the callee stored through it over the caller's next literal); and a `mov #imm,Rk` reached a callee
+  that stores or loads through Rk (seed 305201: address 0x66). Both are replaced after the draws (no draw is added, so every other program of a seed is
+  unchanged: 11,706 functions in the window as before) by the caller's own copy of its entry argument register, a pointer into scratch memory;
+  the second only where the callee, or anything it calls, jumps to or runs into, uses that register number as a memory or poll base.
+
+### The generator (A3-12)
+
+Check 8 now also starts each of r4-r7 at the value of another (r_k := r_j) as well as +0x200 and 0: the four start at distinct scratch pointers, so a
+compare of two of them always had the same answer. The A3-8 replay, 0 findings on master, now reports `param-dropped:r6` and `r7`. The SR-getter
+shape was not added to the grammar: it would be a finding on every module that has it, A3-8 being accepted.
+
+### Mutation
+
+Each reverted alone, the source restored after; failing checks of `Sh2DecompilerTests` unless stated.
+
+| Reverted | Result |
+|---|---|
+| bare `return;` accepted (A3-11) | 8 |
+| `true`/`false` unknown names | 2 |
+| assignments to a parameter ignored | 3 |
+| casts keep their value's width | 16 |
+| `CONCAT`/`SUB` read as unknown calls | 4 |
+| `>>` always arithmetic | 2 |
+| compares and `/` `%` always signed | 3, and 2 |
+| arithmetic 32-bit only | 2 |
+| `char` case labels unread | 2 |
+| narrow parameters fed whole | 10 |
+| 64-bit return taken for unknown | 1 |
+| `x += 1` skipped | 1 (0 before the reason was cleared between checks) |
+| a narrow return compared at full width | 1 |
+| `PseudoAgreesWithRun` accepts a bare return for every fixture | 5 |
+| stack locals kept across a call | 3 |
+| A3-7 rule off / exact copies ignored | 27 / 27 (the round 3 tests included) |
+| A3-7 call outputs counted as direct | suite 0; image 007 lends 545, not 611 (66 withheld "computed from r1/r2/r3/r8/r14") |
+| A3-9 exact address only | 4 |
+| A3-10 pin: r3 declared like r2 | 1 |
+| A4-8 prototypes not entries | 2 |
+| A3-12 no equal-argument values | the A3-8 replay passes (0 findings) |
+| A4-9 arguments unchecked | seeds 301364 and 305201 fail |
+
+### Matrix
+
+- Whole `ctest` (RelWithDebInfo, gcc, `-DSE_ENABLE_DECOMPILER=ON`): 96 of 96 pass.
+- Generator: the default run (300 seeds, both grammars) 0 failing, 0 findings; grammar 2, `SE_GENERATED_FIRST=300001`, 6,000 seeds: 0 failing, 0 findings
+  (11,706 functions, 1,637 tables, 1,020 parameter candidates over 20,555 perturbed runs, none sensitive; seeds 301364 and 305201 pass); grammar 2 from seed 1,
+  3,000 seeds: 0 failing, 0 findings.
+- Game corpus, both images, standalone and with `SE_GAME_LEND=1`: below.
+- gcc Debug with `-fsanitize=address,undefined`, `detect_leaks=1` (`.github/scripts/run-decompiler-sanitizers.sh`): `Sh2DecompilerTests`, `Sh2DecompilerEngineTests`,
+  `Sh2DecompilerFixtureTests`, `DecompilerPanelTests`, `DecompilerRunnerTests` and `Sh2GeneratedTests` (300 seeds) exit 0; `check-sanitizer-logs.sh` passes: only the
+  allow-listed `address.hh:605` and `slghpatexpress.cc:979` lines.
+- Timing: `TestGameCode` image 008, 22.6 s (master) and 25.7 s (this branch) wall on a loaded machine; image 007 6.6 and 7.3 s. The oracle is test code; the host
+  change is one `Value` field more in `ReturnCheck`, which runs once per function with a call.
+
+### Corpus
+
+Standalone (`TestGameCode`, nothing lent) and lending (`SE_GAME_LEND=1`, callees first) on `hwram007.bin` and `hwram008.bin`, master `4210e8e` against this branch:
+every ledger count 0, dropped accesses 0, 16 and 20 reads missing and said (unchanged); signatures lent 611 and 1,007 before and after (767 and 1,220
+parameters), 156 and 299 lent functions that change r8-r14, GBR or VBR as before, text changed by lending 268 and 528 as before. Function texts that
+differ from master: 0 of 839 (007) and 3 of 1,554 (008), standalone and lent alike, all by A3-9's base: `06038822` and `0603885E` gain an unused declaration
+`xunknown1 axStack_23c [568];` (r2 = r15 + index at a call whose callee is not lent: the alias now starts at the frame base), `06035636` splits its
+array (`aiStack_5c [4]` becomes `[3]` and `xStack_50`, the fourth element passed to a call). Every one read: the text states what the code does, none
+states a folded value that the code does not return.
+
+### Limits, and what is not done
+
+- A3-8 and A3-10 are limits of hand-written code, pinned. The generator's grammar has no SR-getter shape.
+- A3-9 takes an index as non-negative. A negative index from a frame address reaches below the declared base; the engine's own pointer arithmetic assumes the same.
+- A3-9's text for two scalar locals is two scalars (no array); only the fold is gone. An engine change to merge them into an array would be patch 0036.
+- The evaluator reads a call as unknown and stack locals as memory after a call: it cannot tell a call that writes a local from one that does not.
+- The generator's pointer rule follows register numbers, not values: a callee that moves its r4 into r6 for a callee of its own which dereferences r6 is not seen (not found in 9,000 seeds).
+- Not run under the sanitizers: `Sh2DecodeTests`, `SlaFreshness`.

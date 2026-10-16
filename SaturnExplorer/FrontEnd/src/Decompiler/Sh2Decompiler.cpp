@@ -341,7 +341,7 @@ public:
     }
 
     // After Run(): the registers outside r4-r7 (r1-r3, r8-r14, GBR, VBR, MACH, MACL: bit n is register n of
-    // origin::) whose entry value reaches r0 at a return of a path that made no call.
+    // origin::) whose entry value reaches r0 at a return, through instructions of this function (not through a call).
     uint32_t InputsInReturn() const { return mInputsInReturn; }
 
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
@@ -404,10 +404,17 @@ private:
         enum Kind : uint8_t { Fuzzy, Reg, Sp, Imm } kind = Fuzzy;
         int64_t v = 0;               // Reg: the register's index; Sp: the offset; Imm: the constant
         uint32_t from = origin::kAll;   // Fuzzy: what it can come from
+        uint32_t direct = origin::kAll;   // Fuzzy: ...of that, what it was computed from here, not what a call returned (A3-7)
+        // Fuzzy: a stack address plus an index, with the offset the address had before it (from r15 on entry): the value
+        // points at or above it, taking the index as non-negative as the engine's own pointer arithmetic does (A3-9).
+        static constexpr int64_t kNoBase = INT64_MIN;
+        int64_t stackBase = kNoBase;
+        int64_t Base() const { return kind == Sp ? v : kind == Fuzzy ? stackBase : kNoBase; }
         static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
         static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
         static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
-        static Value From(uint32_t o) { Value x; x.from = o; return x; }
+        static Value From(uint32_t o) { Value x; x.from = o; x.direct = o; return x; }
+        static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.direct = direct; return x; }
         uint32_t Origins() const
         {
             switch (kind)
@@ -418,14 +425,17 @@ private:
             default: return from;
             }
         }
-        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || from == o.from); }
+        // What the value was computed from by this function's own instructions, as origins: a call's outputs
+        // share one set of origins (everything any of the callee's registers can come from), so a value that
+        // only a call made says nothing about the registers it was passed.
+        uint32_t Direct() const { return kind == Fuzzy ? direct : Origins(); }
+        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase)); }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
     struct State
     {
         bool reached = false;
         bool escaped = false;
-        bool called = false;               // a call or a user op ran on the way here: what it left in the registers is coarse
         std::map<Key, Value> vars;         // registers and temporaries; absent = anything
         std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
     };
@@ -469,7 +479,7 @@ private:
             if (std::get<0>(v.first) != vn.space || std::get<1>(v.first) > vn.offset ||
                 vn.offset + vn.size > std::get<1>(v.first) + std::get<2>(v.first))
                 continue;
-            if (v.second.kind != Value::Imm) return Value::From(v.second.Origins());
+            if (v.second.kind != Value::Imm) return Value::From(v.second.Origins(), v.second.Direct());
             const uint64_t whole = std::get<2>(v.first), below = whole - (vn.offset - std::get<1>(v.first)) - vn.size;
             const uint64_t mask = vn.size >= 8 ? ~0ull : (1ull << (8 * vn.size)) - 1;   // big-endian: the last bytes are the low ones
             return Value::Const(static_cast<int64_t>((static_cast<uint64_t>(v.second.v) >> (8 * below)) & mask));
@@ -503,7 +513,7 @@ private:
     static void Clobber(State& s, uint32_t stored, int64_t from = INT64_MIN, int64_t to = INT64_MAX)
     {
         for (auto& slot : s.slots)
-            if (slot.first + 4 > from && slot.first < to) slot.second = Value::From(slot.second.Origins() | stored);
+            if (slot.first + 4 > from && slot.first < to) slot.second = Value::From(slot.second.Origins() | stored, slot.second.Direct() | stored);
     }
 
     static uint32_t AllSlots(const State& s)
@@ -525,10 +535,10 @@ private:
     {
         bool changed = false;
         if (from.escaped && !into.escaped) into.escaped = changed = true;
-        if (from.called && !into.called) into.called = changed = true;
         auto merge = [&changed](Value& a, const Value& b) {
             if (a == b) return;
-            const Value m = Value::From(a.Origins() | b.Origins());
+            Value m = Value::From(a.Origins() | b.Origins(), a.Direct() | b.Direct());
+            if (a.Base() != Value::kNoBase && b.Base() != Value::kNoBase) m.stackBase = std::min(a.Base(), b.Base());
             if (m == a) return;
             a = m;
             changed = true;
@@ -593,16 +603,18 @@ private:
     void NoteFrameEscape(const State& s)
     {
         const Value v = Get(s, mReg[2]);
-        // Only an address known exactly: one with an index added to it has no offset to declare, and
-        // declaring the whole frame would make an array of every local.
-        if (v.kind != Value::Sp) return;
-        if (!mEscaped || v.v < mEscapeLow) mEscapeLow = v.v;
+        // An address with an index added to it (a returned structure that is an array element) points at or above
+        // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
+        // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
+        // make an array of every local.
+        const int64_t base = v.Base();
+        if (base == Value::kNoBase) return;
+        if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
     }
 
     void Apply(State& s, const CallEffects& e)
     {
-        s.called = true;
         // The callee's bits as origins here. Its entry registers are ours at the call. What it loads
         // from memory can be anything in memory, our slots included: it may read our frame through
         // its stack pointer or a pointer it was given. Its stack is ours above its r15.
@@ -641,7 +653,7 @@ private:
             if (r == kR15 && e.spDelta != CallEffects::kSpUnknown && sp.kind == Value::Sp)
                 Set(s, mReg[r], Value::Stack(Wrap(sp.v + e.spDelta)));
             else
-                Set(s, mReg[r], Value::From(out));
+                Set(s, mReg[r], Value::From(out, 0));   // what the callee returns: not computed from anything here
         }
     }
 
@@ -745,15 +757,17 @@ private:
             // return, which is scratch for every other (a loop that may not run leaves its r1 as it was).
             // Not SR among the origins of a computed value: a flag written here carries the entry SR's origin
             // with it (the write is a masked update), so every movt after a compare would be one. SR itself,
-            // copied whole to r0 (`stc sr,r0`), is. Nor a value of unknown origin. Nor one a
-            // call may have made: a call's outputs share one set of origins (everything any of its registers
-            // can come from), so after one r0 has the origins of the callee's other registers (it is how a
-            // function that saves r8 in its prologue and calls would look to have returned it). The
-            // returns the engine drops are leaf functions' (`rts ; sts macl,r0`); a function that calls is
-            // left to the inputs the engine does keep (WithholdReason's scan of them).
-            if (r == 0 && !s.called && (v.Origins() & origin::kRegisters) != origin::kRegisters)
+            // copied whole to r0 (`stc sr,r0`), is. Nor a value of unknown origin.
+            // Calls do not excuse it (A3-7: `bsr g ; ... ; rts ; mov r8,r0` returns the caller's r8 across a
+            // call that keeps it, and the engine drops that return as it drops the leaf's). What a call
+            // returned is no read of an input, though: its outputs share one set of origins, everything any
+            // of the callee's registers can come from, so after one r0 has the origins of the callee's other
+            // registers (it is how a function that saves r8 in its prologue and calls would look to have
+            // returned it). Value::Direct() leaves those out and keeps what this function's own instructions
+            // computed r0 from, on every path that reaches the return.
+            if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
-                mInputsInReturn |= v.Origins() & kNotParameters & ~1u;
+                mInputsInReturn |= v.Direct() & kNotParameters & ~1u;
                 if (v.kind == Value::Reg && v.v == kSr) mInputsInReturn |= 1u << kSr;   // a plain copy of it, not a masked update
             }
         }
@@ -803,13 +817,24 @@ private:
             {
                 const Value x = Get(s, op.in[0]), y = Get(s, op.in[1]);
                 const bool sub = op.code == ghidra::CPUI_INT_SUB;
-                Value r = Value::From(x.Origins() | y.Origins());
+                Value r = Value::From(x.Origins() | y.Origins(), x.Direct() | y.Direct());
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
                 // An index added to a stack address stays in the stack (the engine's own stack analysis
-                // takes pointer arithmetic so too): somewhere in it, not the index's memory.
-                else if (x.kind == Value::Sp || (!sub && y.kind == Value::Sp)) r = Value::From(origin::kStack);
+                // takes pointer arithmetic so too): somewhere in it, not the index's memory. Where from is
+                // kept (A3-9: `a[i] = f()` passes the address of an element in r2): the base address, with
+                // a constant added to it later added to the base, and the index taken as not negative.
+                else if (x.Base() != Value::kNoBase || (!sub && y.Base() != Value::kNoBase))
+                {
+                    r = Value::From(origin::kStack);
+                    if (!sub && x.Base() != Value::kNoBase && y.Base() == Value::kNoBase)
+                        r.stackBase = Wrap(x.Base() + (y.kind == Value::Imm ? y.v : 0));
+                    else if (!sub && y.Base() != Value::kNoBase && x.Base() == Value::kNoBase)
+                        r.stackBase = Wrap(y.Base() + (x.kind == Value::Imm ? x.v : 0));
+                    else if (sub && y.kind == Value::Imm)
+                        r.stackBase = Wrap(x.Base() - y.v);
+                }
                 Set(s, op.out, r);
                 break;
             }
@@ -861,9 +886,14 @@ private:
             default:
                 if (op.hasOut)
                 {
-                    uint32_t o = 0;
-                    for (const ghidra::VarnodeData& vn : op.in) o |= Get(s, vn).Origins();
-                    Set(s, op.out, Value::From(o));
+                    uint32_t o = 0, d = 0;
+                    for (const ghidra::VarnodeData& vn : op.in)
+                    {
+                        const Value x = Get(s, vn);
+                        o |= x.Origins();
+                        d |= x.Direct();
+                    }
+                    Set(s, op.out, Value::From(o, d));
                 }
                 break;
             }
@@ -885,7 +915,7 @@ private:
     uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
-    uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return (no call before it)
+    uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     int64_t mEscapeLow = 0;
@@ -2612,6 +2642,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::set<uint32_t> entries;
         for (uint32_t k : known) entries.insert(k);
         for (const auto& n : named) entries.insert(n.first);
+        // ...and a function the request lends a signature to is one, whether or not the finder listed it (the panel
+        // lends every function the user decompiled, at the address the user chose: A4-8).
+        for (const auto& p : prototypes) entries.insert(p.first);
         if (targets)
             for (const auto& t : *targets) entries.insert(t.first);
         for (uint32_t a : entries)
