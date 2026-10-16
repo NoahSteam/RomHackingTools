@@ -3108,6 +3108,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // The callees reported are the printed pass's own: the first pass can take a jump for a call
     // that the second, with the literals folded, follows as a goto.
     CalleeAliases first;
+    bool firstPassRan = false;
     if (seedIn)
     {
         knownLiterals = seedIn->literals;
@@ -3116,17 +3117,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     else if (request.registerCallees)
     {
         runPass(CalleeAliases(), false, &first);
-        // The pass boundary, with the pass's locals and its Architecture gone (Teardown has been entered and left):
-        // a cancel raised in the tail of the pass's actions, or while it was torn down, is honoured here, in Actions
-        // (mWorkPhase is still the pass's last phase), and not carried through the next pass's Init into its Flow
-        // (A6-6, A6-35).
-        checkCancel();
+        firstPassRan = true;
     }
     if (seedOut)
     {
         seedOut->literals = knownLiterals;
         seedOut->callees = first;
     }
+    // The first pass's boundary, with its locals and its Architecture gone (Teardown has been entered and left) and
+    // the copies above made, so that nothing but the call stands between this check and the next pass's Init: a cancel
+    // raised in the tail of the pass's actions, or while it was torn down, is honoured here, in Actions (mWorkPhase is
+    // still the pass's last phase), and not carried through the next pass's Init into its Flow (A6-6, A6-35).
+    if (firstPassRan) checkCancel();
     printed = runPass(first, true, &callees);
     if (printed.empty())
     {

@@ -544,6 +544,12 @@ unsigned Expected(const Log& L, int s)
         // Actions, and not carried through the next pass's Init into its Flow (A6-6).
         return kCancelActions;
     }
+    // The Teardown that ends the first pass (its Actions before it, the second pass's Init after it): the pass boundary's
+    // check-point comes after it, with the Architecture gone, and reports the phase the pass was in (A6-35). Before that
+    // check was moved a raise here was carried through the second pass's Init into its Flow.
+    if (p == DecompilePhase::Teardown && s > 0 && L.phase[s - 1] == DecompilePhase::Actions && s + 1 < L.n &&
+        L.phase[s + 1] == DecompilePhase::Init && !L.inRef[s])
+        return kCancelActions;
     for (int j = s + 1; j < L.n; ++j)
         if (L.phase[j] == DecompilePhase::Flow) return L.inRef[j] ? kOkRefCut : kCancelFlow;
     return kOk;
@@ -553,6 +559,22 @@ unsigned ExpectedRange(const Log& L, int s0, int s1)
 {
     unsigned m = 0;
     for (int s = s0; s <= s1; ++s) m |= Expected(L, s);
+    return m;
+}
+
+// A flag raised by another thread, read against the phase-entry counter: s0 and s1 are the counter (less one) before and
+// after the raise. The counter is incremented by the hook, which the host calls AFTER the check-point that precedes the
+// entry (`checkCancel(); Enter(next)`), so a raise that comes after that check and before the hook is read as "in" the
+// entry before, and is honoured as a raise at the entry after it (A6-35): Actions' end carried into Print's Ok, the
+// Flow-to-Actions boundary honoured in Actions, and the first pass's end carried into the second pass's Flow. The
+// honoured outcome of a raise read as in entries s0..s1 is therefore that of s0..s1 + 1. The window is the few
+// instructions between a check and the next hook (the first pass's was the destruction of the pass's locals and its
+// Architecture, wide under a sanitizer, until the check was moved after them); the cancel-enter cells reach each of
+// them deterministically (WindowCell), and fail if this widening is removed.
+unsigned ExpectedThread(const Log& L, int s0, int s1)
+{
+    unsigned m = ExpectedRange(L, std::max(s0, -1), std::min(s1 + 1, L.n - 1));
+    if (s1 + 1 >= L.n) m |= kOk;
     return m;
 }
 
@@ -1502,9 +1524,15 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
     }
     else
     {
-        // The oracle reads the baseline log (the cancelled run's is a prefix of it).
-        allowed = a >= c.base.log.n ? kOk : ExpectedRange(c.base.log, std::max(a, -1), std::min(b, c.base.log.n - 1));
-        if (b >= c.base.log.n) allowed |= kOk;
+        // The oracle reads the baseline log (the cancelled run's is a prefix of it). A raise from another thread is read
+        // against the counter, which runs behind the check-points (ExpectedThread); the other two families raise inside the
+        // hook or the allocator, where the entry is exact.
+        if (how == CancelHow::AtUs) allowed = ExpectedThread(c.base.log, a, b);
+        else
+        {
+            allowed = a >= c.base.log.n ? kOk : ExpectedRange(c.base.log, std::max(a, -1), std::min(b, c.base.log.n - 1));
+            if (b >= c.base.log.n) allowed |= kOk;
+        }
         flagged = a < 0 ? "before the run" : std::string("in ") + PhaseName(c.base.log.phase[std::min(a, c.base.log.n - 1)]) +
                                                  (c.base.log.inRef[std::min(a, c.base.log.n - 1)] ? "(reference)" : "") +
                                                  "#" + std::to_string(a) + (b != a ? "..#" + std::to_string(b) : std::string());
@@ -1527,6 +1555,21 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
     Expect(got != 0 && (got & allowed), "the cancel is honoured where the design says",
            "raised " + flagged + ": expected " + MaskText(allowed) + "but got status " + std::to_string(int(r.status)) +
                " cancelledIn " + PhaseName(r.cancelledIn) + " '" + r.error + "'");
+    // The window, deterministically (A6-35): a raise in the hook of entry p is what a thread sees as a raise in entry p - 1
+    // when it lands after the check-point before p and before p's hook. Attribute this one so, and require the outcome to be
+    // in what the thread family allows for that attribution; "need" marks the entries where the outcome is not what a raise
+    // in p - 1 gets without the widening, i.e. where the window exists (the driver requires that some do).
+    const char* window = "-";
+    if (how == CancelHow::AtEnter && param >= 0 && param < c.base.log.n && raised)
+    {
+        const int before = int(param) - 1;
+        const unsigned plain = ExpectedRange(c.base.log, before, before);
+        const unsigned seen = ExpectedThread(c.base.log, before, before);
+        Expect(got != 0 && (got & seen), "a raise the thread family would attribute to the entry before is honoured where it allows",
+               "raised in the hook of #" + std::to_string(param) + ", read as #" + std::to_string(before) + ": expected " + MaskText(seen) +
+                   "but got status " + std::to_string(int(r.status)) + " cancelledIn " + PhaseName(r.cancelledIn));
+        window = (got & plain) ? "plain" : "need";
+    }
     if (r.status == DecompileStatus::Cancelled)
     {
         Expect(r.lines.empty(), "a cancelled result has no lines");
@@ -1546,8 +1589,8 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
     Expect(after2.status == DecompileStatus::Ok && Signature(after2) == c.base.sig, "a lowered flag does not cancel");
 
     const char* hows[] = { "enter", "alloc", "us" };
-    std::printf("CELL cancel-%s %s p=%ld raised=%s got=%s allowed=%s class=%s>%s lat=%ld\n", hows[int(how)], c.fix->name, param,
-                flagged.c_str(), MaskText(got).c_str(), MaskText(allowed).c_str(), label.c_str(), MaskTag(got).c_str(), latency);
+    std::printf("CELL cancel-%s %s p=%ld raised=%s got=%s allowed=%s class=%s>%s lat=%ld window=%s\n", hows[int(how)], c.fix->name, param,
+                flagged.c_str(), MaskText(got).c_str(), MaskText(allowed).c_str(), label.c_str(), MaskTag(got).c_str(), latency, window);
     (void)log;
     if (after.status == DecompileStatus::Unavailable)
     {
@@ -1816,7 +1859,13 @@ bool ReadBaseFile(const std::string& file, ColdMode& m)
 
 // The two requests a cell makes, by family.
 DecompileResult ColdDecompile(Sh2Decompiler& e, const ColdCtx& c) { return e.Decompile(c.snap, c.req, nullptr); }
-std::vector<std::string> ColdDisasm(Sh2Decompiler& e, const ColdCtx& c) { return e.Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount); }
+// ... a listing's `stopped` flag is the allocation-free report that it is not the whole listing (A6-23), so every request
+// passes one and the cell reads it (A6-31): this family used to pass none, and could not see a listing returned empty with
+// the flag clear.
+std::vector<std::string> ColdDisasm(Sh2Decompiler& e, const ColdCtx& c, bool* stopped = nullptr)
+{
+    return e.Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount, stopped);
+}
 
 bool PrepareCold(ColdCtx& c, const std::string& scratch, const std::string& fixture, bool disasmFirst)
 {
@@ -1869,8 +1918,10 @@ bool PrepareCold(ColdCtx& c, const std::string& scratch, const std::string& fixt
             fa::Arm(-1);
             if (disasmFirst)
             {
-                m.listing = ColdDisasm(*e, c);
+                bool stopped = true;
+                m.listing = ColdDisasm(*e, c, &stopped);
                 m.allocs = fa::gCount.load();
+                if (stopped) return 7;   // nothing failing: the listing is whole
                 fa::Disarm();
                 m.libraryEnd = gLibraryEndCount;
                 const DecompileResult r = ColdDecompile(*e, c);
@@ -1976,12 +2027,13 @@ int RunColdCell(ColdCtx& c, long cell)
     gProbe.Reset();
     gLibraryEndCount = -1;
     bool escaped = false;
+    bool stoppedFlag = false;
     DecompileResult r;
     std::vector<std::string> lines;
     fa::Arm(k);
     try
     {
-        if (c.disasmFirst) lines = ColdDisasm(*engine, c);
+        if (c.disasmFirst) lines = ColdDisasm(*engine, c, &stoppedFlag);
         else r = ColdDecompile(*engine, c);
     }
     catch (...)
@@ -2031,7 +2083,14 @@ int RunColdCell(ColdCtx& c, long cell)
         else if (lines.size() == 1 && head.compare(0, 24, "<Decompiler unavailable:") == 0) kind = kRefusedLibrary;
         else if (lines.size() == 1 && head.compare(0, 16, "<out of memory w") == 0) kind = kFailedBefore;
         else if (!lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0) kind = kFailedEngine;
-        detail = head;
+        else if (lines.empty() && stoppedFlag && siteKnown) kind = inLibrary ? kRefusedLibrary : kFailedBefore;   // sustained exhaustion: no line could be made
+        detail = head.empty() ? std::string("(empty listing, stopped=") + (stoppedFlag ? "true" : "false") + ")" : head;
+        // A listing that is not the whole listing says so in the flag, whether or not a line could be made (A6-31). A refusal
+        // line is its own report.
+        Expect(same ? !stoppedFlag : (stoppedFlag || kind == kRefusedLibrary),
+               "a listing that is not the whole one has `stopped` set (or is the engine's refusal line)", detail);
+        Expect(!(fired && lines.empty()) || (stoppedFlag && fa::gSticky.load()),
+               "an empty listing is only returned for sustained exhaustion, with `stopped` set", detail);
     }
     else
     {
@@ -2066,6 +2125,19 @@ int RunColdCell(ColdCtx& c, long cell)
         Expect(!(inMaterialise && kind != kFailedBefore), "a failure while the language files are prepared is transient: the engine is neither damaged nor refused", detail);
     }
 
+    // A failure while the spec bundle was staged leaves nothing behind (A6-33): the config directory, listed before the second
+    // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. With sustained exhaustion the
+    // removal is itself an allocation and cannot be promised: the next request of the process clears it.
+    if (mode == 1 && fired && !fa::gSticky.load())
+    {
+        std::vector<std::string> names;
+        sfe::ListDirectory(dts::Join(cfg, "decompiler"), names);
+        std::string stray;
+        for (const std::string& n : names)
+            if (n.find(".tmp-") != std::string::npos) stray += (stray.empty() ? "" : ", ") + n;
+        Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
+    }
+
     // The second request, and the other kind of request after it.
     gProbe.Reset();
     const DecompileResult dec = ColdDecompile(*engine, c);
@@ -2075,8 +2147,12 @@ int RunColdCell(ColdCtx& c, long cell)
     if (kind == kRefusedLibrary)
     {
         const std::string firstReason = c.disasmFirst ? (lines.empty() ? std::string() : lines[0]) : r.error;
-        Expect(!fired || !firstReason.empty(), "a refusal carries an explanation");
-        Expect(Has(firstReason, "restart Saturn Explorer") && Has(firstReason, "did not finish starting"),
+        // A listing that could not even make its refusal line (sustained exhaustion: the line is an allocation) has the flag
+        // as its whole report; a Decompile has the text from the first request on, made before the library's first global
+        // write and moved into place (A6-32), so it needs no allocation either.
+        const bool bareListing = c.disasmFirst && lines.empty();
+        Expect(bareListing || !fired || !firstReason.empty(), "a refusal carries an explanation");
+        Expect(bareListing || (Has(firstReason, "restart Saturn Explorer") && Has(firstReason, "did not finish starting")),
                "the refusal says the library did not finish starting and that a restart is needed", firstReason);
         Expect(dec.status == DecompileStatus::Unavailable && dec.lines.empty(), "the next Decompile is Unavailable", "status " + std::to_string(int(dec.status)) + " '" + dec.error + "'");
         Expect(Has(dec.error, "restart Saturn Explorer") && Has(dec.error, "did not finish starting"), "the next Decompile says why and what to do", dec.error);
@@ -2405,16 +2481,32 @@ struct PinRes
 };
 const size_t kPinMax = 16;
 
+// A MOVED pin fails the run, as a STALE one does (A6-34): the cell still fails the allocation the pin's ordinal names, so
+// this run tests something, but a pin whose coordinates and ordinal disagree is wrong in one of the two and nothing
+// re-pinned it, so it could stay pointed away from its defect from the commit that wrote it. The note prints both ways out
+// (the coordinates that lead to the ordinal's allocation, and the ordinal the coordinates lead to). An ordinal the site
+// does not have is STALE: it names nothing, and "MOVED" would have failed every allocation of the site instead.
+long NthOfSize(const Ctx& c, long lo, long k, uint32_t size)
+{
+    long n = 0;
+    for (long j = lo; j < k && j < long(c.base.sizes.size()); ++j)
+        if (c.base.sizes[size_t(j)] == size) ++n;
+    return n;
+}
+
+bool PinFails(const PinRes& r) { return r.stale || r.note.compare(0, 5, "MOVED") == 0; }
+
 // Resolves the pins of the fixture and checks their identity: one extra run of the warmed engine, in a
 // child, takes the stack of every allocation that could be a pin (the pin's size, in its phase entry), and
 // names the stacks of the ones asked about. That run is the one the cells perturb (run N+1 of the series
 // Warm settled), so it is also checked against the baseline: every allocation's size must be the baseline's,
 // and the size the run made at a pin's coordinates must be the size the pin names (A6-24).
-std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
+std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch, const Pin* pinList = kPins, size_t pinCount = sizeof kPins / sizeof kPins[0])
 {
     std::vector<PinRes> out;
-    for (const Pin& p : kPins)
+    for (size_t pi = 0; pi < pinCount; ++pi)
     {
+        const Pin& p = pinList[pi];
         if (c.fix->name != std::string(p.fixture)) continue;
         PinRes r;
         r.pin = &p;
@@ -2604,22 +2696,27 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
         else if (ord >= 0 && ord < long(m.size()))
         {
             // The site's allocation the pin names is not at the coordinates: fail that one.
+            // This run tests the allocation the pin's ordinal names, and the pin fails the run (PinFails) until it is
+            // re-pinned: to follow the ordinal, the coordinates below; to keep the coordinates, the ordinal they lead to.
             r.ks.assign(1, m[size_t(ord)]);
             r.note = "MOVED: the coordinates lead to [" + top[i] + "]" +
                      (rank0[i] >= 0 ? " (the site's #" + std::to_string(rank0[i]) + ")" : std::string(", not the site")) + ", the pin names #" +
-                     std::to_string(ord) + " of [" + r.pin->site + "], which is allocation " + std::to_string(m[size_t(ord)]);
+                     std::to_string(ord) + " of [" + r.pin->site + "], which is allocation " + std::to_string(m[size_t(ord)]) +
+                     ". Re-pin: to follow the ordinal, write nth = " + std::to_string(NthOfSize(c, r.lo, m[size_t(ord)], r.pin->size)) +
+                     " (the " + std::to_string(r.pin->size) + "-byte allocations of " + r.pin->phase + " #" + std::to_string(r.pin->ord) +
+                     " are counted from 0)" +
+                     (rank0[i] >= 0 ? "; to keep the coordinates, write \"" + std::string(r.pin->site).substr(0, std::string(r.pin->site).rfind('#')) + "#" +
+                                          std::to_string(rank0[i]) + "\""
+                                    : std::string());
         }
         else if (!m.empty())
         {
-            if (m.size() > kPinMax)
-            {
-                std::vector<long> thin;
-                for (size_t j = 0; j < kPinMax; ++j) thin.push_back(m[j * (m.size() - 1) / (kPinMax - 1)]);
-                m = thin;
-            }
-            r.ks = m;
-            r.note = "MOVED: the coordinates lead to [" + top[i] + "], not to [" + r.pin->site + "]; the site has no #" + std::to_string(ord) +
-                     " here, only " + std::to_string(m.size()) + " allocation(s) of this size in the entry";
+            // An ordinal the site does not have names no allocation: the honest verdict is STALE, not a sweep of the whole
+            // site (A6-34), which would test every allocation there but the one the row is about.
+            r.stale = true;
+            r.ks.clear();
+            r.note = "STALE: the site [" + std::string(r.pin->site) + "] has no #" + std::to_string(ord) + " here, only " + std::to_string(m.size()) +
+                     " allocation(s) of " + std::to_string(r.pin->size) + " bytes in the entry are made there (the coordinates lead to [" + top[i] + "])";
         }
         else
         {
@@ -2746,6 +2843,55 @@ int DiffRunsTool(const std::string& fixture, const std::string& scratch, int run
     std::printf("diffruns %s: %d of %d runs after the baseline differ from it%s\n", fixture.c_str(), bad % 1000, runs,
                 bad >= 1000 ? "; THE FIRST DOES: the baseline is not the run the cells make" : "");
     return bad >= 1000 ? 1 : 0;
+}
+
+// The pins' own check (A6-34): pins deliberately written wrong, on the dag fixture, and the verdict each must get. A pin whose
+// coordinates and ordinal disagree (MOVED) must fail the run, with the coordinates that put it right in the note; an ordinal
+// the site does not have, or a site the coordinates cannot reach, is STALE. Without this a change to the census that let a
+// MOVED pin pass again would break nothing: every real pin is "site ok".
+int PinSelfTest(Ctx& c, const std::string& scratch)
+{
+#ifdef SE_FAULT_BACKTRACE
+    static const char* const kCreate = "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces";
+    static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
+                             noSite = "TraceDAG::initialize#0", noHash = kCreate;
+    static const Pin pins[] = {
+        { "dag", "actions", 0, 16, 108, good.c_str(), "right coordinates, right ordinal" },
+        { "dag", "actions", 0, 16, 108, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
+        { "dag", "actions", 0, 16, 108, noOrd.c_str(), "an ordinal the site does not have" },
+        { "dag", "actions", 0, 16, 109, good.c_str(), "coordinates one allocation off, right ordinal" },
+        { "dag", "actions", 0, 16, 108, noSite.c_str(), "a site no allocation of the entry is made at" },
+        { "dag", "actions", 0, 16, 108, noHash.c_str(), "no ordinal at all" },
+    };
+    const std::vector<PinRes> res = ResolvePins(c, scratch, pins, sizeof pins / sizeof pins[0]);
+    int bad = 0;
+    auto check = [&](size_t i, bool ok, const char* what) {
+        if (ok) return;
+        std::printf("FAIL pin-selftest: %s: %s -- %s\n", pins[i].what, what, i < res.size() ? res[i].note.c_str() : "(no result)");
+        ++bad;
+    };
+    if (res.size() != sizeof pins / sizeof pins[0])
+    {
+        std::printf("FAIL pin-selftest: %zu pins resolved, %zu written\n", res.size(), sizeof pins / sizeof pins[0]);
+        return 1;
+    }
+    for (size_t i = 0; i < res.size(); ++i) std::printf("PINTEST %zu %s: %s\n", i, pins[i].what, res[i].note.c_str());
+    auto starts = [&](size_t i, const char* w) { return res[i].note.compare(0, std::strlen(w), w) == 0; };
+    check(0, starts(0, "site ok") && !PinFails(res[0]) && res[0].ks.size() == 1, "a pin that leads to its site passes");
+    check(1, starts(1, "MOVED") && PinFails(res[1]) && res[1].ks.size() == 1 && res[1].ks[0] != res[1].k0 && res[1].note.find("Re-pin") != std::string::npos,
+          "a wrong ordinal is MOVED, fails the run, tests the ordinal's allocation, and says how to re-pin");
+    check(2, starts(2, "STALE") && PinFails(res[2]) && res[2].ks.empty(), "an ordinal the site does not have is STALE");
+    check(3, starts(3, "MOVED") && PinFails(res[3]) && res[3].ks.size() == 1 && res[3].note.find("nth = 108") != std::string::npos,
+          "coordinates one off are MOVED, fail the run, and the note gives the nth that re-pins them");
+    check(4, starts(4, "STALE") && PinFails(res[4]), "a site nothing in the entry is made at is STALE");
+    check(5, starts(5, "STALE") && PinFails(res[5]), "a pin without an ordinal is STALE");
+    std::printf("SUMMARY pin-selftest dag shard 0/1: %zu cells, %d failed, 0.0 s\n", res.size(), bad);
+    return bad ? 1 : 0;
+#else
+    (void)c; (void)scratch;
+    std::printf("pin-selftest: needs a backtrace (glibc); not run\n");
+    return 0;
+#endif
 }
 
 std::vector<long> AllocCells(const Ctx& c, bool full, const std::vector<PinRes>& pins)
@@ -2903,6 +3049,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
     }
     else if (!Warm(c, scratch, fixture))
         return 2;
+    if (family == "pin-selftest") return PinSelfTest(c, scratch);
     std::vector<long> cells;
     std::vector<PinRes> pins;
     DisasmBase disasm;
@@ -2950,7 +3097,13 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                 ++sum.classes["FAIL:pin-identity-unchecked"];
             }
             else if (r.note.compare(0, 5, "MOVED") == 0)
-                ++sum.classes["pin-moved"];
+            {
+                // A pin that does not lead to the allocation it names fails the run until it is re-pinned (the note says how):
+                // the cell below still tests the allocation of the pin's ordinal, but nothing else would ever re-point the pin
+                // from a defect it was written for (A6-34).
+                ++sum.failed;
+                ++sum.classes["FAIL:pin-moved"];
+            }
         }
     }
     const double timeout = CellTimeout();
@@ -2984,6 +3137,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                 if (ln.compare(0, 9, "LEAK-SIG ") == 0)
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
+            if (run.out.find(" window=need") != std::string::npos) ++sum.classes["window:need"];
             if (isCold)
                 for (const char* st : kLibrarySteps)
                     if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
@@ -3024,6 +3178,19 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
         else if (shownFailures < 400)
         {
             std::printf("FAIL %s %s %ld: %s\n", familyArg.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
+        }
+    }
+    if (family == "cancel-enter" && only == -999999 && !sticky)
+    {
+        // The window is part of the design the oracle describes (A6-35): the host checks, and only then does the hook count the
+        // entry. If no cell needs the widened oracle, either the family no longer reaches the window or the window is gone, and
+        // ExpectedThread's extra entry is dead weight that hides a real misplaced cancel: the oracle must be tightened, not left.
+        if (sum.classes["window:need"] == 0)
+        {
+            std::printf("FAIL %s %s: no cell raised in an entry's hook was honoured where only the widened (thread) oracle allows (the check-point window is not reached, or is gone)\n",
+                        familyArg.c_str(), fixture.c_str());
+            ++sum.failed;
+            ++sum.classes["FAIL:window-coverage"];
         }
     }
     if (isCold && only == -999999)
@@ -3516,6 +3683,12 @@ int RunnerOomChild(const std::string& scratch, const std::string& fixture, long 
     dts::PrepareProcess();
     fa::tCounted = false;   // the test thread is not injected into
     std::atexit(OnExit);
+    // SE_FAULT_STICKY=1 applies to this family too, as the header says of any family (A6-36): the worker then meets a heap
+    // that stays full from allocation j on, not one that fails once. (The runner children never read it before.)
+    {
+        const char* st = std::getenv("SE_FAULT_STICKY");
+        fa::gSticky = st && *st && std::string(st) != "0";
+    }
     RunnerCtx rc;
     rc.config = dts::Join(scratch, "config");
     sfe::MakeDirectory(scratch);
@@ -3824,6 +3997,8 @@ int main(int argc, char** argv)
         jobs.push_back(j);
     };
     const int shards = full ? int(std::max(1.0, EnvDouble("SE_FAULT_JOBS", 3.0))) : 1;
+    // The fixtures added for coverage (A6-36): the lending paths and the hardware notes, which no other fixture reaches.
+    auto addedForCoverage = [](const Fix& f) { return f.lend != 0 || std::string(f.name) == "hwreg"; };
     // The allocation sweeps run on every fixture, so that a resolved call (fixture1), a loop merge (shapes) and a
     // stack local (stack) see a failed allocation as the mailbox and the switch do (A6-13). diamonds, with 411,659
     // allocations, is left to the full run.
@@ -3833,10 +4008,11 @@ int main(int argc, char** argv)
     // the allocation sweeps, join them in the full run (under a sanitizer they would add about two minutes).
     auto cancelFixture = [&](const Fix& f) {
         return full || (std::string(f.name) != "shapes" && std::string(f.name) != "stack" && std::string(f.name) != "loopbrk" &&
-                        std::string(f.name) != "dag");
+                        std::string(f.name) != "dag" && !addedForCoverage(f));
     };
+    // cancel-enter is a handful of cells per fixture, so the fixtures added for coverage (A6-36) join it in the default subset.
     for (const Fix& f : kFixtures)
-        if (cancelFixture(f)) addDriver("cancel-enter", f.name, 1);
+        if (cancelFixture(f) || addedForCoverage(f)) addDriver("cancel-enter", f.name, 1);
     for (const Fix& f : kFixtures)
     {
         if (!full && std::string(f.name) == "diamonds") continue;
@@ -3845,8 +4021,10 @@ int main(int argc, char** argv)
     for (const Fix& f : kFixtures)
         if (cancelFixture(f)) addDriver("cancel-us", f.name, 1);
     for (const Fix& f : kFixtures)
-        if (full || std::string(f.name) != "diamonds") addDriver("cancel-oom", f.name, full ? shards : 1);
+        if (full || (std::string(f.name) != "diamonds" && !addedForCoverage(f))) addDriver("cancel-oom", f.name, full ? shards : 1);
     addDriver("disasm", "fixture1", full ? shards : 1);
+    // The pins' own verdicts, on pins written wrong (A6-34): a MOVED pin fails the run, an ordinal the site lacks is STALE.
+    addDriver("pin-selftest", "dag", 1);
     // The first request of a process (A6-30): fresh processes, so no warm-up and no sharing with the families above.
     addDriver("cold", "mailbox", 1);
     addDriver("cold-disasm", "mailbox", 1);
@@ -3854,7 +4032,8 @@ int main(int argc, char** argv)
     // Sustained exhaustion on the decompilation itself: the three fixtures with the longest recovery paths in the default
     // subset, all of them in the full run.
     for (const Fix& f : kFixtures)
-        if (full ? std::string(f.name) != "diamonds" : (std::string(f.name) == "mailbox" || std::string(f.name) == "jumptable" || std::string(f.name) == "dag"))
+        if (full ? std::string(f.name) != "diamonds" : (std::string(f.name) == "mailbox" || std::string(f.name) == "jumptable" || std::string(f.name) == "dag" ||
+                                                                           std::string(f.name) == "lendx" || std::string(f.name) == "hwreg"))
             addDriver("alloc-sticky", f.name, full ? shards : 1);
     for (const char* k : { "stop", "supersede", "invalidate", "destroy", "budget", "disable" }) addRunner(k);
     // The worker failing an allocation, a process per cell.
