@@ -1538,7 +1538,15 @@ struct DisasmBase
     long allocs = 0;
 };
 
-std::vector<std::string> DisasmOnce(Ctx& c) { return c.engine->Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount); }
+std::vector<std::string> DisasmOnce(Ctx& c, bool* stopped = nullptr)
+{
+    return c.engine->Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount, stopped);
+}
+
+// Disassemble makes these allocations before anything else (the marker, then the room for the listing and the marker),
+// so that a failure after them cannot take the marker line away: it is a move into room already made. A failure in
+// them leaves no line, and the `stopped` flag is then the whole report.
+const long kDisasmMarkerAllocs = 2;
 
 bool MeasureDisasm(Ctx& c, DisasmBase& b)
 {
@@ -1568,9 +1576,11 @@ bool MeasureDisasm(Ctx& c, DisasmBase& b)
     return false;
 }
 
-// Disassemble never throws and never returns a listing that stops short without saying so (A6-16): a failed
-// allocation ends it with a "<stopped: ..." line, the engine is then refused (Unavailable, and Disassemble
-// refuses), and a failure the library absorbed leaves the listing as it was.
+// Disassemble never throws and never returns a listing that stops short without saying so (A6-16, A6-23): a failed
+// allocation sets `stopped`, which is a bool the caller owns (nothing to allocate, so it holds under sustained
+// exhaustion: "disasm-sticky", every allocation from k on failing), and the listing ends with a "<stopped: ..." line
+// whenever the room for it was made; the engine is then refused (Unavailable, and Disassemble refuses), and a
+// failure the library absorbed leaves the listing as it was.
 int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
 {
     dts::Failures() = 0;
@@ -1579,10 +1589,11 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
     gProbe.Reset();
     bool escaped = false;
     std::vector<std::string> lines;
+    bool stopped = false;
     fa::Arm(k);
     try
     {
-        lines = DisasmOnce(c);
+        lines = DisasmOnce(c, &stopped);
     }
     catch (...)
     {
@@ -1595,19 +1606,26 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
     const bool fired = fa::gFired.load();
     Expect(!escaped, "no exception escapes Disassemble");
     const bool same = lines == b.lines;
-    const bool said = !lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0;
+    const bool said = stopped;
+    const bool line = !lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0;
     std::string cls;
     if (!fired)
     {
         cls = "no-failure";
-        Expect(same, "a listing with no failure injected equals the baseline");
+        Expect(same && !stopped, "a listing with no failure injected equals the baseline");
     }
     else if (said)
+    {
         cls = "stopped";
+        // The marker needs no allocation once its room was made; the flag needs none at all.
+        Expect(line || k < kDisasmMarkerAllocs, "a stopped listing ends with the marker line once its room was made",
+               lines.empty() ? std::string("(empty)") : lines.back());
+    }
     else
     {
         cls = "absorbed";
-        Expect(same, "a failure that does not end the listing leaves it unchanged", lines.empty() ? std::string("(empty)") : lines.back());
+        Expect(same && !line, "a failure that does not end the listing leaves it unchanged, and `stopped` clear",
+               lines.empty() ? std::string("(empty)") : lines.back());
     }
     const DecompileResult after = RunOnce(c);
     const std::vector<std::string> again = DisasmOnce(c);
@@ -3320,6 +3338,12 @@ int main(int argc, char** argv)
     for (const Fix& f : kFixtures)
         if (full || std::string(f.name) != "diamonds") addDriver("cancel-oom", f.name, full ? shards : 1);
     addDriver("disasm", "fixture1", full ? shards : 1);
+    addDriver("disasm-sticky", "fixture1", full ? shards : 1);   // A6-23: every allocation from k on fails
+    // Sustained exhaustion on the decompilation itself: the three fixtures with the longest recovery paths in the default
+    // subset, all of them in the full run.
+    for (const Fix& f : kFixtures)
+        if (full ? std::string(f.name) != "diamonds" : (std::string(f.name) == "mailbox" || std::string(f.name) == "jumptable" || std::string(f.name) == "dag"))
+            addDriver("alloc-sticky", f.name, full ? shards : 1);
     for (const char* k : { "stop", "supersede", "invalidate", "destroy", "budget", "disable" }) addRunner(k);
     // The worker failing an allocation, a process per cell.
     size_t oomFirst = jobs.size();

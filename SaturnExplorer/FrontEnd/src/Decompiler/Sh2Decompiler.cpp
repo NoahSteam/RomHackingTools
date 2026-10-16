@@ -2906,13 +2906,22 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
 }
 
 std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,
-                                                    uint32_t address, int count)
+                                                    uint32_t address, int count, bool* stopped)
 {
     // Never throws, whatever the heap does (A6-16): an allocation failure ends the listing with a line that
     // says so, and the engine is not touched again. Everything that can allocate is inside the try.
+    //
+    // The line that says so is itself an allocation, and under sustained exhaustion (every allocation from one
+    // on fails) it could not be made: the listing came back empty or cut short, with nothing to say it was (A6-23).
+    // So the marker string and the room for it in the listing (and for the lines before it) are made first, and a
+    // stop is then a move into room that exists; and '*stopped' is a bool the caller owns, which needs nothing.
+    if (stopped) *stopped = false;
     AsmLines em;
+    std::string marker;   // empty: no allocation until it is assigned, inside the try
     try
     {
+        marker.assign("<stopped: out of memory or an unexpected exception>");
+        em.lines.reserve(static_cast<std::size_t>(std::max(0, std::min(count, 4096))) + 1);
         // Every way into the engine checks this: disassembly builds an Architecture too, which would
         // reset the same possibly half-reset translator.
         if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };
@@ -2936,6 +2945,16 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
         }
         catch (...)
         {
+            // The engine's own error, and not even its message could be made: the heap is gone. As below.
+            gEngineDamaged = true;
+            if (stopped) *stopped = true;
+            try
+            {
+                em.lines.push_back(std::move(marker));
+            }
+            catch (...)
+            {
+            }
         }
     }
     catch (...)
@@ -2944,9 +2963,10 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
         // treats it -- the engine may be damaged, so nothing touches it again. The listing so far is
         // cut short, and says so: a caller reading it would otherwise take it for the whole.
         gEngineDamaged = true;
+        if (stopped) *stopped = true;
         try
         {
-            em.lines.push_back("<stopped: out of memory or an unexpected exception>");
+            em.lines.push_back(std::move(marker));   // into the room made first: no allocation
         }
         catch (...)
         {

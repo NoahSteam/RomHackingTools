@@ -374,8 +374,13 @@ public:
     // SLEIGH disassembly of 'count' instructions from 'address', one "ADDR  mnemonic operands"
     // line each, in the spec's own spelling (tests and diagnostics: the listing is what the
     // fixture test compares with the Capstone-verified one). Stops at the first undecodable one.
+    // Never throws. When memory runs out (or anything else the engine does not report itself goes wrong) the
+    // listing is cut short and the engine is marked damaged; that is reported in two ways: '*stopped' (when
+    // given) is set, which needs no allocation and so holds however many allocations fail from then on, and the
+    // listing ends with a "<stopped: ..." line whenever the room for it could be made first (it is, but for a
+    // failure in the first two allocations, or a 'count' past 4096).
     std::vector<std::string> Disassemble(const std::shared_ptr<const MemorySnapshot>& snapshot,
-                                         uint32_t address, int count);
+                                         uint32_t address, int count, bool* stopped = nullptr);
 
     // Called on the engine thread as each phase begins (and with Teardown as each pass's
     // Architecture is destroyed). Tests use it to prove which phase a cancel landed in; it may
