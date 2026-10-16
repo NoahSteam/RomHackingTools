@@ -3151,11 +3151,29 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
     // stop is then a move into room that exists; and '*stopped' is a bool the caller owns, which needs nothing.
     if (stopped) *stopped = false;
     AsmLines em;
-    std::string marker;   // empty: no allocation until it is assigned, inside the try
+    std::string marker;   // empty: no allocation until it is assigned, inside a try
     try
     {
         marker.assign("<stopped: out of memory or an unexpected exception>");
         em.lines.reserve(static_cast<std::size_t>(std::max(0, std::min(count, 4096))) + 1);
+    }
+    catch (...)
+    {
+        // The marker and its room could not be made: nothing of the engine's was touched, so the engine is not
+        // damaged and the next request starts again (A6-30). The listing is cut short before it began, and says
+        // so when a line can be made; under sustained exhaustion only the flag, which needs nothing, can say it.
+        if (stopped) *stopped = true;
+        try
+        {
+            em.lines.push_back("<out of memory while preparing the decompiler; try again>");
+        }
+        catch (...)
+        {
+        }
+        return std::move(em.lines);
+    }
+    try
+    {
         // Every way into the engine checks this: disassembly builds an Architecture too, which would
         // reset the same possibly half-reset translator.
         if (gEngineDamaged) return std::vector<std::string>{ std::string("<unavailable: ") + kEngineDamaged + ">" };

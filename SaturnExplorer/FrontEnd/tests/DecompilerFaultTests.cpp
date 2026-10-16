@@ -16,7 +16,8 @@
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
 //   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so (the `stopped` flag
 //             it sets needs no allocation; the marker line is a move into room made first), the engine is then
-//             refused (A6-16, A6-23)
+//             refused (A6-16, A6-23); a failure making the marker or its room, before the engine is touched, stops
+//             the listing before it began and leaves the engine undamaged (A6-30)
 //   cold      allocation k of the FIRST request of a process fails (a Decompile; cold-disasm: a Disassemble), in a
 //             fork of a parent that never ran the engine, with the spec bundle already extracted and with an empty
 //             config directory: the spec materialisation, the library's own start-up, the first translator. Before
@@ -1647,11 +1648,19 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
         cls = "no-failure";
         Expect(same && !stopped, "a listing with no failure injected equals the baseline");
     }
+    else if (said && k < kDisasmMarkerAllocs)
+    {
+        // The marker or its room could not be made, before the engine was touched: the listing is cut short before it
+        // began, says so when a line can be made (not under sustained exhaustion), and the engine is not damaged (A6-30).
+        cls = "stopped-before-engine";
+        Expect(lines.empty() || (lines.size() == 1 && lines[0].compare(0, 16, "<out of memory w") == 0),
+               "a listing stopped before the engine is empty or one line saying so", lines.empty() ? std::string("(empty)") : lines.back());
+    }
     else if (said)
     {
         cls = "stopped";
         // The marker needs no allocation once its room was made; the flag needs none at all.
-        Expect(line || k < kDisasmMarkerAllocs, "a stopped listing ends with the marker line once its room was made",
+        Expect(line, "a stopped listing ends with the marker line once its room was made",
                lines.empty() ? std::string("(empty)") : lines.back());
     }
     else
@@ -1663,7 +1672,12 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
     const DecompileResult after = RunOnce(c);
     const std::vector<std::string> again = DisasmOnce(c);
     const bool damaged = after.status == DecompileStatus::Unavailable;
-    if (said)
+    if (said && k < kDisasmMarkerAllocs)
+    {
+        Expect(after.status == DecompileStatus::Ok && Signature(after) == c.base.sig, "after a listing stopped before the engine the next decompilation is correct");
+        Expect(again == b.lines, "after a listing stopped before the engine the next listing is correct");
+    }
+    else if (said)
     {
         Expect(damaged && Has(after.error, "out of memory"), "after a stopped listing the next decompilation is Unavailable (out of memory)",
                "status " + std::to_string(int(after.status)) + " '" + after.error + "'");
