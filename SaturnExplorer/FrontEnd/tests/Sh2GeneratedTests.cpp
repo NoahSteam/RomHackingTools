@@ -2561,10 +2561,25 @@ bool NamesHardwareBase(const std::string& text)
 bool PointerPrintsFromHardware(const DecompileResult& r, uint32_t insn, const std::vector<const HardwareRegister*>& covering, bool& unrelated)
 {
     unrelated = false;
+    // The read's own tokens on each line that has some: what the instruction contributes to the statement, not the whole statement (a
+    // comparison's other operand, `... != &VDP2_CYCB0U`, comes from another instruction and is not the pointer, seed 347).
     std::vector<std::string> statements;
     for (const Line& l : r.lines)
+    {
+        std::string own;
+        bool any = false;
         for (const Token& t : l.tokens)
-            if (t.addr == insn) { statements.push_back(l.text); break; }
+            if (t.addr == insn)
+            {
+                any = true;
+                own += l.text.substr(t.begin, t.end - t.begin) + " ";
+            }
+        if (!any) continue;
+        // (a line whose own tokens name nothing, only an operator, is judged whole)
+        bool names = false;
+        for (char c : own) names |= std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+        statements.push_back(names ? own : l.text);
+    }
     bool elsewhere = false;
     for (const HardwareRegister* reg : covering)
         for (const Line& l : r.lines)
