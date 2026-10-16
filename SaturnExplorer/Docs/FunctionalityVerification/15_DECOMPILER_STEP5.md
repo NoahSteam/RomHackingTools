@@ -4003,3 +4003,82 @@ CD_HIRQ `w4`, `r4`; CD_CR4 `w1` (`CdByteWrite`: `mask == 0xFFFF`).
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records: 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 7, cautions 16 |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records: 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 22, cautions 20 |
 | Direct accesses to the hardware areas by partition (both images; sound RAM included) | 0x2xxxxxxx 108 and 170, on-chip 25 and 30, associative purge 2 and 2, cached 0: no instance of A5-19; no word read of a DMAC register (A5-18), no CCR word, no byte to the CD FIFO; the 31 SMPC_SF writes are all of 1 |
+
+## Area 2, round 3 review
+
+Reviewer, branch `review/2-round3-review`, on master `6ae4727` (patches 0001 to 0028). Findings only, no fixes. New ledger
+rows: **A2-12 (P1)**, **A2-13 (P2)**, **A2-14 (P1)**, **A2-15 (P2)**. A2-11 (open, being fixed) was not re-probed. Two more
+defects of the same kind were found and are already in the ledger: a callee that sets GBR is taken to keep it by its caller
+(A3-3, fixture b), and a function that returns a copy of an input register prints `void` (A3-5; `stc sr,r0 ; rts ; nop`,
+`stc vbr,r0`, `sts pr,r0`, `mov r1,r0` and `mov r8,r0` behave the same, so SR, VBR and PR belong in that row's list too).
+
+### The instrument: printed C, compiled, against the emulator
+
+The area's oracles compare the spec with Mednafen (decode, differential execution) and the decompiler's accesses with the
+emulator (the generator), and `TestCallsAndTraps` evaluates a printed return for call fixtures. Nothing compares the printed
+value of ordinary SH-2 arithmetic with a run. The probe (scratch, not committed) does: it decompiles a function at 06009000,
+runs it on the p-code emulator (`RunMachine`, as `TestCallsAndTraps`) for 32 to 64 inputs in r4-r7 (edges and random), writes the
+pseudocode into a C file with the engine's types and helpers (`CONCATxy`, `SUBxy`, `ZEXTxy`, `SEXTxy`, `CARRY4`, `SCARRY4`,
+`SBORROW4`; `in_rN` set to what the run had), compiles it with `gcc -fwrapv` and compares the returned r0 (r0 and r1 for an
+8-byte return). The emulator is the spec, which the decode oracle holds equal to Mednafen op by op, so a difference is the
+printing or the engine's transforms. Inputs:
+
+- every ALU, shift, compare, extension, swap, multiply and DIV op, alone, with T from an input, returning the register, T
+  (`movt`) and SR (`stc sr,r0`); `udiv` 32/16 (`div0u` and 16 `div1`), signed `div1` steps, 64-bit `addc`/`subc`/`negc` chains,
+  `dmuls` high and low halves, `xtrct` with r0, `shll`/`rotcl`, branches on `cmp/hi`, `cmp/str`, `addv`, `subv`: 276 functions,
+  0 differences;
+- random register-only functions (34 Rm,Rn ops, 22 Rn ops, `sett`/`clrt`/`div0u`/`clrmac`, the `#imm,r0` ops, `add #imm`,
+  `mov #imm`, `bt`/`bf`/`bt/s`/`bf/s` skips), 8 to 22 instructions: 7,500 functions. Every difference is one of three rows:
+  A2-12 (r0 = 0 with r1 holding an input), A2-14 (`addv`), A2-15 (`shlr`/`rotcl` narrowed). One more class is the C reading
+  itself: `(int4)-param_1` with `char param_1` means a byte negation in the engine's convention and an `int` one in ISO C
+  (differs for 0x80). Not filed; see the questions.
+
+`mac.w`, `mac.l` and memory operands were not compiled (the host's pointers are 64-bit and memory is big-endian); round 2
+read their texts by hand.
+
+### Shapes chosen by hand
+
+Control registers: `stc sr,r0` returned alone prints `void` (A3-5); `get_imask` (`stc sr ; shlr2 ; shlr2 ; and #15`) prints
+right; every `ldc` to SR, GBR or VBR that outlives the function disappears (A2-13); `ldc r4,sr ; rts ; stc sr,r0` prints
+`param_1 & 0x3f3` (patch 0019's mask holds). Illegal and reserved words (`FFFF`, `0000`, in a slot, on one arm) are said:
+"flow reaches bytes that do not decode", `halt_baddata()`; a branch, `rte` or `bsrf` in a slot fails the request (status 3);
+`trapa` in an `rts` slot prints a call through `unaff_vbr + 4` with no warning (slot-illegal on the SH-2: A2-8 (b)).
+
+### What held
+
+- `SaturnExplorerSh2DecodeTests` (default, and `SE_DECODE_CASES=20000 SE_DECODE_SEED=909` with `SE_MEDNAFEN_SS` set: the word
+  table equals `sh7095_idecodetab.inc` on all 65,536 words; 2,600,000 cases, 0 differ, 18,526 the known limit A2-4; 5,632
+  history cells, 0 differ; 8 of 8 A2-4 shapes marked unsupported) and `SaturnExplorerSh2SemanticsTests` pass.
+- The reference model, read again against `sh7095_ops.inc` for MAC.L/MAC.W (S, the 48- and 32-bit bounds, MACH |= 1), LDC and
+  LDC.L (`0x3F3`, then the interrupt recalculation), RTE (SR before `DelayBranch`), TRAPA (`PC -= 2`), ADDV, ROTCL, SHLR, STC: no
+  difference from `ExecRef`.
+- The spec's delayed branches: `bsrf`/`braf` compute the target before the slot, `rts` and `jmp`/`jsr` read PR or Rm before it,
+  PR is written before the slot (0006), SR before `rte`'s slot (0019).
+- Every ALU op's printed value, alone and in 7,500 random sequences, outside the three rows.
+- Illegal encodings are reported, not taken for code.
+
+### The generator's coverage (an oracle hole, no fixture of its own)
+
+Mnemonics in the listings of seeds 1 to 400 (14,004 instructions): `mov.l`, `mov`, `mov.w`, `mov.b`, `add`, `tst`, `bf`, `bt`,
+`bra`, `rts`, `dt`, `cmp/eq`, `tas.b`, `extu.w`, `extu.b`, `shll2`, `cmp/pl`, `bsr`, `or`, `sub`, `xor`, `and`, `bf/s`, `bt/s`,
+`sts.l`, `lds.l`, `jmp`, `jsr`, `mova`, `sts`, `lds`, `cmp/hs`, `cmp/hi` (and a few `mac`, `not`, `neg`, `mulu.w`, `div0s`, `or.b`
+that are literal-pool words read as code). It never emits `addc`, `addv`, `subc`, `subv`, `negc`, `div0u`, `div1`, `dmuls.l`,
+`dmulu.l`, `mul.l`, `muls.w`, `exts.b`/`exts.w`, `swap`, `xtrct`, the rotates, `shal`/`shar`/`shll`/`shlr`/`shll8`/`shll16`/`shlr2`/
+`shlr8`/`shlr16`, `cmp/ge`, `cmp/gt`, `cmp/pz`, `cmp/str`, `movt`, `sett`, `clrt`, `clrmac`, any `ldc`/`stc`, `trapa`, `rte`,
+`braf`, `bsrf`, or the `#imm,r0` and `@(R0,GBR)` logic ops. A2-13, A2-14 and A2-15 are in that set; A2-12 needs r1 left holding
+an argument, which the grammar does not do. The generator replays each fixture with 0 findings.
+
+### Questions (no fixture, or not area 2)
+
+- The C convention: the engine prints byte arithmetic on a `char` parameter (`(int4)-param_1`) meaning a byte-wide operation;
+  read as ISO C it is an `int` one. Does the program read the pseudocode as C? If so, a compile-and-run oracle needs the
+  engine's casts made explicit.
+- A dirty r1 also gives 8-byte returns with the right values (`CONCAT44(0x11,param_2)` for a function that returns 0x11 and
+  leaves an argument in r1): a signature that claims r1. Area 3.
+- `trapa` (and other slot-illegal words) in a delay slot print silently; A2-8 (b) accepts the exception as not modelled. Is a
+  warning wanted?
+
+### Not probed
+
+MAC and memory operands through the compiled-C check; interrupts (A2-8); the game corpus (not in this container); the
+sanitizers; the generator's long run.
