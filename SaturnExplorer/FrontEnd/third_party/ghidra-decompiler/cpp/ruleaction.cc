@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: a pointer type checked before its downcast (patches/0011-ptrsub-char-constant-cast.patch).
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
+ * Modified for SaturnExplorer: an access that runs past the end of its space stays a LOAD or STORE (patches/0031-access-past-space-end.patch).
  */
 #include "ruleaction.hh"
 #include "coreaction.hh"
@@ -4214,6 +4215,23 @@ AddrSpace *RuleLoadVarnode::vnSpacebase(Architecture *glb,Varnode *vn,uintb &val
   return (AddrSpace *)0;
 }
 
+/// \brief Check if a constant access of the given size would run past the end of its space
+///
+/// SaturnExplorer: \e ram ends at 0xFFFFFFFF and does not allow a wrapped range, so after constant
+/// propagation a 4-byte access at 0xFFFFFFFE has no Varnode (\e AddrSpaceManager::constructWrappingAddress
+/// threw "beyond end of address space" and failed the whole function). The LOAD or STORE stays as it is.
+/// \param spc is the space being accessed
+/// \param off is the offset of the access
+/// \param size is the size of the access in bytes
+/// \return \b true if no Varnode can cover the access
+static bool pastSpaceEnd(AddrSpace *spc,uintb off,int4 size)
+
+{
+  if (!spc->isHeritaged() || spc->allowsWrappedRange())
+    return false;
+  return !Address(spc,off).isValidRange(size);
+}
+
 /// \brief Check if STORE or LOAD is off of a spacebase + constant
 ///
 /// If so return the associated space and pass back the offset
@@ -4275,6 +4293,8 @@ int4 RuleLoadVarnode::applyOp(PcodeOp *op,Funcdata &data)
 
   size = op->getOut()->getSize();
   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
+  if (pastSpaceEnd(baseoff,offoff,size))
+    return 0;			// SaturnExplorer: no Varnode can be built at it
   newvn = data.newVarnode(size,baseoff,offoff);
   data.recordAccessFold(op,newvn);	// SaturnExplorer: the op lives on as the COPY, so its time survives
   data.opSetInput(op,newvn,0);
@@ -4317,6 +4337,8 @@ int4 RuleStoreVarnode::applyOp(PcodeOp *op,Funcdata &data)
 
   size = op->getIn(2)->getSize();
   offoff = AddrSpace::addressToByte(offoff,baseoff->getWordSize());
+  if (pastSpaceEnd(baseoff,offoff,size))
+    return 0;			// SaturnExplorer: no Varnode can be built at it
   Address addr(baseoff,offoff);
   data.newVarnodeOut(size, addr,op);
   data.recordAccessFold(op,op->getOut());	// SaturnExplorer: the op lives on as the COPY. Recorded here, while the STORE's inputs are whole

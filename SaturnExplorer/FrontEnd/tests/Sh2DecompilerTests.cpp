@@ -4607,16 +4607,24 @@ private:
     using Seq = std::vector<Node>;
     struct Node
     {
-        enum Kind { Assign, If, Return, Skip } kind = Skip;
+        enum Kind { Assign, If, Return, Switch, Break, Skip } kind = Skip;
         std::string var;
-        size_t expr = 0, exprEnd = 0;   // the expression's tokens (Assign, the If's condition, Return)
+        size_t expr = 0, exprEnd = 0;   // the expression's tokens (Assign, the If's condition, Return, a Switch's selector)
         bool hasExpr = false;
-        std::shared_ptr<Seq> yes, no;
+        std::shared_ptr<Seq> yes, no;   // a Switch's body is 'yes': its statements in order, the labels apart
+        struct Label
+        {
+            bool isDefault;
+            uint32_t value;
+            size_t at;   // the index in the body of the statement the label stands before
+        };
+        std::vector<Label> labels;
     };
     struct Frame
     {
         const Seq* seq;
         size_t next;
+        bool sw = false;   // the body of a switch: a break leaves it
     };
     struct Cursor
     {
@@ -4754,7 +4762,67 @@ private:
             ++mPos;
             return n;
         }
-        if (t == "while" || t == "do" || t == "for" || t == "goto" || t == "switch" || t == "break" || t == "continue" ||
+        // switch (selector) { case N: ... break; ... default: ... }: falls through from a label to the next
+        // statements, as C does; a case value may be negative.
+        if (t == "switch")
+        {
+            n.kind = Node::Switch;
+            mPos += 2;   // switch (
+            n.expr = mPos;
+            int depth = 1;
+            while (mPos < mTok.size())
+            {
+                if (mTok[mPos] == "(") ++depth;
+                else if (mTok[mPos] == ")" && --depth == 0) break;
+                ++mPos;
+            }
+            n.exprEnd = mPos;
+            n.hasExpr = true;
+            ++mPos;
+            if (mPos >= mTok.size() || mTok[mPos] != "{")
+            {
+                mError = "a switch without its body";
+                return n;
+            }
+            ++mPos;
+            n.yes = std::make_shared<Seq>();
+            while (mError.empty() && mPos < mTok.size() && mTok[mPos] != "}")
+            {
+                if (mTok[mPos] == "case")
+                {
+                    ++mPos;
+                    bool neg = false;
+                    if (mPos < mTok.size() && mTok[mPos] == "-")
+                    {
+                        neg = true;
+                        ++mPos;
+                    }
+                    if (mPos + 1 >= mTok.size() || !std::isdigit(static_cast<unsigned char>(mTok[mPos][0])) || mTok[mPos + 1] != ":")
+                    {
+                        mError = "a case label this evaluator does not read";
+                        return n;
+                    }
+                    const uint32_t v = static_cast<uint32_t>(std::strtoull(mTok[mPos].c_str(), nullptr, 0));
+                    n.labels.push_back({ false, neg ? 0u - v : v, n.yes->size() });
+                    mPos += 2;
+                }
+                else if (mTok[mPos] == "default" && mPos + 1 < mTok.size() && mTok[mPos + 1] == ":")
+                {
+                    n.labels.push_back({ true, 0, n.yes->size() });
+                    mPos += 2;
+                }
+                else n.yes->push_back(Statement());
+            }
+            if (mPos < mTok.size()) ++mPos;   // the closing brace
+            return n;
+        }
+        if (t == "break" && mPos + 1 < mTok.size() && mTok[mPos + 1] == ";")
+        {
+            n.kind = Node::Break;
+            mPos += 2;
+            return n;
+        }
+        if (t == "while" || t == "do" || t == "for" || t == "goto" || t == "break" || t == "continue" ||
             (mPos + 1 < mTok.size() && mTok[mPos + 1] == ":"))
         {
             mError = "unsupported statement: " + t;
@@ -5001,6 +5069,40 @@ private:
                 out.push_back(o);
                 return;
             }
+            case Node::Break:
+                while (!frames.empty())
+                {
+                    const bool sw = frames.back().sw;
+                    frames.pop_back();
+                    if (sw) break;
+                }
+                break;
+            case Node::Switch:
+            {
+                // Where execution starts: the label that matches, else the default's, else after the switch.
+                // An unknown selector tries each label and the default, as an unknown condition tries both arms.
+                const Val sel = Eval(n, env);
+                std::vector<long> starts;   // an index into the body, or -1: past the switch
+                long deflt = -1;
+                for (const Node::Label& l : n.labels)
+                {
+                    if (l.isDefault) deflt = static_cast<long>(l.at);
+                    else if (!sel.known || sel.v == l.value)
+                    {
+                        starts.push_back(static_cast<long>(l.at));
+                        if (sel.known) break;
+                    }
+                }
+                if (!sel.known || starts.empty()) starts.push_back(deflt);
+                for (size_t k = 0; k + 1 < starts.size(); ++k)
+                {
+                    std::vector<Frame> other = frames;
+                    if (starts[k] >= 0) other.push_back({ n.yes.get(), static_cast<size_t>(starts[k]), true });
+                    Exec(other, env, out, depth + 1);
+                }
+                if (starts.back() >= 0) frames.push_back({ n.yes.get(), static_cast<size_t>(starts.back()), true });
+                break;
+            }
             case Node::If:
             {
                 const Val c = Eval(n, env);
@@ -5127,6 +5229,152 @@ bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemoryS
         }
     }
     return ok;
+}
+
+// ===== Area 4, round 3: a jump table bounded only by a signed compare (A4-7) ============================
+// `cmp/gt` or `cmp/ge` against the last index sends the larger indices to the default and lets every
+// negative one through: on the hardware index -1 reads the word before the table and runs whatever
+// that points at. The engine used to assume the switch value non-negative whenever the guards left a
+// range too big for a table (upstream's heuristic) and printed the three cases and a default, with the
+// signature lent. Patch 0029 drops the assumption: the range keeps the negatives, no table can fill
+// it, and the jump is reported as unresolved, so nothing wrong is shown and nothing is lent.
+// A guard that excludes the negatives (an unsigned compare, cmp/pz, a zero-extended index) leaves a
+// small range and the switch is recovered as before.
+void TestSignedGuardTable()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 500;
+    const uint32_t base = 0x06009000u;
+    // mov.l @(lit),r2 ; mov #bound,r1 ; <cmp> ; bt def ; shll2 r4 ; mova table,r0 ; mov.l @(r0,r4),r1 ; jmp @r1 ;
+    // nop ; nop ; lit 0x06009034 (case 2: the word before the table) ; table (3 entries) ; def: rts ; mov r2,r0 ;
+    // cases 0 to 2: rts ; mov #n,r0.
+    auto oneGuard = [](uint16_t bound, uint16_t cmp) {
+        return std::vector<uint16_t>{ 0xD204, bound, cmp, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034,
+                                      0x0600, 0x902C, 0x0600, 0x9030, 0x0600, 0x9034, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000,
+                                      0x000B, 0xE001, 0x000B, 0xE002 };
+    };
+    // cmp/pz r4 ; bf def ; cmp/gt r1,r4 ; bt def: both signs bounded.
+    const std::vector<uint16_t> twoGuards = { 0xD205, 0xE102, 0x4411, 0x8B0F, 0x3417, 0x890D, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009,
+                                              0x0600, 0x9034, 0x0600, 0x902C, 0x0600, 0x9030, 0x0600, 0x9034, 0x000B, 0x6023, 0x000B, 0xE000,
+                                              0x000B, 0xE001, 0x000B, 0xE002 };
+    // extu.b r4,r4 first: a byte cannot be negative, so the signed bound is the whole bound.
+    const std::vector<uint16_t> zeroExtended = { 0x644C, 0xD204, 0xE102, 0x3417, 0x890C, 0x4408, 0xC702, 0x014E, 0x412B, 0x0009, 0x0600, 0x9030,
+                                                 0x0600, 0x9028, 0x0600, 0x902C, 0x0600, 0x9030, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001,
+                                                 0x000B, 0xE002 };
+    struct Case
+    {
+        const char* name;
+        std::vector<uint16_t> code;
+        bool recovered;   // the switch is shown and the signature lent
+        bool zeroExtended = false;
+    };
+    const std::vector<Case> cases = {
+        { "table, cmp/gt only", oneGuard(0xE102, 0x3417), false },
+        { "table, cmp/ge only", oneGuard(0xE103, 0x3413), false },
+        { "table, cmp/hi (control)", oneGuard(0xE102, 0x3416), true },
+        { "table, cmp/hs (control)", oneGuard(0xE103, 0x3412), true },
+        { "table, cmp/pz and cmp/gt (control)", twoGuards, true },
+        { "table, zero-extended index and cmp/gt (control)", zeroExtended, true, true },
+    };
+    // The oracle reads a switch (it could not before) and can fail on the text this engine printed before
+    // patch 0029: three cases and a default, which the hardware contradicts for index -1 (it returns 2).
+    {
+        std::string why;
+        const char* const old = "int f(int param_1)\n{\n  switch(param_1) {\n  case 0:\n    return 0;\n  case 1:\n    return 1;\n"
+                                "  case 2:\n    return 2;\n  default:\n    return 0x6009034;\n  }\n}";
+        CHECK(MayReturn(old, { 1 }, 1, why) && MayReturn(old, { 5 }, 0x6009034, why));
+        CHECK(!MayReturn(old, { 0xFFFFFFFFu }, 2, why) && Has(why, "6009034"));
+        CHECK(MayReturn("int f(int param_1)\n{\n  int x;\n  x = 0;\n  switch(param_1) {\n  case 1:\n    x = 7;\n  case 2:\n"
+                        "    x = x + 1;\n    break;\n  case 3:\n    x = 9;\n  }\n  return x;\n}",
+                        { 1 }, 8, why));   // falls through from case 1 to case 2, then leaves
+        CHECK(!MayReturn("int f(int param_1)\n{\n  switch(param_1) {\n  case 0xffffffff:\n    return 5;\n  default:\n"
+                         "    return 6;\n  }\n}", { 0xFFFFFFFFu }, 6, why));
+    }
+    // r4 = 3 is past the bound, 0xFFFFFFFF is -1, 0x80000000 the most negative.
+    const std::vector<std::vector<uint32_t>> indices = { { 0 }, { 1 }, { 2 }, { 3 }, { 0xFFFFFFFFu }, { 0x80000000u }, { 0x7FFFFFFFu } };
+    // The evaluator takes the parameter as the whole register, so the byte-wide one is fed bytes and a -1.
+    const std::vector<std::vector<uint32_t>> byteIndices = { { 0 }, { 1 }, { 2 }, { 3 }, { 0xFFu }, { 0xFFFFFFFFu } };
+    for (const Case& c : cases)
+    {
+        const CallFixture f = { c.name, base, c.code };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(c.name, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        // The text is checked against the emulator, index by index (negatives included).
+        CHECK(PseudoAgreesWithRun(r, snap, f, c.zeroExtended ? byteIndices : indices));
+        CHECK(Has(r.Text(), "switch(") == c.recovered);
+        CHECK(r.prototype.known == c.recovered);
+        CHECK(r.prototypeWithheld.empty() == c.recovered);
+        uint32_t minusOne = 0;
+        CHECK(CallRunResult(snap, f, { 0xFFFFFFFFu }, minusOne));
+        if (c.recovered)
+        {
+            // The negative indices go to the default, the literal r2 holds.
+            CHECK(minusOne == (c.zeroExtended ? 0x06009030u : 0x06009034u));
+        }
+        else
+        {
+            // Index -1 reads the word before the table, case 2's address; the guard does not exclude it. Said: the
+            // jump is not resolved, the larger indices still reach the default through the engine's own test.
+            CHECK(minusOne == 2);
+            CHECK(WarnsAbout(r, "Could not recover jumptable") && WarnsAbout(r, "Treating indirect jump as call"));
+            CHECK(Has(r.prototypeWithheld, "indirect"));
+            CHECK(!Has(r.Text(), "case ") && !Has(r.Text(), "default"));
+            // Nothing is lent, so no caller is told it can pass any index.
+            DecompileRequest q = Request(base);
+            CHECK(!d.Decompile(snap, q).prototype.known);
+        }
+    }
+}
+
+// ===== Area 2, round 3: an access that runs past the top of memory (A2-11) ================================
+// After constant propagation `mov.w r1,@-r4` on the path where `tst` proved r4 = 0 leaves r4 = 0xFFFFFFFE,
+// and the longword store at it is four bytes past 0xFFFFFFFF. The engine could not make a Varnode for it
+// ("Trying to construct memory range beyond end of address space") and failed the whole function. Patch
+// 0031 leaves such a LOAD or STORE alone: the function decompiles, the access is printed through its
+// (constant) pointer, and the ledger lists it once. On the hardware that path is an address error.
+void TestAccessPastSpaceEnd()
+{
+    Sh2Decompiler d(gConfig);
+    std::vector<uint8_t> hw;
+    // tst r4,r4 ; bf/s L ; <step r4 down> ; <access at @r4> ; L: rts ; nop
+    auto fn = [&](uint32_t base, uint16_t step, uint16_t access) {
+        Place(hw, base, { 0x2448, 0x8F01, step, access, 0x000B, 0x0009 });
+    };
+    const uint32_t store4 = 0x06009000u, load4 = 0x06009020u, store2 = 0x06009040u, last4 = 0x06009060u, store1 = 0x06009080u;
+    fn(store4, 0x2415, 0x2432);   // mov.w r1,@-r4 ; mov.l r3,@r4      past the top by 2 bytes
+    fn(load4, 0x2415, 0x6042);    // mov.w r1,@-r4 ; mov.l @r4,r0
+    fn(store2, 0x2414, 0x2431);   // mov.b r1,@-r4 ; mov.w r3,@r4      past the top by 1 byte
+    fn(last4, 0x2416, 0x2432);    // mov.l r1,@-r4 ; mov.l r3,@r4      the last longword: inside, as before
+    fn(store1, 0x2414, 0x2430);   // mov.b r1,@-r4 ; mov.b r3,@r4      the last byte: inside, as before
+    auto snap = MakeSnapshot(hw);
+    auto run = [&](const char* label, uint32_t base) {
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.error.empty());
+        CHECK(ReferenceOk(d, snap, Request(base), r));
+        return r;
+    };
+    // The access past the top is in the ledger once, through the pointer the engine knows only as a constant.
+    auto listed = [](const DecompileResult& r, uint32_t insn, bool write, uint8_t size, uint32_t address) {
+        int n = 0;
+        for (const MemoryAccess& m : r.accesses)
+            if (m.insn == insn && m.write == write && m.size == size && !m.direct && m.address == address && m.printed == 1) ++n;
+        return n == 1;
+    };
+    DecompileResult r = run("longword store past the top", store4);
+    CHECK(Has(r.Text(), "*(xunknown4 *)0xfffffffe = in_r3;") && listed(r, store4 + 6, true, 4, 0xFFFFFFFEu));
+    r = run("longword load past the top", load4);
+    CHECK(Has(r.Text(), "xVar1 = *(xunknown4 *)0xfffffffe;") && listed(r, load4 + 6, false, 4, 0xFFFFFFFEu));
+    r = run("word store past the top by one byte", store2);
+    CHECK(Has(r.Text(), "*(xunknown2 *)0xffffffff = in_r3;") && listed(r, store2 + 6, true, 2, 0xFFFFFFFFu));
+    // Inside the space, at its very end: the same constant-address treatment as any other.
+    r = run("longword store at the last longword", last4);
+    CHECK(Has(r.Text(), "Ramfffffffc = in_r3;") && Ledger(r, { Wr(0, 4), Wr(0xFFFFFFFCu, 4) }));
+    r = run("byte store at the last byte", store1);
+    CHECK(Has(r.Text(), "Ramffffffff = in_r3;") && Ledger(r, { Wr(0, 1), Wr(0xFFFFFFFFu, 1) }));
 }
 
 // Ledger A2-9 (trapa) and A2-10 (what a call leaves in r4-r7, T, MACH and MACL), both from the
@@ -5880,6 +6128,8 @@ int main(int argc, char** argv)
         RUN(TestFlowReachedBody());
         RUN(TestDefaultAlsoCase());
         RUN(TestTailJumpToUnreachedCode());
+        RUN(TestSignedGuardTable());
+        RUN(TestAccessPastSpaceEnd());
         RUN(TestEngineEdgePaths());
         RUN(TestCalleeHarvest());
         RUN(TestBiosFunctionNames());
