@@ -5862,3 +5862,151 @@ none was printed in the 7,627 functions of this round.
 
 Interrupts and the slot-illegal exception (A2-8); the game corpus (not in this container); the sanitizers; the generator's long run;
 `SE_GENERATED_ALPHABET=specials`.
+
+
+## Area 2, round 4: the grammar that reaches the divisions and the stack, and A2-21 to A2-26
+
+Fixer, branch `review/2-round4-fix`, from master `979edd2` (patches 0001 to 0034; 0035 and 0036 are other fixers' this round, so this round's are
+**0037** and **0038**). Fixes the six rows of "Area 2, round 4 review": A2-21 (P1), A2-22 (P1), A2-23, A2-24, A2-26 (P2), A2-25 (P3) are
+`fixed`; no new row. Oracle first: the register-only grammar was widened, shown to find both P1s before the fixes (14 of the 3,000 seeds' functions, 25
+mismatches and 4 texts that are not C counting the fixtures) and nothing after (0 in 3,000 and in 10,000 seeds).
+
+### 1. The oracle (A2-26) and the grammar
+
+*The two holes.* (a) `CheckPrintedC` compared a 1- or 2-byte return in its low bytes only, so a text that dropped the high bytes of r0 passed
+(`return param_2;` for `r4 & 0xFFFFFF00 | r5 & 0xFF`). A narrow return is now also checked against r0's upper bits, which must be the zero or the sign
+extension of it (a lent `char f()` is read so by its callers); anything else is `mismatch` with the marker `upper-bits`, which no second reading excuses.
+(b) GBR and VBR started at 0 in the run and in the text's `unaff_gbr`/`in_gbr`. They start as drawn 32-bit values now (columns 16 and 17 of the
+run table, `g_in[11]`, `g_in[12]`), so a text that drops or mistakes either differs from the run; three fixtures (`GBR advanced`, `VBR advanced`,
+`GBR from VBR`).
+
+*The grammar* (version 3, drawn from a stream of its own so no earlier draw of a seed changes; 35 percent of functions get one item, a quarter of
+those two): a **literal-pool division** (`mov.l @(lit),L ; dmulu.l/dmuls.l L,X ; sts mach,T`, the Hacker's Delight multiplier and shift of
+`magicu`/`magic` for a drawn divisor: 3..41, 55, 63, 100, 127, 641, 1000, 6700417, 0x7FFFFFFF, 0xFFFFFFFE, random up to 201, signed (one in
+five negative) and unsigned, the "add" form `sub ; shlr ; add ; shlr` where the magic number has 33 bits, the sign correction for signed; scaled by the last
+shift (an index into a table of 4- or 16-byte entries: the shape of A2-21), by 0 to 4, or not; the result moved to r0 or left); a **stack item**
+(`add #-4n,r15`, every longword stored whole, one to three overwrites by a byte or a word through r0, `@(d,r15)` or `@r15`, one load back of the
+longword, a word or a byte, an operation, `add #4n,r15`); a **bare literal** (`mov.l @(lit),Rn`, an edge value, a magic number or random). The pool
+follows the `rts` and its slot (`RegFn::Words` fills in the displacements). `SE_GENERATED_PRINTEDC_WIDE=0` turns the items off. The fixtures
+(`WidePrintedCFixtures`) are the seven wrong divisions of the row, 16 neighbours that were always right (`u/7`, `u/7*2`, `u/7*8`, `u/7<<8`, `u/19*4`,
+`u/3*2`, `u/10*2`, `u/641`, `u/6700417*4`, signed `/7`, `/19`, `/100` plain and scaled, `s/-7`), the ledger's four words, the A2-22 forms with their
+controls, three GBR/VBR writes and `cmp/str`.
+
+*Making the texts compile.* The new items print things the harness had no meaning for: the engine's field notation (`xStack_4._2_2_ = e;`, now macros that
+read and write bytes of a variable by `sizeof`, big-endian, typed by their size); `unkbyte3`/`unkint3` and the like; a name made for an access wider than its
+symbol (`_Stack_4`, declared as 8 bytes). Two limits are counted, not failed: a piece of the stack no symbol covers (`stack0xfffffffe`) is
+`skipped:stack-piece` (2 of 10,060), a byte-array local (`axStack_3 [3]`, assigned as a value) `skipped:array-local` (1). And a text that disagrees with the
+run is read once more, with `xunknown` signed and `(uint8)` of a 4-byte value zero-extending (the engine's reading of a compare of a value with no sign, of a
+widening cast, and of `(int4)` of a two-byte field, all of A2-19); if it agrees in that reading it is `narrow-c` (24 of 10,060), otherwise it is a finding.
+
+*Before and after the fixes* (the same fixtures and seeds): 3,055 functions (3,000 seeds and the 55 fixtures of the day; the 3 GBR/VBR and 2 `cmp/str` fixtures came after), **25 `mismatch` and 4 `not-compilable`**:
+the 15 fixtures of A2-21/A2-22 and **14 generated functions**, at least six of A2-21 (seeds 125, 469, 952, 1429, 1759, 2806: also `Write_GBR(... & 0xfffffff8)`,
+a magic number loaded into r1 and used), at least five of A2-22 (126, 447, 1211, 2088, 2647), and two readings of casts and compares (1399, 2457) that the second reading now
+excuses. After: **3,060 functions, 0 findings** (2,524 agree, 3 `narrow-c`, 268 skipped calls, 265 `void-return`). 10,000 seeds: 10,060 functions, **0 findings**
+(8,264 agree, 24 `narrow-c`, 864 skipped calls, 905 `void-return`, 2 `skipped:stack-piece`, 1 `skipped:array-local`). The first 10,000-seed run found 7 texts that were this instrument's, not the engine's (a two-byte field cast to `int4`, an undeclared stack piece, a byte-array
+local), which is why the second reading and the two skipped classes exist.
+
+### 2. A2-21: the product that wraps (patch 0037, part 1)
+
+`RuleDivTermAdd2` rewrites `t + ((x - t) >> 1)` (t the high word of `x * c`) as `sub(zext(x) * (c + 2^32), 0) >> 33`, and `RuleDivTermAdd` rewrites
+`sub(ext(x)*c, b) >> d + x` the same way. For a 32-bit `x` in an 8-byte multiply the new constant has 33 bits and the true product 65. That is harmless on the way
+to a division, because `RuleDivOpt` reasons about the exact value, and wrong as a result. `x / 7 * 4` is `(q >> 2) << 2`; the pair of shifts becomes a mask,
+`RuleDivOpt` finds no division, the wrapped product is printed. The rules now rewrite only when the product fits the multiply (`divTermProductFits`: the bits of the
+multiplied value plus the bits of the constant reduced to the multiply's size, a negative constant by its magnitude, one bit less for a signed multiply), or when every
+reader of the sum is a constant right shift of the matching signedness whose total shift makes `RuleDivOpt::calcDivisor` accept the pair (`divTermIsDivided`, through a
+new public `RuleDivOpt::isDivision`; `calcDivisor` subtracts one from its constant, so it is called on a copy: the first version passed the rule's own and
+broke `x / 7`). Otherwise the unrewritten form stays, which is correct:
+
+- `x / 7 * 4`: `(param_1 - iVar1 >> 1) + iVar1 & 0xfffffffc` (iVar1 the high word of `x * 0x24924925`), for all inputs;
+- `RuleDivTermAdd`, unsigned and signed: `(uint4)((uint8)param_1 * 0x12345678 >> 0x21) + param_1` and its `int` twin;
+- `x / 7`, `x / 7 * 2`, `x / 7 << 8`, signed `/7`: `param_1 / 7`, unchanged. The masked case is not recovered as `param_1 / 7 << 2` (the mask hides the division); it is right, longer.
+
+The first version of the guard computed the bits of a signed constant as the 128-bit unsigned sum of a sign-extended 64-bit constant and `2^32` (65 bits), so it refused
+every signed rewrite, and the game corpus found it: nine functions of image 008 lost their recovered `/ 0x3c`, `/ 7` and `/ 0x1c000` (`(int4)uVar2 / 0x3c + ...` became
+`(int4)((uint8)((int8)... * -0x77777777) >> 0x20) + uVar2 ...`). The test now reduces the constant to the multiply's size first; two checks pin the case that fits (the
+`mulhs(x, c) + x` product, 31 + 32 = 63 bits in a signed 8-byte multiply, stays `* 0xb60b60b7`) and signed `x / 7`.
+
+### 3. A2-22: the stack insert (patch 0037, part 2)
+
+Traced with a temporary dump of the p-code after every rule and action (removed before the patch). Heritage turns the stack stores and the load into
+`s0xfffffffc:3 = SUB43(r4, 1) ; s0xfffffffc = CONCAT31(s0xfffffffc:3, r5+3:1) ; r0 = s0xfffffffc ; return r0`, which is right. Then `RulePiecePathology` fires on
+the CONCAT: upstream's heuristic for `retreg = CONCAT(SUBPIECE(retreg, #4), smallval)` (a small return value written into a register whose other bytes are stale),
+which in its SUBPIECE case only asks whether the SUBPIECE's source is a function input (`isPathology`: `vn->isInput() && !vn->isPersist()`) and never whether the
+CONCAT writes that register. `r4` is an input. `tracePathologyForward` then walks to the RETURN and calls `FuncProto::setReturnBytesConsumed(1)`; `ActionDeadCode`
+(`gatherConsumedReturn`) masks the return's consumed bits to one byte, replaces the three unconsumed bytes `SUB43(r4,1)` by 0, and `piece2zext` / `subvar_zext` finish
+it: `return param_2;`, one byte, lent so. A byte at offset 2 or 1 and a word, the same; with the value copied to r1 `void`. The same code through a global or through registers makes
+no CONCAT of that shape (the global store is a direct write, the register insert is `& | `). Fix: the SUBPIECE case requires the CONCAT's output to overlap its input
+(`characterizeOverlap != 0`), as the INDIRECT case already requires contiguity. Whole longword returned, `CONCAT31((unkint3)((uint4)param_1 >> 8),param_2)`, 4 bytes, two parameters.
+The copy-to-r1 form (`6053 2F46 80F3 60F6 000B 6103`) still prints `void f(void)`: so does `6053 000B 6103` through registers; that is A3-5's class (a result left in r0 and r1
+by copies of inputs), not this row's.
+
+### 4. A2-23: SR stored through a pointer (host, `Sh2Decompiler.cpp`)
+
+The only host change of this round, in `EntryStateUse` and one helper beside it: `EntryStateUse(arch, entry, writeOp, wholeOk, memoryMayBeRead = true)`; the `CPUI_STORE` case
+is `ok = wholeOk && !part && op->getIn(2) == vn && !memoryMayBeRead`; `MayReadMemory(fd)` is true when the function has a call or an alive LOAD (the engine does not forward a
+store through a pointer to the load, so the reload is no descendant of the entry SR); `WithholdReason` passes it for the registers-read-on-entry scan. The call-result scan
+(`extraout_sr`) passes `wholeOk = false` and is unchanged. `stc sr,r0 ; mov.l r0,@r4 ; mov.l @r4,r0 ; rts ; and #1,r0` and `stc.l sr,@-r4 ; ...` are withheld ("it reads sr on entry"); the
+generator's pair run (`SE_GENERATED_FUNCS="0/0/10,10/10/1a" SE_GENERATED_RETURNS="1,1"`) goes from 2 findings (`param-dropped:r5`, `r6`) to 0, the caller withheld on its callee; a function
+that only stores SR (`stc sr,r1 ; mov.l r1,@r4 ; rts`) is still lent. Not looked at: `ReturnCheck`, `LendEffects`, eligibility (area 3's fixer).
+
+### 5. A2-24: what `rte` restores (patch 0038)
+
+`rte` now calls `Write_SR(_sr)` after `sr = _sr` (patch 0034's user op, the masked value) and a new user op `Rte_PC(_pc)` before `pc = _pc ; return [pc]`. A RETURN's target is dropped from the data-flow when the
+flow is built, so the load of the stacked PC was dead and the stack word's store with it; the user op reads it. `51F1 E201 212B 1F11 002B 0009` prints `Write_SR(in_stack_00000004 & 0x3f3 | 1); Rte_PC(in_stack_00000000); return;`,
+`61F2 7102 2F12 002B 0009` `Write_SR(in_stack_00000004 & 0x3f3); Rte_PC(in_stack_00000000 + 2); return;`. The prototype is still withheld, now for "an incoming argument outside its signature" (the handler reads the stack
+words) where it was "a return not to its caller"; `ReturnCheck` does not know `Rte_PC` (it treats it as a user op with unknown effects), which changes nothing for a function that is withheld anyway. The four emulator harnesses hook `Rte_PC`
+(`Sh2EmulatorHooks.h`). `sh-2.sla` and `Sh2SpecData.h` regenerated, both committed.
+
+### 6. A2-25 and the two questions
+
+*A2-25* (patch 0037, part 3): `Scope::buildDefaultName` names an input that is a piece of a register with the byte it starts at, counted from the least significant: `in_r3_b3` is r3's most significant byte, the
+least significant piece keeps `in_r3` (as `char param_1` is the register's low byte, so a text that read only a low-byte piece does not change). `cmp/str r6,r3` prints
+`(char)param_3 == in_r3 || (char)((uint4)param_3 >> 8) == in_r3_b1 || ... == in_r3_b3`. The oracle gives `in_rN_bK` its value, so the function is compared (it was `skipped:unknown-input`).
+
+*`(int4)x` of an `xunknown2`.* **Accepted, under A2-19.** The text does not say that the cast extends the sign. Printing `(int4)(short)` would change `PrintC`'s cast rendering for every extension of every text (a
+change to all of Ghidra's output for a reading the guide already states), and the value is right in the engine's reading. The oracle counts it (the second reading: 24 of 10,060 functions `narrow-c`, none with a different value in it).
+
+### 7. Mutation
+
+Each change reverted alone (the engine and the spec rebuilt, `se-regen-sla` for the spec), the printed-C fixtures and one seed, and `Sh2DecompilerTests`; restored, both pass.
+
+| Reverted | printed-C (61 functions: 60 fixtures and a seed) | `Sh2DecompilerTests` |
+|---|---|---|
+| A2-21: `RuleDivTermAdd2` guard off | 9 findings (the seven wrong divisions, the ledger's words, `(x+t)>>2`) | 2 checks |
+| A2-21: `RuleDivTermAdd` guard off | 2 (the unsigned and signed forms) | 2 |
+| A2-21: the product test says nothing fits | 0 | 2 (`* 0xb60b60b7` and signed `x / 7`; found by the corpus first, see section 2) |
+| A2-22: the storage test in `RulePiecePathology` off | 4 (byte at 3, 2, 1, word at 2) | 7 |
+| A2-23: `MayReadMemory` always false | 0 (the oracle does not see lending) | 2 |
+| A2-24: no `Write_SR` in `rte` | 0 (the generator does not run `rte`, A2-20) | 1 |
+| A2-24: no `Rte_PC` in `rte` | 0 | 2 |
+| A2-25: the piece naming off | 0 findings, 2 fixtures `skipped:unknown-input` | 2 |
+| A2-26: upper-bits check off, with the A2-22 fix reverted | 1 (the one that is not C); with the check, 4 | not asked |
+| A2-26: the text reads GBR/VBR as 0 while the run does not | 3 (`GBR advanced`, `VBR advanced`, `GBR from VBR`); the old oracle (both 0) cannot see a dropped value | not asked |
+
+### 8. Matrix (RelWithDebInfo, gcc 13.3, four cores shared with other agents)
+
+| Check | Result |
+|---|---|
+| whole `ctest` | 97 of 97 (`SaturnExplorerDecompilerFaultTests` failed twice under load average 15, a 0.1 s cancel deadline in `runner disable`, and passed alone in 26 s) |
+| `SaturnExplorerSlaFreshnessTests` | passed (`sh-2.sla`, `Sh2SpecData.h` regenerated and committed) |
+| `vendor.py` on a copy, pinned Ghidra `918d44e` | applies 0001 to 0034, 0037, 0038; the tree is identical to the committed one, `sh-2.sla` aside |
+| printed-C, 3,000 seeds | 3,060 functions, 0 findings |
+| printed-C, 10,000 seeds | 10,060 functions, 0 findings (second reading 24, skipped calls 864, `void-return` 905) |
+| generator, grammar 2, 3,000 seeds | all passed, 0 findings |
+| generator, 20,000 seeds | 4 failing seeds, the four of the other fixer (7134, 8306, 14812 grammar 2; 19409 grammar 1), 7 findings, nothing else |
+| gcc Debug ASan + UBSan + LSan (`detect_leaks=1`) | `Sh2DecompilerTests` (all), the printed-C run (default), `Sh2GeneratedTests` 150 seeds and `Sh2SemanticsTests` exit 0; no ASan or LSan report; UBSan lines only `address.hh:605` (3) and `slghpatexpress.cc:979` (5). Not run under the sanitizers this round (disk): the other four suites of the CI list; the build used the CI flags |
+
+### 9. Corpus
+
+`SE_GAME_HWRAM=hwram007.bin` and `hwram008.bin`, `SaturnExplorerSh2DecompilerTests`, `SE_GAME_OUT` against the same run on `979edd2`: 839 and 1,554 functions ok, every ledger count 0, **16 and 20 missing and
+said**. Text changes: **007: 0. 008: 1 function** (`06071912`, two places), the first A2-21 in real code: `uVar6 = (uint4)((uint8)uVar6 * 0x148315b6d >> 0x21);` is now
+`iVar5 = (int4)((uint8)uVar6 * 0x48315b6d >> 0x20); uVar6 = (uVar6 - iVar5 >> 1) + iVar5;`, and the first wraps for large `uVar6`. No `rte` handler, no `cmp/str` on a non-parameter, no stack insert of the
+shape changed text in either image (the earlier guard bug, section 2, changed nine functions of 008, all returned to their old text). Sample read: the divisions by `0x3c`, `7` and `0x1c000` are unchanged text.
+
+### 10. Not done
+
+- **A3-5** (`void-return`, 905 of 10,060 functions): still counted, not failed; `6053 2F46 80F3 60F6 000B 6103` belongs to it.
+- `x / 7 * 4` is not recovered as a division (the mask hides it); `ReturnCheck` does not list `Rte_PC` beside `Write_*` (an `rte` handler is withheld anyway).
+- The two skipped classes (`stack-piece`, `array-local`) are limits of the harness, not checked values; the engine's `stack0xfffffffe`/`_Stack_4` names are not declared in its own text (a printer defect, not area 2).
+- `rte` still cannot run in the generator (A2-20); `bsrf`, `trapa` likewise. A2-16 and A2-20 stay open P3s.
+- Merge: `patches/README.md` and `VENDOR.md` got two rows each after 0034 (0035 and 0036 will conflict trivially); `Sh2Decompiler.cpp` changed in `EntryStateUse` and `MayReadMemory` only; `Sh2EmulatorHooks.h` has one name added.
