@@ -5146,6 +5146,48 @@ void TestDomainPins(Sh2Decompiler& d)
     gTrackAlignment = tracking;
 }
 
+// A caller and a lent callee that changes a register the calling convention keeps (ledger A3-3, finding 1 of the external
+// review at f0684b9): the caller sets the register to 5, calls the leaf that sets it to 7, reads it, and returns it. The text must
+// not return the 5 (the oracle never checked the value, only that a return existed), and the oracle's own checks must pass with
+// the callee's change declared. Pinned for GBR, VBR and r8 (the caller saving and restoring r8 around the call).
+void TestCalleeClobberPins(Sh2Decompiler& d)
+{
+    struct Case { const char* name; const char* words; uint32_t end0, start1, end1; uint32_t clobbers1; };
+    static const Case kCases[] = {
+        { "GBR", "4F22 E005 401E B004 0009 0012 4F26 000B 0009 E107 411E 000B 0009", 0x12, 0x12, 0x1A, 1u << 17 },
+        { "VBR", "4F22 E005 402E B004 0009 0022 4F26 000B 0009 E107 412E 000B 0009", 0x12, 0x12, 0x1A, 1u << 18 },
+        { "r8",  "2F86 4F22 E805 B005 0009 6083 4F26 68F6 000B 0009 000B E807", 0x14, 0x14, 0x18, 1u << 8 },
+    };
+    for (const Case& c : kCases)
+    {
+        Subject s;
+        std::istringstream in(c.words);
+        std::string tok;
+        while (in >> tok) s.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+        s.codeWords = s.words.size();
+        s.v2 = true;
+        FnInfo f0, f1;
+        f0.layout.start = f0.layout.entry = kCode;
+        f0.layout.end = kCode + c.end0;
+        f0.intent = f1.intent = true;
+        f0.returns = true;
+        f0.clobbers = c.clobbers1 & ~(1u << 8) ? c.clobbers1 : 0;   // the r8 caller restores r8; GBR and VBR it leaves changed
+        f1.layout.start = f1.layout.entry = kCode + c.start1;
+        f1.layout.end = kCode + c.end1;
+        f1.clobbers = c.clobbers1;
+        s.fns = { f0, f1 };
+        const Report rep = EvaluateSubject(d, s, true);
+        const bool constant = rep.text.find("return 5;") != std::string::npos;
+        const bool unknown = rep.text.find("extraout_") != std::string::npos;
+        std::printf("pin 'callee changes %s': %zu finding(s), the caller returns the stale 5: %s, reads the callee's value: %s\n", c.name,
+                    rep.findings.size(), constant ? "yes" : "no", unknown ? "yes" : "no");
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(!constant);
+        CHECK(unknown);
+    }
+}
+
 void TestGenerated()
 {
     Sh2Decompiler d(gConfig);
@@ -5177,7 +5219,11 @@ void TestGenerated()
         return;
     }
     const long single = EnvNumber("SE_GENERATED_SEED", 0);
-    if (!single && !gMutate) RUN(TestDomainPins(d));
+    if (!single && !gMutate)
+    {
+        RUN(TestDomainPins(d));
+        RUN(TestCalleeClobberPins(d));
+    }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
     const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
     const long shrinkCount = EnvNumber("SE_GENERATED_SHRINK", 3);
