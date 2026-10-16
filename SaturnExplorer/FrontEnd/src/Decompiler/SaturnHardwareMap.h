@@ -166,6 +166,7 @@ enum class WidthRule : uint8_t
     KeyedByteWrite,   // a byte write to a watchdog register does nothing, except that it cancels a pending RSTCSR WOVF clear
     StrobeByte,       // a byte write to MINIT/SINIT sends no signal
     MirrorWrite,      // the CCR's read mirrors take no write
+    ReservedByteWrite,// a byte write to the low byte of IPRB or VCRD: the handler masks the store with 0xFF00 / 0x7F00, so nothing is stored (A5-30)
     // (e)
     AddressError,     // the SH-2 takes an address error
     // (f)
@@ -241,12 +242,23 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
 
 // The address an access of 'size' bytes at 'address' really reaches: a misaligned access is an
 // address error and is made at the address rounded down to its width (sh7095.inc MemRead and
-// MemWrite: A &= ~(sizeof(T) - 1)); the on-chip registers decode the address as given.
+// MemWrite: A &= ~(sizeof(T) - 1)). The on-chip registers get the unaligned address (case 7 passes
+// unmasked_A) and the two halves of the area treat it differently (A5-29): from 0xFFFFFF00 up the
+// handlers align it themselves (A &= 0xFE, A &= 0xFC), the same address; below it they switch on
+// A & 0xFF as given, so a word at 0xFFFFFE11 is the register at 0xFFFFFE11 (FTCSR).
 uint32_t AccessAddress(uint32_t address, uint32_t size);
 
+// The registers an access of 'size' bytes at 'address' really reaches (HardwareRegistersCovering of
+// AccessAddress, except below 0xFFFFFF00 on-chip, where a word at an odd address and a long write reach
+// the register at the access's own address only, and a long read reaches none: it returns 0). A5-29, A5-31.
+std::vector<const HardwareRegister*> HardwareRegistersReached(uint32_t address, uint32_t size, bool write);
+
 // What a write of this value does that the line does not say, for the registers whose effect
-// depends on it: a write to SH2_CCR with CP (bit 4) set purges the whole cache, a write to
-// VDP1_PTMR with bit 0 set starts drawing. 'valueKnown' false when the value is not a constant.
+// depends on it (or on nothing but the write): a write to SH2_CCR with CP (bit 4) set purges the whole
+// cache, a write to VDP1_PTMR with bit 0 set starts drawing, any write to VDP1_ENDR ends it, SCU_DnEN
+// with bits 8 and 0 set starts that level's DMA (start factor 7), SCU_AIACK bit 0 acknowledges the A-bus
+// interrupt, SCU_DSTP bit 0 stops every level, SCU_T1MD with bit 0 clear resets timer 0 (A5-32).
+// 'valueKnown' false when the value is not a constant.
 // One text per effect, each a note. Empty when the write has none.
 std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valueKnown, uint32_t value);
 

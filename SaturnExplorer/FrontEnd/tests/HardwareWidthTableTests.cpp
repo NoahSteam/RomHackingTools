@@ -268,11 +268,14 @@ int main(int argc, char** argv)
     {
         CHECK(p.width == 1 || p.width == 2 || p.width == 4);
         CHECK(static_cast<int>(p.cell.rule) <= static_cast<int>(WidthRule::Undecoded));
-        // The same cell asked again, by address, is the same cell (CoveredRegisters / NarrowAccessEffects use the address).
+        // The same cell asked again, by address, is the same cell (CoveredRegisters / NarrowAccessEffects use the address). A long below
+        // 0xFFFFFF00 on-chip is the exception (A5-31): Mednafen makes it on the register at its own address only, so the cells of the
+        // registers under its other bytes are asked about, but the access does not reach them (and a long read reaches none).
         const std::vector<CoveredRegister> c = CoveredRegisters(p.access, p.width, p.write);
         bool found = false;
         for (const CoveredRegister& x : c) found |= x.reg == p.reg && x.cell.rule == p.cell.rule;
-        CHECK(found || p.cell.rule == WidthRule::AccessKind);
+        const bool longBelow = p.width == 4 && p.reg->address >= 0xFFFFFE00u && p.reg->address < 0xFFFFFF00u;
+        CHECK(found || p.cell.rule == WidthRule::AccessKind || longBelow);
     }
     // A cell that is not (a) or "kind" says something: the generator has a caution for it.
     for (const WidthProbe& p : table)
@@ -280,8 +283,10 @@ int main(int argc, char** argv)
         const char cat = WidthCategory(p.cell.rule);
         if (cat == 'a' || cat == '-' || cat == 'v' || cat == '?') continue;
         bool said = false;
+        const bool longError = p.cell.rule == WidthRule::AddressError && p.width == 4;   // one caution for the whole access, on the register it reaches
         for (const NarrowEffect& e : NarrowAccessEffects(p.access, p.width, p.write))
-            said |= e.reg == p.reg && e.caution && (e.text.find(p.reg->name) != std::string::npos || std::string(p.reg->name).compare(0, 12, "SMPC_UNUSED_") == 0);
+            said |= longError ? e.caution && e.text.find("address error") != std::string::npos
+                              : e.reg == p.reg && e.caution && (e.text.find(p.reg->name) != std::string::npos || std::string(p.reg->name).compare(0, 12, "SMPC_UNUSED_") == 0);
         CHECK(said);
     }
 
@@ -367,6 +372,8 @@ int main(int argc, char** argv)
             hhc::CheckBlocks(cases, st, pr);
             hhc::CheckBus(cases, table, st, pr);
             hhc::CheckOnChipAddresses(cases, st, pr);
+            hhc::CheckOnChipMisaligned(cases, excused, st, pr);
+            hhc::CheckOnChipValueRules(cases, pr);
             if (!pr.list.empty())
             {
                 std::printf("the width table disagrees with Mednafen's handlers (%zu):\n", pr.list.size());
@@ -376,9 +383,10 @@ int main(int argc, char** argv)
                 gFailures += int(pr.list.size());
             }
             std::printf("handler check: %zu on-chip cells (%zu reach a case, %zu do not; %zu address errors), %zu SCU cells, %zu block registers, "
-                        "%zu unnamed-address probes, %zu bus probes, %zu effect cells, %zu undecoded registers\n",
+                        "%zu unnamed-address probes, %zu bus probes, %zu effect cells, %zu undecoded registers, %zu misaligned on-chip probes, "
+                        "%zu write-effect registers\n",
                         st.onchipCells, st.reached, st.unreached, st.errors, st.scuCells, st.blockRegs, st.unnamedAddresses, st.busFacts, st.effects,
-                        st.undecodedRegs);
+                        st.undecodedRegs, st.misaligned, st.writeEffectRegs);
         }
     }
 

@@ -1353,36 +1353,114 @@ std::string RegisterNames(const std::vector<const HardwareRegister*>& regs)
     return names;
 }
 
+// The constants a pointer varnode can hold when every path to it is a copy or a merge: the values the printed code names as
+// `&REG` (a pointer merged from register literals, `puVar2 = &VDP2_TVSTAT; if (c) puVar2 = &VDP2_VCNT;`). 'others' is set when
+// some path is not a constant (a parameter, a value loaded or computed): the pointer may hold something else as well.
+// 'bases' are the constants an indexed pointer starts from (`(&SCU_D0EN)[param_1 * 8]`, a PTRADD or an INT_ADD of an address and
+// something the analysis does not know): the access is at the base plus an amount, not at the base, so it is said only for the
+// index 0.
+struct PointerValues
+{
+    std::set<uint32_t> constants;
+    std::set<uint32_t> bases;
+    bool others = false;
+};
+
+PointerValues ConstantsOf(const ghidra::Varnode* start)
+{
+    PointerValues out;
+    std::set<std::pair<const ghidra::Varnode*, bool>> seen;   // (varnode, reached through an index)
+    std::vector<std::pair<const ghidra::Varnode*, bool>> todo{ std::make_pair(start, false) };
+    while (!todo.empty() && seen.size() < 4096)
+    {
+        const std::pair<const ghidra::Varnode*, bool> item = todo.back();
+        todo.pop_back();
+        if (!seen.insert(item).second) continue;
+        const ghidra::Varnode* vn = item.first;
+        const bool indexed = item.second;
+        if (vn->isConstant())
+        {
+            if (indexed) out.bases.insert(static_cast<uint32_t>(vn->getOffset()));
+            else out.constants.insert(static_cast<uint32_t>(vn->getOffset()));
+            continue;
+        }
+        const ghidra::PcodeOp* d = vn->isWritten() ? vn->getDef() : nullptr;
+        if (!d)
+        {
+            if (!indexed) out.others = true;   // (an addend nothing is known about is the index: it makes the pointer indexed, not unknown)
+            continue;
+        }
+        switch (d->code())
+        {
+        case ghidra::CPUI_COPY:
+        case ghidra::CPUI_CAST:
+            todo.push_back(std::make_pair(d->getIn(0), indexed));
+            break;
+        case ghidra::CPUI_MULTIEQUAL:
+            for (int i = 0; i < d->numInput(); ++i) todo.push_back(std::make_pair(d->getIn(i), indexed));
+            break;
+        case ghidra::CPUI_PTRSUB:   // the address of a global: PTRSUB(0, address)
+            if (d->getIn(0)->isConstant() && d->getIn(1)->isConstant())
+            {
+                const uint32_t v = static_cast<uint32_t>(d->getIn(0)->getOffset() + d->getIn(1)->getOffset());
+                if (indexed) out.bases.insert(v);
+                else out.constants.insert(v);
+            }
+            else if (!indexed) out.others = true;
+            break;
+        case ghidra::CPUI_PTRADD:   // base + index * size: the base is where the pointer starts
+            todo.push_back(std::make_pair(d->getIn(0), true));
+            break;
+        case ghidra::CPUI_INT_ADD:   // a sum: either addend may be the base (a constant that is a number, `param_1 - 1`, is dropped by PrintsAsRegister)
+            todo.push_back(std::make_pair(d->getIn(0), true));
+            todo.push_back(std::make_pair(d->getIn(1), true));
+            break;
+        default:
+            if (!indexed) out.others = true;
+            break;
+        }
+    }
+    if (!todo.empty()) out.others = true;
+    return out;
+}
+
+// Whether the printed code names a register at this address (`&VDP2_TVSTAT`): the engine names one only at the address its symbol is
+// at -- the cached and cache-through partitions for the bus, the one on-chip address -- and prints any other as a number (a sentinel
+// -1, an offset, an address in an unnamed part of a register area), which is not a claim that the pointer reaches a register.
+bool PrintsAsRegister(uint32_t address)
+{
+    const HardwareRegister* r = FindHardwareRegister(address);
+    uint32_t canonical = 0;
+    if (!r || !HardwareAlias(address, canonical) || canonical != r->address) return false;
+    return ClassifyPartition(canonical) == Sh2Partition::OnChip ? address == canonical
+                                                                : (address >> 29) <= 1 && (address & 0x1FFFFFFFu) == canonical;
+}
+
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
-// register area is a volatile read or write by now (the symbols and ranges are volatile), so
-// those ops are the accesses, at the address and width the code used. A read through a pointer
-// that never became a constant stays a plain load (patches/0009) and says nothing here: which
-// register it reaches depends on run time.
+// register area at a constant address is a volatile read or write by now (the symbols and ranges
+// are volatile), so those ops are the accesses, at the address and width the code used. A read or
+// write through a pointer that did not become one constant stays a plain load or store (patches/0009);
+// when the engine proved the pointer to be one of several constants, and some are register addresses
+// (the output prints `&REG`), each of those is said as the direct access would be, under "if the pointer holds ..."
+// (A5-28): the cache caution, the read effects, the width cautions, the write effects.
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::set<std::pair<uint32_t, std::string>> seen;
     std::vector<HardwareNote> out;
-    auto note = [&](uint32_t at, std::string text, bool caution) {
+    auto noteRaw = [&](uint32_t at, std::string text, bool caution) {
         if (seen.insert(std::make_pair(at, text)).second) out.push_back(HardwareNote{ at, std::move(text), caution });
     };
     std::set<const HardwareRegister*> written;
     std::vector<std::pair<uint32_t, const HardwareRegister*>> splitReads;
-    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
-    {
-        const ghidra::PcodeOp* o = *it;
-        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
-        const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
-        const bool read = u && u->getType() == ghidra::UserPcodeOp::volatile_read;
-        const bool write = u && u->getType() == ghidra::UserPcodeOp::volatile_write;
-        if (!read && !write) continue;
-        const ghidra::Varnode* value = read ? o->getOut() : (o->numInput() > 2 ? o->getIn(2) : nullptr);
-        if (!value) continue;
-        const uint32_t at = static_cast<uint32_t>(o->getIn(1)->getOffset());
-        const uint32_t size = static_cast<uint32_t>(value->getSize());
-        const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
-        // A misaligned access is an address error and is made at the aligned address (A5-25): the registers are that access's.
+    // One access: of 'size' bytes at the constant address 'at', made by the instruction 'insn'; 'prefix' is what a note starts
+    // with when the address is one the pointer may hold (empty for a direct access, whose address is certain).
+    auto account = [&](uint32_t insn, uint32_t at, uint32_t size, bool write, const ghidra::Varnode* value, const std::string& prefix) {
+        const bool read = !write;
+        auto note = [&](uint32_t where, std::string text, bool caution) { noteRaw(where, prefix + text, caution); };
+        // A misaligned access is an address error and is made at the aligned address (A5-25), on-chip too from 0xFFFFFF00 up; below
+        // it the handlers decode the address as given (A5-29): the registers are that access's.
         const uint32_t reach = AccessAddress(at, size);
-        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(reach, size);
+        const std::vector<const HardwareRegister*> regs = HardwareRegistersReached(reach, size, write);
         // The width table's cell for each register the access reaches: whether its own read or
         // write effect happens at this width (a word read of the byte beside FTCSR does not read it).
         const std::vector<CoveredRegister> covered = CoveredRegisters(at, size, write);
@@ -1395,7 +1473,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         bool ignored = false;
         if (write)
             for (const std::string& t : WriteEffects(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset())))
-                note(insn, t, false);   // an effect that depends on the value: the cache purge, the VDP1 start
+                note(insn, t, false);   // an effect that depends on the value: the cache purge, the VDP1 start, the SCU's DMA
         if (write && KeyedWrite(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset()), text, ignored))
             note(insn, text, ignored);   // the watchdog's write ports: the key picks the register
         else if (!regs.empty())
@@ -1413,8 +1491,11 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 // (a flag that a write sets to 1 is no surprise when the value written is 1)
                 if (write && reg->noteWrite && effectHappens(reg) && !(value->isConstant() && (value->getOffset() & 0xFFu) == 1))
                     note(insn, std::string(reg->name) + ": " + reg->onWrite, false);
-                if (write) written.insert(reg);
-                if (read && reg->split && effectHappens(reg)) splitReads.emplace_back(insn, reg);
+                if (prefix.empty())
+                {
+                    if (write) written.insert(reg);
+                    if (read && reg->split && effectHappens(reg)) splitReads.emplace_back(insn, reg);
+                }
             }
         }
         // What the access's width does to the registers it reaches that the line does not say: a
@@ -1422,7 +1503,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         // on-chip one, a word at an SMPC register, the register the 32-bit bus reads as well. The
         // width table decides, per register, and writes the cautions (NarrowAccessEffects).
         for (const NarrowEffect& e : NarrowAccessEffects(at, size, write)) note(insn, e.text, e.caution);
-        if (regs.empty()) continue;   // an unnamed register: nothing to add to the address shown
+        if (regs.empty()) return;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
         // shown as an address.
@@ -1433,11 +1514,71 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                                : (reach >> 29) <= 1 && (reach & 0x1FFFFFFFu) == canonical;
         // (a misaligned access says where it lands in its own caution)
         if (!named && reach == at) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
+    };
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        if (o->code() == ghidra::CPUI_LOAD || o->code() == ghidra::CPUI_STORE)
+        {
+            // A plain load or store through a pointer that is not one constant. If every value the pointer can hold is a constant
+            // (or some are, and the rest are not known), the register addresses among them are accesses to those registers.
+            const ghidra::Varnode* ptr = o->getIn(1);
+            if (ptr->isConstant()) continue;
+            const bool write = o->code() == ghidra::CPUI_STORE;
+            const ghidra::Varnode* value = write ? o->getIn(2) : o->getOut();
+            if (!value) continue;
+            const PointerValues pv = ConstantsOf(ptr);
+            const uint32_t size = static_cast<uint32_t>(value->getSize());
+            // (a pointer that starts at a register address and is indexed is said for the register itself, as "if the index is 0")
+            std::vector<std::pair<uint32_t, bool>> registers;   // (address, reached through an index)
+            for (uint32_t c : pv.constants)
+                if (PrintsAsRegister(c)) registers.emplace_back(c, false);
+            for (uint32_t c : pv.bases)
+                if (PrintsAsRegister(c) && !pv.constants.count(c)) registers.emplace_back(c, true);
+            if (registers.empty()) continue;
+            const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
+            const bool certain = pv.constants.size() == 1 && pv.bases.empty() && !pv.others;
+            for (const std::pair<uint32_t, bool>& rc : registers)
+            {
+                const HardwareRegister* r = FindHardwareRegister(AccessAddress(rc.first, size));
+                const std::string name = r ? std::string(" (") + r->name + ")" : std::string();
+                std::string prefix;
+                if (rc.second)
+                    prefix = "if the index is 0 (the pointer is based at " + Hex8(rc.first) + name + "): ";
+                else if (!certain)
+                    prefix = "if the pointer holds " + Hex8(rc.first) + name + (pv.others ? " (it may hold other values too)" : "") + ": ";
+                account(insn, rc.first, size, write, value, prefix);
+            }
+            continue;
+        }
+        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
+        const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+        const bool read = u && u->getType() == ghidra::UserPcodeOp::volatile_read;
+        const bool write = u && u->getType() == ghidra::UserPcodeOp::volatile_write;
+        if (!read && !write) continue;
+        const ghidra::Varnode* value = read ? o->getOut() : (o->numInput() > 2 ? o->getIn(2) : nullptr);
+        if (!value) continue;
+        account(canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset())), static_cast<uint32_t>(o->getIn(1)->getOffset()),
+                static_cast<uint32_t>(value->getSize()), write, value, std::string());
+    }
+    // A store to the BIOS ROM (0x00000000-0x000FFFFF through either bus partition) that the engine folded into ordinary memory: the
+    // ROM drops the write (ss.c BusRW_DB_CS0_u8/u16/u32_W1: the ROM branch stores nothing), but a later read of the address in this
+    // function is shown as the value written (A5-33). The store is no volatile op to hang a note on; the engine's record of how it
+    // ended (patch 0017) is the only trace, so the caution is made from it.
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+    {
+        if (!rec.store || rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != fd.getArch()->getDefaultCodeSpace()) continue;
+        const uint32_t a = static_cast<uint32_t>(rec.addr.getOffset());
+        if ((a >> 29) > 1 || (a & 0x07FFFFFFu) > 0x000FFFFFu) continue;
+        noteRaw(canonicalOf(static_cast<uint32_t>(rec.pc.getOffset())),
+                "a write to the BIOS ROM at " + Hex8(a) + " does nothing (the ROM takes no write), but the decompiler treats the address as ordinary "
+                "memory: a later read of it in this function is shown as the value written, which the ROM does not hold",
+                true);
     }
     // A register read back in a function that also writes it, when the read returns something
     // else: say what.
     for (const auto& r : splitReads)
-        if (written.count(r.second)) note(r.first, std::string(r.second->name) + ": " + r.second->split, false);
+        if (written.count(r.second)) noteRaw(r.first, std::string(r.second->name) + ": " + r.second->split, false);
     std::stable_sort(out.begin(), out.end(), [](const HardwareNote& x, const HardwareNote& y) { return x.address < y.address; });
     return out;
 }
