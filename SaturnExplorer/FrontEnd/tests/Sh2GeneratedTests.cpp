@@ -273,6 +273,31 @@ const OpDef kRegOps[] = {
     { "mov", 0xE000, 'A', 4 },
 };
 const size_t kRegOpCount = sizeof kRegOps / sizeof kRegOps[0];
+
+// The state registers an op of the table changes for good, and reads, as Func::clobbers / Func::reads bits (17 gbr, 18 vbr,
+// 19 mach, 20 macl). The multiplies write MACL (the double-length ones MACH too), lds / ldc load MACH, MACL, GBR and VBR from
+// a general register, clrmac clears both; stc and sts (in the grammars that let them in) read them. A function that
+// contains one of these changes (or reads) the register as surely as one the conventions grammar made to: the self-checks
+// and the checks that ask what a callee changes must be told (the merge of area 2's alphabet and area 3's conventions).
+uint32_t StateWritten(const OpDef& op)
+{
+    static const struct { const char* name; uint32_t bits; } kWrites[] = {
+        { "mul.l", 1u << 20 },  { "muls.w", 1u << 20 }, { "mulu.w", 1u << 20 }, { "dmuls.l", 3u << 19 }, { "dmulu.l", 3u << 19 },
+        { "lds mach", 1u << 19 }, { "lds macl", 1u << 20 }, { "clrmac", 3u << 19 }, { "ldc gbr", 1u << 17 }, { "ldc vbr", 1u << 18 },
+    };
+    for (const auto& w : kWrites)
+        if (std::strcmp(op.name, w.name) == 0) return w.bits;
+    return 0;
+}
+uint32_t StateRead(const OpDef& op)
+{
+    static const struct { const char* name; uint32_t bits; } kReads[] = {
+        { "stc gbr", 1u << 17 }, { "stc vbr", 1u << 18 }, { "sts mach", 1u << 19 }, { "sts macl", 1u << 20 },
+    };
+    for (const auto& r : kReads)
+        if (std::strcmp(op.name, r.name) == 0) return r.bits;
+    return 0;
+}
 bool gNarrowAlphabet = false;   // SE_GENERATED_ALPHABET=narrow: only the original eleven ALU ops
 bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in the first two grammars too (ledger A2-16, A3-5)
 
@@ -390,6 +415,10 @@ struct Gen
     // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
     // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
     Rng wideRng;
+    // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
+    // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
+    uint32_t wideClobbers = 0;
+    uint32_t wideReads = 0;
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -543,6 +572,8 @@ struct Gen
             op = cand;
         }
         if (!op) return false;
+        wideClobbers |= StateWritten(*op);
+        wideReads |= StateRead(*op);
         switch (op->form)
         {
         case 'M': it.words = { uint16_t(op->base | n << 8 | m << 4) }; break;
@@ -649,7 +680,11 @@ struct Gen
     {
         Item it;
         it.type = Item::Mem;
-        if (wideRng.Chance(10) && MakeGbrMem(single, it)) return it;
+        if (wideRng.Chance(10) && MakeGbrMem(single, it))
+        {
+            wideReads |= 1u << 17;   // the address of each of them is GBR's value, read on purpose
+            return it;
+        }
         int base = 4 + static_cast<int>(rng.Below(4));
         bool write = rng.Chance(45);
         if (disc)
@@ -1094,6 +1129,7 @@ struct Gen
     {
         Func f;
         f.v2 = true;
+        wideClobbers = wideReads = 0;
         f.end = static_cast<Func::End>(ends[idx]);
         const bool falls = f.end == Func::Fall;
         if (f.end == Func::TailJump) f.tailTo = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
@@ -1342,6 +1378,11 @@ struct Gen
             f.tailLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
         }
+        // What the wide alphabet made it do to the state registers (see StateWritten): it changes them for good
+        // like a convention of the grammar's, and so do the functions that call or run on into it.
+        f.clobbers |= wideClobbers;
+        f.effClobbers |= wideClobbers;
+        f.reads |= wideReads;
         disc = false;
         return f;
     }
@@ -2644,7 +2685,10 @@ public:
         // GBR, VBR, MACH and MACL start at values of their own too (distinct per register and per mode), so a
         // function that sets one to zero, or to what it already was, shows.
         for (int n = 0; n < 4; ++n) out.initState[n] = (0x0A000000u + 0x01000000u * n) | uint32_t(rs.mode + 1) << 8 | 0x5Au;
-        out.initState[0] = kScratchGbr;   // GBR on entry is the base of the @(disp,GBR) and @(r0,GBR) accesses (merge of the area 2 and area 3 grammars)
+        // ...but GBR is also the base of the @(disp,GBR) and @(r0,GBR) accesses (area 2's alphabet), so it points into scratch RAM,
+        // at an address of its own per mode: distinct as the others are (a function that loads it with what it already was shows),
+        // aligned, and clear of the other scratch areas.
+        out.initState[0] = kScratchGbr + 0x20u * uint32_t(rs.mode & 7);
         if (rs.perturbReg >= 0 && rs.perturbReg < 16)
         {
             out.init[rs.perturbReg] = rs.perturbValue;

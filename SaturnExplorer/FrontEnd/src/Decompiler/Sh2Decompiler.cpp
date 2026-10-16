@@ -891,6 +891,60 @@ private:
     int64_t mEscapeLow = 0;
 };
 
+// How the entry value of SR is used, for WithholdReason. `ok`: every use is one that says nothing about the value -- a copy, a
+// return, a store, or a write back into SR (Write_SR, patch 0034) -- or an or with a constant (the whole value, with bits set)
+// or an and with a constant (the CPU's own mask on a load of SR, or a field of it) whose result is used so; but the field
+// only goes into a Write_SR, never out as a value (a T flag selected with `and #1` and returned is the caller's flag).
+// `masked`: some use went through an and or an or. `written`: such a value reaches a Write_SR. A function that raises the
+// interrupt mask and gives it back (`stc sr,r1 ; mov r1,r0 ; or #0xF0,r0 ; ldc r0,sr ; ... ; ldc r1,sr`, with the
+// compiler's own copy of SR) is such: the SR it reads it also writes, so no caller passes it. One that only masks it, or
+// compares it, is computed from the caller's flags.
+struct SrUse
+{
+    bool ok = true, masked = false, written = false;
+};
+
+SrUse SrEntryUse(const ghidra::Architecture& arch, const ghidra::Varnode* vn, int depth, bool field = false)
+{
+    SrUse r;
+    if (depth > 8)
+    {
+        r.ok = false;
+        return r;
+    }
+    for (auto use = vn->beginDescend(); use != vn->endDescend(); ++use)
+    {
+        const ghidra::PcodeOp* op = *use;
+        switch (op->code())
+        {
+        case ghidra::CPUI_COPY:
+        case ghidra::CPUI_RETURN: r.ok = r.ok && !field; break;
+        case ghidra::CPUI_STORE: r.ok = r.ok && !field && op->getIn(2) == vn; break;
+        case ghidra::CPUI_CALLOTHER:
+            if (arch.userops.getOp(static_cast<ghidra::uint4>(op->getIn(0)->getOffset()))->getName() == "Write_SR") r.written = true;
+            else r.ok = false;
+            break;
+        case ghidra::CPUI_INT_AND:
+        case ghidra::CPUI_INT_OR:
+        {
+            const ghidra::Varnode* other = op->getIn(1 - op->getSlot(vn));
+            if (!other->isConstant() || op->getOut() == nullptr)
+            {
+                r.ok = false;
+                break;
+            }
+            const SrUse sub = SrEntryUse(arch, op->getOut(), depth + 1, field || op->code() == ghidra::CPUI_INT_AND);
+            r.ok = r.ok && sub.ok;
+            r.masked = true;
+            r.written = r.written || sub.written;
+            break;
+        }
+        default: r.ok = false; break;
+        }
+    }
+    return r;
+}
+
 // Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent
 // signature is locked: the caller's call shows exactly those arguments and that return, and
 // nothing later revisits it. So it is lent only when the recovery saw everything that decides it.
@@ -971,14 +1025,8 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
             // describes wrongly. Anything computed from it (the T flag: movt, bt, addc, ...) is an input.
             if (reg == "sr" && vn->getSize() == 4)
             {
-                bool wholeValue = true;
-                for (auto use = vn->beginDescend(); use != vn->endDescend(); ++use)
-                {
-                    const ghidra::PcodeOp* op = *use;
-                    wholeValue = wholeValue && (op->code() == ghidra::CPUI_COPY || op->code() == ghidra::CPUI_RETURN ||
-                                                (op->code() == ghidra::CPUI_STORE && op->getIn(2) == vn));
-                }
-                if (wholeValue) continue;
+                const SrUse use = SrEntryUse(*fd.getArch(), vn, 0);
+                if (use.ok && (!use.masked || use.written)) continue;
             }
             return "it reads " + (reg.empty() ? std::string("a register") : reg) + " on entry, which no signature passes";
         }
