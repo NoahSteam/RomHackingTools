@@ -77,10 +77,16 @@ struct CallEffects
     uint32_t outOrigins = origin::kAll;      // where the registers it does not preserve can come from
     uint32_t leaks = origin::kAll;           // where the values it stores to memory it does not track come from
     uint32_t frameValues = origin::kAll;     // ...and the values it may write at or above its entry r15
+    // r15 at every return minus r15 on entry, when it is the same constant at all of them: 0 when r15 is
+    // preserved, else the bytes the function leaves on the stack (negative) or takes off its caller's
+    // (positive). kSpUnknown when it differs between returns or is not a constant: a function that cannot
+    // say is not lent a signature (WithholdReason), and a caller's analysis takes r15 to be anything.
+    static constexpr int32_t kSpUnknown = INT32_MIN;
+    int32_t spDelta = kSpUnknown;
     bool operator==(const CallEffects& o) const
     {
         return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins &&
-               leaks == o.leaks && frameValues == o.frameValues;
+               leaks == o.leaks && frameValues == o.frameValues && spDelta == o.spDelta;
     }
 };
 

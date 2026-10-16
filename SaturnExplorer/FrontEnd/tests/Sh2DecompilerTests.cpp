@@ -1159,7 +1159,9 @@ void TestHardwareVolatility()
     const std::vector<uint16_t> macPoll = { 0xD705, 0xE003, 0x2702, 0x6072, 0xC801, 0x8BFC, 0xD103, 0xD204 };
     auto macAfterPoll = [&](uint32_t base, uint16_t mac, uint32_t first, uint32_t second) {
         std::vector<uint16_t> code = macPoll;
-        for (uint16_t w : { mac, uint16_t(0x001A), uint16_t(0x000B), uint16_t(0x0009) }) code.push_back(w);
+        // clrmac, not sts macl,r0: the accumulator is the caller's otherwise, an input no signature passes
+        // (A3-5), and these fixtures are about the access removed with the endless loop.
+        for (uint16_t w : { mac, uint16_t(0x0028), uint16_t(0x000B), uint16_t(0x0009) }) code.push_back(w);
         for (uint32_t w : { 0x26002180u, first, second })
         {
             code.push_back(uint16_t(w >> 16));
@@ -3291,7 +3293,10 @@ void TestGameLending()
         int lentCallees = 0;         // callees whose signature it was lent
         int keepingCallees = 0;      // ...of which keep some of r4-r7
         bool extraout = false;       // the text has a call's r4-r7 as extraout_rN
+        int changingCallees = 0;     // ...of which change r8-r14, GBR or VBR, which the model keeps (A3-3)
+        bool extraoutKept = false;   // the text has a call's r8-r14, GBR or VBR as extraout_
     };
+    constexpr uint32_t kModelKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);   // r8-r14, GBR, VBR
     auto pass = [&](bool lendEffects, const char* label) {
         Sh2Decompiler::SetLendEffectsForTests(lendEffects);
         std::vector<Row> rows(entries.size());
@@ -3329,7 +3334,10 @@ void TestGameLending()
                 if (l == learned.end()) continue;
                 ++row.lentCallees;
                 if (l->second.effects.preserved & 0xF0u) ++row.keepingCallees;
+                if ((l->second.effects.preserved & kModelKept) != kModelKept) ++row.changingCallees;
             }
+            for (const char* name : { "r8", "r9", "r10", "r11", "r12", "r13", "r14", "gbr", "vbr" })
+                if (row.text.find(std::string("extraout_") + name) != std::string::npos) row.extraoutKept = true;
             for (int reg = 4; reg < 8; ++reg)
                 if (row.text.find("extraout_r" + std::to_string(reg)) != std::string::npos) row.extraout = true;
             if (row.known) learned[entries[i]] = r.prototype;
@@ -3381,6 +3389,39 @@ void TestGameLending()
     };
     summarize(before, "before");
     summarize(after, "after");
+    // A3-3: the registers the model keeps across a call, changed by a lent function. What each caller of one
+    // does with it: reads it as the callee's value (extraout_), or is withheld, never lent on the old value.
+    {
+        int changers = 0, changersChangingSp = 0, callers = 0, callersLent = 0, callersExtraout = 0, callersExtraoutLent = 0;
+        for (const Row& r : after)
+        {
+            changers += r.known && (r.preserved & kModelKept) != kModelKept;
+            changersChangingSp += r.known && !((r.preserved >> 15) & 1u);
+            if (r.changingCallees == 0) continue;
+            ++callers;
+            callersLent += r.known;
+            callersExtraout += r.extraoutKept;
+            callersExtraoutLent += r.extraoutKept && r.known;
+        }
+        std::printf("  [after] lent functions that change r8-r14, GBR or VBR: %d (that move r15: %d); %d functions were lent one: %d lent, "
+                    "%d print their register as extraout_ (%d of those lent)\n",
+                    changers, changersChangingSp, callers, callersLent, callersExtraout, callersExtraoutLent);
+        CHECK(callersExtraoutLent == 0);   // a lent caller never reads such a register after the call: it is withheld on it
+    }
+    // Why the signatures that are not lent are not, in the run with the effects lent: the reason with
+    // the callee's address taken out, so the same reason of two functions counts once.
+    {
+        std::map<std::string, int> reasons;
+        for (const Row& r : after)
+        {
+            if (!r.ok || r.known) continue;
+            std::string why = r.withheld;
+            for (size_t at = why.find("0x"); at != std::string::npos; at = why.find("0x", at + 1))
+                if (at + 10 <= why.size()) why.replace(at, 10, "0x........");
+            ++reasons[why];
+        }
+        for (const auto& kv : reasons) std::printf("    withheld %5d  %s\n", kv.second, kv.first.c_str());
+    }
     int textDiffers = 0, gainedSignature = 0, lostSignature = 0, moreParams = 0, fewerParams = 0, lessExtraout = 0, moreExtraout = 0;
     for (size_t i = 0; i < entries.size(); ++i)
     {
@@ -3971,7 +4012,7 @@ void TestFlowReachedBody()
     auto chain = [&](uint32_t base, std::initializer_list<uint16_t> f2) {
         Place(hw, base, { 0x2FC6,     // mov.l r12,@-r15
                           0x0C2A,     // sts pr,r12
-                          0x2426,     // mov.l r2,@-r4
+                          0x2456,     // mov.l r5,@-r4   (r5, a parameter: an r2 would be an input no signature passes, A3-5)
                           0xD302,     // mov.l @(pool),r3   -> F1
                           0x4C2A,     // lds r12,pr
                           0x6CF6,     // mov.l @r15+,r12
@@ -4438,7 +4479,7 @@ void TestPrototypeEligibility()
     // (k) A stack address stored into an indexed local: the stack, not memory let out.
     const uint32_t indexedLocal = 0x06012900u;
     Place(hw, indexedLocal, { 0x61F3,      // mov r15,r1
-                              0x310C,      // add r0,r1
+                              0x314C,      // add r4,r1   (an unknown index; r0 would be an input no signature passes, A3-5)
                               0x62F3,      // mov r15,r2
                               0x2122,      // mov.l r2,@r1
                               0x000B,      // rts
@@ -5181,6 +5222,27 @@ private:
             SkipGroup(c);
             return Val();
         }
+        // An element of an array local (`axStack_c [0]`): the engine prints a local as an array when a
+        // pointer into it exists, so it is memory something else may write -- a read of it is unknown,
+        // as `*p` is.
+        if (c.pos < c.end && mTok[c.pos] == "[")
+        {
+            while (c.pos < c.end && mTok[c.pos] == "[")
+            {
+                int depth = 0;
+                while (c.pos < c.end)
+                {
+                    if (mTok[c.pos] == "[") ++depth;
+                    else if (mTok[c.pos] == "]" && --depth == 0)
+                    {
+                        ++c.pos;
+                        break;
+                    }
+                    ++c.pos;
+                }
+            }
+            return Val();
+        }
         if (t.compare(0, 6, "param_") == 0)
         {
             const size_t i = static_cast<size_t>(std::atoi(t.c_str() + 6));
@@ -5921,6 +5983,261 @@ void TestCallsAndTraps()
         CHECK(!(lp.callee.prototype.effects.preserved & (1u << 4)));
         CHECK(Has(lp.caller.Text(), "return extraout_r4;"));
         CHECK(!lp.caller.prototype.known);
+
+        // ---- A3-3 (round 3): a register the callee is proved to change is killed at the call ------------
+        // The default model keeps r8-r14, GBR and VBR across a call (patch 0026), so a lent callee that
+        // changes one of them -- which ReturnCheck shows by clearing its bit in CallEffects::preserved --
+        // used to be read as keeping it: the caller printed the value from before the call and was lent a
+        // signature on it. Lent, the proved change is killedbycall (LendEffects); the caller reads the
+        // callee's value (extraout_rN) and, as for r4-r7, is withheld on it.
+        for (int reg : { 8, 9, 14 })
+        {
+            const CallFixture g = { "r" + std::to_string(reg) + " set by the callee", base,
+                                    withCallee({ 0x4F22, uint16_t(0xE005 | (reg << 8)), 0xB00C, 0x0009, uint16_t(0x6003 | (reg << 4)), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, uint16_t(0xE007 | (reg << 8)) }) };
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && lg.callee.prototype.effects.preserved != 0);
+            CHECK(!((lg.callee.prototype.effects.preserved >> reg) & 1u));
+            CHECK(Has(lg.caller.Text(), ("return extraout_r" + std::to_string(reg) + ";").c_str()));
+            CHECK(!Has(lg.caller.Text(), "return 5;"));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, ("r" + std::to_string(reg)).c_str()));
+            // The same callee with its effects not lent (the hook): the model keeps the register, the caller
+            // states the value it set -- which the run shows wrong, so the oracle is not asked.
+            Sh2Decompiler::SetLendEffectsForTests(false);
+            auto snap = CallSnapshot(g, ++serial);
+            DecompileRequest q = Request(g.base);
+            q.prototypes.emplace_back(0x06009020u, lg.callee.prototype);
+            CHECK(Has(d.Decompile(snap, q).Text(), "return 5;"));
+            Sh2Decompiler::SetLendEffectsForTests(true);
+        }
+        // A callee that uses r8 and gives it back (saved and restored) keeps it, proved: lent kept.
+        {
+            const CallFixture g = { "r8 saved and restored by the callee", base,
+                                    withCallee({ 0x4F22, 0xE805, 0xB00C, 0x0009, 0x6083, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x2F86, 0xE807, 0x000B, 0x68F6 }) };   // mov.l r8,@-r15 ; mov #7,r8 ; rts ; mov.l @r15+,r8
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && ((lg.callee.prototype.effects.preserved >> 8) & 1u));
+            CHECK(Has(lg.caller.Text(), "return 5;") && !Has(lg.caller.Text(), "extraout"));
+            CHECK(lg.caller.prototype.known);
+        }
+        // GBR and VBR, loaded from the callee's second parameter.
+        for (int vbr = 0; vbr <= 1; ++vbr)
+        {
+            const CallFixture g = { vbr ? "VBR set by the callee" : "GBR set by the callee", base,
+                                    withCallee({ 0x4F22, uint16_t(vbr ? 0x442E : 0x441E), 0xB00C, 0x0009, uint16_t(vbr ? 0x0022 : 0x0012), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, uint16_t(vbr ? 0x452E : 0x451E) }) };
+            const Lent lg = lend(g);
+            const char* name = vbr ? "vbr" : "gbr";
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> (vbr ? 18 : 17)) & 1u));
+            CHECK(Has(lg.caller.Text(), (std::string("return extraout_") + name + ";").c_str()));
+            CHECK(!Has(lg.caller.Text(), "return param_1;"));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, name));
+        }
+        // The ledger's own b: `rts ; ldc r1,gbr`. The callee reads r1 and changes GBR; nothing in the callee observes
+        // GBR, so the engine drops the load and with it the read: no input is left to withhold on (A3-5 does not
+        // apply), and the change is the caller's to see.
+        {
+            const CallFixture g = { "GBR loaded from r1 by the callee", base,
+                                    withCallee({ 0x4F22, 0x441E, 0xB00C, 0x0009, 0x0012, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x411E }) };
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> 17) & 1u));
+            CHECK(Has(lg.caller.Text(), "return extraout_gbr;") && !Has(lg.caller.Text(), "return param_1;"));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "gbr"));
+        }
+        // MACH and MACL, which the model kills for every callee: set by a lent callee, they are its values.
+        for (int h = 0; h <= 1; ++h)
+        {
+            const CallFixture g = { h ? "MACH set by the callee" : "MACL set by the callee", base,
+                                    withCallee({ 0x4F22, uint16_t(h ? 0x440A : 0x441A), 0xB00C, 0x0009, uint16_t(h ? 0x000A : 0x001A), 0x4F26, 0x000B, 0x0009 },
+                                               { 0x000B, uint16_t(h ? 0x450A : 0x451A) }) };   // lds r5,mach / lds r5,macl
+            const Lent lg = lend(g);
+            const char* name = h ? "mach" : "macl";
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> (h ? 19 : 20)) & 1u));
+            CHECK(Has(lg.caller.Text(), (std::string("return extraout_") + name + ";").c_str()));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, name));
+        }
+        // r15: the callee leaves 4 bytes of its own on the stack (add #-4,r15 ; rts ; mov.l r5,@r15) and the
+        // caller pops them.
+        {
+            const CallFixture g = { "r15 lowered by the callee", base,
+                                    withCallee({ 0x0E2A, 0x2F46, 0xB00C, 0x0009, 0x60F6, 0x4E2A, 0x000B, 0x0009 },
+                                               { 0x7FFC, 0x000B, 0x2F52 }) };
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && !((lg.callee.prototype.effects.preserved >> 15) & 1u));
+            CHECK(lg.callee.prototype.effects.spDelta == -4);
+            // The caller pops what the callee left (its r5, the second argument): not its own pushed r4.
+            // The engine reads the slot below the caller's frame, where the callee's word is.
+            CHECK(!Has(lg.caller.Text(), "return param_1;"));
+            CHECK(Has(lg.caller.Text(), "xStack_8"));
+            // The caller itself ends 4 bytes lower than it began (it popped one of two pushes): lent so.
+            CHECK(lg.caller.prototype.known && lg.caller.prototype.effects.spDelta == -4);
+            Sh2Decompiler::SetLendEffectsForTests(false);
+            auto snap = CallSnapshot(g, ++serial);
+            DecompileRequest q = Request(g.base);
+            q.prototypes.emplace_back(0x06009020u, lg.callee.prototype);
+            CHECK(Has(d.Decompile(snap, q).Text(), "return param_1;"));   // the model's r15: the word the caller pushed
+            Sh2Decompiler::SetLendEffectsForTests(true);
+        }
+        // ...and a callee that moves r15 by an amount that depends on an argument cannot say where it leaves
+        // it: not lent, and so not its caller either.
+        {
+            const CallFixture g = { "r15 moved by an argument", base,
+                                    withCallee({ 0x0E2A, 0x2F46, 0xB00C, 0x0009, 0x60F6, 0x4E2A, 0x000B, 0x0009 },
+                                               { 0x3F5C, 0x000B, 0x0009 }) };   // add r5,r15 ; rts ; nop
+            auto snap = CallSnapshot(g, ++serial);
+            const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+            Print(g.name.c_str(), callee);
+            CHECK(!callee.prototype.known && Has(callee.prototypeWithheld, "r15"));
+            DecompileRequest q = Request(g.base);
+            q.prototypes.emplace_back(0x06009020u, callee.prototype);
+            const DecompileResult caller = d.Decompile(snap, q);
+            CHECK(!caller.prototype.known && Has(caller.prototypeWithheld, "not known"));
+        }
+
+        // ---- A3-5 (round 3): an input outside r4-r7 and the stack is not lent away --------------------------
+        // A callee that reads r0-r3, r8-r14, GBR, MACH, MACL or T before it writes it took the value from its
+        // caller, which no signature passes: the caller's setup of it is dead in the caller's text, and the
+        // callee was lent as if it took nothing (or, when the input alone made its return, as returning
+        // nothing: `rts ; sts macl,r0` printed `return;`). Such a callee is withheld, and so are its callers.
+        struct Input
+        {
+            const char* what;
+            std::vector<uint16_t> caller, callee;
+            const char* reg;
+        };
+        const std::vector<uint16_t> noSetup = { 0x4F22, 0x0009, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 };
+        const Input reads[] = {
+            { "r0", { 0x4F22, 0xE005, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x7001 }, "r0" },     // add #1,r0
+            { "macl", { 0x4F22, 0x441A, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x001A }, "macl" },   // sts macl,r0
+            { "mach", { 0x4F22, 0x440A, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x000A }, "mach" },   // sts mach,r0
+            { "r2", { 0x4F22, 0x6243, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x6023 }, "r2" },       // mov r2,r0
+            { "r3", { 0x4F22, 0x6343, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x6033 }, "r3" },       // mov r3,r0
+            { "T", { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0029 }, "sr" },       // movt r0 after sett
+            { "r8", { 0x4F22, 0x6843, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x6083 }, "r8" },       // mov r8,r0
+            { "r14 as a pointer", { 0x4F22, 0x6E43, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x60E2, 0x000B, 0x0009 }, "r14" },   // mov.l @r14,r0
+            { "GBR", { 0x4F22, 0x441E, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xC600, 0x000B, 0x0009 }, "gbr" },   // mov.l @(0,gbr),r0
+            // T branched on, no value of it in r0: only the input the engine keeps shows it
+            { "T branched on", { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 },
+              { 0x8902, 0xE001, 0x000B, 0x0009, 0xE002, 0x000B, 0x0009 }, "sr" },   // bt L ; mov #1,r0 ; rts ; nop ; L: mov #2,r0 ; rts ; nop
+            // the whole SR, but computed from: the interrupt mask a caller set up
+            { "SR masked", { 0x4F22, 0x0018, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x0002, 0xC9F0, 0x000B, 0x0009 }, "sr" },   // stc sr,r0 ; and #0xF0,r0 ; rts
+        };
+        for (const Input& in : reads)
+        {
+            const CallFixture g = { std::string(in.what) + " read by the callee", base, withCallee(in.caller, in.callee) };
+            const Lent lg = lend(g);
+            CHECK(!lg.callee.prototype.known);
+            CHECK(Has(lg.callee.prototypeWithheld, (std::string("reads ") + in.reg + " on entry").c_str()) ||
+                  Has(lg.callee.prototypeWithheld, (std::string("computed from ") + in.reg + " on entry").c_str()));
+            CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "whose signature is not known"));
+        }
+        // What stays lent: parameters in r4-r7, a flag written here and read here, a register saved and
+        // restored (above).
+        {
+            const CallFixture g = { "r4 and r5 read by the callee", base,
+                                    withCallee(noSetup, { 0x6043, 0x000B, 0x305C }) };   // mov r4,r0 ; rts ; add r5,r0
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && lg.callee.prototype.params.size() == 2);
+            const CallFixture t = { "T written and read by the callee", base,
+                                    withCallee(noSetup, { 0x2448, 0x000B, 0x0029 }) };   // tst r4,r4 ; rts ; movt r0
+            const Lent lt = lend(t);
+            CHECK(lt.callee.prototype.known && lt.callee.prototype.params.size() == 1);
+            // The status register returned whole is machine state, not an input (the idiom of an
+            // interrupt-mask helper): the compiler's `stc sr,r1 ; mov.l r1,@r14 ; mov.l @r14,r0` is lent as
+            // returning it, the engine keeps that return...
+            const CallFixture sr = { "SR returned whole by the callee", base,
+                                     withCallee(noSetup, { 0x2FE6, 0x7FFC, 0x6EF3, 0x0102, 0x2E12, 0x60E2, 0x7E04, 0x6FE3, 0x000B, 0x6EF6 }) };
+            const Lent lsr = lend(sr);
+            CHECK(lsr.callee.prototype.known && lsr.callee.prototype.ret.kind != TypeKind::Void);
+            CHECK(Has(lsr.callee.Text(), "in_sr") && lsr.caller.prototype.known);
+        }
+        // ...but the bare `rts ; stc sr,r0` is printed as returning nothing, like `sts macl,r0`: withheld.
+        {
+            const CallFixture sr = { "SR copied to r0 in rts's slot", base, withCallee(noSetup, { 0x000B, 0x0002 }) };
+            const Lent lsr = lend(sr);
+            CHECK(!lsr.callee.prototype.known && Has(lsr.callee.prototypeWithheld, "computed from sr on entry"));
+        }
+
+        // A caller whose callee's registers share one set of origins is not a function that returns them (the
+        // first form of the dropped-return rule withheld 23 corpus functions that save r8 and call): the callee
+        // reads r8 only to save it and scratches r1 with a copy, then sets r0.
+        {
+            const CallFixture g = { "void caller of a callee that scratches r1 from r8", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x2F86, 0x6183, 0xE805, 0xE003, 0x000B, 0x68F6 }) };   // push r8 ; mov r8,r1 ; mov #5,r8 ; mov #3,r0 ; rts ; pop r8
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && ((lg.callee.prototype.effects.preserved >> 8) & 1u));
+            CHECK(lg.caller.prototype.known && lg.caller.prototypeWithheld.empty());
+        }
+
+        // ---- A3-4 (round 3): the address of a returned structure, in r2 ----------------------------------------
+        // The SH ABI of both compilers passes it in r2, and the engine's calling convention has no input
+        // there: `mov r15,r2` is dead code, the local's address never reaches the call, and the call was
+        // taken to leave the local alone -- the read after it printed the value stored before (`return 5;`
+        // where the code returns 7). A call whose signature is not lent may read r2, so a frame address in
+        // it is a pointer into the frame as far as the engine's alias analysis is concerned (the host
+        // declares it before the actions, the engine's patch 0030); the local is then memory a call may
+        // write, and printed so. The callee here reads r2, so it is not lent (A3-5) and nor is the caller.
+        {
+            const CallFixture g = { "structure return through r2", base,
+                                    { 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xB009, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009,
+                                      0x0009, 0x0009, 0x0009, 0x0009, 0xE107, 0x000B, 0x2212 } };
+            const Lent lg = lend(g);   // the oracle: the run returns 7
+            CHECK(!lg.callee.prototype.known && Has(lg.callee.prototypeWithheld, "reads r2"));
+            CHECK(!Has(lg.caller.Text(), "return 5;") && Has(lg.caller.Text(), "return axStack_"));
+            CHECK(!lg.caller.prototype.known);
+            // The callee not lent at all, as before it was decompiled: the same text.
+            auto snap = CallSnapshot(g, ++serial);
+            const DecompileResult alone = d.Decompile(snap, Request(g.base));
+            Print("structure return through r2, nothing lent", alone);
+            CHECK(!Has(alone.Text(), "return 5;") && Has(alone.Text(), "return axStack_"));
+            CHECK(PseudoAgreesWithRun(alone, snap, g, inputs));
+            // Controls. The same caller and a callee that does not read r2 (rts ; nop): lent, so r2 is
+            // dead at the call, the local is its own and the folded read stands -- and the run agrees.
+            const CallFixture quiet = { "frame address in r2, callee that ignores it", base,
+                                        withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x62F3, 0xB009, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 },
+                                                   { 0x000B, 0x0009 }) };
+            const Lent lq = lend(quiet);
+            CHECK(lq.callee.prototype.known);
+            CHECK(Has(lq.caller.Text(), "return 5;") && lq.caller.prototype.known);
+            // ...and the address of the local in r4 (a parameter register) was never a problem: the call
+            // takes it as its argument.
+            const CallFixture viaR4 = { "frame address in r4", base,
+                                        withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x64F3, 0xB009, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 },
+                                                   { 0xE107, 0x000B, 0x2412 }) };   // mov #7,r1 ; rts ; mov.l r1,@r4
+            const Lent l4 = lend(viaR4);
+            CHECK(l4.callee.prototype.known && l4.callee.prototype.params.size() == 1);
+            CHECK(!Has(l4.caller.Text(), "return 5;"));
+        }
+        // ---- A3-6 (round 3), accepted: an absolute address is never in the stack -------------------------------
+        // ReturnCheck, like the engine's own stack analysis, takes a store through a constant address to land
+        // outside the function's frame. So a callee that overwrites its own saved r4 through the constant
+        // address its push slot has when it is entered with r15 = 0x0600F000 is proved to keep r4, and the
+        // caller is lent that. The run returns 7. Kept as a pinned limit (this is the one place the oracle is
+        // not asked to agree): the stack is ordinary work RAM at an address the program chose, but a store to
+        // a fixed address that is also a stack slot is a coincidence of one entry state, and inside one function
+        // the engine makes the same assumption (DECOMPILER_GUIDE.md).
+        {
+            const CallFixture g = { "absolute store over the callee's saved register", base,
+                                    withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x2F46, 0xD103, 0xE207, 0x2122, 0x64F6, 0x000B, 0x0009, 0x0009, 0x0600, 0xEFF8 }) };
+            auto snap = CallSnapshot(g, ++serial);
+            const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+            DecompileRequest q = Request(g.base);
+            q.prototypes.emplace_back(0x06009020u, callee.prototype);
+            const DecompileResult caller = d.Decompile(snap, q);
+            Print("absolute store over the callee's saved register", caller);
+            CHECK(callee.prototype.known && ((callee.prototype.effects.preserved >> 4) & 1u));
+            CHECK(Has(caller.Text(), "return param_1;") && caller.prototype.known);
+            uint32_t ran = 0;
+            CHECK(CallRunResult(snap, g, inputs[0], ran) && ran == 7u);   // not param_1: the accepted limit
+        }
+        // The evaluator reads an array local as memory (it cannot know what a call wrote to it).
+        {
+            std::string why;
+            CHECK(MayReturn("int f(void)\n{\n  int axStack_c [2];\n\n  axStack_c[0] = 5;\n  func_0x06009020();\n  return axStack_c[0];\n}", {}, 7, why));
+            CHECK(!MayReturn("int f(void)\n{\n  func_0x06009020();\n  return 5;\n}", {}, 7, why));
+        }
     }
 }
 

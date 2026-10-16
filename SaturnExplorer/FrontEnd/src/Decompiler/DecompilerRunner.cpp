@@ -78,6 +78,7 @@ DecompilerRunner::RequestKey DecompilerRunner::MakeRequestKey(const SnapshotKey&
         d.Mix(p.second.effects.outOrigins);
         d.Mix(p.second.effects.leaks);
         d.Mix(p.second.effects.frameValues);
+        d.Mix(static_cast<uint32_t>(p.second.effects.spDelta));
     }
     d.Mix(request.registerCallees);
     d.Mix(request.maxInstructions);
