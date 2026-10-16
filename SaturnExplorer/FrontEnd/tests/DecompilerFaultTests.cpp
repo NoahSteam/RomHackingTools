@@ -2053,12 +2053,14 @@ std::vector<long> ColdCells(const ColdCtx& c, bool full)
         else
         {
             // The materialisation is at the front, the library follows it. Under sustained exhaustion (the default subset's
-            // sticky families) the library's allocations are every fourth one: each step of it is hundreds long, and the
-            // dense run is the plain family's (A6-19: the cold families are the longest jobs of the sanitizer run).
+            // sticky families) the materialisation's allocations are every third one and the library's every twelfth: each
+            // step of the library is hundreds long, and the dense run is the plain family's (A6-19: the cold families are the
+            // longest jobs of the sanitizer run, and a cell costs the same however early it fails: the second request runs
+            // the engine whole).
             const char* stickyEnv = std::getenv("SE_FAULT_STICKY");   // asked for by environment: every allocation, as the plain family
             const bool thin = fa::gSticky.load() && !(stickyEnv && *stickyEnv && std::string(stickyEnv) != "0");
             for (long k = 0; k <= m.libHi + 8; ++k)
-                if (!thin || k <= m.matHi + 8 || k > m.libHi - 16 || (k - m.libLo) % 4 == 0) add(k);
+                if (!thin || k < 12 || k > m.libHi - 16 || (k <= m.matHi + 8 ? k % 3 == 0 : (k - m.libLo) % 12 == 0)) add(k);
             // ...and between the library and the first translator (the Architecture's construction): spread out.
             for (double k = double(m.libHi) + 8; k < double(m.libraryEnd) + 8; k = std::max(k + 1, k * 1.25)) add(long(k));
         }

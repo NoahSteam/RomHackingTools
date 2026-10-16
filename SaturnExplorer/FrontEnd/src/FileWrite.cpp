@@ -273,20 +273,39 @@ bool ListDirectory(const std::string& path, std::vector<std::string>& names)
     WIN32_FIND_DATAA find;
     const HANDLE h = ::FindFirstFileA((path + kSep + "*").c_str(), &find);
     if (h == INVALID_HANDLE_VALUE) return false;
-    do
+    // The name and the list can fail to allocate; the search handle must not be lost with them (A6-38).
+    try
     {
-        const std::string name = find.cFileName;
-        if (name != "." && name != "..") names.push_back(name);
-    } while (::FindNextFileA(h, &find) != 0);
+        do
+        {
+            const std::string name = find.cFileName;
+            if (name != "." && name != "..") names.push_back(name);
+        } while (::FindNextFileA(h, &find) != 0);
+    }
+    catch (...)
+    {
+        ::FindClose(h);
+        throw;
+    }
     ::FindClose(h);
     return true;
 #else
     DIR* d = ::opendir(path.c_str());
     if (d == nullptr) return false;
-    for (struct dirent* e = ::readdir(d); e != nullptr; e = ::readdir(d))
+    // The name and the list can fail to allocate; the directory handle (32 KB with its buffer) must not be lost with
+    // them (A6-38: a failed first request's staging cleanup, under sustained exhaustion).
+    try
     {
-        const std::string name = e->d_name;
-        if (name != "." && name != "..") names.push_back(name);
+        for (struct dirent* e = ::readdir(d); e != nullptr; e = ::readdir(d))
+        {
+            const std::string name = e->d_name;
+            if (name != "." && name != "..") names.push_back(name);
+        }
+    }
+    catch (...)
+    {
+        ::closedir(d);
+        throw;
     }
     ::closedir(d);
     return true;
