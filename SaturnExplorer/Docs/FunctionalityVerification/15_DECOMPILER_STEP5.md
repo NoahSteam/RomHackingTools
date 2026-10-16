@@ -4337,3 +4337,104 @@ notes, backup RAM) are as strong as their fixture: the independent check does no
   pinned by hand fixtures and the golden file only.
 - The cache caution cannot know CCR.CE is clear for a function (it would need the CCR state, which is a flow property, not a map property).
 - VDP2 colour RAM byte writes (A5-16 part 4) stay accepted.
+
+## Area 5, round 5 review
+
+Reviewer, branch `review/5-round5-review`, at `5b403ba` (master). Findings only; no source or test changed. Every fixture is in
+`Docs/Decompiler/REVIEW_LEDGER.md` (A5-28 to A5-32) with its words, current and expected output and the Mednafen lines (in the
+ledger's code quotes `or` stands for the C bar). Reproduced on a RelWithDebInfo gcc build with a scratch harness linked against the
+decompiler's objects (it prints the notes and cautions, which `SE_GENERATED_WORDS` does not), with `SaturnExplorerSh2GeneratedTests`
+(`SE_GENERATED_WORDS`) for the generator's verdict, and with the corpus (`SE_GAME_HWRAM`, `SE_GAME_NOTES=1`). Mednafen read from the
+review path (`mednafen/ss`): `sh7095.inc` (the six on-chip handlers, `MemRead`, `MemWrite`, `SH7095_BSC_Bus*`), `scu.inc`
+(`SCU_RegRW_DB_u8/u16/u32_W0/W1`, `SCU_FromSH2_BusRW_DB_u8_W0`, `ABusRW_DB_u8_W1_SH0`, `ABus_Read`), `ss.c` (`BusRW_DB_CS0_*`),
+`vdp1.c` (`WriteReg`, `ReadReg`, `VDP1_Write8/16_DB`, `VDP1_Read16_DB`), `vdp2.c` (`RegsWrite`, `RegsRead`, `RW_R16`, `RW_W8`,
+`RW_W16`), `smpc.c` (`SMPC_Write`, `SMPC_Read`), `cdb.c` (`CDB_Read`, `CDB_Write_DBM`), `scsp.inc` (`SS_SCSP_RW_u16_W0/W1`).
+
+**Area 5 is not clean: one P2, four P3.** The round 4 check is faithful to the handlers it parses; what it cannot see is where the
+rows are: a per-label mask inside a group, misaligned on-chip addresses, values after an address error, and a register reached
+through a pointer.
+
+**Not held.**
+
+- **A5-28 (P2).** A register read through a pointer merged from register literals (`puVar2 = &VDP2_TVSTAT; ... *puVar2` in a
+  poll) gets no cache caution through the cached partition and no read note in either partition, though the line names the
+  registers. The generator's rule 3b excuses exactly this shape ("a plain load names no register"); the excuse holds for an
+  anonymous pointer, not for one whose values are register symbols.
+- **A5-29 (P3).** Misaligned on-chip accesses. "Decoded as given" is true below 0xFFFFFF00 only; the upper half aligns with
+  `A &= 0xFE` / `0xFC` itself, so a word at 0xFFFFFF05 divides (the caution says it does nothing), a word at 0xFFFFFF8D arms CHCR0
+  (the caution says it reads nothing). Below 0xFFFFFF00 the cells are the aligned table's: a word at 0xFFFFFE11 reads FTCSR and the
+  cautions say TIER and FRCH.
+- **A5-30 (P3).** A byte write to the reserved low byte of IPRB or VCRD does nothing (`& mask & 0xFF00`, `& 0x7F00`); printed as a
+  plain part write. The handler check passes it: one flag per group of labels.
+- **A5-31 (P3).** The address-error cautions do not say what Mednafen does next: a byte write to a 32-bit register stores
+  `V or (V << 8)` whole (and divides at DVDNT), a byte read returns bits 15-8 whatever the byte; a long below 0xFFFFFF00 reads 0, and
+  writes only the register at its own address (TIER bits 7-0, IPRB and the vector registers bits 15-8).
+- **A5-32 (P3).** VDP1_ENDR (any write ends drawing), SCU_DnEN with bits 8 and 0 (starts that level's DMA), SCU_AIACK and SCU_DSTP:
+  not said, where PTMR and SF are. Both images write `VDP1_ENDR = 0;` and `(&SCU_D0EN)[param_1 * 8] = 0x101;` with no note.
+
+**The parser, read against the C** (`derive_handler_cases.py`; 25 groups and lines checked by hand, every line of the cases file
+compared with its handler): the on-chip lines (all twelve; `pex`, `mask`, the hi/lo split, the label groups, `E` on FTCSR, FRCH,
+FICRH, WTCSR, RSTCSR, CHCR, DMAOR, RTCSR, `D` on DVDNT/DVDNTL, `C` on 0x92, the watchdog's `F`), `scu.rd8`/`wr8` (and the three
+widths' write bodies, which differ only in the mask and the PPD decoder), `vdp1.rd`/`wr`, `vdp2.rd`/`wr` (`RegsWrite` masks
+`A &= 0x1FE` itself, `RegsRead` switches on `A & 0x1FE`), `smpc.rd`/`wr`, `cd.rd`/`wr`, `scsp.rd` (the common block only; slots,
+DSP and the MIDI lane are outside it). Held, with two weaknesses that misstate nothing today: (1) a case body that falls through into
+the next label is classified on its own text only; the one instance is SMPC case 0x00 (`if(...) nt = ...;` then `IREG[A] = V`), which
+is `M` either way; (2) `ret = 0xFFFF >> shift` (on-chip 0x6A-0x6F and 0xE6-0xFF, the filler of unnamed addresses) is classified `M`,
+not `-`, because the filler test wants a bare constant; no register is named there, so no cell is judged by it, but a register added
+there would pass. The `F` flag is coarse (it also marks SCSP bookkeeping, `MPROG_Dirty = true`, and value-dependent stores such as
+`Timer0_Counter = 0` under `if(!Timer_Enable)`), which is harmless while only `smpc.wr` reads it.
+
+**The check's lists of rules.** Every rule an on-chip cell can have is in one of the two lists of `CheckOnChip` (reaches / claims
+nothing) or is `AddressError`; no on-chip cell falls to `default`. The holes are below the cell: one flag per group (A5-30), aligned
+addresses only (A5-29), no value (A5-31), and `F` read for the SMPC only (A5-32).
+
+**Held**, one line each:
+
+1. The cache caution fires on partition 0 only (0x0xxxxxxx and 0x1xxxxxxx): not on 0x2/0x3 (`MemRead` case 1), not on partition 7,
+   not on writes (case 0 falls into case 1's `ExtBusWrite`); the associative purge (0x4/0xA) is its own note and names no register.
+2. Misaligned accesses off chip align down (`A &= ~(sizeof(T) - 1)` before the partition switch; the cache, `ExtBusRead` and the purge
+   all use the aligned `A`): A5-25's fixtures and a misaligned long in backup RAM (made at 0x20180000, its lane caution) are right.
+3. Backup RAM (A5-26): a byte at an odd address is kept and re-read (volatile), a byte at the even address, a word and a long have the
+   lane cautions `ss.c` `BusRW_DB_CS0_*` and `SH7095_BSC_Bus*` (CS0: `shift = (A & 1) << 3` for a word, the long split high half first)
+   bear out; a cached read gets the cache caution.
+4. The SMPC lanes, MINIT/SINIT (`c = ((A >> 23) & 1) ^ 1`), the CD window (`(A & 0x7FFF) < 0x1000`, `(A & 0x3F) >> 2`: 0x25818008 is
+   HIRQ, 0x25898000 the FIFO read once), VDP1 (no repeat: `which` past 6 is `default`), VDP2 (`A & 0x1FE` within 0x05F80000-0x05FBFFFF),
+   SCU (`A & 0xFC`, 0x05FE0000-0x05FEFFFF): as `HardwareAlias` has them.
+5. Polled ordinary memory: a poll of unmarked work RAM (0x06001000, 0x26001000) stays a loop that re-reads (`do {} while (iRam06001000
+   == 0);`), and the corpus' slave handshake (060241CC, `while (iRam26003304 != 0x534c4156)`) likewise; no volatility is inferred, as the
+   program says (after the oracle).
+6. The game corpus, read by function against the disassembly and the handler (30 functions): the SMPC INTBACK sequence (0600541E: SF
+   poll, SF = 1, IREG0-2, COMREG, OREG12-15), the SMPC port setup (06019A56, 06058662), the sound setup (06008BB0: SF, COMREG,
+   SCSP_MVOL = 0x200), the FRT/INTC setup (060241CC, 06063E6C), the FTCSR waits and the MINIT signal (06063ED4, 06063EF8), the cache
+   init (0606554C: `SH2_CCR = 0x11` twice, purge notes true), the BCR1 master/slave test (06025D3C, 060278C4, 060659DC, 06067564: a
+   word read at 0xFFFFFFE2, the low half, case 0xE2), the SCU timers (0600B736: T0C, T1MD = 0x101), the DSP loader (06033D5A,
+   06074DEE: PPAF, PPD), the CD reads (06021414, 06021634, 060608F0: HIRQ; 06021540, 06060A1C: the FIFO at 0x25898000, popped once
+   per word, said), the TVSTAT polls (060569B4, 06056D30, 06071912), VDP2 BGON/WCTLA (0600BCF6), VDP1 TVMR (06005906), and the two
+   A5-32 instances (060056E6, 0600572A, 0601B7B4, 0605A964). Every access printed once at its width and address, the notes true. The
+   `stc sr`/`ldc sr` masks around several of them are dropped (A2-13, area 2's, open). 0601B3B0 and 0605A560 print the bound
+   0x25FE0000 of a pointer range check as `&SCU_D0R` (a constant that is a register's address used as a number; cosmetic, no row).
+
+**For the coordinator.**
+
+- A5-28 is the P2 because the oracle written for A5-19 excuses it by name; the fix is either notes that follow a pointer whose values
+  are known register symbols, or a caution that the read may be of those registers, and rule 3b without the exemption when the output
+  shows `&REG`.
+- Questions without a fixture: the BIOS ROM (0x00000000-0x000FFFFF through either partition) drops writes (`BusRW_DB_CS0_u*_W1`: no
+  store), and the decompiler folds a store and load there as ordinary memory; is that area 5 (a hardware area) or area 2? The cache
+  arrays (0x6xxxxxxx address array, 0x8/0xCxxxxxxx data array) are ordinary memory to the decompiler; a game that uses the cache as
+  RAM (two-way mode) is right, a write to the address array is not memory. The SCU's byte and word lanes are judged by register, not by
+  lane (`CheckScu` uses the register's label): a byte write to the upper bytes of D0EN or T0C reaches no bit (`& 0x3FF`, `tmp >> 8`)
+  and prints as a part write; that is the value blind spot, not a row. The SCSP MIDI output (`case 0x03: if(!shift)`) takes a byte
+  write at the odd address only.
+- Could not probe: the cache with CCR.OD/ID or two-way mode (Mednafen's replacement tables decide whether a miss fills the line), the
+  slave CPU's view (the decompiler has one map for both), and VDP2 colour RAM (A5-16 part 4, accepted).
+
+**Runs.**
+
+| | |
+|---|---|
+| `SaturnExplorerHardwareWidthTableTests` | passes: 337 registers, 3,038 cells; handler check 526 on-chip cells, 490 SCU cells, 228 block registers, 1,792 unnamed-address probes, 2,597 bus probes |
+| `derive_handler_cases.py --check` | the cases file is current against the review path's sources |
+| Generator replays of A5-28 to A5-32 | 0 findings each (the oracle accepts all of them) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 12, cautions 16 (as round 4) |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 27, cautions 20 (as round 4) |
