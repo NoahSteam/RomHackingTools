@@ -2190,14 +2190,14 @@ int RunColdCell(ColdCtx& c, long cell)
     // A failure while the spec bundle was staged leaves nothing behind (A6-33): the config directory, listed before the second
     // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. With sustained exhaustion the
     // removal is itself an allocation and cannot be promised: the next request of the process clears it.
-    if (mode == 1 && fired && !fa::gSticky.load())
+    std::string stray;
+    if (mode == 1 && fired)
     {
         std::vector<std::string> names;
         sfe::ListDirectory(dts::Join(cfg, "decompiler"), names);
-        std::string stray;
         for (const std::string& n : names)
             if (n.find(".tmp-") != std::string::npos) stray += (stray.empty() ? "" : ", ") + n;
-        Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
+        if (!fa::gSticky.load()) Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
     }
 
     // The second request, and the other kind of request after it.
@@ -2240,8 +2240,9 @@ int RunColdCell(ColdCtx& c, long cell)
         Expect(c.disasmFirst ? list == base.listing : list.size() == size_t(kDisasmCount) && list[0].compare(0, 1, "<") != 0,
                "the next listing is correct", list.empty() ? std::string("(empty)") : list[0]);
     }
-    std::printf("CELL %s %s k=%ld mode=%s class=%s inEngine=%d inLibrary=%d step=%s next=%d\n", c.disasmFirst ? "cold-disasm" : "cold", c.fix->name, k,
-                mode ? "empty-config" : "extracted-config", cls.c_str(), inEngine ? 1 : 0, siteKnown ? int(inLibrary) : -1, step, int(dec.status));
+    std::printf("CELL %s %s k=%ld mode=%s class=%s inEngine=%d inLibrary=%d step=%s next=%d staging=%s\n", c.disasmFirst ? "cold-disasm" : "cold", c.fix->name, k,
+                mode ? "empty-config" : "extracted-config", cls.c_str(), inEngine ? 1 : 0, siteKnown ? int(inLibrary) : -1, step, int(dec.status),
+                stray.empty() ? "none" : "left");
     if (mode == 1) dts::RemoveTree(cfg);
     gMustNotExit = damaged;
     std::fflush(nullptr);
@@ -3250,6 +3251,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
             if (run.out.find(" window=need") != std::string::npos) ++sum.classes["window:need"];
+            if (run.out.find(" staging=left") != std::string::npos) ++sum.classes["staging-left"];   // only counted under sustained exhaustion, where the removal cannot allocate
             if (isCold)
                 for (const char* st : kLibrarySteps)
                     if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
