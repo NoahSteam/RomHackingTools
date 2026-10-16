@@ -1749,9 +1749,16 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                     prefix = "if the pointer holds " + Hex8(rc.address) + name + (otherValues ? " (it may hold other values too)" : "") + ": ";
                 account(insn, rc.address, size, write, value, prefix, !rc.shifted);
             }
+            // (said for a pointer that starts at a register: a walk through the SCSP's DSP program area, where no register is named, has
+            // nothing to be missed)
             if (pv.steps)
-                noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(registers[0].address) + ": the iterations after the first reach other addresses, "
-                        "other registers perhaps, which are not said", false);
+                for (const Candidate& rc : registers)
+                    if (!HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty())
+                    {
+                        noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
+                                "other registers perhaps, which are not said", false);
+                        break;
+                    }
             continue;
         }
         if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
