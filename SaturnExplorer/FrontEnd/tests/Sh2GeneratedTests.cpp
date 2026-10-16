@@ -59,6 +59,9 @@
 //      is printed only on some of the paths that reach it, and the ledger's ordering invariants
 //      (Sh2DecompilerTests.cpp's Ledger) hold. (FoldedIntoSwitch reports only what a run shows: two
 //      accesses it joined, one made without the other.)
+//   3b. (round 4, A5-19) A read the emulator traced at a register through the cached partition (an address below
+//      0x20000000 that the bus decodes to a register) has a caution on its instruction saying it is a cache read:
+//      the emulator has no cache, Mednafen does, so the trace cannot show the difference and the output must say it.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
@@ -2652,6 +2655,29 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 std::string("the ") + (write ? "write" : "read") + " of " + std::to_string(size) + " byte(s) at " + Hex(insn) + " (" +
                     Hex(addrs[0]) + (addrs.size() > 1 ? ", ..." : "") + "; " + provenance + ") has no access in the output" +
                     (fate.empty() ? std::string("; the engine has no record of it") : "; the engine's record says: " + fate));
+        }
+        // ---- Area 5, round 4 (A5-19): a read of a register through the cached partition is a cache read ----
+        // The emulator below has no cache, so a cached-partition register literal behaves like its 0x2xxxxxxx twin in the
+        // trace; Mednafen does not: with CCR.CE a hit reads nothing and a miss reads the whole line. The decompiler must
+        // say so on the instruction (a caution "... a cache read ..."), whichever way the literal was written.
+        for (const TraceRec& t : trace)
+        {
+            uint32_t canon = 0;
+            if (t.write || t.addr >= 0x20000000u || !r.InBody(t.insn) || !HardwareAlias(t.addr, canon) || canon >= 0xFFFFFE00u) continue;
+            const uint16_t word = subject.WordAt(t.insn);
+            if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000 || SaidMissing(r, t.insn)) continue;
+            // Only an access the output shows at that constant address: a pointer merged from two literals is a plain
+            // load (patches/0009), and there is no register for the note to be about.
+            bool shown = false;
+            for (const MemoryAccess& m : r.accesses) shown |= !m.write && m.insn == t.insn && m.direct && m.address == t.addr && m.size == t.size;
+            if (!shown) { count("cache.read.indirect"); continue; }
+            bool said = false;
+            for (const HardwareNote& n : r.hardwareNotes)
+                said |= n.address == t.insn && n.caution && n.text.find("cache read") != std::string::npos;
+            count(said ? "cache.read.said" : "cache.read.unsaid");
+            if (!said)
+                add("cache-read-unsaid", "the read of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " (" + Hex(t.addr) +
+                                              ", the cached partition) is not called a cache read");
         }
         for (const MemoryAccess& m : r.accesses)
         {

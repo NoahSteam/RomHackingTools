@@ -1222,7 +1222,9 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         const uint32_t at = static_cast<uint32_t>(o->getIn(1)->getOffset());
         const uint32_t size = static_cast<uint32_t>(value->getSize());
         const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
-        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(at, size);
+        // A misaligned access is an address error and is made at the aligned address (A5-25): the registers are that access's.
+        const uint32_t reach = AccessAddress(at, size);
+        const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(reach, size);
         // The width table's cell for each register the access reaches: whether its own read or
         // write effect happens at this width (a word read of the byte beside FTCSR does not read it).
         const std::vector<CoveredRegister> covered = CoveredRegisters(at, size, write);
@@ -1233,6 +1235,9 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         };
         std::string text;
         bool ignored = false;
+        if (write)
+            for (const std::string& t : WriteEffects(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset())))
+                note(insn, t, false);   // an effect that depends on the value: the cache purge, the VDP1 start
         if (write && KeyedWrite(at, size, value->isConstant(), static_cast<uint32_t>(value->getOffset()), text, ignored))
             note(insn, text, ignored);   // the watchdog's write ports: the key picks the register
         else if (!regs.empty())
@@ -1243,13 +1248,13 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                     note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written", true);
                 if (write && reg->access == RegisterAccess::ReadOnly)
                     note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing", true);
-                if (write && reg->access == RegisterAccess::KeyedWrite)
-                    note(insn, std::string(reg->name) + " takes no " + std::to_string(size) +
-                                   "-byte write: it is written by a keyed word at " +
-                                   (std::string(reg->name) == "SH2_RSTCSR" ? "0xFFFFFE82" : "0xFFFFFE80") +
-                                   "; this write does nothing", true);
+                if (write && reg->access == RegisterAccess::KeyedWrite && size != 1)   // a byte write: the width table says it
+                    note(insn, KeyedPortCaution(*reg, size), true);
                 if (read && reg->onRead && effectHappens(reg)) note(insn, std::string(reg->name) + ": " + reg->onRead, false);
                 if (reg->about) note(insn, std::string(reg->name) + ": " + reg->about, false);
+                // (a flag that a write sets to 1 is no surprise when the value written is 1)
+                if (write && reg->noteWrite && effectHappens(reg) && !(value->isConstant() && (value->getOffset() & 0xFFu) == 1))
+                    note(insn, std::string(reg->name) + ": " + reg->onWrite, false);
                 if (write) written.insert(reg);
                 if (read && reg->split && effectHappens(reg)) splitReads.emplace_back(insn, reg);
             }
@@ -1264,11 +1269,12 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
         // shown as an address.
         uint32_t canonical = 0;
-        HardwareAlias(at, canonical);
+        HardwareAlias(reach, canonical);
         const bool named = ClassifyPartition(canonical) == Sh2Partition::OnChip
-                               ? at == canonical
-                               : (at >> 29) <= 1 && (at & 0x1FFFFFFFu) == canonical;
-        if (!named) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
+                               ? reach == canonical
+                               : (reach >> 29) <= 1 && (reach & 0x1FFFFFFFu) == canonical;
+        // (a misaligned access says where it lands in its own caution)
+        if (!named && reach == at) note(insn, Hex8(at) + " is " + regs[0]->name + " through a mirror (shown by address)", false);
     }
     // A register read back in a function that also writes it, when the read returns something
     // else: say what.

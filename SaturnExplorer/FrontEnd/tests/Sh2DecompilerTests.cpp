@@ -1465,6 +1465,71 @@ void TestHardwareVolatility()
         k.f.literal = 0x0C;
         k.insn = k.f.base + 4;
     }
+
+    // ---- Area 5, round 4 (REVIEW_LEDGER.md A5-18 to A5-27): the reviewer's fixtures, their words verbatim; only the base moves (they
+    // all sit at 0x06009000 in the ledger, the suite keeps one function per address). The `or` of the ledger is the C bar.
+    std::map<std::string, Fixture> r4;
+    {
+        uint32_t next = 0x0600D000u;
+        auto add = [&](const char* name, std::vector<uint16_t> words, uint32_t literal, uint32_t pointer) {
+            r4[name] = Fixture{ next, words, literal, pointer };
+            next += 0x40u;
+        };
+        const std::vector<uint16_t> rd1 = { 0xD101, 0x6011, 0x000B, 0x0009 };   // mov.l @(pool),r1 ; mov.w @r1,r0 ; rts ; nop
+        auto withLiteral = [&](std::vector<uint16_t> ops, uint32_t pointer) {
+            ops.push_back(uint16_t(pointer >> 16));
+            ops.push_back(uint16_t(pointer));
+            return ops;
+        };
+        // A5-18: a word read at +2 of a DMAC register reaches nothing.
+        add("a5_18a", withLiteral(rd1, 0xFFFFFF8Eu), 0x08, 0xFFFFFF8Eu);   // CHCR0 + 2
+        add("a5_18b", withLiteral(rd1, 0xFFFFFFB2u), 0x08, 0xFFFFFFB2u);   // DMAOR + 2
+        add("a5_18c", withLiteral(rd1, 0xFFFFFF82u), 0x08, 0xFFFFFF82u);   // SAR0 + 2
+        add("a5_18d", withLiteral(rd1, 0xFFFFFF8Cu), 0x08, 0xFFFFFF8Cu);   // CHCR0 + 0
+        add("a5_18dvsr", withLiteral(rd1, 0xFFFFFF02u), 0x08, 0xFFFFFF02u);   // control: the divider has the +2 case
+        // A5-19: a register read through the cached partition is a cache read.
+        add("a5_19a", { 0xD103, 0x6011, 0xC808, 0x89FC, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0004 }, 0x10, 0x05F80004u);
+        add("a5_19a_through", { 0xD103, 0x6011, 0xC808, 0x89FC, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0004 }, 0x10, 0x25F80004u);   // control
+        add("a5_19b", { 0xD101, 0x6012, 0x000B, 0x0009, 0x0581, 0x8000 }, 0x08, 0x05818000u);
+        add("a5_19c", { 0xD101, 0x6010, 0x000B, 0x0009, 0x0010, 0x0063 }, 0x08, 0x00100063u);   // SMPC_SF, the third address of the ledger
+        add("a5_19write", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0x05F8, 0x0000 }, 0x0C, 0x05F80000u);   // control: written through
+        // A5-20: the CCR's word accesses, the register beside RSTCSR.
+        add("a5_20a", withLiteral(rd1, 0xFFFFFE92u), 0x08, 0xFFFFFE92u);
+        add("a5_20b", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE92 }, 0x0C, 0xFFFFFE92u);
+        add("a5_20c", withLiteral(rd1, 0xFFFFFE82u), 0x08, 0xFFFFFE82u);
+        // A5-21: the watchdog.
+        add("a5_21rstcsr", { 0xD101, 0x6010, 0x000B, 0x0009, 0xFFFF, 0xFE83 }, 0x08, 0xFFFFFE83u);
+        add("a5_21wtcsr", { 0xD101, 0x6010, 0x000B, 0x0009, 0xFFFF, 0xFE80 }, 0x08, 0xFFFFFE80u);
+        add("a5_21b", { 0xD102, 0xD203, 0x2121, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE80, 0x0000, 0xA51F }, 0x0C, 0xFFFFFE80u);
+        add("a5_21b_tme", { 0xD102, 0xD203, 0x2121, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE80, 0x0000, 0xA53F }, 0x0C, 0xFFFFFE80u);   // control: TME set
+        add("a5_21c", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE80 }, 0x0C, 0xFFFFFE80u);
+        // A5-22: any write to SMPC_SF sets it.
+        add("a5_22", { 0xD102, 0xE000, 0x2100, 0x000B, 0x0009, 0x0009, 0x2010, 0x0063 }, 0x0C, 0x20100063u);
+        // A5-23: a byte write to the CD FIFO pushes a word.
+        add("a5_23", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0x2581, 0x8000 }, 0x0C, 0x25818000u);
+        // A5-24: the byte access to a 32-bit on-chip register is made after the address error.
+        add("a5_24", withLiteral({ 0xD101, 0x6010, 0x000B, 0x0009 }, 0xFFFFFF8Fu), 0x08, 0xFFFFFF8Fu);
+        // A5-25: a misaligned access lands on the aligned register.
+        add("a5_25long", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A2 }, 0x0C, 0x25FE00A2u);
+        add("a5_25word", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0001 }, 0x0C, 0x25F80001u);
+        // A5-26: backup RAM is a byte device on the low lane.
+        add("a5_26", { 0xD102, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x2018, 0x0000 }, 0x0C, 0x20180000u);
+        // A5-27: a long access to an unnamed on-chip address below 0xFFFFFF00.
+        add("a5_27", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE20 }, 0x0C, 0xFFFFFE20u);
+        // The reviewer's two questions: the partition's decode, and the notes for a CCR purge, a line purge and a PTMR start.
+        add("q_alias", withLiteral({ 0xD101, 0x6010, 0x000B, 0x0009 }, 0xFFFF8E10u), 0x08, 0xFFFF8E10u);   // TIER through A & 0x1FF
+        add("q_ccr", { 0xD102, 0xE011, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE92 }, 0x0C, 0xFFFFFE92u);   // CE and CP
+        add("q_ccr_ce", { 0xD102, 0xE001, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE92 }, 0x0C, 0xFFFFFE92u);   // control: CE only
+        add("q_purge", withLiteral({ 0xD101, 0x6012, 0x000B, 0x0009 }, 0x46003304u), 0x08, 0x46003304u);
+        add("q_ptmr", { 0xD102, 0xE001, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);   // PTMR = 1
+        add("q_ptmr0", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);   // control: PTMR = 0
+    }
+    for (const auto& x : r4)
+    {
+        size_t off = x.second.base - 0x06000000u;
+        for (uint16_t c : x.second.code) { dts::Put16(hw, off, c); off += 2; }
+        dts::Put32(hw, x.second.base + x.second.literal - 0x06000000u, x.second.pointer);
+    }
     for (const auto& w : wf)
     {
         size_t off = w.second.f.base - 0x06000000u;
@@ -1572,7 +1637,8 @@ void TestHardwareVolatility()
 
     r = run("watchdog WTCSR", wtcsr);
     CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
-    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00 (OVF is cleared only if a read saw it set)", false));
+    // A5-21: the data is 0x00, so TME (bit 5) is clear: Mednafen clears OVF whatever a read saw and resets WTCNT.
+    CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x00 (TME is clear: OVF is cleared whatever a read saw, and SH2_WTCNT is reset to 0)", false));
 
     r = run("watchdog RSTCSR", wovf);
     CHECK(Ledger(r, { Wr(0xFFFFFE82u, 2) }));
@@ -1586,7 +1652,7 @@ void TestHardwareVolatility()
     r = run("watchdog key unknown", keyVar);
     CHECK(Ledger(r, { Wr(0xFFFFFE80u, 2) }));
     CHECK(HasNote(r, "SH2_WTCNT when the upper byte is 0x5A (taken while SH2_WTCSR's TME is set)", false));
-    CHECK(HasNote(r, "OVF cleared only if a read saw it set", false));
+    CHECK(HasNote(r, "with TME set, OVF is cleared only if a read saw it set", false));
 
     r = run("divider mirror", divMirror);
     CHECK(Ledger(r, { Rd(0xFFFFFF24u, 4, false, true) }));
@@ -1597,7 +1663,8 @@ void TestHardwareVolatility()
     r = run("0xA partition", purge5);
     CHECK(Ledger(r, { Rd(0xA5F80000u, 2, false, true) }));
     CHECK(Has(r.Text(), "a5f80000"));
-    CHECK(r.hardwareNotes.empty());
+    // ...and said to be the purge, not a read of anything (A5 round 4): the line for 0x05F80000 is invalidated, the read is all ones.
+    CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "an access at 0xA5F80000 is an associative purge, not a memory access: it invalidates the cache line for 0x05F80000 (a read returns all ones)", false));
 
     r = run("undocumented pair", oddPair);
     CHECK(Ledger(r, { Wr(0x25F80000u, 4) }));
@@ -1794,7 +1861,8 @@ void TestHardwareVolatility()
     // Read-only, so no caution; but the read is not free (A5-16, vdp2.c RegsRead case 0x04): it clears EXLTFG.
     CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "VDP2_TVSTAT: a read clears EXLTFG", false));
     r = run("PTMR written", ptmrWrite);
-    CHECK(r.hardwareNotes.empty());
+    // The value is unknown: bit 0 starts drawing (vdp1.c WriteReg case 2), which the line does not say (A5 round 4).
+    CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "VDP1_PTMR: a write with bit 0 set starts drawing the command table", false));
     // Every note sits on the instruction of the access it is about.
     for (const Fixture* f : { &woRead, &roWrite, &mvolRead, &mibufWrite, &wtcnt, &badKey, &wdtByte, &ppaf, &oddPair, &mirror })
     {
@@ -2281,6 +2349,108 @@ void TestHardwareVolatility()
         CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write at 0xFFFFFE95 does nothing: SH2_CCR reads back at 0xFFFFFE93-0xFFFFFE9F, but takes writes at 0xFFFFFE92 only"));
     }
 
+
+    // ---- Area 5, round 4 ---------------------------------------------------------------------------
+    {
+        auto R4 = [&](const char* name, const char* label) { return run(label, r4.at(name)); };
+        // A5-18: the DMAC has no word case at +2: it reads 0, arms nothing, and the +0 caution does not claim +2.
+        r = R4("a5_18a", "a word read at CHCR0 + 2");
+        CHECK(HasNote(r, "a 2-byte read at +2 of SH2_CHCR0, a 32-bit register, returns 0 and reads nothing", true));
+        CHECK(!HasNote(r, "arms clearing TE", false));
+        r = R4("a5_18b", "a word read at DMAOR + 2");
+        CHECK(HasNote(r, "a 2-byte read at +2 of SH2_DMAOR, a 32-bit register, returns 0 and reads nothing", true));
+        CHECK(!HasNote(r, "arms clearing AE", false));
+        r = R4("a5_18c", "a word read at SAR0 + 2");
+        CHECK(HasNote(r, "a 2-byte read at +2 of SH2_SAR0, a 32-bit register, returns 0 and reads nothing", true));
+        r = R4("a5_18d", "a word read at CHCR0");
+        CHECK(HasNote(r, "a 2-byte read at SH2_CHCR0, a 32-bit register, returns its low 16 bits, not the upper half this address suggests (a read at +2 returns 0 and reads nothing)", true));
+        CHECK(!HasNote(r, "a read at +2 returns them too", true));
+        CHECK(HasNote(r, "SH2_CHCR0: a read arms clearing TE", false));   // the read at +0 does arm it
+        r = R4("a5_18dvsr", "a word read at DVSR + 2: the divider has the case");
+        CHECK(!HasNote(r, "returns 0 and reads nothing", true));
+
+        // A5-19: a register read through the cached partition is a cache read; through 0x2xxxxxxx and writes it is not.
+        r = R4("a5_19a", "a poll of VDP2_TVSTAT through the cached partition");
+        CHECK(HasNote(r, "a read of VDP2_TVSTAT through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes without reading the hardware, so a poll of it may never see it change, and a miss reads the whole 16-byte line 0x05F80000-0x05F8000F, every register in it with its read effect", true));
+        CHECK(HasNote(r, "VDP2_TVSTAT: a read clears EXLTFG", false));
+        r = R4("a5_19a_through", "the same poll through 0x25F80004");
+        CHECK(!HasNote(r, "cache read", true) && HasNote(r, "VDP2_TVSTAT: a read clears EXLTFG", false));
+        r = R4("a5_19b", "a long read of the CD FIFO through the cached partition");
+        CHECK(HasNote(r, "a read of CD_DATATRNS through the cached partition is a cache read", true));
+        r = R4("a5_19c", "a byte read of SMPC_SF through the cached partition");
+        CHECK(HasNote(r, "a read of SMPC_SF through the cached partition is a cache read", true));
+        r = R4("a5_19write", "a write through the cached partition");
+        CHECK(!HasNote(r, "cache", true));   // MemWrite case 0 falls into case 1: written through
+
+        // A5-20: the CCR's word read returns it in both bytes; a word beside RSTCSR reads 0x00FF.
+        r = R4("a5_20a", "a word read of SH2_CCR");
+        CHECK(HasNote(r, "a 2-byte read at SH2_CCR, an 8-bit register, returns it in both bytes (bits 15-8 and 7-0)", true));
+        CHECK(!HasNote(r, "the register beside it", true));
+        r = R4("a5_20b", "a word write to SH2_CCR");
+        CHECK(HasNote(r, "a 2-byte write to SH2_CCR, an 8-bit register, reaches only it, with the low byte of the value", true));
+        CHECK(!HasNote(r, "the register beside it", true));
+        r = R4("a5_20c", "a word read beside SH2_RSTCSR");
+        CHECK(HasNote(r, "a word reaches only the register at its own address, and there is none (it reads 0x00FF)", true));
+
+        // A5-21: the watchdog's read and write effects.
+        r = R4("a5_21rstcsr", "a byte read of SH2_RSTCSR");
+        CHECK(HasNote(r, "SH2_RSTCSR: a read arms clearing WOVF: write 0xA500 to it after reading 1", false));
+        r = R4("a5_21wtcsr", "a byte read of SH2_WTCSR");
+        CHECK(HasNote(r, "SH2_WTCSR: a read arms clearing OVF: write 0 to it after reading 1", false));
+        r = R4("a5_21b", "a keyed write of 0xA51F to SH2_WTCSR");
+        CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x07 (TME is clear: OVF is cleared whatever a read saw, and SH2_WTCNT is reset to 0)", false));
+        r = R4("a5_21b_tme", "a keyed write of 0xA53F to SH2_WTCSR");
+        CHECK(HasNote(r, "keyed watchdog write: SH2_WTCSR = 0x27 (TME is set: OVF is cleared only if a read saw it set, and SBYCR's SBY bit is cleared)", false));
+        r = R4("a5_21c", "a byte write to SH2_WTCSR");
+        CHECK(HasNote(r, "SH2_WTCSR takes no 1-byte write: it is written by a keyed word at 0xFFFFFE80; this write does not write it, and it cancels a pending SH2_RSTCSR WOVF clear (a read arms it)", true));
+
+        // A5-22: any write to SMPC_SF sets it; a write of 1 is what the line says.
+        r = R4("a5_22", "SMPC_SF = 0");
+        CHECK(HasNote(r, "SMPC_SF: a write sets SF to 1 whatever is written (the SMPC clears it when its command ends)", false));
+
+        // A5-23: a byte write to the CD FIFO pushes a whole word.
+        r = R4("a5_23", "a byte write to the CD FIFO");
+        CHECK(HasNote(r, "a 1-byte write to CD_DATATRNS pushes a whole 16-bit word into the transfer", true));
+
+        // A5-24: the byte access to a 32-bit on-chip register is an address error and then happens: the arming note stays.
+        r = R4("a5_24", "a byte read of SH2_CHCR0");
+        CHECK(HasNote(r, "a 1-byte read of SH2_CHCR0, a 32-bit register, is an address error on the SH-2: it is accessed whole", true));
+        CHECK(HasNote(r, "SH2_CHCR0: a read arms clearing TE", false));
+
+        // A5-25: a misaligned access is an address error, made at the aligned address.
+        r = R4("a5_25long", "a long write at 0x25FE00A2");
+        CHECK(HasNote(r, "a misaligned 4-byte write at 0x25FE00A2 is an address error on the SH-2 (an access must be aligned to its width); the access is made at 0x25FE00A0 (SCU_IMS)", true));
+        CHECK(!HasNote(r, "through a mirror", false));
+        r = R4("a5_25word", "a word write at 0x25F80001");
+        CHECK(HasNote(r, "a misaligned 2-byte write at 0x25F80001 is an address error on the SH-2 (an access must be aligned to its width); the access is made at 0x25F80000 (VDP2_TVMD)", true));
+        CHECK(!HasNote(r, "VDP2_EXTEN", true));   // the access is the word at 0x25F80000, not the bytes from 0x25F80001
+
+        // A5-26: backup RAM is a byte device on the low lane: not folded, and what it does is said.
+        r = R4("a5_26", "mov.b 5 then mov.b back at backup RAM");
+        CHECK(!Has(r.Text(), "return 5;"));
+        CHECK(Ledger(r, { Wr(0x20180000u, 1), Rd(0x20180000u, 1, false, true) }));
+        CHECK(HasNote(r, "a 1-byte write to backup RAM at an even address does nothing (backup RAM is a byte device on the low lane of the 16-bit bus: its bytes are at the odd addresses)", true));
+        CHECK(HasNote(r, "a 1-byte read of backup RAM at an even address returns 0xFF, not a byte of it", true));
+
+        // A5-27: a long access to an on-chip address below 0xFFFFFF00 is an address error whether or not a register is there.
+        r = R4("a5_27", "a long write at 0xFFFFFE20");
+        CHECK(HasNote(r, "a 4-byte write at 0xFFFFFE20 is an address error on the SH-2: no register is named there, and the on-chip registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only", true));
+
+        // The reviewer's questions. Which reference wins: Mednafen decodes 0xE0000000-0xFFFFFFFF by A & 0x1FF.
+        r = R4("q_alias", "a byte read at 0xFFFF8E10");
+        CHECK(HasNote(r, "0xFFFF8E10 is SH2_TIER through a mirror (shown by address)", false));
+        r = R4("q_ccr", "SH2_CCR = 0x11");
+        CHECK(HasNote(r, "SH2_CCR: CP (bit 4) is set, so this write purges the whole cache", false));
+        r = R4("q_ccr_ce", "SH2_CCR = 1");
+        CHECK(r.hardwareNotes.empty());
+        r = R4("q_purge", "a read at 0x46003304");
+        CHECK(HasNote(r, "an access at 0x46003304 is an associative purge, not a memory access: it invalidates the cache line for 0x06003300 (a read returns all ones)", false));
+        r = R4("q_ptmr", "VDP1_PTMR = 1");
+        CHECK(HasNote(r, "VDP1_PTMR: bit 0 is set, so this write starts drawing the command table", false));
+        r = R4("q_ptmr0", "VDP1_PTMR = 0");
+        CHECK(r.hardwareNotes.empty());
+    }
+
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.
     r = run("mac.l @r5+,@r4+ through pointers", macPtr);
     CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
@@ -2416,7 +2586,7 @@ void TestHardwareMap()
         auto kind = [](uint32_t a) { const HardwareRegister* r = FindHardwareRegister(a); return r ? r->narrow : NarrowAccess::Part; };
         CHECK(kind(0x05F80000u) == NarrowAccess::WholeOnByte && kind(0x05D00000u) == NarrowAccess::WholeOnByte);
         CHECK(kind(0x0010001Fu) == NarrowAccess::ByteLane);
-        CHECK(kind(0xFFFFFF04u) == NarrowAccess::OnChipLong && kind(0xFFFFFF80u) == NarrowAccess::OnChipLong);
+        CHECK(kind(0xFFFFFF04u) == NarrowAccess::OnChipLong && kind(0xFFFFFF80u) == NarrowAccess::OnChipDmac);   // A5-18: the DMAC has no word case at +2
         CHECK(kind(0xFFFFFFE0u) == NarrowAccess::OnChipKeyedLong && kind(0xFFFFFFF8u) == NarrowAccess::OnChipKeyedLong);
         CHECK(kind(0xFFFFFF40u) == NarrowAccess::OnChipWord);
         // Round 3 (the width table): below 0xFFFFFF00 a register is a byte or a half, whose word and
@@ -2450,7 +2620,7 @@ void TestHardwareMap()
                 laneWords += NarrowAccessEffects(at - 1, 2, true).size() == canW && NarrowAccessEffects(at - 1, 2, false).size() == canR &&
                              NarrowAccessEffects(at - 1, 1, true).size() == 1 && NarrowAccessEffects(at, 1, true).empty();
             }
-            else if (g.narrow == NarrowAccess::OnChipLong || g.narrow == NarrowAccess::OnChipKeyedLong)
+            else if (g.narrow == NarrowAccess::OnChipLong || g.narrow == NarrowAccess::OnChipKeyedLong || g.narrow == NarrowAccess::OnChipDmac)
             {
                 longs += NarrowAccessEffects(at, 1, true).size() == 1 && NarrowAccessEffects(at + 3, 1, false).size() == 1 &&
                          NarrowAccessEffects(at, 2, true).size() == 1 && NarrowAccessEffects(at + 2, 2, true).size() == 1 &&
@@ -2462,7 +2632,8 @@ void TestHardwareMap()
         {
             wantVdp += all[i].narrow == NarrowAccess::WholeOnByte;
             wantLane += all[i].narrow == NarrowAccess::ByteLane;
-            wantLong += all[i].narrow == NarrowAccess::OnChipLong || all[i].narrow == NarrowAccess::OnChipKeyedLong;
+            wantLong += all[i].narrow == NarrowAccess::OnChipLong || all[i].narrow == NarrowAccess::OnChipKeyedLong ||
+                        all[i].narrow == NarrowAccess::OnChipDmac;
         }
         CHECK(wantVdp > 100 && wantLane == 48 && wantLong > 20);   // VDP1 + VDP2, the SMPC's 48 registers, the 32-bit on-chip ones
         CHECK(vdpBytes == wantVdp && laneWords == wantLane && longs == wantLong);
@@ -2514,8 +2685,10 @@ void TestHardwareMap()
     }
     CHECK(name(0xFFFFFE11u) == "SH2_FTCSR");
     CHECK(name(0xE0004104u) == "SH2_DVDNT");    // on-chip upper half: only bit 14 matters
-    CHECK(name(0xE0004011u) == "");             // the lower half needs bits 28 and 12 as well
-    CHECK(name(0xFFFFBF04u) == "");             // bit 14 clear: not the registers
+    // A5 round 4: Mednafen decodes the whole partition 0xE0000000-0xFFFFFFFF by A & 0x1FF (MemRead / MemWrite case 7), and it is the
+    // reference SE runs; the manual's bit 14 (and bits 28 and 12 for the low half) is real hardware's. The emulator wins.
+    CHECK(name(0xE0004011u) == "SH2_FTCSR");   // was "": the lower half needed bits 28 and 12 as well
+    CHECK(name(0xFFFFBF04u) == "SH2_DVDNT");   // was "": bit 14 clear
     CHECK(name(0x45F80000u) == "");             // associative purge: not memory
     CHECK(name(0x05F8000Cu) == "");             // VDP2's reserved word
     CHECK(name(0x20100062u) == "");             // SMPC's even bytes are not registers
