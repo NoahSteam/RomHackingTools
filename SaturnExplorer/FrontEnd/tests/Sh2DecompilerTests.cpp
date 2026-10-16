@@ -6876,6 +6876,44 @@ void TestCallsAndTraps()
             CHECK(Has(callerQ.Text(), "return 10;"));
             CHECK(PseudoAgreesWithRun(callerQ, snapQ, quiet, idx));
         }
+        // ---- A3-10 (round 4), accepted: a frame address in r3 is not declared -----------------------------------
+        // The SH ABI passes the address of a returned structure in r2 and nowhere else (gcc's SH_STRUCT_VALUE_REGNUM,
+        // Renesas' compilers); r3 is call-clobbered scratch, and gcc's static chain (a nested function's pointer to
+        // its parent's frame) is the one other pointer to a frame it puts there, which neither the Hitachi/SN compilers
+        // nor game code use. A frame address sits in r3 at 36 and 53 of the call sites the two corpus images have (and
+        // in r14 at 852 and 2,068: the frame pointer), so a rule over r3 would alias the locals of those functions to
+        // protect a convention nothing uses. Hand-written code that passes a frame pointer in r3 gets the folded read
+        // (the callee reads r3, so it is not lent and nor is the caller; only the text is wrong). Pinned as a limit.
+        {
+            const CallFixture g = { "frame address in r3", base,
+                                    withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x63F3, 0xB009, 0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 },
+                                               { 0xE107, 0x000B, 0x2312 }) };
+            auto snap = CallSnapshot(g, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(g.base));
+            Print(g.name.c_str(), r);
+            CHECK(Has(r.Text(), "return 5;") && !r.prototype.known);   // the accepted limit
+            uint32_t ran = 0;
+            CHECK(CallRunResult(snap, g, inputs[0], ran) && ran == 7u);   // not 5
+        }
+        // ---- A3-8 (round 4), accepted: T set by the caller reaches a lent SR getter ---------------------------------
+        // A callee that returns the status register whole is machine state, not an input (A3-5): it is lent. A caller
+        // that sets T (`cmp/eq r6,r7`), calls it and returns bit 0 of the result depends on r6 and r7 through the
+        // callee's read of SR, though SR is no input of any signature, and is lent with no parameters. Accepted:
+        // compiled code does not keep T across a call (the SH ABI makes it caller-saved) or read it out of a returned SR
+        // (the 20 getters of the corpus are interrupt-mask helpers whose callers mask the I bits, which the getter
+        // takes from the machine). Withholding every caller that has set T before such a call would cost the callers
+        // that never use it. Hand-written code can; the generator, asked by hand, reports it (param-dropped:r6) and
+        // its grammar does not emit the shape. Pinned: the run depends on r6 and r7, the lent caller has no parameter for them.
+        {
+            const CallFixture g = { "caller sets T, lent SR getter", base,
+                                    withCallee({ 0x4F22, 0x3760, 0xB00C, 0x0009, 0xC901, 0x4F26, 0x000B, 0x0009 },
+                                               { 0x2FE6, 0x7FFC, 0x6EF3, 0x0102, 0x2E12, 0x60E2, 0x7E04, 0x6FE3, 0x000B, 0x6EF6 }) };
+            const Lent lg = lend(g);
+            CHECK(lg.callee.prototype.known && lg.caller.prototype.known && lg.caller.prototype.params.empty());
+            uint32_t equal = 0, differ = 0;
+            CHECK(CallRunResult(CallSnapshot(g, ++serial), g, { 1, 2, 5, 5 }, equal) && equal == 1u);
+            CHECK(CallRunResult(CallSnapshot(g, ++serial), g, { 1, 2, 5, 6 }, differ) && differ == 0u);
+        }
         // ---- A3-6 (round 3), accepted: an absolute address is never in the stack -------------------------------
         // ReturnCheck, like the engine's own stack analysis, takes a store through a constant address to land
         // outside the function's frame. So a callee that overwrites its own saved r4 through the constant
