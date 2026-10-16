@@ -980,6 +980,8 @@ const std::vector<AcceptedLeak>& AcceptedLeaks()
         { "A6-7 compiler spec", { "ghidra::Architecture::parseCompilerConfig(" }, true },   // prototype models decoded from the cspec
         { "A6-7 compiler spec", { "ghidra::AddrSpaceManager::findAddJoin(" }, true },
         { "A6-7 context", { "ghidra::ContextInternal::FreeArray::reset(" }, true },
+        // A6-30: the first translator of a process decodes the .sla (a cold failure only; a warm Init resets the translator).
+        { "A6-30 first translator", { "ghidra::SleighBase::decode(" }, true },
     };
     return v;
 }
@@ -1850,13 +1852,14 @@ int RunColdCell(ColdCtx& c, long cell)
 #endif
 #ifdef SE_FAULT_ASAN
     {
-        // Init's leaks (the Architecture's spec XML, the action tree) are the accepted ones (A6-7); anything the
-        // failure leaves beyond Flow is not.
+        // Init's leaks (the Architecture's spec XML, the action tree, the first translator's decode) are the accepted ones
+        // (A6-7, A6-30); anything the failure leaves in another phase is not. The phase is the one the failing allocation
+        // fell in, by this run's own log (the second pass's Init follows a first pass's Flow).
         const Log log = gProbe.Snapshot();
         gFailedInInit = true;
-        for (int i = 0; i < log.n; ++i)
-            if (log.phase[i] == DecompilePhase::Flow || log.phase[i] == DecompilePhase::Actions || log.phase[i] == DecompilePhase::Print)
-                gFailedInInit = false;
+        if (fired)
+            for (int i = 0; i < log.n; ++i)
+                if (log.allocAt[i] <= k) gFailedInInit = log.phase[i] == DecompilePhase::Init;
     }
 #endif
 
