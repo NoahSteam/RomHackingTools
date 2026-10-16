@@ -3203,7 +3203,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 for (const RunOut& base : runs)
                 {
                     if (!base.finished || !((base.use.readFirst >> k) & 1u) || matters) continue;
-                    for (uint32_t value : { base.init[k] + 0x200u, 0u })
+                    // +0x200 and 0, and (A3-12) each of the other argument registers' values: the registers start at
+                    // four distinct pointers, so without it a compare of two of them (`cmp/eq r6,r7`) always has the same answer
+                    // and a function that decides on it reads as insensitive to both.
+                    std::vector<uint32_t> values = { base.init[k] + 0x200u, 0u };
+                    for (int j = 4; j < 8; ++j)
+                        if (j != k && base.init[j] != base.init[k]) values.push_back(base.init[j]);
+                    for (uint32_t value : values)
                     {
                         RunSpec rs;
                         rs.mode = base.mode;
