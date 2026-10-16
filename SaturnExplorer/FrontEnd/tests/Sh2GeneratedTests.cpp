@@ -49,6 +49,18 @@
 //     register that later items may store or return. (r15 is not moved: a function that leaves it changed
 //     takes its callers' frames and saved PR with it, and the harness cannot say what they then mean.)
 //
+// The domain (ledger A2-8 (a), A11-2): a misaligned word or longword access is an address error on the SH-2, which the
+// spec has no model of and the emulator does not raise (it makes the access). The generator keeps the pointer parameters
+// r4/r5 aligned for the width they are used at -- including after a post-increment or pre-decrement of a smaller width,
+// in a loop body, and in a returned value's load -- so the programs it makes execute far fewer of them (3,000 grammar-2
+// seeds from 200001: 232 seeds with one, 934 runs, against 329 and 1,496 untracked). The rest -- a pointer handed to a
+// callee by a caller that advanced it, a mac inserted after the items around it were drawn, GBR and literal-pointer
+// displacements -- is not prevented: the harness classifies a run whose trace holds a misaligned access (also a perturbed
+// run, and SE_GENERATED_WORDS) as excluded. It is left out of the trace-based checks and counted
+// ('excluded.address-error.*', with the seeds listed in the summary), not run as a normal completion. Nothing else is
+// suppressed: the decompilation of such a program is still checked (its status, the flow, the prototype), and a Failed
+// status or an engine error string is a finding as for any other program. TestDomainPins holds both parts in every run.
+//
 // The ALU alphabet of both grammars is wider than the first eleven ops (area 2, round 3): one ALU item in four
 // is drawn, from a stream of its own, from kRegOps -- carry and overflow arithmetic (addc addv subc subv negc), div0u div1,
 // the multiplies (mul.l muls.w mulu.w dmuls.l dmulu.l), exts swap xtrct, the rotates and shifts, movt sett clrt
@@ -302,6 +314,7 @@ uint32_t StateRead(const OpDef& op)
         if (std::strcmp(op.name, r.name) == 0) return r.bits;
     return 0;
 }
+bool gTrackAlignment = true;    // SE_GENERATED_ALIGN=off: r4/r5 alignment is not tracked (the generator as it was before A11-2; for A/B counts and the mutation check)
 bool gNarrowAlphabet = false;   // SE_GENERATED_ALPHABET=narrow: only the original eleven ALU ops
 bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in the first two grammars too (ledger A2-16, A3-5)
 
@@ -437,6 +450,7 @@ struct Gen
     int frame = 0;            // bytes of locals the function has
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
+    int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
     Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull)
     {
@@ -541,6 +555,8 @@ struct Gen
             if (rng.Chance(70)) w = pref[base];
             w = std::min(w, align[base]);
         }
+        else if (gTrackAlignment)
+            w = std::min(w, align[base]);   // r4/r5 start aligned; a post-increment or pre-decrement of a smaller width lowers it (A11-2)
         return w;
     }
 
@@ -706,6 +722,9 @@ struct Gen
         form = form < 40 ? 0 : form < 70 ? 1 : form < 85 ? 2 : form < 94 ? 3 : 4;   // plain disp indexed inc tas
         if (single && form == 2) form = 0;
         if (form == 3 && base >= 6) form = 0;
+        // In a loop body the pointer is advanced again by the next iteration, which the widths drawn before it do not
+        // know of: only an advance that keeps its alignment is made there (A11-2).
+        if (gTrackAlignment && form == 3 && loopDepth > 0 && w < align[base]) form = 0;
         int data = static_cast<int>(rng.Below(4));
         if (!write && data == avoid) data = (data + 1) & 3;
         if (disc)
@@ -760,6 +779,7 @@ struct Gen
             break;
         }
         it.width = w;
+        if (gTrackAlignment && form == 3) align[base] = std::min(align[base], w);   // @Rm+ / @-Rn moves the pointer by the width
         if (disc && !write)
         {
             if (form == 1 && w < 4) defined |= 1u;
@@ -857,7 +877,9 @@ struct Gen
         everConst[it.counter] = true;
         const uint32_t before = defined;
         const int kids = 1 + static_cast<int>(rng.Below(3));
+        ++loopDepth;
         for (int i = 0; i < kids; ++i) it.kids.push_back(rng.Chance(40) ? MakeAlu(it.counter) : MakeMem(it.counter, false));
+        --loopDepth;
         if (disc) defined = before | (1u << it.counter);
         return it;
     }
@@ -1416,7 +1438,17 @@ struct Gen
                 int pool[4], k = 0;
                 for (int q = 4; q < 8; ++q)
                     if (Def(q) && q != selReg) pool[k++] = q;
-                if (k) f.retWord = uint16_t(0x6000 | pool[rng.Below(static_cast<uint32_t>(k))] << 4 | rng.Below(3));   // mov.x @Rm,r0
+                if (k && !gTrackAlignment)
+                    f.retWord = uint16_t(0x6000 | pool[rng.Below(static_cast<uint32_t>(k))] << 4 | rng.Below(3));   // as before A11-2, draw order and all
+                else if (k)
+                {
+                    const int q = pool[rng.Below(static_cast<uint32_t>(k))];
+                    uint32_t sz = rng.Below(3);   // byte, word or longword
+                    // ...of the width the pointer is still aligned for (an increment or decrement earlier in the function, or a
+                    // literal's address, may have left it at 2 or 1): a misaligned read is an address error (A11-2)
+                    if (gTrackAlignment) sz = std::min<uint32_t>(sz, align[q] >= 4 ? 2u : align[q] >= 2 ? 1u : 0u);
+                    f.retWord = uint16_t(0x6000 | q << 4 | sz);   // mov.x @Rm,r0
+                }
             }
             else if (r >= 85)
             {
@@ -2237,7 +2269,14 @@ struct RunOut
     static constexpr int kNoSel = INT32_MIN;
     int selValue = kNoSel;             // the integer a jump table was indexed with (kNoSel: none given; -1 is an index)
     int perturbed = -1;                // register whose start value was changed (-1: none)
+    bool addressError = false;         // the run made a misaligned word or longword access: an address error on the SH-2 (A2-8 (a))
+    TraceRec addressErrorAt;           // ...the first, for the report
 };
+
+// A word or longword access at an address that is not a multiple of its size. The emulator makes it; the SH-2 raises an address
+// error and does not (sh7095.inc, SH7095_PEX_CPUADDR). The model has no exceptions (A2-8), so a run that makes one is not a
+// run of the model.
+bool IsMisaligned(const TraceRec& t) { return t.size > 1 && (t.addr & static_cast<uint32_t>(t.size - 1)) != 0; }
 
 class Machine
 {
@@ -2765,6 +2804,13 @@ public:
         for (int n = 0; n < 4; ++n) mM->Set(kState[n], out.initState[n]);
         mM->Run(f.layout.entry, kSentinel, kStepLimit, out, env);
         out.trace = std::move(env.trace);
+        for (const TraceRec& t : out.trace)
+            if (IsMisaligned(t))
+            {
+                out.addressError = true;
+                out.addressErrorAt = t;
+                break;
+            }
         return out;
     }
 
@@ -3525,6 +3571,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         rs.perturbValue = value;
                         const RunOut other = runner.One(fn, rs);
                         count("param.perturbed-runs");
+                        if (other.addressError)
+                        {
+                            count("excluded.address-error.perturbed-runs");   // a run of no model: it says nothing about the parameter
+                            continue;
+                        }
                         if (!SameBehaviour(base, other, compareR0, marked))
                         {
                             matters = true;
@@ -3576,6 +3627,11 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                             rs.perturbValue = value;
                             const RunOut other = runner.One(fn, rs);
                             count("input.perturbed-runs");
+                            if (other.addressError)
+                            {
+                                count("excluded.address-error.perturbed-runs");
+                                continue;
+                            }
                             if (!SameBehaviour(base, other, compareR0 || (anyFinished && r0Always), marked))
                             {
                                 matters = true;
@@ -3766,6 +3822,31 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
 
 // Emulates the subject, decompiles it function by function (the last first, lending what each
 // learned to the ones before it, as the panel does), and checks every decompilation against its runs.
+// Leaves the runs that made an address error out of the ones the checks are made against (A2-8 (a), A11-2): the model has no
+// exceptions, so what such a run does after the access is not what the code does, and the access itself is not one the
+// decompiler is to list as made. They are counted, and said in the verbose report; the function is still decompiled and
+// checked against the runs that remain (and, if none is left, against its own flow and prototype).
+void ExcludeAddressErrors(const Subject& subject, std::vector<RunOut>& runs, Report& rep, std::string& notes, int fi, bool volatileRun)
+{
+    std::vector<RunOut> kept;
+    for (RunOut& run : runs)
+    {
+        if (!run.addressError)
+        {
+            kept.push_back(std::move(run));
+            continue;
+        }
+        const TraceRec& t = run.addressErrorAt;
+        rep.counts["excluded.address-error.runs"] += 1;
+        notes += "  excluded from the checks (A2-8 (a): an address error on the SH-2, not modelled): function " + std::to_string(fi) +
+                 (volatileRun ? " with the mailbox marked" : "") + ", input mode " + std::to_string(run.mode) + ": the " +
+                 std::to_string(t.size) + "-byte " + (t.write ? "write" : "read") + " at " + Hex(t.addr) + " by " + Hex(t.insn) + " (" +
+                 Hex(subject.WordAt(t.insn), 4) + ")\n";
+    }
+    if (kept.empty() && !runs.empty()) rep.counts["excluded.address-error.functions-without-runs"] += 1;
+    runs.swap(kept);
+}
+
 Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
 {
     Report rep;
@@ -3788,6 +3869,7 @@ Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
     Runner runner(s, snap);
     std::string engineError;
     std::set<std::tuple<uint32_t, bool, int>> kinds;
+    std::string excludedNotes;
     std::vector<std::vector<RunOut>> truth[2];   // per world, per function
     const int worlds = s.markVolatile ? 2 : 1;
     for (int world = 0; world < worlds; ++world)
@@ -3810,6 +3892,7 @@ Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
                     if (!run.error.empty()) engineError = run.error;
                     rep.counts["runs"] += 1;
                 }
+                ExcludeAddressErrors(s, truth[world][fi], rep, excludedNotes, static_cast<int>(fi), volatileRun);
             }
             for (const RunOut& run : truth[world][fi])
                 for (const TraceRec& t : run.trace) kinds.insert(std::make_tuple(t.insn, t.write, t.size));
@@ -3834,7 +3917,7 @@ Report EvaluateSubject(Sh2Decompiler& d, const Subject& s, bool wantText)
                   << " (instruction, direction, size, address):\n";
                 for (const TraceRec& t : united) o << "    " << Hex(t.insn) << " " << (t.write ? "write" : "read ") << " " << t.size << " " << Hex(t.addr) << "\n";
             }
-        rep.text = o.str() + rep.text;
+        rep.text = o.str() + excludedNotes + rep.text;
     }
     return rep;
 }
@@ -4201,6 +4284,21 @@ std::vector<uint32_t> HexList(const std::string& text, char sep)
 
 // A hand-written (or pasted) function or module instead of generated ones: hex words from kCode, the
 // literal pool among them.
+// One function from instruction words, and nothing from the environment (the pins below must not change with it).
+Subject WordsSubject(const char* raw)
+{
+    Subject s;
+    std::istringstream in(raw);
+    std::string tok;
+    while (in >> tok) s.words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+    s.codeWords = s.words.size();
+    FnInfo f;
+    f.layout.start = f.layout.entry = kCode;
+    f.layout.end = kCode + 2 * static_cast<uint32_t>(s.words.size());
+    s.fns.push_back(f);
+    return s;
+}
+
 Subject RawSubject(const char* raw)
 {
     Subject s;
@@ -5004,6 +5102,50 @@ Program MakeV2(uint64_t seed)
     return Generate2(seed, 0);
 }
 
+// The domain of the oracle (ledger A2-8 (a), A11-2). A run that makes a misaligned word or longword access is an address
+// error on the SH-2, which the model has no exceptions for: it is counted and left out of the trace-based checks, not run
+// as a normal completion; and the generator keeps the programs it makes clear of them. Both are pinned here, in every run.
+void TestDomainPins(Sh2Decompiler& d)
+{
+    struct Pin { const char* name; const char* words; int excludedRuns; bool atLeast; };
+    static const Pin kPins[] = {
+        // mov.w @r4+,r1 ; mov.l @r4,r2 ; rts ; nop: the longword read is at r4 + 2 in every ordinary run
+        { "misaligned long after a post-incremented word", "6145 6242 000B 0009", 3, false },
+        // ...and with the increment by a longword, the same function is an ordinary one
+        { "control: the same with a longword increment", "6146 6242 000B 0009", 0, false },
+        // seed 219488's shape on r1, which is 0 in the first input mode (r4 is a scratch pointer in every run):
+        // tst r1,r1 ; bf/s L ; mov.w r2,@-r1 ; mov.l r3,@r1 ; L: rts ; nop. With r1 = 0 the longword store is at 0xFFFFFFFE, an
+        // address error on the SH-2 (and a fold the engine used to fail on: A2-11, patch 0031); the other modes' word store is at
+        // a random r1 - 2
+        { "seed 219488's shape on r1: the run with r1 = 0", "2118 8F01 2125 2132 000B 0009", 1, true },
+    };
+    for (const Pin& p : kPins)
+    {
+        const Report rep = EvaluateSubject(d, WordsSubject(p.words), true);
+        auto count = [&](const char* k) { auto it = rep.counts.find(k); return it == rep.counts.end() ? 0 : it->second; };
+        const int runs = count("excluded.address-error.runs");
+        std::printf("pin '%s': excluded runs %d (want %s%d), %zu finding(s)\n", p.name, runs, p.atLeast ? ">= " : "", p.excludedRuns, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(p.atLeast ? runs >= p.excludedRuns : runs == p.excludedRuns);
+    }
+    // Seed 219488 itself (A2-11, fixed by patch 0031; the failing seed of the review's 20,000-seed run), as it was generated
+    // before r4/r5 alignment was tracked and as it is now: both decompile (no Failed status, no engine error), and the
+    // generator that tracks alignment makes no address error of it.
+    const bool tracking = gTrackAlignment;
+    for (bool track : { false, true })
+    {
+        gTrackAlignment = track;
+        const Report rep = Evaluate(d, MakeV2(219488), true);
+        const int runs = rep.counts.count("excluded.address-error.runs") ? rep.counts.at("excluded.address-error.runs") : 0;
+        std::printf("pin 'seed 219488, alignment %s': excluded runs %d, %zu finding(s)\n", track ? "tracked" : "not tracked", runs, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        if (track) CHECK(runs == 0);
+    }
+    gTrackAlignment = tracking;
+}
+
 void TestGenerated()
 {
     Sh2Decompiler d(gConfig);
@@ -5018,6 +5160,7 @@ void TestGenerated()
         gNarrowAlphabet = alphabet && std::strcmp(alphabet, "narrow") == 0;
         gSpecialReads = alphabet && std::strcmp(alphabet, "specials") == 0;
     }
+    if (const char* align = std::getenv("SE_GENERATED_ALIGN")) gTrackAlignment = std::strcmp(align, "off") != 0;
     if (const char* fence = std::getenv("SE_GENERATED_FENCE"))
     {
         gFenceFolds = std::strstr(fence, "folds") != nullptr;
@@ -5034,6 +5177,7 @@ void TestGenerated()
         return;
     }
     const long single = EnvNumber("SE_GENERATED_SEED", 0);
+    if (!single && !gMutate) RUN(TestDomainPins(d));
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
     const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
     const long shrinkCount = EnvNumber("SE_GENERATED_SHRINK", 3);
@@ -5046,6 +5190,7 @@ void TestGenerated()
     std::map<std::string, int> shapes, classes, counts;
     std::map<std::string, int> mnemonics;
     const bool coverage = EnvNumber("SE_GENERATED_COVERAGE", 0) != 0;
+    std::vector<long> excludedSeeds;   // seeds with a run left out as an address error (A2-8 (a), A11-2)
     int failing = 0, totalFindings = 0, unfinished = 0, volatileRuns = 0, shrunk = 0, v1seeds = 0, v2seeds = 0;
     size_t traced = 0;
     double decompileMs = 0;
@@ -5064,6 +5209,10 @@ void TestGenerated()
         traced += rep.traced;
         decompileMs += rep.decompileMs;
         for (const auto& c : rep.counts) counts[c.first] += c.second;
+        {
+            auto ex = rep.counts.find("excluded.address-error.runs");
+            if (ex != rep.counts.end()) excludedSeeds.push_back(seed);
+        }
         if (single) std::printf("%s", rep.text.c_str());
         if (rep.findings.empty()) continue;
 
@@ -5109,6 +5258,12 @@ void TestGenerated()
         std::printf("coverage: %zu distinct mnemonics over %ld seeds:", mnemonics.size(), seeds);
         for (const auto& k : mnemonics) std::printf(" %s=%d", k.first.c_str(), k.second);
         std::printf("\n");
+    }
+    if (!excludedSeeds.empty())
+    {
+        std::printf("seeds with a run excluded as an address error (%zu):", excludedSeeds.size());
+        for (size_t i = 0; i < excludedSeeds.size() && i < 400; ++i) std::printf(" %ld", excludedSeeds[i]);
+        std::printf("%s\n", excludedSeeds.size() > 400 ? " ..." : "");
     }
     std::printf("finding classes (seeds):");
     for (const auto& cl : classes) std::printf(" %s=%d", cl.first.c_str(), cl.second);
