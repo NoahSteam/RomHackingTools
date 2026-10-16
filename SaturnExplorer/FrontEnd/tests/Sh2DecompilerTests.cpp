@@ -7889,6 +7889,11 @@ void TestArea2Round5()
                                   0x06009018u);
         CHECK(checked.caller.prototype.known && checked.caller.prototype.ret.kind != TypeKind::Void);
         CHECK(Has(checked.caller.Text(), "return pxVar1;"));
+        // ...and a 64-bit result (r0 and r1, a piece of the call's output in each) whose high half is also tested (generator seed 5234)
+        const Pair wide = pair("A2-31 a 64-bit result tested and returned",
+                               { 0x4F22, 0xB006, 0x0009, 0x2008, 0x8900, 0xE303, 0x4F26, 0x000B, 0x7F00, 0xE001, 0x000B, 0xE102 }, 0x06009012u);
+        CHECK(wide.callee.prototype.known && wide.callee.prototype.ret.size == 8);
+        CHECK(wide.caller.prototype.known && wide.caller.prototype.ret.size == 8 && Has(wide.caller.Text(), "return "));
         // A callee lent as returning nothing is not a value to return: the wrapper stays void.
         const Pair none = pair("A2-31 control: the callee returns nothing",
                                { 0x2FE6, 0x4F22, 0xB003, 0x0009, 0x4F26, 0x000B, 0x6EF6, 0x000B, 0x0009 }, 0x0600900Eu);
@@ -7909,6 +7914,17 @@ void TestArea2Round5()
         const DecompileResult cmpNopped = decompile("A2-31 compare, nop in the slot", { 0x6043, 0x8805, 0x8B00, 0x2652, 0x000B, 0x0009 });
         CHECK(cmpFilled.prototype.ret.kind == cmpNopped.prototype.ret.kind);
         CHECK(cmpFilled.prototype.params.size() == cmpNopped.prototype.params.size());
+        // r0 computed from its own entry value and then compared: the engine drops the return (another use), and with it the text's read of
+        // r0, so the lent `void` hid a dependence on a register no signature passes. A nop in the slot hid it by keeping the return; the
+        // host (ReturnCheck, InputsInReturn) withholds it in every slot now.
+        for (uint16_t slot : { uint16_t(0x0009), uint16_t(0x7F00) })
+        {
+            const DecompileResult shll = decompile("A2-31 shll r0 ; cmp/eq #1,r0 ; rts", { 0x4000, 0x8801, 0x8BFF, 0x000B, slot });
+            CHECK(!shll.prototype.known && Has(shll.prototypeWithheld, "computed from r0 on entry"));
+        }
+        // ...and r0 left alone on the path that does not write it is not a read (A3-14's scratch r0): lent
+        const DecompileResult alone = decompile("A2-31 control: cmp/eq #1,r0 ; rts", { 0x8801, 0x8BFF, 0x000B, 0x0009 });
+        CHECK(alone.prototype.known);
         // A function that sets r0 and does nothing else with it still returns it, in any slot
         const DecompileResult one = decompile("A2-31 control: mov #1,r0 ; rts ; nop", { 0xE001, 0x000B, 0x0009 });
         CHECK(one.prototype.known && one.prototype.ret.kind != TypeKind::Void && Has(one.Text(), "return 1;"));

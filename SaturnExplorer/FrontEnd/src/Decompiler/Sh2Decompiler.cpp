@@ -850,11 +850,13 @@ private:
                 // (not an interrupt-mask idiom's plain transform of SR, which compiled code leaves in r0 as scratch: 06010054),
                 // made of nothing but those inputs and constants, and for r0 computed from r0's entry value on some path (a
                 // path that leaves r0 alone and one that writes something else is a scratch r0: 15 and 24 more corpus functions).
+                // ...and r0 computed from r0's entry value alone, on every path, which the engine takes for no return when the value has any
+                // other use (`shll r0 ; cmp/eq #1,r0 ; rts`): the dependence on r0 is gone from the text with the return. A nop in rts's
+                // slot hid this class (it kept every such return, A2-31); with any other slot it was lent `void` all along.
                 const uint32_t d = v.Direct();
-                if (v.Joined() && (d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 &&
-                    (d & ~(kNotParameters | 1u | (1u << kSr))) == 0)
+                if ((d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr))) == 0)
                 {
-                    if (d & (1u << kSr)) mInputsInReturn |= 1u << kSr;
+                    if (v.Joined() && (d & (1u << kSr))) mInputsInReturn |= 1u << kSr;
                     if ((d & 1u) && v.usesR0) mInputsInReturn |= 1u;
                 }
             }

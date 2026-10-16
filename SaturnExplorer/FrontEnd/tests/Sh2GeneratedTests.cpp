@@ -4650,6 +4650,7 @@ Subject RawSubject(const char* raw)
 //   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
 //   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
 //   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
+//   SE_CXX_COMPILER=<c++>          the C++ compiler of the engine reading of a text that disagrees as C (default: the one that goes with the C compiler)
 // Without a C compiler the run says so loudly and exits 77, which ctest reports as skipped.
 // A text that disagrees with the run as C is read once more as the engine means it (CxxHeader, C++ classes that do the
 // arithmetic at their own width: `(int4)-param_1` with `char param_1` negates a byte, a comparison is a four-byte unsigned
