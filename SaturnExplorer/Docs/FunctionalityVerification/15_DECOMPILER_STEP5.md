@@ -2708,3 +2708,95 @@ touches no spec).
   signature learned under another volatile list is not lent).
 - The corpus still has 39 and 77 functions withheld on "uses a register after calling": callers of helpers that change the register
   (or whose own signature is not lent).
+
+## Areas 3 and 4, round 3 review
+
+Reviewer, branch `review/3-4-round3-review`, on master `f0684b9` (patches 0001 to 0028). Adversarial: this round adds findings
+only, no fixes. New ledger rows: A3-3 (P2), A3-4 (P2), A3-5 (P2), A3-6 (P3), A4-7 (P3), and A2-11 (P3, found by the generator
+outside these areas). The instrument was a scratch driver, not committed: the `TestCallsAndTraps` oracle (`CallSnapshot`,
+`PseudoAgreesWithRun`) over fixtures read from a file, with the callees decompiled first and lent. It also did a lending run of
+image 008 that reports every lent prototype whose `preserved` misses a register the model keeps.
+
+### What was probed and held
+
+- **Patch 0025 (trapa).** A leaf callee with a `trapa` is withheld ("an indirect call it does not resolve"), and its caller
+  reads `extraout_r4`. Conservative and right. The fixer's fixtures were not re-derived.
+- **Patch 0026 (what a call kills).** T changed only by a `cmp/eq` in a lent callee clears SR's bit in `preserved`. A bit-range
+  write to `sr` is an `INT_AND`/`INT_OR` that `ReturnCheck` takes for a new value. The caller prints `extraout_sr` and is
+  withheld; the oracle agrees.
+- **Patch 0028 (lent effects).** These hold: r4 set in the caller's own `bsr` slot with a keeping callee (`return 9;`); nested
+  lending, where A calls B, B calls C, and C keeps r4 (`return param_1;`, all three lent); the one-path and delay-slot
+  controls of the suite. `ReturnCheck`'s model held for these:
+  - saves and restores through the stack;
+  - width-mismatched restores (a 2-byte load from a 4-byte slot is a new value);
+  - pushes below r15;
+  - stores through a parameter or a callee's `storesThrough` (every slot clobbered);
+  - recursion (the panel never lends a function its own signature, and the engine withholds "it calls itself", so no
+    coinductive proof is possible).
+
+  A stale callee is not lent: `Lendable` needs the snapshot key and the `LendingId`.
+- **The return-width question.** `mov.b @r4,r0` is lent `int4`, `extu.b` `xunknown1`, `and #0xff` `uint4`: each consistent with
+  the extension the callee makes. No mismatch was found.
+- **Patch 0021 (body from the last flow), 0024, 0027 (switch folds).** These all match the emulator or read right by hand:
+  - a conditional branch into an `rts` delay slot (Ghidra warns "overlaps"; the oracle agrees: `return 0x15` / `0x11`);
+  - a table entry into a delay slot (`case 1: return 0x6009011;`);
+  - a table entry that is the function's entry or the guard's compare (a loop, printed as `while` with a switch on the
+    entry value);
+  - two guards, signed and `cmp/pz`, with different defaults;
+  - table entries through the cache-through mirror;
+  - a table entry into uncaptured memory (truncated, warned, withheld);
+  - the `cmp/hi` control of A4-7.
+
+  For the patch 0027 three-way case: the default path's values can only differ from the switch block's through the switch
+  block's own register ops. A store there fails `noInterveningStatement`, and the guard block's stores are on both paths. Every
+  such value meets at the guard's target, where the patch compares it. No fixture found a way round.
+- **Generator**, grammar 2, `SE_GENERATED_FIRST=200001 SE_GENERATED_SEEDS=20000` (a new window): 1 failing seed of 20,000
+  (219488, A2-11), 1 finding. The ordinary suite with `SE_GAME_HWRAM=hwram008.bin`: all passed, 0 dropped, 20 missing and said.
+
+### What failed
+
+- **A3-3 (P2): a proved change to a "kept" register is ignored.** `LendEffects` lends only what was proved kept among the
+  registers the model kills. What was proved changed among those the model keeps (r8-r14, r15, GBR, VBR) is never killed. A lent
+  callee that sets r8, loads GBR, or leaves r15 4 bytes lower is read as keeping them. The caller prints the old value
+  (`return 5;` where the emulator returns 7) and is lent a signature on it. The corpus has real instances:
+  - `060647EC` takes and advances r8 and reads r14;
+  - `06064228` sets GBR.
+
+  Both are lent to callers that are lent in turn.
+- **A3-4 (P2): structure-return pointer in r2.** The callee writes the caller's local through r2, and the caller's read after
+  the call is folded to the value it stored before. The host's own proof (the callee's `storesThrough` names r2) is why the lent
+  caller is withheld, but the text still states 5 where the code returns 7.
+- **A3-5 (P2): inputs outside r4-r7 are dropped from a lent signature.** This covers r0-r3, r8-r14, GBR, MACH, MACL and T read
+  before written. A return made only of such an input is dropped too: `rts ; sts macl,r0` prints
+  `void f(void) { return; }`, lent `void`. The generator checks parameters for r4-r7 only.
+- **A3-6 (P3): an absolute store into the callee's own frame.** `ReturnCheck`'s assumption that an absolute address is not in
+  the stack lends r4 as kept when the callee overwrites its saved r4 through a constant address. It is the engine's own
+  assumption inside a function; it is raised so it is decided where the proof is lent.
+- **A4-7 (P3): a signed-only bound check.** A table guarded by `cmp/gt` or `cmp/ge` alone is shown with every other index going
+  to the default. The hardware takes a negative index through the word before the table.
+- **A2-11 (P3): an engine failure.** A store whose propagated constant address wraps 0xFFFFFFFF fails the whole function
+  (status Failed): `mov.w r1,@-r4` on the path where r4 = 0.
+
+### Oracle gaps (no fixture of a wrong output, so not rows)
+
+- The generator's check 10 compares `preserved` with the emulator for r0-r15, SR and PR. It skips GBR, VBR, MACH and MACL
+  (`else continue`), although patch 0028 lends MACH and MACL. Grammar 2 never touches MACH, MACL or GBR, and grammar 1 (which
+  has `mac`) has no calls. So the MACH/MACL lending is pinned only by `TestCallsAndTraps`.
+- Check 11 asks whether lent kept registers are honoured. It never asks whether a register lent as changed is still read as
+  kept. With A3-3 fixed, a check 11b would be the mirror image: a register outside r2-r7/SR/MACH/MACL that a callee does not
+  keep must not be read across the call as the caller's.
+- Shapes outside the grammar, each found only by hand this round:
+  - only unsigned guards (`cmp/hi`, `cmp/hs`);
+  - no r8-r15 or GBR changes (the generator's own contract);
+  - no inputs outside r4-r7;
+  - no struct returns.
+- `bodyBytes` (`fd->getSize()`) mixes mirrors: a function entered at 0x26009000 whose table jumps to 0x0600xxxx reports
+  536,870,908 bytes. Nothing reads `bodyBytes` outside the tests' `Print`, so this is no finding.
+
+### Not probed, and why
+
+- Interrupt-driven changes to a callee's registers, a `trapa` handler that rewrites its stacked PC (inline parameters after the
+  trap), and self-modifying literal pools. Each needs a model the oracle does not have.
+- `SE_GAME_LEND=1` (`TestGameLending`) was not rerun as such. The scratch lending run covers the same order and lending on
+  image 008 (2,998 functions, 1,004 lent). Image 007 was not run.
+- Grammar 1 and longer generator windows. Not these areas; the fixers' runs stand.
