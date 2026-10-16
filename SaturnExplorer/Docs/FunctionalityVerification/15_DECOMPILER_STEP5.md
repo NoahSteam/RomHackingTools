@@ -3742,3 +3742,191 @@ image 008 that reports every lent prototype whose `preserved` misses a register 
 - `SE_GAME_LEND=1` (`TestGameLending`) was not rerun as such. The scratch lending run covers the same order and lending on
   image 008 (2,998 functions, 1,004 lent). Image 007 was not run.
 - Grammar 1 and longer generator windows. Not these areas; the fixers' runs stand.
+
+## Area 3, round 3: lent effects, inputs outside r4-r7, the structure-return pointer
+
+Fixer, branch `review/3-round3-fix`, from master `f5268df`; fix commit `fdc68ff`, with `b1d783a` and `fb2a517`. Ledger rows A3-3, A3-4 and A3-5 are fixed, A3-6 is
+accepted. One engine patch, `0030-host-stack-alias.patch`; patch 0029 is the other fixer's. Every fixture of the four rows was
+reproduced first (the A3-3 fixtures: 20 failing checks on master, the oracle's "the code returned 00000007 ..., the pseudocode returns
+00000005" for r8, r9 and r14, and the GBR and VBR cases returning param_2 by the run and `param_1` by the text).
+
+### The classes, not the instances
+
+- **A3-3: the lent effects ran one way.** `LendEffects` (patch 0028) marks the registers the model kills (r2-r7, SR, MACH, MACL) that
+  `ReturnCheck` proved kept as unaffected. The registers the model keeps (r8-r14, GBR, VBR, and r15 as the stack) were never looked at, so
+  the proof `ReturnCheck` had already made (the bit clear in `CallEffects::preserved`) was thrown away at the call. Now the same proof
+  kills them: a proved change to r8-r14, GBR or VBR is `killedbycall` in the lent effects, and the caller reads `extraout_r8` and is
+  withheld on it, as for r4-r7. r15 cannot be killed (the engine's stack analysis would lose the frame); `ReturnCheck` now also records
+  where r15 ends at every return (`CallEffects::spDelta`, the offset from its entry value, when it is the same constant at all of them),
+  and `LendEffects` lends it as the callee's **extrapop**, which the engine applies to the stack pointer after the call. The caller of
+  the ledger's fixture c then reads the word the callee pushed (`xStack_8`), where before it popped its own (`return param_1;`). A
+  callee whose r15 differs between returns, or is not a constant, is withheld ("it leaves r15 changed by an amount that is not the same
+  at every return"). `ReturnCheck`'s own call model applies the delta, so the caller's stack slots stay tracked.
+- **A3-5: two holes.** (a) `WithholdReason` looked at the engine's input varnodes only where `possibleInputParam` accepted them (r4-r7,
+  the stack). It now looks at every input left in the register space: a register that is no parameter and is read for its value on entry
+  (r0-r3, r8-r14, GBR, MACH, MACL, or the T flag) withholds the signature, because no signature can pass it and the caller's setup of it
+  is dead code in the caller's text. (b) The engine does not leave such an input in the text when it also drops the return that was made
+  of it: `AncestorRealistic` takes a value that comes only from non-parameter inputs for no value, so `rts ; sts macl,r0` prints `void f(void)
+  { return; }` and the input is gone with it. `ReturnCheck` sees r0's origins at every return (a `mov` or `sts` of another register
+  leaves it exactly that register), and a function the engine calls void whose r0 comes from such a register is withheld ("its return is
+  computed from macl on entry"). Both hold for the ledger's a, b, c, d.
+- **A3-4: the engine cannot see the pointer, and the cspec cannot be made to.** The SH ABI's returned-structure address is in r2, which
+  the default model has no input for. Adding one is not a cspec change that works: parameter trials are positional and a chain of
+  inactive trials (r4-r7 untouched) cancels a later active one, while an r2 entry placed first would put a parameter on every call that
+  sets r2 as a scratch. The engine's `HiddenReturnAction` needs a structure-typed return, which nothing here infers. The fixture's
+  root is smaller: `mov r15,r2` is the only use of the frame address, so dead-code removal deletes the copy before
+  `AliasChecker` looks for pointers into the frame, and the local has no alias, its INDIRECT at the call is collapsed, and the read after the call is the value
+  stored before. The same code with the address in r4 prints `func(axStack_c); return axStack_c[0];` (checked). So the fix is for the host to say what
+  the code does: `ReturnCheck`, run on the raw p-code before the actions, notes an **exact** frame address in r2 at a call whose callee has
+  no lent signature (a lent one is never lent when it reads r2: A3-5), and declares the lowest such offset with `ScopeLocal::declareHostAlias`
+  (patch 0030, 26 functional lines in varmap.hh and varmap.cc): `AliasChecker` counts it as one more pointer base with no Varnode, also
+  when nothing else reads the stack pointer any more, and every local from that offset up is aliased. It lives as long as the function (the host
+  sees no restart). The text now reads `axStack_c[0] = 5; func_0x06009020(); return axStack_c[0];`, the evaluated pseudocode no longer claims 5,
+  and the call still shows no argument (the ABI register is not an input of the model).
+- **A3-6: accepted.** `ReturnCheck` takes a constant address never to be in the stack, as the engine's own stack analysis does for every
+  local it folds. The fixture needs a callee that stores over its own saved r4 at the one address that slot has for one entry state of
+  r15. Refusing the assumption in the proof clobbers every saved slot, the saved PR included, at each store to a constant address, so every function
+  that saves PR and writes a global would be withheld ("a return not to its caller"). `TestCallsAndTraps` keeps the fixture as a pinned
+  limit, with the run's 7 beside the lent text (`return param_1;`); `DECOMPILER_GUIDE.md` says it where the proof is described.
+
+### Decisions, each on a measurement
+
+- **Withhold, do not carry (A3-5).** Carrying an input into the lent prototype needs a prototype with explicit storage per parameter:
+  `FuncProto::setPieces` assigns positions from the model only, so it is an engine API (a further patch), a storage field in `Prototype`, in
+  `ShapeOf` and in the runner's digest, a type-of-register convention for `sr` and `gbr`, and a caller printing `f(x, in_r2)`. Withholding is
+  what the program's rule says ("nothing incomplete is lent") and costs 68 and 75 of 680 and 1,083 (above) lent signatures per image (below), all of them hand-written
+  conventions. Carrying also would not fix the r2 case for a callee that was not decompiled first.
+- **SR is not always an input.** `stc sr,r0 ; rts` is an interrupt-mask helper's idiom (20 of the lent functions of image 007 returned `in_sr`). When
+  the engine keeps the value (the compiler's `stc sr,r1 ; mov.l r1,@r14 ; mov.l @r14,r0`) and every use of the input is a whole copy, a
+  return or a store, it is machine state, not a call's input, and still lends. Anything computed from it (`movt`, `bt`, `addc`) is
+  the T flag and withholds. The bare `rts ; stc sr,r0` is dropped by the engine like `sts macl,r0` and is withheld by (b).
+- **(b) only on a path with no call, only r0.** First version flagged every origin of r0 and r1 at a return: 23 functions of image 007
+  that save r8 and call were withheld "its return is computed from r8 on entry". A call's outputs share one set of origins (everything
+  any of the callee's registers can come from), so after a call r0 has the origins of the callee's other registers. A path that has
+  made a call is therefore not asked (`State::called`); the engine's returns that are dropped are leaf functions'. r1 is scratch for a 32-bit
+  return and meets its own entry value wherever a loop may not run. r0's own entry value is no read either (a path that leaves r0 alone
+  and one that does not meet). A non-leaf function whose dropped return comes from such a register is left to (a), which sees an input
+  the engine kept. Not done: nothing sees one that neither does.
+- **Only r2 (A3-4).** r0, r1, r3 hold scratch frame addresses the compiler leaves behind and r8-r14 hold the frame pointer (r14 = r15 in
+  84 of the generator's 601 functions), so a rule over them would alias every local of every function. A frame address with an index added
+  to it has no offset to declare: the first version declared the whole frame for it and printed `axStack_80000000 [2147483580]`, so only an exact one counts.
+- **Five existing fixtures read an input by accident.** The three `macAfterPoll` fixtures end `sts macl,r0` after a `mac.l` (the accumulator
+  is the caller's), the two-hop chain stores r2 (`mov.l r2,@-r4`), `indexedLocal` indexes with r0, and `Sh2DecodeTests`' A2-5 function (patch 0020's recycled tree) adds to an r2 and
+  branches on a T nothing set (its slot is now `tst r4,r4`; not re-mutated against patch 0020, whose revert does not apply to a file with later notices). Each now uses what it needs from the
+  parameters or a `clrmac` (`sts macl,r0` becomes `clrmac`, `mov.l r2,@-r4` becomes `mov.l r5,@-r4`, `add r0,r1` becomes `add r4,r1`); the
+  assertions are the same, the machine-code reads are r4/r5.
+
+### The oracle
+
+- `PseudoEval` (the evaluated pseudocode of `TestCallsAndTraps`) reads an array element as memory: the engine prints a local as an array
+  when a pointer into it exists, and whatever a call wrote to it is unknown. Without it the corrected A3-4 text could not be evaluated
+  ("text left in an expression").
+- Generator, grammar 2 (separate stream, so every other program of a seed is unchanged; one module in three): a function that leaves
+  r12, r13 or r14 (one per module; the saved PR, frame pointer and extra push avoid it), GBR, VBR, MACH or MACL changed for good; a function that
+  reads an input no signature passes (r1-r3 left by the caller, or the entry value of an unsaved r8-r14, GBR, VBR, MACH, MACL copied to a scratch register that
+  later items store or return); a caller that copies the register a callee changed into a scratch register right after the call. r15
+  is not moved by the grammar (a callee that leaves it changed takes its callers' saved PR with it, and the harness cannot say what they then mean): the extrapop is pinned by
+  `TestCallsAndTraps` only.
+- Check 8 widened (`input-dropped:<reg>`): r0-r3, r8-r14, GBR, VBR, MACH and MACL read before written and whose value changes what the function does (hardware,
+  marked memory, memory through the parameter pointers, and r0 whenever the function writes it on every path, which is what a dropped return is) make a lent
+  prototype wrong. SR is not asked (every compare reads it under a mask). Check 10 widened: GBR, VBR, MACH, MACL, which now start at values of their
+  own. New check 12 (`kept-read`), the mirror of 11: a function whose lent callee changes r8-r14, GBR or VBR never prints that register's entry value
+  (`unaff_r13`, `in_gbr`) unless it reads it on purpose. `SE_GENERATED_MUTATE=kept` adds such a line to every result.
+- A bug in the generator's own instrument, found by the widened check: `nop` is `r0 = r0` in the spec, so `RegUse` counted every function that executes a nop as
+  having read and written r0 on every path. Both checks that ask about r0 (`return-invented` among them) were blind to it; the self copy is ignored now.
+  No new finding came out of that in 3,300 seeds.
+- `TestGameLending` (SE_GAME_LEND) prints, per image, why each signature is not lent (the reason with the callee's address taken out), and
+  the lent functions that change r8-r14, GBR or VBR with their callers.
+
+### Numbers
+
+Generator, grammar 2, 3,000 seeds (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000`): 0 failing seeds, 0 findings. The grammar changed, so
+there is no before; the new checks' reach: 5,809 lent prototypes (of 5,941 functions), 425 registers outside r4-r7 read for their value and checked by perturbing them
+(3,752 extra runs; none changes what a lent function does: the ones that would are withheld), 292 functions checked by check 12 (a lent callee changes a
+register they might read), 10,106 by check 11. The default run (300 seeds, both grammars): 0 findings. A new window (`SE_GENERATED_FIRST=200001 SE_GENERATED_SEEDS=20000`, the review's): 1 failing seed of 20,000, 219488 (A2-11, the engine address wrap, the other fixer's), 1 finding -- the review's own result.
+A first form of check 8 counted a push (`mov.l Rn,@-r15`) as a read of Rn: 8,133 "candidates", and two false findings in the window below (seeds 202338 and 216993), where a function
+reads an uninitialised local that is the slot an earlier callee pushed a perturbed r3 or r14 to -- a dependence on the stack's garbage, no register to pass. The push is no read now
+(it saves the register, its value is not an input of the code that saves it); the two seeds pass.
+
+Corpus, lending run (`SE_GAME_LEND=1`, callees first, each proved signature lent to the next as the panel does), master `f5268df` against this branch:
+
+| | 007 master | 007 now | 008 master | 008 now |
+|---|---|---|---|---|
+| functions | 1,733 | 1,733 | 2,998 | 2,998 |
+| signatures lent | 680 | 612 | 1,083 | 1,008 |
+| parameters in them | 845 | 770 | 1,302 | 1,223 |
+| withheld "uses a register after calling" | 39 | 30 | 77 | 67 |
+| lent, lost (all withheld now) | | 68 | | 75 |
+| lent, gained | | 0 | | 0 |
+| function bodies whose text differs | | 76 | | 97 |
+
+Why the 68 and 75 lost lent status: 007: 26 and 10 by the cascade ("it calls X, whose signature is not known") and "reads sr on entry" (the T flag, 10); the
+rest are hand-written conventions: GBR 6, r0 6, r1 7, r8 4, r2 3, r10 3, MACH 1, r14 1, and one r15 that differs between returns. 008: the same kinds
+(53 by the cascade, 11 on sr). The registers are the ones the ledger row names; nothing else is lost. (The first form of rule (b) lost 23 more per image that save r8 and
+call: with the `State::called` condition reverted, image 007 lends 546, not 612.) Of the lent functions, 156 (007) and 299 (008) change r8-r14, GBR or VBR -- 154 and 295
+of them also move r15, the entries the prologue heuristic finds one instruction after the real one (`mov.l r14,@-r15` before `sts.l pr,@-r15`) --
+and 2 and 6 functions are lent one: the 2 lent ones do not read the register after the call; the 4 that do print it as `extraout_` and are withheld. The ledger's
+corpus fixtures: `060647EC` (reads r8, advances it) is withheld ("it reads r8 on entry"), so is `0606538E` that called it, and `06064228` (sets GBR) is lent with GBR killed; its callers
+`060641E0` and `06063F2E` keep their text (neither reads GBR after the call; `06063F2E` is withheld, "its return is computed from r14", a convention of its own).
+
+Standalone corpus (`TestGameCode`, nothing lent), both images: every ledger count 0, the dropped accesses 0, 16 and 20 reads missing and said (unchanged). 3 of
+839 and 11 of 1,554 function texts differ from master: all of them a local the frame-address rule aliases (`xStack_f` becomes `axStack_f [11]`, `cStack_12`
+becomes `acStack_12 [14]`), where r2 holds a frame address at a call with no lent signature.
+
+Time (`TestGameCode`, image 008, the machine loaded by other agents, load 6 to 14): wall 18.9 to 21.1 s for the first two quiet pairs, user CPU of the whole suite
+33.7-35.8 s on master and 37.7-39.6 s now, about +11%: the probe is one more `ReturnCheck` over every function with a call, in the printing pass only (the first form ran it in
+both passes and cost +25%). No function's time moved in the worst case (3.0 s at `0604F422` on both).
+
+### Mutation
+
+Each reverted alone (the source restored after), `Sh2DecompilerTests` rebuilt and run, and the generator (300 seeds, grammar 2) where the host change is one it
+sees. The failing checks are the ones the table's reverse names.
+
+| Reverted | `Sh2DecompilerTests` | generator |
+|---|---|---|
+| `LendEffects` kills nothing (A3-3) | fails 23 checks: r8, r9, r14 (with the oracle: the run returns 7), GBR, VBR, MACH, MACL | 3 seeds, `kept-read` r12 and r13 |
+| the r15 delta not lent as the extrapop | fails 3: the oracle on fixture c (`xStack_8` missing, `return param_1;`) | not reached (the grammar never moves r15) |
+| `ReturnCheck::Apply` leaves r15 fuzzy after a delta call | fails 1: the caller of fixture c is not lent | not reached |
+| the varying-delta withhold removed | fails 2: `r15 moved by an argument` | not reached |
+| the engine-input scan (a) removed | fails 21: r0 (`add #1,r0`), r2, r3, r8, r14, GBR, T branched on, SR masked, MACL... | 26 seeds, 50 findings, `input-dropped` for r1-r3, r8, r10, r11, r13, r14, GBR, VBR, MACH, MACL |
+| the dropped-return rule (b) removed | fails 16: MACL, MACH, r2, r3, r8, the bare `stc sr,r0`, `r1 loaded` ... | 0 (the grammar's returns from an input are lent by neither or caught by (a)) |
+| (b) not limited to a void return | fails 2: the compiler's SR getter is withheld | |
+| (b) not limited to a path with no call | 0 in the suite; image 007 lends 546 instead of 612 (58 more withheld "computed from r8/r14/r2...") | |
+| the SR whole-copy exception removed | fails 2: the compiler's SR getter | |
+| the SR exception applied to every SR read | fails 3: `T branched on`, `SR masked`, `T` | |
+| the frame-address declaration removed (patch 0030's caller) | fails 4: `structure return through r2`, lent or not | |
+| the frame-address rule applied to lent callees too | fails 1: the control that ignores r2 reads `return axStack_`, not `return 5;` | |
+| the rule read r3, not r2 | fails 4: the same | |
+| patch 0030 ignores a declared alias when nothing reads r15 any more (`if (spacebase == 0) return`) | fails 4: the same (the copy of r15 is dead by then) | |
+| `PseudoEval` reads no array element | fails 4: the corrected text cannot be evaluated | |
+| GBR always "preserved" (check 10) | fails 9 (GBR fixtures) | 17 seeds, `preserved-wrong:gbr` (123 findings) |
+| MACL always "preserved" (check 10) | fails 4 (MACL fixtures) | 14 seeds, `preserved-wrong:macl` (88 findings) |
+
+`SE_GENERATED_MUTATE` (damage to a result): `kept` 22 of 300 seeds report it, `lent` 86, `preserved` 274, `honour` 134. Not mutated: the A3-6 pin (a fixture of a
+limit, which fails if the limit is ever removed: the run returns 7 and the text says `param_1`); the fifth changed fixture (below) against patch 0020, whose
+revert did not apply to the file with its later notices.
+
+### Matrix
+
+- Whole `ctest` (RelWithDebInfo, gcc, `-DSE_ENABLE_DECOMPILER=ON`): 96 of 96 pass. The first run found one failure: `Sh2DecodeTests`' A2-5 fixture (patch 0020's
+  recycled parse tree) is a function whose slot reads an r2 and whose branches test a T nothing set -- inputs no signature passes. It now sets T and reads a
+  parameter (`tst r4,r4`), the same shape. (A fifth existing fixture changed; its assertion is the same.)
+- Game corpus, both images, ledger counts 0 and 16/20 missing and said, as above.
+- gcc Debug with `-fsanitize=address,undefined`, `detect_leaks=1`: `Sh2DecompilerTests`, `Sh2DecompilerEngineTests`, `Sh2DecompilerFixtureTests`,
+  `DecompilerPanelTests`, `DecompilerRunnerTests` and 60 seeds of `Sh2GeneratedTests` exit 0 with only the allow-listed reports (`address.hh:605`,
+  `slghpatexpress.cc:979`). `DecompilerRunnerTests` failed once, under a load of 12 from other builds, on its timing-based "following request after the budget" and passed
+  on the rerun; `Sh2DecodeTests` and `SlaFreshness` were not run under the sanitizers.
+- `vendor.py` on the pinned Ghidra (`918d44e`, the sparse checkout in the scratchpad) with patch 0030 applied reproduces the committed tree, `sh-2.sla` aside (the
+  patch touches no spec).
+- The timing comparison, above.
+
+### Limits, and what is not done
+
+- r15 is not moved by the generator's grammar; the extrapop and the varying-delta withhold are pinned by `TestCallsAndTraps` alone.
+- The frame-address rule is r2 only and exact only. A callee that reads another register the caller filled with a frame address, a hidden input
+  in r0, r1, r3 or r8-r14 of a function not decompiled first, is read as before; for a function that was decompiled first it is withheld (A3-5).
+- A function that calls and whose return was dropped because it came from a non-parameter register is found only through the input the engine
+  kept, if it kept one.
+- Carrying an input in the lent prototype (instead of withholding) is not done; see the decision above.
+- The cache key: `spDelta` is in `ShapeOf` and in the runner's request digest. No other key changed.
+- Patch 0030 touches `varmap.cc` and `varmap.hh` only. The brief puts the other fixer's work in the engine's address code and in `jumptable.cc`, so the patches should apply in either order; not checked, 0029 is not on this branch.
