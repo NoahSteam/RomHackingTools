@@ -345,6 +345,9 @@ public:
     // After Run(): the registers outside r4-r7 (r1-r3, r8-r14, GBR, VBR, MACH, MACL: bit n is register n of
     // origin::) whose entry value reaches r0 at a return, through instructions of this function (not through a call).
     uint32_t InputsInReturn() const { return mInputsInReturn; }
+    // After Run(): whether r0 holds, at some return, a value this function put there and held across a call to a callee that
+    // keeps r0 (A3-13): the engine kills r0 at every call, so it does not see the value at the return.
+    bool CarriedValueInReturn() const { return mCarriedInReturn; }
 
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
     // function's own summary.
@@ -358,6 +361,7 @@ public:
         mSpKnown = true;
         mSpDelta = 0;
         mInputsInReturn = 0;
+        mCarriedInReturn = false;
         mStoresThrough = 0;
         mOut = 0;
         mLeaks = 0;
@@ -426,8 +430,30 @@ private:
         static Value Entry(int r) { Value x; x.kind = Reg; x.v = r; return x; }
         static Value Stack(int64_t off) { Value x; x.kind = Sp; x.v = off; return x; }
         static Value Const(int64_t c) { Value x; x.kind = Imm; x.v = c; return x; }
+        // Fuzzy: computed, at least in part, by this function's own instructions or loaded by them (A3-13, A3-14); false
+        // for what only a call returned. An exact value (a register's entry value, a stack address, a constant) is
+        // always the function's own: put there by it, or, for r0's own entry value, left alone (see OwnInR0).
+        bool own = true;
+        // The value was held in r0 across a call to a callee that keeps r0: the engine kills r0 at every call, so it
+        // does not see this value at a later return (A3-13).
+        bool carried = false;
+        // The value was the target of a `jsr @r0`: compiled code leaves the callee's address in r0 and the callee that keeps r0
+        // leaves it there, which is no value anyone returns (10 of the corpus's void functions do). Never carried.
+        bool callTarget = false;
+        // Fuzzy: an operation of this function had r0's entry value as an operand (not merely a path that leaves r0 alone).
+        bool usesR0 = false;
+        // Fuzzy: made, wholly or in part, by a join of two different values (the engine's MULTIEQUAL).
+        bool joined = false;
         static Value From(uint32_t o) { Value x; x.from = o; x.direct = o; return x; }
         static Value From(uint32_t o, uint32_t direct) { Value x; x.from = o; x.direct = direct; return x; }
+        // What a callee returned: not computed from anything here.
+        static Value Returned(uint32_t o) { Value x; x.from = o; x.direct = 0; x.own = false; return x; }
+        bool Own() const { return kind != Fuzzy || own; }
+        // As an operand: r0's entry value itself, or something already computed from it.
+        bool Joined() const { return kind == Fuzzy && joined; }
+        bool UsesR0() const { return (kind == Reg && v == 0) || (kind == Fuzzy && usesR0); }
+        // A value in r0 that this function put there: not r0's entry value left alone, not what a call returned.
+        bool OwnInR0() const { return !(kind == Reg && v == 0) && Own(); }
         uint32_t Origins() const
         {
             switch (kind)
@@ -442,7 +468,11 @@ private:
         // share one set of origins (everything any of the callee's registers can come from), so a value that
         // only a call made says nothing about the registers it was passed.
         uint32_t Direct() const { return kind == Fuzzy ? direct : Origins(); }
-        bool operator==(const Value& o) const { return kind == o.kind && v == o.v && (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase)); }
+        bool operator==(const Value& o) const
+        {
+            return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget &&
+                   (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase && own == o.own && usesR0 == o.usesR0 && joined == o.joined));
+        }
     };
     using Key = std::tuple<ghidra::AddrSpace*, ghidra::uintb, ghidra::uint4>;
     struct State
@@ -562,6 +592,11 @@ private:
         auto merge = [&changed](Value& a, const Value& b) {
             if (a == b) return;
             Value m = Value::From(a.Origins() | b.Origins(), a.Direct() | b.Direct());
+            m.own = a.Own() || b.Own();
+            m.carried = a.carried || b.carried;
+            m.callTarget = a.callTarget && b.callTarget;
+            m.usesR0 = a.usesR0 || b.usesR0;
+            m.joined = true;
             if (a.Base() != Value::kNoBase && b.Base() != Value::kNoBase) m.stackBase = std::min(a.Base(), b.Base());
             if (m == a) return;
             a = m;
@@ -598,7 +633,7 @@ private:
 
     static int64_t Wrap(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v)); }
 
-    void Call(State& s, uint32_t at)
+    void Call(State& s, uint32_t at, bool targetIsR0 = false)
     {
         CallEffects e;   // unknown: anything
         bool signatureLent = false;
@@ -613,7 +648,7 @@ private:
             }
         }
         if (!signatureLent) NoteFrameEscape(s);
-        Apply(s, e);
+        Apply(s, e, targetIsR0);
     }
 
     // A call whose signature is not lent may read r2: the SH ABI passes the address of a returned
@@ -638,7 +673,7 @@ private:
         mEscaped = true;
     }
 
-    void Apply(State& s, const CallEffects& e)
+    void Apply(State& s, const CallEffects& e, bool targetIsR0 = false)
     {
         // The callee's bits as origins here. Its entry registers are ours at the call. What it loads
         // from memory can be anything in memory, our slots included: it may read our frame through
@@ -671,6 +706,17 @@ private:
             Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
         }
         if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(stores), leaked | framed);
+        // A value this function put in r0 and a callee that keeps r0 leaves there: the engine's call killed it (A3-13). Not
+        // the callee's own address in `jsr @r0`, which compiled code leaves there (10 of the corpus's void functions).
+        if (e.preserved & 1u)
+        {
+            Value r0 = Get(s, mReg[0]);
+            if (targetIsR0 || r0.callTarget)
+                r0.callTarget = true;
+            else if (r0.OwnInR0())
+                r0.carried = true;
+            Set(s, mReg[0], r0);
+        }
         for (int r = 0; r < kTracked; ++r)
         {
             if (e.preserved & (1u << r)) continue;
@@ -678,7 +724,7 @@ private:
             if (r == kR15 && e.spDelta != CallEffects::kSpUnknown && sp.kind == Value::Sp)
                 Set(s, mReg[r], Value::Stack(Wrap(sp.v + e.spDelta)));
             else
-                Set(s, mReg[r], Value::From(out, 0));   // what the callee returns: not computed from anything here
+                Set(s, mReg[r], Value::Returned(out));   // what the callee returns: not computed from anything here
         }
     }
 
@@ -790,6 +836,28 @@ private:
             // registers (it is how a function that saves r8 in its prologue and calls would look to have
             // returned it). Value::Direct() leaves those out and keeps what this function's own instructions
             // computed r0 from, on every path that reaches the return.
+            if (r == 0 && v.OwnInR0())
+            {
+                // A value this function put in r0 and held across a call that keeps it (A3-13): the engine's call killed it, so
+                // the return is dropped, whatever the value is (a parameter, a constant, a sum of them). Compiled code leaves
+                // such a value only as scratch, which this rule withholds as well (10 of image 007's and 22 of image 008's
+                // void functions, measured); the alternative is a lent signature that loses a return.
+                if (v.carried) mCarriedInReturn = true;
+                // A join of entry values that no signature passes, or a value computed from them and joined with another path
+                // (A3-14): `phi(in_sr, in_sr | 0xf0)`, `phi(in_r0, in_r0 + 1)`. The engine takes a return made only of such
+                // inputs for no return (A3-5), and a join of them too; rule (b) below leaves out r0's own entry value and SR
+                // in a computed value, which is a path that leaves r0 alone or a flag written here. Here the value is a join
+                // (not an interrupt-mask idiom's plain transform of SR, which compiled code leaves in r0 as scratch: 06010054),
+                // made of nothing but those inputs and constants, and for r0 computed from r0's entry value on some path (a
+                // path that leaves r0 alone and one that writes something else is a scratch r0: 15 and 24 more corpus functions).
+                const uint32_t d = v.Direct();
+                if (v.Joined() && (d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 &&
+                    (d & ~(kNotParameters | 1u | (1u << kSr))) == 0)
+                {
+                    if (d & (1u << kSr)) mInputsInReturn |= 1u << kSr;
+                    if ((d & 1u) && v.usesR0) mInputsInReturn |= 1u;
+                }
+            }
             if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
                 mInputsInReturn |= v.Direct() & kNotParameters & ~1u;
@@ -843,22 +911,26 @@ private:
                 const Value x = Get(s, op.in[0]), y = Get(s, op.in[1]);
                 const bool sub = op.code == ghidra::CPUI_INT_SUB;
                 Value r = Value::From(x.Origins() | y.Origins(), x.Direct() | y.Direct());
+                r.carried = x.carried || y.carried;
+                r.usesR0 = x.UsesR0() || y.UsesR0();
+                r.joined = x.Joined() || y.Joined();
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
                 // An index added to a stack address stays in the stack (the engine's own stack analysis
                 // takes pointer arithmetic so too): somewhere in it, not the index's memory. Where from is
                 // kept (A3-9: `a[i] = f()` passes the address of an element in r2): the base address, with
-                // a constant added to it later added to the base, and the index taken as not negative.
+                // a constant added to it later added to the base.
                 else if (x.Base() != Value::kNoBase || (!sub && y.Base() != Value::kNoBase))
                 {
                     r = Value::From(origin::kStack);
-                    if (!sub && x.Base() != Value::kNoBase && y.Base() == Value::kNoBase)
-                        r.stackBase = Value::MoveBase(x.Base(), y.kind == Value::Imm ? y.v : 0);
-                    else if (!sub && y.Base() != Value::kNoBase && x.Base() == Value::kNoBase)
-                        r.stackBase = Value::MoveBase(y.Base(), x.kind == Value::Imm ? x.v : 0);
-                    else if (sub && y.kind == Value::Imm)
-                        r.stackBase = Value::MoveBase(x.Base(), -y.v);
+                    const bool xb = x.Base() != Value::kNoBase, yb = y.Base() != Value::kNoBase;
+                    // A constant moves the base; any other index may be negative (`p - i`, `p + i` for an i below zero reach the
+                    // locals under the address it was made from: A3-17), so the base is given up for the frame's lowest slot.
+                    if (xb && !yb)
+                        r.stackBase = y.kind == Value::Imm ? Value::MoveBase(x.Base(), sub ? -y.v : y.v) : Value::kLowBase;
+                    else if (!sub && yb && !xb)
+                        r.stackBase = x.kind == Value::Imm ? Value::MoveBase(y.Base(), x.v) : Value::kLowBase;
                 }
                 Set(s, op.out, r);
                 break;
@@ -867,7 +939,16 @@ private:
             case ghidra::CPUI_STORE: Store(s, Get(s, op.in[1]), op.in[2], Get(s, op.in[2])); break;
             case ghidra::CPUI_CALL:
             case ghidra::CPUI_CALLIND:
-                Call(s, a);
+                {
+                    // `jsr @r0`: the target is a copy of r0 made at the start of the instruction (the delay slot may change r0).
+                    bool viaR0 = false;
+                    if (op.code == ghidra::CPUI_CALLIND)
+                        for (int k = 0; k < i; ++k)
+                            if (c.ops[k].code == ghidra::CPUI_COPY && c.ops[k].hasOut && KeyOf(c.ops[k].out) == KeyOf(op.in[0]) &&
+                                KeyOf(c.ops[k].in[0]) == KeyOf(mReg[0]))
+                                viaR0 = true;
+                    Call(s, a, viaR0);
+                }
                 if (mNoReturn.count(a)) continue;   // the path ends in the callee
                 break;
             case ghidra::CPUI_CALLOTHER:
@@ -912,13 +993,21 @@ private:
                 if (op.hasOut)
                 {
                     uint32_t o = 0, d = 0;
+                    bool carried = false, usesR0 = false, joined = false;
                     for (const ghidra::VarnodeData& vn : op.in)
                     {
                         const Value x = Get(s, vn);
                         o |= x.Origins();
                         d |= x.Direct();
+                        carried = carried || x.carried;
+                        usesR0 = usesR0 || x.UsesR0();
+                        joined = joined || x.Joined();
                     }
-                    Set(s, op.out, Value::From(o, d));
+                    Value r = Value::From(o, d);
+                    r.carried = carried;
+                    r.usesR0 = usesR0;
+                    r.joined = joined;
+                    Set(s, op.out, r);
                 }
                 break;
             }
@@ -940,6 +1029,7 @@ private:
     uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
+    bool mCarriedInReturn = false;
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
@@ -1138,6 +1228,8 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
         for (int bit = 0; bit < 22; ++bit)
             if ((inputs >> bit) & 1u) return std::string("its return is computed from ") + kNames[bit] + " on entry, which no signature passes";
     }
+    if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID && check.CarriedValueInReturn())
+        return "it holds a value in r0 across a call that keeps r0, which the engine takes for no return";
     // r15 is not where it was on entry: the engine applies a constant difference as the call's extrapop
     // (LendEffects); one that varies between returns, or is not a constant, cannot be lent.
     if (!((effects.preserved >> 15) & 1u) && effects.spDelta == CallEffects::kSpUnknown)

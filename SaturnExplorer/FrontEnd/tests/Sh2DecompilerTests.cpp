@@ -7299,6 +7299,89 @@ void TestCallsAndTraps()
             uint32_t ran = 0;
             CHECK(CallRunResult(snap, g, inputs[0], ran) && ran == 7u);   // not param_1: the accepted limit
         }
+        // ---- A3-13 (round 5): a value put in r0 before a call to a callee that keeps r0 -----------------------------
+        // The engine kills r0 at every call, so the copy before the call is dead and the return is dropped; ReturnCheck sees
+        // r0 as the function's own value (a parameter, a constant, a sum), and rule (b) asked only registers no signature
+        // passes. A value this function put in r0 and a callee left there is a return the engine does not see: withheld.
+        // Compiled code does it as scratch (cmp/eq #imm,r0 before a call): the cost is in the corpus numbers.
+        {
+            struct Carried
+            {
+                const char* what;
+                std::vector<uint16_t> caller;
+            };
+            const Carried cases[] = {
+                { "r4 copied to r0 before a call that keeps r0", { 0x4F22, 0x6043, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "r5 copied to r0 before the call", { 0x4F22, 0x6053, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "a constant put in r0 before the call", { 0x4F22, 0xE005, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                { "r4 + r5 in r0, the sum finished in the delay slot", { 0x4F22, 0x6043, 0xB00C, 0x305C, 0x4F26, 0x000B, 0x0009 } },
+            };
+            for (const Carried& c : cases)
+            {
+                const CallFixture g = { c.what, base, withCallee(c.caller, { 0x000B, 0x0009 }) };
+                const Lent lg = lend(g, true, false);
+                CHECK(lg.callee.prototype.known);
+                CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "across a call that keeps r0"));
+                CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(g, ++serial), g, inputs));   // the text returns nothing, the code r4 / r5 / 5 / r4 + r5
+            }
+            // Controls. A callee that does not keep r0 (it sets it): the engine sees the callee's value, and the caller is lent.
+            const CallFixture sets = { "r0 set by the callee after the caller's copy", base,
+                                       withCallee({ 0x4F22, 0x6043, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE005, 0x000B, 0xE007 }) };
+            // (mov #5,r0 ; rts ; mov #7,r0: the callee's r0 is 7)
+            CHECK(lend(sets).caller.prototype.known);
+            // The value put in r0 after the call is the engine's own return.
+            const CallFixture after = { "r4 copied to r0 after the call", base,
+                                         withCallee({ 0x4F22, 0xB00D, 0x0009, 0x6043, 0x4F26, 0x000B, 0x0009 }, { 0x000B, 0x0009 }) };
+            CHECK(lend(after).caller.prototype.known);
+            // `jsr @r0`: compiled code leaves the callee's address in r0 and the callee that keeps r0 leaves it there. Not a
+            // return: lent. (mov.l @(3,pc),r0 ; jsr @r0 ; nop ; ... the literal is the callee's address.)
+            const CallFixture jsr = { "callee's address in r0 for jsr @r0", base,
+                                      withCallee({ 0x4F22, 0xD003, 0x400B, 0x0009, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9020 }, { 0x000B, 0x0009 }) };
+            auto snapJ = CallSnapshot(jsr, ++serial);
+            const DecompileResult calleeJ = d.Decompile(snapJ, Request(0x06009020u));
+            DecompileRequest qj = Request(jsr.base);
+            qj.prototypes.emplace_back(0x06009020u, calleeJ.prototype);
+            const DecompileResult callerJ = d.Decompile(snapJ, qj);
+            Print(jsr.name.c_str(), callerJ);
+            CHECK(calleeJ.prototype.known && callerJ.prototype.known);
+        }
+        // ---- A3-14 (round 5): a join of entry values the engine drops -------------------------------------------------
+        // `phi(in_sr, in_sr | 0xf0)` and `phi(in_r0, in_r0 + 1)` print as no return at all (the engine takes a return made only of
+        // inputs no signature passes for none), and the function was lent `void f(void)`, losing r4, which chooses the path.
+        // The SR shape is what `sr = get_cr(); if (!x) sr &= 0xf0; return sr;` compiles to. Withheld.
+        {
+            struct Joined
+            {
+                const char* what;
+                std::vector<uint16_t> code;
+                const char* reg;
+            };
+            const Joined cases[] = {
+                { "SR or'ed with 0xf0 on one path", { 0x0002, 0x4411, 0x8900, 0xCBF0, 0x000B, 0x0009 }, "sr" },
+                { "SR and'ed with 0xf0 on one path", { 0x0002, 0x2448, 0x8900, 0xC9F0, 0x000B, 0x0009 }, "sr" },
+                { "r0 incremented on one path", { 0x2448, 0x8900, 0x7001, 0x000B, 0x0009 }, "r0" },
+            };
+            for (const Joined& c : cases)
+            {
+                const CallFixture g = { c.what, base, c.code };
+                auto snap = CallSnapshot(g, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(g.base));
+                Print(g.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok);
+                CHECK(!r.prototype.known && Has(r.prototypeWithheld, (std::string("computed from ") + c.reg + " on entry").c_str()));
+                CHECK(!PseudoAgreesWithRun(r, snap, g, inputs));   // the engine's text returns nothing
+            }
+            // Accepted, pinned: a path that leaves r0 alone and another that sets it to a constant (`phi(in_r0, 5)`) is lent
+            // `void` as before. It hides the caller's r0 behind the constant, but compiled code leaves exactly this as scratch: the
+            // rule that withholds it (a join with r0's entry value, whatever the other path) takes 15 functions of image 007 and
+            // 24 of image 008 out of the lent set, every one a void function with a scratch r0. The interrupt-mask idiom's plain
+            // transform of SR left in r0 (06010054) is not a join either, and stays lent.
+            const CallFixture alone = { "r0 left alone on one path, set to a constant on the other", base, { 0x2448, 0x8900, 0xE005, 0x000B, 0x0009 } };
+            auto snapA = CallSnapshot(alone, ++serial);
+            const DecompileResult ra = d.Decompile(snapA, Request(alone.base));
+            Print(alone.name.c_str(), ra);
+            CHECK(ra.prototype.known);
+        }
         // ---- A3-16 (round 5): a loop that moves a stack address down -----------------------------------------------
         // A3-9 made a join of two stack addresses keep the lower base; a loop that lowers an address each pass never
         // settled, ReturnCheck ran to its step limit (3.4 s for 11 instructions) and withheld the function "too many
@@ -7341,6 +7424,33 @@ void TestCallsAndTraps()
             const DecompileResult rc = d.Decompile(snapC, Request(c.base));
             Print(c.name.c_str(), rc);
             CHECK(rc.elapsedMs < 1000 && !Has(rc.Text(), "return 10;") && Has(rc.Text(), "iStack_c + iStack_8"));
+        }
+        // ---- A3-17 (round 5): a negative or a subtracted index from a frame address ---------------------------------
+        // Round 4 took an index added to a frame address as not negative, and dropped the base for a subtracted
+        // register, so `p - i` and `p + (-1)` from the address of the second local reached the one below it, which the
+        // declared alias did not cover: the read after the call was folded (`return 5;` where the code returns 7).
+        // An index that is not a constant gives up the base for the frame's lowest slot (p - i, and p + i for an i that may
+        // be negative, are ordinary C when p points into an array).
+        {
+            const std::vector<uint16_t> callee = { 0xE107, 0x000B, 0x2212 };   // g: mov #7,r1 ; rts ; mov.l r1,@r2
+            for (const bool subtract : { false, true })
+            {
+                const CallFixture g = { subtract ? "frame address minus an index, in r2" : "frame address plus a negative index, in r2", base,
+                                        withCallee({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x62F3, 0x7204, uint16_t(subtract ? 0x3248 : 0x324C), 0xB006,
+                                                     0x0009, 0x60F2, 0x7F08, 0x4F26, 0x000B, 0x0009 }, callee) };
+                // add: r2 = r15 + 4 + r4, so r4 = -4 reaches the word at r15 (the code returns 7); sub: r2 = r15 + 4 - r4, so
+                // r4 = 4 does.
+                const std::vector<std::vector<uint32_t>> reach = { { 0 }, { subtract ? 4u : 0xFFFFFFFCu } };
+                auto snap = CallSnapshot(g, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(g.base));
+                Print(g.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok);
+                CHECK(!Has(r.Text(), "return 5;"));
+                CHECK(PseudoAgreesWithRun(r, snap, g, reach));
+                uint32_t ran = 0;
+                CHECK(CallRunResult(snap, g, reach[1], ran) && ran == 7u);
+                CHECK(!r.prototype.known);   // the callee reads r2: withheld, and so is the caller
+            }
         }
         // The evaluator reads an array local as memory (it cannot know what a call wrote to it).
         {
