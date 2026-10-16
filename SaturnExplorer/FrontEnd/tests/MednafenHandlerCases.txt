@@ -12,7 +12,7 @@
 onchip.rd8.hi pex=1 sw=1 mask=FC : 0,2,20,22=M ; 4,6,24,26=M ; 8,A,28,2A=M ; C,E,2C,2E=M ; 10,12,30,32=M ; 14,16,34,36=M ; 18,1A,38,3A=M ; 1C,1E,3C,3E=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=ME ; A0,A8=M ; B0=ME ; E0,E2=M ; E4,E6=M ; E8,EA=M ; EC,EE=M ; F0,F2=ME ; F4,F6=M ; F8,FA=M
 onchip.rd8.lo pex=0 sw=1 mask=am : 10=M ; 11=ME ; 12=ME ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 18=ME ; 19=M ; 71,72=M ; 80,88=ME ; 81,89=M ; 82,85,86,87,8A,8D,8E,8F=- ; 83,8B=ME ; 91=M ; 92,93,94,95,96,97,98,99,9A,9B,9C,9D,9E,9F=M ; 60,61=M ; 62,63=M ; 64,65=M ; 66,67=M ; 68,69=M ; 6A,6B,6C,6D,6E,6F=M ; E0,E1=M ; E2,E3=M ; E4,E5=M ; E6,E7,E8,E9,EA,EB,EC,ED,EE,EF,F0,F1,F2,F3,F4,F5,F6,F7,F8,F9,FA,FB,FC,FD,FE,FF=M
 onchip.wr8.hi pex=1 sw=1 mask=FC : 0,20=M ; 4,24=MD ; 8,28=M ; C,2C=M ; 10,30=M ; 14,34=MD ; 18,38=M ; 1C,3C=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=MS ; A0,A8=M ; B0=MS ; E0=- ; E4=- ; E8=- ; EC=- ; F0=- ; F4=- ; F8=-
-onchip.wr8.lo pex=0 sw=1 mask=am : 10=M ; 11=M ; 12=M ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 71,72=M ; 80,88=F ; 82,8A=F ; 81,83,84,85,86,87,89,8B,8C,8D,8E,8F=F ; 91=M ; 92=MC ; 60,61=M ; 62,63=M ; 64,65=M ; 66,67=M ; 68,69=M ; E0,E1=M ; E2,E3=M ; E4,E5=M
+onchip.wr8.lo pex=0 sw=1 mask=am : 10=M ; 11=M ; 12=M ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 71,72=M ; 80,88=F ; 82,8A=F ; 81,83,84,85,86,87,89,8B,8C,8D,8E,8F=F ; 91=M ; 92=MC ; 60=M ; 61=- ; 62,63=M ; 64,65=M ; 66,67=M ; 68=M ; 69=- ; E0,E1=M ; E2,E3=M ; E4,E5=M
 onchip.rd16.hi pex=0 sw=1 mask=FE : 0,2,20,22=M ; 4,6,24,26=M ; 8,A,28,2A=M ; C,E,2C,2E=M ; 10,12,30,32=M ; 14,16,34,36=M ; 18,1A,38,3A=M ; 1C,1E,3C,3E=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=ME ; A0,A8=M ; B0=ME ; E0,E2=M ; E4,E6=M ; E8,EA=M ; EC,EE=M ; F0,F2=ME ; F4,F6=M ; F8,FA=M
 onchip.rd16.lo pex=0 sw=1 mask=am : 10=M ; 11=ME ; 12=ME ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 18=ME ; 19=M ; 71,72=M ; 80,88=ME ; 81,89=M ; 82,85,86,87,8A,8D,8E,8F=- ; 83,8B=ME ; 91=M ; 92,93,94,95,96,97,98,99,9A,9B,9C,9D,9E,9F=M ; 60,61=M ; 62,63=M ; 64,65=M ; 66,67=M ; 68,69=M ; 6A,6B,6C,6D,6E,6F=M ; E0,E1=M ; E2,E3=M ; E4,E5=M ; E6,E7,E8,E9,EA,EB,EC,ED,EE,EF,F0,F1,F2,F3,F4,F5,F6,F7,F8,F9,FA,FB,FC,FD,FE,FF=M
 onchip.wr16.hi pex=0 sw=1 mask=FE : 0,20=M ; 4,24=MD ; 8,28=M ; C,2C=M ; 10,30=M ; 14,34=MD ; 18,38=M ; 1C,3C=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=MS ; A0,A8=M ; B0=MS ; E0=- ; E4=- ; E8=- ; EC=- ; F0=- ; F4=- ; F8=-
@@ -20,11 +20,12 @@ onchip.wr16.lo pex=0 sw=1 mask=am : 10=M ; 11=M ; 12=M ; 13=M ; 14=M ; 15=M ; 16
 onchip.rd32.hi pex=0 sw=1 mask=FC : 0,2,20,22=M ; 4,6,24,26=M ; 8,A,28,2A=M ; C,E,2C,2E=M ; 10,12,30,32=M ; 14,16,34,36=M ; 18,1A,38,3A=M ; 1C,1E,3C,3E=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=ME ; A0,A8=M ; B0=ME ; E0,E2=M ; E4,E6=M ; E8,EA=M ; EC,EE=M ; F0,F2=ME ; F4,F6=M ; F8,FA=M
 onchip.rd32.lo pex=1 sw=0 mask=am : 
 onchip.wr32.hi pex=0 sw=1 mask=FC : 0,20=M ; 4,24=MD ; 8,28=M ; C,2C=M ; 10,30=M ; 14,34=MD ; 18,38=M ; 1C,3C=M ; 80,90=M ; 84,94=M ; 88,98=M ; 8C,9C=MS ; A0,A8=M ; B0=MS ; E0=M ; E4=M ; E8=M ; EC=M ; F0=M ; F4=M ; F8=M
-onchip.wr32.lo pex=1 sw=1 mask=am : 10=M ; 11=M ; 12=M ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 71,72=M ; 80,88=F ; 82,8A=F ; 81,83,84,85,86,87,89,8B,8C,8D,8E,8F=F ; 91=M ; 92=MC ; 60,61=M ; 62,63=M ; 64,65=M ; 66,67=M ; 68,69=M ; E0,E1=M ; E2,E3=M ; E4,E5=M
+onchip.wr32.lo pex=1 sw=1 mask=am : 10=M ; 11=M ; 12=M ; 13=M ; 14=M ; 15=M ; 16=M ; 17=M ; 71,72=M ; 80,88=F ; 82,8A=F ; 81,83,84,85,86,87,89,8B,8C,8D,8E,8F=F ; 91=M ; 92=MC ; 60=M ; 61=- ; 62=M ; 63=- ; 64=M ; 65=- ; 66=M ; 67=- ; 68=M ; 69=- ; E0=M ; E1=- ; E2=M ; E3=- ; E4=M ; E5=-
 bus.misaligned rd_pex=1 wr_pex=1 align_down=1
 bus.cache rd_cached_partition=1 rd_hit_no_bus=1 rd_miss_fills_line=1 wr_through=1
 bus.partition7 onchip_rd=1 onchip_wr=1
 bus.partition25 assoc_purge_rd=1 assoc_purge_wr=1
+bus.onchipbyte wr_dup=1 rd_shift8=1
 scu.rd8 sw=1 mask=FC : A4=M ; A8=- ; C4=M ; C8=M ; 0,20,40=M ; 4,24,44=M ; 7C=M ; 80=ME ; 8C=ME
 scu.wr8 sw=1 mask=FC : 90=M ; 94=M ; 98=MF ; A0=M ; A4=M ; A8=MF ; B0=M ; B4=M ; B8=M ; C4=M ; 0,20,40=M ; 4,24,44=M ; 8,28,48=M ; C,2C,4C=M ; 10,30,50=MF ; 14,34,54=M ; 60=MF ; 80=MF ; 84=M ; 88=M ; 8C=M
 scu.rd16 sw=1 mask=FC : A4=M ; A8=- ; C4=M ; C8=M ; 0,20,40=M ; 4,24,44=M ; 7C=M ; 80=ME ; 8C=ME

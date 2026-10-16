@@ -21,6 +21,12 @@
 #               sw=<0|1>    the branch decodes anything (a switch); an address-error-only branch has none
 #               mask=<hex|am>  the mask the offset gets (A &= 0xFC) or `am`: the low byte as it is
 #   group       <label>,<label>...=<flags>   labels that share one body (fall-through): one register
+#   a label whose lane mask kills the store (A5-30): a write case that stores `(V << shift) & mask & CONST` is
+#               evaluated per label with the branch's own `mask` and `shift` statements; a label for which nothing of V
+#               survives (IPRB's and VCRD's low byte, every odd label of a long write) is its own group with the flag `-`
+#               and not part of the register's group, so a cell that says it writes there is a disagreement
+#   bus.onchipbyte  the values a byte access to a 32-bit register gets after its address error (A5-31): a write stores
+#               V | V << 8; a read returns bits 15-8 of the register (it shifts after the address is aligned)
 #   flags       M  the case does something with the access (a read returns a value that is not a
 #                  constant, a write stores or acts); - decoded and inert (a bare break, ret = 0xFF)
 #               E  a read has a side effect (a flag armed, a latch, a FIFO pop)
@@ -92,6 +98,42 @@ def parse_cases(body):
             continue
         out.append((pending, text))
         pending = []
+    return out
+
+LANE = re.compile(r'\(V\s*<<\s*shift\)\s*&\s*mask\s*&\s*(0x[0-9A-Fa-f]+)')
+
+def lane_runner(branch):
+    """The statements before the switch that set `mask` and `shift`, run for one label: (mask, shift)."""
+    pre = strip_comments(branch[:branch.index('switch')])
+    stm = [t.strip() for t in pre.replace('{', ';').replace('}', ';').split(';')]
+    def run(label):
+        env = {'A': label, 'mask': 0xFFFF, 'shift': 0}
+        for t in stm:
+            m = re.match(r'^(?:unsigned\s+)?(mask|shift)\s*(\^|\|)?=\s*(.+)$', t)
+            if not m: continue
+            name, op, expr = m.groups()
+            v = eval(expr, {'__builtins__': {}}, dict(env))
+            env[name] = (env[name] ^ v) if op == '^' else (env[name] | v) if op == '|' else v
+        return env['mask'], env['shift']
+    return run
+
+def split_dead_lanes(groups, branch, width):
+    """A group whose body stores `(V << shift) & mask & CONST`: the labels where that is 0 for every V of the width are inert."""
+    run = lane_runner(branch)
+    ones = (1 << width) - 1
+    out = []
+    for labels, text in groups:
+        m = LANE.search(strip_comments(text))
+        if not m:
+            out.append((labels, text))
+            continue
+        const = int(m.group(1), 16)
+        alive, dead = [], []
+        for l in labels:
+            mask, shift = run(l)
+            (alive if ((ones << shift) & 0xFFFFFFFF & mask & const) else dead).append(l)
+        if alive: out.append((alive, text))
+        if dead: out.append((dead, ''))
     return out
 
 TIMING = ('MA_until', 'FRT_WDT_Update', 'RecalcPendingIntPEX', 'FRT_WDT_Recalc_NET', 'FRT_CheckOCR',
@@ -199,8 +241,23 @@ def onchip_lines(inc):
                 m = re.search(r'A\s*&=\s*(0x[0-9A-Fa-f]+)', br)
                 mask = ('%X' % int(m.group(1), 16)) if m else 'am'
                 attrs = [('pex', int('SH7095_SetPEX' in br)), ('sw', int(sw is not None)), ('mask', mask)]
-                out.append(line('onchip.%s%d.%s' % (tag, width, half), attrs, parse_cases(sw) if sw else [], classify))
+                groups = parse_cases(sw) if sw else []
+                if tag == 'wr' and half == 'lo' and sw: groups = split_dead_lanes(groups, br, width)
+                out.append(line('onchip.%s%d.%s' % (tag, width, half), attrs, groups, classify))
     return out
+
+def byte_error_line(inc):
+    # What a byte access to a 32-bit register gets after its address error (hi half, A & 0x100 set).
+    wr = func_body(inc, r'static NO_INLINE MDFN_HOT void SH7095_OnChipRegWrite_u8\(')
+    rd = func_body(inc, r'static INLINE uint8_t SH7095_OnChipRegRead_INLINE_u8\(SH7095\* z, uint32_t A\)')
+    whi, _ = split_hi_lo(wr)
+    rhi, _ = split_hi_lo(rd)
+    pre = lambda t: strip_comments(t[:t.index('switch')])
+    dup = int(re.search(r'V\s*\|=\s*\(uint8_t\)V\s*<<\s*8', pre(whi)) is not None and re.search(r'A\s*&=\s*0xFC', pre(whi)) is not None)
+    tail = strip_comments(rhi[rhi.index('switch'):])
+    shift8 = int(re.search(r'A\s*&=\s*0xFC', pre(rhi)) is not None and
+                 re.search(r'ret\s*>>=\s*\(\(A\s*&\s*1\)\s*\^\s*1\)\s*<<\s*3', tail) is not None)
+    return 'bus.onchipbyte wr_dup=%d rd_shift8=%d' % (dup, shift8)
 
 def bus_lines(inc):
     # The CPU's bus dispatch (sh7095.inc MemRead / MemWrite): facts about the partitions, as present(1) or absent(0).
@@ -257,6 +314,7 @@ def derive(med):
     lines = []
     lines += onchip_lines(inc)
     lines += bus_lines(inc)
+    lines.append(byte_error_line(inc))
     lines += scu_lines(scu)
     lines.append(simple_line('vdp1.rd', v1, r'static INLINE uint16_t ReadReg\(', classify_read, r'which'))
     lines.append(simple_line('vdp1.wr', v1, r'static INLINE void WriteReg\(', classify_write, r'which'))

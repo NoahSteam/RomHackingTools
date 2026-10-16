@@ -1527,12 +1527,93 @@ void TestHardwareVolatility()
         add("q_ptmr", { 0xD102, 0xE001, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);   // PTMR = 1
         add("q_ptmr0", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);   // control: PTMR = 0
     }
-    for (const auto& x : r4)
+    // ---- Area 5, round 5 (REVIEW_LEDGER.md A5-28 to A5-32): the reviewer's fixtures, their words verbatim (only the base moves), and
+    // the controls and neighbours each fix needs. A5-28's through-variant and A5-29..A5-32's literals are as the ledger gives them.
+    std::map<std::string, Fixture> r5;
     {
-        size_t off = x.second.base - 0x06000000u;
-        for (uint16_t c : x.second.code) { dts::Put16(hw, off, c); off += 2; }
-        dts::Put32(hw, x.second.base + x.second.literal - 0x06000000u, x.second.pointer);
+        uint32_t next = 0x0600E000u;
+        auto add = [&](const char* name, std::vector<uint16_t> words, uint32_t literal, uint32_t pointer) {
+            r5[name] = Fixture{ next, words, literal, pointer };
+            next += 0x40u;
+        };
+        // A5-28: a pointer merged from register literals (mov.l lit0,r1 ; tst r4,r4 ; bt L ; mov.l lit1,r1 ; nop ; L: mov.w @r1,r0 ; tst #8,r0 ; bt L).
+        add("a5_28", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0x6011, 0xC808, 0x89FC, 0x000B, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0004, 0x05F8, 0x000A },
+            0x18, 0x05F80004u);
+        add("a5_28_through", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0x6011, 0xC808, 0x89FC, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0004, 0x25F8, 0x000A },
+            0x18, 0x25F80004u);   // control: the same poll through the cache-through partition
+        // ...a write through a merged pointer (VDP1_ENDR or VDP1_PTMR; the value written is 0)
+        add("a5_28_write", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25D0, 0x000C, 0x25D0, 0x0004 },
+            0x18, 0x25D0000Cu);
+        // ...a pointer that is a register address or a parameter: said, with "may hold other values"
+        add("a5_28_other", { 0xD104, 0x2448, 0x8900, 0x6153, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x05F8, 0x0004 }, 0x14, 0x05F80004u);
+        // ...control: a pointer that is only a parameter names no register
+        add("a5_28_param", { 0x6041, 0x000B, 0x0009, 0x0009 }, 0x04, 0x00000000u);
+        // ...a pointer built from a number that is not a register (`param_1 - 1` is INT_ADD(0xFFFFFFFF, param_1)): no register is named
+        add("a5_28_minus1", { 0x6143, 0x71FF, 0x6010, 0x000B, 0x0009 }, 0x08, 0x00000000u);
+        // ...a number that is a register's address (0xFFFFFFF4, SH2_RTCNT's) added to a parameter prints as `param_1 + -0xc`: no register is named
+        add("a5_28_rawconst", { 0xD102, 0x314C, 0x6011, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFFF4 }, 0x0C, 0xFFFFFFF4u);
+        // ...an index added to a register's address: said for the register itself
+        add("a5_28_addend", { 0xD102, 0x314C, 0x6011, 0x000B, 0x0009, 0x0009, 0x05F8, 0x0004 }, 0x0C, 0x05F80004u);
+        add("a5_28_index", { 0xD105, 0x6043, 0x4008, 0x4008, 0x4000, 0xD204, 0x0126, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 },
+            0x18, 0x25FE0010u);   // (&SCU_D0EN)[param_1 * 8] = 0x101, the corpora's shape (hwram007 0601B7B4, hwram008 0605A964)
+        // ...a write through a pointer that may be SMPC_PDR1 or SMPC_PDR2, then a read of SMPC_PDR1: the write is not certain, so the read
+        // is not "read back after a write" (the split note); the control writes SMPC_PDR1 directly
+        add("a5_28_split", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xE000, 0x2100, 0xD204, 0x6020, 0x000B, 0x0009, 0x0009, 0x2010, 0x0075, 0x2010, 0x0077, 0x2010, 0x0075 },
+            0x18, 0x20100075u);
+        add("a5_28_split_direct", { 0xD103, 0xE000, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x2010, 0x0075 }, 0x10, 0x20100075u);
+        // A5-29: a misaligned on-chip access (a: word write at 0xFFFFFF05, b: word read at 0xFFFFFF8D, c: long write at 0xFFFFFF06, d: word read at 0xFFFFFE11).
+        add("a5_29a", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFF05 }, 0x0C, 0xFFFFFF05u);
+        add("a5_29b", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFF8D }, 0x08, 0xFFFFFF8Du);
+        add("a5_29c", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFF06 }, 0x0C, 0xFFFFFF06u);
+        add("a5_29d", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFE11 }, 0x08, 0xFFFFFE11u);
+        add("a5_29e", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE11 }, 0x0C, 0xFFFFFE11u);   // a word write at FTCSR's own address
+        add("a5_29f", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFE61 }, 0x08, 0xFFFFFE61u);   // a word read at IPRB + 1: IPRB, whole
+        add("a5_29g", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFE81 }, 0x08, 0xFFFFFE81u);   // a word read at WTCNT's address
+        add("a5_29h", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE81 }, 0x0C, 0xFFFFFE81u);   // a word write at WTCNT's address: not the key port
+        // A5-30: a byte write to the reserved low byte of IPRB / VCRD; controls: the high byte, VCRA's low byte, a word write.
+        add("a5_30iprb", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE61 }, 0x0C, 0xFFFFFE61u);
+        add("a5_30vcrd", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE69 }, 0x0C, 0xFFFFFE69u);
+        add("a5_30high", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE60 }, 0x0C, 0xFFFFFE60u);
+        add("a5_30vcra", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE63 }, 0x0C, 0xFFFFFE63u);
+        add("a5_30word", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE60 }, 0x0C, 0xFFFFFE60u);
+        // A5-31: what Mednafen does after the address error (a: byte write to DVDNT, b: byte read of CHCR0, c: long write at TIER, d: long read at TIER).
+        add("a5_31a", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFF07 }, 0x0C, 0xFFFFFF07u);
+        add("a5_31b", { 0xD101, 0x6010, 0x000B, 0x0009, 0xFFFF, 0xFF8F }, 0x08, 0xFFFFFF8Fu);
+        add("a5_31c", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE10 }, 0x0C, 0xFFFFFE10u);
+        add("a5_31d", { 0xD101, 0x6012, 0x000B, 0x0009, 0xFFFF, 0xFE10 }, 0x08, 0xFFFFFE10u);
+        add("a5_31iprb", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE60 }, 0x0C, 0xFFFFFE60u);   // a long at IPRB: bits 15-8 into its high byte
+        add("a5_31odd", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE61 }, 0x0C, 0xFFFFFE61u);   // a long at IPRB + 1: nothing is stored
+        add("a5_31wdt", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE80 }, 0x0C, 0xFFFFFE80u);   // a long at the watchdog: nothing is stored
+        add("a5_31ccr", { 0xD102, 0xE010, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE92 }, 0x0C, 0xFFFFFE92u);   // a long write to CCR with CP set: purges
+        add("a5_31bsc", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFFE3 }, 0x0C, 0xFFFFFFE3u);   // a byte write to a bus state controller register
+        // A5-32: a: VDP1_ENDR = 0, b: SCU_D0EN = 0x101, c: SCU_AIACK = 1; and DSTP, T1MD, level 1, and controls without the bits.
+        add("a5_32a", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x000C }, 0x0C, 0x25D0000Cu);
+        add("a5_32b", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x0C, 0x25FE0010u);
+        add("a5_32c", { 0xD102, 0xE001, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A8 }, 0x0C, 0x25FE00A8u);
+        add("a5_32dstp", { 0xD102, 0xE001, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0060 }, 0x0C, 0x25FE0060u);
+        add("a5_32t1md", { 0xD102, 0xE000, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0098 }, 0x0C, 0x25FE0098u);
+        add("a5_32level1", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0030, 0x0000, 0x0101 }, 0x0C, 0x25FE0030u);
+        add("a5_32en1", { 0xD102, 0xE001, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010 }, 0x0C, 0x25FE0010u);   // control: bit 0 only, no bit 8
+        add("a5_32aiack0", { 0xD102, 0xE000, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A8 }, 0x0C, 0x25FE00A8u);   // control: bit 0 clear
+        // ...the lane that carries the bits: a word at +0 and a byte at +0 carry neither bit 0 nor bit 8; a word at +2 carries both; a byte at +3 carries bit 0
+        add("a5_32word0", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x0C, 0x25FE0010u);
+        add("a5_32word2", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0012, 0x0000, 0x0101 }, 0x0C, 0x25FE0012u);
+        add("a5_32byte0", { 0xD102, 0xE001, 0x2100, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010 }, 0x0C, 0x25FE0010u);
+        add("a5_32byte3", { 0xD102, 0xE001, 0x2100, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0013 }, 0x0C, 0x25FE0013u);
+        add("a5_32t1md1", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0098, 0x0000, 0x0101 }, 0x0C, 0x25FE0098u);   // control: enable set
+        // The reviewer's questions (A5-33, A5-34): a store to the BIOS ROM that the engine folds; the cache address array.
+        add("a5_33", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1000 }, 0x10, 0x00001000u);   // mov.b 5 -> ROM, read it back
+        add("a5_33_through", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x2000, 0x1000 }, 0x10, 0x20001000u);   // ...through the cache-through partition
+        add("a5_33_ram", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1000 }, 0x10, 0x06001000u);   // control: work RAM
+        add("a5_34", { 0xD102, 0xE005, 0x2102, 0x000B, 0x0009, 0x0009, 0x6000, 0x0010 }, 0x0C, 0x60000010u);   // a long write to the address array, entry 1
     }
+    for (const auto* group : { &r4, &r5 })
+        for (const auto& x : *group)
+        {
+            size_t off = x.second.base - 0x06000000u;
+            for (uint16_t c : x.second.code) { dts::Put16(hw, off, c); off += 2; }
+            dts::Put32(hw, x.second.base + x.second.literal - 0x06000000u, x.second.pointer);
+        }
     for (const auto& w : wf)
     {
         size_t off = w.second.f.base - 0x06000000u;
@@ -2247,14 +2328,17 @@ void TestHardwareVolatility()
         auto rr = W("icrLong", "a long write over SH2_ICR and SH2_IPRA");
         CHECK(Ledger(rr.first, { Wr(0xFFFFFEE0u, 4) }));
         CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_ICR, a 16-bit register, is an address error on the SH-2"));
-        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_IPRA, a 16-bit register, is an address error on the SH-2"));
-        CHECK(!HasNote(rr.first, "covers"));
+        // (A5-31: Mednafen makes the access on the register at the long's own address; the caution is one, not one for each register
+        // under its four bytes, and says what then happens)
+        CHECK(HasNoteAt(rr.first, rr.second, "Mednafen then writes only SH2_ICR, the register at 0xFFFFFEE0, with bits 15-8 of the value in its high byte (the low byte is left as it was); SH2_IPRA is not written"));
+        CHECK(!HasNote(rr.first, "a 4-byte write to SH2_IPRA") && !HasNote(rr.first, "covers"));
         rr = W("iprbLong", "a long write over SH2_IPRB and SH2_VCRA");
         CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_IPRB, a 16-bit register, is an address error on the SH-2") && !HasNote(rr.first, "covers"));
+        CHECK(!HasNote(rr.first, "a 4-byte write to SH2_VCRA"));
         rr = W("sbycrLong", "a long write over SH2_SBYCR and SH2_CCR");
         CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_SBYCR, an 8-bit register, is an address error on the SH-2") &&
-              HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_CCR, an 8-bit register, is an address error on the SH-2") &&
-              !HasNote(rr.first, "covers"));
+              HasNoteAt(rr.first, rr.second, "Mednafen then writes nothing: SH2_SBYCR and SH2_CCR are not written") &&   // no register is at 0xFFFFFE90
+              !HasNote(rr.first, "a 4-byte write to SH2_CCR") && !HasNote(rr.first, "covers"));
         rr = W("vcrwdtLongRead", "a long read over SH2_VCRWDT and a gap");
         CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte read of SH2_VCRWDT, a 16-bit register, is an address error on the SH-2"));
 
@@ -2452,6 +2536,148 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "VDP1_PTMR: bit 0 is set, so this write starts drawing the command table", false));
         r = R4("q_ptmr0", "VDP1_PTMR = 0");
         CHECK(r.hardwareNotes.empty());
+    }
+
+    // ---- Area 5, round 5 ---------------------------------------------------------------------------
+    {
+        auto R5 = [&](const char* name, const char* label) { return run(label, r5.at(name)); };
+
+        // A5-28: a register read through a pointer merged from register literals is said as a direct read is, for each register the
+        // pointer can hold, though the access is a plain load (the output prints &REG).
+        r = R5("a5_28", "a poll of VDP2_TVSTAT or VDP2_VCNT through a merged pointer, cached partition");
+        CHECK(Has(r.Text(), "puVar2 = &VDP2_TVSTAT;") && Has(r.Text(), "puVar2 = &VDP2_VCNT;"));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F8000A (VDP2_VCNT): a read of VDP2_VCNT through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(!HasNote(r, "VDP2_VCNT: a read", false));   // VCNT has no read effect
+        CHECK(WarnsAbout(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition"));   // a caution is a warning too
+        r = R5("a5_28_through", "the same poll through the cache-through partition");
+        CHECK(!HasNote(r, "cache read", true) && HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        r = R5("a5_28_write", "a write through a pointer that is VDP1_ENDR or VDP1_PTMR");
+        CHECK(HasNote(r, "if the pointer holds 0x25D0000C (VDP1_ENDR): VDP1_ENDR: any write ends the drawing in progress, whatever is written", false));
+        CHECK(!HasNote(r, "VDP1_PTMR", false));   // the value written is 0: PTMR starts nothing
+        r = R5("a5_28_other", "a pointer that is VDP2_TVSTAT or a parameter");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT) (it may hold other values too): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
+        r = R5("a5_28_param", "a pointer that is only a parameter: no register is named");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_28_split", "a write through PDR1 or PDR2, then a read of PDR1");
+        CHECK(!HasNote(r, "SMPC_PDR1: a write sets the port's output bits", false));   // the write may not be PDR1's
+        r = R5("a5_28_split_direct", "control: PDR1 written, then read");
+        CHECK(HasNote(r, "SMPC_PDR1: a write sets the port's output bits; a read returns its pin levels", false));
+        r = R5("a5_28_minus1", "a pointer that is param_1 - 1: the number is not a register");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_28_rawconst", "param_1 + 0xFFFFFFF4: a number, not &SH2_RTCNT");
+        CHECK(!Has(r.Text(), "SH2_RTCNT") && r.hardwareNotes.empty());
+        r = R5("a5_28_addend", "a read at &VDP2_TVSTAT + param_1");
+        CHECK(Has(r.Text(), "&VDP2_TVSTAT"));
+        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05F80004 (VDP2_TVSTAT)): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
+        r = R5("a5_28_index", "(&SCU_D0EN)[param_1 * 8] = 0x101");
+        CHECK(Has(r.Text(), "(&SCU_D0EN)[param_1 * 8] = 0x101;"));
+        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x25FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register)", false));
+
+        // A5-29: a misaligned on-chip access. From 0xFFFFFF00 up the handlers align the address (the register is the aligned one's,
+        // its effects happen); below it they decode the address as given (case 0x11 is FTCSR).
+        r = R5("a5_29a", "a word write at 0xFFFFFF05");
+        CHECK(HasNote(r, "a misaligned 2-byte write at 0xFFFFFF05 is an address error on the SH-2 (an access must be aligned to its width); the access is made at 0xFFFFFF04 (SH2_DVDNT)", true));
+        CHECK(HasNote(r, "a 2-byte write to SH2_DVDNT, a 32-bit register, writes the whole register with the 16-bit value (upper half 0) and starts a 32-by-32 division", true));
+        CHECK(!HasNote(r, "does nothing", true));
+        r = R5("a5_29b", "a word read at 0xFFFFFF8D");
+        CHECK(HasNote(r, "the access is made at 0xFFFFFF8C (SH2_CHCR0)", true));
+        CHECK(HasNote(r, "SH2_CHCR0: a read arms clearing TE: write 0 to it after reading 1", false));
+        CHECK(!HasNote(r, "a 2-byte read at +2 of SH2_CHCR0", true));
+        r = R5("a5_29c", "a long write at 0xFFFFFF06");
+        CHECK(HasNote(r, "a misaligned 4-byte write at 0xFFFFFF06 is an address error on the SH-2 (an access must be aligned to its width); the access is made at 0xFFFFFF04 (SH2_DVDNT)", true));
+        r = R5("a5_29d", "a word read at 0xFFFFFE11");
+        CHECK(HasNote(r, "the on-chip handlers below 0xFFFFFF00 decode the address as given, so the access is made at 0xFFFFFE11 (SH2_FTCSR)", true));
+        CHECK(HasNote(r, "a 2-byte read at SH2_FTCSR, an 8-bit register, returns only it, in bits 7-0; SH2_FRCH, the register beside it, is not read", true));
+        CHECK(HasNote(r, "SH2_FTCSR: a read arms clearing its flags: write 0 to a flag read as 1", false));
+        CHECK(!HasNote(r, "SH2_TIER", true) && !HasNote(r, "latches SH2_FRCL", false));   // neither TIER nor FRCH is read
+        r = R5("a5_29e", "a word write at 0xFFFFFE11");
+        CHECK(HasNote(r, "a 2-byte write to SH2_FTCSR, an 8-bit register, reaches only it, with the low byte of the value", true) && !HasNote(r, "SH2_TIER", true));
+        r = R5("a5_29f", "a word read at 0xFFFFFE61: IPRB, whole");
+        CHECK(HasNote(r, "so the access is made at 0xFFFFFE61 (SH2_IPRB)", true) && !HasNote(r, "does not read it", true));
+        r = R5("a5_29g", "a word read at WTCNT's address");
+        CHECK(HasNote(r, "a 2-byte read at SH2_WTCNT, an 8-bit register, returns only it, in bits 7-0", true) && !HasNote(r, "SH2_WTCSR", true));
+
+        // A5-30: the low byte of IPRB and VCRD is reserved: a byte write there stores nothing.
+        r = R5("a5_29h", "a word write at 0xFFFFFE81");
+        CHECK(HasNote(r, "SH2_WTCNT takes no 2-byte write: it is written by a keyed word at 0xFFFFFE80; this write does not write it", true) && !HasNote(r, "keyed watchdog write", false));
+        r = R5("a5_30iprb", "a byte write to 0xFFFFFE61");
+        CHECK(HasNote(r, "a 1-byte write to the low byte of SH2_IPRB does nothing: that byte is reserved, and the handler masks the store with 0xFF00 (a read there returns 0)", true));
+        r = R5("a5_30vcrd", "a byte write to 0xFFFFFE69");
+        CHECK(HasNote(r, "a 1-byte write to the low byte of SH2_VCRD does nothing: that byte is reserved, and the handler masks the store with 0x7F00 (a read there returns 0)", true));
+        r = R5("a5_30high", "a byte write to the high byte of IPRB");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_30vcra", "a byte write to the low byte of VCRA, which takes it (0x7F7F)");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_30word", "a word write to IPRB");
+        CHECK(r.hardwareNotes.empty());
+
+        // A5-31: what Mednafen does after the address error.
+        r = R5("a5_31a", "a byte write to SH2_DVDNT");
+        CHECK(HasNote(r, "a 1-byte write to SH2_DVDNT, a 32-bit register, is an address error on the SH-2: it is accessed whole; Mednafen then makes the access: the register takes "
+                         "the byte twice (V | V << 8, bits 15-0; the upper 16 bits are 0) and starts a 32-by-32 division", true));
+        r = R5("a5_31b", "a byte read of SH2_CHCR0");
+        CHECK(HasNote(r, "a 1-byte read of SH2_CHCR0, a 32-bit register, is an address error on the SH-2: it is accessed whole; Mednafen then returns bits 15-8 of the register, whichever byte was asked for", true));
+        r = R5("a5_31c", "a long write at SH2_TIER");
+        CHECK(HasNote(r, "a 4-byte write to SH2_TIER, an 8-bit register, is an address error on the SH-2: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only; "
+                         "Mednafen then writes only SH2_TIER, the register at 0xFFFFFE10, with bits 7-0 of the value; SH2_FTCSR, SH2_FRCH and SH2_FRCL are not written", true));
+        CHECK(!HasNote(r, "a 4-byte write to SH2_FTCSR", true) && !HasNote(r, "a 4-byte write to SH2_FRCH", true) && !HasNote(r, "a 4-byte write to SH2_FRCL", true));   // not repeated
+        r = R5("a5_31d", "a long read at SH2_TIER");
+        CHECK(HasNote(r, "a 4-byte read of SH2_TIER, an 8-bit register, is an address error on the SH-2: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only; "
+                         "Mednafen then returns 0 and reads none of SH2_TIER, SH2_FTCSR, SH2_FRCH and SH2_FRCL", true));
+        CHECK(!HasNote(r, "a 4-byte read of SH2_FTCSR", true));
+        r = R5("a5_31iprb", "a long write at SH2_IPRB");
+        CHECK(HasNote(r, "Mednafen then writes only SH2_IPRB, the register at 0xFFFFFE60, with bits 15-8 of the value in its high byte (the low byte is left as it was); SH2_VCRA is not written", true));
+        r = R5("a5_31odd", "a long write at 0xFFFFFE61");
+        CHECK(HasNote(r, "which a 4-byte write at its low byte does not reach: nothing is stored; SH2_VCRA and SH2_VCRB are not written", true));
+        r = R5("a5_31wdt", "a long write at the watchdog");
+        CHECK(HasNote(r, "Mednafen then writes only SH2_WTCSR, the register at 0xFFFFFE80, which a 4-byte write does not write (the watchdog takes only a keyed word); "
+                         "the write cancels a pending SH2_RSTCSR WOVF clear; SH2_WTCNT and SH2_RSTCSR are not written", true));
+        CHECK(!HasNote(r, "SH2_WTCNT takes no 4-byte write") && !HasNote(r, "SH2_RSTCSR takes no 4-byte write"));   // the registers under the long's other bytes are not written
+        r = R5("a5_31ccr", "a long write to SH2_CCR with CP set");
+        CHECK(HasNote(r, "SH2_CCR: CP (bit 4) is set, so this write purges the whole cache", false));
+        r = R5("a5_31bsc", "a byte write to SH2_BCR1");
+        CHECK(HasNote(r, "Mednafen then ignores the write: the bus state controller takes a 4-byte write with 0xA55A in its upper half only", true));
+
+        // A5-32: writes that start or stop work whatever (or nearly whatever) is written.
+        r = R5("a5_32a", "VDP1_ENDR = 0");
+        CHECK(HasNote(r, "VDP1_ENDR: any write ends the drawing in progress, whatever is written", false));
+        r = R5("a5_32b", "SCU_D0EN = 0x101");
+        CHECK(HasNote(r, "SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register)", false));
+        r = R5("a5_32level1", "SCU_D1EN = 0x101");
+        CHECK(HasNote(r, "SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA when its start factor (SCU_D1MD bits 2-0) is 7 (start by this register)", false));
+        r = R5("a5_32c", "SCU_AIACK = 1");
+        CHECK(HasNote(r, "SCU_AIACK: bit 0 is set, so this write acknowledges the A-bus interrupt (the SCU may raise it again)", false));
+        r = R5("a5_32dstp", "SCU_DSTP = 1");
+        CHECK(HasNote(r, "SCU_DSTP: bit 0 is set, so this write stops DMA on every level", false));
+        r = R5("a5_32t1md", "SCU_T1MD = 0");
+        CHECK(HasNote(r, "SCU_T1MD: bit 0 (the timer enable) is clear, so this write also resets timer 0's counter", false));
+        r = R5("a5_32en1", "SCU_D0EN = 1: no bit 8");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32aiack0", "SCU_AIACK = 0");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32word0", "SCU_D0EN word write at +0 (bits 31-16)");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32word2", "SCU_D0EN word write at +2 with 0x0101");
+        CHECK(HasNote(r, "SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        r = R5("a5_32byte0", "SCU_D0EN byte write at +0");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32byte3", "SCU_D0EN byte write at +3 with bit 0");
+        CHECK(HasNote(r, "SCU_D0EN: bit 0 is set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register), when bit 8 is already set", false));
+        r = R5("a5_32t1md1", "SCU_T1MD = 0x101: the timer is enabled");
+        CHECK(r.hardwareNotes.empty());
+
+        // The reviewer's questions. A store to the BIOS ROM is dropped by the bus (ss.c: the ROM branch stores nothing), and the engine
+        // folds it into ordinary memory, so the read after it is the value written: said (A5-33). The cache address array is not memory (A5-34).
+        r = R5("a5_33", "mov.b 5 to 0x00001000 (BIOS ROM) and back");
+        CHECK(HasNote(r, "a write to the BIOS ROM at 0x00001000 does nothing (the ROM takes no write), but the decompiler treats the address as ordinary memory: a later read of it in this function is shown as the value written, which the ROM does not hold", true));
+        r = R5("a5_33_through", "the same through 0x20001000");
+        CHECK(HasNote(r, "a write to the BIOS ROM at 0x20001000 does nothing", true));
+        r = R5("a5_33_ram", "the same in work RAM");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_34", "a long write to 0x60000010");
+        CHECK(HasNote(r, "an access at 0x60000010 is the cache address array, not a memory access: entry 1 of the way SH2_CCR selects; a write sets its tag (from the address, valid is bit 2 inverted) and its LRU bits (bits 9-4 of the value), a read returns tag, valid and LRU", false));
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.

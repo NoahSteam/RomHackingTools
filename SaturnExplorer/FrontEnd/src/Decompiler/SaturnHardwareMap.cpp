@@ -511,6 +511,7 @@ const RuleInfo kRuleInfo[] = {
     { 'd', "KeyedByteWrite", "sh7095.inc SH7095_OnChipRegWrite_u8 cases 0x80-0x8F: z->WDT.RSTCSRM = 0 and nothing else (only the _u16 write takes a key)" },
     { 'd', "StrobeByte", "ss.c BusRW_DB_CS0_u8_W1, \"FRT trigger region\": the block is empty (only _u16_W1 calls SH7095_SetFTI)" },
     { 'd', "MirrorWrite", "sh7095.inc OnChipRegWrite_u*: case 0x92 only (\"No 0x93...0x9F mirrors for writes\")" },
+    { 'd', "ReservedByteWrite", "sh7095.inc SH7095_OnChipRegWrite_u8 cases 0x60/0x61 (IPRB) and 0x68/0x69 (VCRD): z->IPRB = (z->IPRB &~ mask) | ((V << shift) & mask & 0xFF00), VCRD & 0x7F00, with mask 0xFF at the odd address: nothing is stored" },
     { 'e', "AddressError", "sh7095.inc SH7095_SetPEX(z, SH7095_PEX_CPUADDR): OnChipRegWrite_u8 / RegRead_u8 with A & 0x100 set, OnChipRegWrite_u32 / RegRead_u32 with it clear" },
     { 'f', "StrobeLong", "sh7095.inc SH7095_BSC_BusWrite_u32 (CS0): two BusRW_DB_CS0_u16_W1, each SH7095_SetFTI" },
     { 'f', "CdByteWrite", "cdb.c CDB_Write_DBM case 0x9: CommandPending only if mask == 0xFFFF" },
@@ -573,6 +574,26 @@ std::string Hex8s(uint32_t a)
 std::string Bits(unsigned hi, unsigned lo)
 {
     return "bits " + std::to_string(hi) + "-" + std::to_string(lo);
+}
+
+// What Mednafen does after it raises the address error of a byte access at 0xFFFFFF00 and up (A5-31, sh7095.inc
+// OnChipRegWrite_u8 / RegRead_u8, A & 0x100 set): SetPEX, then the access is made on the register at A & 0xFC. A write
+// stores `V |= (uint8_t)V << 8` (both bytes of the low half, the upper 16 bits 0) and does what the register does on a
+// write (a division); a read returns bits 15-8 of the register whatever byte was asked for (`ret >>= ((A & 1) ^ 1) << 3`
+// runs after A has been aligned, so it always shifts by 8). The bus state controller takes a 4-byte keyed write only, and
+// the user break controller has no handler: neither stores anything, and the latter reads 0.
+std::string AfterByteError(const HardwareRegister& r, bool write)
+{
+    if (r.narrow == NarrowAccess::OnChipWord)
+        return write ? "; Mednafen decodes no register there, so the write does nothing" : "; Mednafen decodes no register there, so the read returns 0";
+    if (write)
+    {
+        if (r.narrow == NarrowAccess::OnChipKeyedLong)
+            return "; Mednafen then ignores the write: the bus state controller takes a 4-byte write with 0xA55A in its upper half only";
+        return std::string("; Mednafen then makes the access: the register takes the byte twice (V | V << 8, bits 15-0; the upper 16 bits are 0)") +
+               (r.onWrite ? std::string(" and ") + r.onWrite : std::string());
+    }
+    return "; Mednafen then returns bits 15-8 of the register, whichever byte was asked for";
 }
 
 // The caution a cell gives, or "" when it has none. The wording of the round 2 fixtures is kept.
@@ -681,16 +702,18 @@ std::string WidthText(const HardwareRegister& r, const WidthCell& c, uint32_t w,
         return "a 2-byte write to the low half of " + name + ", a 32-bit register, does nothing: a word takes effect only at "
                "the register's own address";
     case WidthRule::KeyedByteWrite:
-        return KeyedPortCaution(r, 1);
+        return KeyedPortCaution(r, w);
+    case WidthRule::ReservedByteWrite:
+        return "a 1-byte write to the low byte of " + name + " does nothing: that byte is reserved, and the handler masks the store with " +
+               (r.address == 0xFFFFFE60u ? "0xFF00" : "0x7F00") + " (a read there returns 0)";
     case WidthRule::KeyedWordWrite:
         return "a 2-byte write to " + name + ", a 32-bit register, does nothing: it is set only by a 4-byte write with 0xA55A in "
                "the upper half";
     case WidthRule::AddressError:
-        if (w == 4)
-            return "a 4-byte " + dir + name + ", " + article + bitsOf + " register, is an address error on the SH-2: the "
-                   "registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only";
+        // (a long below 0xFFFFFF00 is one caution for the whole access, with what Mednafen does after it: OnChipLongError)
+        if (w == 4) return std::string();
         return "a " + width + " " + dir + name + ", " + article + bitsOf + " register, is an address error on the SH-2: it is "
-               "accessed whole";
+               "accessed whole" + AfterByteError(r, write);
     case WidthRule::MirrorWrite:
         return "a " + width + " write at " + Hex8s(access) + " does nothing: " + name + " reads back at 0xFFFFFE93-0xFFFFFE9F, but "
                "takes writes at 0xFFFFFE92 only";
@@ -784,6 +807,9 @@ WidthCell WidthCellFor(const HardwareRegister& r, uint32_t w, bool write, int32_
         if (w == 4) return HalfCell(r, eff);
         return MakeCell(WidthRule::Plain, eff);
     case NarrowAccess::OnChipHalf:
+        // IPRB and VCRD keep only their high byte (`& mask & 0xFF00`, `& 0x7F00`): a byte write at +1 stores nothing (A5-30).
+        if (write && w == 1 && off == 1 && (r.address == 0xFFFFFE60u || r.address == 0xFFFFFE68u))
+            return MakeCell(WidthRule::ReservedByteWrite, 0);
         return MakeCell(w == 4 ? WidthRule::AddressError : WidthRule::Plain, w == 4 ? 0 : eff);
     case NarrowAccess::OnChipSci:
         return w == 1 ? MakeCell(WidthRule::Plain, eff) : MakeCell(WidthRule::Undecoded, 0);
@@ -792,10 +818,12 @@ WidthCell WidthCellFor(const HardwareRegister& r, uint32_t w, bool write, int32_
         if (w == 4) return MakeCell(WidthRule::AddressError, 0);
         if (write && w <= 2 && r.address == 0xFFFFFE92u && (access & 0x1FFu) != 0x92u)
             return MakeCell(WidthRule::MirrorWrite, 0);
+        // (a word at the odd register's own address, which only a misaligned access makes -- the handlers below 0xFFFFFF00
+        // switch on the address as given -- is not the key port either: the port is the even address, FE80)
         if (write && r.access == RegisterAccess::KeyedWrite)   // the watchdog
-            return MakeCell(w == 1 ? WidthRule::KeyedByteWrite : WidthRule::KeyedWrite, 0);
+            return MakeCell(w == 1 || (w == 2 && off == 0 && (r.address & 1u)) ? WidthRule::KeyedByteWrite : WidthRule::KeyedWrite, 0);
         if (w == 1) return MakeCell(WidthRule::Plain, eff);
-        const bool even = !(r.address & 1u);
+        const bool even = !(r.address & 1u) || off == 0;   // (off 0 at an odd register: a word at its own address, A5-29)
         if (write) return even ? MakeCell(WidthRule::EvenByteWrite, eff, 7, 0) : MakeCell(WidthRule::OddByteWrite, 0);
         return even ? MakeCell(WidthRule::EvenByteRead, eff, 7, 0) : MakeCell(WidthRule::OddByteRead, 0);
     }
@@ -868,8 +896,37 @@ std::vector<WidthProbe> WidthTable()
 
 uint32_t AccessAddress(uint32_t address, uint32_t size)
 {
-    if (size < 2 || !(address & (size - 1)) || (address >> 29) == 7) return address;
+    if (size < 2 || !(address & (size - 1))) return address;
+    // On-chip, MemRead / MemWrite case 7 hand the handlers the unaligned address. From 0xFFFFFF00 up they align it themselves
+    // (`A &= 0xFE` for a word, `A &= 0xFC` for a long: the address the bus would have made); below it they switch on A & 0xFF as
+    // given, so a word at 0xFFFFFE11 is the register at 0xFFFFFE11 (A5-29).
+    if ((address >> 29) == 7 && !(address & 0x100u)) return address;
     return address & ~(size - 1);
+}
+
+namespace
+{
+// An access below 0xFFFFFF00 on-chip that reaches the register at its own address only: a word at an odd address, and a long
+// (a read returns 0 and reads nothing; a write is made on the register at A & 0xFF as given). 'canonical' is the canonical address.
+bool OwnAddressOnly(uint32_t address, uint32_t canonical, uint32_t size)
+{
+    return (address >> 29) == 7 && canonical < 0xFFFFFF00u && ((size == 2 && (address & 1u)) || size == 4);
+}
+}  // namespace
+
+std::vector<const HardwareRegister*> HardwareRegistersReached(uint32_t address, uint32_t size, bool write)
+{
+    std::vector<const HardwareRegister*> out;
+    address = AccessAddress(address, size);
+    uint32_t canonical = 0;
+    if (size != 0 && HardwareAlias(address, canonical) && OwnAddressOnly(address, canonical, size))
+    {
+        if (size == 4 && !write) return out;   // sh7095.inc OnChipRegRead_INLINE_u32, A & 0x100 clear: SetPEX and `return ret` with ret = 0
+        const HardwareRegister* r = FindHardwareRegister(canonical);
+        if (r) out.push_back(r);
+        return out;
+    }
+    return HardwareRegistersCovering(address, size);
 }
 
 std::vector<CoveredRegister> CoveredRegisters(uint32_t address, uint32_t size, bool write)
@@ -886,7 +943,7 @@ std::vector<CoveredRegister> CoveredRegisters(uint32_t address, uint32_t size, b
                 out.push_back(CoveredRegister{ &v, WidthCellFor(v, 1, write, 0, address) });
                 break;
             }
-    for (const HardwareRegister* reg : HardwareRegistersCovering(address, size))
+    for (const HardwareRegister* reg : HardwareRegistersReached(address, size, write))
     {
         const int32_t off = static_cast<int32_t>(first) - static_cast<int32_t>(reg->address);
         out.push_back(CoveredRegister{ reg, WidthCellFor(*reg, size, write, off, address) });
@@ -936,14 +993,21 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
     const HardwareRegister* first = covered.empty() ? nullptr : covered[0].reg;
 
     // A misaligned access is an address error and is made at the aligned address (A5-25): the register it reaches
-    // is that one's, and the rest of this function describes that access. On-chip, the address is decoded as given.
+    // is that one's, and the rest of this function describes that access. On-chip, the handlers at 0xFFFFFF00 and up
+    // align it themselves (the same address); below it they decode it as given (A5-29).
+    uint32_t onchipCanon = 0;
+    const bool onChip = partition == 7 && HardwareAlias(reach, onchipCanon);
+    const bool lowHalf = onChip && onchipCanon < 0xFFFFFF00u;
     if (size > 1 && (address & (size - 1)))
     {
         std::string text = "a misaligned " + width + (write ? " write" : " read") + " at " + Hex8s(address) +
                            " is an address error on the SH-2 (an access must be aligned to its width)";
-        if (partition != 7)
+        const std::string name = NameAt(reach).empty() ? std::string() : " (" + NameAt(reach) + ")";
+        if (lowHalf)
+            text += "; the on-chip handlers below 0xFFFFFF00 decode the address as given, so the access is made at " + Hex8s(reach) +
+                    (name.empty() ? std::string(" (no register is named there)") : name);
+        else
         {
-            const std::string name = NameAt(reach) .empty() ? std::string() : " (" + NameAt(reach) + ")";
             uint32_t canon = 0;
             text += "; the access is made at " + Hex8s(reach) + (HardwareAlias(reach, canon) ? name : std::string());
         }
@@ -981,21 +1045,53 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
         }
     }
 
-    // A long access to an on-chip address below 0xFFFFFF00, or a byte access at or above it, is an address error whether or not
-    // a register is there (sh7095.inc: OnChipRegWrite_u32 / RegRead_u32 raise it in the half below, _u8 in the half above); the
-    // registers say so themselves, this is for the addresses nothing is named at (A5-27).
-    if (partition == 7 && !(size > 1 && (address & (size - 1))))
+    // A long access to an on-chip address below 0xFFFFFF00 is an address error whether or not a register is there (sh7095.inc:
+    // OnChipRegWrite_u32 / RegRead_u32 raise it in the half below). Mednafen then makes the access, once, on the register at the
+    // long's own address: a read returns 0 and reads nothing, a write reaches that register alone (`switch(A & 0xFF)`), so this
+    // is one caution for the access and not one for each register under its four bytes (A5-31).
+    if (lowHalf && size == 4)
     {
-        uint32_t canon = 0;
-        HardwareAlias(address, canon);
-        const bool hi = canon >= 0xFFFFFF00u;
-        bool said = false;
-        for (const NarrowEffect& e : out) said |= e.text.find("address error") != std::string::npos;
-        if (!said && (hi ? size == 1 : size == 4))
-            say(first, "a " + width + (write ? " write" : " read") + " at " + Hex8s(address) + " is an address error on the SH-2: no register is named there, and the on-chip "
-                       "registers at " + (hi ? "0xFFFFFF00-0xFFFFFFFF take word and longword accesses only"
-                                             : "0xFFFFFE00-0xFFFFFEFF take byte and word accesses only"), true);
+        const std::vector<const HardwareRegister*> under = HardwareRegistersCovering(reach, 4);
+        const HardwareRegister* own = write ? FindHardwareRegister(reach) : nullptr;
+        const HardwareRegister* head = own ? own : under.empty() ? nullptr : under[0];
+        std::vector<const HardwareRegister*> others;
+        for (const HardwareRegister* u : under)
+            if (u != own) others.push_back(u);
+        auto names = [](const std::vector<const HardwareRegister*>& v) {
+            std::string t;
+            for (size_t i = 0; i < v.size(); ++i) t += (i == 0 ? "" : i + 1 == v.size() ? " and " : ", ") + std::string(v[i]->name);
+            return t;
+        };
+        std::string text;
+        if (head)
+            text = "a 4-byte " + std::string(write ? "write to " : "read of ") + head->name + ", " + (head->size == 1 ? "an " : "a ") +
+                   std::to_string(unsigned(head->size) * 8) + "-bit register, is an address error on the SH-2: the registers at "
+                   "0xFFFFFE00-0xFFFFFEFF take byte and word accesses only";
+        else
+            text = "a 4-byte " + std::string(write ? "write" : "read") + " at " + Hex8s(address) + " is an address error on the SH-2: no register is "
+                   "named there, and the on-chip registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only";
+        if (!write)
+            text += "; Mednafen then returns 0 and reads " + (under.empty() ? std::string("nothing") : "none of " + names(under));
+        else if (!own)
+            text += "; Mednafen then writes nothing" + (others.empty() ? std::string() : ": " + names(others) + (others.size() == 1 ? " is" : " are") + " not written");
+        else
+        {
+            text += "; Mednafen then writes only " + std::string(own->name) + ", the register at " + Hex8s(reach) + ", ";
+            if (own->narrow == NarrowAccess::OnChipSci) text += "which it does not decode: nothing is stored";
+            else if (own->access == RegisterAccess::KeyedWrite)
+                text += "which a 4-byte write does not write (the watchdog takes only a keyed word); the write cancels a pending SH2_RSTCSR WOVF clear";
+            else if (own->size == 2 && (reach & 1u)) text += "which a 4-byte write at its low byte does not reach: nothing is stored";
+            else if (own->size == 2) text += "with bits 15-8 of the value in its high byte (the low byte is left as it was)";
+            else text += "with bits 7-0 of the value";
+            if (!others.empty()) text += "; " + names(others) + (others.size() == 1 ? " is" : " are") + " not written";
+        }
+        say(head, text, true);
     }
+    // A byte access at or above 0xFFFFFF00 is one whether or not a register is there (OnChipRegWrite_u8 / RegRead_u8, A & 0x100
+    // set); the registers say so themselves, this is for the addresses nothing is named at (A5-27).
+    if (onChip && !lowHalf && size == 1 && covered.empty())
+        say(first, "a 1-byte " + std::string(write ? "write" : "read") + " at " + Hex8s(address) + " is an address error on the SH-2: no register is named there, and the on-chip "
+                   "registers at 0xFFFFFF00-0xFFFFFFFF take word and longword accesses only", true);
 
     // Backup RAM, which the map does not name.
     if (InBackupRam(reach))
@@ -1011,6 +1107,21 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
         char b[160];
         std::snprintf(b, sizeof b, "an access at %s is an associative purge, not a memory access: it invalidates the cache line for 0x%08X%s",
                       Hex8s(address).c_str(), reach & 0x1FFFFFF0u, write ? "" : " (a read returns all ones)");
+        say(nullptr, b, false);
+    }
+
+    // An access through 0x6xxxxxxx is the cache's address array, not memory (sh7095.inc MemRead / MemWrite case 3, the volatile range
+    // already keeps it as written): entry (A >> 4) & 0x3F of the way SH2_CCR selects (bits 7-6). A write sets its tag from the address
+    // (valid is bit 2 inverted) and its LRU bits from bits 9-4 of the value; a read returns tag, valid and LRU (A5-34). The 0x8xxxxxxx and
+    // 0xCxxxxxxx data array is RAM that a cache fill overwrites with the cache on: ordinary memory to the decompiler, as the games that
+    // use the cache as RAM want it.
+    if (partition == 3)
+    {
+        char b[400];
+        std::snprintf(b, sizeof b,
+                      "an access at %s is the cache address array, not a memory access: entry %u of the way SH2_CCR selects; a write sets its tag "
+                      "(from the address, valid is bit 2 inverted) and its LRU bits (bits 9-4 of the value), a read returns tag, valid and LRU",
+                      Hex8s(address).c_str(), (reach >> 4) & 0x3Fu);
         say(nullptr, b, false);
     }
 
@@ -1156,9 +1267,11 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
 {
     std::vector<std::string> out;
     uint32_t a = 0;
+    address = AccessAddress(address, size);
     if (!HardwareAlias(address, a)) return out;
     // SH2_CCR (sh7095.inc SH7095_SetCCR): CP, bit 4, purges the whole cache; a write elsewhere in the register's read mirrors does nothing.
-    if (a == 0xFFFFFE92u && (address & 0x1FFu) == 0x92u && size <= 2)
+    // A long write below 0xFFFFFF00 is made on the register at its own address (an address error first), so it purges as well.
+    if (a == 0xFFFFFE92u && (address & 0x1FFu) == 0x92u && size <= 4)
     {
         if (!valueKnown)
             out.push_back("SH2_CCR: a write with CP (bit 4) set purges the whole cache");
@@ -1176,6 +1289,49 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
             out.push_back("VDP1_PTMR: a write with bit 0 set starts drawing the command table");
         else if (bit0)
             out.push_back("VDP1_PTMR: bit 0 is set, so this write starts drawing the command table");
+    }
+    // VDP1_ENDR (vdp1.c WriteReg case 0x6): `if(DrawingActive) { DrawingActive = false; ... }` whatever is written, at any width
+    // that reaches the register (a long at 0x05D0000C writes it with its high half).
+    for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
+        if (reg->address == 0x05D0000Cu)
+            out.push_back("VDP1_ENDR: any write ends the drawing in progress, whatever is written");
+    // The SCU (scu.inc SCU_RegRW_DB_u8/u16/u32_W1, `switch(A & 0xFC)`): a write takes the bits of its lane and acts on the whole
+    // register. The lane of a byte at +3 is bits 7-0, of a word at +2 bits 15-0, of a long all 32; the others carry no bit 0 or 8.
+    if (a >= 0x05FE0000u && a <= 0x05FEFFFFu)
+    {
+        const uint32_t reg = a & 0xFCu, off = a & 3u;
+        const bool lane0 = (size == 4 && off == 0) || (size == 2 && off == 2) || (size == 1 && off == 3);   // carries bit 0
+        const bool lane8 = (size == 4 && off == 0) || (size == 2 && off == 2) || (size == 1 && off == 2);   // carries bit 8
+        const bool bit0 = valueKnown && (value & 1u);
+        const bool bit8 = valueKnown && (value & 0x100u);
+        const char* const kLevels[] = { "0", "1", "2" };
+        if ((reg == 0x10 || reg == 0x30 || reg == 0x50) && lane0)
+        {
+            // DnEN: `if((tmp & 0x1) && d->Enable && d->SF == 0x7)` starts the transfer; Enable is bit 8 of the value written, or what it
+            // was before when the lane is a byte at +3.
+            const std::string level = kLevels[(reg >> 5) & 3];
+            const std::string name = "SCU_D" + level + "EN";
+            const std::string start = "starts level-" + level + " DMA when its start factor (SCU_D" + level + "MD bits 2-0) is 7 (start by this register)";
+            if (lane8)
+            {
+                if (!valueKnown) out.push_back(name + ": a write with bits 8 and 0 set " + start);
+                else if (bit0 && bit8) out.push_back(name + ": bits 8 and 0 are set, so this write " + start);
+            }
+            else if (!valueKnown) out.push_back(name + ": a write with bit 0 set " + start + ", when bit 8 is already set");
+            else if (bit0) out.push_back(name + ": bit 0 is set, so this write " + start + ", when bit 8 is already set");
+        }
+        // AIACK: `if(*DB & mask & 0x0001) { ABusIProhibit = 0; ABusIRQCheck(); }`.
+        if (reg == 0xA8 && lane0 && (!valueKnown || bit0))
+            out.push_back(std::string("SCU_AIACK: ") + (valueKnown ? "bit 0 is set, so this write" : "a write with bit 0 set") +
+                          " acknowledges the A-bus interrupt (the SCU may raise it again)");
+        // DSTP: `if(*DB & mask & 0x1) { for each level: Active = false; GoGoGadget = false; }`.
+        if (reg == 0x60 && lane0 && (!valueKnown || bit0))
+            out.push_back(std::string("SCU_DSTP: ") + (valueKnown ? "bit 0 is set, so this write" : "a write with bit 0 set") +
+                          " stops DMA on every level");
+        // T1MD: `Timer_Enable = tmp & 1; if(!Timer_Enable) Timer0_Counter = 0;` (the old enable bit when the lane has no bit 0).
+        if (reg == 0x98 && lane0 && (!valueKnown || !bit0))
+            out.push_back(std::string("SCU_T1MD: ") + (valueKnown ? "bit 0 (the timer enable) is clear, so this write" : "a write with bit 0 clear") +
+                          " also resets timer 0's counter");
     }
     return out;
 }

@@ -16,7 +16,12 @@
 //   * what the CPU's bus does before any register is reached: a misaligned access, a read through
 //     the cached partition, the whole 0xE0000000 partition decoding as on-chip registers;
 //   * every aligned address of the on-chip area, named or not, at every width: an address error iff
-//     the handler raises one.
+//     the handler raises one;
+//   * every MISALIGNED word and long address of the on-chip area (round 5, A5-29): the address the handler is
+//     given (the bus passes it unmasked), the register its case labels reach, against the registers the
+//     decompiler says the access reaches, with the same cell checks as an aligned probe;
+//   * a lane mask that kills the store of one label of a group (IPRB's and VCRD's low byte, A5-30): the cases
+//     file lists such a label as its own inert group, so a cell that says it writes there disagrees.
 // What it cannot check is listed in 15_DECOMPILER_STEP5.md ("Area 5, round 4", "What the independent
 // check covers"): which bits of the value reach the register, the lane rules of the 16-bit buses
 // (SMPC, SCSP, CD, MINIT/SINIT), the keyed writes' keys, the FIFO pops and the text of any caution.
@@ -123,7 +128,7 @@ inline bool NotDecodedFamily(NarrowAccess f) { return f == NarrowAccess::OnChipS
 struct Stats
 {
     size_t onchipCells = 0, scuCells = 0, blockRegs = 0, unnamedAddresses = 0, busFacts = 0, reached = 0, unreached = 0, errors = 0,
-           effects = 0, undecodedRegs = 0;
+           effects = 0, undecodedRegs = 0, misaligned = 0, writeEffectRegs = 0;
 };
 
 struct Problems
@@ -161,18 +166,19 @@ struct Excused
     const char* why;
 };
 
-inline void CheckOnChip(const Cases& c, const std::vector<WidthProbe>& table, const std::vector<Excused>& excused, Stats& st, Problems& pr)
+// One cell against the handler: p.access is the address the handler is given (aligned for the table's own probes, as the access
+// made for a misaligned one), p.off its distance from the register.
+inline void CheckOnChipProbe(const Cases& c, const WidthProbe& p, const std::vector<Excused>& excused, Stats& st, Problems& pr)
 {
-    for (const WidthProbe& p : table)
     {
         const HardwareRegister& r = *p.reg;
-        if (r.address < 0xFFFFFE00u || NotDecodedFamily(r.narrow)) continue;
-        if (p.cell.rule == WidthRule::AccessKind || p.cell.rule == WidthRule::Undecoded) continue;
+        if (r.address < 0xFFFFFE00u || NotDecodedFamily(r.narrow)) return;
+        if (p.cell.rule == WidthRule::AccessKind || p.cell.rule == WidthRule::Undecoded) return;
         const uint32_t a = p.access;
         const bool hi = (a & 0x100u) != 0;
         const std::string key = std::string("onchip.") + (p.write ? "wr" : "rd") + std::to_string(p.width * 8) + (hi ? ".hi" : ".lo");
         const Handler* h = c.Get(key);
-        if (!h) { pr.Add("no handler " + key + " in the cases file"); continue; }
+        if (!h) { pr.Add("no handler " + key + " in the cases file"); return; }
         ++st.onchipCells;
         const unsigned label = hi ? (unsigned(a) & unsigned(h->mask)) : (a & 0xFFu);
         const unsigned own = hi ? (r.address & unsigned(h->mask)) : (r.address & 0xFFu);
@@ -202,6 +208,7 @@ inline void CheckOnChip(const Cases& c, const std::vector<WidthProbe>& table, co
         case WidthRule::KeyedWordWrite:
         case WidthRule::KeyedByteWrite:
         case WidthRule::MirrorWrite:
+        case WidthRule::ReservedByteWrite:
             if (meaningful) pr.Add(CellName(p) + ": the table says nothing reaches the register, the handler decodes it" + where);
             break;
         case WidthRule::AddressError:
@@ -252,6 +259,11 @@ inline void CheckOnChip(const Cases& c, const std::vector<WidthProbe>& table, co
     }
 }
 
+inline void CheckOnChip(const Cases& c, const std::vector<WidthProbe>& table, const std::vector<Excused>& excused, Stats& st, Problems& pr)
+{
+    for (const WidthProbe& p : table) CheckOnChipProbe(c, p, excused, st, pr);
+}
+
 // Families Mednafen has no handler for: the table claims them from the manual (SCI, UBC); the check is
 // that Mednafen still has no case, so the day it grows one this fails and the claim gets reviewed.
 inline void CheckUndecoded(const Cases& c, Stats& st, Problems& pr)
@@ -296,6 +308,17 @@ inline void CheckScu(const Cases& c, const std::vector<WidthProbe>& table, Stats
             pr.Add(CellName(p) + ": onRead says a read does more than return a value, " + key + " does not");
         if (!p.write && !kind && !r.onRead && g && g->Has('E'))
             pr.Add(CellName(p) + ": " + key + " has a read effect and the register has no onRead");
+        // A write that acts whatever (or nearly whatever) is written -- a DMA level started, the A-bus interrupt acknowledged, every
+        // level stopped, timer 0 reset (`F` in the cases file) -- is said by WriteEffects for an unknown value (A5-32). Judged once per
+        // register, at the long write; the DSP control port's effects are what its `split` text says.
+        if (p.write && p.width == 4 && !kind && g && g->Has('F'))
+        {
+            ++st.writeEffectRegs;
+            if (std::string(r.name) != "SCU_PPAF" && WriteEffects(r.address, 4, false, 0).empty())
+                pr.Add(std::string(r.name) + ": " + key + " acts on a write whatever it stores (F), and WriteEffects says nothing");
+            if (std::string(r.name) == "SCU_PPAF" && !r.split)
+                pr.Add("SCU_PPAF: " + key + " acts on a write (F) and the register has no split text saying what a write does");
+        }
     }
 }
 
@@ -338,13 +361,22 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                        (write ? wrKey : rdKey) + " label 0x" + Hex(unsigned(label), 1) + (meaningful ? " does something" : " does not"));
             if (write && allowed)
             {
-                bool drawing = false, constant = false;
+                bool drawing = false, constant = false, ends = false;
                 for (const std::string& key : { wrKey, wrKey2 })
                 {
                     const Handler* h = key.empty() ? nullptr : c.Get(key);
                     const Group* g = h ? h->At(unsigned(label)) : nullptr;
                     drawing |= g && g->Has('G');
-                    constant |= g && g->Has('F') && key == "smpc.wr";   // the others (VDP1 ENDR, SCU AIACK, SCSP) are listed in the cases file, not checked
+                    constant |= g && g->Has('F') && key == "smpc.wr";
+                    // VDP1's ENDR (A5-32). The SCU is judged in CheckScu; the SCSP common block's F is bookkeeping (MPROG_Dirty, a timer
+                    // reload under a condition) and is not an effect a note would help with: decided, not checked.
+                    ends |= g && g->Has('F') && key == "vdp1.wr";
+                }
+                if (ends)
+                {
+                    ++st.writeEffectRegs;
+                    if (WriteEffects(r.address, 2, false, 0).empty())
+                        pr.Add(std::string(r.name) + ": the handler acts on a write whatever it stores (F) and WriteEffects says nothing");
                 }
                 if (drawing && WriteEffects(r.address, 2, false, 0).empty())
                     pr.Add(std::string(r.name) + ": the handler starts drawing on a write and WriteEffects says nothing");
@@ -449,7 +481,114 @@ inline void CheckOnChipAddresses(const Cases& c, Stats& st, Problems& pr)
                 if (said != h->pex)
                     pr.Add("on-chip " + std::string(wr ? "write" : "read") + " of " + std::to_string(w) + " bytes at " + Hex(uint32_t(a)) +
                            (said ? " is called an address error, the handler raises none" : " is not called an address error, the handler raises one"));
+                // ...and the aligned long below 0xFFFFFF00 reaches at most the register at its own address, a read none (A5-31).
+                if (!hi && w == 4)
+                {
+                    const size_t reached = CoveredRegisters(uint32_t(a), w, wr != 0).size();
+                    if (reached > (wr ? 1u : 0u))
+                        pr.Add("on-chip long " + std::string(wr ? "write" : "read") + " at " + Hex(uint32_t(a)) + " is said to reach " + std::to_string(reached) +
+                               " registers, the handler (switch on A & 0xFF) reaches " + (wr ? "the one at its own address" : "none"));
+                }
             }
         }
+}
+
+// Every misaligned word and long address of the on-chip area (A5-29). MemRead / MemWrite raise the address error and hand the
+// handler the address unmasked, so the handler decodes what it is given: from 0xFFFFFF00 up it aligns the address itself (the
+// mask in the cases file), below it it switches on A & 0xFF as it is. The register the label reaches must be one the decompiler
+// says the access reaches, with the cells the table has for it checked as for an aligned probe; a register it says the access
+// reaches that the handler does not, is a disagreement; and the address error is always said.
+inline void CheckOnChipMisaligned(const Cases& c, const std::vector<Excused>& excused, Stats& st, Problems& pr)
+{
+    size_t n = 0;
+    const HardwareRegister* regs = SaturnHardwareRegisters(n);
+    const bool mis = c.bus.count("bus.misaligned") && c.bus.at("bus.misaligned").count("rd_pex") && c.bus.at("bus.misaligned").at("rd_pex") &&
+                     c.bus.at("bus.misaligned").at("wr_pex");
+    if (!mis) pr.Add("bus.misaligned: the bus does not raise an address error for a misaligned access (the cautions say it does)");
+    for (uint64_t a64 = 0xFFFFFE00ull; a64 <= 0xFFFFFFFFull; ++a64)
+    {
+        const uint32_t a = uint32_t(a64);
+        for (uint32_t w : { 2u, 4u })
+        {
+            if (!(a & (w - 1))) continue;
+            for (int wr = 0; wr < 2; ++wr)
+            {
+                const bool hi = (a & 0x100u) != 0;
+                const Handler* h = c.Get(std::string("onchip.") + (wr ? "wr" : "rd") + std::to_string(w * 8) + (hi ? ".hi" : ".lo"));
+                if (!h) continue;
+                ++st.misaligned;
+                bool said = false;
+                for (const NarrowEffect& e : NarrowAccessEffects(a, w, wr != 0))
+                    said |= e.caution && e.text.find("address error") != std::string::npos;
+                if (said != mis)
+                    pr.Add("misaligned " + std::string(wr ? "write" : "read") + " of " + std::to_string(w) + " bytes at " + Hex(a) +
+                           (said ? " is called an address error, the bus raises none" : " is not called an address error, the bus raises one"));
+                // The handler's decoding of the address it is given.
+                const unsigned label = hi ? (a & unsigned(h->mask)) : (a & 0xFFu);
+                const Group* g = h->At(label);
+                const HardwareRegister* target = nullptr;   // the register whose own label is in the label's group, when the case does something
+                if (g && g->Has('M'))
+                {
+                    const HardwareRegister* sameGroup = nullptr;   // (a 16-bit register's second label, a copy of the divider)
+                    for (size_t i = 0; i < n && !target; ++i)
+                    {
+                        const HardwareRegister& r = regs[i];
+                        if (r.address < 0xFFFFFE00u || NotDecodedFamily(r.narrow) || !Allows(r, wr != 0) || ((r.address & 0x100u) != 0) != hi) continue;
+                        const unsigned own = hi ? (r.address & unsigned(h->mask)) : (r.address & 0xFFu);
+                        if (own == label) target = &r;
+                        else if (!sameGroup && h->At(own) == g) sameGroup = &r;
+                    }
+                    if (!target) target = sameGroup;
+                }
+                // The decompiler: the registers it says the access reaches, each with its cell.
+                uint32_t first = 0;
+                const uint32_t reach = AccessAddress(a, w);
+                HardwareAlias(reach, first);
+                const std::vector<CoveredRegister> covered = CoveredRegisters(a, w, wr != 0);
+                bool targetSaid = false;
+                for (const CoveredRegister& cr : covered)
+                {
+                    if (cr.reg == target) targetSaid = true;
+                    WidthProbe p{ cr.reg, w, wr != 0, int32_t(first) - int32_t(cr.reg->address), reach, cr.cell };
+                    CheckOnChipProbe(c, p, excused, st, pr);
+                }
+                // Below 0xFFFFFF00 a long write is made on the register at the long's own address only and a long read reaches none (the
+                // cases file: rd32.lo has no switch, wr32.lo switches on A & 0xFF): the decompiler may not say it reaches the others.
+                if (!hi && w == 4 && covered.size() > (wr ? 1u : 0u))
+                    pr.Add("misaligned " + std::string(wr ? "write" : "read") + " of 4 bytes at " + Hex(a) + ": the handler reaches " +
+                           (wr ? "the register at its own address only" : "no register") + ", the decompiler says it reaches " + std::to_string(covered.size()));
+                if (target && !targetSaid)
+                    pr.Add("misaligned " + std::string(wr ? "write" : "read") + " of " + std::to_string(w) + " bytes at " + Hex(a) + ": the handler (" +
+                           std::string("label 0x") + Hex(label, 2) + ") reaches " + target->name + ", the decompiler says the access reaches " +
+                           (covered.empty() ? std::string("no register") : std::string(covered[0].reg->name)));
+            }
+        }
+    }
+}
+
+// The values a byte access to a 32-bit register gets after its address error, and the halves' masks, that the cautions' texts state
+// (A5-31): a byte write stores V | V << 8, a byte read returns bits 15-8; a long read below 0xFFFFFF00 reaches no register.
+inline void CheckOnChipValueRules(const Cases& c, Problems& pr)
+{
+    auto need = [&](const char* name, const char* fact, int want) {
+        auto g = c.bus.find(name);
+        if (g == c.bus.end() || !g->second.count(fact)) { pr.Add(std::string("no fact ") + name + " " + fact); return; }
+        if (g->second.at(fact) != want) pr.Add(std::string(name) + " " + fact + ": the cautions' text states " + std::to_string(want) + ", Mednafen has " + std::to_string(g->second.at(fact)));
+    };
+    need("bus.onchipbyte", "wr_dup", 1);
+    need("bus.onchipbyte", "rd_shift8", 1);
+    auto mask = [&](const char* key, long want) {
+        const Handler* h = c.Get(key);
+        if (!h) { pr.Add(std::string("no handler ") + key); return; }
+        if (h->mask != want) pr.Add(std::string(key) + ": the address mask is " + std::to_string(h->mask) + ", AccessAddress assumes " + std::to_string(want));
+    };
+    // From 0xFFFFFF00 up the handlers align the address themselves (the same address AccessAddress makes); below it they take it as given.
+    mask("onchip.rd16.hi", 0xFE); mask("onchip.wr16.hi", 0xFE); mask("onchip.rd32.hi", 0xFC); mask("onchip.wr32.hi", 0xFC);
+    mask("onchip.rd8.hi", 0xFC); mask("onchip.wr8.hi", 0xFC);
+    for (const char* k : { "onchip.rd8.lo", "onchip.wr8.lo", "onchip.rd16.lo", "onchip.wr16.lo", "onchip.rd32.lo", "onchip.wr32.lo" }) mask(k, -1);
+    const Handler* r32 = c.Get("onchip.rd32.lo");
+    if (!r32 || r32->sw || !r32->pex) pr.Add("onchip.rd32.lo: a long read below 0xFFFFFF00 is said to return 0 and read nothing, the handler decodes something");
+    const Handler* w32 = c.Get("onchip.wr32.lo");
+    if (!w32 || !w32->sw || !w32->pex) pr.Add("onchip.wr32.lo: a long write below 0xFFFFFF00 is said to reach the register at its own address, the handler is not a switch with an address error");
 }
 }  // namespace hhc

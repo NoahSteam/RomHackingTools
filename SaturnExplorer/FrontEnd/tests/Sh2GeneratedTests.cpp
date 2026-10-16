@@ -84,9 +84,13 @@
 //      is printed only on some of the paths that reach it, and the ledger's ordering invariants
 //      (Sh2DecompilerTests.cpp's Ledger) hold. (FoldedIntoSwitch reports only what a run shows: two
 //      accesses it joined, one made without the other.)
-//   3b. (round 4, A5-19) A read the emulator traced at a register through the cached partition (an address below
-//      0x20000000 that the bus decodes to a register) has a caution on its instruction saying it is a cache read:
-//      the emulator has no cache, Mednafen does, so the trace cannot show the difference and the output must say it.
+//   3b. (round 4, A5-19; round 5, A5-28) A read the emulator traced at a register through the cached partition (an address
+//      below 0x20000000 that the bus decodes to a register) has a caution on its instruction saying it is a cache read:
+//      the emulator has no cache, Mednafen does, so the trace cannot show the difference and the output must say it. That
+//      holds for a read through a pointer too, when the output names the register: a pointer the engine proved to be one of
+//      several register literals prints as `&REG` (`puVar2 = &VDP2_TVSTAT;`), and the read through it is said as a direct one
+//      is. Only a read through a pointer whose printed form names no register (an address in a register, loaded or computed)
+//      is excused, counted `cache.read.anonymous`; one the output names is `cache.read.pointer.said` or `...unsaid`.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
@@ -3086,18 +3090,35 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             if (t.write || t.addr >= 0x20000000u || !r.InBody(t.insn) || !HardwareAlias(t.addr, canon) || canon >= 0xFFFFFE00u) continue;
             const uint16_t word = subject.WordAt(t.insn);
             if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000 || SaidMissing(r, t.insn)) continue;
-            // Only an access the output shows at that constant address: a pointer merged from two literals is a plain
-            // load (patches/0009), and there is no register for the note to be about.
+            // An access the output shows at that constant address, or a read through a pointer whose printed form names the register
+            // (`&REG`): either must be said. A pointer that names none (a parameter, a loaded or computed address) is a plain load
+            // (patches/0009) with no register for a note to be about, and is excused.
             bool shown = false;
             for (const MemoryAccess& m : r.accesses) shown |= !m.write && m.insn == t.insn && m.direct && m.address == t.addr && m.size == t.size;
-            if (!shown) { count("cache.read.indirect"); continue; }
+            bool named = false;
+            if (!shown)
+            {
+                const std::vector<const HardwareRegister*> regs = HardwareRegistersCovering(t.addr, t.size);
+                for (const HardwareRegister* reg : regs)
+                    for (const Line& l : r.lines)
+                    {
+                        const std::string needle = std::string("&") + reg->name;
+                        for (size_t at = l.text.find(needle); at != std::string::npos && !named; at = l.text.find(needle, at + 1))
+                        {
+                            const size_t end = at + needle.size();
+                            named = end >= l.text.size() || !(std::isalnum(static_cast<unsigned char>(l.text[end])) || l.text[end] == '_');
+                        }
+                    }
+                if (!named) { count("cache.read.anonymous"); continue; }
+            }
             bool said = false;
             for (const HardwareNote& n : r.hardwareNotes)
                 said |= n.address == t.insn && n.caution && n.text.find("cache read") != std::string::npos;
-            count(said ? "cache.read.said" : "cache.read.unsaid");
+            count(std::string(shown ? "cache.read." : "cache.read.pointer.") + (said ? "said" : "unsaid"));
             if (!said)
-                add("cache-read-unsaid", "the read of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " (" + Hex(t.addr) +
-                                              ", the cached partition) is not called a cache read");
+                add(shown ? "cache-read-unsaid" : "cache-read-pointer-unsaid",
+                    "the read of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " (" + Hex(t.addr) + ", the cached partition)" +
+                        (shown ? std::string() : std::string(" through a pointer the output names as &REG")) + " is not called a cache read");
         }
         for (const MemoryAccess& m : r.accesses)
         {
