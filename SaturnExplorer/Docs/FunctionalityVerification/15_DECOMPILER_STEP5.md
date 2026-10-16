@@ -6397,3 +6397,24 @@ Fixer, branch `review/6-round3-fix` on master `139a6e4`. Fix commit `a1ccc4c` (e
 - The cancel families on `dag` and `loopbrk` are in the full run only and were not rerun after the fix (the reviewer's 7,690 cells of `dag` passed on the unfixed tree and no code that the cancel path reads changed); `diamonds` every k and Windows and macOS are as in round 3.
 - The `TypeFactory` re-inserts, the `clearJumpTables` copy (`jumpvec = remain` after deleting tables) and the other items round 2 listed as not reached are still listed, not fixed.
 - A counter reset in the printer (above) was not made.
+
+## Integration of the five fix branches at 139a6e4
+
+Five fixers worked from the same master (`139a6e4`, or earlier commits merged up to it) and handed back the same day: `review/nightly-20k-fix` (A5-37..A5-41, A5-45, A5-46, A4-15), `review/3-round5-fix` (A3-13..A3-17), `review/gpt-ledger-review-fix` (A6-30, A12-10, A12-11, A2-30, A11-2, A6-19, A6-20; A5-50 recorded open), `review/2-round4-fix` (A2-21..A2-26, patches 0037 and 0038) and `review/6-round3-fix` (A6-18, A6-21..A6-24, patch 0040). They were merged in that order; the code auto-merged everywhere except `DecompilerFaultTests.cpp`, where the GPT branch's cold families and the area 6 branch's sticky mode, pin ordinals and size-checked census touched the same six places (resolved by hand: the census array, the cold cells, the sticky `ResolvePins` condition, the summary lines, both families' drivers). The patch tables take 0037, 0038 and 0040 in order; `vendor.py` on a copy of the vendored directory reproduces `cpp/`, `processors/` and `sources.cmake` with all 37 patches, so no patch needed regenerating.
+
+**Two defects the merge made, neither present on either branch alone.**
+
+1. The cold baseline child wrote census sizes into `gCensusSize`, which only the area 6 branch's `Warm` and census code allocated: every `cold` and `cold-disasm` cell died in the forked baseline ("the cold baseline (extracted config) failed: exit 0", the child killed by a signal). The cold body now allocates the array with the other census arrays.
+2. Area 6 made `Disassemble` build its marker string and the listing's room first (A6-23). That allocation sits before anything of the engine's is touched, but its failure fell through to the outer `catch (...)`, which marks the engine damaged, so `cold-disasm mailbox 0` and `1` ended "the decompiler ran out of memory earlier and its engine may be damaged" and the next request was refused: the A6-30 contract broken by the A6-23 fix. The marker now has its own `try`: on failure the listing is stopped before it began (`*stopped` set, one line "out of memory while preparing the decompiler; try again" when a line can be made, nothing under sustained exhaustion) and the engine is left untouched. `RunDisasmCell` gained the class `stopped-before-engine` for k below `kDisasmMarkerAllocs`, which expects the next decompilation and listing to be correct; the cell for a later k still expects the marker line and a refused engine.
+
+Patches 0037 and 0038 also moved the print-phase ranks of two A6-1 pins (`EmitPrettyPrint::setMarkup`, mailbox 40 bytes 77 to 81, jumptable 48 bytes 42 to 26); the census reported both MOVED with the right allocation, and `--sites` gave the new coordinates. No other pin moved.
+
+**Matrix on the merged head** (`c52adca`; the generator and corpus runs were made on `054d522`, whose engine and host differ from `c52adca` only in `Disassemble`'s allocation-failure path, which none of them exercises).
+
+- Whole `ctest`, RelWithDebInfo, `-j3`: 97 of 97 pass (the fault suite's default subset, 42 jobs, 0 failed, among them).
+- Generator: grammar 2, 3,000 seeds, 0 failing, 0 findings; grammar 1, 1,000 seeds, 0 failing; **20,000 seeds (10,000 of each grammar), 0 failing seeds, 0 findings** (`cache.read.pointer.said` 408, `cache.read.anonymous` 68) — the nightly job's four seeds (7134, 8306, 14812, 19409) are gone.
+- Printed-C, 3,000 seeds: 3,060 functions, 2,474 compared, 2,524 agree, 3 `narrow-c`, 0 differ.
+- Corpora with `SE_GAME_LEND=1`: `hwram007` 839 of 839 ok, `hwram008` 1,554 of 1,554 ok; every ledger count 0; 16 and 20 reads missing and said; notes 16 and 31 (the SCU_PPAF write-effect lines from the nightly fix); signatures lent 600 (786 parameters) and 984 (1,223), the area 3 round 5 numbers.
+- `vendor.py` in a copy: identical.
+
+**Not done.** No sanitizer run of the merged head (each branch ran its own); CI runs it. The ledger has no row for the two merge defects: both are integration of two correct fixes, recorded here. The reviewers' questions the fixers left (SCSP slot registers and KYONEX, the displaced on-chip pointer's type, `phi(in_r0, constant)`, the `TypeFactory` re-inserts, the printer's `countbase`) carry to the next rounds.
