@@ -395,6 +395,7 @@ struct Func
     bool returns = false;          // r0 is written on every path just before the return
     uint16_t retWord = 0;          // ...by this instruction
     bool retInSlot = false;        // ...which is rts's delay slot
+    bool retIsCall = false;        // ...or by no instruction: the function's last item is a call, and r0 is what its callee returned (`return g(p);`, A2-31)
     bool noR0 = false;             // never writes r0 itself (a function that returns nothing)
     bool slotPop = false;          // the last stack instruction of the epilogue is rts's delay slot
     int sel = -1;                  // the register a jump table indexes with: an integer, not a pointer
@@ -439,6 +440,7 @@ struct Gen
     Rng wideRng;
     // ...and one for the frame walk (a loop that moves a stack address, round 5 A3-16): whether a function has one and where.
     Rng frameRng;
+    Rng retRng;   // a stream of its own: whether a returning function returns its last call's result (A2-31)
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -460,7 +462,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull), retRng(seed ^ 0x7265747263616C6Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1495,6 +1497,15 @@ struct Gen
             f.retInSlot = rng.Chance(40);
         }
         if (f.end != Func::Fall && !f.retInSlot) f.slotPop = rng.Chance(45);
+        // `return g(p);`: the value is what the last call's callee returned, with nothing written after it (the usual epilogue pops in the
+        // slot, or a nop there). The draws above are those of the seeds found before this form existed; this one has a stream of its own.
+        if (f.returns && f.end == Func::Rts && !table && !f.items.empty() && f.items.back().type == Item::Call && f.items.back().callee >= 0 &&
+            fns[f.items.back().callee].returns && retRng.Chance(50))
+        {
+            f.retIsCall = true;
+            f.retInSlot = false;
+            f.slotPop = retRng.Chance(70);
+        }
         if (f.end == Func::TailJump)
         {
             f.tailReg = 1 + static_cast<int>(rng.Below(3));
@@ -1738,7 +1749,7 @@ struct Emitter
     void EmitExit(const Func& f)
     {
         if (f.end == Func::TailJump) PutLitLoad(f.tailReg, f.tailLit);
-        if (f.returns && f.end == Func::Rts && !f.retInSlot) Put(f.retWord);
+        if (f.returns && f.end == Func::Rts && !f.retInSlot && !f.retIsCall) Put(f.retWord);
         const ExitOps e = ExitSequence(f);
         const bool slotOp = f.slotPop && e.lastMovable && !f.retInSlot;
         for (size_t i = 0; i < e.ops.size(); ++i)
@@ -4322,6 +4333,7 @@ struct Shrinker
                     if (Try(f.shared, false)) changed = true;
                     if (Try(f.epilogueBelow, false)) changed = true;
                     if (Try(f.retInSlot, false)) changed = true;
+                    if (Try(f.retIsCall, false)) changed = true;
                     if (Try(f.slotPop, false)) changed = true;
                 }
             }
@@ -4429,7 +4441,7 @@ void CountProgramMnemonics(const Program& p, std::map<std::string, int>& m)
         CountWords(f.slotA, m);
         CountWords(f.slotB, m);
         m["rts"] += 1;
-        if (f.retWord) CountWords({ f.retWord }, m);
+        if (f.retWord && !f.retIsCall) CountWords({ f.retWord }, m);
         if (f.savePr) { m["sts.l"] += 1; m["lds.l"] += 1; }
         if (f.prReg >= 0) { m["sts"] += 1; m["lds"] += 1; }
         if (!f.pushed.empty()) { m["mov.l"] += 2 * static_cast<int>(f.pushed.size()); }
@@ -4460,6 +4472,7 @@ void CountProgram(const Program& p, std::map<std::string, int>& shapes)
         if (f.epilogueBelow) ++shapes["fn.exit_below"];
         if (f.slotPop) ++shapes["fn.slot_pop"];
         if (f.retInSlot) ++shapes["fn.ret_in_slot"];
+        if (f.retIsCall) ++shapes["fn.ret_call"];
         if (!f.argSave.empty()) ++shapes["fn.arg_copies"];
     }
     shapes["module.fns"] += static_cast<int>(p.fns.size());
@@ -4632,15 +4645,17 @@ Subject RawSubject(const char* raw)
 // emulator's r0 (r0 and r1 for an 8-byte return). The emulator is the spec: Sh2DecodeTests holds it
 // equal to Mednafen op by op.
 //   SE_GENERATED_PRINTEDC=1|only   run it (only: and nothing else; ctest's entry for it sets 'only')
-//   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 22 walk the edge values through r4-r7)
+//   SE_GENERATED_PRINTEDC_INPUTS=n inputs per function (default 32: the first 26 walk the edge values through r4-r7)
 //   SE_GENERATED_PRINTEDC_PER=n    functions per seed (default 1)
 //   SE_GENERATED_PRINTEDC_WORDS="6153 E000 000B 0009;..."  check hand-written functions, text printed
 //   SE_C_COMPILER=<cc>             the compiler (default: cc, gcc, clang found on PATH)
 // Without a C compiler the run says so loudly and exits 77, which ctest reports as skipped.
-// A mismatch on a function whose text declares a 1- or 2-byte variable or parameter is counted
-// apart ('narrow-c'): the engine prints sub-int arithmetic at its own width (`(int4)-param_1` with
-// `char param_1` negates a byte) and ISO C widens it, so the difference is in the reading, not the
-// value (15_DECOMPILER_STEP5.md, "Area 2, round 3: ...", question 1).
+// A text that disagrees with the run as C is read once more as the engine means it (CxxHeader, C++ classes that do the
+// arithmetic at their own width: `(int4)-param_1` with `char param_1` negates a byte, a comparison is a four-byte unsigned
+// in the arithmetic around it, xunknown has no sign) and counted apart ('narrow-c') only if it agrees there: the difference is
+// then in the reading, not the value (15_DECOMPILER_STEP5.md, "Area 2, round 3", question 1, and "Area 2, round 5", A2-33).
+// No declaration or cast in the text excuses a mismatch by its looks. The generated functions are register-only: a text that
+// calls something or reads a stack argument is the grammar leaking an instruction it cannot run ('grammar-leak', A2-38).
 
 std::string gScratch;
 
@@ -5194,7 +5209,7 @@ template <int N, bool S> struct SZ<T<N, S> > { static const int n = N; };
 #define FLDT_7(x) (T<7, true>((u64)(x)))
 #define FLDT_8(x) (T<8, false>((u64)(x)))
 #define FLD(v, o, n) FLDT_##n(FLDRAW(v, o, n))
-#define SETFLD(v, o, n, e) ((v) = __typeof__(v)((RAW(v) & ~(FLDMASK(n) << (8 * (SIZEOFV(v) - (o) - (n))))) | ((RAW(e) & FLDMASK(n)) << (8 * (SIZEOFV(v) - (o) - (n))))))
+#define SETFLD(v, o, n, e) ((v) = static_cast<__typeof__(v)>((RAW(v) & ~(FLDMASK(n) << (8 * (SIZEOFV(v) - (o) - (n))))) | ((RAW(e) & FLDMASK(n)) << (8 * (SIZEOFV(v) - (o) - (n))))))
 static inline Bool4 CARRY4(u64 a, u64 b) { return Bool4((uint32_t)((uint32_t)a + (uint32_t)b) < (uint32_t)a); }
 static inline Bool4 CARRY1(u64 a, u64 b) { return Bool4((uint8_t)((uint8_t)a + (uint8_t)b) < (uint8_t)a); }
 static inline Bool4 SCARRY4(u64 a, u64 b) { return Bool4(((int32_t)a >= 0) == ((int32_t)b >= 0) && (((int32_t)((uint32_t)a + (uint32_t)b) >= 0) != ((int32_t)a >= 0))); }
@@ -5262,7 +5277,6 @@ struct CVerdict
     std::string text;
     bool compared = false;
     bool voidReturn = false;
-    bool narrow = false;
     bool upperBits = false;   // a narrow return whose r0 upper bits are no extension of it (A2-26): never excused as C's reading
     int mismatches = 0;
 };
@@ -5436,12 +5450,11 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const size_t lineStart = pr.cText.rfind('\n', at);
         const std::string ret = pr.cText.substr(lineStart == std::string::npos ? 0 : lineStart + 1, at - (lineStart == std::string::npos ? 0 : lineStart + 1));
         v.voidReturn = ret.find("void") != std::string::npos;
-        static const std::regex narrow("\\b(char|uchar|byte|short|ushort|uint1|int1|uint2|int2|xunknown1|xunknown2|undefined1|undefined2)\\s+\\w+\\s*[;,)=]");
-        v.narrow = std::regex_search(pr.cText, narrow);
         // The run: the emulator from the entry for nIn inputs.
         Rng ir(inputSeed ^ (static_cast<uint64_t>(ci) * 0x9E3779B97F4A7C15ull) ^ c.words.size());
         const uint32_t pool[] = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
-                                  0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33 };
+                                  0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33,
+                                  0xFFFF7FFFu, 0xFFFFFF7Fu, 0xFF7FFFFFu, 0x7F7F7F7Fu };   // a negative value whose low 16, 8 or 24 bits are positive (A2-40)
         const uint32_t poolSize = sizeof pool / sizeof pool[0];
         int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
         auto draw = [&]() -> uint32_t {
