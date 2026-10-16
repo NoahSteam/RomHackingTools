@@ -5586,3 +5586,84 @@ Combined tree (this branch with `review/3-4-round4-fix` merged), RelWithDebInfo,
 - `ldc.l @Rm+,gbr/vbr/sr` forms and the `rte` restore are exercised by the generator's alphabet only through `ldc Rm,...`.
 - The generator's lent coverage fell (GBR items withhold their functions); a grammar draw that keeps GBR accesses to non-convention modules would
   restore area 3's counts if they are wanted.
+
+## Area 5, round 6 review
+
+Reviewer, branch `review/5-round6-review`, at `124a5eb` (master). Findings only; no source or test changed. Every fixture is in
+`Docs/Decompiler/REVIEW_LEDGER.md` (A5-37 to A5-41) with its words, current and expected output and the Mednafen lines (in the ledger's code
+quotes `or` stands for the C bar). Reproduced on a RelWithDebInfo gcc build with a scratch harness linked against the decompiler's objects (it
+prints the lines, the ledger and every note and caution), with `SaturnExplorerSh2GeneratedTests` (`SE_GENERATED_WORDS`) for the generator's
+verdict, with `SaturnExplorerHardwareWidthTableTests` and `derive_handler_cases.py --check`, and with the corpus (`SE_GAME_HWRAM`,
+`SE_GAME_NOTES=1`, `SE_GAME_OUT` to read every output). Mednafen read from the review path (`mednafen/ss`): `sh7095.inc` (`MemRead`,
+`MemWrite`, `SH7095_OnChipRegWrite_u16/u32`, `SH7095_OnChipRegRead_INLINE_u32`), `scu.inc` (`SCU_RegRW_DB_u8_W1`, `SCU_RegRW_DB_u32_W1`, the
+timers, the 16-bit CS2 write), `vdp2.c` (`RegsRead`, `RW_R16`), `cdb.c` (`CDB_Write_DBM`), `scsp.inc` (`SS_SCSP_RW_u16_W1`).
+
+**Area 5 is not clean: one P2, four P3.** The streak has not started. Round 5's pointer-following holds for the shape it was written for (a
+pointer merged from register literals, accessed at `@Rn`); it does not hold for the SH-2's base-plus-displacement form, and its text does not
+say when a pointer moves.
+
+**Not held.**
+
+- **A5-37 (P2).** A constant offset from a merged register pointer (`mov.l r0,@(16,r1)`, `mov.w @(4,r1),r0`, `add #-4,r1`) is taken as an
+  unknown index: `ConstantsOf` keeps the base of a PTRADD or INT_ADD and drops the literal addend, so the notes are made for the base
+  registers "if the index is 0", which the printed `puVar1[4]` shows never happens. `puVar1[1] = 0x101` from `&SCU_D0EN`/`&SCU_D1EN` (a store to
+  D0MD/D1MD) is said to start level-0 and level-1 DMA; `puVar1[4] = 0x101` from `&SCU_D0R`/`&SCU_D1R` (a store to D0EN/D1EN, which does start
+  it) says nothing; `puVar1[2]` from `&VDP2_TVMD`/`&VDP2_EXTEN` (a read of TVSTAT, which clears EXLTFG) is said to latch HCNT and VCNT. The
+  generator counts that read `cache.read.anonymous` (it looks for `&TVSTAT`), and passes it because the base's cache caution is on the same
+  instruction. P2 as A5-28: the same class through the more common addressing form.
+- **A5-38 (P3).** A merged pointer whose values are a register's aliases (`0x25FE0110`, SCU_D0EN through `A & 0xFC`; `0x05F80204`, TVSTAT
+  through `A & 0x1FE`) prints as numbers and is said nothing; the direct access says everything. Rule 3b excuses the cached poll as anonymous:
+  the excuse is keyed on the printed name, not on whether the engine knew the address.
+- **A5-39 (P3).** A pointer stepped in a loop (`mov.w @r1+,r0`) is said as "if the pointer holds 0x25F80004 (VDP2_TVSTAT)" without "(it may hold
+  other values too)"; a store loop from `&SCU_D0R` whose fifth store reaches D0EN (a literal trip count) says nothing at all.
+- **A5-40 (P3).** Two `F` registers the check passes and the output does not say: SCU_PPAF (exempted by a `split` text that is said only when
+  the function reads PPAF back; both corpora write `SCU_PPAF = 0;` and `SCU_PPAF = param_1 | 0x8000;` with no note, at 06033D5A and 06074DEE)
+  and CD_CR4 (a word write issues the command; `cd.wr`'s `F` is not read by the check). The SCSP common block's `F` (MVOL, RBL/RBP) is
+  bookkeeping, as round 5 decided.
+- **A5-41 (P3).** A long at 0xFFFFFEFE or 0xFFFFFEFD gets a caution about SH2_DVSR ("a 4-byte write to SH2_DVSR, a 32-bit register, is an address
+  error ...: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only"): the outcome is right (lower-half handler, `default`,
+  nothing written, 0 read), the register and the reason are not.
+
+**Held**, one line each:
+
+1. A5-28's shapes: a merged `@Rn` read (cache caution and TVSTAT's note per value), a merged write (ENDR's note, PTMR's not with 0), a merged
+   byte write to VDP2 (the whole-register caution per value), a merge with a RAM literal ("(it may hold other values too)"), on-chip merges
+   (CHCR0/CHCR1 arming per value; FTCSR's arming, TIER none), `a5_28_rawconst`.
+2. A register pointer stored to work RAM and read back in the same function folds to a direct access (`SCU_D0EN = 0x101;` with the DMA note).
+3. The misaligned edge above the split: a word at 0xFFFFFF01 (write: DVSR whole, upper half 0; read: DVSR's low 16 bits, `A &= 0xFE` then
+   case 0x00), a long at 0xFFFFFF02 (DVSR), a word at 0xFFFFFEFF (no register; nothing). Below it, A5-41's text only.
+4. The write effects against `SCU_RegRW_DB_u8_W1` (532-790) and `_u32_W1`: DnEN by lane (a byte at +2 carries Enable and never bit 0, so no
+   start; at +3 bit 0 with the old Enable; a word at +0 neither), a variable value said conditionally; T1MD (`if(!Timer_Enable) Timer0_Counter = 0`,
+   and the counter moves only while enabled, so the note is harmless when the timer is already off); AIACK and DSTP by lane.
+5. The BIOS ROM caution: a byte store and a word read of it (`CONCAT11(5, ...)`) have the caution; a store through a merged pointer to the ROM
+   is not folded, its read is printed as a read, and no caution is needed.
+6. CD_CR4's byte write ("does not start the command", `mask == 0xFFFF` only) and its long write (two word writes, the effect twice).
+7. The oracles as they stand: `SaturnExplorerHardwareWidthTableTests` passes (337 registers, 3,038 cells; 952 on-chip cells, 490 SCU cells,
+   228 block registers, 1,792 + 1,280 on-chip probes, 2,597 bus probes, 8 write-effect registers); `derive_handler_cases.py --check`: current.
+8. The corpus, every pointer-based hardware access read: the indexed SMPC OREG reads (`(&SMPC_OREG0)[(7 - uStack_14) * 2]`, 0601A0C8 / 06058CD4;
+   no read effect, nothing to say), the indexed D0EN store (A5-36, accepted), SMPC register pointers stored to RAM and used later (060715B6,
+   0601A0C8; anonymous, rightly), the SCSP DSP program area at 0x25B00BE2 (0602FE4C / 0606FA64; no register there). No merged register pointer
+   and no displacement from one in either image: A5-37 to A5-39 have no corpus instance; A5-40's PPAF has two.
+
+**Questions without a fixture (for the coordinator).**
+
+- The SCSP slot registers (0x25B00000-0x25B003FF) are not in the map: a write to a slot's word 0 with bit 12 (KYONEX) keys every slot on or off
+  (`scsp.inc` `SS_SCSP_RW_u16_W1`, `z->KeyExecute |= (bool)(*SRV & 0x1000)`). SCSP_SCIRE / SCSP_MCIRE clear pending interrupts by the bits
+  written (`z->MCIPD &= ~(...)`) and say nothing, where SCU_IST has a note for its clear. In scope for the map, or not?
+- A merged on-chip pointer used with a displacement prints its values as signed numbers (`iVar1 = -0x80; ... *(xunknown4 *)(iVar1 + 0xc) = 3;`,
+  SH2_CHCR0 or SH2_CHCR1): no register is named, so A5-37's fix would not reach it either. A printing matter (the type) or this area's?
+- Rule 3b counted 41 anonymous cached-partition reads in 3,000 grammar-2 seeds (28 said through a named pointer, 160 direct); how many are
+  A5-37's displacement shape (a base named, the traced register not) was not classified.
+
+**Could not probe:** the cache with CCR.OD/ID or two-way mode; the slave CPU's view; the generator's anonymous reads one by one.
+
+**Runs.**
+
+| | |
+|---|---|
+| `SaturnExplorerHardwareWidthTableTests` | passes (counts above) |
+| `derive_handler_cases.py --check` | the cases file is current against the review path's sources |
+| Generator replays of A5-37a-d and A5-38b | 0 findings each |
+| Generator, `SE_GENERATED_SEEDS=3000` `SE_GENERATED_GRAMMAR=2` | 0 findings; `cache.read.said` 160, `cache.read.pointer.said` 28, `cache.read.anonymous` 41 |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 14, cautions 16 (as round 5) |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 29, cautions 20 (as round 5) |
