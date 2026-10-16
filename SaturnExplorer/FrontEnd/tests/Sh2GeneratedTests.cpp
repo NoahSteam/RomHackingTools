@@ -35,8 +35,10 @@
 //   * control flow: bra forward (to a loop test at the bottom) and backward (loop with an exit in the
 //     middle), data words skipped by a bra (rts and invalid words among them), a jump table through
 //     mova + shll2 + mov.l @(r0,Rn) + jmp @Rn with 3 to 6 entries (some shared, some going to the
-//     default) and a cmp/hi or cmp/hs bound check, a shared exit reached by two bra, and an exit
-//     placed before the entry.
+//     default) and a cmp/hi or cmp/hs bound check or, for a quarter of the tables, a signed one
+//     (cmp/gt, cmp/ge: the larger indices go to the default and index -1 reads the word before
+//     the table, which the generator fills with an entry that goes to a case), a shared exit reached
+//     by two bra, and an exit placed before the entry.
 //
 // The check, per function (and again with the mailbox marked volatile when the program has one),
 // against the emulator's runs of that function from its entry: 4 inputs for version 2 (3 for version 1),
@@ -230,6 +232,8 @@ struct Item
     std::vector<uint16_t> after;   // Call: the registers restored from their callee-saved copies
     int sel = 4;                   // Table: the register that indexes
     bool useHs = false;            // Table: cmp/hs against the case count (else cmp/hi against the last case)
+    bool signedGuard = false;      // Table: cmp/ge (useHs) or cmp/gt instead: negative indices pass the bound check (ledger A4-7)
+    int preCase = 0;               // Table, signed guard: the case the entry for index -1 (the word before the table) goes to
     std::vector<int> target;       // Table: for each entry, the index of the case it goes to, or -1: the default
     std::vector<std::vector<Item>> cases;   // Table: the bodies of the cases
     std::vector<uint16_t> data;    // DataSkip: the words skipped over
@@ -282,6 +286,7 @@ struct Gen
     // A stream of its own for mac: the other items' draws, and so every program a seed made before mac
     // was in the grammar, are unchanged; mac only adds an item.
     Rng macRng;
+    Rng guardRng;   // a stream of its own, so that the signed guards do not move the programs of the seeds found before them
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -297,7 +302,7 @@ struct Gen
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -797,7 +802,7 @@ struct Gen
     }
 
     // A switch through mova + shll2 + mov.l @(r0,Rn) + jmp @Rn with a bound check.
-    Item MakeTable()
+    Item MakeTable(int idx)
     {
         Item it;
         it.type = Item::Table;
@@ -817,6 +822,14 @@ struct Gen
         {
             it.target[0] = 0;
             cases = 1;
+        }
+        // A signed bound check lets the negative indices through, so it is made only where the harness alone
+        // chooses the index: the first function of a module is entered by nothing else (a callee gets whatever
+        // its caller left in the register, a negative number among them, and would jump anywhere).
+        if (guardRng.Chance(25) && idx == 0)
+        {
+            it.signedGuard = true;
+            it.preCase = static_cast<int>(guardRng.Below(static_cast<uint32_t>(cases)));
         }
         const uint32_t before = defined;
         for (int c = 0; c < cases; ++c)
@@ -952,7 +965,7 @@ struct Gen
             }
             case 'p': f.items.push_back(MakeSpill()); break;
             case 'd': f.items.push_back(MakeDataSkip()); break;
-            case 'T': f.items.push_back(MakeTable()); break;
+            case 'T': f.items.push_back(MakeTable(idx)); break;
             default:
             {
                 const int callee = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
@@ -1106,6 +1119,10 @@ struct TableLayout
     // up to the join itself).
     std::vector<std::pair<uint32_t, uint32_t>> range;
     std::pair<uint32_t, uint32_t> defaultRange;
+    // A signed guard lets index -1 through: the word before the table is an entry of its own.
+    bool hasPre = false;
+    uint32_t preEntry = 0;
+    std::pair<uint32_t, uint32_t> preRange;
 };
 
 struct UnitLayout
@@ -1144,6 +1161,7 @@ struct Emitter
         std::vector<int> entryLabels;
         std::vector<int> endLabels;      // per entry: the end of its case body
         int defaultLabel = 0, defaultEnd = 0;
+        int preLabel = -1, preEnd = -1;  // a signed guard: the case the word before the table goes to
     };
     const Program& p;
     std::vector<W> w;
@@ -1397,7 +1415,8 @@ struct Emitter
                 caseEnd.push_back(NewLabel());
             }
             Put(static_cast<uint16_t>(0xE100 | (it.useHs ? n : n - 1)));                 // mov #bound,r1
-            Put(static_cast<uint16_t>((it.useHs ? 0x3012 : 0x3016) | it.sel << 8));      // cmp/hs r1,Rn / cmp/hi r1,Rn
+            // cmp/hs r1,Rn / cmp/hi r1,Rn, or the signed cmp/ge r1,Rn / cmp/gt r1,Rn
+            Put(static_cast<uint16_t>((it.signedGuard ? (it.useHs ? 0x3013 : 0x3017) : (it.useHs ? 0x3012 : 0x3016)) | it.sel << 8));
             PutBranch(0x8900, def);                                                       // bt default
             Put(static_cast<uint16_t>(0x4008 | it.sel << 8));                             // shll2 Rn
             PutFix(0xC700, 4, tbl, 0);                                                    // mova @(table,pc),r0
@@ -1409,6 +1428,15 @@ struct Emitter
             Put(0x412B);                                                                  // jmp @r1
             Put(0x0009);
             Align4();
+            if (it.signedGuard)
+            {
+                // Index -1 passes the guard and reads the word before the table: an entry of its own, to a case.
+                const int c = it.preCase % static_cast<int>(it.cases.size());
+                t.preLabel = caseLabel[c];
+                t.preEnd = caseEnd[c];
+                PutFix(0, 5, caseLabel[c], 0);
+                PutFix(0, 6, caseLabel[c], 0);
+            }
             Place(tbl);
             for (int e : it.target)
             {
@@ -1558,6 +1586,12 @@ Assembled Assemble(const Program& p)
             }
             tl.defaultAddr = labelAddr(t.defaultLabel);
             tl.defaultRange = std::make_pair(labelAddr(t.defaultLabel), labelAddr(t.defaultEnd));
+            if (t.preLabel >= 0)
+            {
+                tl.hasPre = true;
+                tl.preEntry = labelAddr(t.preLabel);
+                tl.preRange = std::make_pair(labelAddr(t.preLabel), labelAddr(t.preEnd));
+            }
             u.tables.push_back(tl);
         }
         a.units.push_back(u);
@@ -1770,7 +1804,8 @@ struct RunOut
     uint32_t initPr = 0, finPr = 0, initSr = 0, finSr = 0;
     RegUse use;
     int mode = 0;
-    int selValue = -1;                 // the integer a jump table was indexed with (-1: none given)
+    static constexpr int kNoSel = INT32_MIN;
+    int selValue = kNoSel;             // the integer a jump table was indexed with (kNoSel: none given; -1 is an index)
     int perturbed = -1;                // register whose start value was changed (-1: none)
 };
 
@@ -2118,6 +2153,7 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
                 tabs << (tabs.str().empty() ? "" : ";") << std::hex << (t.jmpInsn - kCode) << ":" << std::dec << t.sel << ":" << t.n << ":" << std::hex
                      << (t.defaultAddr - kCode) << ":";
                 for (size_t k = 0; k < t.entry.size(); ++k) tabs << (k ? "," : "") << (t.entry[k] - kCode);
+                if (t.hasPre) tabs << ":" << (t.preEntry - kCode);   // the entry for index -1, the word before the table
                 tabs << std::dec;
             }
             for (const std::pair<uint32_t, uint32_t>& r : f.layout.data)
@@ -2285,6 +2321,8 @@ public:
         for (const TableLayout& t : f.layout.tables) tableMax = std::max(tableMax, t.n);
         const bool useSel = f.sel >= 4 && tableMax > 0;
         std::set<int> sels;
+        bool negative = false;   // a table with a signed guard: index -1 is run too (the word before the table)
+        for (const TableLayout& t : f.layout.tables) negative = negative || t.hasPre;
         for (int mode = 0; mode < modes; ++mode)
         {
             RunSpec rs;
@@ -2300,11 +2338,11 @@ public:
             runs.push_back(One(f, rs));
         }
         if (useSel)
-            for (int v = 0; v <= tableMax + 1; ++v)
+            for (int v = negative ? -1 : 0; v <= tableMax + 1; ++v)
                 if (!sels.count(v))
                 {
                     RunSpec rs;
-                    rs.mode = 1 + v % 3;
+                    rs.mode = 1 + (v < 0 ? 0 : v % 3);
                     rs.volatileRun = volatileRun;
                     rs.selReg = f.sel;
                     rs.selValue = static_cast<uint32_t>(v);
@@ -2579,9 +2617,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         std::map<std::tuple<uint32_t, bool, int>, std::vector<uint32_t>> lost;
         for (const RunOut& run : runs)
         {
+            // An indirect jump the output says it treats as a call (a table it could not recover, A4-7: a
+            // signed bound lets the negative indices through) hands the rest of the run to code the output does
+            // not follow: what the run does after the jump's delay slot is not the output's to list, though the
+            // instruction may be in the body by another path (the join after the cases).
+            int handedOver = INT32_MAX;
+            for (size_t k = 0; k < run.pcs.size() && handedOver == INT32_MAX; ++k)
+                if (run.depths[k] == 0)
+                    for (const FlowWarning& w : r.flowWarnings)
+                        if (w.address == run.pcs[k] && w.text.find("Treating indirect jump as call") != std::string::npos)
+                            handedOver = static_cast<int>(k) + 2;
             std::map<std::tuple<int, uint32_t, bool, int>, std::vector<uint32_t>> steps;
             for (const TraceRec& t : run.trace)
-                if (t.depth == 0) steps[std::make_tuple(t.step, t.insn, t.write, t.size)].push_back(t.addr);
+                if (t.depth == 0 && t.step < handedOver) steps[std::make_tuple(t.step, t.insn, t.write, t.size)].push_back(t.addr);
             for (const auto& st : steps)
             {
                 std::vector<const MemoryAccess*> entries;
@@ -2821,6 +2869,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (run.pcs[k] == tl.jmpInsn && run.depths[k] == 0)
                     {
                         if (run.selValue >= 0 && run.selValue < tl.n) byIndex[run.selValue] = run.pcs[k + 1];
+                        else if (run.selValue == -1 && tl.hasPre) byIndex[-1] = run.pcs[k + 1];   // the word before the table
                         else defaultPath = true;
                     }
             if (defaultPath) count("table.out-of-range-index");
@@ -2833,6 +2882,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (dest.second == tl.defaultAddr) range = tl.defaultRange;
                 for (size_t k = 0; k < tl.entry.size(); ++k)
                     if (tl.entry[k] == dest.second && k < tl.range.size()) range = tl.range[k];
+                if (dest.first == -1 && tl.hasPre && tl.preEntry == dest.second) range = tl.preRange;
                 bool observable = false;
                 for (const MemoryAccess& m : r.accesses)
                     if (range.first <= m.insn && m.insn < range.second) observable = true;
@@ -2919,7 +2969,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                         RunSpec rs;
                         rs.mode = base.mode;
                         rs.volatileRun = volatileRun;
-                        if (base.selValue >= 0 && fn.sel >= 4)
+                        if (base.selValue != RunOut::kNoSel && fn.sel >= 4)
                         {
                             rs.selReg = fn.sel;
                             rs.selValue = static_cast<uint32_t>(base.selValue);
@@ -3266,6 +3316,12 @@ struct Shrinker
                 if (Still()) changed = true;
                 else cur.setup = setup;
             }
+            if (cur.type == Item::Table && cur.signedGuard)
+            {
+                cur.signedGuard = false;
+                if (Still()) changed = true;
+                else cur.signedGuard = true;
+            }
             if (cur.type == Item::Table)
                 for (size_t c = 0; c < cur.cases.size(); ++c)
                     if (Pass(list[i].cases[c])) changed = true;
@@ -3378,7 +3434,7 @@ void CountShapes(const std::vector<Item>& items, std::map<std::string, int>& sha
         {
             shapes["table.entries"] += static_cast<int>(it.target.size());
             shapes["table.cases"] += static_cast<int>(it.cases.size());
-            shapes[it.useHs ? "table.cmp_hs" : "table.cmp_hi"] += 1;
+            shapes[it.signedGuard ? (it.useHs ? "table.cmp_ge" : "table.cmp_gt") : it.useHs ? "table.cmp_hs" : "table.cmp_hi"] += 1;
             for (size_t e = 0; e < it.target.size(); ++e)
             {
                 if (it.target[e] < 0) ++shapes["table.entry_default"];
@@ -3483,18 +3539,20 @@ Subject RawSubject(const char* raw)
         }
         if (const char* tabs = std::getenv("SE_GENERATED_TABLES"))
         {
-            // jmp:sel:n:default:e0,e1,...  (the jmp and addresses as hex offsets from the entry, sel and n decimal)
+            // jmp:sel:n:default:e0,e1,...[:pre]  (the jmp and addresses as hex offsets from the entry, sel and n decimal;
+            // pre: where index -1, the word before the table, goes, for a table with a signed bound check)
             std::stringstream ts(tabs);
             std::string t;
             while (std::getline(ts, t, ';'))
             {
                 std::stringstream parts(t);
-                std::string a, sel, n, def, entries;
+                std::string a, sel, n, def, entries, pre;
                 std::getline(parts, a, ':');
                 std::getline(parts, sel, ':');
                 std::getline(parts, n, ':');
                 std::getline(parts, def, ':');
                 std::getline(parts, entries, ':');
+                std::getline(parts, pre, ':');
                 TableLayout tl;
                 tl.jmpInsn = kCode + static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16));
                 tl.sel = static_cast<int>(std::strtol(sel.c_str(), nullptr, 10));
@@ -3506,6 +3564,12 @@ Subject RawSubject(const char* raw)
                     tl.range.push_back(std::make_pair(kCode + e, kCode + e + 2));
                 }
                 tl.defaultRange = std::make_pair(tl.defaultAddr, tl.defaultAddr + 2);
+                if (!pre.empty())
+                {
+                    tl.hasPre = true;
+                    tl.preEntry = kCode + static_cast<uint32_t>(std::strtoul(pre.c_str(), nullptr, 16));
+                    tl.preRange = std::make_pair(tl.preEntry, tl.preEntry + 2);
+                }
                 const int u = s.UnitOf(tl.jmpInsn);
                 if (u >= 0)
                 {

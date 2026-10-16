@@ -4082,3 +4082,132 @@ an argument, which the grammar does not do. The generator replays each fixture w
 
 MAC and memory operands through the compiled-C check; interrupts (A2-8); the game corpus (not in this container); the
 sanitizers; the generator's long run.
+
+## Areas 2 and 4, round 3: signed bounds and the top of memory
+
+Fixer, branch `review/2-4-round3-fix`, fix commit `5a1297a` (tests strengthened in `45dd3bd` and `d64c50f`), on master `f5268df` (patches 0001 to 0028; this adds 0029 and 0031,
+0030 is another fixer's, and `vendor.py` on a sparse clone of the pinned Ghidra (`918d44e`) reproduces the vendored tree exactly
+with them). Ledger rows A4-7 and A2-11 (both P3) are `fixed 5a1297a`. Two engine changes, about 30 functional lines in
+`jumptable.cc` and `ruleaction.cc`; the rest is the generator, the evaluator the call oracle uses, and two test blocks.
+
+### 1. A4-7: the mechanism
+
+`JumpBasic::calcRange` intersects a candidate switch variable's range with each guard's. A guard `cmp/gt r1,r4 ; bt default`
+leaves r4 in "signed at most 2": the circle `[0x80000000, 3)`, the whole negative half and 0 to 2. Upstream then does
+
+```
+// It may be an assumption that the switch value is positive in which case the guard might not check for it.
+// If the size is too big, we try only positive values
+if (rng.getSize() > 0x10000) { positive = [0, 2^31) ∩ rng; if (!positive.isEmpty()) rng = positive; }
+```
+
+so the table became `[0, 3)`: three cases and a default, with the larger indices sent to the default by the guard. The hardware
+takes a negative index through the guard (the sign of the compare), `shll2` makes it a negative offset, and `mov.l @(r0,r4),r1`
+reads the word before the table: index -1 runs whatever that points at (the fixture: case 2). The engine had assumed what only
+the programmer knew. That is the root cause; neither the host nor the printer was wrong about the table the engine gave them.
+
+*Fix, patch 0029.* The assumption is gone. The range keeps the negatives, no table can fill it, `recoverModel` fails
+(`jrange->getSize() > maxtablesize`) and the engine takes the path it already has for an unrecoverable table: "Could not recover
+jumptable at 0x0600900e. Too many branches" and "Treating indirect jump as call". The host withholds the signature ("an indirect
+call it does not resolve"). The fixture's output, which agrees with the emulator for every index (it says nothing of the ones the
+guard lets through):
+
+```
+if (param_1 < 3) { xVar1 = (**(code **)(param_1 * 4 + 0x6009018))(); return xVar1; }
+return 0x6009034;
+```
+
+Not under `loadsNotDuplicated`: it is a wrong table from an upstream heuristic, whatever is done with loads (the same call as
+patch 0027). What stays recovered, each pinned by a fixture and the emulator: an unsigned bound (`cmp/hi`, `cmp/hs`), a signed
+bound with `cmp/pz` as a second guard (the pair leaves `[0, 3)`), and a zero-extended index (`extu.b r4,r4 ; cmp/gt`: a byte
+cannot be negative). The first sound outcome the row names (the table's range reflects the signed bound) cannot be a switch: a
+32-bit signed bound is 2^31 entries; the second (the guard recognised as not bounding the table) is the same outcome as the
+engine reports it. A sign-extended index (`exts.b r4,r4 ; cmp/gt`, the shape the row calls "often one loaded with a sign-extending `mov.b`") was
+the silent three-case switch with the signature lent; it is now a switch over the byte with the engine's own "Sanity check
+requires truncation of jumptable: cases may be missing" and "Could not find normalized switch variable", and the signature is
+withheld ("a jump table recovered incompletely"). The byte, as a candidate on its own, has the whole 0 to 255 range, and the
+sanity check cuts it where the words stop being code addresses. Warned and withheld, as the row asks.
+
+### 2. A2-11: the mechanism
+
+`RuleStoreVarnode` and `RuleLoadVarnode` turn an access to a constant address into a COPY of a Varnode at that address. For a
+constant that leaves fewer than `size` bytes before the end of `ram`, `Funcdata::newVarnodeOut` and `newVarnode` call
+`AddrSpaceManager::constructWrappingAddress`, which throws "Trying to construct memory range beyond end of address space" for a
+space that does not allow a wrapped range (it is the only caller of that exception). The fixture's path where `tst` proved r4 = 0
+reaches `mov.w r1,@-r4` (r4 = 0xFFFFFFFE) and `mov.l r3,@r4`: a 4-byte store at 0xFFFFFFFE. The exception unwinds the whole
+function, so the row's "the other path is ordinary code" did not matter.
+
+*Fix, patch 0031.* The two rules leave the LOAD or STORE alone when the constant access does not fit in the space (a file-local
+`pastSpaceEnd`, which is the exception's own condition). It stays a LOAD or STORE through its constant pointer and is printed as
+one: `*(xunknown4 *)0xfffffffe = in_r3;` under `if (param_1 == 0)`. An access that ends at 0xFFFFFFFF is inside the space and is
+folded as before. The ledger lists it once, as an access through a pointer. On the hardware that path is an address error (a
+longword at 0xFFFFFFFE, in the on-chip register region); the output does not say so (see "Not done").
+
+### 3. Tests, the evaluator and the generator
+
+- **`TestSignedGuardTable`** (after `TestTailJumpToUnreachedCode`): the ledger's fixture with `cmp/gt` and with `cmp/ge`, the
+  sign-extended form (`exts.b`), and four controls (`cmp/hi`, `cmp/hs`, `cmp/pz` with `cmp/gt`, `extu.b` with `cmp/gt`). Each runs on the emulator for r4 = 0, 1, 2, 3,
+  -1, 0x80000000 and 0x7FFFFFFF, and the evaluated text must agree (`PseudoAgreesWithRun`). The signed ones must be an unresolved
+  jump, warned, with the signature withheld and not lent to a caller; the emulator's answer for -1 is 2 (the word before the table).
+  The oracle is the call oracle widened: **`PseudoEval` now reads `switch`** (`case`, `default`, fall-through, `break`, a case
+  value that is negative), which it refused before, so the text that used to be printed for the fixture is rejected by value
+  (it returns 0x6009034 where the code returns 2), not because the evaluator could not parse it. The evaluator's own checks
+  include the old text, a fall-through, and a `break` inside an `if`.
+- **`TestAccessPastSpaceEnd`**: the row's three shapes (a longword store, a longword load at 0xFFFFFFFE, a word store at
+  0xFFFFFFFF), each `Ok`, with the text, the ledger entry (once, through the pointer) and the reference run (`ReferenceOk`); the
+  last longword and the last byte of the space, folded as before (`Ramfffffffc`, `Ramffffffff`).
+- **The generator** (grammar 2). A quarter of the first function's jump tables are bounded by `cmp/gt` or `cmp/ge` (the same
+  bounds, `n-1` and `n`). The word before such a table is an entry of its own, to one of the table's cases, so that index -1 does
+  something the emulator can follow; the run set gains a run with index -1 for such a function; and the table check (every
+  destination the run took is a case the output prints, or a warning says cases may be missing) takes index -1 as an index, its
+  destination being the entry before the table. A signed guard is made in the first function only: a callee is entered with
+  whatever its caller left in the register, a negative number among them, and would jump anywhere. The choice is drawn from a
+  stream of its own (as `macRng` is), so the programs of earlier seeds are unchanged except for the tables that became signed
+  (219488, the A2-11 seed, is the same program). A second change was forced by the first: after an indirect jump the output treats
+  as a call, what the run does is not the output's to list, though an instruction after it can be in the body by another path (the
+  join after the cases). The `dropped` check now skips an access made after such a jump's delay slot, as the `outside-body` check
+  has done since A4-5. Replay lines carry the entry before the table as a sixth field of `SE_GENERATED_TABLES`.
+
+### 4. Matrix
+
+**Mutation** (a scratch build with the change applied or reverted; restored, all pass):
+
+| Mutation | Fails |
+|---|---|
+| patch 0029 reverted | `TestSignedGuardTable`: 20 checks (the evaluated text disagrees with the emulator for -1 and 0x80000000 on both signed fixtures; `switch(` and the lent signature where they must not be; the warning, the withheld reason, no `case`/`default`; the signature lent to a caller; and for the sign-extended index the lent signature and the missing "cases may be missing"); the generator: 50 of 3,000 seeds (`table-case`: index -1 goes to a case the printed switch does not hold; `lent-incomplete:table-case-missing` in 44) |
+| patch 0031 reverted | `TestAccessPastSpaceEnd`: 12 checks (status Failed with the exception's text, on all three shapes); seed 219488 (`[n:status]`) |
+| patch 0029 over-reaching (every range full) | 60 checks: the four controls and the existing switch fixtures |
+| patch 0031's bound off by one (`size+1`) | 2 checks: the last longword and the last byte of the space are no longer folded |
+| `PseudoEval` ignoring the case labels | 7 checks of the evaluator's own |
+| `PseudoEval`'s `break` leaving only the innermost block | 1 check (the first version of the evaluator's checks passed this mutant; the `break` inside an `if` was added) |
+| generator: no run with index -1 (patch 0029 reverted) | 0 findings of 3,000 (the unit fixture still fails): the run is what finds it |
+| generator: no signed guards made (patch 0029 reverted) | 0 findings of 3,000: this is the grammar as it was, which could not see the class |
+| generator: the table check ignoring index -1 (patch 0029 reverted) | 0 findings of 3,000 |
+| generator: no exemption after an indirect jump treated as a call (patch 0029 in) | 6 of 3,000 seeds (`dropped:*`) |
+
+**Matrix** (RelWithDebInfo, gcc; the machine ran other work):
+
+| | |
+|---|---|
+| `ctest` | 96 of 96 passed (68 s with -j3), a full build of every target |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings. 843 tables, 100 signed (52 `cmp/gt`, 48 `cmp/ge`); 5,941 functions |
+| `SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=200001 SE_GENERATED_SEEDS=20000` (the review's window) | 0 failing seeds, 0 findings (497 s); the review run had 1 (219488). 39,066 functions; 5,307 tables, 657 signed (324 `cmp/gt`, 333 `cmp/ge`) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds, 0 findings |
+| Seed 219488 (`SE_GENERATED_SEED`, grammar 2) | passes (it failed with `[n:status]` before) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; **0 of 839 outputs changed** against the same build with patches 0029 and 0031 off (every prologue decompiled, outputs compared file by file) |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; **0 of 1,554 outputs changed** |
+| Game corpus, every prologue decompiled twice, patches off and on | 1,554 functions: 23.1 s and 27.0 s with the patches off, 22.4 s and 21.1 s with them on (a loaded machine: no slowdown to see) |
+| `vendor.py` on a sparse clone of `918d44e` | reproduces the vendored tree exactly (84 library sources, 94 headers, 5 spec files; patches 0001 to 0029 and 0031) |
+| ASan + UBSan + LeakSanitizer, gcc Debug, `Sh2DecompilerTests` (`detect_leaks=1`) | no AddressSanitizer or LeakSanitizer report; the only UBSan lines are the two tolerated (`address.hh:605`, `slghpatexpress.cc:979`); the suite passes (55 s), and with `SE_GAME_HWRAM=hwram008.bin` (954 s); `Sh2GeneratedTests` over 300 grammar-2 seeds under the same build is clean and passes |
+
+**Not done.**
+- The access past the top of memory is printed as written. The hardware takes a longword at 0xFFFFFFFE as an address error, and
+  nothing in the output says so; the width table (area 5) is the place for such a caution, and it has no row for an access that
+  leaves the space.
+- A signed bound with an index that is not a plain register (a `mov.b`-loaded index, a computed one) was probed by the
+  sign-extended register form only (`exts.b`). A `mov.b @r4,r4` load adds a memory read to the same shape; it was not probed.
+- The generator makes signed bound checks in the first function of a module only. A callee with a signed table would need its
+  callers' arguments constrained, which the grammar does not do.
+- Grammar 1 has no jump tables, so it has no signed bound.
+- The `PseudoEval` ignores the width of a parameter (`xunknown1 param_1` is the whole register), so the fixture with a byte index
+  is fed bytes.

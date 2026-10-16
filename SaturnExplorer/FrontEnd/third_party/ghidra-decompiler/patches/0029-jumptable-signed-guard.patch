@@ -1,0 +1,35 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/jumptable.cc
+@@ -19,6 +19,7 @@
+  * Modified for SaturnExplorer: a recovered switch's table lookup is not held with the other loads (patches/0018-hold-every-load.patch).
+  * Modified for SaturnExplorer: a guard is not folded over a table lookup whose value is used (patches/0024-switch-lookup-used.patch).
+  * Modified for SaturnExplorer: a guard is not folded into a switch whose case is the guard's own target when the paths carry different values there (patches/0027-switch-default-is-case.patch).
++ * Modified for SaturnExplorer: a switch variable is not assumed non-negative when its guard is signed (patches/0029-jumptable-signed-guard.patch).
+  */
+ #include "jumptable.hh"
+ #include "emulate.hh"
+@@ -1175,15 +1176,14 @@
+     if (rng.intersect(guard.getRange())!=0) continue;
+   }
+ 
+-  // It may be an assumption that the switch value is positive
+-  // in which case the guard might not check for it. If the
+-  // size is too big, we try only positive values
+-  if (rng.getSize() > 0x10000) {
+-    CircleRange positive(0,(rng.getMask()>>1)+1,vn->getSize(),rng.getStep());
+-    positive.intersect(rng);
+-    if (!positive.isEmpty())
+-      rng = positive;
+-  }
++  // Upstream assumes the switch value is non-negative when the range is too big, so that a signed
++  // bound alone (SLESS or SLESSEQUAL against the last index) gives a switch of 0 to the last index.
++  // SaturnExplorer does not: a negative value passes such a guard on the hardware, reads the word
++  // before the table and jumps there, and the output sent every value but the table's to the
++  // default (ledger A4-7). The range stays the circle the guards leave, which no table can fill; the
++  // recovery fails and the jump is reported as unresolved (the guard is signed and the value that
++  // reaches the table is unbounded below). A second guard that excludes the negatives (cmp/pz,
++  // or an unsigned bound) already leaves a small range.
+ }
+ 
+ /// \brief Return \b true if the \b newRange is preferred over the current range
