@@ -5771,3 +5771,94 @@ not 0 and every function over 300 ms.
 
 **Done criteria.** Area 3 has four P2 rows this round (A3-13 to A3-16), so it needs a fix round and then two consecutive clean review
 rounds. Area 4 has no row this round.
+
+## Area 2, round 4 review
+
+Reviewer, branch `review/2-round4-review`, on master `124a5eb` (patches 0001 to 0034, the printed-C oracle, the wide alphabet,
+`EntryStateUse`). Findings only, no fixes. New ledger rows: **A2-21 (P1)**, **A2-22 (P1)**, **A2-23 (P2)**, **A2-24 (P2)**,
+**A2-25 (P3)**, **A2-26 (P2)**. A2-16 and A2-20 (open P3s) were context, not re-probed. Two P1s: area 2 is not clean this round.
+
+### Where the oracle could not look
+
+The printed-C differential's grammar is register-only: no stack, no memory, and no constant wider than `mov #imm`'s 8 bits. Both
+P1s are outside it, and both pass the generator (it compares accesses, not values or return widths):
+
+- **A2-21**, a constant division whose quotient is scaled. Compilers divide by constants with `dmulu.l`/`dmuls.l` and a 32-bit magic
+  number from the literal pool, which the grammar cannot draw. A corpus of compiler-shaped divisions (Hacker's Delight magic numbers;
+  `mov.l @(lit),r1 ; dmulu.l r1,r4 ; sts mach,r0`, then the shift or the "add" form `sub ; shlr ; add ; shlr...`, signed with `dmuls.l`,
+  `shar` and the sign correction; d = 3..159, 641, 1000, 6700417, 0x7FFFFFFF; the quotient alone and times 2, 4, 8, 16), 1,610 functions
+  through `SE_GENERATED_PRINTEDC_WORDS`: 1,603 agree (`param_1 / 7`, `param_1 % 7`, `param_1 / 0xe`, signed with Ghidra's
+  `x / 7 + (x >> 0x1f) + (x < 0)` form), 7 differ, all unsigned add-form divisions scaled by exactly the power of two of their final shift
+  (`x / 7 * 4`, `x / 19 * 16` ...). The shift pair becomes a mask, `RuleDivOpt` no longer sees a division, and `RuleDivTermAdd2`'s
+  intermediate `(uint8)x * 0x124924925 >> 0x21`, whose product needs 65 bits, is printed. `RuleDivTermAdd` has the same overflow for
+  `(mulh(x, c) >> d) + x`. Both rules are upstream's.
+- **A2-22**, a byte or word put into a stacked longword and the longword loaded back: the part of r0 that is still the stored register is
+  dropped from the return (1, 2 or 3 bytes are returned, or `void` when r0 is also copied to r1), and the signature is lent. Through a global
+  or registers the same code prints right; offset 0 prints right. The printed-C check said `agrees` on it, because it compares a narrow
+  return in its low bytes only (**A2-26**).
+
+Checked in scratch with the oracle widened: requiring a 1- or 2-byte return to be r0's zero or sign extension, and giving GBR and VBR
+non-zero entry values (the oracle uses 0 for both, so a text that dropped either would pass): 6,017 functions (seeds 1-3000, two each),
+0 such returns and 0 differences. So nothing else is hidden in the register-only grammar by these two; the grammar's alphabet is the
+gap.
+
+### Memory operands, checked against the emulator by hand
+
+About thirty texts read against the run (`SE_GENERATED_WORDS`, trace and text), big-endian throughout. Right: `mov.b @r4` with `extu.b`/
+`exts.b`; `mov.w @r4+` with `extu.w ; swap.b`; two `mov.b @r4+` joined by `shll8 ; or` (`CONCAT11`); a 64-bit `subc` chain from memory
+(the borrow `uVar2 < uVar2 - iVar3`, the reads in order); `tas.b` (T from the old byte, `| 0x80` written); `tst.b`, `xor.b` through
+`@(r0,GBR)`; `mac.w` after `clrmac` (the saturation branch removed as unreachable, correctly: a 16x16 product cannot overflow 32 bits from
+0), `mac.w` with S and a live MAC (both halves, `MACH |= 1` on saturation), `mac.l` with S (the 48-bit bounds, the low word 0 for the
+negative bound); `ldc.l @r4+,gbr`; `stc.l sr` / `ldc r4,sr` / `ldc.l @r15+,sr` (`Write_SR(param_1 & 0x3f3) ; Write_SR(in_sr & 0x3f3)`);
+stack reads of a stored register's byte 0, byte 1, the low byte, the low word (`(char)(param_1 >> 0x18)` ...); a global byte insert
+(`CONCAT31`). Wrong: the stack inserts (A2-22). `t[x/7]` prints the A2-21 address. One reading question, counted as `narrow-c` and so
+accepted with A2-19: `(int4)xStack_2` with `xunknown2 xStack_2` is a sign extension in the engine's reading, and nothing in the text says so.
+
+### The rarely emitted instructions, by hand
+
+- `rte`: its restore of SR and PC is dead at the return, so a handler that changes the stacked SR (a status in T) or PC prints as nothing
+  (**A2-24**). With an ordinary body it prints the body; the A2-4 slot limit is still flagged.
+- `trapa #0x20`: `(**(code **)(unaff_vbr + 0x80))()` then the caller's use of r0; the push of PC and SR is balanced (A2-9 holds).
+- `bsrf r1` (target computed before the slot): the call is to the right address, its return used.
+- `braf` with a slot that writes the branch register: the target is taken from the value before the slot (`func_0x06009008()`, the tail
+  call the guide documents with its warning).
+- Delay slots: `bf/s` with `sett` in the slot and `bt/s` with `clrt` (the branch decided on the T before the slot), a slot that writes
+  r0 on the taken path, `bf/s` with `movt` in the slot: all agree with the run in the printed-C check.
+- `cmp/str` on a register that is not a parameter: four byte inputs named `in_r3`, `in_r3_00` ..., none saying which byte (**A2-25**);
+  the oracle skips the function.
+- `EntryStateUse`: SR stored whole is state; stored and loaded back through a pointer the reload is no descendant of `in_sr`, and the
+  function is lent without its T input (**A2-23**). Through the stack the store is folded and the function is withheld, as it should be.
+- `div0s`/`div1`, `movt` after `addc`/`subc`/`div1`, `rotcl`/`rotcr` chains, `dmuls`/`dmulu` high words, `swap.b`/`xtrct`: in the
+  register-only alphabet; 6,017 more functions (seeds 1-3000, two each, 32 inputs): 0 findings (4,954 agree, 2 `narrow-c`, 536
+  `void-return`, 524 skipped calls, 1 skipped unknown input, which is A2-25).
+- Not SH-2 instructions, so not probed: `pref`, `shad`/`shld` (SH-3 and later), and the integer division ops (SH-2A); division by zero and
+  INT_MIN / -1 arise in no SH-2 p-code (the divide unit is a memory-mapped peripheral, area 5), and the engine only makes divisions by
+  constants.
+
+### The C helpers
+
+Read against p-code: `SEXTab` shifts left by 64 - 8a and back arithmetically (right for 1 to 8); `ZEXTab`, `SUBab`, `CONCATab` mask
+correctly; `CARRY4`, `SCARRY4`, `SBORROW4` are the p-code definitions. `CARRY8`, `SCARRY8`, `SBORROW8` and 2-byte forms are not defined:
+a text that used one would be `not-compilable`, a failure, not a pass. A shift by 32 or more of a 4-byte value would be undefined in C;
+none was printed in the 7,627 functions of this round.
+
+### What held
+
+- `SaturnExplorerSh2DecodeTests` with `SE_MEDNAFEN_SS` (word table, decode comparison, 260,000 cases, 0 differ, 1,780 the known A2-4)
+  and `SaturnExplorerSh2SemanticsTests` pass.
+- Patch 0034: `ldc`/`ldc.l` to SR mask with `0x3F3` before `Write_SR`, as Mednafen's `LDC`/`LDC_L` (`sh7095_ops.inc:1653-1690`); GBR and
+  VBR unmasked; `ldc.l` reads then increments, as `LDC_L`.
+- Patch 0033: no `unaff_<address>` in any text; the `addv` fixtures; 8-byte returns with both halves right.
+- `EntryStateUse` for GBR and VBR (any store or load address or return withholds), for transformed SR (a field returned or branched on
+  withholds) and through the stack.
+
+### Questions (no fixture, or not area 2)
+
+- `(int4)x` of an `xunknown2`: is the extension's sign meant to be readable from the text? The oracle counts it as `narrow-c`.
+- The printed-C grammar would reach both P1s with a literal-pool constant item (`mov.l @(disp,PC)`) and a stack item (push, partial
+  store, reload). Area 11's call.
+
+### Not probed
+
+Interrupts and the slot-illegal exception (A2-8); the game corpus (not in this container); the sanitizers; the generator's long run;
+`SE_GENERATED_ALPHABET=specials`.
