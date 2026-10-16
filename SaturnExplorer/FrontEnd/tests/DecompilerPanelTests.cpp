@@ -2212,6 +2212,23 @@ void TestStaleTooltipNamesTheCause()
         CHECK(!Has(tip, "Follow PC") && !Has(tip, "entry box names"));
     }
     {
+        // A running emulator is stale for moving on as well, but a refresh would not help while the
+        // PC is where no function is: the tooltip names the PC, not just the lag.
+        Fixture f;
+        f.kind = DecompViewKind::LiveRunning;
+        f.trackSerial = false;
+        CHECK(f.WaitShown("+ 1"));
+        f.regs[0].pc = 0x00001FF0u;
+        ++f.frame;
+        ++f.fixedSerial;
+        f.Idle();
+        CHECK(Has(f.panel.StaleTooltip(), "The emulator has moved on"));   // before it is looked at
+        f.ClickItem("refresh");
+        f.Idle(3);
+        CHECK(f.panel.ShownStale() && !f.panel.EntryError().empty());
+        CHECK(Has(f.panel.StaleTooltip(), "Follow PC finds no function at the PC"));
+    }
+    {
         // An entry typed that is not code memory, and one that is not an address: the box is what to fix.
         Fixture f;
         CHECK(f.WaitShown("+ 1"));
