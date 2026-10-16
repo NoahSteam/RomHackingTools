@@ -6418,3 +6418,104 @@ Patches 0037 and 0038 also moved the print-phase ranks of two A6-1 pins (`EmitPr
 - `vendor.py` in a copy: identical.
 
 **Not done.** No sanitizer run of the merged head (each branch ran its own); CI runs it. The ledger has no row for the two merge defects: both are integration of two correct fixes, recorded here. The reviewers' questions the fixers left (SCSP slot registers and KYONEX, the displaced on-chip pointer's type, `phi(in_r0, constant)`, the `TypeFactory` re-inserts, the printer's `countbase`) carry to the next rounds.
+
+## Area 5, round 7 review
+
+Reviewer, branch `review/5-round7-review`, at `30112ac` (master). Findings only; no source or test changed. Every fixture is in
+`Docs/Decompiler/REVIEW_LEDGER.md` (A5-51 to A5-56) with its words, current and expected output, the Mednafen lines and the oracle's verdict (in
+the ledger's code quotes `or` stands for the C bar). Reproduced on a RelWithDebInfo gcc build (the main build's options) with
+`SaturnExplorerSh2GeneratedTests` in its `SE_GENERATED_WORDS` mode as the harness (it prints the trace, every note and caution, the ledger and
+the text, and gives the generator's verdict on the same words), `SaturnExplorerSh2DecompilerTests` (suite and corpus), and
+`SaturnExplorerHardwareWidthTableTests` with `derive_handler_cases.py --check`. Mednafen read from the review path (`mednafen/ss`): `vdp2.c`
+(`RW_R16`, `RW_W8`, `RW_W16`, `RegsRead`), `vdp1.c` (`VDP1_Write8_DB`, `VDP1_Write16_DB`, `WriteReg`), `scu.inc` (`SCU_RegRW_DB_u8_W1`, the
+B-bus and CS2 dispatch), `scsp.inc` (`SS_SCSP_RW_u8_W1`, `_u16_W1`), `cdb.c` (`CDB_Read`, `CDB_Write_DBM`), `smpc.c` (`SMPC_Write`,
+`SMPC_Read`), `sh7095.inc` (`MemWrite`, case 7), `ss.c` (CS3 work RAM).
+
+**Area 5 is not clean: two P2, four P3.** Round 6's fixes hold for every shape they were written for; the resolver does not follow a pointer
+moved between partitions by a mask (A5-51), and the data flow does not know that two addresses of one work-RAM word are one word (A5-52).
+
+### Verified (round 6 and the nightly fix)
+
+Each round 6 fixture, words verbatim through the harness: `a5_37a`-`d`, `a5_37_mirror`, `a5_38a`, `a5_38a_direct`, `a5_38b`, `a5_39a`, `a5_39b`,
+`a5_40a`, `a5_40b`, `a5_40b_byte`, `a5_41a`, `a5_41a_fd`, `a5_41b`, `a5_45`, `a5_45_through`, `a5_45_byte`: the notes the ledger rows expect,
+0 generator findings each; the suite passes. Then the resolver, each with a fixture of its own (words in the scratch file, not in the suite):
+
+| Attack | Result |
+|---|---|
+| Constant offset into the next register (`@(16,r1)` from D0R/D1R), the mirror base, `add #-4` | held (the A5-37 fixtures) |
+| Pre-decrement `mov.l r0,@-r1` from D0MD/D1MD | held: D0EN/D1EN's DMA notes |
+| `@(r0,Rn)` with a constant r0 (`mov #16,r0`) | held: D0EN/D1EN's notes |
+| `@(r0,Rn)` with a variable r0 | held: "if the index is 0", and D0R has nothing to say |
+| An offset into an unmapped hole (SCU 0x18/0x38) | held: nothing to say (`default` in `SCU_RegRW_DB_u32_W1`) |
+| An offset past the end of the SCU's 256-byte decode (`&SCU_VER` + 0x48 = 0x25FE0110) | held: SCU_D0EN through the `A & 0xFF` repeat, its DMA note |
+| A join of a register and RAM with an offset | held: "(it may hold other values too)" |
+| A pointer stepped by `add #-4` from SCU_D1EN | held: the qualifier and the stepped note |
+| A pointer stepped by a non-constant (`add r5,r1`) | the qualifier, no stepped note (A5-54, remark) |
+| A mirror of a mirror (0x2DFE0110, bits 28-27), direct and merged | held: D0EN's note and the mirror line |
+| SMPC word views through a pointer: a byte at +1 from `&SMPC_SF`/`&SMPC_SR` (the odd lane), a word at +2, a byte at +0 (the even lane) | held: SR's read-only caution, SF's width caution, the even-lane cautions; SF's own write note is left out for the value 1 by design |
+| The on-chip split through a pointer: {0xFFFFFEFE, 0xFFFFFE0E} + 2 (crosses into the upper half) | held: DVSR's whole-register word caution; TIER's byte-register cautions |
+| A displaced merged on-chip pointer ({0xFFFFFF80, 0xFFFFFF90} + 0xC) | followed now: CHCR0/CHCR1's arming on a read; printed as `iVar1 = -0x80; *(xunknown4 *)(iVar1 + 0xc)`, the type a printing matter (round 6's question) |
+| A pointer moved between partitions (`and`/`or` with 0x1FFFFFFF / 0x20000000) | **not followed: A5-51** |
+| A stepped walk from an unnamed start into named registers | **not said: A5-54** |
+| `tas.b` on SMPC_SF, VDP2_TVMD, SCU_IST's low byte | held: one read and one write in the ledger, SF's note, VDP2's byte-write and B-bus cautions |
+| 32-bit reads of 16-bit pairs (TVMD:EXTEN, TVSTAT:VRSIZE, SCSP MIBUF:MOBUF) | held: EXTEN's latch, TVSTAT's clear, MIBUF's FIFO pop, MOBUF's write-only caution, the "covers" caution |
+| A poll of TVSTAT with a timeout counter | held: one read in the loop, TVSTAT's note |
+| CD_HIRQ read, clear by `0xfffe`, read again | held: the clear text on both reads (said where the function writes it) |
+| The `F` labels of the cases file against `WriteEffects` | held: every `F` has its text (SCU 98/A8/10/30/50/60/80, VDP1 ENDR, SMPC SF, CD CR4, the watchdog through `KeyedWrite`); the SCSP common block's `F` stays bookkeeping. What `F` cannot see is A5-55 |
+| Read effects (`E`) against `onRead` | held, every one (the width-table test checks it) |
+| Registers added since round 5 | none: `SaturnHardwareMap.cpp` changed only in `e8d472e` (WriteEffects for PPAF and CR4, the half's end); 337 registers, 3,038 cells as before |
+| The bus areas and their repeats against the B-bus, CS2 and CS0 dispatch | held: CD block `(A & 0x7FFF) < 0x1000`, `(A & 0x3F) >> 2`; SCU `0x05FE0000-0x05FEFFFF`; VDP2 registers `A < 0x1C0000` after `A &= 0x1FFFFF`; VDP1 registers without repeat; SCSP `A &= 0xFFF` |
+
+### A5-50's neighbours (narrow writes against the bus handlers)
+
+The pseudocode's `CONCAT11(old, v)` is what VDP2 VRAM (`RW_W8`: `(VRAM[vri] & ~mask) or (*DB & mask)`), VDP1 VRAM and the frame buffer (one
+byte stored, `VDP1_Write8_DB`) store; sound RAM is volatile and printed as a byte write, which is what `SOUND_Write8` does; the SCU DSP ports
+(`*DB` whole) and the VDP1/VDP2 registers (`RegsWrite(A, *DB)`, `WriteReg`) have their cautions. Only colour RAM stores the bus's whole entry
+(A5-50). Colour RAM has two more properties the data flow does not know: it repeats every 4 KiB, and in mode 0 a write of either width also
+writes the entry 0x400 up; VDP2 VRAM and the VDP1 frame buffer repeat too. With A5-52 (work RAM) they make one class, a store forwarded past a
+write to the same bytes under another address: A5-53.
+
+### Findings
+
+- **A5-51 (P2).** A merged register pointer masked into the other partition is followed by nothing: no cache caution (the generator's rule 3b
+  rejects it: `cache-read-pointer-unsaid`), no TVSTAT clear, no DMA start. The A5-37 class through INT_AND / INT_OR.
+- **A5-52 (P2).** `xRam26001000 = 5; xRam06001000 = 7; return 5;`: the hardware returns 7. The cached and cache-through partitions, bits 28-27
+  and the 1 MiB repeat of high work RAM are one memory to Mednafen and to the generator's emulator, two to the engine's data flow. A wrong value
+  and a dropped read on a shape the games use (a word written through 0x2xxxxxxx and read through 0x0xxxxxxx); no oracle compares the printed
+  value outside the register-only grammar. Corpus: the alias pair occurs in 3 functions, none forwards across it.
+- **A5-53 (P3).** The same for VDP2 colour RAM (4 KiB repeat, mode 0's double write), VDP2 VRAM and the VDP1 frame buffer; a fix of A5-50 that
+  looks at byte writes only will miss the word form.
+- **A5-54 (P3).** The stepped-pointer note keys on the start being a named register: a walk from an SCU hole whose seventh store starts level-1
+  DMA, and a walk from SCSP slot 31 into MVOL and MOBUF, say nothing.
+- **A5-55 (P3).** Value-triggered write effects with no text and no flag in the cases file: SCSP_DTLG's EX (the SCSP DMA), KYONEX on an unnamed
+  slot register, SCSP_SCIRE / SCSP_MCIRE, SMPC_COMREG, VDP1_FBCR's FCM. Round 6's SCSP question, with fixtures.
+- **A5-56 (P3).** The SMPC write-only read caution says "the value is not what was written"; Mednafen returns its bus buffer, the last byte
+  written to the SMPC.
+
+### Questions without a fixture
+
+- The slave idle loop (06003C46 and copies): the engine's ignorance of the partition alias (A5-52) is what keeps `pcRam06003304` a read. A fix
+  that merges aliases must keep the poll (the purge at 0x46003304 between the store and the read is the barrier the hardware has); the current
+  result is right by accident.
+- `SMPC_SF` reads bits 7-1 from the bus buffer (the last byte written to the SMPC); a test `SMPC_SF == 0` (rather than `& 1`) would read them.
+  No game code tests it that way in either image (not searched beyond the notes).
+- Two-level pointers (`mov.l @r1,r2 ; mov.l @r2,r3` with a register address stored in RAM the function does not write): the value is a load
+  and nothing can be said; a pointer the function stores and reads back folds (round 6, held).
+
+### Runs
+
+| | |
+|---|---|
+| `SaturnExplorerSh2DecompilerTests` | all passed |
+| `SaturnExplorerHardwareWidthTableTests` | 337 registers, 3,038 cells, passes; 952 on-chip cells, 490 SCU cells, 228 block registers, 9 write-effect registers |
+| `derive_handler_cases.py --check` | the cases file is current against the review path's sources |
+| Generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=1` | 0 failing seeds, 0 findings; `cache.read.said` 1,284, `cache.read.pointer.said` 70, `cache.read.anonymous` 13; 56 seeds with a run excluded as an address error |
+| Generator, `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=30001` | 0 failing seeds, 0 findings; `cache.read.said` 150, `cache.read.pointer.said` 53, `cache.read.anonymous` 9 |
+| Generator on the review's words | 0 findings each, except A5-51a: 1 (`cache-read-pointer-unsaid`) |
+| Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 16, cautions 16 (as the nightly fix) |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 31, cautions 20 (as the nightly fix) |
+| Corpus scan for one work-RAM word named through two aliases in one function | 3 functions (above), no store forwarded across the alias |
+
+**Not covered:** the cache with CCR.OD/ID or two-way mode; the slave CPU's view; the VDP1 frame buffer's 8 bpp rotation scramble; the generator
+grammars' coverage of masked partitions and aliased stores (neither grammar makes them: 0 findings in 6,000 seeds while A5-51a's words fail);
+sanitizer runs (no code changed).
