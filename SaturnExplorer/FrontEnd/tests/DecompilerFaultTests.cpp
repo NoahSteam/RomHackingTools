@@ -14,8 +14,11 @@
 //             flag), and from a second thread every millisecond across the run. The outcome must be
 //             the one the design gives for where the flag went up (see Expected), a cancelled result
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
-//   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so, the engine is then
-//             refused (A6-16)
+//   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so (the `stopped` flag
+//             it sets needs no allocation; the marker line is a move into room made first), the engine is then
+//             refused (A6-16, A6-23)
+//   sticky    "disasm-sticky" and "alloc-sticky": the same cells with every allocation from k on failing, not only
+//             k, as a full heap stays full (A6-23; SE_FAULT_STICKY=1 does it to any family)
 //   runner    DecompilerRunner lifecycle: Stop (Cancel), Submit while busy (superseding),
 //             InvalidateSession, budget expiry, DisableLocked recovery and destruction, each with the
 //             worker held at every phase entry of the request. No result for a stale generation or
@@ -33,9 +36,13 @@
 //          one cell, with the failing allocation's stack trace; family is alloc, cancel-enter,
 //          cancel-alloc, cancel-us, cancel-oom, disasm or runner (then <kind> is stop, supersede, invalidate,
 //          destroy, budget, disable or memo and <k> a phase-entry ordinal, or "all")
-//        SaturnExplorerDecompilerFaultTests <scratch dir> --sites <fixture> <phase> <ord> <size>
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --sites <fixture> <phase> <ord> <size> [site]
 //          the allocations of that size in that phase entry, each with its rank and the functions on its stack:
-//          how a pin's coordinates and site are written (SE_FAULT_DEPTH=<n> frames, 5)
+//          how a pin's coordinates and site are written (SE_FAULT_DEPTH=<n> frames, 5). With a site, only the
+//          allocations made there, each with its ordinal among them (the '#n' of the site)
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --diffruns <fixture> [runs]
+//          runs of the warmed engine after the baseline, each compared with it, allocation by allocation (the
+//          first must match; the markup's pair ids make a later one differ when they pass a varint boundary)
 //        environment: SE_FAULT_FULL, SE_FAULT_DENSE (alloc: size of the dense prefix, 3000),
 //          SE_FAULT_JOBS (parallel drivers, 1), SE_FAULT_TIMEOUT (seconds per cell, 120),
 //          SE_FAULT_PHASE=actions,... / SE_FAULT_RANGE=<lo>-<hi> (alloc: every k of those phase entries, or of the range),
@@ -1754,7 +1761,7 @@ std::string CellClass(const std::string& out)
 }
 
 // The allocation sites where the exhaustive sweep found a defect (REVIEW_LEDGER.md, rows A6-1 ..
-// A6-5, A6-10, A6-11, A6-14, A6-15 and the leaks that were fixed), in every run of the matrix, the default
+// A6-5, A6-10, A6-11, A6-14, A6-15, A6-21, A6-22 and the leaks that were fixed), in every run of the matrix, the default
 // subset included. A site is named twice:
 //
 //   where -- the 'ord'-th entry of 'phase' in the baseline log (counting the reference run's entries
@@ -1763,13 +1770,19 @@ std::string CellClass(const std::string& out)
 //            more than a thousand), but not a change in the same phase entry: one more allocation of the
 //            same size before the site moves the coordinates onto its neighbour.
 //   what  -- 'site', the functions on the stack of that allocation, innermost first, separated by ';'
-//            (each a substring of a demangled name; every one must occur, in order). It is how the
-//            driver knows the coordinates still lead to the site the row names. An allocation that does
-//            not match is looked for again among the allocations of the same size in the same phase
-//            entry (the pin "moved", and every match, at most kPinMax of them, becomes a cell); if there
-//            is none the pin is STALE, and that fails the run, so that it is re-pinned instead of
-//            silently pointing at code it was not written for (A6-12: a pin that had slid onto a
-//            neighbour passed with the defect back in).
+//            (each a substring of a demangled name; every one must occur, in order), and '#<n>': the
+//            allocation is the n-th (from 0, in allocation order) of those at the site that ask for the
+//            pin's size in the phase entry. The functions alone cannot tell two allocations of one size in
+//            one function apart (ProtoStoreSymbol::clone makes two of 72 bytes), so a shift of one between
+//            them was "site ok"; with the ordinal it is MOVED, and the cell fails the allocation the pin
+//            names. It is how the driver knows the coordinates still lead to the site the row names. An
+//            allocation that is not the one named is looked for again among the allocations of the same
+//            size in the same phase entry (the pin "moved", and the one with the ordinal, or every match,
+//            at most kPinMax of them, becomes a cell); if there is none the pin is STALE, and that fails
+//            the run, so that it is re-pinned instead of silently pointing at code it was not written for
+//            (A6-12: a pin that had slid onto a neighbour passed with the defect back in). The census also
+//            checks the size (A6-24): the run it takes the stacks from must make the allocation at the
+//            coordinates at the size the pin names, and must be the baseline's run, size for size.
 //
 // `--cell alloc <fixture> <k>` prints the coordinates of its allocation ("PIN-AT") and its stack, which
 // is how a pin is written. Where there is no backtrace (not glibc) the coordinates alone are used and the
@@ -2247,8 +2260,10 @@ int SitesTool(const std::string& fixture, const std::string& scratch, const std:
 }
 
 // `--diffruns <fixture> [runs]`: after Warm, 'runs' more runs of the same engine (50), each compared with the baseline: the
-// number of allocations and the size of each. Warm settles on these (A6-24), so the answer is "identical": a build in which
-// it is not is a baseline that is not the run the cells perturb.
+// number of allocations, the size of each and the result. The first, N+1, is the run every cell makes and the baseline was
+// measured from, so it must be identical (the exit status). The later ones are not required to be: the markup's group ids
+// (`TokenSplit::countbase`, see MeasureBaseline) keep growing, and a run in which they pass 127 or 16,383 has a longer
+// markup; that is what this tool is for.
 int DiffRunsTool(const std::string& fixture, const std::string& scratch, int runs)
 {
     Ctx c;
@@ -2273,14 +2288,16 @@ int DiffRunsTool(const std::string& fixture, const std::string& scratch, int run
         const bool same = n == c.base.allocs && diffs == 0 && Signature(r) == c.base.sig;
         if (!same)
         {
+            if (i == 1) bad = 1000;
             ++bad;
             std::printf("run N+%d: %ld allocations (baseline %ld), %ld sizes differ, first at %ld (%u vs baseline %u)%s\n", i, n, c.base.allocs, diffs,
                         first, first >= 0 ? fa::gSizeLog[first] : 0u, first >= 0 ? c.base.sizes[size_t(first)] : 0u,
                         Signature(r) == c.base.sig ? "" : "; the result differs");
         }
     }
-    std::printf("diffruns %s: %d of %d runs after the baseline differ from it\n", fixture.c_str(), bad, runs);
-    return bad ? 1 : 0;
+    std::printf("diffruns %s: %d of %d runs after the baseline differ from it%s\n", fixture.c_str(), bad % 1000, runs,
+                bad >= 1000 ? "; THE FIRST DOES: the baseline is not the run the cells make" : "");
+    return bad >= 1000 ? 1 : 0;
 }
 
 std::vector<long> AllocCells(const Ctx& c, bool full, const std::vector<PinRes>& pins)
