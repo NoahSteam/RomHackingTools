@@ -134,6 +134,10 @@ void DecompilerPanel::ResetSession()
 {
     mPending = Outstanding();
     mAsked = Question();
+    mStopped = false;
+    // The PC the last auto-refresh was for belongs to the session that ended: kept, it would
+    // suppress the new session's one refresh when its PC lands on the same value.
+    mAutoPcValid = false;
     mSnap.reset();
     mSnapId = ViewId();
     mResolved = false;
@@ -266,6 +270,43 @@ bool DecompilerPanel::ShownStale() const
            mShownVolatileHash != mVolatileHash ||   // decompiled under another volatile list
            mShownFunctions != mFunctions ||         // or another function set: after a Stop nothing re-asks (review of 0e3cd12)
            (mResolved && (!mEntryOk || mShown.requestedEntry != mEntry));
+}
+
+DecompilerPanel::StaleReason DecompilerPanel::GetStaleReason() const
+{
+    if (!ShownStale()) return StaleReason::None;
+    // A request the user has just Stopped is still outstanding until the runner acknowledges it,
+    // but no replacement is coming from it.
+    if (mPending.active && !mPending.cancelled) return StaleReason::Pending;
+    if (mRunnerDisabled) return StaleReason::Disabled;
+    if (mStopped || (mPending.active && mPending.cancelled)) return StaleReason::Stopped;
+    return StaleReason::NeedsRefresh;
+}
+
+std::string DecompilerPanel::StaleTooltip() const
+{
+    switch (GetStaleReason())
+    {
+    case StaleReason::None:
+        return std::string();
+    case StaleReason::Pending:
+        return "This output is from an earlier state; its replacement is shown when it is ready.";
+    case StaleReason::Stopped:
+        return "This output is from an earlier state. You stopped its replacement; press Enter in the\n"
+               "entry box or Refresh to ask for it again.";
+    case StaleReason::Disabled:
+        return "This output is from an earlier state. Decompiling is disabled for this session (see\n"
+               "the message below), so no replacement will come.";
+    case StaleReason::NeedsRefresh:
+        break;
+    }
+    if (mViewKind == DecompViewKind::LiveRunning && ShownOutdatedByView())
+        return "The emulator has moved on since this was decompiled. Press Refresh.";
+    if (mResolved && !mEntryOk)
+        return "This output is from an earlier state, and the entry box names no function to replace it\n"
+               "(see the message below). Correct the entry and press Enter.";
+    return "This output is from an earlier state and nothing is being decompiled. Press Enter in the\n"
+           "entry box or Refresh to replace it.";
 }
 
 void DecompilerPanel::Resolve(const DecompilerInputs& inputs)
@@ -496,6 +537,7 @@ void DecompilerPanel::Install(DecompileResult& result, const ViewId& snapId, uin
         ++mCalleesGeneration;
     }
     Learn(mShown);
+    mStopped = false;
     mShownWidth = -1.0f;   // measured at the next Draw, which has a font
     if (!sameFunction)
     {
@@ -540,8 +582,16 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
     if (!current)
     {
         ++mDiscarded;
-        // The answer to the outstanding request came back and is not wanted: nothing else will.
-        if (mPending.active && r.slot == kSlot && r.generation == mPending.generation) mPending.active = false;
+        // The answer to the outstanding request came back and is not wanted: nothing else will. And
+        // the question it answered is not settled: an answer the panel threw away (it was closed
+        // while the view moved) must not leave the question recorded as asked, or the inputs coming
+        // back to it ask nothing and the old output stays (A1-4). A question the user Stopped stays
+        // asked: the Stop is the user's answer to it.
+        if (mPending.active && r.slot == kSlot && r.generation == mPending.generation)
+        {
+            if (!mPending.cancelled) mAsked = Question();
+            mPending.active = false;
+        }
         return false;
     }
     mPending.active = false;
@@ -549,6 +599,7 @@ bool DecompilerPanel::Accept(DecompileResult& r, uint64_t runnerEpoch)
     {
         // The user's Stop. What was shown stays; the same question is not asked again until Refresh.
         mNote = "Stopped.";
+        mStopped = true;
         return false;
     }
     if (r.status == DecompileStatus::Ok)
@@ -688,8 +739,12 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     DecompileResult r;
     while (runner.Poll(r))
         if (r.slot == kSlot) Accept(r, epoch);
-    // Neither a disabled runner nor an ended session will answer what is outstanding.
-    if (mPending.active && (runner.Disabled() || mPending.epoch != epoch)) mPending.active = false;
+    // Neither a disabled runner nor an ended session will answer what is outstanding. The question
+    // stays recorded: the runner re-enables only in a new session (epoch), and App ends a session
+    // with ResetSession, which forgets what was asked. (The model cannot tell a clear here from
+    // none: no sequence reaches it without that ResetSession.)
+    mRunnerDisabled = runner.Disabled();
+    if (mPending.active && (mRunnerDisabled || mPending.epoch != epoch)) mPending.active = false;
 
     if (!active || !mSnap) return;
     const bool force = mForceSubmit, retry = mRetryTooLarge;
@@ -711,25 +766,30 @@ void DecompilerPanel::Update(const DecompilerView& view, DecompilerRunner& runne
     q.prototypes = PrototypeHash(mEntry);
     q.volatileMemory = mVolatileHash;
     if (q == mAsked && !force && !askAgain) return;   // asked already: its answer, or its failure, is shown
-    mAsked = q;
-    mNote.clear();
 
     if (!force)
         if (const CacheEntry* hit = CacheFind(q))
         {
             DecompileResult copy = hit->result;
             const ViewId snapId = hit->snapId;
+            mAsked = q;
+            mNote.clear();
             mPending.active = false;
             Install(copy, snapId, q.namesGeneration);
             ++mCacheHits;
             return;
         }
 
+    // Nothing is sent to a disabled runner, so nothing is recorded as asked: the question is put
+    // when the runner takes requests again (A1-5), not lost with the session that disabled it.
     if (runner.Disabled())
     {
         mPending.active = false;
         return;
     }
+    mAsked = q;
+    mNote.clear();
+    mStopped = false;
     DecompileRequest rq;
     rq.entry = mEntry;
     if (inputs.names)
@@ -1005,10 +1065,7 @@ void DecompilerPanel::DrawStatus(const DecompilerView& view, const DecompilerRun
             ImGui::TextColored(kAmber, "[stale: frame %llu]", static_cast<unsigned long long>(mShown.key.frameNumber));
         else
             ImGui::TextColored(kAmber, "[stale]");
-        if (view.kind == DecompViewKind::LiveRunning && !mPending.active && ShownOutdatedByView())
-            ImGui::SetItemTooltip("The emulator has moved on since this was decompiled. Press Refresh.");
-        else
-            ImGui::SetItemTooltip("This output is from an earlier state; its replacement is shown when it is ready.");
+        ImGui::SetItemTooltip("%s", StaleTooltip().c_str());
     }
 
     if (runner.Disabled())

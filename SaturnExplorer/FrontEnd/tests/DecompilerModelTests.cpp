@@ -1210,9 +1210,53 @@ struct Rig
         CheckStaleMark();
     }
 
+    // The stale badge's reason (area 8): it exists exactly when the result is stale, and the tooltip
+    // promises a replacement only while one is outstanding. Without a reason the badge cannot tell
+    // "its replacement is coming" from "nothing will come until you press Refresh" (A8-1).
+    void CheckStaleReason()
+    {
+        if (failed) return;
+        const bool stale = panel.ShownStale();
+        const DecompilerPanel::StaleReason reason = panel.GetStaleReason();
+        const std::string tip = panel.StaleTooltip();
+        const bool promises = tip.find("when it is ready") != std::string::npos;
+        using R = DecompilerPanel::StaleReason;
+        std::string why;
+        if (stale != (reason != R::None))
+            why = "the reason and the stale mark disagree";
+        else if (!stale && !tip.empty())
+            why = "a tooltip for an output that is not stale";
+        else if (stale && tip.empty())
+            why = "a stale output with no tooltip";
+        else if (stale && panel.Pending())
+        {
+            // A request being Stopped is still outstanding until the runner acknowledges it.
+            if (reason != R::Pending && reason != R::Stopped) why = "a request is outstanding but the reason is neither pending nor stopped";
+            else if (promises != (reason == R::Pending)) why = "the tooltip's promise does not match the reason";
+        }
+        else if (stale)
+        {
+            if (reason == R::Pending || promises) why = "nothing is outstanding but the badge promises a replacement";
+            else if (runner.Disabled() != (reason == R::Disabled)) why = "the reason is Disabled exactly when the runner is";
+            else if (reason == R::Stopped && !haveStopped) why = "the reason is Stopped though the user stopped nothing";
+            else if (reason != R::Stopped && !runner.Disabled() && haveStopped && SigOf(held).Same(stopped))
+                why = "the user stopped this question and the badge does not say so";
+            else if (reason == R::NeedsRefresh && tip.find("Refresh") == std::string::npos)
+                why = "a stale output needing the user does not say to press Refresh";
+            else if (reason == R::Disabled && tip.find("disabled") == std::string::npos) why = "the Disabled tooltip does not say so";
+            else if (reason == R::Stopped && tip.find("stopped") == std::string::npos) why = "the Stopped tooltip does not say so";
+        }
+        if (why.empty()) return;
+        static const char* const names[] = { "None", "Pending", "Stopped", "Disabled", "NeedsRefresh" };
+        Fail("STALE REASON: " + why + "\n  stale " + std::to_string(stale) + ", pending " + std::to_string(panel.Pending()) +
+             ", runner disabled " + std::to_string(runner.Disabled()) + ", reason " + names[static_cast<int>(reason)] +
+             "\n  tooltip: " + tip);
+    }
+
     // At any time, engine busy or not: a result made from other inputs than the ones now must say so.
     void CheckStaleMark()
     {
+        CheckStaleReason();
         if (failed || !haveShown || selected == -2) return;
         ++gStats.heldChecks;
         const Sig now = ViewSig();
@@ -1639,6 +1683,8 @@ struct Rig
             return;
         }
         if (!CheckInstalls()) return;
+        CheckStaleReason();
+        if (failed) return;
         if (panel.Pending())
         {
             Fail("PENDING: the runner is idle but the panel still waits for an answer (a result was lost)");
@@ -1905,7 +1951,7 @@ bool RunSeed(Oracle& oracle, uint64_t seed, bool verbose, const std::set<int>& s
 }
 
 // The default run: this many seeds, then the shrunk sequences of the findings fixed from this model
-// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-3), which stay in the default run as regression pins.
+// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5 and A8-1), which stay in the default run as regression pins.
 const uint64_t kDefaultSeeds = 18;
 
 struct Pinned
@@ -1925,18 +1971,30 @@ const Pinned kPinned[] = {
     { "A1-2", "select A; starve; refresh; name A 1", "A", 0 },
     // Typing the entry of a function again after Stop asks for it (the old one must not stay, stale).
     { "A1-3", "hold; select A; stop; wait; select A", "C,A", 0 },
-};
-
-// The open findings of round 2 (REVIEW_LEDGER.md A1-4, A1-5), not in the default run while they
-// fail: SE_MODEL_OPEN=1 runs them alone. The fixer moves each into kPinned once it passes.
-const Pinned kOpen[] = {
-    // An answer discarded while the panel is closed; the view comes back to the question asked.
+    // An answer discarded while the panel is closed does not settle its question: the view comes
+    // back to it (a resume after a scrub; a scrub away and back; a BIOS image dropped and chosen
+    // again; a function start set and cleared) and the panel, once shown, asks it.
     { "A1-4 (resume)", "hold; select A; hide; scrub 1; wait; resume; show; wait", "C,A", 0 },
     { "A1-4 (scrub)", "scrub 1; hold; select A; hide; scrub 2; wait; scrub 1; show; wait", "C,A", 0 },
     { "A1-4 (BIOS)", "hold; select A; hide; bios 1; wait; bios 0; show; wait", "C,A", 0 },
     { "A1-4 (start)", "hold; select A; hide; bound C 1; wait; bound C 1; show; wait", "C,A", 0 },
-    // A question formed while the runner is disabled; the runner recovers in the new session.
+    // A question formed while the runner is disabled is not recorded as asked: the runner recovers
+    // in the new session and the panel asks it. Two controls: the stuck request ending before the
+    // session changed, and an edit made while the session is still disabled (nothing can be asked).
     { "A1-5", "select A; wedge; reconnect; wait", "C,A", 0 },
+    { "A1-5 (control, ended first)", "select A; wedge; wait; reconnect; select C; edit A 0 1", "C,A", 0 },
+    { "A1-5 (control, disabled)", "select A; wedge; edit A 0 1; wait", "C,A", 0 },
+    // The stale badge's reason (A8-1): after Stop nothing is outstanding and the tooltip must not
+    // promise a replacement; with the runner disabled it says so. CheckStaleReason runs on every
+    // step of every sequence; these are the two states it first reads without a replacement coming.
+    { "A8-1 (stopped)", "hold; select A; stop; wait", "C,A", 0 },
+    { "A8-1 (disabled)", "select A; wedge; edit A 0 1; wait", "C,A", 0 },
+};
+
+// The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
+// 1 while any fails). The fixer moves each into kPinned once it passes. None are open now.
+const Pinned kOpen[] = {
+    { nullptr, nullptr, nullptr, 0 },
 };
 
 std::set<int> ParseList(const char* text)
@@ -1996,6 +2054,7 @@ int main(int argc, char** argv)
             int open = 0;
             for (const Pinned& pin : kOpen)
             {
+                if (!pin.id) continue;   // the empty list's sentinel
                 Program p;
                 std::string error;
                 if (!ParseScript(pin.script, pin.world, pin.image, p, error))
