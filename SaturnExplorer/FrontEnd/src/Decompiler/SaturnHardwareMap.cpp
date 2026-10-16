@@ -1265,6 +1265,56 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
     return true;
 }
 
+namespace
+{
+
+// The 16-bit register at 'reg' (even) as a write of 'size' bytes at 'address' reaches it: whether it does, which of its bits the write
+// carries and what they are. A byte at the register's address carries bits 15-8, at +1 bits 7-0; a word at the register all of them;
+// a long at the register carries its upper half, one 2 below it its lower (the 16-bit bus takes a long as two words).
+struct WordLane
+{
+    bool reached = false;
+    uint16_t mask = 0;
+    uint16_t value = 0;
+};
+
+WordLane LaneOf(uint32_t reg, uint32_t address, uint32_t size, uint32_t value)
+{
+    WordLane l;
+    if (size == 1 && address == reg) l = WordLane{ true, 0xFF00u, static_cast<uint16_t>((value & 0xFFu) << 8) };
+    else if (size == 1 && address == reg + 1) l = WordLane{ true, 0x00FFu, static_cast<uint16_t>(value & 0xFFu) };
+    else if (size == 2 && address == reg) l = WordLane{ true, 0xFFFFu, static_cast<uint16_t>(value & 0xFFFFu) };
+    else if (size == 4 && address == reg) l = WordLane{ true, 0xFFFFu, static_cast<uint16_t>(value >> 16) };
+    else if (size == 4 && address + 2 == reg) l = WordLane{ true, 0xFFFFu, static_cast<uint16_t>(value & 0xFFFFu) };
+    return l;
+}
+
+const char* SmpcCommandName(uint32_t command)
+{
+    switch (command)
+    {
+    case 0x00: return "MSHON";
+    case 0x02: return "SSHON";
+    case 0x03: return "SSHOFF";
+    case 0x06: return "SNDON";
+    case 0x07: return "SNDOFF";
+    case 0x08: return "CDON";
+    case 0x09: return "CDOFF";
+    case 0x0D: return "SYSRES";
+    case 0x0E: return "CKCHG352";
+    case 0x0F: return "CKCHG320";
+    case 0x10: return "INTBACK";
+    case 0x16: return "SETTIME";
+    case 0x17: return "SETSMEM";
+    case 0x18: return "NMIREQ";
+    case 0x19: return "RESENAB";
+    case 0x1A: return "RESDISA";
+    default: return nullptr;
+    }
+}
+
+}  // namespace
+
 std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valueKnown, uint32_t value)
 {
     std::vector<std::string> out;
@@ -1345,6 +1395,78 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
         if (reg == 0x98 && lane0 && (!valueKnown || !bit0))
             out.push_back(std::string("SCU_T1MD: ") + (valueKnown ? "bit 0 (the timer enable) is clear, so this write" : "a write with bit 0 clear") +
                           " also resets timer 0's counter");
+    }
+    // Writes whose action is chosen by the value written (A5-55): a flag or a command taken from the value, not a store the line shows.
+    // The SCSP's common and slot registers (scsp.inc SS_SCSP_RW_u16_W1): a write takes the bits of its lane, the others keep their state.
+    if (a >= 0x05B00000u && a <= 0x05B00FFFu && size <= 4)
+    {
+        const uint32_t off = a & 0xFFFu;
+        char b[256];
+        // DTLG (case 0x0B): EX, bit 12, is latched into DMA_Execute and SS_SCSP_RunDMA runs: it starts the SCSP DMA.
+        const WordLane dtlg = LaneOf(0x05B00416u, a, size, value);
+        if (dtlg.reached && (dtlg.mask & 0x1000u) && (!valueKnown || (dtlg.value & 0x1000u)))
+            out.push_back(std::string("SCSP_DTLG: ") + (valueKnown ? "EX (bit 12) is set, so this write" : "a write with EX (bit 12) set") +
+                          " starts the SCSP DMA set up in SCSP_DMEAL, SCSP_DMEAH_DRGA and this register (DTLG is the length)");
+        // A slot's word 0 (case 0x00): KYONEX, bit 12, is latched into KeyExecute and not stored; every slot is then keyed on or off by its KYONB.
+        if (off < 0x400u && ((off >> 1) & 0xFu) == 0)
+        {
+            const WordLane kyonex = LaneOf(0x05B00000u | (off & ~0x1Fu), a, size, value);
+            if (kyonex.reached && (kyonex.mask & 0x1000u) && (!valueKnown || (kyonex.value & 0x1000u)))
+            {
+                std::snprintf(b, sizeof b, "SCSP slot %u word 0: ", (off >> 5) & 0x1Fu);
+                out.push_back(std::string(b) + (valueKnown ? "KYONEX (bit 12) is set, so this write" : "a write with KYONEX (bit 12) set") +
+                              " keys every slot on or off by its own KYONB (bit 11); KYONEX is not stored");
+            }
+        }
+        // SCIRE (case 0x11) and MCIRE (case 0x17): the written bits clear those pending interrupts (SCIPD, MCIPD &= ~value).
+        const struct { uint32_t reg; const char* name; const char* whose; const char* pending; } kClears[] = {
+            { 0x05B00422u, "SCSP_SCIRE", "sound-CPU", "SCSP_SCIPD" }, { 0x05B0042Eu, "SCSP_MCIRE", "main-CPU", "SCSP_MCIPD" } };
+        for (const auto& c : kClears)
+        {
+            const WordLane l = LaneOf(c.reg, a, size, value);
+            if (!l.reached) continue;
+            if (valueKnown && (l.value & l.mask) == 0) continue;   // clears nothing
+            if (valueKnown)
+            {
+                std::snprintf(b, sizeof b, "%s: clears the pending %s interrupts (%s) whose bits are set in the value written (0x%X here)",
+                              c.name, c.whose, c.pending, static_cast<unsigned>(l.value & l.mask));
+                out.push_back(b);
+            }
+            else
+                out.push_back(std::string(c.name) + ": clears the pending " + c.whose + " interrupts (" + c.pending +
+                              ") whose bits are set in the value written");
+        }
+    }
+    // SMPC_COMREG (smpc.c SMPC_Write case 0x0F, PendingCommand = V): the byte written is the command the SMPC then executes. A word or a long
+    // reaches the byte by its lane, and it is always the low byte of the value.
+    for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
+        if (reg->address == 0x0010001Fu)
+        {
+            if (!valueKnown)
+                out.push_back("SMPC_COMREG: the byte written is the SMPC command it executes (INTBACK is 0x10, RESENAB 0x19, SYSRES 0x0D, "
+                              "SNDON 0x06, SNDOFF 0x07, ...)");
+            else
+            {
+                const uint32_t cmd = value & 0xFFu;
+                const char* name = SmpcCommandName(cmd);
+                char b[160];
+                if (name) std::snprintf(b, sizeof b, "SMPC_COMREG: issues SMPC command 0x%02X (%s)", cmd, name);
+                else std::snprintf(b, sizeof b, "SMPC_COMREG: issues SMPC command 0x%02X (a value the SMPC does not know)", cmd);
+                out.push_back(b);
+            }
+        }
+    // VDP1_FBCR (vdp1.c WriteReg case 0x1, FBManualPending |= value & 0x2): bit 1 (FCM) requests a manual frame-buffer change, which the end of
+    // the frame carries out (the buffers swap if bit 0, FCT, is set, else only the erase starts). The register is written whole, the byte not
+    // written coming from the data bus: a byte at the even address leaves bit 1 unknown.
+    if (a >= 0x05D00000u && a < 0x05D00004u && size <= 4)
+    {
+        const WordLane l = LaneOf(0x05D00002u, a, size, value);
+        const bool carries = size == 2 || (size == 4 && a == 0x05D00000u) || (size == 1 && (a & 1u));
+        const bool known = l.reached && carries && valueKnown;
+        if (l.reached && (!known || (l.value & 2u)))
+            out.push_back(std::string("VDP1_FBCR: ") + (known ? "bit 1 (FCM) is set, so this write" : "a write with bit 1 (FCM) set") +
+                          " requests a manual frame-buffer change, carried out at the end of the frame: the buffers swap if bit 0 (FCT) is then set, "
+                          "else only the erase starts");
     }
     return out;
 }
@@ -1434,6 +1556,51 @@ bool InHardwareRange(uint32_t address)
     auto it = std::upper_bound(r.begin(), r.end(), address,
                                [](uint32_t v, const HardwareRange& x) { return v < x.first; });
     return it != r.begin() && address <= std::prev(it)->last;
+}
+
+bool MemoryBytesOf(uint32_t address, uint32_t size, MemoryBytes& out)
+{
+    if ((address >> 29) > 1 || size == 0) return false;   // the partitions that reach memory: cached and cache-through
+    const uint32_t a = address & 0x07FFFFFFu;
+    struct Area { uint32_t first, last, mask; MemoryKind kind; };
+    static const Area kAreas[] = {
+        { 0x00200000u, 0x003FFFFFu, 0x000FFFFFu, MemoryKind::WorkRamLow },
+        { 0x05C00000u, 0x05C7FFFFu, 0x0007FFFFu, MemoryKind::Vdp1Vram },
+        { 0x05C80000u, 0x05CFFFFFu, 0x0003FFFFu, MemoryKind::Vdp1FrameBuffer },
+        { 0x05E00000u, 0x05EFFFFFu, 0x0007FFFFu, MemoryKind::Vdp2Vram },
+        { 0x05F00000u, 0x05F7FFFFu, 0x000007FFu, MemoryKind::Vdp2ColorRam },
+        { 0x06000000u, 0x07FFFFFFu, 0x000FFFFFu, MemoryKind::WorkRamHigh },
+    };
+    for (const Area& area : kAreas)
+    {
+        if (a < area.first || a > area.last) continue;
+        const uint32_t off = a & area.mask;
+        out.kind = area.kind;
+        out.first = off;
+        out.last = std::min<uint32_t>(off + size - 1, area.mask);   // (an access past the repeat is an address error anyway)
+        return true;
+    }
+    return false;
+}
+
+const char* MemoryKindName(MemoryKind kind)
+{
+    switch (kind)
+    {
+    case MemoryKind::WorkRamHigh: return "high work RAM";
+    case MemoryKind::WorkRamLow: return "low work RAM";
+    case MemoryKind::Vdp1Vram: return "VDP1 VRAM";
+    case MemoryKind::Vdp1FrameBuffer: return "the VDP1 frame buffer";
+    case MemoryKind::Vdp2Vram: return "VDP2 VRAM";
+    case MemoryKind::Vdp2ColorRam: return "VDP2 colour RAM";
+    }
+    return "memory";
+}
+
+bool InColorRam(uint32_t address)
+{
+    MemoryBytes m;
+    return MemoryBytesOf(address, 1, m) && m.kind == MemoryKind::Vdp2ColorRam;
 }
 
 }  // namespace decomp
