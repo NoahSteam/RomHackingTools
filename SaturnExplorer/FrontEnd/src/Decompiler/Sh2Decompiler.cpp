@@ -1046,20 +1046,19 @@ private:
 // entry value only to write it back: it is the machine's state, which no caller passes, and not an input. One whose behaviour
 // depends on it is: a branch, a compare, a load or a call argument computed from it; a value of it returned or stored (but
 // the whole of SR, or the whole with bits set, `stc sr,r0 ; or #0xF0,r0`, is the helper's idiom of A3-5 and stays lent).
-//   `ok`: every path the value takes ends in the write back, or is a whole copy (SR only: returned, stored, or with bits
-//   set by an or with a constant). `transformed`: it went through an operation, so it is not a plain copy. `written`: it
+//   `ok`: every path the value takes ends in the write back, or is a whole copy (SR only: returned, or with bits
+//   set by an or with a constant; a store is an input, see below). `transformed`: it went through an operation, so it is not a plain copy. `written`: it
 //   reached a write back. A transformed value that reaches no write back is somebody's flags, and is an input.
 struct StateUse
 {
     bool ok = true, transformed = false, written = false;
 };
 
-// 'memoryMayBeRead': something in the function can read memory back -- a LOAD the engine could not fold to a variable, or a
-// call. A whole SR stored through a pointer is then not a store and nothing more (A2-23): the engine does not forward a store
-// through a pointer to the load that follows it, so the reload is no descendant of the entry value, and a function that
-// stores SR, loads it back and branches on T was lent without SR (its caller's compare was dropped from the caller's text).
-StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* entry, const char* writeOp, bool wholeOk,
-                       bool memoryMayBeRead = true)
+// A whole SR stored through a pointer is an input (A2-23, A2-35): the memory outlives the function. The engine does not forward a store
+// through a pointer to a load that follows it in the same function, so the reload is no descendant of the entry value (a function that
+// stores SR, loads it back and branches on T was lent without SR); and a caller reads the word back after the call (`stc sr,r1 ;
+// mov.l r1,@r4` called under a compare, then `mov.l @r4,r0 ; and #1,r0`), so its compare is the callee's input and was dropped.
+StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* entry, const char* writeOp, bool wholeOk)
 {
     StateUse r;
     std::set<std::pair<const ghidra::Varnode*, bool>> seen;   // (value, whether it is no longer the whole register)
@@ -1087,7 +1086,7 @@ StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* 
                 if (out != nullptr) work.emplace_back(out, part);
                 break;
             case ghidra::CPUI_RETURN: r.ok = wholeOk && !part; break;
-            case ghidra::CPUI_STORE: r.ok = wholeOk && !part && op->getIn(2) == vn && !memoryMayBeRead; break;
+            case ghidra::CPUI_STORE: r.ok = false; break;
             case ghidra::CPUI_CALLOTHER:
                 if (arch.userops.getOp(static_cast<ghidra::uint4>(op->getIn(0)->getOffset()))->getName() == writeOp) r.written = true;
                 else r.ok = false;
@@ -1113,15 +1112,6 @@ StateUse EntryStateUse(const ghidra::Architecture& arch, const ghidra::Varnode* 
         }
     }
     return r;
-}
-
-// Whether the function can read memory back: an alive LOAD (a pointer the engine did not fold to a variable) or a call.
-bool MayReadMemory(ghidra::Funcdata& fd)
-{
-    if (fd.numCalls() > 0) return true;
-    for (auto it = fd.beginOp(ghidra::CPUI_LOAD); it != fd.endOp(ghidra::CPUI_LOAD); ++it)
-        if (!(*it)->isDead()) return true;
-    return false;
 }
 
 // The user op that writes the control register 'reg' (patch 0034), or null for any other register.
@@ -1221,7 +1211,7 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
             // describes wrongly. Anything computed from it (the T flag: movt, bt, addc, ...) is an input.
             if (vn->getSize() == 4 && StateWriteOp(reg) != nullptr)
             {
-                const StateUse use = EntryStateUse(*fd.getArch(), vn, StateWriteOp(reg), reg == "sr", MayReadMemory(fd));
+                const StateUse use = EntryStateUse(*fd.getArch(), vn, StateWriteOp(reg), reg == "sr");
                 if (use.ok && (reg == "sr" ? !use.transformed || use.written : use.written)) continue;
             }
             return "it reads " + (reg.empty() ? std::string("a register") : reg) + " on entry, which no signature passes";

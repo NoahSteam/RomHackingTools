@@ -2080,7 +2080,17 @@ bool Funcdata::ancestorOpUse(int4 maxlevel,const Varnode *invn,
   }
   case CPUI_CALL:
   case CPUI_CALLIND:
-    return false;		// A call is never a good indication of a single op use
+    // SaturnExplorer: a call is never a good indication of a single op use, except for a RETURN whose value is the output of a
+    // call whose prototype is locked and returns a value (a host lent it): the function returns what its callee returns, with
+    // whatever else the value is used for (`return g(p);`, `p = g(x); if (p) *p = 0; return p;`). Without it the decision
+    // was left to the instruction in rts's delay slot: a nop, which then wrote r0, made the value a return, and any other
+    // slot did not (patches/0044-engine-division-width-and-unaffected-pieces.patch).
+    if (op->code() == CPUI_RETURN && offset == 0 && def->getOut() == invn) {
+      const FuncCallSpecs *fc = getCallSpecs(def);
+      if (fc != (const FuncCallSpecs *)0 && fc->isOutputLocked() && fc->getOutputType()->getMetatype() != TYPE_VOID)
+	return true;
+    }
+    return false;
   default:
     break;
   }

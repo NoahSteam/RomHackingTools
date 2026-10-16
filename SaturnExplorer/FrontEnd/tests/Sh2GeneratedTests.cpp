@@ -5281,7 +5281,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::unique_ptr<Machine> machine(new Machine(snap, &env));
         std::ostringstream rows;
         int kept = 0;
-        bool r0Changed = false;
+        bool r0Changed = false, r0Always = true;
         for (int k = 0; k < nIn; ++k)
         {
             uint32_t in[13];
@@ -5313,6 +5313,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             env.trace.clear();
             if (!machine->Run(kCode, kSentinel, kStepLimit, run, env)) continue;
             if (run.fin[0] != in[0]) r0Changed = true;
+            if (!(run.use.written & 1u)) r0Always = false;
             char buf[256];
             std::snprintf(buf, sizeof buf, "      { 0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu,0x%08Xu },\n",
                           in[0], in[1], in[2], in[3], in[4], in[5], in[6], in[7], in[8], in[9], in[10], run.fin[0], run.fin[1], run.finSr,
@@ -5361,9 +5362,11 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         pr.ready = true;
         v.compared = !v.voidReturn;
         v.detail = std::to_string(kept) + " inputs";
-        // A function that returns nothing but whose r0 ended as something other than it began: a return the
-        // signature dropped (A3-5, another row's class: counted, not failed here).
-        if (v.voidReturn && r0Changed) v.cls = "void-return";
+        // A function that returns nothing but whose r0 ended as something other than it began: a return the engine dropped, or r0
+        // left as scratch. Compiled code cannot tell the two apart, so a `void` text is no failure by itself (counted). But a
+        // signature lent as `void` over an r0 the function writes on every path is (A2-34, A3-5's decision: such a function is
+        // withheld, not lent void; a path that leaves r0 alone, A3-14's join, is another row's class and stays counted).
+        if (v.voidReturn && r0Changed) v.cls = (r.prototype.known && r0Always) ? "void-return-lent" : "void-return";
     }
     // Compile and run.
     auto compileRun = [&](const std::vector<size_t>& which, const std::string& tag, std::string& log, bool& compiled, bool alt = false) -> std::string {
@@ -5418,13 +5421,9 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 {
                     CVerdict& v = out[i];
                     if (++v.mismatches == 1) v.detail = line.substr(9);
-                    // Only the high word of an 8-byte value differs and the text widens with a C cast ((uint8)x of a signed
-                    // x sign-extends in C, the engine means a zero extension): the reading of the cast, not the value.
-                    const bool widenOnly = line.find("high-word-only") != std::string::npos &&
-                                           (v.text.find("(uint8)") != std::string::npos || v.text.find("(int8)") != std::string::npos);
                     // r0's upper bits that are no extension of a narrow return are not C's promotion: always a failure.
                     if (line.find(" upper-bits") != std::string::npos) v.cls = "mismatch", v.upperBits = true;
-                    else if (v.cls != "mismatch") v.cls = v.narrow || widenOnly ? "narrow-c" : "mismatch";
+                    else v.cls = "mismatch";   // a second reading below may excuse it; none is assumed (A2-33)
                 }
         }
     };
@@ -5458,7 +5457,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::vector<size_t> cand;
         for (size_t i : all)
             if (out[i].cls == "mismatch" && !out[i].upperBits &&
-                (out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos ||
+                (out[i].narrow || out[i].text.find("xunknown") != std::string::npos || out[i].text.find("(uint8)") != std::string::npos ||
                  std::regex_search(out[i].text, std::regex("\\._\\d+_\\d+_"))))
                 cand.push_back(i);
         if (!cand.empty())
