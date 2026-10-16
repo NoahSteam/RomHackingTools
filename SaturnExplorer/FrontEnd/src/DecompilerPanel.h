@@ -174,6 +174,19 @@ public:
     const decomp::DecompileResult* Shown() const { return mShownValid ? &mShown : nullptr; }
     bool ShownStale() const;                  // shown output is not the answer for the view now
     bool ShownOutdatedByView() const;         // ...because the memory on screen moved on
+    // Why the stale badge is up, and so what its tooltip may promise (A8-1). A stale output with
+    // nothing outstanding is not "being replaced": it needs the user, or nothing will come.
+    enum class StaleReason : uint8_t
+    {
+        None,          // not stale
+        Pending,       // a replacement has been asked for and is on its way
+        Stopped,       // the user stopped it; Enter or Refresh asks again
+        Disabled,      // the runner is off for this session; nothing can be asked
+        NeedsRefresh,  // nothing is outstanding and nothing will be asked on its own: Enter or Refresh
+    };
+    StaleReason GetStaleReason() const;
+    // The badge's tooltip for the reason (what Draw shows); "" when not stale.
+    std::string StaleTooltip() const;
     bool Pending() const { return mPending.active; }
     uint64_t PendingGeneration() const { return mPending.generation; }
     const decomp::SnapshotKey* HeldKey() const { return mSnap ? &mSnap->key : nullptr; }
@@ -297,7 +310,7 @@ private:
     std::shared_ptr<const decomp::MemorySnapshot> mSnap;   // the snapshot the panel holds
     ViewId mSnapId;
     uint64_t mTick = 0, mCaptureTick = 0;
-    bool mAutoPcValid = false;       // the PC the last auto-refresh was for: not refreshed for again
+    bool mAutoPcValid = false;       // the PC the last auto-refresh was for: not refreshed for again (ResetSession forgets it)
     uint32_t mAutoPc = 0;
 
     // The entry wanted for mSnap, resolved once per snapshot, target and set of finder hints: a
@@ -371,6 +384,8 @@ private:
     Question mAsked;
     Outstanding mPending;
     std::string mNote;               // "cancelled", ... (the last request's fate when not installed)
+    bool mStopped = false;           // the outstanding question was Stopped by the user: asked again only on Enter or Refresh
+    bool mRunnerDisabled = false;    // the runner refused work as of the last Update (the stale reason reads it)
 
     decomp::DecompileResult mShown;
     bool mShownValid = false;

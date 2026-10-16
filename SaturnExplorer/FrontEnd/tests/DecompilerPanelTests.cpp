@@ -1474,6 +1474,47 @@ void TestAutoRefreshFollowsMirror()
     CHECK(f.panel.Captures() == c + 1);
 }
 
+// Round 2 review of areas 1 and 8, open question: the PC the last auto-refresh was for is the
+// session's. Kept across ResetSession, it suppressed the new session's one refresh when its followed
+// PC landed on the same value, and the output of the function left behind stayed on screen.
+void TestAutoRefreshPcBelongsToTheSession()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    auto tick = [&](int frames) {
+        for (int i = 0; i < frames; ++i)
+        {
+            ++f.frame;
+            ++f.fixedSerial;
+            f.Idle();
+        }
+    };
+    const uint32_t hole = 0x0600F000u;   // outside every function the fixture holds
+    CHECK(f.WaitShown("+ 1"));
+    f.panel.SetAutoRefresh(true);
+    uint64_t c = f.panel.Captures();
+    f.regs[0].pc = hole;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == c + 1);   // refreshed for the PC, once
+    while (f.panel.Pending()) tick(1);
+
+    // The emulator is reconnected: a new session, a new source, and the PC back in the function.
+    f.runner.InvalidateSession();
+    f.panel.ResetSession();
+    f.sourceId = 8;
+    f.regs[0].pc = dts::kFixture1AddOne;
+    CHECK(f.PumpUntil([&] { return f.panel.Shown() && f.Shown().key.sourceId == 8 && !f.panel.Pending(); }));
+    CHECK(f.Shown().Text().find("+ 1") != std::string::npos);
+
+    // ...then the PC leaves it for the same address: that is a PC no answer holds, and it is
+    // refreshed for in this session as in any other.
+    c = f.panel.Captures();
+    f.regs[0].pc = hole;
+    tick(DecompilerPanel::kAutoRefreshFrames + 1);
+    CHECK(f.panel.Captures() == c + 1);
+}
+
 // Review of c426c2e, finding 2: a halt hint belongs to the mirror the output was decompiled at.
 // Output pinned at the canonical entry gets no hint for a halt at the cache-through mirror.
 void TestHaltHintMatchesMirror()
@@ -2125,6 +2166,7 @@ int main(int argc, char** argv)
         RUN(TestPrototypesPerMirror());
         RUN(TestFunctionStartKeepsMirror());
         RUN(TestAutoRefreshFollowsMirror());
+        RUN(TestAutoRefreshPcBelongsToTheSession());
         RUN(TestFlowUncertaintyShown());
         RUN(TestHaltHintMatchesMirror());
         RUN(TestRunningLive());
