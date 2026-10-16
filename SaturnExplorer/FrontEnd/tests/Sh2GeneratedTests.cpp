@@ -45,7 +45,8 @@
 // one memory item in ten is a GBR access (and.b / or.b / xor.b / tst.b #imm,@(r0,GBR), mov.x @(disp,GBR),r0 and back,
 // GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (they need
 // a vector table and a handler laid out beside the function, and rte pops the stack), bsrf (a callee at a distance known
-// only after layout: the call grammar's), and stc/sts inside the cases of a jump table (ledger A2-16).
+// only after layout: the call grammar's), and, in the first two grammars, stc/sts (ledger A2-16 and A3-5; the register-only
+// grammar has them).
 // Version 3 is not a program of that kind but a register-only function (kRegOps and bt/bf/bt/s/bf/s and braf over
 // one to three instructions, r0-r7, returning r0) checked by TestPrintedC, which compiles the text the decompiler
 // prints for it with the system C compiler and compares what it returns with the emulator's r0 (r0:r1 for an
@@ -115,7 +116,8 @@
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
-//   SE_GENERATED_ALPHABET=narrow  only the original eleven ALU ops (what the generator emitted before round 3 of area 2)
+//   SE_GENERATED_ALPHABET=narrow  only the original eleven ALU ops (what the generator emitted before round 3 of area 2);
+//                            =specials  also stc / sts (special register reads) in the first two grammars, fenced by default
 //   SE_GENERATED_PRINTEDC=1|only  the printed-C differential (see TestPrintedC); SE_C_COMPILER names the compiler
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
 //   SE_GENERATED_WORDS="D102 6010 ..."  check one hand-written function (hex words from the entry,
@@ -250,6 +252,7 @@ const OpDef kRegOps[] = {
 };
 const size_t kRegOpCount = sizeof kRegOps / sizeof kRegOps[0];
 bool gNarrowAlphabet = false;   // SE_GENERATED_ALPHABET=narrow: only the original eleven ALU ops
+bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in the first two grammars too (ledger A2-16, A3-5)
 
 // ---- The program model ----------------------------------------------------------------------
 
@@ -351,10 +354,6 @@ struct Gen
     // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
     // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
     Rng wideRng;
-    // Inside the bodies of a jump table's cases no stc / sts (a special register copied into a general one):
-    // a case that does so before the shared exit makes the recovered switch print on the loaded address, not
-    // the index (ledger A2-16, area 4's jump-table recovery, open).
-    bool inTable = false;
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -488,7 +487,11 @@ struct Gen
         for (int tries = 0; tries < 8 && !op; ++tries)
         {
             const OpDef* cand = &kRegOps[wideRng.Below(static_cast<uint32_t>(kRegOpCount))];
-            if (inTable && (std::strncmp(cand->name, "stc", 3) == 0 || std::strncmp(cand->name, "sts", 3) == 0)) continue;
+            // stc / sts copy a special register into a general one. In the first two grammars they are fenced (the
+            // third has them): after a jump table's case one makes the recovered switch print on the loaded address
+            // (ledger A2-16), and one returned in r0 is a copy of an input register that prints void (A3-5).
+            // SE_GENERATED_ALPHABET=specials lets them in.
+            if (!gSpecialReads && (std::strncmp(cand->name, "stc", 3) == 0 || std::strncmp(cand->name, "sts", 3) == 0)) continue;
             if (disc)
             {
                 if ((cand->flags & kReadsN) && !Def(n)) continue;
@@ -973,7 +976,6 @@ struct Gen
             cases = 1;
         }
         const uint32_t before = defined;
-        inTable = true;
         for (int c = 0; c < cases; ++c)
         {
             std::vector<Item> body;
@@ -984,7 +986,6 @@ struct Gen
         }
         const int kids = static_cast<int>(rng.Below(3));
         for (int i = 0; i < kids; ++i) it.kids.push_back(MakeSimple(-1, false, true));
-        inTable = false;
         defined = before | 2u;   // r1 holds the bound on every path
         return it;
     }
@@ -4073,7 +4074,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const size_t lineStart = pr.cText.rfind('\n', at);
         const std::string ret = pr.cText.substr(lineStart == std::string::npos ? 0 : lineStart + 1, at - (lineStart == std::string::npos ? 0 : lineStart + 1));
         v.voidReturn = ret.find("void") != std::string::npos;
-        static const std::regex narrow("\\b(char|uchar|byte|short|ushort|uint1|int1|uint2|int2|xunknown1|xunknown2|undefined1|undefined2)\\s+\\w+\\s*[;,)]");
+        static const std::regex narrow("\\b(char|uchar|byte|short|ushort|uint1|int1|uint2|int2|xunknown1|xunknown2|undefined1|undefined2)\\s+\\w+\\s*[;,)=]");
         v.narrow = std::regex_search(pr.cText, narrow);
         // The run: the emulator from the entry for nIn inputs.
         Rng ir(inputSeed ^ (static_cast<uint64_t>(ci) * 0x9E3779B97F4A7C15ull) ^ c.words.size());
@@ -4450,6 +4451,7 @@ void TestGenerated()
     {
         const char* alphabet = std::getenv("SE_GENERATED_ALPHABET");
         gNarrowAlphabet = alphabet && std::strcmp(alphabet, "narrow") == 0;
+        gSpecialReads = alphabet && std::strcmp(alphabet, "specials") == 0;
     }
     if (const char* fence = std::getenv("SE_GENERATED_FENCE"))
     {
