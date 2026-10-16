@@ -1412,6 +1412,65 @@ void TestHardwareVolatility()
         for (uint16_t w : f->code) { dts::Put16(hw, off, w); off += 2; }
         dts::Put32(hw, f->base + f->literal - 0x06000000u, f->pointer);
     }
+    // Area 5, round 3: the width table (SaturnHardwareMap.h "The width table"), one fixture per family
+    // and ledger row A5-9 to A5-17. Each is mov #3,r0 (or none) then the access at base+2*ops on r1 = the
+    // literal; the table's golden file has every cell, these pin the cautions it generates.
+    struct WidthFixture { Fixture f; uint32_t insn; };
+    std::map<std::string, WidthFixture> wf;
+    auto wadd = [&](const char* name, std::vector<uint16_t> ops, uint32_t pointer) {
+        const uint32_t base = 0x0600C000u + uint32_t(wf.size()) * 0x40u;
+        wf[name] = WidthFixture{ simple(base, ops, pointer), base + 2u * uint32_t(ops.size()) };
+    };
+    const std::vector<uint16_t> movl = { 0xE003, 0x2102 }, rdb = { 0x6010 }, rdw = { 0x6011 }, rdl = { 0x6012 };
+    wadd("icrLong", movl, 0xFFFFFEE0u);          // A5-9a: SH2_ICR and SH2_IPRA, 16-bit registers
+    wadd("iprbLong", movl, 0xFFFFFE60u);         //        SH2_IPRB and SH2_VCRA
+    wadd("sbycrLong", movl, 0xFFFFFE90u);        //        SH2_SBYCR and SH2_CCR, 8-bit
+    wadd("vcrwdtLongRead", rdl, 0xFFFFFEE4u);    // A5-9b: a long read over a register and a gap
+    wadd("tierWord", movw, 0xFFFFFE10u);         // A5-10a: TIER, FTCSR
+    wadd("frchWordRead", rdw, 0xFFFFFE12u);      // A5-10b: FRCH, FRCL
+    wadd("tierWordRead", rdw, 0xFFFFFE10u);      //         TIER, FTCSR: nothing is armed
+    wadd("sbycrWord", movw, 0xFFFFFE90u);        // A5-10c: no register at the even address
+    wadd("drcr0Word", movw, 0xFFFFFE70u);
+    wadd("ppdByte", movb, 0x25FE0087u);          // A5-11: the SCU's DSP ports are not masked
+    wadd("ppafByte", movb, 0x25FE0083u);
+    wadd("pdaWord", movw, 0x25FE008Au);
+    wadd("ppdLong", movl, 0x25FE0084u);          //        control: the register whole
+    wadd("pddWordRead", rdw, 0x25FE008Cu);       //        a narrow read of PDD is the whole read
+    wadd("bcrLong", movl, 0xFFFFFFE0u);          // A5-12: no key
+    wadd("bcrUnknown", { 0x2142 }, 0xFFFFFFE0u); //        a value the analysis does not know
+    wadd("minitByte", movb, 0x21000000u);        // A5-13
+    wadd("minitLong", movl, 0x21000000u);
+    wadd("minitWord", movw, 0x21000000u);        //        control
+    wadd("prirLong", movl, 0x25F800FCu);         // A5-14a: a register and a reserved word
+    wadd("ramctlLong", movl, 0x25F8000Cu);       //         b: a reserved word and a register
+    wadd("endrLong", movl, 0x25D0000Cu);         //         c: VDP1
+    wadd("dmealLong", movl, 0x25B00410u);        //         d: the SCSP
+    wadd("hirqLongRead", rdl, 0x25890008u);      //         e: a long read of a CD register
+    wadd("hirqLong", movl, 0x25890008u);         //            ...and a long write
+    wadd("cr4Byte", movb, 0x25890024u);          //            a byte write to the command register
+    wadd("tvmdWordRead", rdw, 0x25F80000u);      // A5-15a: the bus reads EXTEN as well
+    wadd("fifoWordRead", rdw, 0x25818000u);      //         b: the CD FIFO pops twice
+    wadd("fifoWindowRead", rdw, 0x25898000u);    //            ...once in the register window
+    wadd("fifoWindowLong", rdl, 0x25898000u);    //            a long read there: one word, in both halves
+    wadd("fifoLong", rdl, 0x25818000u);          //            control: a long read of the FIFO window is two words
+    wadd("extenRead", rdw, 0x25F80002u);         // A5-16: the latch
+    wadd("aiackRead", rdl, 0x25FE00A8u);         //        reads 0
+    wadd("ccrMirrorRead", rdb, 0xFFFFFE93u);     //        the CCR reads back here
+    wadd("ccrMirrorWrite", movb, 0xFFFFFE95u);   //        ...but is not written
+    wadd("bcrKeyed", { 0 }, 0xFFFFFFE0u);        //        (replaced below: BCR1 = 0xA55A0003)
+    {
+        WidthFixture& k = wf["bcrKeyed"];
+        // mov.l @(pool),r1 ; mov.l @(pool),r2 ; mov.l r2,@r1 ; rts ; nop ; nop ; the two literals
+        k.f.code = { 0xD102, 0xD203, 0x2122, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFFE0, 0xA55A, 0x0003 };
+        k.f.literal = 0x0C;
+        k.insn = k.f.base + 4;
+    }
+    for (const auto& w : wf)
+    {
+        size_t off = w.second.f.base - 0x06000000u;
+        for (uint16_t c : w.second.f.code) { dts::Put16(hw, off, c); off += 2; }
+        dts::Put32(hw, w.second.f.base + w.second.f.literal - 0x06000000u, w.second.f.pointer);
+    }
     {
         const char text[] = "HELLO";
         for (size_t i = 0; i < sizeof text; ++i) hw[0x9B40 + i] = static_cast<uint8_t>(text[i]);
@@ -1732,7 +1791,8 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Rd(0xFFFFFE81u, 1, false, true) }));
     CHECK(r.hardwareNotes.empty());   // read where it is read: nothing to say
     r = run("TVSTAT read", tvstatRead);
-    CHECK(r.hardwareNotes.empty());
+    // Read-only, so no caution; but the read is not free (A5-16, vdp2.c RegsRead case 0x04): it clears EXLTFG.
+    CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "VDP2_TVSTAT: a read clears EXLTFG", false));
     r = run("PTMR written", ptmrWrite);
     CHECK(r.hardwareNotes.empty());
     // Every note sits on the instruction of the access it is about.
@@ -2042,7 +2102,9 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Wr(0x25D00001u, 1) }) && Has(r.Text(), "VDP1_TVMR._1_1_ = 3;"));
     CHECK(HasNoteAt(r, 0x0600AB84u, "a 1-byte write to VDP1_TVMR writes the whole 16-bit register"));
     r = run("a byte read of a 16-bit VDP2 register: the part is read as it is", vdp2ByteRead);
-    CHECK(Ledger(r, { Rd(0x25F80001u, 1, false, true) }) && r.hardwareNotes.empty());
+    // ...but the B bus reads 32 bits, so EXTEN at +2 is read too, latching HCNT and VCNT (A5-15): said, not a caution.
+    CHECK(Ledger(r, { Rd(0x25F80001u, 1, false, true) }) && r.hardwareNotes.size() == 1 &&
+          HasNote(r, "a 1-byte read at VDP2_TVMD also reads VDP2_EXTEN (the bus reads 32 bits): a read latches HCNT and VCNT while EXLTEN is 0", false));
     r = run("a word write to a 16-bit VDP2 register: the plain access", vdp2Word);
     CHECK(Ledger(r, { Wr(0x25F80000u, 2) }) && r.hardwareNotes.empty() && Has(r.Text(), "VDP2_TVMD = 3;"));
 
@@ -2101,6 +2163,123 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Wr(0x2010009Eu, 2) }) && Has(r.Text(), "Ram2010009e"));
     CHECK(HasNoteAt(r, 0x0600B004u, "0x2010009E is SMPC_COMREG through a mirror", false));
     CHECK(HasNoteAt(r, 0x0600B004u, "a 2-byte write to SMPC_COMREG is a byte write"));
+
+    // ---- Area 5, round 3: the width table ----------------------------------------------------------
+    // Every caution below is generated from a cell of the table (NarrowAccessEffects); the golden file
+    // (HardwareWidthTable.golden.txt) lists them all, these pin the text and the register it lands on.
+    auto W = [&](const char* name, const char* label) {
+        const WidthFixture& x = wf.at(name);
+        return std::make_pair(run(label, x.f), x.insn);
+    };
+    {
+        // A5-9: a 4-byte access to the on-chip registers below 0xFFFFFF00 is an address error.
+        auto rr = W("icrLong", "a long write over SH2_ICR and SH2_IPRA");
+        CHECK(Ledger(rr.first, { Wr(0xFFFFFEE0u, 4) }));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_ICR, a 16-bit register, is an address error on the SH-2"));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_IPRA, a 16-bit register, is an address error on the SH-2"));
+        CHECK(!HasNote(rr.first, "covers"));
+        rr = W("iprbLong", "a long write over SH2_IPRB and SH2_VCRA");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_IPRB, a 16-bit register, is an address error on the SH-2") && !HasNote(rr.first, "covers"));
+        rr = W("sbycrLong", "a long write over SH2_SBYCR and SH2_CCR");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_SBYCR, an 8-bit register, is an address error on the SH-2") &&
+              HasNoteAt(rr.first, rr.second, "a 4-byte write to SH2_CCR, an 8-bit register, is an address error on the SH-2") &&
+              !HasNote(rr.first, "covers"));
+        rr = W("vcrwdtLongRead", "a long read over SH2_VCRWDT and a gap");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte read of SH2_VCRWDT, a 16-bit register, is an address error on the SH-2"));
+
+        // A5-10: a word reaches the even byte register only, with the low byte.
+        rr = W("tierWord", "a word write over SH2_TIER and SH2_FTCSR");
+        CHECK(Ledger(rr.first, { Wr(0xFFFFFE10u, 2) }));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte write to SH2_TIER, an 8-bit register, reaches only it, with the low byte of the value"));
+        CHECK(HasNoteAt(rr.first, rr.second, "SH2_FTCSR, the register beside it, is not written"));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte write at the even address beside SH2_FTCSR does not write it: a word reaches only the register at its own address (SH2_TIER)"));
+        CHECK(!HasNote(rr.first, "covers"));
+        rr = W("frchWordRead", "a word read over SH2_FRCH and SH2_FRCL");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read at SH2_FRCH, an 8-bit register, returns only it, in bits 7-0"));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read at the even address beside SH2_FRCL does not read it"));
+        CHECK(HasNoteAt(rr.first, rr.second, "SH2_FRCH: a read latches SH2_FRCL for the next low-byte read", false) && !HasNote(rr.first, "covers"));
+        rr = W("tierWordRead", "a word read over SH2_TIER and SH2_FTCSR: FTCSR is not read");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read at SH2_TIER, an 8-bit register, returns only it"));
+        CHECK(!HasNote(rr.first, "arms clearing", false) && !HasNote(rr.first, "covers"));
+        rr = W("sbycrWord", "a word write at the even address beside SH2_SBYCR");
+        CHECK(Has(rr.first.Text(), "Ramfffffe90") || Has(rr.first.Text(), "fffffe90"));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte write at the even address beside SH2_SBYCR does not write it: a word reaches only the register at its own address, and there is none"));
+        rr = W("drcr0Word", "a word write at the even address beside SH2_DRCR0");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte write at the even address beside SH2_DRCR0 does not write it"));
+
+        // A5-11: the SCU's DSP ports take the whole data bus.
+        rr = W("ppdByte", "a byte write to SCU_PPD");
+        CHECK(Ledger(rr.first, { Wr(0x25FE0087u, 1) }));
+        CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write to SCU_PPD writes the whole 32-bit register: its other bytes are whatever was last on the data bus"));
+        CHECK(HasNoteAt(rr.first, rr.second, "and loads one DSP program word at the program counter and advances it"));
+        rr = W("ppafByte", "a byte write to SCU_PPAF");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write to SCU_PPAF writes the whole 32-bit register"));
+        rr = W("pdaWord", "a word write to SCU_PDA");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte write to SCU_PDA writes the whole 32-bit register") &&
+              HasNoteAt(rr.first, rr.second, "and sets the DSP data RAM address"));
+        rr = W("ppdLong", "a long write to SCU_PPD: the register whole");
+        CHECK(rr.first.hardwareNotes.empty());
+        rr = W("pddWordRead", "a word read of SCU_PDD");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read of SCU_PDD is a read of the whole 32-bit register"));
+
+        // A5-12: a long write to the bus state controller takes effect only with the key.
+        rr = W("bcrLong", "a long write of 3 to SH2_BCR1");
+        CHECK(Ledger(rr.first, { Wr(0xFFFFFFE0u, 4) }));
+        CHECK(HasNoteAt(rr.first, rr.second, "write to SH2_BCR1 without 0xA55A in the upper half (it is 0x0000): the write does nothing"));
+        rr = W("bcrKeyed", "a long write of 0xA55A0003 to SH2_BCR1");
+        CHECK(Has(rr.first.Text(), "SH2_BCR1 = 0xa55a0003;"));
+        CHECK(HasNoteAt(rr.first, rr.second, "SH2_BCR1 keyed write: the low half 0x0003 is taken", false));
+        for (const HardwareNote& n : rr.first.hardwareNotes) CHECK(!n.caution);
+        rr = W("bcrUnknown", "a long write of an unknown value to SH2_BCR1");
+        CHECK(HasNoteAt(rr.first, rr.second, "SH2_BCR1 takes a 4-byte write only with 0xA55A in its upper half", false));
+
+        // A5-13: MINIT and SINIT signal on a 16-bit write.
+        rr = W("minitByte", "a byte write to MINIT");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write to MINIT does nothing: the signal to the other CPU takes a 16-bit write"));
+        rr = W("minitLong", "a long write to MINIT");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to MINIT is two 16-bit bus writes, so it signals the other CPU twice"));
+        rr = W("minitWord", "a word write to MINIT: the signal");
+        CHECK(rr.first.hardwareNotes.empty());
+
+        // A5-14: a long over one 16-bit register and a word the map does not name.
+        rr = W("prirLong", "a long write over VDP2_PRIR and the reserved word");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write over VDP2_PRIR is two 16-bit bus writes, high half first: VDP2_PRIR takes bits 31-16 of the value, and bits 15-0 go to the word at 0x25F800FE, which is no register in the map"));
+        rr = W("ramctlLong", "a long write over the reserved word and VDP2_RAMCTL");
+        CHECK(HasNoteAt(rr.first, rr.second, "VDP2_RAMCTL takes bits 15-0 of the value, and bits 31-16 go to the word at 0x25F8000C, which is no register in the map"));
+        rr = W("endrLong", "a long write over VDP1_ENDR");
+        CHECK(HasNoteAt(rr.first, rr.second, "VDP1_ENDR takes bits 31-16 of the value, and bits 15-0 go to the word at 0x25D0000E"));
+        rr = W("dmealLong", "a long write over SCSP_DMEAL");
+        CHECK(HasNoteAt(rr.first, rr.second, "SCSP_DMEAL takes bits 15-0 of the value, and bits 31-16 go to the word at 0x25B00410"));
+        rr = W("hirqLongRead", "a long read of CD_HIRQ");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte read of CD_HIRQ reads it once and returns it in both halves"));
+        rr = W("hirqLong", "a long write to CD_HIRQ");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte write to CD_HIRQ is two 16-bit writes to the same register"));
+        rr = W("cr4Byte", "a byte write to CD_CR4");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write to CD_CR4 stores that byte only: it does not start the command, which takes a 16-bit write"));
+
+        // A5-15: a read narrower than 32 bits on the A and B buses is a 32-bit read.
+        rr = W("tvmdWordRead", "a word read of VDP2_TVMD");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read at VDP2_TVMD also reads VDP2_EXTEN (the bus reads 32 bits): a read latches HCNT and VCNT while EXLTEN is 0", false));
+        rr = W("fifoWordRead", "a word read of the CD FIFO");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 2-byte read of CD_DATATRNS takes two 16-bit words off the FIFO"));
+        CHECK(HasNoteAt(rr.first, rr.second, "CD_DATATRNS: a read takes the next data off the FIFO", false));
+        rr = W("fifoWindowRead", "a word read of the CD FIFO in the register window");
+        CHECK(!HasNote(rr.first, "takes two 16-bit words off the FIFO") && HasNote(rr.first, "CD_DATATRNS: a read takes the next data off the FIFO", false));
+        rr = W("fifoWindowLong", "a long read of the CD FIFO in the register window");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 4-byte read of CD_DATATRNS reads it once and returns it in both halves"));
+        rr = W("fifoLong", "a long read of the CD FIFO in its window");
+        CHECK(!HasNote(rr.first, "both halves") && !HasNote(rr.first, "two 16-bit words off the FIFO"));
+
+        // A5-16: read effects (said, not cautions), AIACK reads 0, CCR's mirrors.
+        rr = W("extenRead", "a word read of VDP2_EXTEN");
+        CHECK(HasNoteAt(rr.first, rr.second, "VDP2_EXTEN: a read latches HCNT and VCNT while EXLTEN is 0", false));
+        rr = W("aiackRead", "a long read of SCU_AIACK");
+        CHECK(HasNoteAt(rr.first, rr.second, "reads SCU_AIACK, which is write-only"));
+        rr = W("ccrMirrorRead", "a byte read of SH2_CCR's mirror");
+        CHECK(HasNoteAt(rr.first, rr.second, "0xFFFFFE93 is SH2_CCR through a mirror", false));
+        rr = W("ccrMirrorWrite", "a byte write to SH2_CCR's mirror");
+        CHECK(HasNoteAt(rr.first, rr.second, "a 1-byte write at 0xFFFFFE95 does nothing: SH2_CCR reads back at 0xFFFFFE93-0xFFFFFE9F, but takes writes at 0xFFFFFE92 only"));
+    }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.
     r = run("mac.l @r5+,@r4+ through pointers", macPtr);
@@ -2240,10 +2419,16 @@ void TestHardwareMap()
         CHECK(kind(0xFFFFFF04u) == NarrowAccess::OnChipLong && kind(0xFFFFFF80u) == NarrowAccess::OnChipLong);
         CHECK(kind(0xFFFFFFE0u) == NarrowAccess::OnChipKeyedLong && kind(0xFFFFFFF8u) == NarrowAccess::OnChipKeyedLong);
         CHECK(kind(0xFFFFFF40u) == NarrowAccess::OnChipWord);
-        CHECK(kind(0xFFFFFE60u) == NarrowAccess::Part);   // IPRB: a byte write is taken by lane (below 0xFFFFFF00)
-        CHECK(kind(0xFFFFFE10u) == NarrowAccess::Part);   // TIER
-        CHECK(kind(0x05FE00A4u) == NarrowAccess::Part && kind(0x05B00400u) == NarrowAccess::Part &&
-              kind(0x05890008u) == NarrowAccess::Part);    // SCU masks, the SCSP and the CD block take the bytes given
+        // Round 3 (the width table): below 0xFFFFFF00 a register is a byte or a half, whose word and
+        // long accesses have rules of their own (they were `Part`, "taken by lane", which is only
+        // the byte access); the CD block answers every 4 bytes (a long is two writes to one register).
+        CHECK(kind(0xFFFFFE60u) == NarrowAccess::OnChipHalf);   // IPRB
+        CHECK(kind(0xFFFFFE10u) == NarrowAccess::OnChipByte);   // TIER
+        CHECK(kind(0xFFFFFE00u) == NarrowAccess::OnChipSci);    // SMR: Mednafen has no case for it
+        CHECK(kind(0x05FE00A4u) == NarrowAccess::Part && kind(0x05B00400u) == NarrowAccess::Part);   // SCU masks, the SCSP takes the bytes given
+        CHECK(kind(0x05FE0084u) == NarrowAccess::ScuPort && kind(0x05FE008Cu) == NarrowAccess::ScuPort);
+        CHECK(kind(0x05890008u) == NarrowAccess::CdWindow && kind(0x05818000u) == NarrowAccess::CdWindow);
+        CHECK(kind(0x01000000u) == NarrowAccess::Strobe && kind(0x01800000u) == NarrowAccess::Strobe);
         // Every register of a kind gets its rule: sample each block.
         size_t n = 0;
         const HardwareRegister* all = SaturnHardwareRegisters(n);
@@ -2252,14 +2437,17 @@ void TestHardwareMap()
         {
             const HardwareRegister& g = all[i];
             const uint32_t at = g.address | (g.address < 0xE0000000u ? 0x20000000u : 0u);
+            // The width table answers a direction the register has; the other is the access kind's.
+            const size_t canW = g.access != RegisterAccess::ReadOnly, canR = g.access != RegisterAccess::WriteOnly;
+            auto cautions = [](const std::vector<NarrowEffect>& v) { size_t k = 0; for (const NarrowEffect& e : v) k += e.caution; return k; };
             if (g.narrow == NarrowAccess::WholeOnByte)
             {
-                vdpBytes += NarrowAccessEffects(at + 1, 1, true).size() == 1 && NarrowAccessEffects(at, 1, true).size() == 1 &&
-                            NarrowAccessEffects(at, 1, false).empty() && NarrowAccessEffects(at, 2, true).empty();
+                vdpBytes += NarrowAccessEffects(at + 1, 1, true).size() == canW && NarrowAccessEffects(at, 1, true).size() == canW &&
+                            cautions(NarrowAccessEffects(at, 1, false)) == 0 && NarrowAccessEffects(at, 2, true).empty();
             }
             else if (g.narrow == NarrowAccess::ByteLane)
             {
-                laneWords += NarrowAccessEffects(at - 1, 2, true).size() == 1 && NarrowAccessEffects(at - 1, 2, false).size() == 1 &&
+                laneWords += NarrowAccessEffects(at - 1, 2, true).size() == canW && NarrowAccessEffects(at - 1, 2, false).size() == canR &&
                              NarrowAccessEffects(at - 1, 1, true).size() == 1 && NarrowAccessEffects(at, 1, true).empty();
             }
             else if (g.narrow == NarrowAccess::OnChipLong || g.narrow == NarrowAccess::OnChipKeyedLong)
@@ -2287,6 +2475,20 @@ void TestHardwareMap()
             const HardwareRegister* odd = FindHardwareRegister(views[i].address + 1);
             CHECK(odd && std::string(odd->name) == views[i].name && !(views[i].address & 1) && views[i].size == 2 &&
                   odd->address == views[i].address + 1);
+        }
+        // The byte at the even address is the bus word's unused lane (A5-17): the width table has a row
+        // for it, named by the word's offset, but it is not a symbol (see SaturnHardwareWordViews).
+        {
+            size_t pads = 0;
+            for (const WidthProbe& p : WidthTable())
+            {
+                if (std::string(p.reg->name).compare(0, 12, "SMPC_UNUSED_") != 0) continue;
+                char want[32];
+                std::snprintf(want, sizeof want, "SMPC_UNUSED_%02X", unsigned(p.reg->address & 0x7Fu));
+                pads += p.width == 1 && std::string(p.reg->name) == want &&
+                        p.cell.rule == (p.write ? WidthRule::SmpcPadWrite : WidthRule::SmpcPadRead);
+            }
+            CHECK(pads == 2 * wantLane);
         }
         // An access that is the plain access the code wrote says nothing; a long to DVDNT, a word to a VDP register.
         CHECK(NarrowAccessEffects(0x25F80000u, 2, true).empty() && NarrowAccessEffects(0xFFFFFF04u, 4, false).empty());
@@ -2642,7 +2844,13 @@ void TestGameCode()
                         if (t.addr == m.insn) { std::printf("      | %s\n", l.text.c_str()); break; }
             }
         }
-        for (const HardwareNote& h : r.hardwareNotes) (h.caution ? cautions : notes) += 1;
+        for (const HardwareNote& h : r.hardwareNotes)
+        {
+            (h.caution ? cautions : notes) += 1;
+            // SE_GAME_NOTES=1 lists them, so two builds' notes can be diffed (the width table's corpus check).
+            if (std::getenv("SE_GAME_NOTES"))
+                std::printf("  game %s in %08X at %08X: %s\n", h.caution ? "caution" : "note", entry, h.address, h.text.c_str());
+        }
         // Per instruction: an SH-2 instruction reads at most once and writes at most once on a path
         // (mac.l/mac.w read twice). Copies of an access on one path are an access the analysis
         // made twice; copies on separate paths (a block copied into each) are not.

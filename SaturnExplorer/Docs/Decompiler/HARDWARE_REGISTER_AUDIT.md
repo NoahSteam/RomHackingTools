@@ -21,12 +21,15 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
   listed here, and nothing new. Re-read by hand from the handlers: the mirror periods (VDP2
   `A & 0x1FE`, SCU `A & 0xFC`, SMPC `(A & 0x7F) >> 1`), `SCU_IST` reading the pending set, and
   `SCU_PDD` advancing the DSP's address on a read while the DSP is stopped.
+- **Re-run in area 5 round 3** against the same sources: 21 of 337 registers differ, all of them "not decoded
+  by Mednafen" (the serial interface and the UBC); `SCU_AIACK` now agrees (write-only), and `VDP2_EXTEN`,
+  `VDP2_TVSTAT` are `ok` with their read effects in the map.
 
 ## Disagreements
 
 | Register | Table | Manual | Mednafen | Decision |
 |---|---|---|---|---|
-| SCU_AIACK (`05FE00A8`) | read/write | read/write | reads 0 (its read is commented out) | Manual. No note claims a value. |
+| SCU_AIACK (`05FE00A8`) | write-only | read/write | reads 0 at every width (`SCU_RegRW_DB_u*_W0` case 0xA8: `*DB = 0; //ABusIAck`) | Mednafen (area 5 round 3, A5-16): a read is the write-only caution. The manual's label is the only thing against it. |
 | SCSP_MCIEB (`05B0042A`) | write-only | paired with the readable SCIEB | reads 0 | Mednafen (the backend), recorded in the table's comment. |
 | SH2_SMR..SH2_RDR (`FFFFFE00`-`05`) | per SH7604 | SCI registers | not emulated | Manual. |
 | SH2_BARAH..SH2_BRCR (`FFFFFF40`-`78`) | per SH7604 | UBC registers | not emulated | Manual. |
@@ -54,44 +57,93 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
   - Byte writes at FE80-FE83 have no effect.
 
   Source: sh7095.inc `OnChipRegWrite_u16`, SH7604 §12.2.4.
-- **Access width and lane** (area 5 round 2, A5-3 and A5-4; `NarrowAccess` in the map, said by
-  `NarrowAccessEffects`). What an access narrower than its register does, re-read from Mednafen:
-  - **SMPC** (ss.c `BusRW_DB_CS0_*`): the registers sit on the low lane of the 16-bit bus at the
-    odd addresses, decoded as `(A & 0x7F) >> 1`. A word write at the even address calls
-    `SMPC_Write` with the low byte (a word write at `0x2010001E` is a `SMPC_COMREG` write, an SMPC
-    command); a byte write at an even address does nothing (`A & 1` is tested); a long is two
-    16-bit bus accesses, so `0x2010001C` writes register `0x0E` with bits 23-16 and `SMPC_COMREG`
-    with bits 7-0. Reads: a word is `0xFF00 | SMPC_Read` (a word read at `0x20100060` is
-    `0xFF00 | SMPC_SR`), a byte at an even address reads `0xFF`. The table's 1-byte entries at odd
-    addresses stay as they are (the SMPC manual's), the decompiler also names each register at the
-    even address as a 2-byte word view (`SaturnHardwareWordViews`), and every SMPC row below is
-    unchanged and ok.
-  - **VDP1, VDP2** (vdp1.c `VDP1_Write8_DB`, vdp2.c `RW_W8`): a byte write to a register calls
-    `WriteReg`/`RegsWrite` with the whole 16-bit bus word, so the other byte is whatever was last on
-    the data bus. A byte read returns the byte. (`WholeOnByte`.)
-  - **On-chip, `0xFFFFFF00` and up** (sh7095.inc, the `A & 0x100` half of `OnChipRegWrite_u8/u16`
-    and `OnChipRegRead_INLINE_u8/u16`): a word write at a 32-bit register's own address writes the
-    whole register with the 16-bit value (`DVDNT` and `DVDNTL` also start a division) and a word
-    write at `+2` does nothing; a word read returns the low half at both; any byte access sets a CPU
-    address error. The bus state controller (`0xFFFFFFE0` and up) takes no word write at all: only a
-    4-byte write with `0xA55A` in the upper half sets a register (`OnChipKeyedLong`; the long write
-    itself is not checked, a wrong key is not diagnosed). A byte access to a 16-bit register in the
-    same half (the UBC, which Mednafen does not otherwise decode) is the same address error
-    (`OnChipWord`). Below `0xFFFFFF00` a byte write is taken by lane and needs no rule.
-  - **SCU, SCSP, CD block**: a byte write is masked or taken by lane (`SCU_RegRW_DB_u8_W1`,
-    `SCSP_NE16_RW`, `CDB_Write_DBM`); no rule.
+- **Access width and lane** (area 5, rounds 2 and 3): superseded by the width table above, which has
+  every register, width and direction, the Mednafen handler each rule is read from, and the golden file.
+  Round 2's findings are in it unchanged (the SMPC lane, the VDP byte write, the on-chip 32-bit
+  registers' word and byte rules); round 3 added the on-chip registers below `0xFFFFFF00` (a word
+  reaches the even byte only, a long is an address error), the SCU's DSP ports, the bus state
+  controller's keyed long write, `MINIT`/`SINIT`, the CD block's windows and the B bus's 32-bit reads.
 - **Split fields:**
   - SCSP MSLC/CA, DTLG, SCIPD, MCIPD (scsp.inc);
   - SCU IST, PPAF (scu.inc);
   - CD HIRQ and CR1-CR4 (cdb.cpp);
   - SMPC PDR1-2 (smpc.cpp).
-- **Read effects:**
+- **Read effects** (said as notes, not cautions: the register returns what it says):
   - PPAF clears V and E and the DSP interrupt;
   - PDD returns data and advances the address only while the DSP is stopped;
   - the MIBUF and CD FIFO reads pop;
   - CR4 marks the response read;
   - FRCH and FICRH latch the low byte;
+  - EXTEN latches HCNT and VCNT while EXLTEN is 0, TVSTAT clears EXLTFG (`vdp2.c` `RegsRead`);
+  - the B bus reads 32 bits (SH0 at A, SH1 at A|2), so a read of an even VDP2/VDP1/SCSP register also reads the one 2 bytes on, and the CD FIFO pops twice at `0x25818000`;
   - FTCSR, CHCR, DMAOR and RTCSR arm their "write 0 after reading 1" clear.
+
+## Width table (area 5, round 3)
+
+The width of an access is not the register's width, and Mednafen's handler for each area decides
+what the difference does. Round 1 and 2 found the instances one at a time (VDP byte writes, the
+divider's words, the SMPC's lane); round 3 replaced the hand rules with a table, derived from the
+handlers, with a cell for every register, each of the three widths, both directions, and every
+aligned place the access can fall on the register (`WidthCellFor`, one rule per family in
+`SaturnHardwareMap.cpp`). **Source of truth: the table in the code.** Two things are generated from it
+and checked against it by `SaturnExplorerHardwareWidthTableTests` (`SE_UPDATE_GOLDEN=1` rewrites both):
+
+- the **golden file** `FrontEnd/tests/HardwareWidthTable.golden.txt`: one line per register (and per
+  window of the CD FIFO, and for each unused SMPC lane) with all its cells -- review it against the
+  handlers named in the rules table, line by line, instead of probing registers;
+- the **rules table below**, between the markers: each rule's category (a accepted, b whole register,
+  c one lane/half/register, d nothing, e address error, f a side effect that differs, v depends on
+  the value), the Mednafen function it is read from, how many cells use it, and the caution the
+  decompiler gives for the first of them.
+
+Not in the table, and why: memory the decompiler treats as ordinary. A byte write to **VDP2 colour RAM**
+(`0x25F00000`-`0x25F7FFFF`) writes the whole 16-bit entry from the data bus (`vdp2.c` `RW_W8`: the CRAM branch has no
+byte mask, VRAM's has); a folded store there has no volatile operation to hang a caution on, and marking colour RAM
+volatile would keep every palette copy as written, so it is accepted (ledger A5-16, part 4). Accesses to unnamed
+addresses inside a register area (the SCSP slots, the gaps) are not rows either; a long over a gap and a register is, from
+the register's side (`HalfBesideGap`).
+
+The cautions are generated from the cells in one place (`NarrowAccessEffects`), and
+`HardwareNotes` gates a register's own read effect (a latch, a flag armed) on the cell, so a word read
+of TIER no longer claims to arm FTCSR. The per-register table that follows (Ours/Mednafen) is
+still generated by `tools/audit_hardware_map.py` from the same `Reg` arrays; the width table is not
+in the script because its source is the rule function, not a text pattern.
+
+<!-- width-rules:begin (generated by HardwareWidthTableTests; SE_UPDATE_GOLDEN=1 rewrites it) -->
+
+| Cat | Rule | Mednafen | Cells | Caution (first cell) |
+|---|---|---|---|---|
+| a | Plain | the register's own handler: scu.inc SCU_RegRW_DB_u*, SS_SCSP_RW_u*, vdp1.c ReadReg/WriteReg, vdp2.c RegsRead/RegsWrite, sh7095.inc OnChipReg*, cdb.c CDB_Read/CDB_Write_DBM | 830 | (none) |
+| a | HalfOfLong | scu.inc SCU_FromSH2_BusRW_DB_u32_W*: the B bus is BBusRW_DB_u16_*_SH0 at A then _SH1 at A\|2, high half first | 199 | one 4-byte write covers SCSP_MVOL and SCSP_RBL_RBP (shown under the first)  [SCSP_MVOL, write 4 @05B00400] |
+| - | AccessKind | (none: the register's kind -- write-only, read-only -- says it) | 983 | (none) |
+| b | ByteWritesWord | scu.inc BBusRW_DB_u8_W1_SH0 -> vdp1.c VDP1_Write8_DB / vdp2.c VDP2_Write8_DB: WriteReg / RegsWrite(A, *DB), the 16-bit lane of the data bus (RW_W8's byte mask is VRAM's only) | 292 | a 1-byte write to VDP1_TVMR writes the whole 16-bit register: its other byte is whatever was last on the data bus  [VDP1_TVMR, write 1 @05D00000] |
+| b | PortWritesWhole | scu.inc SCU_RegRW_DB_u8_W1 / _u16_W1 cases 0x80-0x8C: *DB is used whole, the mask every other case applies is not | 24 | a 1-byte write to SCU_PPAF writes the whole 32-bit register: its other bytes are whatever was last on the data bus (the SCU masks the byte and word writes of every other register, not the DSP ports) and controls the DSP from the whole 32-bit value: execute, pause, step, load the program counter  [SCU_PPAF, write 1 @05FE0080] |
+| b | NarrowReadWhole | scu.inc SCU_RegRW_DB_u*_W0 cases 0x80, 0x8C: the whole 32-bit read happens, the CPU takes its part | 12 | a 1-byte read of SCU_PPAF is a read of the whole 32-bit register: what a read does to it happens in full, and only the bytes asked for are returned  [SCU_PPAF, read 1 @05FE0080] |
+| b | WordWritesLong | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: the register takes V (DVDNT, DVDNTL also divide) | 19 | a 2-byte write to SH2_DVSR, a 32-bit register, writes the whole register with the 16-bit value (upper half 0)  [SH2_DVSR, write 2 @FFFFFF00] |
+| b | FifoPopsTwice | scu.inc ABus_Read(A & ~3): ABusRW_DB_u16_W0_SH0 and _SH1 both reach CDB_Read(0) when bit 19 of A is clear | 6 | a 1-byte read of CD_DATATRNS takes two 16-bit words off the FIFO: the 32-bit bus reads it twice and the access returns only part of them (the register window at 0x25898000 reads it once)  [CD_DATATRNS, read 1 @05818000] |
+| c | HalfBesideGap | as HalfOfLong; the other half is a word nothing in the map names | 13 | a 4-byte write over SCSP_MSLC_CA is two 16-bit bus writes, high half first: SCSP_MSLC_CA takes bits 31-16 of the value, and bits 15-0 go to the word at 0x05B0040A, which is no register in the map  [SCSP_MSLC_CA, write 4 @05B00408] |
+| c | SmpcLaneWrite | ss.c BusRW_DB_CS0_u16_W1: SMPC_Write((A & 0x7F) >> 1, low byte of the half); a long is two of them | 30 | a 2-byte write to SMPC_IREG0 is a byte write: the register takes the low byte of the value and the high byte goes nowhere (the SMPC is a byte device on the low lane of the 16-bit bus)  [SMPC_IREG0, write 2 @00100000] |
+| c | SmpcLaneRead | ss.c BusRW_DB_CS0_u16_W0: 0xFF00 \| SMPC_Read((A & 0x7F) >> 1); a long is two of them | 72 | a 2-byte read of SMPC_OREG0 returns 0xFF00 or the register: the SMPC is a byte device on the low lane of the 16-bit bus, and the high byte reads as 0xFF  [SMPC_OREG0, read 2 @00100020] |
+| c | EvenByteWrite | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 clear: switch (A & 0xFF) has the even address only; TIER = V (uint8_t) | 6 | a 2-byte write to SH2_TIER, an 8-bit register, reaches only it, with the low byte of the value (bits 7-0, the byte a big-endian word has at the odd address); SH2_FTCSR, the register beside it, is not written  [SH2_TIER, write 2 @FFFFFE10] |
+| c | EvenByteRead | sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 clear: ret is the register at the word's own address | 8 | a 2-byte read at SH2_TIER, an 8-bit register, returns only it, in bits 7-0; SH2_FTCSR, the register beside it, is not read  [SH2_TIER, read 2 @FFFFFE10] |
+| c | LowHalfRead | sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 set: A &= 0xFE, ret = the 32-bit register truncated | 26 | a 2-byte read at SH2_DVSR, a 32-bit register, returns its low 16 bits, not the upper half this address suggests (a read at +2 returns them too)  [SH2_DVSR, read 2 @FFFFFF00] |
+| c | CdLongWrite | scu.inc ABus_Write_DB32_u32: ABusRW_DB_u16_W1_SH0 at A, _SH1 at A\|2; both decode (A & 0x3F) >> 2 to one CDB_Write_DBM | 6 | a 4-byte write to CD_HIRQ is two 16-bit writes to the same register (the CD block answers every 4 bytes): it is written with bits 31-16 and then with bits 15-0, which it keeps, and a write that has an effect happens twice  [CD_HIRQ, write 4 @05890008] |
+| c | CdLongRead | scu.inc ABus_Read: ABusRW_DB_u16_W0_SH1 reads only if !(A & 0x80000), so the register window keeps the first value in both halves | 7 | a 4-byte read of CD_DATATRNS reads it once and returns it in both halves (the CD block ignores the second 16-bit access in its register window)  [CD_DATATRNS, read 4 @05898000] |
+| d | SmpcPadWrite | ss.c BusRW_DB_CS0_u8_W1: SMPC_Write only if (A & 1) | 48 | a 1-byte write at the even address beside SMPC_IREG0 does nothing: the SMPC is a byte device on the low lane of the 16-bit bus, and its registers are at the odd addresses  [SMPC_UNUSED_00, write 1 @00100000] |
+| d | SmpcPadRead | ss.c BusRW_DB_CS0_u8_W0: the high lane of the 16-bit word reads 0xFF | 48 | a 1-byte read at the even address beside SMPC_IREG0 returns 0xFF, not the register: the SMPC is a byte device on the low lane of the 16-bit bus, and its registers are at the odd addresses  [SMPC_UNUSED_00, read 1 @00100000] |
+| d | OddByteWrite | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 clear: no case at the odd address of a word (A is even) | 6 | a 2-byte write at the even address beside SH2_FTCSR does not write it: a word reaches only the register at its own address (SH2_TIER)  [SH2_FTCSR, write 2 @FFFFFE10] |
+| d | OddByteRead | sh7095.inc SH7095_OnChipRegRead_INLINE_u16, A & 0x100 clear: no case at the odd address of a word | 9 | a 2-byte read at the even address beside SH2_FTCSR does not read it: a word reaches only the register at its own address (SH2_TIER, in bits 7-0)  [SH2_FTCSR, read 2 @FFFFFE10] |
+| d | LongHalfWrite | sh7095.inc SH7095_OnChipRegWrite_u16, A & 0x100 set: A &= 0xFE, and the cases are the registers' own addresses | 19 | a 2-byte write to the low half of SH2_DVSR, a 32-bit register, does nothing: a word takes effect only at the register's own address  [SH2_DVSR, write 2 @FFFFFF02] |
+| d | KeyedWordWrite | sh7095.inc SH7095_OnChipRegWrite_u16 cases 0xE0-0xF8: break (only the _u32 write checks 0xA55A) | 14 | a 2-byte write to SH2_BCR1, a 32-bit register, does nothing: it is set only by a 4-byte write with 0xA55A in the upper half  [SH2_BCR1, write 2 @FFFFFFE0] |
+| d | StrobeByte | ss.c BusRW_DB_CS0_u8_W1, "FRT trigger region": the block is empty (only _u16_W1 calls SH7095_SetFTI) | 4 | a 1-byte write to MINIT does nothing: the signal to the other CPU takes a 16-bit write (the CS0 byte path ignores the FRT trigger region)  [MINIT, write 1 @01000000] |
+| d | MirrorWrite | sh7095.inc OnChipRegWrite_u*: case 0x92 only ("No 0x93...0x9F mirrors for writes") | 2 | a 1-byte write at 0xFFFFFE93 does nothing: SH2_CCR reads back at 0xFFFFFE93-0xFFFFFE9F, but takes writes at 0xFFFFFE92 only  [SH2_CCR, write 1 @FFFFFE93] |
+| e | AddressError | sh7095.inc SH7095_SetPEX(z, SH7095_PEX_CPUADDR): OnChipRegWrite_u8 / RegRead_u8 with A & 0x100 set, OnChipRegWrite_u32 / RegRead_u32 with it clear | 316 | a 4-byte write to SH2_TIER, an 8-bit register, is an address error on the SH-2: the registers at 0xFFFFFE00-0xFFFFFEFF take byte and word accesses only  [SH2_TIER, write 4 @FFFFFE10] |
+| f | StrobeLong | sh7095.inc SH7095_BSC_BusWrite_u32 (CS0): two BusRW_DB_CS0_u16_W1, each SH7095_SetFTI | 2 | a 4-byte write to MINIT is two 16-bit bus writes, so it signals the other CPU twice (its input capture takes the second)  [MINIT, write 4 @01000000] |
+| f | CdByteWrite | cdb.c CDB_Write_DBM case 0x9: CommandPending only if mask == 0xFFFF | 2 | a 1-byte write to CD_CR4 stores that byte only: it does not start the command, which takes a 16-bit write  [CD_CR4, write 1 @05890024] |
+| v | KeyedWrite | sh7095.inc OnChipRegWrite_u16 cases 0x80, 0x82 (the key in the upper byte); _u32 cases 0xE0-0xF8 ((V & 0xFFFF0000) == 0xA55A0000) | 13 | (none) |
+| ? | Undecoded | sh7095.inc has no case for the serial interface: no rule is claimed | 22 | (none) |
+
+<!-- width-rules:end -->
 
 ## Table
 
@@ -356,7 +408,7 @@ hardware-semantics review; re-run `tools/audit_hardware_map.py` after any change
 | `05FE0098` | SCU_T1MD | 4 | WO | ok |
 | `05FE00A0` | SCU_IMS | 4 | WO | ok |
 | `05FE00A4` | SCU_IST | 4 | RW | ok |
-| `05FE00A8` | SCU_AIACK | 4 | RW | DIFFERS: Mednafen read returns 0/nothing |
+| `05FE00A8` | SCU_AIACK | 4 | WO | ok |
 | `05FE00B0` | SCU_ASR0 | 4 | WO | ok |
 | `05FE00B4` | SCU_ASR1 | 4 | WO | ok |
 | `05FE00B8` | SCU_AREF | 4 | WO | ok |
