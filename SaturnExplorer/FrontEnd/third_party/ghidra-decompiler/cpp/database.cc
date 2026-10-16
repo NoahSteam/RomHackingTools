@@ -2657,7 +2657,7 @@ bool ScopeInternal::isNameUsed(const string &nm,const Scope *op2) const
 /// SaturnExplorer: an input that is a piece of a register (the four bytes cmp/str compares) would be named like the
 /// register and told apart only by a counter. The byte it starts at, counted from the least significant, is part of the
 /// name: `in_r3_b3` is r3's most significant byte, `in_r3` its least, and `unaff_r8_b3` that of a register the function
-/// keeps (patches/0037-engine-division-piece-and-input-names.patch, 0044-engine-division-width-and-unaffected-pieces.patch).
+/// keeps (patches/0037-engine-division-piece-and-input-names.patch, 0044-engine-round5-printed-value-fixes.patch).
 /// \param glb is the architecture
 /// \param regname is the name of the register that holds the piece
 /// \param addr is where the piece is

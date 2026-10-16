@@ -795,8 +795,9 @@ bool Ledger(const DecompileResult& r, const std::vector<Op>& want)
     return ok;
 }
 
-// A mailbox: one write, then one read per pass through the poll, returned as read.
-std::vector<Op> Mailbox(uint32_t a) { return { Wr(a, 2), Rd(a, 2, true, true) }; }
+// A mailbox: one write, then one read per pass through the poll. The value read is the loop's condition and nothing returns it (a poll
+// is void: the nop in rts's slot used to write r0 and make the last read the function's return, patches/0045).
+std::vector<Op> Mailbox(uint32_t a) { return { Wr(a, 2), Rd(a, 2, true) }; }
 
 void TestHardwareVolatility()
 {
@@ -1660,7 +1661,7 @@ void TestHardwareVolatility()
     };
 
     DecompileResult r = run("SMPC_SF poll", poll);
-    CHECK(Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true, true) }));
+    CHECK(Ledger(r, { Wr(0x20100063u, 1), Rd(0x20100063u, 1, true) }));
     CHECK(Has(r.Text(), "SMPC_SF = 1;"));
     CHECK(Count(r.Text(), "SMPC_SF") >= 2);   // the write and the poll's read
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
@@ -1704,7 +1705,7 @@ void TestHardwareVolatility()
     CHECK(!WarnsAbout(r, "SCXIN0"));
 
     r = run("SMPC_SF through a mirror", mirror);
-    CHECK(Ledger(r, { Wr(0x201000E3u, 1), Rd(0x201000E3u, 1, true, true) }));
+    CHECK(Ledger(r, { Wr(0x201000E3u, 1), Rd(0x201000E3u, 1, true) }));
     CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "while (true)"));
     CHECK(HasNote(r, "0x201000E3 is SMPC_SF through a mirror", false));
 
@@ -1841,9 +1842,9 @@ void TestHardwareVolatility()
             r = d.Decompile(snap, q);
             Print("mailbox, wide range", r);
             if (w.name) CHECK(Ledger(r, Mailbox(w.f->pointer)));
-            else CHECK(Ledger(r, { Rd(w.f->base + w.f->literal, 4), Wr(0, 2), Rd(0, 2, true, true) }));   // pointer, then mailbox
+            else CHECK(Ledger(r, { Rd(w.f->base + w.f->literal, 4), Wr(0, 2), Rd(0, 2, true) }));   // pointer, then mailbox
             if (w.name) CHECK(kept(r, w.name));
-            else CHECK(Has(r.Text(), "*piVar1 = 1;") && Count(r.Text(), "*piVar1") == 3 && !Has(r.Text(), "while( true )"));
+            else CHECK(Has(r.Text(), "*puVar1 = 1;") && Count(r.Text(), "*puVar1") == 3 && !Has(r.Text(), "while( true )"));
         }
     }
     // The mailbox pointer volatile too: the poll's sample is read once per pass through the loop
@@ -1854,10 +1855,10 @@ void TestHardwareVolatility()
         q.volatileMemory.emplace_back(0x26001000u, 0x26001001u);
         r = d.Decompile(snap, q);
         Print("mailbox through a volatile pointer", r);
-        CHECK(Ledger(r, { Rd(ptrMailbox.base + ptrMailbox.literal, 4), Wr(0, 2), Rd(0, 2, true, true) }));
-        CHECK(Has(r.Text(), "*piVar1 = 1;"));
-        CHECK(Count(r.Text(), "*piVar1") == 3);   // the declaration, the write, the one read in the loop
-        CHECK(!Has(r.Text(), "return (int4)*piVar1"));
+        CHECK(Ledger(r, { Rd(ptrMailbox.base + ptrMailbox.literal, 4), Wr(0, 2), Rd(0, 2, true) }));
+        CHECK(Has(r.Text(), "*puVar1 = 1;"));
+        CHECK(Count(r.Text(), "*puVar1") == 3);   // the declaration, the write, the one read in the loop
+        CHECK(!Has(r.Text(), "return (int4)*puVar1"));
         CHECK(!Has(r.Text(), "while( true )"));
     }
     // An inverted range is no range: ignored, and said.
@@ -2041,11 +2042,11 @@ void TestHardwareVolatility()
     r = run("one byte of a 4-byte read", byteOfLong);
     CHECK(Ledger(r, { Rd(0, 4) }));   // the read keeps its width; the narrowing is in the expression
     r = run("a 4-byte read stored as a byte", longToByte);
-    CHECK(Ledger(r, { Rd(0, 4, false, true), Wr(0, 1) }));
+    CHECK(Ledger(r, { Rd(0, 4), Wr(0, 1) }));   // r0 is stored and returned: another use, so no return (patches/0045)
     r = run("two stores through one pointer", twoStores);
     CHECK(Ledger(r, { Wr(0, 4), Wr(0, 4) }));
     r = run("compound assignment through pointers", compound);
-    CHECK(Ledger(r, { Rd(0, 4, false, true), Rd(0, 4), Wr(0, 4) }));
+    CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4), Wr(0, 4) }));
     r = run("two reads as call arguments", callArgs);
     CHECK(Ledger(r, { Rd(0, 4), Rd(0, 4) }));
 
@@ -2572,7 +2573,7 @@ void TestHardwareVolatility()
         // A5-28: a register read through a pointer merged from register literals is said as a direct read is, for each register the
         // pointer can hold, though the access is a plain load (the output prints &REG).
         r = R5("a5_28", "a poll of VDP2_TVSTAT or VDP2_VCNT through a merged pointer, cached partition");
-        CHECK(Has(r.Text(), "puVar2 = &VDP2_TVSTAT;") && Has(r.Text(), "puVar2 = &VDP2_VCNT;"));
+        CHECK(Has(r.Text(), "puVar1 = &VDP2_TVSTAT;") && Has(r.Text(), "puVar1 = &VDP2_VCNT;"));
         CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
         CHECK(HasNote(r, "if the pointer holds 0x05F8000A (VDP2_VCNT): a read of VDP2_VCNT through the cached partition is a cache read when the cache is on (SH2_CCR.CE)", true));
         CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
@@ -6333,8 +6334,11 @@ bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint3
 }
 
 // The code run on the emulator for each input, against the pseudocode evaluated for the same.
+// 'voidOk': a text that returns nothing is not a disagreement. For a function whose signature is withheld, which says nothing about what
+// it returns, and whose text need not either: the engine returns r0 only where the value has no other use (upstream's heuristic, which the
+// nop in rts's slot used to hide, A2-31); a text that returns a value still has to be the right one.
 bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemorySnapshot>& snap, const CallFixture& f,
-                         const std::vector<std::vector<uint32_t>>& inputs)
+                         const std::vector<std::vector<uint32_t>>& inputs, bool voidOk = false)
 {
     bool ok = true;
     for (const std::vector<uint32_t>& args : inputs)
@@ -6350,7 +6354,7 @@ bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemoryS
         entry.regs = RunEntryRegisters(args);
         entry.snap = snap;
         entry.sp = kRunStack;
-        if (!MayReturn(r.Text(), args, ran, why, !f.noResult, &entry))
+        if (!MayReturn(r.Text(), args, ran, why, !f.noResult && !voidOk, &entry))
         {
             std::printf("  oracle %s: the code returned %08X for r4=%08X, the pseudocode %s\n", f.name.c_str(), ran,
                         args.empty() ? 0u : args[0], why.c_str());
@@ -6678,7 +6682,7 @@ void TestCallsAndTraps()
         const DecompileResult r = d.Decompile(snap, Request(f.base));
         Print(f.name.c_str(), r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(PseudoAgreesWithRun(r, snap, f, with ? *with : inputs));
+        CHECK(PseudoAgreesWithRun(r, snap, f, with ? *with : inputs, !r.prototype.known));
         return r;
     };
     const uint32_t base = 0x06009000u;
@@ -6892,7 +6896,7 @@ void TestCallsAndTraps()
             l.caller = d.Decompile(snap, q);
             Print(f.name.c_str(), l.caller);
             CHECK(l.caller.status == DecompileStatus::Ok);
-            CHECK(!oracle || PseudoAgreesWithRun(l.caller, snap, f, inputs));
+            CHECK(!oracle || PseudoAgreesWithRun(l.caller, snap, f, inputs, !l.caller.prototype.known));
             return l;
         };
         // r4: a leaf that never touches it. The caller returns what it passed in r4.
@@ -7790,9 +7794,9 @@ void TestArea2Round4()
         CHECK(!r.prototype.known && Has(r.prototypeWithheld, "sr"));
     }
     {
-        // ...but SR only stored (nothing can read it back here) is still machine state: lent
-        const DecompileResult r = decompile("A2-23 control: SR stored only", { 0x0102, 0x2412, 0x000B, 0x0009 });   // stc sr,r1 ; mov.l r1,@r4 ; rts
-        CHECK(r.prototype.known);
+        // SR only stored is withheld too since round 5 (A2-35: the memory outlives the function and a caller reads it back; TestArea2Round5)
+        const DecompileResult r = decompile("A2-23 SR stored only", { 0x0102, 0x2412, 0x000B, 0x0009 });   // stc sr,r1 ; mov.l r1,@r4 ; rts
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "sr"));
     }
 
     // A2-24: rte restores SR and PC from the stack; a handler that changes the stacked words changes where and how the
@@ -7812,6 +7816,166 @@ void TestArea2Round4()
         const DecompileResult r = decompile("A2-25 cmp/str r6,r3", { 0x236C, 0x000B, 0x0029 });
         CHECK(Has(r.Text(), "in_r3;") && Has(r.Text(), "in_r3_b1") && Has(r.Text(), "in_r3_b2") && Has(r.Text(), "in_r3_b3"));
         CHECK(!Has(r.Text(), "in_r3_00") && !Has(r.Text(), "in_r3_01"));
+    }
+}
+
+// Area 2, round 5 (ledger A2-31 .. A2-37): what decides that r0 is returned, a division by a divisor at or above 2^31, what rte leaves in SR,
+// SR stored through a pointer, and the names of the bytes of r8-r15. The printed-C differential (SaturnExplorerSh2GeneratedTests) runs the
+// A2-32 and A2-37 fixtures against the emulator (rte is not run there, A2-20); these are the text and signature checks.
+void TestArea2Round5()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 500;
+    auto decompile = [&](const char* label, const std::vector<uint16_t>& words) {
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : words)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw, ++serial), Request(0x06009000u));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // The caller at 0x06009000 and the callee at 'calleeAt' (the words are one image), the callee decompiled first and its signature
+    // lent to the caller, as the panel does.
+    struct Pair
+    {
+        DecompileResult callee, caller;
+    };
+    auto pair = [&](const char* label, const std::vector<uint16_t>& words, uint32_t calleeAt) {
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : words)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        auto snap = MakeSnapshot(hw, ++serial);
+        Pair p;
+        p.callee = d.Decompile(snap, Request(calleeAt));
+        DecompileRequest q = Request(0x06009000u);
+        q.prototypes.emplace_back(calleeAt, p.callee.prototype);
+        p.caller = d.Decompile(snap, q);
+        Print(label, p.caller);
+        CHECK(p.callee.status == DecompileStatus::Ok && p.caller.status == DecompileStatus::Ok);
+        return p;
+    };
+
+    // A2-31: whether r0 was returned depended on the instruction in rts's delay slot. `nop` was `r0 = r0`, a COPY that was the last write of
+    // r0 and its only use, so a function ending `rts ; nop` returned the value and the same function with any other instruction in the slot
+    // (the epilogue's last pop, `add #n,r15`) did not. A nop writes nothing now, and a value that is the output of a call to a callee
+    // whose signature is lent as returning is returned whatever else it is used for.
+    {
+        const std::vector<uint16_t> callee = { 0x6042, 0x000B, 0x0009 };   // mov.l @r4,r0 ; rts ; nop
+        // return g(p) with the usual epilogue: sts.l pr ... lds.l @r15+,pr ; rts ; mov.l @r15+,r14 (the pop in the slot)
+        std::vector<uint16_t> wrapper = { 0x2FE6, 0x4F22, 0xB003, 0x0009, 0x4F26, 0x000B, 0x6EF6 };
+        wrapper.insert(wrapper.end(), callee.begin(), callee.end());
+        const Pair filled = pair("A2-31 return g(p), the pop in the slot", wrapper, 0x0600900Eu);
+        CHECK(filled.callee.prototype.known && filled.callee.prototype.ret.kind != TypeKind::Void);
+        CHECK(filled.caller.prototype.known && filled.caller.prototype.ret.kind != TypeKind::Void);
+        CHECK(Has(filled.caller.Text(), "return xVar1;"));
+        // ...the pop before rts and a nop in the slot: the same text, the same signature
+        std::vector<uint16_t> nopped = { 0x2FE6, 0x4F22, 0xB004, 0x0009, 0x4F26, 0x6EF6, 0x000B, 0x0009 };
+        nopped.insert(nopped.end(), callee.begin(), callee.end());
+        const Pair withNop = pair("A2-31 return g(p), nop in the slot", nopped, 0x06009010u);
+        CHECK(withNop.caller.prototype.known && withNop.caller.prototype.ret.kind != TypeKind::Void);
+        CHECK(Has(withNop.caller.Text(), "return xVar1;"));
+        // p = g(x); if (p) *p = 0; return p;  (the value is also compared and used as an address)
+        const Pair checked = pair("A2-31 p = g(x); if (p) *p = 0; return p;",
+                                  { 0x2FE6, 0x4F22, 0xB008, 0x0009, 0x2008, 0x8901, 0xE100, 0x2012, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x6042, 0x000B, 0x0009 },
+                                  0x06009018u);
+        CHECK(checked.caller.prototype.known && checked.caller.prototype.ret.kind != TypeKind::Void);
+        CHECK(Has(checked.caller.Text(), "return pxVar1;"));
+        // A callee lent as returning nothing is not a value to return: the wrapper stays void.
+        const Pair none = pair("A2-31 control: the callee returns nothing",
+                               { 0x2FE6, 0x4F22, 0xB003, 0x0009, 0x4F26, 0x000B, 0x6EF6, 0x000B, 0x0009 }, 0x0600900Eu);
+        CHECK(none.callee.prototype.known && none.callee.prototype.ret.kind == TypeKind::Void);
+        CHECK(none.caller.prototype.ret.kind == TypeKind::Void);
+    }
+    {
+        // The slot does not decide for a value that is not a call's either: `return ++*p` (the store in the slot) is the same function with a
+        // nop and with any other instruction there. r0 is used for the store as well as the return, which upstream's heuristic takes for
+        // scratch; what it takes for scratch it takes for scratch in every slot.
+        const DecompileResult filled = decompile("A2-31 ++*p, add #0,r15 in the slot", { 0x6042, 0x7001, 0x2402, 0x000B, 0x7F00 });
+        const DecompileResult nopped = decompile("A2-31 ++*p, nop in the slot", { 0x6042, 0x7001, 0x2402, 0x000B, 0x0009 });
+        CHECK(filled.prototype.known && nopped.prototype.known);
+        CHECK(filled.prototype.ret.kind == nopped.prototype.ret.kind);
+        CHECK(filled.prototype.params.size() == nopped.prototype.params.size());
+        // if (x == 5) *p = v; return x;
+        const DecompileResult cmpFilled = decompile("A2-31 compare, add #0,r15 in the slot", { 0x6043, 0x8805, 0x8B00, 0x2652, 0x000B, 0x7F00 });
+        const DecompileResult cmpNopped = decompile("A2-31 compare, nop in the slot", { 0x6043, 0x8805, 0x8B00, 0x2652, 0x000B, 0x0009 });
+        CHECK(cmpFilled.prototype.ret.kind == cmpNopped.prototype.ret.kind);
+        CHECK(cmpFilled.prototype.params.size() == cmpNopped.prototype.params.size());
+        // A function that sets r0 and does nothing else with it still returns it, in any slot
+        const DecompileResult one = decompile("A2-31 control: mov #1,r0 ; rts ; nop", { 0xE001, 0x000B, 0x0009 });
+        CHECK(one.prototype.known && one.prototype.ret.kind != TypeKind::Void && Has(one.Text(), "return 1;"));
+        const DecompileResult oneB = decompile("A2-31 control: mov #1,r0 ; rts ; add #0,r15", { 0xE001, 0x000B, 0x7F00 });
+        CHECK(oneB.prototype.known && oneB.prototype.ret.kind != TypeKind::Void && Has(oneB.Text(), "return 1;"));
+    }
+
+    // A2-32: x / 0xFFFFFFFE (multiplier 3, the add form, a total shift of 64) printed `return 0;` and dropped the parameter: the shift of 64 in
+    // an 8-byte multiply is 0, so the product that needs 65 bits was left in the data-flow where nothing divided it. 0xFFFFFFFC and
+    // 0xFFFFFFF0 the same; the divisors with a total shift of 63 and the others were always right.
+    for (uint16_t multiplier : { uint16_t(3), uint16_t(5), uint16_t(0x11) })
+    {
+        const DecompileResult r = decompile("A2-32 x / 0xFFFFFFFx",
+                                            { 0xD106, 0x3415, 0x000A, 0x3408, 0x4401, 0x340C, 0x4429, 0x4419, 0x4409, 0x4409, 0x4409, 0x4401, 0x000B, 0x6043, 0x0000, multiplier });
+        CHECK(!Has(r.Text(), "return 0;"));
+        CHECK(r.prototype.known && r.prototype.params.size() == 1 && r.prototype.ret.kind != TypeKind::Void);
+        CHECK(Has(r.Text(), "param_1"));
+    }
+    {
+        const DecompileResult r = decompile("A2-32 x / 0xFFFFFFFE * 4", { 0xD307, 0x3535, 0x000A, 0x3508, 0x4501, 0x350C, 0x4529, 0x4519, 0x4509, 0x4509, 0x4509, 0x4501, 0x4508, 0x6053, 0x000B, 0x0009, 0x0000, 0x0003 });
+        CHECK(!Has(r.Text(), "return 0;"));
+        CHECK(r.prototype.known && Has(r.Text(), "param_2"));
+    }
+
+    // A2-36: rte restores SR and then runs its slot, so a slot that changes T changes the SR the interrupted code resumes with.
+    {
+        const DecompileResult sett = decompile("A2-36 rte ; sett", { 0x002B, 0x0018 });
+        CHECK(Has(sett.Text(), "Write_SR(in_stack_00000004 & 0x3f2 | 1);"));
+        const DecompileResult clrt = decompile("A2-36 rte ; clrt", { 0x002B, 0x0008 });
+        CHECK(Has(clrt.Text(), "Write_SR(in_stack_00000004 & 0x3f2);"));
+        const DecompileResult cmp = decompile("A2-36 rte ; cmp/eq r4,r5", { 0x002B, 0x3540 });
+        CHECK(Has(cmp.Text(), "& 0x3f2 |") && Has(cmp.Text(), "param_2 == param_1"));
+        // controls: a slot that leaves T alone, and one that stores to the stacked SR (the restore has read it already)
+        const DecompileResult plain = decompile("A2-36 control: rte ; nop", { 0x002B, 0x0009 });
+        CHECK(Has(plain.Text(), "Write_SR(in_stack_00000004 & 0x3f3);"));
+        const DecompileResult stored = decompile("A2-36 control: a store to the stacked SR in the slot", { 0x51F1, 0xE201, 0x212B, 0x002B, 0x1F11 });
+        CHECK(Has(stored.Text(), "Write_SR(in_stack_00000004 & 0x3f3);"));
+        const DecompileResult vbr = decompile("A2-36 control: rte ; ldc r4,vbr", { 0x002B, 0x442E });
+        CHECK(Has(vbr.Text(), "Write_VBR(param_1)"));
+    }
+
+    // A2-35: SR stored through a pointer is an input: the caller reads the word back after the call, so its own T at the call is the callee's.
+    {
+        const Pair p = pair("A2-35 SR stored, the word read back by the caller",
+                            { 0x4F22, 0x3650, 0xB004, 0x0009, 0x4F26, 0x6042, 0x000B, 0xC901, 0x0102, 0x2412, 0x000B, 0x0009 }, 0x06009010u);
+        CHECK(!p.callee.prototype.known && Has(p.callee.prototypeWithheld, "sr"));
+        CHECK(!p.caller.prototype.known);   // nothing is lent to the caller on a callee that reads T
+        const DecompileResult stcl = decompile("A2-35 stc.l sr,@-r4", { 0x4403, 0x000B, 0x0009 });
+        CHECK(!stcl.prototype.known && Has(stcl.prototypeWithheld, "sr"));
+        // a control that stays lent: the interrupt mask raised around a store and put back (SR is only written back)
+        const DecompileResult ret = decompile("A2-35 control: SR saved and put back", { 0x0102, 0x6013, 0xCBF0, 0x400E, 0x2452, 0x410E, 0x000B, 0x0009 });
+        CHECK(ret.prototype.known && ret.prototype.params.size() == 2);
+    }
+
+    // A2-37: the bytes of a register no signature passes are named with the byte they are, as r0-r7's are (A2-25), not by a counter.
+    for (const std::vector<uint16_t>& words : { std::vector<uint16_t>{ 0x286C, 0x000B, 0x0029 },     // cmp/str r6,r8 ; rts ; movt r0
+                                                std::vector<uint16_t>{ 0x2E6C, 0x000B, 0x0029 },     // r14
+                                                std::vector<uint16_t>{ 0x2F6C, 0x000B, 0x0029 } })   // r15
+    {
+        const DecompileResult r = decompile("A2-37 cmp/str on r8-r15", words);
+        CHECK(Has(r.Text(), "_b1") && Has(r.Text(), "_b2") && Has(r.Text(), "_b3"));
+        CHECK(!Has(r.Text(), "_00") && !Has(r.Text(), "_01") && !Has(r.Text(), "_02"));
+        CHECK(Has(r.Text(), "unaff_r"));
+    }
+    {
+        const DecompileResult r = decompile("A2-37 control: cmp/str on r1", { 0x221C, 0x000B, 0x0029 });
+        CHECK(Has(r.Text(), "in_r1_b1") && Has(r.Text(), "in_r1_b3"));
     }
 }
 
@@ -8219,6 +8383,7 @@ int main(int argc, char** argv)
         RUN(TestCallsAndTraps());
         RUN(TestArea2Round3());
         RUN(TestArea2Round4());
+        RUN(TestArea2Round5());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
