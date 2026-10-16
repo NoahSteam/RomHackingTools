@@ -5348,3 +5348,241 @@ round 4 rule accepted).
 - Value-independent write effects of the SCSP common block (`F`) are not said (bookkeeping, not an effect a note would help with).
 - The bits of the value that reach a register, the keys, the FIFO pops and the text of every caution remain with the hand fixtures and the golden file.
 - The slave CPU's view (one map for both CPUs) was not probed.
+
+## Areas 3 and 4, round 4
+
+Fixer, branch `review/3-4-round4-fix`, from master `4210e8e`. Commits: oracle `4f67521`, `c16f914`; A3-7 `dd90913`; A3-9 `9f9318d`; A3-8 and A3-10
+accepted and pinned `7a61e6f`; A3-12 `e4274b0`; A4-8 and A4-9 `e1f6b4c`. Ledger rows A3-7, A3-9, A3-11, A3-12, A4-8 and A4-9 are fixed; A3-8 and A3-10
+are accepted with their reasons. No engine patch (0036 was not needed). Every fixture was reproduced first, against the master binary: the three
+A3-7 shapes (the oracle accepted all three, the generator rejected them), A3-9 (the emulator returns 12, the text said `return 10;`), the A3-8
+replay (0 findings), seeds 301364 and 305201 (`generator:no-return`, `emulator-error`), and the A3-11 texts (each wrong verdict of the row).
+
+### The oracle first (A3-11)
+
+`PseudoEval` was a 32-bit signed interpreter that knew no declaration. It types its values now: a parameter or local has the width and sign its
+declaration gives it and every assignment converts to it (a `char` parameter is the register's low byte, signed); a cast truncates or extends;
+`<`, `>`, `/`, `%` and `>>` read their operands unsigned when the C rules say so (a literal over `0x7FFFFFFF` is a `uint4`); arithmetic is 64-bit
+when an operand is 8 bytes (`dmuls.l`'s `(int4)((uint8)((int8)b * (int8)a) >> 0x20)`); a parameter assigned to holds the new value, under an `if` too;
+`true` and `false` are 1 and 0; `'\x02'` is a character constant, in an expression and as a case label (matched modulo the selector's width);
+`CONCATnm`, `SUBnm`, `ZEXTnm`, `SEXTnm`, `CARRYn`, `SCARRYn` and `SBORROWn` are evaluated. A type with no sign (`xunknown4`, `undefined4`) is read both ways
+and is unknown when the two disagree, which agrees with any run: the evaluator never states a verdict it cannot support. What it cannot read is an
+**error**, which fails the check, not an unknown value: an operator of the `NAME4` shape it has no rule for, a CONCAT wider than 8 bytes, a 64-bit
+return (r0 alone does not hold it), `x += 1` and `x++`. A call may write a stack local (`xStack_c`, `iStack_8`: the engine keeps one a call could
+reach, A3-9), so those are unknown after a call; register locals (`xVar1`) are not.
+
+`MayReturn` and `PseudoAgreesWithRun` no longer accept `return;` for any value: a function that returns nothing agrees with a run only if the fixture says
+r0 is no result (`CallFixture::noResult`, default false). The fixture is the proof: one existing fixture needed it (the r2 and r3 "kept by the callee"
+callers, which end `mov.l rN,@r4`; the emulator returns r0's starting value, 0x1000, unchanged). Every other existing fixture passed unchanged. The verdicts
+of the row are pinned: the wrong accepts (bare return, `false`, reassigned parameter, `(char)` width, `CONCAT31`, `SUB41`) as texts, the wrong rejects
+(parameter reassigned under an `if`, `shlr` on a `uint4`, `cmp/hs` and `cmp/hi`, the `dmuls.l` high word) as code run on the emulator against the
+engine's real output, the `char` case label as text. A weakness of the first version of those tests was found by mutation: the reason string was
+appended across checks, so a check on "cannot evaluate" passed on an earlier check's text; it is cleared before each now (`c16f914`).
+
+### The rows in the host
+
+- **A3-7: the rule asked only paths with no call.** `State::called` was set at the join, so the call on one path hid the other, and the call
+  itself hid everything: `bsr g ; ... ; rts ; mov r8,r0` (g lent, keeps r8) is a function whose return is a register no signature passes,
+  and the engine drops the copy as it drops the leaf's. The reason `called` existed is real: a call's outputs share one set of origins (everything any
+  of the callee's registers can come from), so r0 after a call has the callee's other registers among its origins; that is no read of an input.
+  Replaced by the distinction itself: a `Value` carries `direct`, the origins computed by this function's own instructions, and a call's outputs
+  have `direct = 0`. `Return` asks r0's `direct` origins on every path, with or without a call, exact copies (`mov r8,r0`, `sts macl,r0`, `stc gbr,r0`) included.
+  The three shapes of the row and a fourth (`mov r9,r0` before the call, the callee keeps r0) are withheld ("its return is computed from r8 on entry")
+  and the text is still the engine's `return;`, which the oracle now rejects. Controls: a function that saves r8, calls and returns the callee's value, and
+  one that returns a parameter after the call, are lent.
+- **A3-9: the exact address only.** `Value` keeps, for an address made of a stack address plus anything, the offset it was made from (`stackBase`); a
+  constant added later moves it, an index leaves it (taken as non-negative, as the engine's own pointer arithmetic is), a subtraction of
+  anything but a constant drops it, and a join keeps the lower. `NoteFrameEscape` declares that offset. The alias is "every local from there up", so
+  the index and its bound do not matter. The row's fixture (index `r4 & 4`) and a second with the parameter added whole are no longer folded: the
+  text is `return iStack_c + iStack_8;` with both stores before the call (the engine does not make an array of two scalars; patch 0030 declares the alias
+  and the call is guarded, which is what prevents the fold). The round 3 first version, the whole frame for an inexact address, printed
+  `axStack_80000000 [2147483580]` because it had lost the base; the base is kept now, so the declared offset is a real frame offset.
+- **A3-10: accepted.** The corpus decides: a frame address is in r3 at a call to an unlent callee at 36 (007) and 53 (008) call sites, in r2 at
+  39 and 74, in r14 at 852 and 2,068 (the frame pointer). GCC's SH static chain is r3, and is the only compiler convention that puts a frame pointer
+  there (nested functions); Hitachi's and SN's compilers have none, and r2 is the one hidden pointer of the ABI. A rule over r3 would alias the
+  locals of those 36 and 53 functions for a convention nothing in the corpus uses. Pinned in `TestCallsAndTraps` (the run returns 7, the text 5, the
+  signature is withheld).
+- **A3-8: accepted.** The exception is for machine state; the T flag the caller set is the only way a lent getter's result depends on the
+  caller. Compiled code cannot do it (T is caller-saved), the 20 getters of image 007 are mask helpers whose callers mask the I bits, and the
+  alternative (a `readsSr` bit in `CallEffects`, in `ShapeOf`, in two digests, and withholding every caller that has set T before such a call)
+  buys nothing for compiled code and costs the callers that merely compared something earlier. Pinned in `TestCallsAndTraps`: the run depends on
+  r6 and r7 (1 for r6 = r7, 0 otherwise), the caller is lent with no parameters. The generator reports the replay by hand (A3-12); its grammar does not
+  emit the shape.
+- **A4-8: the flow boundary set.** `entries` for "flow runs into" came from `knownFunctions`, names and call targets; it takes the lent prototypes'
+  addresses too (host side, `Sh2Decompiler.cpp`; the panel's request assembly is untouched, it already passes `prototypes`). A mirror address is
+  canonicalised; a prototype that is not known lends nothing and adds no entry; one outside the body adds no warning.
+- **A4-9: the generator's contract.** Two causes, one fix. A call's arguments are drawn before the jsr's target register is chosen, so a `mov r1,r4` in
+  the delay slot copied the callee's address (seed 301364: the callee stored through it over the caller's next literal); and a `mov #imm,Rk` reached a callee
+  that stores or loads through Rk (seed 305201: address 0x66). Both are replaced after the draws (no draw is added, so every other program of a seed is
+  unchanged: 11,706 functions in the window as before) by the caller's own copy of its entry argument register, a pointer into scratch memory;
+  the second only where the callee, or anything it calls, jumps to or runs into, uses that register number as a memory or poll base.
+
+### The generator (A3-12)
+
+Check 8 now also starts each of r4-r7 at the value of another (r_k := r_j) as well as +0x200 and 0: the four start at distinct scratch pointers, so a
+compare of two of them always had the same answer. The A3-8 replay, 0 findings on master, now reports `param-dropped:r6` and `r7`. The SR-getter
+shape was not added to the grammar: it would be a finding on every module that has it, A3-8 being accepted.
+
+### Mutation
+
+Each reverted alone, the source restored after; failing checks of `Sh2DecompilerTests` unless stated.
+
+| Reverted | Result |
+|---|---|
+| bare `return;` accepted (A3-11) | 8 |
+| `true`/`false` unknown names | 2 |
+| assignments to a parameter ignored | 3 |
+| casts keep their value's width | 16 |
+| `CONCAT`/`SUB` read as unknown calls | 4 |
+| `>>` always arithmetic | 2 |
+| compares and `/` `%` always signed | 3, and 2 |
+| arithmetic 32-bit only | 2 |
+| `char` case labels unread | 2 |
+| narrow parameters fed whole | 10 |
+| 64-bit return taken for unknown | 1 |
+| `x += 1` skipped | 1 (0 before the reason was cleared between checks) |
+| a narrow return compared at full width | 1 |
+| `PseudoAgreesWithRun` accepts a bare return for every fixture | 5 |
+| stack locals kept across a call | 3 |
+| A3-7 rule off / exact copies ignored | 27 / 27 (the round 3 tests included) |
+| A3-7 call outputs counted as direct | suite 0; image 007 lends 545, not 611 (66 withheld "computed from r1/r2/r3/r8/r14") |
+| A3-9 exact address only | 4 |
+| A3-10 pin: r3 declared like r2 | 1 |
+| A4-8 prototypes not entries | 2 |
+| A3-12 no equal-argument values | the A3-8 replay passes (0 findings) |
+| A4-9 arguments unchecked | seeds 301364 and 305201 fail |
+
+### Matrix
+
+- Whole `ctest` (RelWithDebInfo, gcc, `-DSE_ENABLE_DECOMPILER=ON`): 96 of 96 pass.
+- Generator: the default run (300 seeds, both grammars) 0 failing, 0 findings; grammar 2, `SE_GENERATED_FIRST=300001`, 6,000 seeds: 0 failing, 0 findings
+  (11,706 functions, 1,637 tables, 1,020 parameter candidates over 20,555 perturbed runs, none sensitive; seeds 301364 and 305201 pass); grammar 2 from seed 1,
+  3,000 seeds: 0 failing, 0 findings.
+- Game corpus, both images, standalone and with `SE_GAME_LEND=1`: below.
+- gcc Debug with `-fsanitize=address,undefined`, `detect_leaks=1` (`.github/scripts/run-decompiler-sanitizers.sh`): `Sh2DecompilerTests`, `Sh2DecompilerEngineTests`,
+  `Sh2DecompilerFixtureTests`, `DecompilerPanelTests`, `DecompilerRunnerTests` and `Sh2GeneratedTests` (300 seeds) exit 0; `check-sanitizer-logs.sh` passes: only the
+  allow-listed `address.hh:605` and `slghpatexpress.cc:979` lines.
+- Timing: `TestGameCode` image 008, 22.6 s (master) and 25.7 s (this branch) wall on a loaded machine; image 007 6.6 and 7.3 s. The oracle is test code; the host
+  change is one `Value` field more in `ReturnCheck`, which runs once per function with a call.
+
+### Corpus
+
+Standalone (`TestGameCode`, nothing lent) and lending (`SE_GAME_LEND=1`, callees first) on `hwram007.bin` and `hwram008.bin`, master `4210e8e` against this branch:
+every ledger count 0, dropped accesses 0, 16 and 20 reads missing and said (unchanged); signatures lent 611 and 1,007 before and after (767 and 1,220
+parameters), 156 and 299 lent functions that change r8-r14, GBR or VBR as before, text changed by lending 268 and 528 as before. Function texts that
+differ from master: 0 of 839 (007) and 3 of 1,554 (008), standalone and lent alike, all by A3-9's base: `06038822` and `0603885E` gain an unused declaration
+`xunknown1 axStack_23c [568];` (r2 = r15 + index at a call whose callee is not lent: the alias now starts at the frame base), `06035636` splits its
+array (`aiStack_5c [4]` becomes `[3]` and `xStack_50`, the fourth element passed to a call). Every one read: the text states what the code does, none
+states a folded value that the code does not return.
+
+### Limits, and what is not done
+
+- A3-8 and A3-10 are limits of hand-written code, pinned. The generator's grammar has no SR-getter shape.
+- A3-9 takes an index as non-negative. A negative index from a frame address reaches below the declared base; the engine's own pointer arithmetic assumes the same.
+- A3-9's text for two scalar locals is two scalars (no array); only the fold is gone. An engine change to merge them into an array would be patch 0036.
+- The evaluator reads a call as unknown and stack locals as memory after a call: it cannot tell a call that writes a local from one that does not.
+- The generator's pointer rule follows register numbers, not values: a callee that moves its r4 into r6 for a callee of its own which dereferences r6 is not seen (not found in 9,000 seeds).
+- Not run under the sanitizers: `Sh2DecodeTests`, `SlaFreshness`.
+
+## Areas 2 and 3, integration
+
+Fixer, branch `review/2-3-integration`, from the merge `c358822` of `review/2-round3-fix` (patches 0033, 0034; the printed-C oracle and the
+wide opcode alphabet) and `review/3-round3-fix` (the lent effects that kill, rule (a)/(b), `NoteFrameEscape`, patch 0030; the conventions
+grammar). Two branches built in parallel from different bases; the merge compiled and passed its own halves but not each other's tests. A
+second merge, `review/3-4-round4-fix` (areas 3/4 round 4), was brought in after the fixes below and merged without a source conflict (the
+two docs by `merge_docs.py`). No patch, no ledger row changed disposition; no engine file touched. The host change is in `Sh2Decompiler.cpp`
+only (below).
+
+### What interacted
+
+1. **The wide alphabet changes the registers the conventions grammar thought only it changed.** `mul.l`, `muls.w`, `mulu.w`, `dmuls.l`,
+   `dmulu.l`, `clrmac`, `lds mach/macl`, `ldc gbr/vbr` change MACH, MACL, GBR or VBR for good, and the self-check
+   (`generator:state-saved`, `generator:callee-saved`) compares those at the return with `Func::clobbers`, which only the conventions items
+   filled in: 288 failing seeds of 3,000 (grammar 2), `state-saved` 281 + 49 findings. And the `@(disp,GBR)` items read GBR on purpose,
+   which `Func::reads` did not say: `kept-read:gbr` (9 findings): a premise of check 12 (the generator's functions read GBR only on purpose),
+   not a decompiler fault. `RunFunction` set GBR to one scratch address for every mode, which the area 3 checks (a function that loads it with
+   what it already was) cannot tell from a change.
+2. **`Write_SR/GBR/VBR` keep the read of what an `ldc` loads from.** Before, the engine dropped an `ldc` nothing read, and its source with it. Now
+   the source is an input, and rule (a) (inputs outside r4-r7 withhold) sees it:
+   - `rts ; ldc r1,gbr` (the ledger's A3-3 b) is a callee that reads r1, an input no signature passes: it is withheld (correctly, A3-5), and so is
+     its caller. The fixture expected it lent with GBR killed because the engine used to drop the read.
+   - Every function that saves GBR or SR and puts it back, or changes some of SR's bits and keeps the rest, reads the register on entry: 5 more
+     withheld by "reads sr on entry" and 3 more by "reads gbr on entry" on image 007 than for area 3 alone, and `A2-13 critical section` (the
+     compiler's interrupt-mask idiom) from two parameters to withheld.
+
+### What changed
+
+- **Generator** (`Sh2GeneratedTests.cpp`): `StateWritten`/`StateRead` say which state registers an op of `kRegOps` changes and reads; `MakeWideAlu` and the
+  GBR memory items add them to `wideClobbers`/`wideReads`, which `MakeFunc` ORs into `Func::clobbers`, `effClobbers` and `reads` (so a caller that
+  calls such a function observes the change, check 12's premise holds, and replay lines carry the masks). GBR starts at `kScratchGbr + 0x20 * mode`:
+  scratch memory for the GBR accesses, a value of its own per mode for checks 10 and 12. A new exemption in the dropped-access check: a call to an
+  unlent function that changes r8-r14, GBR or VBR leaves them kept in the engine's model, so a branch on such a register is folded and the code it
+  guards can be removed as unreachable (seed 301832 of the 300001 window: a conventions callee withheld for a r1 read changes r12, the caller
+  branches on its restored r12). That is A3-3's limit for an unlent callee, not a flow finding; counted as `dropped.after-unlent-changer` (12 in
+  6,000 seeds).
+- **Host** (`Sh2Decompiler.cpp`, `WithholdReason` only; `ReturnCheck`, `PseudoEval` untouched, so the round 4 merge is textual): `EntryStateUse` follows the
+  entry value of SR, GBR or VBR through copies, phis and any operation; it is machine state, not an input, when every path ends in a `Write_<REG>` of
+  the same register (GBR saved and restored; SR read-modify-write), or, for SR only, is returned or stored as the whole value or the whole with bits set
+  (`or` with a constant: the critical section returns `in_sr | 0xf0`). A branch, a compare, a load address, a call argument, or a field of it (`and`)
+  returned or stored makes it an input. The same test is applied to what a call left in SR/GBR/VBR (`Write_SR(extraout_sr & 0xf0 | ...)`, the mask
+  raised round a call), which the "register read after a call" rule would otherwise withhold. The old test looked only at the direct uses of the
+  input and let any copy through, so a function that copies SR and tests its S bit (`uVar8 = in_sr; ... (uVar8 >> 1 & 1)`, the saturating
+  multiply-accumulate at `0602671C` and `060663BC`) was lent with a hidden input; it is withheld now.
+- **Tests** (`Sh2DecompilerTests.cpp`): the GBR-from-r1 fixture pins the callee and caller withheld, the oracle not asked (the text is the model's, as for
+  any unlent callee that changes a register it keeps); new fixtures for GBR/VBR set and restored (lent, GBR preserved), GBR advanced (lent, killed),
+  GBR returned or used as an address (withheld), SR raised and returned with no write (withheld), SR restored and its T or a field returned (withheld),
+  and the mask raised after a call that sets T (lent).
+
+### Decisions
+
+- The ledger's A3-3 b fixture is no longer a case the fix can reach: the callee is withheld, the caller is withheld, and the caller's text keeps GBR as
+  the model has it (`return param_1;`, the run returns r1). Nothing incomplete is lent, which is the rule; the text of a caller of an unlent callee is
+  the model's, a limit already pinned for r8 and by A3-6. The same load from a parameter (`ldc r5,gbr`) is lent with GBR killed (the loop above it).
+  Carrying the callee's effects while withholding its signature was not done.
+- The critical section is lent returning `in_sr | 0xf0`: r0 holds the raised mask on exit, and the engine keeps it as the return. The rule lends it because
+  every use of the entry SR is a write back or the whole with bits set; `stc sr,r0 ; or #0xF0,r0 ; rts` with no write is withheld, and so is anything
+  that returns a field of SR (`and #3`).
+
+### Mutation
+
+Each change reverted alone, `Sh2DecompilerTests` rebuilt (the generator for its two rows):
+
+| Reverted | Fails |
+|---|---|
+| `Write_SR` not counted as a write back | 6 checks: the critical section, the mask after a call, GBR/VBR restored, GBR advanced |
+| GBR and VBR not treated as write-back registers | 4 (GBR, VBR restore; GBR advanced) |
+| an `and` result may be returned or stored | 2 (T returned after a restore, field returned) |
+| an `or` with a constant is a field | 1 (the critical section) |
+| a transformed SR need not reach a write | 1 (SR raised and returned) |
+| the call's SR/GBR/VBR exemption removed | 1 (the mask after a call) |
+| rule (a) off (the input scan skipped) | 26 incl. the new GBR-from-r1 callee |
+| `ReturnCheck` without the `Write_*` condition (area 2's host line) | 20 |
+| generator: wide state clobbers not registered | 24 of 300 seeds, 242 findings `state-saved` |
+| generator: GBR items not marked as reads | 9 of 3,000 seeds, `kept-read:gbr` |
+| generator: the unlent-changer exemption removed | seed 301832, 1 finding in the 300001 window |
+
+### Matrix
+
+Combined tree (this branch with `review/3-4-round4-fix` merged), RelWithDebInfo, gcc:
+
+- Whole `ctest`: 97 of 97.
+- Generator, grammar 2, 3,000 seeds: 0 failing, 0 findings (lent 4,475 of 5,941 functions: the GBR memory items withhold 976 as inputs, so area 3's
+  checks see fewer lent functions than their 5,809: input candidates 341 against 425, check 12 260 against 292). Grammar 1, 1,000 seeds: 0.
+  Window `SE_GENERATED_FIRST=300001 SE_GENERATED_SEEDS=6000`: 0 findings after the exemption above (one, seed 301832, before).
+- Printed-C: default run in `ctest`; `SE_GENERATED_SEEDS=3000`: 3,017 functions, 0 findings (2,410 compared, 270 `void-return`, 268 skipped calls).
+- Corpus, standalone, both images: every ledger count 0, 16 and 20 missing and said, 839 and 1,554 functions ok.
+- Lending (`SE_GAME_LEND=1`): 007 610 lent (area 3 alone, built here for the comparison: 611), 008 1,006 (1,007); area 3 reported 612 and 1,008 from
+  its own base. Against area 3 alone the lent set differs by one function per image, and the cascade through it: `0602671C` / `060663BC` (the S-bit
+  reader above, withheld "reads sr on entry"; its two callers `060266E8`, `06026708` / `06066388`, `060663A8` were withheld "a return not to its caller"
+  and are now withheld on the callee) and `06003800` (withheld both ways; the `Write_SR` makes the flow take `06003840` in as its own code). Before
+  `EntryStateUse` was applied to GBR, VBR and what a call left (SR only, direct uses), 600 and 989 were lent: 11 and 18 lost to the `Write_*` reads
+  (SR and GBR read on entry, `uses sr after calling`, and their callers); the ones read are the mask or restore idiom and are lent again. Every
+  function that changed signature was read.
+- gcc Debug, ASan + UBSan, `detect_leaks=1`: `Sh2DecompilerTests` (all), `Sh2GeneratedTests` 150 seeds and the printed-C run exit 0; the only reports are
+  `address.hh:605` and `slghpatexpress.cc:979`. Not run under the sanitizers this round: the other five suites of the CI list.
+
+### Not done
+
+- A callee withheld for a hidden input does not lend the effects it proved; its caller's text keeps the model's registers (above).
+- `ldc.l @Rm+,gbr/vbr/sr` forms and the `rte` restore are exercised by the generator's alphabet only through `ldc Rm,...`.
+- The generator's lent coverage fell (GBR items withhold their functions); a grammar draw that keeps GBR accesses to non-convention modules would
+  restore area 3's counts if they are wanted.

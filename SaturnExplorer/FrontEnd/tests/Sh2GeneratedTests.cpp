@@ -277,6 +277,31 @@ const OpDef kRegOps[] = {
     { "mov", 0xE000, 'A', 4 },
 };
 const size_t kRegOpCount = sizeof kRegOps / sizeof kRegOps[0];
+
+// The state registers an op of the table changes for good, and reads, as Func::clobbers / Func::reads bits (17 gbr, 18 vbr,
+// 19 mach, 20 macl). The multiplies write MACL (the double-length ones MACH too), lds / ldc load MACH, MACL, GBR and VBR from
+// a general register, clrmac clears both; stc and sts (in the grammars that let them in) read them. A function that
+// contains one of these changes (or reads) the register as surely as one the conventions grammar made to: the self-checks
+// and the checks that ask what a callee changes must be told (the merge of area 2's alphabet and area 3's conventions).
+uint32_t StateWritten(const OpDef& op)
+{
+    static const struct { const char* name; uint32_t bits; } kWrites[] = {
+        { "mul.l", 1u << 20 },  { "muls.w", 1u << 20 }, { "mulu.w", 1u << 20 }, { "dmuls.l", 3u << 19 }, { "dmulu.l", 3u << 19 },
+        { "lds mach", 1u << 19 }, { "lds macl", 1u << 20 }, { "clrmac", 3u << 19 }, { "ldc gbr", 1u << 17 }, { "ldc vbr", 1u << 18 },
+    };
+    for (const auto& w : kWrites)
+        if (std::strcmp(op.name, w.name) == 0) return w.bits;
+    return 0;
+}
+uint32_t StateRead(const OpDef& op)
+{
+    static const struct { const char* name; uint32_t bits; } kReads[] = {
+        { "stc gbr", 1u << 17 }, { "stc vbr", 1u << 18 }, { "sts mach", 1u << 19 }, { "sts macl", 1u << 20 },
+    };
+    for (const auto& r : kReads)
+        if (std::strcmp(op.name, r.name) == 0) return r.bits;
+    return 0;
+}
 bool gNarrowAlphabet = false;   // SE_GENERATED_ALPHABET=narrow: only the original eleven ALU ops
 bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in the first two grammars too (ledger A2-16, A3-5)
 
@@ -394,6 +419,10 @@ struct Gen
     // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
     // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
     Rng wideRng;
+    // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
+    // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
+    uint32_t wideClobbers = 0;
+    uint32_t wideReads = 0;
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -547,6 +576,8 @@ struct Gen
             op = cand;
         }
         if (!op) return false;
+        wideClobbers |= StateWritten(*op);
+        wideReads |= StateRead(*op);
         switch (op->form)
         {
         case 'M': it.words = { uint16_t(op->base | n << 8 | m << 4) }; break;
@@ -653,7 +684,11 @@ struct Gen
     {
         Item it;
         it.type = Item::Mem;
-        if (wideRng.Chance(10) && MakeGbrMem(single, it)) return it;
+        if (wideRng.Chance(10) && MakeGbrMem(single, it))
+        {
+            wideReads |= 1u << 17;   // the address of each of them is GBR's value, read on purpose
+            return it;
+        }
         int base = 4 + static_cast<int>(rng.Below(4));
         bool write = rng.Chance(45);
         if (disc)
@@ -954,6 +989,37 @@ struct Gen
         }
     }
 
+    // The registers r4-r7 (bits 4-7) that code uses as the base of a memory access, a poll or a table's index: the ones a
+    // caller must pass a pointer in.
+    static uint32_t UsedAsPointer(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        for (const Item& it : items)
+        {
+            if ((it.type == Item::Mem && !it.stack && it.base >= 4 && it.base < 8) || (it.type == Item::Poll && it.reg >= 4 && it.reg < 8))
+                m |= 1u << (it.type == Item::Mem ? it.base : it.reg);
+            m |= UsedAsPointer(it.slot) | UsedAsPointer(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= UsedAsPointer(c);
+        }
+        return m;
+    }
+    // ...by function 'fi' or anything it calls, jumps to or runs on into (A4-9: a constant passed to a callee that stores
+    // through it ends the run at an address nothing is mapped at).
+    static uint32_t PointerArgs(int fi, const std::vector<Func>& fns, std::set<int>& seen)
+    {
+        if (fi < 0 || fi >= static_cast<int>(fns.size()) || !seen.insert(fi).second) return 0;
+        const Func& f = fns[fi];
+        uint32_t m = UsedAsPointer(f.items) | UsedAsPointer(f.pathA) | UsedAsPointer(f.pathB) | UsedAsPointer(f.tail);
+        std::vector<int> callees;
+        CalleesOf(f.items, callees);
+        CalleesOf(f.pathA, callees);
+        CalleesOf(f.pathB, callees);
+        for (int c : callees) m |= PointerArgs(c, fns, seen);
+        if (f.end == Func::TailJump) m |= PointerArgs(f.tailTo, fns, seen);
+        if (f.end == Func::Fall) m |= PointerArgs(fi + 1, fns, seen);
+        return m;
+    }
+
     // A call: arguments in r4-r7 (some set in the delay slot), bsr or jsr through a literal, the
     // arguments kept in callee-saved registers restored after it.
     Item MakeCall(int callee, const std::vector<Func>& fns)
@@ -1000,6 +1066,26 @@ struct Gen
             args.pop_back();
         }
         it.setup = args;
+        // The generator's own contract (A4-9): an argument is never a code address or a constant that the callee (or what it
+        // calls) stores or loads through. The jsr's target register is loaded first, so an argument copied from it is the
+        // callee's address (seed 301364: written through, it overwrote the caller's next literal); a small constant is no
+        // address at all (seed 305201). Both are replaced by the caller's own copy of the argument register it was entered
+        // with, a pointer into scratch memory, without a draw: no other program of a seed changes.
+        std::set<int> seen;
+        const uint32_t derefs = PointerArgs(callee, fns, seen);
+        auto safeArg = [&](uint16_t w) {
+            const int dst = (w >> 8) & 0xF;
+            return saves.empty() ? w : uint16_t(0x6003 | dst << 8 | saves[0].second << 4);   // mov Rsaved,Rdst
+        };
+        auto fixArgs = [&](std::vector<uint16_t>& words, int jsrReg) {
+            for (uint16_t& w : words)
+            {
+                const int dst = (w >> 8) & 0xF;
+                const bool constant = (w & 0xF000) == 0xE000 && dst >= 4 && dst < 8 && ((derefs >> dst) & 1u);
+                const bool target = jsrReg >= 0 && (w & 0xF00F) == 0x6003 && static_cast<int>((w >> 4) & 0xF) == jsrReg;
+                if (constant || target) w = safeArg(w);
+            }
+        };
         if (it.viaJsr)
         {
             it.jsrReg = 1 + static_cast<int>(rng.Below(3));
@@ -1009,6 +1095,8 @@ struct Gen
             it.fnLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
         }
+        fixArgs(it.setup, it.viaJsr ? it.jsrReg : -1);
+        fixArgs(it.slotWords, it.viaJsr ? it.jsrReg : -1);
         for (const std::pair<int, int>& s : saves) it.after.push_back(uint16_t(0x6003 | s.first << 8 | s.second << 4));
         // A callee that leaves a register changed (a convention of its own): read right after the call, into
         // a scratch register, which later items may use or return. A caller that took the register to be
@@ -1098,6 +1186,7 @@ struct Gen
     {
         Func f;
         f.v2 = true;
+        wideClobbers = wideReads = 0;
         f.end = static_cast<Func::End>(ends[idx]);
         const bool falls = f.end == Func::Fall;
         if (f.end == Func::TailJump) f.tailTo = idx + 1 + static_cast<int>(rng.Below(static_cast<uint32_t>(nFn - idx - 1)));
@@ -1346,6 +1435,11 @@ struct Gen
             f.tailLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
         }
+        // What the wide alphabet made it do to the state registers (see StateWritten): it changes them for good
+        // like a convention of the grammar's, and so do the functions that call or run on into it.
+        f.clobbers |= wideClobbers;
+        f.effClobbers |= wideClobbers;
+        f.reads |= wideReads;
         disc = false;
         return f;
     }
@@ -2648,7 +2742,10 @@ public:
         // GBR, VBR, MACH and MACL start at values of their own too (distinct per register and per mode), so a
         // function that sets one to zero, or to what it already was, shows.
         for (int n = 0; n < 4; ++n) out.initState[n] = (0x0A000000u + 0x01000000u * n) | uint32_t(rs.mode + 1) << 8 | 0x5Au;
-        out.initState[0] = kScratchGbr;   // GBR on entry is the base of the @(disp,GBR) and @(r0,GBR) accesses (merge of the area 2 and area 3 grammars)
+        // ...but GBR is also the base of the @(disp,GBR) and @(r0,GBR) accesses (area 2's alphabet), so it points into scratch RAM,
+        // at an address of its own per mode: distinct as the others are (a function that loads it with what it already was shows),
+        // aligned, and clear of the other scratch areas.
+        out.initState[0] = kScratchGbr + 0x20u * uint32_t(rs.mode & 7);
         if (rs.perturbReg >= 0 && rs.perturbReg < 16)
         {
             out.init[rs.perturbReg] = rs.perturbValue;
@@ -2924,6 +3021,21 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
     (void)fi;
 }
 
+// Whether the function calls one that changes r8-r14, GBR or VBR for good (Func::effClobbers) and was lent no signature:
+// the engine's model keeps those registers across every call it knows nothing about.
+bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototype>& lent, const DecompileResult& r)
+{
+    constexpr uint32_t kKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);
+    for (uint32_t c : r.calledAt)
+    {
+        const int i = subject.FnAtEntry(c & ~0x20000000u);
+        if (i < 0 || !(subject.fns[i].clobbers & kKept)) continue;
+        const auto l = lent.find(c);
+        if (l == lent.end() || !l->second.known) return true;
+    }
+    return false;
+}
+
 // One decompilation of function 'fi', checked against its runs. 'lent' holds the prototypes of the
 // functions already decompiled (the later ones), 'results' their results.
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
@@ -3066,6 +3178,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             }
             if (exempt) continue;
             if (SaidMissing(r, insn)) continue;
+            // A call to a function that was not lent a signature leaves r8-r14, GBR and VBR as the calling convention has
+            // them, kept, however much its code changes them (the model's, and A3-3's limit for a callee not decompiled
+            // first): a branch on a register such a callee changed is folded as if it kept it, and the code it guards can
+            // be removed as unreachable. The conventions grammar makes such callees, and the wide alphabet's ldc / lds make
+            // more of them (seed 301832). Not a finding of the flow; counted.
+            if (CallsUnlentChanger(subject, lent, r))
+            {
+                count("dropped.after-unlent-changer");
+                continue;
+            }
 
             std::string provenance;
             for (const std::string& f : from) provenance += (provenance.empty() ? "" : "+") + f;
@@ -3383,7 +3505,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 for (const RunOut& base : runs)
                 {
                     if (!base.finished || !((base.use.readFirst >> k) & 1u) || matters) continue;
-                    for (uint32_t value : { base.init[k] + 0x200u, 0u })
+                    // +0x200 and 0, and (A3-12) each of the other argument registers' values: the registers start at
+                    // four distinct pointers, so without it a compare of two of them (`cmp/eq r6,r7`) always has the same answer
+                    // and a function that decides on it reads as insensitive to both.
+                    std::vector<uint32_t> values = { base.init[k] + 0x200u, 0u };
+                    for (int j = 4; j < 8; ++j)
+                        if (j != k && base.init[j] != base.init[k]) values.push_back(base.init[j]);
+                    for (uint32_t value : values)
                     {
                         RunSpec rs;
                         rs.mode = base.mode;
