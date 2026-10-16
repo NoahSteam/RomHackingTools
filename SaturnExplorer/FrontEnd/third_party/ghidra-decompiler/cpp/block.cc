@@ -15,6 +15,7 @@
  * limitations under the License.
  *
  * Modified for SaturnExplorer: the blocks of a collapsed set change owner only after every allocation of the move has succeeded, and a block under construction is owned until it is attached (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: a block that cannot be added is freed (newBlock and newBlockBasic, as the other newBlock* functions), and so is a virtual root that cannot be made or used (the dominator calculation) (patches/0032-allocation-failure-order-2.patch).
  */
 #include "block.hh"
 #include "funcdata.hh"
@@ -1010,8 +1011,18 @@ FlowBlock *BlockGraph::createVirtualRoot(const vector<FlowBlock *> &rootlist)
 
 {
   FlowBlock *newroot = new FlowBlock();
-  for(int4 i=0;i<rootlist.size();++i)
-    rootlist[i]->addInEdge(newroot,0);
+  try {
+    for(int4 i=0;i<rootlist.size();++i)
+      rootlist[i]->addInEdge(newroot,0);
+  } catch(...) {
+    // SaturnExplorer: the caller frees the root, which it never gets. Its edges are taken off the entry
+    // points first, as the caller does when it is done with the root (a half-made edge, if the failure
+    // came between its two halves, is not followed while the graph is torn down).
+    while(newroot->sizeOut() > 0)
+      newroot->removeOutEdge(newroot->sizeOut()-1);
+    delete newroot;
+    throw;
+  }
   return newroot;
 }
 
@@ -1672,8 +1683,10 @@ FlowBlock *BlockGraph::getStartBlock(void) const
 FlowBlock *BlockGraph::newBlock(void)
 
 {
-  FlowBlock *ret = new FlowBlock();
+  unique_ptr<FlowBlock> uret( new FlowBlock() );	// SaturnExplorer: owned until attached
+  FlowBlock *ret = uret.get();
   addBlock(ret);
+  uret.release();
   return ret;
 }
 
@@ -1683,8 +1696,10 @@ FlowBlock *BlockGraph::newBlock(void)
 BlockBasic *BlockGraph::newBlockBasic(Funcdata *fd)
 
 {
-  BlockBasic *ret = new BlockBasic(fd);
+  unique_ptr<BlockBasic> uret( new BlockBasic(fd) );	// SaturnExplorer: owned until attached
+  BlockBasic *ret = uret.get();
   addBlock(ret);
+  uret.release();
   return ret;
 }
 
@@ -2008,7 +2023,15 @@ void BlockGraph::calcForwardDominator(const vector<FlowBlock *> &rootlist)
   }
   if (rootlist.size() > 1) {
     virtualroot = createVirtualRoot(rootlist);
-    postorder.push_back(virtualroot);
+    try {
+      postorder.push_back(virtualroot);
+    } catch(...) {
+      // SaturnExplorer: the root is ours until the end of this function, which frees it
+      while(virtualroot->sizeOut() > 0)
+	virtualroot->removeOutEdge(virtualroot->sizeOut()-1);
+      delete virtualroot;
+      throw;
+    }
   }
   else
     virtualroot = (FlowBlock *)0;
@@ -2018,7 +2041,14 @@ void BlockGraph::calcForwardDominator(const vector<FlowBlock *> &rootlist)
     if ((rootlist.size() != 1)||(rootlist[0] != b))
       throw LowlevelError("Problems finding root node of graph");
     virtualroot = createVirtualRoot(rootlist); // Create virtual root with no in edges
-    postorder.push_back(virtualroot);
+    try {
+      postorder.push_back(virtualroot);
+    } catch(...) {
+      while(virtualroot->sizeOut() > 0)	// SaturnExplorer: as above
+	virtualroot->removeOutEdge(virtualroot->sizeOut()-1);
+      delete virtualroot;
+      throw;
+    }
     b = virtualroot;
   }
   b->immed_dom = b;

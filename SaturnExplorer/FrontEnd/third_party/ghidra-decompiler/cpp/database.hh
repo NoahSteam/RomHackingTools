@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a ScopeInternal keeps a Symbol it could not put back in its name tree (patches/0032-allocation-failure-order-2.patch).
  */
 /// \file database.hh
 /// \brief Symbol and Scope objects for the decompiler
@@ -882,6 +884,7 @@ protected:
   vector<vector<Symbol *> > category;		///< References to Symbol objects organized by category
   list<DynamicEntry *> dynamicentry;		///< Dynamic symbol entries
   SymbolNameTree multiEntrySet;			///< Set of symbols with multiple entries
+  vector<Symbol *> limbo;			///< Symbols taken out of \b nametree that could not be put back (freed by the destructor)
   uint8 nextUniqueId;				///< Next available symbol id
 public:
   ScopeInternal(uint8 id,const string &nm,Architecture *g);	///< Construct the Scope

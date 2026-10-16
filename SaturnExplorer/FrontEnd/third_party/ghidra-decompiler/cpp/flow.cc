@@ -15,6 +15,7 @@
  *
  * Modified for SaturnExplorer: host cancellation check-points (patches/0001-cancel-flag.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
+ * Modified for SaturnExplorer: a call site the function cannot list is freed (patches/0032-allocation-failure-order-2.patch).
  */
 #include "flow.hh"
 
@@ -722,7 +723,12 @@ bool FlowInfo::setupCallSpecs(PcodeOp *op,FuncCallSpecs *fc)
 {
   FuncCallSpecs *res;
   res = new FuncCallSpecs(op);
-  qlst.push_back(res);
+  try {
+    qlst.push_back(res);
+  } catch(...) {
+    delete res;		// SaturnExplorer: the list owns a call site only once it holds it
+    throw;
+  }
   data.opSetInput(op,data.newVarnodeCallSpecs(res),0);
 
   data.getOverride().applyPrototype(data,*res);
@@ -746,7 +752,12 @@ bool FlowInfo::setupCallindSpecs(PcodeOp *op,FuncCallSpecs *fc)
 {
   FuncCallSpecs *res;
   res = new FuncCallSpecs(op);
-  qlst.push_back(res);
+  try {
+    qlst.push_back(res);
+  } catch(...) {
+    delete res;		// SaturnExplorer: the list owns a call site only once it holds it
+    throw;
+  }
 
   data.getOverride().applyIndirect(data,*res);
   if (fc != (FuncCallSpecs *)0 && fc->getEntryAddress() == res->getEntryAddress())

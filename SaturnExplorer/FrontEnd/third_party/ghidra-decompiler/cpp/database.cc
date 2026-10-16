@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a Symbol the name tree cannot take back is kept, and a Symbol or map entry that a failed insertion leaves unowned is freed, and so is a Scope the parent cannot take (patches/0032-allocation-failure-order-2.patch).
  */
 #include "database.hh"
 #include "funcdata.hh"
@@ -1668,10 +1670,17 @@ MapEntry *Scope::addMapPoint(Symbol *sym,const Address &addr,const Address &usep
 
 {
   MapEntry *entry = new MapEntry(sym);
-  entry->addr = addr;
-  if (!usepoint.isInvalid())	// Restrict maps use if necessary
-    entry->uselimit.insertRange(usepoint.getSpace(),usepoint.getOffset(),usepoint.getOffset());
-  addMap(entry);
+  try {
+    entry->addr = addr;
+    if (!usepoint.isInvalid())	// Restrict maps use if necessary
+      entry->uselimit.insertRange(usepoint.getSpace(),usepoint.getOffset(),usepoint.getOffset());
+    addMap(entry);
+  } catch(...) {
+    // SaturnExplorer: a Symbol owns its entries once it lists them; before that the entry is ours
+    if (std::find(sym->mapentry.begin(),sym->mapentry.end(),(SymbolEntry *)entry) == sym->mapentry.end())
+      delete entry;
+    throw;
+  }
   return entry;
 }
 
@@ -1895,7 +1904,14 @@ SymbolEntry *Scope::addSymbolWithConflict(const string &nm,Datatype *ct,Varnode 
   Symbol *sym = new Symbol(owner,nm,ct);
   addSymbolInternal(sym);
   MapEntryConflict *entry = new MapEntryConflict(sym,vn);
-  addMap(entry);
+  try {
+    addMap(entry);
+  } catch(...) {
+    // SaturnExplorer: as in addMapPoint
+    if (std::find(sym->mapentry.begin(),sym->mapentry.end(),(SymbolEntry *)entry) == sym->mapentry.end())
+      delete entry;
+    throw;
+  }
   return entry;
 }
 
@@ -1992,6 +2008,13 @@ void ScopeInternal::addSymbolInternal(Symbol *sym)
   } catch(LowlevelError &err) {
     delete sym;			// Symbol must be deleted to avoid orphaning its memory
     throw err;
+  } catch(...) {
+    // SaturnExplorer: an allocation failure. The name tree owns the Symbol once it holds it (the category
+    // lists only index it), and the caller has handed it over, so one that is not in the tree is freed here.
+    SymbolNameTree::iterator iter = nametree.find(sym);
+    if (iter == nametree.end() || *iter != sym)
+      delete sym;
+    throw;
   }
 }
 
@@ -2121,6 +2144,8 @@ ScopeInternal::~ScopeInternal(void)
 
   for(iter2=nametree.begin();iter2!=nametree.end();++iter2)
     delete *iter2;
+  for(int4 i=0;i<limbo.size();++i)	// SaturnExplorer: see renameSymbol
+    delete limbo[i];
 }
 
 void ScopeInternal::clear(void)
@@ -2303,13 +2328,26 @@ void ScopeInternal::removeSymbol(Symbol *symbol)
 void ScopeInternal::renameSymbol(Symbol *sym,const string &newname)
 
 {
+  // SaturnExplorer: the name tree owns its Symbols. A Symbol erased from it and not put back under the new
+  // name (the insertion allocates) would be freed by nobody, and its map entries would go with it. Everything
+  // that allocates but the insertion is done before the Symbol leaves the tree, and the Symbol is kept in
+  // \b limbo, whose room is reserved first, if the insertion fails.
+  limbo.reserve(limbo.size()+1);
+  string newName(newname);
+  string newDisplay(newname);
   nametree.erase(sym);		// Erase under old name
   if (sym->wholeCount > 1)
     multiEntrySet.erase(sym);	// The multi-entry set is sorted by name, remove
-  string oldname = sym->name;
-  sym->name = newname;
-  sym->displayName = newname;
-  insertNameTree(sym);
+  sym->name.swap(newName);
+  sym->displayName.swap(newDisplay);
+  try {
+    insertNameTree(sym);
+  } catch(...) {
+    SymbolNameTree::iterator iter = nametree.find(sym);
+    if (iter == nametree.end() || *iter != sym)
+      limbo.push_back(sym);
+    throw;
+  }
   if (sym->wholeCount > 1)
     multiEntrySet.insert(sym);	// Reenter into the multi-entry set now that name is changed
 }
@@ -3149,7 +3187,15 @@ void Database::attachScope(Scope *newscope,Scope *parent)
   res = idmap.insert(value);
   if (res.second==false)
     throw RecovError("Duplicate scope id: " + newscope->getFullName());
-  parent->attachScope(owner.release());
+  // SaturnExplorer: the Scope is the parent's only once its map holds it. Releasing it before the call
+  // leaked it, and left a pointer to nothing in idmap, when the map's node could not be allocated.
+  try {
+    parent->attachScope(owner.get());
+  } catch(...) {
+    idmap.erase(res.first);
+    throw;
+  }
+  owner.release();
 }
 
 /// Give \b this database the chance to inform existing scopes of any change to the

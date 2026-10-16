@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: the VarnodeBank keeps a Varnode it could not put back in its lists (patches/0032-allocation-failure-order-2.patch).
  */
 /// \file varnode.hh
 /// \brief The Varnode and VarnodeBank classes
@@ -371,8 +373,10 @@ class VarnodeBank {
   uint4 create_index;		///< Number of varnodes created
   VarnodeLocSet loc_tree;	///< Varnodes sorted by location then def
   VarnodeDefSet def_tree;	///< Varnodes sorted by def then location
+  vector<Varnode *> limbo;	///< Varnodes taken out of the sorted lists that could not be put back (freed by clear)
   mutable Varnode searchvn;	///< Template varnode for searching trees
   Varnode *xref(Varnode *vn);	///< Insert a Varnode into the sorted lists
+  void keepOrphan(Varnode *vn);	///< Keep a Varnode that is in neither sorted list, so that it is freed
 public:
   VarnodeBank(AddrSpaceManager *m);				///< Construct the container
   void clear(void);						///< Clear out all Varnodes and reset counters

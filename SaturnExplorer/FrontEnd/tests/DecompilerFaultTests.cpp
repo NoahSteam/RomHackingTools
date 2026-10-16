@@ -14,6 +14,8 @@
 //             flag), and from a second thread every millisecond across the run. The outcome must be
 //             the one the design gives for where the flag went up (see Expected), a cancelled result
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
+//   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so, the engine is then
+//             refused (A6-16)
 //   runner    DecompilerRunner lifecycle: Stop (Cancel), Submit while busy (superseding),
 //             InvalidateSession, budget expiry, DisableLocked recovery and destruction, each with the
 //             worker held at every phase entry of the request. No result for a stale generation or
@@ -29,10 +31,14 @@
 //          the default subset (deterministic, under a minute); SE_FAULT_FULL=1 runs the whole matrix
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --cell <family> <fixture|kind> <k>
 //          one cell, with the failing allocation's stack trace; family is alloc, cancel-enter,
-//          cancel-alloc, cancel-us, cancel-oom or runner (then <kind> is stop, supersede, invalidate, destroy,
-//          budget, disable or memo and <k> a phase-entry ordinal, or "all")
+//          cancel-alloc, cancel-us, cancel-oom, disasm or runner (then <kind> is stop, supersede, invalidate,
+//          destroy, budget, disable or memo and <k> a phase-entry ordinal, or "all")
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --sites <fixture> <phase> <ord> <size>
+//          the allocations of that size in that phase entry, each with its rank and the functions on its stack:
+//          how a pin's coordinates and site are written (SE_FAULT_DEPTH=<n> frames, 5)
 //        environment: SE_FAULT_FULL, SE_FAULT_DENSE (alloc: size of the dense prefix, 3000),
 //          SE_FAULT_JOBS (parallel drivers, 1), SE_FAULT_TIMEOUT (seconds per cell, 120),
+//          SE_FAULT_PHASE=actions,... / SE_FAULT_RANGE=<lo>-<hi> (alloc: every k of those phase entries, or of the range),
 //          SE_FAULT_KEEP=1 (keep the drivers' logs in <scratch>/logs), SE_FAULT_ONLY=alloc,cancel-enter,...
 //          (only the jobs whose label starts with one of these), SE_FAULT_EXIT=static (a damaged engine
 //          leaves through SleighArchitecture::shutdown() and exit() instead of _Exit), SE_FAULT_LEAKS=0 (no
@@ -75,6 +81,8 @@ int main()
 #include <thread>
 
 #if defined(__GLIBC__)
+#include <cxxabi.h>
+#include <dlfcn.h>
 #include <execinfo.h>
 #define SE_FAULT_BACKTRACE 1
 #endif
@@ -161,6 +169,53 @@ std::atomic<bool> gFiredNothrow(false);
 std::atomic<long> gFiredSize(0);
 std::atomic<bool> gTrace(false);
 
+#ifdef SE_FAULT_BACKTRACE
+// ---- where an allocation was made (the identity of a pin, below) ------------------------------------
+//
+// The test executable is linked with -rdynamic (CMakeLists.txt), so dladdr names the engine's functions
+// in a plain build as well as in a sanitizer one. A stack is kept as raw return addresses while the run
+// is going and named afterwards, only for the few allocations a pin asks about.
+const int kFrames = 30;
+struct Stack
+{
+    int n = 0;
+    void* f[kFrames];
+};
+
+// The function names of a stack, innermost first, demangled. A frame with no symbol is left out.
+std::vector<std::string> Names(const Stack& s)
+{
+    std::vector<std::string> v;
+    for (int i = 0; i < s.n; ++i)
+    {
+        Dl_info info;
+        if (!dladdr(static_cast<char*>(s.f[i]) - 1, &info) || !info.dli_sname) continue;   // - 1: the call, not the instruction after it
+        int st = 0;
+        char* d = abi::__cxa_demangle(info.dli_sname, nullptr, nullptr, &st);
+        v.push_back(d && st == 0 ? std::string(d) : std::string(info.dli_sname));
+        std::free(d);
+    }
+    return v;
+}
+
+// A stack captured by the allocator for the allocations a census asked for (never freed: a cell's process is short).
+std::atomic<bool> gCensus(false);
+const uint8_t* gCensusWant = nullptr;      // [k] != 0: keep the stack of allocation k
+long gCensusWantN = 0;
+Stack* gCensusStack = nullptr;
+long* gCensusK = nullptr;
+long gCensusN = 0;
+const long kCensusCap = 60000;
+
+__attribute__((noinline)) void CensusRecord(long i)
+{
+    if (gCensusN >= kCensusCap) return;
+    Stack& s = gCensusStack[gCensusN];
+    s.n = backtrace(s.f, kFrames);
+    gCensusK[gCensusN++] = i;
+}
+#endif
+
 void Trace()
 {
     // A short trace of the allocation that was failed, for the findings. Printed only when asked for
@@ -172,9 +227,9 @@ void Trace()
 #elif defined(SE_FAULT_BACKTRACE)
     std::fprintf(stderr, "TRACE of the failed allocation (index %ld, %ld bytes, %s):\n", gFailAt.load(), gFiredSize.load(),
                  gFiredNothrow ? "nothrow" : "throwing");
-    void* frames[40];
-    const int n = backtrace(frames, 40);
-    backtrace_symbols_fd(frames, n, 2);
+    Stack st;
+    st.n = backtrace(st.f, kFrames);
+    for (const std::string& n : Names(st)) std::fprintf(stderr, "    %s\n", n.c_str());
 #endif
 }
 
@@ -214,6 +269,9 @@ void* Allocate(std::size_t size, bool nothrow)
     }
     const long i = gCount.fetch_add(1, std::memory_order_relaxed);
     if (gLogSizes.load(std::memory_order_relaxed) && i < kSizeLogMax && gSizeLog) gSizeLog[i] = uint32_t(size);
+#ifdef SE_FAULT_BACKTRACE
+    if (gCensus.load(std::memory_order_relaxed) && i < gCensusWantN && gCensusWant[i]) CensusRecord(i);
+#endif
     if (i == gCancelAt.load(std::memory_order_relaxed))
     {
         gProbe.setOrdinal = gProbe.enters.load() - 1;
@@ -275,11 +333,15 @@ struct Fix
 };
 
 const uint32_t kMailboxBase = 0x0600A480u;
+const uint32_t kShapesBase = 0x0600B000u;
+const uint32_t kStackBase = 0x0600B100u;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
     { "fixture1", dts::kFixture1Caller, false },   // a call through a literal pool: the second pass names the callee
     { "diamonds", dts::kDiamondsBase, true },      // 150 branches: a long flow and a long action tree
+    { "shapes", kShapesBase, false },              // loops, &&, ||, a do-while, an if/else: variables that merge (A6-11)
+    { "stack", kStackBase, false },                // a stack array: local variables, restructuring, naming (A6-14, A6-15)
 };
 
 const Fix* FindFix(const std::string& name)
@@ -297,6 +359,28 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
                               0x2600, 0x1000, 0x2010, 0x0063 };
     size_t off = kMailboxBase - 0x06000000u;
     for (uint16_t w : code)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `shapes`: if (r4>0 && r5>0), if (r6>=0 || r4>=0), a while loop on r5, a do-while on `dt r6`, an
+    // if/else on r4==r5 and a guarded *r4 = *r4. Joins of distinct variables, so the variable merge
+    // (HighVariable::mergeInternal) runs on a loop and on a join.
+    const uint16_t shapes[] = { 0xE000, 0x4415, 0x8B03, 0x4515, 0x8B01, 0x7001, 0x0009, 0x4611, 0x8901, 0x4411, 0x8B01,
+                                0x7002, 0x0009, 0x4515, 0x8B03, 0x75FF, 0x7003, 0xAFFA, 0x0009, 0x7004, 0x4610, 0x8BFC,
+                                0x3450, 0x8B02, 0x7005, 0xA001, 0x0009, 0x7006, 0x2448, 0x8902, 0x6142, 0x2412, 0x0009,
+                                0x000B, 0x0009 };
+    off = kShapesBase - 0x06000000u;
+    for (uint16_t w : shapes)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `stack`: add #-16,r15 ; mov.l r4,@r15 ; mov.l r5,@(4,r15) ; mov r6,r0 ; mov.l @(r0,r15),r1 ; mov r1,r0 ;
+    // rts ; add #16,r15. A frame with an indexed local: ScopeLocal::restructureVarnode, ActionNameVars.
+    const uint16_t stack[] = { 0x7FF0, 0x2F42, 0x1F51, 0x6063, 0x01FE, 0x6013, 0x000B, 0x7F10 };
+    off = kStackBase - 0x06000000u;
+    for (uint16_t w : stack)
     {
         dts::Put16(hw, off, w);
         off += 2;
@@ -849,22 +933,29 @@ struct AcceptedLeak
 {
     const char* row;
     std::vector<const char*> frames;
+    bool initOnly;   // accepted only for an allocation failure inside the Init phase (A6-15)
 };
+// The phase the failed allocation fell in, for the entries above that are bounded by it (set by the cell
+// before the leak check). A6-7's sites are in Architecture construction and in the host's register loop, both
+// of which run in Init; the engine calls some of the same functions in the Actions (Scope::addSymbol from
+// ScopeLocal::createEntry, ProtoStoreSymbol::setInput, Funcdata::linkSymbol, ScopeInternal::renameSymbol), and
+// a leak there is a different defect that a frame match alone would excuse as the register loop (A6-15).
+bool gFailedInInit = false;
 const std::vector<AcceptedLeak>& AcceptedLeaks()
 {
+    // Round 2 (A6-15) took out what patch 0032 fixed: the host's register loop and the engine's
+    // Scope::addSymbol / addMapPoint (a Symbol or map entry the failed insertion leaves unowned is freed now),
+    // the conflict symbol of ActionNameVars::linkSymbols, and the copy of the action tree (ActionDatabase::
+    // deriveAction: ActionGroup, ActionRestartGroup and ActionPool::clone free what they built). The sweeps of
+    // Init and Teardown (every eighth k of three fixtures) use only the three rows below.
     static const std::vector<AcceptedLeak> v = {
         // A6-7: the Architecture is built, and its spec read, from raw pointers
-        { "A6-7 spec XML", { "ghidra::xml_parse(" } },                          // the XML reader's parse stack (bison values)
-        { "A6-7 spec XML", { "ghidra::xml_tree(" } },
-        { "A6-7 action tree", { "ghidra::ActionDatabase::universalAction(" } },   // the default action tree: raw Action and Rule pointers
-        { "A6-7 action tree", { "ghidra::ActionDatabase::deriveAction(" } },      // its clone for the current action
-        { "A6-7 compiler spec", { "ghidra::Architecture::parseCompilerConfig(" } },   // prototype models decoded from the cspec
-        { "A6-7 compiler spec", { "ghidra::AddrSpaceManager::findAddJoin(" } },
-        { "A6-7 context", { "ghidra::ContextInternal::FreeArray::reset(" } },
-        { "A6-7 host register loop", { "ghidra::Scope::addMapPoint(", "Sh2Decompiler::DecompileInto(" } },   // Scope::addSymbol / addMapPoint
-        { "A6-7 host register loop", { "ghidra::Scope::addSymbol(", "Sh2Decompiler::DecompileInto(" } },
-        // A6-9: a symbol and its map entry made for a conflict, owned by neither until addMap returns
-        { "A6-9 conflict symbol", { "ghidra::Scope::addSymbolWithConflict(", "ghidra::ActionNameVars::linkSymbols(" } },
+        { "A6-7 spec XML", { "ghidra::xml_parse(" }, true },                          // the XML reader's parse stack (bison values)
+        { "A6-7 spec XML", { "ghidra::xml_tree(" }, true },
+        { "A6-7 action tree", { "ghidra::ActionDatabase::universalAction(" }, true },   // the default action tree: raw Action and Rule pointers
+        { "A6-7 compiler spec", { "ghidra::Architecture::parseCompilerConfig(" }, true },   // prototype models decoded from the cspec
+        { "A6-7 compiler spec", { "ghidra::AddrSpaceManager::findAddJoin(" }, true },
+        { "A6-7 context", { "ghidra::ContextInternal::FreeArray::reset(" }, true },
     };
     return v;
 }
@@ -901,6 +992,7 @@ const char* AcceptedRow(const LeakStack& s)
 {
     for (const AcceptedLeak& a : AcceptedLeaks())
     {
+        if (a.initOnly && !gFailedInInit) continue;
         size_t at = 0;
         bool all = true;
         for (const char* f : a.frames)
@@ -1095,6 +1187,10 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
         return last >= 0 && c.base.log.inRef[last];
     }();
 
+#ifdef SE_FAULT_ASAN
+    // Before the first Flow entry of a pass is Architecture construction and the register loop (A6-15).
+    gFailedInInit = std::string(where) == "before the engine" || std::string(where) == "init";
+#endif
     std::string cls;
     Expect(!escaped, "no exception escapes Decompile");
     if (cancelAt >= 0) gProbe.cancelFlag = nullptr;
@@ -1314,6 +1410,130 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
 }
 
 // ================================================================================================
+// Family 3: allocation k of a Disassemble fails
+// ================================================================================================
+
+// A listing of three instructions of fixture1's caller: it builds an Architecture like a decompilation does.
+const int kDisasmCount = 3;
+
+struct DisasmBase
+{
+    std::vector<std::string> lines;
+    long allocs = 0;
+};
+
+std::vector<std::string> DisasmOnce(Ctx& c) { return c.engine->Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount); }
+
+bool MeasureDisasm(Ctx& c, DisasmBase& b)
+{
+    long prev = -1;
+    for (int i = 0; i < 6; ++i)
+    {
+        gProbe.Reset();
+        fa::Arm(-1);
+        const std::vector<std::string> lines = DisasmOnce(c);
+        const long n = fa::gCount.load();
+        fa::Disarm();
+        if (lines.size() != size_t(kDisasmCount))
+        {
+            std::printf("the listing of %d instructions has %zu lines\n", kDisasmCount, lines.size());
+            return false;
+        }
+        if (n == prev)
+        {
+            b.lines = lines;
+            b.allocs = n;
+            std::printf("disassembly: %ld allocations, %zu lines\n", n, lines.size());
+            return true;
+        }
+        prev = n;
+    }
+    std::printf("the allocation count of a disassembly does not settle\n");
+    return false;
+}
+
+// Disassemble never throws and never returns a listing that stops short without saying so (A6-16): a failed
+// allocation ends it with a "<stopped: ..." line, the engine is then refused (Unavailable, and Disassemble
+// refuses), and a failure the library absorbed leaves the listing as it was.
+int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
+{
+    dts::Failures() = 0;
+    gMustNotExit = true;
+    std::atexit(OnExit);
+    gProbe.Reset();
+    bool escaped = false;
+    std::vector<std::string> lines;
+    fa::Arm(k);
+    try
+    {
+        lines = DisasmOnce(c);
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    fa::Disarm();
+#ifdef SE_FAULT_ASAN
+    gFailedInInit = true;   // a listing only builds the Architecture: all of it is what Init is
+#endif
+    const bool fired = fa::gFired.load();
+    Expect(!escaped, "no exception escapes Disassemble");
+    const bool same = lines == b.lines;
+    const bool said = !lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0;
+    std::string cls;
+    if (!fired)
+    {
+        cls = "no-failure";
+        Expect(same, "a listing with no failure injected equals the baseline");
+    }
+    else if (said)
+        cls = "stopped";
+    else
+    {
+        cls = "absorbed";
+        Expect(same, "a failure that does not end the listing leaves it unchanged", lines.empty() ? std::string("(empty)") : lines.back());
+    }
+    const DecompileResult after = RunOnce(c);
+    const std::vector<std::string> again = DisasmOnce(c);
+    const bool damaged = after.status == DecompileStatus::Unavailable;
+    if (said)
+    {
+        Expect(damaged && Has(after.error, "out of memory"), "after a stopped listing the next decompilation is Unavailable (out of memory)",
+               "status " + std::to_string(int(after.status)) + " '" + after.error + "'");
+        Expect(again.size() == 1 && Has(again[0], "unavailable"), "Disassemble refuses on a damaged engine");
+    }
+    else
+    {
+        Expect(after.status == DecompileStatus::Ok && Signature(after) == c.base.sig, "after no failure the next decompilation is correct");
+        Expect(again == b.lines, "after no failure the next listing is correct");
+    }
+    std::printf("CELL disasm %s k=%ld class=%s next=%d\n", c.fix->name, k, cls.c_str(), int(after.status));
+    gMustNotExit = damaged;
+    std::fflush(nullptr);
+    if (!damaged) return dts::Failures() ? kExitInvariant : 0;
+    LeaveDamaged();
+}
+
+std::vector<long> DisasmCells(const DisasmBase& b, bool full)
+{
+    std::set<long> s;
+    const long N = b.allocs;
+    if (full)
+    {
+        for (long k = 0; k < N; ++k) s.insert(k);
+    }
+    else
+    {
+        for (long k = 0; k < 12; ++k) s.insert(k);
+        for (double k = 12; k < double(N); k *= 1.35) s.insert(long(k));
+        for (long d = 0; d < 6; ++d) s.insert(N - 1 - d);
+    }
+    s.insert(N);
+    s.insert(N + 5);
+    return std::vector<long>(s.begin(), s.end());
+}
+
+// ================================================================================================
 // The driver: cells in a list, forked from the warmed engine
 // ================================================================================================
 
@@ -1400,16 +1620,26 @@ std::string CellClass(const std::string& out)
 }
 
 // The allocation sites where the exhaustive sweep found a defect (REVIEW_LEDGER.md, rows A6-1 ..
-// A6-5), in every run of the matrix, the default subset included. A site is named by where it falls
-// in a run and not by its index, which any change to the engine or the host shifts (a merge moved
-// every one of them by more than a thousand): the 'ord'-th entry of 'phase' in the baseline log
-// (counting the reference run's entries too), and in it the 'nth' allocation (from 0) of 'size'
-// bytes. One that no longer resolves is reported STALE and fails, so that it is re-pinned rather
-// than silently dropped. `--cell alloc <fixture> <k>` prints the coordinates of its allocation
-// ("PIN-AT"), which is how a pin is written. The coordinates below are those of the engine as the
-// defects were found; a fix that changes the allocations around a site makes its pin resolve to a
-// neighbour, which is still a cell of the same phase and size (the mutation checks in the Step 5
-// record revert each fix and show these cells fail again).
+// A6-5, A6-10, A6-11, A6-14, A6-15 and the leaks that were fixed), in every run of the matrix, the default
+// subset included. A site is named twice:
+//
+//   where -- the 'ord'-th entry of 'phase' in the baseline log (counting the reference run's entries
+//            too), and in it the 'nth' allocation (from 0) of 'size' bytes. This survives a change
+//            elsewhere in the run, which an allocation index does not (a merge moved every index by
+//            more than a thousand), but not a change in the same phase entry: one more allocation of the
+//            same size before the site moves the coordinates onto its neighbour.
+//   what  -- 'site', the functions on the stack of that allocation, innermost first, separated by ';'
+//            (each a substring of a demangled name; every one must occur, in order). It is how the
+//            driver knows the coordinates still lead to the site the row names. An allocation that does
+//            not match is looked for again among the allocations of the same size in the same phase
+//            entry (the pin "moved", and every match, at most kPinMax of them, becomes a cell); if there
+//            is none the pin is STALE, and that fails the run, so that it is re-pinned instead of
+//            silently pointing at code it was not written for (A6-12: a pin that had slid onto a
+//            neighbour passed with the defect back in).
+//
+// `--cell alloc <fixture> <k>` prints the coordinates of its allocation ("PIN-AT") and its stack, which
+// is how a pin is written. Where there is no backtrace (not glibc) the coordinates alone are used and the
+// run says so. The mutation checks in the Step 5 record revert each fix and show these cells fail again.
 struct Pin
 {
     const char* fixture;
@@ -1417,41 +1647,78 @@ struct Pin
     int ord;
     uint32_t size;
     int nth;
+    const char* site;
     const char* what;
 };
 const Pin kPins[] = {
-    { "mailbox", "print", 0, 48, 22, "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
-    { "mailbox", "print", 0, 40, 77, "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
-    { "mailbox", "print", 1, 48, 20, "A6-1 the same, in the reference run's print" },
-    { "jumptable", "print", 0, 48, 26, "A6-1 the same, on the jumptable fixture" },
-    { "mailbox", "print", 0, 16, 1, "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
-    { "jumptable", "actions", 0, 16, 72, "A6-3 BlockGraph::identifyInternal: list growth fails with blocks half moved (newBlockSwitch)" },
-    { "jumptable", "actions", 0, 32, 59, "A6-3 the same, the growth after it" },
-    { "jumptable", "actions", 0, 16, 138, "A6-3 the same, the next switch block" },
-    { "jumptable", "actions", 1, 16, 72, "A6-3 the same, second pass" },
-    { "mailbox", "print", 0, 513, 0, "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
-    { "mailbox", "print", 0, 1025, 0, "A6-4 the same, one growth later" },
-    { "jumptable", "print", 0, 513, 0, "A6-4 the same, on the jumptable fixture" },
-    { "mailbox", "actions", 0, 513, 0, "A6-5 a warning's stream swallows the failure, status Ok (first pass)" },
-    { "mailbox", "actions", 1, 513, 0, "A6-5 the same in the printing pass: 'WARNING: Removing unreac', status Ok" },
-    { "jumptable", "followFlow", 0, 513, 0, "A6-5 the jump-table message stream swallows the failure, status Ok" },
-    { "jumptable", "followFlow", 1, 513, 0, "A6-5 the same in the second pass" },
+    { "mailbox", "print", 0, 48, 22, "EmitPrettyPrint::setMarkup", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
+    { "mailbox", "print", 0, 40, 77, "EmitPrettyPrint::setMarkup", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
+    { "mailbox", "print", 1, 48, 20, "EmitPrettyPrint::setMarkup", "A6-1 the same, in the reference run's print" },
+    { "jumptable", "print", 0, 48, 26, "EmitPrettyPrint::setMarkup", "A6-1 the same, on the jumptable fixture" },
+    { "mailbox", "print", 0, 16, 1, "EmitMarkup::setPackedOutput", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
+    { "jumptable", "actions", 0, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 BlockGraph::identifyInternal: the room made in the new switch block before any block moves (first switch)" },
+    { "jumptable", "actions", 0, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, the next switch block" },
+    { "jumptable", "actions", 1, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, second pass" },
+    { "jumptable", "actions", 1, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, second pass, next switch block" },
+    { "mailbox", "print", 0, 513, 0, "overflow;PackedEncode::", "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
+    { "mailbox", "print", 0, 1025, 0, "overflow;PackedEncode::", "A6-4 the same, one growth later" },
+    { "jumptable", "print", 0, 513, 0, "overflow;PackedEncode::", "A6-4 the same, on the jumptable fixture" },
+    { "mailbox", "actions", 0, 513, 0, "overflow;Funcdata::removeUnreachableBlocks", "A6-5 a warning's stream swallows the failure, status Ok (first pass)" },
+    { "mailbox", "actions", 1, 513, 0, "overflow;Funcdata::removeUnreachableBlocks", "A6-5 the same in the printing pass: 'WARNING: Removing unreac', status Ok" },
+    { "jumptable", "followFlow", 0, 513, 0, "overflow;FlowInfo::recoverJumpTables", "A6-5 the jump-table message stream swallows the failure, status Ok" },
+    { "jumptable", "followFlow", 1, 513, 0, "overflow;FlowInfo::recoverJumpTables", "A6-5 the same in the second pass" },
     // The leaks fixed on the way (patch 0023), seen under LeakSanitizer (a sanitizer build; in a plain one they are cells that pass):
-    { "mailbox", "init", 0, 56, 0, "A6-7 Architecture::Architecture: the print language is freed when the constructor fails" },
-    { "mailbox", "init", 0, 20, 0, "A6-7 OptionDatabase::registerOption: the option is freed when it cannot be registered" },
-    { "mailbox", "init", 0, 17, 0, "A6-7 OptionDatabase::OptionDatabase: the options registered so far are freed" },
-    { "mailbox", "init", 0, 512, 0, "A6-7 DisassemblyCache::initialize: what it made is freed when it fails" },
-    { "mailbox", "init", 0, 40, 52, "A6-7 TypeFactory::insert: the data-type is freed when it cannot be inserted" },
-    { "mailbox", "followFlow", 0, 24, 0, "A6-8 PcodeOpBank::create: the op is freed when it cannot be listed" },
-    { "mailbox", "followFlow", 0, 24, 95, "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
-    { "jumptable", "followFlow", 0, 24, 140, "A6-8 PcodeOpBank::create (by cloneOp) and markAlive, on the jumptable fixture" },
-    { "mailbox", "followFlow", 0, 40, 0, "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
-    { "mailbox", "followFlow", 0, 40, 2, "A6-8 VarnodeBank::create: the same" },
-    { "mailbox", "actions", 0, 40, 0, "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
-    { "mailbox", "actions", 0, 24, 235, "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
-    { "mailbox", "actions", 1, 24, 236, "A6-9 the same, in the printing pass" },
-    { "mailbox", "actions", 0, 40, 216, "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
-    { "mailbox", "actions", 1, 40, 216, "A6-9 the same, in the printing pass" },
+    { "mailbox", "init", 0, 56, 0, "Architecture::Architecture", "A6-7 Architecture::Architecture: the print language is freed when the constructor fails" },
+    { "mailbox", "init", 0, 20, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase", "A6-7 OptionDatabase::registerOption: the option is freed when it cannot be registered" },
+    { "mailbox", "init", 0, 17, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase", "A6-7 OptionDatabase::OptionDatabase: the options registered so far are freed" },
+    { "mailbox", "init", 0, 512, 0, "ParserContext::initialize;DisassemblyCache::initialize", "A6-7 DisassemblyCache::initialize: what it made is freed when it fails" },
+    { "mailbox", "init", 0, 40, 52, "TypeFactory::insert;TypeFactory::findAdd", "A6-7 TypeFactory::insert: the data-type is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 24, 0, "PcodeOpBank::create;PcodeEmitFd::dump", "A6-8 PcodeOpBank::create: the op is freed when it cannot be listed" },
+    { "mailbox", "followFlow", 0, 24, 72, "PcodeOpBank::markAlive;Funcdata::opInsert", "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
+    { "jumptable", "followFlow", 0, 24, 60, "PcodeOpBank::create;Funcdata::cloneOp", "A6-8 PcodeOpBank::create (by cloneOp), on the jumptable fixture" },
+    { "jumptable", "followFlow", 0, 24, 124, "PcodeOpBank::markAlive;Funcdata::opInsert", "A6-8 PcodeOpBank::markAlive, on the jumptable fixture" },
+    { "mailbox", "followFlow", 0, 40, 0, "VarnodeBank::xref;VarnodeBank::createDef", "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 40, 2, "VarnodeBank::create(;Funcdata::newVarnode", "A6-8 VarnodeBank::create: the same" },
+    { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
+    { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
+    { "mailbox", "actions", 1, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy", "A6-9 the same, in the printing pass" },
+    { "mailbox", "actions", 0, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
+    { "mailbox", "actions", 1, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate", "A6-9 the same, in the printing pass" },
+    // Round 2 (patch 0032): the sweeps of the other fixtures. A6-10 and A6-11 crash without the fix; A6-14 and A6-15 leak, seen under LeakSanitizer.
+    { "fixture1", "actions", 0, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 FuncProto::copy: the other prototype's store is cloned before the old one is freed (ProtoStoreSymbol)" },
+    { "fixture1", "actions", 0, 72, 26, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 ProtoStoreSymbol::clone: the constructor's parameter" },
+    { "fixture1", "actions", 0, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 ProtoStoreSymbol::clone: the copy of the parameter, made before the constructor's is freed" },
+    { "fixture1", "actions", 1, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 the same, second pass" },
+    { "fixture1", "actions", 1, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 the same, second pass" },
+    { "shapes", "actions", 0, 16, 344, "HighVariable::mergeInternal", "A6-11 HighVariable::mergeInternal: the merged list is built before any Varnode changes owner" },
+    { "shapes", "actions", 0, 24, 901, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 32, 261, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 40, 575, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 48, 57, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 56, 103, "Cover::merge;HighVariable::mergeInternal", "A6-11 the cover merge after the move: the emptied HighVariable is freed when it fails" },
+    { "shapes", "actions", 1, 24, 901, "HighVariable::mergeInternal", "A6-11 the same, second pass" },
+    { "shapes", "actions", 1, 32, 261, "HighVariable::mergeInternal", "A6-11 the same, second pass" },
+    { "stack", "actions", 0, 40, 19, "VarnodeBank::xref;VarnodeBank::setInput", "A6-14 VarnodeBank::setInput: a Varnode taken out of the lists is kept if it cannot be put back" },
+    { "stack", "actions", 0, 40, 89, "VarnodeBank::xref;VarnodeBank::setDef", "A6-14 VarnodeBank::setDef: the same" },
+    { "stack", "actions", 0, 40, 37, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes", "A6-14 VarnodeBank::makeFree: the same" },
+    { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroy;PcodeOpBank::destroyDead", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
+    { "stack", "actions", 0, 8, 28, "MapState::addRange", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
+    { "stack", "actions", 0, 40, 108, "ScopeInternal::insertNameTree;ScopeInternal::renameSymbol", "A6-15 ScopeInternal::renameSymbol: a Symbol that cannot return to the name tree is kept" },
+    { "stack", "actions", 0, 40, 42, "ScopeInternal::insertNameTree;ScopeInternal::addSymbolInternal", "A6-15 ScopeInternal::addSymbolInternal: a Symbol the name tree cannot take is freed (ScopeLocal::createEntry)" },
+    { "stack", "actions", 0, 8, 29, "ScopeInternal::addMapInternal;Scope::addMapPoint", "A6-15 Scope::addMapPoint: the map entry is freed when the Symbol cannot list it" },
+    // The leaks the round 2 survey found in the Flow and Print phases and in the action tree's clone (patch 0032), seen under LeakSanitizer:
+    { "fixture1", "followFlow", 0, 8, 9, "FlowInfo::setupCallindSpecs", "A6-8 FlowInfo::setupCallindSpecs: the call site is freed when the function cannot list it" },
+    { "mailbox", "followFlow", 0, 8, 8, "BlockGraph::addBlock;BlockGraph::newBlockBasic", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
+    { "mailbox", "actions", 0, 24, 222, "BlockGraph::createVirtualRoot", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
+    { "mailbox", "print", 0, 32, 2, "PackedDecode::ingestStream", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
+    { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
+    { "jumptable", "followFlow", 0, 8, 31, "ActionRestartGroup::clone;ActionDatabase::deriveAction", "A6-7 the same, the member in hand when the group's list cannot grow" },
+    { "jumptable", "followFlow", 0, 16, 23, "ActionGroup::clone;ActionRestartGroup::clone", "A6-7 ActionGroup::clone: the same, in a nested group" },
+    { "jumptable", "followFlow", 0, 8, 33, "ActionPool::addRule;ActionPool::clone", "A6-7 ActionPool::clone: the rule in hand when the pool's list cannot grow" },
+    { "jumptable", "followFlow", 0, 24, 175, "RuleIdentityEl::getOpList;ActionPool::addRule", "A6-7 ActionPool::clone: the rule is the pool's already when its op-code index cannot grow (not freed twice)" },
+    { "mailbox", "actions", 0, 48, 7, "BlockGraph::calcForwardDominator;Funcdata::structureReset", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
+    { "jumptable", "init", 1, 48, 71, "Database::attachScope;Funcdata::Funcdata", "A6-7 Database::attachScope: the Scope is freed, and its id taken out of the map, when the parent cannot hold it (Funcdata::Funcdata)" },
+    { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
 };
 
 long ResolvePin(const Ctx& c, const Pin& p)
@@ -1470,7 +1737,268 @@ long ResolvePin(const Ctx& c, const Pin& p)
     return -1;
 }
 
-std::vector<long> AllocCells(const Ctx& c, bool full)
+// The phase entry a pin names: [lo, hi) of the baseline's allocation indices (empty if it has none).
+void PinRange(const Ctx& c, const Pin& p, long& lo, long& hi)
+{
+    const Log& L = c.base.log;
+    int ord = 0;
+    lo = hi = 0;
+    for (int e = 0; e < L.n; ++e)
+    {
+        if (std::string(PhaseName(L.phase[e])) != p.phase || ord++ != p.ord) continue;
+        lo = L.allocAt[e];
+        hi = e + 1 < L.n ? L.allocAt[e + 1] : c.base.allocs;
+        return;
+    }
+}
+
+#ifdef SE_FAULT_BACKTRACE
+bool SiteMatches(const std::vector<std::string>& names, const char* site)
+{
+    size_t at = 0;
+    const std::string rest(site);
+    for (size_t pos = 0; pos <= rest.size();)
+    {
+        size_t semi = rest.find(';', pos);
+        if (semi == std::string::npos) semi = rest.size();
+        const std::string want = rest.substr(pos, semi - pos);
+        pos = semi + 1;
+        if (want.empty()) continue;
+        while (at < names.size() && names[at].find(want) == std::string::npos) ++at;
+        if (at == names.size()) return false;
+        ++at;
+    }
+    return true;
+}
+#endif
+
+// A pin resolved against this build.
+struct PinRes
+{
+    const Pin* pin = nullptr;
+    long k0 = -1;              // the coordinates' allocation (-1: no such allocation)
+    long lo = 0, hi = 0;       // the phase entry the pin names
+    std::vector<long> ks;      // the allocations to fail: k0 when it is the site, every match when not
+    std::string note;          // "site ok", "MOVED ...", "STALE ...", or why it was not checked
+    bool stale = false;
+};
+const size_t kPinMax = 16;
+
+// Resolves the pins of the fixture and checks their identity: one extra run of the warmed engine, in a
+// child, takes the stack of every allocation that could be a pin (the pin's size, in its phase entry), and
+// names the stacks of the ones asked about.
+std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
+{
+    std::vector<PinRes> out;
+    for (const Pin& p : kPins)
+    {
+        if (c.fix->name != std::string(p.fixture)) continue;
+        PinRes r;
+        r.pin = &p;
+        r.k0 = ResolvePin(c, p);
+        PinRange(c, p, r.lo, r.hi);
+        if (r.k0 < 0)
+        {
+            r.stale = true;
+            r.note = "STALE: no such allocation (the phase entry or the size is gone)";
+        }
+        else if (!p.site || !*p.site)
+        {
+            r.stale = true;
+            r.note = "STALE: the pin has no site";
+        }
+        else
+            r.ks.push_back(r.k0);
+        out.push_back(r);
+    }
+#ifdef SE_FAULT_BACKTRACE
+    if (out.empty()) return out;
+    // Which allocations to take a stack of.
+    std::vector<uint8_t> want(c.base.sizes.size(), 0);
+    for (const PinRes& r : out)
+    {
+        if (r.stale) continue;
+        for (long k = r.lo; k < r.hi && k < long(want.size()); ++k)
+            if (c.base.sizes[size_t(k)] == r.pin->size) want[size_t(k)] = 1;
+    }
+    fa::gCensusWant = want.data();
+    fa::gCensusWantN = long(want.size());
+    fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
+    fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+    auto body = [&]() -> int {
+        dts::Failures() = 0;
+        gProbe.Reset();
+        fa::gCensusN = 0;
+        fa::Arm(-1);
+        fa::gCensus = true;
+        RunOnce(c);
+        fa::gCensus = false;
+        fa::Disarm();
+        // Name the stacks here, where the addresses mean what they meant while the run was going.
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            const PinRes& r = out[i];
+            if (r.stale) continue;
+            // The coordinates' own allocation first: when it is the site (nearly always) nothing else is named.
+            long j0 = -1;
+            for (long j = 0; j < fa::gCensusN && j0 < 0; ++j)
+                if (fa::gCensusK[j] == r.k0) j0 = j;
+            if (j0 < 0)
+            {
+                std::printf("PINSITE %zu 0\n", i);
+                continue;
+            }
+            const std::vector<std::string> names0 = fa::Names(fa::gCensusStack[j0]);
+            std::string top;
+            int taken = 0;
+            for (const std::string& n : names0)
+            {
+                if (n.find("operator new") != std::string::npos || n.find("Allocate") != std::string::npos ||
+                    n.find("CensusRecord") != std::string::npos)
+                    continue;
+                top += (taken ? " < " : "") + n.substr(0, n.find('('));
+                if (++taken == 6) break;
+            }
+            std::printf("PINAT %zu %s\n", i, top.c_str());
+            if (SiteMatches(names0, r.pin->site))
+            {
+                std::printf("PINSITE %zu 1 %ld\n", i, r.k0);
+                continue;
+            }
+            // Not the site: every other allocation of the size in the entry that is.
+            std::string matches;
+            long nmatch = 0;
+            for (long j = 0; j < fa::gCensusN; ++j)
+            {
+                const long k = fa::gCensusK[j];
+                if (j == j0 || k < r.lo || k >= r.hi || c.base.sizes[size_t(k)] != r.pin->size) continue;
+                if (!SiteMatches(fa::Names(fa::gCensusStack[j]), r.pin->site)) continue;
+                ++nmatch;
+                matches += " " + std::to_string(k);
+            }
+            std::printf("PINSITE %zu %ld%s\n", i, nmatch, matches.c_str());
+        }
+        if (fa::gCensusN >= fa::kCensusCap) std::printf("PINCAP the census is full: raise kCensusCap\n");
+        std::fflush(stdout);
+        std::_Exit(0);
+    };
+    CellRun run = ForkCell(scratch, body, CellTimeout());
+    std::vector<std::string> top(out.size());
+    std::vector<std::vector<long>> matches(out.size());
+    std::vector<bool> seen(out.size(), false);
+    for (const std::string& l : Lines(run.out))
+    {
+        const bool at = l.compare(0, 6, "PINAT ") == 0;
+        if (!at && l.compare(0, 8, "PINSITE ") != 0) continue;
+        std::istringstream in(l.substr(at ? 6 : 8));
+        size_t i = 0;
+        in >> i;
+        if (i >= out.size()) continue;
+        if (at)
+        {
+            std::string rest;
+            std::getline(in, rest);
+            top[i] = rest.empty() ? rest : rest.substr(1);
+        }
+        else
+        {
+            long n = 0;
+            in >> n;
+            for (long k; in >> k;) matches[i].push_back(k);
+            seen[i] = true;
+        }
+    }
+    for (size_t i = 0; i < out.size(); ++i)
+    {
+        PinRes& r = out[i];
+        if (r.stale) continue;
+        if (!seen[i])
+        {
+            r.stale = true;
+            r.ks.clear();
+            r.note = std::string("STALE: the identity run did not report (") + (run.proc.timedOut ? "timed out" : "failed") + ")";
+        }
+        else if (std::find(matches[i].begin(), matches[i].end(), r.k0) != matches[i].end())
+        {
+            r.ks.assign(1, r.k0);
+            r.note = "site ok";
+        }
+        else if (!matches[i].empty())
+        {
+            std::vector<long>& m = matches[i];
+            if (m.size() > kPinMax)
+            {
+                std::vector<long> thin;
+                for (size_t j = 0; j < kPinMax; ++j) thin.push_back(m[j * (m.size() - 1) / (kPinMax - 1)]);
+                m = thin;
+            }
+            r.ks = m;
+            r.note = "MOVED: the coordinates lead to [" + top[i] + "], not to [" + r.pin->site + "]; the site is at " +
+                     std::to_string(m.size()) + " allocation(s) of this size in the entry";
+        }
+        else
+        {
+            r.stale = true;
+            r.ks.clear();
+            r.note = "STALE: the coordinates lead to [" + top[i] + "], and no allocation of " + std::to_string(r.pin->size) +
+                     " bytes in this phase entry is made at [" + r.pin->site + "]";
+        }
+    }
+#else
+    for (PinRes& r : out)
+        if (!r.stale) r.note = "identity not checked (no backtrace on this platform)";
+#endif
+    return out;
+}
+
+// `--sites <fixture> <phase> <ord> <size>`: for each allocation of that size in that phase entry, its rank
+// among them and the innermost functions on its stack. How the 'site' of a pin is found.
+int SitesTool(const std::string& fixture, const std::string& scratch, const std::string& phase, int ord, uint32_t size)
+{
+#ifdef SE_FAULT_BACKTRACE
+    Ctx c;
+    if (!Warm(c, scratch, fixture)) return 2;
+    Pin p = { fixture.c_str(), phase.c_str(), ord, size, 0, "", "" };
+    long lo = 0, hi = 0;
+    PinRange(c, p, lo, hi);
+    std::vector<uint8_t> want(c.base.sizes.size(), 0);
+    for (long k = lo; k < hi && k < long(want.size()); ++k)
+        if (c.base.sizes[size_t(k)] == size) want[size_t(k)] = 1;
+    fa::gCensusWant = want.data();
+    fa::gCensusWantN = long(want.size());
+    fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
+    fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+    gProbe.Reset();
+    fa::gCensusN = 0;
+    fa::Arm(-1);
+    fa::gCensus = true;
+    RunOnce(c);
+    fa::gCensus = false;
+    fa::Disarm();
+    const char* depthEnv = std::getenv("SE_FAULT_DEPTH");
+    const int depth = depthEnv ? std::atoi(depthEnv) : 5;
+    for (long j = 0; j < fa::gCensusN; ++j)
+    {
+        std::string top;
+        int taken = 0;
+        for (const std::string& n : fa::Names(fa::gCensusStack[j]))
+        {
+            if (n.find("operator new") != std::string::npos || n.find("Allocate") != std::string::npos || n.find("CensusRecord") != std::string::npos)
+                continue;
+            top += (taken ? " < " : "") + n.substr(0, 110);
+            if (++taken == depth) break;
+        }
+        std::printf("{ \"%s\", \"%s\", %d, %u, %ld }  k=%ld  %s\n", fixture.c_str(), phase.c_str(), ord, size, j, fa::gCensusK[j], top.c_str());
+    }
+    return 0;
+#else
+    (void)fixture; (void)scratch; (void)phase; (void)ord; (void)size;
+    std::printf("--sites needs a backtrace (glibc)\n");
+    return 2;
+#endif
+}
+
+std::vector<long> AllocCells(const Ctx& c, bool full, const std::vector<PinRes>& pins)
 {
     std::set<long> s;
     const long N = c.base.allocs;
@@ -1498,10 +2026,35 @@ std::vector<long> AllocCells(const Ctx& c, bool full)
         add(N - 1);
         add(N - 2);
     }
-    for (const Pin& p : kPins)
-        if (c.fix->name == std::string(p.fixture)) add(ResolvePin(c, p));   // -1 (stale) is skipped; the driver reports it
+    for (const PinRes& r : pins)
+        for (long k : r.ks) add(k);   // a stale pin has none; the driver reports it and fails
     add(N);       // one past the last: nothing fails, the run must equal the baseline
     add(N + 5);
+    // SE_FAULT_PHASE=<name>[,<name>...]: instead, every k of every phase entry with one of these names (every k of
+    // the Actions of a fixture under a sanitizer, where the whole run would take hours); SE_FAULT_RANGE=<lo>-<hi>:
+    // every k in the range.
+    if (const char* phases = std::getenv("SE_FAULT_PHASE"))
+    {
+        std::set<std::string> names;
+        std::istringstream in(phases);
+        for (std::string w; std::getline(in, w, ',');) names.insert(w);
+        s.clear();
+        for (int e = 0; e < L.n; ++e)
+        {
+            if (!names.count(PhaseName(L.phase[e]))) continue;
+            const long hi = e + 1 < L.n ? L.allocAt[e + 1] : N;
+            for (long k = L.allocAt[e]; k < hi; ++k) s.insert(k);
+        }
+    }
+    if (const char* range = std::getenv("SE_FAULT_RANGE"))
+    {
+        const char* dash = std::strchr(range, '-');
+        if (dash)
+        {
+            s.clear();
+            for (long k = std::atol(range); k < std::atol(dash + 1); ++k) s.insert(k);
+        }
+    }
     return std::vector<long>(s.begin(), s.end());
 }
 
@@ -1587,7 +2140,15 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
     Ctx c;
     if (!Warm(c, scratch, fixture)) return 2;
     std::vector<long> cells;
-    if (family == "alloc") cells = AllocCells(c, full);
+    std::vector<PinRes> pins;
+    DisasmBase disasm;
+    if (family == "alloc" && only == -999999) pins = ResolvePins(c, scratch);
+    if (family == "alloc") cells = AllocCells(c, full, pins);
+    else if (family == "disasm")
+    {
+        if (!MeasureDisasm(c, disasm)) return 2;
+        cells = DisasmCells(disasm, full);
+    }
     else if (family == "cancel-enter") cells = EnterCells(c, full);
     else if (family == "cancel-alloc") cells = CancelAllocCells(c, full);
     else if (family == "cancel-us") cells = UsCells(c, full);
@@ -1600,19 +2161,23 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
     if (only != -999999) cells.assign(1, only);
     const auto t0 = Clock::now();
     DriverSummary sum;
-    if (family == "alloc" && only == -999999 && shard == 0)
+    if (family == "alloc" && only == -999999)
     {
-        for (const Pin& p : kPins)
+        // Every shard resolves the pins (the cells are dealt out among them); shard 0 reports them, and every
+        // shard counts a stale one as its own failure, so that no shard of a sweep passes over it.
+        for (const PinRes& r : pins)
         {
-            if (fixture != p.fixture) continue;
-            const long k = ResolvePin(c, p);
-            std::printf("PIN %s %s: %s #%d, %u bytes #%d -> allocation %ld%s\n", p.fixture, p.what, p.phase, p.ord, p.size, p.nth, k,
-                        k < 0 ? " STALE" : "");
-            if (k < 0)
+            const Pin& p = *r.pin;
+            if (shard == 0 || r.stale || r.note.compare(0, 5, "MOVED") == 0)
+                std::printf("PIN %s %s: %s #%d, %u bytes #%d -> allocation %ld: %s\n", p.fixture, p.what, p.phase, p.ord, p.size, p.nth,
+                            r.k0, r.note.c_str());
+            if (r.stale)
             {
                 ++sum.failed;
                 ++sum.classes["FAIL:stale-pin"];
             }
+            else if (r.note.compare(0, 5, "MOVED") == 0)
+                ++sum.classes["pin-moved"];
         }
     }
     const double timeout = CellTimeout();
@@ -1623,6 +2188,7 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
         const long p = cells[i];
         auto body = [&]() -> int {
             if (family == "alloc") return RunAllocCell(c, p);
+            if (family == "disasm") return RunDisasmCell(c, disasm, p);
             if (family == "cancel-oom") return RunAllocCell(c, p / 8 + kFailAfterCancel[p % 8], p / 8);
             if (family == "cancel-enter") return RunCancelCell(c, CancelHow::AtEnter, p);
             if (family == "cancel-alloc") return RunCancelCell(c, CancelHow::AtAlloc, p);
@@ -1640,7 +2206,7 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
             for (const std::string& ln : Lines(run.out))
             {
                 if (ln.compare(0, 14, "LEAK-ACCEPTED ") == 0)
-                    ++sum.classes["leak-accepted:" + ln.substr(14, ln.find(' ', 14) - 14)];
+                    ++sum.classes["leak-accepted:" + ln.substr(14, ln.rfind(" x") - 14)];
                 if (ln.compare(0, 9, "LEAK-SIG ") == 0)
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
@@ -2417,6 +2983,10 @@ int main(int argc, char** argv)
     dts::RemoveTree(scratch);
     sfe::MakeDirectory(scratch);
 
+    // ---- the allocations of one size in one phase entry, with their stacks (how a pin's site is found)
+    if (arg(2) == "--sites" && argc >= 7)
+        return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])));
+
     // ---- one cell, in this process's driver, with the failing allocation's trace
     if (arg(2) == "--cell" && argc >= 6)
     {
@@ -2452,15 +3022,26 @@ int main(int argc, char** argv)
         jobs.push_back(j);
     };
     const int shards = full ? int(std::max(1.0, EnvDouble("SE_FAULT_JOBS", 3.0))) : 1;
-    for (const char* f : { "mailbox", "jumptable" }) addDriver("alloc", f, shards);
-    for (const Fix& f : kFixtures) addDriver("cancel-enter", f.name, 1);
+    // The allocation sweeps run on every fixture, so that a resolved call (fixture1), a loop merge (shapes) and a
+    // stack local (stack) see a failed allocation as the mailbox and the switch do (A6-13). diamonds, with 411,659
+    // allocations, is left to the full run.
+    for (const Fix& f : kFixtures)
+        if (full || std::string(f.name) != "diamonds") addDriver("alloc", f.name, shards);
+    // The cancel families: the default subset keeps the four fixtures it always had; shapes and stack, added for
+    // the allocation sweeps, join them in the full run (under a sanitizer they would add about two minutes).
+    auto cancelFixture = [&](const Fix& f) { return full || (std::string(f.name) != "shapes" && std::string(f.name) != "stack"); };
+    for (const Fix& f : kFixtures)
+        if (cancelFixture(f)) addDriver("cancel-enter", f.name, 1);
     for (const Fix& f : kFixtures)
     {
         if (!full && std::string(f.name) == "diamonds") continue;
-        addDriver("cancel-alloc", f.name, full ? shards : 1);
+        if (cancelFixture(f)) addDriver("cancel-alloc", f.name, full ? shards : 1);
     }
-    for (const Fix& f : kFixtures) addDriver("cancel-us", f.name, 1);
-    for (const char* f : { "mailbox", "jumptable" }) addDriver("cancel-oom", f, full ? shards : 1);
+    for (const Fix& f : kFixtures)
+        if (cancelFixture(f)) addDriver("cancel-us", f.name, 1);
+    for (const Fix& f : kFixtures)
+        if (full || std::string(f.name) != "diamonds") addDriver("cancel-oom", f.name, full ? shards : 1);
+    addDriver("disasm", "fixture1", full ? shards : 1);
     for (const char* k : { "stop", "supersede", "invalidate", "destroy", "budget", "disable" }) addRunner(k);
     // The worker failing an allocation, a process per cell.
     size_t oomFirst = jobs.size();

@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a decoder buffer the stream cannot hold is freed (patches/0032-allocation-failure-order-2.patch).
  */
 #ifndef __MARSHAL_HH__
 #define __MARSHAL_HH__
@@ -678,7 +680,12 @@ inline uint1 *PackedDecode::allocateNextInputBuffer(int4 pad)
 
 {
   uint1 *buf = new uint1[BUFFER_SIZE + pad];
-  inStream.emplace_back(buf,buf+BUFFER_SIZE);
+  try {
+    inStream.emplace_back(buf,buf+BUFFER_SIZE);
+  } catch(...) {
+    delete [] buf;		// SaturnExplorer: the stream frees its buffers, and does not hold this one yet
+    throw;
+  }
   return buf;
 }
 
