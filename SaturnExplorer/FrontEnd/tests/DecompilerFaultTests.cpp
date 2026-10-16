@@ -12,7 +12,9 @@
 //   cancel    the cancel flag goes up at every phase entry of the run (the phase hook), at every
 //             allocation (a deterministic stand-in for "every thousand ops": the allocator raises the
 //             flag), and from a second thread every millisecond across the run. The outcome must be
-//             the one the design gives for where the flag went up (see Expected), a cancelled result
+//             the one the design gives for where the flag went up (see Expected; a flag from another thread is read against a
+//             counter that runs a check-point behind, ExpectedThread, and the cancel-enter cells reach that window
+//             deterministically: A6-35), a cancelled result
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
 //   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so (the `stopped` flag
 //             it sets needs no allocation; the marker line is a move into room made first), the engine is then
@@ -24,8 +26,10 @@
 //             any engine global was written the failure is transient (the next request is correct); inside
 //             startDecompilerLibrary the engine is refused for good, with the same restart reason from the first
 //             request on, for Decompile and Disassemble alike (A6-30).
-//   sticky    "disasm-sticky" and "alloc-sticky": the same cells with every allocation from k on failing, not only
-//             k, as a full heap stays full (A6-23; SE_FAULT_STICKY=1 does it to any family)
+//   sticky    "disasm-sticky", "alloc-sticky", "cold-sticky" and "cold-disasm-sticky": the same cells with every allocation
+//             from k on failing, not only k, as a full heap stays full (A6-23; SE_FAULT_STICKY=1 does it to any family,
+//             the runner's allocation-failure children included: A6-36)
+//   pin-selftest  pins written wrong, and the verdict each gets: a MOVED pin fails the run (A6-34)
 //   runner    DecompilerRunner lifecycle: Stop (Cancel), Submit while busy (superseding),
 //             InvalidateSession, budget expiry, DisableLocked recovery and destruction, each with the
 //             worker held at every phase entry of the request. No result for a stale generation or
@@ -2903,6 +2907,119 @@ int DiffRunsTool(const std::string& fixture, const std::string& scratch, int run
     return bad >= 1000 ? 1 : 0;
 }
 
+// What a fixture added for coverage must keep reaching (A6-36): the host functions whose allocations the fixture exists to
+// fail, found by the stacks of the run's allocations in one phase (every entry of that name), with the least number of
+// allocations made under each. A refactor that stopped lending a prototype, or stopped noting a register, would leave the
+// fixture decompiling and the sweep green over nothing; this is what turns that into a failure. `--reach <fixture> <phase>
+// <frame>...` prints the counts.
+struct Reach
+{
+    const char* fixture;
+    const char* phase;
+    const char* frame;     // a substring of a demangled function name on the stack
+    long atLeast;
+};
+const Reach kReach[] = {
+    { "lend", "init", "ApplyPrototype", 1 },
+    { "lend", "init", "LendEffects", 1 },
+    { "lendm", "init", "ApplyPrototype", 1 },
+    { "lendm", "init", "LendEffects", 1 },
+    { "lendx", "init", "ApplyPrototype", 1 },
+    { "lendx", "init", "LendEffects", 1 },
+    { "hwreg", "print", "HardwareNotes", 1 },
+    { "hwreg", "print", "PointerResolver", 1 },
+};
+
+// The number of allocations in the fixture's run (every entry of 'phase') made under each of 'frames'; -1 each where no
+// backtrace is available.
+std::vector<long> ReachCounts(Ctx& c, const std::string& scratch, const std::string& phase, const std::vector<std::string>& frames)
+{
+    std::vector<long> counts(frames.size(), -1);
+#ifdef SE_FAULT_BACKTRACE
+    std::vector<uint8_t> want(c.base.sizes.size(), 0);
+    const Log& L = c.base.log;
+    for (int e = 0; e < L.n; ++e)
+    {
+        if (phase != PhaseName(L.phase[e])) continue;
+        const long hi = e + 1 < L.n ? L.allocAt[e + 1] : c.base.allocs;
+        for (long k = L.allocAt[e]; k < hi && k < long(want.size()); ++k) want[size_t(k)] = 1;
+    }
+    fa::gCensusWant = want.data();
+    fa::gCensusWantN = long(want.size());
+    fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
+    fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+    fa::gCensusSize = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kCensusCap)));
+    auto body = [&]() -> int {
+        gProbe.Reset();
+        fa::gCensusN = 0;
+        fa::Arm(-1);
+        fa::gCensus = true;
+        RunOnce(c);
+        fa::gCensus = false;
+        fa::Disarm();
+        std::vector<long> n(frames.size(), 0);
+        for (long j = 0; j < fa::gCensusN; ++j)
+        {
+            const std::vector<std::string> names = fa::Names(fa::gCensusStack[j]);
+            for (size_t f = 0; f < frames.size(); ++f)
+                for (const std::string& nm : names)
+                    if (nm.find(frames[f]) != std::string::npos)
+                    {
+                        ++n[f];
+                        break;
+                    }
+        }
+        for (size_t f = 0; f < frames.size(); ++f) std::printf("REACH %zu %ld\n", f, n[f]);
+        std::fflush(stdout);
+        std::_Exit(0);
+    };
+    const CellRun run = ForkCell(scratch, body, CellTimeout());
+    for (const std::string& l : Lines(run.out))
+    {
+        size_t f = 0;
+        long n = 0;
+        if (l.compare(0, 6, "REACH ") == 0 && std::sscanf(l.c_str() + 6, "%zu %ld", &f, &n) == 2 && f < counts.size()) counts[f] = n;
+    }
+#else
+    (void)c; (void)scratch; (void)phase;
+#endif
+    return counts;
+}
+
+// The requirements of kReach for the fixture; the number of those not met.
+int ReachCheck(Ctx& c, const std::string& scratch)
+{
+    int bad = 0;
+#ifdef SE_FAULT_BACKTRACE
+    for (const char* phase : { "init", "print" })
+    {
+        std::vector<std::string> frames;
+        std::vector<const Reach*> rows;
+        for (const Reach& r : kReach)
+            if (c.fix->name == std::string(r.fixture) && std::string(r.phase) == phase)
+            {
+                frames.push_back(r.frame);
+                rows.push_back(&r);
+            }
+        if (frames.empty()) continue;
+        const std::vector<long> n = ReachCounts(c, scratch, phase, frames);
+        for (size_t i = 0; i < rows.size(); ++i)
+        {
+            std::printf("REACHED %s %s %s: %ld allocation(s) (at least %ld)\n", rows[i]->fixture, rows[i]->phase, rows[i]->frame, n[i], rows[i]->atLeast);
+            if (n[i] < rows[i]->atLeast)
+            {
+                std::printf("FAIL reach %s: no allocation of the %s phase is made under %s (%ld, the fixture needs %ld): it no longer covers what it was added for\n",
+                            rows[i]->fixture, rows[i]->phase, rows[i]->frame, n[i], rows[i]->atLeast);
+                ++bad;
+            }
+        }
+    }
+#else
+    (void)c; (void)scratch;
+#endif
+    return bad;
+}
+
 // The pins' own check (A6-34): pins deliberately written wrong, on the dag fixture, and the verdict each must get. A pin whose
 // coordinates and ordinal disagree (MOVED) must fail the run, with the coordinates that put it right in the note; an ordinal
 // the site does not have, or a site the coordinates cannot reach, is STALE. Without this a change to the census that let a
@@ -3131,6 +3248,16 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
     if (only != -999999) cells.assign(1, only);
     const auto t0 = Clock::now();
     DriverSummary sum;
+    if (family == "alloc" && !sticky && only == -999999 && shard == 0)
+    {
+        // The fixtures added for coverage still reach what they were added for (A6-36).
+        const int bad = ReachCheck(c, scratch);
+        if (bad)
+        {
+            sum.failed += bad;
+            sum.classes["FAIL:reach"] += bad;
+        }
+    }
     if (family == "alloc" && !sticky && only == -999999)
     {
         // Every shard resolves the pins (the cells are dealt out among them); shard 0 reports them, and every
@@ -3138,13 +3265,17 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
         for (const PinRes& r : pins)
         {
             const Pin& p = *r.pin;
-            if (shard == 0 || r.stale || r.note.compare(0, 5, "MOVED") == 0)
+            if (shard == 0 || PinFails(r))
                 std::printf("PIN %s %s: %s #%d, %u bytes #%d -> allocation %ld: %s\n", p.fixture, p.what, p.phase, p.ord, p.size, p.nth,
                             r.k0, r.note.c_str());
-            if (r.stale)
+            if (PinFails(r))
             {
+                // STALE (no such allocation, an ordinal the site lacks, a site the coordinates cannot reach) and MOVED (the
+                // coordinates and the ordinal disagree) both fail the run until the pin is re-pinned, the note saying how: a
+                // MOVED pin's cell still tests the allocation of its ordinal, but nothing else would ever re-point the pin from
+                // a defect it was written for (A6-34). PinSelfTest holds PinFails to this.
                 ++sum.failed;
-                ++sum.classes["FAIL:stale-pin"];
+                ++sum.classes[r.stale ? "FAIL:stale-pin" : "FAIL:pin-moved"];
             }
             else if (r.note.compare(0, 8, "identity") == 0 && !std::getenv("SE_FAULT_NO_IDENTITY"))
             {
@@ -3153,14 +3284,6 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                 std::printf("FAIL pin %s %s: its site cannot be checked on this platform (set SE_FAULT_NO_IDENTITY=1 to accept)\n", p.fixture, p.what);
                 ++sum.failed;
                 ++sum.classes["FAIL:pin-identity-unchecked"];
-            }
-            else if (r.note.compare(0, 5, "MOVED") == 0)
-            {
-                // A pin that does not lead to the allocation it names fails the run until it is re-pinned (the note says how):
-                // the cell below still tests the allocation of the pin's ordinal, but nothing else would ever re-point the pin
-                // from a defect it was written for (A6-34).
-                ++sum.failed;
-                ++sum.classes["FAIL:pin-moved"];
             }
         }
     }
