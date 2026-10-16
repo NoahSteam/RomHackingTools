@@ -3017,6 +3017,21 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
     (void)fi;
 }
 
+// Whether the function calls one that changes r8-r14, GBR or VBR for good (Func::effClobbers) and was lent no signature:
+// the engine's model keeps those registers across every call it knows nothing about.
+bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototype>& lent, const DecompileResult& r)
+{
+    constexpr uint32_t kKept = (0x7Fu << 8) | (1u << 17) | (1u << 18);
+    for (uint32_t c : r.calledAt)
+    {
+        const int i = subject.FnAtEntry(c & ~0x20000000u);
+        if (i < 0 || !(subject.fns[i].clobbers & kKept)) continue;
+        const auto l = lent.find(c);
+        if (l == lent.end() || !l->second.known) return true;
+    }
+    return false;
+}
+
 // One decompilation of function 'fi', checked against its runs. 'lent' holds the prototypes of the
 // functions already decompiled (the later ones), 'results' their results.
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
@@ -3159,6 +3174,16 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             }
             if (exempt) continue;
             if (SaidMissing(r, insn)) continue;
+            // A call to a function that was not lent a signature leaves r8-r14, GBR and VBR as the calling convention has
+            // them, kept, however much its code changes them (the model's, and A3-3's limit for a callee not decompiled
+            // first): a branch on a register such a callee changed is folded as if it kept it, and the code it guards can
+            // be removed as unreachable. The conventions grammar makes such callees, and the wide alphabet's ldc / lds make
+            // more of them (seed 301832). Not a finding of the flow; counted.
+            if (CallsUnlentChanger(subject, lent, r))
+            {
+                count("dropped.after-unlent-changer");
+                continue;
+            }
 
             std::string provenance;
             for (const std::string& f : from) provenance += (provenance.empty() ? "" : "+") + f;
