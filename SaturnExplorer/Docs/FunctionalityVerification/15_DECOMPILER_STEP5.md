@@ -4811,3 +4811,94 @@ addresses only (A5-29), no value (A5-31), and `F` read for the SMPC only (A5-32)
 | Generator replays of A5-28 to A5-32 | 0 findings each (the oracle accepts all of them) |
 | Game corpus, `hwram007.bin` | 839/839; every count 0; 16 missing and said; records 14,843 folded, 0 dead, 16 unreachable, 27 switch lookups; notes 12, cautions 16 (as round 4) |
 | Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; 20 missing and said; records 38,701 folded, 0 dead, 20 unreachable, 155 switch lookups; notes 27, cautions 20 (as round 4) |
+
+## Areas 3 and 4, round 4 review
+
+Reviewer, branch `review/3-4-round4-review`, on master `ec7751d` (patches 0001 to 0031). Findings only, no fixes. New ledger rows:
+A3-7 (P2), A3-8 (P3), A3-9 (P2), A3-10 (P3), A3-11 (P3), A3-12 (P3), A4-8 (P3), A4-9 (P3). The instrument was a scratch driver, not
+committed: `Sh2DecompilerTests.cpp` with a reader of fixtures from a file (callees decompiled first and lent, then the caller, the
+emulator's run and `PseudoAgreesWithRun`), a mode that hands a text to `MayReturn` alone, and a callees-first lending pass over image 008
+that lists lent `void` functions that call and end by moving a register no signature passes to r0. Rows A2-12 to A2-15 (open, another
+agent's) were not re-reported.
+
+### Area 3: what was probed and held
+
+- **`LendEffects`.** A callee that pops its caller's pushed word (`rts ; add #4,r15`) is lent with extrapop +4; the caller that pushed it
+  and then pops only its PR is proved to keep r15 (preserved 0x003FFFFF) and is lent `void f(void)`, which the emulator agrees with. The
+  round-3 fixtures (r8, r9, r14, GBR, VBR, MACH, MACL, r15 lowered, r15 moved by an argument) pass in the suite.
+- **The frame-address rule.** A frame address stored to a global that the callee writes through is aliased by the engine itself
+  (`pxRam0600a000 = axStack_c; ... return axStack_c[0];`, the oracle agrees). The exact-r2 case (A3-4's fixture) holds.
+- **Rule (a) and rule (b) in a leaf.** The round-3 leaf fixtures pass in the suite. A callee that stores SR whole through a parameter
+  (`stc sr,r0 ; rts ; mov.l r0,@r4`) is withheld too: r0 is a copy of SR at the return, so (b) sees it.
+- **The corpus.** `SE_GAME_LEND=1` with both images: the suite passes; image 007 lends 611 signatures (767 parameters), image 008 1,007
+  (1,220); every `TestGameCode` count 0, 16 and 20 missing and said, 27 and 155 switch lookups, as round 3. The scan of image 008's
+  346 lent `void` functions that call found no `rts` whose slot or previous instruction moves r1-r3, r8-r14, MACH, MACL or GBR to r0:
+  A3-7 has no instance there.
+
+### Area 3: what failed
+
+- **A3-7 (P2): a dropped return after a call.** `sts.l pr,@-r15 ; bsr g ; nop ; lds.l @r15+,pr ; rts ; mov r8,r0`, with g lent: the
+  function is lent `void f(void)` and returns its caller's r8. Rule (b) asks only paths with no call, and a call on any path joining the
+  return counts (the variant with the call under `if (param_1 != 0)`, returning MACL). The generator's checks 8 and 9 reject each;
+  `PseudoEval` accepts each (A3-11).
+- **A3-9 (P2): r2 holds a frame address with an index added.** The struct-return address of an array element: `mov r15,r2 ; add r0,r2`.
+  `NoteFrameEscape` takes only an exact address; the text says `return 10;` where the code returns 12. Withheld, so only the text is
+  wrong, as A3-4's was.
+- **A3-8 (P3): the SR whole-copy exception, the answer to "can a getter hide a real input".** Yes: a caller that sets T, calls the lent
+  getter and returns bit 0 of the result is lent with no parameters, though its return depends on r6 and r7. P3 because compiled code
+  does not read T out of a returned SR; a hand-written caller can.
+- **A3-10 (P3): r3 instead of r2.** Round 3's deliberate choice. Raised to be accepted with a reason in the ledger, or narrowed.
+
+### Area 4: what was probed and held
+
+Each against the emulator for indices 0 to 3, -1 and 0x80000000 (or the bytes 00, 01, 02, 03, FF, 80, 7F):
+
+- **The A4-7 shape with the index loaded by `mov.b @r4,r4`.** The engine finds the byte switch, warns "Sanity check requires truncation
+  of jumptable: cases may be missing" and withholds the signature. Index 0xFF goes to case 2 on the hardware and is not shown, but the
+  warning covers it. The `cmp/hi` control is a four-way switch, right for every byte, and lent.
+- **`braf` from a bounded register with no table** (`shll2 r0 ; braf r0` into `rts ; mov #k,r0` cases). This is GCC's `casesi` (`mova`,
+  `add r4,r4`, `mov.w @(r0,r4),r1`, `braf r1` over a table of words relative to the `braf`). It is a two-level table (a byte table of
+  sub-indices, then a `jmp` table). Each is a switch that agrees with the emulator, and each is lent.
+- **A `cmp/pz` guard with no upper bound.** "Too many branches", treated as a call, withheld.
+- **A shared epilogue reached by `bra` from two functions.** Each function's text and body is right.
+- **A function that falls into another's entry.** The text is right. The warning is there only when the entry is in `knownFunctions`
+  (A4-8).
+- **Generator, grammar 2, a new window** (`SE_GENERATED_FIRST=300001 SE_GENERATED_SEEDS=6000`). 11,706 functions, 1,637 tables. There
+  were no decompiler findings. 2 seeds broke the generator's own contract (A4-9).
+
+### Oracles
+
+- **`PseudoEval` (A3-11).** It accepts `return;` for any value, so it reads A3-7 as right. It also accepts:
+  - `true` and `false`, as unknown names;
+  - a reassigned parameter, read as its entry value;
+  - casts of any width;
+  - `CONCAT`/`SUB`.
+
+  It rejects five texts the engine prints rightly: a parameter reassigned under an `if`, `>>` on a `uint4`, `<` on a `uint4` (from
+  `cmp/hs` and `cmp/hi`), and a 64-bit product; and a `char` case label. The unsigned bound of `TestSignedGuardTable`'s controls is
+  printed inside a `switch`; the same bound printed as an `if` is rejected.
+- **The generator's check 8 (A3-12).** It cannot make two argument registers equal and does not ask SR, so it accepts A3-8.
+- **The table check (check 6).** It looks only at cases whose code makes an access the ledger lists (`table.inert` otherwise). It
+  excuses every table of a function when any warning in it mentions a jump table ("umptable"), the warning of another table included.
+  A case that sends an index to the wrong return value is seen by no generator check; the call oracle is the only one, and it does not
+  run on generated code. No wrong output was found through either hole, so this is no row.
+
+### Questions without a fixture
+
+- Self-modifying literal pools (A4-9's seed 301364 is one, made by accident: the decompiler folds the literal the callee overwrote, and
+  the code's second call goes where the folded literal does not say). Is a store into the function's own literal pool something the
+  output should say?
+- `PseudoEval` and narrow parameters: the engine prints `char param_1` when only the low byte is used, and the evaluator feeds the whole
+  register. With A3-11's typing this would be settled. It is in that row's expectation.
+
+### Could not probe
+
+- Signed bounds in a callee whose callers bound the index (the generator makes signed tables in the first function only). An
+  interrupt between a callee's push and its use. Flow that leaves captured memory and comes back: no captured code can be reached from
+  uncaptured memory, so only a cut is possible, and that is warned (`TestTruncatedFlow`).
+- Two indices that both escape a signed guard with distinct behaviour. Patch 0029 makes every signed-only guard unresolvable, so only
+  index -1 was run.
+
+**Done criteria.** Area 4: this round has only P3 rows (A4-8, A4-9) after round 3's P3 only. That is two consecutive rounds with no P1
+or P2, so area 4 is done once A4-8 and A4-9 are fixed or accepted and the overnight generator run on grammar 2 is clean. A4-9 is the
+generator's own failure in this window. Area 3: two P2 (A3-7, A3-9), so it needs a fix round and two clean review rounds.
