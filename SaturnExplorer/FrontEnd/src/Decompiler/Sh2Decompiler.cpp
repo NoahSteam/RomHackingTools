@@ -1046,6 +1046,13 @@ private:
                         falls = false;
                         break;
                     }
+                    // ...but the engine prints the jump as `f(); return;`, a call whose value nothing returns: a callee that returns one
+                    // loses it in the text and in the signature, which would be lent void.
+                    {
+                        const auto lent = mLent.find(mCallAt[a]);
+                        if (lent != mLent.end() && lent->second.known && lent->second.ret.kind != TypeKind::Void && !mTolerant)
+                            return "it tail-calls a function that returns a value, which the engine takes for a call that returns nothing";
+                    }
                     Call(s, a);
                     if (mNoReturn.count(a)) continue;
                     Set(s, mReg[kPr], pr);

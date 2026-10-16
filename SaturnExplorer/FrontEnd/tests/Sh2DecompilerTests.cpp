@@ -4540,8 +4540,8 @@ void TestTailJumpToUnreachedCode()
     CHECK(tail(r, b + 2, "jmp is taken for a tail call to 0x0600910C") && tail(r, b + 2, "not part of this function's body"));
     CHECK(!r.InBody(b + 0x0C) && !r.prototype.known);
     // Named as a function of its own, the destination is decompiled as one, and a caller lent its signature
-    // calls it with the argument. Since A3-27 the caller is lent as well: the jump is the call the engine made it, and ReturnCheck
-    // applies the callee's effects and returns (it was withheld "an indirect jump it does not resolve").
+    // calls it with the argument (the caller's own signature stays withheld: the jump is a call whose value the engine does not
+    // return, A3-27).
     DecompileRequest q = Request(a + 0x0A);
     const DecompileResult callee = d.Decompile(snap, q);
     CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known && Has(callee.Text(), "param_1 + 1"));
@@ -4549,7 +4549,7 @@ void TestTailJumpToUnreachedCode()
     q.prototypes.emplace_back(a + 0x0A, callee.prototype);
     r = d.Decompile(snap, q);
     Print("the destination named and lent", r);
-    CHECK(r.status == DecompileStatus::Ok && r.prototype.known && Has(r.Text(), "func_0x0600900a(param_1)"));
+    CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x0600900a(param_1)"));
 }
 
 // The engine paths the control-flow review could only check by reading the source. Two are reached
@@ -7694,7 +7694,7 @@ void TestCallsAndTraps()
             CHECK(!r.prototype.known && Has(r.prototypeWithheld, "joins r0's entry value with a parameter"));
             CHECK(!PseudoAgreesWithRun(r, snap, a, both));   // `return;` where the code returns r4 / r0's entry value
             // Controls. A parameter copied to r0 on every path is the engine's return; a constant on the other path, pinned in A3-14.
-            const CallFixture every = { "a3_20 control: r4 copied to r0 on both paths", base, { 0x2558, 0x8901, 0x6043, 0x000B, 0x6053 } };
+            const CallFixture every = { "a3_20 control: r4 copied to r0 on both paths", base, { 0x2558, 0x8902, 0x6043, 0x000B, 0x0009, 0x6053, 0x000B, 0x0009 } };
             auto snapE = CallSnapshot(every, ++serial);
             const DecompileResult re = d.Decompile(snapE, Request(every.base));
             Print(every.name.c_str(), re);
@@ -7798,8 +7798,8 @@ void TestCallsAndTraps()
             // The evaluator itself.
             std::string why;
             const PseudoEval::Entry none;
-            CHECK(MayReturn("int f(int param_1,int param_5)\n{\n  func_0x06009020(&param_5);\n  return param_5;\n}", { 1, 2 }, 9, why));
-            CHECK(!MayReturn("int f(int param_1,int param_5)\n{\n  return param_5;\n}", { 1, 2 }, 9, why));
+            CHECK(MayReturn("int f(int param_1,int param_2)\n{\n  func_0x06009020(&param_2);\n  return param_2;\n}", { 1, 2 }, 9, why));
+            CHECK(!MayReturn("int f(int param_1,int param_2)\n{\n  return param_2;\n}", { 1, 2 }, 9, why));
             (void)none;
         }
 
@@ -7817,7 +7817,7 @@ void TestCallsAndTraps()
                                      withCallee({ 0x4F22, 0x64F3, 0x7404, 0x7404, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE107, 0x000B, 0x2412 }) };
             // (r4 = r15 + 8: not the slot; r4 = r15 - 4 + ... below)
             const CallFixture pr2 = { "a3_24: the callee writes the saved PR through the exact address of its slot", base,
-                                      withCallee({ 0x4F22, 0x64F3, 0x74FC, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE107, 0x000B, 0x2412 }) };
+                                      withCallee({ 0x4F22, 0x64F3, 0xB00C, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE107, 0x000B, 0x2412 }) };
             (void)pr;
             const Lent l2 = lend(pr2, true, false);
             CHECK(!l2.caller.prototype.known && Has(l2.caller.prototypeWithheld, "not to its caller"));
@@ -7863,11 +7863,13 @@ void TestCallsAndTraps()
             // Controls. The same through `bra` (followed into the callee's code): lent, right.
             const CallFixture bra = { "a3_27 control: bra", base, withCallee({ 0x6043, 0xA00D, 0x0009 }, keeper) };
             CHECK(lend(bra).caller.prototype.known);
-            // A tail call that is a plain return of the callee's value, and one with no value in r0: lent.
+            // A tail call to a callee that returns a value is withheld (below); one with no value in r0 is lent.
             const CallFixture val = { "a3_27 b: jmp to a callee that returns 7", base,
                                       withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, { 0x000B, 0xE007 }) };
-            const Lent lv = lend(val);
-            CHECK(lv.caller.prototype.known && lv.caller.prototype.ret.kind != TypeKind::Void);
+            const Lent lv = lend(val, true, false);
+            // The engine prints the jump as `f(); return;` whatever the callee returns: lent void, it would lose the 7.
+            CHECK(!lv.caller.prototype.known && Has(lv.caller.prototypeWithheld, "returns a value"));
+            CHECK(!PseudoAgreesWithRun(lv.caller, CallSnapshot(val, ++serial), val, inputs));
             const CallFixture none = { "a3_27 c: jmp to a callee that keeps r0, r0 untouched", base,
                                        withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, keeper), true };
             CHECK(lend(none).caller.prototype.known);
