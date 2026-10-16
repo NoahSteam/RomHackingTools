@@ -2907,116 +2907,47 @@ int DiffRunsTool(const std::string& fixture, const std::string& scratch, int run
     return bad >= 1000 ? 1 : 0;
 }
 
-// What a fixture added for coverage must keep reaching (A6-36): the host functions whose allocations the fixture exists to
-// fail, found by the stacks of the run's allocations in one phase (every entry of that name), with the least number of
-// allocations made under each. A refactor that stopped lending a prototype, or stopped noting a register, would leave the
-// fixture decompiling and the sweep green over nothing; this is what turns that into a failure. `--reach <fixture> <phase>
-// <frame>...` prints the counts.
+// What a fixture added for coverage must keep reaching (A6-36). Each one is there to put a failed allocation inside a host path
+// no other fixture runs: the lent prototype and effects, the mirror's entry, the hardware notes. A refactor that stopped
+// lending, or stopped noting a register, would leave the fixture decompiling and the sweep green over nothing; the baseline
+// result (Signature: the text, the warnings) must show each path was taken, and this turns its absence into a failure.
+// (The census cannot say it from stacks: the host's own functions are not in the dynamic symbol table.) `--show <fixture>`
+// prints the baseline signature these are written from.
 struct Reach
 {
     const char* fixture;
-    const char* phase;
-    const char* frame;     // a substring of a demangled function name on the stack
-    long atLeast;
+    const char* evidence;   // a substring of the baseline's signature
+    const char* what;
 };
 const Reach kReach[] = {
-    { "lend", "init", "ApplyPrototype", 1 },
-    { "lend", "init", "LendEffects", 1 },
-    { "lendm", "init", "ApplyPrototype", 1 },
-    { "lendm", "init", "LendEffects", 1 },
-    { "lendx", "init", "ApplyPrototype", 1 },
-    { "lendx", "init", "LendEffects", 1 },
-    { "hwreg", "print", "HardwareNotes", 1 },
-    { "hwreg", "print", "PointerResolver", 1 },
+    { "lend", "Fn_lend(int4 *param_1)", "the lent parameter type reaches the caller's own parameter (ApplyPrototype)" },
+    { "lend", "func_0x06005000(param_1)", "the call to the lent callee passes the lent parameter" },
+    { "lendm", "Fn_lendm(int4 *param_1)", "the lent parameter type reaches the caller's own parameter" },
+    { "lendm", "A 637554688", "the call goes through the mirror 0x26005000 (the callee lent at both addresses)" },
+    { "lendm", "func_0x06005000(param_1)", "the mirrored call resolves to the callee and passes the lent parameter" },
+    { "lendx", "Fn_lendx(int4 *param_1,uint2 param_2)", "the lent second parameter reaches the caller" },
+    { "lendx", "func_0x06005000(param_1,param_2)", "the call passes both lent parameters" },
+    { "lendx", "axStack_88 + 0x84", "the lent stack delta (setExtraPop) moves the frame after the call" },
+    { "hwreg", "puVar2 = &VDP2_TVMD;", "the register is named (HardwareNotes)" },
+    { "hwreg", "puVar2 = &VDP2_EXTEN;", "the store's pointer resolves to the second register (PointerResolver)" },
 };
 
-// The number of allocations in the fixture's run (every entry of 'phase') made under each of 'frames'; -1 each where no
-// backtrace is available.
-std::vector<long> ReachCounts(Ctx& c, const std::string& scratch, const std::string& phase, const std::vector<std::string>& frames)
-{
-    std::vector<long> counts(frames.size(), -1);
-#ifdef SE_FAULT_BACKTRACE
-    std::vector<uint8_t> want(c.base.sizes.size(), 0);
-    const Log& L = c.base.log;
-    for (int e = 0; e < L.n; ++e)
-    {
-        if (phase != PhaseName(L.phase[e])) continue;
-        const long hi = e + 1 < L.n ? L.allocAt[e + 1] : c.base.allocs;
-        for (long k = L.allocAt[e]; k < hi && k < long(want.size()); ++k) want[size_t(k)] = 1;
-    }
-    fa::gCensusWant = want.data();
-    fa::gCensusWantN = long(want.size());
-    fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
-    fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
-    fa::gCensusSize = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kCensusCap)));
-    auto body = [&]() -> int {
-        gProbe.Reset();
-        fa::gCensusN = 0;
-        fa::Arm(-1);
-        fa::gCensus = true;
-        RunOnce(c);
-        fa::gCensus = false;
-        fa::Disarm();
-        std::vector<long> n(frames.size(), 0);
-        for (long j = 0; j < fa::gCensusN; ++j)
-        {
-            const std::vector<std::string> names = fa::Names(fa::gCensusStack[j]);
-            for (size_t f = 0; f < frames.size(); ++f)
-                for (const std::string& nm : names)
-                    if (nm.find(frames[f]) != std::string::npos)
-                    {
-                        ++n[f];
-                        break;
-                    }
-        }
-        for (size_t f = 0; f < frames.size(); ++f) std::printf("REACH %zu %ld\n", f, n[f]);
-        std::fflush(stdout);
-        std::_Exit(0);
-    };
-    const CellRun run = ForkCell(scratch, body, CellTimeout());
-    for (const std::string& l : Lines(run.out))
-    {
-        size_t f = 0;
-        long n = 0;
-        if (l.compare(0, 6, "REACH ") == 0 && std::sscanf(l.c_str() + 6, "%zu %ld", &f, &n) == 2 && f < counts.size()) counts[f] = n;
-    }
-#else
-    (void)c; (void)scratch; (void)phase;
-#endif
-    return counts;
-}
-
 // The requirements of kReach for the fixture; the number of those not met.
-int ReachCheck(Ctx& c, const std::string& scratch)
+int ReachCheck(const Ctx& c)
 {
     int bad = 0;
-#ifdef SE_FAULT_BACKTRACE
-    for (const char* phase : { "init", "print" })
+    for (const Reach& r : kReach)
     {
-        std::vector<std::string> frames;
-        std::vector<const Reach*> rows;
-        for (const Reach& r : kReach)
-            if (c.fix->name == std::string(r.fixture) && std::string(r.phase) == phase)
-            {
-                frames.push_back(r.frame);
-                rows.push_back(&r);
-            }
-        if (frames.empty()) continue;
-        const std::vector<long> n = ReachCounts(c, scratch, phase, frames);
-        for (size_t i = 0; i < rows.size(); ++i)
+        if (c.fix->name != std::string(r.fixture)) continue;
+        const bool ok = Has(c.base.sig, r.evidence);
+        std::printf("REACHED %s '%s': %s (%s)\n", r.fixture, r.evidence, ok ? "yes" : "NO", r.what);
+        if (!ok)
         {
-            std::printf("REACHED %s %s %s: %ld allocation(s) (at least %ld)\n", rows[i]->fixture, rows[i]->phase, rows[i]->frame, n[i], rows[i]->atLeast);
-            if (n[i] < rows[i]->atLeast)
-            {
-                std::printf("FAIL reach %s: no allocation of the %s phase is made under %s (%ld, the fixture needs %ld): it no longer covers what it was added for\n",
-                            rows[i]->fixture, rows[i]->phase, rows[i]->frame, n[i], rows[i]->atLeast);
-                ++bad;
-            }
+            std::printf("FAIL reach %s: the baseline result has no '%s' -- %s: the fixture no longer covers what it was added for\n", r.fixture,
+                        r.evidence, r.what);
+            ++bad;
         }
     }
-#else
-    (void)c; (void)scratch;
-#endif
     return bad;
 }
 
@@ -3251,7 +3182,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
     if (family == "alloc" && !sticky && only == -999999 && shard == 0)
     {
         // The fixtures added for coverage still reach what they were added for (A6-36).
-        const int bad = ReachCheck(c, scratch);
+        const int bad = ReachCheck(c);
         if (bad)
         {
             sum.failed += bad;
@@ -4142,6 +4073,15 @@ int main(int argc, char** argv)
         return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])), argc >= 8 ? argv[7] : nullptr);
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
+
+    // ---- the baseline result of a fixture (what kReach's evidence is written from)
+    if (arg(2) == "--show" && argc >= 4)
+    {
+        Ctx c;
+        if (!Warm(c, dts::Join(scratch, "cell"), arg(3))) return 2;
+        std::printf("%s\n", c.base.sig.c_str());
+        return 0;
+    }
 
     // ---- one cell, in this process's driver, with the failing allocation's trace
     if (arg(2) == "--cell" && argc >= 6)
