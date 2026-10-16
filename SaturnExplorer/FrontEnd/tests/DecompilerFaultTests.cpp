@@ -167,6 +167,9 @@ std::atomic<long> gCancelAt(-1);      // the allocation at which the cancel flag
 std::atomic<bool> gFired(false);
 std::atomic<bool> gFiredNothrow(false);
 std::atomic<long> gFiredSize(0);
+// Sustained exhaustion (A6-23): every allocation from gFailAt on fails, not only that one, as a heap that is full stays
+// full. SE_FAULT_STICKY=1, or a family named "...-sticky". Disarm() ends it.
+std::atomic<bool> gSticky(false);
 std::atomic<bool> gTrace(false);
 
 #ifdef SE_FAULT_BACKTRACE
@@ -204,14 +207,16 @@ const uint8_t* gCensusWant = nullptr;      // [k] != 0: keep the stack of alloca
 long gCensusWantN = 0;
 Stack* gCensusStack = nullptr;
 long* gCensusK = nullptr;
+uint32_t* gCensusSize = nullptr;            // the size the run actually asked for (A6-24: a pin names a size, the census checks it)
 long gCensusN = 0;
 const long kCensusCap = 60000;
 
-__attribute__((noinline)) void CensusRecord(long i)
+__attribute__((noinline)) void CensusRecord(long i, std::size_t size)
 {
     if (gCensusN >= kCensusCap) return;
     Stack& s = gCensusStack[gCensusN];
     s.n = backtrace(s.f, kFrames);
+    gCensusSize[gCensusN] = uint32_t(size);
     gCensusK[gCensusN++] = i;
 }
 #endif
@@ -270,19 +275,23 @@ void* Allocate(std::size_t size, bool nothrow)
     const long i = gCount.fetch_add(1, std::memory_order_relaxed);
     if (gLogSizes.load(std::memory_order_relaxed) && i < kSizeLogMax && gSizeLog) gSizeLog[i] = uint32_t(size);
 #ifdef SE_FAULT_BACKTRACE
-    if (gCensus.load(std::memory_order_relaxed) && i < gCensusWantN && gCensusWant[i]) CensusRecord(i);
+    if (gCensus.load(std::memory_order_relaxed) && i < gCensusWantN && gCensusWant[i]) CensusRecord(i, size);
 #endif
     if (i == gCancelAt.load(std::memory_order_relaxed))
     {
         gProbe.setOrdinal = gProbe.enters.load() - 1;
         if (std::atomic<bool>* f = gProbe.cancelFlag.load()) f->store(true);
     }
-    if (i == gFailAt.load(std::memory_order_relaxed))
+    const long failAt = gFailAt.load(std::memory_order_relaxed);
+    if (i == failAt || (failAt >= 0 && i > failAt && gSticky.load(std::memory_order_relaxed)))
     {
-        gFired = true;
-        gFiredNothrow = nothrow;
-        gFiredSize = long(size);
-        if (gTrace) Trace();
+        if (i == failAt)
+        {
+            gFired = true;
+            gFiredNothrow = nothrow;
+            gFiredSize = long(size);
+            if (gTrace) Trace();
+        }
         throw std::bad_alloc();
     }
     void* p = std::malloc(size ? size : 1);
@@ -598,89 +607,6 @@ void InstallHooks()
     Sh2Decompiler::SetBeforeReferenceHookForTests([] { gProbe.inRefNow = true; });
 }
 
-bool Warm(Ctx& c, const std::string& scratch, const std::string& fixture)
-{
-    c.fix = FindFix(fixture);
-    if (!c.fix)
-    {
-        std::printf("unknown fixture '%s'\n", fixture.c_str());
-        return false;
-    }
-    c.config = dts::Join(scratch, "config");
-    sfe::MakeDirectory(scratch);
-    sfe::MakeDirectory(c.config);
-    c.snap = BuildSnapshot();
-    c.req = MakeRequest(*c.fix);
-    fa::gSizeLog = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kSizeLogMax)));
-    c.engine.reset(new Sh2Decompiler(c.config));
-    InstallHooks();
-    // Warm runs until two in a row agree: the first builds the translator and the library state, and
-    // the translator's caches (parse-tree ring, patch 0020) settle over the next one or two. A cell
-    // forks from this state, so its run is the next in the series. "Agree" includes the size of every
-    // allocation, not only their number and the text: the markup of an unchanged listing keeps growing
-    // for two runs after the count settles (stack: 1,114, 1,124, 1,128 bytes), and a baseline taken
-    // before that names run N's sizes for allocations that run N+1 makes at other sizes, so a pin and
-    // `--sites` could name the wrong allocation (A6-24).
-    long prevCount = -1;
-    std::string prevSig;
-    Log prevLog{};
-    std::vector<uint32_t> prevSizes;
-    bool settled = false;
-    std::string series;
-    for (int i = 0; i < 16 && !settled; ++i)
-    {
-        gProbe.Reset();
-        fa::Arm(-1);
-        fa::gLogSizes = true;
-        const auto t0 = Clock::now();
-        const DecompileResult w = RunOnce(c);
-        const double ms = MsSince(t0);
-        fa::gLogSizes = false;
-        fa::Disarm();
-        if (w.status != DecompileStatus::Ok)
-        {
-            std::printf("the warm run of '%s' is %d (%s)\n", fixture.c_str(), int(w.status), w.error.c_str());
-            return false;
-        }
-        const long n = fa::gCount.load();
-        const Log log = gProbe.Snapshot();
-        const std::string sig = Signature(w);
-        series += std::to_string(n) + " ";
-        const std::vector<uint32_t> sizes(fa::gSizeLog, fa::gSizeLog + std::min(n, fa::kSizeLogMax));
-        bool same = i > 0 && n == prevCount && sig == prevSig && log.n == prevLog.n && sizes == prevSizes;
-        for (int k = 0; same && k < log.n; ++k) same = log.phase[k] == prevLog.phase[k] && log.allocAt[k] == prevLog.allocAt[k];
-        prevCount = n;
-        prevSig = sig;
-        prevLog = log;
-        prevSizes = sizes;
-        if (same)
-        {
-            settled = true;
-            c.base.sig = sig;
-            c.base.allocs = n;
-            c.base.log = log;
-            c.base.ms = ms;
-            c.base.sizes = sizes;
-        }
-    }
-    if (!settled)
-    {
-        std::printf("the allocation count of '%s' does not settle (%s): the matrix would be meaningless\n", fixture.c_str(), series.c_str());
-        return false;
-    }
-    std::string phases;
-    for (int i = 0; i < c.base.log.n; ++i)
-    {
-        phases += PhaseName(c.base.log.phase[i]);
-        phases += c.base.log.inRef[i] ? "(ref)@" : "@";
-        phases += std::to_string(c.base.log.allocAt[i]);
-        phases += ' ';
-    }
-    std::printf("fixture %-9s: %ld allocations, %.1f ms warm, %d phase entries: %s\n", fixture.c_str(), c.base.allocs, c.base.ms,
-                c.base.log.n, phases.c_str());
-    return true;
-}
-
 // ---- process plumbing ----------------------------------------------------------------------
 
 std::string gSelf;
@@ -925,6 +851,159 @@ CellRun ForkCell(const std::string& scratch, const std::function<int()>& body, d
     c.out = ReadFile(file);
     return c;
 }
+
+// The baseline is run N+1 of the series, measured in a forked child: the run every cell makes (a cell is a fork of
+// this process at run N). Taking it from run N, as Warm did, named the wrong allocation across a boundary of the markup
+// (A6-24): the markup of an unchanged listing is not the same size from one run to the next. The engine numbers the
+// begin/end pairs of the printer's groups with a process-wide counter (`TokenSplit::countbase`, prettyprint.hh) that is
+// never reset and grows by the groups of every print; these ids are written into the markup (`open` and `close` on
+// every parenthesis) as varints, so the markup is a byte longer whenever the counter passes 127 or 16,383 (stack: 1,114,
+// 1,124 and 1,128 bytes over the first runs, mailbox 840, 842 and 844). The text and the tokens do not use them (the host
+// reads `color`, `indent`, `content` and `opref`); `--diffruns` shows it. Two consecutive runs that agree do not make the
+// next one agree, so the next one is measured.
+bool MeasureBaseline(Ctx& c, const std::string& scratch)
+{
+    const std::string sizesFile = dts::Join(scratch, "baseline.sizes");
+    const std::string sigFile = dts::Join(scratch, "baseline.sig");
+    auto body = [&]() -> int {
+        gProbe.Reset();
+        fa::Arm(-1);
+        fa::gLogSizes = true;
+        const auto t0 = Clock::now();
+        const DecompileResult w = RunOnce(c);
+        const double ms = MsSince(t0);
+        fa::gLogSizes = false;
+        const long n = fa::gCount.load();
+        fa::Disarm();
+        const Log log = gProbe.Snapshot();
+        const std::string sig = Signature(w);
+        std::printf("BASE %d %ld %.3f %d\n", int(w.status), n, ms, log.n);
+        for (int i = 0; i < log.n; ++i) std::printf("BASELOG %d %ld %d\n", int(log.phase[i]), log.allocAt[i], log.inRef[i] ? 1 : 0);
+        std::fflush(stdout);
+        FILE* f = std::fopen(sizesFile.c_str(), "wb");
+        if (!f) return 3;
+        std::fwrite(fa::gSizeLog, sizeof(uint32_t), size_t(std::min(n, fa::kSizeLogMax)), f);
+        std::fclose(f);
+        f = std::fopen(sigFile.c_str(), "wb");
+        if (!f) return 3;
+        std::fwrite(sig.data(), 1, sig.size(), f);
+        std::fclose(f);
+        std::fflush(nullptr);
+        std::_Exit(0);
+    };
+    const CellRun run = ForkCell(scratch, body, CellTimeout());
+    long n = -1, entries = 0;
+    int status = -1;
+    double ms = 0;
+    Log log;
+    for (const std::string& l : Lines(run.out))
+    {
+        if (l.compare(0, 5, "BASE ") == 0)
+            std::sscanf(l.c_str() + 5, "%d %ld %lf %ld", &status, &n, &ms, &entries);
+        else if (l.compare(0, 8, "BASELOG ") == 0 && log.n < Log::kMax)
+        {
+            int p = 0, ref = 0;
+            long at = 0;
+            std::sscanf(l.c_str() + 8, "%d %ld %d", &p, &at, &ref);
+            log.phase[log.n] = static_cast<DecompilePhase>(p);
+            log.allocAt[log.n] = at;
+            log.inRef[log.n] = ref != 0;
+            ++log.n;
+        }
+    }
+    const std::string sizes = ReadFile(sizesFile), sig = ReadFile(sigFile);
+    if (n < 0 || status != int(DecompileStatus::Ok) || entries != log.n || sizes.size() != size_t(std::min(n, fa::kSizeLogMax)) * sizeof(uint32_t) ||
+        sig.empty())
+    {
+        std::printf("the baseline run (N+1, in a child) of '%s' did not report (status %d, %ld allocations)\n", c.fix->name, status, n);
+        return false;
+    }
+    c.base.allocs = n;
+    c.base.ms = ms;
+    c.base.log = log;
+    c.base.sig = sig;
+    c.base.sizes.resize(sizes.size() / sizeof(uint32_t));
+    std::memcpy(c.base.sizes.data(), sizes.data(), sizes.size());
+    return true;
+}
+
+bool Warm(Ctx& c, const std::string& scratch, const std::string& fixture)
+{
+    c.fix = FindFix(fixture);
+    if (!c.fix)
+    {
+        std::printf("unknown fixture '%s'\n", fixture.c_str());
+        return false;
+    }
+    c.config = dts::Join(scratch, "config");
+    sfe::MakeDirectory(scratch);
+    sfe::MakeDirectory(c.config);
+    c.snap = BuildSnapshot();
+    c.req = MakeRequest(*c.fix);
+    fa::gSizeLog = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kSizeLogMax)));
+    c.engine.reset(new Sh2Decompiler(c.config));
+    InstallHooks();
+    // Warm runs until two in a row agree: the first builds the translator and the library state, and
+    // the translator's caches (parse-tree ring, patch 0020) settle over the next one or two. A cell
+    // forks from this state, so its run is the next in the series, N+1. That run, and not run N, is the
+    // baseline: it is measured in a forked child below (A6-24).
+    long prevCount = -1;
+    std::string prevSig;
+    Log prevLog{};
+    std::vector<uint32_t> prevSizes;
+    bool settled = false;
+    std::string series;
+    for (int i = 0; i < 16 && !settled; ++i)
+    {
+        gProbe.Reset();
+        fa::Arm(-1);
+        fa::gLogSizes = true;
+        const auto t0 = Clock::now();
+        const DecompileResult w = RunOnce(c);
+        const double ms = MsSince(t0);
+        fa::gLogSizes = false;
+        fa::Disarm();
+        if (w.status != DecompileStatus::Ok)
+        {
+            std::printf("the warm run of '%s' is %d (%s)\n", fixture.c_str(), int(w.status), w.error.c_str());
+            return false;
+        }
+        const long n = fa::gCount.load();
+        const Log log = gProbe.Snapshot();
+        const std::string sig = Signature(w);
+        series += std::to_string(n) + " ";
+        const std::vector<uint32_t> sizes(fa::gSizeLog, fa::gSizeLog + std::min(n, fa::kSizeLogMax));
+        bool same = i > 0 && n == prevCount && sig == prevSig && log.n == prevLog.n && sizes == prevSizes;
+        for (int k = 0; same && k < log.n; ++k) same = log.phase[k] == prevLog.phase[k] && log.allocAt[k] == prevLog.allocAt[k];
+        prevCount = n;
+        prevSig = sig;
+        prevLog = log;
+        prevSizes = sizes;
+        if (same)
+        {
+            settled = true;
+            c.base.ms = ms;
+        }
+    }
+    if (!settled)
+    {
+        std::printf("the allocation count of '%s' does not settle (%s): the matrix would be meaningless\n", fixture.c_str(), series.c_str());
+        return false;
+    }
+    if (!MeasureBaseline(c, scratch)) return false;
+    std::string phases;
+    for (int i = 0; i < c.base.log.n; ++i)
+    {
+        phases += PhaseName(c.base.log.phase[i]);
+        phases += c.base.log.inRef[i] ? "(ref)@" : "@";
+        phases += std::to_string(c.base.log.allocAt[i]);
+        phases += ' ';
+    }
+    std::printf("fixture %-9s: %ld allocations, %.1f ms warm, %d phase entries: %s\n", fixture.c_str(), c.base.allocs, c.base.ms,
+                c.base.log.n, phases.c_str());
+    return true;
+}
+
 
 // A damaged engine must not run its static destruction (the translator may be half reset); an
 // exit() that gets there is caught by this handler, registered after the translator's static was
@@ -1224,6 +1303,12 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
 #endif
     std::string cls;
     Expect(!escaped, "no exception escapes Decompile");
+    // Allocation k of this run is allocation k of the baseline, at the size the baseline recorded (A6-24): the cells, the
+    // pins' census and `--sites` all index the baseline. Before a cancel the run is the same up to k; after one it need not be.
+    if (fired && cancelAt < 0 && k < long(c.base.sizes.size()))
+        Expect(size == long(c.base.sizes[size_t(k)]), "the failed allocation is the baseline's: its size is the one the baseline recorded",
+               "allocation " + std::to_string(k) + " asked for " + std::to_string(size) + " bytes, the baseline " +
+                   std::to_string(c.base.sizes[size_t(k)]));
     if (cancelAt >= 0) gProbe.cancelFlag = nullptr;
     if (cancelAt >= 0 && r.status == DecompileStatus::Cancelled)
     {
@@ -1682,74 +1767,74 @@ struct Pin
     const char* what;
 };
 const Pin kPins[] = {
-    { "mailbox", "print", 0, 48, 22, "EmitPrettyPrint::setMarkup", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
-    { "mailbox", "print", 0, 40, 77, "EmitPrettyPrint::setMarkup", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
-    { "mailbox", "print", 1, 48, 20, "EmitPrettyPrint::setMarkup", "A6-1 the same, in the reference run's print" },
-    { "jumptable", "print", 0, 48, 26, "EmitPrettyPrint::setMarkup", "A6-1 the same, on the jumptable fixture" },
-    { "mailbox", "print", 0, 16, 1, "EmitMarkup::setPackedOutput", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
-    { "jumptable", "actions", 0, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 BlockGraph::identifyInternal: the room made in the new switch block before any block moves (first switch)" },
-    { "jumptable", "actions", 0, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, the next switch block" },
-    { "jumptable", "actions", 1, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, second pass" },
-    { "jumptable", "actions", 1, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch", "A6-3 the same, second pass, next switch block" },
-    { "mailbox", "print", 0, 513, 0, "overflow;PackedEncode::", "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
-    { "mailbox", "print", 0, 1025, 0, "overflow;PackedEncode::", "A6-4 the same, one growth later" },
-    { "jumptable", "print", 0, 513, 0, "overflow;PackedEncode::", "A6-4 the same, on the jumptable fixture" },
-    { "mailbox", "actions", 0, 513, 0, "overflow;Funcdata::removeUnreachableBlocks", "A6-5 a warning's stream swallows the failure, status Ok (first pass)" },
-    { "mailbox", "actions", 1, 513, 0, "overflow;Funcdata::removeUnreachableBlocks", "A6-5 the same in the printing pass: 'WARNING: Removing unreac', status Ok" },
-    { "jumptable", "followFlow", 0, 513, 0, "overflow;FlowInfo::recoverJumpTables", "A6-5 the jump-table message stream swallows the failure, status Ok" },
-    { "jumptable", "followFlow", 1, 513, 0, "overflow;FlowInfo::recoverJumpTables", "A6-5 the same in the second pass" },
+    { "mailbox", "print", 0, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
+    { "mailbox", "print", 0, 40, 77, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
+    { "mailbox", "print", 1, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, in the reference run's print" },
+    { "jumptable", "print", 0, 48, 42, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, on the jumptable fixture" },
+    { "mailbox", "print", 0, 16, 1, "EmitMarkup::setPackedOutput#0", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },
+    { "jumptable", "actions", 0, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 BlockGraph::identifyInternal: the room made in the new switch block before any block moves (first switch)" },
+    { "jumptable", "actions", 0, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 the same, the next switch block" },
+    { "jumptable", "actions", 1, 40, 96, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 the same, second pass" },
+    { "jumptable", "actions", 1, 48, 10, "BlockGraph::identifyInternal;BlockGraph::newBlockSwitch#0", "A6-3 the same, second pass, next switch block" },
+    { "mailbox", "print", 0, 513, 0, "overflow;PackedEncode::#0", "A6-4 the markup stream swallows the failure, the truncated markup fails to parse: 'unexpected exception'" },
+    { "mailbox", "print", 0, 1025, 0, "overflow;PackedEncode::#0", "A6-4 the same, one growth later" },
+    { "jumptable", "print", 0, 513, 0, "overflow;PackedEncode::#0", "A6-4 the same, on the jumptable fixture" },
+    { "mailbox", "actions", 0, 513, 0, "overflow;Funcdata::removeUnreachableBlocks#0", "A6-5 a warning's stream swallows the failure, status Ok (first pass)" },
+    { "mailbox", "actions", 1, 513, 0, "overflow;Funcdata::removeUnreachableBlocks#0", "A6-5 the same in the printing pass: 'WARNING: Removing unreac', status Ok" },
+    { "jumptable", "followFlow", 0, 513, 0, "overflow;FlowInfo::recoverJumpTables#0", "A6-5 the jump-table message stream swallows the failure, status Ok" },
+    { "jumptable", "followFlow", 1, 513, 0, "overflow;FlowInfo::recoverJumpTables#0", "A6-5 the same in the second pass" },
     // The leaks fixed on the way (patch 0023), seen under LeakSanitizer (a sanitizer build; in a plain one they are cells that pass):
-    { "mailbox", "init", 0, 56, 0, "Architecture::Architecture", "A6-7 Architecture::Architecture: the print language is freed when the constructor fails" },
-    { "mailbox", "init", 0, 20, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase", "A6-7 OptionDatabase::registerOption: the option is freed when it cannot be registered" },
-    { "mailbox", "init", 0, 17, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase", "A6-7 OptionDatabase::OptionDatabase: the options registered so far are freed" },
-    { "mailbox", "init", 0, 512, 0, "ParserContext::initialize;DisassemblyCache::initialize", "A6-7 DisassemblyCache::initialize: what it made is freed when it fails" },
-    { "mailbox", "init", 0, 40, 52, "TypeFactory::insert;TypeFactory::findAdd", "A6-7 TypeFactory::insert: the data-type is freed when it cannot be inserted" },
-    { "mailbox", "followFlow", 0, 24, 0, "PcodeOpBank::create;PcodeEmitFd::dump", "A6-8 PcodeOpBank::create: the op is freed when it cannot be listed" },
-    { "mailbox", "followFlow", 0, 24, 72, "PcodeOpBank::markAlive;Funcdata::opInsert", "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
-    { "jumptable", "followFlow", 0, 24, 60, "PcodeOpBank::create;Funcdata::cloneOp", "A6-8 PcodeOpBank::create (by cloneOp), on the jumptable fixture" },
-    { "jumptable", "followFlow", 0, 24, 124, "PcodeOpBank::markAlive;Funcdata::opInsert", "A6-8 PcodeOpBank::markAlive, on the jumptable fixture" },
-    { "mailbox", "followFlow", 0, 40, 0, "VarnodeBank::xref;VarnodeBank::createDef", "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
-    { "mailbox", "followFlow", 0, 40, 2, "VarnodeBank::create(;Funcdata::newVarnode", "A6-8 VarnodeBank::create: the same" },
-    { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
-    { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
-    { "mailbox", "actions", 1, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy", "A6-9 the same, in the printing pass" },
-    { "mailbox", "actions", 0, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
-    { "mailbox", "actions", 1, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate", "A6-9 the same, in the printing pass" },
+    { "mailbox", "init", 0, 56, 0, "Architecture::Architecture#0", "A6-7 Architecture::Architecture: the print language is freed when the constructor fails" },
+    { "mailbox", "init", 0, 20, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase#0", "A6-7 OptionDatabase::registerOption: the option is freed when it cannot be registered" },
+    { "mailbox", "init", 0, 17, 0, "OptionDatabase::registerOption;OptionDatabase::OptionDatabase#0", "A6-7 OptionDatabase::OptionDatabase: the options registered so far are freed" },
+    { "mailbox", "init", 0, 512, 0, "ParserContext::initialize;DisassemblyCache::initialize#0", "A6-7 DisassemblyCache::initialize: what it made is freed when it fails" },
+    { "mailbox", "init", 0, 40, 52, "TypeFactory::insert;TypeFactory::findAdd#10", "A6-7 TypeFactory::insert: the data-type is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 24, 0, "PcodeOpBank::create;PcodeEmitFd::dump#0", "A6-8 PcodeOpBank::create: the op is freed when it cannot be listed" },
+    { "mailbox", "followFlow", 0, 24, 72, "PcodeOpBank::markAlive;Funcdata::opInsert#0", "A6-8 PcodeOpBank::markAlive: the op is not lost when the alive list cannot take it" },
+    { "jumptable", "followFlow", 0, 24, 60, "PcodeOpBank::create;Funcdata::cloneOp#0", "A6-8 PcodeOpBank::create (by cloneOp), on the jumptable fixture" },
+    { "jumptable", "followFlow", 0, 24, 124, "PcodeOpBank::markAlive;Funcdata::opInsert#0", "A6-8 PcodeOpBank::markAlive, on the jumptable fixture" },
+    { "mailbox", "followFlow", 0, 40, 0, "VarnodeBank::xref;VarnodeBank::createDef#0", "A6-8 VarnodeBank::createDef (xref): the Varnode is freed when it cannot be inserted" },
+    { "mailbox", "followFlow", 0, 40, 2, "VarnodeBank::create(;Funcdata::newVarnode#0", "A6-8 VarnodeBank::create: the same" },
+    { "mailbox", "actions", 0, 40, 0, "VarnodeBank::create(;Funcdata::newConstant#0", "A6-9 Funcdata::newConstant (VarnodeBank::create), in ActionPrototypeTypes" },
+    { "mailbox", "actions", 0, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 BlockGraph::newBlockCopy: the copy is freed when it cannot be added" },
+    { "mailbox", "actions", 1, 24, 169, "BlockGraph::newBlockCopy;BlockGraph::buildCopy#0", "A6-9 the same, in the printing pass" },
+    { "mailbox", "actions", 0, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 CommentDatabaseInternal::addCommentNoDuplicate: the comment is freed when it cannot be stored" },
+    { "mailbox", "actions", 1, 40, 215, "CommentDatabaseInternal::addCommentNoDuplicate#0", "A6-9 the same, in the printing pass" },
     // Round 2 (patch 0032): the sweeps of the other fixtures. A6-10 and A6-11 crash without the fix; A6-14 and A6-15 leak, seen under LeakSanitizer.
-    { "fixture1", "actions", 0, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 FuncProto::copy: the other prototype's store is cloned before the old one is freed (ProtoStoreSymbol)" },
-    { "fixture1", "actions", 0, 72, 26, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 ProtoStoreSymbol::clone: the constructor's parameter" },
-    { "fixture1", "actions", 0, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 ProtoStoreSymbol::clone: the copy of the parameter, made before the constructor's is freed" },
-    { "fixture1", "actions", 1, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 the same, second pass" },
-    { "fixture1", "actions", 1, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy", "A6-10 the same, second pass" },
-    { "shapes", "actions", 0, 16, 344, "HighVariable::mergeInternal", "A6-11 HighVariable::mergeInternal: the merged list is built before any Varnode changes owner" },
-    { "shapes", "actions", 0, 24, 901, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 32, 261, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 40, 575, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 48, 57, "HighVariable::mergeInternal", "A6-11 the same, another merge" },
-    { "shapes", "actions", 0, 56, 103, "Cover::merge;HighVariable::mergeInternal", "A6-11 the cover merge after the move: the emptied HighVariable is freed when it fails" },
-    { "shapes", "actions", 1, 24, 901, "HighVariable::mergeInternal", "A6-11 the same, second pass" },
-    { "shapes", "actions", 1, 32, 261, "HighVariable::mergeInternal", "A6-11 the same, second pass" },
-    { "stack", "actions", 0, 40, 19, "VarnodeBank::xref;VarnodeBank::setInput", "A6-14 VarnodeBank::setInput: a Varnode taken out of the lists is kept if it cannot be put back" },
-    { "stack", "actions", 0, 40, 89, "VarnodeBank::xref;VarnodeBank::setDef", "A6-14 VarnodeBank::setDef: the same" },
-    { "stack", "actions", 0, 40, 37, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes", "A6-14 VarnodeBank::makeFree: the same" },
-    { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroy;PcodeOpBank::destroyDead", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
-    { "stack", "actions", 0, 8, 28, "MapState::addRange", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
-    { "stack", "actions", 0, 40, 108, "ScopeInternal::insertNameTree;ScopeInternal::renameSymbol", "A6-15 ScopeInternal::renameSymbol: a Symbol that cannot return to the name tree is kept" },
-    { "stack", "actions", 0, 40, 42, "ScopeInternal::insertNameTree;ScopeInternal::addSymbolInternal", "A6-15 ScopeInternal::addSymbolInternal: a Symbol the name tree cannot take is freed (ScopeLocal::createEntry)" },
-    { "stack", "actions", 0, 8, 29, "ScopeInternal::addMapInternal;Scope::addMapPoint", "A6-15 Scope::addMapPoint: the map entry is freed when the Symbol cannot list it" },
+    { "fixture1", "actions", 0, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 FuncProto::copy: the other prototype's store is cloned before the old one is freed (ProtoStoreSymbol)" },
+    { "fixture1", "actions", 0, 72, 26, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 ProtoStoreSymbol::clone: the constructor's parameter" },
+    { "fixture1", "actions", 0, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy#1", "A6-10 ProtoStoreSymbol::clone: the copy of the parameter, made before the constructor's is freed" },
+    { "fixture1", "actions", 1, 64, 58, "ProtoStoreSymbol::clone;FuncProto::copy#0", "A6-10 the same, second pass" },
+    { "fixture1", "actions", 1, 72, 27, "ProtoStoreSymbol::clone;FuncProto::copy#1", "A6-10 the same, second pass" },
+    { "shapes", "actions", 0, 16, 344, "HighVariable::mergeInternal#0", "A6-11 HighVariable::mergeInternal: the merged list is built before any Varnode changes owner" },
+    { "shapes", "actions", 0, 24, 901, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 32, 261, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 40, 575, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 48, 57, "HighVariable::mergeInternal#0", "A6-11 the same, another merge" },
+    { "shapes", "actions", 0, 56, 103, "Cover::merge;HighVariable::mergeInternal#0", "A6-11 the cover merge after the move: the emptied HighVariable is freed when it fails" },
+    { "shapes", "actions", 1, 24, 901, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
+    { "shapes", "actions", 1, 32, 261, "HighVariable::mergeInternal#0", "A6-11 the same, second pass" },
+    { "stack", "actions", 0, 40, 19, "VarnodeBank::xref;VarnodeBank::setInput#0", "A6-14 VarnodeBank::setInput: a Varnode taken out of the lists is kept if it cannot be put back" },
+    { "stack", "actions", 0, 40, 89, "VarnodeBank::xref;VarnodeBank::setDef#0", "A6-14 VarnodeBank::setDef: the same" },
+    { "stack", "actions", 0, 40, 37, "VarnodeBank::makeFree;Funcdata::clearDeadVarnodes#0", "A6-14 VarnodeBank::makeFree: the same" },
+    { "stack", "actions", 0, 24, 26, "PcodeOpBank::destroy;PcodeOpBank::destroyDead#0", "A6-14 PcodeOpBank::destroy: the op is put on the final list before it leaves the others" },
+    { "stack", "actions", 0, 8, 28, "MapState::addRange#0", "A6-14 MapState::addRange: the hint is freed when the list cannot take it" },
+    { "stack", "actions", 0, 40, 108, "ScopeInternal::insertNameTree;ScopeInternal::renameSymbol#0", "A6-15 ScopeInternal::renameSymbol: a Symbol that cannot return to the name tree is kept" },
+    { "stack", "actions", 0, 40, 42, "ScopeInternal::insertNameTree;ScopeInternal::addSymbolInternal#0", "A6-15 ScopeInternal::addSymbolInternal: a Symbol the name tree cannot take is freed (ScopeLocal::createEntry)" },
+    { "stack", "actions", 0, 8, 29, "ScopeInternal::addMapInternal;Scope::addMapPoint#0", "A6-15 Scope::addMapPoint: the map entry is freed when the Symbol cannot list it" },
     // The leaks the round 2 survey found in the Flow and Print phases and in the action tree's clone (patch 0032), seen under LeakSanitizer:
-    { "fixture1", "followFlow", 0, 8, 9, "FlowInfo::setupCallindSpecs", "A6-8 FlowInfo::setupCallindSpecs: the call site is freed when the function cannot list it" },
-    { "mailbox", "followFlow", 0, 8, 8, "BlockGraph::addBlock;BlockGraph::newBlockBasic", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
-    { "mailbox", "actions", 0, 24, 222, "BlockGraph::createVirtualRoot", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
-    { "mailbox", "print", 0, 32, 2, "PackedDecode::ingestStream", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
-    { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
-    { "jumptable", "followFlow", 0, 8, 31, "ActionRestartGroup::clone;ActionDatabase::deriveAction", "A6-7 the same, the member in hand when the group's list cannot grow" },
-    { "jumptable", "followFlow", 0, 16, 23, "ActionGroup::clone;ActionRestartGroup::clone", "A6-7 ActionGroup::clone: the same, in a nested group" },
-    { "jumptable", "followFlow", 0, 8, 33, "ActionPool::addRule;ActionPool::clone", "A6-7 ActionPool::clone: the rule in hand when the pool's list cannot grow" },
-    { "jumptable", "followFlow", 0, 24, 175, "RuleIdentityEl::getOpList;ActionPool::addRule", "A6-7 ActionPool::clone: the rule is the pool's already when its op-code index cannot grow (not freed twice)" },
-    { "mailbox", "actions", 0, 48, 7, "BlockGraph::calcForwardDominator;Funcdata::structureReset", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
-    { "jumptable", "init", 1, 48, 71, "Database::attachScope;Funcdata::Funcdata", "A6-7 Database::attachScope: the Scope is freed, and its id taken out of the map, when the parent cannot hold it (Funcdata::Funcdata)" },
-    { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
+    { "fixture1", "followFlow", 0, 8, 9, "FlowInfo::setupCallindSpecs#0", "A6-8 FlowInfo::setupCallindSpecs: the call site is freed when the function cannot list it" },
+    { "mailbox", "followFlow", 0, 8, 8, "BlockGraph::addBlock;BlockGraph::newBlockBasic#0", "A6-8 BlockGraph::newBlockBasic: the block is freed when the graph cannot take it" },
+    { "mailbox", "actions", 0, 24, 222, "BlockGraph::createVirtualRoot#0", "A6-9 BlockGraph::createVirtualRoot: the virtual root is freed when an edge cannot be made" },
+    { "mailbox", "print", 0, 32, 2, "PackedDecode::ingestStream#0", "A6-9 PackedDecode::allocateNextInputBuffer: the buffer is freed when the stream cannot hold it" },
+    { "jumptable", "followFlow", 0, 144, 0, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 ActionRestartGroup::clone: the copy of the action tree is freed when it cannot be completed" },
+    { "jumptable", "followFlow", 0, 8, 31, "ActionRestartGroup::clone;ActionDatabase::deriveAction#0", "A6-7 the same, the member in hand when the group's list cannot grow" },
+    { "jumptable", "followFlow", 0, 16, 23, "ActionGroup::clone;ActionRestartGroup::clone#0", "A6-7 ActionGroup::clone: the same, in a nested group" },
+    { "jumptable", "followFlow", 0, 8, 33, "ActionPool::addRule;ActionPool::clone#0", "A6-7 ActionPool::clone: the rule in hand when the pool's list cannot grow" },
+    { "jumptable", "followFlow", 0, 24, 175, "RuleIdentityEl::getOpList;ActionPool::addRule#0", "A6-7 ActionPool::clone: the rule is the pool's already when its op-code index cannot grow (not freed twice)" },
+    { "mailbox", "actions", 0, 48, 7, "BlockGraph::calcForwardDominator;Funcdata::structureReset#1", "A6-9 BlockGraph::calcForwardDominator: the virtual root is freed when it cannot be added to the order" },
+    { "jumptable", "init", 1, 48, 71, "Database::attachScope;Funcdata::Funcdata#1", "A6-7 Database::attachScope: the Scope is freed, and its id taken out of the map, when the parent cannot hold it (Funcdata::Funcdata)" },
+    { "jumptable", "init", 1, 40, 40, "TypeFactory::getTypeVoid;TypeFactory::setCoreType#0", "A6-7 TypeFactory::getTypeVoid: the \"void\" data-type is freed when the tree cannot take it" },
 };
 
 long ResolvePin(const Ctx& c, const Pin& p)
@@ -1783,11 +1868,22 @@ void PinRange(const Ctx& c, const Pin& p, long& lo, long& hi)
     }
 }
 
+// A site is the functions on the stack of the allocation, innermost first, each a substring of a demangled name and all in
+// order, separated by ';'. It ends in '#<n>': the allocation is the n-th (from 0, in allocation order) of those at the site
+// that ask for the pin's size in the pin's phase entry. The functions alone do not tell two such allocations apart
+// (ProtoStoreSymbol::clone makes two of 72 bytes), so a shift of one between them used to be "site ok".
+int SiteOrdinal(const char* site)
+{
+    const char* hash = site ? std::strrchr(site, '#') : nullptr;
+    return hash ? std::atoi(hash + 1) : -1;
+}
+
 #ifdef SE_FAULT_BACKTRACE
 bool SiteMatches(const std::vector<std::string>& names, const char* site)
 {
     size_t at = 0;
-    const std::string rest(site);
+    const char* hash = std::strrchr(site, '#');
+    const std::string rest(site, hash ? size_t(hash - site) : std::strlen(site));
     for (size_t pos = 0; pos <= rest.size();)
     {
         size_t semi = rest.find(';', pos);
@@ -1817,7 +1913,9 @@ const size_t kPinMax = 16;
 
 // Resolves the pins of the fixture and checks their identity: one extra run of the warmed engine, in a
 // child, takes the stack of every allocation that could be a pin (the pin's size, in its phase entry), and
-// names the stacks of the ones asked about.
+// names the stacks of the ones asked about. That run is the one the cells perturb (run N+1 of the series
+// Warm settled), so it is also checked against the baseline: every allocation's size must be the baseline's,
+// and the size the run made at a pin's coordinates must be the size the pin names (A6-24).
 std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
 {
     std::vector<PinRes> out;
@@ -1856,58 +1954,75 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
     fa::gCensusWantN = long(want.size());
     fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
     fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+    fa::gCensusSize = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kCensusCap)));
     auto body = [&]() -> int {
         dts::Failures() = 0;
         gProbe.Reset();
         fa::gCensusN = 0;
         fa::Arm(-1);
         fa::gCensus = true;
+        fa::gLogSizes = true;
         RunOnce(c);
+        fa::gLogSizes = false;
         fa::gCensus = false;
+        const long n = fa::gCount.load();
         fa::Disarm();
-        // Name the stacks here, where the addresses mean what they meant while the run was going.
+        // Is this the baseline's run? Its allocations, one by one.
+        long firstDiff = -1, diffs = 0;
+        for (long k = 0; k < std::min(n, long(c.base.sizes.size())); ++k)
+            if (fa::gSizeLog[k] != c.base.sizes[size_t(k)])
+            {
+                if (firstDiff < 0) firstDiff = k;
+                ++diffs;
+            }
+        if (n != c.base.allocs || diffs)
+            std::printf("PINSEQ %ld %ld %ld %u %u\n", n, diffs, firstDiff, firstDiff >= 0 ? fa::gSizeLog[firstDiff] : 0u,
+                        firstDiff >= 0 ? c.base.sizes[size_t(firstDiff)] : 0u);
+        // Name the stacks here, where the addresses mean what they meant while the run was going. A stack is named once.
+        std::map<long, std::vector<std::string>> named;
+        auto namesOf = [&](long j) -> const std::vector<std::string>& {
+            auto it = named.find(j);
+            if (it == named.end()) it = named.emplace(j, fa::Names(fa::gCensusStack[j])).first;
+            return it->second;
+        };
         for (size_t i = 0; i < out.size(); ++i)
         {
             const PinRes& r = out[i];
             if (r.stale) continue;
-            // The coordinates' own allocation first: when it is the site (nearly always) nothing else is named.
+            // The coordinates' own allocation first.
             long j0 = -1;
             for (long j = 0; j < fa::gCensusN && j0 < 0; ++j)
                 if (fa::gCensusK[j] == r.k0) j0 = j;
             if (j0 < 0)
             {
-                std::printf("PINSITE %zu 0\n", i);
+                std::printf("PINSITE %zu 0 -1\n", i);
                 continue;
             }
-            const std::vector<std::string> names0 = fa::Names(fa::gCensusStack[j0]);
             std::string top;
             int taken = 0;
-            for (const std::string& n : names0)
+            for (const std::string& nm : namesOf(j0))
             {
-                if (n.find("operator new") != std::string::npos || n.find("Allocate") != std::string::npos ||
-                    n.find("CensusRecord") != std::string::npos)
+                if (nm.find("operator new") != std::string::npos || nm.find("Allocate") != std::string::npos ||
+                    nm.find("CensusRecord") != std::string::npos)
                     continue;
-                top += (taken ? " < " : "") + n.substr(0, n.find('('));
+                top += (taken ? " < " : "") + nm.substr(0, nm.find('('));
                 if (++taken == 6) break;
             }
             std::printf("PINAT %zu %s\n", i, top.c_str());
-            if (SiteMatches(names0, r.pin->site))
-            {
-                std::printf("PINSITE %zu 1 %ld\n", i, r.k0);
-                continue;
-            }
-            // Not the site: every other allocation of the size in the entry that is.
+            // Every allocation of the pin's size (as the run made it) in the entry that is made at the site, in order: the
+            // coordinates' allocation is one of them, and its place among them is the ordinal a pin names.
             std::string matches;
-            long nmatch = 0;
+            long rank0 = -1, nmatch = 0;
             for (long j = 0; j < fa::gCensusN; ++j)
             {
                 const long k = fa::gCensusK[j];
-                if (j == j0 || k < r.lo || k >= r.hi || c.base.sizes[size_t(k)] != r.pin->size) continue;
-                if (!SiteMatches(fa::Names(fa::gCensusStack[j]), r.pin->site)) continue;
+                if (k < r.lo || k >= r.hi || fa::gCensusSize[j] != r.pin->size) continue;
+                if (!SiteMatches(namesOf(j), r.pin->site)) continue;
+                if (j == j0) rank0 = nmatch;
                 ++nmatch;
                 matches += " " + std::to_string(k);
             }
-            std::printf("PINSITE %zu %ld%s\n", i, nmatch, matches.c_str());
+            std::printf("PINSITE %zu %u %ld%s\n", i, fa::gCensusSize[j0], rank0, matches.c_str());
         }
         if (fa::gCensusN >= fa::kCensusCap) std::printf("PINCAP the census is full: raise kCensusCap\n");
         std::fflush(stdout);
@@ -1916,9 +2031,23 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
     CellRun run = ForkCell(scratch, body, CellTimeout());
     std::vector<std::string> top(out.size());
     std::vector<std::vector<long>> matches(out.size());
+    std::vector<long> rank0(out.size(), -1);
+    std::vector<long> sizeAt(out.size(), 0);
     std::vector<bool> seen(out.size(), false);
+    std::string seqNote;
     for (const std::string& l : Lines(run.out))
     {
+        if (l.compare(0, 7, "PINSEQ ") == 0)
+        {
+            long n = 0, diffs = 0, first = 0;
+            unsigned got = 0, want = 0;
+            std::istringstream in(l.substr(7));
+            in >> n >> diffs >> first >> got >> want;
+            seqNote = "the identity run made " + std::to_string(n) + " allocations (the baseline " + std::to_string(c.base.allocs) + ") and " +
+                      std::to_string(diffs) + " of them at another size, the first at " + std::to_string(first) + " (" + std::to_string(got) +
+                      " bytes, the baseline " + std::to_string(want) + ")";
+            continue;
+        }
         const bool at = l.compare(0, 6, "PINAT ") == 0;
         if (!at && l.compare(0, 8, "PINSITE ") != 0) continue;
         std::istringstream in(l.substr(at ? 6 : 8));
@@ -1933,8 +2062,7 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
         }
         else
         {
-            long n = 0;
-            in >> n;
+            in >> sizeAt[i] >> rank0[i];
             for (long k; in >> k;) matches[i].push_back(k);
             seen[i] = true;
         }
@@ -1943,20 +2071,52 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
     {
         PinRes& r = out[i];
         if (r.stale) continue;
-        if (!seen[i])
+        const int ord = SiteOrdinal(r.pin->site);
+        std::vector<long>& m = matches[i];
+        if (!seqNote.empty())
+        {
+            r.stale = true;
+            r.ks.clear();
+            r.note = "STALE: " + seqNote + ": the baseline is not the run the cells perturb";
+        }
+        else if (!seen[i] || sizeAt[i] == 0)
         {
             r.stale = true;
             r.ks.clear();
             r.note = std::string("STALE: the identity run did not report (") + (run.proc.timedOut ? "timed out" : "failed") + ")";
         }
-        else if (std::find(matches[i].begin(), matches[i].end(), r.k0) != matches[i].end())
+        else if (sizeAt[i] != long(r.pin->size))
+        {
+            r.stale = true;
+            r.ks.clear();
+            r.note = "STALE: the identity run asked for " + std::to_string(sizeAt[i]) + " bytes at allocation " + std::to_string(r.k0) +
+                     ", the pin names " + std::to_string(r.pin->size);
+        }
+        else if (ord < 0)
+        {
+            // A pin names which of the site's allocations of its size it is: two in one function cannot be told apart by the
+            // function alone (the second of ProtoStoreSymbol::clone's 72-byte allocations is not the first).
+            r.stale = true;
+            r.ks.clear();
+            r.note = rank0[i] >= 0 ? "STALE: the site has no ordinal; the coordinates' allocation is #" + std::to_string(rank0[i]) + " of the " +
+                                         std::to_string(m.size()) + " at [" + r.pin->site + "]: write \"" + r.pin->site + "#" + std::to_string(rank0[i]) + "\""
+                                   : "STALE: the site has no ordinal, and the coordinates lead to [" + top[i] + "], not to [" + r.pin->site + "]";
+        }
+        else if (rank0[i] >= 0 && rank0[i] == ord)
         {
             r.ks.assign(1, r.k0);
-            r.note = "site ok";
+            r.note = "site ok (#" + std::to_string(ord) + " of " + std::to_string(m.size()) + ")";
         }
-        else if (!matches[i].empty())
+        else if (ord >= 0 && ord < long(m.size()))
         {
-            std::vector<long>& m = matches[i];
+            // The site's allocation the pin names is not at the coordinates: fail that one.
+            r.ks.assign(1, m[size_t(ord)]);
+            r.note = "MOVED: the coordinates lead to [" + top[i] + "]" +
+                     (rank0[i] >= 0 ? " (the site's #" + std::to_string(rank0[i]) + ")" : std::string(", not the site")) + ", the pin names #" +
+                     std::to_string(ord) + " of [" + r.pin->site + "], which is allocation " + std::to_string(m[size_t(ord)]);
+        }
+        else if (!m.empty())
+        {
             if (m.size() > kPinMax)
             {
                 std::vector<long> thin;
@@ -1964,8 +2124,8 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
                 m = thin;
             }
             r.ks = m;
-            r.note = "MOVED: the coordinates lead to [" + top[i] + "], not to [" + r.pin->site + "]; the site is at " +
-                     std::to_string(m.size()) + " allocation(s) of this size in the entry";
+            r.note = "MOVED: the coordinates lead to [" + top[i] + "], not to [" + r.pin->site + "]; the site has no #" + std::to_string(ord) +
+                     " here, only " + std::to_string(m.size()) + " allocation(s) of this size in the entry";
         }
         else
         {
@@ -1982,9 +2142,13 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch)
     return out;
 }
 
-// `--sites <fixture> <phase> <ord> <size>`: for each allocation of that size in that phase entry, its rank
-// among them and the innermost functions on its stack. How the 'site' of a pin is found.
-int SitesTool(const std::string& fixture, const std::string& scratch, const std::string& phase, int ord, uint32_t size)
+// `--sites <fixture> <phase> <ord> <size> [site]`: for each allocation of that size in that phase entry, its rank
+// among them and the innermost functions on its stack. How the 'site' of a pin is found. With a site, only the
+// allocations made there, and each one's ordinal among them (the '#n' of the site). The run is checked as the pins'
+// census is (A6-24): an allocation that asks for another size than the baseline's is marked, and so is a run that is
+// not the baseline's.
+int SitesTool(const std::string& fixture, const std::string& scratch, const std::string& phase, int ord, uint32_t size,
+              const char* site = nullptr)
 {
 #ifdef SE_FAULT_BACKTRACE
     Ctx c;
@@ -1999,27 +2163,47 @@ int SitesTool(const std::string& fixture, const std::string& scratch, const std:
     fa::gCensusWantN = long(want.size());
     fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
     fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+    fa::gCensusSize = static_cast<uint32_t*>(std::malloc(sizeof(uint32_t) * size_t(fa::kCensusCap)));
     gProbe.Reset();
     fa::gCensusN = 0;
     fa::Arm(-1);
     fa::gCensus = true;
+    fa::gLogSizes = true;
     RunOnce(c);
+    fa::gLogSizes = false;
     fa::gCensus = false;
+    const long n = fa::gCount.load();
     fa::Disarm();
+    long firstDiff = -1, diffs = 0;
+    for (long k = 0; k < std::min(n, long(c.base.sizes.size())); ++k)
+        if (fa::gSizeLog[k] != c.base.sizes[size_t(k)])
+        {
+            if (firstDiff < 0) firstDiff = k;
+            ++diffs;
+        }
+    if (n != c.base.allocs || diffs)
+        std::printf("WARNING: this run is not the baseline's: %ld allocations (baseline %ld), %ld at another size, the first at %ld; the listing may name other allocations\n",
+                    n, c.base.allocs, diffs, firstDiff);
     const char* depthEnv = std::getenv("SE_FAULT_DEPTH");
     const int depth = depthEnv ? std::atoi(depthEnv) : 5;
+    long rank = 0;
     for (long j = 0; j < fa::gCensusN; ++j)
     {
+        const std::vector<std::string> names = fa::Names(fa::gCensusStack[j]);
+        if (site && !SiteMatches(names, site)) continue;
         std::string top;
         int taken = 0;
-        for (const std::string& n : fa::Names(fa::gCensusStack[j]))
+        for (const std::string& nm : names)
         {
-            if (n.find("operator new") != std::string::npos || n.find("Allocate") != std::string::npos || n.find("CensusRecord") != std::string::npos)
+            if (nm.find("operator new") != std::string::npos || nm.find("Allocate") != std::string::npos || nm.find("CensusRecord") != std::string::npos)
                 continue;
-            top += (taken ? " < " : "") + n.substr(0, 110);
+            top += (taken ? " < " : "") + nm.substr(0, 110);
             if (++taken == depth) break;
         }
-        std::printf("{ \"%s\", \"%s\", %d, %u, %ld }  k=%ld  %s\n", fixture.c_str(), phase.c_str(), ord, size, j, fa::gCensusK[j], top.c_str());
+        char tag[48] = "";
+        if (fa::gCensusSize[j] != size) std::snprintf(tag, sizeof tag, "  ASKED FOR %u BYTES", fa::gCensusSize[j]);
+        if (site) std::printf("#%ld  { \"%s\", \"%s\", %d, %u, %ld }  k=%ld%s  %s\n", rank++, fixture.c_str(), phase.c_str(), ord, size, j, fa::gCensusK[j], tag, top.c_str());
+        else std::printf("{ \"%s\", \"%s\", %d, %u, %ld }  k=%ld%s  %s\n", fixture.c_str(), phase.c_str(), ord, size, j, fa::gCensusK[j], tag, top.c_str());
     }
     return 0;
 #else
@@ -2202,15 +2386,21 @@ std::vector<long> UsCells(const Ctx& c, bool full)
     return v;
 }
 
-int Driver(const std::string& family, const std::string& fixture, const std::string& scratch, bool full, int shard, int shards,
+int Driver(const std::string& familyArg, const std::string& fixture, const std::string& scratch, bool full, int shard, int shards,
            long only)
 {
+    // "<family>-sticky": the same cells with sustained exhaustion, every allocation from k on failing (A6-23).
+    std::string family = familyArg;
+    const bool sticky = family.size() > 7 && family.compare(family.size() - 7, 7, "-sticky") == 0;
+    if (sticky) family.resize(family.size() - 7);
+    const char* stickyEnv = std::getenv("SE_FAULT_STICKY");
+    fa::gSticky = sticky || (stickyEnv && *stickyEnv && std::string(stickyEnv) != "0");
     Ctx c;
     if (!Warm(c, scratch, fixture)) return 2;
     std::vector<long> cells;
     std::vector<PinRes> pins;
     DisasmBase disasm;
-    if (family == "alloc" && only == -999999) pins = ResolvePins(c, scratch);
+    if (family == "alloc" && !sticky && only == -999999) pins = ResolvePins(c, scratch);
     if (family == "alloc") cells = AllocCells(c, full, pins);
     else if (family == "disasm")
     {
@@ -2223,13 +2413,13 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
     else if (family == "cancel-oom") cells = CancelOomCells(c, full);
     else
     {
-        std::printf("unknown family '%s'\n", family.c_str());
+        std::printf("unknown family '%s'\n", familyArg.c_str());
         return 2;
     }
     if (only != -999999) cells.assign(1, only);
     const auto t0 = Clock::now();
     DriverSummary sum;
-    if (family == "alloc" && only == -999999)
+    if (family == "alloc" && !sticky && only == -999999)
     {
         // Every shard resolves the pins (the cells are dealt out among them); shard 0 reports them, and every
         // shard counts a stale one as its own failure, so that no shard of a sweep passes over it.
@@ -2307,26 +2497,26 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
             }
             if (shownFailures++ < 40)
             {
-                std::printf("FAIL %s %s %ld: %s\n", family.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
+                std::printf("FAIL %s %s %ld: %s\n", familyArg.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
                 std::string cond = only == -999999 ? Condense(detail) : detail;
                 for (const std::string& l : Lines(cond)) std::printf("    | %s\n", l.c_str());
             }
         }
         else if (shownFailures < 400)
         {
-            std::printf("FAIL %s %s %ld: %s\n", family.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
+            std::printf("FAIL %s %s %ld: %s\n", familyArg.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
         }
     }
-    std::printf("SUMMARY %s %s shard %d/%d: %ld cells, %ld failed, %.1f s\n", family.c_str(), fixture.c_str(), shard, shards, sum.cells,
+    std::printf("SUMMARY %s %s shard %d/%d: %ld cells, %ld failed, %.1f s\n", familyArg.c_str(), fixture.c_str(), shard, shards, sum.cells,
                 sum.failed, MsSince(t0) / 1000.0);
-    for (const auto& kv : sum.classes) std::printf("CLASS %s %s %ld\n", family.c_str(), kv.first.c_str(), kv.second);
+    for (const auto& kv : sum.classes) std::printf("CLASS %s %s %ld\n", familyArg.c_str(), kv.first.c_str(), kv.second);
     for (const auto& kv : sum.maxLatency)
-        std::printf("LATENCY %s %s max %ld allocations of %ld\n", family.c_str(), kv.first.c_str(), kv.second, c.base.allocs);
+        std::printf("LATENCY %s %s max %ld allocations of %ld\n", familyArg.c_str(), kv.first.c_str(), kv.second, c.base.allocs);
     for (const auto& kv : sum.sigs)
     {
         std::string ph;
         for (const std::string& x : kv.second.phases) ph += (ph.empty() ? "" : ",") + x;
-        std::printf("SIGNATURE %s | x%ld, %s %s k=%ld..%ld%s%s\n", kv.first.c_str(), kv.second.count, family.c_str(), fixture.c_str(),
+        std::printf("SIGNATURE %s | x%ld, %s %s k=%ld..%ld%s%s\n", kv.first.c_str(), kv.second.count, familyArg.c_str(), fixture.c_str(),
                     kv.second.first, kv.second.last, ph.empty() ? "" : " in ", ph.c_str());
     }
     return sum.failed ? 1 : 0;
@@ -3053,7 +3243,7 @@ int main(int argc, char** argv)
 
     // ---- the allocations of one size in one phase entry, with their stacks (how a pin's site is found)
     if (arg(2) == "--sites" && argc >= 7)
-        return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])));
+        return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])), argc >= 8 ? argv[7] : nullptr);
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
 
