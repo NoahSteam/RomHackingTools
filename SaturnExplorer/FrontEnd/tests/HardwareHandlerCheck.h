@@ -481,6 +481,14 @@ inline void CheckOnChipAddresses(const Cases& c, Stats& st, Problems& pr)
                 if (said != h->pex)
                     pr.Add("on-chip " + std::string(wr ? "write" : "read") + " of " + std::to_string(w) + " bytes at " + Hex(uint32_t(a)) +
                            (said ? " is called an address error, the handler raises none" : " is not called an address error, the handler raises one"));
+                // ...and the aligned long below 0xFFFFFF00 reaches at most the register at its own address, a read none (A5-31).
+                if (!hi && w == 4)
+                {
+                    const size_t reached = CoveredRegisters(uint32_t(a), w, wr != 0).size();
+                    if (reached > (wr ? 1u : 0u))
+                        pr.Add("on-chip long " + std::string(wr ? "write" : "read") + " at " + Hex(uint32_t(a)) + " is said to reach " + std::to_string(reached) +
+                               " registers, the handler (switch on A & 0xFF) reaches " + (wr ? "the one at its own address" : "none"));
+                }
             }
         }
 }
@@ -544,6 +552,11 @@ inline void CheckOnChipMisaligned(const Cases& c, const std::vector<Excused>& ex
                     WidthProbe p{ cr.reg, w, wr != 0, int32_t(first) - int32_t(cr.reg->address), reach, cr.cell };
                     CheckOnChipProbe(c, p, excused, st, pr);
                 }
+                // Below 0xFFFFFF00 a long write is made on the register at the long's own address only and a long read reaches none (the
+                // cases file: rd32.lo has no switch, wr32.lo switches on A & 0xFF): the decompiler may not say it reaches the others.
+                if (!hi && w == 4 && covered.size() > (wr ? 1u : 0u))
+                    pr.Add("misaligned " + std::string(wr ? "write" : "read") + " of 4 bytes at " + Hex(a) + ": the handler reaches " +
+                           (wr ? "the register at its own address only" : "no register") + ", the decompiler says it reaches " + std::to_string(covered.size()));
                 if (target && !targetSaid)
                     pr.Add("misaligned " + std::string(wr ? "write" : "read") + " of " + std::to_string(w) + " bytes at " + Hex(a) + ": the handler (" +
                            std::string("label 0x") + Hex(label, 2) + ") reaches " + target->name + ", the decompiler says the access reaches " +

@@ -1553,6 +1553,11 @@ void TestHardwareVolatility()
         add("a5_28_addend", { 0xD102, 0x314C, 0x6011, 0x000B, 0x0009, 0x0009, 0x05F8, 0x0004 }, 0x0C, 0x05F80004u);
         add("a5_28_index", { 0xD105, 0x6043, 0x4008, 0x4008, 0x4000, 0xD204, 0x0126, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 },
             0x18, 0x25FE0010u);   // (&SCU_D0EN)[param_1 * 8] = 0x101, the corpora's shape (hwram007 0601B7B4, hwram008 0605A964)
+        // ...a write through a pointer that may be SMPC_PDR1 or SMPC_PDR2, then a read of SMPC_PDR1: the write is not certain, so the read
+        // is not "read back after a write" (the split note); the control writes SMPC_PDR1 directly
+        add("a5_28_split", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xE000, 0x2100, 0xD204, 0x6020, 0x000B, 0x0009, 0x0009, 0x2010, 0x0075, 0x2010, 0x0077, 0x2010, 0x0075 },
+            0x18, 0x20100075u);
+        add("a5_28_split_direct", { 0xD103, 0xE000, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x2010, 0x0075 }, 0x10, 0x20100075u);
         // A5-29: a misaligned on-chip access (a: word write at 0xFFFFFF05, b: word read at 0xFFFFFF8D, c: long write at 0xFFFFFF06, d: word read at 0xFFFFFE11).
         add("a5_29a", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFF05 }, 0x0C, 0xFFFFFF05u);
         add("a5_29b", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFF8D }, 0x08, 0xFFFFFF8Du);
@@ -1561,6 +1566,7 @@ void TestHardwareVolatility()
         add("a5_29e", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE11 }, 0x0C, 0xFFFFFE11u);   // a word write at FTCSR's own address
         add("a5_29f", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFE61 }, 0x08, 0xFFFFFE61u);   // a word read at IPRB + 1: IPRB, whole
         add("a5_29g", { 0xD101, 0x6011, 0x000B, 0x0009, 0xFFFF, 0xFE81 }, 0x08, 0xFFFFFE81u);   // a word read at WTCNT's address
+        add("a5_29h", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE81 }, 0x0C, 0xFFFFFE81u);   // a word write at WTCNT's address: not the key port
         // A5-30: a byte write to the reserved low byte of IPRB / VCRD; controls: the high byte, VCRA's low byte, a word write.
         add("a5_30iprb", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE61 }, 0x0C, 0xFFFFFE61u);
         add("a5_30vcrd", { 0xD102, 0xE003, 0x2100, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFE69 }, 0x0C, 0xFFFFFE69u);
@@ -1586,6 +1592,11 @@ void TestHardwareVolatility()
         add("a5_32level1", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0030, 0x0000, 0x0101 }, 0x0C, 0x25FE0030u);
         add("a5_32en1", { 0xD102, 0xE001, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010 }, 0x0C, 0x25FE0010u);   // control: bit 0 only, no bit 8
         add("a5_32aiack0", { 0xD102, 0xE000, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A8 }, 0x0C, 0x25FE00A8u);   // control: bit 0 clear
+        // ...the lane that carries the bits: a word at +0 and a byte at +0 carry neither bit 0 nor bit 8; a word at +2 carries both; a byte at +3 carries bit 0
+        add("a5_32word0", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x0C, 0x25FE0010u);
+        add("a5_32word2", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0012, 0x0000, 0x0101 }, 0x0C, 0x25FE0012u);
+        add("a5_32byte0", { 0xD102, 0xE001, 0x2100, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010 }, 0x0C, 0x25FE0010u);
+        add("a5_32byte3", { 0xD102, 0xE001, 0x2100, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0013 }, 0x0C, 0x25FE0013u);
         add("a5_32t1md1", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0098, 0x0000, 0x0101 }, 0x0C, 0x25FE0098u);   // control: enable set
         // The reviewer's questions (A5-33, A5-34): a store to the BIOS ROM that the engine folds; the cache address array.
         add("a5_33", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1000 }, 0x10, 0x00001000u);   // mov.b 5 -> ROM, read it back
@@ -2546,6 +2557,10 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT) (it may hold other values too): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
         r = R5("a5_28_param", "a pointer that is only a parameter: no register is named");
         CHECK(r.hardwareNotes.empty());
+        r = R5("a5_28_split", "a write through PDR1 or PDR2, then a read of PDR1");
+        CHECK(!HasNote(r, "SMPC_PDR1: a write sets the port's output bits", false));   // the write may not be PDR1's
+        r = R5("a5_28_split_direct", "control: PDR1 written, then read");
+        CHECK(HasNote(r, "SMPC_PDR1: a write sets the port's output bits; a read returns its pin levels", false));
         r = R5("a5_28_minus1", "a pointer that is param_1 - 1: the number is not a register");
         CHECK(r.hardwareNotes.empty());
         r = R5("a5_28_addend", "a read at &VDP2_TVSTAT + param_1");
@@ -2580,6 +2595,8 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "a 2-byte read at SH2_WTCNT, an 8-bit register, returns only it, in bits 7-0", true) && !HasNote(r, "SH2_WTCSR", true));
 
         // A5-30: the low byte of IPRB and VCRD is reserved: a byte write there stores nothing.
+        r = R5("a5_29h", "a word write at 0xFFFFFE81");
+        CHECK(HasNote(r, "SH2_WTCNT takes no 2-byte write: it is written by a keyed word at 0xFFFFFE80; this write does not write it", true) && !HasNote(r, "keyed watchdog write", false));
         r = R5("a5_30iprb", "a byte write to 0xFFFFFE61");
         CHECK(HasNote(r, "a 1-byte write to the low byte of SH2_IPRB does nothing: that byte is reserved, and the handler masks the store with 0xFF00 (a read there returns 0)", true));
         r = R5("a5_30vcrd", "a byte write to 0xFFFFFE69");
@@ -2612,6 +2629,7 @@ void TestHardwareVolatility()
         r = R5("a5_31wdt", "a long write at the watchdog");
         CHECK(HasNote(r, "Mednafen then writes only SH2_WTCSR, the register at 0xFFFFFE80, which a 4-byte write does not write (the watchdog takes only a keyed word); "
                          "the write cancels a pending SH2_RSTCSR WOVF clear; SH2_WTCNT and SH2_RSTCSR are not written", true));
+        CHECK(!HasNote(r, "SH2_WTCNT takes no 4-byte write") && !HasNote(r, "SH2_RSTCSR takes no 4-byte write"));   // the registers under the long's other bytes are not written
         r = R5("a5_31ccr", "a long write to SH2_CCR with CP set");
         CHECK(HasNote(r, "SH2_CCR: CP (bit 4) is set, so this write purges the whole cache", false));
         r = R5("a5_31bsc", "a byte write to SH2_BCR1");
@@ -2634,6 +2652,14 @@ void TestHardwareVolatility()
         CHECK(r.hardwareNotes.empty());
         r = R5("a5_32aiack0", "SCU_AIACK = 0");
         CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32word0", "SCU_D0EN word write at +0 (bits 31-16)");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32word2", "SCU_D0EN word write at +2 with 0x0101");
+        CHECK(HasNote(r, "SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        r = R5("a5_32byte0", "SCU_D0EN byte write at +0");
+        CHECK(r.hardwareNotes.empty());
+        r = R5("a5_32byte3", "SCU_D0EN byte write at +3 with bit 0");
+        CHECK(HasNote(r, "SCU_D0EN: bit 0 is set, so this write starts level-0 DMA when its start factor (SCU_D0MD bits 2-0) is 7 (start by this register), when bit 8 is already set", false));
         r = R5("a5_32t1md1", "SCU_T1MD = 0x101: the timer is enabled");
         CHECK(r.hardwareNotes.empty());
 
