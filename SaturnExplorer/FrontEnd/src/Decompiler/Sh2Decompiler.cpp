@@ -1834,9 +1834,9 @@ bool NamedRegisterNear(uint32_t address, uint32_t span)
 
 // True when every use of 'vn' looks only at the bits in 'mask': an AND with a constant inside it, through the copies, extensions and
 // truncations that carry the value on. A value nothing uses is seen by no bit.
-bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, int depth = 0)
+bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, std::set<const ghidra::Varnode*>& seen)
 {
-    if (depth > 12) return false;
+    if (!seen.insert(vn).second) return true;   // (a loop's merge of its own value: its other uses are judged where they are)
     for (auto it = vn->beginDescend(); it != vn->endDescend(); ++it)
     {
         const ghidra::PcodeOp* use = *it;
@@ -1855,16 +1855,23 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, int depth = 0)
         case ghidra::CPUI_INT_SEXT:
         case ghidra::CPUI_COPY:
         case ghidra::CPUI_CAST:
-            if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, depth + 1)) return false;
+        case ghidra::CPUI_MULTIEQUAL:
+            if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
             continue;
         case ghidra::CPUI_SUBPIECE:
-            if (use->getIn(1)->isConstant() && use->getIn(1)->getOffset() == 0 && use->getOut() && OnlyUsesBits(use->getOut(), mask, depth + 1)) continue;
+            if (use->getIn(1)->isConstant() && use->getIn(1)->getOffset() == 0 && use->getOut() && OnlyUsesBits(use->getOut(), mask, seen)) continue;
             return false;
         default:
             return false;
         }
     }
     return true;
+}
+
+bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask)
+{
+    std::set<const ghidra::Varnode*> seen;
+    return OnlyUsesBits(vn, mask, seen);
 }
 
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
