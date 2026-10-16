@@ -5950,3 +5950,58 @@ sanitizer cells there is no crash, no use-after-free, no double free, and no UBS
 - The race between two cancels: by reading, both take `mMutex`, and `RequestCancelLocked` keeps the first reason.
 - A child that dies mid-write, and a full pipe. Cells and drivers write to files, not pipes, and a dead cell is classified by its signal.
 - `diamonds` for every k, Windows and macOS (the matrix forks), and a deep-recursion fixture.
+
+## External ledger review at f0684b9: response
+
+The user commissioned an external review of the findings ledger at master f0684b9
+(`Docs/Decompiler/GPTReview/SaturnExplorer-Ledger-Review-f0684b9.md`). The dispositions, with the exact regression and
+mutation evidence for each, are in `Docs/Decompiler/GPTReview/Response-f0684b9.md`; this is the record in the round format.
+Branch `review/gpt-ledger-review-fix` from 979edd2, merged with 139a6e4 (the area 6 round 3 review, whose A6-19 and A6-20
+are finding 4).
+
+| Finding | Verdict | Row | Commit |
+|---|---|---|---|
+| 1 known callee clobbers (P2) | already fixed (A3-3); the three replays are right or withheld; the oracle could not see the class, now pinned | none | `ee154b7` |
+| 2 cold global initialization (P2) | confirmed; `StartLibrary` transactional, the interrupted library start refuses the engine with a restart reason, Decompile and Disassemble alike | A6-30 | `dfadefb` (test), `b964b91` |
+| 3 Rosetta job builds what it selects (P2) | confirmed; one list builds, selects and is checked | A12-10 | `d415247` |
+| 4 fault suite in the sanitizer gate (P2) | confirmed with A6-19, A6-20; built, run, gated; checker has an expected-binary list and pass lines | A12-11 | `d415247` |
+| 5 A2-8 guide disclosure (P3) | confirmed; Limits text written | A2-30 | `61b9357` |
+| 6 generator alignment / domain (P3) | confirmed, an oracle-domain issue; tracking and exclusion | A11-2 | `39ceee4` |
+| 7 A5-16 CRAM byte write (P2) | confirmed, not fixed | A5-50 (open) | ledger `1f9144f` |
+
+### What the round found
+
+- **A6-30.** The first request of a process runs the engine library's start-up, which fills process-global tables by
+  appending. `StartLibrary` committed its flags before the work was done, so an allocation failure left three different
+  states: `Unavailable` with an empty explanation (167 of the first request's allocations), a second request that met a
+  half-filled print-language list (`No print languages registered`, 6), and a failure inside the library reported as a
+  plain out of memory with the engine not damaged (882). The warm matrix could not see any of it. The new cold family forks
+  from a parent that never ran the engine and fails each allocation of the first request, with the bundle extracted and
+  with an empty config directory, finding where the allocation fell by its stack. Fixed; 0 of 1,105 and 0 of 1,101 cells
+  fail; five mutations are each caught.
+- **A12-10, A12-11 (A6-19, A6-20).** CI never built two of the tests the Rosetta job selected, and never ran the fault matrix
+  in a configuration that checks pins or leaks; the sanitizer checker passed an empty log. The self-test of the sanitizer
+  harness (`test-sanitizer-harness.sh`) runs the real scripts against stub binaries and separates 11 cases, which the old
+  scripts get wrong.
+- **Finding 1.** The engine side was fixed in round 3. The oracle side was not: with the fix removed the review's replays
+  print `return 5;` and the generator reports 0 findings. `TestCalleeClobberPins` closes it for these shapes.
+- **A11-2.** r4/r5 alignment is tracked in generation; a run with a misaligned access is an address error (A2-8 (a)) and is
+  excluded and counted, never a normal completion. 3,000 grammar-2 seeds: 232 seeds with an excluded run, against 329 untracked.
+
+### Matrix
+
+Whole `ctest` 97 of 97 (166 s); cold families 0 of 1,105 and 0 of 1,101 cells failed; the fault matrix default subset under
+ASan + UBSan + `detect_leaks=1` through the updated script: `fault matrix: 0 of 34 job(s) failed, 552 s`, the checker passes
+(its first run found four cold-translator cells with leaks the accepted table did not name: `A6-30 first translator` added, and
+the Init-only bound now uses the phase the failure fell in); hwram008 corpus: every count 0, 20 missing and said; 3,000
+grammar-2 seeds from 200001: 2,999 pass, seed 201436 (`cache-read-pointer-unsaid`) fails with and without the new alignment
+tracking.
+
+### Not done
+
+macOS and Rosetta execution, Windows, the GitHub sanitizer job itself (a local run with the CI's flags stands for it),
+the A5-50 fix, a general value check for the generator's modules, the callee-argument alignment residue (A11-2), and the
+`SaturnExplorerDecompilerPanelTests` link under the local RelWithDebInfo sanitizer build (see the response).
+Seed 201436 of the 3,000-seed grammar-2 range reports `cache-read-pointer-unsaid` (a 1-byte read of a register through the
+cached partition, printed through `&REG` with no cache-read note); it fails the same way with alignment tracking off, so it is
+not caused by this round, and it has no row here.
