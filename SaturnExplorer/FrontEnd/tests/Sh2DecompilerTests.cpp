@@ -1549,6 +1549,8 @@ void TestHardwareVolatility()
         add("a5_28_param", { 0x6041, 0x000B, 0x0009, 0x0009 }, 0x04, 0x00000000u);
         // ...a pointer built from a number that is not a register (`param_1 - 1` is INT_ADD(0xFFFFFFFF, param_1)): no register is named
         add("a5_28_minus1", { 0x6143, 0x71FF, 0x6010, 0x000B, 0x0009 }, 0x08, 0x00000000u);
+        // ...a number that is a register's address (0xFFFFFFF4, SH2_RTCNT's) added to a parameter prints as `param_1 + -0xc`: no register is named
+        add("a5_28_rawconst", { 0xD102, 0x314C, 0x6011, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFFF4 }, 0x0C, 0xFFFFFFF4u);
         // ...an index added to a register's address: said for the register itself
         add("a5_28_addend", { 0xD102, 0x314C, 0x6011, 0x000B, 0x0009, 0x0009, 0x05F8, 0x0004 }, 0x0C, 0x05F80004u);
         add("a5_28_index", { 0xD105, 0x6043, 0x4008, 0x4008, 0x4000, 0xD204, 0x0126, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 },
@@ -2563,6 +2565,8 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "SMPC_PDR1: a write sets the port's output bits; a read returns its pin levels", false));
         r = R5("a5_28_minus1", "a pointer that is param_1 - 1: the number is not a register");
         CHECK(r.hardwareNotes.empty());
+        r = R5("a5_28_rawconst", "param_1 + 0xFFFFFFF4: a number, not &SH2_RTCNT");
+        CHECK(!Has(r.Text(), "SH2_RTCNT") && r.hardwareNotes.empty());
         r = R5("a5_28_addend", "a read at &VDP2_TVSTAT + param_1");
         CHECK(Has(r.Text(), "&VDP2_TVSTAT"));
         CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05F80004 (VDP2_TVSTAT)): a read of VDP2_TVSTAT through the cached partition is a cache read", true));

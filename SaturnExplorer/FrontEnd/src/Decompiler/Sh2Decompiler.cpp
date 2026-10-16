@@ -1380,8 +1380,9 @@ PointerValues ConstantsOf(const ghidra::Varnode* start)
         const bool indexed = item.second;
         if (vn->isConstant())
         {
-            if (indexed) out.bases.insert(static_cast<uint32_t>(vn->getOffset()));
-            else out.constants.insert(static_cast<uint32_t>(vn->getOffset()));
+            // A bare number, which the engine prints as a number even when it is a register's address (`param_1 + -0xc` is 0xFFFFFFF4,
+            // SH2_RTCNT's): the pointer holds something else as well. A register address the engine means as a pointer is a PTRSUB (below).
+            if (!indexed) out.others = true;
             continue;
         }
         const ghidra::PcodeOp* d = vn->isWritten() ? vn->getDef() : nullptr;
