@@ -176,12 +176,14 @@ ghidra::Datatype* TypeOf(ghidra::TypeFactory& types, const TypeShape& shape)
 }
 
 // Whether a lent prototype also lends the effects its analysis proved (the registers it keeps).
-// Tests only: off, a lent callee leaves r0-r7, MACH, MACL and SR as the default model does.
+// Tests only: off, a lent callee leaves r0-r7, MACH, MACL and SR killed and r8-r15, GBR and VBR kept, as
+// the default model does.
 bool gLendEffectsForTests = true;
 
 // The registers the default model's killedbycall list (patch 0026) names that a callee can be proved
 // to keep, as CallEffects::preserved bits: r2-r7, SR, MACH, MACL. (r8-r14, GBR, VBR and r15 are
-// unaffected for every callee already; PR is the return address.) Not r0 and r1: they are the
+// unaffected for every callee already, and are killed the other way round: kKeptByCall, below. PR
+// is the return address.) Not r0 and r1: they are the
 // return registers, and what the engine's return recovery takes for a value depends on what a call
 // leaves in them -- a caller whose r0 and r1 pass through callees that keep them has a "real" value
 // in both at its own return, so a function that only leaves temporaries there was given a return
@@ -193,6 +195,10 @@ struct KilledRegister
 };
 constexpr KilledRegister kKilledByCall[] = { { 2, "r2" }, { 3, "r3" }, { 4, "r4" }, { 5, "r5" }, { 6, "r6" }, { 7, "r7" },
                                              { 16, "sr" }, { 19, "mach" }, { 20, "macl" } };
+// The registers the model keeps across every call (the cspec's <unaffected>, bar r15, which is the stack
+// pointer and is settled in WithholdReason).
+constexpr KilledRegister kKeptByCall[] = { { 8, "r8" }, { 9, "r9" }, { 10, "r10" }, { 11, "r11" }, { 12, "r12" }, { 13, "r13" },
+                                           { 14, "r14" }, { 17, "gbr" }, { 18, "vbr" } };
 
 // Lend 'proto''s proved effects with its signature: the registers ReturnCheck found equal to their
 // entry values at every return are unaffected by a call to this function, where the model would
@@ -201,11 +207,23 @@ constexpr KilledRegister kKilledByCall[] = { { 2, "r2" }, { 3, "r3" }, { 4, "r4"
 void LendEffects(ghidra::Architecture& arch, ghidra::FuncProto& fp, const Prototype& proto)
 {
     if (!gLendEffectsForTests || !proto.known) return;
-    std::vector<ghidra::EffectRecord> kept;
+    std::vector<ghidra::EffectRecord> effects;
     for (const KilledRegister& k : kKilledByCall)
         if ((proto.effects.preserved >> k.bit) & 1u)
-            kept.emplace_back(arch.translate->getRegister(k.name), ghidra::EffectRecord::unaffected);
-    if (!kept.empty()) fp.setEffects(kept);
+            effects.emplace_back(arch.translate->getRegister(k.name), ghidra::EffectRecord::unaffected);
+    // ...and the other way: a register the model keeps for every callee (cspec <unaffected>) that this
+    // one was proved to change on some path is killed, as the model's kill of r0-r7 is. Without it the
+    // caller reads the value from before the call and is lent a signature on it (A3-3).
+    for (const KilledRegister& k : kKeptByCall)
+        if (!((proto.effects.preserved >> k.bit) & 1u))
+            effects.emplace_back(arch.translate->getRegister(k.name), ghidra::EffectRecord::killedbycall);
+    if (!effects.empty()) fp.setEffects(effects);
+    // r15: the model keeps it (extrapop 0). A callee proved to leave it a constant distance from where it
+    // found it -- a push it does not undo, a pop of its caller's frame -- has that as its extrapop, which
+    // the engine applies to the stack pointer after the call. (A callee that cannot say is not lent at
+    // all: WithholdReason.)
+    if (!((proto.effects.preserved >> 15) & 1u) && proto.effects.spDelta != CallEffects::kSpUnknown)
+        fp.setExtraPop(proto.effects.spDelta);
 }
 
 // Lock 'fd' to 'proto': the caller's call site then copies it instead of guessing.
@@ -309,6 +327,23 @@ public:
         }
     }
 
+    // Explore every path whatever happens on it: an instruction that does not decode, a return not to
+    // the caller or an unresolved jump ends that path instead of the run. For FrameEscape().
+    void SetTolerant() { mTolerant = true; }
+
+    // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
+    // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
+    bool FrameEscape(uint32_t& offset) const
+    {
+        if (!mEscaped) return false;
+        offset = static_cast<uint32_t>(mEscapeLow);
+        return true;
+    }
+
+    // After Run(): the registers outside r4-r7 (r1-r3, r8-r14, GBR, VBR, MACH, MACL: bit n is register n of
+    // origin::) whose entry value reaches r0 at a return of a path that made no call.
+    uint32_t InputsInReturn() const { return mInputsInReturn; }
+
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
     // function's own summary.
     std::string Run(CallEffects& effects)
@@ -317,6 +352,10 @@ public:
         start.reached = true;
         for (int i = 0; i < kTracked; ++i) Set(start, mReg[i], i == kR15 ? Value::Stack(0) : Value::Entry(i));
         mPreserved = origin::kRegisters;
+        mSpSeen = false;
+        mSpKnown = true;
+        mSpDelta = 0;
+        mInputsInReturn = 0;
         mStoresThrough = 0;
         mOut = 0;
         mLeaks = 0;
@@ -347,13 +386,18 @@ public:
         effects.outOrigins = mOut;
         effects.leaks = mLeaks;
         effects.frameValues = mFrameValues;
+        // |delta| below the engine's own 'unknown' extrapop (0x8000).
+        effects.spDelta = mSpKnown && mSpDelta > -0x8000 && mSpDelta < 0x8000 ? static_cast<int32_t>(mSpDelta) : CallEffects::kSpUnknown;
         return std::string();
     }
 
 private:
     static constexpr size_t kMaxSteps = 200000;
     static constexpr int kTracked = 22;   // the registers origin:: names, in its order
-    static constexpr int kR15 = 15, kPr = 21;
+    static constexpr int kR15 = 15, kSr = 16, kPr = 21;
+    // r0-r3, r8-r14, GBR, VBR, MACH, MACL: the registers whose entry value no signature passes (r4-r7 are
+    // parameters; r15 and PR are the stack and the return address; SR is left out, see Return()).
+    static constexpr uint32_t kNotParameters = 0xFu | (0x7Fu << 8) | (1u << 17) | (1u << 18) | (1u << 19) | (1u << 20);
 
     struct Value
     {
@@ -381,6 +425,7 @@ private:
     {
         bool reached = false;
         bool escaped = false;
+        bool called = false;               // a call or a user op ran on the way here: what it left in the registers is coarse
         std::map<Key, Value> vars;         // registers and temporaries; absent = anything
         std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
     };
@@ -480,6 +525,7 @@ private:
     {
         bool changed = false;
         if (from.escaped && !into.escaped) into.escaped = changed = true;
+        if (from.called && !into.called) into.called = changed = true;
         auto merge = [&changed](Value& a, const Value& b) {
             if (a == b) return;
             const Value m = Value::From(a.Origins() | b.Origins());
@@ -521,17 +567,42 @@ private:
     void Call(State& s, uint32_t at)
     {
         CallEffects e;   // unknown: anything
+        bool signatureLent = false;
         auto t = mCallAt.find(at);
         if (t != mCallAt.end())
         {
             auto p = mLent.find(t->second);
-            if (p != mLent.end()) e = p->second.effects;
+            if (p != mLent.end())
+            {
+                e = p->second.effects;
+                signatureLent = p->second.known;
+            }
         }
+        if (!signatureLent) NoteFrameEscape(s);
         Apply(s, e);
+    }
+
+    // A call whose signature is not lent may read r2: the SH ABI passes the address of a returned
+    // structure there (SH_STRUCT_VALUE_REGNUM 2 in gcc, and Renesas' compilers), and the engine's
+    // calling convention has no input in r2. So the copy of r15 that made the address is dead code
+    // before the engine looks for pointers into the frame, and the callee's writes through it are
+    // taken for none (A3-4). A callee whose signature is lent has been through WithholdReason, which
+    // lends none that reads r2. Only r2, not the other registers a callee could read: r0, r1 and r3
+    // are scratch the compiler leaves a frame address in, and r8-r14 hold the frame pointer, so a
+    // rule over them would put every local of every function in an alias.
+    void NoteFrameEscape(const State& s)
+    {
+        const Value v = Get(s, mReg[2]);
+        // Only an address known exactly: one with an index added to it has no offset to declare, and
+        // declaring the whole frame would make an array of every local.
+        if (v.kind != Value::Sp) return;
+        if (!mEscaped || v.v < mEscapeLow) mEscapeLow = v.v;
+        mEscaped = true;
     }
 
     void Apply(State& s, const CallEffects& e)
     {
+        s.called = true;
         // The callee's bits as origins here. Its entry registers are ours at the call. What it loads
         // from memory can be anything in memory, our slots included: it may read our frame through
         // its stack pointer or a pointer it was given. Its stack is ours above its r15.
@@ -564,7 +635,14 @@ private:
         }
         if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(stores), leaked | framed);
         for (int r = 0; r < kTracked; ++r)
-            if (!(e.preserved & (1u << r))) Set(s, mReg[r], Value::From(out));
+        {
+            if (e.preserved & (1u << r)) continue;
+            // r15 moved by a constant at every return of the callee: where it ends is known.
+            if (r == kR15 && e.spDelta != CallEffects::kSpUnknown && sp.kind == Value::Sp)
+                Set(s, mReg[r], Value::Stack(Wrap(sp.v + e.spDelta)));
+            else
+                Set(s, mReg[r], Value::From(out));
+        }
     }
 
     // Values let out to memory this function does not track: its callers learn of them through
@@ -644,6 +722,15 @@ private:
     {
         const Value t = Get(s, target);
         if (!(t.kind == Value::Reg && t.v == kPr)) return false;
+        const Value sp = Get(s, mReg[kR15]);
+        if (!mSpSeen)
+        {
+            mSpSeen = true;
+            if (sp.kind == Value::Sp) mSpDelta = sp.v;
+            else mSpKnown = false;
+        }
+        else if (!(sp.kind == Value::Sp && sp.v == mSpDelta))
+            mSpKnown = false;
         for (int r = 0; r < kTracked; ++r)
         {
             const Value v = Get(s, mReg[r]);
@@ -651,6 +738,24 @@ private:
             if (same) continue;
             mPreserved &= ~(1u << r);
             mOut |= v.Origins();
+            // The return register: a value computed from a register no signature passes is a return the
+            // engine does not see (it takes a return made only of such inputs for no return at all: A3-5).
+            // Not r0's own entry value: a path that leaves r0 alone and one that does not meet in a value
+            // that has it among its origins, which is no read. Not r1, the second half of a 64-bit
+            // return, which is scratch for every other (a loop that may not run leaves its r1 as it was).
+            // Not SR among the origins of a computed value: a flag written here carries the entry SR's origin
+            // with it (the write is a masked update), so every movt after a compare would be one. SR itself,
+            // copied whole to r0 (`stc sr,r0`), is. Nor a value of unknown origin. Nor one a
+            // call may have made: a call's outputs share one set of origins (everything any of its registers
+            // can come from), so after one r0 has the origins of the callee's other registers (it is how a
+            // function that saves r8 in its prologue and calls would look to have returned it). The
+            // returns the engine drops are leaf functions' (`rts ; sts macl,r0`); a function that calls is
+            // left to the inputs the engine does keep (WithholdReason's scan of them).
+            if (r == 0 && !s.called && (v.Origins() & origin::kRegisters) != origin::kRegisters)
+            {
+                mInputsInReturn |= v.Origins() & kNotParameters & ~1u;
+                if (v.kind == Value::Reg && v.v == kSr) mInputsInReturn |= 1u << kSr;   // a plain copy of it, not a masked update
+            }
         }
         return true;
     }
@@ -667,7 +772,7 @@ private:
         }
         catch (ghidra::LowlevelError&)   // bad data, memory not captured
         {
-            return "an instruction that does not decode";
+            return mTolerant ? std::string() : std::string("an instruction that does not decode");
         }
         const uint32_t next = a + static_cast<uint32_t>(length);
         const int n = static_cast<int>(c.ops.size());
@@ -740,12 +845,12 @@ private:
                     for (uint32_t to : table->second) succ.emplace_back(to, s);
                 // jmp @rN with rN holding the caller's PR is a return like rts (the engine takes a jump
                 // table it cannot recover that way too, when the target is the return address).
-                if (!found && !Return(s, op.in[0])) return "an indirect jump it does not resolve";
+                if (!found && !Return(s, op.in[0]) && !mTolerant) return "an indirect jump it does not resolve";
                 falls = false;
                 break;
             }
             case ghidra::CPUI_RETURN:
-                if (!Return(s, op.in[0])) return "a return not to its caller";
+                if (!Return(s, op.in[0]) && !mTolerant) return "a return not to its caller";
                 falls = false;
                 break;
             default:
@@ -773,6 +878,12 @@ private:
     std::map<uint32_t, uint32_t> mCallAt;   // call instruction -> the address it calls
     std::set<uint32_t> mNoReturn;            // call instructions the engine knows do not return
     uint32_t mPreserved = 0, mStoresThrough = 0, mOut = 0, mLeaks = 0, mFrameValues = 0;
+    bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
+    int64_t mSpDelta = 0;
+    uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return (no call before it)
+    bool mTolerant = false;
+    bool mEscaped = false;   // r2 held a frame address at a call that may read it
+    int64_t mEscapeLow = 0;
 };
 
 // Why the signature recovered for 'fd' cannot be lent to its callers, or empty when it can. A lent
@@ -837,9 +948,56 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
         }
         if (!held) return "an incoming argument outside its signature";
     }
+    // A register outside r4-r7 and the stack that the function reads before writing (r0-r3, r8-r14, GBR,
+    // MACH, MACL, T): its value is an input no signature can pass, so a caller's setup of it is dead in
+    // the caller's text and the call shows without it (A3-5). The calling convention of hand-written
+    // code, not of the compiler's: compiled code reads such a register only to save it, and that read
+    // is gone by now. r15 and PR are the stack and the return address.
+    {
+        const ghidra::Translate* translate = fd.getArch()->translate;
+        for (auto it = fd.beginDef(ghidra::Varnode::input); it != fd.endDef(ghidra::Varnode::input); ++it)
+        {
+            const ghidra::Varnode* vn = *it;
+            if (fp.possibleInputParam(vn->getAddr(), vn->getSize()) || vn->getSpace()->getName() != "register") continue;
+            std::string reg = translate->getRegisterName(vn->getSpace(), vn->getOffset(), vn->getSize());
+            if (reg == "r15" || reg == "pr") continue;
+            // The status register as it is -- returned or stored whole (`stc sr,r0 ; rts`, the idiom of an
+            // interrupt-mask helper) -- is the machine's state, which nothing passes and nothing here
+            // describes wrongly. Anything computed from it (the T flag: movt, bt, addc, ...) is an input.
+            if (reg == "sr" && vn->getSize() == 4)
+            {
+                bool wholeValue = true;
+                for (auto use = vn->beginDescend(); use != vn->endDescend(); ++use)
+                {
+                    const ghidra::PcodeOp* op = *use;
+                    wholeValue = wholeValue && (op->code() == ghidra::CPUI_COPY || op->code() == ghidra::CPUI_RETURN ||
+                                                (op->code() == ghidra::CPUI_STORE && op->getIn(2) == vn));
+                }
+                if (wholeValue) continue;
+            }
+            return "it reads " + (reg.empty() ? std::string("a register") : reg) + " on entry, which no signature passes";
+        }
+    }
     // A return that does not go back to the caller (PR replaced, or saved after a call changed it)
     // is a jump somewhere else, not a return to the call site the signature describes.
-    return ReturnCheck(fd, exec, lent, tables).Run(effects);
+    ReturnCheck check(fd, exec, lent, tables);
+    const std::string why = check.Run(effects);
+    if (!why.empty()) return why;
+    // A return the engine dropped because its value comes from such a register alone (`rts ; sts macl,r0`
+    // prints as returning nothing): the input is no longer in the text to be found above. Only when the
+    // engine did drop it; one it kept has its input in the text, and was looked at there.
+    if (const uint32_t inputs = fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID ? check.InputsInReturn() : 0u)
+    {
+        static const char* const kNames[] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+                                              "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
+        for (int bit = 0; bit < 22; ++bit)
+            if ((inputs >> bit) & 1u) return std::string("its return is computed from ") + kNames[bit] + " on entry, which no signature passes";
+    }
+    // r15 is not where it was on entry: the engine applies a constant difference as the call's extrapop
+    // (LendEffects); one that varies between returns, or is not a constant, cannot be lent.
+    if (!((effects.preserved >> 15) & 1u) && effects.spDelta == CallEffects::kSpUnknown)
+        return "it leaves r15 changed by an amount that is not the same at every return";
+    return std::string();
 }
 
 // What one pass learned from a function's raw p-code, before any action has run.
@@ -2126,6 +2284,16 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         knownLiterals = scan.readonly;
         JumpDests flowTables;
         AddJumpTables(*fd, flowTables);
+        // A pointer into the frame in r2 at a call the engine cannot give an input in r2 (A3-4): said to
+        // the engine now, while the code that made it is still there to be found.
+        {
+            ReturnCheck probe(*fd, exec, prototypes, flowTables);
+            probe.SetTolerant();
+            CallEffects unused;
+            probe.Run(unused);
+            uint32_t from = 0;
+            if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
+        }
         for (const auto& ro : scan.readonly)
             if (!sharedLiteral(ro.first, ro.second))
                 arch->symboltab->setPropertyRange(ghidra::Varnode::readonly,

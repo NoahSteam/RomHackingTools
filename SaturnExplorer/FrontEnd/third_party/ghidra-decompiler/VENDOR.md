@@ -56,6 +56,7 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0026-cspec-call-clobbers.patch` | `superh.cspec`: a call kills r0, r1, r4-r7, MACH, MACL and SR (T), as the SH ABI has them caller-saved, and keeps VBR; before, a register in neither list read after a call as the value before it. `Sh2SpecData.h` is regenerated. |
 | `0027-switch-default-is-case.patch` | `JumpBasic::foldInOneGuard` does not fold a guard into a switch when the guard's target is also one of the switch's destinations and a value the destination reads differs between the guard's edge and the switch block's (a `mova`'s r0): the default path took the switch block's value, and a reachable block was removed as unreachable. |
 | `0028-funcproto-set-effects.patch` | `FuncProto::setEffects`: the host sets one prototype's side-effect overrides (the registers a callee was proved to keep are unaffected by a call to it, where patch 0026 has the model kill them for every callee). |
+| `0030-host-stack-alias.patch` | `ScopeLocal::declareHostAlias`: the host declares a pointer into the stack frame that no Varnode shows (the address of a returned structure, in r2, which the calling convention has no input for), so the locals from that offset up are aliased and a call may write them. |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -107,6 +108,7 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0024: `TestHardwareVolatility` (`switchUsed`: the table read of a switch whose entry register is used after it stays under the guard), and the generator's `folded-into-switch` check.
   - 0027: `TestDefaultAlsoCase` (the default that is also a case: the write under the join's test stays, the control still folds), and the generator's replay of ledger A4-4 (seeds 68620 and 107923).
   - 0028: `TestCallsAndTraps` ("A3-2": a lent callee that keeps r4-r7, MACH, MACL or SR leaves them the caller's own; one that changes them does not), and the generator's `effects-ignored` check.
+  - 0030: `TestCallsAndTraps` ("A3-4": a callee that writes the caller's local through r2 is seen to: the read after the call is the local, not the value stored before it).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

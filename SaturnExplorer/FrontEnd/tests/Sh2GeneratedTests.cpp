@@ -37,6 +37,15 @@
 //     mova + shll2 + mov.l @(r0,Rn) + jmp @Rn with 3 to 6 entries (some shared, some going to the
 //     default) and a cmp/hi or cmp/hs bound check, a shared exit reached by two bra, and an exit
 //     placed before the entry.
+//   * conventions the compiler does not use (a hand-written routine's; one module in three, ledger A3-3 and
+//     A3-5), drawn from a stream of their own so no other program of a seed changes: a function that leaves
+//     a register changed for good -- r12, r13 or r14 (one per module, no function of it uses that one for a
+//     frame pointer, a saved PR or a push), GBR, VBR, MACH or MACL, from r4-r7 or a constant; a function that
+//     reads an input no signature passes -- a scratch register the caller left (r1-r3), or the entry value of
+//     r8-r14 it does not save, GBR, VBR, MACH or MACL, copied to a scratch register the later items use; and
+//     a caller that, right after a call to such a function, copies the register it changed into a scratch
+//     register that later items may store or return. (r15 is not moved: a function that leaves it changed
+//     takes its callers' frames and saved PR with it, and the harness cannot say what they then mean.)
 //
 // The check, per function (and again with the mailbox marked volatile when the program has one),
 // against the emulator's runs of that function from its entry: 4 inputs for version 2 (3 for version 1),
@@ -76,14 +85,21 @@
 //   8. Every one of r4-r7 the function reads before writing, and whose value changes what the function
 //      does to the world (hardware, marked memory, memory through the parameter pointers, r0 if it
 //      returns), is a parameter. Found by running again with that register changed (+0x200, then 0).
+//      Every other register it reads before writing -- r0-r3, r8-r14, GBR, VBR, MACH, MACL -- is an input
+//      no signature passes, so a lent prototype must have none whose value matters (round 3, A3-5); r0 is
+//      compared whenever the function writes it on every path, which is what a dropped return is.
 //   9. A return is claimed only if r0 is written on every run before the return; a function the
 //      generator made to return r0 does not claim to return nothing.
-//   10. A register CallEffects::preserved names has the value it started with at every return.
+//   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
+//       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
 //       calls was lent a signature that keeps r2-r7, MACH, MACL or SR, the text never reads that register
 //       as a call's output (extraout_<reg>), whatever else the function does or is lent itself.
+//   12. The mirror of 11 (round 3, A3-3): when a function this one calls was lent a signature that changes a
+//       register the model keeps -- r8-r14, GBR, VBR -- the text never reads that register as the value it had
+//       on entry (unaff_<reg>, in_<reg>), unless the function reads it on purpose.
 //   And the generator's own contract (not the decompiler's): a version 2 function returns, restores
-//   r8-r15 and ends with PR as it began.
+//   r8-r15 and ends with PR as it began (but what it was generated to change: Func::clobbers).
 // The ground truth is emulator runs with different inputs (registers, what hardware reads
 // return), united. The "other processor" of a mailbox poll answers a polled hardware register
 // always and a polled address the request marks volatile only in that request's run: an unmarked
@@ -98,7 +114,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data|honour
+//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data|honour|kept
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_FENCE=selfops|folds  keep a known open class out of the grammar (see gFenceFolds)
@@ -119,6 +135,7 @@
 #include "memstate.hh"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -227,7 +244,8 @@ struct Item
     int jsrReg = 1, fnLit = 0;     // Call via jsr: the register and the literal (the callee's address)
     std::vector<uint16_t> setup;   // Call: argument set-up before the call
     std::vector<uint16_t> slotWords;   // Call: the delay slot's instruction (empty: nop)
-    std::vector<uint16_t> after;   // Call: the registers restored from their callee-saved copies
+    std::vector<uint16_t> after;   // Call: the registers restored from their callee-saved copies, then a read of a register the callee changed
+    bool observes = false;         // Call: 'after' ends with that read
     int sel = 4;                   // Table: the register that indexes
     bool useHs = false;            // Table: cmp/hs against the case count (else cmp/hi against the last case)
     std::vector<int> target;       // Table: for each entry, the index of the case it goes to, or -1: the default
@@ -264,6 +282,11 @@ struct Func
     std::vector<Item> pathA, pathB;
     std::vector<uint16_t> slotA, slotB;   // each path's bra delay slot (empty: nop)
     bool epilogueBelow = false;    // the exit sits before the entry
+    // Conventions the compiler does not use (a hand-written routine's: ledger A3-3 and A3-5). Bit n is Rn for
+    // r8-r14, and 17 gbr, 18 vbr, 19 mach, 20 macl as in CallEffects::preserved.
+    uint32_t clobbers = 0;         // registers this function changes for good (never saved)
+    uint32_t effClobbers = 0;      // ...and what its callees, a function it jumps to or runs on into leave changed too
+    uint32_t reads = 0;            // registers whose entry value it reads on purpose (r1-r3, r8-r14, gbr, vbr, mach, macl)
 };
 
 struct Program
@@ -282,6 +305,11 @@ struct Gen
     // A stream of its own for mac: the other items' draws, and so every program a seed made before mac
     // was in the grammar, are unchanged; mac only adds an item.
     Rng macRng;
+    // A stream of its own for the conventions below, for the same reason: the programs of a seed that
+    // does not use them are the ones it always made.
+    Rng convRng;
+    bool convModule = false;  // this module has functions with conventions of their own
+    int clobberReg = 12;      // the register (r12-r14) its functions change for good: no function of it uses that one for anything else
     Program p;
     int align[8];      // the natural alignment of every literal that may be in a register
     int pref[8];       // ...and the width of the latest
@@ -297,7 +325,7 @@ struct Gen
     bool fp = false;          // locals are addressed through r14
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), convRng(seed ^ 0x636F6E7663727667ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -733,6 +761,30 @@ struct Gen
         return it;
     }
 
+    // The instruction that copies register 'bit' (r8-r14, or 17 gbr, 18 vbr, 19 mach, 20 macl) into Rd.
+    static uint16_t ReadRegisterInto(int bit, int d)
+    {
+        switch (bit)
+        {
+        case 17: return uint16_t(0x0012 | d << 8);   // stc gbr,Rd
+        case 18: return uint16_t(0x0022 | d << 8);   // stc vbr,Rd
+        case 19: return uint16_t(0x000A | d << 8);   // sts mach,Rd
+        case 20: return uint16_t(0x001A | d << 8);   // sts macl,Rd
+        default: return uint16_t(0x6003 | d << 8 | bit << 4);   // mov Rn,Rd
+        }
+    }
+
+    static void CalleesOf(const std::vector<Item>& items, std::vector<int>& out)
+    {
+        for (const Item& it : items)
+        {
+            if (it.type == Item::Call) out.push_back(it.callee);
+            CalleesOf(it.slot, out);
+            CalleesOf(it.kids, out);
+            for (const std::vector<Item>& c : it.cases) CalleesOf(c, out);
+        }
+    }
+
     // A call: arguments in r4-r7 (some set in the delay slot), bsr or jsr through a literal, the
     // arguments kept in callee-saved registers restored after it.
     Item MakeCall(int callee, const std::vector<Func>& fns)
@@ -789,10 +841,25 @@ struct Gen
             p.lits.push_back(l);
         }
         for (const std::pair<int, int>& s : saves) it.after.push_back(uint16_t(0x6003 | s.first << 8 | s.second << 4));
+        // A callee that leaves a register changed (a convention of its own): read right after the call, into
+        // a scratch register, which later items may use or return. A caller that took the register to be
+        // kept would print the value it had before the call (ledger A3-3).
+        int observed = 0;
+        if (convModule && fns[callee].effClobbers && convRng.Chance(75))
+        {
+            std::vector<int> bits;
+            for (int b = 0; b < 32; ++b)
+                if ((fns[callee].effClobbers >> b) & 1u) bits.push_back(b);
+            const int b = bits[convRng.Below(static_cast<uint32_t>(bits.size()))];
+            observed = 1 + static_cast<int>(convRng.Below(3));
+            it.after.push_back(ReadRegisterInto(b, observed));
+            it.observes = true;
+        }
         // After the call only what was restored, and r0 if the callee returns, holds a value.
         defined &= ~0xFFu;
         for (const std::pair<int, int>& s : saves) defined |= 1u << s.first;
         if (fns[callee].returns) defined |= 1u;
+        if (observed) defined |= 1u << observed;
         return it;
     }
 
@@ -868,7 +935,7 @@ struct Gen
         if (f.savePr && rng.Chance(30))
         {
             f.savePr = false;
-            f.prReg = 12;
+            f.prReg = convModule && clobberReg == 12 ? 13 : 12;   // never the register this module's functions change
         }
         int nsave = nCalls > 0 ? 2 + static_cast<int>(rng.Below(3)) : 0;
         if (table)
@@ -888,15 +955,54 @@ struct Gen
         {
             static const int kFrames[] = { 4, 8, 12, 16, 24, 32, 48, 64 };
             f.frame = kFrames[rng.Below(8)];
-            f.fp = rng.Chance(30);
+            f.fp = rng.Chance(30) && !(convModule && clobberReg == 14);
             if (f.fp) f.pushed.push_back(14);
         }
-        if (!falls && rng.Chance(15)) f.pushed.push_back(13);
+        if (!falls && rng.Chance(15) && !(convModule && clobberReg == 13)) f.pushed.push_back(13);
         std::sort(f.pushed.begin(), f.pushed.end());
         f.pushed.erase(std::unique(f.pushed.begin(), f.pushed.end()), f.pushed.end());
         f.shared = !falls && rng.Chance(22);
         f.epilogueBelow = !falls && rng.Chance(25) && (idx == 0 || ends[idx - 1] != Func::Fall);
 
+        // An input the compiler would not pass (a hand-written routine's convention, ledger A3-5): a scratch
+        // register that holds a value the caller left (r1-r3), or a register read for its value on entry
+        // before anything writes it -- r8-r14 that the function does not save, GBR, VBR, MACH, MACL -- into a
+        // scratch register the later items may use. Drawn from the stream of its own.
+        uint32_t convDefined = 0;
+        Item convRead;
+        bool hasConvRead = false;
+        if (convModule && convRng.Chance(45))
+        {
+            const uint32_t r = convRng.Below(100);
+            if (r < 30)
+            {
+                const int k = 1 + static_cast<int>(convRng.Below(3));
+                convDefined = 1u << k;
+                f.reads |= 1u << k;
+            }
+            else
+            {
+                int bit = -1;
+                if (r < 60)
+                {
+                    int pool[7], n = 0;
+                    for (int g = 8; g <= 14; ++g)
+                        if (std::find(f.pushed.begin(), f.pushed.end(), g) == f.pushed.end()) pool[n++] = g;
+                    if (n) bit = pool[convRng.Below(static_cast<uint32_t>(n))];
+                }
+                else bit = 17 + static_cast<int>(convRng.Below(4));
+                if (bit >= 0)
+                {
+                    const int d = 1 + static_cast<int>(convRng.Below(3));
+                    convRead.type = Item::Alu;
+                    convRead.shape = "conv.read";
+                    convRead.words = { ReadRegisterInto(bit, d) };
+                    hasConvRead = true;
+                    convDefined = 1u << d;
+                    f.reads |= 1u << bit;
+                }
+            }
+        }
         disc = true;
         noR0 = f.noR0;
         codeInRegs = table;
@@ -904,7 +1010,7 @@ struct Gen
         frame = f.frame;
         fp = f.fp;
         inSpill = false;
-        defined = 0xF0u;
+        defined = 0xF0u | convDefined;
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
 
         std::vector<char> plan;
@@ -975,6 +1081,45 @@ struct Gen
             }
         }
 
+        // Registers this function changes for good: the module's r12-r14 (no function of it uses that for
+        // anything else, so the others' saves and frames do not meet it), GBR, VBR, MACH, MACL. Written from
+        // r4-r7 or a constant, at a place among the items that every path passes.
+        if (convModule && convRng.Chance(55))
+        {
+            static const struct { uint16_t op; int bit; } kState[] = { { 0x401E, 17 }, { 0x402E, 18 }, { 0x400A, 19 }, { 0x401A, 20 } };
+            const int count = 1 + static_cast<int>(convRng.Below(2));
+            for (int i = 0; i < count; ++i)
+            {
+                Item c;
+                c.type = Item::Alu;
+                const int src = 4 + static_cast<int>(convRng.Below(4));
+                if (convRng.Chance(45))
+                {
+                    c.shape = "conv.clobber.gpr";
+                    c.words = { convRng.Chance(50) ? uint16_t(0xE000 | clobberReg << 8 | convRng.Below(256))   // mov #imm,Rn
+                                                   : uint16_t(0x6003 | clobberReg << 8 | src << 4) };          // mov Rm,Rn
+                    f.clobbers |= 1u << clobberReg;
+                }
+                else
+                {
+                    const auto& st = kState[convRng.Below(4)];
+                    c.shape = "conv.clobber.state";
+                    c.words = { uint16_t(st.op | src << 8) };   // ldc Rm,gbr / ldc Rm,vbr / lds Rm,mach / lds Rm,macl
+                    f.clobbers |= 1u << st.bit;
+                }
+                f.items.insert(f.items.begin() + convRng.Below(static_cast<uint32_t>(f.items.size() + 1)), c);
+            }
+        }
+        if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
+        f.effClobbers = f.clobbers;
+        {
+            std::vector<int> callees;
+            CalleesOf(f.items, callees);
+            if (falls) callees.push_back(idx + 1);
+            if (f.end == Func::TailJump) callees.push_back(f.tailTo);
+            for (int c : callees) f.effClobbers |= fns[c].effClobbers;
+        }
+
         if (f.shared)
         {
             const uint32_t before = defined;
@@ -1032,6 +1177,8 @@ struct Gen
     Program Module()
     {
         p.version = 2;
+        convModule = convRng.Chance(35);
+        clobberReg = 12 + static_cast<int>(convRng.Below(3));
         const uint32_t r = rng.Below(100);
         const int nFn = r < 30 ? 1 : r < 75 ? 2 : 3;
         std::vector<int> ends(nFn, Func::Rts);
@@ -1660,8 +1807,9 @@ struct Env
     }
 };
 
-// Which of r0-r15 a run read before it had written them, and which it wrote at all: the registers
-// are 4 bytes each in the register space, and a read of any byte of one counts.
+// Which of r0-r15 (bits 0-15), SR, GBR, VBR, MACH and MACL (16-20) a run read before it had written them,
+// and which it wrote at all: the registers are 4 bytes each in the register space, and a read of any byte
+// of one counts. (SR is read by every compare, which updates T under a mask: it is not asked about.)
 struct RegUse
 {
     uint32_t readFirst = 0;   // bit n: Rn was read before the run wrote the bytes it read
@@ -1679,12 +1827,15 @@ public:
     {
         mRegSpace = t->getSpaceByName("register");
         for (int i = 0; i < 16; ++i) mRegOff[i] = t->getRegister("r" + std::to_string(i)).offset;
+        // ...and after them SR, GBR, VBR, MACH, MACL as bits 16-20, as CallEffects::preserved numbers them.
+        static const char* const kState[] = { "sr", "gbr", "vbr", "mach", "macl" };
+        for (int i = 0; i < 5; ++i) mRegOff[16 + i] = t->getRegister(kState[i]).offset;
     }
     void SetEnv(Env* env) { mEnv = env; }
     void ResetUse()
     {
         mUse = RegUse();
-        for (int i = 0; i < 16; ++i) mWrittenBytes[i] = 0;
+        for (int i = 0; i < kUse; ++i) mWrittenBytes[i] = 0;
     }
     const RegUse& Use() const { return mUse; }
 
@@ -1692,11 +1843,16 @@ protected:
     void Note(const ghidra::PcodeOpRaw* op)
     {
         if (!op) return;
+        // nop is `r0 = r0` in the spec (to silence its compiler): neither a read nor a write of r0.
+        if (op->getOpcode() == ghidra::CPUI_COPY && op->numInput() == 1 && op->getOutput() != nullptr &&
+            op->getOutput()->space == op->getInput(0)->space && op->getOutput()->offset == op->getInput(0)->offset &&
+            op->getOutput()->size == op->getInput(0)->size)
+            return;
         for (int i = 0; i < op->numInput(); ++i)
         {
             const ghidra::VarnodeData* vn = op->getInput(i);
             if (vn->space != mRegSpace) continue;
-            for (int r = 0; r < 16; ++r)
+            for (int r = 0; r < kUse; ++r)
                 for (int b = 0; b < 4; ++b)
                 {
                     const ghidra::uintb at = mRegOff[r] + b;
@@ -1705,7 +1861,7 @@ protected:
         }
         const ghidra::VarnodeData* out = op->getOutput();
         if (out && out->space == mRegSpace)
-            for (int r = 0; r < 16; ++r)
+            for (int r = 0; r < kUse; ++r)
                 for (int b = 0; b < 4; ++b)
                 {
                     const ghidra::uintb at = mRegOff[r] + b;
@@ -1753,8 +1909,9 @@ protected:
 private:
     Env* mEnv;
     ghidra::AddrSpace* mRegSpace = nullptr;
-    ghidra::uintb mRegOff[16];
-    uint32_t mWrittenBytes[16] = {};
+    static constexpr int kUse = 21;   // r0-r15, SR, GBR, VBR, MACH, MACL
+    ghidra::uintb mRegOff[kUse];
+    uint32_t mWrittenBytes[kUse] = {};
     RegUse mUse;
 };
 
@@ -1768,6 +1925,7 @@ struct RunOut
     std::vector<int> depths;           // ...and how many calls deep it ran (0: the function's own)
     uint32_t init[16] = {}, fin[16] = {};
     uint32_t initPr = 0, finPr = 0, initSr = 0, finSr = 0;
+    uint32_t initState[4] = {}, finState[4] = {};   // GBR, VBR, MACH, MACL (register 17 + n)
     RegUse use;
     int mode = 0;
     int selValue = -1;                 // the integer a jump table was indexed with (-1: none given)
@@ -1839,6 +1997,8 @@ public:
         for (int r = 0; r < 16; ++r) out.fin[r] = Get(("r" + std::to_string(r)).c_str());
         out.finPr = Get("pr");
         out.finSr = Get("sr");
+        static const char* const kState[4] = { "gbr", "vbr", "mach", "macl" };
+        for (int n = 0; n < 4; ++n) out.finState[n] = Get(kState[n]);
         out.finished = done;
         return done;
     }
@@ -2017,6 +2177,8 @@ struct FnInfo
     bool intent = false;     // generated: 'returns' and 'sel' mean something
     bool returns = false;    // r0 is written on every path just before the return
     int sel = -1;            // the register a jump table indexes with
+    uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
+    uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
 };
 
 // What is checked: the code and its literal pool as words from kCode, the functions in it, what the
@@ -2069,6 +2231,8 @@ Subject MakeSubject(const Program& p)
         f.intent = p.fns[i].v2;
         f.returns = p.fns[i].returns;
         f.sel = p.fns[i].sel;
+        f.clobbers = p.fns[i].effClobbers;
+        f.reads = p.fns[i].reads;
         s.fns.push_back(f);
     }
     for (const Func& fn : p.fns)
@@ -2128,6 +2292,16 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
         o << " SE_GENERATED_RETURNS=\"";
         for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << (s.fns[i].returns ? 1 : 0);
         o << "\"";
+        bool conv = false;
+        for (const FnInfo& f : s.fns) conv = conv || f.clobbers || f.reads;
+        if (conv)
+        {
+            o << " SE_GENERATED_CLOBBERS=\"";
+            for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << std::hex << s.fns[i].clobbers << std::dec;
+            o << "\" SE_GENERATED_READS=\"";
+            for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << std::hex << s.fns[i].reads << std::dec;
+            o << "\"";
+        }
     }
     o << "\n";
     if (!s.literals.empty()) o << "  literals:" << s.literals << "\n";
@@ -2208,7 +2382,7 @@ struct RunSpec
     int mode = 0;              // the register and hardware inputs: 0 zeros, 1 ones, 2 and up pseudo-random
     int selReg = -1;           // a register holding an integer (a jump table's index), and its value
     uint32_t selValue = 0;
-    int perturbReg = -1;       // a register started with another value
+    int perturbReg = -1;       // a register started with another value (0-15, or 17-20 for GBR, VBR, MACH, MACL)
     uint32_t perturbValue = 0;
     bool volatileRun = false;  // the other processor answers what the second request marks
 };
@@ -2256,9 +2430,17 @@ public:
             out.init[rs.selReg] = rs.selValue;
             out.selValue = static_cast<int>(rs.selValue);
         }
-        if (rs.perturbReg >= 0)
+        // GBR, VBR, MACH and MACL start at values of their own too (distinct per register and per mode), so a
+        // function that sets one to zero, or to what it already was, shows.
+        for (int n = 0; n < 4; ++n) out.initState[n] = (0x0A000000u + 0x01000000u * n) | uint32_t(rs.mode + 1) << 8 | 0x5Au;
+        if (rs.perturbReg >= 0 && rs.perturbReg < 16)
         {
             out.init[rs.perturbReg] = rs.perturbValue;
+            out.perturbed = rs.perturbReg;
+        }
+        else if (rs.perturbReg >= 17 && rs.perturbReg <= 20)
+        {
+            out.initState[rs.perturbReg - 17] = rs.perturbValue;
             out.perturbed = rs.perturbReg;
         }
         out.initPr = kSentinel;
@@ -2266,10 +2448,8 @@ public:
         for (int r = 0; r < 16; ++r) mM->Set(("r" + std::to_string(r)).c_str(), out.init[r]);
         mM->Set("pr", kSentinel);
         mM->Set("sr", 0);
-        mM->Set("gbr", 0);
-        mM->Set("vbr", 0);
-        mM->Set("mach", 0);
-        mM->Set("macl", 0);
+        static const char* const kState[4] = { "gbr", "vbr", "mach", "macl" };
+        for (int n = 0; n < 4; ++n) mM->Set(kState[n], out.initState[n]);
         mM->Run(f.layout.entry, kSentinel, kStepLimit, out, env);
         out.trace = std::move(env.trace);
         return out;
@@ -2456,9 +2636,21 @@ bool GroupAddrs(const std::vector<Line>& lines, const std::vector<LineLabels>& l
     return true;
 }
 
+// Whether 'word' stands in 'text' as a name of its own (not inside a longer one).
+bool WholeWord(const std::string& text, const std::string& word)
+{
+    auto isName = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (size_t at = text.find(word); at != std::string::npos; at = text.find(word, at + 1))
+    {
+        const size_t end = at + word.size();
+        if ((at == 0 || !isName(text[at - 1])) && (end >= text.size() || !isName(text[end]))) return true;
+    }
+    return false;
+}
+
 // What the SE_GENERATED_MUTATE modes do to a result before it is checked: each simulates one defect
 // that one family of checks exists to find, so a run can show the check sees it.
-std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data", "honour"
+std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data", "honour", "kept"
 void Mutate(DecompileResult& r, const Subject& s, int fi)
 {
     if (gMutateKind.empty() || r.status != DecompileStatus::Ok) return;
@@ -2499,6 +2691,13 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
         // A caller that ignores the effects it was lent reads a kept register as a call's output.
         Line l;
         l.text = "  return extraout_r4 + extraout_r5 + extraout_r6 + extraout_r7 + extraout_macl + extraout_mach + extraout_sr;";
+        r.lines.push_back(l);
+    }
+    else if (gMutateKind == "kept")
+    {
+        // A caller that ignores that a callee changed r8-r14, GBR or VBR reads them as they were on entry.
+        Line l;
+        l.text = "  return unaff_r8 + unaff_r9 + unaff_r10 + unaff_r11 + unaff_r12 + unaff_r13 + unaff_r14 + unaff_gbr + unaff_vbr;";
         r.lines.push_back(l);
     }
     else if (gMutateKind == "data")
@@ -2941,6 +3140,59 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 else count("param.insensitive");
             }
             count("param.checked");
+            // The same for every other register a function can read for its value on entry (round 3, A3-5):
+            // r0-r3, r8-r14, GBR, VBR, MACH and MACL. No parameter list holds one, so a lent prototype is wrong
+            // if what the function does depends on any of them. r0 is compared too when the function writes it
+            // on every path, whatever the prototype returns: a return the engine dropped (`rts ; sts macl,r0`
+            // printed as `return;`) is exactly a void prototype over a changing r0.
+            {
+                bool anyFinished = false, r0Always = true;
+                for (const RunOut& run : runs)
+                    if (run.finished)
+                    {
+                        anyFinished = true;
+                        if (!(run.use.written & 1u)) r0Always = false;
+                    }
+                static const int kInputs[] = { 0, 1, 2, 3, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20 };
+                static const char* const kStateNames[4] = { "gbr", "vbr", "mach", "macl" };
+                for (int k : kInputs)
+                {
+                    if (!((readFirst >> k) & 1u)) continue;
+                    count("input.candidate");
+                    bool matters = false;
+                    for (const RunOut& base : runs)
+                    {
+                        if (!base.finished || !((base.use.readFirst >> k) & 1u) || matters) continue;
+                        const uint32_t start = k < 16 ? base.init[k] : base.initState[k - 17];
+                        for (uint32_t value : { start + 0x200u, 0u })
+                        {
+                            RunSpec rs;
+                            rs.mode = base.mode;
+                            rs.volatileRun = volatileRun;
+                            if (base.selValue >= 0 && fn.sel >= 4)
+                            {
+                                rs.selReg = fn.sel;
+                                rs.selValue = static_cast<uint32_t>(base.selValue);
+                            }
+                            rs.perturbReg = k;
+                            rs.perturbValue = value;
+                            const RunOut other = runner.One(fn, rs);
+                            count("input.perturbed-runs");
+                            if (!SameBehaviour(base, other, compareR0 || (anyFinished && r0Always), marked))
+                            {
+                                matters = true;
+                                break;
+                            }
+                        }
+                    }
+                    const std::string name = k < 16 ? "r" + std::to_string(k) : kStateNames[k - 17];
+                    if (matters)
+                        add("input-dropped:" + name, "the function reads " + name + " before writing it and its value changes what the function does" +
+                                                         " (or what it returns in r0), but no signature passes it: the prototype is lent");
+                    else count("input.insensitive");
+                }
+                count("input.checked");
+            }
             // The return: claimed only if r0 is written on every path.
             bool everUnwritten = false;
             for (const RunOut& run : runs)
@@ -2965,6 +3217,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     std::string name;
                     if (bit < 16) { was = run.init[bit]; now = run.fin[bit]; name = "r" + std::to_string(bit); }
                     else if (bit == 16) { was = run.initSr; now = run.finSr; name = "sr"; }
+                    else if (bit >= 17 && bit <= 20)
+                    {
+                        static const char* const kNames[4] = { "gbr", "vbr", "mach", "macl" };
+                        was = run.initState[bit - 17];
+                        now = run.finState[bit - 17];
+                        name = kNames[bit - 17];
+                    }
                     else if (bit == 21) { was = run.initPr; now = run.finPr; name = "pr"; }
                     else continue;
                     if (was != now)
@@ -3010,6 +3269,33 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             }
         }
 
+        // The mirror of that (round 3, A3-3): a register the model keeps across a call (r8-r14, GBR, VBR) that
+        // a lent callee is known to change is not read as kept. The generator's functions never read their own
+        // entry r8-r14, GBR or VBR but on purpose (Func::reads), so the text of one that calls such a callee
+        // shows the register's entry value (`unaff_r13`, `in_gbr`) only if a call was taken to leave it alone:
+        // after the call it reads the callee's value, which prints as `extraout_r13`.
+        if (!r.calledAt.empty())
+        {
+            static const struct { int bit; const char* name; } kKept[] = { { 8, "r8" }, { 9, "r9" }, { 10, "r10" }, { 11, "r11" }, { 12, "r12" },
+                                                                           { 13, "r13" }, { 14, "r14" }, { 17, "gbr" }, { 18, "vbr" } };
+            const std::string text = r.Text();
+            for (const auto& k : kKept)
+            {
+                if ((fn.reads >> k.bit) & 1u) continue;
+                bool changed = false;
+                for (uint32_t c : r.calledAt)
+                {
+                    const auto l = lent.find(c);
+                    if (l != lent.end() && c != fn.layout.entry && l->second.known && !((l->second.effects.preserved >> k.bit) & 1u)) changed = true;
+                }
+                if (!changed) continue;
+                count("lent.changed.checked");
+                if (WholeWord(text, std::string("unaff_") + k.name) || WholeWord(text, std::string("in_") + k.name))
+                    add(std::string("kept-read:") + k.name, std::string("a function it calls was lent a signature that changes ") + k.name +
+                                                                ", and the text reads " + k.name + " as the value it had on entry");
+            }
+        }
+
         // The generator's own contract: a version 2 function returns, restores what it saved, and ends
         // at the return address. A run that does not is the generator's fault, said so it is fixed.
         if (subject.v2 && fn.intent)
@@ -3021,8 +3307,12 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     continue;
                 }
                 for (int reg = 8; reg < 16; ++reg)
-                    if (run.fin[reg] != run.init[reg])
+                    if (run.fin[reg] != run.init[reg] && !((fn.clobbers >> reg) & 1u))
                         add("generator:callee-saved", "r" + std::to_string(reg) + " ends as " + Hex(run.fin[reg]) + ", started as " + Hex(run.init[reg]));
+                for (int n = 0; n < 4; ++n)
+                    if (run.finState[n] != run.initState[n] && !((fn.clobbers >> (17 + n)) & 1u))
+                        add("generator:state-saved", std::string(n == 0 ? "gbr" : n == 1 ? "vbr" : n == 2 ? "mach" : "macl") + " ends as " +
+                                                         Hex(run.finState[n]) + ", started as " + Hex(run.initState[n]));
                 if (run.finPr != run.initPr) add("generator:pr", "PR ends as " + Hex(run.finPr));
             }
     }
@@ -3373,6 +3663,7 @@ void CountShapes(const std::vector<Item>& items, std::map<std::string, int>& sha
         {
             if (!it.slotWords.empty()) ++shapes["call.arg_in_slot"];
             if (!it.after.empty()) ++shapes["call.restores"];
+            if (it.observes) ++shapes["conv.observe"];
         }
         if (it.type == Item::Table)
         {
@@ -3468,6 +3759,18 @@ Subject RawSubject(const char* raw)
                 s.fns[i].intent = true;
                 s.fns[i].returns = flags[i] != 0;
             }
+        }
+        // The registers each function leaves changed and the ones it reads on purpose, hex masks (bit n: Rn,
+        // 17 gbr, 18 vbr, 19 mach, 20 macl), for a module with conventions of its own.
+        if (const char* c = std::getenv("SE_GENERATED_CLOBBERS"))
+        {
+            const std::vector<uint32_t> masks = HexList(c, ',');
+            for (size_t i = 0; i < masks.size() && i < s.fns.size(); ++i) s.fns[i].clobbers = masks[i];
+        }
+        if (const char* c = std::getenv("SE_GENERATED_READS"))
+        {
+            const std::vector<uint32_t> masks = HexList(c, ',');
+            for (size_t i = 0; i < masks.size() && i < s.fns.size(); ++i) s.fns[i].reads = masks[i];
         }
         if (const char* data = std::getenv("SE_GENERATED_DATA"))
         {

@@ -1,0 +1,118 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+index e9df4ad..855b242 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.cc
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  */
+ #include "varmap.hh"
+ #include "funcdata.hh"
+@@ -406,9 +408,34 @@ ScopeLocal::ScopeLocal(uint8 id,AddrSpace *spc,Funcdata *fd,Architecture *g) : S
+   stackGrowsNegative = true;
+   overlapProblems = false;
+   openParamRefs = false;
++  hostAlias = false;
++  hostAliasStart = 0;
+   restrictScope(fd);
+ } 
+ 
++/// SaturnExplorer. The function's code passes the address of one of its locals to a callee by a
++/// route its p-code does not show once dead code is gone (a register that is no input of the call),
++/// so the local would be taken for one nothing can reach. The host says where the pointer points:
++/// every local at or above the offset is then treated as aliased, as if a Varnode holding the
++/// pointer were still there. The declaration lasts as long as the function (it is not cleared with
++/// the analysis, which the host cannot see when it restarts).
++/// \param off is the stack offset the pointer points to
++void ScopeLocal::declareHostAlias(uintb off)
++
++{
++  if (!hostAlias || off < hostAliasStart) hostAliasStart = off;
++  hostAlias = true;
++}
++
++/// \param off receives the lowest offset declared
++/// \return \b true if the host declared a pointer
++bool ScopeLocal::getHostAlias(uintb &off) const
++
++{
++  off = hostAliasStart;
++  return hostAlias;
++}
++
+ /// Turn any symbols that are \e name \e locked but not \e type \e locked into name recommendations
+ /// removing the symbol in the process.  This allows the decompiler to decide on how the stack is layed
+ /// out without forcing specific variables to mapped. But, if the decompiler does create a variable at
+@@ -738,11 +765,22 @@ void AliasChecker::gatherInternal(void) const
+   calculated = true;
+   aliasBoundary = localExtreme;
+   Varnode *spacebase = fd->findSpacebaseInput(space);
+-  if (spacebase == (Varnode *)0) return; // No possible alias
+-
+-  gatherAdditiveBase(spacebase,addBase);
++  // SaturnExplorer: a pointer the host knows of and the p-code does not show. The code hands the
++  // address of a local to a callee in a register no call input names (a returned structure's
++  // address, in r2), so the copy is dead code before this runs, and the callee's writes through it
++  // would be taken for no writes at all. It is a pointer reference like the ones found, with no
++  // Varnode to hold it (a null base). Declared, it counts even when nothing else reads the stack
++  // pointer any more.
++  uintb hostOffset = 0;
++  const bool host = fd->getScopeLocal()->getHostAlias(hostOffset);
++  if (spacebase == (Varnode *)0 && !host) return; // No possible alias
++
++  if (spacebase != (Varnode *)0)
++    gatherAdditiveBase(spacebase,addBase);
++  if (host)
++    addBase.push_back(AddBase((Varnode *)0,(Varnode *)0));
+   for(vector<AddBase>::iterator iter=addBase.begin();iter!=addBase.end();++iter) {
+-    uintb offset = gatherOffset((*iter).base);
++    uintb offset = ((*iter).base == (Varnode *)0) ? hostOffset : gatherOffset((*iter).base);
+     offset = AddrSpace::addressToByte(offset,space->getWordSize()); // Convert to byte offset
+     alias.push_back(offset);
+     if (direction == 1) {
+@@ -1353,8 +1391,9 @@ void MapState::gatherOpen(const Funcdata &fd)
+ 
+   for(int4 i=0;i<addbase.size();++i) {
+     offset = alias[i];
+-    ct = addbase[i].base->getType();
+-    if (ct->getMetatype() == TYPE_PTR) {
++    // SaturnExplorer: a pointer the host declared has no Varnode, so no data-type
++    ct = (addbase[i].base == (Varnode *)0) ? (Datatype *)0 : addbase[i].base->getType();
++    if (ct != (Datatype *)0 && ct->getMetatype() == TYPE_PTR) {
+       ct = ((TypePointer *)ct)->getPtrTo();
+       while(ct->getMetatype() == TYPE_ARRAY)
+ 	ct = ((TypeArray *)ct)->getBase();
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+index 29cf5b6..fccba2e 100644
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/varmap.hh
+@@ -12,6 +12,8 @@
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
++ *
++ * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
+  */
+ /// \file varmap.hh
+ /// \brief Classes for keeping track of local variables and reconstructing stack layout
+@@ -229,6 +231,8 @@ class ScopeLocal : public ScopeInternal {
+   bool rangeLocked;		///< True if the subset of addresses \e mapped to \b this scope has been locked
+   bool overlapProblems;		///< True if the last \b restructure had overlapping variable problems
+   bool openParamRefs;		///< True if we have seen references into the stack region reserved for parameters
++  bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
++  uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
+   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
+   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
+   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
+@@ -243,6 +247,8 @@ public:
+   virtual ~ScopeLocal(void) {}	///< Destructor
+ 
+   AddrSpace *getSpaceId(void) const { return space; }		///< Get the associated (stack) address space
++  void declareHostAlias(uintb off);	///< Declare a pointer to offset \b off that the function's p-code does not show (SaturnExplorer)
++  bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
+ 
+   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
+   bool hasOverlapProbems(void) const { return overlapProblems; }

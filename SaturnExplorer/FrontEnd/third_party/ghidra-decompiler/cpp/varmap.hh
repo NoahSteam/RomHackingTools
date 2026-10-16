@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified for SaturnExplorer: a host can declare a pointer into the stack the actions cannot see (patches/0030-host-stack-alias.patch).
  */
 /// \file varmap.hh
 /// \brief Classes for keeping track of local variables and reconstructing stack layout
@@ -229,6 +231,8 @@ class ScopeLocal : public ScopeInternal {
   bool rangeLocked;		///< True if the subset of addresses \e mapped to \b this scope has been locked
   bool overlapProblems;		///< True if the last \b restructure had overlapping variable problems
   bool openParamRefs;		///< True if we have seen references into the stack region reserved for parameters
+  bool hostAlias;		///< True if the host declared a pointer into the stack that no Varnode shows (SaturnExplorer)
+  uintb hostAliasStart;		///< The offset it points to; the lowest if declared more than once (SaturnExplorer)
   bool adjustFit(RangeHint &a) const;	///< Make the given RangeHint fit in the current Symbol map
   void createEntry(const RangeHint &a);	///< Create a Symbol entry corresponding to the given (fitted) RangeHint
   bool restructure(MapState &state);	///< Merge hints into a formal Symbol layout of the address space
@@ -243,6 +247,8 @@ public:
   virtual ~ScopeLocal(void) {}	///< Destructor
 
   AddrSpace *getSpaceId(void) const { return space; }		///< Get the associated (stack) address space
+  void declareHostAlias(uintb off);	///< Declare a pointer to offset \b off that the function's p-code does not show (SaturnExplorer)
+  bool getHostAlias(uintb &off) const;	///< Get the offset of the lowest pointer the host declared (SaturnExplorer)
 
   /// \brief Return \b true if \b restructure analysis discovered overlapping variables
   bool hasOverlapProbems(void) const { return overlapProblems; }
