@@ -4337,3 +4337,188 @@ notes, backup RAM) are as strong as their fixture: the independent check does no
   pinned by hand fixtures and the golden file only.
 - The cache caution cannot know CCR.CE is clear for a function (it would need the CCR state, which is a flow property, not a map property).
 - VDP2 colour RAM byte writes (A5-16 part 4) stay accepted.
+
+## Areas 1 and 8, round 3 review
+
+Branch `review/1-8-round3-review`, from master `5b403ba`. This round reviewed area 1 (the round 2 fix `a4153ad`, the oracle's blind
+spots: `App`, registers, the NeedsRefresh text, the speed question) and area 8 (the stale reason and its tooltip). No production
+source and no test source was changed. `kOpen` stays empty: none of the findings can be written as a model script (they need registers,
+the tooltip text or a refused entry), so each is a directed `DecompilerPanelTests` sequence, given below. Four ledger rows were added:
+**A1-6, A8-2, A8-3 and A8-4, all P3**. No P1 or P2 was found. Round 2 found only P3s too, so area 1 has had two consecutive rounds
+with no P1 or P2. Under the program's rule, area 1 is done once A1-6 is fixed or accepted.
+
+### Findings
+
+- **A1-6 (P3).** Auto-refresh re-runs a function the runner found too large every debounce period while the followed PC stays in
+  it. A "too large" answer has no body, so every PC counts as having left it. Every frame of a running emulator is a new key, so the
+  runner's memo never answers. Measured at a 0.3 s budget over 6 s: 12 runs, worker busy in 93% of UI frames, worst UI frame 3.6 ms.
+  The UI thread is not blocked and nothing else is starved (the panel is the runner's only requester), but a core stays busy for as
+  long as the game runs there. Stepping is the documented per-frame cost: 1.0 s per step at a 0.3 s budget (the budget, then about
+  0.7 s until the engine reaches a check-point).
+- **A8-2 (P3).** The NeedsRefresh tooltip says "the entry box names no function ... Correct the entry and press Enter" for any
+  resolve failure. That includes Follow PC with the PC in the BIOS or with no registers, and "Decompile" on an address with no
+  function. In each case the box holds a valid entry and was never touched.
+- **A8-3 (P3).** Refresh of output that is current shows `[stale]` "from an earlier state" while the replacement runs. It also dims
+  the output and drops the halt hint, though nothing changed.
+- **A8-4 (P3).** A refused entry ("zz") leaves the target as it was. The next capture re-resolves the old target, and the badge and the
+  error disappear with the box still saying `zz`.
+
+### The sequences
+
+Each is a function on the `Fixture` of `DecompilerPanelTests.cpp` (lines 1-360 at `5b403ba`, unchanged). Built against the panel
+tests' objects with `Probe.o` in place of `DecompilerPanelTests.cpp.o`, they print the panel state and fail on the `CHECK`s below,
+which state the expected behaviour.
+
+```cpp
+// A8-2
+void ProbeFollowPcTooltip()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LivePaused;
+    CHECK(f.WaitShown("+ 1"));
+    f.regs[0].pc = 0x00001FF0u;   // in the BIOS, no image mapped: no function found
+    ++f.frame;
+    f.Idle(3);
+    CHECK(f.panel.ShownStale());
+    CHECK(!Has(f.panel.StaleTooltip(), "entry box names no function"));   // fails
+}
+// ...the same with f.haveRegs[0] = false instead of the PC, and with
+// f.panel.ShowFunctionContaining(0, 0x00001FF0u) on the default Static view: the same tooltip.
+
+// A8-3
+void ProbeRefreshMarksCurrentStale()
+{
+    Fixture f;
+    f.kind = DecompViewKind::LivePaused;
+    f.PutWord(dts::kFixture1Jsr - 2, 0x6042);
+    ++f.backend.serial;
+    f.regs[0].pc = dts::kFixture1Jsr;
+    f.regs[0].r[0] = dts::kFixture1Callee;
+    CHECK(f.WaitShown("(*(code *)"));
+    f.Idle(2);
+    const SnapshotKey before = f.Shown().key;
+    CHECK(!f.panel.ShownStale() && !f.panel.HintText().empty());
+    f.gate.Close();
+    f.ClickItem("refresh");
+    CHECK(f.gate.WaitHeld());
+    f.Idle(2);
+    CHECK(f.Held() == before);                                  // nothing moved
+    CHECK(!f.panel.ShownStale());                               // fails: stale, reason Pending
+    CHECK(!Has(f.panel.StaleTooltip(), "earlier state"));       // fails
+    CHECK(!f.panel.HintText().empty());                         // fails: the hint is gone
+    f.gate.Open();
+    CHECK(f.WaitShown("(*(code *)"));
+}
+
+// A8-4
+void ProbeRefusedEntryForgotten()
+{
+    Fixture f;
+    f.panel.ShowFunctionContaining(0, dts::kFixture1Caller);
+    CHECK(f.WaitShown("+ 1"));
+    f.TypeInto("entry", "zz");
+    f.Idle(2);
+    CHECK(f.panel.ShownStale());                  // NeedsRefresh, "Type the function's entry as a hex address..."
+    f.backend.hw[0x0600F000u - kHw] = 0x11;       // a byte no function reads
+    ++f.backend.serial;
+    f.Idle();
+    CHECK(f.WaitShown("+ 1"));
+    f.Idle(2);
+    CHECK(f.panel.ShownStale() || !f.panel.EntryError().empty());   // fails: neither, box still 'zz'
+}
+
+// A1-6
+void ProbeAutoRefreshTooLarge()
+{
+    RunnerOptions o;
+    o.budgetSeconds = 0.3;
+    Fixture f(o);
+    std::vector<uint8_t> image(f.backend.hw.begin(), f.backend.hw.end());
+    dts::PlaceDiamonds(image, 1000);
+    std::copy(image.begin(), image.end(), f.backend.hw.begin());
+    f.PutWord(dts::kDiamondsBase - 4, 0x000B);
+    f.PutWord(dts::kDiamondsBase - 2, 0x0009);
+    ++f.backend.serial;
+    f.kind = DecompViewKind::LiveRunning;
+    f.trackSerial = false;
+    f.regs[0].pc = dts::kDiamondsBase + 12;
+    CHECK(f.PumpUntil([&] { return f.panel.Shown() && !f.panel.Pending(); }));
+    CHECK(f.Shown().status == DecompileStatus::TooLarge);
+    f.panel.SetAutoRefresh(true);
+    const uint64_t runs0 = f.runner.RunsStarted();
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; dts::MsSince(t0) < 6000.0; ++i)
+    {
+        f.regs[0].pc = dts::kDiamondsBase + 12u * static_cast<uint32_t>((i * 7) % 900);   // inside the function
+        ++f.frame;
+        ++f.fixedSerial;
+        f.Idle();
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+    CHECK(f.runner.RunsStarted() - runs0 <= 1);   // fails: 12
+}
+```
+
+Results (RelWithDebInfo, a 4-core container shared with other work):
+
+| Probe | Current |
+|---|---|
+| Follow PC into the BIOS | stale 1, reason NeedsRefresh, entry box `06004000`, error "No function found containing 0x00001FF0: 0x00001FF0 is not in captured memory", tooltip "...the entry box names no function to replace it (see the message below). Correct the entry and press Enter." |
+| Follow PC, no registers | the same tooltip; error "This source has no master SH-2 registers to follow." |
+| Decompile (Containing) in the BIOS | the same tooltip; the box holds `06004000` |
+| Refresh running, nothing changed | held key = shown key; stale 1, reason Pending, "This output is from an earlier state; its replacement is shown when it is ready."; hint `''` (before: "r0 = 0x06005000 at the halt"). After the answer: not stale, hint back |
+| Refused entry, then an unrelated edit | before: stale 1, NeedsRefresh, error set; after: stale 0, error `''`, box `zz`, `0x06004000` shown as current |
+| Auto-refresh in a too-large function, 6 s | 350 UI frames: 12 engine runs, 12 submissions, 12 captures, worker busy in 325 frames (93%), worst UI frame 3.6 ms, `TooLarge` shown throughout |
+| Stepping in a too-large function, 5 steps | 5 engine runs, 1,003 ms per step to the verdict (budget 300 ms) |
+
+### What held
+
+- **The round 2 fix.** The default run passes: 18 seeds and the 14 pinned sequences (808 operations, 469 results checked at install, 832
+  idle checks, 262 held-engine stale checks, 94 walks). `SE_MODEL_OPEN=1` runs nothing. `DecompilerPanelTests` passes. Seeds 1501 to 1800, which no earlier
+  round ran, were run one at a time (`SE_MODEL_SEED=<k>`), and none of the 300 fails.
+- **Directed model scripts** (all pass). An edit landing between a request's submit and its answer, then reverted:
+  `select D; hold; edit A 0 1; finish; edit A 0 0; wait`. Two answers for one question: `select D; hold; refresh; refresh; wait`, and a
+  retry after a slow first, `select D; starve; refresh; wait; select C; select D`. A callee changed under a held caller, two levels
+  down: `select A; select C; select D; hold; edit A 1 2; select C; finish; select D; wait` and the same through mirrors
+  (`selectm A; selectm C; select D; edit A 1 2; selectm A; select D`). A callee learned bare and lent to its caller, then the
+  callee's callee: `edit C 0 1|2|3; select C; select D; ...` (world D,C,B,P,Q). A BIOS image reloaded with the same bytes (a new
+  object, the same content hash): `bios 1; select X; select E; bios 1; select E; bios 2; select X; bios 1; select E` serves the
+  cache and asks nothing. Hidden while the bytes change and change back: `select A; hide; edit A 0 1; edit A 0 0; show; wait`. Stop,
+  then a change and its reversal: `select C; hold; stop; edit A 0 1; finish; edit A 0 0; wait; select C`.
+- **Follow PC across a session reset, hide/show, Stop and a scrub** (a directed panel sequence, passes). The PC is in the caller,
+  then the session resets with the PC in the callee, then the panel is hidden while the PC goes back to the caller and shown again.
+  Refresh is stopped, then the PC steps into the callee. A recorded frame has the PC in the caller, then the view returns to live with
+  it in the callee. Each time the shown function is the one containing the PC, and it is not stale once answered.
+- **`App`, read path by path.** Every input the key covers is recomputed by the panel each frame from the view, and `App`
+  builds that view's identity the same way on every path:
+  - The live identity is `ContextBackend::SourceId()`, the context pointer folded with a generation that `NoteSourceChanged`
+    moves, together with `se_derive_serial`. The serial moves in `RebuildDerived`, which `BeginFrame` and every `WriteVram` and
+    VDP-register write call. SH-2 registers are never written in place.
+  - Every context replacement goes through `CloseData` (`OpenFullDump`, `OpenSavestate`, `AttachLiveSource`,
+    `OpenSavestateBuffer`), and so through `ResetSessionDebugState`. `AdoptNewEmulatorInstance` calls it too.
+  - The scrub identity (`mScrubTimeline`, the view serial, the shown frame) moves on Play From Here, a ring clear, a slot load, an
+    emulator slot load and a session reset. `FrameRecorder::Capture` never reuses a number within a timeline. A Select that fails
+    falls back to live (`mbScrubbing = false`), so a half-decoded frame is never keyed.
+  - Names (`Rename`, `Load`, `Import`) all move `FunctionNames::Generation`. Function starts and the volatile list are hashed by the
+    panel itself. The BIOS identity is the image's content hash, so a reload with the same bytes is no change, by design and
+    correctly.
+  - No path was found that changes an engine input without moving the identity.
+- **Mirrors.** The entry as asked, lent prototypes by the address as run, names canonicalised by the engine but keyed raw by the
+  panel (conservative), function starts canonicalised at `SetEntry`, and volatile ranges expanded by `VolatileAliases` are each
+  consistent between the panel's question, the runner's `RequestKey` and the engine.
+- **The runner.** Supersession, Stop and the budget share one cancel clock (the first reason stands), so a budget run superseded
+  after its deadline still records "too large" for its own key only. A memo answer carries the asking request's generation. The
+  queue coalesces per slot.
+
+### Not probed, and why
+
+- **App with a live emulator.** It was read, not run. One question has no reproducer. `App` calls `se_begin_frame` (which always moves
+  the derive serial) on a paused emulator every UI frame while a state load is unconfirmed (`restoreWaiting`), while a step settles,
+  or while the session is behind. A `LivePaused` panel follows every such move at once: it captures and asks again, superseding the
+  run before. A function that takes longer than a frame would then never be shown while a state load stays unconfirmed (the wait
+  does not end on the 10 s timeout). That needs a live server that never confirms a load.
+- **`DecompileStatus::Disabled`.** Nothing produces it (the runner disables itself and returns generation 0 instead). The panel's
+  branch for it is dead code, unchanged from round 2.
+- **"Unimplemented".** Still unreachable on this spec.
+- **Cancel acknowledgement on real large functions.** On `PlaceDiamonds(1000)` the engine acknowledged a budget cancel in about 0.7 s,
+  well under the 5 s limit that disables the session. A function near `maxInstructions` was not measured.
