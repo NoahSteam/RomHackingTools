@@ -7699,8 +7699,15 @@ void TestCallsAndTraps()
             const DecompileResult re = d.Decompile(snapE, Request(every.base));
             Print(every.name.c_str(), re);
             CHECK(re.prototype.known && re.prototype.ret.kind != TypeKind::Void);
-            // A parameter joined with r0's entry value in a function whose r0 is scratch for the caller still withholds: the rule is
-            // about what the code can return, which only the caller knows.
+            // Accepted, pinned: the same join where the signature holds the parameter (r4 and r5 are read by the store and the test,
+            // r6 is the pointer): compiled code leaves exactly this as scratch in r0 (four functions of image 008), so it stays lent
+            // void. The rule is about a parameter the signature drops.
+            const CallFixture held = { "a3_20 control: the parameter is held by the signature", base,
+                                       { 0x2642, 0x2558, 0x8900, 0x6043, 0x000B, 0x0009 } };
+            auto snapH = CallSnapshot(held, ++serial);
+            const DecompileResult rh = d.Decompile(snapH, Request(held.base));
+            Print(held.name.c_str(), rh);
+            CHECK(rh.prototype.known && rh.prototype.ret.kind == TypeKind::Void && rh.prototype.params.size() >= 2);
         }
 
         // ---- A3-21: a callee that hands a value back through its caller's stack slot ----------------------------------------------
