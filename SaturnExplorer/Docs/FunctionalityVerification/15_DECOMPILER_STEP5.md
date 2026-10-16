@@ -2708,3 +2708,89 @@ touches no spec).
   signature learned under another volatile list is not lent).
 - The corpus still has 39 and 77 functions withheld on "uses a register after calling": callers of helpers that change the register
   (or whose own signature is not lent).
+
+## Area 6, round 2 review
+
+Reviewer, branch `review/6-round2-review`, on master `f0684b9` (round 1's fix `d41c806` and its merged-tree record `b10bc98`).
+No source changed: the probes were run from scratch copies, and each mutant was compiled into a scratch binary from a copy of
+one file, with the tree left untouched. New ledger rows: A6-10 to A6-15 (two P1, two P2, two P3).
+
+**How the probing was done.** `FaultProbe.cpp` is a scratch copy of `DecompilerFaultTests.cpp` with four additions:
+
+- two fixtures, `shapes` (loops, `&&`, `||`, a do-while, an if/else; A6-11) and `stack` (a stack array; A6-14, A6-15);
+- `SE_FAULT_STICKY=1`, which makes every allocation from `k` on fail (real exhaustion, not one transient failure);
+- `SE_FAULT_RANGE=lo-hi`, every `k` in a range, with each cell's trace;
+- `--repeat`, N requests in one process with RSS read before and after.
+
+It was linked against the RelWithDebInfo build's objects. A second, ASan+UBSan build (`-O0 -g0`) was linked from the same
+sources, because the disk was too full for a CMake Debug sanitizer tree.
+The fixtures and the reproduction commands in the ledger use the matrix's own request (`MakeRequest`) and its `--cell`/`--driver`
+syntax. `fixture1` is already in `kFixtures`, so A6-10 reproduces with the unmodified binary.
+
+### What held
+
+- **The default subset** on the merged tree: 25 of 25 jobs pass, 32 s. No pin is STALE.
+- **Every pin of A6-1 and A6-2 is on its site.** The failing allocation's stack is `Emit::Emit` / `PackedEncode` in Print, in
+  both passes and in the reference run.
+- **The full cancel and runner matrix** (`SE_FAULT_FULL=1 SE_FAULT_ONLY=cancel-enter,cancel-alloc,cancel-oom,runner`), RelWithDebInfo:
+  229 jobs pass, including 207 `runner-oom` processes; 267 s. This covers cancels at every phase entry and every allocation of all
+  four fixtures, cancel with an allocation failure 0 to 4,096 allocations later, and Stop, supersede, invalidate, destroy, budget
+  and disable at every phase entry. A6-6's pass-boundary check holds: no `cancel-alloc fixture1` cell is late.
+- **Mutation of A6-3 by its likeliest regression.** Dropping only `ident->list.reserve` in `block.cc` (a partial re-apply of patch
+  0023) is caught by the default subset: 3 pinned cells crash. Reverting A6-2 alone is caught too (the pinned cell 22940 crashes).
+- **Sticky exhaustion.** With every allocation from `k` on failing, the every-k sweep of mailbox (35,956 cells) and jumptable has 0
+  failures. Nothing on the way out (destructors, `SetError`, `TeardownNote`) needs an allocation that would turn a failure into a
+  terminate. On `shapes` and `fixture1` the sticky sweep fails only the cells of A6-11 and A6-10 (12 and 6 cells). The runner was
+  not run sticky.
+- **Repeated failures in one process.** RSS holds still over 1,000 requests each of Ok, `Failed` by `LowlevelError` ("Flow exceeded
+  maximum allowable instructions", which does not damage the engine) and Cancelled at a phase entry: 11,028 to 11,048 KB, 11,684
+  to 11,700 KB and 11,668 to 11,684 KB. The non-damaging failures leak nothing per request.
+- **The ASan sweep of the Actions phases** of mailbox and jumptable (both passes, every `k`, 5,102 cells) is clean.
+- **The host paths.** A damaged engine refuses `Decompile` and `Disassemble`, and every `alloc` cell checks this. `Failed("out of
+  memory")` reaches the panel's red line through `Poll`. A stale one is dropped, and the next request then shows the
+  Unavailable text. `catch(...)` in the engine swallows only in `Scope::addMapSym` (symbol decoding, not reached).
+  `CancelError` is a `LowlevelError`: the one engine catch of it in Actions that drops its type
+  (`ActionActiveParam::apply`, coreaction.cc:1874) wraps no check-point.
+- **Stack depth, by analysis only.** Recursion grows with the dominator tree and the structure's nesting. Both are bounded by
+  `maxInstructions` (20,000) and by the SH-2's branch ranges (an if nests at most a few hundred deep through `bra`). The
+  1000-diamond fixture needed more than 512 KiB in a Debug build, which puts the deepest reachable chain at a few MiB against the
+  worker's 16 MiB. No fixture was built to test it.
+- `Scope::addUnassigned`'s use-after-free (it reads `entry->symbol` after `delete entry`, on every call) is unreached. It is called
+  only from `Scope::addMap` for a map entry with an invalid address, which only decoding a symbol without storage makes. The host
+  and the actions map every symbol at a real address: the host's registers, `ScopeLocal::createEntry`,
+  `ProtoStoreSymbol::setInput` and `linkSymbol`. Because the bug fires on every call, not only after a failure, the clean ASan
+  runs of the decompiler suites and of these sweeps also show the path is never taken.
+
+### What failed
+
+| Row | Severity | What | Cells |
+|---|---|---|---|
+| A6-10 | P1 | `FuncProto::copy`: `delete store; store = op2.store->clone();` (A6-1's class in `fspec.cc`). A double free when a call through a literal pool is deindirected | `fixture1`: 6 of 21,831 (RelWithDebInfo), ASan heap-use-after-free in `~FuncProto` |
+| A6-11 | P1 | `HighVariable::mergeInternal` moves the Varnodes before it allocates the merged list. Use-after-free of the high at teardown; in RelWithDebInfo it crashes only sometimes | `shapes`: 11 of 40,442 (RelWithDebInfo, nondeterministic), 7 under ASan in one pass |
+| A6-12 | P2 | A pin has no identity. A6-2 reverted plus one unrelated 16-byte host allocation in Print passes the whole default subset; the A6-3 pins already sit on other code | mutant: 0 of 25 jobs fail |
+| A6-13 | P2 | `alloc` and `cancel-oom` run on mailbox and jumptable only. `fixture1`, the matrix's own fixture, crashes at once | the every-k sweep of `fixture1` |
+| A6-14 | P3 | More erase-then-insert leaks: `VarnodeBank::setInput`, `PcodeOpBank::destroy`, `MapState::addRange` | `stack`: 41 of 945 (ASan+LSan) |
+| A6-15 | P3 | The "A6-7 host register loop" frames match every phase. It accepts Actions-phase leaks, among them a new class (`ScopeInternal::renameSymbol`) | `stack`: 29 of 945 accepted wrongly |
+
+Both P1 rows are patch 0015's class. Round 1 searched `block.cc` and a grep for `delete X; X = new`. A grep for `delete X;` followed
+within six lines by any `X = ...` over the engine finds `FuncProto::copy` and `ProtoStore*::clone`. The rest of its hits are null
+assignments, are fixed already, or are on unreached paths (round 1's list, and `JumpTable::saveModel`/`restoreSavedModel`, which
+only move pointers). Search does not find A6-11, whose state change and allocation are in different statements. The matrix does,
+given a fixture that merges. So the case for A6-13 is stronger than the case for any further grep.
+
+### Could not probe, and why
+
+- **The CI's Debug ASan configuration, whole.** The disk was full (the shared scratch held about 24 GB of other agents' builds).
+  The ASan runs here use `-O0 -g0` objects linked by hand. Allocation counts match the RelWithDebInfo build (fixture1 21,800 in
+  both).
+- **`diamonds` under the `alloc` family** (410,906 allocations) and `cancel-us` in full were not run, for time.
+- **A deep-recursion fixture**, for the reasons under "What held".
+- **Windows and macOS.** The matrix forks.
+
+### For the coordinator, not area 6
+
+`b10bc98` ("Area 6 round 1: record the merged-tree runs") rewrote this file. It added 26 lines and deleted 741, dropping six
+sections: "Area 1, oracle", "Area 1, round 1", "Areas 3 and 4, oracle", "Area 5, round 2: fixes", "Area 6, oracle" and
+"Area 6, round 1". What is left of them is a bare "**Merged tree.**" paragraph, which now sits inside "Area 5, round 2 review".
+The sections are intact at `4c838c5` (`git show 4c838c5:SaturnExplorer/Docs/FunctionalityVerification/15_DECOMPILER_STEP5.md`).
+They were not restored here, because this branch is a review.
