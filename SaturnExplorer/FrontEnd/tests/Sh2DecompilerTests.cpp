@@ -4774,14 +4774,23 @@ private:
     std::unique_ptr<ghidra::EmulatePcodeCache> mEmu;
 };
 
-// The pseudocode, evaluated.
+// The pseudocode, evaluated. Values carry the width and signedness the declarations give them (A3-11):
+// a parameter or local is converted to its declared type on every assignment, a cast truncates or
+// extends, and `<`, `>>`, `/` and `%` read their operands as signed or unsigned by the C rules. A type
+// the printer leaves unknown (`xunknown4`, `undefined4`) has no sign: an operation that reads it both
+// ways and gets two answers is unknown, which agrees with any run. What the text does not let the
+// evaluator read (a construct it has no rule for, a 64-bit return, CONCAT or SUB of a width it cannot
+// hold) is an error, which fails the check: it is not an unknown value.
 class PseudoEval
 {
 public:
+    enum Sign : uint8_t { Unsigned = 0, Signed = 1, Unknown = 2 };
     struct Val
     {
         bool known = false;
-        uint32_t v = 0;
+        uint64_t v = 0;   // the bits, within 'size' bytes
+        int size = 4;
+        Sign sg = Unknown;
     };
     struct Outcome
     {
@@ -4800,6 +4809,7 @@ public:
             mError = "no body";
             return;
         }
+        Header(mPos);
         ++mPos;
         mBody = Block();
         if (mError.empty() && mPos < mTok.size()) mError = "text after the body";
@@ -4811,12 +4821,28 @@ public:
         std::vector<Outcome> out;
         if (!mError.empty()) return out;
         std::map<std::string, Val> env;
+        // Each parameter the header declares holds its register's value, converted to its type (a `char`
+        // parameter is the low byte, signed).
+        for (const auto& t : mTypes)
+        {
+            if (t.first.compare(0, 6, "param_") != 0) continue;
+            const size_t i = static_cast<size_t>(std::atoi(t.first.c_str() + 6));
+            Val v = Unk(4, Unknown);
+            if (i >= 1 && i <= mArgs.size()) v = Make(mArgs[i - 1], 4, Unsigned);
+            env[t.first] = Convert(v, t.second);
+        }
         Exec({ { &mBody, 0 } }, env, out, 0);
         return out;
     }
     const std::string& Error() const { return mError; }
 
 private:
+    struct Ty
+    {
+        int size = 4;   // 0: void
+        Sign sg = Unknown;
+        bool isBool = false;
+    };
     struct Node;
     using Seq = std::vector<Node>;
     struct Node
@@ -4829,7 +4855,7 @@ private:
         struct Label
         {
             bool isDefault;
-            uint32_t value;
+            uint64_t value;
             size_t at;   // the index in the body of the statement the label stands before
         };
         std::vector<Label> labels;
@@ -4844,6 +4870,183 @@ private:
     {
         size_t pos, end;
     };
+
+    // ---- values ----
+    static uint64_t Mask(int size) { return size >= 8 ? ~0ull : (1ull << (8 * size)) - 1; }
+    static Val Make(uint64_t v, int size, Sign sg)
+    {
+        Val x;
+        x.known = true;
+        x.v = v & Mask(size);
+        x.size = size;
+        x.sg = sg;
+        return x;
+    }
+    static Val Unk(int size, Sign sg)
+    {
+        Val x;
+        x.size = size;
+        x.sg = sg;
+        return x;
+    }
+    static int64_t SignedOf(const Val& a)
+    {
+        const int bits = 8 * a.size;
+        if (bits >= 64) return static_cast<int64_t>(a.v);
+        const uint64_t m = 1ull << (bits - 1);
+        return static_cast<int64_t>((a.v ^ m) - m);
+    }
+    // The integer a value stands for, as the bits of a wider one: a signed type extends its sign, any other
+    // its zero.
+    static uint64_t Widen(const Val& a) { return a.sg == Signed ? static_cast<uint64_t>(SignedOf(a)) : a.v; }
+    static Val Convert(const Val& a, const Ty& t)
+    {
+        if (t.size <= 0) return Unk(4, Unknown);
+        if (!a.known) return Unk(t.size, t.sg);
+        if (t.isBool) return Make(a.v != 0, t.size, t.sg);
+        return Make(Widen(a), t.size, t.sg);
+    }
+    // Narrower than an int becomes one (the usual promotion); a type without a sign stays without.
+    static Val Promote(const Val& a)
+    {
+        if (a.size >= 4) return a;
+        const Sign sg = a.sg == Unknown ? Unknown : Signed;
+        return a.known ? Make(Widen(a), 4, sg) : Unk(4, sg);
+    }
+    // The type two promoted operands are brought to: the wider, and at one width the unsigned one.
+    static Ty Common(const Val& a, const Val& b)
+    {
+        Ty t;
+        t.size = std::max(a.size, b.size);
+        if (a.size != b.size) t.sg = (a.size > b.size ? a : b).sg;
+        else if (a.sg == Unsigned || b.sg == Unsigned) t.sg = Unsigned;
+        else if (a.sg == Unknown || b.sg == Unknown) t.sg = Unknown;
+        else t.sg = Signed;
+        return t;
+    }
+
+    // ---- types ----
+    // A type word as the printer writes them: int, uint4, xunknown4, undefined2, char, code, ...
+    static bool IsType(const std::string& t)
+    {
+        static const char* const prefixes[] = { "int", "uint", "char", "uchar", "short", "ushort", "long", "ulong", "bool",
+                                                "code", "byte", "xunknown", "unknown", "undefined", "void", "unsigned",
+                                                "signed", "ulonglong", "longlong" };
+        for (const char* p : prefixes)
+        {
+            const size_t n = std::strlen(p);
+            if (t.compare(0, n, p) != 0) continue;
+            bool digits = true;
+            for (size_t i = n; i < t.size(); ++i) digits = digits && std::isdigit(static_cast<unsigned char>(t[i]));
+            if (digits) return true;
+        }
+        return false;
+    }
+    // One type word: its size and sign. `int`/`uint` without a width are 4 bytes, `long` 4 (the SH-2's), `longlong` 8.
+    static Ty TypeOfWord(const std::string& t)
+    {
+        size_t k = t.size();
+        while (k > 0 && std::isdigit(static_cast<unsigned char>(t[k - 1]))) --k;
+        const std::string name = t.substr(0, k);
+        const int n = k < t.size() ? std::atoi(t.c_str() + k) : 0;
+        Ty r;
+        if (name == "int") r = { n ? n : 4, Signed, false };
+        else if (name == "uint") r = { n ? n : 4, Unsigned, false };
+        else if (name == "char") r = { 1, Signed, false };
+        else if (name == "uchar" || name == "byte") r = { 1, Unsigned, false };
+        else if (name == "bool") r = { 1, Unsigned, true };
+        else if (name == "short") r = { 2, Signed, false };
+        else if (name == "ushort") r = { 2, Unsigned, false };
+        else if (name == "long") r = { 4, Signed, false };
+        else if (name == "ulong") r = { 4, Unsigned, false };
+        else if (name == "longlong") r = { 8, Signed, false };
+        else if (name == "ulonglong") r = { 8, Unsigned, false };
+        else if (name == "code") r = { 4, Unsigned, false };
+        else if (name == "void") r = { 0, Unknown, false };
+        else if (name == "unsigned") r = { 4, Unsigned, false };
+        else if (name == "signed") r = { 4, Signed, false };
+        else r = { n ? n : 4, Unknown, false };   // xunknown4, undefined4: a width and no sign
+        if (r.size > 8) r.size = 8;
+        return r;
+    }
+    // The type the tokens [s, e) spell: a star makes a pointer (4 bytes), `unsigned` before a word makes it unsigned.
+    Ty TypeOf(size_t s, size_t e) const
+    {
+        Ty r;
+        bool uns = false, sgn = false, any = false;
+        for (size_t i = s; i < e; ++i)
+        {
+            if (mTok[i] == "*")
+            {
+                Ty p;
+                p.size = 4;
+                p.sg = Unsigned;
+                return p;
+            }
+            if (mTok[i] == "unsigned") uns = true;
+            else if (mTok[i] == "signed") sgn = true;
+            else if (IsType(mTok[i]) && !any)
+            {
+                r = TypeOfWord(mTok[i]);
+                any = true;
+            }
+        }
+        if (uns && (!any || r.sg == Signed)) r.sg = Unsigned;
+        if (sgn && !any) r.sg = Signed;
+        return r;
+    }
+
+    // The function's own declaration: its return type, and each parameter's.
+    void Header(size_t bodyAt)
+    {
+        size_t p = 0;
+        while (p < bodyAt && mTok[p] != "(") ++p;
+        if (p == 0 || p >= bodyAt) return;
+        mRet = TypeOf(0, p - 1);   // the tokens before the function's name
+        size_t depth = 0, s = p + 1;
+        for (size_t i = p + 1; i < bodyAt; ++i)
+        {
+            if (mTok[i] == "(") ++depth;
+            const bool close = mTok[i] == ")" && depth == 0;
+            if (mTok[i] == ")" && depth > 0) --depth;
+            if (close || (mTok[i] == "," && depth == 0))
+            {
+                if (i > s && !(i == s + 1 && mTok[s] == "void") && i - s >= 2)
+                    mTypes[mTok[i - 1]] = TypeOf(s, i - 1);
+                s = i + 1;
+                if (close) break;
+            }
+        }
+    }
+
+    // `type name, *name;`: the tokens [s, e) of a declaration, each name given the type.
+    void Declare(size_t s, size_t e)
+    {
+        size_t j = s;
+        while (j < e && IsType(mTok[j])) ++j;
+        if (j == s) return;
+        const Ty base = TypeOf(s, j);
+        while (j < e)
+        {
+            bool ptr = false;
+            while (j < e && mTok[j] == "*")
+            {
+                ptr = true;
+                ++j;
+            }
+            if (j >= e) break;
+            Ty t = base;
+            if (ptr)
+            {
+                t.size = 4;
+                t.sg = Unsigned;
+                t.isBool = false;
+            }
+            mTypes[mTok[j]] = t;
+            ++j;
+            if (j < e && mTok[j] == ",") ++j;
+        }
+    }
 
     void Lex(const std::string& s)
     {
@@ -4860,6 +5063,15 @@ private:
             {
                 const size_t end = s.find("*/", i + 2);
                 i = end == std::string::npos ? s.size() : end + 2;
+                continue;
+            }
+            if (c == '\'')   // a character constant, one token with its quotes: '\x02', 'A', '\\'
+            {
+                size_t j = i + 1;
+                while (j < s.size() && s[j] != '\'')
+                    j += s[j] == '\\' ? 2 : 1;
+                mTok.push_back(s.substr(i, std::min(j + 1, s.size()) - i));
+                i = j + 1;
                 continue;
             }
             if (std::isalnum(static_cast<unsigned char>(c)) || c == '_')
@@ -4884,23 +5096,6 @@ private:
             mTok.push_back(std::string(1, c));
             ++i;
         }
-    }
-
-    // A type name as the printer writes them: int, uint4, xunknown4, undefined2, char, code, ...
-    static bool IsType(const std::string& t)
-    {
-        static const char* const prefixes[] = { "int", "uint", "char", "uchar", "short", "ushort", "long", "ulong", "bool",
-                                                "code", "byte", "xunknown", "unknown", "undefined", "void", "unsigned",
-                                                "signed", "ulonglong", "longlong" };
-        for (const char* p : prefixes)
-        {
-            const size_t n = std::strlen(p);
-            if (t.compare(0, n, p) != 0) continue;
-            bool digits = true;
-            for (size_t i = n; i < t.size(); ++i) digits = digits && std::isdigit(static_cast<unsigned char>(t[i]));
-            if (digits) return true;
-        }
-        return false;
     }
 
     // A block up to its closing brace, which is consumed.
@@ -4936,6 +5131,36 @@ private:
         Seq s;
         s.push_back(Statement());
         return s;
+    }
+
+    // The value of a character constant's token ('\x02'), as an int (char is signed).
+    static bool CharValue(const std::string& t, int64_t& v)
+    {
+        if (t.size() < 3 || t[0] != '\'' || t.back() != '\'') return false;
+        const std::string b = t.substr(1, t.size() - 2);
+        int c = 0;
+        if (b[0] != '\\') c = static_cast<unsigned char>(b[0]);
+        else if (b.size() < 2) return false;
+        else if (b[1] == 'x') c = static_cast<int>(std::strtoul(b.c_str() + 2, nullptr, 16));
+        else if (b[1] >= '0' && b[1] <= '7') c = static_cast<int>(std::strtoul(b.c_str() + 1, nullptr, 8));
+        else
+            switch (b[1])
+            {
+            case 'n': c = '\n'; break;
+            case 't': c = '\t'; break;
+            case 'r': c = '\r'; break;
+            case 'a': c = 7; break;
+            case 'b': c = 8; break;
+            case 'f': c = 12; break;
+            case 'v': c = 11; break;
+            case '\\': c = '\\'; break;
+            case '\'': c = '\''; break;
+            case '"': c = '"'; break;
+            case '?': c = '?'; break;
+            default: return false;
+            }
+        v = static_cast<int8_t>(static_cast<uint8_t>(c));
+        return true;
     }
 
     Node Statement()
@@ -4977,7 +5202,7 @@ private:
             return n;
         }
         // switch (selector) { case N: ... break; ... default: ... }: falls through from a label to the next
-        // statements, as C does; a case value may be negative.
+        // statements, as C does; a case value may be negative or a character constant.
         if (t == "switch")
         {
             n.kind = Node::Switch;
@@ -5011,13 +5236,17 @@ private:
                         neg = true;
                         ++mPos;
                     }
-                    if (mPos + 1 >= mTok.size() || !std::isdigit(static_cast<unsigned char>(mTok[mPos][0])) || mTok[mPos + 1] != ":")
+                    int64_t cv = 0;
+                    uint64_t v = 0;
+                    const bool number = mPos < mTok.size() && std::isdigit(static_cast<unsigned char>(mTok[mPos][0]));
+                    const bool chr = mPos < mTok.size() && CharValue(mTok[mPos], cv);
+                    if (mPos + 1 >= mTok.size() || !(number || chr) || mTok[mPos + 1] != ":")
                     {
                         mError = "a case label this evaluator does not read";
                         return n;
                     }
-                    const uint32_t v = static_cast<uint32_t>(std::strtoull(mTok[mPos].c_str(), nullptr, 0));
-                    n.labels.push_back({ false, neg ? 0u - v : v, n.yes->size() });
+                    v = number ? std::strtoull(mTok[mPos].c_str(), nullptr, 0) : static_cast<uint64_t>(cv);
+                    n.labels.push_back({ false, neg ? 0ull - v : v, n.yes->size() });
                     mPos += 2;
                 }
                 else if (mTok[mPos] == "default" && mPos + 1 < mTok.size() && mTok[mPos + 1] == ":")
@@ -5057,6 +5286,7 @@ private:
             }
             if (decl && names >= 2 && k < mTok.size())
             {
+                Declare(mPos, k);
                 mPos = k + 1;
                 return n;
             }
@@ -5072,6 +5302,14 @@ private:
             n.exprEnd = mPos;
             n.hasExpr = true;
             ++mPos;
+            return n;
+        }
+        // `name += expr;`, `name++;`: a change to a local this evaluator would not see.
+        if (mPos + 2 < mTok.size() && (std::isalpha(static_cast<unsigned char>(t[0])) || t[0] == '_') && Prec(mTok[mPos + 1]) > 0 &&
+            (mTok[mPos + 2] == "=" || (mTok[mPos + 2] == mTok[mPos + 1] && (mTok[mPos + 1] == "+" || mTok[mPos + 1] == "-"))))
+        {
+            mError = "an assignment this evaluator does not read: " + t + " " + mTok[mPos + 1] + mTok[mPos + 2];
+            mPos = mTok.size();
             return n;
         }
         // Anything else is a call or a store: it changes no local.
@@ -5096,44 +5334,88 @@ private:
         return -1;
     }
 
-    Val Apply(const std::string& op, const Val& a, const Val& b)
+    // 'op' on two values of one width, read as signed or unsigned; false if it has no value (a division by zero).
+    static bool Compute(const std::string& op, const Val& a, const Val& b, bool sgn, uint64_t& r)
     {
-        // A short circuit or an absorbing operand decides without the other side.
-        if (op == "&&" && ((a.known && !a.v) || (b.known && !b.v))) return Val{ true, 0 };
-        if (op == "||" && ((a.known && a.v) || (b.known && b.v))) return Val{ true, 1 };
-        if (op == "&" && ((a.known && !a.v) || (b.known && !b.v))) return Val{ true, 0 };
-        if (!a.known || !b.known) return Val();
-        const uint32_t x = a.v, y = b.v;
-        const int32_t sx = static_cast<int32_t>(x), sy = static_cast<int32_t>(y);
-        uint32_t r = 0;
+        const uint64_t x = a.v, y = b.v;
+        const int64_t sx = SignedOf(a), sy = SignedOf(b);
         if (op == "+") r = x + y;
         else if (op == "-") r = x - y;
         else if (op == "*") r = x * y;
-        else if (op == "/")
-        {
-            if (!y) return Val();
-            r = static_cast<uint32_t>(sx / sy);
-        }
-        else if (op == "%")
-        {
-            if (!y) return Val();
-            r = static_cast<uint32_t>(sx % sy);
-        }
         else if (op == "&") r = x & y;
         else if (op == "|") r = x | y;
         else if (op == "^") r = x ^ y;
-        else if (op == "<<") r = y < 32 ? x << y : 0;
-        else if (op == ">>") r = y < 32 ? static_cast<uint32_t>(sx >> y) : 0;
+        else if (op == "/" || op == "%")
+        {
+            if (!y) return false;
+            if (!sgn) r = op == "/" ? x / y : x % y;
+            else if (sy == -1) r = op == "/" ? 0ull - static_cast<uint64_t>(sx) : 0;   // no INT_MIN / -1 trap
+            else r = static_cast<uint64_t>(op == "/" ? sx / sy : sx % sy);
+        }
         else if (op == "==") r = x == y;
         else if (op == "!=") r = x != y;
-        else if (op == "<") r = sx < sy;
-        else if (op == ">") r = sx > sy;
-        else if (op == "<=") r = sx <= sy;
-        else if (op == ">=") r = sx >= sy;
-        else if (op == "&&") r = x && y;
-        else if (op == "||") r = x || y;
-        else mError = "unsupported operator " + op;
-        return Val{ true, r };
+        else if (op == "<") r = sgn ? sx < sy : x < y;
+        else if (op == ">") r = sgn ? sx > sy : x > y;
+        else if (op == "<=") r = sgn ? sx <= sy : x <= y;
+        else if (op == ">=") r = sgn ? sx >= sy : x >= y;
+        else return false;
+        return true;
+    }
+
+    Val Apply(const std::string& op, Val a, Val b)
+    {
+        if (op == "&&" || op == "||")
+        {
+            const bool and_ = op == "&&";
+            if ((a.known && (a.v != 0) == !and_) || (b.known && (b.v != 0) == !and_)) return Make(!and_, 4, Signed);   // 0 && x, 1 || x
+            if (!a.known || !b.known) return Unk(4, Signed);
+            return Make(and_, 4, Signed);
+        }
+        if (op == "<<" || op == ">>")
+        {
+            a = Promote(a);
+            b = Promote(b);
+            if (!a.known) return Unk(a.size, a.sg);
+            if (a.v == 0) return Make(0, a.size, a.sg);
+            if (!b.known) return Unk(a.size, a.sg);
+            const int bits = 8 * a.size;
+            const uint64_t count = b.v;
+            if (b.sg == Signed && SignedOf(b) < 0) return Unk(a.size, a.sg);
+            if (op == "<<") return Make(count >= static_cast<uint64_t>(bits) ? 0 : a.v << count, a.size, a.sg);
+            const uint64_t logical = count >= static_cast<uint64_t>(bits) ? 0 : a.v >> count;
+            const int64_t s = SignedOf(a);
+            const uint64_t arithmetic = count >= static_cast<uint64_t>(bits) ? (s < 0 ? ~0ull : 0ull) : static_cast<uint64_t>(s >> count);
+            if (a.sg == Unsigned) return Make(logical, a.size, a.sg);
+            if (a.sg == Signed) return Make(arithmetic, a.size, a.sg);
+            if ((logical & Mask(a.size)) == (arithmetic & Mask(a.size))) return Make(logical, a.size, a.sg);
+            return Unk(a.size, a.sg);   // a right shift of a value without a sign: it depends on which
+        }
+        if (Prec(op) < 0)
+        {
+            mError = "unsupported operator " + op;
+            return Val();
+        }
+        a = Promote(a);
+        b = Promote(b);
+        const Ty t = Common(a, b);
+        a = Convert(a, t);
+        b = Convert(b, t);
+        const bool compare = Prec(op) == 6 || Prec(op) == 7;
+        const Ty result = compare ? Ty{ 4, Signed, false } : t;
+        // An absorbing operand decides without the other side.
+        if ((op == "&" || op == "*") && ((a.known && !a.v) || (b.known && !b.v))) return Make(0, result.size, result.sg);
+        if (!a.known || !b.known) return Unk(result.size, result.sg);
+        uint64_t r = 0;
+        const bool dependsOnSign = op == "/" || op == "%" || (compare && Prec(op) == 7);
+        if (dependsOnSign && t.sg == Unknown)
+        {
+            uint64_t u = 0, s = 0;
+            const bool okU = Compute(op, a, b, false, u), okS = Compute(op, a, b, true, s);
+            if (!okU || !okS || (u & Mask(result.size)) != (s & Mask(result.size))) return Unk(result.size, result.sg);
+            return Make(u, result.size, result.sg);
+        }
+        if (!Compute(op, a, b, t.sg == Signed, r)) return Unk(result.size, result.sg);
+        return Make(r, result.size, result.sg);
     }
 
     void SkipGroup(Cursor& c)
@@ -5151,6 +5433,110 @@ private:
         }
     }
 
+    // The arguments of a call, `(` at c.pos, to the `)`: comma-separated expressions.
+    std::vector<Val> Arguments(Cursor& c, const std::map<std::string, Val>& env)
+    {
+        std::vector<Val> args;
+        ++c.pos;   // (
+        if (c.pos < c.end && mTok[c.pos] == ")")
+        {
+            ++c.pos;
+            return args;
+        }
+        while (c.pos < c.end && mError.empty())
+        {
+            args.push_back(ParseExpr(c, env, 1));
+            if (c.pos < c.end && mTok[c.pos] == ",") ++c.pos;
+            else break;
+        }
+        if (c.pos < c.end && mTok[c.pos] == ")") ++c.pos;
+        else if (mError.empty()) mError = "unbalanced parentheses";
+        return args;
+    }
+
+    // The decompiler's own operators, written like calls: CONCAT31(a, b), SUB41(x, 0), ZEXT48(x), SEXT48(x),
+    // CARRY4(a, b), SCARRY4(a, b), SBORROW4(a, b). The digits are widths in bytes. Any other name of that shape
+    // is one this evaluator has no rule for.
+    static bool BuiltinShape(const std::string& name)
+    {
+        size_t k = name.size();
+        while (k > 0 && std::isdigit(static_cast<unsigned char>(name[k - 1]))) --k;
+        if (k == 0 || k == name.size()) return false;
+        for (size_t i = 0; i < k; ++i)
+            if (!std::isupper(static_cast<unsigned char>(name[i]))) return false;
+        return true;
+    }
+    bool Builtin(const std::string& name, const std::vector<Val>& a, Val& out)
+    {
+        size_t k = name.size();
+        while (k > 0 && std::isdigit(static_cast<unsigned char>(name[k - 1]))) --k;
+        const std::string base = name.substr(0, k), digits = name.substr(k);
+        auto known = [&](size_t n) {
+            if (a.size() != n) return false;
+            for (const Val& v : a)
+                if (!v.known) return false;
+            return true;
+        };
+        auto fail = [&](const char* what) {
+            mError = std::string(what) + " " + name + " this evaluator does not read";
+            return true;
+        };
+        if (base == "CONCAT" && digits.size() == 2)
+        {
+            const int hi = digits[0] - '0', lo = digits[1] - '0';
+            if (hi < 1 || lo < 1 || hi + lo > 8) return fail("a width of");
+            if (a.size() != 2) return fail("the arguments of");
+            out = known(2) ? Make((a[0].v << (8 * lo)) | a[1].v, hi + lo, Unknown) : Unk(hi + lo, Unknown);
+            return true;
+        }
+        if (base == "SUB" && digits.size() == 2)
+        {
+            const int from = digits[0] - '0', to = digits[1] - '0';
+            if (from < 1 || to < 1 || from > 8 || to > 8) return fail("a width of");
+            if (a.size() != 2 || (a[1].known && static_cast<int>(a[1].v) + to > from)) return fail("the arguments of");
+            out = known(2) ? Make(a[0].v >> (8 * a[1].v), to, Unknown) : Unk(to, Unknown);
+            return true;
+        }
+        if ((base == "ZEXT" || base == "SEXT") && digits.size() == 2)
+        {
+            const int from = digits[0] - '0', to = digits[1] - '0';
+            if (from < 1 || to < from || to > 8 || a.size() != 1) return fail("a width of");
+            if (!a[0].known) out = Unk(to, Unknown);
+            else
+            {
+                Val src = Make(a[0].v, from, base == "SEXT" ? Signed : Unsigned);
+                out = Make(Widen(src), to, Unknown);
+            }
+            return true;
+        }
+        if ((base == "CARRY" || base == "SCARRY" || base == "SBORROW") && digits.size() == 1)
+        {
+            const int n = digits[0] - '0';
+            if (n < 1 || n > 8 || a.size() != 2) return fail("a width of");
+            if (!known(2))
+            {
+                out = Unk(1, Unsigned);
+                return true;
+            }
+            const Val x = Make(a[0].v, n, Signed), y = Make(a[1].v, n, Signed);
+            const uint64_t ux = x.v, uy = y.v, m = Mask(n);
+            bool r = false;
+            if (base == "CARRY") r = n == 8 ? ux + uy < ux : ux + uy > m;
+            else
+            {
+                const int64_t sx = SignedOf(x), sy = SignedOf(y);
+                const uint64_t sum = static_cast<uint64_t>(sx) + static_cast<uint64_t>(sy);
+                const uint64_t dif = static_cast<uint64_t>(sx) - static_cast<uint64_t>(sy);
+                const bool sxNeg = sx < 0, syNeg = sy < 0;
+                const bool sumNeg = (sum >> (8 * n - 1)) & 1, difNeg = (dif >> (8 * n - 1)) & 1;
+                r = base == "SCARRY" ? (sxNeg == syNeg && sumNeg != sxNeg) : (sxNeg != syNeg && difNeg != sxNeg);
+            }
+            out = Make(r, 1, Unsigned);
+            return true;
+        }
+        return fail("the operator");
+    }
+
     Val ParseUnary(Cursor& c, const std::map<std::string, Val>& env)
     {
         if (c.pos >= c.end)
@@ -5161,18 +5547,18 @@ private:
         const std::string t = mTok[c.pos++];
         if (t == "-")
         {
-            const Val v = ParseUnary(c, env);
-            return v.known ? Val{ true, 0u - v.v } : Val();
+            const Val v = Promote(ParseUnary(c, env));
+            return v.known ? Make(0ull - v.v, v.size, v.sg) : Unk(v.size, v.sg);
         }
         if (t == "!")
         {
             const Val v = ParseUnary(c, env);
-            return v.known ? Val{ true, v.v ? 0u : 1u } : Val();
+            return v.known ? Make(v.v ? 0 : 1, 4, Signed) : Unk(4, Signed);
         }
         if (t == "~")
         {
-            const Val v = ParseUnary(c, env);
-            return v.known ? Val{ true, ~v.v } : Val();
+            const Val v = Promote(ParseUnary(c, env));
+            return v.known ? Make(~v.v, v.size, v.sg) : Unk(v.size, v.sg);
         }
         if (t == "*" || t == "&")   // a memory read or an address: unknown
         {
@@ -5191,8 +5577,9 @@ private:
             }
             if (cast && k < c.end)
             {
+                const Ty to = TypeOf(c.pos, k);
                 c.pos = k + 1;
-                return ParseUnary(c, env);
+                return Convert(ParseUnary(c, env), to);
             }
             const Val v = ParseExpr(c, env, 1);
             if (c.pos < c.end && mTok[c.pos] == ")") ++c.pos;
@@ -5204,21 +5591,47 @@ private:
             }
             return v;
         }
+        if (t[0] == '\'')
+        {
+            int64_t v = 0;
+            if (!CharValue(t, v))
+            {
+                mError = "character constant " + t;
+                return Val();
+            }
+            return Make(static_cast<uint64_t>(v), 4, Signed);
+        }
         if (std::isdigit(static_cast<unsigned char>(t[0])))
         {
             char* endp = nullptr;
             const unsigned long long v = std::strtoull(t.c_str(), &endp, 0);
+            bool u = false;
+            int l = 0;
             for (; endp && *endp; ++endp)
-                if (*endp != 'u' && *endp != 'U' && *endp != 'l' && *endp != 'L')
+            {
+                if (*endp == 'u' || *endp == 'U') u = true;
+                else if (*endp == 'l' || *endp == 'L') ++l;
+                else
                 {
                     mError = "number " + t;
                     break;
                 }
-            return Val{ true, static_cast<uint32_t>(v) };
+            }
+            if (v > 0xFFFFFFFFull || l >= 2) return Make(v, 8, u || v > 0x7FFFFFFFFFFFFFFFull ? Unsigned : Signed);
+            if (u || v > 0x7FFFFFFFull) return Make(v, 4, Unsigned);
+            return Make(v, 4, Signed);
         }
-        // A name; followed by `(` it is a call, whose result is unknown.
+        if (t == "true" || t == "false") return Make(t == "true", 1, Unsigned);
+        // A name; followed by `(` it is a call, whose result is unknown, or one of the decompiler's own operators.
         if (c.pos < c.end && mTok[c.pos] == "(")
         {
+            if (BuiltinShape(t))
+            {
+                const std::vector<Val> args = Arguments(c, env);
+                Val out;
+                if (mError.empty() && Builtin(t, args, out)) return out;
+                return Val();
+            }
             SkipGroup(c);
             return Val();
         }
@@ -5243,14 +5656,17 @@ private:
             }
             return Val();
         }
+        const auto it = env.find(t);
+        if (it != env.end()) return it->second;
+        const auto ty = mTypes.find(t);
+        if (ty != mTypes.end()) return Convert(Unk(4, Unknown), ty->second);   // declared, never assigned
+        // A parameter the header does not declare (a fragment): the register's value as an int.
         if (t.compare(0, 6, "param_") == 0)
         {
             const size_t i = static_cast<size_t>(std::atoi(t.c_str() + 6));
-            if (i >= 1 && i <= mArgs.size()) return Val{ true, mArgs[i - 1] };
-            return Val();
+            if (i >= 1 && i <= mArgs.size()) return Make(mArgs[i - 1], 4, Signed);
         }
-        const auto it = env.find(t);
-        return it == env.end() ? Val() : it->second;
+        return Val();
     }
 
     Val ParseExpr(Cursor& c, const std::map<std::string, Val>& env, int minPrec)
@@ -5295,12 +5711,23 @@ private:
             switch (n.kind)
             {
             case Node::Skip: break;
-            case Node::Assign: env[n.var] = Eval(n, env); break;
+            case Node::Assign:
+            {
+                const Val v = Eval(n, env);
+                const auto ty = mTypes.find(n.var);
+                env[n.var] = ty == mTypes.end() ? v : Convert(v, ty->second);
+                break;
+            }
             case Node::Return:
             {
                 Outcome o;
                 o.value = n.hasExpr;
-                if (n.hasExpr) o.v = Eval(n, env);
+                if (n.hasExpr)
+                {
+                    o.v = Eval(n, env);
+                    if (mRet.size > 0) o.v = Convert(o.v, mRet);
+                    if (o.v.known && o.v.size > 4 && mError.empty()) mError = "a 64-bit return, which r0 alone does not hold";
+                }
                 out.push_back(o);
                 return;
             }
@@ -5316,13 +5743,14 @@ private:
             {
                 // Where execution starts: the label that matches, else the default's, else after the switch.
                 // An unknown selector tries each label and the default, as an unknown condition tries both arms.
-                const Val sel = Eval(n, env);
+                const Val sel = Promote(Eval(n, env));
+                const uint64_t mask = Mask(sel.size);
                 std::vector<long> starts;   // an index into the body, or -1: past the switch
                 long deflt = -1;
                 for (const Node::Label& l : n.labels)
                 {
                     if (l.isDefault) deflt = static_cast<long>(l.at);
-                    else if (!sel.known || sel.v == l.value)
+                    else if (!sel.known || (sel.v & mask) == (l.value & mask))
                     {
                         starts.push_back(static_cast<long>(l.at));
                         if (sel.known) break;
@@ -5362,6 +5790,8 @@ private:
     std::vector<std::string> mTok;
     size_t mPos = 0;
     std::vector<uint32_t> mArgs;
+    std::map<std::string, Ty> mTypes;   // the declared type of each parameter and local
+    Ty mRet;                            // the return type
     Seq mBody;
     std::string mError;
 };
@@ -5373,6 +5803,9 @@ struct CallFixture
     std::string name;
     uint32_t base;
     std::vector<uint16_t> code;
+    // The function's result is not in r0: r0 at its return is scratch, so a text that returns nothing is right.
+    // Otherwise r0 is the result (the default: a `return;` from code that leaves a value there is wrong, A3-11).
+    bool noResult = false;
 };
 
 constexpr uint32_t kRunSentinel = 0x0600FF00u;   // PR on entry: the run ends when it is the next instruction
@@ -5421,8 +5854,11 @@ bool CallRunResult(const std::shared_ptr<MemorySnapshot>& snap, const CallFixtur
 }
 
 // Whether the pseudocode may return 'value' for these inputs: some path returns a value it cannot
-// know, returns nothing, or returns exactly that. 'why' says what it does return when not.
-bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint32_t value, std::string& why)
+// know, or returns exactly that (as many low bytes as the return type has). A path that returns nothing
+// (`return;`, or falling off the end) agrees only when r0 is no result at all ('resultInR0' false): the
+// code leaves its value there, and a text that states none dropped it. 'why' says what it does return when not.
+bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint32_t value, std::string& why,
+               bool resultInR0 = true)
 {
     PseudoEval eval(text, args);
     const std::vector<PseudoEval::Outcome> outs = eval.Run();
@@ -5431,11 +5867,19 @@ bool MayReturn(const std::string& text, const std::vector<uint32_t>& args, uint3
         why = "cannot evaluate the pseudocode (" + eval.Error() + ")";
         return false;
     }
-    char buf[16];
+    char buf[32];
     for (const PseudoEval::Outcome& o : outs)
     {
-        if (!o.value || !o.v.known || o.v.v == value) return true;
-        std::snprintf(buf, sizeof buf, " %08X", o.v.v);
+        if (!o.value)
+        {
+            if (!resultInR0) return true;
+            why += " nothing";
+            continue;
+        }
+        if (!o.v.known) return true;
+        const uint32_t mask = o.v.size >= 4 ? 0xFFFFFFFFu : (1u << (8 * o.v.size)) - 1u;
+        if ((static_cast<uint32_t>(o.v.v) & mask) == (value & mask)) return true;
+        std::snprintf(buf, sizeof buf, " %08X", static_cast<uint32_t>(o.v.v));
         why += buf;
     }
     why = "returns" + why;
@@ -5456,7 +5900,7 @@ bool PseudoAgreesWithRun(const DecompileResult& r, const std::shared_ptr<MemoryS
             return false;
         }
         std::string why;
-        if (!MayReturn(r.Text(), args, ran, why))
+        if (!MayReturn(r.Text(), args, ran, why, !f.noResult))
         {
             std::printf("  oracle %s: the code returned %08X for r4=%08X, the pseudocode %s\n", f.name.c_str(), ran,
                         args.empty() ? 0u : args[0], why.c_str());
@@ -5653,6 +6097,76 @@ void TestCallsAndTraps()
         CHECK(!MayReturn("int f(int param_1)\n{\n  while (param_1 != 0) {\n    param_1 = param_1 - 1;\n  }\n  return 0;\n}", { 1 }, 0, why));
     }
 
+    // ---- A3-11: the evaluator reads what the text says ----------------------------------------
+    // Text it used to accept for a run it does not agree with ...
+    {
+        std::string why;
+        // A `return;` states no value: right only for a function whose r0 is no result (the fixture says so).
+        const std::string bare = "void f(void)\n{\n  func_0x06009020();\n  return;\n}";
+        CHECK(!MayReturn(bare, {}, 7, why) && Has(why, "nothing"));
+        CHECK(MayReturn(bare, {}, 7, why, false));
+        CHECK(!MayReturn("void f(void)\n{\n  func_0x06009020();\n}", {}, 7, why));   // falling off the end is the same
+        CHECK(!MayReturn("void f(int param_1)\n{\n  if (param_1 != 0) {\n    return;\n  }\n  return;\n}", { 1 }, 7, why));
+        // true and false are 1 and 0, not names of unknown value.
+        CHECK(!MayReturn("bool f(void)\n{\n  return false;\n}", {}, 1, why));
+        CHECK(MayReturn("bool f(void)\n{\n  return false;\n}", {}, 0, why));
+        CHECK(MayReturn("bool f(void)\n{\n  return true;\n}", {}, 1, why) && !MayReturn("bool f(void)\n{\n  return true;\n}", {}, 0, why));
+        // A parameter assigned to holds the new value.
+        const std::string reassigned = "int f(int param_1)\n{\n  param_1 = param_1 + 1;\n  return param_1;\n}";
+        CHECK(!MayReturn(reassigned, { 5 }, 5, why) && MayReturn(reassigned, { 5 }, 6, why));
+        // A cast has a width: (char) keeps a byte and extends its sign, (uint1) keeps it and extends none.
+        const std::string viaChar = "int f(int param_1)\n{\n  return (int)(char)param_1;\n}";
+        CHECK(!MayReturn(viaChar, { 0xFF }, 0xFF, why) && MayReturn(viaChar, { 0xFF }, 0xFFFFFFFFu, why));
+        const std::string viaByte = "int f(int param_1)\n{\n  return (int)(uint1)param_1;\n}";
+        CHECK(MayReturn(viaByte, { 0x1FF }, 0xFF, why) && !MayReturn(viaByte, { 0x1FF }, 0xFFFFFFFFu, why));
+        CHECK(MayReturn("int f(int param_1)\n{\n  return (short)param_1;\n}", { 0x18000 }, 0xFFFF8000u, why));
+        // The operators the decompiler writes like calls are evaluated: CONCAT, SUB, ZEXT, SEXT.
+        const std::string concat = "uint f(uint param_1)\n{\n  return CONCAT31((int3)(param_1 >> 8),(char)param_1);\n}";
+        CHECK(MayReturn(concat, { 0x12345678 }, 0x12345678, why) && !MayReturn(concat, { 0x12345678 }, 0x12345600, why));
+        const std::string sub = "uint f(uint param_1)\n{\n  return SUB41(param_1,0) + 1;\n}";
+        CHECK(MayReturn(sub, { 0x12345678 }, 0x79, why) && !MayReturn(sub, { 0x12345678 }, 0x12345679, why));
+        CHECK(MayReturn("uint f(uint param_1)\n{\n  return SUB42(param_1,2);\n}", { 0x12345678 }, 0x1234, why));
+        CHECK(MayReturn("uint f(uint param_1)\n{\n  return ZEXT24(SUB42(param_1,0));\n}", { 0x12348000 }, 0x8000, why));
+        CHECK(MayReturn("int f(uint param_1)\n{\n  return SEXT24(SUB42(param_1,0));\n}", { 0x12348000 }, 0xFFFF8000u, why));
+        // ...what it has no rule for is an error, not an unknown value.
+        CHECK(!MayReturn("uint f(uint param_1)\n{\n  return FROBNICATE4(param_1);\n}", { 1 }, 1, why) && Has(why, "cannot evaluate"));
+        CHECK(!MayReturn("uint f(uint param_1)\n{\n  return CONCAT55(param_1,param_1);\n}", { 1 }, 1, why) && Has(why, "cannot evaluate"));
+        CHECK(!MayReturn("ulonglong f(uint param_1)\n{\n  return 1;\n}", { 1 }, 1, why) && Has(why, "64-bit"));
+        CHECK(!MayReturn("int f(int param_1)\n{\n  param_1 += 1;\n  return param_1;\n}", { 1 }, 2, why) && Has(why, "cannot evaluate"));
+        // ...and text it used to reject. A parameter assigned under an if, the other path reading it as it was:
+        const std::string underIf = "int4 f(int4 param_1,int4 param_2)\n{\n  if (param_2 != 0) {\n    param_1 = param_1 + 1;\n  }\n"
+                                    "  return param_1 + 1;\n}";
+        CHECK(MayReturn(underIf, { 5, 1 }, 7, why) && MayReturn(underIf, { 5, 0 }, 6, why) && !MayReturn(underIf, { 5, 1 }, 6, why));
+        // >> reads a uint4 as unsigned and an int4 as signed
+        const std::string shr = "uint4 f(uint4 param_1)\n{\n  return param_1 >> 1;\n}";
+        CHECK(MayReturn(shr, { 0x80000000u }, 0x40000000, why) && !MayReturn(shr, { 0x80000000u }, 0xC0000000u, why));
+        const std::string sar = "int4 f(int4 param_1)\n{\n  return param_1 >> 1;\n}";
+        CHECK(MayReturn(sar, { 0x80000000u }, 0xC0000000u, why) && !MayReturn(sar, { 0x80000000u }, 0x40000000, why));
+        // < reads its operands as the declarations say
+        const std::string ult = "uint4 f(uint4 param_1)\n{\n  if (param_1 < 3) {\n    return 1;\n  }\n  return 0;\n}";
+        CHECK(MayReturn(ult, { 0xFFFFFFFFu }, 0, why) && !MayReturn(ult, { 0xFFFFFFFFu }, 1, why));
+        const std::string slt = "int4 f(int4 param_1)\n{\n  if (param_1 < 3) {\n    return 1;\n  }\n  return 0;\n}";
+        CHECK(MayReturn(slt, { 0xFFFFFFFFu }, 1, why) && !MayReturn(slt, { 0xFFFFFFFFu }, 0, why));
+        // ...and where a value has no sign the two readings disagree, the answer is not known: any run agrees.
+        const std::string xlt = "xunknown4 f(xunknown4 param_1)\n{\n  if (param_1 < 3) {\n    return 1;\n  }\n  return 0;\n}";
+        CHECK(MayReturn(xlt, { 0xFFFFFFFFu }, 1, why) && MayReturn(xlt, { 0xFFFFFFFFu }, 0, why));
+        CHECK(!MayReturn(xlt, { 0 }, 0, why) && MayReturn(xlt, { 0 }, 1, why));   // small: both readings give 1
+        // A 64-bit product's high word (dmuls.l): (int4)((uint8)((int8)b * (int8)a) >> 0x20)
+        const std::string hi = "int4 f(int4 param_1,int4 param_2)\n{\n  return (int4)((uint8)((int8)param_2 * (int8)param_1) >> 0x20);\n}";
+        CHECK(MayReturn(hi, { 0x10000, 0x10000 }, 1, why) && !MayReturn(hi, { 0x10000, 0x10000 }, 0, why));
+        CHECK(MayReturn(hi, { 0xFFFFFFFFu, 2 }, 0xFFFFFFFFu, why));
+        // A narrow parameter is the register's low byte; a `char` case label is a character.
+        CHECK(MayReturn("int f(char param_1)\n{\n  return param_1;\n}", { 0x1FF }, 0xFFFFFFFFu, why));
+        CHECK(!MayReturn("int f(char param_1)\n{\n  return param_1;\n}", { 0x1FF }, 0x1FF, why));
+        const std::string sw = "int f(char param_1)\n{\n  switch(param_1) {\n  case '\\0':\n    return 7;\n  case '\\x02':\n    return 9;\n"
+                               "  case '\\xff':\n    return 4;\n  default:\n    return 5;\n  }\n}";
+        CHECK(MayReturn(sw, { 2 }, 9, why) && !MayReturn(sw, { 2 }, 5, why) && MayReturn(sw, { 0xFF }, 4, why) && MayReturn(sw, { 0x1FF }, 4, why));
+        CHECK(MayReturn(sw, { 0 }, 7, why) && MayReturn(sw, { 3 }, 5, why));
+        // A return of a narrow type compares as many low bytes as it has.
+        CHECK(MayReturn("uint1 f(uint param_1)\n{\n  return (uint1)param_1;\n}", { 0x1FF }, 0xFFFFFFFFu, why));
+        CHECK(!MayReturn("uint1 f(uint param_1)\n{\n  return (uint1)param_1;\n}", { 0x1FF }, 0xFE, why));
+    }
+
     const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
                                                         { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u } };
     uint64_t serial = 100;
@@ -5672,6 +6186,25 @@ void TestCallsAndTraps()
         caller.insert(caller.end(), callee.begin(), callee.end());
         return caller;
     };
+
+    // ---- A3-11: the decompiler's own texts the evaluator used to reject (each run on the emulator) ----
+    // The engine's right output, against the code's run: a parameter reassigned under an if, a logical
+    // right shift, an unsigned compare (cmp/hs and cmp/hi), the high word of a 64-bit product.
+    {
+        const std::vector<std::vector<uint32_t>> pair = { { 5, 0 }, { 5, 1 }, { 0, 1 } };
+        const DecompileResult r1 = run({ "parameter reassigned under an if", base, { 0x2558, 0x8900, 0x7401, 0x7401, 0x000B, 0x6043 } }, &pair);
+        CHECK(Has(r1.Text(), "param_1 = param_1 + 1;"));
+        const std::vector<std::vector<uint32_t>> shifted = { { 0x80000000u }, { 3 }, { 0xFFFFFFFFu } };
+        const DecompileResult r2 = run({ "shlr on a uint4", base, { 0x4401, 0x000B, 0x6043 } }, &shifted);
+        CHECK(Has(r2.Text(), "param_1 >> 1"));
+        const std::vector<std::vector<uint32_t>> compared = { { 0 }, { 2 }, { 3 }, { 0xFFFFFFFFu }, { 0x80000000u } };
+        const DecompileResult r3 = run({ "cmp/hs against 3", base, { 0xE103, 0x3412, 0x8901, 0x000B, 0xE001, 0x000B, 0xE000 } }, &compared);
+        CHECK(Has(r3.Text(), "< 3"));
+        const DecompileResult r4 = run({ "cmp/hi against 3", base, { 0xE103, 0x3416, 0x8901, 0x000B, 0xE001, 0x000B, 0xE000 } }, &compared);
+        CHECK(Has(r4.Text(), "< 4") || Has(r4.Text(), "< 3"));
+        const std::vector<std::vector<uint32_t>> products = { { 0x10000, 0x10000 }, { 0xFFFFFFFFu, 2 }, { 3, 5 } };
+        run({ "dmuls.l high word", base, { 0x354D, 0x000B, 0x000A } }, &products);
+    }
 
     // ---- A2-9: trapa -------------------------------------------------------------------------
     // The 8 bytes it pushes are popped by the handler's rte, so every stack access after it is
@@ -5910,7 +6443,8 @@ void TestCallsAndTraps()
         {
             const CallFixture g = { "r" + std::to_string(reg) + " kept by the callee", base,
                                     withCallee({ 0x4F22, 0xB00D, 0x0009, uint16_t(0x2002 | (4 << 8) | (reg << 4)), 0x4F26, 0x000B, 0x0009 },
-                                               { 0x000B, 0x0009 }) };   // mov.l rN,@r4 after the call
+                                               { 0x000B, 0x0009 }),
+                                    true };   // mov.l rN,@r4 after the call; r0 is left as it was (0x1000 on the run): no result
             const Lent lg = lend(g);
             CHECK(Has(lg.caller.Text(), ("= in_r" + std::to_string(reg) + ";").c_str()) && !Has(lg.caller.Text(), "extraout"));
             Sh2Decompiler::SetLendEffectsForTests(false);
