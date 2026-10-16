@@ -371,6 +371,10 @@ struct Fix
     const char* name;
     uint32_t entry;
     bool lean;   // one pass, no callee registration: for the larger shapes
+    // The request lends the callee's prototype and effects (the panel lends every function the user decompiled, A6-36):
+    // 1 a pointer parameter and every register but r0 kept; 2 the same at the callee's cache-through mirror too; 3 a second
+    // (uint2) parameter, r4, r5 and r8 kept and a stack delta of 4 (setExtraPop, registers killed).
+    unsigned lend = 0;
 };
 
 const uint32_t kMailboxBase = 0x0600A480u;
@@ -378,6 +382,8 @@ const uint32_t kShapesBase = 0x0600B000u;
 const uint32_t kStackBase = 0x0600B100u;
 const uint32_t kLoopBreakBase = 0x0600B300u;
 const uint32_t kDagBase = 0x0600B400u;
+const uint32_t kLendMirrorBase = 0x0600B500u;
+const uint32_t kHwRegBase = 0x0600B600u;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
@@ -387,6 +393,10 @@ const Fix kFixtures[] = {
     { "stack", kStackBase, false },                // a stack array: local variables, restructuring, naming (A6-14, A6-15)
     { "loopbrk", kLoopBreakBase, false },          // a counted loop that returns from inside: the structurer picks a goto with TraceDAG (A6-22)
     { "dag", kDagBase, false },                    // two conditionals that share both targets, chosen by a third: TraceDAG's branch points (A6-22)
+    { "lend", dts::kFixture1Caller, false, 1 },    // fixture1 with the callee's signature and effects lent: ApplyPrototype, LendEffects (A6-36)
+    { "lendm", kLendMirrorBase, false, 2 },        // the same caller calling through the mirror 0x26005000, lent at both addresses: the mirror's registration
+    { "lendx", dts::kFixture1Caller, false, 3 },   // lent with a stack delta and kept registers killed: setExtraPop
+    { "hwreg", kHwRegBase, false },                // a VDP2 register read directly, and a store through a pointer that is one of two: HardwareNotes, PointerResolver
 };
 
 const Fix* FindFix(const std::string& name)
@@ -451,6 +461,22 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
         off += 2;
     }
     dts::PlaceFixture1(hw);
+    // `lendm`: fixture1's caller again, at kLendMirrorBase, whose literal names the callee through its cache-through mirror.
+    for (uint32_t i = 0; i < 0x1C; i += 2)
+        dts::Put16(hw, kLendMirrorBase - 0x06000000u + i, uint16_t((hw[dts::kFixture1Caller - 0x06000000u + i] << 8) | hw[dts::kFixture1Caller - 0x06000000u + i + 1]));
+    dts::Put32(hw, kLendMirrorBase - 0x06000000u + 0x1Cu, 0x26005000u);
+    // `hwreg`: mov.l @(0x14),r1 (VDP2 TVMD) ; mov.w @r1,r0 ; cmp/pl r4 ; bt L ; mov.l @(0x18),r1 (VDP2 EXTEN) ; nop ;
+    // L: mov.w r0,@r1 ; rts ; nop. HardwareNotes names the registers, and PointerResolver resolves the store's pointer,
+    // which is one of two (A6-36).
+    const uint16_t hwreg[] = { 0xD104, 0x6011, 0x4415, 0x8901, 0xD103, 0x0009, 0x2101, 0x000B, 0x0009, 0x0009 };
+    off = kHwRegBase - 0x06000000u;
+    for (uint16_t w : hwreg)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    dts::Put32(hw, kHwRegBase - 0x06000000u + 0x14u, 0x25F80000u);
+    dts::Put32(hw, kHwRegBase - 0x06000000u + 0x18u, 0x25F80002u);
     dts::PlaceDiamonds(hw, 150);
     dts::PlaceJumpTable(hw, 4, 2);
     return dts::MakeSnapshot(hw);
@@ -465,6 +491,32 @@ DecompileRequest MakeRequest(const Fix& f)
     q.names.emplace_back(f.entry, std::string("Fn_") + f.name);
     q.knownFunctions.push_back(0x06005000u);
     q.volatileMemory.emplace_back(0x26002000u, 0x26002003u);   // not the mailbox
+    if (f.lend)
+    {
+        Prototype p;
+        p.known = true;
+        p.ret.kind = TypeKind::Int;
+        p.ret.size = 4;
+        TypeShape ptr;
+        ptr.kind = TypeKind::Pointer;
+        ptr.size = 4;
+        ptr.pointee = TypeKind::Int;
+        ptr.pointeeSize = 4;
+        p.params.push_back(ptr);
+        p.effects.preserved = ((1u << 22) - 1) & ~1u;   // all but r0
+        p.effects.spDelta = 0;
+        if (f.lend == 3)
+        {
+            p.effects.preserved = (1u << 4) | (1u << 5) | (1u << 16) | (1u << 8);   // r4, r5, r8 and SR kept, the rest killed
+            p.effects.spDelta = 4;
+            TypeShape u;
+            u.kind = TypeKind::Uint;
+            u.size = 2;
+            p.params.push_back(u);
+        }
+        q.prototypes.emplace_back(dts::kFixture1Callee, p);
+        if (f.lend == 2) q.prototypes.emplace_back(0x26005000u, p);
+    }
     if (f.lean)
     {
         q.registerCallees = false;
@@ -1996,7 +2048,13 @@ std::vector<long> ColdCells(const ColdCtx& c, bool full)
             for (long k = 0; k < m.libraryEnd + 8; ++k) add(k);
         else
         {
-            for (long k = 0; k <= m.libHi + 8; ++k) add(k);   // the materialisation is at the front, the library follows it
+            // The materialisation is at the front, the library follows it. Under sustained exhaustion (the default subset's
+            // sticky families) the library's allocations are every fourth one: each step of it is hundreds long, and the
+            // dense run is the plain family's (A6-19: the cold families are the longest jobs of the sanitizer run).
+            const char* stickyEnv = std::getenv("SE_FAULT_STICKY");   // asked for by environment: every allocation, as the plain family
+            const bool thin = fa::gSticky.load() && !(stickyEnv && *stickyEnv && std::string(stickyEnv) != "0");
+            for (long k = 0; k <= m.libHi + 8; ++k)
+                if (!thin || k <= m.matHi + 8 || k > m.libHi - 16 || (k - m.libLo) % 4 == 0) add(k);
             // ...and between the library and the first translator (the Architecture's construction): spread out.
             for (double k = double(m.libHi) + 8; k < double(m.libraryEnd) + 8; k = std::max(k + 1, k * 1.25)) add(long(k));
         }
@@ -4028,6 +4086,10 @@ int main(int argc, char** argv)
     // The first request of a process (A6-30): fresh processes, so no warm-up and no sharing with the families above.
     addDriver("cold", "mailbox", 1);
     addDriver("cold-disasm", "mailbox", 1);
+    // ... and under sustained exhaustion (A6-31, A6-32): the first request's refusal text and the listing's flag need no
+    // allocation, so they hold when every allocation from k on fails. The library's allocations are thinned (ColdCells).
+    addDriver("cold-sticky", "mailbox", 1);
+    addDriver("cold-disasm-sticky", "mailbox", 1);
     addDriver("disasm-sticky", "fixture1", full ? shards : 1);   // A6-23: every allocation from k on fails
     // Sustained exhaustion on the decompilation itself: the three fixtures with the longest recovery paths in the default
     // subset, all of them in the full run.
