@@ -16,6 +16,12 @@
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
 //   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so, the engine is then
 //             refused (A6-16)
+//   cold      allocation k of the FIRST request of a process fails (a Decompile; cold-disasm: a Disassemble), in a
+//             fork of a parent that never ran the engine, with the spec bundle already extracted and with an empty
+//             config directory: the spec materialisation, the library's own start-up, the first translator. Before
+//             any engine global was written the failure is transient (the next request is correct); inside
+//             startDecompilerLibrary the engine is refused for good, with the same restart reason from the first
+//             request on, for Decompile and Disassemble alike (A6-30).
 //   runner    DecompilerRunner lifecycle: Stop (Cancel), Submit while busy (superseding),
 //             InvalidateSession, budget expiry, DisableLocked recovery and destruction, each with the
 //             worker held at every phase entry of the request. No result for a stale generation or
@@ -31,7 +37,7 @@
 //          the default subset (deterministic, under a minute); SE_FAULT_FULL=1 runs the whole matrix
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --cell <family> <fixture|kind> <k>
 //          one cell, with the failing allocation's stack trace; family is alloc, cancel-enter,
-//          cancel-alloc, cancel-us, cancel-oom, disasm or runner (then <kind> is stop, supersede, invalidate,
+//          cancel-alloc, cancel-us, cancel-oom, disasm, cold, cold-disasm (<fixture> is mailbox; <k> is allocation * 2, plus 1 for an empty config directory) or runner (then <kind> is stop, supersede, invalidate,
 //          destroy, budget, disable or memo and <k> a phase-entry ordinal, or "all")
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --sites <fixture> <phase> <ord> <size>
 //          the allocations of that size in that phase entry, each with its rank and the functions on its stack:
@@ -54,14 +60,16 @@
 
 int main()
 {
+    // 77 is ctest's SKIP_RETURN_CODE for this test: reported as skipped, not as a pass (A6-19).
     std::printf("DecompilerFaultTests: SKIPPED (the matrix forks a process per cell; POSIX only)\n");
-    return 0;
+    return 77;
 }
 
 #else
 
 #include "Decompiler/DecompilerRunner.h"
 #include "Decompiler/SaturnArchitecture.h"
+#include "Decompiler/SpecBundle.h"
 #include "Decompiler/Sh2Decompiler.h"
 
 #include <fcntl.h>
@@ -80,11 +88,20 @@ int main()
 #include <sstream>
 #include <thread>
 
-#if defined(__GLIBC__)
+// A feature test, not a libc name: glibc and macOS both have backtrace (<execinfo.h>), dladdr (<dlfcn.h>) and
+// abi::__cxa_demangle (<cxxabi.h>), and the pins' identity check (A6-12) needs all three. It was `__GLIBC__`, which left
+// every pin "identity not checked" on macOS (A6-19). A platform without them, musl say, is told so loudly below.
+#if defined(__has_include)
+#if __has_include(<execinfo.h>) && __has_include(<dlfcn.h>) && __has_include(<cxxabi.h>)
+#define SE_FAULT_BACKTRACE 1
+#endif
+#elif defined(__GLIBC__)
+#define SE_FAULT_BACKTRACE 1
+#endif
+#ifdef SE_FAULT_BACKTRACE
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <execinfo.h>
-#define SE_FAULT_BACKTRACE 1
 #endif
 
 #if defined(__SANITIZE_ADDRESS__)
@@ -216,6 +233,10 @@ __attribute__((noinline)) void CensusRecord(long i)
 }
 #endif
 
+// The stack of the allocation that was failed (raw addresses, named afterwards with Names), for the cells that
+// classify a failure by where it fell.
+Stack gFiredStack;
+
 void Trace()
 {
     // A short trace of the allocation that was failed, for the findings. Printed only when asked for
@@ -282,6 +303,9 @@ void* Allocate(std::size_t size, bool nothrow)
         gFired = true;
         gFiredNothrow = nothrow;
         gFiredSize = long(size);
+#ifdef SE_FAULT_BACKTRACE
+        gFiredStack.n = backtrace(gFiredStack.f, kFrames);
+#endif
         if (gTrace) Trace();
         throw std::bad_alloc();
     }
@@ -956,6 +980,8 @@ const std::vector<AcceptedLeak>& AcceptedLeaks()
         { "A6-7 compiler spec", { "ghidra::Architecture::parseCompilerConfig(" }, true },   // prototype models decoded from the cspec
         { "A6-7 compiler spec", { "ghidra::AddrSpaceManager::findAddJoin(" }, true },
         { "A6-7 context", { "ghidra::ContextInternal::FreeArray::reset(" }, true },
+        // A6-30: the first translator of a process decodes the .sla (a cold failure only; a warm Init resets the translator).
+        { "A6-30 first translator", { "ghidra::SleighBase::decode(" }, true },
     };
     return v;
 }
@@ -1531,6 +1557,413 @@ std::vector<long> DisasmCells(const DisasmBase& b, bool full)
     s.insert(N);
     s.insert(N + 5);
     return std::vector<long>(s.begin(), s.end());
+}
+
+// ================================================================================================
+// Family 4: cold start -- allocation k fails in the first request of a process (A6-30)
+// ================================================================================================
+//
+// Every cell above forks from an engine that has already decompiled twice, so the process-global start-up
+// (the spec bundle, the library's registries and spec path, the first translator) is never inside a failure.
+// A cold cell forks from a parent that has not touched the engine, and fails allocation k of the *first*
+// request: a Decompile ("cold") or a Disassemble ("cold-disasm"). The allocation falls in one of three places,
+// and each has its own contract:
+//
+//   before any engine global    (request preparation, spec materialisation: filesystem work). The request
+//                               is Failed("out of memory") -- or, for a listing, says it stopped -- and the engine is
+//                               NOT damaged: the next request starts again and is correct.
+//   inside startDecompilerLibrary   (the attribute and element ids, the capability lists, the spec path: appended
+//                               to, never undone). The library cannot be started twice and cannot be finished, so the
+//                               process refuses the engine, and the first request already says why and that a restart
+//                               is needed; so does every later one, Decompile and Disassemble alike. It is never
+//                               Failed("out of memory") followed by "No print languages registered", and never
+//                               Unavailable with an empty explanation.
+//   inside the engine           (the first translator, the Architecture): as in the warm families, Failed and then
+//                               Unavailable (out of memory).
+//
+// Run twice per k: with the spec bundle already extracted in the config directory (the verify-only path) and with
+// an empty one (extraction), because the two have different allocations before the library.
+struct ColdMode
+{
+    long allocs = 0;        // allocations of the first request, nothing failing
+    long libraryEnd = 0;    // allocation count when the first translator is about to be built (the library is up)
+    // Where the first request's allocations fall, from the stacks of a census run: the spec materialisation and
+    // startDecompilerLibrary, as [lo, hi] allocation indices (-1: not found, then every allocation up to libraryEnd is a cell).
+    long matLo = -1, matHi = -1, libLo = -1, libHi = -1;
+    std::string sig;        // the first request's result (Decompile) ...
+    std::vector<std::string> listing;   // ... or its listing (Disassemble)
+};
+
+struct ColdCtx
+{
+    std::string scratch;
+    std::string cachedConfig;
+    const Fix* fix = nullptr;
+    std::shared_ptr<const MemorySnapshot> snap;
+    DecompileRequest req;
+    ColdMode mode[2];   // 0: bundle already extracted, 1: empty config directory
+    bool disasmFirst = false;
+};
+
+long gLibraryEndCount = -1;
+const long kColdCensus = 8192;   // the first allocations whose stacks the baseline keeps
+
+// The first request of the process: decompile, or list kDisasmCount instructions.
+const char* const kColdRestartText = "restart Saturn Explorer";
+
+std::string ColdConfig(const ColdCtx& c, int mode)
+{
+    return mode == 0 ? c.cachedConfig : dts::Join(c.scratch, "cfg" + std::to_string(long(getpid())));
+}
+
+#ifdef SE_FAULT_BACKTRACE
+bool FiredIn(const char* frame)
+{
+    for (const std::string& n : fa::Names(fa::gFiredStack))
+        if (n.find(frame) != std::string::npos) return true;
+    return false;
+}
+#endif
+
+// The steps of startDecompilerLibrary a failure is reported by (the sweep must reach each: a step that allocates
+// and is not covered is a step whose failure nobody has seen).
+const char* const kLibrarySteps[] = { "AttributeId::initialize", "ElementId::initialize", "CapabilityPoint::initializeAll" };
+
+bool WriteBaseFile(const std::string& file, const ColdMode& m)
+{
+    FILE* f = std::fopen(file.c_str(), "wb");
+    if (!f) return false;
+    std::fprintf(f, "%ld %ld %ld %ld %ld %ld\n", m.allocs, m.libraryEnd, m.matLo, m.matHi, m.libLo, m.libHi);
+    std::fprintf(f, "%zu\n", m.listing.size());
+    for (const std::string& l : m.listing) std::fprintf(f, "%s\n", l.c_str());
+    std::fputs(m.sig.c_str(), f);
+    std::fclose(f);
+    return true;
+}
+
+bool ReadBaseFile(const std::string& file, ColdMode& m)
+{
+    std::istringstream in(ReadFile(file));
+    size_t n = 0;
+    if (!(in >> m.allocs >> m.libraryEnd >> m.matLo >> m.matHi >> m.libLo >> m.libHi >> n)) return false;
+    std::string line;
+    std::getline(in, line);
+    for (size_t i = 0; i < n; ++i)
+    {
+        std::getline(in, line);
+        m.listing.push_back(line);
+    }
+    std::ostringstream rest;
+    rest << in.rdbuf();
+    m.sig = rest.str();
+    return true;
+}
+
+// The two requests a cell makes, by family.
+DecompileResult ColdDecompile(Sh2Decompiler& e, const ColdCtx& c) { return e.Decompile(c.snap, c.req, nullptr); }
+std::vector<std::string> ColdDisasm(Sh2Decompiler& e, const ColdCtx& c) { return e.Disassemble(c.snap, dts::kFixture1Caller, kDisasmCount); }
+
+bool PrepareCold(ColdCtx& c, const std::string& scratch, const std::string& fixture, bool disasmFirst)
+{
+    c.fix = FindFix(fixture);
+    if (!c.fix)
+    {
+        std::printf("unknown fixture '%s'\n", fixture.c_str());
+        return false;
+    }
+    c.scratch = scratch;
+    c.disasmFirst = disasmFirst;
+    sfe::MakeDirectory(scratch);
+    c.cachedConfig = dts::Join(scratch, "config");
+    sfe::MakeDirectory(c.cachedConfig);
+    c.snap = BuildSnapshot();
+    c.req = MakeRequest(*c.fix);
+    // The extracted bundle for mode 0: filesystem work only, no engine global is written.
+    const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(c.cachedConfig);
+    if (!b.ok)
+    {
+        std::printf("cannot extract the spec bundle: %s\n", b.error.c_str());
+        return false;
+    }
+    InstallHooks();
+    SaturnArchitecture::SetBuildTranslatorHookForTests([] {
+        if (gLibraryEndCount < 0) gLibraryEndCount = fa::gCount.load();
+    });
+    // The baselines: each in a process of its own, because the first request is what is measured.
+    for (int mode = 0; mode < 2; ++mode)
+    {
+        const std::string file = dts::Join(scratch, "base" + std::to_string(mode) + ".txt");
+        auto body = [&]() -> int {
+            const std::string cfg = ColdConfig(c, mode);
+            sfe::MakeDirectory(cfg);
+            std::unique_ptr<Sh2Decompiler> e(new Sh2Decompiler(cfg));
+            ColdMode m;
+            gProbe.Reset();
+            gLibraryEndCount = -1;
+#ifdef SE_FAULT_BACKTRACE
+            // The stack of each of the first allocations, to find where the materialisation and the library start-up are.
+            static std::vector<uint8_t> want(kColdCensus, 1);
+            fa::gCensusWant = want.data();
+            fa::gCensusWantN = long(want.size());
+            fa::gCensusStack = static_cast<fa::Stack*>(std::malloc(sizeof(fa::Stack) * size_t(fa::kCensusCap)));
+            fa::gCensusK = static_cast<long*>(std::malloc(sizeof(long) * size_t(fa::kCensusCap)));
+            fa::gCensusN = 0;
+            fa::gCensus = true;
+#endif
+            fa::Arm(-1);
+            if (disasmFirst)
+            {
+                m.listing = ColdDisasm(*e, c);
+                m.allocs = fa::gCount.load();
+                fa::Disarm();
+                m.libraryEnd = gLibraryEndCount;
+                const DecompileResult r = ColdDecompile(*e, c);
+                m.sig = Signature(r);
+                if (r.status != DecompileStatus::Ok) return 3;
+                if (m.listing.size() != size_t(kDisasmCount)) return 4;
+            }
+            else
+            {
+                const DecompileResult r = ColdDecompile(*e, c);
+                m.allocs = fa::gCount.load();
+                fa::Disarm();
+                m.libraryEnd = gLibraryEndCount;
+                m.sig = Signature(r);
+                if (r.status != DecompileStatus::Ok) return 3;
+            }
+            if (m.libraryEnd < 0) return 5;
+#ifdef SE_FAULT_BACKTRACE
+            fa::gCensus = false;
+            for (long j = 0; j < fa::gCensusN; ++j)
+            {
+                const long k = fa::gCensusK[j];
+                if (k >= m.libraryEnd) continue;
+                for (const std::string& n : fa::Names(fa::gCensusStack[j]))
+                {
+                    if (n.find("startDecompilerLibrary") != std::string::npos)
+                    {
+                        m.libLo = m.libLo < 0 ? k : std::min(m.libLo, k);
+                        m.libHi = std::max(m.libHi, k);
+                    }
+                    if (n.find("MaterialiseSh2SpecBundle") != std::string::npos)
+                    {
+                        m.matLo = m.matLo < 0 ? k : std::min(m.matLo, k);
+                        m.matHi = std::max(m.matHi, k);
+                    }
+                }
+            }
+#endif
+            if (mode == 1) dts::RemoveTree(cfg);
+            return WriteBaseFile(file, m) ? 0 : 6;
+        };
+        const CellRun run = ForkCell(scratch, body, CellTimeout());
+        if (!run.proc.exited || run.proc.code != 0 || !ReadBaseFile(file, c.mode[mode]))
+        {
+            std::printf("the cold baseline (%s config) failed: exit %d%s\n", mode ? "empty" : "extracted", run.proc.code,
+                        run.proc.timedOut ? " (timed out)" : "");
+            return false;
+        }
+        std::printf("cold %s, %s config: %ld allocations to the end of the first request, the library is up at %ld; "
+                    "spec materialisation at %ld-%ld, startDecompilerLibrary at %ld-%ld\n",
+                    disasmFirst ? "disasm" : "decompile", mode ? "empty" : "extracted", c.mode[mode].allocs, c.mode[mode].libraryEnd,
+                    c.mode[mode].matLo, c.mode[mode].matHi, c.mode[mode].libLo, c.mode[mode].libHi);
+    }
+    return true;
+}
+
+// Cells are k * 2 + mode.
+std::vector<long> ColdCells(const ColdCtx& c, bool full)
+{
+    std::set<long> s;
+    for (int mode = 0; mode < 2; ++mode)
+    {
+        const ColdMode& m = c.mode[mode];
+        const long N = m.allocs;
+        auto add = [&](long k) {
+            if (k >= 0) s.insert(k * 2 + mode);
+        };
+        // The spec materialisation and the library's start-up are the point: every allocation in them, and a margin
+        // around. (The full run, or a build that cannot say where they are: every allocation up to the first translator.)
+        const bool located = m.libLo >= 0 && m.matLo >= 0;
+        if (full || !located)
+            for (long k = 0; k < m.libraryEnd + 8; ++k) add(k);
+        else
+        {
+            for (long k = 0; k <= m.libHi + 8; ++k) add(k);   // the materialisation is at the front, the library follows it
+            // ...and between the library and the first translator (the Architecture's construction): spread out.
+            for (double k = double(m.libHi) + 8; k < double(m.libraryEnd) + 8; k = std::max(k + 1, k * 1.25)) add(long(k));
+        }
+        // The first translator and the rest of the run.
+        const double ratio = full ? 1.05 : 1.7;
+        for (double k = double(m.libraryEnd) + 8; k < double(N); k = std::max(k + 1, k * ratio)) add(long(k));
+        for (long d = 1; d < 4; ++d) add(N - d);
+        add(N);       // nothing fails: the run must equal the baseline
+        add(N + 5);
+    }
+    return std::vector<long>(s.begin(), s.end());
+}
+
+// One cell: the first request of this process fails its allocation k.
+int RunColdCell(ColdCtx& c, long cell)
+{
+    const long k = cell / 2;
+    const int mode = int(cell % 2);
+    const ColdMode& base = c.mode[mode];
+    dts::Failures() = 0;
+    gMustNotExit = true;
+    std::atexit(OnExit);
+    const std::string cfg = ColdConfig(c, mode);
+    sfe::MakeDirectory(cfg);
+    std::unique_ptr<Sh2Decompiler> engine(new Sh2Decompiler(cfg));
+    const std::string want = c.disasmFirst ? std::string() : base.sig;
+
+    gProbe.Reset();
+    gLibraryEndCount = -1;
+    bool escaped = false;
+    DecompileResult r;
+    std::vector<std::string> lines;
+    fa::Arm(k);
+    try
+    {
+        if (c.disasmFirst) lines = ColdDisasm(*engine, c);
+        else r = ColdDecompile(*engine, c);
+    }
+    catch (...)
+    {
+        escaped = true;
+    }
+    fa::Disarm();
+    const bool fired = fa::gFired.load();
+    const bool nothrow = fa::gFiredNothrow.load();
+    const bool inEngine = gProbe.engineEntered.load();
+    bool inLibrary = false;
+    bool inMaterialise = false;
+    bool siteKnown = false;
+    const char* step = "-";
+#ifdef SE_FAULT_BACKTRACE
+    if (fired)
+    {
+        siteKnown = true;
+        inLibrary = FiredIn("startDecompilerLibrary");
+        inMaterialise = FiredIn("MaterialiseSh2SpecBundle");
+        for (const char* st : kLibrarySteps)
+            if (step[0] == '-' && FiredIn(st)) step = st;
+    }
+#endif
+#ifdef SE_FAULT_ASAN
+    {
+        // Init's leaks (the Architecture's spec XML, the action tree, the first translator's decode) are the accepted ones
+        // (A6-7, A6-30); anything the failure leaves in another phase is not. The phase is the one the failing allocation
+        // fell in, by this run's own log (the second pass's Init follows a first pass's Flow).
+        const Log log = gProbe.Snapshot();
+        gFailedInInit = true;
+        if (fired)
+            for (int i = 0; i < log.n; ++i)
+                if (log.allocAt[i] <= k) gFailedInInit = log.phase[i] == DecompilePhase::Init;
+    }
+#endif
+
+    Expect(!escaped, "no exception escapes the first request");
+    // What the first request was, in the vocabulary of the contract above.
+    enum Kind { kNone, kOk, kFailedBefore, kFailedEngine, kRefusedLibrary, kOther } kind = kOther;
+    std::string cls, detail;
+    if (c.disasmFirst)
+    {
+        const bool same = lines == base.listing;
+        const std::string head = lines.empty() ? std::string() : lines[0];
+        if (same) kind = kOk;
+        else if (lines.size() == 1 && head.compare(0, 24, "<Decompiler unavailable:") == 0) kind = kRefusedLibrary;
+        else if (lines.size() == 1 && head.compare(0, 16, "<out of memory w") == 0) kind = kFailedBefore;
+        else if (!lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0) kind = kFailedEngine;
+        detail = head;
+    }
+    else
+    {
+        if (r.status == DecompileStatus::Ok) kind = Signature(r) == want ? kOk : kOther;
+        else if (r.status == DecompileStatus::Unavailable) kind = kRefusedLibrary;
+        else if (r.status == DecompileStatus::Failed && Has(r.error, "out of memory")) kind = inEngine ? kFailedEngine : kFailedBefore;
+        detail = std::string("status ") + std::to_string(int(r.status)) + " '" + r.error + "'";
+        Expect(r.status == DecompileStatus::Ok || r.lines.empty(), "a request that did not complete has no lines");
+    }
+    switch (kind)
+    {
+    case kOk:
+        cls = fired ? (nothrow ? "ok-nothrow-fallback" : "ok-swallowed-bad_alloc") : "no-failure";
+        Expect(!fired || nothrow, "a throwing allocation failure is reported, not swallowed", "allocation " + std::to_string(k));
+        Expect(fired || k >= base.allocs, "the allocation count is deterministic: failure k < N always fires",
+               "k=" + std::to_string(k) + " N=" + std::to_string(base.allocs));
+        break;
+    case kFailedBefore: cls = "failed-before-engine"; break;
+    case kFailedEngine: cls = "failed-in-engine"; break;
+    case kRefusedLibrary: cls = "library-interrupted"; break;
+    default:
+        cls = "wrong-status";
+        Expect(false, "the first request ends Ok, out of memory, or refused with a restart reason", detail);
+    }
+    if (fired && kind != kOk && kind != kOther)
+    {
+        Expect(!(kind == kFailedBefore && inLibrary), "a failure inside the library's start-up is not reported as a plain out-of-memory (the next request would meet half-built global tables)", detail);
+        Expect(!(kind != kRefusedLibrary && inLibrary), "a failure inside startDecompilerLibrary refuses the engine", detail);
+        Expect(!(kind == kRefusedLibrary && siteKnown && !inLibrary), "only a failure inside startDecompilerLibrary refuses the engine for good", detail);
+        // The spec materialisation is filesystem work that touches no engine global: its failure costs this request and nothing
+        // after it -- for a listing as for a decompilation (the listing used to mark the engine damaged for it).
+        Expect(!(inMaterialise && kind != kFailedBefore), "a failure while the language files are prepared is transient: the engine is neither damaged nor refused", detail);
+    }
+
+    // The second request, and the other kind of request after it.
+    gProbe.Reset();
+    const DecompileResult dec = ColdDecompile(*engine, c);
+    const int entersAfter = gProbe.enters.load();
+    const std::vector<std::string> list = ColdDisasm(*engine, c);
+    bool damaged = false;
+    if (kind == kRefusedLibrary)
+    {
+        const std::string firstReason = c.disasmFirst ? (lines.empty() ? std::string() : lines[0]) : r.error;
+        Expect(!fired || !firstReason.empty(), "a refusal carries an explanation");
+        Expect(Has(firstReason, "restart Saturn Explorer") && Has(firstReason, "did not finish starting"),
+               "the refusal says the library did not finish starting and that a restart is needed", firstReason);
+        Expect(dec.status == DecompileStatus::Unavailable && dec.lines.empty(), "the next Decompile is Unavailable", "status " + std::to_string(int(dec.status)) + " '" + dec.error + "'");
+        Expect(Has(dec.error, "restart Saturn Explorer") && Has(dec.error, "did not finish starting"), "the next Decompile says why and what to do", dec.error);
+        Expect(entersAfter == 0, "the refused request does not enter the engine", std::to_string(entersAfter) + " phase entries");
+        Expect(list.size() == 1 && Has(list[0], "restart Saturn Explorer") && Has(list[0], "did not finish starting"),
+               "Disassemble refuses with the same reason", list.empty() ? std::string("(empty)") : list[0]);
+        Expect(c.disasmFirst || dec.error == r.error, "Decompile says the same thing the first request said", dec.error + " / " + r.error);
+        damaged = true;
+    }
+    else if (kind == kFailedEngine)
+    {
+        Expect(dec.status == DecompileStatus::Unavailable && Has(dec.error, "out of memory"),
+               "after a failure inside the engine, the next Decompile is Unavailable (out of memory)", "status " + std::to_string(int(dec.status)) + " '" + dec.error + "'");
+        Expect(list.size() == 1 && Has(list[0], "unavailable"), "after a failure inside the engine, Disassemble refuses");
+        damaged = true;
+    }
+    else
+    {
+        // Ok, or a failure before anything global was written: both requests are correct, the first of
+        // them (after a failure) being the one that starts the library.
+        Expect(dec.status == DecompileStatus::Ok && Signature(dec) == base.sig, "the next Decompile is correct",
+               "status " + std::to_string(int(dec.status)) + " '" + dec.error + "'");
+        Expect(c.disasmFirst ? list == base.listing : list.size() == size_t(kDisasmCount) && list[0].compare(0, 1, "<") != 0,
+               "the next listing is correct", list.empty() ? std::string("(empty)") : list[0]);
+    }
+    std::printf("CELL %s %s k=%ld mode=%s class=%s inEngine=%d inLibrary=%d step=%s next=%d\n", c.disasmFirst ? "cold-disasm" : "cold", c.fix->name, k,
+                mode ? "empty-config" : "extracted-config", cls.c_str(), inEngine ? 1 : 0, siteKnown ? int(inLibrary) : -1, step, int(dec.status));
+    if (mode == 1) dts::RemoveTree(cfg);
+    gMustNotExit = damaged;
+    std::fflush(nullptr);
+    if (!damaged) return dts::Failures() ? kExitInvariant : 0;
+    if (ExitStatic())
+    {
+        // The application's way out after the library did not start: the runner's destructor shuts the translator
+        // registry down and the process runs its static destruction over tables that were half filled.
+        const int leak = LeakCheck();
+        if (leak && !dts::Failures()) ++dts::Failures();
+        gMustNotExit = false;
+        ghidra::SleighArchitecture::shutdown();
+        std::fflush(nullptr);
+        return dts::Failures() ? kExitInvariant : 0;
+    }
+    LeaveDamaged();
 }
 
 // ================================================================================================
@@ -2138,12 +2571,21 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
            long only)
 {
     Ctx c;
-    if (!Warm(c, scratch, fixture)) return 2;
+    ColdCtx cold;
+    const bool isCold = family == "cold" || family == "cold-disasm";
+    if (isCold)
+    {
+        // No warm-up: the first request of each cell is the thing under test.
+        if (!PrepareCold(cold, scratch, fixture, family == "cold-disasm")) return 2;
+    }
+    else if (!Warm(c, scratch, fixture))
+        return 2;
     std::vector<long> cells;
     std::vector<PinRes> pins;
     DisasmBase disasm;
     if (family == "alloc" && only == -999999) pins = ResolvePins(c, scratch);
-    if (family == "alloc") cells = AllocCells(c, full, pins);
+    if (isCold) cells = ColdCells(cold, full);
+    else if (family == "alloc") cells = AllocCells(c, full, pins);
     else if (family == "disasm")
     {
         if (!MeasureDisasm(c, disasm)) return 2;
@@ -2176,6 +2618,14 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
                 ++sum.failed;
                 ++sum.classes["FAIL:stale-pin"];
             }
+            else if (r.note.compare(0, 8, "identity") == 0 && !std::getenv("SE_FAULT_NO_IDENTITY"))
+            {
+                // Without a backtrace a pin that slides onto a neighbour passes (A6-12's oracle switched off): say so as a
+                // failure, once per pin, rather than a note in a log nobody reads. SE_FAULT_NO_IDENTITY=1 accepts it.
+                std::printf("FAIL pin %s %s: its site cannot be checked on this platform (set SE_FAULT_NO_IDENTITY=1 to accept)\n", p.fixture, p.what);
+                ++sum.failed;
+                ++sum.classes["FAIL:pin-identity-unchecked"];
+            }
             else if (r.note.compare(0, 5, "MOVED") == 0)
                 ++sum.classes["pin-moved"];
         }
@@ -2187,6 +2637,7 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
         if (only == -999999 && long(i % size_t(shards)) != shard) continue;
         const long p = cells[i];
         auto body = [&]() -> int {
+            if (isCold) return RunColdCell(cold, p);
             if (family == "alloc") return RunAllocCell(c, p);
             if (family == "disasm") return RunDisasmCell(c, disasm, p);
             if (family == "cancel-oom") return RunAllocCell(c, p / 8 + kFailAfterCancel[p % 8], p / 8);
@@ -2210,6 +2661,9 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
                 if (ln.compare(0, 9, "LEAK-SIG ") == 0)
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
+            if (isCold)
+                for (const char* st : kLibrarySteps)
+                    if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
             const size_t lp = run.out.find(" lat=");
             if (lp != std::string::npos)
             {
@@ -2249,11 +2703,34 @@ int Driver(const std::string& family, const std::string& fixture, const std::str
             std::printf("FAIL %s %s %ld: %s\n", family.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
         }
     }
+    if (isCold && only == -999999)
+    {
+        // The sweep must have reached the class it exists for: a cell that failed inside startDecompilerLibrary and was
+        // refused. (Without a backtrace it cannot say where a failure fell, and the class is then not demanded.)
+#ifdef SE_FAULT_BACKTRACE
+        if (shards == 1)
+        {
+            std::vector<std::string> missing;
+            if (sum.classes["library-interrupted"] == 0) missing.push_back("any step");
+            for (const char* st : kLibrarySteps)
+                if (sum.classes[std::string("step:") + st] == 0) missing.push_back(st);
+            if (!missing.empty())
+            {
+                std::string list;
+                for (const std::string& m : missing) list += (list.empty() ? "" : ", ") + m;
+                std::printf("FAIL %s %s: no cell failed inside startDecompilerLibrary at: %s (the library start-up is not covered)\n", family.c_str(),
+                            fixture.c_str(), list.c_str());
+                ++sum.failed;
+                ++sum.classes["FAIL:cold-coverage"];
+            }
+        }
+#endif
+    }
     std::printf("SUMMARY %s %s shard %d/%d: %ld cells, %ld failed, %.1f s\n", family.c_str(), fixture.c_str(), shard, shards, sum.cells,
                 sum.failed, MsSince(t0) / 1000.0);
     for (const auto& kv : sum.classes) std::printf("CLASS %s %s %ld\n", family.c_str(), kv.first.c_str(), kv.second);
     for (const auto& kv : sum.maxLatency)
-        std::printf("LATENCY %s %s max %ld allocations of %ld\n", family.c_str(), kv.first.c_str(), kv.second, c.base.allocs);
+        std::printf("LATENCY %s %s max %ld allocations of %ld\n", family.c_str(), kv.first.c_str(), kv.second, isCold ? 0L : c.base.allocs);
     for (const auto& kv : sum.sigs)
     {
         std::string ph;
@@ -3042,6 +3519,9 @@ int main(int argc, char** argv)
     for (const Fix& f : kFixtures)
         if (full || std::string(f.name) != "diamonds") addDriver("cancel-oom", f.name, full ? shards : 1);
     addDriver("disasm", "fixture1", full ? shards : 1);
+    // The first request of a process (A6-30): fresh processes, so no warm-up and no sharing with the families above.
+    addDriver("cold", "mailbox", 1);
+    addDriver("cold-disasm", "mailbox", 1);
     for (const char* k : { "stop", "supersede", "invalidate", "destroy", "budget", "disable" }) addRunner(k);
     // The worker failing an allocation, a process per cell.
     size_t oomFirst = jobs.size();

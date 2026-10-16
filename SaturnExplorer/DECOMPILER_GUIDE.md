@@ -86,6 +86,7 @@ The output is always for a specific snapshot. If what you are looking at changes
 | **too large to decompile within 10 s** | The time budget ran out. | **Refresh** retries once on demand. The same question is not retried automatically (the panel answers it at once, without running the engine), but any change to what the output depends on asks again: an edit to the function or to one it calls, another frame, a rename, a function start, the volatile list. |
 | **Decompiler disabled for this session** | A cancelled run did not stop in time, or the engine failed badly. | Restart Saturn Explorer. The rest of the app is unaffected. |
 | **Decompiler unavailable: <path>** | The language files could not be written to the config directory. | Fix permissions on that directory and restart. |
+| **Decompiler unavailable: the engine's library did not finish starting (out of memory); restart Saturn Explorer to decompile again** | The machine ran out of memory while the engine's tables were being filled for the first request of the session. They cannot be filled twice or finished, so the decompiler refuses for the rest of the session and says so. | Restart Saturn Explorer; free memory first if that is what ran out. |
 
 ## Limits
 
@@ -97,6 +98,26 @@ The output is always for a specific snapshot. If what you are looking at changes
   code makes it: the interrupt mask, the base of the GBR accesses and the vector table are the caller's business, and the
   register the value comes from stays a parameter. A return in both r0 and r1 is shown as an 8-byte value (`CONCAT44(r0, r1)`,
   `(uint8)x`) even when r1 is only a scratch register the function left a value in: the code does not say which.
+- The pseudocode describes the instructions of an ordinary run. It does not model what the CPU does when it cannot
+  carry one out, and it does not say so:
+  - *Address errors.* A word or longword access at an address that is not a multiple of its size (`mov.w`, `mov.l`,
+    `mac.w`, `mac.l`, the `@(disp,..)` forms), or a jump to an odd address, raises an address error on the SH-2 and
+    the access is not completed. The output prints the access at the address the code computes, as if it had been
+    made. (Only for the hardware registers listed above does the panel say that an access of that width is an address
+    error.)
+  - *Illegal instruction and illegal slot instruction exceptions.* A word that is not an instruction, or a branch (or
+    another instruction that changes PC) in a delay slot, raises one. The output never shows the exception: such a
+    word is printed as the instruction it would be, and an engine warning about the slot (not an exception) is as far
+    as it goes.
+  - *Interrupts.* They can run between any two instructions and are not shown. Neither is the one-instruction
+    interrupt delay after `ldc`, `lds`, `stc` and `sts`.
+  - *`sleep`.* It is shown as the call `Sleep_Standby()`; the output does not say that the CPU stops there until an
+    interrupt or reset, or what Standby does to the on-chip modules.
+  - *`tas.b`.* It is printed as a read of the byte, a test of it into T, and a write of it back with bit 7 set. On the SH-2 the pair is
+    one bus-locked operation, and that is how the two CPUs of a Saturn take a lock from each other; the output does
+    not show the locking, so nothing in it says that no other access can fall between the read and the write.
+  None of this changes what a correct program computes. Where the code depends on one of these (an exception handler, a
+  lock, a wake-up from `sleep`), read the assembly beside the pseudocode.
 - Function boundaries are found heuristically, from a known entry or backwards to the previous `rts` plus slot. The scan skips literal pools and `mova` jump tables, and steps past a function that ends in a tail jump. A known entry keeps an address after an `rts` when flow from the entry reaches it (an early return). What the finder cannot settle is shown as an amber line. Expect to correct some entries with **Set Function Start Here**.
 - Indirect calls stay indirect unless you are halted on them (see above).
 - Only one level of pointer type is recovered for signatures. Structures are not inferred.

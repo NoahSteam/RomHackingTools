@@ -60,7 +60,9 @@ jobs:
   # SaturnExplorerSlaFreshnessTests is built and run, but its result is informational: it runs
   # se-sleighc (upstream's SLEIGH compiler) as a child, and that compiler is not clean under the
   # sanitizers (an invalid downcast, an out-of-range enum load, a few leaked bytes), which makes
-  # the test fail for reasons outside the engine. The other six binaries gate the job. The log is
+  # the test fail for reasons outside the engine. The other binaries gate the job, SaturnExplorerDecompilerFaultTests
+  # (the allocation-failure and cancel matrix, its default subset: deterministic, about a few minutes under ASan) among
+  # them: its leak check is a no-op without AddressSanitizer, so an unsanitized ctest run cannot stand in for it. The log is
   # uploaded in the artifact under informational/.
   #
   # Time: an ASan build of the engine is a few minutes; the runner test is the slow one under
@@ -103,7 +105,12 @@ jobs:
           SaturnExplorerSh2DecompilerFixtureTests SaturnExplorerDecompilerPanelTests
           SaturnExplorerDecompilerRunnerTests SaturnExplorerSh2SemanticsTests
           SaturnExplorerSh2DecodeTests SaturnExplorerSh2GeneratedTests
-          SaturnExplorerSlaFreshnessTests
+          SaturnExplorerDecompilerFaultTests SaturnExplorerSlaFreshnessTests
+
+      # The gate itself, against stub binaries: the runner invokes the fault matrix, and the checker fails on its non-zero
+      # exit, on an ASan / LSan report, on an unaccepted UBSan error, and on a binary the runner never ran (A12-11).
+      - name: Self-test the sanitizer harness
+        run: bash ../.github/scripts/test-sanitizer-harness.sh
 
       # Always succeeds: the next step judges the logs, so one run shows every binary's reports.
       - name: Run the tests, capturing each log

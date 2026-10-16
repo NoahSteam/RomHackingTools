@@ -5,7 +5,7 @@
 #
 # <build-dir> is a CMake build of SaturnExplorer configured with
 #   -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
-# whose seven decompiler test targets are built. Writes <log-dir>/<target>.log (stdout and
+# whose decompiler test targets (the list below) are built. Writes <log-dir>/<target>.log (stdout and
 # stderr, also echoed) and <log-dir>/<target>.rc (exit status), and a timing table. It never
 # stops at the first failing binary and always exits 0: pass/fail is decided afterwards by
 # check-sanitizer-logs.sh, so every binary's report is seen in one run.
@@ -80,6 +80,16 @@ run SaturnExplorerDecompilerPanelTests \
   "$build/bin/SaturnExplorerDecompilerPanelTests" "$(scratch decompiler_panel_test)"
 run SaturnExplorerDecompilerRunnerTests \
   "$build/bin/SaturnExplorerDecompilerRunnerTests" "$(scratch decompiler_DecompilerRunner_test)"
+# The allocation-failure / cancel matrix (REVIEW_LEDGER.md, area 6): its default subset, which is deterministic. Every
+# cell runs in a child process of this binary, so a crash, a hang, an ASan or UBSan report or a leak is a failed cell
+# and the binary exits non-zero; the matrix does its own leak check per cell (LeakSanitizer's recoverable check, with
+# the accepted leaks of A6-7 named in DecompilerFaultTests.cpp) and its own sorting of the two accepted upstream UBSan
+# sites. Built without AddressSanitizer its leak check is a no-op, which is why it runs here and not only in ctest.
+# SE_FAULT_FULL=1 (the whole matrix, hours) is not set.
+# The environment cannot weaken the gate: the full matrix, a job filter and the leak-check switch are cleared.
+run SaturnExplorerDecompilerFaultTests \
+  env -u SE_FAULT_FULL -u SE_FAULT_ONLY -u SE_FAULT_LEAKS -u SE_FAULT_LEAKLIST -u SE_FAULT_RANGE -u SE_FAULT_PHASE \
+  "$build/bin/SaturnExplorerDecompilerFaultTests" "$(scratch decompiler_fault_test)"
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   { echo '### Decompiler tests under ASan + UBSan + LSan'; echo '```'; cat "$summary"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

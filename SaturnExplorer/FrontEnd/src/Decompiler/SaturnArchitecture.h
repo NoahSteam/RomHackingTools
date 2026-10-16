@@ -41,8 +41,11 @@ public:
 
     // Materialise the embedded spec bundle under 'configDir' (SpecBundle, PLAN.md A5) and point
     // the engine's process-global spec search path at it. Once per process: later calls return
-    // the first outcome. Engine thread only. False, with 'error' naming the path, when the
-    // decompiler is unavailable.
+    // the first outcome -- except that a failure of the materialisation alone (an allocation, say)
+    // is not an outcome and is retried, while one that interrupts the library's own start-up, which
+    // is not transactional, is permanent and says so. Engine thread only. False, with 'error'
+    // naming the path or the restart that is needed, when the decompiler is unavailable. May throw
+    // (std::bad_alloc) before anything global was written; the next call then starts again.
     static bool StartLibrary(const std::string& configDir, std::string& error);
 
     // Tests only: called just before the translator is built (or reset, when reused), so a test
