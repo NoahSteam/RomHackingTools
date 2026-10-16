@@ -2555,6 +2555,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         std::set<uint32_t> entries;
         for (uint32_t k : known) entries.insert(k);
         for (const auto& n : named) entries.insert(n.first);
+        // ...and a function the request lends a signature to is one, whether or not the finder listed it (the panel
+        // lends every function the user decompiled, at the address the user chose: A4-8).
+        for (const auto& p : prototypes) entries.insert(p.first);
         if (targets)
             for (const auto& t : *targets) entries.insert(t.first);
         for (uint32_t a : entries)

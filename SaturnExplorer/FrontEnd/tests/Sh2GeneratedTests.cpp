@@ -793,6 +793,37 @@ struct Gen
         }
     }
 
+    // The registers r4-r7 (bits 4-7) that code uses as the base of a memory access, a poll or a table's index: the ones a
+    // caller must pass a pointer in.
+    static uint32_t UsedAsPointer(const std::vector<Item>& items)
+    {
+        uint32_t m = 0;
+        for (const Item& it : items)
+        {
+            if ((it.type == Item::Mem && !it.stack && it.base >= 4 && it.base < 8) || (it.type == Item::Poll && it.reg >= 4 && it.reg < 8))
+                m |= 1u << (it.type == Item::Mem ? it.base : it.reg);
+            m |= UsedAsPointer(it.slot) | UsedAsPointer(it.kids);
+            for (const std::vector<Item>& c : it.cases) m |= UsedAsPointer(c);
+        }
+        return m;
+    }
+    // ...by function 'fi' or anything it calls, jumps to or runs on into (A4-9: a constant passed to a callee that stores
+    // through it ends the run at an address nothing is mapped at).
+    static uint32_t PointerArgs(int fi, const std::vector<Func>& fns, std::set<int>& seen)
+    {
+        if (fi < 0 || fi >= static_cast<int>(fns.size()) || !seen.insert(fi).second) return 0;
+        const Func& f = fns[fi];
+        uint32_t m = UsedAsPointer(f.items) | UsedAsPointer(f.pathA) | UsedAsPointer(f.pathB) | UsedAsPointer(f.tail);
+        std::vector<int> callees;
+        CalleesOf(f.items, callees);
+        CalleesOf(f.pathA, callees);
+        CalleesOf(f.pathB, callees);
+        for (int c : callees) m |= PointerArgs(c, fns, seen);
+        if (f.end == Func::TailJump) m |= PointerArgs(f.tailTo, fns, seen);
+        if (f.end == Func::Fall) m |= PointerArgs(fi + 1, fns, seen);
+        return m;
+    }
+
     // A call: arguments in r4-r7 (some set in the delay slot), bsr or jsr through a literal, the
     // arguments kept in callee-saved registers restored after it.
     Item MakeCall(int callee, const std::vector<Func>& fns)
@@ -839,6 +870,26 @@ struct Gen
             args.pop_back();
         }
         it.setup = args;
+        // The generator's own contract (A4-9): an argument is never a code address or a constant that the callee (or what it
+        // calls) stores or loads through. The jsr's target register is loaded first, so an argument copied from it is the
+        // callee's address (seed 301364: written through, it overwrote the caller's next literal); a small constant is no
+        // address at all (seed 305201). Both are replaced by the caller's own copy of the argument register it was entered
+        // with, a pointer into scratch memory, without a draw: no other program of a seed changes.
+        std::set<int> seen;
+        const uint32_t derefs = PointerArgs(callee, fns, seen);
+        auto safeArg = [&](uint16_t w) {
+            const int dst = (w >> 8) & 0xF;
+            return saves.empty() ? w : uint16_t(0x6003 | dst << 8 | saves[0].second << 4);   // mov Rsaved,Rdst
+        };
+        auto fixArgs = [&](std::vector<uint16_t>& words, int jsrReg) {
+            for (uint16_t& w : words)
+            {
+                const int dst = (w >> 8) & 0xF;
+                const bool constant = (w & 0xF000) == 0xE000 && dst >= 4 && dst < 8 && ((derefs >> dst) & 1u);
+                const bool target = jsrReg >= 0 && (w & 0xF00F) == 0x6003 && static_cast<int>((w >> 4) & 0xF) == jsrReg;
+                if (constant || target) w = safeArg(w);
+            }
+        };
         if (it.viaJsr)
         {
             it.jsrReg = 1 + static_cast<int>(rng.Below(3));
@@ -848,6 +899,8 @@ struct Gen
             it.fnLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
         }
+        fixArgs(it.setup, it.viaJsr ? it.jsrReg : -1);
+        fixArgs(it.slotWords, it.viaJsr ? it.jsrReg : -1);
         for (const std::pair<int, int>& s : saves) it.after.push_back(uint16_t(0x6003 | s.first << 8 | s.second << 4));
         // A callee that leaves a register changed (a convention of its own): read right after the call, into
         // a scratch register, which later items may use or return. A caller that took the register to be

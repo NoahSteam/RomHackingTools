@@ -3781,6 +3781,27 @@ void TestFlowUncertainty()
     r = d.Decompile(snap, q);
     Print("fall-through", r);
     CHECK(any(r, FlowWarning::IntoFunction, next, "another function's entry"));
+    // A4-8: an entry the request knows only because it lends a signature there (the panel lends every function the
+    // user decompiled, at the address the user chose, and lists the finder's bounds apart from that).
+    {
+        Prototype lent;
+        lent.known = true;
+        q = Request(falls);
+        q.prototypes.emplace_back(next, lent);
+        r = d.Decompile(snap, q);
+        Print("fall-through into a lent function", r);
+        CHECK(any(r, FlowWarning::IntoFunction, next, "another function's entry"));
+        q = Request(falls);
+        q.prototypes.emplace_back(0x26000000u | (next & 0x000FFFFFu), lent);   // lent at a mirror of it
+        CHECK(any(d.Decompile(snap, q), FlowWarning::IntoFunction, next, "another function's entry"));
+        Prototype notLent;   // known = false lends nothing, so it is no entry either
+        q = Request(falls);
+        q.prototypes.emplace_back(next, notLent);
+        CHECK(d.Decompile(snap, q).flowWarnings.empty());
+        q = Request(falls);
+        q.prototypes.emplace_back(helper, lent);   // an entry the flow does not reach
+        CHECK(d.Decompile(snap, q).flowWarnings.empty());
+    }
     r = d.Decompile(snap, Request(helper));   // its own entry is not "another"
     CHECK(r.flowWarnings.empty() && r.warnings.empty());
 
