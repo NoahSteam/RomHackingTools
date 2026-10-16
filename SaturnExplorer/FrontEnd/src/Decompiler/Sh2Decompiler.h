@@ -61,6 +61,10 @@ struct TypeShape
 // decompiled (Sh2Decompiler.cpp, ReturnCheck), so a caller's own return-address proof can rely on it.
 // Bits name where a value can come from, in the callee's terms: origin::*. The defaults assume the
 // worst.
+// The comment printed at a call that a frame address reaches in a register its arguments do not show (the address of a returned
+// structure, in r2: A3-4). The pseudocode alone would read as a call that cannot touch the local.
+constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none of the arguments: the call may write the locals from there up";
+
 namespace origin
 {
 // 0-14 r0-r14, 15 r15, 16 sr, 17 gbr, 18 vbr, 19 mach, 20 macl, 21 pr: that register's value on entry.

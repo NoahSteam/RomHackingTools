@@ -331,6 +331,7 @@ public:
     // the caller or an unresolved jump ends that path instead of the run. For FrameEscape().
     void SetTolerant() { mTolerant = true; }
 
+    const std::set<uint32_t>& EscapeSites() const { return mEscapeSites; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
     bool FrameEscape(uint32_t& offset) const
@@ -675,14 +676,14 @@ private:
                 signatureLent = p->second.known;
             }
         }
-        if (!signatureLent) NoteFrameEscape(s, 2, true);
+        if (!signatureLent) NoteFrameEscape(s, 2, true, at);
         else
             // A lent callee gets its pointer in a register of its signature, which the engine sees, but only as far as its own
             // reading of the address goes: an index added to it or a loop that moved it leaves the locals under the address it
             // was made from out of the alias (A3-22). Declared for the registers the callee stores through, when the address is
             // not exact (an exact one is the engine's, and was never a problem).
             for (int r = 0; r < 15; ++r)
-                if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false);
+                if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false, at);
         Apply(s, e, targetIsR0);
     }
 
@@ -694,7 +695,7 @@ private:
     // lends none that reads r2. Only r2, not the other registers a callee could read: r0, r1 and r3
     // are scratch the compiler leaves a frame address in, and r8-r14 hold the frame pointer, so a
     // rule over them would put every local of every function in an alias.
-    void NoteFrameEscape(const State& s, int reg, bool exactToo)
+    void NoteFrameEscape(const State& s, int reg, bool exactToo, uint32_t at)
     {
         const Value v = Get(s, mReg[reg]);
         if (!exactToo && v.kind == Value::Sp) return;
@@ -704,6 +705,7 @@ private:
         // make an array of every local.
         const int64_t base = v.Base();
         if (base == Value::kNoBase) return;
+        if (exactToo) mEscapeSites.insert(at);   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
@@ -1106,6 +1108,7 @@ private:
     bool mStoresCallerFrame = false;   // a store at an exact offset at or above the entry r15 (A3-21)
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
+    std::set<uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
@@ -2874,7 +2877,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             CallEffects unused;
             probe.Run(unused);
             uint32_t from = 0;
-            if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
+            if (probe.FrameEscape(from))
+            {
+                fd->getScopeLocal()->declareHostAlias(from);
+                // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;`
+                // would take the local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own
+                // flow warnings do not collect.
+                for (uint32_t site : probe.EscapeSites())
+                    arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+            }
         }
         for (const auto& ro : scan.readonly)
             if (!sharedLiteral(ro.first, ro.second))
