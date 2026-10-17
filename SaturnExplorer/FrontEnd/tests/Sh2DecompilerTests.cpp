@@ -9583,6 +9583,17 @@ void TestArea3Round8()
         const DecompileResult r5 = d.Decompile(snap5, Request(f5.base));
         Print(f5.name.c_str(), r5);
         CHECK(Has(r5.Text(), "func_0x06009040(&xStack_8)") && !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
+        // ST6: the address in the second stack word (a callee that reads its sixth argument), the first word unwritten: the same drop
+        const std::vector<uint16_t> writer2 = { 0x52F1, 0xE137, 0x000B, 0x2212 };   // mov.l @(4,r15),r2 ; mov #K,r1 ; rts ; mov.l r1,@r2
+        const CallFixture f6 = { "a3_51 ST6: the address in the second stack word", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0xB017, 0x0009, 0x50F2, 0x7F0C, 0x4F26, 0x000B, 0x0009 }, writer2) };
+        auto snap6 = CallSnapshot(f6, ++serial);
+        const DecompileResult r6 = d.Decompile(snap6, Request(f6.base));
+        Print(f6.name.c_str(), r6);
+        CHECK(Has(r6.Text(), kStackNote) && !Has(r6.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r6, snap6, f6, { { 1 }, { 2 } }, true));
+        uint32_t ran6 = 0;
+        CHECK(CallRunResult(snap6, f6, { 1 }, ran6) && ran6 == 0x37u);
         // ST2 (control): the address in r4, the engine's own argument
         const CallFixture f2 = { "a3_51 ST2 control: the address in r4", 0x06009000u,
                                  atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x64F3, 0x7404, 0xB018, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, { 0xE337, 0x000B, 0x2432 }) };
