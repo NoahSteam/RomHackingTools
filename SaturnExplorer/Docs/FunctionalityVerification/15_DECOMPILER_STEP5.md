@@ -7309,5 +7309,27 @@ says. These held under variants the round did not pin:
 - **Probe limits.** The probe's `kMaxSteps` exit returns a reason that `WithholdReason`'s probe ignores; a function that exhausts it declares nothing for the calls
   it did not reach. No corpus function was seen to; not probed.
 
+### Re-checked against the merged head (`6817075`: area 2's round 5 fix, patches 0044 and 0045)
+
+The review was done on `d7da94a` as briefed. After the coordinator's note every fixture was rerun on a scratch build of the main checkout's head (read only), with
+the same driver and the same inputs, and the corpora again.
+- **Reproduce unchanged on the merged head (lent, the oracle rejects, the effect check fires):** A3-36 (J1, J2, K1), A3-37 (K2, K4, U1, U2), A3-38 (P1, P3),
+  A3-39 (S2b, S2b2, N1), A3-41 (R1a, R1b, R1c, R1e; R1d is right and R1f is withheld, as before), A3-42 (S3a and S3b `EFFECT-VIOLATION:r14`, S3g does not return).
+  The controls (J0, K0, K3, S3a0, S2a0, S3d to S3f, M1 to M3, Q1 to Q5, the T4 and T5 tail calls) print what they did.
+- **A3-40 needed a new fixture on the merged head.** S2a (`mov r4,r0 ; add r5,r0 ; mov.l r0,@r15 ; rts ; nop`) is no longer lent: with `nop` writing nothing the engine takes
+  an r0 that is also stored for scratch (A2-42, accepted) and prints `void g(void)`, so g is withheld "it writes a word of its caller's frame". **S2a2** (`mov r4,r1 ; add r5,r1 ;
+  mov.l r1,@r15 ; rts ; mov r1,r0`) is lent on both heads with the stale `return 5;` caller; the row's fixture leads with it.
+- **A2-31 is fixed there** (`350c98f`): V1 to V6 all agree with the run, the four corpus functions of the sample that were A2-31 (`060336E6`, `0603337A`, `06033718`
+  of image 007 and `0606E950` of 008) are now lent as returning (`uint4`, `int4`, `uint4`, `xunknown4`), and the lent `void` functions ending in a call to a lent non-void callee
+  fall from 61 and 50 to 4 and 5. The other twelve of the sixteen print the same signature line on both heads. The merged head's corpus: 662 lent (923 parameters) for image 007 and
+  1,020 (1,282) for 008, every ledger count 0, both suites "all passed".
+- **A3-29** (a `jmp` tail call to a value-returning callee): T4g now agrees with the run (the text is right); the caller is still withheld "it tail-calls a function that returns
+  a value", as the coordinator said. I did not close the row.
+- **What 0045 does to A3-19's neighbours (no row).** On the merged head `mov r4,r0 ; mov.l r0,@r5 ; rts ; nop` (W1) and `mov r4,r0 ; mov.l @(r0,r5),r1 ; mov.l r1,@r6 ; rts ; nop` (W3)
+  print `return;` and are lent `void`; on `d7da94a` both returned `param_1`. The generator's `SE_GENERATED_WORDS="6043 2502 000B 0009" SE_GENERATED_RETURNS="1"` reports
+  `return-dropped` there and 0 findings on `d7da94a`. This is A2-42's accepted decision (an r0 that is also stored, compared or used as an address is scratch), not filed again;
+  it makes A3-41's reads the same decision: a result the function has used is scratch whichever way it is read.
+- The probe scratch patch of A3-36 was not rebuilt on the merged head; the row's source lines are unchanged by 0044 and 0045 (`Call`, `Apply`).
+
 **Done criteria.** Area 3 has three P2 rows this round (A3-36, A3-38, A3-39) and four P3 rows; it needs a fix round and then two consecutive clean review
 rounds. The open P3 rows A3-29, A3-31 and A3-34 are unchanged; A3-34's instrument is described above.
