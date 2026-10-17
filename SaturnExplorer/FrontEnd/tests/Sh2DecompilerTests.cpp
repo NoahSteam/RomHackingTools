@@ -9942,7 +9942,7 @@ R8Slot R8SlotFixture(const std::string& kind, const std::string& slot, int d, in
 // (1) The slot loads above, by value. (2) The A2-47 family in ordinary code, 19 fixtures that printed a wrong value with patch 0046 reverted:
 // a value built from a boolean as `T * A + (1 - T) * B` (mul.l, sts macl), then a mask or a shift pair or an extension that reads the low
 // bits (Sh2GeneratedTests' scratch grammar of the round: 20,000 functions of these templates and 20,000 of a wider register-only grammar, 0 findings
-// on the fixed tree, 18 of 400 with patch 0046 reverted). (3) A2-52: the stack pointer on entry is taken to be 256-aligned.
+// on the fixed tree, 18 of 400 with patch 0046 reverted). (3) A2-53: the stack pointer on entry is taken to be 256-aligned. (5) A2-52: what patch 0046 leaves of A2-47. (6) the spec's decompiler-only lines (A2-55).
 void TestArea2Round8()
 {
     Sh2Decompiler d(gConfig);
@@ -9988,13 +9988,13 @@ void TestArea2Round8()
         CHECK(verdicts["differs"] == 0 && verdicts["unknown"] == 0 && verdicts["not-ok"] == 0 && verdicts["no-run"] == 0);
         CHECK(verdicts["agrees"] + verdicts["agrees-global"] >= 100);
     }
+    struct Family
+    {
+        const char* name;
+        std::vector<uint16_t> code;
+    };
     // ---- (2) ----
     {
-        struct Family
-        {
-            const char* name;
-            std::vector<uint16_t> code;
-        };
         const std::vector<Family> families = {
             { "t5", { 0x4511, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0001, 0x0022, 0x0000, 0x0020 } },
             { "t7", { 0x3567, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xD704, 0x2679, 0x6063, 0x4000, 0x000B, 0x0009, 0x0000, 0x0106, 0x0000, 0x0100, 0x0000, 0x003C } },
@@ -10064,20 +10064,83 @@ void TestArea2Round8()
                         }
         std::printf("A2 round 8, mac.l and mac.w by value: %d of %d fixtures agree with the run (%zu accumulators each)\n", agree, fixtures, inputs.size());
     }
-    // ---- (3) A2-52 ----
+    // ---- (5) A2-52 (P1): the A2-47 family that patch 0046 leaves ----
+    {
+        // A sum of terms over shared variables, `c + 8 * x + 4 * y + 14 * x` (constants from the literal pool, `mul.l`, `sts macl`), read through a mask
+        // (`shlr2 ; shll2`). RuleCollectTerms combines the two x terms: it zeroes the coefficient of one (the op that held `8 * x` is now `c + 0`) and puts
+        // `22 * x` in the other. Patch 0046 resets the non-zero mask of the output of each op whose input it replaces, and that is those two; the partial
+        // sum between them (`+ 4 * y`) read the first as a multiple of 8, was a multiple of 4, and is not now (22 * x is 2 mod 4), but is left with
+        // the mask 0xfffffffc and so is the op RuleAndMask reads when it removes the mask as redundant. The text drops it: `x * 0x16 + 0x100 + y * 4`
+        // for r4 = 1, r6 = 0 is 0x116, the code returns 0x114. The pins hold the wrong text, to be flipped by the fix: every fixture must DIFFER.
+        // (Reverting patch 0046 changes none of them; a transitive reset in `Funcdata::opSetInput` makes all of them agree.)
+        const std::vector<Family> wrong = {
+            { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
+            { "termgen 0", { 0xD00A, 0xD30B, 0x0367, 0x031A, 0x303C, 0x6353, 0x4308, 0x4308, 0x303C, 0xD308, 0x0347, 0x031A, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0010, 0x0000, 0x0008, 0x0000, 0x0012 } },
+            { "termgen 1", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0600, 0x9008, 0x0600, 0x900E } },
+            { "termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
+            { "termgen 3", { 0x2678, 0x0129, 0x3673, 0x0229, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x303C, 0xD30A, 0x0357, 0x031A, 0x3038, 0xD309, 0x0367, 0x031A, 0x3038, 0xD308, 0x0357, 0x031A, 0x303C, 0xC903, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0004, 0x0000, 0x00B8, 0xFFFF, 0xFFFC, 0x0600, 0x900A } },
+            { "termgen 4", { 0x3456, 0x0129, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x3038, 0xD30A, 0x0367, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x3038, 0xD308, 0x0317, 0x031A, 0x303C, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0048, 0x0000, 0x001C, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFC } },
+            { "termgen 5", { 0xD00A, 0xD30B, 0x0357, 0x031A, 0x303C, 0xD30A, 0x0357, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0357, 0x031A, 0x3038, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0010, 0x0000, 0x0014, 0xFFFF, 0xFFFA, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFE } },
+            { "termgen 6", { 0xD008, 0xD309, 0x0357, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0357, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0004, 0x0000, 0x0008, 0x0000, 0x0010, 0x0000, 0x0001 } }
+        };
+        const std::vector<std::vector<uint32_t>> inputs = { { 0, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 1, 0, 1, 0 }, { 5, 3, 1, 2 },
+                                                            { 1, 0xFFFFFFFEu, 0x100, 0x7F7F7F7Fu }, { 7, 7, 7, 7 }, { 2, 9, 0xFFFFFFFEu, 5 },
+                                                            { 0x80000001u, 3, 5, 9 }, { 5, 2, 3, 1 } };
+        int differ = 0;
+        for (const Family& fam : wrong)
+        {
+            DecompileResult r;
+            const R8Outcome o = R8Check(d, fam.name, fam.code, inputs, "", {}, ++serial, 0x06009000u, &r);
+            if (o.verdict != "differs") std::printf("  A2-52 pin %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
+            Print(fam.name, r);
+            CHECK(o.verdict == "differs");   // the defect: flip to "agrees" with the fix
+            differ += o.verdict == "differs" ? 1 : 0;
+        }
+        std::printf("A2 round 8, A2-52 (the A2-47 family beyond patch 0046): %d of %zu fixtures print a wrong value\n", differ, wrong.size());
+    }
+    // ---- (6) the spec's decompiler-only lines ----
+    // Mutants of superh.sinc that survived the decode oracle (its emulator does not run the op, or compares registers, not text), Sh2SemanticsTests
+    // and the whole of Sh2DecompilerTests before these pins: deleting `Write_VBR(rm)` from `ldc Rm,VBR`, `Write_VBR(value)` from `ldc.l @Rm+,VBR`,
+    // `Write_SR(value)` from `ldc.l @Rm+,SR`, and `r15 = r15 + 8` after trapa's call (deleted, or `- 8`). Each changes the printed text: the write
+    // is no longer shown, or the word pushed before a trap is read back from the wrong stack slot after it.
+    {
+        auto text = [&](const char* name, std::vector<uint16_t> code) {
+            auto snap = CallSnapshot({ name, 0x06009000u, std::move(code) }, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+            Print(name, r);
+            CHECK(r.status == DecompileStatus::Ok);
+            return r.Text();
+        };
+        CHECK(Has(text("ldc r4,vbr", { 0x442E, 0x000B, 0x0009 }), "Write_VBR(param_1);"));
+        CHECK(Has(text("ldc.l @r4+,vbr", { 0x4427, 0x000B, 0x0009 }), "Write_VBR(*param_1);"));
+        CHECK(Has(text("ldc.l @r4+,sr", { 0x4407, 0x000B, 0x0009 }), "Write_SR(*param_1 & 0x3f3);"));
+        // mov.l r4,@-r15 ; trapa #5 ; mov.l @r15+,r0 ; rts ; nop: the trap pushes SR and PC and its handler's rte pops them, so r15 is where it was and the
+        // word read back is r4. The run (the handler at kRunHandler is rte ; nop) returns r4; the text must say so.
+        const R8Outcome o = R8Check(d, "push r4 ; trapa #5 ; pop r0", { 0x2F46, 0xC305, 0x60F6, 0x000B, 0x0009 }, { { 5 }, { 0x1234 }, { 0xFFFFFFFFu } }, "", {}, ++serial);
+        if (o.verdict != "agrees") std::printf("  trapa: %s %s\n", o.verdict.c_str(), o.detail.c_str());
+        CHECK(o.verdict == "agrees");
+    }
+    // ---- (3) A2-53 ----
     {
         // mov r15,r0 ; and #0xFF,r0 ; rts ; nop: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot
         // tell). The engine takes the stack pointer on entry to be aligned to 256 (Funcdata::calcNZMask: "Treat spacebase input as aligned") and
         // prints `return 0;`; the code returns the low byte of r15. The pin holds the wrong text, to be flipped by the fix.
         auto snap = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC9FF, 0x000B, 0x0009 } }, ++serial);
         const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
-        Print("A2-52: mov r15,r0 ; and #0xff,r0", r);
+        Print("A2-53: mov r15,r0 ; and #0xff,r0", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(Has(r.Text(), "return 0;"));   // the defect: A2-52 (the right text states r15 & 0xff)
-        auto snap2 = CallSnapshot({ "sp", 0x06009000u, { 0x7FFB, 0x60F3, 0xC903, 0x7F05, 0x000B, 0x0009 } }, ++serial);
+        CHECK(Has(r.Text(), "return 0;"));   // the defect: A2-53 (the right text states r15 & 0xff)
+        // The same assumption through the idiom that rounds a pointer up to 8: `mov r15,r0 ; add #7,r0 ; mov #-8,r1 ; and r1,r0`. A 4-aligned stack
+        // pointer that is 4 mod 8 gives r15 + 4; the engine takes the AND for redundant and returns the frame address itself.
+        auto snap2 = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0x7007, 0xE1F8, 0x2019, 0x000B, 0x0009 } }, ++serial);
         const DecompileResult r2 = d.Decompile(snap2, Request(0x06009000u));
-        Print("A2-52: add #-5,r15 ; mov r15,r0 ; and #3,r0", r2);
-        CHECK(Has(r2.Text(), "return 3;"));   // the same assumption: the low bits of a frame address are those of the offset alone
+        Print("A2-53: mov r15,r0 ; add #7,r0 ; and #-8", r2);
+        CHECK(Has(r2.Text(), "return &xStack00000000;"));   // the defect: the right text keeps the rounding
+        // ...and `(r15 - 5) & 0x1c`: bits 2 to 4 of the stack pointer, printed as the constant 0x18
+        auto snap3 = CallSnapshot({ "sp", 0x06009000u, { 0x7FFB, 0x60F3, 0xC91C, 0x7F05, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r3 = d.Decompile(snap3, Request(0x06009000u));
+        Print("A2-53: add #-5,r15 ; mov r15,r0 ; and #0x1c,r0", r3);
+        CHECK(Has(r3.Text(), "return 0x18;"));   // the defect
     }
 }
 
