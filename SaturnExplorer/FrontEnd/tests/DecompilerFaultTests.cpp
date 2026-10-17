@@ -4223,7 +4223,8 @@ int RunJobs(std::vector<Job>& jobs, size_t parallel, double timeoutSec, bool ver
         {
             const bool summary = l.compare(0, 8, "SUMMARY ") == 0 || l.compare(0, 6, "CLASS ") == 0 || l.compare(0, 10, "SIGNATURE ") == 0 ||
                                  l.compare(0, 8, "fixture ") == 0 || l.compare(0, 7, "RUNNER ") == 0 ||
-                                 l.compare(0, 8, "LATENCY ") == 0 || l.compare(0, 4, "PIN ") == 0;
+                                 l.compare(0, 8, "LATENCY ") == 0 || l.compare(0, 4, "PIN ") == 0 ||
+                                 l.compare(0, 11, "BOUNDARIES ") == 0 || l.compare(0, 7, "RESULT ") == 0;
             if (summary || ((verbose || !ok) && shown < 60))
             {
                 std::printf("   %s\n", l.c_str());
