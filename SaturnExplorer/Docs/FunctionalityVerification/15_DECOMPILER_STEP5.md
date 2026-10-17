@@ -7550,3 +7550,24 @@ seeds and not only by fixtures. Grammar 1 would gain a `p = p or/and mask` loop 
 - The VDP1 frame buffer swap at the frame end (`FBDrawWhich`) and the SCU, VDP1 and SCSP DMA writing work RAM behind a function's back: not seen by any
   function's own accesses, like the mailbox; the volatile mark and the removal caution are the design.
 - SCU_IST and CD_HIRQ writes of 0 clear flags and say nothing on the write (their `split` text is on a read-back): the class of A5-64, left as round 7 decided it.
+
+## Integration of the four fix branches at 887cf11
+
+The round's four fixers worked from master 887cf11 (or earlier) and handed back within a few hours of one another: `review/6-round4-fix` (A6-31..A6-36; A6-37..A6-39 found while fixing), `review/3-round6-fix` (A3-18..A3-28; A3-29, A3-31..A3-35 found), `review/5-round7-fix` (A5-50..A5-56; A5-57, A5-58 found) and `review/2-round5-fix` (A2-31..A2-41, A2-42 accepted; engine patches 0044 and 0045). They were merged in that order, each after the previous one's whole `ctest`, with the area 5 round 8 review (docs only, A5-59..A5-68) on top. Hand-resolved: `Sh2Decompiler.cpp` twice (area 5's alias-retry loop around the print pass against area 6's first-pass cancel check, both kept, the check before the loop; area 2's `InputsInReturn` rewrite against area 3's A3-20 joined-parameter rule, both kept), `Sh2GeneratedTests.cpp` (the generator's new random streams `aliasRng`, `maskRng`, `partialRng`, `retRng` all kept), `DECOMPILER_GUIDE.md` (area 5's Volatile-memory paragraph and area 2's Calls paragraph), and the two docs. `vendor.py` on a copy reproduces `cpp/`, `processors/` and `sources.cmake` with all 39 patches.
+
+**Three defects the merge made, none present on a branch alone.**
+
+1. Patch 0044 (a RETURN of a locked returning call's output is a return) made the engine print the tail-called value in `a3_27 b` ("jmp to a callee that returns 7"), which area 3's round 6 fixture asserted the oracle would reject. The text is now right and the assertion is flipped; A3-29's row now says what is left of it (the host still withholds the caller with a reason that is no longer true).
+2. Patch 0044 shifted the allocation counts of the Actions phase, so 23 fault-suite pins moved: jumptable A6-3 (4), mailbox A6-9 (4), dag A6-22 (7), shapes A6-11 (8). Every one came out MOVED, failed the run and printed the re-pin (A6-34's rule, landed this round, did what it was made for; before it they would have passed silently on the wrong allocation). All 23 are re-pinned to the printed values; every alloc family is `site ok` again.
+3. The pin self-test (A6-34) wrote its good `createTraces` pin at nth 108 and checked for the string "nth = 108" in the one-off pin's note. Both are concrete allocation counts, so the self-test itself went MOVED/STALE with the engine. The good pin follows the real table (107 now) and the expectation follows the good pin's `nth`. A self-test that pins an allocation count is stale whenever the engine changes; the area 6 round 5 reviewer has it as a candidate row.
+
+**Matrix on the merged head** (6817075; the generator and corpus runs on eae8e7b, which differs only in test-table pins and docs).
+
+- Whole `ctest -j3 --timeout 900`: 97 of 97.
+- Fault suite default subset: 45 jobs, 0 failed, every pin `site ok`, pin self-test 6 of 6.
+- Generator: grammar 2, 3,000 seeds, 0 findings; grammar 1, 1,000 seeds, 0 findings; **20,000 seeds (10,000 of each grammar), 0 failing seeds, 0 findings**.
+- Printed-C, 3,000 seeds: 3,072 functions, 2,661 compared, 2,715 agree, 4 `narrow-c`, 0 differ (232 `void-return`, 121 `void-return-lent`).
+- Corpora with `SE_GAME_LEND=1`: `hwram007` 839 of 839, every ledger count 0, 0 missing and said, notes 32, cautions 0, lent 662 (923 parameters); `hwram008` 1,554 of 1,554, every count 0, 4 missing and said (the two VDP2_BGON polls of 0600C2DA and 0600C49A, right), notes 54, cautions 4, lent 1,020 (1,282). The lending gains are area 3's (A3-24) plus area 2's (A2-31) on the same functions.
+- `vendor.py` in a copy: identical.
+
+**Not done.** No sanitizer run of the merged head (each branch ran its own; CI runs it). The three merge defects have no ledger rows: the first two are integration of correct fixes, the third is with the area 6 reviewer. The cost of `0604F422` (the slowest corpus function) rose from 2.8 s to 5.7 s in this run under load 10; a timing comparison on an idle machine is owed.
