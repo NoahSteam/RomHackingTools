@@ -73,6 +73,8 @@ namespace
 
 const ImVec4 kAmber(0.95f, 0.75f, 0.30f, 1.0f);
 const ImVec4 kRed(0.95f, 0.42f, 0.42f, 1.0f);
+// The instructions after the first that a line's menu lists (the tooltip lists eight; a menu can be longer).
+const size_t kMenuInstructions = 24;
 
 // FNV-1a, a 64-bit value at a time: the fingerprints of engine and finder inputs.
 const uint64_t kFnvBasis = 1469598103934665603ull;
@@ -937,6 +939,7 @@ void DecompilerPanel::Draw(bool* open, const DecompilerView& view, const Decompi
     }
     mDrawn.clear();
     mItems.clear();
+    mLineTooltip.clear();
     if (!ImGui::Begin(kTitle, open))
     {
         ImGui::End();
@@ -1357,7 +1360,13 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
             }
             const ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
             mDrawn.push_back(DrawnLine{ i, min, max });
-            if (ln.firstAddr) ImGui::SetItemTooltip("0x%08X", ln.firstAddr);
+            // Says what the number is: it is the address of the instruction the line came from and
+            // where a click goes, not a value in the line (A7-1), and whether the line is several.
+            if (ln.firstAddr && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+            {
+                mLineTooltip = LineOriginText(ln);
+                ImGui::SetTooltip("%s", mLineTooltip.c_str());
+            }
 
             if (ImGui::BeginPopupContextItem("lnctx"))
             {
@@ -1378,6 +1387,31 @@ void DecompilerPanel::DrawLines(const DecompilerInputs& inputs, Request& req)
                     req.jumpAssembly = true;
                     req.cpu = mCpu;
                     req.addr = ln.firstAddr;
+                }
+                // A line from several instructions: the click and the item above show the first; the rest are here (A7-2).
+                {
+                    const std::vector<uint32_t> at = LineInstructions(ln);
+                    if (at.size() > 1)
+                    {
+                        const bool open = ImGui::BeginMenu("Show Other Instructions");
+                        Remember("Show Other Instructions");
+                        if (open)
+                        {
+                            for (size_t k = 1; k < at.size() && k <= kMenuInstructions; ++k)
+                            {
+                                char b[24];
+                                std::snprintf(b, sizeof b, "0x%08X", at[k]);
+                                if (item(b, true))
+                                {
+                                    req.jumpAssembly = true;
+                                    req.cpu = mCpu;
+                                    req.addr = at[k];
+                                }
+                            }
+                            if (at.size() > kMenuInstructions + 1) ImGui::TextDisabled("and %zu more", at.size() - kMenuInstructions - 1);
+                            ImGui::EndMenu();
+                        }
+                    }
                 }
                 if (item("Rename Function...", true))
                 {

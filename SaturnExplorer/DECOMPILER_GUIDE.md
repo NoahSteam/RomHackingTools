@@ -23,9 +23,10 @@ The combo picks **Master SH-2** or **Slave SH-2**. That only decides whose PC Fo
 ## Reading the output
 
 - The status line shows the source and frame, and the function's name and entry. It also shows the panel's state: decompiling, stale, unsupported, or out of time.
-- **Click a line** to jump SH-2 Assembly to the first instruction it came from.
+- **Click a line** to jump SH-2 Assembly to the first instruction it came from. "First" means the lowest address: a statement is built from every instruction whose result it combines, so a line is often several instructions (about four lines in ten of those that have any are), not always next to each other, and a line can hold code from below the function's entry (a shared epilogue). A line with no instruction behind it (a declaration, a brace) does nothing when clicked and has no tooltip.
+- **Hover a line** to see where it came from. The tooltip says, for example, "Decompiled from the SH-2 instruction at 0x06086F54 (an address in the program, not a value in this line). Click to show it in SH-2 Assembly." The number is the address of the SH-2 instruction, as SH-2 Assembly shows it; it is not a variable, a parameter or a value in the line, whatever the line holds. When the line is built from several instructions the tooltip says how many and lists their addresses (the first eight, then a count), for example "Decompiled from 3 SH-2 instructions" and `0x06086F54, 0x06086F58, 0x06086F60`; the click shows the first, and **Show Other Instructions** in the right-click menu shows each of the others. Not every instruction has an address on a line: an operation folded into the expression that uses it (a move, an addition, a literal load) has none, and an instruction in a delay slot is carried by its branch, so its line is the branch's and the instruction is the row after the branch in SH-2 Assembly. There is no way back yet from an SH-2 Assembly row to the line that came from it.
 - **Right-click a line** for these:
-  - **Show in SH-2 Assembly**.
+  - **Show in SH-2 Assembly**, and, for a line from several instructions, **Show Other Instructions**.
   - **Rename Function...** and **Rename Callee 0x...**: names go into the same store Call Stack uses. Call Stack shows a name only on frames whose function it has identified, not on "Func unknown" frames. SH-2 Assembly has no label column, so a name does not show on its rows.
   - **Set Function Start Here**: use it when the finder guessed the entry wrong.
   - **View in Memory**.
