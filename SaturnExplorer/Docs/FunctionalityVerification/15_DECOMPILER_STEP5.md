@@ -8987,3 +8987,82 @@ The suite passes at `f1a3765` (inside both corpus runs: 94 s and 177 s, "all pas
 - **A3-33, A3-35, A3-41** are accepted and were not re-argued; A3-53 is their oracle row.
 
 **Done criteria.** Area 3 has three P2 rows this round (A3-49, A3-50, A3-51) and three P3 rows (A3-52, A3-53, A3-54); it needs a fix round and then two consecutive clean review rounds. The scratch change in "What the attack found" (1) is the measured size of the fix of A3-49 and A3-50 (two lines of `Return`, plus giving `WithholdReason`'s ReturnCheck the literals if the fixer prefers the more exact reading); A3-51 asks the probe about the words at the call's r15.
+
+## Area 3, round 8 fix
+
+Fixer, branch `review/3-round8-fix`, on the coordinator's head `460d64f`. Code commits `cee85f5`, `127b21b`, `65f0705`, `8ed65e0` and `9323a50` (the host, the suite and the generator), then the record. **A3-49, A3-50 and A3-51 (P2) are fixed; A3-52, A3-53 and A3-54 (P3) are fixed**, with two parts accepted on a reason: SA1's plain value in A3-51 and the corpus run of A3-54 (below). No engine patch: the next free number, 0051, stays unused (0049 is the A5-82 agent's), so the vendored tree, `patches/`, `sh-2.sla` and `Sh2SpecData.h` are as they were and there is nothing to reproduce with `vendor.py`. The coordinator's four seeds from the area 5 fixer (66914, 77197, 69133, 69493) are triaged below: all four are old rows (A3-49 and A3-52), no new row.
+
+### 1. The rows
+
+**A3-49 and A3-50 (P2), one change in `ReturnCheck::Return`.** Both rules asked for registers only among the origins of the returned value (`(d & ~origin::kRegisters) == 0` in `mJoinedParams` and in `onlyInputs`), on the premise, written into the code comment, that the engine keeps the return of a value from memory. It does not, and the suite shows it on every fixture: each is withheld now, and the oracle still rejects the text the engine prints for it (`void ... { return; }` where the run returns r6 or r0 plus a word), which is what "the engine dropped it" means. Verified rather than trusted: the reviewer's claim that the fix touches 4 of 4,338 lent signatures is right. The first 3,000 grammar-2 seeds (the canary and the other short pins run beside them) lend **4,338** at `460d64f` and **4,334** with the fix (withheld 2,773 to 2,777; "its return joins r0's entry value with a parameter" 34 to 38; the other reasons move by the callers of those functions); 0 failing seeds in both. Both corpus images' full logs are identical to the unfixed tree's (below).
+
+The narrowest *sound* change is wider than the reviewer's scratch change, which dropped `kMemory` only. `Loaded()` gives a load the stack origin as well once a frame address has escaped (`s.escaped`), so in a function that has published a frame address (`mov r15,r1 ; mov.l r1,@r4`) V8 and W1 are still lent `void` with the memory-only change: two more fixtures, `a3_49 d` and `a3_50 d` in `TestArea3Round8`, fail with it (mutations M3 and M4). Every origin bit a value can have is now allowed (the clause is gone, not widened): the rule asks only for what it is about, r0's entry value among the alternatives and, for A3-49, a parameter the signature does not hold. The false comment is replaced. What is not changed, on purpose: a join of r0's entry value with a value that has neither an operation on r0 nor a parameter in it (`tst r4,r4 ; bt L ; mov.l @r5,r0 ; L: rts`, `mov r15,r0`) stays lent `void`, as `phi(in_r0, 5)` is in A3-14 (the scratch r0 of compiled code, 15 and 24 corpus functions; the generator's `return-dropped` needs r0 written on every path).
+
+Fixtures (`TestArea3Round8`, all withheld, all rejected by the oracle as texts): V8, V10 (literal), seed 112124's function 1, and the V9 control; W1, its `xor` form, W3 (literal), W4 (SR and a literal), the `add #1,r0` and `add r4,r0` controls; the controls that stay lent (r6 held by the signature with a memory alternative; r0 loaded on both paths). Generator (`TestRound8Pins`): seeds 112124, 117195, 400533, 66914, 77197 and, with the specials alphabet, 202318 and 207676, and V8, V10, W1, W3 as modules.
+
+**A3-51 (P2), the probe (`ReturnCheck::Call`, `NoteStackArguments`).** The engine drops an argument that follows a chain of three unset ones; the stack word comes after r7, so it is dropped with r4-r6 unset (r7 too) or with r5-r7 unset. The probe now asks the words of the frame at or above the call's r15 at an unlent call when either holds: a frame address in one of them declares the alias and says a note of its own (`kFrameEscapeNoteStack`: "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up"), as A3-48 does for r7. Not when the same exact address is in r4-r7, which the call shows (ST5). The condition is held to the engine, not argued: `TestArea3Round8` runs all 16 subsets of r4-r7 set before a call with the address in the first stack word; the local is never folded, the note is said exactly when the rule predicts the drop, and the text agrees with the run (16 of 16). ST1, ST4 and the controls ST2 and ST3 print as the record says (ST3 shows `&xStack_8` as the fifth argument); ST6 puts the address in the second word. The generator's canary family has a new kind, `stack slot` (the address of the second local in the word at the call's r15, r4-r7 untouched, a callee that reads and writes through it), 21 of the 240 default programs (30 of 330); the oracle that cleans a local after the call (`CanaryReturned`) knows the note. The default canary: 240 programs, 0 failing; 330 programs, 0 failing.
+
+*Accepted: SA1.* A plain value in the stack word (`func_0x06009040(3);` for a call that passes 7 as well) is the same limit as A3-5's registers: the callee reads a stack word outside its signature and is never lent, so the caller is withheld; no local is folded and no address is lost; the text states the arguments the engine sees. A note for it would be said at every call with a written word at the stack pointer, and compiled code keeps its first local there. Pinned (`SA1`: text, withheld, the run's 10) so a change is seen.
+
+The corpus, default request: 10 of 2,393 functions with a prologue get the note (4 of 839 on image 007, 6 of 1,554 on image 008); every other line of their texts and every other function is byte for byte the same. The filter for an address the call shows removed 2 of the 12 the first version of the rule gave. The ones left keep a pointer to a local in a local (`piStack_8 = aiStack_10`) and call with no argument: the note is a "may", like the r2 one.
+
+**A3-52 (P3, oracle).** Check 12 asks which registers the function reads on purpose; it now takes the union with every other function whose entry the body holds (`readsOnPurpose`): a function without an `rts` falls into the next one and the engine shows that code as its own, so a read there, after the call, is right (`unaff_r14` before the call). Seeds 60538, 308527, 405351, 413608 pass and are pinned, with 69133 and 69493 (coordinator, `kept-read:gbr`; the `into-function` lines of 69133 are the shrinker's two functions at one address: the review's shrunk module has them too, so the seeds are the pins). Check 11 uses `calledAt`, which already holds the calls of the run-on code.
+
+**A3-53 (P3, oracle).** Already fixed, by `ad80a00` (A2-49's exclusion `ComparesCallResult`, counted as `excluded.call-result-compared.return-dropped`): the review ran on `f1a3765`, before it. Both seeds are excluded (1 each) with 0 findings at `460d64f`; 400785 is pinned beside 62956. Row closed on that commit.
+
+**A3-54 (P3, instrument).** Part (1) is committed as check 10b: `EffectClaimsContradicted` holds `storesThrough`, `frameWords`, `outOrigins` and `spDelta` against every finished run of a lent function: a store at or above the entry r15 needs `kFrame` and its word in `frameWords` (or `kFrameAny`); a store into the 4 KiB arena of r4-r7 or GBR needs that register's bit or `kMemory`; a register that does not end as it began and holds a pointer into an arena or the stack needs some origin (its own, memory or a register's: the first version asked for the arena's register and failed on `extu.w r5,r1 ; xor r5,r1`, 0x06020000 by arithmetic, seeds 5752, 11714, 12548, 12550, 16826, 18478); r15 ends `spDelta` from where it began. 18,096 runs per 3,000 grammar-2 seeds, 0 findings. `SE_GENERATED_MUTATE=claims` clears the claims (36 of 60 seeds reported it) and a pin runs it; one synthetic run per claim in `TestRound8Pins`. Stores to the caller's frame do not occur in the generator (a function that makes one is withheld), so the `frameWords` claim is held by the synthetic run only.
+
+*Accepted: part (2), the run of the lent functions of an image on the emulator.* It needs a writable machine over the image, a stack in LWRAM, 16 register sets, perturbations and a window rule for stores (the first pass of the review's instrument flagged more than it found, all its own); it found 0 violations in 25,486 completed runs of 1,683 lent functions and 3 hits with causes outside the engine (the record of round 8). The claims it checks are the ones now checked on the generator's 65,000 runs per 20,000 seeds; a reviewer who wants the corpus run has the description above.
+
+### 2. The mutation table
+
+Each change reverted alone in the committed tree (the file restored with `git checkout` after), the owning suites rebuilt and run; "dt" is `SaturnExplorerSh2DecompilerTests`, "gen" the generator's short run with its pins (and the canary with 330 programs for the A3-51 rows):
+
+| Reverted | Pins | Result |
+|---|---|---|
+| A3-49: `mJoinedParams` asks for registers only again (M1) | `a3_49` a-d, seeds | dt 4 CHECKs fail, gen 5 |
+| A3-50: `onlyInputs` asks for registers only again (M2) | `a3_50` a-d, W1/W3 | dt 5, gen 2 |
+| The review's memory-only change in `onlyInputs` (M3) | `a3_50 d` (a frame address has escaped) | dt 1 |
+| ...in `mJoinedParams` (M4) | `a3_49 d` | dt 1 |
+| A3-51: no `NoteStackArguments` (M5) | ST1, ST4, ST6, the 16 subsets, the canary kind | dt 13, gen 1 (the canary) |
+| ...only r4-r6 unset asked (M6) | ST4, the subsets | dt 5 |
+| ...only r5-r7 unset asked (M7) | ST1, the subsets | dt 3 |
+| ...only the word at the call's r15 (M8) | ST6 | dt 2 |
+| ...an address shown in r4-r7 still noted (M9) | ST5 | dt 1 |
+| A3-52: the reads of the run-on functions not taken (M10) | seeds 60538, 308527, 405351, 413608, 69133, 69493 | gen 6 |
+| A3-53: the A2-49 exclusion off (M11) | seeds 62956 and 400785, and A2's pins | gen 6 |
+| A3-54: the `spDelta` claim off (M12) | its synthetic run | gen 1 |
+| ...the `kFrame` claim off (M13) | | gen 1 |
+| ...the `frameWords` claim off (M14) | | gen 2 |
+| ...the arena store claim off (M15) | | gen 2 |
+| ...the `outOrigins` arena claim off (M16) / the stack claim off (M17) | | gen 1 / gen 1 |
+| ...the check not called from `CheckFn` (M18) | the `claims` mutation pin | gen 1 |
+
+### 3. The matrix, on the fixed tree (`8ed65e0` code, `9323a50` tests)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the fault suite 136 s, the runner suite 86 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, 0 MOVED (no re-pin) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; 4,334 lent (4,338 before), claims checked in 18,096 runs; canary 240 programs, 0 failing |
+| generator, grammar 1, 1,000 seeds | 0 failing, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, 0 findings (the numbers of the round before) |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings (65,426 runs held to the claims) |
+| generator, grammar 2, `SE_GENERATED_FIRST=60001`, 6,000 seeds | 1 failing seed: 64293 (A5-82); 62956 excluded as before |
+| ...66,001 to 80,000, 14,000 seeds (the coordinator's range) | 0 failing, 0 findings (66914, 77197, 69133, 69493 fail at `460d64f`; 84,720 runs held to the claims) |
+| ...100,001 to 120,000, 20,000 seeds | 0 failing (112124 and 117195 failed at `460d64f`) |
+| ...200,001 to 210,000, 10,000 seeds, `SE_GENERATED_ALPHABET=specials` | 1 failing seed: 202350 (A5-82); 202318 and 207676 no longer fail |
+| ...300,001 to 320,000, 20,000 seeds | 3 failing seeds: 303290, 310654, 313937, all A5-82; 308527 no longer fails |
+| ...400,001 to 420,000, 20,000 seeds (the range of the review's claims check) | 1 failing seed: 405136 (A5-82); 400533, 400785, 405351, 413608 no longer fail |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 1,732 functions; lent signatures 637 (866 parameters) before, **662 (923)** after: as at `460d64f` |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 2,997 functions; lent 992 (1,227) before, **1,021 (1,287)** after: as at `460d64f` |
+| vendoring | not applicable: no engine patch |
+
+**The corpus, before and after.** Lending counts and ledger counts are unchanged; the full logs of both runs (the suite's output, line by line, without the new test's section) are identical to those of the tree at `460d64f` built beside this one, so no function changes its lending and the counts of changed texts (290 and 527 functions, 25 and 29 gaining a signature) are the baseline's, not this round's. The reviewer's 296 and 557 were taken at `f1a3765`, before patches 0046 and 0047. Texts of the default request, all 839 functions of image 007 and all 1,554 of image 008 with a prologue, by the engine at `460d64f` and with the fix, the second linked against the other's object file: 4 and 6 differ, all by the note of A3-51 and nothing else (`06019A56`, `06021C24`, `06021E54`, `06022374`; `06021ADE`, `0603D5F6`, `06058662`, `06061100`, `06061330`, `06061850`). The A3-49 and A3-50 change reaches no text of the default request (it decides lending).
+
+### 4. Not done
+
+- A3-51, SA1's plain value, and A3-54, the corpus run on the emulator: accepted above.
+- The coordinator's seeds 66914 and 77197 (`return-dropped:partial`, r0 ends as r7: A3-49) and 69133 and 69493 (`kept-read:gbr`: A3-52) fail at `460d64f` and pass; they are in the pins and in the two rows. No new class.
+- Sanitizers and the Live tests were not run (no engine code changed; the Live tests share a socket).
+- A5-82 is not taken; its seeds are the only failures left in the ranges.
