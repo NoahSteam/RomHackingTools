@@ -413,6 +413,10 @@ public:
     // the observer is not told of); and just before the reference run starts. Process-wide.
     static void SetPhaseHookForTests(std::function<void(DecompilePhase)> hook);
     static void SetBeforeReferenceHookForTests(std::function<void()> hook);
+    // Tests only: called at each of the host's own cancel check-points (Flow to Actions, Actions to Print, and the end of the first
+    // pass), immediately BEFORE the check, so that a test can raise the cancel flag exactly there and require the check to honour
+    // it in the phase that is ending (A6-41). The engine's own check-points are not told of. Process-wide.
+    static void SetBoundaryHookForTests(std::function<void()> hook);
 
 private:
     void NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
