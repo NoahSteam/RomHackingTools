@@ -8362,3 +8362,73 @@ The 300-seed run (`SE_MODEL_SEEDS=300`) found one failing seed, 171: `scrub 2; s
 
 - `App`'s two call sites have no test (above). A test through `App` would need a headless `App`; the next best thing is what is here.
 - After the timeout the loop still captures every frame (a decision, above). The sanitizer CI job lists its binaries by name (`run-decompiler-sanitizers.sh`, `check-sanitizer-logs.sh`, the harness self-test); the new test, `LiveRestoreSignalTests` and the model test are not on the list (the panel and runner tests are). All three were run under the sanitizers by hand (above); adding them to the job is a change to the workflow and its scripts, left to the coordinator.
+
+## Area 1, round 5: A1-8 was the model's bookkeeping, not the panel; the model and live tests join the sanitizer job
+
+Fixer, branch `review/1-a1-8-fix` on master `a9c38b0`. CI commit `103d0fc`; fix and pins `72dcc23`; this record, the ledger and a tightening of the harness self-test are the commit after. Ledger row A1-8 is `fixed 72dcc23`. No new rows. The panel, the runner, the decompiler engine, `Sh2Decompiler.cpp` and the generator are not touched, so the decompiler matrix (generator, corpora, fault suite beyond `ctest`'s run) was not run.
+
+### Reproduction first
+
+`SE_MODEL_OPEN=1` on the scratch build of `a9c38b0`: the pin fails as the ledger says (`SHOWN TEXT: the result on screen is not a from-scratch answer for the inputs now`). The failure message already carries the diagnosis: `shown under` and `now` are the same snapshot (frame 3), the model says not stale (view 0, other inputs 0), the panel says not stale, and the "expected" text is for key frame 2, the snapshot the model believes the panel holds (the `panel:` line: held key frame 2).
+
+### Diagnosis: which side was wrong
+
+Walk the script against the panel's source (frames are `scrub n` + 1):
+
+1. `scrub 2; select P`: the panel holds frame 3's snapshot and shows P for it.
+2. `hold; scrub 1`: the view moves to frame 2; the panel (visible) captures it and submits P for frame 2; the engine holds it.
+3. `hide; scrub 2`: the view is back on frame 3. A hidden panel does no capture (`Update`: `active = visible && ...`), so it still holds frame 2's snapshot. `mShown` is still P for frame 3 with `mShownSnapId` equal to the view's identity.
+4. `wait`: the engine delivers P for frame 2. `Accept` finds the key equal to the pending one and the snapshot's, but `HeldIsOnScreen()` is false (snapshot id frame 2, view frame 3), so it is discarded and the question is forgotten (`mAsked = Question()`, A1-4). `mShown` stays.
+
+The panel did what its header says: the result on screen is for the view now (not stale: `ShownOutdatedByView()` compares `mShownSnapId` with the view), it is the from-scratch answer for frame 3 (the model's own `Install` record of it was checked when it was installed, with the snapshot held being the view), and the answer for the held frame was rightly not installed over it. The invariant ("a shown result's key equals the key of the current inputs") holds. What does not hold is the model's idle check, which compared the shown result with `oracle.Candidates(SigOf(held))`, the answer for the snapshot the policy says the panel *holds*. While the panel is visible the held snapshot is the view (or a running emulator's lag, which is always `modelStale` and never reaches that line), so the two were the same and the choice was invisible. A hidden panel breaks the equality: it copies no memory, so it can hold another frame's snapshot than the view's, and the result on screen is the view's. `PolicyStep` returning early when hidden is correct (it mirrors the panel); the check read the wrong variable. The model was wrong, the panel right. The row's guess "it may be the model" was right. Without `hide` the panel captures frame 3 and the two agree; without `hold` nothing is in flight to be discarded; with `show` before `wait` the held snapshot is the view's again: the three observations of the ledger, and the same failure on master `a608d8c` follow.
+
+### Fix
+
+`DecompilerModelTests.cpp`, `CheckIdle`: the candidates for a result that is not stale are those of the inputs now (`oracle.Candidates(now)`), with the comment above. It is the line the invariant states (the answer for the inputs now), so it is also the stronger statement for every visible step: it no longer assumes the model's `held` equals the view.
+
+### Pins (kPinned; `kOpen` is empty again)
+
+- `A1-8`: the shrunk script from the ledger.
+- `A1-8 (shown again)`: the same with `show` after `wait`; the panel takes the view's frame, a cache hit, nothing wrong.
+- `A1-8 (view to the held frame)`: `...; hide; scrub 2; scrub 1; wait; show`. The view goes back to the *held* frame instead, so the answer for it is installed while hidden (the held snapshot is what is on screen, which the install rule allows) and replaces the other frame's result; the model's install check and idle check accept it. This is the other half of the hidden-install rule, so a later change that "fixes" the first pin by forbidding every hidden install fails it.
+
+### Mutation check (the source restored after each; the three pins run as scripts)
+
+| Break | A1-8 | A1-8 (shown again) | A1-8 (view to the held frame) |
+|---|---|---|---|
+| the fix reverted (`Candidates(now.valid ? SigOf(held) : now)`) | fails (`SHOWN TEXT`) | fails (`SHOWN TEXT`) | passes (not meant to catch it) |
+| panel: `HeldIsOnScreen` always true (a hidden panel installs the answer for a snapshot that is off screen) | fails (`ON SCREEN`: frame 2 result installed while the view is frame 3) | fails (same) | passes (the install is legitimate there) |
+| panel: `HeldIsOnScreen` false for every non-running view | hangs (30 s `HANG`, as every pin and sequence does) | same | same |
+
+The third pin is a control against over-correction and is not caught by any single-expression break I tried; a panel that refused every install while hidden would lose it only through the model's "installed while the snapshot held is what is on screen" bookkeeping, which this build of the panel does not expose a switch for. Said plainly: no mutation was found that only this third pin catches.
+
+### 300 seeds
+
+`SE_MODEL_SEEDS=300`: **300 seed(s), 0 failed** (round 4: 299 of 300, seed 171); 230 s on a quiet machine. 11,613 operations (1,958 without effect), 1,384 held steps, 875 races, 54 stops, 30 budget stalls, 6,492 results checked at install, 11,622 idle checks, 4,101 held-engine stale checks, 1,330 walks, 284 recaptures (114 on a current paused view), 7,690 submissions, 389 discarded, 1,368 cache hits. (The operation counts differ from round 4's by a few: the sequences are seeded, but the starve and budget operations depend on timing, and the count of operations without effect with them.) The default run: 18 seeds and 22 pinned sequences (19 and the three above), 0 failures, 872 operations.
+
+### CI: the round 4 tests under the sanitizers
+
+The round 4 record named this as left to the coordinator; done here.
+
+- `.github/workflows/saturn-explorer-decompiler.yml`, "Build decompiler tests (timed)": `SaturnExplorerDecompilerModelTests SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveDecompilerCaptureTests` added to the target list.
+- `.github/scripts/run-decompiler-sanitizers.sh`: three `run` lines, the model test and the capture test with scratch directories (`decompiler_model_test`, `live_decompiler_capture_test`, as ctest gives them), `LiveRestoreSignalTests` without an argument (it takes none). The two live tests are consecutive, after the model test, and the script runs binaries one at a time, so they never overlap on the socket and port 6845; a comment says so.
+- `.github/scripts/check-sanitizer-logs.sh`: the three on the `EXPECTED` list (A12-11), and a `pass_re` case: `SaturnExplorerLiveRestoreSignalTests` prints `LiveRestoreSignalTests passed`, not `all passed` (the other two end with `dts::Finish`).
+- `.github/scripts/test-sanitizer-harness.sh`: the three on `NAMES`, the Live restore stub prints its own pass line, and three new cases (`model-omitted`, `live-restore-omitted`, `live-capture-omitted`) that must fail the checker. The first version of those cases passed with the `EXPECTED` entry deleted (a stub left out makes the runner log exit 127, which fails anyway); the cases now also delete the log, so only the checker's list can fail them. Mutation: the `LiveRestoreSignalTests` entry deleted from `EXPECTED`, the self-test reports `live-restore-omitted ... checker=pass (want fail) WRONG`; restored, it passes. The self-test runs locally, no CI needed: `Sanitizer harness self-test passed.`
+- `REVIEW_PROGRAM.md`, the `sanitizers` row, names the new binaries.
+- Run locally through the edited runner and checker (`SE_SANITIZER_ONLY` narrowed to the five binaries; Debug, the workflow's flags, `detect_leaks=1`): panel 24 s, runner 514 s, model 93 s, LiveRestoreSignal 27 s, LiveDecompilerCapture 105 s, all exit 0, `Sanitizer check passed`; the only UBSan lines are the two accepted upstream SLEIGH shifts (model 1, panel 2).
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| Whole `ctest -j3 --timeout 900`, RelWithDebInfo, a scratch build of the branch | **98 of 98 pass**, 292 s. `DecompilerFaultTests` 275 s, `DecompilerRunnerTests` 43 s, `DecompilerModelTests` 27 s, `DecompilerPanelTests` 10 s, `LiveRestoreSignalTests` 3.5 s, `LiveDecompilerCaptureTests` 7.7 s. No timeout, no re-run. |
+| `DecompilerModelTests` default; `SE_MODEL_SEEDS=300` | 0 failures; 300 of 300 (above) |
+| `SE_MODEL_OPEN=1` | exit 0 (no open finding) |
+| Panel, runner, model and the two live tests under ASan + UBSan + LSan | pass, through the edited script (above) |
+| Decompiler matrix (generator, corpora, fault suite beyond `ctest`'s), game corpus, timing | not run: the decompiler engine, `Sh2Decompiler.cpp`, the generator and the panel are untouched |
+
+### Not done
+
+- The sanitizer job has not run on GitHub; the workflow edit is a list of targets and the scripts were run locally. Time added to the job: the model test about 90 s and the live tests about 2.5 minutes under the sanitizers here.
+- `CheckConverged` still reads `SigOf(held)`; it runs only after the final `Show`, where held equals the view, so the two cannot differ there.
+- `App`'s two call sites of the capture tracker remain untested (round 4).

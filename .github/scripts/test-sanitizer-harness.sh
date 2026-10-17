@@ -55,6 +55,9 @@ one() {
   [ "$omit" = 1 ] || stub "$build" SaturnExplorerDecompilerFaultTests "$frc" "$fout"
   bash "$here/run-decompiler-sanitizers.sh" "$build" "$logs" > "$tmp/$label/run.out" 2>&1
   local run_rc=$?
+  # A binary the runner never ran has no log at all (left out of its list), which is not what running a missing
+  # stub gives (exit 127 and a log): take the log away, so only the checker's own list can fail it.
+  [ -z "$leave" ] || rm -f "$logs/$leave.log" "$logs/$leave.rc"
   bash "$here/check-sanitizer-logs.sh" "$logs" > "$tmp/$label/check.out" 2>&1
   local check_rc=$?
   local got=pass
