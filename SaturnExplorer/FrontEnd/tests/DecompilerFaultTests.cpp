@@ -4529,36 +4529,6 @@ int VanishProbe(const std::string& scratch, bool damage)
     return 0;
 }
 
-// `--askloop <cfg>`: one process, requests on demand ("d" decompile, "l" listing, "q" quit) read from stdin; the shell changes the world between them.
-int AskLoop(const std::string& cfg)
-{
-    const auto snap = BuildSnapshot();
-    const Fix* fx = FindFix("mailbox");
-    const DecompileRequest rq = MakeRequest(*fx);
-    Sh2Decompiler e(cfg);
-    char line[64];
-    std::printf("ready\n");
-    std::fflush(stdout);
-    while (std::fgets(line, sizeof line, stdin))
-    {
-        if (line[0] == 'q') break;
-        if (line[0] == 'd')
-        {
-            const DecompileResult r = e.Decompile(snap, rq, nullptr);
-            std::printf("D status %d '%s' (%zu lines)\n", int(r.status), r.error.substr(0, 300).c_str(), r.lines.size());
-        }
-        else if (line[0] == 'l')
-        {
-            bool stopped = false;
-            const std::vector<std::string> l = e.Disassemble(snap, dts::kFixture1Caller, 3, &stopped);
-            std::printf("L %zu line(s) stopped=%d first '%s'\n", l.size(), int(stopped), l.empty() ? "" : l[0].substr(0, 300).c_str());
-        }
-        std::printf("done\n");
-        std::fflush(stdout);
-    }
-    std::_Exit(0);
-}
-
 }  // namespace
 
 int main(int argc, char** argv)
@@ -4603,7 +4573,6 @@ int main(int argc, char** argv)
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
 
-    if (arg(2) == "--askloop") return AskLoop(arg(3));
     if (arg(2) == "--vanish") return VanishProbe(dts::Join(scratch, "cell"), arg(3) == "damage");
     if (arg(2) == "--diskfull") return DiskFullProbe(dts::Join(scratch, "cell"), arg(3) == "sticky");
     // ---- the refusal for a cause that is gone (A6-40), a process of its own
