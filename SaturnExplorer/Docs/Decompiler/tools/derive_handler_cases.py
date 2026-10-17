@@ -36,6 +36,10 @@
 #                  DMA's execute flag, a slot's key-execute flag, the SMPC's pending command, VDP1's manual frame change
 #                  -- or clears pending interrupts bit by bit (SCIPD, MCIPD &= ~value). A register with V has an action no
 #                  line shows, and WriteEffects must say it (the width-table test checks that).
+#               L  a write that stores nothing of the register's high byte (the SCSP's SCIPD and SCILV0-2): a note for it must differ between the
+#                  two bytes (A5-77)
+#               A register with two of G, V, S, D, C does two things on a write, and WriteEffects must say two (A5-74: PTMR starts drawing now
+#               with bit 0 and at the frame change with bit 1).
 # Timing bookkeeping (MA_until, FRT/WDT updates, interrupt recalculation) is not an effect.
 import hashlib, os, re, sys
 
@@ -214,15 +218,20 @@ def classify_read(text):
 # The state a handler latches an action into, or clears pending bits of, from the value written. The names are the emulator's own; a
 # write that assigns a value-derived expression to one of them is value-triggered (A5-55). `X |= <value>` and `X = <value>` latch an
 # action (DMA_Execute, KeyExecute, FBManualPending, PendingCommand); `X &= ~<value>` clears pending interrupts (SCIPD, MCIPD).
-LATCHES = re.compile(r'(?:^|[>.])(?:DMA_Execute|KeyExecute|FBManualPending|PendingCommand)\s*(?:\|=|=)(?!=)')
-CLEARS = re.compile(r'(?:^|[>.])(?:SCIPD|MCIPD)\s*&=\s*~')
+LATCHES = re.compile(r'(?:^|[>.])(?:DMA_Execute|KeyExecute|FBManualPending|PendingCommand|PTMR)\s*(?:\|=|=)(?!=)')
+CLEARS = re.compile(r'(?:^|[>.])(?:(?:SCIPD|MCIPD)\s*&=\s*~|IPending\s*&=\s*\*DB\b)')
 
 # Actions a write takes from the value that the statements do not show once the conditions are stripped (A5-64): the SMPC's INTBACK
 # continue and break bits (`if((V ^ IR0WX) & IR0WA)`), the SCU mask write that raises the SH-2's interrupt line on the spot
 # (`if(CheckDoMasterInt()) SH7095_SetIRL(...)`), the SCSP's interrupt recalculations after an enable, level or pending write, the MIDI byte
 # sent from MOBUF, and a timer's reload value taken from the value (`t->Reload = V & 0xFF`).
-VALUE_ACTS = re.compile(r'\(V\s*\^\s*IR0WX\)|\bCheckDoMasterInt\s*\(|\bSS_SCSP_Recalc(?:Sound|Main)Int\s*\(|'
+VALUE_ACTS = re.compile(r'\(V\s*\^\s*IR0WX\)|\bCheckDoMasterInt\s*\(|\bSS_SCSP_Recalc(?:Sound|Main)Int\s*\(|\bRecalcIRQOut\s*\(|'
                         r'\bSS_SCSP_MIDI_WriteOutput\s*\(|\bt->Reload\s*=(?!=)')
+
+# L: a write that stores nothing of the register's high byte -- `((*DBV_p) << shift) & mask & CONST` with CONST below 0x100 (SCSP's SCIPD takes bit 5
+# only, the SCILV registers the low byte). The handler still runs its recalculation for a byte at the even address, which stores nothing (A5-77): a
+# note must not say it stored something there.
+LOW_BYTE_ONLY = re.compile(r'\(\(\*DBV_p\)\s*<<\s*shift\)\s*&\s*mask\s*&\s*(0x[0-9A-Fa-f]+)')
 
 def classify_write(text):
     flags = ''
@@ -238,6 +247,8 @@ def classify_write(text):
     # V: the value chooses the action (a latch assigned from the value, or pending bits cleared by it)
     if any((LATCHES.search(s) and re.search(r'\bV\b|\*SRV|\*DBV_p|\bvalue\b|\btmp\b', s)) or CLEARS.search(s) for s in stm) or \
        VALUE_ACTS.search(strip_comments(text)): flags += 'V'
+    m = LOW_BYTE_ONLY.search(strip_comments(text))
+    if m and int(m.group(1), 16) < 0x100: flags += 'L'
     return ('M' if stm else '') + flags
 
 def fmt_groups(groups, classify):

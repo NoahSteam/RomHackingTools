@@ -366,7 +366,9 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                        (write ? wrKey : rdKey) + " label 0x" + Hex(unsigned(label), 1) + (meaningful ? " does something" : " does not"));
             if (write && allowed)
             {
-                bool drawing = false, constant = false, ends = false, valueActs = false;
+                bool drawing = false, constant = false, ends = false, valueActs = false, lowOnly = false;
+                size_t actions = 0;   // how many of G, V, S, D, C the label has: each is something a write does
+
                 for (const std::string& key : { wrKey, wrKey2 })
                 {
                     const Handler* h = key.empty() ? nullptr : c.Get(key);
@@ -375,6 +377,9 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                     // V (A5-55): the value written chooses the action -- the SCSP's DMA start (DTLG's EX), its interrupt clears (SCIRE, MCIRE),
                     // the SMPC's command (COMREG), VDP1's manual frame change (FBCR's FCM). No line shows it, so a note must.
                     valueActs |= g && g->Has('V');
+                    lowOnly |= g && g->Has('L');
+                    for (char flag : { 'G', 'V', 'S', 'D', 'C' })
+                        if (g && g->Has(flag)) ++actions;
                     constant |= g && g->Has('F') && key == "smpc.wr";
                     // VDP1's ENDR (A5-32). The SCU is judged in CheckScu; the SCSP common block's F is bookkeeping (MPROG_Dirty, a timer
                     // reload under a condition) and is not an effect a note would help with: decided, not checked.
@@ -391,6 +396,22 @@ inline void CheckBlocks(const Cases& c, Stats& st, Problems& pr)
                     ++st.valueActionRegs;
                     if (WriteEffects(r.address, r.size, false, 0).empty())
                         pr.Add(std::string(r.name) + ": the handler acts on the value written (V: a latched action or cleared pending bits) and WriteEffects says nothing");
+                }
+                // A register that does two things on a write needs two texts: a text for one of them satisfies the check above for the other
+                // (A5-74: PTMR's bit 0 starts drawing now, its bit 1 at the frame change).
+                if (actions >= 2)
+                {
+                    ++st.valueActionRegs;
+                    if (WriteEffects(r.address, r.size, false, 0).size() < actions)
+                        pr.Add(std::string(r.name) + ": the handler does " + std::to_string(actions) + " things on a write (G, V, S, D, C) and WriteEffects says fewer");
+                }
+                // L (A5-77): the handler stores nothing of the high byte. A byte write there does not do what a byte write to the low byte does,
+                // and its notes must not be the same.
+                if (lowOnly && r.size == 2)
+                {
+                    ++st.valueActionRegs;
+                    if (WriteEffects(r.address, 1, false, 0) == WriteEffects(r.address + 1, 1, false, 0))
+                        pr.Add(std::string(r.name) + ": the handler stores nothing of the high byte (L) and WriteEffects says the same of both bytes");
                 }
                 if (drawing && WriteEffects(r.address, 2, false, 0).empty())
                     pr.Add(std::string(r.name) + ": the handler starts drawing on a write and WriteEffects says nothing");
