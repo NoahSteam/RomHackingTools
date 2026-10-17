@@ -10120,6 +10120,23 @@ void TestArea2Round8()
         if (o.verdict != "agrees") std::printf("  trapa: %s %s\n", o.verdict.c_str(), o.detail.c_str());
         CHECK(o.verdict == "agrees");
     }
+    // ---- (7) A2-56 (P1): a consume mask that the common-subexpression merge leaves behind ----
+    {
+        // addc r6,r4 ; movt r5 ; dmuls.l r0,r4 ; stc sr,r2 ; cmp/str r2,r6 ; bf over the next two ; stc sr,r5 ; sts macl,r4 ; rts ; mov r5,r0 (generator seed 965717).
+        // The low byte of SR is read twice, once through `& 1` (the T bit of the carry chain) and once whole (cmp/str compares bytes): the two SUBPIECEs
+        // are equal and RuleSelectCse merges them with Funcdata::totalReplace, which re-points the readers and does not merge the consume masks, so the
+        // survivor keeps the 0x01 of the reader that was there first. The next ActionVarnodeProps (the first action of the main loop, before ActionDeadCode
+        // recomputes the masks) replaces any varnode whose non-zero mask and consume mask do not meet by a zero: the byte is printed as 0, and the
+        // text compares `(bool)(char)param_3` where the code compares the whole byte `(uint1)(in_sr_low | carry) == (uint1)param_3`. The run returns 1 where
+        // the text returns 0x203 for SR = 0x202. The pin holds the wrong text, to be flipped by the fix (an OR of the merged consume masks in
+        // Funcdata::cseElimination makes the fixture agree).
+        auto snap = CallSnapshot({ "consume", 0x06009000u, { 0x346F, 0x0529, 0x340F, 0x0202, 0x262C, 0x8B01, 0x0502, 0x041A, 0x000B, 0x6053 } }, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+        Print("A2-56: cmp/str on the SR byte after addc", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "== (bool)(char)param_3"));   // the defect: A2-56 (the right text compares (uint1)(... | carry) == (uint1)param_3)
+        CHECK(!Has(r.Text(), "(uint1)param_3"));
+    }
     // ---- (3) A2-53 ----
     {
         // mov r15,r0 ; and #0xFF,r0 ; rts ; nop: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot

@@ -1930,9 +1930,11 @@ long TestTranslationHistory(EmuMachine& mach, const std::vector<Form>& forms, co
 // bytes, the address and the context, never of what it translated before (A2-5 was the ring, A2-48 the cached tree's next address). The reference
 // of every address of a pool is made by a machine of its own, built for the one translation (a new SaturnArchitecture resets the translator: its
 // caches and its context database are empty). Then random walks over the pool on one machine (a walk starts on a new machine and runs 'steps'
-// translations and listings, mostly of addresses near the last one: the branch, its slot, the instruction after the slot, the slot as an
-// instruction of its own), each result held to the reference. The pool: every kind of delayed branch with every kind of slot, the followers
-// of A2-48, and the PC-relative forms (whose context the slot's commits paint). Returns the number of results that differ.
+// translations, listings and lengths, mostly of addresses near the last one: the branch, the instruction after the slot), each result held to
+// the reference. The pool: every kind of delayed branch with every kind of slot, the followers of A2-48, and the PC-relative forms (whose context
+// the slot's commits paint). The slot as an instruction of its own is left out: translated after its branch, or before it with the slot's tree
+// still in the ring, a PC-relative slot gets the wrong PC, which is A2-4's accepted limit (a slot that other code also jumps to; the host flags it
+// unsupported). SE_DECODE_SLOTS_ALONE=1 puts the slots back in, and 87 of 24,000 results differ. Returns the number of results that differ.
 long TestTranslationOrder(const std::shared_ptr<const MemorySnapshot>& snap, const std::vector<Form>& forms,
                           const std::vector<Follower>& followersOnce, const std::vector<Follower>& followersTwice, uint64_t seed, long walks,
                           long steps)
@@ -1954,7 +1956,7 @@ long TestTranslationOrder(const std::shared_ptr<const MemorySnapshot>& snap, con
                 // spread over the form's cells: every k-th
                 const Cell& c = f.cells[(i * f.cells.size()) / take];
                 add(c.addr);
-                if (f.delayed && std::getenv("SE_DECODE_SLOTS_ALONE")) add(c.addr + 2);   // see below
+                if (f.delayed && std::getenv("SE_DECODE_SLOTS_ALONE")) add(c.addr + 2);   // see above
                 add(c.addr + 4);
             }
         }

@@ -1,6 +1,6 @@
 --- a/FrontEnd/third_party/ghidra-decompiler/cpp/action.cc
 +++ b/FrontEnd/third_party/ghidra-decompiler/cpp/action.cc
-@@ -20,8 +20,232 @@
+@@ -20,8 +20,246 @@
  #include "funcdata.hh"
  
  #include "coreaction.hh"
@@ -197,6 +197,20 @@
 +    }
 +  }
 +}
++static void dumpEach(Funcdata &data, const std::string &where) {
++  static int on3 = -1;
++  if (on3 < 0) on3 = std::getenv("SE_DUMP_EACH") ? 1 : 0;
++  if (!on3) return;
++  std::ostringstream os; data.printRaw(os);
++  std::fprintf(stderr, "=== after %s ===\n%s\n", where.c_str(), os.str().c_str());
++  if (std::getenv("SE_DUMP_CONSUME")) {
++    list<PcodeOp *>::const_iterator it;
++    for (it = data.beginOpAlive(); it != data.endOpAlive(); ++it) {
++      Varnode *o = (*it)->getOut();
++      if (o != (Varnode *)0) std::fprintf(stderr, "CONS %s(%s:%llx) size=%d consume=%llx nzm=%llx\n", get_opname((*it)->code()), o->getSpace()->getName().c_str(), (unsigned long long)o->getOffset(), o->getSize(), (unsigned long long)o->getConsume(), (unsigned long long)o->getNZMask());
++    }
++  }
++}
 +static void check(Funcdata &data, const std::string &where) {
 +  static long maxops = std::getenv("SE_NZM_MAXOPS") ? std::atol(std::getenv("SE_NZM_MAXOPS")) : 300;
 +  long nops = 0;
@@ -233,20 +247,22 @@
  
  /// Specify the name, group, and properties of the Action
  /// \param f is the collection of property flags
-@@ -332,6 +556,8 @@
+@@ -332,6 +570,9 @@
        }
        else if (lcount < count) { // Action has been applied
  	issueWarning(data.getArch());
 +	if (nzmchk::enabled()) nzmchk::check(data, std::string("action:") + getName());
 +	if (nzmchk::consumeEnabled()) nzmchk::checkConsume(data, std::string("action:") + getName());
++	nzmchk::dumpEach(data, std::string("action:") + getName());
  	count_apply += 1;
  	if (checkActionBreak()) {
  	  status = status_actionbreak;
-@@ -864,6 +1090,8 @@
+@@ -864,6 +1105,9 @@
        rl->count_apply += 1;
        count += res;
        rl->issueWarning(data.getArch()); // Check if we need to issue a warning
 +      if (nzmchk::enabled()) nzmchk::check(data, std::string("rule:") + rl->getName());
++      nzmchk::dumpEach(data, std::string("rule:") + rl->getName());
 +      if (nzmchk::consumeEnabled()) nzmchk::checkConsume(data, std::string("rule:") + rl->getName());
        if (rl->checkActionBreak())
          return -1;
