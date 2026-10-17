@@ -14,7 +14,9 @@
 //             flag), and from a second thread every millisecond across the run. The outcome must be
 //             the one the design gives for where the flag went up (see Expected; a flag from another thread is read against a
 //             counter that runs a check-point behind, ExpectedThread, and the cancel-enter cells reach that window
-//             deterministically: A6-35), a cancelled result
+//             deterministically: A6-35), and cancel-bound raises it exactly at the host's own check-points, in the hook the
+//             host calls just before each (and at the last allocation before it), so that the check there, which the
+//             engine's check-points cannot stand in for, is pinned by a cell of its own: A6-41), a cancelled result
 //             carries no lines, and the same Sh2Decompiler then produces exactly the uncancelled output.
 //   disasm    allocation k of a Disassemble fails: it never throws, a listing cut short says so (the `stopped` flag
 //             it sets needs no allocation; the marker line is a move into room made first), the engine is then
@@ -45,15 +47,16 @@
 //          the default subset (deterministic, under a minute); SE_FAULT_FULL=1 runs the whole matrix
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --cell <family> <fixture|kind> <k>
 //          one cell, with the failing allocation's stack trace; family is alloc, cancel-enter,
-//          cancel-alloc, cancel-us, cancel-oom, disasm, cold, cold-disasm (<fixture> is mailbox; <k> is allocation * 2, plus 1 for an empty config directory) or runner (then <kind> is stop, supersede, invalidate,
+//          cancel-alloc, cancel-bound (<k> 2j: the hook before the host's check-point j; 2j+1: the allocation before it), cancel-us, cancel-oom, disasm, cold, cold-disasm (<fixture> is mailbox; <k> is allocation * 2, plus 1 for an empty config directory) or runner (then <kind> is stop, supersede, invalidate,
 //          destroy, budget, disable or memo and <k> a phase-entry ordinal, or "all")
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --sites <fixture> <phase> <ord> <size> [site]
 //          the allocations of that size in that phase entry, each with its rank and the functions on its stack:
 //          how a pin's coordinates and site are written (SE_FAULT_DEPTH=<n> frames, 5). With a site, only the
 //          allocations made there, each with its ordinal among them (the '#n' of the site)
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --refused-retry
-//          one cell of its own (A6-40, not in the default subset or the full run: it fails until the row is closed): a request
-//          refused for a cause that is gone one request later must clear or say that a restart is needed
+//          the refused-retry cell by hand (A6-40; it is a job of the default subset and of the full run as "refused-retry"):
+//          a request refused because the configuration directory cannot be made is answered again, and correctly, once the
+//          cause is gone
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --diffruns <fixture> [runs]
 //          runs of the warmed engine after the baseline, each compared with it, allocation by allocation (the
 //          first must match; the markup's pair ids make a later one differ when they pass a varint boundary)
@@ -150,6 +153,12 @@ struct Log
     DecompilePhase phase[kMax];
     long allocAt[kMax];
     bool inRef[kMax];
+    // The host's own check-points (Sh2Decompiler::SetBoundaryHookForTests), in the order they are made: the number of phase
+    // entries before each, and the allocation count at it (A6-41).
+    static const int kMaxBound = 32;
+    int nb = 0;
+    int boundEnters[kMaxBound];
+    long boundAlloc[kMaxBound];
 };
 
 struct Probe
@@ -163,6 +172,10 @@ struct Probe
     std::atomic<int> cancelAtEnter{ -2 };           // raise the cancel flag at the start of this phase entry
     std::atomic<std::atomic<bool>*> cancelFlag{ nullptr };
     std::atomic<int> setOrdinal{ -2 };              // the phase entry the flag went up in (-1: before the first)
+    std::atomic<int> bounds{ 0 };                   // host check-points reached
+    int boundEnters[Log::kMaxBound];
+    long boundAlloc[Log::kMaxBound];
+    std::atomic<int> cancelAtBoundary{ -2 };        // raise the cancel flag at the start of this host check-point, before the check
 
     void Reset()
     {
@@ -170,6 +183,8 @@ struct Probe
         inRefNow = false;
         engineEntered = false;
         cancelAtEnter = -2;
+        cancelAtBoundary = -2;
+        bounds = 0;
         cancelFlag = nullptr;
         setOrdinal = -2;
     }
@@ -182,6 +197,12 @@ struct Probe
             l.phase[i] = phase[i];
             l.allocAt[i] = allocAt[i];
             l.inRef[i] = inRef[i];
+        }
+        l.nb = std::min(bounds.load(), int(Log::kMaxBound));
+        for (int i = 0; i < l.nb; ++i)
+        {
+            l.boundEnters[i] = boundEnters[i];
+            l.boundAlloc[i] = boundAlloc[i];
         }
         return l;
     }
@@ -815,6 +836,21 @@ void InstallHooks()
         }
     });
     Sh2Decompiler::SetBeforeReferenceHookForTests([] { gProbe.inRefNow = true; });
+    // Called by the host immediately before each of its own cancel check-points (A6-41): the flag goes up here, in the phase
+    // that is ending, and only the check that follows can honour it in that phase.
+    Sh2Decompiler::SetBoundaryHookForTests([] {
+        const int b = gProbe.bounds.fetch_add(1);
+        if (b < Log::kMaxBound)
+        {
+            gProbe.boundEnters[b] = gProbe.enters.load();
+            gProbe.boundAlloc[b] = fa::gCount.load();
+        }
+        if (b == gProbe.cancelAtBoundary.load())
+        {
+            gProbe.setOrdinal = gProbe.enters.load() - 1;
+            if (std::atomic<bool>* f = gProbe.cancelFlag.load()) f->store(true);
+        }
+    });
 }
 
 // ---- process plumbing ----------------------------------------------------------------------
@@ -1089,6 +1125,7 @@ bool MeasureBaseline(Ctx& c, const std::string& scratch)
         const std::string sig = Signature(w);
         std::printf("BASE %d %ld %.3f %d\n", int(w.status), n, ms, log.n);
         for (int i = 0; i < log.n; ++i) std::printf("BASELOG %d %ld %d\n", int(log.phase[i]), log.allocAt[i], log.inRef[i] ? 1 : 0);
+        for (int i = 0; i < log.nb; ++i) std::printf("BASEBOUND %d %ld\n", log.boundEnters[i], log.boundAlloc[i]);
         std::fflush(stdout);
         FILE* f = std::fopen(sizesFile.c_str(), "wb");
         if (!f) return 3;
@@ -1119,6 +1156,15 @@ bool MeasureBaseline(Ctx& c, const std::string& scratch)
             log.allocAt[log.n] = at;
             log.inRef[log.n] = ref != 0;
             ++log.n;
+        }
+        else if (l.compare(0, 10, "BASEBOUND ") == 0 && log.nb < Log::kMaxBound)
+        {
+            int at = 0;
+            long al = 0;
+            std::sscanf(l.c_str() + 10, "%d %ld", &at, &al);
+            log.boundEnters[log.nb] = at;
+            log.boundAlloc[log.nb] = al;
+            ++log.nb;
         }
     }
     const std::string sizes = ReadFile(sizesFile), sig = ReadFile(sigFile);
@@ -1611,7 +1657,7 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
 // Family 2: the cancel flag goes up
 // ================================================================================================
 
-enum class CancelHow { AtEnter, AtAlloc, AtUs };
+enum class CancelHow { AtEnter, AtAlloc, AtUs, AtBoundary };
 
 int RunCancelCell(Ctx& c, CancelHow how, long param)
 {
@@ -1630,6 +1676,9 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
         if (param < 0) flag = true;   // before the run
         gProbe.cancelAtEnter = int(param);
     }
+    // AtBoundary: the flag goes up inside the hook the host calls immediately before its own check-point number 'param'
+    // (A6-41), after the engine's last check of the phase that ends there and before the host's.
+    if (how == CancelHow::AtBoundary) gProbe.cancelAtBoundary = int(param);
     fa::Arm(-1, how == CancelHow::AtAlloc ? param : -1);
     if (how == CancelHow::AtUs)
     {
@@ -1659,13 +1708,14 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
     if (timer.joinable()) timer.join();
     gProbe.cancelFlag = nullptr;
     gProbe.cancelAtEnter = -2;
+    gProbe.cancelAtBoundary = -2;
     const Log log = gProbe.Snapshot();
     const bool raised = flag.load();
 
     int a = -2, b = -2;
     if (how == CancelHow::AtEnter)
         a = b = int(param);
-    else if (how == CancelHow::AtAlloc)
+    else if (how == CancelHow::AtAlloc || how == CancelHow::AtBoundary)
         a = b = gProbe.setOrdinal.load();
     else
     {
@@ -1694,6 +1744,10 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
                                                  "#" + std::to_string(a) + (b != a ? "..#" + std::to_string(b) : std::string());
     }
     const unsigned got = Observed(r);
+    // The baseline has this check-point, so the run must reach it and raise there: a hook that is no longer called would
+    // otherwise read as "never raised" and pass.
+    if (how == CancelHow::AtBoundary && param < c.base.log.nb)
+        Expect(raised, "the host's check-point the baseline made is reached", "check-point #" + std::to_string(param) + " of " + std::to_string(c.base.log.nb));
     // Where the flag went up, as a class name: the phase (the reference run's apart; the first pass's
     // Actions apart from the printing pass's, which have different check-points).
     std::string label = !raised || a == -2 ? "never" : a < 0 ? "before-run" : "";
@@ -1744,7 +1798,7 @@ int RunCancelCell(Ctx& c, CancelHow how, long param)
     const DecompileResult after2 = RunOnce(c, &down);
     Expect(after2.status == DecompileStatus::Ok && Signature(after2) == c.base.sig, "a lowered flag does not cancel");
 
-    const char* hows[] = { "enter", "alloc", "us" };
+    const char* hows[] = { "enter", "alloc", "us", "bound" };
     std::printf("CELL cancel-%s %s p=%ld raised=%s got=%s allowed=%s class=%s>%s lat=%ld window=%s\n", hows[int(how)], c.fix->name, param,
                 flagged.c_str(), MaskText(got).c_str(), MaskText(allowed).c_str(), label.c_str(), MaskTag(got).c_str(), latency, window);
     (void)log;
@@ -2290,8 +2344,8 @@ int RunColdCell(ColdCtx& c, long cell)
     }
 
     // A failure while the spec bundle was staged leaves nothing behind (A6-33): the config directory, listed before the second
-    // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. With sustained exhaustion the
-    // removal is itself an allocation and cannot be promised: the next request of the process clears it.
+    // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. Under sustained exhaustion too
+    // (A6-37): the guard's removal needs no allocation (the staged paths are made before the directory is).
     std::string stray;
     if (mode == 1 && fired)
     {
@@ -2299,7 +2353,7 @@ int RunColdCell(ColdCtx& c, long cell)
         sfe::ListDirectory(dts::Join(cfg, "decompiler"), names);
         for (const std::string& n : names)
             if (n.find(".tmp-") != std::string::npos) stray += (stray.empty() ? "" : ", ") + n;
-        if (!fa::gSticky.load()) Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
+        Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
     }
 
     // The second request, and the other kind of request after it.
@@ -2780,6 +2834,16 @@ std::vector<PinRes> ResolvePins(Ctx& c, const std::string& scratch, const Pin* p
         std::_Exit(0);
     };
     CellRun run = ForkCell(scratch, body, CellTimeout());
+    // The census buffers were for the child (this process never ran the census); freed here because the pin self-test resolves twice
+    // in one process, and a sanitizer build counts the first set as a leak.
+    std::free(fa::gCensusStack);
+    std::free(fa::gCensusK);
+    std::free(fa::gCensusSize);
+    fa::gCensusStack = nullptr;
+    fa::gCensusK = nullptr;
+    fa::gCensusSize = nullptr;
+    fa::gCensusWant = nullptr;
+    fa::gCensusWantN = 0;
     std::vector<std::string> top(out.size());
     std::vector<std::vector<long>> matches(out.size());
     std::vector<long> rank0(out.size(), -1);
@@ -3071,13 +3135,32 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     static const char* const kCreate = "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces";
     static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
                              noSite = "TraceDAG::initialize#0", noHash = kCreate;
-    static const Pin pins[] = {
-        { "dag", "actions", 0, 16, 107, good.c_str(), "right coordinates, right ordinal" },
-        { "dag", "actions", 0, 16, 107, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
-        { "dag", "actions", 0, 16, 107, noOrd.c_str(), "an ordinal the site does not have" },
-        { "dag", "actions", 0, 16, 108, good.c_str(), "coordinates one allocation off, right ordinal" },
-        { "dag", "actions", 0, 16, 107, noSite.c_str(), "a site no allocation of the entry is made at" },
-        { "dag", "actions", 0, 16, 107, noHash.c_str(), "no ordinal at all" },
+    // The good pin's coordinates are found at run time, by the census every real pin goes through: ordinal #0 of the site is some
+    // allocation of the entry, and its place among the entry's 16-byte allocations is the nth that leads to it. Nothing here
+    // names an allocation count, so an engine patch that moves the count (patch 0044 moved it from 108 to 107) cannot make this
+    // test stale: it never needed to be re-pinned by hand, only the real pins do (A6-42). The probe's own coordinates are any
+    // 16-byte allocation of the entry (the first); whatever it leads to, the verdict names the allocation of the site's #0.
+    const Pin probe[] = { { "dag", "actions", 0, 16, 0, good.c_str(), "probe" } };
+    const std::vector<PinRes> found = ResolvePins(c, scratch, probe, 1);
+    if (found.size() != 1 || found[0].stale || found[0].ks.size() != 1)
+    {
+        std::printf("FAIL pin-selftest: the site [%s] has no #0 in dag's first Actions entry (%s): the fixture or the engine changed so that the "
+                    "test's allocation is gone\n",
+                    good.c_str(), found.empty() ? "no result" : found[0].note.c_str());
+        return 1;
+    }
+    const int nth = int(NthOfSize(c, found[0].lo, found[0].ks[0], 16));
+    // A neighbour for the pin one allocation off: the next 16-byte allocation of the entry, or the one before when there is none.
+    const Pin next = { "dag", "actions", 0, 16, nth + 1, good.c_str(), "" };
+    const int off = ResolvePin(c, next) >= 0 || nth == 0 ? nth + 1 : nth - 1;
+    std::printf("pin-selftest: the site's #0 is the %dth 16-byte allocation of the entry (allocation %ld); the one-off pin is %d\n", nth, found[0].ks[0], off);
+    const Pin pins[] = {
+        { "dag", "actions", 0, 16, nth, good.c_str(), "right coordinates, right ordinal" },
+        { "dag", "actions", 0, 16, nth, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
+        { "dag", "actions", 0, 16, nth, noOrd.c_str(), "an ordinal the site does not have" },
+        { "dag", "actions", 0, 16, off, good.c_str(), "coordinates one allocation off, right ordinal" },
+        { "dag", "actions", 0, 16, nth, noSite.c_str(), "a site no allocation of the entry is made at" },
+        { "dag", "actions", 0, 16, nth, noHash.c_str(), "no ordinal at all" },
     };
     const std::vector<PinRes> res = ResolvePins(c, scratch, pins, sizeof pins / sizeof pins[0]);
     int bad = 0;
@@ -3097,8 +3180,8 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     check(1, starts(1, "MOVED") && PinFails(res[1]) && res[1].ks.size() == 1 && res[1].ks[0] != res[1].k0 && res[1].note.find("Re-pin") != std::string::npos,
           "a wrong ordinal is MOVED, fails the run, tests the ordinal's allocation, and says how to re-pin");
     check(2, starts(2, "STALE") && PinFails(res[2]) && res[2].ks.empty(), "an ordinal the site does not have is STALE");
-    // The re-pin the note offers is the good pin's nth: pins[0]'s, whatever the engine's allocation count is this round.
-    const std::string repin = "nth = " + std::to_string(pins[0].nth);
+    // The re-pin the note offers is the good pin's nth, whatever the engine's allocation count is this round.
+    const std::string repin = "nth = " + std::to_string(nth);
     check(3, starts(3, "MOVED") && PinFails(res[3]) && res[3].ks.size() == 1 && res[3].note.find(repin) != std::string::npos,
           "coordinates one off are MOVED, fail the run, and the note gives the nth that re-pins them");
     check(4, starts(4, "STALE") && PinFails(res[4]), "a site nothing in the entry is made at is STALE");
@@ -3209,6 +3292,50 @@ std::vector<long> EnterCells(const Ctx& c, bool)
     return v;
 }
 
+// The host's own check-points (A6-41): one cell with the flag raised in the hook before each, one with it raised at the last
+// allocation made before each, and one past the last (never raised). Every one must be honoured by the check, in the phase that
+// ends there, which only that check can do: the engine has no check-point between its last one and ours.
+std::vector<long> BoundCells(const Ctx& c)
+{
+    std::vector<long> v;
+    for (int j = 0; j < c.base.log.nb; ++j)
+    {
+        v.push_back(2L * j);
+        if (c.base.log.boundAlloc[j] > 0) v.push_back(2L * j + 1);
+    }
+    v.push_back(2L * c.base.log.nb);   // past the last check-point: never raised
+    return v;
+}
+
+// The check-points the phase log says there must be: one at the end of every Flow that goes on to Actions, of every Actions
+// that goes on to Print, and of every Teardown that follows an Actions and goes on to an Init (the first pass's end, whose
+// Architecture is gone by then). Their number and place in the run are the baseline's; a check-point the host no longer makes
+// has no cell and no hook call, which would pass for want of a raise.
+int BoundaryCheck(const Ctx& c)
+{
+    const Log& L = c.base.log;
+    std::vector<int> want;
+    for (int s = 0; s < L.n; ++s)
+    {
+        const bool next = s + 1 < L.n;
+        const DecompilePhase p = L.phase[s];
+        if (p == DecompilePhase::Flow && next && L.phase[s + 1] == DecompilePhase::Actions) want.push_back(s + 1);
+        else if (p == DecompilePhase::Actions && next && L.phase[s + 1] == DecompilePhase::Print) want.push_back(s + 1);
+        else if (p == DecompilePhase::Teardown && s > 0 && L.phase[s - 1] == DecompilePhase::Actions && next && L.phase[s + 1] == DecompilePhase::Init)
+            want.push_back(s + 1);
+    }
+    std::string wantText, gotText;
+    for (int e : want) wantText += std::to_string(e) + " ";
+    for (int j = 0; j < L.nb; ++j) gotText += std::to_string(L.boundEnters[j]) + "@" + std::to_string(L.boundAlloc[j]) + " ";
+    bool same = int(want.size()) == L.nb;
+    for (int j = 0; same && j < L.nb; ++j) same = want[size_t(j)] == L.boundEnters[j];
+    std::printf("BOUNDARIES %s: %d host check-points (phase entries before each @ allocations): %s\n", c.fix->name, L.nb, gotText.c_str());
+    if (!same)
+        std::printf("FAIL boundaries %s: the host made check-points after phase entries [%s], the phase log says [%s]: a check-point is gone or new\n",
+                    c.fix->name, gotText.c_str(), wantText.c_str());
+    return same && L.nb > 0 ? 0 : 1;
+}
+
 std::vector<long> CancelAllocCells(const Ctx& c, bool full)
 {
     std::set<long> s;
@@ -3283,6 +3410,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
         cells = DisasmCells(disasm, full);
     }
     else if (family == "cancel-enter") cells = EnterCells(c, full);
+    else if (family == "cancel-bound") cells = BoundCells(c);
     else if (family == "cancel-alloc") cells = CancelAllocCells(c, full);
     else if (family == "cancel-us") cells = UsCells(c, full);
     else if (family == "cancel-oom") cells = CancelOomCells(c, full);
@@ -3345,6 +3473,9 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
             if (family == "disasm") return RunDisasmCell(c, disasm, p);
             if (family == "cancel-oom") return RunAllocCell(c, p / 8 + kFailAfterCancel[p % 8], p / 8);
             if (family == "cancel-enter") return RunCancelCell(c, CancelHow::AtEnter, p);
+            // Even p: the flag goes up in the hook before host check-point p/2; odd p: at the last allocation made before it.
+            if (family == "cancel-bound")
+                return p % 2 == 0 ? RunCancelCell(c, CancelHow::AtBoundary, p / 2) : RunCancelCell(c, CancelHow::AtAlloc, c.base.log.boundAlloc[p / 2] - 1);
             if (family == "cancel-alloc") return RunCancelCell(c, CancelHow::AtAlloc, p);
             return RunCancelCell(c, CancelHow::AtUs, p);
         };
@@ -3365,7 +3496,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
             if (run.out.find(" window=need") != std::string::npos) ++sum.classes["window:need"];
-            if (run.out.find(" staging=left") != std::string::npos) ++sum.classes["staging-left"];   // only counted under sustained exhaustion, where the removal cannot allocate
+            if (run.out.find(" staging=left") != std::string::npos) ++sum.classes["staging-left"];   // 0 since A6-37; the cell itself fails when it is not
             if (isCold)
                 for (const char* st : kLibrarySteps)
                     if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
@@ -3406,6 +3537,15 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
         else if (shownFailures < 400)
         {
             std::printf("FAIL %s %s %ld: %s\n", familyArg.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
+        }
+    }
+    if (family == "cancel-bound" && only == -999999 && shard == 0)
+    {
+        const int bad = BoundaryCheck(c);
+        if (bad)
+        {
+            sum.failed += bad;
+            sum.classes["FAIL:boundaries"] += bad;
         }
     }
     if (family == "cancel-enter" && only == -999999 && !sticky)
@@ -4093,7 +4233,8 @@ int RunJobs(std::vector<Job>& jobs, size_t parallel, double timeoutSec, bool ver
         {
             const bool summary = l.compare(0, 8, "SUMMARY ") == 0 || l.compare(0, 6, "CLASS ") == 0 || l.compare(0, 10, "SIGNATURE ") == 0 ||
                                  l.compare(0, 8, "fixture ") == 0 || l.compare(0, 7, "RUNNER ") == 0 ||
-                                 l.compare(0, 8, "LATENCY ") == 0 || l.compare(0, 4, "PIN ") == 0;
+                                 l.compare(0, 8, "LATENCY ") == 0 || l.compare(0, 4, "PIN ") == 0 ||
+                                 l.compare(0, 11, "BOUNDARIES ") == 0 || l.compare(0, 7, "RESULT ") == 0;
             if (summary || ((verbose || !ok) && shown < 60))
             {
                 std::printf("   %s\n", l.c_str());
@@ -4149,39 +4290,76 @@ int RunJobs(std::vector<Job>& jobs, size_t parallel, double timeoutSec, bool ver
 }
 
 
-// A6-40: a refusal for a cause that is gone one request later. The first request of this process meets a configuration
-// directory it cannot create (a regular file stands where the directory should be); the cause is removed; the next request
-// must then either work (the refusal was not for good) or have been told, as every refusal for good is, that a restart is what
-// clears it. Not in the default subset nor in the full run: it fails until the row is closed. One cell, a process of its own
-// (the library's start-up is once per process): `<scratch> --refused-retry`; exit 0 when the contract holds.
+// A6-40: a refusal for a cause that is gone one request later. Failing to prepare the language files (a configuration directory that
+// cannot be made, a file where a directory goes, a lock that cannot be taken, a rename that is blocked) writes nothing of the
+// engine's, and its cause can be gone one request later (a full disk, a permission the user fixes): such a request is refused, and
+// the next one starts again. Only a failure inside the library's own start-up is for the process, and it says that a restart is what
+// clears it (the cold family). One process (the library's start-up is once per process): `<scratch> --refused-retry`, or the job
+// "refused-retry" of the parent. The causes, in order, in one engine:
+//   1. a regular file where the configuration directory goes          -> Unavailable, "cannot create ...cfg/decompiler"
+//   2. the same again, and a Disassemble                              -> refused again with the same text (nothing is cached)
+//   3. the file replaced by a directory that holds a file where
+//      "decompiler" goes                                              -> Unavailable, the other path in the text
+//   4. that file removed                                              -> Ok, with the text of a request that was never refused
+//   5. a second request, and a Disassemble                            -> Ok (the library was started once, not again)
 int RefusedRetryCell(const std::string& scratch)
 {
     dts::Failures() = 0;
     sfe::MakeDirectory(scratch);
     const std::string cfg = dts::Join(scratch, "cfg");
-    if (FILE* f = std::fopen(cfg.c_str(), "wb"))
-    {
-        std::fputs("x", f);
-        std::fclose(f);
-    }
+    auto put = [](const std::string& path) {
+        if (FILE* f = std::fopen(path.c_str(), "wb"))
+        {
+            std::fputs("x", f);
+            std::fclose(f);
+        }
+    };
+    put(cfg);
     const auto snap = BuildSnapshot();
     const Fix* fx = FindFix("mailbox");
     Sh2Decompiler engine(cfg);
-    const DecompileResult first = engine.Decompile(snap, MakeRequest(*fx), nullptr);
-    std::printf("first : status %d '%s'\n", int(first.status), first.error.c_str());
-    Expect(first.status == DecompileStatus::Unavailable, "the first request is refused: its configuration directory cannot be made");
+    const DecompileRequest rq = MakeRequest(*fx);
+    auto ask = [&](const char* what) {
+        const DecompileResult r = engine.Decompile(snap, rq, nullptr);
+        std::printf("%-8s: status %d '%s'\n", what, int(r.status), r.error.c_str());
+        return r;
+    };
+    auto list = [&](const char* what) {
+        bool stopped = false;
+        const std::vector<std::string> lines = engine.Disassemble(snap, dts::kFixture1Caller, 3, &stopped);
+        std::printf("%-8s: %zu line(s), first '%s'\n", what, lines.size(), lines.empty() ? "" : lines[0].c_str());
+        return lines;
+    };
+    const DecompileResult first = ask("1 file");
+    Expect(first.status == DecompileStatus::Unavailable && Has(first.error, "cannot create"),
+           "the first request is refused, with the path: its configuration directory cannot be made", first.error);
+    const DecompileResult again = ask("2 again");
+    Expect(again.status == DecompileStatus::Unavailable && again.error == first.error,
+           "the same cause is refused again, with the same text: nothing wedged and nothing cached", again.error);
+    const std::vector<std::string> broken = list("2 disasm");
+    Expect(broken.size() == 1 && broken[0].compare(0, 24, "<Decompiler unavailable:") == 0, "a listing in the same state is refused with the reason");
+
     sfe::RemoveFile(cfg);
-    sfe::MakeDirectory(cfg);   // the cause is gone
-    const DecompileResult second = engine.Decompile(snap, MakeRequest(*fx), nullptr);
-    std::printf("second: status %d '%s'\n", int(second.status), second.error.c_str());
-    const bool works = second.status == DecompileStatus::Ok;
-    const bool toldRestart = Has(first.error, "restart Saturn Explorer") && Has(second.error, "restart Saturn Explorer");
-    Expect(works || toldRestart,
-           "a refusal whose cause is gone either clears on the next request or says that a restart is needed (A6-40)",
-           "second request: status " + std::to_string(int(second.status)) + " '" + second.error + "'");
+    sfe::MakeDirectory(cfg);
+    put(dts::Join(cfg, "decompiler"));   // another cause: a file where the decompiler's directory goes
+    const DecompileResult third = ask("3 file2");
+    Expect(third.status == DecompileStatus::Unavailable && third.error != first.error,
+           "a different cause is a different refusal, not the first one's text", third.error);
+
+    sfe::RemoveFile(dts::Join(cfg, "decompiler"));   // the cause is gone
+    const DecompileResult fourth = ask("4 fixed");
+    Expect(fourth.status == DecompileStatus::Ok && !fourth.Text().empty(),
+           "a refusal whose cause is gone is not for the process: the next request decompiles (A6-40)",
+           "status " + std::to_string(int(fourth.status)) + " '" + fourth.error + "'");
+    const DecompileResult fifth = ask("5 again");
+    Expect(fifth.status == DecompileStatus::Ok && Signature(fifth) == Signature(fourth), "and the one after it, the same", fifth.error);
+    const std::vector<std::string> good = list("5 disasm");
+    Expect(good.size() == 3 && !Has(good[0], "unavailable"), "and a listing is made");
     std::printf("RESULT refused-retry: %s\n", dts::Failures() ? "FAIL" : "ok");
     std::fflush(nullptr);
-    std::_Exit(dts::Failures() ? kExitInvariant : 0);
+    const int leak = dts::Failures() ? 0 : LeakCheck();
+    std::fflush(nullptr);
+    std::_Exit(dts::Failures() ? kExitInvariant : leak);
 }
 
 }  // namespace
@@ -4206,6 +4384,8 @@ int main(int argc, char** argv)
     // --driver <family> <fixture> <scratch> <full 0|1> <shard> <shards>
     if (arg(1) == "--driver" && argc >= 8)
         return Driver(arg(2), arg(3), arg(4), arg(5) == "1", std::atoi(argv[6]), std::atoi(argv[7]), -999999);
+    // ... or the refused-retry cell (A6-40) in a process of its own: --refused-retry <scratch>
+    if (arg(1) == "--refused-retry" && argc >= 3) return RefusedRetryCell(arg(2));
     // ... or one worker allocation-failure cell: --runner-oom <fixture> <scratch> <entry> <j>
     if (arg(1) == "--runner-oom" && argc >= 6) return RunnerOomChild(arg(3), arg(2), std::atol(argv[4]), std::atol(argv[5]));
     // ... or the runner scenarios of one kind: --runner <kind> <scratch> <entry|all> <full 0|1>
@@ -4290,6 +4470,10 @@ int main(int argc, char** argv)
     // cancel-enter is a handful of cells per fixture, so the fixtures added for coverage (A6-36) join it in the default subset.
     for (const Fix& f : kFixtures)
         if (cancelFixture(f) || addedForCoverage(f)) addDriver("cancel-enter", f.name, 1);
+    // The host's own check-points, a flag raised exactly before each and at the last allocation before it (A6-41): a handful of
+    // cells per fixture, on the same fixtures.
+    for (const Fix& f : kFixtures)
+        if (cancelFixture(f) || addedForCoverage(f)) addDriver("cancel-bound", f.name, 1);
     for (const Fix& f : kFixtures)
     {
         if (!full && std::string(f.name) == "diamonds") continue;
@@ -4300,6 +4484,14 @@ int main(int argc, char** argv)
     for (const Fix& f : kFixtures)
         if (full || (std::string(f.name) != "diamonds" && !addedForCoverage(f))) addDriver("cancel-oom", f.name, full ? shards : 1);
     addDriver("disasm", "fixture1", full ? shards : 1);
+    // A request refused for a cause that is gone one request later is answered again (A6-40): a process of its own.
+    {
+        Job j;
+        j.label = "refused-retry";
+        j.log = dts::Join(logs, "refused-retry.log");
+        j.args = { "--refused-retry", dts::Join(scratch, "rr" + std::to_string(jobs.size())) };
+        jobs.push_back(j);
+    }
     // The pins' own verdicts, on pins written wrong (A6-34): a MOVED pin fails the run, an ordinal the site lacks is STALE.
     addDriver("pin-selftest", "dag", 1);
     // The first request of a process (A6-30): fresh processes, so no warm-up and no sharing with the families above.

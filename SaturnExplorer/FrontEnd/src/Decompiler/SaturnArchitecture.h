@@ -40,12 +40,14 @@ public:
     CaptureLoadImage& DataImage() { return *static_cast<CaptureLoadImage*>(loader); }
 
     // Materialise the embedded spec bundle under 'configDir' (SpecBundle, PLAN.md A5) and point
-    // the engine's process-global spec search path at it. Once per process: later calls return
-    // the first outcome -- except that a failure of the materialisation alone (an allocation, say)
-    // is not an outcome and is retried, while one that interrupts the library's own start-up, which
-    // is not transactional, is permanent and says so. Engine thread only. False, with 'error'
-    // naming the path or the restart that is needed, when the decompiler is unavailable. May throw
-    // (std::bad_alloc) before anything global was written; the next call then starts again.
+    // the engine's process-global spec search path at it. The library's start-up is once per process,
+    // but the materialisation before it is not an outcome: any failure of it (an allocation, a
+    // directory or file that cannot be made, a lock, a rename) is a failure of that request alone, the
+    // next call tries again, and so a cause that is gone is gone (A6-30, A6-40). One that interrupts
+    // the library's own start-up, which is not transactional, is permanent for the process and says
+    // so, restart included. Engine thread only. False, with 'error' naming the path or the restart
+    // that is needed, when the decompiler is unavailable. May throw (std::bad_alloc) before anything
+    // global was written; the next call then starts again.
     static bool StartLibrary(const std::string& configDir, std::string& error);
 
     // Tests only: called just before the translator is built (or reset, when reused), so a test

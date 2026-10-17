@@ -1784,6 +1784,7 @@ namespace
 std::set<uint32_t> gNoReturnForTests;
 std::function<void(DecompilePhase)> gPhaseHookForTests;
 std::function<void()> gBeforeReferenceHookForTests;
+std::function<void()> gBoundaryHookForTests;
 }  // namespace
 
 void Sh2Decompiler::Enter(DecompilePhase phase)
@@ -1829,6 +1830,11 @@ void Sh2Decompiler::SetNoReturnForTests(const std::set<uint32_t>& entries)
 void Sh2Decompiler::SetPhaseHookForTests(std::function<void(DecompilePhase)> hook)
 {
     gPhaseHookForTests = std::move(hook);
+}
+
+void Sh2Decompiler::SetBoundaryHookForTests(std::function<void()> hook)
+{
+    gBoundaryHookForTests = std::move(hook);
 }
 
 void Sh2Decompiler::SetBeforeReferenceHookForTests(std::function<void()> hook)
@@ -3416,6 +3422,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // well before the phase ends (block generation after flow, the tail of the action tree),
         // and our own raw-p-code scan has none. A cancel requested anywhere in a phase is then
         // honoured in that phase, never carried into the next one's work.
+        if (gBoundaryHookForTests) gBoundaryHookForTests();
         checkCancel();
         Enter(DecompilePhase::Actions);
         // Every memory access as the code makes it: as many, as wide. These cleanup rules rewrite
@@ -3496,6 +3503,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // one run in three. Made after them, only the few instructions to the next pass's Init remain.
         if (!print) return std::string();
 
+        if (gBoundaryHookForTests) gBoundaryHookForTests();
         checkCancel();
         Enter(DecompilePhase::Print);
         r.name = fd->getName();
@@ -3772,7 +3780,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // the copies above made, so that nothing but the call stands between this check and the next pass's Init: a cancel
     // raised in the tail of the pass's actions, or while it was torn down, is honoured here, in Actions (mWorkPhase is
     // still the pass's last phase), and not carried through the next pass's Init into its Flow (A6-6, A6-35).
-    if (firstPassRan) checkCancel();
+    if (firstPassRan)
+    {
+        if (gBoundaryHookForTests) gBoundaryHookForTests();
+        checkCancel();
+    }
     for (int round = 0;; ++round)
     {
         aliasRetry = false;
@@ -3780,6 +3792,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (!aliasRetry) break;
         // The same boundary as the first pass's, for a printing pass that gives way to another (aliasRetry): its locals and Architecture
         // are gone, and a cancel raised in its teardown is honoured here, in Actions, not carried into the next pass's Init (A5-63).
+        if (gBoundaryHookForTests) gBoundaryHookForTests();
         checkCancel();
     }
     for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);

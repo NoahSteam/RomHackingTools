@@ -104,20 +104,26 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     // win depend on order. So the first outcome stands for the process -- once it is an outcome.
     //
     // Fresh        nothing has touched an engine global. Spec materialisation is filesystem work, so a
-    //              failure in it (an allocation included) is a failure of this request only: the next one
-    //              starts again from here.
+    //              failure in it is a failure of this request only, whatever its kind -- an allocation, a
+    //              directory that cannot be made, a file that cannot be written, a lock that cannot be
+    //              taken, a rename a scanner holds -- and the next request starts again from here (A6-30,
+    //              A6-40). Each of those has a cause that can be gone one request later (a full disk, a
+    //              permission the user fixes), and none has written anything the engine reads: the stage
+    //              stays Fresh, the request is answered Unavailable with the reason, and the cost of
+    //              trying again is one directory check, or one verified extraction, on a request the user
+    //              made. Nothing is rate-limited: a clock would make which request is retried depend on
+    //              timing, and a refusal text that is not retried is the one that must say so.
     // Ready        the library is started.
-    // Refused      the spec bundle cannot be written or verified; 'firstError' says where.
     // Interrupted  startDecompilerLibrary threw part-way. It fills process-global tables (attribute and
     //              element ids, the capability lists, the spec search path) by appending, with no way to
     //              see how far it got or to undo it, so running it again would register some twice and a
     //              skipped step would be missing for good (what the second request used to find was an
     //              empty print-language list: "No print languages registered"). The process refuses the
-    //              engine from then on, as it does after an allocation failure inside it, and says why.
-    enum class Stage { Fresh, Ready, Refused, Interrupted };
+    //              engine from then on, as it does after an allocation failure inside it, and says why,
+    //              restart included: it is the one refusal a retry cannot clear.
+    enum class Stage { Fresh, Ready, Interrupted };
     static std::mutex m;
     static Stage stage = Stage::Fresh;
-    static std::string firstError;                    // Refused
     static std::string interruptedText;               // Interrupted: made before the first global write
     std::lock_guard<std::mutex> lock(m);
     // What the call that moved the stage hands back, swapped into 'error' (no allocation), so that the request that
@@ -130,38 +136,34 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
         SpecBundleResult bundle = MaterialiseSh2SpecBundle(configDir);
         if (!bundle.ok)
         {
-            std::string text = bundle.error.empty() ? std::string("Decompiler unavailable: the language files could not be prepared")
-                                                    : std::move(bundle.error);
-            std::string keep = text;
-            firstError = std::move(keep);
-            firstReport = std::move(text);
-            stage = Stage::Refused;
+            // Unavailable for this request and Fresh still: the stage is not committed, so the next request retries.
+            // (A move assignment: no allocation.)
+            error = bundle.error.empty() ? std::string("Decompiler unavailable: the language files could not be prepared")
+                                         : std::move(bundle.error);
+            return false;
         }
-        else
+        const std::vector<std::string> paths{ bundle.dir };
+        const auto text = [](const char* by) {
+            return std::string("Decompiler unavailable: the engine's library did not finish starting (") + by +
+                   "); restart Saturn Explorer to decompile again";
+        };
+        std::string oomText = text("out of memory"), otherText = text("an unexpected exception");
+        std::string oomKeep = oomText, otherKeep = otherText;
+        stage = Stage::Interrupted;   // from the first global write; Ready only once the last has been made
+        try
         {
-            const std::vector<std::string> paths{ bundle.dir };
-            const auto text = [](const char* by) {
-                return std::string("Decompiler unavailable: the engine's library did not finish starting (") + by +
-                       "); restart Saturn Explorer to decompile again";
-            };
-            std::string oomText = text("out of memory"), otherText = text("an unexpected exception");
-            std::string oomKeep = oomText, otherKeep = otherText;
-            stage = Stage::Interrupted;   // from the first global write; Ready only once the last has been made
-            try
-            {
-                ghidra::startDecompilerLibrary(paths);
-                stage = Stage::Ready;
-            }
-            catch (std::bad_alloc&)
-            {
-                interruptedText = std::move(oomKeep);
-                firstReport = std::move(oomText);
-            }
-            catch (...)
-            {
-                interruptedText = std::move(otherKeep);
-                firstReport = std::move(otherText);
-            }
+            ghidra::startDecompilerLibrary(paths);
+            stage = Stage::Ready;
+        }
+        catch (std::bad_alloc&)
+        {
+            interruptedText = std::move(oomKeep);
+            firstReport = std::move(oomText);
+        }
+        catch (...)
+        {
+            interruptedText = std::move(otherKeep);
+            firstReport = std::move(otherText);
         }
     }
     switch (stage)
@@ -169,10 +171,6 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     case Stage::Ready:
         error.clear();
         return true;
-    case Stage::Refused:
-        if (!firstReport.empty()) error.swap(firstReport);
-        else error = firstError;
-        return false;
     default:
         // Every call says it, the first included: the request that met the failure is told what the next
         // ones will be told, and neither is "out of memory" with an engine that looks usable.
