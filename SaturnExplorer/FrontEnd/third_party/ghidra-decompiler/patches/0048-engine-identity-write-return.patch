@@ -1,0 +1,91 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -14,6 +14,7 @@
+  * limitations under the License.
+  *
+  * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
++ * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -2018,6 +2019,66 @@
+   return fc->isOutputLocked() && fc->getOutputType()->getMetatype() != TYPE_VOID;
+ }
+ 
++static bool isZeroConstant(const Varnode *vn,int4 depth)
++
++{
++  // The spec writes `xor #imm,r0` as r0 ^ (imm & 0xFF): the operand is the output of an AND of constants until the rules fold it.
++  if (vn->isConstant()) return vn->getOffset() == 0;
++  if (depth == 0 || !vn->isWritten()) return false;
++  const PcodeOp *def = vn->getDef();
++  switch(def->code()) {
++  case CPUI_COPY:
++  case CPUI_INT_ZEXT:
++    return isZeroConstant(def->getIn(0),depth-1);
++  case CPUI_INT_AND:
++    return (def->getIn(0)->isConstant() && def->getIn(1)->isConstant() && (def->getIn(0)->getOffset() & def->getIn(1)->getOffset()) == 0) ||
++	   isZeroConstant(def->getIn(0),depth-1) || isZeroConstant(def->getIn(1),depth-1);
++  default:
++    break;
++  }
++  return false;
++}
++
++/// \brief If the given Varnode is the output of an operation that leaves its input as it was, return that input
++///
++/// SaturnExplorer (patches/0048-engine-identity-write-return.patch): the SH-2 has several instructions that write a register
++/// with the value it already holds (`mov r0,r0`, `and r0,r0`, `or r0,r0`, `add #0,r0`, `xor #0,r0`, `or #0,r0`). To the
++/// return recovery such a write is a new value in the return register whose only use is the RETURN, so a function ended
++/// by one returned r0 where the same function ended by a \b nop, or by any instruction that does not write r0, did not.
++/// \param vn is the given Varnode
++/// \return the Varnode the value is a plain copy of, or null
++static const Varnode *identityWriteSource(const Varnode *vn)
++
++{
++  if (!vn->isWritten()) return (const Varnode *)0;
++  const PcodeOp *def = vn->getDef();
++  const Varnode *in0;
++  switch(def->code()) {
++  case CPUI_COPY:
++    in0 = def->getIn(0);
++    if (vn->getSpace()->getType() == IPTR_INTERNAL || in0->isConstant()) return (const Varnode *)0;
++    if (vn->getAddr() == in0->getAddr() && vn->getSize() == in0->getSize()) return in0;
++    return (const Varnode *)0;
++  case CPUI_INT_AND:
++    in0 = def->getIn(0);
++    if (in0 == def->getIn(1) && !in0->isConstant()) return in0;	// x & x
++    return (const Varnode *)0;
++  case CPUI_INT_OR:
++    in0 = def->getIn(0);
++    if (in0 == def->getIn(1) && !in0->isConstant()) return in0;	// x | x
++    if (isZeroConstant(def->getIn(1),3) && !in0->isConstant()) return in0;	// x | 0
++    return (const Varnode *)0;
++  case CPUI_INT_ADD:
++  case CPUI_INT_XOR:
++    in0 = def->getIn(0);
++    if (isZeroConstant(def->getIn(1),3) && !in0->isConstant()) return in0;	// x + 0, x ^ 0
++    return (const Varnode *)0;
++  default:
++    break;
++  }
++  return (const Varnode *)0;
++}
++
+ /// \brief Test if the given trial Varnode is likely only used for parameter passing
+ ///
+ /// Flow is followed from the Varnode itself and from ancestors the Varnode was copied from
+@@ -2044,6 +2105,12 @@
+   }
+ 
+   const PcodeOp *def = invn->getDef();
++  if (op->code() == CPUI_RETURN) {
++    // SaturnExplorer: a write of the return register with the value it holds is no value of its own (identityWriteSource)
++    const Varnode *same = identityWriteSource(invn);
++    if (same != (const Varnode *)0)
++      return ancestorOpUse(maxlevel-1,same,op,trial,offset,mainFlags);
++  }
+   switch(def->code()) {
+   case CPUI_INDIRECT:
+     // An indirectCreation is an indication of an output trial, this should not count as

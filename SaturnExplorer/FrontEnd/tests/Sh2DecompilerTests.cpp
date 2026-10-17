@@ -8756,6 +8756,28 @@ void TestArea2Round5()
         const DecompileResult cmpNopped = decompile("A2-31 compare, nop in the slot", { 0x6043, 0x8805, 0x8B00, 0x2652, 0x000B, 0x0009 });
         CHECK(cmpFilled.prototype.ret.kind == cmpNopped.prototype.ret.kind);
         CHECK(cmpFilled.prototype.params.size() == cmpNopped.prototype.params.size());
+        // A2-43: a write of r0 with the value it holds (`mov r0,r0`, `and r0,r0`, `or r0,r0`, `add #0,r0`, `xor #0,r0`, `or #0,r0`) is no new
+        // value: in the slot and before the rts it is a nop, and the compare's r0 is the scratch of A2-42 whichever of them ends the function.
+        // The pair `mov.l @r4,r0 ; cmp/eq #5,r0 ; bf +1 ; mov.l r0,@r5` is the reviewer's.
+        const DecompileResult idNop = decompile("A2-43 reference: nop in the slot", { 0x6042, 0x8805, 0x8B00, 0x2502, 0x000B, 0x0009 });
+        CHECK(idNop.prototype.known && idNop.prototype.ret.kind == TypeKind::Void);
+        for (uint16_t identity : { uint16_t(0x6003), uint16_t(0x2009), uint16_t(0x200B), uint16_t(0x7000), uint16_t(0xCA00), uint16_t(0xCB00) })
+        {
+            const DecompileResult inSlot = decompile("A2-43 an identity write of r0 in the slot", { 0x6042, 0x8805, 0x8B00, 0x2502, 0x000B, identity });
+            const DecompileResult before = decompile("A2-43 an identity write of r0 before the rts", { 0x6042, 0x8805, 0x8B00, 0x2502, identity, 0x000B, 0x0009 });
+            for (const DecompileResult* r : { &inSlot, &before })
+            {
+                CHECK(r->prototype.known && r->prototype.ret.kind == idNop.prototype.ret.kind);
+                CHECK(r->prototype.params.size() == idNop.prototype.params.size());
+                CHECK(Has(r->Text(), "return;"));
+            }
+        }
+        // ...and the identity ops that are not identities are values: `and #0`, `add #1`, `xor #1` of r0 are written, and returned.
+        for (uint16_t value : { uint16_t(0xC900), uint16_t(0x7001), uint16_t(0xCA01) })
+        {
+            const DecompileResult r = decompile("A2-43 control: r0 changed by the last instruction", { 0x6042, 0x2502, 0x000B, value });
+            CHECK(r.prototype.known && r.prototype.ret.kind != TypeKind::Void);
+        }
         // r0 computed from its own entry value and then compared: the engine drops the return (another use), and with it the text's read of
         // r0, so the lent `void` hid a dependence on a register no signature passes. A nop in the slot hid it by keeping the return; the
         // host (ReturnCheck, InputsInReturn) withholds it in every slot now.

@@ -5489,7 +5489,10 @@ struct CCase
     std::vector<uint16_t> words;
 };
 
-uint32_t CalleeSaved(int r) { return 0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u; }
+// The value r8-r14 start with in a printed-C run. Its four bytes differ from each other, for every register (A2-44): with
+// 0xA0000000 + r * 0x01010101 the bytes 1 and 2 were equal, so a text that named the two the wrong way round (`unaff_r8_b1` for the register's
+// byte 2) read the same value under either name and the differential could not tell.
+uint32_t CalleeSaved(int r) { return (0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u) ^ 0x00010203u; }
 
 // The edge values the printed-C inputs walk through r4-r7 first (the first poolSize inputs). It has the sign boundaries of the byte, the
 // word and the longword, and (A2-40) the negative values whose low 8, 16 or 24 bits are positive, which a text that sign-extends a narrow
@@ -5526,6 +5529,14 @@ void TestOracleOwnDecisions()
     CHECK(VoidReturnClass(true, { 0x000B, 0x6003 }) == "void-return-lent");      // rts ; mov r0,r0
     CHECK(VoidReturnClass(true, { 0x6013, 0x000B, 0x0009 }) == "void-return-lent");
     CHECK(VoidReturnClass(true, { 0x6013 }) == "void-return-lent");              // no rts at all
+    // A2-44: the entry values of r8-r14 have four different bytes (a text that numbered the bytes 1 and 2 the wrong way round read the same
+    // value under both names)
+    for (int r = 8; r <= 14; ++r)
+    {
+        const uint32_t v = CalleeSaved(r);
+        for (int i = 0; i < 4; ++i)
+            for (int j = i + 1; j < 4; ++j) CHECK(((v >> (8 * i)) & 0xFF) != ((v >> (8 * j)) & 0xFF));
+    }
     // A2-40: for each width a value with all the bits above it set whose narrow piece is positive
     const std::vector<uint32_t>& pool = PrintedCPool();
     for (int bits : { 8, 16, 24 })
@@ -5643,12 +5654,14 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 int num = -1;
                 if (std::sscanf(name.c_str() + (name.compare(0, 3, "in_") == 0 ? 4 : 7), "%d", &num) == 1 && num >= 0 && num <= 15 &&
                     (name == "in_r" + std::to_string(num) || name == "unaff_r" + std::to_string(num)))
-                    value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(CalleeSaved(num)) + "u";
+                    value = num <= 7 ? "g_in[" + std::to_string(num) + "]" : std::to_string(num == 15 ? kStackTop : CalleeSaved(num)) + "u";
                 else if (std::regex_match(name, pieceName, std::regex("(?:in|unaff)_r(\\d+)_b([1-3])")) && std::atoi(pieceName[1].str().c_str()) <= 15)
                 {
                     // a byte of a register (cmp/str compares four): named with the byte it is, counted from the least significant (A2-25; r8-r15, A2-37)
                     const int reg = std::atoi(pieceName[1].str().c_str());
-                    const std::string whole = reg <= 7 ? "g_in[" + std::to_string(reg) + "]" : std::to_string(CalleeSaved(reg)) + "u";
+                    // (r15 starts at the stack top the run gives it: the text was given CalleeSaved(15), which only agreed with the run
+                    // while no input matched a byte of either; A2-44.)
+                    const std::string whole = reg <= 7 ? "g_in[" + std::to_string(reg) + "]" : std::to_string(reg == 15 ? kStackTop : CalleeSaved(reg)) + "u";
                     value = "((" + whole + " >> " + std::to_string(8 * (pieceName[2].str()[0] - '0')) + ") & 0xFF)";
                 }
                 else if (name == "in_sr" || name == "unaff_sr") value = "g_in[8]";
@@ -5703,6 +5716,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         const std::vector<uint32_t>& pool = PrintedCPool();
         const uint32_t poolSize = static_cast<uint32_t>(pool.size());
         int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
+        int byteSweep = 0;   // ...and the next 44 share one byte with a register a function may compare them with (A2-44)
         auto draw = [&]() -> uint32_t {
             const uint32_t k = ir.Below(4);
             if (k == 0) return pool[ir.Below(poolSize)];
@@ -5715,7 +5729,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         std::ostringstream rows;
         int kept = 0;
         bool r0Changed = false;
-        for (int k = 0; k < nIn; ++k)
+        for (int k = 0; k < nIn + 44; ++k)
         {
             uint32_t in[13];
             for (int i = 0; i < 8; ++i) in[i] = draw();
@@ -5732,6 +5746,21 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
                 in[1] = pool[(sweep * 3 + 1) % poolSize];
                 in[8] = (sweep & 1) ? (in[8] | 1u) : (in[8] & ~1u);   // T both ways
                 ++sweep;
+            }
+            // A parameter that shares exactly one byte with a register the function may compare it with (cmp/str is an OR of four byte
+            // compares, and a random 32-bit value matches a given byte with probability 1/256): the other three bytes are the register's
+            // complement, so a text that compares the wrong byte of it or names the wrong one decides differently (A2-44).
+            // The 44 inputs after the edge sweep walk every (register, byte) pair through every parameter register: register t = (j + 3 i) % 11
+            // (r0-r3, r8-r14) and byte (j / 11 + i) % 4 for parameter r(4 + i) at input j.
+            if (sweep >= static_cast<int>(poolSize) && byteSweep < 44)
+            {
+                for (int i = 0; i < 4; ++i)
+                {
+                    const uint32_t t = static_cast<uint32_t>(byteSweep + 3 * i) % 11, byte = (static_cast<uint32_t>(byteSweep) / 11 + i) % 4;
+                    const uint32_t other = t < 4 ? in[t] : CalleeSaved(8 + (t - 4));
+                    in[4 + i] = (~other & ~(0xFFu << (8 * byte))) | (other & (0xFFu << (8 * byte)));
+                }
+                ++byteSweep;
             }
             for (int i = 0; i < 8; ++i) machine->Set(("r" + std::to_string(i)).c_str(), in[i]);
             for (int i = 8; i < 15; ++i) machine->Set(("r" + std::to_string(i)).c_str(), CalleeSaved(i));
