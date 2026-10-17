@@ -165,6 +165,7 @@ uint64_t DecompilerPanel::ShapeOf(const Prototype& proto)
     Mix(h, proto.effects.outOrigins);
     Mix(h, proto.effects.leaks);
     Mix(h, proto.effects.frameValues);
+    Mix(h, proto.effects.frameWords);
     Mix(h, static_cast<uint32_t>(proto.effects.spDelta));
     return h ? h : 1;   // 0 is "none lent"
 }
@@ -457,8 +458,8 @@ std::vector<std::string> DecompilerPanel::Uncertainties() const
     char b[200];
     if (mShown.unsupported)
     {
-        std::snprintf(b, sizeof b, "PC-relative load in a delay slot at 0x%08X: pseudocode for this function is not "
-                                   "trustworthy.", mShown.unsupportedAt);
+        std::snprintf(b, sizeof b, "PC-relative load in a delay slot at 0x%08X that other code also jumps to: pseudocode for this "
+                                   "function is not trustworthy.", mShown.unsupportedAt);
         out.push_back(b);
     }
     if (mShown.truncated)

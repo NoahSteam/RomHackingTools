@@ -20,11 +20,9 @@
 // error, illegal instruction, illegal slot), SLEEP (a user op), misaligned accesses, code at the
 // top of the address space, and anything that depends on the bus rather than flat memory.
 //
-// One difference from the hardware is known and accepted (ledger A2-4): after a taken delayed branch
-// other than bra and bsr the spec cannot place a PC-relative slot's literal. The oracle runs a case
-// that differs a second time against a reference with that one rule, counts it as a known limit if
-// that agrees exactly (any other difference in the same case still fails), and checks that the
-// decompiler marks a function with such a slot unsupported.
+// No difference from the hardware is known. After a taken delayed branch a PC-relative slot reads relative to the branch's target
+// + 2; the spec gives every delayed branch's slot that PC (ledger A2-4: patch 0005 for bra and bsr, patch 0050 for the others, whose
+// target is a register, PR, the stack or T), and the oracle holds it to the reference on all of them.
 //
 // usage: SaturnExplorerSh2DecodeTests <scratch dir>
 // environment: SE_DECODE_CASES=<n>   differential cases per form (default 2000)
@@ -1035,21 +1033,17 @@ Flow ExecRef(Cpu& c, Mem& m, uint16_t w, uint32_t PC)
 
 // An instruction at 'A' (and its slot) from the register file 'c'. Returns the next address.
 //
-// 'specSlotPc' selects the one place the spec is known to differ from the hardware (A2-4): after a
-// taken branch other than bra and bsr the spec computes a PC-relative slot's address from the
-// slot's own address + 4, where the hardware uses the branch target + 2. The decompiler marks a
-// function with such a slot unsupported (ScanRawPcode); the oracle accepts a difference only if it
-// is exactly this one, and checks that the marking is there.
-uint32_t RunRef(Cpu& c, Mem& m, uint32_t A, uint16_t w0, uint16_t w1, bool specSlotPc = false)
+// The slot runs with the PC the hardware gives it: after a taken branch the branch target + 2 (A2-4: before patch 0050 the spec
+// computed the slot's own address + 4 for every delayed branch but bra and bsr, and the oracle counted the difference as a known
+// limit).
+uint32_t RunRef(Cpu& c, Mem& m, uint32_t A, uint16_t w0, uint16_t w1)
 {
     const uint32_t PC = A + 4;
     const Flow f = ExecRef(c, m, w0, PC);
     if (!f.delayed) return f.taken ? f.target : A + 2;
     // The slot runs with z->PC = target + 2 after a taken branch (UCDelayBranch / DelayBranch set
     // PC to the target and the post-switch PC += 2 follows), and its own address + 4 otherwise.
-    const int op = gOpOf[w0];
-    const bool specFixed = op == 0x68 || op == 0x6A;   // bra, bsr: the target is in the instruction (patch 0005)
-    ExecRef(c, m, w1, f.taken && !(specSlotPc && !specFixed) ? f.target + 2 : PC + 2);
+    ExecRef(c, m, w1, f.taken ? f.target + 2 : PC + 2);
     return f.taken ? f.target : A + 4;
 }
 
@@ -1531,7 +1525,6 @@ struct Outcome
     std::string why;
     std::string sig;      // which parts of the result differ ("" if none)
     std::string detail;   // and how
-    bool known = false;   // differs from the hardware only as A2-4 does (see RunRef); sig is then empty
 };
 
 // One case on both sides, compared: r0-r15, SR, GBR, VBR, MACH, MACL, PR, the next PC and every
@@ -1550,10 +1543,10 @@ Outcome RunCase(EmuMachine& mach, const Cell& cell, const Case& k)
     const std::vector<uint32_t> ew = mach.Bank().InsertedWords();
 
     // The emulator's result against the reference; the reference runs on a copy of the case.
-    auto compare = [&](bool specSlotPc, std::string& sig, std::string& detail) {
+    auto compare = [&](std::string& sig, std::string& detail) {
         Cpu ref = k.cpu;
         Mem refMem = k.mem;
-        const uint32_t refNext = RunRef(ref, refMem, cell.addr, cell.w[0], cell.w[1], specSlotPc);
+        const uint32_t refNext = RunRef(ref, refMem, cell.addr, cell.w[0], cell.w[1]);
         char b[160];
         bool gpr = false;
         for (int r = 0; r < kRegs; ++r)
@@ -1586,20 +1579,7 @@ Outcome RunCase(EmuMachine& mach, const Cell& cell, const Case& k)
             detail += "; ";
         }
     };
-    compare(false, o.sig, o.detail);
-    if (!o.sig.empty())
-    {
-        // A delayed branch that differs: is it exactly the spec's known slot PC (A2-4)? Only then is it
-        // not a finding here; anything else in the same case, an SR bit say, still fails.
-        std::string sig, detail;
-        compare(true, sig, detail);
-        if (sig.empty())
-        {
-            o.known = true;
-            o.sig.clear();
-            o.detail.clear();
-        }
-    }
+    compare(o.sig, o.detail);
     return o;
 }
 
@@ -1661,7 +1641,7 @@ void BuildShapes(Layout& L, std::vector<Shape>& out)
     out.push_back(MakeShape(L, "rte; movt r2; stacked SR = 1 (the slot reads the restored T)", 0x002B, 0x0229, true,
                             { { 15, kStack } }, { { kStack, kTarget }, { kStack + 4, 1 } }));
     // A PC-relative load in a delay slot reads relative to the branch target + 2 when the branch is
-    // taken. bra and bsr are fixed (patch 0005); the other delayed branches are not.
+    // taken (patch 0005 for bra and bsr, patch 0050 for the other delayed branches, A2-4).
     const uint16_t slotL = 0xD200, slotW = 0x9200, slotA = 0xC700;   // mov.l/mov.w @(0,pc),r2; mova @(0,pc),r0
     out.push_back(MakeShape(L, "bra +; mov.l @(0,pc),r2 (control)", 0xA010, slotL, true, {}));
     out.push_back(MakeShape(L, "bsr +; mov.w @(0,pc),r2 (control)", 0xB010, slotW, true, {}));
@@ -1728,26 +1708,25 @@ long TestTranslationHistory(EmuMachine& mach, const std::vector<Form>& forms, co
     return bad;
 }
 
-// A2-4 is accepted because the host flags it: a function that reaches a PC-relative load or mova in the
-// delay slot of a branch other than bra and bsr is marked unsupported, and its literal is not folded.
-// Pinned for the shapes the differential run found: decompiled from the branch, the result says so.
-void TestKnownLimitIsFlagged(const std::shared_ptr<MemorySnapshot>& snap,
-                             const std::vector<std::pair<std::string, uint32_t>>& shapes)
+// A2-4 as the decompiler reaches it. The shapes the differential run found (a PC-relative load or mova in the slot of bt/s, bf/s, jmp,
+// jsr, rts, braf, bsrf and rte), decompiled from the branch: the function is no longer marked unsupported, since the spec places the
+// slot's literal for every delayed branch (patch 0050); the load is made, through the address the branch's PC gives it.
+void TestSlotShapesAreNotFlagged(const std::shared_ptr<MemorySnapshot>& snap,
+                                 const std::vector<std::pair<std::string, uint32_t>>& shapes)
 {
     Sh2Decompiler d(gConfig);
-    int flagged = 0;
+    int clean = 0;
     for (const auto& s : shapes)
     {
         DecompileRequest q;
         q.entry = s.second;
         const DecompileResult r = d.Decompile(snap, q);
-        std::printf("A2-4 shape %-44s decompiled from %08X: %s\n", s.first.c_str(), s.second,
-                    r.unsupported ? "marked unsupported" : "NOT MARKED");
+        std::printf("A2-4 shape %-44s decompiled from %08X: %s\n", s.first.c_str(), s.second, r.unsupported ? "MARKED UNSUPPORTED" : "not flagged");
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(r.unsupported);
-        flagged += r.unsupported ? 1 : 0;
+        CHECK(!r.unsupported);
+        clean += r.unsupported ? 0 : 1;
     }
-    std::printf("known limit A2-4: %d of %zu shapes marked unsupported by the decompiler\n", flagged, shapes.size());
+    std::printf("A2-4: %d of %zu shapes decompiled without the unsupported marking\n", clean, shapes.size());
     CHECK(!shapes.empty());
 }
 
@@ -1814,7 +1793,7 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
 
     const long historyBad = TestTranslationHistory(mach, forms, filter, show);
     long shapeFails = 0;
-    std::vector<std::pair<std::string, uint32_t>> knownShapes;   // A2-4 shapes: the decompiler must flag them
+    std::vector<std::pair<std::string, uint32_t>> slotShapes;   // A2-4 shapes: a PC-relative slot after a delayed branch; the decompiler must not flag them
     const char* pcode = std::getenv("SE_DECODE_PCODE");   // print the p-code of the shapes selected by SE_DECODE_FORM
     for (const Shape& s : shapes)
     {
@@ -1826,21 +1805,21 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
         }
         const Outcome o = RunCase(mach, s.cell, s.k);
         if (!o.ran) std::printf("SHAPE %s: could not run (%s)\n", s.name.c_str(), o.why.c_str());
-        else if (o.known)
-        {
-            std::printf("SHAPE %s: known limit (A2-4: the slot's PC)\n", s.name.c_str());
-            knownShapes.emplace_back(s.name, s.cell.addr);
-        }
         else if (o.sig.empty()) std::printf("SHAPE %s: agrees\n", s.name.c_str());
         else std::printf("SHAPE %s: DIFFERS %s\n         %s\n", s.name.c_str(), o.sig.c_str(), o.detail.c_str());
         if (!o.ran || !o.sig.empty()) ++shapeFails;
+        if (s.delayed)
+        {
+            const int so = gOpOf[s.cell.w[1]];
+            if (so == 0x02 || so == 0x03 || so == 0x23) slotShapes.emplace_back(s.name, s.cell.addr);
+        }
     }
 
-    long totalCases = 0, totalFails = 0, failingForms = 0, unrunnable = 0, pcodeDumps = 0, totalKnown = 0;
+    long totalCases = 0, totalFails = 0, failingForms = 0, unrunnable = 0, pcodeDumps = 0;
     for (const Form& f : forms)
     {
         if (filter && f.name.find(filter) == std::string::npos) continue;
-        long cases = 0, fails = 0, notRun = 0, known = 0;
+        long cases = 0, fails = 0, notRun = 0;
         std::map<std::string, long> signatures;   // which parts of the result differed -> how often
         std::vector<std::string> examples;
         Rng frng(seed ^ (uint64_t(f.op) << 40) ^ std::hash<std::string>()(f.name));
@@ -1857,7 +1836,6 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
                     examples.push_back("  " + o.why + " (word " + Hex8(cell.w[0]).substr(6) + " at " + Hex8(cell.addr) + ")");
                 continue;
             }
-            if (o.known) ++known;
             if (o.sig.empty()) continue;
             if (pcode && o.sig.find("next") != std::string::npos && ++pcodeDumps <= 3)
             {
@@ -1884,10 +1862,7 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
         }
         totalCases += cases;
         totalFails += fails;
-        totalKnown += known;
         unrunnable += notRun;
-        if (known) std::printf("form %-34s %ld of %ld cases differ only as A2-4 does (a PC-relative slot after a taken branch)\n",
-                               f.name.c_str(), known, cases);
         if (fails || notRun)
         {
             ++failingForms;
@@ -1898,20 +1873,19 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
             for (const std::string& e : examples) std::printf("%s\n", e.c_str());
         }
     }
-    std::printf("differential execution: %ld cases, %ld differ, %ld more differ only as the known limit A2-4, %ld could not run, "
+    std::printf("differential execution: %ld cases, %ld differ, %ld could not run, "
                 "%ld of %zu forms fail; %zu named shapes, %ld differ (%.1f s)\n",
-                totalCases, totalFails, totalKnown, unrunnable, failingForms, forms.size(), shapes.size(), shapeFails,
+                totalCases, totalFails, unrunnable, failingForms, forms.size(), shapes.size(), shapeFails,
                 dts::MsSince(t0) / 1000.0);
     CHECK(totalFails == 0);
     CHECK(unrunnable == 0);
     CHECK(shapeFails == 0);
     CHECK(historyBad == 0);
 
-    // The known limit stays safe only while the decompiler says so: each shape, decompiled from its
-    // branch, must come back unsupported (ScanRawPcode: a PC-relative slot after a delayed branch the
-    // spec cannot place). The machine goes first -- the decompiler resets the process-wide translator.
+    // ...and the decompiler does not call a function with such a slot unsupported (ScanRawPcode flags only a slot that other code
+    // also jumps to). The machine goes first -- the decompiler resets the process-wide translator.
     machPtr.reset();
-    if (!filter) TestKnownLimitIsFlagged(snap, knownShapes);
+    if (!filter) TestSlotShapesAreNotFlagged(snap, slotShapes);
 }
 
 }  // namespace

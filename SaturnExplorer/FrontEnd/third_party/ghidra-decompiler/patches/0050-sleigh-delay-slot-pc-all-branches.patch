@@ -1,0 +1,178 @@
+diff --git a/Ghidra/Processors/SuperH/data/languages/superh.sinc b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+--- a/Ghidra/Processors/SuperH/data/languages/superh.sinc
++++ b/Ghidra/Processors/SuperH/data/languages/superh.sinc
+@@ -6,6 +6,7 @@
+ # ldc to SR, GBR and VBR also call a user op that carries the value written (patches/0034-sleigh-control-register-writes.patch).
+ # rte also calls Write_SR with the SR it restores and Rte_PC with the PC it returns to (patches/0038-sleigh-rte-restores.patch);
+ # the SR is the one after its delay slot, and nop writes nothing (patches/0045-sleigh-nop-writes-nothing-rte-sr-after-slot.patch).
++# A PC-relative load or mova in the delay slot of every delayed branch reads the PC the hardware gives it (patches/0050-sleigh-delay-slot-pc-all-branches.patch).
+ 
+ define endian=big;
+ 
+@@ -23,10 +24,19 @@ define register offset=0x100 size=4 [sr gbr vbr mach macl pr pc];
+ # not its own address + 4. bra and bsr encode their target, so they hand it to the slot through
+ # this context: slot_tgt is (target + 2) >> 1 -- the slot's PC, which is even -- and
+ # slot_pc_valid says it is set. Both are noflow, so they hold for the slot's address only.
+-define register offset=0x400 size=4 [contextreg];
++#
++# The other delayed branches (bt/s, bf/s, jmp, jsr, rts, braf, bsrf, rte) hand it theirs through slot_kind, which says where the
++# PC comes from, because the target is a register or the stack, or depends on T (patches/0050): 1 bt/s (taken if T is set) and 2
++# bf/s (taken if T is clear), both with slot_tgt as bra has it, the slot's own address + 4 when not taken; 3 jmp and jsr, the register
++# slot_rm + 2; 4 rts, PR + 2; 5 braf and bsrf, slot_rm + the branch's address + 4 + 2; 6 rte, the PC it popped + 2. The p-code of the slot
++# computes it from what the branch left (a register still holding the target: the slot is the one instruction that runs before the jump
++# and cannot have changed it before its own address is made), so the branch's own p-code is what it was.
++define register offset=0x400 size=8 [contextreg];
+ define context contextreg
+     slot_pc_valid = (0,0) noflow
+     slot_tgt      = (1,31) noflow
++    slot_kind     = (32,34) noflow
++    slot_rm       = (35,38) noflow
+ ;
+ 
+ 
+@@ -205,7 +215,26 @@ imm8: "#"^simm_00_07 is simm_00_07 { export *[const]:4 simm_00_07; }
+     rn_08_11 = imm8;
+ }
+ 
+-disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0
++# The register that holds the target of the branch whose delay slot this is.
++slotreg: r0 is slot_rm=0 & r0 { export r0; }
++slotreg: r1 is slot_rm=1 & r1 { export r1; }
++slotreg: r2 is slot_rm=2 & r2 { export r2; }
++slotreg: r3 is slot_rm=3 & r3 { export r3; }
++slotreg: r4 is slot_rm=4 & r4 { export r4; }
++slotreg: r5 is slot_rm=5 & r5 { export r5; }
++slotreg: r6 is slot_rm=6 & r6 { export r6; }
++slotreg: r7 is slot_rm=7 & r7 { export r7; }
++slotreg: r8 is slot_rm=8 & r8 { export r8; }
++slotreg: r9 is slot_rm=9 & r9 { export r9; }
++slotreg: r10 is slot_rm=10 & r10 { export r10; }
++slotreg: r11 is slot_rm=11 & r11 { export r11; }
++slotreg: r12 is slot_rm=12 & r12 { export r12; }
++slotreg: r13 is slot_rm=13 & r13 { export r13; }
++slotreg: r14 is slot_rm=14 & r14 { export r14; }
++slotreg: r15 is slot_rm=15 & r15 { export r15; }
++
++# The PC a PC-relative load sees: the slot's own address + 4, or after bra and bsr (target + 2, in the context) ...
++disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=0
+     [ disp = (disp_00_07 << 2) + ((inst_start + 4) & 0xfffffffc); ]
+     { local tmp:4 = disp; export tmp; }
+ 
+@@ -213,7 +242,7 @@ disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt
+     [ disp = (disp_00_07 << 2) + ((slot_tgt << 1) & 0xfffffffc); ]
+     { local tmp:4 = disp; export tmp; }
+ 
+-disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0
++disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=0
+     [ disp = (disp_00_07 << 1) + (inst_start + 4); ]
+     { local tmp:4 = disp; export tmp; }
+ 
+@@ -221,6 +250,38 @@ disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=1 & slot_tgt
+     [ disp = (disp_00_07 << 1) + (slot_tgt << 1); ]
+     { local tmp:4 = disp; export tmp; }
+ 
++# ... or, after the other delayed branches, a value the p-code makes (the kinds are in the context's comment).
++
++disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=1 & slot_tgt
++    [ disp = slot_tgt << 1; ]
++    { local t:4 = sr & 1; local p:4 = (t * disp) + ((1 - t) * (inst_start + 4)); local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++disppc4: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=2 & slot_tgt
++    [ disp = slot_tgt << 1; ]
++    { local t:4 = sr & 1; local p:4 = (t * (inst_start + 4)) + ((1 - t) * disp); local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++disppc4: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=3 & slotreg
++    { local p:4 = slotreg + 2; local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++disppc4: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=4
++    { local p:4 = pr + 2; local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++disppc4: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=5 & slotreg
++    { local p:4 = slotreg + (inst_start + 4); local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++disppc4: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=6
++    { local p:4 = (*:4 (r15 - 8)) + 2; local tmp:4 = (p & 0xfffffffc) + (disp_00_07:4 << 2); export tmp; }
++
++disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=1 & slot_tgt
++    [ disp = slot_tgt << 1; ]
++    { local t:4 = sr & 1; local p:4 = (t * disp) + ((1 - t) * (inst_start + 4)); local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++disppc2: @(disp,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=2 & slot_tgt
++    [ disp = slot_tgt << 1; ]
++    { local t:4 = sr & 1; local p:4 = (t * (inst_start + 4)) + ((1 - t) * disp); local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++disppc2: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=3 & slotreg
++    { local p:4 = slotreg + 2; local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++disppc2: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=4
++    { local p:4 = pr + 2; local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++disppc2: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=5 & slotreg
++    { local p:4 = slotreg + (inst_start + 4); local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++disppc2: @(disp_00_07,pc) is disp_00_07 & pc & slot_pc_valid=0 & slot_kind=6
++    { local p:4 = (*:4 (r15 - 8)) + 2; local tmp:4 = p + (disp_00_07:4 << 1); export tmp; }
++
+ :mova   disppc4,r0  is r0 & opcode_08_15=0b11000111 & disppc4
+ {
+     r0 = disppc4;
+@@ -1504,7 +1565,9 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+-:bf"/s" target00_07  is opcode_08_15=0b10001111 & target00_07  
++:bf"/s" target00_07  is opcode_08_15=0b10001111 & target00_07 & sdisp_00_07
++    [ slot_tgt = sdisp_00_07 + ((inst_start + 4) >> 1) + 1; slot_kind = 2;
++      globalset(inst_next, slot_tgt); globalset(inst_next, slot_kind); ]
+ {
+     local cond = $(T_FLAG);
+     delayslot(1);
+@@ -1518,7 +1581,9 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+-:bt"/s" target00_07  is opcode_08_15=0b10001101 & target00_07
++:bt"/s" target00_07  is opcode_08_15=0b10001101 & target00_07 & sdisp_00_07
++    [ slot_tgt = sdisp_00_07 + ((inst_start + 4) >> 1) + 1; slot_kind = 1;
++      globalset(inst_next, slot_tgt); globalset(inst_next, slot_kind); ]
+ {
+     local cond = $(T_FLAG);
+     delayslot(1);
+@@ -1536,6 +1601,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+ :braf rm_08_11  is opcode_12_15=0b0000 & rm_08_11 & opcode_00_07=0b00100011 
++    [ slot_kind = 5; slot_rm = rm_08_11; globalset(inst_next, slot_kind); globalset(inst_next, slot_rm); ]
+ {
+     local dest:4 = inst_start + 4 + rm_08_11;
+     delayslot(1);
+@@ -1558,6 +1624,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ 
+ @if (SH_VERSION == "2") || (SH_VERSION == "2A")
+ :bsrf   rm_08_11  is opcode_12_15=0b0000 & rm_08_11 & opcode_00_07=0b00000011 
++    [ slot_kind = 5; slot_rm = rm_08_11; globalset(inst_next, slot_kind); globalset(inst_next, slot_rm); ]
+ {
+     local dest = rm_08_11 + inst_start + 4;
+     pr = inst_start + 4;
+@@ -1569,6 +1636,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ @endif
+ 
+ :jmp    @rm_08_11  is opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00101011 
++    [ slot_kind = 3; slot_rm = rm_08_11; globalset(inst_next, slot_kind); globalset(inst_next, slot_rm); ]
+ {
+     local _pc:4 = rm_08_11;
+     delayslot(1);
+@@ -1577,6 +1645,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ 
+ :jsr    @rm_08_11  is opcode_12_15=0b0100 & rm_08_11 & opcode_00_07=0b00001011 
++    [ slot_kind = 3; slot_rm = rm_08_11; globalset(inst_next, slot_kind); globalset(inst_next, slot_rm); ]
+ {
+     local _pc:4 = rm_08_11;
+     pr = inst_start + 4;
+@@ -1588,6 +1657,7 @@ MovMUReg2: MovMUReg2_15 is MovMUReg2_15 {
+ }
+ 
+ :rts  is opcode_00_15=0b0000000000001011 
++    [ slot_kind = 4; globalset(inst_next, slot_kind); ]
+ {
+     local _pc = pr;
+     delayslot(1);
+@@ -1792,6 +1862,7 @@ define pcodeop Rte_PC;
+ }
+ 
+ :rte is opcode_00_15=0b0000000000101011 
++    [ slot_kind = 6; globalset(inst_next, slot_kind); ]
+ {    
+     _pc:4 = *r15;
+     r15 = r15 + 4;

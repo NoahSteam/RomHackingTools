@@ -28,7 +28,8 @@
 //     (mov.l Rn,@-r15 ... mov.l @r15+,Rn), and restores everything by rts (the last pop, or the
 //     return value's mov, may sit in the delay slot). The harness checks it does.
 //   * calls to a function laid out after the caller: bsr, or jsr @Rn after a literal-pool load of the
-//     address; arguments in r4-r7 (the last may be set in the delay slot), kept across calls in
+//     address, or (three in ten of those, A2-20) bsrf Rn after a load of the distance from the bsrf + 4 to the callee, which is known only after
+//     layout; arguments in r4-r7 (the last may be set in the delay slot), kept across calls in
 //     callee-saved copies; a result in r0 (a function either writes r0 as its result on every path,
 //     or leaves r0 alone); a call may be conditional; tail calls (jmp @Rn after the epilogue has
 //     restored PR and the registers) and falling off the end into the next function (no rts).
@@ -66,10 +67,13 @@
 // the multiplies (mul.l muls.w mulu.w dmuls.l dmulu.l), exts swap xtrct, the rotates and shifts, movt sett clrt
 // clrmac, sts/lds of MACH and MACL, stc/ldc of SR, GBR and VBR, the #imm,r0 logic and compare, cmp/ge gt pz str -- and
 // one memory item in ten is a GBR access (and.b / or.b / xor.b / tst.b #imm,@(r0,GBR), mov.x @(disp,GBR),r0 and back,
-// GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (they need
-// a vector table and a handler laid out beside the function, and rte pops the stack), bsrf (a callee at a distance known
-// only after layout: the call grammar's), and, in the first two grammars, stc/sts (ledger A2-16 and A3-5; the register-only
-// grammar has them).
+// GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (A2-20, accepted: a handler
+// returns through rte, not to its caller, so the per-function run from the entry to the sentinel, the depth count of calls and returns, the callee
+// closure of check 4 -- the handler is reached through a vector table the decompiler cannot read, an unresolved indirect call -- and the signature
+// checks have no meaning for it; the hand fixtures run both against the emulator, TestCallsAndTraps' A2-9 and A2-24/A2-36 in TestArea2Round4 and 5, and
+// the decode oracle holds rte and its slot to Mednafen on 5.2 million cases), and, in the first two grammars, stc/sts (ledger A2-16 and A3-5; the
+// register-only grammar has them), which SE_GENERATED_ALPHABET=specials lets in: A3-5 and A2-16 are fixed, and the fence stays only so that the
+// programs of a seed do not change under the nightly.
 // Version 3 is not a program of that kind but a register-only function (kRegOps and bt/bf/bt/s/bf/s and braf over
 // one to three instructions, r0-r7, returning r0) checked by TestPrintedC, which compiles the text the decompiler
 // prints for it with the system C compiler and compares what it returns with the emulator's r0 (r0:r1 for an
@@ -132,7 +136,9 @@
 //   6. Each index of a jump table that a run dispatched with reaches a case that holds the code the
 //      index runs (its own label, or the default of a switch whose bound check was taken out, or what
 //      follows the switch) when that code does something the ledger lists, or a warning says cases may
-//      be missing.
+//      be missing. A switch the engine could not normalize (no guard in the finished function) is one case
+//      per destination, labelled with the address the table holds for the index (A2-16, A4-10, A4-11); the
+//      label looked for is then that address (counted `table.switch-on-address`).
 //   Area 3, for a prototype that is known (lent):
 //   7. It is not lent when the analysis is incomplete: truncated, unsupported, unimplemented, bad data,
 //      a case that is missing, an executed instruction outside the body; known and prototypeWithheld
@@ -149,6 +155,8 @@
 //       writer that overwrites it through a pointer in r4 or r2, through r15 plus an index, with a computed value or through a callee that
 //       gives a lent writer its own entry r15 + 4, and returns the local. No `return` of the text holds the canary (or a variable assigned it
 //       with no call between that could have written it) when no run returned it; the hand-back kinds only when the signature is lent.
+//       Round 8 (A3-44): the address in r5, r6 or r7, handed through a word of memory the writer loads it from, the result used (`add #1,r0`),
+//       the call under `if (r4 != 0)` or in a loop that runs twice.
 //   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
 //       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
@@ -168,7 +176,7 @@
 // usage: SaturnExplorerSh2GeneratedTests <scratch dir>
 //   SE_GENERATED_SEEDS=<n>   how many seeds (default 300)
 //   SE_GENERATED_FIRST=<k>   the first seed (default 1): a nightly run moves it
-//   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 96, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
+//   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 240, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
 //   SE_GENERATED_SEED=<k>    one seed, with everything printed
 //   SE_GENERATED_GRAMMAR=1|2 only that grammar (default: the odd seeds are version 1, the even ones version 2)
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
@@ -345,12 +353,13 @@ bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in 
 
 // ---- The program model ----------------------------------------------------------------------
 
-// Cache: a cell of the cache's data array (partitions 4 and 6, 4 KiB, A5-71); Cart: an address of the A-bus cartridge areas (A5-73).
-enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn, Mask, Cache, Cart };
+// Cache: a cell of the cache's data array (partitions 4 and 6, 4 KiB, A5-71); Cart: an address of the A-bus cartridge areas (A5-73);
+// FnRel: the callee's address minus the bsrf's + 4 (A2-20).
+enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn, Mask, Cache, Cart, FnRel };
 const char* KindName(LitKind k)
 {
     return k == LitKind::Hw ? "hardware" : k == LitKind::Ram ? "RAM" : k == LitKind::Mbox ? "mailbox" : k == LitKind::Mask ? "mask" :
-           k == LitKind::Cache ? "cache array" : k == LitKind::Cart ? "cartridge" : "function";
+           k == LitKind::Cache ? "cache array" : k == LitKind::Cart ? "cartridge" : k == LitKind::FnRel ? "function, relative" : "function";
 }
 
 struct Lit
@@ -385,6 +394,7 @@ struct Item
     int spillReg = 1;              // Spill: the register pushed and popped around 'kids'
     int callee = -1;               // Call: the function called
     bool viaJsr = false;           // Call: jsr @Rn after a literal-pool load (else bsr)
+    bool viaBsrf = false;          // Call (with viaJsr): bsrf Rn instead of jsr @Rn, the literal being the distance (A2-20)
     int jsrReg = 1, fnLit = 0;     // Call via jsr: the register and the literal (the callee's address)
     std::vector<uint16_t> setup;   // Call: argument set-up before the call
     std::vector<uint16_t> slotWords;   // Call: the delay slot's instruction (empty: nop)
@@ -473,6 +483,7 @@ struct Gen
     // ...and one for the partial result (a parameter copied to r0 on one path only, round 6 A3-20).
     Rng partialRng;
     Rng retRng;   // a stream of its own: whether a returning function returns its last call's result (A2-31)
+    Rng bsrfRng;  // ...and one for which register-called calls are bsrf (A2-20)
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -494,7 +505,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull), bsrfRng(seed ^ 0x6273726652656C21ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1161,7 +1172,10 @@ struct Gen
         it.type = Item::Call;
         it.callee = callee;
         it.viaJsr = rng.Chance(40);
-        it.shape = it.viaJsr ? "call.jsr" : "call.bsr";
+        // ...a bsrf for some of the calls through a register (A2-20): the literal is the distance to the callee from the bsrf + 4, known only
+        // after layout. Drawn from a stream of its own, so no other draw of a program moves.
+        it.viaBsrf = it.viaJsr && bsrfRng.Chance(30);
+        it.shape = it.viaBsrf ? "call.bsrf" : it.viaJsr ? "call.jsr" : "call.bsr";
         const int nargs = static_cast<int>(rng.Below(5));
         std::vector<uint16_t> args;
         uint32_t def = defined;
@@ -1227,7 +1241,7 @@ struct Gen
         {
             it.jsrReg = 1 + static_cast<int>(rng.Below(3));
             Lit l;
-            l.kind = LitKind::Fn;
+            l.kind = it.viaBsrf ? LitKind::FnRel : LitKind::Fn;
             l.fn = callee;
             it.fnLit = static_cast<int>(p.lits.size());
             p.lits.push_back(l);
@@ -1858,6 +1872,7 @@ struct Emitter
     std::vector<int> labelAt;
     std::vector<int> pending;         // literals loaded since the last pool, once each, in order
     std::vector<int> litWord;         // per literal: the word index of its pool entry, -1 if none yet
+    std::vector<int> litFrom;         // per literal: the label of the bsrf its distance is measured from (FnRel), -1 otherwise
     std::vector<int> entryLabel, startLabel;
     std::vector<Table> tables;
     std::vector<std::vector<size_t>> tablesOf;           // per unit: indices into 'tables'
@@ -1867,6 +1882,7 @@ struct Emitter
     explicit Emitter(const Program& prog) : p(prog)
     {
         litWord.assign(p.lits.size(), -1);
+        litFrom.assign(p.lits.size(), -1);
         for (size_t i = 0; i < p.fns.size(); ++i)
         {
             entryLabel.push_back(NewLabel());
@@ -2088,7 +2104,14 @@ struct Emitter
         case Item::Call:
         {
             for (uint16_t x : it.setup) Put(x);
-            if (it.viaJsr)
+            if (it.viaBsrf)
+            {
+                PutLitLoad(it.jsrReg, it.fnLit);
+                litFrom[it.fnLit] = NewLabel();
+                Place(litFrom[it.fnLit]);
+                Put(static_cast<uint16_t>(0x0003 | it.jsrReg << 8));      // bsrf Rn
+            }
+            else if (it.viaJsr)
             {
                 PutLitLoad(it.jsrReg, it.fnLit);
                 Put(static_cast<uint16_t>(0x400B | it.jsrReg << 8));      // jsr @Rn
@@ -2213,6 +2236,7 @@ Assembled Assemble(const Program& p)
     const auto labelAddr = [&](int label) { return addrOf(static_cast<size_t>(e.labelAt[label])); };
     const auto litValue = [&](int lit) {
         const Lit& l = p.lits[lit];
+        if (l.kind == LitKind::FnRel) return labelAddr(e.entryLabel[l.fn]) - (labelAddr(e.litFrom[lit]) + 4);
         return l.kind == LitKind::Fn ? labelAddr(e.entryLabel[l.fn]) : l.value;
     };
     a.codeWords = unitEnd.empty() ? 0 : unitEnd[0];
@@ -2477,6 +2501,11 @@ protected:
             const uint32_t at = static_cast<uint32_t>(op->getAddr().getOffset()) & 0xFFFFFu;
             if (at + 1 < mEnv->ram.size()) word = static_cast<uint16_t>(mEnv->ram[at] << 8 | mEnv->ram[at + 1]);
         }
+        // ...nor are the words that write r0 with the value it has (A2-43, patch 0048: mov r0,r0, and r0,r0, or r0,r0, add #0,r0, xor #0,r0,
+        // or #0,r0): the engine and the host take them as nop. Counted as writes, a path that runs one of them and leaves r0 alone on every
+        // other looks like a function that writes r0 on every path, and r0's entry value then reaches its result (A3-46: a sample of runs that
+        // all took the `and r0,r0` path, never the one that skips it).
+        if (word == 0x6003u || word == 0x2009u || word == 0x200Bu || word == 0x7000u || word == 0xCA00u || word == 0xCB00u) return;
         for (int i = 0; i < op->numInput(); ++i)
         {
             const ghidra::VarnodeData* vn = op->getInput(i);
@@ -2988,6 +3017,7 @@ struct FnInfo
     uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
     uint32_t canary = 0;     // a constant the function stores in a local that a callee overwrites: no `return` of its text may contain it (A3-34)
+    uint32_t canary2 = 0;    // ...and what the function returns of it when it uses the result (canary + 1): no `return` may contain that either (A3-44)
     bool canaryIfLent = false;   // ...only when the signature is lent: the callee hands the value back through the caller's own frame, which the
                              // engine cannot see, so a caller withheld for it (A3-15, A3-21: the claim is the check) prints the stale local
 };
@@ -3055,7 +3085,7 @@ Subject MakeSubject(const Program& p)
     for (size_t i = 0; i < p.lits.size(); ++i)
         if (a.litAddr[i])
         {
-            const uint32_t v = p.lits[i].kind == LitKind::Fn ? a.units[p.lits[i].fn].entry : p.lits[i].value;
+            const uint32_t v = p.lits[i].kind == LitKind::Fn || p.lits[i].kind == LitKind::FnRel ? a.units[p.lits[i].fn].entry : p.lits[i].value;
             o << " [" << Hex(a.litAddr[i]) << "]=" << Hex(v) << " (" << KindName(p.lits[i].kind) << ")";
             if (p.lits[i].kind == LitKind::Mbox) s.markVolatile = true;
         }
@@ -3577,18 +3607,20 @@ bool CallsUnlentChanger(const Subject& subject, const std::map<uint32_t, Prototy
 // call between that could have written the variable. A call whose line takes an address (`&xStack_4 + p`) or carries the note of a frame
 // address in r2 may write any stack local, so the stack locals are clean after it; the others (xVar1) are written by no call
 // that is not passed their address. Straight-line texts only, which is what the canary programs are.
-bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offending)
+bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offending, uint32_t canary2 = 0)
 {
-    char hex[16], dec[16];
+    char hex[16], dec[16], hex2[16], dec2[16];
     std::snprintf(hex, sizeof hex, "0x%x", canary);
     std::snprintf(dec, sizeof dec, "%u", canary);
+    std::snprintf(hex2, sizeof hex2, "0x%x", canary2);
+    std::snprintf(dec2, sizeof dec2, "%u", canary2);
     auto isWord = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
     auto has = [&](const std::string& line, const std::string& needle) {
         for (size_t p = line.find(needle); p != std::string::npos; p = line.find(needle, p + 1))
             if ((p == 0 || !isWord(line[p - 1])) && (p + needle.size() >= line.size() || !isWord(line[p + needle.size()]))) return true;
         return false;
     };
-    std::set<std::string> tainted;
+    std::set<std::string> tainted, exposed;
     auto taintedIn = [&](const std::string& line) {
         if (has(line, hex) || has(line, dec)) return true;
         for (const std::string& name : tainted)
@@ -3604,16 +3636,28 @@ bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offen
         const std::string line = raw.substr(at);
         if (line.compare(0, 6, "return") == 0)
         {
-            if (taintedIn(line))
+            if (taintedIn(line) || (canary2 != 0 && (has(line, hex2) || has(line, dec2))))
             {
                 offending = line;
                 return true;
             }
             continue;
         }
-        if (line.find('&') != std::string::npos || line.find("a frame address is in r2 here") != std::string::npos)
+        // A name whose address the text takes anywhere (`pxRam0600910c = &xStack_c;`) may be written by any later call: the stack locals are clean
+        // after one (A3-44: the address handed through a word of memory). On the line itself too, as a call that is passed it.
+        for (size_t amp = line.find('&'); amp != std::string::npos; amp = line.find('&', amp + 1))
+        {
+            size_t end = amp + 1;
+            while (end < line.size() && isWord(line[end])) ++end;
+            if (end > amp + 1) exposed.insert(line.substr(amp + 1, end - amp - 1));
+        }
+        const bool callLine = line.find("func_0x") != std::string::npos || line.find("(*") != std::string::npos;
+        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos)
             for (auto it = tainted.begin(); it != tainted.end();)
                 it = it->find("Stack") != std::string::npos ? tainted.erase(it) : std::next(it);
+        else if (callLine)
+            for (auto it = tainted.begin(); it != tainted.end();)
+                it = exposed.count(*it) ? tainted.erase(it) : std::next(it);
         const size_t eq = line.find(" = ");
         if (eq != std::string::npos && line.back() == ';' && line.find_first_of("(){}[]*") > eq)
         {
@@ -3686,10 +3730,10 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         if (fn.canary != 0)
         {
             bool returned = false;
-            for (const RunOut& run : runs) returned = returned || (run.finished && run.fin[0] == fn.canary);
+            for (const RunOut& run : runs) returned = returned || (run.finished && (run.fin[0] == fn.canary || (fn.canary2 != 0 && run.fin[0] == fn.canary2)));
             count("canary.checked");
             std::string line;
-            if (!returned && (!fn.canaryIfLent || r.prototype.known) && CanaryReturned(r.Text(), fn.canary, line))
+            if (!returned && (!fn.canaryIfLent || r.prototype.known) && CanaryReturned(r.Text(), fn.canary, line, fn.canary2))
                 add("canary:return", "the function stores " + Hex(fn.canary, 2) + " in a local that a callee overwrites and the run returns what the callee wrote, "
                                       "but the text returns the value from before the call: `" + line + "`");
         }
@@ -4146,7 +4190,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 size_t swBegin = 0, swEnd = 0;
                 if (FindSwitch(r.lines, tl.jmpInsn, swBegin, swEnd))
                 {
-                    if (GroupAddrs(r.lines, labels, swBegin, swEnd, dest.first, group))
+                    // A switch on the loaded address, not on the index (A2-16, A4-10, A4-11): the engine recovered the table when the function
+                    // was still partial, and in the finished one a bound check whose T bit is part of a whole SR word that something else also
+                    // uses (`stc sr`, `div1`, an SR returned) is not a compare any more, so the model that matched it finds no guard and falls
+                    // back to the trivial one -- one case for each destination, labelled with its address, the bound check an `if` before
+                    // it. The text is right; the label of the index is the address the table holds for it.
+                    bool byAddress = false;
+                    for (size_t k = swBegin; k < swEnd && !byAddress; ++k)
+                        for (long label : labels[k].cases)
+                            for (uint32_t e : tl.entry)
+                                if (static_cast<uint32_t>(label) == e || (tl.hasPre && static_cast<uint32_t>(label) == tl.preEntry)) byAddress = true;
+                    if (byAddress) count("table.switch-on-address");
+                    if (GroupAddrs(r.lines, labels, swBegin, swEnd, byAddress ? static_cast<long>(dest.second) : dest.first, group))
                     {
                         for (uint32_t a : group)
                             if (range.first <= a && a < range.second) printed = true;
@@ -4719,10 +4774,14 @@ struct Shrinker
             if (cur.type == Item::Call && cur.viaJsr)
             {
                 // bsr for jsr: the same call without the literal.
-                const bool jsr = cur.viaJsr;
-                cur.viaJsr = false;
+                const bool jsr = cur.viaJsr, bsrf = cur.viaBsrf;
+                cur.viaJsr = cur.viaBsrf = false;
                 if (Still()) changed = true;
-                else cur.viaJsr = jsr;
+                else
+                {
+                    cur.viaJsr = jsr;
+                    cur.viaBsrf = bsrf;
+                }
             }
             if (cur.type == Item::Call && !cur.setup.empty())
             {
@@ -4783,7 +4842,7 @@ struct Shrinker
             });
         }
         for (Lit& l : p.lits)
-            if (l.kind == LitKind::Fn && l.fn > k) --l.fn;
+            if ((l.kind == LitKind::Fn || l.kind == LitKind::FnRel) && l.fn > k) --l.fn;
     }
 
     Program Run()
@@ -4893,7 +4952,7 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
             CountWords({ it.cond }, m);
             break;
         case Item::Loop: m["dt"] += 1; m["bf"] += 1; m["mov"] += 1; break;
-        case Item::Call: m[it.viaJsr ? "jsr" : "bsr"] += 1; break;
+        case Item::Call: m[it.viaBsrf ? "bsrf" : it.viaJsr ? "jsr" : "bsr"] += 1; break;
         case Item::Table: m["mova"] += 1; m["shll2"] += 1; m["jmp"] += 1; m["cmp/hi"] += 1; break;
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
@@ -6602,6 +6661,84 @@ void TestCalleeClobberPins(Sh2Decompiler& d)
     }
 }
 
+// The seeds beyond the nightly's range (area 5 round 9 review; ledger A3-45, A3-46, A4-10, A4-11), as the shrunk programs the review printed. They are
+// the words the replay lines carry; each must come out with no finding, and the two table pins must have been read through the labels that are
+// addresses (the check's `table.switch-on-address` count), so that an oracle which looks for the index's label only fails them.
+void SetOrClear(const char* name, const char* value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) setenv(name, value, 1);
+    else unsetenv(name);
+#endif
+}
+
+struct ModulePin
+{
+    const char* name;
+    const char* words;
+    const char* funcs;
+    const char* tables;
+    const char* returns;
+    const char* clobbers;
+    const char* reads;
+};
+
+Subject ModuleSubject(const ModulePin& m)
+{
+    const char* names[] = { "SE_GENERATED_FUNCS", "SE_GENERATED_TABLES", "SE_GENERATED_RETURNS", "SE_GENERATED_CLOBBERS", "SE_GENERATED_READS",
+                            "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_DATA" };
+    const char* values[] = { m.funcs, m.tables, m.returns, m.clobbers, m.reads, nullptr, nullptr, nullptr };
+    std::string saved[8];
+    bool had[8];
+    for (int i = 0; i < 8; ++i)
+    {
+        const char* old = std::getenv(names[i]);
+        had[i] = old != nullptr;
+        if (old) saved[i] = old;
+        SetOrClear(names[i], values[i]);
+    }
+    const Subject s = RawSubject(m.words);
+    for (int i = 0; i < 8; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+    return s;
+}
+
+void TestLeftoverSeedPins(Sh2Decompiler& d)
+{
+    // A3-45 (seed 22001): rotcr r0 in a do-while loop, r0's entry value reaches the result on every path: not lent. A3-46 (seed 24379): r0 is left
+    // alone on the path that skips both writes: lent, and the oracle must not count `and r0,r0` as the write that fills it.
+    for (const char* words : { "E301 4025 451B 4310 8BFB 000B 0009", "5264 C880 8900 200A 2028 8B00 2009 000B 0009",
+                               // control: the same loop entered only if r4 is not zero, so a path leaves r0 alone (the scratch join of A3-14): lent void
+                               "2448 8902 4025 4410 8BFC 000B 0009" })
+    {
+        const Report rep = EvaluateSubject(d, WordsSubject(words), true);
+        std::printf("pin '%s': %zu finding(s)\n", words, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    static const ModulePin kTables[] = {
+        { "A4-10, seed 33994 (div1 in a case)",
+          "2F86 2F96 2FC6 0C2A 7FF0 6843 6953 604D 7F10 4C2A 6CF6 69F6 68F6 000B 0009 E301 A000 0009 4310 8BFD E103 3616 8913 4608 C701 016E 412B 0009 0600 9048 0600 "
+          "904C 0600 9052 0600 9052 A005 0009 C604 A002 0009 A000 0009 E301 A000 0009 4310 8BFD 4515 8902 3154 A002 0009 A000 0009 E074 000B 0009",
+          "0/0/1e,1e/1e/74", "34:6:4:56:48,4c,52,52", "1,1", "0,0", "0,20000" },
+        { "A4-11, seed 50070 (stc sr in a case)",
+          "2F86 2F96 2FA6 4F22 7FF8 6843 6953 6A63 D203 7F08 4F26 6AF6 69F6 68F6 422B 0009 0600 9024 E105 3616 891B 4608 C701 016E 412B 0009 0600 904C 0600 9050 0600 9054 "
+          "0600 9054 0600 9058 0600 905C A009 0009 A007 0009 A005 0009 A003 0009 517F A000 0009 0202 6023 000B 0009",
+          "0/0/20,24/24/6a", "30:6:6:62:4c,50,54,54,58,5c", "1,1", "41000,41000", "0,0" },
+    };
+    for (const ModulePin& m : kTables)
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        const auto it = rep.counts.find("table.switch-on-address");
+        const int onAddress = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), switches labelled by address %d\n", m.name, rep.findings.size(), onAddress);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(onAddress > 0);
+    }
+}
+
 // ---- The canary family (ledger A3-34, A3-36, A3-37, A3-39, A3-40) ---------------------------------------------------------------------
 // The grammar never hands a callee the address of a local, nor reads a word a callee wrote, so a text that folds a local across a call (the
 // engine's own reading of what a call may write) is invisible to every other check: the function still returns a value, the registers still
@@ -6650,18 +6787,24 @@ struct CanaryAsm
 Subject MakeCanarySubject(int variant, std::string& label)
 {
     Rng r(0xCA4A41ull + static_cast<uint64_t>(variant) * 7919u);
-    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, kKinds };
+    // Round 8 (A3-44) adds the frame address in r5, r6 or r7 (a lent writer), and handed through a word of memory the writer loads it from
+    // (Cell), and three dimensions drawn from a stream of their own (so the older variants draw what they drew): the result used (`add #1,r0`),
+    // and the call under a branch or in a loop that runs twice.
+    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, Lent5, Lent6, Lent7, Cell, kKinds };
     const Kind kind = static_cast<Kind>(variant % kKinds);
-    const bool fp = kind <= Unlent2 && r.Chance(40);
+    Rng x(0xCA4A42ull + static_cast<uint64_t>(variant) * 104729u);
+    const bool plus1 = x.Chance(30);
+    int shape = static_cast<int>(x.Below(3));   // 0 straight, 1 `if (r4 != 0)` around the call, 2 a loop of two calls (r13 the counter)
+    const bool fp = (kind <= Unlent2 || kind >= Lent5) && r.Chance(40);
     const bool jsr = r.Chance(50);
     const int pre = static_cast<int>(r.Below(3));
     const int form = static_cast<int>(r.Below(3));   // 0 exact, 1 plus a negative index, 2 minus a positive one
-    const uint32_t kWriter = 0x80, kKeepLent = 0xA0, kKeepUnlent = 0xC0, kIndexWord = 0x100;
+    const uint32_t kWriter = 0x80, kKeepLent = 0xA0, kKeepUnlent = 0xC0, kIndexWord = 0x100, kCell = 0x10C;
     CanaryAsm a;
     // (the callee that is not lent stores r1, which the caller sets, through r4: a read of r1 that is live, so the signature is withheld; a
     // copy of r1 to a scratch register was dead code and the callee was lent)
     std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x2412, 0x000B, 0x0009 };
-    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested" };
+    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested", "r5 lent", "r6 lent", "r7 lent", "cell" };
     const uint16_t seven = static_cast<uint16_t>(0xE100 | kCanaryWritten);   // mov #0x37,r1
     // The functions after the caller: the writer, a callee that keeps everything and one that reads r1 (so is not lent), and for the nested
     // kind the lent writer that the first one calls.
@@ -6671,6 +6814,14 @@ Subject MakeCanarySubject(int variant, std::string& label)
     switch (kind)
     {
     case Lent4: writer = { seven, 0x000B, 0x2412 }; break;                   // mov #K,r1 ; rts ; mov.l r1,@r4
+    case Lent5: writer = { seven, 0x000B, 0x2512 }; break;                   // ... mov.l r1,@r5
+    case Lent6: writer = { seven, 0x000B, 0x2612 }; break;
+    case Lent7: writer = { seven, 0x000B, 0x2712 }; break;
+    case Cell:
+        // mov.l @(3,pc),r2 ; mov.l @r2,r2 ; mov #K,r1 ; rts ; mov.l r1,@r2 ... the word the caller left its frame address in (the pool at 0x90)
+        writer = { 0xD203, 0x6222, seven, 0x000B, 0x2212, 0x0009, 0x0009, 0x0009,
+                   static_cast<uint16_t>((kCode + kCell) >> 16), static_cast<uint16_t>(kCode + kCell) };
+        break;
     case Unlent4: writer = { 0x2412, 0x000B, 0x0009 }; break;                // mov.l r1,@r4 ; rts ; nop  (r1 is the caller's)
     case Unlent2: writer = { 0x2212, 0x000B, 0x0009 }; break;                // mov.l r1,@r2
     case Indexed: writer = r.Chance(50) ? std::vector<uint16_t>{ 0x61F3, 0x316C, 0x000B, 0x2152 }    // mov r15,r1 ; add r6,r1 ; rts ; mov.l r5,@r1
@@ -6691,11 +6842,14 @@ Subject MakeCanarySubject(int variant, std::string& label)
     others.emplace_back(kKeepLent, keepLent);
     others.emplace_back(kKeepUnlent, keepUnlent);
     if (!inner.empty()) others.emplace_back(kInner, inner);   // last: the harness decompiles the last function first, so g finds h lent
-    const bool localKind = kind <= Unlent2;
+    const bool localKind = kind <= Unlent2 || kind >= Lent5;
+    if (!localKind || fp) shape = shape == 2 ? 0 : shape;   // the loop counter needs a push of its own, which the frame pointer variants do not have
+    if (!localKind) shape = 0;
     const int base = fp ? 14 : 15;
     // Prologue.
     if (localKind)
     {
+        if (shape == 2) a.Put(0x2FD6);      // mov.l r13,@-r15
         if (fp) a.Put(0x2FE6);              // mov.l r14,@-r15
         a.Put(0x4F22);                      // sts.l pr,@-r15
         a.Put(0x7FF8);                      // add #-8,r15
@@ -6718,17 +6872,35 @@ Subject MakeCanarySubject(int variant, std::string& label)
         a.Put(0xE101);                      // mov #1,r1 (an unlent callee reads it)
         a.Call(lent ? kKeepLent : kKeepUnlent, r.Chance(50));
     }
+    // The call under `if (r4 != 0)` (r4 is a pointer in every run): the local is read back on that path only, the other returns 0. Or in a loop
+    // that runs twice (r13 the counter, pushed above): the local is read back after it.
+    size_t btAt = 0;
+    uint32_t loopTop = 0;
+    if (shape == 1)
+    {
+        a.Put(0x2448);                      // tst r4,r4
+        btAt = a.w.size();
+        a.Put(0x8900);                      // bt SKIP (patched below)
+    }
+    if (shape == 2)
+    {
+        a.Put(0xED02);                      // mov #2,r13
+        loopTop = a.Here();
+    }
     uint16_t slot = 0x0009;
     switch (kind)
     {
     case Lent4:
     case Unlent4:
     case Unlent2:
+    case Lent5:
+    case Lent6:
+    case Lent7:
     {
-        const int reg = kind == Unlent2 ? 2 : 4;
+        const int reg = kind == Unlent2 ? 2 : kind == Lent5 ? 5 : kind == Lent6 ? 6 : kind == Lent7 ? 7 : 4;
         if (kind == Unlent4) a.Put(seven);
         if (kind == Unlent2) a.Put(seven);
-        if (form == 0 || kind == Unlent2)
+        if (form == 0 || kind == Unlent2 || kind >= Lent5)
             a.Put(static_cast<uint16_t>(0x6003 | reg << 8 | base << 4));                    // mov base,Rn
         else
         {
@@ -6742,13 +6914,35 @@ Subject MakeCanarySubject(int variant, std::string& label)
         }
         break;
     }
+    case Cell:
+        a.Put(static_cast<uint16_t>(0x6003 | 1 << 8 | base << 4));                          // mov base,r1
+        a.LoadLiteral(6, kCode + kCell);                                                    // mov.l @(L,pc),r6
+        a.Put(0x2612);                                                                      // mov.l r1,@r6: the frame address, in a word of memory
+        break;
     case Indexed: slot = 0xE600; break;     // mov #0,r6 in the slot
     default: break;
     }
     a.Call(kWriter, jsr, slot);
-    // The local back as the result.
+    if (shape == 2)
+    {
+        a.Put(0x4D10);                      // dt r13
+        const int disp = (static_cast<int>(loopTop) - static_cast<int>(a.Here() + 4)) / 2;
+        a.Put(static_cast<uint16_t>(0x8B00 | (disp & 0xFF)));   // bf loop
+    }
+    // The local back as the result (plus one, when the result is used).
     if (localKind) a.Put(fp ? 0x50E0 : 0x50F0);   // mov.l @(0,base),r0
     else a.Put(0x60F2);                           // mov.l @r15,r0
+    if (plus1) a.Put(0x7001);                     // add #1,r0
+    if (shape == 1)
+    {
+        const size_t braAt = a.w.size();
+        a.Put(0xA000);                      // bra END (patched)
+        a.Put(0x0009);
+        const uint32_t skipAt = a.Here();
+        a.Put(0xE000);                      // SKIP: mov #0,r0
+        a.w[btAt] = static_cast<uint16_t>(0x8900 | (((static_cast<int>(skipAt) - static_cast<int>(2 * btAt + 4)) / 2) & 0xFF));
+        a.w[braAt] = static_cast<uint16_t>(0xA000 | (((static_cast<int>(a.Here()) - static_cast<int>(2 * braAt + 4)) / 2) & 0xFFF));
+    }
     if (localKind)
     {
         if (fp)
@@ -6764,7 +6958,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
             a.Put(0x7F08);                  // add #8,r15
             a.Put(0x4F26);
             a.Put(0x000B);
-            a.Put(0x0009);
+            a.Put(shape == 2 ? 0x6DF6 : 0x0009);   //   mov.l @r15+,r13 (the loop's counter) or nop
         }
     }
     else
@@ -6776,7 +6970,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
     }
     const uint32_t callerEnd = a.Here();
     std::vector<uint16_t> words = a.w;
-    words.resize(0x108 / 2, 0x0009);
+    words.resize(0x110 / 2, 0x0009);
     words[kIndexWord / 2] = form == 1 ? 0xFFFF : 0x0000;       // the index: -4 (plus) or 4 (minus)
     words[kIndexWord / 2 + 1] = form == 1 ? 0xFFFC : 0x0004;
     for (const auto& lv : a.literalValues)
@@ -6791,6 +6985,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
     caller.layout.end = kCode + callerEnd;
     caller.intent = caller.returns = true;
     caller.canary = kCanary;
+    caller.canary2 = plus1 ? kCanary + 1 : 0;
     caller.canaryIfLent = !localKind;
     s.fns.push_back(caller);
     for (const auto& o : others)
@@ -6807,15 +7002,16 @@ Subject MakeCanarySubject(int variant, std::string& label)
     s.codeWords = words.size();
     // The callers of the callees are decompiled after them: the harness lends in the order of the functions, last first.
     char buf[96];
-    std::snprintf(buf, sizeof buf, "canary %d: %s, %s%s, %d earlier call(s)%s", variant, names[kind], fp ? "frame pointer, " : "", jsr ? "jsr" : "bsr", pre,
-                  kind <= Unlent2 ? (form == 0 ? ", exact address" : form == 1 ? ", plus an index" : ", minus an index") : "");
+    std::snprintf(buf, sizeof buf, "canary %d: %s, %s%s, %d earlier call(s)%s%s%s", variant, names[kind], fp ? "frame pointer, " : "", jsr ? "jsr" : "bsr", pre,
+                  kind <= Unlent2 ? (form == 0 ? ", exact address" : form == 1 ? ", plus an index" : ", minus an index") : "",
+                  shape == 1 ? ", under a branch" : shape == 2 ? ", in a loop" : "", plus1 ? ", result plus one" : "");
     label = buf;
     return s;
 }
 
 void TestCanary(Sh2Decompiler& d)
 {
-    const long n = EnvNumber("SE_GENERATED_CANARY", 96);
+    const long n = EnvNumber("SE_GENERATED_CANARY", 240);
     const long only = EnvNumber("SE_GENERATED_CANARY_ONLY", -1);
     std::map<std::string, int> counts;
     int failing = 0;
@@ -6878,7 +7074,8 @@ void TestGenerated()
     {
         RUN(TestDomainPins(d));
         RUN(TestCalleeClobberPins(d));
-        if (EnvNumber("SE_GENERATED_CANARY", 96) > 0) RUN(TestCanary(d));
+        RUN(TestLeftoverSeedPins(d));
+        if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
     const long first = single ? single : EnvNumber("SE_GENERATED_FIRST", 1);
@@ -6981,14 +7178,14 @@ void TestGenerated()
     if (v2seeds)
     {
         std::printf("SUMMARY2: modules=%d functions=%d (end rts/tail/fall=%d/%d/%d; returning %d, void %d) pushes=%d pr stack/reg=%d/%d frames=%d (frame pointer %d) "
-                    "spills=%d frame walks=%d locals ld/st=%d/%d (stack accesses exempt %d) calls bsr/jsr=%d/%d (arg in slot %d, args restored %d) "
+                    "spills=%d frame walks=%d locals ld/st=%d/%d (stack accesses exempt %d) calls bsr/jsr/bsrf=%d/%d/%d (arg in slot %d, args restored %d) "
                     "tables=%d (entries %d, cases %d, shared entries %d, default entries %d; destinations traced %d, printed %d, inert %d, warned %d) "
                     "bra loops fwd/back=%d/%d data skips=%d shared exits=%d exits below the entry=%d slot pops=%d ret in slot=%d; "
                     "lent prototypes=%d (void %d, returning %d) withheld=%d; parameter checks=%d (candidates %d, perturbed runs %d, insensitive %d); "
                     "preserved checks=%d; flow: instructions executed=%d, into-function said/silent=%d/%d, outside body but named=%d (after a tail jump %d); runs=%d\n",
                     n("module.v2"), n("fn"), n("fn.end.rts"), n("fn.end.tail"), n("fn.end.fall"), n("fn.returns"), n("fn.void"), n("fn.pushed"),
                     n("fn.pr.stack"), n("fn.pr.reg"), n("fn.frame"), n("fn.fp"), n("spill"), n("frame.walk"), n("stack.ld.plain") + n("stack.ld.disp") + n("stack.ld.indexed"),
-                    n("stack.st.plain") + n("stack.st.disp") + n("stack.st.indexed"), c("stack.exempt"), n("call.bsr"), n("call.jsr"), n("call.arg_in_slot"),
+                    n("stack.st.plain") + n("stack.st.disp") + n("stack.st.indexed"), c("stack.exempt"), n("call.bsr"), n("call.jsr"), n("call.bsrf"), n("call.arg_in_slot"),
                     n("call.restores"), n("table"), n("table.entries"), n("table.cases"), n("table.entry_shared"), n("table.entry_default"),
                     c("table.destination"), c("table.printed"), c("table.inert"), c("table.warned"), n("loop.bra"), n("loop.back"), n("bra.data"), n("fn.shared_exit"),
                     n("fn.exit_below"), n("fn.slot_pop"), n("fn.ret_in_slot"), c("proto.lent"), c("ret.void"), c("ret.claimed"), c("proto.withheld"),
