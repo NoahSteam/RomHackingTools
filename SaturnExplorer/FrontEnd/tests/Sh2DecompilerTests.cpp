@@ -10401,6 +10401,197 @@ void TestRoutedSeeds()
     }
 }
 
+// ===== Area 3, round 9 review: what the round 8 fixes held under (controls; the findings are rows A3-56 to A3-64 of the ledger) =====
+// None of these is a defect: each prints what the record of round 9 says it held, so a fix of the open rows that disturbs one is seen.
+// A3-51 (the stack-slot note): the frame address in the slot is a note or an argument, the local is never folded, whether it is pushed right before
+// the call, held in an r14-based frame, in the second slot, passed through two calls, or r5/r6 is set on one path or by a copy. A3-55 (the join
+// chosen by a register no signature passes): the choice read through a spilled word, a byte, a push and a pop, a T flag set blocks before, a
+// counter, a join of distinct registers; the choice kept in the text (a second return, a load through the register) is the engine's own read and
+// withheld as such. Tail calls: the effects of a caller that jumps to a lent callee after restoring a register, popping its frame in the slot or
+// restoring PR in the slot.
+void TestArea3Round9()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 70000;
+    const uint32_t gAt = 0x06009040u;
+    const char* const kStackNote = "a frame address is in a stack argument slot here";
+    // A caller of an unlent callee that reads (and writes through) a frame address in a stack slot: the text is held to the run.
+    auto stackAddress = [&](const CallFixture& f, const std::vector<std::vector<uint32_t>>& inputs) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && !callee.prototype.known);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        CHECK(!Has(r.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs, true));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, inputs[0], ran) && ran == 0x37u);
+        return r;
+    };
+    auto withheld = [&](const CallFixture& f, const char* reason) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+    };
+    // A caller that jumps to the lent callee at 0x06009040: lent, held to the run, and the registers it says it keeps are kept.
+    auto tailCall = [&](const CallFixture& f, uint32_t keptBit, bool kept) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known);
+        DecompileRequest q = Request(f.base);
+        q.prototypes.emplace_back(gAt, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && r.prototype.known);
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1, 2, 3, 4 }, { 0, 1, 2, 3 } }));
+        CHECK((((r.prototype.effects.preserved >> keptBit) & 1u) != 0) == kept);
+        CHECK(r.prototype.effects.spDelta == 0);
+    };
+
+    // ---- A3-51: other slot offsets, pushes, frames, calls ----
+    {
+        const CallFixture f = { "a3_51 round 9 pushed (@-r15) right before the call", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F16, 0xD304, 0x430B, 0x0009, 0x7F04, 0x50F1,
+        0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r14-based frame", 0x06009000u,
+{
+        0x4F22, 0x2FE6, 0x7FF8, 0x6EF3, 0xE05A, 0x1E01, 0x61E3, 0x7104, 0x2E12, 0xD304, 0x430B, 0x0009,
+        0x50E1, 0x7F08, 0x6EF6, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 the address passed through two calls", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xD305, 0x430B, 0x0009, 0xD304, 0x430B,
+        0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9060, 0x0600, 0x9040, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x62F2, 0x000B, 0x6122, 0x0009 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 the address in the second slot, the first written", 0x06009000u,
+{
+        0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0xD304, 0x430B, 0x0009, 0x50F2, 0x7F0C,
+        0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x52F1, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r5 set on one path only", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x2448, 0x8900, 0xE501, 0xD303, 0x430B,
+        0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 0 } });
+    }
+    {
+        const CallFixture f = { "a3_51 round 9 r6 set by a copy of r4", 0x06009000u,
+{
+        0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x6643, 0xD303, 0x430B, 0x0009, 0x50F1,
+        0x7F08, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x62F2, 0xE337, 0x000B, 0x2232 } };
+        stackAddress(f, { { 1 }, { 2 } });
+    }
+    (void)kStackNote;
+    // ---- A3-55: the choice is in the text, or is read through a register the rule follows ----
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by r3 spilled to a stack word and reloaded", 0x06009000u,
+{
+        0x7FF8, 0x2F32, 0x61F2, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x7F08,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by a byte of r3 spilled and reloaded", 0x06009000u,
+{
+        0x7FF8, 0x2F30, 0x61F0, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x7F08,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by r3 pushed and popped", 0x06009000u,
+{
+        0x2F36, 0x61F6, 0x2118, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by T set by tst r3 two blocks earlier", 0x06009000u,
+{
+        0x2338, 0xE203, 0xA000, 0x0009, 0xE204, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B,
+        0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by dt r3", 0x06009000u,
+{
+        0x4310, 0x8903, 0xE001, 0x210B, 0xA002, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 r5 or r6 chosen by r3", 0x06009000u,
+{
+        0x6053, 0x3300, 0x8B01, 0x6063, 0x210B, 0x000B, 0x0009, 0x0009 } };
+        withheld(f, "chosen by r3");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 chosen by a load through r3 (the engine keeps the read)", 0x06009000u,
+{
+        0xD705, 0x6071, 0xE2A3, 0x3200, 0x6132, 0x2118, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009,
+        0x0600, 0x9100 } };
+        withheld(f, "reads r3 on entry");
+    }
+    {
+        const CallFixture f = { "a3_55 round 9 two return sites chosen by r3 (the engine keeps the branch)", 0x06009000u,
+{
+        0x2338, 0x8903, 0xE001, 0x210B, 0x000B, 0x0009, 0xE002, 0x210B, 0x000B, 0x0009 } };
+        withheld(f, "reads r3 on entry");
+    }
+    // ---- tail calls: the caller's effects ----
+    {
+        const CallFixture f = { "a3_27 round 9 tail call after r8 is saved and restored: r8 kept", 0x06009000u,
+{
+        0x2F86, 0x6843, 0x7801, 0x68F6, 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6043, 0x7001, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call to a callee that clobbers r9 without saving it: r9 not kept", 0x06009000u,
+{
+        0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0xE905, 0x6043, 0x000B, 0x0009 } };
+        tailCall(f, 9, false);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call restoring PR in the slot of the jump", 0x06009000u,
+{
+        0x4F22, 0x6543, 0xD101, 0x412B, 0x4F26, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6053, 0x7003, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+    {
+        const CallFixture f = { "a3_27 round 9 tail call popping the frame in the slot of the jump", 0x06009000u,
+{
+        0x7FF8, 0x6543, 0xD101, 0x412B, 0x7F08, 0x0009, 0x0600, 0x9040, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009,
+        0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x0009, 0x6053, 0x7003, 0x000B, 0x0009 } };
+        tailCall(f, 8, true);
+    }
+}
+
+
 // ===== Area 2, round 8 review =====
 // (1) The slot loads above, by value. (2) The A2-47 family in ordinary code, 19 fixtures that printed a wrong value with patch 0046 reverted:
 // a value built from a boolean as `T * A + (1 - T) * B` (mul.l, sts macl), then a mask or a shift pair or an extension that reads the low
@@ -10994,6 +11185,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round7SlotValues());
         RUN(TestArea3Round8());
         RUN(TestRoutedSeeds());
+        RUN(TestArea3Round9());
         RUN(TestArea2Round8());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
