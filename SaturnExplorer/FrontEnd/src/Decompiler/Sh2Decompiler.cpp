@@ -2036,9 +2036,14 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, std::set<const ghidr
         }
         case ghidra::CPUI_RETURN:   // (r0 left in the return register by a poll is no use of the value: the decompiler returns it whatever the code meant)
             continue;
+        case ghidra::CPUI_COPY:
+            // A byte stored to a constant address of ordinary memory: the engine folds the store into a copy to that memory's variable, and
+            // the byte is then in memory, whole, whatever the readers of the variable look at (A5-66).
+            if (use->getOut() && use->getOut()->isPersist()) return false;
+            if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
+            continue;
         case ghidra::CPUI_INT_ZEXT:
         case ghidra::CPUI_INT_SEXT:
-        case ghidra::CPUI_COPY:
         case ghidra::CPUI_CAST:
         case ghidra::CPUI_MULTIEQUAL:
             if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
@@ -2066,6 +2071,12 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask)
 // when the engine proved the pointer to be one of several constants, and some are register addresses
 // (the output prints `&REG`), each of those is said as the direct access would be, under "if the pointer holds ..."
 // (A5-28): the cache caution, the read effects, the width cautions, the write effects.
+std::string ColorRamByteNote(uint32_t at)
+{
+    return "a 1-byte write to colour RAM at " + Hex8(at) + " stores the whole 16-bit entry: the byte not written is the last value on the "
+           "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)";
+}
+
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::set<std::pair<uint32_t, std::string>> seen;
@@ -2139,8 +2150,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         // VDP2 colour RAM stores the whole 16-bit entry from the data bus on a byte write: the byte not written is the last value on the
         // bus, not the entry's old byte (vdp2.c RW_W8, unlike VRAM's masked store), so no value of the entry is carried past it (A5-50).
         if (write && size == 1 && InColorRam(at))
-            note(insn, "a 1-byte write to colour RAM at " + Hex8(at) + " stores the whole 16-bit entry: the byte not written is the last value on the "
-                       "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)", true);
+            note(insn, ColorRamByteNote(at), true);
         if (regs.empty()) return;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
@@ -2181,9 +2191,25 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 if (isRegister(c.first)) registers.push_back(Candidate{ c.first, false, c.second });
             for (uint32_t c : pv.bases)
                 if (isRegister(c) && !pv.constants.count(c)) registers.push_back(Candidate{ c, true, false });
-            if (registers.empty()) continue;
             const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
             const bool certain = pv.constants.size() == 1 && pv.bases.empty() && !pv.others;
+            // A byte store through a pointer that holds a colour RAM address stores the whole entry as a store at a constant address does
+            // (A5-50): said under the address the pointer holds, as the register notes are (A5-67). Every colour RAM address says the same
+            // thing, so a pointer stepped from one need not name the others.
+            if (write && size == 1)
+                for (const auto& c : pv.constants)
+                {
+                    if (!InColorRam(c.first)) continue;
+                    bool others = pv.others || !pv.bases.empty();
+                    for (const auto& d : pv.constants) others |= !InColorRam(d.first);
+                    noteRaw(insn, (certain ? std::string() : "if the pointer holds " + Hex8(c.first) + (others ? " (it may hold other values too)" : "") + ": ") +
+                                      ColorRamByteNote(c.first), true);
+                }
+            if (write && size == 1)
+                for (uint32_t b : pv.bases)
+                    if (!pv.constants.count(b) && InColorRam(b))
+                        noteRaw(insn, "if the index is 0 (the pointer is based at " + Hex8(b) + "): " + ColorRamByteNote(b), true);
+            if (registers.empty()) continue;
             // (an address the pointer holds that is no register's is another value it may hold, as a parameter's is)
             bool otherValues = pv.others;
             for (const auto& c : pv.constants) otherValues |= !isRegister(c.first);
@@ -2869,6 +2895,9 @@ struct ConstAccess
     uint32_t bus = 0;
     uint32_t size = 0;
     bool store = false;
+    // A write to a register that changes how a memory is addressed from then on (A5-68): bit 0 VDP1_TVMR (the frame buffer's 8 bpp rotate
+    // scramble), bit 1 VDP2_RAMCTL (the colour RAM mode). Not an access of any memory; the evidence that the function re-addresses them.
+    uint8_t remaps = 0;
     bool operator<(const ConstAccess& o) const { return std::tie(address, size, store) < std::tie(o.address, o.size, o.store); }
 };
 
@@ -2894,6 +2923,23 @@ std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghid
         const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
         if (!u || (u->getType() != ghidra::UserPcodeOp::volatile_read && u->getType() != ghidra::UserPcodeOp::volatile_write)) continue;
         const uint32_t address = static_cast<uint32_t>(o->getIn(1)->getOffset());
+        if (u->getType() == ghidra::UserPcodeOp::volatile_write && o->numInput() > 2)
+        {
+            const uint32_t width = static_cast<uint32_t>(o->getIn(2)->getSize());
+            uint8_t remaps = 0;
+            for (const HardwareRegister* reg : HardwareRegistersCovering(address, width))
+                remaps |= reg->address == 0x05D00000u ? 1 : reg->address == 0x05F8000Eu ? 2 : 0;
+            if (remaps)
+            {
+                ConstAccess c;
+                c.address = c.bus = address;
+                c.size = width;
+                c.store = true;
+                c.remaps = remaps;
+                out.push_back(c);
+                continue;
+            }
+        }
         if (!IsPurgePartition(address)) continue;   // 0x40000000-0x5FFFFFFF and 0xA0000000-0xBFFFFFFF: Mednafen's associative purge (sh7095.inc cases 2 and 5, A5-62)
         const bool store = u->getType() == ghidra::UserPcodeOp::volatile_write;
         const ghidra::Varnode* value = store ? (o->numInput() > 2 ? o->getIn(2) : nullptr) : o->getOut();
@@ -2923,6 +2969,12 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     };
     std::vector<Member> members;
     std::set<ConstAccess> have;
+    // The function writes VDP1_TVMR or VDP2_RAMCTL: the memory that register re-addresses is not the memory the data flow keys by address
+    // after the write. A store before it and a load after it are not the same bytes (the mode 3 colour RAM reads another entry), so every
+    // access the function makes to that memory is volatile (A5-68). (Seen as accesses of the register in 'seen' or 'known'.)
+    uint8_t remaps = 0;
+    for (const ConstAccess& c : known) remaps |= c.remaps;
+    for (const ConstAccess& c : seen) remaps |= c.remaps;
     auto add = [&](const ConstAccess& c, bool isKnown) {
         if (!have.insert(c).second) return;
         Member m;
@@ -2940,6 +2992,8 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     {
         Member& mi = members[i];
         if (mi.bytes.kind == MemoryKind::Vdp2ColorRam && mi.access.store && mi.access.size == 1) mi.flagged = true;
+        if ((mi.bytes.kind == MemoryKind::Vdp1FrameBuffer && (remaps & 1)) || (mi.bytes.kind == MemoryKind::Vdp2ColorRam && (remaps & 2)))
+            mi.flagged = true;
         for (size_t j = i + 1; j < members.size(); ++j)
         {
             Member& mj = members[j];

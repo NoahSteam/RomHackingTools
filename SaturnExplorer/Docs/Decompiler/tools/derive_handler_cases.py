@@ -31,7 +31,7 @@
 #                  constant, a write stores or acts); - decoded and inert (a bare break, ret = 0xFF)
 #               E  a read has a side effect (a flag armed, a latch, a FIFO pop)
 #               D  a write starts a division   S  a write starts a DMA   C  a write sets CCR
-#               G  a write starts VDP1 drawing   F  a write stores a constant whatever the value (SF = true)
+#               G  a write starts VDP1 drawing   F  a write stores a constant whatever the value (SF = true; an SCSP slot's words 12-15)
 #               V  a write whose action the value chooses (A5-55): the value is latched into a pending action -- the SCSP
 #                  DMA's execute flag, a slot's key-execute flag, the SMPC's pending command, VDP1's manual frame change
 #                  -- or clears pending interrupts bit by bit (SCIPD, MCIPD &= ~value). A register with V has an action no
@@ -217,6 +217,13 @@ def classify_read(text):
 LATCHES = re.compile(r'(?:^|[>.])(?:DMA_Execute|KeyExecute|FBManualPending|PendingCommand)\s*(?:\|=|=)(?!=)')
 CLEARS = re.compile(r'(?:^|[>.])(?:SCIPD|MCIPD)\s*&=\s*~')
 
+# Actions a write takes from the value that the statements do not show once the conditions are stripped (A5-64): the SMPC's INTBACK
+# continue and break bits (`if((V ^ IR0WX) & IR0WA)`), the SCU mask write that raises the SH-2's interrupt line on the spot
+# (`if(CheckDoMasterInt()) SH7095_SetIRL(...)`), the SCSP's interrupt recalculations after an enable, level or pending write, the MIDI byte
+# sent from MOBUF, and a timer's reload value taken from the value (`t->Reload = V & 0xFF`).
+VALUE_ACTS = re.compile(r'\(V\s*\^\s*IR0WX\)|\bCheckDoMasterInt\s*\(|\bSS_SCSP_Recalc(?:Sound|Main)Int\s*\(|'
+                        r'\bSS_SCSP_MIDI_WriteOutput\s*\(|\bt->Reload\s*=(?!=)')
+
 def classify_write(text):
     flags = ''
     stm = [s for s in statements(text) if not any(t in s for t in TIMING)]
@@ -225,10 +232,12 @@ def classify_write(text):
     if any('SetCCR' in s for s in stm): flags += 'C'
     if any('StartDrawing' in s for s in stm): flags += 'G'
     # F: a store of a constant that does not depend on the value written (SMPC SF = true, CommandPending = true)
-    if any(re.match(r'^[\w\.\[\]>-]+\s*=\s*(true|false|0x[0-9A-Fa-f]+|\d+)$', s) and not re.search(r'\bV\b', s) for s in stm): flags += 'F'
+    # (a store through a pointer too: the SCSP slot words 12-15 are `*SRV = 0`, A5-64)
+    if any(re.match(r'^\*?[\w\.\[\]>-]+\s*=\s*(true|false|0x[0-9A-Fa-f]+|\d+)$', s) and not re.search(r'\bV\b', s) for s in stm): flags += 'F'
     stm = [s for s in stm if not re.match(r'^z->WDT\.RSTCSRM\s*=\s*0$', s)]
     # V: the value chooses the action (a latch assigned from the value, or pending bits cleared by it)
-    if any((LATCHES.search(s) and re.search(r'\bV\b|\*SRV|\*DBV_p|\bvalue\b|\btmp\b', s)) or CLEARS.search(s) for s in stm): flags += 'V'
+    if any((LATCHES.search(s) and re.search(r'\bV\b|\*SRV|\*DBV_p|\bvalue\b|\btmp\b', s)) or CLEARS.search(s) for s in stm) or \
+       VALUE_ACTS.search(strip_comments(text)): flags += 'V'
     return ('M' if stm else '') + flags
 
 def fmt_groups(groups, classify):

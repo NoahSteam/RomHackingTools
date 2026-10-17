@@ -1405,6 +1405,11 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
         if (reg == 0x60 && lane0 && (!valueKnown || bit0))
             out.push_back(std::string("SCU_DSTP: ") + (valueKnown ? "bit 0 is set, so this write" : "a write with bit 0 set") +
                           " stops DMA on every level");
+        // IMS (case 0xA0): `IMask = ...; if(CheckDoMasterInt()) SH7095_SetIRL(&CPU[0], ILevel);` at every width: the SCU works out the interrupt
+        // to raise from the pending bits and the new mask on the spot (a set bit masks), so unmasking a pending one interrupts the SH-2 (A5-64).
+        if (reg == 0xA0)
+            out.push_back("SCU_IMS: a write recalculates the SCU's interrupt at once (a set bit masks): clearing the mask bit of an interrupt that is "
+                          "already pending raises it to the SH-2 on the spot");
         // T1MD: `Timer_Enable = tmp & 1; if(!Timer_Enable) Timer0_Counter = 0;` (the old enable bit when the lane has no bit 0).
         if (reg == 0x98 && lane0 && (!valueKnown || !bit0))
             out.push_back(std::string("SCU_T1MD: ") + (valueKnown ? "bit 0 (the timer enable) is clear, so this write" : "a write with bit 0 clear") +
@@ -1447,7 +1452,65 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
                 out.push_back(std::string(c.name) + ": clears the pending " + c.whose + " interrupts (" + c.pending +
                               ") whose bits are set in the value written");
         }
+        // The interrupt registers (cases 0x0F, 0x10, 0x12-0x17): a write recalculates the interrupt the SCSP raises at once
+        // (SS_SCSP_RecalcSoundInt: SCIPD & SCIEB by level to the sound CPU; SS_SCSP_RecalcMainInt: SCSP_MainIntChanged(MCIPD & MCIEB) to the SCU), so
+        // enabling an interrupt that is pending raises it on the spot. SCIPD and MCIPD take bit 5 only (`|= value & 0x20`): the software interrupt (A5-64).
+        const struct { uint32_t reg; const char* name; const char* text; bool pendingBit5; } kRecalc[] = {
+            { 0x05B0041Eu, "SCSP_SCIEB", "sets which sound-CPU interrupts are enabled; the sound-CPU interrupt is recalculated at once, so enabling one that is pending raises it", false },
+            { 0x05B00420u, "SCSP_SCIPD", "a write of bit 5 requests sound-CPU interrupt 5 (SCIPD |= 0x20, the only bit a write sets); the sound-CPU interrupt is recalculated at once", true },
+            { 0x05B00424u, "SCSP_SCILV0", "sets bit 0 of the level of each sound-CPU interrupt (the low byte); the sound-CPU interrupt level is recalculated at once", false },
+            { 0x05B00426u, "SCSP_SCILV1", "sets bit 1 of the level of each sound-CPU interrupt (the low byte); the sound-CPU interrupt level is recalculated at once", false },
+            { 0x05B00428u, "SCSP_SCILV2", "sets bit 2 of the level of each sound-CPU interrupt (the low byte); the sound-CPU interrupt level is recalculated at once", false },
+            { 0x05B0042Au, "SCSP_MCIEB", "sets which main-CPU interrupts are enabled; the request the SCSP makes of the SCU (MCIPD & MCIEB) is recalculated at once, so enabling one that is pending raises it", false },
+            { 0x05B0042Cu, "SCSP_MCIPD", "a write of bit 5 requests main-CPU interrupt 5 (MCIPD |= 0x20, the only bit a write sets); the request the SCSP makes of the SCU is recalculated at once", true } };
+        for (const auto& c : kRecalc)
+        {
+            const WordLane l = LaneOf(c.reg, a, size, value);
+            if (!l.reached) continue;
+            if (c.pendingBit5 && (!(l.mask & 0x20u) || (valueKnown && !(l.value & 0x20u)))) continue;   // sets nothing
+            out.push_back(std::string(c.name) + ": " + c.text);
+        }
+        // MOBUF (case 0x03): `if(!shift) SS_SCSP_MIDI_WriteOutput(z, V)`: a write that carries the low byte sends it as a MIDI output byte, whatever it is.
+        const WordLane mobuf = LaneOf(0x05B00406u, a, size, value);
+        if (mobuf.reached && (mobuf.mask & 0x00FFu))
+            out.push_back("SCSP_MOBUF: a write sends its low byte out as a MIDI byte, whatever it is");
+        // The timers (cases 0x0C-0x0E): `t->Control = (tmp >> 8) & 0x7` from the high byte, and `if(!shift) t->Reload = V & 0xFF` from the low.
+        for (unsigned t = 0; t < 3; ++t)
+        {
+            const WordLane l = LaneOf(0x05B00418u + 2u * t, a, size, value);
+            if (!l.reached) continue;
+            const char name = static_cast<char>('A' + t);
+            if ((l.mask & 0x00FFu) && (l.mask & 0xFF00u))
+                out.push_back(Fmt("SCSP_TIM%c: the low byte is the timer's reload value (loaded at its next count) and bits 10-8 set its clock divider "
+                                  "(it counts every 2^n samples)", name));
+            else if (l.mask & 0x00FFu)
+                out.push_back(Fmt("SCSP_TIM%c: the byte is the timer's reload value, loaded at its next count", name));
+            else
+                out.push_back(Fmt("SCSP_TIM%c: bits 10-8 of the register set the timer's clock divider (it counts every 2^n samples)", name));
+        }
+        // A slot's words 12-15 (case 0x0C-0x0F: `*SRV = 0`): the value written is dropped and 0 stored, at any width that reaches them.
+        if (off < 0x400u)
+            for (uint32_t w = off & ~1u; w < off + size && w < 0x400u; w += 2)
+                if (((w >> 1) & 0xFu) >= 12)
+                    out.push_back(Fmt("SCSP slot %u word %u: any write stores 0 here, whatever is written", (w >> 5) & 0x1Fu, (w >> 1) & 0xFu));
     }
+    // SMPC_IREG0 (smpc.c SMPC_Write case 0x00): `if((V ^ IR0WX) & IR0WA) nt = timestamp + 1;` -- while an INTBACK waits (IR0WA = 0xC0) for its
+    // next request, bit 7 (continue) of the byte written asks for the next report and bit 6 (break) ends it (`JR_WAIT((IREG[0] & 0x80) ==
+    // NextContBit || (IREG[0] & 0x40))`); the SMPC wakes on the write. The byte is the register's, wherever in the access it sits (A5-64).
+    for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
+        if (reg->address == 0x00100001u)
+        {
+            const std::string what = "SMPC_IREG0: while an INTBACK waits for its next request, bit 7 (continue) of the byte written asks for the next "
+                                     "report and bit 6 (break) ends the INTBACK; the SMPC acts on the write at once";
+            if (!valueKnown)
+                out.push_back(what);
+            else
+            {
+                const uint32_t d = reg->address - a;   // the byte's place in the access (big-endian)
+                const uint32_t byte = (value >> ((size - 1 - d) * 8)) & 0xFFu;
+                out.push_back(std::string(what) + Fmt(" (here bit 7 is %s and bit 6 is %s)", (byte & 0x80u) ? "set" : "clear", (byte & 0x40u) ? "set" : "clear"));
+            }
+        }
     // SMPC_COMREG (smpc.c SMPC_Write case 0x0F, PendingCommand = V): the byte written is the command the SMPC then executes. A word or a long
     // reaches the byte by its lane, and it is always the low byte of the value.
     for (const HardwareRegister* reg : HardwareRegistersCovering(a, size))
