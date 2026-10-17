@@ -108,6 +108,11 @@
 //      call the engine does not know, counted `cache.read.pointer.unrelated`. A pointer that derives from no register address (a
 //      parameter, a loaded or computed address) is excused, counted `cache.read.anonymous`; the others are
 //      `cache.read.pointer.said` or `...unsaid`.
+//   2b. (round 7, A5-52) A work-RAM word the traced function reaches under two addresses (the other partition, bits 28-27, the 1 MiB repeat, the
+//      associative-purge name of its line), by the emulator's own memory model, and at constant addresses the engine folds, is listed like marked
+//      memory: every access to it is in the ledger. The data flow keys memory by address, and would forward a store past a write to the other
+//      name (counted `alias.words`; SE_GENERATED_MUTATE=alias checks the check). Grammar 1 also makes a partition mask on a pointer register
+//      (`litptr.mask.and` / `.or`, A5-51), which rule 3b holds to the cache caution.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
@@ -154,7 +159,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|params|ret|body|cases|warn|preserved|lent|data|honour|kept
+//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|lent|data|honour|kept
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -325,10 +330,10 @@ bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in 
 
 // ---- The program model ----------------------------------------------------------------------
 
-enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn };
+enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn, Mask };
 const char* KindName(LitKind k)
 {
-    return k == LitKind::Hw ? "hardware" : k == LitKind::Ram ? "RAM" : k == LitKind::Mbox ? "mailbox" : "function";
+    return k == LitKind::Hw ? "hardware" : k == LitKind::Ram ? "RAM" : k == LitKind::Mbox ? "mailbox" : k == LitKind::Mask ? "mask" : "function";
 }
 
 struct Lit
@@ -342,11 +347,11 @@ struct Lit
 struct Item
 {
     // Poll is version 1 only; the types after it are version 2.
-    enum Type : uint8_t { Alu, Mem, LitPtr, Skip, Loop, Poll, Spill, Call, Table, BraLoop, BraBack, DataSkip } type = Alu;
+    enum Type : uint8_t { Alu, Mem, LitPtr, Skip, Loop, Poll, Spill, Call, Table, BraLoop, BraBack, DataSkip, Mask } type = Alu;
     const char* shape = "";
     std::vector<uint16_t> words;   // Alu, Mem: the instruction words (an indexed access: mov #k,r0 first)
     int base = -1;                 // Mem: the pointer register
-    int reg = 6, lit = 0;          // LitPtr, Poll: the pointer register and its literal
+    int reg = 6, lit = 0;          // LitPtr, Poll: the pointer register and its literal; Mask: the pointer register and the mask's literal (loaded into jsrReg)
     uint16_t cond = 0;             // Skip: the tst or cmp that sets T
     bool onTrue = true;            // Skip: bt (else bf)
     bool delayed = false;          // Skip: bt/s, bf/s with 'slot'
@@ -438,6 +443,10 @@ struct Gen
     // ...and one for the wide ALU alphabet (addc .. swap, the rotates and shifts, movt, ldc/stc ...): which
     // ALU items become one of those is drawn here, so the shapes of the narrow alphabet keep their draws.
     Rng wideRng;
+    // ...and one for the second names of work-RAM words (A5-52): which literals are another address of an earlier literal's word
+    // (the other partition, bits 28-27, the 1 MiB repeat), and the partition masks (A5-51). Neither moves a draw of the streams above.
+    Rng aliasRng;
+    Rng maskRng;
     // ...and one for the frame walk (a loop that moves a stack address, round 5 A3-16): whether a function has one and where.
     Rng frameRng;
     // ...and one for the partial result (a parameter copied to r0 on one path only, round 6 A3-20).
@@ -463,7 +472,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -533,8 +542,26 @@ struct Gen
             l.value = (rng.Chance(75) ? p.mbox : (p.mbox & ~0x20000000u)) + 4u * rng.Below(3);
             l.width = rng.Chance(50) ? 2 : rng.Chance(50) ? 4 : 1;
         }
+        if (kind == LitKind::Ram || kind == LitKind::Mbox) MaybeAlias(l);
         l.width = std::min(l.width, Alignment(l.value));
         return l;
+    }
+
+    // A literal of work RAM that is another address of the word an earlier one names, three times in ten: the other partition, bits
+    // 28-27 flipped, or the next 1 MiB repeat. The data flow keys memory by address, and the decompiler must know these are one word.
+    void MaybeAlias(Lit& l)
+    {
+        std::vector<int> prior;
+        for (size_t i = 0; i < p.lits.size(); ++i)
+            if (p.lits[i].kind == LitKind::Ram || p.lits[i].kind == LitKind::Mbox) prior.push_back(static_cast<int>(i));
+        if (prior.empty() || !aliasRng.Chance(30)) return;
+        const Lit& q = p.lits[prior[aliasRng.Below(static_cast<uint32_t>(prior.size()))]];
+        static const uint32_t kFlips[] = { 0x20000000u, 0x08000000u, 0x10000000u, 0x00100000u };
+        const uint32_t pick = aliasRng.Below(5);
+        // ...or the name of its cache line in the associative-purge partition (0x4xxxxxxx), the barrier the slave's idle loop puts between
+        // its store and its poll: not memory, but a word the function purges is one it expects another processor to write
+        l.value = pick == 4 ? ((q.value & 0x07FFFFFFu) | 0x40000000u) : q.value ^ kFlips[pick];
+        l.width = q.width;
     }
 
     LitKind PickKind()
@@ -1588,6 +1615,29 @@ struct Gen
         // mac, in one program of eight; never ahead of the pointer registers' literals
         if (macRng.Chance(12))
             items.insert(items.begin() + 1 + macRng.Below(static_cast<uint32_t>(items.size())), MakeMac());
+        // A pointer moved between bus partitions with a mask -- `and` 0x1FFFFFFF (to the cached partition) or `or` 0x20000000 (to the
+        // cache-through one), the idiom SBL calls CACHE_THROUGH (A5-51) -- in one program of eight, after the pointer's literal. The pointer
+        // is then a merge of addresses whenever a skipped reload gave it two values, which the engine does not fold to a constant.
+        if (maskRng.Chance(13))
+        {
+            Item m;
+            m.type = Item::Mask;
+            m.reg = items.size() > 1 && p.lits.size() > 1 && maskRng.Chance(50) ? 7 : 6;
+            m.onTrue = maskRng.Chance(50);                    // true: and (to cached); false: or (to cache-through)
+            m.jsrReg = 1 + static_cast<int>(maskRng.Below(2));
+            m.shape = m.onTrue ? "litptr.mask.and" : "litptr.mask.or";
+            Lit l;
+            l.kind = LitKind::Mask;
+            l.value = m.onTrue ? 0x1FFFFFFFu : 0x20000000u;
+            m.lit = static_cast<int>(p.lits.size());
+            p.lits.push_back(l);
+            // after the pointer register's literal (the first item is r6's; r7's is wherever it was made)
+            size_t at = 1;
+            for (size_t i = 0; i < items.size(); ++i)
+                if (items[i].type == Item::LitPtr && items[i].reg == m.reg) at = i + 1;
+            at += maskRng.Below(static_cast<uint32_t>(items.size() - at + 1));
+            items.insert(items.begin() + at, m);
+        }
         return p;
     }
 };
@@ -1850,6 +1900,10 @@ struct Emitter
             break;
         case Item::LitPtr:
             PutLitLoad(it.reg, it.lit);
+            break;
+        case Item::Mask:
+            PutLitLoad(it.jsrReg, it.lit);
+            Put(static_cast<uint16_t>((it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / or Rm,Rn
             break;
         case Item::Skip:
         {
@@ -2120,13 +2174,16 @@ struct TraceRec
     bool operator!=(const TraceRec& o) const { return !(*this == o); }
 };
 
-// The machine's memory, as the code sees it: high work RAM (both partitions, every 1 MiB repeat)
-// is real; every other address is "hardware", whose reads return a default and whose writes are
+// The machine's memory, as the code sees it: work RAM is real -- high (0x06000000-0x07FFFFFF) and low
+// (0x00200000-0x003FFFFF), through both partitions that reach memory, with bits 28-27 not decoded and a
+// repeat every 1 MiB, as the bus decodes it (ss.c, sh7095.inc) -- so a word has as many addresses as the
+// bus gives it (A5-52); every other address is "hardware", whose reads return a default and whose writes are
 // dropped, all logged. A polled address reads busy a few times and then ready: another processor
 // answering.
 struct Env
 {
-    std::vector<uint8_t> ram;
+    std::vector<uint8_t> ram;                                  // high work RAM (the snapshot's), 1 MiB
+    std::vector<uint8_t> lowRam = std::vector<uint8_t>(0x100000u);   // low work RAM, 1 MiB
     int hwMode = 0;   // what a hardware read returns: 0 zeros, 1 ones, 2 pseudo-random
     uint64_t hwState = 0x12345;
     struct Poll { uint32_t addr; uint32_t busy, ready; int reads; uint32_t raw; };   // addr canonical, raw as the code has it
@@ -2134,12 +2191,36 @@ struct Env
     std::vector<TraceRec> trace;
     int depth = 0;    // set by the machine before each instruction
     int step = 0;     // ...and the instruction's position in the run
-    static bool IsRam(uint32_t a)
+    // The byte of work RAM an address reaches, or null: the same bytes under every address that names them.
+    uint8_t* ByteAt(uint32_t a)
     {
-        const uint32_t top = a >> 24;
-        return top == 0x06 || top == 0x07 || top == 0x26 || top == 0x27;
+        if ((a >> 29) > 1) return nullptr;
+        const uint32_t p = a & 0x07FFFFFFu;
+        if (p >= 0x06000000u) return &ram[p & 0xFFFFFu];
+        if (p >= 0x00200000u && p <= 0x003FFFFFu) return &lowRam[p & 0xFFFFFu];
+        return nullptr;
+    }
+    bool IsRam(uint32_t a) { return ByteAt(a) != nullptr; }
+    // The bytes of work RAM [a, a + size) cover, as keys of the memory itself (MemKey); false when they are not work RAM.
+    static bool RamRange(uint32_t a, int size, uint32_t& lo, uint32_t& hi)
+    {
+        if ((a >> 29) > 1) return false;
+        const uint32_t p = a & 0x07FFFFFFu;
+        if (!(p >= 0x06000000u || (p >= 0x00200000u && p <= 0x003FFFFFu))) return false;
+        lo = MemKey(a);
+        hi = lo + static_cast<uint32_t>(size) - 1;
+        return true;
     }
     static uint32_t Canon(uint32_t a) { return a < 0xC0000000u ? (a & 0x0FFFFFFFu) : a; }
+    // The word a polled address names, whatever it is called: a mailbox is one word under all its addresses.
+    static uint32_t MemKey(uint32_t a)
+    {
+        if ((a >> 29) > 1) return a;
+        const uint32_t p = a & 0x07FFFFFFu;
+        if (p >= 0x06000000u) return 0x06000000u | (p & 0xFFFFFu);
+        if (p >= 0x00200000u && p <= 0x003FFFFFu) return 0x00200000u | (p & 0xFFFFFu);
+        return p;
+    }
 
     uint64_t Read(uint32_t a, int size, uint32_t insn)
     {
@@ -2152,7 +2233,7 @@ struct Env
     {
         const uint64_t mask = size == 4 ? 0xFFFFFFFFull : (1ull << (8 * size)) - 1;
         for (Poll& p : polls)
-            if (p.addr == Canon(a))
+            if (p.addr == MemKey(a))
             {
                 const uint32_t v = ++p.reads <= kPollBusyReads ? p.busy : p.ready;
                 if (IsRam(a)) Store(a, size, p.ready);   // what the other processor left behind
@@ -2161,7 +2242,7 @@ struct Env
         if (IsRam(a))
         {
             uint64_t v = 0;
-            for (int i = 0; i < size; ++i) v = (v << 8) | ram[(a + i) & 0xFFFFF];
+            for (int i = 0; i < size; ++i) v = (v << 8) | *ByteAt(a + i);
             return v;
         }
         if (hwMode == 0) return 0;
@@ -2185,7 +2266,8 @@ struct Env
 
     void Store(uint32_t a, int size, uint64_t v)
     {
-        for (int i = size - 1; i >= 0; --i, v >>= 8) ram[(a + i) & 0xFFFFF] = static_cast<uint8_t>(v);
+        for (int i = size - 1; i >= 0; --i, v >>= 8)
+            if (uint8_t* b = ByteAt(a + i)) *b = static_cast<uint8_t>(v);
     }
 
     void Write(uint32_t a, int size, uint64_t v, uint32_t insn)
@@ -2817,7 +2899,7 @@ Subject MakeSubject(const Program& p)
     for (const Func& fn : p.fns)
         for (const Item& it : fn.items)
             if (it.type == Item::Poll)
-                s.polls.push_back({ Env::Canon(p.lits[it.lit].value), it.untilSet ? 0u : 1u, it.untilSet ? 1u : 0u, 0, p.lits[it.lit].value });
+                s.polls.push_back({ Env::MemKey(p.lits[it.lit].value), it.untilSet ? 0u : 1u, it.untilSet ? 1u : 0u, 0, p.lits[it.lit].value });
     std::ostringstream o;
     for (size_t i = 0; i < p.lits.size(); ++i)
         if (a.litAddr[i])
@@ -3263,6 +3345,30 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
             break;
         }
     }
+    else if (gMutateKind == "alias")
+    {
+        // The host that did not make a word it reaches under two names volatile: the accesses to ordinary memory that fold are not listed.
+        std::vector<MemoryAccess> keep;
+        for (const MemoryAccess& m : r.accesses)
+        {
+            bool aliased = false;
+            for (const auto& h : r.aliasedMemory) aliased |= m.direct && h.first <= m.address && m.address <= h.second;
+            if (!aliased) keep.push_back(m);
+            else
+            {
+                // ...and the engine's record says the access folded into a variable, as it did before the host made the word volatile
+                AccessFate f;
+                f.insn = m.insn;
+                f.write = m.write;
+                f.size = m.size;
+                f.fate = AccessFate::FoldedOrdinary;
+                f.address = m.address;
+                f.constantAddress = true;
+                r.accessFates.push_back(f);
+            }
+        }
+        r.accesses = keep;
+    }
     else if (gMutateKind == "params") { if (r.prototype.known && !r.prototype.params.empty()) r.prototype.params.pop_back(); }
     else if (gMutateKind == "ret")
     {
@@ -3377,6 +3483,46 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (h.first <= addr && addr <= h.last) return true;
             return false;
         };
+        // ---- Area 5, round 7 (A5-52): a word of work RAM the function reaches under two addresses is one memory ----
+        // The bus gives a work-RAM word as many addresses as it has partitions, undecoded bits (28-27) and 1 MiB repeats; the emulator's
+        // memory is the same bytes under all of them. The engine's data flow keys memory by address, and forwards a store to a load past
+        // a write to the other name -- `xRam26001000 = 5; xRam06001000 = 7; return 5;` -- so the load is folded away with a wrong value,
+        // and the ledger does not list it (an access of ordinary memory at a constant address is folded by design). So an access of the
+        // traced function to a word it also reaches at an address that does not overlap its own is listed like marked memory:
+        // present in the ledger, whatever the request marks. The aliasing is read off the trace, by the emulator's memory model, not off
+        // the decompiler's output. (Only accesses the engine takes at a constant address count: one through a pointer it cannot resolve
+        // is a plain load or store, which the data flow treats as possibly reaching any word, and which the ledger lists.)
+        std::set<uint32_t> aliased;
+        {
+            auto constantToEngine = [&](const TraceRec& t) {
+                for (const AccessFate& f : r.accessFates)
+                    if (f.insn == t.insn && f.write == t.write && f.size == t.size && f.constantAddress && f.address == t.addr && f.fate == AccessFate::FoldedOrdinary)
+                        return true;
+                for (const MemoryAccess& m : r.accesses)
+                    if (m.insn == t.insn && m.write == t.write && m.size == t.size && m.direct && m.address == t.addr) return true;
+                return false;
+            };
+            struct Acc { uint32_t addr; int size; uint32_t lo, hi; };
+            std::vector<Acc> accs;
+            std::set<std::pair<uint32_t, int>> once;
+            for (const TraceRec& t : trace)
+            {
+                uint32_t lo = 0, hi = 0;
+                // (an access in the associative-purge partition names the line of the word it purges)
+                if (InScratch(t.addr) || InStack(t.addr) || !Env::RamRange((t.addr >> 29) == 2 ? (t.addr & 0x07FFFFFFu) : t.addr, t.size, lo, hi) || !constantToEngine(t) || !once.insert(std::make_pair(t.addr, t.size)).second) continue;
+                accs.push_back({ t.addr, t.size, lo, hi });
+            }
+            auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
+            for (size_t i = 0; i < accs.size() && accs.size() <= 4000; ++i)
+                for (size_t j = i + 1; j < accs.size(); ++j)
+                    if (overlap(accs[i].lo, accs[i].hi, accs[j].lo, accs[j].hi) &&
+                        !overlap(accs[i].addr, accs[i].addr + accs[i].size - 1, accs[j].addr, accs[j].addr + accs[j].size - 1))
+                    {
+                        aliased.insert(accs[i].addr);
+                        aliased.insert(accs[j].addr);
+                    }
+            count("alias.words", static_cast<int>(aliased.size()));
+        }
         // ---- Area 5: every access the code made, in an instruction of the body, is in the ledger ----
         // (instruction, direction, size) -> the addresses it touched
         std::map<std::tuple<uint32_t, bool, int>, std::vector<uint32_t>> seen;
@@ -3406,7 +3552,7 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     if (m.insn == std::get<1>(st.first) && m.write == std::get<2>(st.first) && m.size == std::get<3>(st.first))
                         entries.push_back(&m);
                 std::vector<uint32_t>& out = lost[std::make_tuple(std::get<1>(st.first), std::get<2>(st.first), std::get<3>(st.first))];
-                for (uint32_t a : UnaccountedAddresses(entries, st.second, [&](uint32_t x) { return InScratch(x) || InHardwareRange(x) || inMarked(x); }))
+                for (uint32_t a : UnaccountedAddresses(entries, st.second, [&](uint32_t x) { return InScratch(x) || InHardwareRange(x) || inMarked(x) || aliased.count(x) != 0; }))
                     if (std::find(out.begin(), out.end(), a) == out.end()) out.push_back(a);
             }
         }
@@ -3451,8 +3597,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 if (InScratch(addr)) from.insert("param");
                 else if (InHardwareRange(addr)) from.insert("hardware");
                 else if (inMarked(addr)) from.insert("marked");
+                else if (aliased.count(addr)) from.insert("alias");
                 else from.insert("RAM");
-                if (InScratch(addr) || InHardwareRange(addr) || inMarked(addr)) exempt = false;
+                if (InScratch(addr) || InHardwareRange(addr) || inMarked(addr) || aliased.count(addr)) exempt = false;
             }
             if (exempt) continue;
             if (SaidMissing(r, insn)) continue;
@@ -4461,6 +4608,7 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::Table: m["mova"] += 1; m["shll2"] += 1; m["jmp"] += 1; m["cmp/hi"] += 1; break;
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
+        case Item::Mask: m["mov.l"] += 1; m[it.onTrue ? "and" : "or"] += 1; break;
         default: break;
         }
         CountMnemonics(it.slot, m);
@@ -4670,7 +4818,7 @@ Subject RawSubject(const char* raw)
     {
         const bool untilSet = std::strstr(poll, ":until-set") != nullptr;
         const uint32_t at = static_cast<uint32_t>(std::strtoul(poll, nullptr, 16));
-        s.polls.push_back({ Env::Canon(at), untilSet ? 0u : 1u, untilSet ? 1u : 0u, 0, at });
+        s.polls.push_back({ Env::MemKey(at), untilSet ? 0u : 1u, untilSet ? 1u : 0u, 0, at });
     }
     return s;
 }

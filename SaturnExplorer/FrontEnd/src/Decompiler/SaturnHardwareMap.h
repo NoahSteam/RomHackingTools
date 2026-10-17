@@ -294,5 +294,32 @@ const std::vector<HardwareRange>& HardwareRanges();
 std::vector<HardwareRange> VolatileAliases(uint32_t first, uint32_t last);
 bool InHardwareRange(uint32_t address);
 
+// ---- Ordinary memory that more than one address names ----------------------------------------------
+//
+// The engine's data flow keys memory by address, so a store through one name of a word is forwarded past a store
+// through another name of the same word (A5-52: `xRam26001000 = 5; xRam06001000 = 7; return 5;`). The bus decodes
+// bits 31-29 as the partition (0 cached and 1 cache-through reach memory alike) and ignores bits 28-27 (ss.c, and
+// sh7095.inc MemRead / MemWrite case 0 and 1 pass A & 0x07FFFFFF), and each memory repeats inside its window:
+// work RAM every 1 MiB (high 0x06000000-0x07FFFFFF; low 0x00200000-0x003FFFFF, which Mednafen answers in its lower
+// MiB only and the hardware of some revisions mirrors, taken as repeating: the safe side), VDP2 VRAM every 512 KiB
+// (vdp2.c RW_*: A & 0x7FFFF), the VDP1 frame buffer every 256 KiB (vdp1.c: FBA & 0x3FFFF). VDP2 colour RAM repeats
+// every 4 KiB (cri = (A & 0xFFF) >> 1), and in colour RAM mode 0 an entry is also written 0x800 bytes on (the entry
+// 0x400 up): the mode is a register the decompiler does not follow, so the bytes are taken modulo 0x800 (A5-53).
+enum class MemoryKind : uint8_t { WorkRamHigh, WorkRamLow, Vdp1Vram, Vdp1FrameBuffer, Vdp2Vram, Vdp2ColorRam };
+struct MemoryBytes
+{
+    MemoryKind kind = MemoryKind::WorkRamHigh;
+    uint32_t first = 0, last = 0;   // the bytes an access covers, as offsets into that memory after its repeats
+};
+// True when [address, address + size) is in one of these memories, through any partition and any repeat; 'out' is
+// the bytes it covers. Two accesses that cover a byte of one memory in common are the same bytes whatever address
+// each used.
+bool MemoryBytesOf(uint32_t address, uint32_t size, MemoryBytes& out);
+const char* MemoryKindName(MemoryKind kind);
+// VDP2 colour RAM, through any partition (0x05F00000-0x05F7FFFF and its aliases): a byte write there stores the whole
+// 16-bit entry, the byte not written being the last value on the data bus (vdp2.c RW_W8: `CRAM[..] = *DB`, no mask,
+// where VRAM's is `(VRAM[vri] & ~mask) | (*DB & mask)`) (A5-50).
+bool InColorRam(uint32_t address);
+
 }  // namespace decomp
 }  // namespace sfe

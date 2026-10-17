@@ -691,6 +691,7 @@ bool ReferenceOk(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, 
     std::vector<HardwareRange> user;
     for (const auto& v : q.volatileMemory)
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) user.push_back(h);
+    for (const auto& h : r.aliasedMemory) user.push_back(HardwareRange{ h.first, h.second });   // memory the host made volatile (A5-52)
     auto marked = [&](uint32_t a) {
         for (const HardwareRange& h : user)
             if (h.first <= a && a <= h.last) return true;
@@ -1633,7 +1634,69 @@ void TestHardwareVolatility()
         add("a5_41a_fd", { 0xD102, 0xE003, 0x2102, 0x000B, 0x0009, 0x0009, 0xFFFF, 0xFEFD }, 0x0C, 0xFFFFFEFDu);
         add("a5_41b", { 0xD101, 0x6012, 0x000B, 0x0009, 0xFFFF, 0xFEFE }, 0x08, 0xFFFFFEFEu);
     }
-    for (const auto* group : { &r4, &r5 })
+    // ---- Area 5, round 7 (REVIEW_LEDGER.md A5-50 to A5-56): the reviewer's words verbatim (only the base moves), with the variants and controls
+    // each fix needs. In the words the literals are among them, as in the ledger.
+    std::map<std::string, Fixture> r7;
+    {
+        uint32_t next = 0x06010000u;
+        auto add = [&](const char* name, std::vector<uint16_t> words, uint32_t literal, uint32_t pointer) {
+            r7[name] = Fixture{ next, words, literal, pointer };
+            next += 0x40u;
+        };
+        // A5-50: mov.b 3 to the odd byte of colour RAM, then mov.w @r1,r0; controls: a word write, VDP2 VRAM and the VDP1 frame buffer and VRAM (right as they are).
+        add("a5_50", { 0xD103, 0xE003, 0x8011, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F0, 0x0000 }, 0x10, 0x25F00000u);
+        add("a5_50_even", { 0xD103, 0xE003, 0x2100, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F0, 0x0000 }, 0x10, 0x25F00000u);   // mov.b r0,@r1: the even byte
+        add("a5_50_word", { 0xD103, 0xE003, 0x2101, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25F0, 0x0000 }, 0x10, 0x25F00000u);   // control: the word form
+        add("a5_50_vram", { 0xD103, 0xE003, 0x8011, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25E0, 0x0000 }, 0x10, 0x25E00000u);   // control: VDP2 VRAM
+        add("a5_50_fb", { 0xD103, 0xE003, 0x8011, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25C8, 0x0000 }, 0x10, 0x25C80000u);   // control: the frame buffer
+        add("a5_50_v1ram", { 0xD103, 0xE003, 0x8011, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x25C0, 0x0000 }, 0x10, 0x25C00000u);   // control: VDP1 VRAM
+        // A5-51: a pointer merged from register addresses, then moved between partitions: a: `& 0x1fffffff` (cached), b: `| 0x20000000`, c: the store
+        // to SCU_D0EN / SCU_D1EN; d: a mask that is a parameter (nothing is known).
+        add("a5_51a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD204, 0x2129, 0x6011, 0x000B, 0x0009, 0x25F8, 0x0004, 0x25F8, 0x000A, 0x1FFF, 0xFFFF }, 0x14, 0x25F80004u);
+        add("a5_51b", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD204, 0x212B, 0x6011, 0x000B, 0x0009, 0x05F8, 0x0004, 0x05F8, 0x000A, 0x2000, 0x0000 }, 0x14, 0x05F80004u);
+        add("a5_51c", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xD205, 0x212B, 0xD305, 0x2132, 0x000B, 0x0009, 0x0009, 0x05FE, 0x0010, 0x05FE, 0x0030, 0x2000, 0x0000, 0x0000, 0x0101 }, 0x18, 0x05FE0010u);
+        add("a5_51e", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xD205, 0x212B, 0xD305, 0x2132, 0x000B, 0x0009, 0x0009, 0x05FE, 0x0110, 0x05FE, 0x0130, 0x2000, 0x0000, 0x0000, 0x0101 }, 0x18, 0x05FE0110u);   // c with the SCU's mirrors
+        add("a5_51d", { 0xD103, 0x2149, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0004 }, 0x10, 0x25F80004u);   // control: and r4,r1
+        // A5-52: two names of one work-RAM word: mov.l lit0,r2 ; mov.l lit1,r1 ; mov #5,r0 ; mov.w r0,@r2 ; mov #7,r0 ; mov.w r0,@r1 ; mov.w @r2,r0.
+        add("a5_52a", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2600, 0x1000, 0x0600, 0x1000 }, 0x14, 0x26001000u);
+        add("a5_52_repeat", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2610, 0x0000, 0x2600, 0x0000 }, 0x14, 0x26100000u);   // the 1 MiB repeat of high work RAM
+        add("a5_52_bit27", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2E00, 0x1000, 0x2600, 0x1000 }, 0x14, 0x2E001000u);   // bits 28-27
+        add("a5_52_low", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2020, 0x1000, 0x0020, 0x1000 }, 0x14, 0x20201000u);   // low work RAM
+        add("a5_52_long", { 0xD204, 0xD105, 0xE005, 0x2202, 0xE007, 0x2102, 0x6022, 0x000B, 0x0009, 0x0009, 0x2600, 0x1000, 0x0600, 0x1000 }, 0x14, 0x26001000u);   // the long form
+        add("a5_52_same", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2600, 0x1000, 0x2600, 0x1000 }, 0x14, 0x26001000u);   // control: one name, the fold stands
+        add("a5_52_apart", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2600, 0x1000, 0x0600, 0x1004 }, 0x14, 0x26001000u);   // control: two words, no alias
+        // the slave's idle loop: a store through the cache-through name, the associative purge of the line, and the poll through the cached name
+        add("a5_52_idle", { 0xD205, 0xD306, 0xD106, 0xE000, 0x2202, 0x2302, 0x6012, 0x2008, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x2600, 0x3304, 0x4600, 0x3304, 0x0600, 0x3304 }, 0x18, 0x26003304u);
+        add("a5_52_purge", { 0xD205, 0xD306, 0xD106, 0xE000, 0x2202, 0x2302, 0x6012, 0x2008, 0x8BFC, 0x000B, 0x0009, 0x0009, 0x0600, 0x3304, 0x4600, 0x3304, 0x0600, 0x3304 }, 0x18, 0x06003304u);   // the same with one name besides the purge's
+        // A5-53: colour RAM (4 KiB repeat; mode 0's entry 0x400 up), VDP2 VRAM (512 KiB), the frame buffer (256 KiB)
+        add("a5_53_cram", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x25F0, 0x1000, 0x25F0, 0x0000 }, 0x14, 0x25F01000u);
+        add("a5_53_mode0", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x25F0, 0x0800, 0x25F0, 0x0000 }, 0x14, 0x25F00800u);
+        add("a5_53_vram", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x25E8, 0x0000, 0x25E0, 0x0000 }, 0x14, 0x25E80000u);
+        add("a5_53_fb", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x25CC, 0x0000, 0x25C8, 0x0000 }, 0x14, 0x25CC0000u);
+        add("a5_53_cram_apart", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x25F0, 0x0004, 0x25F0, 0x0000 }, 0x14, 0x25F00004u);   // control: two entries
+        // A5-54: a store loop from the SCU's hole (seven stores reach SCU_D1EN) and from SCSP slot 31 (eight reach MVOL, MOBUF); a non-constant
+        // step from SCU_D0EN; a walk through the SCSP's DSP program area (no register near).
+        add("a5_54_hole", { 0xD104, 0xE207, 0xD004, 0x2102, 0x7104, 0x4210, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0018, 0x0000, 0x0101 }, 0x14, 0x25FE0018u);
+        add("a5_54_slot", { 0xD104, 0xE208, 0xD004, 0x2102, 0x7104, 0x4210, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x25B0, 0x03F0, 0x0000, 0x0101 }, 0x14, 0x25B003F0u);
+        add("a5_54_stepvar", { 0xD104, 0xE205, 0xD004, 0x2102, 0x315C, 0x4210, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x14, 0x25FE0010u);
+        add("a5_54_dsp", { 0xD104, 0xE208, 0xD004, 0x2102, 0x7104, 0x4210, 0x8BFB, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0A00, 0x0000, 0x0101 }, 0x14, 0x25B00A00u);   // control: the DSP program area
+        // A5-55: writes whose action is chosen by the value: DTLG with EX, KYONEX in a slot's word 0, SCIRE, COMREG, FBCR with FCM
+        add("a5_55_dtlg", { 0xD102, 0xE010, 0x4018, 0x2101, 0x000B, 0x0009, 0x25B0, 0x0416 }, 0x0C, 0x25B00416u);
+        add("a5_55_dtlg0", { 0xD102, 0xE001, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0416 }, 0x0C, 0x25B00416u);   // control: EX clear
+        add("a5_55_kyonex", { 0xD102, 0xE018, 0x4018, 0x2101, 0x000B, 0x0009, 0x25B0, 0x0000 }, 0x0C, 0x25B00000u);
+        add("a5_55_kyonex0", { 0xD102, 0xE008, 0x4018, 0x2101, 0x000B, 0x0009, 0x25B0, 0x0000 }, 0x0C, 0x25B00000u);   // control: bit 12 clear (0x0800)
+        add("a5_55_scire", { 0xD102, 0xE020, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0422 }, 0x0C, 0x25B00422u);
+        add("a5_55_mcire", { 0xD102, 0xE020, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x042E }, 0x0C, 0x25B0042Eu);
+        add("a5_55_scire0", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0422 }, 0x0C, 0x25B00422u);   // control: clears nothing
+        add("a5_55_comreg", { 0xD102, 0xE019, 0x2100, 0x000B, 0x0009, 0x0009, 0x2010, 0x001F }, 0x0C, 0x2010001Fu);
+        add("a5_55_fbcr", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0002 }, 0x0C, 0x25D00002u);
+        add("a5_55_fbcr0", { 0xD102, 0xE001, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0002 }, 0x0C, 0x25D00002u);   // control: FCM clear
+        // A5-56: a read of a write-only SMPC register returns the bus buffer; SMPC_SF read whole (not masked to bit 0), and masked
+        add("a5_56", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x2010, 0x0001 }, 0x10, 0x20100001u);
+        add("a5_56_sf", { 0xD102, 0x6010, 0x2008, 0x0029, 0x000B, 0x0009, 0x2010, 0x0063 }, 0x0C, 0x20100063u);   // mov.b @r1,r0 ; tst r0,r0 ; movt r0: SMPC_SF == 0 tests bits 7-1 too
+        add("a5_56_sf_masked", { 0xD102, 0x6010, 0xC901, 0x000B, 0x0009, 0x0009, 0x2010, 0x0063 }, 0x0C, 0x20100063u);   // and #1,r0: SMPC_SF & 1, every game's poll
+    }
+    for (const auto* group : { &r4, &r5, &r7 })
         for (const auto& x : *group)
         {
             size_t off = x.second.base - 0x06000000u;
@@ -2323,7 +2386,8 @@ void TestHardwareVolatility()
     CHECK(Ledger(r, { Wr(0x2010001Eu, 1) }));
     CHECK(HasNoteAt(r, 0x0600AEC4u, "a 1-byte write at the even address beside SMPC_COMREG does nothing"));
     r = run("a byte write at the odd address: the register", smpcByteOdd);
-    CHECK(Ledger(r, { Wr(0x2010001Fu, 1) }) && Has(r.Text(), "SMPC_COMREG = 0x19;") && r.hardwareNotes.empty());
+    CHECK(Ledger(r, { Wr(0x2010001Fu, 1) }) && Has(r.Text(), "SMPC_COMREG = 0x19;") && r.hardwareNotes.size() == 1);
+    CHECK(HasNote(r, "SMPC_COMREG: issues SMPC command 0x19 (RESENAB)", false));   // A5-55: the command the byte is
     r = run("a long write: two 16-bit bus writes", smpcLong);
     CHECK(Ledger(r, { Wr(0x2010001Cu, 4) }));
     CHECK(HasNoteAt(r, 0x0600AF44u, "a 4-byte write reaching SMPC_COMREG is two 16-bit bus writes: the register takes bits 7-0 of the value"));
@@ -2774,6 +2838,132 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "Mednafen then writes nothing", true) && !HasNote(r, "SH2_DVSR", true));
         r = R5("a5_41b", "a long read at 0xFFFFFEFE");
         CHECK(HasNote(r, "Mednafen then returns 0 and reads nothing", true) && !HasNote(r, "SH2_DVSR", true));
+    }
+
+    // ---- Area 5, round 7 ----------------------------------------------------------------------------
+    {
+        auto R7 = [&](const char* name, const char* label) { return run(label, r7.at(name)); };
+        auto accessAt = [](const DecompileResult& x, bool write, uint32_t address) {
+            for (const MemoryAccess& m : x.accesses)
+                if (m.write == write && m.direct && m.address == address) return true;
+            return false;
+        };
+
+        // A5-50: a byte write to colour RAM stores the whole 16-bit entry from the bus; no value of the entry is carried past it.
+        r = R7("a5_50", "mov.b 3 to the odd byte of colour RAM, then a word read of the entry");
+        CHECK(Ledger(r, { Wr(0x25F00001u, 1), Rd(0x25F00000u, 2, false, true) }));
+        CHECK(!Has(r.Text(), "CONCAT11") && Has(r.Text(), "Ram25f00001 = 3;"));
+        CHECK(HasNote(r, "a 1-byte write to colour RAM at 0x25F00001 stores the whole 16-bit entry: the byte not written is the last value on the data bus", true));
+        r = R7("a5_50_even", "mov.b 3 to the even byte");
+        CHECK(Ledger(r, { Wr(0x25F00000u, 1), Rd(0x25F00000u, 2, false, true) }) && !Has(r.Text(), "CONCAT11"));
+        CHECK(HasNote(r, "a 1-byte write to colour RAM at 0x25F00000 stores the whole 16-bit entry", true));
+        r = R7("a5_50_word", "control: a word write to colour RAM stores what it says");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 3;") && r.hardwareNotes.empty() && r.aliasedMemory.empty());
+        r = R7("a5_50_vram", "control: VDP2 VRAM keeps the byte it does not write (CONCAT11 is right)");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "CONCAT11(iRam25e00000._0_1_,3)") && r.hardwareNotes.empty() && r.aliasedMemory.empty());
+        r = R7("a5_50_fb", "control: the VDP1 frame buffer");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "CONCAT11(") && r.hardwareNotes.empty());
+        r = R7("a5_50_v1ram", "control: VDP1 VRAM");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "CONCAT11(") && r.hardwareNotes.empty());
+
+        // A5-51: a pointer merged from register addresses, then moved between partitions with a mask, is followed.
+        r = R7("a5_51a", "a word read through (&VDP2_TVSTAT or &VDP2_VCNT) & 0x1fffffff");
+        CHECK(Has(r.Text(), "& 0x1fffffff"));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read", true));
+        CHECK(HasNote(r, "if the pointer holds 0x05F8000A (VDP2_VCNT): a read of VDP2_VCNT through the cached partition is a cache read", true));
+        CHECK(!HasNote(r, "through a mirror (shown by address)", false) && !HasNote(r, "it may hold other values too", false));
+        r = R7("a5_51b", "the same read through | 0x20000000: the cache-through partition");
+        CHECK(Has(r.Text(), "| 0x20000000") || Has(r.Text(), "or 0x20000000"));
+        CHECK(HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(!HasNote(r, "cache read", true));
+        r = R7("a5_51c", "a store of 0x101 through (&SCU_D0EN or &SCU_D1EN) | 0x20000000");
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0010 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0030 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        r = R7("a5_51e", "a store through (0x05FE0110 or 0x05FE0130) | 0x20000000: the mirrors of SCU_D0EN and SCU_D1EN, not shown by address");
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0110 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0130 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        CHECK(!HasNote(r, "through a mirror (shown by address)", false));   // the access is printed as an expression of the pointer, not by address
+        r = R7("a5_51d", "control: a mask that is a parameter says nothing");
+        CHECK(r.hardwareNotes.empty());
+
+        // A5-52: two names of one work-RAM word are one memory: the accesses to it are kept, in order, and the read is not folded to the other
+        // name's store. (A volatile mark on the range did this before; the default request now does for the words the function names twice.)
+        const std::vector<Op> twoNames = { Wr(0x26001000u, 2), Wr(0x06001000u, 2), Rd(0x26001000u, 2, false, true) };
+        r = R7("a5_52a", "xRam26001000 = 5; xRam06001000 = 7; return xRam26001000");
+        CHECK(Ledger(r, twoNames) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
+        r = R7("a5_52_repeat", "the 1 MiB repeat of high work RAM");
+        CHECK(Ledger(r, { Wr(0x26100000u, 2), Wr(0x26000000u, 2), Rd(0x26100000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_52_bit27", "bits 28-27 are not decoded");
+        CHECK(Ledger(r, { Wr(0x2E001000u, 2), Wr(0x26001000u, 2), Rd(0x2E001000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_52_low", "low work RAM through its two partitions");
+        CHECK(Ledger(r, { Wr(0x20201000u, 2), Wr(0x00201000u, 2), Rd(0x20201000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_52_long", "the long form");
+        CHECK(Ledger(r, { Wr(0x26001000u, 4), Wr(0x06001000u, 4), Rd(0x26001000u, 4, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_52_same", "control: one name, the fold stands");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 7;") && r.aliasedMemory.empty());
+        r = R7("a5_52_apart", "control: two words, no alias");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 5;") && r.aliasedMemory.empty());
+        // The slave's idle loop (corpus hwram008 06003C46): the poll through the cached name stays a read, as the hardware reads it: the store was
+        // through the other name, and the purge of its line is the barrier.
+        r = R7("a5_52_idle", "store 0 through 0x26003304, purge 0x46003304, poll 0x06003304");
+        CHECK(accessAt(r, true, 0x26003304u) && accessAt(r, true, 0x46003304u) && accessAt(r, false, 0x06003304u));
+        CHECK(Has(r.Text(), "= Ram06003304;") || Has(r.Text(), "Ram06003304"));
+        r = R7("a5_52_purge", "store 0 and poll 0x06003304, the line purged through 0x46003304 between: still a read");
+        CHECK(accessAt(r, true, 0x06003304u) && accessAt(r, true, 0x46003304u) && accessAt(r, false, 0x06003304u));
+
+        // A5-53: colour RAM (4 KiB repeat, mode 0's entry 0x400 up), VDP2 VRAM (512 KiB) and the frame buffer (256 KiB) are kept apart no longer.
+        r = R7("a5_53_cram", "colour RAM repeats every 4 KiB");
+        CHECK(Ledger(r, { Wr(0x25F01000u, 2), Wr(0x25F00000u, 2), Rd(0x25F01000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_53_mode0", "in colour RAM mode 0 an entry is written 0x800 bytes on too");
+        CHECK(Ledger(r, { Wr(0x25F00800u, 2), Wr(0x25F00000u, 2), Rd(0x25F00800u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_53_vram", "VDP2 VRAM repeats every 512 KiB");
+        CHECK(Ledger(r, { Wr(0x25E80000u, 2), Wr(0x25E00000u, 2), Rd(0x25E80000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_53_fb", "the VDP1 frame buffer repeats every 256 KiB");
+        CHECK(Ledger(r, { Wr(0x25CC0000u, 2), Wr(0x25C80000u, 2), Rd(0x25CC0000u, 2, false, true) }) && !Has(r.Text(), "return 5;"));
+        r = R7("a5_53_cram_apart", "control: two colour RAM entries");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 5;") && r.aliasedMemory.empty());
+
+        // A5-54: the stepped-pointer note is said for a walk that starts in a register area and can reach a named register.
+        r = R7("a5_54_hole", "a store loop from the SCU's hole at 0x25FE0018");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x25FE0018: the iterations after the first reach other addresses, other registers perhaps, which are not said", false));
+        r = R7("a5_54_slot", "a store loop from SCSP slot 31's registers");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x25B003F0: the iterations after the first reach other addresses", false));
+        r = R7("a5_54_stepvar", "a non-constant step from SCU_D0EN");
+        CHECK(HasNote(r, "(it may hold other values too): SCU_D0EN: bits 8 and 0 are set", false) && HasNote(r, "the pointer is stepped in a loop from 0x25FE0010", false));
+        r = R7("a5_54_dsp", "control: a walk through the SCSP's DSP program area, with no register near");
+        CHECK(!HasNote(r, "stepped in a loop", false));
+
+        // A5-55: writes whose action the value chooses.
+        r = R7("a5_55_dtlg", "SCSP_DTLG = 0x1000");
+        CHECK(HasNote(r, "SCSP_DTLG: EX (bit 12) is set, so this write starts the SCSP DMA", false));
+        r = R7("a5_55_dtlg0", "control: SCSP_DTLG = 1, EX clear");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_55_kyonex", "a slot's word 0 = 0x1800");
+        CHECK(HasNote(r, "SCSP slot 0 word 0: KYONEX (bit 12) is set, so this write keys every slot on or off by its own KYONB", false));
+        r = R7("a5_55_kyonex0", "control: a slot's word 0 = 0x0800, KYONEX clear");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_55_scire", "SCSP_SCIRE = 0x20");
+        CHECK(HasNote(r, "SCSP_SCIRE: clears the pending sound-CPU interrupts (SCSP_SCIPD) whose bits are set in the value written (0x20 here)", false));
+        r = R7("a5_55_mcire", "SCSP_MCIRE = 0x20");
+        CHECK(HasNote(r, "SCSP_MCIRE: clears the pending main-CPU interrupts (SCSP_MCIPD) whose bits are set in the value written (0x20 here)", false));
+        r = R7("a5_55_scire0", "control: SCSP_SCIRE = 0 clears nothing");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_55_comreg", "SMPC_COMREG = 0x19");
+        CHECK(HasNote(r, "SMPC_COMREG: issues SMPC command 0x19 (RESENAB)", false));
+        r = R7("a5_55_fbcr", "VDP1_FBCR = 3");
+        CHECK(HasNote(r, "VDP1_FBCR: bit 1 (FCM) is set, so this write requests a manual frame-buffer change", false));
+        r = R7("a5_55_fbcr0", "control: VDP1_FBCR = 1, FCM clear");
+        CHECK(r.hardwareNotes.empty());
+
+        // A5-56: a read of a write-only SMPC register returns the last byte written to the SMPC; SMPC_SF's high bits are the same byte.
+        r = R7("a5_56", "SMPC_IREG0 = 5; x = SMPC_IREG0");
+        CHECK(HasNote(r, "reads SMPC_IREG0, which is write-only: Mednafen returns the last byte written to the SMPC, to any register (its bus buffer), not the register", true));
+        CHECK(!HasNote(r, "the value is not what was written", true));
+        r = R7("a5_56_sf", "SMPC_SF read whole");
+        CHECK(HasNote(r, "SMPC_SF: bits 7-1 of a read are the last byte written to the SMPC (its bus buffer), not the register's", false));
+        r = R7("a5_56_sf_masked", "control: SMPC_SF & 1, every game's poll");
+        CHECK(r.hardwareNotes.empty());
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.

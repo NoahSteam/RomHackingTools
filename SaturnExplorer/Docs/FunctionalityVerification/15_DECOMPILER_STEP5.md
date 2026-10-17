@@ -7057,3 +7057,102 @@ the gained ones, their callers, and the note of A3-28 (43 and 90 functions carry
   A3-34: the generator cannot see a printed frame local.
 - The reviewer's A3-22 c is checked by the text and the run (`PseudoEval` reads no `do` loop).
 - The sanitizers were run on `Sh2DecompilerTests`, `Sh2GeneratedTests` (300 seeds) and the printed-C run only, not the other suites of the CI list.
+
+## Area 5, round 7: ordinary memory with two names, masked pointers, value-triggered writes, and the SMPC's bus buffer
+
+Fixer, branch `review/5-round7-fix` from master `dc91474`. Ledger rows A5-50 to A5-56 are fixed; A5-57 and A5-58 are new (open, P3). Commits: `90d80c9` (the
+host and the fixtures), `3a71c6f` (SMPC_SF: a masked read through a merge), `6802560` (the generator), `17d8e27` (the cases file), `04439d1` (the guide),
+`3376de3` (the purge as a second name; the audit; `a5_51e`) and the commit that adds this section. No engine patch (0041 not needed: the engine's data
+flow keys memory by address, which the host answers by making the memory volatile; see the design decision).
+
+### The design decision (A5-52): where the fix belongs
+
+The reviewer's question was whether the fix is the host's address canonicalisation, a volatile declaration, or an engine patch. The three answers differ in
+what they do to the one case that must not change, the slave's idle loop (`hwram008` 06003C46 and copies):
+
+| Option | What it does | Why not / why |
+|---|---|---|
+| Canonicalise constant addresses to one name before the engine sees them | The two names become one varnode, so the data flow forwards 7, the value the hardware has. | The constants are not constants at flow time: `mov.l lit,r2` loads them from the pool and `add` / `and` / `or` make others; they exist only after the actions fold them. A rewrite would have to be a rule inside the engine (a patch to `RuleLoadVarnode` / `RuleStoreVarnode`), and it would then fold the idle loop: the store of 0 through the cache-through name, forwarded to the poll through the cached name, makes `while (poll == 0)` an endless loop, which is the very defect the unaliased text has hidden. The purge at 0x46003304 between them is a *barrier* the hardware has, not a store the engine can model. It would also lose the partition the access used, which the cache caution (A5-19) keys on. |
+| An engine patch for aliases | The engine learns the Saturn's aliasing. | The largest change, in vendored code, for a property that is a few address masks. |
+| **Make the word volatile in that function** (chosen) | Every access to a word the function names under two addresses is kept, in order, as a volatile access: nothing is forwarded or dropped, the poll stays a read, the purge counts as a name of the word it purges. | It is what the user's own volatile mark does for the same bytes (`VolatileAliases`), it needs no engine change, and it is conservative in the right direction: the text then shows exactly the accesses the code makes. The cost is that a word accessed under two names is no longer folded, which is the point. |
+
+Mechanism (`Sh2Decompiler.cpp`): after a pass's actions, `ConstantAccesses` collects the accesses the engine folded into variables of ordinary memory at a
+constant address (patch 0017's `fate_folded_ordinary` records) and the associative purges of work RAM (volatile accesses at 0x4xxxxxxx, named by the line
+they purge); `NewAliasedRanges` finds, with `MemoryBytesOf` (`SaturnHardwareMap.cpp`), the accesses whose bytes are the same memory (partition, bits 28-27,
+the repeat of work RAM, VDP2 VRAM, colour RAM and the VDP1 frame buffer) under addresses whose bytes do not overlap, plus every byte store to colour RAM
+(A5-50); their constant addresses, outward to whole longwords, become volatile ranges for the next pass (`userVolatile`, so also not read-only literals and
+not data for a jump table), and a printing pass that found any gives way to another (`aliasRetry`; after six retries it prints). The first pass of
+a request, when there is one, finds them too, so the common case costs no extra pass; a function with none costs nothing. `DecompileResult::aliasedMemory` lists the ranges, and the
+oracles count them as marked memory (`NoteRemovedAccesses`, the suite's `ReferenceOk`). Only constant addresses are decided: a store through a pointer the
+engine cannot resolve already clobbers every word in its data flow, and is a ledger entry.
+
+### Causes and dispositions
+
+| Row | Who was wrong | Cause | Fix |
+|---|---|---|---|
+| A5-50 (P2) | the host | A byte store to VDP2 colour RAM was ordinary memory to the engine, so `CONCAT11(old, 3)` carried the old high byte; `vdp2.c` `RW_W8` stores `*DB` whole there, the other byte being the last value on the data bus (VRAM's masked store keeps it; the controls `a5_50_vram`, `a5_50_fb`, `a5_50_v1ram` print `CONCAT11` rightly). | A byte store to colour RAM makes that entry volatile in the function (no value is carried past it, a read afterwards stays a read), and says so: "a 1-byte write to colour RAM at 0x25F00001 stores the whole 16-bit entry: the byte not written is the last value on the data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)". |
+| A5-51 (P2) | the host | `PointerResolver` walked COPY, CAST, MULTIEQUAL, PTRSUB, PTRADD, INT_ADD, INT_SUB; INT_AND / INT_OR / INT_XOR fell to `default` (unknown), so a register pointer moved between partitions was not followed and nothing was said (no cache caution, no TVSTAT clear, no DMA start). | `Bitwise`: with one operand a set of known numbers (the mask) and the other a set of addresses, each pair gives the address the op gives, flagged as reached through an operation (so no "shown by address" line for a pointer printed as an expression). A computed mask, an indexed pointer or a parameter leaves the pointer unknown, as before; a pointer's own value round a loop adds nothing. The generator now makes the shape (`litptr.mask.and` / `.or`, one program in eight of grammar 1: 119 in 1,000 seeds), and its rule 3b holds the cache caution to it. |
+| A5-52 (P2) | the host | Two names of one work-RAM word were two memories to the data flow (see the design decision). Beyond the wrong values, **the corpus has a worse instance than the reviewer's scan found**: in both images the function at 06003C06 (the slave start-up handshake, and copies at 060340BE and 060750FE) was printed as `/* WARNING: Do nothing block with infinite loop */`, its whole body removed as unreachable after `Ram26003304 = 0x534c4156` and a poll that the store through the other name folded to an endless loop; all 16 of `hwram007`'s "missing and said" cautions and 16 of `hwram008`'s 20 were these. | The word is volatile in the function that names it twice. 06003C06 now prints its two waits, the purge, the poll of the call target and the calls. |
+| A5-53 (P3) | the host | The same for colour RAM (4 KiB repeat; mode 0's entry 0x800 bytes on, taken as a possible alias in every mode), VDP2 VRAM (512 KiB) and the VDP1 frame buffer (256 KiB). | `MemoryBytesOf` covers them; the word form (`a5_53_*`) is fixed with the byte form. |
+| A5-54 (P3) | the host | The stepped-pointer note was said only when the walk started at a *named* register. Also a pointer stepped by an unknown amount (`add r5,r1`) set `others` but not `steps`. | Said when the start is in a register area and a named register is within `kSteppedReach` = 256 bytes of it (either way), or is the start; a self-merge plus an unknown sets `steps`. The SCSP DSP program area (no register near) stays silent (`a5_54_dsp`). The walk is still not worked out (A5-58). |
+| A5-55 (P3) | the host and the check | Value-triggered writes had no text, and the cases file could not see them (`F` marks a constant stored; the SCSP slot block was not read). | `WriteEffects` says SCSP_DTLG with EX, KYONEX in a slot's word 0, SCSP_SCIRE / SCSP_MCIRE (the bits cleared), SMPC_COMREG (the command, named) and VDP1_FBCR with FCM, at the lanes that carry the bit, for known and unknown values; none for a value that triggers nothing. The cases file has the flag `V` (`derive_handler_cases.py`: a latch assigned from the value, or `SCIPD` / `MCIPD &= ~value`) and the line `scsp.slot.wr`; `CheckBlocks` and the new `CheckScspSlots` require a text at all 37 targets. |
+| A5-56 (P3) | the host | The write-only caution said "the value is not what was written"; Mednafen returns `BusBuffer`, the last byte written to the SMPC. | The caution for an SMPC register says that. `SMPC_SF` (bits 7-1) and the port data registers (bit 7) take their other bits from it: a note, only for a read the code does not mask to the register's bits (`OnlyUsesBits`: through extensions, merges and truncations; a use as the return value does not count). Every game poll masks `& 1`, so neither corpus image gets one. |
+
+### Mutation checks
+
+Each entry was applied to the source (`mut.py`), the three binaries rebuilt (decompiler suite, width table, generator on 1,000 seeds of each grammar) and the
+source restored. "Suite" is the number of failing CHECKs; the fixture is named where one line fails.
+
+| Mutation | Suite | Width table | Generator |
+|---|---|---|---|
+| no alias detection at all (the unfixed A5-50, A5-52, A5-53) | 16 (`a5_50`, `a5_50_even`, `a5_52a` and its variants, `a5_52_idle`, `a5_52_purge`, `a5_53_*`) | passes | seeds fail: grammar 1 `dropped:R1/R2/R4/W1/W2/W4:alias:folded` (6 classes, 20-34 seeds each), grammar 2 the same (1-3 each) |
+| the purge not counted as a name | 1 (`a5_52_purge`) | passes | grammar 1 and 2 fail (`dropped:..:alias:folded`), after the generator learned the purge name |
+| no byte-store rule for colour RAM | 5 (`a5_50`, `a5_50_even`) | passes | 0 (the emulator has no colour RAM) |
+| colour RAM modulo 4 KiB instead of 0x800 | 1 (`a5_53_mode0`) | passes | 0 |
+| VDP2 VRAM without its repeat | 1 (`a5_53_vram`) | passes | 0 |
+| frame buffer without its repeat | 1 (`a5_53_fb`) | passes | 0 |
+| work RAM without the 1 MiB repeat | 1 (`a5_52_repeat`) | passes | fails (3-6 seeds a class) |
+| bits 28-27 decoded | 1 (`a5_52_bit27`) | passes | fails (1-17 seeds a class) |
+| only partition 1 reaches memory | 5 (`a5_52a`, `_low`, `_long`, `_idle`, `_purge`) | passes | fails (1-20 seeds a class) |
+| INT_AND not followed (the unfixed A5-51a) | 3 (`a5_51a`: the three notes) | passes | 0 in 2,000 seeds (most generated masked pointers hold one value and the engine folds them itself); the A5-51a words fail rule 3b on the unfixed build, as the reviewer ran |
+| INT_OR not followed | 3 (`a5_51b`, `a5_51c`) | passes | 0 |
+| masked addresses counted as shown by address | 1 (`a5_51e`) | passes | 0 |
+| no reach for the stepped note | 2 (`a5_54_hole`, `_slot`) | passes | 0 |
+| an unknown step does not set `steps` | 1 (`a5_54_stepvar`) | passes | 0 |
+| the write-only caution unchanged for the SMPC | 2 (`a5_56`) | passes | 0 |
+| no SMPC_SF note | 1 (`a5_56_sf`) | passes | 0 |
+| the SF note for every read (no mask test) | 2 (`a5_56_sf_masked`, the existing SMPC_SF poll) | passes | 0 |
+| no SCSP_DTLG text | 1 (`a5_55_dtlg`) | fails (DTLG) | 0 |
+| no KYONEX text | 1 (`a5_55_kyonex`) | fails (64 slot probes) | 0 |
+| no SCIRE / MCIRE text | 2 (`a5_55_scire`, `_mcire`) | fails (SCIRE, MCIRE) | 0 |
+| no COMREG text | 3 (`a5_55_comreg`, the byte-write test of A5-17) | fails (COMREG) | 0 |
+| no FBCR text | 1 (`a5_55_fbcr`) | fails (FBCR) | 0 |
+| DTLG's text said for EX clear too | 1 (`a5_55_dtlg0`) | passes | 0 |
+| no colour RAM note | 2 (`a5_50`, `a5_50_even`) | passes | 0 |
+| generator: the host's volatile words dropped from the ledger and their fold records restored (`SE_GENERATED_MUTATE=alias`) | n/a | n/a | 63 of 1,000 seeds report it |
+
+The generator is blind to the colour RAM, VRAM and frame-buffer repeats (its emulator has only work RAM) and to the notes; the suite pins them.
+
+### Matrix
+
+| | |
+|---|---|
+| Suite fixtures | `a5_50`, `_even`, `_word`, `_vram`, `_fb`, `_v1ram`; `a5_51a`-`e`; `a5_52a`, `_repeat`, `_bit27`, `_low`, `_long`, `_same`, `_apart`, `_idle`, `_purge`; `a5_53_cram`, `_mode0`, `_vram`, `_fb`, `_cram_apart`; `a5_54_hole`, `_slot`, `_stepvar`, `_dsp`; `a5_55_dtlg`, `_dtlg0`, `_kyonex`, `_kyonex0`, `_scire`, `_mcire`, `_scire0`, `_comreg`, `_fbcr`, `_fbcr0`; `a5_56`, `_sf`, `_sf_masked` (the reviewer's words verbatim for the first of each row; the SMPC byte-write test of A5-17 now expects the COMREG note) |
+| `ctest -j3 --timeout 900` | 97 of 97 passed |
+| Width-table test | 337 registers, 3,038 cells, passes; 9 write-effect registers, 37 value-triggered write targets (5 registers and 32 slot words); `derive_handler_cases.py --check`: current |
+| Generator, `SE_GENERATED_SEEDS=20000` (the nightly) | 0 failing seeds, 0 findings; `alias.words` 2,556, `cache.read.said` 4,535, `cache.read.pointer.said` 404, `cache.read.pointer.unrelated` 6, `cache.read.anonymous` 72; partition masks `litptr.mask.and` 631, `.or` 610 |
+| Generator, `SE_GENERATED_GRAMMAR=2 SE_GENERATED_SEEDS=3000` | 0 findings; `alias.words` 24 |
+| Generator, `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 findings; `alias.words` 262, masks 59 and 60 |
+| Printed C, `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | 3,060 functions, 2,474 compared, 2,524 agree |
+| Game corpus, `hwram007.bin` (`SE_GAME_LEND=1`) | 839/839; every ledger count 0; **0 missing and said (was 16)**; records 14,831 folded (was 14,843), 0 dead, 0 unreachable (was 16), 27 switch lookups; direct volatile accesses 163 (was 135); notes 16 -> 32, cautions 16 -> 0; lent signatures 552 -> 600 (723 -> 786 parameters), as master |
+| Game corpus, `hwram008.bin` | 1,554/1,554; every count 0; **4 missing and said (was 20)**; records 38,687 folded (was 38,701), 0 dead, 4 unreachable (was 20), 155 switch lookups; direct volatile accesses 232 (was 202); notes 31 -> 54, cautions 20 -> 4; lent 923 -> 984 (1,133 -> 1,223 parameters), as master |
+| Corpus text that changed (master's build beside this one's, every function of both images, pseudocode, warnings, cautions and notes) | **Pseudocode and warnings changed in nine functions** (the lending run's `lend_before` / `lend_after` copies alike): `hwram007` 06003C06 and 060340BE, `hwram008` 06003C06 and 060750FE (the slave start-up handshake and two copies: `/* WARNING: Do nothing block with infinite loop */` and a body of removed blocks, eight cautions each, become the two waits on `Ram26003304`, the IPRA / IPRB / TIER / SINIT writes, the FTCSR wait, the purge, the poll and the call; the signature is withheld "an indirect call it does not resolve" instead of "code removed as unreachable", and the eight removal cautions go); `hwram007` 06003C46 and 060340FE, `hwram008` 06003C46 and 0607513E (the slave idle loop: `xRam26003304 = 0` and `pcRam06003304` become `Ram26003304 = 0` and `(code *)Ram06003304`, the word being volatile, the poll still a read); `hwram008` 060716A8 (`(*pcRam260b72e8)(); xRam060b72e8 = 0;` becomes `pcVar1 = (code *)Ram260b72e8; (*pcVar1)(); Ram060b72e8 = 0;`, the word named through both partitions). Notes added: `SMPC_COMREG: issues SMPC command 0x.. (name)` at every constant COMREG write (12 in `hwram007`, 19 in `hwram008`, one of them the unknown-value text at 060715B6), the associative-purge note and `SH2_FTCSR: a read arms clearing its flags` in the restored handshake functions; no `SMPC_SF` note (every poll masks to bit 0). |
+| ASan + UBSan + LSan, gcc Debug | `Sh2DecompilerTests`, `HardwareWidthTableTests` and `Sh2GeneratedTests` (300 seeds), `detect_leaks=1`: no AddressSanitizer or LeakSanitizer report; UBSan only at the two tolerated sites (`address.hh:605`, `slghpatexpress.cc:979`); all pass |
+
+### Not done
+
+- The VDP1 frame buffer's 8 bpp rotate scramble (A5-57), the notes' limit on a stepped walk and on a callee-returned pointer (A5-58).
+- The VDP memories have no emulator in the generator: A5-50 and A5-53 are held by the suite (`a5_50*`, `a5_53_*`) and the mutation table, not by seeds.
+- Low work RAM is taken as repeating every MiB (the hardware of some revisions does; Mednafen answers the lower MiB only). The error is on the safe side: more words are volatile.
+- A pointer a callee returns (`*extraout_r6`), and any word reached through a pointer the engine cannot resolve, are not decided: the engine's data flow already treats a store through an unknown pointer as clobbering.
+- Grammar 2 makes few second names (24 words in 3,000 seeds; grammar 1 260 in 1,000): its literals come from `PickKind2` and the mask item is grammar 1's only.

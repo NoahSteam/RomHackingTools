@@ -22,6 +22,7 @@
 #include <new>
 #include <set>
 #include <sstream>
+#include <tuple>
 
 namespace sfe
 {
@@ -1824,7 +1825,15 @@ private:
                 // Neither is a number: an address plus an index nothing is known about (either addend may be the address).
                 PointerValues x = Walk(a, depth + 1), y = Walk(b, depth + 1);
                 const bool anyBase = !x.constants.empty() || !x.bases.empty() || !y.constants.empty() || !y.bases.empty();
-                if (!anyBase) { Merge(out, x); Merge(out, y); out.others = true; }
+                if (!anyBase)
+                {
+                    Merge(out, x);
+                    Merge(out, y);
+                    out.others = true;
+                    // An unknown added to the pointer's own value, round a loop, steps it by an amount nothing is known about (A5-54: the
+                    // qualifier "it may hold other values too" said so, the stepped note did not).
+                    if (x.cycle || y.cycle) out.steps = true;
+                }
                 else
                 {
                     out = Indexed(x);
@@ -1836,6 +1845,11 @@ private:
             }
             break;
         }
+        case ghidra::CPUI_INT_AND:   // a pointer moved between bus partitions (`& 0x1fffffff`, `| 0x20000000`: the cached / cache-through idiom, A5-51)
+        case ghidra::CPUI_INT_OR:
+        case ghidra::CPUI_INT_XOR:
+            out = Bitwise(d->code(), Walk(d->getIn(0), depth + 1), Walk(d->getIn(1), depth + 1));
+            break;
         default:
             out.others = true;
             break;
@@ -1871,6 +1885,41 @@ private:
         return out;
     }
 
+    // x op y for a bitwise op. The values are the address sets of the operands: with one side a set of known numbers (the mask) and the
+    // other a set of addresses, the op gives each pair's result (`{0x25F80004, 0x25F8000A} & {0x1FFFFFFF}` is the same two registers
+    // through the cached partition). Every result is an address the pointer holds through an operation, never one printed as itself. The
+    // other side may hold more besides (`others`). An operand nothing is known about (a parameter, a loaded value, a computed mask) makes
+    // the result unknown, and so does an indexed pointer: the op acts on its index too. A side that is only the pointer's own value
+    // round a loop (no address, no unknown) adds nothing, as in a merge: `p = p & mask` steps nothing.
+    static PointerValues Bitwise(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
+    {
+        PointerValues out;
+        constexpr size_t kMaxPairs = 64;   // (a pointer merged from more addresses than this is not worked out)
+        auto known = [](const PointerValues& v) { return !v.constants.empty() && v.bases.empty() && !v.others; };
+        auto onlyCycle = [](const PointerValues& v) { return v.constants.empty() && v.bases.empty() && !v.others && v.cycle; };
+        out.steps = x.steps || y.steps;
+        out.cycle = x.cycle || y.cycle;
+        if (onlyCycle(x) || onlyCycle(y))
+            return out;
+        const PointerValues* mask = known(y) ? &y : known(x) ? &x : nullptr;
+        const PointerValues* set = mask == &y ? &x : &y;
+        if (!mask || set->constants.empty() || !set->bases.empty() || mask->constants.size() * set->constants.size() > kMaxPairs)
+        {
+            out.others = true;
+            return out;
+        }
+        for (const auto& s : set->constants)
+            for (const auto& m : mask->constants)
+                out.constants[Apply(code, s.first, m.first)] = true;
+        out.others = set->others;
+        return out;
+    }
+
+    static uint32_t Apply(ghidra::OpCode code, uint32_t a, uint32_t b)
+    {
+        return code == ghidra::CPUI_INT_AND ? (a & b) : code == ghidra::CPUI_INT_OR ? (a | b) : (a ^ b);
+    }
+
     // Every address held becomes the base of an indexed pointer.
     static PointerValues Indexed(const PointerValues& v)
     {
@@ -1888,6 +1937,67 @@ private:
     std::set<const ghidra::Varnode*> active_;
     std::map<const ghidra::Varnode*, PointerValues> done_;
 };
+
+// How far a pointer stepped in a loop is taken to walk: a register within this many bytes of where it starts (either way: a step may be
+// negative) is one it may reach. The trip count is not worked out; 256 bytes is 64 longs, more than the loops that walk a register file.
+constexpr uint32_t kSteppedReach = 0x100;
+
+// A named register whose address is within 'span' bytes of 'address' (through any alias, in the same register area).
+bool NamedRegisterNear(uint32_t address, uint32_t span)
+{
+    uint32_t canonical = 0;
+    if (!HardwareAlias(address, canonical)) return false;
+    size_t n = 0;
+    const HardwareRegister* regs = SaturnHardwareRegisters(n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        const int64_t lo = regs[i].address, hi = int64_t(regs[i].address) + regs[i].size - 1;
+        if (hi + span >= canonical && lo <= int64_t(canonical) + span) return true;
+    }
+    return false;
+}
+
+// True when every use of 'vn' looks only at the bits in 'mask': an AND with a constant inside it, through the copies, extensions and
+// truncations that carry the value on. A value nothing uses is seen by no bit.
+bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, std::set<const ghidra::Varnode*>& seen)
+{
+    if (!seen.insert(vn).second) return true;   // (a loop's merge of its own value: its other uses are judged where they are)
+    for (auto it = vn->beginDescend(); it != vn->endDescend(); ++it)
+    {
+        const ghidra::PcodeOp* use = *it;
+        if (use->isDead()) continue;
+        switch (use->code())
+        {
+        case ghidra::CPUI_INT_AND:
+        {
+            const ghidra::Varnode* other = use->getIn(0) == vn ? use->getIn(1) : use->getIn(0);
+            if (other->isConstant() && (other->getOffset() & ~mask) == 0) continue;
+            return false;
+        }
+        case ghidra::CPUI_RETURN:   // (r0 left in the return register by a poll is no use of the value: the decompiler returns it whatever the code meant)
+            continue;
+        case ghidra::CPUI_INT_ZEXT:
+        case ghidra::CPUI_INT_SEXT:
+        case ghidra::CPUI_COPY:
+        case ghidra::CPUI_CAST:
+        case ghidra::CPUI_MULTIEQUAL:
+            if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
+            continue;
+        case ghidra::CPUI_SUBPIECE:
+            if (use->getIn(1)->isConstant() && use->getIn(1)->getOffset() == 0 && use->getOut() && OnlyUsesBits(use->getOut(), mask, seen)) continue;
+            return false;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask)
+{
+    std::set<const ghidra::Varnode*> seen;
+    return OnlyUsesBits(vn, mask, seen);
+}
 
 // What the pseudocode does not say about the hardware accesses it shows. Every access to a
 // register area at a constant address is a volatile read or write by now (the symbols and ranges
@@ -1933,8 +2043,18 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         {
             for (const HardwareRegister* reg : regs)
             {
+                const bool smpc = reg->address >= 0x00100000u && reg->address < 0x00180000u;
                 if (read && reg->access == RegisterAccess::WriteOnly)
-                    note(insn, std::string("reads ") + reg->name + ", which is write-only: the value is not what was written", true);
+                    note(insn, std::string("reads ") + reg->name + ", which is write-only: " +
+                                   (smpc ? "Mednafen returns the last byte written to the SMPC, to any register (its bus buffer), not the register"
+                                         : "the value is not what was written"), true);
+                // The SMPC's bus buffer is also the high bits of the two status registers it reads (smpc.c SMPC_Read: `ret = BusBuffer; ...
+                // ret &= ~0x01; ret |= SF;` and `(ret & 0x80) | IOBusState`). Said only where the code uses them: a read the code masks to
+                // bit 0 (`SMPC_SF & 1`, every game poll) does not see them (A5-56).
+                if (read && smpc && (reg->address == 0x00100063u || reg->address == 0x00100075u || reg->address == 0x00100077u) && value &&
+                    !OnlyUsesBits(value, reg->address == 0x00100063u ? 0x01u : 0x7Fu))
+                    note(insn, std::string(reg->name) + ": " + (reg->address == 0x00100063u ? "bits 7-1" : "bit 7") +
+                                   " of a read are the last byte written to the SMPC (its bus buffer), not the register's", false);
                 if (write && reg->access == RegisterAccess::ReadOnly)
                     note(insn, std::string("writes ") + reg->name + ", which is read-only: the write does nothing", true);
                 if (write && reg->access == RegisterAccess::KeyedWrite && size != 1)   // a byte write: the width table says it
@@ -1956,6 +2076,11 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         // on-chip one, a word at an SMPC register, the register the 32-bit bus reads as well. The
         // width table decides, per register, and writes the cautions (NarrowAccessEffects).
         for (const NarrowEffect& e : NarrowAccessEffects(at, size, write)) note(insn, e.text, e.caution);
+        // VDP2 colour RAM stores the whole 16-bit entry from the data bus on a byte write: the byte not written is the last value on the
+        // bus, not the entry's old byte (vdp2.c RW_W8, unlike VRAM's masked store), so no value of the entry is carried past it (A5-50).
+        if (write && size == 1 && InColorRam(at))
+            note(insn, "a 1-byte write to colour RAM at " + Hex8(at) + " stores the whole 16-bit entry: the byte not written is the last value on the "
+                       "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)", true);
         if (regs.empty()) return;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
@@ -2016,11 +2141,12 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                     prefix = "if the pointer holds " + Hex8(rc.address) + name + (otherValues ? " (it may hold other values too)" : "") + ": ";
                 account(insn, rc.address, size, write, value, prefix, !rc.shifted);
             }
-            // (said for a pointer that starts at a register: a walk through the SCSP's DSP program area, where no register is named, has
-            // nothing to be missed)
+            // (said for a pointer that starts at a register, or in a register area within kSteppedReach bytes of one: A5-54, a walk from the SCU's
+            // hole at 0x25FE0018 reaches SCU_D1EN, one from the last SCSP slot reaches MVOL and MOBUF. A walk through the SCSP's DSP program
+            // area, with no register near, has nothing to be missed.)
             if (pv.steps)
                 for (const Candidate& rc : registers)
-                    if (!HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty())
+                    if (!HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty() || NamedRegisterNear(rc.address, kSteppedReach))
                     {
                         noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
                                 "other registers perhaps, which are not said", false);
@@ -2588,6 +2714,7 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     std::vector<HardwareRange> marked;
     for (const auto& v : request.volatileMemory)
         for (const HardwareRange& h : VolatileAliases(v.first, v.second)) marked.push_back(h);
+    for (const auto& h : r.aliasedMemory) marked.push_back(HardwareRange{ h.first, h.second });
     auto isMarked = [&](uint32_t a) {
         for (const HardwareRange& h : marked)
             if (h.first <= a && a <= h.last) return true;
@@ -2663,6 +2790,112 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
     if (r.prototypeWithheld.empty()) r.prototypeWithheld = "code removed as unreachable holds hardware accesses";
     r.prototype.known = false;
 }
+
+namespace
+{
+
+// One access of ordinary memory at a constant address, as the actions left it. 'bus' is where it lands on the bus (the address, or for an
+// associative purge the cached address it purges), 'size' its width.
+struct ConstAccess
+{
+    uint32_t address = 0;
+    uint32_t bus = 0;
+    uint32_t size = 0;
+    bool store = false;
+    bool operator<(const ConstAccess& o) const { return std::tie(address, size, store) < std::tie(o.address, o.size, o.store); }
+};
+
+// The constant-address accesses of the function that are ordinary memory to the engine (it folded them into variables, patch 0017's
+// record) and the associative purges of work RAM, which are volatile accesses of a word the function also treats as memory: a purge says
+// another processor is expected to have written it (the slave's idle loop purges its mailbox and polls it).
+std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghidra::AddrSpace* ram)
+{
+    std::vector<ConstAccess> out;
+    for (const ghidra::AccessRecord& rec : fd.getAccessFates())
+    {
+        if (rec.fate != ghidra::fate_folded_ordinary || rec.addr.isInvalid() || rec.addr.getSpace() != ram) continue;
+        ConstAccess c;
+        c.address = c.bus = static_cast<uint32_t>(rec.addr.getOffset());
+        c.size = static_cast<uint32_t>(rec.size);
+        c.store = rec.store;
+        out.push_back(c);
+    }
+    for (auto it = fd.beginOpAlive(); it != fd.endOpAlive(); ++it)
+    {
+        const ghidra::PcodeOp* o = *it;
+        if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
+        const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
+        if (!u || (u->getType() != ghidra::UserPcodeOp::volatile_read && u->getType() != ghidra::UserPcodeOp::volatile_write)) continue;
+        const uint32_t address = static_cast<uint32_t>(o->getIn(1)->getOffset());
+        if ((address >> 29) != 2) continue;   // 0x40000000-0x5FFFFFFF: Mednafen's associative purge (sh7095.inc case 2)
+        const bool store = u->getType() == ghidra::UserPcodeOp::volatile_write;
+        const ghidra::Varnode* value = store ? (o->numInput() > 2 ? o->getIn(2) : nullptr) : o->getOut();
+        if (!value) continue;
+        ConstAccess c;
+        c.address = address;
+        c.bus = address & 0x07FFFFFFu;   // the line it purges, as the cached partition names it
+        c.size = static_cast<uint32_t>(value->getSize());
+        c.store = store;
+        out.push_back(c);
+    }
+    return out;
+}
+
+// The accesses among 'seen' and 'known' that reach memory another address of the function reaches too, not yet in 'known': two accesses
+// that cover a byte of one memory in common (MemoryBytesOf) at addresses whose bytes do not overlap, so that the data flow takes them for
+// two memories (A5-52, A5-53); and every byte store to colour RAM, which stores the whole entry (A5-50). They are appended to 'known',
+// so a later pass counts them too, and their ranges (outward to whole longwords, as VolatileAliases does) are returned.
+std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen, std::vector<ConstAccess>& known)
+{
+    struct Member
+    {
+        ConstAccess access;
+        MemoryBytes bytes;
+        bool flagged = false;
+        bool isKnown = false;
+    };
+    std::vector<Member> members;
+    std::set<ConstAccess> have;
+    auto add = [&](const ConstAccess& c, bool isKnown) {
+        if (!have.insert(c).second) return;
+        Member m;
+        m.access = c;
+        m.isKnown = isKnown;
+        if (!MemoryBytesOf(c.bus, c.size, m.bytes)) return;
+        members.push_back(m);
+    };
+    for (const ConstAccess& c : known) add(c, true);
+    for (const ConstAccess& c : seen) add(c, false);    std::sort(members.begin(), members.end(), [](const Member& x, const Member& y) {
+        return std::tie(x.bytes.kind, x.bytes.first, x.bytes.last) < std::tie(y.bytes.kind, y.bytes.first, y.bytes.last);
+    });
+    auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+        Member& mi = members[i];
+        if (mi.bytes.kind == MemoryKind::Vdp2ColorRam && mi.access.store && mi.access.size == 1) mi.flagged = true;
+        for (size_t j = i + 1; j < members.size(); ++j)
+        {
+            Member& mj = members[j];
+            if (mj.bytes.kind != mi.bytes.kind || mj.bytes.first > mi.bytes.last) break;   // sorted by first byte: nothing later overlaps
+            if (!overlap(mi.bytes.first, mi.bytes.last, mj.bytes.first, mj.bytes.last)) continue;
+            // The same bytes under addresses that do not overlap: the engine keys them apart.
+            if (overlap(mi.access.address, mi.access.address + mi.access.size - 1, mj.access.address, mj.access.address + mj.access.size - 1)) continue;
+            mi.flagged = mj.flagged = true;
+        }
+    }
+    std::vector<HardwareRange> out;
+    for (const Member& m : members)
+    {
+        if (!m.flagged || m.isKnown) continue;
+        known.push_back(m.access);
+        // (a purge is volatile already; it is only the evidence)
+        if (m.access.address != m.access.bus && (m.access.address >> 29) == 2) continue;
+        out.push_back(HardwareRange{ m.access.address & ~3u, (m.access.address + m.access.size - 1) | 3u });
+    }
+    return out;
+}
+
+}  // namespace
 
 void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& snapshot,
                                   const DecompileRequest& request, std::atomic<bool>* cancel, DecompileResult& r,
@@ -2752,9 +2985,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         return false;
     };
 
+    // Ordinary memory the function reaches under more than one address (A5-52, A5-53), found after a pass's actions from the accesses the
+    // engine folded into variables, and made volatile for the passes after it: the engine keys memory by address, and would forward a store
+    // past a write to the other name of the same word. Found in a pass that prints, it makes that pass give way to another.
+    std::vector<ConstAccess> aliasKnown;
+    std::vector<HardwareRange> aliasRanges;
+    bool aliasRetry = false;
+    constexpr int kAliasRounds = 6;
+
     // One pass: a fresh Architecture, every function registered, flow followed, read-only
-    // literals applied, actions run. 'print' adds the markup output.
-    auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets) {
+    // literals applied, actions run. 'print' adds the markup output; 'mayRetry' lets a print pass stop, before it prints, when the
+    // actions showed memory with two names that is not yet volatile ('aliasRetry').
+    auto runPass = [&](const CalleeAliases& callees, bool print, CalleeAliases* targets, bool mayRetry) {
         Enter(DecompilePhase::Init);
         std::ostringstream errors;
         errors.exceptions(std::ios::badbit);   // an allocation failure must not just cut the text short
@@ -2966,6 +3208,21 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             }
             if (!lentCallee)
                 arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+        }
+
+        if (!request.allMemoryVolatile)
+        {
+            const std::vector<HardwareRange> fresh = NewAliasedRanges(ConstantAccesses(*fd, ram), aliasKnown);
+            for (const HardwareRange& h : fresh)
+            {
+                aliasRanges.push_back(h);
+                userVolatile.push_back(h);
+            }
+            if (!fresh.empty() && print && mayRetry)
+            {
+                aliasRetry = true;
+                return std::string();
+            }
         }
 
         if (targets)
@@ -3266,7 +3523,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     }
     else if (request.registerCallees)
     {
-        runPass(CalleeAliases(), false, &first);
+        runPass(CalleeAliases(), false, &first, false);
         firstPassRan = true;
     }
     if (seedOut)
@@ -3279,7 +3536,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // raised in the tail of the pass's actions, or while it was torn down, is honoured here, in Actions (mWorkPhase is
     // still the pass's last phase), and not carried through the next pass's Init into its Flow (A6-6, A6-35).
     if (firstPassRan) checkCancel();
-    printed = runPass(first, true, &callees);
+    for (int round = 0;; ++round)
+    {
+        aliasRetry = false;
+        printed = runPass(first, true, &callees, round < kAliasRounds);
+        if (!aliasRetry) break;
+    }
+    for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
     if (printed.empty())
     {
         r.status = DecompileStatus::NoCode;
