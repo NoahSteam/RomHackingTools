@@ -1156,6 +1156,34 @@ public:
         return h.t;
     }
 
+    // The length the translator gives the instruction at 'addr' (-1 when it cannot), a parse that stops short of the p-code.
+    int Length(uint32_t addr)
+    {
+        try
+        {
+            return const_cast<ghidra::Translate*>(mArch->translate)->instructionLength(ghidra::Address(mRam, addr));
+        }
+        catch (ghidra::LowlevelError&)
+        {
+            return -1;
+        }
+    }
+
+    // The listing the translator prints for the instruction at 'addr' ("" when it cannot).
+    std::string Asm(uint32_t addr)
+    {
+        DisEmit emit;
+        try
+        {
+            const_cast<ghidra::Translate*>(mArch->translate)->printAssembly(emit, ghidra::Address(mRam, addr));
+        }
+        catch (ghidra::LowlevelError&)
+        {
+            return "";
+        }
+        return emit.got ? emit.mn + " " + emit.body : "";
+    }
+
     // The p-code of the instruction at 'addr' (its delay slot with it), one op per line.
     void DumpPcode(uint32_t addr)
     {
@@ -1898,6 +1926,120 @@ long TestTranslationHistory(EmuMachine& mach, const std::vector<Form>& forms, co
     return bad;
 }
 
+// Round 8: the same property as TestTranslationHistory over random histories. What the translator makes of an instruction is a function of the
+// bytes, the address and the context, never of what it translated before (A2-5 was the ring, A2-48 the cached tree's next address). The reference
+// of every address of a pool is made by a machine of its own, built for the one translation (a new SaturnArchitecture resets the translator: its
+// caches and its context database are empty). Then random walks over the pool on one machine (a walk starts on a new machine and runs 'steps'
+// translations, listings and lengths, mostly of addresses near the last one: the branch, the instruction after the slot), each result held to
+// the reference. The pool: every kind of delayed branch with every kind of slot, the followers of A2-48, and the PC-relative forms (whose context
+// the slot's commits paint). The slot as an instruction of its own is left out: translated after its branch, or before it with the slot's tree
+// still in the ring, a PC-relative slot gets the wrong PC, which is A2-4's accepted limit (a slot that other code also jumps to; the host flags it
+// unsupported). SE_DECODE_SLOTS_ALONE=1 puts the slots back in, and 87 of 24,000 results differ. Returns the number of results that differ.
+long TestTranslationOrder(const std::shared_ptr<const MemorySnapshot>& snap, const std::vector<Form>& forms,
+                          const std::vector<Follower>& followersOnce, const std::vector<Follower>& followersTwice, uint64_t seed, long walks,
+                          long steps)
+{
+    Rng rng(seed ^ 0x0DD0F0ull);
+    std::vector<uint32_t> pool;
+    {
+        std::set<uint32_t> seen;
+        auto add = [&](uint32_t a) {
+            if (seen.insert(a).second) pool.push_back(a);
+        };
+        for (const Form& f : forms)
+        {
+            if (f.name.find("code at address 0") != std::string::npos) continue;
+            const bool pcRel = f.name.find("PC") != std::string::npos;
+            const size_t take = f.delayed ? 48 : pcRel ? 24 : 6;
+            for (size_t i = 0; i < f.cells.size() && i < take; ++i)
+            {
+                // spread over the form's cells: every k-th
+                const Cell& c = f.cells[(i * f.cells.size()) / take];
+                add(c.addr);
+                if (f.delayed && std::getenv("SE_DECODE_SLOTS_ALONE")) add(c.addr + 2);   // see above
+                add(c.addr + 4);
+            }
+        }
+        for (const std::vector<Follower>* v : { &followersOnce, &followersTwice })
+            for (const Follower& fo : *v)
+            {
+                add(fo.branchAddr);
+                if (std::getenv("SE_DECODE_SLOTS_ALONE")) add(fo.branchAddr + 2);
+                add(fo.branchAddr + 4);
+            }
+    }
+    struct Ref
+    {
+        EmuMachine::Translation t;
+        std::string text;
+        int length = -1;
+    };
+    std::map<uint32_t, Ref> ref;
+    for (uint32_t a : pool)
+    {
+        EmuMachine cold(snap);
+        Ref r;
+        r.t = cold.Translate(a);
+        r.text = cold.Asm(a);
+        r.length = cold.Length(a);
+        ref[a] = r;
+    }
+    const std::set<uint32_t> inPool(pool.begin(), pool.end());
+    long bad = 0, checked = 0, shown = 0;
+    struct Step
+    {
+        uint32_t addr;
+        int what;   // 0 p-code, 1 listing, 2 length
+    };
+    for (long w = 0; w < walks; ++w)
+    {
+        EmuMachine mach(snap);
+        std::vector<Step> recent;
+        uint32_t last = pool[rng.Below(static_cast<uint32_t>(pool.size()))];
+        for (long i = 0; i < steps; ++i)
+        {
+            uint32_t a;
+            const uint32_t r = rng.Below(100);
+            static const int kNear[] = { -4, -2, 0, 0, 2, 4, 6 };
+            a = last + static_cast<uint32_t>(kNear[rng.Below(7)]);
+            if (r < 30 || !inPool.count(a)) a = pool[rng.Below(static_cast<uint32_t>(pool.size()))];
+            last = a;
+            const uint32_t kind = rng.Below(100);   // 0 p-code, 1 listing, 2 length
+            const int what = kind < 25 ? 1 : kind < 45 ? 2 : 0;
+            const bool listing = what == 1;
+            recent.push_back({ a, what });
+            if (recent.size() > 12) recent.erase(recent.begin());
+            const Ref& want = ref[a];
+            bool same;
+            std::string gotText;
+            if (what == 1)
+            {
+                gotText = mach.Asm(a);
+                same = gotText == want.text;
+            }
+            else if (what == 2) same = mach.Length(a) == want.length;
+            else same = mach.Translate(a) == want.t;
+            ++checked;
+            if (same) continue;
+            ++bad;
+            if (shown++ < 4)
+            {
+                uint16_t here = 0, before = 0;
+                snap->ReadU16(a, here);
+                snap->ReadU16(a - 2, before);
+                std::printf("TRANSLATION ORDER walk %ld step %ld: %s of %s (word %04X, the word before %04X) differs from a cold translator's%s\n  recent:", w, i,
+                            what == 1 ? "the listing" : what == 2 ? "the length" : "the p-code", Hex8(a).c_str(), here, before,
+                            listing ? (" ('" + gotText + "' for '" + want.text + "')").c_str() : "");
+                for (const Step& st : recent) std::printf(" %s%s", st.what == 1 ? "L" : st.what == 2 ? "N" : "T", Hex8(st.addr).substr(2).c_str());
+                std::printf("\n");
+            }
+        }
+    }
+    std::printf("translation order: %zu addresses, %ld walks of %ld steps, %ld results checked against a cold translator, %ld differ\n", pool.size(), walks,
+                steps, checked, bad);
+    return bad;
+}
+
 // A2-4 as the decompiler reaches it. The shapes the differential run found (a PC-relative load or mova in the slot of bt/s, bf/s, jmp,
 // jsr, rts, braf, bsrf and rte), decompiled from the branch: the function is no longer marked unsupported, since the spec places the
 // slot's literal for every delayed branch (patch 0050); the load is made, through the address the branch's PC gives it.
@@ -1977,6 +2119,15 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
     low.bytes = layout.low;
     snap->regions.push_back(std::move(low));
     snap->key.regionSetHash = snap->ComputeRegionSetHash();
+    // Round 8: translation order over random histories, on machines of its own (each reference is a new machine).
+    long orderBad = 0;
+    if (!filter)
+    {
+        const char* wenv = std::getenv("SE_DECODE_WALKS");
+        const char* senv = std::getenv("SE_DECODE_STEPS");
+        orderBad = TestTranslationOrder(snap, forms, followersOnce, followersTwice, seed, wenv ? std::strtol(wenv, nullptr, 10) : 6,
+                                        senv ? std::strtol(senv, nullptr, 10) : 4000);
+    }
     std::unique_ptr<EmuMachine> machPtr(new EmuMachine(snap));
     EmuMachine& mach = *machPtr;
     std::printf("%zu forms, %ld cases each, seed %llu; code placed in %u bytes of HWRAM and %u at address 0 (%.0f ms)\n",
@@ -1984,6 +2135,7 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
                 layout.lowNext, dts::MsSince(t0));
 
     const long historyBad = TestTranslationHistory(mach, forms, filter, show);
+
     long shapeFails = 0;
     std::vector<std::pair<std::string, uint32_t>> slotShapes;   // A2-4 shapes: a PC-relative slot after a delayed branch; the decompiler must not flag them
     const char* pcode = std::getenv("SE_DECODE_PCODE");   // print the p-code of the shapes selected by SE_DECODE_FORM
@@ -2089,6 +2241,7 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
     CHECK(unrunnable == 0);
     CHECK(shapeFails == 0);
     CHECK(historyBad == 0);
+    CHECK(orderBad == 0);
 
     // ...and the decompiler does not call a function with such a slot unsupported (ScanRawPcode flags only a slot that other code
     // also jumps to). The machine goes first -- the decompiler resets the process-wide translator.

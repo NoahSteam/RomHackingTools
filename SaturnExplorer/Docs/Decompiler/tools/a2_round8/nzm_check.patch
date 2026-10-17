@@ -1,0 +1,269 @@
+--- a/FrontEnd/third_party/ghidra-decompiler/cpp/action.cc
++++ b/FrontEnd/third_party/ghidra-decompiler/cpp/action.cc
+@@ -20,8 +20,246 @@
+ #include "funcdata.hh"
+ 
+ #include "coreaction.hh"
++#include <set>
++#include <sstream>
++#include <map>
++#include <cstdio>
++#include <cstdlib>
++
+ 
+ namespace ghidra {
++// ---- round 8 instrument (scratch only): is every non-zero mask a fact about the value the varnode holds now? ----
++namespace nzmchk {
++static int on = -1;
++static bool enabled() { if (on < 0) on = std::getenv("SE_NZM_CHECK") ? 1 : 0; return on == 1; }
++static uint64_t mix(uint64_t x){ x ^= x>>33; x*=0xff51afd7ed558ccdULL; x^=x>>33; x*=0xc4ceb9fe1a85ec53ULL; x^=x>>33; return x; }
++struct Ev {
++  int trial;
++  std::map<const Varnode*, std::pair<bool,uintb> > memo;
++  std::map<const Varnode*, uintb> xorov;   // consume check: bits of a varnode's value flipped
++  explicit Ev(int t) : trial(t) {}
++  static uintb sx(uintb v, int sz) { int b = sz*8; if (b >= 64) return v; if ((v >> (b-1)) & 1) return v | ~calc_mask(sz); return v; }
++  bool get(const Varnode *vn, uintb &val) {
++    std::map<const Varnode*, std::pair<bool,uintb> >::iterator it = memo.find(vn);
++    if (it != memo.end()) { val = it->second.second; return it->second.first; }
++    memo[vn] = std::make_pair(false, (uintb)0);
++    bool ok = false; uintb res = 0;
++    int sz = vn->getSize();
++    if (sz > 8) { return false; }
++    if (vn->isConstant()) { res = vn->getOffset(); ok = true; }
++    else if (!vn->isWritten()) {
++      AddrSpace *spc = vn->getSpace();
++      for (int i = 0; i < sz; ++i) {
++        uint64_t h = mix(((uint64_t)spc->getIndex() << 52) ^ ((uint64_t)(vn->getOffset() + i) * 0x9E3779B97F4A7C15ULL) ^ ((uint64_t)trial * 0xD6E8FEB86659FD93ULL));
++        uint8_t b = (trial == 0) ? 0 : (trial == 1) ? 0xff : (uint8_t)(h & 0xff);
++        if (spc->isBigEndian()) res = (res << 8) | b; else res |= (uintb)b << (8*i);
++      }
++      if (vn->isSpacebase()) res &= ~((uintb)0xff);   // the engine's own assumption (calcNZMask): a stack pointer on entry is 256-aligned
++      ok = true;
++    } else ok = evalOp(vn->getDef(), res);
++    res &= calc_mask(sz);
++    if (ok) { std::map<const Varnode*, uintb>::const_iterator ov = xorov.find(vn); if (ov != xorov.end()) res ^= (ov->second & calc_mask(sz)); }
++    memo[vn] = std::make_pair(ok, res);
++    val = res;
++    return ok;
++  }
++  bool evalOp(const PcodeOp *op, uintb &res) {
++    int n = op->numInput();
++    uintb a = 0, b = 0, c = 0;
++    int osz = op->getOut()->getSize();
++    OpCode oc = op->code();
++    switch (oc) {
++    case CPUI_COPY: case CPUI_CAST: case CPUI_INT_NEGATE: case CPUI_INT_2COMP: case CPUI_INT_ZEXT: case CPUI_INT_SEXT: case CPUI_BOOL_NEGATE: case CPUI_POPCOUNT: case CPUI_SUBPIECE:
++      if (n < 1 || !get(op->getIn(0), a)) return false;
++      break;
++    case CPUI_INT_ADD: case CPUI_INT_SUB: case CPUI_INT_XOR: case CPUI_INT_AND: case CPUI_INT_OR: case CPUI_INT_LEFT: case CPUI_INT_RIGHT: case CPUI_INT_SRIGHT:
++    case CPUI_INT_MULT: case CPUI_INT_EQUAL: case CPUI_INT_NOTEQUAL: case CPUI_INT_LESS: case CPUI_INT_LESSEQUAL: case CPUI_INT_SLESS: case CPUI_INT_SLESSEQUAL:
++    case CPUI_INT_CARRY: case CPUI_INT_SCARRY: case CPUI_INT_SBORROW: case CPUI_BOOL_AND: case CPUI_BOOL_OR: case CPUI_BOOL_XOR: case CPUI_PIECE: case CPUI_PTRSUB:
++    case CPUI_INT_DIV: case CPUI_INT_SDIV: case CPUI_INT_REM: case CPUI_INT_SREM:
++      if (n < 2 || !get(op->getIn(0), a) || !get(op->getIn(1), b)) return false;
++      break;
++    case CPUI_PTRADD:
++      if (n < 3 || !get(op->getIn(0), a) || !get(op->getIn(1), b) || !get(op->getIn(2), c)) return false;
++      break;
++    default: return false;
++    }
++    int isz = op->getIn(0)->getSize();
++    uintb m = calc_mask(isz);
++    switch (oc) {
++    case CPUI_COPY: case CPUI_CAST: res = a; return true;
++    case CPUI_INT_NEGATE: res = ~a; return true;
++    case CPUI_INT_2COMP: res = (uintb)0 - a; return true;
++    case CPUI_INT_ZEXT: res = a; return true;
++    case CPUI_INT_SEXT: res = sx(a, isz); return true;
++    case CPUI_BOOL_NEGATE: res = (a & 1) ^ 1; return true;
++    case CPUI_POPCOUNT: res = popcount(a); return true;
++    case CPUI_SUBPIECE: { uintb sh = op->getIn(1)->getOffset(); res = (sh >= 8) ? 0 : (a >> (8*sh)); return true; }
++    case CPUI_INT_ADD: res = a + b; return true;
++    case CPUI_INT_SUB: res = a - b; return true;
++    case CPUI_INT_XOR: res = a ^ b; return true;
++    case CPUI_INT_AND: res = a & b; return true;
++    case CPUI_INT_OR: res = a | b; return true;
++    case CPUI_INT_LEFT: res = (b >= (uintb)(8*osz)) ? 0 : (a << b); return true;
++    case CPUI_INT_RIGHT: res = (b >= (uintb)(8*isz)) ? 0 : (a >> b); return true;
++    case CPUI_INT_SRIGHT: { uintb s = sx(a, isz); int sh = (b >= (uintb)(8*isz)) ? 63 : (int)b; res = (uintb)(((intb)s) >> (sh > 63 ? 63 : sh)); return true; }
++    case CPUI_INT_MULT: res = a * b; return true;
++    case CPUI_INT_EQUAL: res = a == b; return true;
++    case CPUI_INT_NOTEQUAL: res = a != b; return true;
++    case CPUI_INT_LESS: res = a < b; return true;
++    case CPUI_INT_LESSEQUAL: res = a <= b; return true;
++    case CPUI_INT_SLESS: res = (intb)sx(a, isz) < (intb)sx(b, isz); return true;
++    case CPUI_INT_SLESSEQUAL: res = (intb)sx(a, isz) <= (intb)sx(b, isz); return true;
++    case CPUI_INT_CARRY: res = ((a + b) & m) < a; return true;
++    case CPUI_INT_SCARRY: { intb x = (intb)sx(a, isz), y = (intb)sx(b, isz); intb r = (intb)sx((a + b) & m, isz); res = ((x >= 0) == (y >= 0)) && ((r >= 0) != (x >= 0)); return true; }
++    case CPUI_INT_SBORROW: { intb x = (intb)sx(a, isz), y = (intb)sx(b, isz); intb r = (intb)sx((a - b) & m, isz); res = ((x >= 0) != (y >= 0)) && ((r >= 0) != (x >= 0)); return true; }
++    case CPUI_BOOL_AND: res = (a & b) & 1; return true;
++    case CPUI_BOOL_OR: res = (a | b) & 1; return true;
++    case CPUI_BOOL_XOR: res = (a ^ b) & 1; return true;
++    case CPUI_PIECE: res = (a << (8 * op->getIn(1)->getSize())) | b; return true;
++    case CPUI_PTRSUB: res = a + b; return true;
++    case CPUI_PTRADD: res = a + b * c; return true;
++    case CPUI_INT_DIV: if (b == 0) return false; res = a / b; return true;
++    case CPUI_INT_REM: if (b == 0) return false; res = a % b; return true;
++    case CPUI_INT_SDIV: { intb y = (intb)sx(b, isz); if (y == 0) return false; intb x = (intb)sx(a, isz); if (y == -1) { res = (uintb)0 - (uintb)x; return true; } res = (uintb)(x / y); return true; }
++    case CPUI_INT_SREM: { intb y = (intb)sx(b, isz); if (y == 0) return false; intb x = (intb)sx(a, isz); if (y == -1) { res = 0; return true; } res = (uintb)(x % y); return true; }
++    default: return false;
++    }
++  }
++};
++static std::set<std::pair<std::string,uintb> > seen;
++static long reports = 0;
++static std::set<std::string> checkedFns, skippedFns;
++static struct Summary { ~Summary() { if (on == 1) std::fprintf(stderr, "NZMSUMMARY functions checked at least once: %lu, skipped for size at least once: %lu, only skipped: %lu, reports: %ld\n", (unsigned long)checkedFns.size(), (unsigned long)skippedFns.size(), (unsigned long)[&]{ unsigned long n = 0; for (std::set<std::string>::const_iterator i = skippedFns.begin(); i != skippedFns.end(); ++i) if (!checkedFns.count(*i)) ++n; return n; }(), reports); } } summary;
++static std::set<std::string> cseen;
++static long creports = 0;
++static bool consumeEnabled() { static int on2 = -1; if (on2 < 0) on2 = std::getenv("SE_CONSUME_CHECK") ? 1 : 0; return on2 == 1; }
++// roots: what the function does that is visible: returns, stores, branches, load addresses
++static bool rootValues(Funcdata &data, Ev &ev, std::vector<std::pair<bool,uintb> > &out, bool &bail) {
++  list<PcodeOp *>::const_iterator it;
++  for (it = data.beginOpAlive(); it != data.endOpAlive(); ++it) {
++    PcodeOp *op = *it;
++    OpCode oc = op->code();
++    if (op->isCall() || oc == CPUI_BRANCHIND || oc == CPUI_CALLOTHER) { bail = true; return false; }
++    int from = -1, to = -1;
++    if (oc == CPUI_RETURN) { from = 1; to = op->numInput(); }
++    else if (oc == CPUI_STORE) { from = 1; to = 3; }
++    else if (oc == CPUI_CBRANCH) { from = 1; to = 2; }
++    else if (oc == CPUI_LOAD) { from = 1; to = 2; }
++    for (int i = from; i >= 0 && i < to; ++i) {
++      uintb v = 0;
++      bool ok = ev.get(op->getIn(i), v);
++      if (oc == CPUI_CBRANCH) v = (v != 0);
++      if (oc == CPUI_RETURN && !data.getFuncProto().isOutputLocked() && data.getActiveOutput() == (ParamActive *)0 && op->getIn(i)->getSpace()->getType() != IPTR_JOIN)
++        v &= minimalmask(op->getIn(i)->getNZMask());   // an unlocked return is consumed down to its non-zero bits (gatherConsumedReturn)
++      out.push_back(std::make_pair(ok, v));
++    }
++  }
++  return true;
++}
++static void checkConsume(Funcdata &data, const std::string &where) {
++  static long maxops = std::getenv("SE_NZM_MAXOPS") ? std::atol(std::getenv("SE_NZM_MAXOPS")) : 300;
++  long nops = 0;
++  list<PcodeOp *>::const_iterator oiter;
++  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) { if (++nops > maxops) return; }
++  // the bits each value really takes over the trials: a flip outside them is a state the function cannot be in
++  std::map<const Varnode*, uintb> reach;
++  for (int trial = 0; trial < 8; ++trial) {
++    Ev e(trial);
++    for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
++      Varnode *o = (*oiter)->getOut();
++      uintb v;
++      if (o != (Varnode *)0 && o->getSize() <= 8 && e.get(o, v)) reach[o] |= v;
++    }
++  }
++  for (int trial = 0; trial < 4; ++trial) {
++    Ev base(trial);
++    std::vector<std::pair<bool,uintb> > want;
++    bool bail = false;
++    if (!rootValues(data, base, want, bail)) return;
++    for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
++      PcodeOp *op = *oiter;
++      Varnode *x = op->getOut();
++      if (x == (Varnode *)0 || x->getSize() > 8) continue;
++      uintb m = calc_mask(x->getSize());
++      uintb cons = x->getConsume();
++      if (std::getenv("SE_CONSUME_SELFTEST") && x->getSize() == 4) cons &= 0xffff;   // self-test: pretend the engine consumed too little
++      uintb P = ~cons & m & reach[x];   // only bits the value takes
++      if (P == 0) continue;
++      uintb vx;
++      if (!base.get(x, vx)) continue;
++      for (int variant = 0; variant < 2; ++variant) {
++        uintb pert = variant == 0 ? P : (P & (0x9E3779B97F4A7C15ULL ^ (uintb)(trial * 0x1234567 + 1)));
++        if (pert == 0) continue;
++        Ev ev(trial);
++        ev.xorov[x] = pert;
++        std::vector<std::pair<bool,uintb> > got;
++        bool b2 = false;
++        rootValues(data, ev, got, b2);
++        for (size_t k = 0; k < want.size() && k < got.size(); ++k) {
++          if (!want[k].first || !got[k].first) continue;
++          if (want[k].second == got[k].second) continue;
++          char key[200];
++          std::snprintf(key, sizeof key, "%s|%s|%d|%llx", data.getName().c_str(), get_opname(op->code()), (int)op->getSeqNum().getTime(), (unsigned long long)x->getConsume());
++          if (!cseen.insert(std::string(key)).second) goto nextvn;
++          std::fprintf(stderr, "CONSUMECHK where=%s fn=%s defop=%s size=%d consume=%llx nzm=%llx flipped=%llx root=%d want=%llx got=%llx trial=%d\n", where.c_str(), data.getName().c_str(),
++                       get_opname(op->code()), x->getSize(), (unsigned long long)x->getConsume(), (unsigned long long)x->getNZMask(), (unsigned long long)pert, (int)k,
++                       (unsigned long long)want[k].second, (unsigned long long)got[k].second, trial);
++          ++creports;
++          if (std::getenv("SE_NZM_VERBOSE")) { std::ostringstream os; data.printRaw(os); std::fprintf(stderr, "--- the function when %s left it so ---\n%s\n---\n", where.c_str(), os.str().c_str()); }
++          goto nextvn;
++        }
++      }
++      nextvn:;
++    }
++  }
++}
++static void dumpEach(Funcdata &data, const std::string &where) {
++  static int on3 = -1;
++  if (on3 < 0) on3 = std::getenv("SE_DUMP_EACH") ? 1 : 0;
++  if (!on3) return;
++  std::ostringstream os; data.printRaw(os);
++  std::fprintf(stderr, "=== after %s ===\n%s\n", where.c_str(), os.str().c_str());
++  if (std::getenv("SE_DUMP_CONSUME")) {
++    list<PcodeOp *>::const_iterator it;
++    for (it = data.beginOpAlive(); it != data.endOpAlive(); ++it) {
++      Varnode *o = (*it)->getOut();
++      if (o != (Varnode *)0) std::fprintf(stderr, "CONS %s(%s:%llx) size=%d consume=%llx nzm=%llx\n", get_opname((*it)->code()), o->getSpace()->getName().c_str(), (unsigned long long)o->getOffset(), o->getSize(), (unsigned long long)o->getConsume(), (unsigned long long)o->getNZMask());
++    }
++  }
++}
++static void check(Funcdata &data, const std::string &where) {
++  static long maxops = std::getenv("SE_NZM_MAXOPS") ? std::atol(std::getenv("SE_NZM_MAXOPS")) : 300;
++  long nops = 0;
++  list<PcodeOp *>::const_iterator oiter;
++  for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) { if (++nops > maxops) { skippedFns.insert(data.getName()); return; } }
++  checkedFns.insert(data.getName());
++  for (int trial = 0; trial < 8; ++trial) {
++    Ev ev(trial);
++    for (oiter = data.beginOpAlive(); oiter != data.endOpAlive(); ++oiter) {
++      PcodeOp *op = *oiter;
++      Varnode *out = op->getOut();
++      if (out == (Varnode *)0 || out->getSize() > 8) continue;
++      uintb v;
++      if (!ev.get(out, v)) continue;
++      uintb bad = v & ~out->getNZMask() & calc_mask(out->getSize());
++      if (bad == 0) continue;
++      char key[256];
++      std::snprintf(key, sizeof key, "%s|%s|%d|%llx", data.getName().c_str(), get_opname(op->code()), (int)op->getSeqNum().getTime(), (unsigned long long)out->getNZMask());
++      if (!seen.insert(std::make_pair(std::string(key), (uintb)0)).second) continue;
++      std::fprintf(stderr, "NZMCHK where=%s fn=%s defop=%s size=%d nzm=%llx value=%llx trial=%d ins=", where.c_str(), data.getName().c_str(), get_opname(op->code()), out->getSize(),
++                   (unsigned long long)out->getNZMask(), (unsigned long long)v, trial);
++      for (int i = 0; i < op->numInput(); ++i) { uintb iv = 0; bool ok = ev.get(op->getIn(i), iv); std::fprintf(stderr, "%s%s%llx/nzm%llx", i ? "," : "", ok ? "" : "?", (unsigned long long)iv, (unsigned long long)op->getIn(i)->getNZMask()); }
++      std::fprintf(stderr, "\n");
++      if (std::getenv("SE_NZM_VERBOSE")) {
++        std::ostringstream os; data.printRaw(os);
++        std::fprintf(stderr, "--- the function when %s left it so ---\n%s\n---\n", where.c_str(), os.str().c_str());
++      }
++      ++reports;
++      return;
++    }
++  }
++}
++}
+ 
+ /// Specify the name, group, and properties of the Action
+ /// \param f is the collection of property flags
+@@ -332,6 +570,9 @@
+       }
+       else if (lcount < count) { // Action has been applied
+ 	issueWarning(data.getArch());
++	if (nzmchk::enabled()) nzmchk::check(data, std::string("action:") + getName());
++	if (nzmchk::consumeEnabled()) nzmchk::checkConsume(data, std::string("action:") + getName());
++	nzmchk::dumpEach(data, std::string("action:") + getName());
+ 	count_apply += 1;
+ 	if (checkActionBreak()) {
+ 	  status = status_actionbreak;
+@@ -864,6 +1105,9 @@
+       rl->count_apply += 1;
+       count += res;
+       rl->issueWarning(data.getArch()); // Check if we need to issue a warning
++      if (nzmchk::enabled()) nzmchk::check(data, std::string("rule:") + rl->getName());
++      nzmchk::dumpEach(data, std::string("rule:") + rl->getName());
++      if (nzmchk::consumeEnabled()) nzmchk::checkConsume(data, std::string("rule:") + rl->getName());
+       if (rl->checkActionBreak())
+         return -1;
+ #ifdef OPACTION_DEBUG
