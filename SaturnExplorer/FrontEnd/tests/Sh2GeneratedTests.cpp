@@ -113,6 +113,16 @@
 //      memory: every access to it is in the ledger. The data flow keys memory by address, and would forward a store past a write to the other
 //      name (counted `alias.words`; SE_GENERATED_MUTATE=alias checks the check). Grammar 1 also makes a partition mask on a pointer register
 //      (`litptr.mask.and` / `.or`, A5-51), which rule 3b holds to the cache caution.
+//   3c. (round 9, A5-70) A read or write the emulator traced at a register through a pointer the output derives from register addresses has, on its
+//      instruction, the read effect of that register and the width cautions of the access, unless the notes say the pointer may hold other values,
+//      is indexed, or is stepped (the registers after the first are then not said, by design). Counted `pointer.effect.said` / `.unsaid`.
+//      Grammar 1 puts a mask (and / or / xor with 0x1FFFFFFF, 0xFFFFFFF0, 0xFFFFFFF9, 0x20000000 or 4) and a step of the pointer's alignment
+//      inside a loop body, alone or under a skip (`loop.mask.*`, `loop.step`): the loop then moves the pointer between partitions on some turns,
+//      by two operations in a turn, or by a step and a mask.
+//   3d. (round 9, A5-73) A store the engine folds in the A-bus cartridge areas (0x02000000-0x04FFFFFF) has the caution that the cartridge decides
+//      what a write does, on its instruction (`litptr.cart`; counted `cart.write.said`).
+//   2c. (round 9, A5-71, A5-72) The cache data array (partitions 4 and 6, 4 KiB: `litptr.cache`) is one memory under all its names, like work RAM,
+//      and the associative purge names the 16-byte line of its word: both are read off the emulator's memory model by rule 2b.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
@@ -335,10 +345,12 @@ bool gSpecialReads = false;     // SE_GENERATED_ALPHABET=specials: stc / sts in 
 
 // ---- The program model ----------------------------------------------------------------------
 
-enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn, Mask };
+// Cache: a cell of the cache's data array (partitions 4 and 6, 4 KiB, A5-71); Cart: an address of the A-bus cartridge areas (A5-73).
+enum class LitKind : uint8_t { Hw, Ram, Mbox, Fn, Mask, Cache, Cart };
 const char* KindName(LitKind k)
 {
-    return k == LitKind::Hw ? "hardware" : k == LitKind::Ram ? "RAM" : k == LitKind::Mbox ? "mailbox" : k == LitKind::Mask ? "mask" : "function";
+    return k == LitKind::Hw ? "hardware" : k == LitKind::Ram ? "RAM" : k == LitKind::Mbox ? "mailbox" : k == LitKind::Mask ? "mask" :
+           k == LitKind::Cache ? "cache array" : k == LitKind::Cart ? "cartridge" : "function";
 }
 
 struct Lit
@@ -358,7 +370,8 @@ struct Item
     int base = -1;                 // Mem: the pointer register
     int reg = 6, lit = 0;          // LitPtr, Poll: the pointer register and its literal; Mask: the pointer register and the mask's literal (loaded into jsrReg)
     uint16_t cond = 0;             // Skip: the tst or cmp that sets T
-    bool onTrue = true;            // Skip: bt (else bf)
+    bool onTrue = true;            // Skip: bt (else bf); Mask: and (else or, or xor with 'xorOp')
+    bool xorOp = false;            // Mask: xor (A5-70)
     bool delayed = false;          // Skip: bt/s, bf/s with 'slot'
     int counter = 3, count = 2;    // Loop, BraLoop, BraBack
     int width = 2;                 // Poll
@@ -453,6 +466,8 @@ struct Gen
     // (the other partition, bits 28-27, the 1 MiB repeat), and the partition masks (A5-51). Neither moves a draw of the streams above.
     Rng aliasRng;
     Rng maskRng;
+    Rng placeRng;   // cache array and cartridge literals (A5-71, A5-73)
+    Rng loopMaskRng;   // a mask or a step inside a loop (A5-60, A5-70)
     // ...and one for the frame walk (a loop that moves a stack address, round 5 A3-16): whether a function has one and where.
     Rng frameRng;
     // ...and one for the partial result (a parameter copied to r0 on one path only, round 6 A3-20).
@@ -479,7 +494,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), aliasRng(seed ^ 0x616C696173526E67ull), maskRng(seed ^ 0x6D61736B52616E64ull), placeRng(seed ^ 0x706C616365526E67ull), loopMaskRng(seed ^ 0x6C6F6F704D61736Bull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull), retRng(seed ^ 0x7265747263616C6Cull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -544,6 +559,29 @@ struct Gen
             l.value = (rng.Chance(75) ? 0x26000000u : 0x06000000u) + 0x2000u + 0x80u * rng.Below(8) + 4u * rng.Below(4);
             l.width = rng.Chance(50) ? 4 : rng.Chance(50) ? 2 : 1;
         }
+        else if (kind == LitKind::Cache)
+        {
+            // A cell of the cache's data array under the partition 4 or 6, and once in two the same cell under another name of an earlier literal:
+            // the other partition, or 4 KiB on (the array repeats every 4 KiB; sh7095.inc MemRead / MemWrite `case 4: case 6:`).
+            l.value = (placeRng.Chance(50) ? 0xC0000000u : 0x80000000u) + 0x1000u * placeRng.Below(3) + 0x10u * placeRng.Below(3) + 4u * placeRng.Below(2);
+            l.width = placeRng.Chance(50) ? 4 : 2;
+            std::vector<int> prior;
+            for (size_t i = 0; i < p.lits.size(); ++i)
+                if (p.lits[i].kind == LitKind::Cache) prior.push_back(static_cast<int>(i));
+            if (!prior.empty() && placeRng.Chance(50))
+            {
+                static const uint32_t kNames[] = { 0x40000000u, 0x00001000u, 0x00002000u, 0x40001000u };
+                const Lit& q = p.lits[prior[placeRng.Below(static_cast<uint32_t>(prior.size()))]];
+                l.value = q.value ^ kNames[placeRng.Below(4)];
+                l.width = q.width;
+            }
+        }
+        else if (kind == LitKind::Cart)
+        {
+            // The extended RAM cartridge's window or the backup RAM cartridge's, through either partition that reaches the bus.
+            l.value = (placeRng.Chance(50) ? 0x02400000u : 0x04000000u) + (placeRng.Chance(25) ? 0x20000000u : 0u) + 4u * placeRng.Below(4);
+            l.width = placeRng.Chance(50) ? 4 : 2;
+        }
         else
         {
             l.value = (rng.Chance(75) ? p.mbox : (p.mbox & ~0x20000000u)) + 4u * rng.Below(3);
@@ -568,7 +606,9 @@ struct Gen
         // ...or the name of its cache line in the associative-purge partition (0x4xxxxxxx), the barrier the slave's idle loop puts between
         // its store and its poll: not memory, but a word the function purges is one it expects another processor to write
         // ...through the partition 0xA too, which Mednafen sends to the same purge (sh7095.inc `case 2: case 5:`, A5-62), one time in three of them
-        l.value = pick == 4 ? ((q.value & 0x07FFFFFFu) | (aliasRng.Chance(33) ? 0xA0000000u : 0x40000000u)) : q.value ^ kFlips[pick];
+        // ...the purge invalidates the 16-byte line of the word it names, so it may name another word of that line (A5-72), two times in five
+        const uint32_t purged = pick == 4 && aliasRng.Chance(40) ? q.value ^ (4u << aliasRng.Below(2)) : q.value;
+        l.value = pick == 4 ? ((purged & 0x07FFFFFFu) | (aliasRng.Chance(33) ? 0xA0000000u : 0x40000000u)) : q.value ^ kFlips[pick];
         l.width = q.width;
     }
 
@@ -580,12 +620,16 @@ struct Gen
 
     Item MakeLitPtr(int reg, LitKind kind)
     {
+        // One RAM pointer in eleven is a cell of the cache's data array or an address of the cartridge areas instead (A5-71, A5-73), drawn from a stream
+        // of its own so the other programs are the ones they were.
+        if (kind == LitKind::Ram && placeRng.Chance(9)) kind = placeRng.Chance(60) ? LitKind::Cache : LitKind::Cart;
         if (disc && reg == selReg) reg = 13 - reg;   // the jump table's integer stays one
         Item it;
         it.type = Item::LitPtr;
         it.reg = reg;
         it.lit = static_cast<int>(p.lits.size());
-        it.shape = kind == LitKind::Hw ? "litptr.hw" : kind == LitKind::Ram ? "litptr.ram" : "litptr.mbox";
+        it.shape = kind == LitKind::Hw ? "litptr.hw" : kind == LitKind::Ram ? "litptr.ram" : kind == LitKind::Cache ? "litptr.cache" :
+                   kind == LitKind::Cart ? "litptr.cart" : "litptr.mbox";
         p.lits.push_back(NewLit(kind));
         align[reg] = std::min(align[reg], Alignment(p.lits.back().value));
         pref[reg] = p.lits.back().width;
@@ -1655,6 +1699,83 @@ struct Gen
             at += maskRng.Below(static_cast<uint32_t>(items.size() - at + 1));
             items.insert(items.begin() + at, m);
         }
+        // ...and, in one program of seven, a mask, an `xor` or a step on the pointer a loop body reads through, in the body itself (A5-60, A5-70): after the
+        // access, alone or under a skip, with a step of the pointer's alignment before it two times in five, so the loop moves the pointer between
+        // partitions on some turns and not on others, by two operations in a turn, and by a step and a mask in one. A pointer of the partitions 0 and 1
+        // only: an `xor 0x20000000` of a cache array cell would be an on-chip register. Rule 3b holds the reads to the cache caution, rule 3c to the
+        // registers the notes name.
+        if (loopMaskRng.Chance(14))
+        {
+            std::vector<size_t> loops;
+            for (size_t i = 0; i < items.size(); ++i)
+                if (items[i].type == Item::Loop) loops.push_back(i);
+            if (!loops.empty())
+            {
+                const size_t at = loops[loopMaskRng.Below(static_cast<uint32_t>(loops.size()))];
+                int reg = -1;
+                for (const Item& k : items[at].kids)
+                    if (k.type == Item::Mem && k.base >= 6) { reg = k.base; break; }
+                uint32_t start = 0xFFFFFFFFu;
+                for (size_t i = 0; i < at; ++i)
+                    if (items[i].type == Item::LitPtr && items[i].reg == reg) start = p.lits[items[i].lit].value;
+                if (reg >= 0 && start < 0x40000000u)
+                {
+                    Item m;
+                    m.type = Item::Mask;
+                    m.reg = reg;
+                    m.jsrReg = 1 + static_cast<int>(loopMaskRng.Below(2));
+                    const uint32_t op = loopMaskRng.Below(3);
+                    uint32_t value;
+                    if (op == 0)
+                    {
+                        static const uint32_t kAnd[] = { 0x1FFFFFFFu, 0xFFFFFFF0u, 0xFFFFFFF9u };
+                        m.onTrue = true;
+                        value = kAnd[loopMaskRng.Below(3)];
+                        m.shape = "loop.mask.and";
+                    }
+                    else if (op == 1)
+                    {
+                        m.onTrue = false;
+                        value = 0x20000000u;
+                        m.shape = "loop.mask.or";
+                    }
+                    else
+                    {
+                        m.xorOp = true;
+                        value = loopMaskRng.Chance(50) ? 0x20000000u : 0x4u;
+                        m.shape = "loop.mask.xor";
+                    }
+                    Lit l;
+                    l.kind = LitKind::Mask;
+                    l.value = value;
+                    m.lit = static_cast<int>(p.lits.size());
+                    p.lits.push_back(l);
+                    std::vector<Item> body;
+                    if (loopMaskRng.Chance(40))
+                    {
+                        Item step;
+                        step.type = Item::Alu;
+                        step.shape = "loop.step";
+                        step.words = { static_cast<uint16_t>(0x7000 | reg << 8 | std::min(4, align[reg])) };   // add #w,Rn
+                        body.push_back(step);
+                    }
+                    body.push_back(m);
+                    std::vector<Item>& kids = items[at].kids;
+                    if (loopMaskRng.Chance(50))
+                        kids.insert(kids.end(), body.begin(), body.end());
+                    else
+                    {
+                        Item skip;
+                        skip.type = Item::Skip;
+                        skip.cond = 0x2008;   // tst r0,r0
+                        skip.onTrue = loopMaskRng.Chance(50);
+                        skip.shape = skip.onTrue ? "skip.bt" : "skip.bf";
+                        skip.kids = body;
+                        kids.push_back(skip);
+                    }
+                }
+            }
+        }
         return p;
     }
 };
@@ -1920,7 +2041,7 @@ struct Emitter
             break;
         case Item::Mask:
             PutLitLoad(it.jsrReg, it.lit);
-            Put(static_cast<uint16_t>((it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / or Rm,Rn
+            Put(static_cast<uint16_t>((it.xorOp ? 0x200A : it.onTrue ? 0x2009 : 0x200B) | it.reg << 8 | it.jsrReg << 4));   // and / xor / or Rm,Rn
             break;
         case Item::Skip:
         {
@@ -2201,6 +2322,7 @@ struct Env
 {
     std::vector<uint8_t> ram;                                  // high work RAM (the snapshot's), 1 MiB
     std::vector<uint8_t> lowRam = std::vector<uint8_t>(0x100000u);   // low work RAM, 1 MiB
+    std::vector<uint8_t> cacheData = std::vector<uint8_t>(0x1000u);  // the cache's data array, 4 KiB, under both partitions 4 and 6 (A5-71)
     int hwMode = 0;   // what a hardware read returns: 0 zeros, 1 ones, 2 pseudo-random
     uint64_t hwState = 0x12345;
     struct Poll { uint32_t addr; uint32_t busy, ready; int reads; uint32_t raw; };   // addr canonical, raw as the code has it
@@ -2211,6 +2333,7 @@ struct Env
     // The byte of work RAM an address reaches, or null: the same bytes under every address that names them.
     uint8_t* ByteAt(uint32_t a)
     {
+        if ((a >> 29) == 4 || (a >> 29) == 6) return &cacheData[a & 0xFFFu];   // sh7095.inc `case 4: case 6:`: bits 31-12 are not decoded
         if ((a >> 29) > 1) return nullptr;
         const uint32_t p = a & 0x07FFFFFFu;
         if (p >= 0x06000000u) return &ram[p & 0xFFFFFu];
@@ -2221,6 +2344,12 @@ struct Env
     // The bytes of work RAM [a, a + size) cover, as keys of the memory itself (MemKey); false when they are not work RAM.
     static bool RamRange(uint32_t a, int size, uint32_t& lo, uint32_t& hi)
     {
+        if ((a >> 29) == 4 || (a >> 29) == 6)
+        {
+            lo = MemKey(a);
+            hi = lo + static_cast<uint32_t>(size) - 1;
+            return true;
+        }
         if ((a >> 29) > 1) return false;
         const uint32_t p = a & 0x07FFFFFFu;
         if (!(p >= 0x06000000u || (p >= 0x00200000u && p <= 0x003FFFFFu))) return false;
@@ -2232,6 +2361,7 @@ struct Env
     // The word a polled address names, whatever it is called: a mailbox is one word under all its addresses.
     static uint32_t MemKey(uint32_t a)
     {
+        if ((a >> 29) == 4 || (a >> 29) == 6) return 0x80000000u | (a & 0xFFFu);
         if ((a >> 29) > 1) return a;
         const uint32_t p = a & 0x07FFFFFFu;
         if (p >= 0x06000000u) return 0x06000000u | (p & 0xFFFFFu);
@@ -3594,7 +3724,9 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             {
                 uint32_t lo = 0, hi = 0;
                 // (an access in an associative-purge partition, 0x4 or 0xA, names the line of the word it purges)
-                if (InScratch(t.addr) || InStack(t.addr) || !Env::RamRange((t.addr >> 29) == 2 || (t.addr >> 29) == 5 ? (t.addr & 0x07FFFFFFu) : t.addr, t.size, lo, hi) || !constantToEngine(t) || !once.insert(std::make_pair(t.addr, t.size)).second) continue;
+                // ...the whole 16-byte line (sh7095.inc SH7095_Cache_AssocPurge compares the line's tag, A5-72)
+                const bool purge = (t.addr >> 29) == 2 || (t.addr >> 29) == 5;
+                if (InScratch(t.addr) || InStack(t.addr) || !Env::RamRange(purge ? (t.addr & 0x07FFFFF0u) : t.addr, purge ? 16 : t.size, lo, hi) || !constantToEngine(t) || !once.insert(std::make_pair(t.addr, t.size)).second) continue;
                 accs.push_back({ t.addr, t.size, lo, hi });
             }
             auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
@@ -3744,6 +3876,76 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 add(shown ? "cache-read-unsaid" : "cache-read-pointer-unsaid",
                     "the read of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " (" + Hex(t.addr) + ", the cached partition)" +
                         (shown ? std::string() : std::string(" through a pointer the output derives from a register address")) + " is not called a cache read");
+        }
+        // ---- Area 5, round 9 (A5-70): what a register's access does is said for the register the pointer reached ----
+        // A read or a write through a pointer that the output derives from some register address is said, for each address the pointer can hold,
+        // as a direct access to it would be ("if the pointer holds 0x...: ..."): the read effect of the register and the cautions of the access's
+        // width (the cache caution is rule 3b's). So the effect of the register the emulator traced must be among the notes of the instruction,
+        // unless they say the pointer may hold other values or is stepped in a loop (the registers after the first are then not said, by design).
+        // Found by A5-70 (b) and (c): `p = (p and 0xFFFFFFF0) xor 4` named the first register, or a register never read, and left out the one
+        // read for ever after.
+        {
+            size_t nregs = 0;
+            const HardwareRegister* every = SaturnHardwareRegisters(nregs);
+            std::vector<const HardwareRegister*> allRegs;
+            for (size_t i = 0; i < nregs; ++i) allRegs.push_back(&every[i]);
+            std::set<uint32_t> excused;   // instructions whose notes leave the other values of the pointer unsaid
+            for (const HardwareNote& n : r.hardwareNotes)
+                if (n.text.find("it may hold other values too") != std::string::npos || n.text.find("is stepped in a loop") != std::string::npos ||
+                    n.text.find("if the index is 0") != std::string::npos)
+                    excused.insert(n.address);
+            std::set<std::tuple<uint32_t, uint32_t, int, bool>> checked;
+            for (const TraceRec& t : trace)
+            {
+                uint32_t canon = 0;
+                if (t.depth != 0 || !r.InBody(t.insn) || excused.count(t.insn) || SaidMissing(r, t.insn) || !HardwareAlias(t.addr, canon)) continue;
+                const uint16_t word = subject.WordAt(t.insn);
+                if ((word & 0xF000) == 0xD000 || (word & 0xF000) == 0x9000) continue;
+                bool shown = false;
+                for (const MemoryAccess& m : r.accesses) shown |= m.insn == t.insn && m.direct && m.address == t.addr && m.write == t.write;
+                bool unrelated = false;
+                if (shown || !checked.insert(std::make_tuple(t.insn, t.addr, t.size, t.write)).second || !PointerPrintsFromHardware(r, t.insn, allRegs, unrelated))
+                    continue;
+                std::set<std::string> want;
+                const std::vector<CoveredRegister> covered = CoveredRegisters(t.addr, t.size, t.write);
+                for (const HardwareRegister* reg : HardwareRegistersReached(AccessAddress(t.addr, t.size), t.size, t.write))
+                {
+                    bool effect = true;
+                    for (const CoveredRegister& c : covered)
+                        if (c.reg == reg) effect = (c.cell.flags & kWidthEffect) != 0;
+                    if (!t.write && reg->onRead && effect) want.insert(std::string(reg->name) + ": " + reg->onRead);
+                }
+                for (const NarrowEffect& e : NarrowAccessEffects(t.addr, t.size, t.write))
+                    if (e.text.find("cache read") == std::string::npos) want.insert(e.text);
+                for (const std::string& w : want)
+                {
+                    bool said = false;
+                    for (const HardwareNote& n : r.hardwareNotes) said |= n.address == t.insn && n.text.find(w) != std::string::npos;
+                    count(said ? "pointer.effect.said" : "pointer.effect.unsaid");
+                    if (!said)
+                        add("pointer-effect-unsaid", "the " + std::string(t.write ? "write" : "read") + " of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " reached " +
+                                                         Hex(t.addr) + " through a pointer the output derives from register addresses, and no note says: " + w);
+                }
+            }
+        }
+        // ---- Area 5, round 9 (A5-73): a store to the A-bus cartridge areas that the engine folds is cautioned ----
+        // The cartridge decides what a write does (none: nowhere; a ROM cartridge: dropped; backup RAM: a byte at an odd address only), and a later read
+        // of the address in the function is shown as the value written. The decompiler cannot know the cartridge, and says so on the store.
+        for (const TraceRec& t : trace)
+        {
+            const uint32_t bus = t.addr & 0x07FFFFFFu;
+            if (!t.write || t.depth != 0 || (t.addr >> 29) > 1 || bus < 0x02000000u || bus > 0x04FFFFFFu || !r.InBody(t.insn) || SaidMissing(r, t.insn)) continue;
+            bool folded = false;
+            for (const AccessFate& f : r.accessFates)
+                folded |= f.insn == t.insn && f.write && f.fate == AccessFate::FoldedOrdinary && f.constantAddress && f.address == t.addr;
+            if (!folded) continue;
+            bool said = false;
+            for (const HardwareNote& n : r.hardwareNotes)
+                said |= n.address == t.insn && n.caution && n.text.find("a write to the cartridge area") != std::string::npos;
+            count(said ? "cart.write.said" : "cart.write.unsaid");
+            if (!said)
+                add("cart-write-unsaid", "the write of " + std::to_string(t.size) + " byte(s) at " + Hex(t.insn) + " to " + Hex(t.addr) +
+                                             ", a cartridge area, is folded and not cautioned");
         }
         for (const MemoryAccess& m : r.accesses)
         {
@@ -4694,7 +4896,7 @@ void CountMnemonics(const std::vector<Item>& items, std::map<std::string, int>& 
         case Item::Table: m["mova"] += 1; m["shll2"] += 1; m["jmp"] += 1; m["cmp/hi"] += 1; break;
         case Item::BraLoop: case Item::BraBack: m["bra"] += 1; break;
         case Item::DataSkip: m["bra"] += 1; break;
-        case Item::Mask: m["mov.l"] += 1; m[it.onTrue ? "and" : "or"] += 1; break;
+        case Item::Mask: m["mov.l"] += 1; m[it.xorOp ? "xor" : it.onTrue ? "and" : "or"] += 1; break;
         default: break;
         }
         CountMnemonics(it.slot, m);

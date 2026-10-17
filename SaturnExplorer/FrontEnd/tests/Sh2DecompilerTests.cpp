@@ -1739,7 +1739,63 @@ void TestHardwareVolatility()
         add("a5_68_tvmr", { 0xD104, 0xD205, 0xE005, 0x2100, 0xE303, 0x2231, 0x6010, 0x000B, 0x0009, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0000 }, 0x14, 0x25C80200u);
         add("a5_68_ramctl", { 0xD104, 0xD205, 0xD005, 0x2101, 0xD305, 0x2231, 0x6011, 0x000B, 0x0009, 0x0009, 0x25F0, 0x0004, 0x25F8, 0x000E, 0x0000, 0x1234, 0x0000, 0x3000 }, 0x14, 0x25F00004u);
     }
-    for (const auto* group : { &r4, &r5, &r7 })
+    // ---- Area 5, round 9 (REVIEW_LEDGER.md A5-70 to A5-79): the reviewer's words verbatim (only the base moves), with the controls each fix needs.
+    std::map<std::string, Fixture> r9;
+    {
+        uint32_t next = 0x06014000u;
+        auto add = [&](const char* name, std::vector<uint16_t> words, uint32_t literal, uint32_t pointer) {
+            r9[name] = Fixture{ next, words, literal, pointer };
+            next += 0x40u;
+        };
+        // A5-70: a bitwise operation round a loop that is conditional, one of two in a turn, on one path of two, or with a step (r1 = 0x25F80004, r3 the mask,
+        // r4 the count 3). (a) mask after the read on one path; (a') the control, before the read; (b) and (c) two operations in a turn; (d) a mask on one
+        // path and a step on the other; (e) a step and a mask in one turn.
+        add("a5_70a", { 0xD105, 0xD306, 0xE403, 0x6011, 0x2008, 0x8900, 0x2139, 0x4410, 0x8BF9, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x18, 0x25F80004u);
+        add("a5_70a_control", { 0xD105, 0xD306, 0xE403, 0x2448, 0x8900, 0x2139, 0x6011, 0x4410, 0x8BF9, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x18, 0x25F80004u);
+        add("a5_70b", { 0xD105, 0xD306, 0xE504, 0xE403, 0x6011, 0x2139, 0x215A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0008, 0xFFFF, 0xFFF0 }, 0x18, 0x25F80008u);
+        add("a5_70c", { 0xD105, 0xD306, 0xE504, 0xE403, 0x6011, 0x2139, 0x215A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0006, 0xFFFF, 0xFFF9 }, 0x18, 0x25F80006u);
+        add("a5_70d", { 0xD106, 0xD307, 0xE403, 0x6011, 0x2008, 0x8902, 0x2139, 0xA001, 0x0009, 0x7104, 0x4410, 0x8BF6, 0x000B, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x1C, 0x25F80004u);
+        add("a5_70e", { 0xD104, 0xD305, 0xE403, 0x6011, 0x7104, 0x2139, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x14, 0x25F80004u);
+        // ...and the shapes a closure by paths must also get right: a mask that loses nothing on one path and a reload on the other (a join with a number
+        // of its own), a step with no mask (A5-39's), the mask before the step, and a mask whose operand is the pointer itself (unknown).
+        add("a5_70_join", { 0xD106, 0xD307, 0xE403, 0x6011, 0x2008, 0x8903, 0x2139, 0xA002, 0x0009, 0xD105, 0x0009, 0x4410, 0x8BF5, 0x000B, 0x0009, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x1C, 0x25F80004u);
+        add("a5_70_mask_step", { 0xD104, 0xD305, 0xE403, 0x6011, 0x2139, 0x7104, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x25F8, 0x0004, 0x1FFF, 0xFFFF }, 0x14, 0x25F80004u);
+        // A5-71: the cache data array, 4 KiB, partitions 4 and 6 (a: 0xC0000000 and 0xC0001000; b: 0x80000010 and 0xC0000010; controls: two cells)
+        add("a5_71a", { 0xD104, 0xD205, 0xE305, 0xE407, 0x2132, 0x2242, 0x6012, 0x000B, 0x0009, 0x0009, 0xC000, 0x0000, 0xC000, 0x1000 }, 0x14, 0xC0000000u);
+        add("a5_71b", { 0xD104, 0xD205, 0xE305, 0xE407, 0x2132, 0x2242, 0x6012, 0x000B, 0x0009, 0x0009, 0x8000, 0x0010, 0xC000, 0x0010 }, 0x14, 0x80000010u);
+        add("a5_71_cells", { 0xD104, 0xD205, 0xE305, 0xE407, 0x2132, 0x2242, 0x6012, 0x000B, 0x0009, 0x0009, 0xC000, 0x0000, 0xC000, 0x0004 }, 0x14, 0xC0000000u);   // control: two cells
+        add("a5_71_same", { 0xD104, 0xD205, 0xE305, 0xE407, 0x2132, 0x2242, 0x6012, 0x000B, 0x0009, 0x0009, 0xC000, 0x0000, 0xC000, 0x0000 }, 0x14, 0xC0000000u);   // control: one name, the fold stands
+        // A5-72: the purge names a line; the flag word is another word of it (0x06003308; the purge through 0x46003304), and the control purges the polled word
+        add("a5_72", { 0xD206, 0xD307, 0xE000, 0x2202, 0x2302, 0x6122, 0x2118, 0x89FC, 0xD404, 0xD505, 0x2452, 0x000B, 0x0009, 0x0009, 0x0600, 0x3308, 0x4600, 0x3304, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x1C, 0x06003308u);
+        add("a5_72_word", { 0xD206, 0xD307, 0xE000, 0x2202, 0x2302, 0x6122, 0x2118, 0x89FC, 0xD404, 0xD505, 0x2452, 0x000B, 0x0009, 0x0009, 0x0600, 0x3304, 0x4600, 0x3304, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x1C, 0x06003304u);
+        add("a5_72_apart", { 0xD206, 0xD307, 0xE000, 0x2202, 0x2302, 0x6122, 0x2118, 0x89FC, 0xD404, 0xD505, 0x2452, 0x000B, 0x0009, 0x0009, 0x0600, 0x3310, 0x4600, 0x3304, 0x25FE, 0x0010, 0x0000, 0x0101 }, 0x1C, 0x06003310u);   // control: the next line
+        // A5-73: the cartridge probe: store a pattern to the extended RAM cartridge, read it back, compare (and a store to the backup RAM cartridge's area)
+        add("a5_73", { 0xD106, 0x9209, 0x2121, 0x6311, 0x3320, 0x8902, 0xE001, 0x000B, 0x0009, 0xE000, 0x000B, 0x0009, 0x1234, 0x0009, 0x0240, 0x0000 }, 0x1C, 0x02400000u);
+        add("a5_73_backup", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0400, 0x0001 }, 0x10, 0x04000001u);
+        add("a5_73_ram", { 0xD103, 0xE005, 0x2100, 0x6010, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x1000 }, 0x10, 0x06001000u);   // control: work RAM
+        // A5-74: VDP1_PTMR = 2 (the draw-at-frame-change mode); controls 0, 1 and 3
+        add("a5_74", { 0xD102, 0xE002, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);
+        add("a5_74_0", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);
+        add("a5_74_1", { 0xD102, 0xE001, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);
+        add("a5_74_3", { 0xD102, 0xE003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25D0, 0x0004 }, 0x0C, 0x25D00004u);
+        // A5-75: SMPC_IREG0 = 0 as the INTBACK's own first parameter (mov.b to the register at 0x20100001)
+        add("a5_75", { 0xD102, 0xE000, 0x2100, 0x000B, 0x0009, 0x0009, 0x2010, 0x0001 }, 0x0C, 0x20100001u);
+        add("a5_75_break", { 0xD102, 0xE040, 0x2100, 0x000B, 0x0009, 0x0009, 0x2010, 0x0001 }, 0x0C, 0x20100001u);
+        // A5-76: CD_HIRQMSK = 0xFFFF, SCU_IST = 0, CD_HIRQ = 0
+        add("a5_76_hirqmsk", { 0xD102, 0xE0FF, 0x2101, 0x000B, 0x0009, 0x0009, 0x2589, 0x000C }, 0x0C, 0x2589000Cu);
+        add("a5_76_ist", { 0xD102, 0xE000, 0x2102, 0x000B, 0x0009, 0x0009, 0x25FE, 0x00A4 }, 0x0C, 0x25FE00A4u);
+        add("a5_76_hirq", { 0xD102, 0xE000, 0x2101, 0x000B, 0x0009, 0x0009, 0x2589, 0x0008 }, 0x0C, 0x25890008u);
+        // A5-77: a byte write to the high byte of SCSP_SCILV0 (0x25B00424: stores nothing); the control is the low byte (0x25B00425)
+        add("a5_77", { 0xD102, 0xE005, 0x2100, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0424 }, 0x0C, 0x25B00424u);
+        add("a5_77_low", { 0xD102, 0xE005, 0x2100, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0425 }, 0x0C, 0x25B00425u);
+        // A5-78: a byte store to colour RAM at `param + 0x25F00000` (both operand orders); the control adds a small offset
+        add("a5_78a", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
+        add("a5_78b", { 0xD102, 0xE005, 0x314C, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
+        add("a5_78_small", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x0000, 0x0010 }, 0x0C, 0x00000010u);   // control: param + 0x10
+        // A5-79: a frame buffer store, a frame change (VDP1_FBCR = 3), a wait for the frame end, the load of the same address
+        add("a5_79", { 0xD807, 0x900B, 0x2801, 0xD107, 0xE203, 0x2121, 0xD306, 0x6031, 0xC808, 0x89FC, 0x6081, 0x000B, 0x0009, 0x0009, 0x1234, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0002, 0x25F8, 0x0004 }, 0x20, 0x25C80200u);
+    }
+    for (const auto* group : { &r4, &r5, &r7, &r9 })
         for (const auto& x : *group)
         {
             size_t off = x.second.base - 0x06000000u;
@@ -2070,7 +2126,8 @@ void TestHardwareVolatility()
     CHECK(HasNote(r, "SCU_PPAF: a write acts on the DSP program whatever is written", false));   // A5-40
     r = run("IST written only", istWrite);
     CHECK(Ledger(r, { Wr(0x25FE00A4u, 4) }));
-    CHECK(r.hardwareNotes.empty());
+    CHECK(!HasNote(r, "a read returns the pending ones", false));   // (the split-read text is for a read after the write)
+    CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "SCU_IST: a write clears the pending interrupts whose bits are 0 (the acknowledge)", false));   // A5-76
     r = run("WTCNT read", wtcntRead);
     CHECK(Ledger(r, { Rd(0xFFFFFE81u, 1, false, true) }));
     CHECK(r.hardwareNotes.empty());   // read where it is read: nothing to say
@@ -2079,7 +2136,9 @@ void TestHardwareVolatility()
     CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "VDP2_TVSTAT: a read clears EXLTFG", false));
     r = run("PTMR written", ptmrWrite);
     // The value is unknown: bit 0 starts drawing (vdp1.c WriteReg case 2), which the line does not say (A5 round 4).
-    CHECK(r.hardwareNotes.size() == 1 && HasNote(r, "VDP1_PTMR: a write with bit 0 set starts drawing the command table", false));
+    // ...and bit 1 arms it at the frame change (A5-74): two actions, two notes.
+    CHECK(r.hardwareNotes.size() == 2 && HasNote(r, "VDP1_PTMR: a write with bit 0 set starts drawing the command table", false) &&
+          HasNote(r, "VDP1_PTMR: a write with bit 1 set arms drawing to start at each frame change", false));
     // Every note sits on the instruction of the access it is about.
     for (const Fixture* f : { &woRead, &roWrite, &mvolRead, &mibufWrite, &wtcnt, &badKey, &wdtByte, &ppaf, &oddPair, &mirror })
     {
@@ -3053,8 +3112,9 @@ void TestHardwareVolatility()
 
         // A5-64: writes whose action the value chooses, said from Mednafen's handlers.
         r = R7("a5_64_ireg0", "SMPC_IREG0 = 0x80");
-        CHECK(HasNote(r, "SMPC_IREG0: while an INTBACK waits for its next request, bit 7 (continue) of the byte written asks for the next report and bit 6 (break) ends "
-                         "the INTBACK; the SMPC acts on the write at once (here bit 7 is set and bit 6 is clear)", false));
+        CHECK(HasNote(r, "SMPC_IREG0: while an INTBACK waits for its next request, the SMPC takes the byte as a continue when bit 7 equals the continue bit it expects "
+                         "(set for the first request, then alternating) and ends the INTBACK when bit 6 is set; otherwise the byte is a parameter; the SMPC acts on the "
+                         "write at once (the byte here has bit 7 set and bit 6 clear)", false));   // (A5-75: round 8's text read bit 7 as a fixed "continue")
         r = R7("a5_64_ims", "SCU_IMS = 0");
         CHECK(HasNote(r, "SCU_IMS: a write recalculates the SCU's interrupt at once (a set bit masks): clearing the mask bit of an interrupt that is already pending "
                          "raises it to the SH-2 on the spot", false));
@@ -3107,6 +3167,124 @@ void TestHardwareVolatility()
         CHECK(Ledger(r, { Wr(0x25C80200u, 1), Wr(0x25D00000u, 2), Rd(0x25C80200u, 1, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
         r = R7("a5_68_ramctl", "colour RAM word store, VDP2_RAMCTL = 0x3000, load of the word");
         CHECK(Ledger(r, { Wr(0x25F00004u, 2), Wr(0x25F8000Eu, 2), Rd(0x25F00004u, 2, false, true) }) && !Has(r.Text(), "return 0x1234;") && !r.aliasedMemory.empty());
+    }
+
+    // ---- Area 5, round 9 (REVIEW_LEDGER.md A5-70 to A5-79) ----------------------------------------------------------------------------
+    {
+        auto R9 = [&](const char* name, const char* label) { return run(label, r9.at(name)); };
+        auto accessAt = [](const DecompileResult& x, bool write, uint32_t address) {
+            for (const MemoryAccess& m : x.accesses)
+                if (m.write == write && m.direct && m.address == address) return true;
+            return false;
+        };
+        const char* const kCacheNote = "a read of VDP2_TVSTAT through the cached partition is a cache read when the cache is on (SH2_CCR.CE)";
+        const char* const kThroughNote = "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG";
+
+        // A5-70: a pointer's bitwise values round a loop are closed over every path of the loop body, however the body branches.
+        // (a) a mask on one path, after the read: the cached TVSTAT is read in the next turn.
+        r = R9("a5_70a", "r1 = 0x25F80004; loop 3: read @r1; if (r0) r1 &= 0x1FFFFFFF");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): ", true) && HasNote(r, kCacheNote, true) && HasNote(r, kThroughNote, false));
+        r = R9("a5_70a_control", "control: the conditional mask before the read");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): ", true) && HasNote(r, kCacheNote, true));
+        // (b) two operations in one turn, p = (p and 0xFFFFFFF0) xor 4 from 0x25F80008: the reads are VDP2_HCNT, then VDP2_TVSTAT for ever.
+        r = R9("a5_70b", "r1 = 0x25F80008; loop 3: read @r1; r1 = (r1 & 0xFFFFFFF0) ^ 4");
+        CHECK(HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        // (c) the same with and 0xFFFFFFF9 from 0x25F80006: TVSTAT is read, VDP2_EXTEN (the xor alone: 0x25F80002) never is.
+        r = R9("a5_70c", "r1 = 0x25F80006; loop 3: read @r1; r1 = (r1 & 0xFFFFFFF9) ^ 4");
+        CHECK(HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false));
+        CHECK(!HasNote(r, "VDP2_EXTEN", false) && !HasNote(r, "VDP2_EXTEN", true) && !Has(r.Text(), "0x25f80002"));
+        for (const HardwareNote& n : r.hardwareNotes) CHECK(!Has(n.text, "0x25F80002"));
+        // (d) a mask on one path and a step on the other.
+        r = R9("a5_70d", "r1 = 0x25F80004; loop 3: read @r1; if (r0) r1 &= 0x1FFFFFFF else r1 += 4");
+        CHECK(HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT) (it may hold other values too): ", true) && HasNote(r, kCacheNote, true));
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x05F80004: the iterations after the first reach other addresses, other registers perhaps, which are not said", false));
+        // (e) a step and a mask in one turn: the later reads are through the cached partition, which the stepped note says.
+        r = R9("a5_70e", "r1 = 0x25F80004; loop 3: read @r1; r1 += 4; r1 &= 0x1FFFFFFF");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x25F80004: the iterations after the first reach other addresses, other registers perhaps, which are not said; "
+                         "they read through the cached partition (0x05F80008 is one) too, and a read of a register through the cached partition is a cache read when the cache is on",
+                      true));
+        r = R9("a5_70_mask_step", "r1 = 0x25F80004; loop 3: read @r1; r1 &= 0x1FFFFFFF; r1 += 4");
+        CHECK(HasNote(r, "they read through the cached partition (0x05F80008 is one) too", true));
+        r = R9("a5_70_join", "r1 = 0x25F80004; loop 3: read @r1; if (r0) r1 &= 0x1FFFFFFF else r1 = 0x25F8000A");
+        CHECK(HasNote(r, "if the pointer holds 0x05F8000A (VDP2_VCNT): ", true) && HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): ", true) &&
+              HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false) && !HasNote(r, "stepped in a loop", false) &&
+              !HasNote(r, "it may hold other values too", true));
+
+        // A5-71: the cache data array is 4 KiB under both partitions: the names of one cell are one memory.
+        r = R9("a5_71a", "xRamc0000000 = 5; xRamc0001000 = 7; return xRamc0000000");
+        CHECK(Ledger(r, { Wr(0xC0000000u, 4), Wr(0xC0001000u, 4), Rd(0xC0000000u, 4, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
+        r = R9("a5_71b", "xRam80000010 = 5; xRamc0000010 = 7; return xRam80000010");
+        CHECK(Ledger(r, { Wr(0x80000010u, 4), Wr(0xC0000010u, 4), Rd(0x80000010u, 4, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
+        r = R9("a5_71_cells", "control: two cells of the array");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 5;") && r.aliasedMemory.empty());
+        r = R9("a5_71_same", "control: one name");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 7;") && r.aliasedMemory.empty());
+
+        // A5-72: the associative purge invalidates the 16-byte line of the word it names: a poll of another word of the line is a poll.
+        r = R9("a5_72", "store 0 to 0x06003308, purge 0x46003304, poll 0x06003308, then SCU_D0EN = 0x101");
+        CHECK(accessAt(r, false, 0x06003308u) && accessAt(r, true, 0x25FE0010u) && Has(r.Text(), "SCU_D0EN = 0x101;"));
+        CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "do { } while") && !WarnsAbout(r, "is missing"));
+        CHECK(HasNote(r, "is an associative purge, not a memory access: it invalidates the cache line for 0x06003300", false));
+        r = R9("a5_72_word", "control: the purge names the polled word");
+        CHECK(accessAt(r, false, 0x06003304u) && accessAt(r, true, 0x25FE0010u) && !WarnsAbout(r, "is missing"));
+        r = R9("a5_72_apart", "control: the poll is in the next line");
+        CHECK(!accessAt(r, false, 0x06003310u) && Has(r.Text(), "while( true )"));
+
+        // A5-73: the A-bus cartridge areas: what a write does is the cartridge's; the folded store is cautioned.
+        r = R9("a5_73", "the cartridge probe: store a pattern to 0x02400000, read it back, compare");
+        CHECK(HasNote(r, "a write to the cartridge area at 0x02400000 may be dropped (no cartridge, a ROM cartridge, a backup RAM cartridge for a word or an even byte): "
+                         "a later read of it in this function is shown as the value written, which the cartridge may not hold", true));
+        r = R9("a5_73_backup", "a byte store to the backup RAM cartridge's area, read back");
+        CHECK(HasNote(r, "a write to the cartridge area at 0x04000001 may be dropped", true));
+        r = R9("a5_73_ram", "control: work RAM");
+        CHECK(r.hardwareNotes.empty());
+
+        // A5-74: VDP1_PTMR bit 1 arms drawing at each frame change; bit 0 starts it now.
+        r = R9("a5_74", "VDP1_PTMR = 2");
+        CHECK(HasNote(r, "VDP1_PTMR: bit 1 is set, so drawing starts at each frame change (when the frame buffers swap) until PTMR is written with bit 1 clear", false) &&
+              !HasNote(r, "starts drawing the command table", false));
+        r = R9("a5_74_0", "control: VDP1_PTMR = 0 disarms it");
+        CHECK(r.hardwareNotes.empty());
+        r = R9("a5_74_1", "VDP1_PTMR = 1");
+        CHECK(HasNote(r, "VDP1_PTMR: bit 0 is set, so this write starts drawing the command table", false) && !HasNote(r, "frame change", false));
+        r = R9("a5_74_3", "VDP1_PTMR = 3");
+        CHECK(HasNote(r, "VDP1_PTMR: bit 0 is set, so this write starts drawing the command table", false) && HasNote(r, "VDP1_PTMR: bit 1 is set, so drawing starts at each frame change", false));
+
+        // A5-75: the continue bit alternates (smpc.c NextContBit): a byte of 0 is the continue of every second request, not "no continue".
+        r = R9("a5_75", "SMPC_IREG0 = 0");
+        CHECK(HasNote(r, "SMPC_IREG0: while an INTBACK waits for its next request, the SMPC takes the byte as a continue when bit 7 equals the continue bit it expects "
+                         "(set for the first request, then alternating) and ends the INTBACK when bit 6 is set; otherwise the byte is a parameter", false));
+        CHECK(!HasNote(r, "here bit 7 is clear", false));
+        r = R9("a5_75_break", "SMPC_IREG0 = 0x40");
+        CHECK(HasNote(r, "(the byte here has bit 7 clear and bit 6 set)", false));
+
+        // A5-76: writes that recalculate or lower an interrupt line on the spot.
+        r = R9("a5_76_hirqmsk", "CD_HIRQMSK = 0xFFFF");
+        CHECK(HasNote(r, "CD_HIRQMSK: a write recalculates the CD block's interrupt to the SCU at once (a set bit enables): enabling a flag that is already set raises it", false));
+        r = R9("a5_76_ist", "SCU_IST = 0");
+        CHECK(HasNote(r, "SCU_IST: a write clears the pending interrupts whose bits are 0 (the acknowledge)", false));
+        r = R9("a5_76_hirq", "CD_HIRQ = 0");
+        CHECK(HasNote(r, "CD_HIRQ: a write clears the flags whose bits are 0 (a 1 leaves a flag as it is) and recalculates the CD block's interrupt to the SCU at once", false));
+
+        // A5-77: the SCILV registers store the low byte only: a byte at the even address stores nothing and still recalculates.
+        r = R9("a5_77", "SCSP_SCILV0 high byte = 5");
+        CHECK(HasNote(r, "SCSP_SCILV0: this byte is not stored (only the low byte of the register is); the sound-CPU interrupt level is recalculated at once", false) &&
+              !HasNote(r, "sets bit 0 of the level", false));
+        r = R9("a5_77_low", "control: SCSP_SCILV0 low byte = 5");
+        CHECK(HasNote(r, "SCSP_SCILV0: sets bit 0 of the level of each sound-CPU interrupt (the low byte)", false) && !HasNote(r, "is not stored", false));
+
+        // A5-78: a byte store to colour RAM through `param + 0x25F00000` says what a byte store there does, for the index 0.
+        for (const char* name : { "a5_78a", "a5_78b" })
+        {
+            r = R9(name, "*(char *)(param + 0x25F00000) = 5");
+            CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x25F00000): a 1-byte write to colour RAM at 0x25F00000 stores the whole 16-bit entry", true));
+        }
+        r = R9("a5_78_small", "control: param + 0x10");
+        CHECK(r.hardwareNotes.empty());
+
+        // A5-79: a frame change (a write to VDP1_FBCR) makes the frame buffer the other buffer: the load after it is not the store before it.
+        r = R9("a5_79", "frame buffer store, VDP1_FBCR = 3, wait for the frame end, load of the same address");
+        CHECK(Ledger(r, { Wr(0x25C80200u, 2), Wr(0x25D00002u, 2), Rd(0x25F80004u, 2, true), Rd(0x25C80200u, 2, false, true) }) && !Has(r.Text(), "return 0x1234;") && !r.aliasedMemory.empty());
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.

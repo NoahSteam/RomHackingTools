@@ -1973,8 +1973,8 @@ private:
                 // An unknown plus a number that is an address of colour RAM or of a register area: the number is the base and the unknown the
                 // index (`param + 0x25F00000`), not a small offset of an unknown. The engine prints a symbol's address as the symbol (and the
                 // pointer is based at it already); colour RAM has none, nor has an unnamed register (A5-78). Said for the index 0, as an indexed
-                // pointer is.
-                if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps && (InColorRam(k) || IsRegisterArea(k)))
+                // pointer is. (Not the on-chip registers' partition: `param_1 + 0xFFFFFFF4` is `param_1 - 12`, A5-28's rawconst.)
+                if (!sub && out.others && out.constants.empty() && out.bases.empty() && out.back.empty() && !out.steps && k < 0xE0000000u && (InColorRam(k) || IsRegisterArea(k)))
                     out.bases.insert(k);
             }
             else
