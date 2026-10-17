@@ -1347,7 +1347,7 @@ void TestFlowUncertaintyShown()
         CHECK(f.panel.ShownStale());
 
         f.panel.ShowFunctionContaining(0, caller);
-        CHECK(f.WaitShown("4 review_caller("));
+        CHECK(f.WaitShown("review_caller("));   // void: the callee's signature is not lent, so nothing says the caller returns its result (A2-31)
         f.Idle(2);
         std::printf("%s", f.Shown().Text().c_str());
         CHECK(!Has(f.Shown().Text(), "review_callee();"));     // the old signature is not lent

@@ -5923,6 +5923,13 @@ void TestPrintedC()
         // instruction it cannot run (A2-38: it was braf, which the engine reads as a tail call, in every one of 268 of 3,060).
         const bool grammarLeak = !hand && v.cls == "skipped:call-or-stack" && cases[i].name.compare(0, 4, "seed") == 0;
         if (grammarLeak) v.cls = "grammar-leak";
+        // A ledger fixture exists to be compared: one the harness skips (an input it cannot give a value, a stack piece) checks nothing, and is a failure,
+        // not a quiet class (A2-37: `unaff_r8_00` was `skipped:unknown-input`).
+        if (!hand && cases[i].name.compare(0, 4, "seed") != 0 && v.cls.compare(0, 8, "skipped:") == 0)
+        {
+            v.detail = "the fixture was skipped (" + v.cls + "): " + v.detail;
+            v.cls = "fixture-skipped";
+        }
         if (!IsFailing(v))
         {
             // Said, not failed: the classes that are another row's or a limit of the instrument.

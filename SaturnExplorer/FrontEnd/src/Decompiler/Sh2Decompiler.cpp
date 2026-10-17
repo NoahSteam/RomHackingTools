@@ -850,15 +850,14 @@ private:
                 // (not an interrupt-mask idiom's plain transform of SR, which compiled code leaves in r0 as scratch: 06010054),
                 // made of nothing but those inputs and constants, and for r0 computed from r0's entry value on some path (a
                 // path that leaves r0 alone and one that writes something else is a scratch r0: 15 and 24 more corpus functions).
-                // ...and r0 computed from r0's entry value alone, on every path, which the engine takes for no return when the value has any
-                // other use (`shll r0 ; cmp/eq #1,r0 ; rts`): the dependence on r0 is gone from the text with the return. A nop in rts's
-                // slot hid this class (it kept every such return, A2-31); with any other slot it was lent `void` all along.
+                // ...and r0 computed, on every path, from r0's entry value (`shll r0 ; cmp/eq #1,r0 ; rts`, `add r4,r0 ; xor r0,r1 ; rts`), which the
+                // engine takes for no return when the value has any other use: the dependence on r0 is gone from the text with the return.
+                // Compiled code never reads r0 on entry, so whatever else the value is made of (parameters, memory) it is an input no signature
+                // passes. A nop in rts's slot hid this class (it kept every such return, A2-31); with any other slot it was lent `void` all along.
                 const uint32_t d = v.Direct();
-                if ((d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr))) == 0)
-                {
-                    if (v.Joined() && (d & (1u << kSr))) mInputsInReturn |= 1u << kSr;
-                    if ((d & 1u) && v.usesR0) mInputsInReturn |= 1u;
-                }
+                const bool onlyInputs = (d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr))) == 0;
+                if (v.Joined() && onlyInputs && (d & (1u << kSr))) mInputsInReturn |= 1u << kSr;
+                if ((d & 1u) && v.usesR0 && (!v.Joined() || onlyInputs)) mInputsInReturn |= 1u;
             }
             if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
@@ -919,6 +918,7 @@ private:
                 if (x.kind == Value::Sp && y.kind == Value::Imm) r = Value::Stack(Wrap(sub ? x.v - y.v : x.v + y.v));
                 else if (!sub && x.kind == Value::Imm && y.kind == Value::Sp) r = Value::Stack(Wrap(x.v + y.v));
                 else if (x.kind == Value::Imm && y.kind == Value::Imm) r = Value::Const(sub ? x.v - y.v : x.v + y.v);
+                else if (sub && KeyOf(op.in[0]) == KeyOf(op.in[1])) r = Value::Const(0);   // x - x
                 // An index added to a stack address stays in the stack (the engine's own stack analysis
                 // takes pointer arithmetic so too): somewhere in it, not the index's memory. Where from is
                 // kept (A3-9: `a[i] = f()` passes the address of an element in r2): the base address, with
@@ -1009,6 +1009,9 @@ private:
                     r.carried = carried;
                     r.usesR0 = usesR0;
                     r.joined = joined;
+                    // `xor r0,r0` is how compiled code zeroes a register: 0, computed from nothing (the engine folds it so). Taken for a value
+                    // computed from r0's entry value it would withhold the function for a return that reads no input (A2-31: 06073C7C).
+                    if (op.code == ghidra::CPUI_INT_XOR && op.in.size() == 2 && KeyOf(op.in[0]) == KeyOf(op.in[1])) r = Value::Const(0);
                     Set(s, op.out, r);
                 }
                 break;

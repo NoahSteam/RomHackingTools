@@ -7921,10 +7921,17 @@ void TestArea2Round5()
         {
             const DecompileResult shll = decompile("A2-31 shll r0 ; cmp/eq #1,r0 ; rts", { 0x4000, 0x8801, 0x8BFF, 0x000B, slot });
             CHECK(!shll.prototype.known && Has(shll.prototypeWithheld, "computed from r0 on entry"));
+            // ...with a parameter in it as well (generator seed 12623: the nightly's second grammar)
+            const DecompileResult sum = decompile("A2-31 add r4,r0 ; xor r0,r1 ; rts", { 0x304C, 0x210A, 0x000B, slot });
+            CHECK(!sum.prototype.known && Has(sum.prototypeWithheld, "computed from r0 on entry"));
         }
         // ...and r0 left alone on the path that does not write it is not a read (A3-14's scratch r0): lent
         const DecompileResult alone = decompile("A2-31 control: cmp/eq #1,r0 ; rts", { 0x8801, 0x8BFF, 0x000B, 0x0009 });
         CHECK(alone.prototype.known);
+        // ...and `xor r0,r0`, the compiler's zero, reads no input: lent (image 008's 06073C7C was withheld on it by the rule above until the
+        // interpretation took x ^ x and x - x for 0)
+        const DecompileResult zeroed = decompile("A2-31 control: xor r0,r0 ; mov.l r0,@r4 ; rts", { 0x200A, 0x2402, 0x000B, 0x0009 });
+        CHECK(zeroed.prototype.known);
         // A function that sets r0 and does nothing else with it still returns it, in any slot
         const DecompileResult one = decompile("A2-31 control: mov #1,r0 ; rts ; nop", { 0xE001, 0x000B, 0x0009 });
         CHECK(one.prototype.known && one.prototype.ret.kind != TypeKind::Void && Has(one.Text(), "return 1;"));
