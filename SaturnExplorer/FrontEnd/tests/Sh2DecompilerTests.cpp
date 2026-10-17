@@ -5507,7 +5507,7 @@ public:
         for (size_t i = 0; i + 1 < mTok.size(); ++i)
             if (mTok[i] == "&") mAddrTaken.insert(mTok[i + 1]);   // a local whose address is taken: a call may write it
         // The engine's note at a call that a frame address reaches in r2 (A3-28): every stack word may have been written by it.
-        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos;
+        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos;
         // The header: everything up to the body's opening brace.
         while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
         if (mPos >= mTok.size())

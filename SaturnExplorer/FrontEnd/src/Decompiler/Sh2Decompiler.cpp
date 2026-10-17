@@ -340,7 +340,8 @@ public:
         mLiteralMemory = &snapshot;
     }
 
-    const std::set<uint32_t>& EscapeSites() const { return mEscapeSites; }
+    // The calls (by the instruction that makes them) a frame address escapes at in a register the call is shown without, and which (bit 2: r2, bit 7: r7).
+    const std::map<uint32_t, uint32_t>& EscapeSites() const { return mEscapeSites; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
     bool FrameEscape(uint32_t& offset) const
@@ -751,6 +752,19 @@ private:
                 // the registers the model keeps lost, the frame pointer and the stack pointer after one such call had no base, and
                 // no frame address made from them after it was seen (A3-36, A3-37).
                 for (int r = 4; r < 8; ++r) NoteFrameEscape(s, r, false, at);
+                // ...which is so for the arguments the engine sees. It reads r4-r7 in order and fills in at most two unset registers before one that is
+                // set (ParamListStandard::fillinMap, forceInactiveChain with a chain of 2): a frame address in r7 with r4-r6 all untouched is no argument
+                // of the call, and the locals it reaches would be folded across it (A3-48). Said like the address in r2.
+                {
+                    bool untouched = true;
+                    for (int r = 4; r < 7; ++r)
+                    {
+                        const Value x = Get(s, mReg[r]);
+                        // (a register an earlier call killed is as unset to the engine as one nothing wrote)
+                        untouched = untouched && ((x.kind == Value::Reg && x.v == r) || (x.kind == Value::Fuzzy && !x.own));
+                    }
+                    if (untouched) NoteFrameEscape(s, 7, true, at);
+                }
                 for (const KilledRegister& k : kKeptByCall) e.preserved |= 1u << k.bit;
                 e.preserved |= 1u << kR15;
                 e.spDelta = 0;
@@ -791,7 +805,7 @@ private:
         // make an array of every local.
         const int64_t base = v.Base();
         if (base == Value::kNoBase) return;
-        if (exactToo) mEscapeSites.insert(at);   // the address is in no argument of the call: the text says so (A3-28)
+        if (exactToo) mEscapeSites[at] |= 1u << reg;   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
@@ -930,6 +944,9 @@ private:
     void StoreThrough(State& s, const Value& addr, uint32_t stored, bool spare = false, const std::vector<int64_t>* exact = nullptr)
     {
         const uint32_t o = addr.Origins();
+        // Whether the address may be in the stack is asked before the store lets a stack address out: the store that publishes a frame address
+        // (`mov.l r1,@r6` with r1 = r15 and r6 a pointer loaded from the literal pool) is not made through that address (A3-47).
+        const bool mayBeStack = MayBeStack(s, addr);
         if (o == 0 || (o & ~origin::kStack)) Leak(s, stored);   // memory this function does not track
         if (o == 0) return;
         mStoresThrough |= o & ~origin::kStack;
@@ -939,7 +956,7 @@ private:
             mFrameValues |= stored;
             mFrameWords |= CallEffects::kFrameAny;
         }
-        if (MayBeStack(s, addr)) Clobber(s, stored, INT64_MIN, INT64_MAX, spare, exact);
+        if (mayBeStack) Clobber(s, stored, INT64_MIN, INT64_MAX, spare, exact);
         else Clobber(s, stored, 0);   // through an entry value: the caller's frame, at most
     }
 
@@ -1288,7 +1305,7 @@ private:
     uint32_t mFrameWords = 0;          // ...and which words of it (CallEffects::frameWords)
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
-    std::set<uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2
+    std::map<uint32_t, uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2 or r7, and which
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
@@ -3419,7 +3436,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // A pointer into the frame in r2 at a call the engine cannot give an input in r2 (A3-4): said to
         // the engine now, while the code that made it is still there to be found. (Only the pass that
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
-        std::set<uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
+        std::map<uint32_t, uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -3461,8 +3478,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         arch->allacts.getCurrent()->perform(*fd);
         // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
         // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
-        for (uint32_t site : escapeSites)
+        for (const auto& siteRegs : escapeSites)
         {
+            const uint32_t site = siteRegs.first;
             bool lentCallee = false;
             for (ghidra::int4 i = 0; i < fd->numCalls() && !lentCallee; ++i)
             {
@@ -3474,7 +3492,8 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 lentCallee = p != prototypes.end() && p->second.known;
             }
             if (!lentCallee)
-                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
+                                            (siteRegs.second & 4u) ? kFrameEscapeNote : kFrameEscapeNoteR7);
         }
 
         if (!request.allMemoryVolatile)
