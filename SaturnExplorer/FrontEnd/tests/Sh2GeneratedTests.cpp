@@ -620,9 +620,9 @@ struct Gen
 
     Item MakeLitPtr(int reg, LitKind kind)
     {
-        // One RAM pointer in eleven is a cell of the cache's data array or an address of the cartridge areas instead (A5-71, A5-73), drawn from a stream
+        // One RAM pointer in seven is a cell of the cache's data array or an address of the cartridge areas instead (A5-71, A5-73), drawn from a stream
         // of its own so the other programs are the ones they were.
-        if (kind == LitKind::Ram && placeRng.Chance(9)) kind = placeRng.Chance(60) ? LitKind::Cache : LitKind::Cart;
+        if (kind == LitKind::Ram && placeRng.Chance(15)) kind = placeRng.Chance(60) ? LitKind::Cache : LitKind::Cart;
         if (disc && reg == selReg) reg = 13 - reg;   // the jump table's integer stays one
         Item it;
         it.type = Item::LitPtr;
@@ -1699,12 +1699,12 @@ struct Gen
             at += maskRng.Below(static_cast<uint32_t>(items.size() - at + 1));
             items.insert(items.begin() + at, m);
         }
-        // ...and, in one program of seven, a mask, an `xor` or a step on the pointer a loop body reads through, in the body itself (A5-60, A5-70): after the
+        // ...and, in nearly one program in two, a mask, an `xor` or a step on the pointer a loop body reads through, in the body itself (A5-60, A5-70): after the
         // access, alone or under a skip, with a step of the pointer's alignment before it two times in five, so the loop moves the pointer between
         // partitions on some turns and not on others, by two operations in a turn, and by a step and a mask in one. A pointer of the partitions 0 and 1
         // only: an `xor 0x20000000` of a cache array cell would be an on-chip register. Rule 3b holds the reads to the cache caution, rule 3c to the
         // registers the notes name.
-        if (loopMaskRng.Chance(14))
+        if (loopMaskRng.Chance(45))
         {
             std::vector<size_t> loops;
             for (size_t i = 0; i < items.size(); ++i)
