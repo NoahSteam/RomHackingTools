@@ -237,6 +237,10 @@ public:
         // A request that is not acknowledged in this time is the runner's own failure to report (it disables itself and
         // its destructor joins); the wait here is only so that the test's locals outlive the worker's use of them.
         mStopped = WaitIdle(mRunner, 120);
+        // The cancelled request's result is still to be taken (Busy ends before it is polled); left, it would be the next
+        // caller's first answer.
+        DecompileResult ignored;
+        while (mRunner.Poll(ignored)) {}
         mRunner.SetPhaseObserverForTests(nullptr);
     }
     bool Stopped() const { return mStopped; }
@@ -249,8 +253,8 @@ private:
 };
 
 // The baselines on 'runner', each result waited for at most 'waitSeconds'. True when every wait returned; a timeout is
-// a failed CHECK and the function returns early, with the worker stopped and the observer gone (the Settled guard).
-bool MeasureBaselines(DecompilerRunner& runner, double waitSeconds)
+// a failed CHECK (unless the caller expects it) and the function returns early, with the worker stopped and the observer gone (the Settled guard).
+bool MeasureBaselines(DecompilerRunner& runner, double waitSeconds, bool timeoutIsFailure = true)
 {
     Settled settled(runner);
     // Phase lengths, from the observer's timestamps.
@@ -274,8 +278,11 @@ bool MeasureBaselines(DecompilerRunner& runner, double waitSeconds)
             runner.Submit(0, gSnap, Big(kFixtures[i].entry));
             DecompileResult r;
             const bool got = WaitResult(runner, r, waitSeconds);
-            CHECK(got);
-            if (!got) return false;
+            if (!got)
+            {
+                if (timeoutIsFailure) CHECK(got);
+                return false;
+            }
             CHECK(r.status == DecompileStatus::Ok);
             if (run == 0)
             {
@@ -319,7 +326,7 @@ void TestBaselinesTimeoutLeavesNothingRunning()
     DecompilerRunner runner(gConfig, Generous());
     Baseline saved[3];
     for (int i = 0; i < 3; ++i) saved[i] = gBaseline[i];
-    const bool finished = MeasureBaselines(runner, 0.01);
+    const bool finished = MeasureBaselines(runner, 0.01, false);
     CHECK(!finished);                 // the wait did time out (a request cannot be this fast)
     CHECK(!runner.Busy());            // ...and the worker is not running the request
     CHECK(!runner.Disabled());        // ...which was cancelled and acknowledged, not abandoned
