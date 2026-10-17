@@ -674,8 +674,8 @@ void TestEnterAsksAgain()
     }
 }
 
-// A3: a delay-slot construct the spec cannot get right (bf/s) is flagged, with its address, and
-// still shown.
+// A3: a delay-slot construct the spec cannot get right (a bra slot that a bt also jumps straight to; since patch 0050 the
+// bf/s of the original fixture is no longer one, A2-4) is flagged, with its address, and still shown.
 void TestDelaySlotFlagged()
 {
     Fixture f;
@@ -684,9 +684,12 @@ void TestDelaySlotFlagged()
     std::copy(image.begin(), image.end(), f.backend.hw.begin());
     ++f.backend.serial;
     f.Idle(3);
-    f.TypeInto("entry", "06006100");
+    f.TypeInto("entry", "06006900");
     CHECK(f.WaitShown());
-    CHECK(f.Shown().unsupported && f.Shown().unsupportedAt == dts::kFixture3BfsSlot);
+    CHECK(f.Shown().unsupported && f.Shown().unsupportedAt == dts::kFixture3SlotJumpedSlot);
+    bool said = false;
+    for (const std::string& u : f.panel.Uncertainties()) said = said || u.find("that other code also jumps to") != std::string::npos;
+    CHECK(said);
     CHECK(!f.Shown().lines.empty());
 }
 
