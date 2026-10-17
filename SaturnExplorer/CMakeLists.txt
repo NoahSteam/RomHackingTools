@@ -290,6 +290,12 @@ if(SE_ENABLE_DECOMPILER)
             FrontEnd/tests/HardwareWidthTableTests.cpp
             FrontEnd/src/Decompiler/SaturnHardwareMap.cpp)
         target_include_directories(SaturnExplorerHardwareWidthTableTests PRIVATE FrontEnd/src FrontEnd/tests)
+        # A5-59: two cautions were cut off in the middle of a word by buffers a few characters short, which no test saw (they
+        # match prefixes). The map's texts are built with a std::string now; gcc's -Wformat-truncation=2 makes a fixed buffer
+        # that a text can overrun a build error again (the file compiled with it is clean, the round 7 file has three).
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            set_source_files_properties(FrontEnd/src/Decompiler/SaturnHardwareMap.cpp PROPERTIES COMPILE_OPTIONS "-Werror=format-truncation=2")
+        endif()
         add_test(NAME SaturnExplorerHardwareWidthTableTests
                  COMMAND SaturnExplorerHardwareWidthTableTests
                      ${CMAKE_CURRENT_SOURCE_DIR}/FrontEnd/tests/HardwareWidthTable.golden.txt

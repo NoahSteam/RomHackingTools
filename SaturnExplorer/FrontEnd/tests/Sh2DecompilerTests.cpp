@@ -3029,7 +3029,7 @@ void TestHardwareVolatility()
 
         // A5-61: a mask applied after an index add keeps the base the index starts from, and the note for the index 0.
         r = R7("a5_61_nomask", "control: (&SCU_D0EN)[param_1 * 4] = 0x101");
-        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x25FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
         r = R7("a5_61", "((&SCU_D0EN + param_1 * 4) & 0x1fffffff) = 0x101");
         CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
 
