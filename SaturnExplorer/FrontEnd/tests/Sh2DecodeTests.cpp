@@ -1745,6 +1745,7 @@ Shape MakeShape(Layout& L, const char* name, uint16_t w0, uint16_t w1, bool dela
 // 'twice' a branch translated twice in a row, where the second translation finds the branch's parse tree cached (the ring of two that A2-5 is
 // about) and the engine applies the tree's context commits again: Sleigh::oneInstruction left the tree's next-address at the end of the
 // delay slot, `inst_next` of the commit is now the instruction after the slot, and the slot's context is painted on that instruction instead.
+// Patch 0047 puts the next address back to the end of the branch itself before the commits are applied.
 // The emulator translates every instruction it executes (EmulatePcodeCache::createInstruction keeps no cache), so a tight loop of a delayed
 // branch and its slot (`L: bf/s L ; dt r2`) poisons the instruction after the loop.
 struct Follower
@@ -2010,10 +2011,11 @@ void TestExecution(long casesPerForm, uint64_t seed, const char* filter, int sho
     {
         Rng side(seed ^ 0xF011017ull);
         CHECK(RunFollowers(mach, followersOnce, 1, filter, side, true) == 0);
-        // A2-48, open: the same after two translations of the branch in a row. Pinned as it is today (it differs for every pair but those
-        // whose branch hands no PC to a following mov.w); when the engine is fixed the count is 0 and this CHECK turns into `== 0`.
+        // A2-48 (patch 0047): the same after two translations of the branch in a row, the second from the cache. Before the patch the
+        // cached tree's next address was left after the slot and its commits were applied to the instruction that follows it: 215 of 240
+        // pairs differed.
         const long twice = RunFollowers(mach, followersTwice, 2, filter, side, false);
-        CHECK(filter != nullptr || twice > 0);
+        CHECK(twice == 0);
     }
 
     long totalCases = 0, totalFails = 0, failingForms = 0, unrunnable = 0, pcodeDumps = 0;

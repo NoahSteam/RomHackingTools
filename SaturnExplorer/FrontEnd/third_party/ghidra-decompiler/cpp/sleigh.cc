@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: cache pointers cleared after delete (patches/0002-sleigh-reset-null-caches.patch).
  * Modified for SaturnExplorer: the parse-tree cache is least recently used (patches/0020-sleigh-cache-lru.patch).
  * Modified for SaturnExplorer: a parse-tree cache that fails to initialise frees what it made (patches/0023-allocation-failure-order.patch).
+ * Modified for SaturnExplorer: a cached delayed branch's commits are applied from the address after the branch (patches/0047-sleigh-cached-branch-commits-next-address.patch).
  */
 #include "sleigh.hh"
 #include "loadimage.hh"
@@ -781,6 +782,10 @@ int4 Sleigh::oneInstruction(PcodeEmit &emit,const Address &baseaddr) const
   }
   
   ParserContext *pos = obtainContext(baseaddr,ParserContext::pcode);
+  // SaturnExplorer (patches/0047-sleigh-cached-branch-commits-next-address.patch): below, the next address of a delayed branch's
+  // tree is moved to the end of its delay slot. A tree found in the cache has it there from the last translation, and the commits
+  // (`globalset(inst_next, ...)`: what the slot's PC-relative loads read) would be applied to the instruction after the slot.
+  pos->setNaddr(pos->getAddr() + pos->getLength());
   pos->applyCommits();
   fallOffset = pos->getLength();
   

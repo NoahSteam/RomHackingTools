@@ -16,6 +16,7 @@
  * Modified for SaturnExplorer: every LOAD and STORE's fate is recorded (patches/0017-access-fates.patch).
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
+ * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -126,6 +127,14 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
 
   vn->addDescend(op);		// Add this op to list of vn's descendants
   op->setInput(vn,slot);	// op must be up to date AFTER calling descend_add
+  // SaturnExplorer (patches/0046-engine-input-replaced-resets-nzmask.patch): the non-zero mask of the output was worked out
+  // from the inputs the op had. A rule that rewrites an op in place can change the value of that op while the value of the
+  // tree it is part of stays (RuleCollectTerms zeroes a coefficient in one inner ADD and puts the sum in another, which was
+  // a multiple of 4 and is not now), so the old mask is no longer a fact about the new value. A mask that claims clear bits
+  // the value has lets RuleAndMask drop an AND that is not redundant. ActionNonzeroMask works the real mask out again.
+  Varnode *outvn = op->getOut();
+  if (outvn != (Varnode *)0)
+    outvn->nzm = ~((uintb)0);
 }
 
 /// This is convenience method that is more efficient than call opSetInput() twice.
