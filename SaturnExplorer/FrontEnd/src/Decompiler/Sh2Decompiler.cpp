@@ -1548,20 +1548,18 @@ RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
 {
     RawScan scan;
 
-    // A3: every instruction the flow reached, decoded on our side. A delayed branch followed by
-    // a PC-relative load or mova reads relative to the branch target when the branch is taken.
-    // The spec (patch 0005) gets that right for bra and bsr, whose target is in the instruction.
-    // Every other delayed branch -- conditional, through a register, rts -- leaves the spec
-    // computing the slot's own address, which is wrong whenever the branch is taken; that
-    // literal is excluded from folding and the function flagged.
+    // A3: every instruction the flow reached, decoded on our side. A delayed branch followed by a PC-relative load or mova hands the
+    // load the PC of the branch's target when the branch is taken. The spec gives the slot that PC for every delayed branch (patch
+    // 0005 for bra and bsr, whose target is in the instruction; patch 0050 for the rest: bt/s and bf/s by T, jmp, jsr and braf and bsrf
+    // by their register, rts by PR, rte by the stacked PC), through the context of the slot's address.
     std::set<uint32_t>& insns = scan.insns;
     for (auto it = fd.beginOpMain(); it != fd.endOpMain(); ++it)
     {
         const uint32_t a = static_cast<uint32_t>(it->second->getAddr().getOffset());
         insns.insert(a);
     }
-    // The patch hands the slot its PC by address, so a slot that anything in the function also
-    // jumps straight to would get the slot's PC on that path too. Such code is flagged rather than
+    // The context reaches the slot by its address, so a slot that anything in the function also
+    // jumps straight to would get the branch's PC on that path too. Such code is flagged rather than
     // trusted. Jumps come from immediate branches and from the jump tables flow recovered (a
     // switch case may enter a slot as well as an ordinary branch can).
     std::set<uint32_t> targets;
@@ -1589,15 +1587,14 @@ RawScan ScanRawPcode(ghidra::Funcdata& fd, const MemorySnapshot& snap)
         if (!snap.ReadU16(a + 2, slotOp)) continue;
         const DisassembledInstruction slot = Sh2DecodeAfterBranch(a + 2, slotOp, branch);
         if (slot.PcRel == Sh2PcRel::None) continue;
-        const bool specFixed = branch.HasBranchTarget && !branch.IsConditional;   // bra, bsr
-        if (specFixed && targets.count(a + 2) == 0) continue;
+        if (targets.count(a + 2) == 0) continue;
         if (!scan.unsupported || a + 2 < scan.unsupportedAt)
         {
             scan.unsupported = true;
             scan.unsupportedAt = a + 2;
         }
-        // Neither candidate folds: the spec computes the slot-relative address after a bra or bsr
-        // and the slot's own otherwise, and either is wrong on one of the paths.
+        // Neither candidate folds: the spec computes the address the branch's PC gives the slot, and the slot's own otherwise,
+        // and either is wrong on one of the paths.
         const uint32_t size = slot.PcRel == Sh2PcRel::Word ? 2 : 4;
         excluded.emplace_back(slot.PcRelDirectAddress, slot.PcRelDirectAddress + size);
         if (slot.PcRelHasSlotAddress)
@@ -3551,7 +3548,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         r.literalLoads = scan.literalLoads;
         if (scan.unsupported)
             r.warnings.push_back("PC-relative load in a delay slot at " + Hex8(r.unsupportedAt) +
-                                 ": pseudocode for this function is not trustworthy");
+                                 " that other code also jumps to: pseudocode for this function is not trustworthy");
         if (r.unimplemented) r.warnings.push_back("the SH-2 spec has no semantics for an instruction here");
 
         // Every uncertainty the engine recorded while following flow, which it keeps as warning
