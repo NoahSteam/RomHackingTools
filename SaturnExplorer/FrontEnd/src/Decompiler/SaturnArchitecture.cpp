@@ -113,7 +113,13 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     //              trying again is one directory check, or one verified extraction, on a request the user
     //              made. Nothing is rate-limited: a clock would make which request is retried depend on
     //              timing, and a refusal text that is not retried is the one that must say so.
-    // Ready        the library is started.
+    // Ready        the library is started. The directory it was started from is not trusted for good: every
+    //              later call verifies it again (the cost is a read of the five small files), restores
+    //              it when it is not what the build embeds, and answers Unavailable, to be tried again on
+    //              the next call, when it cannot. The engine reads the .pspec and .cspec of that directory
+    //              for every Architecture, so a cache directory cleaned or quarantined under the running
+    //              process used to fail every later request until a restart, with an XML message that
+    //              named neither the cause nor the cure (A6-44).
     // Interrupted  startDecompilerLibrary threw part-way. It fills process-global tables (attribute and
     //              element ids, the capability lists, the spec search path) by appending, with no way to
     //              see how far it got or to undo it, so running it again would register some twice and a
@@ -125,11 +131,13 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     static std::mutex m;
     static Stage stage = Stage::Fresh;
     static std::string interruptedText;               // Interrupted: made before the first global write
+    static std::string readyConfigDir, readyDir;      // Ready: what the library was started from
     std::lock_guard<std::mutex> lock(m);
     // What the call that moved the stage hands back, swapped into 'error' (no allocation), so that the request that
     // met the failure says what the next ones will say even when the heap is gone (A6-32): the texts are all made
     // before the stage changes, and moved (not copied) into place after it.
     std::string firstReport;
+    bool startedNow = false;
     if (stage == Stage::Fresh)
     {
         // An exception from here to the vector below leaves the stage Fresh: nothing global was written.
@@ -149,11 +157,15 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
         };
         std::string oomText = text("out of memory"), otherText = text("an unexpected exception");
         std::string oomKeep = oomText, otherKeep = otherText;
+        std::string configKeep = configDir, dirKeep = bundle.dir;
         stage = Stage::Interrupted;   // from the first global write; Ready only once the last has been made
         try
         {
             ghidra::startDecompilerLibrary(paths);
+            readyConfigDir = std::move(configKeep);   // moves: no allocation
+            readyDir = std::move(dirKeep);
             stage = Stage::Ready;
+            startedNow = true;
         }
         catch (std::bad_alloc&)
         {
@@ -169,8 +181,23 @@ bool SaturnArchitecture::StartLibrary(const std::string& configDir, std::string&
     switch (stage)
     {
     case Stage::Ready:
+    {
+        if (!startedNow)
+        {
+            // Verified and, when damaged, repaired under the lock, from the configuration directory the library
+            // was started from: the engine reads that one, whatever this caller's is. May throw (std::bad_alloc):
+            // the stage is Ready and stays so, and the next call looks again.
+            SpecBundleResult again = MaterialiseSh2SpecBundle(readyConfigDir);
+            if (!again.ok || again.dir != readyDir)
+            {
+                error = again.error.empty() ? std::string("Decompiler unavailable: the language files could not be prepared")
+                                            : std::move(again.error);
+                return false;
+            }
+        }
         error.clear();
         return true;
+    }
     default:
         // Every call says it, the first included: the request that met the failure is told what the next
         // ones will be told, and neither is "out of memory" with an engine that looks usable.

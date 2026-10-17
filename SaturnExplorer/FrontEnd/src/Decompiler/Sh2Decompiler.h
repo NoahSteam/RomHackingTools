@@ -425,6 +425,10 @@ public:
     // pass), immediately BEFORE the check, so that a test can raise the cancel flag exactly there and require the check to honour
     // it in the phase that is ending (A6-41). The engine's own check-points are not told of. Process-wide.
     static void SetBoundaryHookForTests(std::function<void()> hook);
+    // Tests only: called where the host declares the engine finished with a request -- the last pass's Architecture is gone,
+    // the work phase back to Idle -- so that a failure after it is host-only (A6-45) and the fault matrix can tell it from one
+    // inside the engine. It runs again after the reference run. Process-wide.
+    static void SetEngineDoneHookForTests(std::function<void()> hook);
 
 private:
     void NoteRemovedAccesses(const std::shared_ptr<const MemorySnapshot>& snapshot, const DecompileRequest& request,
@@ -438,7 +442,7 @@ private:
 
     std::string mConfigDir;
     std::function<void(DecompilePhase)> mObserver;
-    DecompilePhase mWorkPhase = DecompilePhase::Idle;   // the last phase that does work
+    DecompilePhase mWorkPhase = DecompilePhase::Idle;   // the last phase that does work; Idle once the last pass's Architecture is gone
     // The reference run's phases are not the request's progress: the observer is not told of them.
     bool mQuietPhases = false;
 };

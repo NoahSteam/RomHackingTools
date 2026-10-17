@@ -121,31 +121,29 @@ std::string Extract(const std::string& dir, const std::string& manifest,
         }
     } guard{ tmp, staged, true };
 
+    // A failure below returns and the guard removes the staging directory: nothing on a failure path allocates before it
+    // does (A6-43; the removal used to be RemoveEntry here, which lists the directory).
     std::string error;
     for (size_t i = 0; i < files.size(); ++i)
     {
         const std::string& path = staged[i];
         if (!WriteFileAtomically(path, files[i].data, files[i].size, error))
         {
-            RemoveEntry(tmp);
             return "cannot write " + path + ": " + error;
         }
     }
     if (!WriteFileAtomically(staged.back(), manifest.data(), manifest.size(), error))
     {
-        RemoveEntry(tmp);
         return "cannot write the manifest in " + tmp + ": " + error;
     }
     if (void (*hook)(const std::string&) = gStagingHook.load()) hook(tmp);
     const std::string problem = Verify(tmp, manifest, files);
     if (!problem.empty())
     {
-        RemoveEntry(tmp);
         return tmp + " did not verify after writing (" + problem + ")";
     }
     if (!MovePath(tmp, dir))
     {
-        RemoveEntry(tmp);
         return "cannot move " + tmp + " to " + dir;
     }
     guard.armed = false;   // published: the directory is no longer the staging one

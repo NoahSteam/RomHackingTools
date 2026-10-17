@@ -60,6 +60,11 @@ std::string Reason(const char* what, const std::string& path)
 
 // fwrite/fclose with every result checked. This is the whole point of the file: the close is
 // where a buffered write to a full device finally fails. Takes ownership of 'f'.
+//
+// The file is closed BEFORE any text is made. The text is a handful of strings, and an allocation
+// that fails in one of them used to leave the FILE and its descriptor open for good (A6-43): a
+// disk that is full and a heap that is short at the same moment is rare, but the cost of the
+// order is nothing. errno is captured at the failing call and put back for Reason.
 bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t size,
                    std::string& error)
 {
@@ -67,8 +72,10 @@ bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t si
     const size_t wrote = (size == 0) ? 0 : std::fwrite(data, 1, size, f);
     if (wrote != size)
     {
-        error = Reason("could not write", path);
+        const int err = errno;
         std::fclose(f);   // result ignored on purpose: the write already failed
+        errno = err;
+        error = Reason("could not write", path);
         return false;
     }
     // THE line this file exists for. fclose flushes, and a small write has not reached the
@@ -76,6 +83,7 @@ bool WriteAndClose(FILE* f, const std::string& path, const void* data, size_t si
     errno = 0;
     if (std::fclose(f) != 0)
     {
+        // fclose has released the descriptor whether or not it succeeded.
         error = Reason("could not finish writing", path);
         return false;
     }
@@ -142,13 +150,16 @@ FILE* OpenStagingFile(const std::string& path, std::string& temp, std::string& e
 #endif
         if (f == nullptr)
         {
-            error = Reason("could not open", temp);
+            // Release the descriptor and the name before any text is made (A6-43).
+            const int err = errno;
 #ifdef _WIN32
             ::_close(fd);
 #else
             ::close(fd);
 #endif
             RemoveFile(temp);
+            errno = err;
+            error = Reason("could not open", temp);
             temp.clear();
         }
         return f;
@@ -180,16 +191,18 @@ bool WriteFileAtomically(const std::string& path, const void* data, size_t size,
     std::string temp;
     FILE* f = OpenStagingFile(path, temp, error);
     if (f == nullptr) return false;
-    if (!WriteAndClose(f, temp, data, size, error))
+    // The staging file is ours and goes unless it was published, on every way out of here: an allocation failure
+    // while an error text is made used to leave it beside the destination for good (A6-43). unlink allocates nothing,
+    // so this holds under sustained exhaustion too.
+    struct TempGuard
     {
-        RemoveFile(temp);
-        return false;
-    }
-    if (!PublishFile(temp, path, error))
-    {
-        RemoveFile(temp);
-        return false;
-    }
+        const std::string& path;
+        bool armed;
+        ~TempGuard() { if (armed) RemoveFile(path); }
+    } guard{ temp, true };
+    if (!WriteAndClose(f, temp, data, size, error)) return false;
+    if (!PublishFile(temp, path, error)) return false;
+    guard.armed = false;   // the rename took the name
     return true;
 }
 
@@ -422,10 +435,13 @@ std::string CreateStagingFile(const std::string& path, std::string& error)
     FILE* f = OpenStagingFile(path, temp, error);
     if (f == nullptr) return std::string();
     errno = 0;
-    if (std::fclose(f) != 0)
+    const bool closed = std::fclose(f) == 0;
+    if (!closed)
     {
+        const int err = errno;
+        RemoveFile(temp);   // before any text is made: the name must go even if the text cannot be built
+        errno = err;
         error = Reason("could not create", temp);
-        RemoveFile(temp);
         return std::string();
     }
     return temp;

@@ -215,16 +215,49 @@ void CheckFollowingRequest(DecompilerRunner& runner, const char* after)
 struct Baseline { std::string text; double phaseMs[8] = {}; double totalMs = 0; };
 Baseline gBaseline[3];
 
-void TestBaselines()
+// The phase log of a baseline run. Owned by shared pointer: the runner's worker copies the observer when a request
+// starts and calls it until that request ends, so what the observer writes to must live as long as any copy of it,
+// not as long as the function that submitted the request (A6-46: the log used to be locals the observer wrote to by
+// reference, and a wait that timed out returned with the worker still running).
+struct PhaseLog
 {
-    DecompilerRunner runner(gConfig, Generous());
-    // Phase lengths, from the observer's timestamps. Declared outside the loop: the engine keeps
-    // the observer it was given until its next request starts.
-    std::vector<std::pair<DecompilePhase, Clock::time_point>> seen;
     std::mutex m;
-    runner.SetPhaseObserverForTests([&](DecompilePhase p) {
-        std::lock_guard<std::mutex> lock(m);
-        seen.emplace_back(p, Clock::now());
+    std::vector<std::pair<DecompilePhase, Clock::time_point>> seen;
+};
+
+// However the function using the runner is left, the worker is made to stop and waited for, and the observer is
+// cleared: nothing the test owns is touched by a request that outlives the code that asked for it (A6-46).
+class Settled
+{
+public:
+    explicit Settled(DecompilerRunner& runner) : mRunner(runner) {}
+    ~Settled()
+    {
+        for (int slot : { 0, 9 }) mRunner.Cancel(slot);
+        // A request that is not acknowledged in this time is the runner's own failure to report (it disables itself and
+        // its destructor joins); the wait here is only so that the test's locals outlive the worker's use of them.
+        mStopped = WaitIdle(mRunner, 120);
+        mRunner.SetPhaseObserverForTests(nullptr);
+    }
+    bool Stopped() const { return mStopped; }
+    Settled(const Settled&) = delete;
+    Settled& operator=(const Settled&) = delete;
+
+private:
+    DecompilerRunner& mRunner;
+    bool mStopped = false;
+};
+
+// The baselines on 'runner', each result waited for at most 'waitSeconds'. True when every wait returned; a timeout is
+// a failed CHECK and the function returns early, with the worker stopped and the observer gone (the Settled guard).
+bool MeasureBaselines(DecompilerRunner& runner, double waitSeconds)
+{
+    Settled settled(runner);
+    // Phase lengths, from the observer's timestamps.
+    const std::shared_ptr<PhaseLog> log = std::make_shared<PhaseLog>();
+    runner.SetPhaseObserverForTests([log](DecompilePhase p) {
+        std::lock_guard<std::mutex> lock(log->m);
+        log->seen.emplace_back(p, Clock::now());
     });
     // Each fixture twice: the first, cold run is the slow one, and the midway cancels below time
     // themselves against a warm run like theirs. Both runs must give the same text.
@@ -234,13 +267,15 @@ void TestBaselines()
         for (int run = 0; run < 2; ++run)
         {
             {
-                std::lock_guard<std::mutex> lock(m);
-                seen.clear();
+                std::lock_guard<std::mutex> lock(log->m);
+                log->seen.clear();
             }
             const auto t0 = Clock::now();
             runner.Submit(0, gSnap, Big(kFixtures[i].entry));
             DecompileResult r;
-            CHECK(WaitResult(runner, r));
+            const bool got = WaitResult(runner, r, waitSeconds);
+            CHECK(got);
+            if (!got) return false;
             CHECK(r.status == DecompileStatus::Ok);
             if (run == 0)
             {
@@ -252,10 +287,10 @@ void TestBaselines()
             gBaseline[i].text = r.Text();
             CHECK(gBaseline[i].text == coldText);
             {
-                std::lock_guard<std::mutex> lock(m);
-                for (size_t k = 0; k + 1 < seen.size(); ++k)
-                    gBaseline[i].phaseMs[int(seen[k].first)] +=
-                        std::chrono::duration<double, std::milli>(seen[k + 1].second - seen[k].second).count();
+                std::lock_guard<std::mutex> lock(log->m);
+                for (size_t k = 0; k + 1 < log->seen.size(); ++k)
+                    gBaseline[i].phaseMs[int(log->seen[k].first)] +=
+                        std::chrono::duration<double, std::milli>(log->seen[k + 1].second - log->seen[k].second).count();
             }
         }
         const double* p = gBaseline[i].phaseMs;
@@ -266,7 +301,30 @@ void TestBaselines()
     }
     CHECK(gBaseline[2].text.find("switch") != std::string::npos);   // the jump table was recovered
     CheckFollowingRequest(runner, "the baselines");
-    runner.SetPhaseObserverForTests(nullptr);
+    return true;
+}
+
+void TestBaselines()
+{
+    DecompilerRunner runner(gConfig, Generous());
+    MeasureBaselines(runner, 60.0);
+}
+
+// A6-46: a baseline wait that times out returns with the worker stopped and the observer cleared, not running on beside
+// freed storage. The wait here is 10 ms, which the cold first request of any build outlasts; the baselines it fills in are
+// written over by TestBaselines' own run, which comes first in main and is not disturbed (this one runs after it and
+// restores them).
+void TestBaselinesTimeoutLeavesNothingRunning()
+{
+    DecompilerRunner runner(gConfig, Generous());
+    Baseline saved[3];
+    for (int i = 0; i < 3; ++i) saved[i] = gBaseline[i];
+    const bool finished = MeasureBaselines(runner, 0.01);
+    CHECK(!finished);                 // the wait did time out (a request cannot be this fast)
+    CHECK(!runner.Busy());            // ...and the worker is not running the request
+    CHECK(!runner.Disabled());        // ...which was cancelled and acknowledged, not abandoned
+    for (int i = 0; i < 3; ++i) gBaseline[i] = saved[i];
+    CheckFollowingRequest(runner, "a baseline wait that timed out");
 }
 
 // Cancel with the worker held at the very start of 'phase'.
@@ -959,6 +1017,7 @@ int main(int argc, char** argv)
     {
         RUN(TestWorkerStack());
         RUN(TestBaselines());
+        RUN(TestBaselinesTimeoutLeavesNothingRunning());
         RUN(TestCancelInFlowAndActions());
         RUN(TestCancelDuringPrint());
         RUN(TestBudget());
