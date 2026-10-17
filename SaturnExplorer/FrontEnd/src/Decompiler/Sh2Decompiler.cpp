@@ -755,15 +755,18 @@ private:
                 // ...which is so for the arguments the engine sees. It reads r4-r7 in order and fills in at most two unset registers before one that is
                 // set (ParamListStandard::fillinMap, forceInactiveChain with a chain of 2): a frame address in r7 with r4-r6 all untouched is no argument
                 // of the call, and the locals it reaches would be folded across it (A3-48). Said like the address in r2.
+                // ...and the stack argument is the same: the word at the call's r15 comes after r7, and the engine drops an argument that follows
+                // a run of three unset ones, so with r4-r6 or r5-r7 all untouched a frame address stored there is in no argument either (A3-51).
                 {
-                    bool untouched = true;
-                    for (int r = 4; r < 7; ++r)
+                    bool unset[4];
+                    for (int r = 4; r < 8; ++r)
                     {
                         const Value x = Get(s, mReg[r]);
                         // (a register an earlier call killed is as unset to the engine as one nothing wrote)
-                        untouched = untouched && ((x.kind == Value::Reg && x.v == r) || (x.kind == Value::Fuzzy && !x.own));
+                        unset[r - 4] = (x.kind == Value::Reg && x.v == r) || (x.kind == Value::Fuzzy && !x.own);
                     }
-                    if (untouched) NoteFrameEscape(s, 7, true, at);
+                    if (unset[0] && unset[1] && unset[2]) NoteFrameEscape(s, 7, true, at);
+                    if ((unset[0] && unset[1] && unset[2]) || (unset[1] && unset[2] && unset[3])) NoteStackArguments(s, at);
                 }
                 for (const KilledRegister& k : kKeptByCall) e.preserved |= 1u << k.bit;
                 e.preserved |= 1u << kR15;
@@ -797,7 +800,23 @@ private:
     // rule over them would put every local of every function in an alias.
     void NoteFrameEscape(const State& s, int reg, bool exactToo, uint32_t at)
     {
-        const Value v = Get(s, mReg[reg]);
+        NoteFrameEscapeOf(Get(s, mReg[reg]), reg, exactToo, at);
+    }
+
+    // The words from the call's r15 up, where a callee reads its stack arguments (the SH calling convention puts the fifth at its entry r15): a
+    // frame address stored in one of them with r4-r6 or r5-r7 unset is no argument the call shows (A3-51), as an address in r7 alone is not
+    // (A3-48). Every word of the frame from there up, since the engine's trial for a slot is dropped with the ones before it (the fifth
+    // argument not written, the sixth is). Bit 15 of the site's mask.
+    void NoteStackArguments(const State& s, uint32_t at)
+    {
+        const Value sp = Get(s, mReg[kR15]);
+        if (sp.kind != Value::Sp) return;
+        for (const auto& slot : s.slots)
+            if (slot.first >= sp.v) NoteFrameEscapeOf(slot.second, kR15, true, at);
+    }
+
+    void NoteFrameEscapeOf(const Value& v, int reg, bool exactToo, uint32_t at)
+    {
         if (!exactToo && v.kind == Value::Sp) return;
         // An address with an index added to it (a returned structure that is an array element) points at or above
         // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
@@ -1037,7 +1056,12 @@ private:
                 // Compiled code never reads r0 on entry, so whatever else the value is made of (parameters, memory) it is an input no signature
                 // passes. A nop in rts's slot hid this class (it kept every such return, A2-31); with any other slot it was lent `void` all along.
                 const uint32_t d = v.Direct();
-                const bool onlyInputs = (d & ~origin::kRegisters) == 0 && (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr))) == 0;
+                // What else the value is made of does not matter (A3-50): a word from memory (a load, or a literal-pool word, which this check reads
+                // as a load) or a stack address among the alternatives is not a return the engine keeps. It drops `phi(in_r0, *p)` and
+                // `phi(in_r0, literal)` as it drops `phi(in_r0, in_r6)`, and a load carries a stack origin once a frame address has escaped
+                // (Loaded). The rule had asked for registers only on the premise that a value from memory keeps the engine's return.
+                constexpr uint32_t kAlsoMade = origin::kMemory | origin::kStack;
+                const bool onlyInputs = (d & origin::kRegisters) != 0 && (d & ~(kNotParameters | 1u | (1u << kSr) | kAlsoMade)) == 0;
                 if (v.Joined() && onlyInputs && (d & (1u << kSr))) mInputsInReturn |= 1u << kSr;
                 // ...and when no path leaves r0 alone (A3-45): a value computed from r0 on every path of a loop that rotates it
                 // (`L: rotcr r0 ; tas.b @r5 ; dt r3 ; bf L`) is a join at the loop head and a transformation of it at the exit, and its
@@ -1046,9 +1070,10 @@ private:
                 if ((d & 1u) && v.usesR0 && (!v.Joined() || onlyInputs || !v.KeepsR0())) mInputsInReturn |= 1u;
                 // ...and a join of r0's entry value with a parameter (A3-20): `if (b) return a;` leaves r0 alone on the path that
                 // does not return, and the engine takes the join for no return like the ones above, so the parameter that is the
-                // value (and, if nothing else reads it, the one that chooses the path) is lost with it. The origins are registers
-                // only: a value from memory keeps the engine's return.
-                if (v.Joined() && (d & ~origin::kRegisters) == 0 && (d & 1u) != 0 && (d & 0xF0u) != 0) mJoinedParams |= d & 0xF0u;
+                // value (and, if nothing else reads it, the one that chooses the path) is lost with it. Whatever the other alternatives are
+                // (A3-49): a load or a literal-pool word (`if (a) { r = c; if (p) r = *p; return r; }`), a frame address, are dropped with the
+                // join like a register is.
+                if (v.Joined() && (d & 1u) != 0 && (d & 0xF0u) != 0) mJoinedParams |= d & 0xF0u;
             }
             if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
@@ -3656,9 +3681,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 const auto p = prototypes.find(static_cast<uint32_t>(at.getOffset()));
                 lentCallee = p != prototypes.end() && p->second.known;
             }
-            if (!lentCallee)
-                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
-                                            (siteRegs.second & 4u) ? kFrameEscapeNote : kFrameEscapeNoteR7);
+            if (lentCallee) continue;
+            // One note for the register that holds the address (r2, then r7), or for the stack argument slot when that is all.
+            arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site),
+                                        (siteRegs.second & 4u) ? kFrameEscapeNote : (siteRegs.second & 0x80u) ? kFrameEscapeNoteR7 : kFrameEscapeNoteStack);
         }
 
         if (!request.allMemoryVolatile)
