@@ -8659,3 +8659,83 @@ Area 4 is back to **no open row**: A4-10 and A4-11 (opened by the area 5 round 9
 - The engine's guard analysis does not see through a shared SR word (A4-10): accepted, the trivial model is right. A reviewer who wants `switch(param_3)` there needs a range pull-back through `INT_OR` and `SUBPIECE` in `JumpBasic::analyzeGuards` (patch 0051 or later).
 - The canary's remaining reach is listed under A3-44.
 - Sanitizers were run on `Sh2DecompilerTests` and `Sh2GeneratedTests` only.
+
+## Area 2, round 7 review
+
+Reviewer, branch `review/2-round7-review`, on the coordinator's head `ffc75a1` (patch 0050 and the regenerated `sh-2.sla` in the tree). Tests only: the decode oracle and the decompiler suite grew (commit `0cc677a`); no spec, engine or host file changed (the engine files I changed to find a cause or to try a fix were restored with `cp` from copies and `git status` is clean of them). New ledger rows **A2-46** to **A2-51**: **A2-47 is a P1** (a wrong printed address, no warning), **A2-48** a P2, **A2-46** a P2 oracle hole (closed here, oracle only), **A2-49**, **A2-50** (oracle) and **A2-51** (oracle, closed here) P3. **The round is not clean, so area 2 is not done**: round 6 was the first clean round, this one resets the count. Round 6 held otherwise: A2-4's patch 0050 is right in the spec (the decode oracle, 77 spec mutants, every delayed-branch kind), and the P1 is in how the engine prints what the spec makes.
+
+### 1. What I ran
+
+| Run | Result |
+|---|---|
+| `SaturnExplorerSh2DecodeTests` with `SE_MEDNAFEN_SS` (the real `sh7095_idecodetab.inc`) | transcribed table equals Mednafen's for all 65,536 words; SLEIGH and `Sh2Disasm` define 53,752 words, 0 disagreements; translation history 5,632 cells, 0 differ; the 18 named shapes agree. Differential execution on the round 6 code before I changed the oracle: 260,000 (default), 13,000,000 twice (`SE_DECODE_CASES=100000` at seeds 777 and 424242): 0 differ. After: 260,000 (default), 5,200,000 (`40000`, seed 6060606), 13,000,000 at seeds 31337, 777 and 424242 (`100000`), 6,500,000 at seed 555 (`50000`): **0 differ, 0 could not run, 0 of 130 forms fail**; and 2,000,000 cases of each of the ten delayed-branch forms at seed 555 |
+| `SaturnExplorerSh2SemanticsTests`, `SaturnExplorerSlaFreshnessTests` (`se-sleighc` compiles the `.slaspec`; the checked-in `sh-2.sla` and the embedded copy agree, 15,156 bytes; the compiler's one warning is the `nop` temporary, by design) | pass |
+| generator, grammar 2, seeds 1-3,000 | 5,941 functions, 0 findings; the canary's 240 programs 0 failing |
+| generator, grammar 1, seeds 1-1,000 | 0 findings |
+| generator, beyond the nightly's 20,000 | grammar 1 seeds 70,001-74,000: 0; grammar 2 seeds 100,001-106,000: 0; **grammar 2 seeds 60,001-66,000: 3 failing seeds** (60538, 62956, 64293: section 5) |
+| generator, `SE_GENERATED_ALPHABET=specials` (stc/sts let in) | grammar 2 and 1 seeds 60,001-66,000 (3,000 of each): the same two failing seeds as the default alphabet's (60538, 62956), none of its own; grammar 1 seeds 70,001-73,000: 0 |
+| printed-C, seeds 1-3,000 (one each) | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, **0 findings** |
+| printed-C, seeds 950,001-956,000, two each | 12,072 functions, 10,300 compared, agrees 10,492, `narrow-c` 38, `skipped:array-local` 2, `void-return` 927, `void-return-lent` 613, 0 findings |
+| printed-C, hand | the classic 32-step unsigned division (`div0u ; mov #0,r1 ; (rotcl r0 ; div1 r5,r1) x 32 ; rotcl r0`, 68 words), a signed one (`div0s r5,r4` first), and 16 turns of two chained dividers: all agree with the run for 32 inputs, divisor 0 among them (the text is a 160-line expression) |
+| `ctest` on the six area 2 tests of my scratch build (Semantics, Decode, Decompiler, Generated, PrintedC, SlaFreshness) | 6 of 6 pass, 24 s. I did not run the whole ctest: the build is the decompiler targets only |
+
+### 2. Patch 0050 and the spec, attacked by mutation
+
+Seventy-seven mutants of `superh.sinc` (a scratch script: edit the text, `se-regen-sla`, rebuild the decode test, run it, restore the three files; 75 non-equivalent, two are equivalent by construction), each against the decode oracle.
+
+*The slot's PC, 17 mutants.* For every kind the value and the context: bt/s not taken (slot + 2 for + 4), bt/s T polarity, bf/s taken (+ 2), jmp (Rm + 4, Rm + 0), rts (PR + 4), braf (+ 2), rte (r15 - 4, no + 2), the alignment mask of a kind, `slot_kind` of bt/s, jsr and rte swapped for another, `slot_rm` of braf (the wrong field, 0). All killed, 607 to 4,602 of 2,600,000 cases differ. The decode oracle holds the spec.
+
+*The arithmetic and flags, 58 more.* div0s (T, Q and M swapped), div0u (T kept), div1 (T polarity, the carry compare signed, `m_eq_q` from the old Q), rotcl (T), rotcr (carry in), shar (logical), shal (T), addc and subc (either carry dropped), negc (either term dropped, T old), addv and subv (the conditions), the mac.w bounds, MACH bit 0, product sign and order, the mac.l bounds and the 48-bit constants, both operand orders for m == n, dmuls, dmulu, muls.w, mulu.w (signs), swap.b, xtrct, exts.b, exts.w, tas (T and the or), movt, dt, cmp/hs (signed), cmp/str (bytes 0 and 3), ldc, ldc.l and rte masks, the branch targets' signedness, trapa's pushed PC, rte's SR after its slot, jsr's PR after its slot, mov.l `@Rm+,Rn` with m == n, mov.l `Rm,@-Rn` stored value. All killed at 20,000 cases of each form **except** the four mac saturation bounds (the sum exactly on `0x7FFFFFFF`, `0xFFFFFFFF80000000`, `2^47 - 1`, `-2^47`) and one equivalent mutant (`product s>= 0` read as `s> 0`: product 0 never reaches the test). The second carry of addc was found by 30 cases of 2.6 million, negc's by 147, cmp/str's byte 3 by 131. That is **A2-46**: the spec is right (read against `MAC_W`, `MAC_L` and `DIV1` of `sh7095_ops.inc`), the oracle's uniform draw meets those states one time in 2^32. The widening (`RelateOperands`, `PlaceMacBoundary`, each on a stream of its own so every other case is what it was) kills them at the **default** 2,000 cases of each form: the 46 arithmetic mutants 11 to 2,141 cases differ (260,000), the four bounds 49 to 63 each; the current spec: 0 differ.
+
+*The new tests, mutation-checked.* A2-46: with the widening reverted the four bounds survive 2.6 million cases (the audit above, run before I wrote it), with it they are killed at 260,000. A2-48 and A2-47: each pin was turned round by a trial fix of the engine (below) and the rest of the suites stayed green; both trials were reverted.
+
+### 3. The slot, the three ways, and a word that is illegal there
+
+The three PC-relative reads in the slot of every kind are in the decode oracle's slot sweep (mova, mov.w, mov.l; 512 slots drawn from every non-branch form, a tenth of them PC-relative), taken and not taken, in cells at both alignments of the code and at address 0: 0 differ. What the oracle cannot see is what the engine prints for them. **`TestArea2Round7SlotValues`** evaluates the printed address against the run for bt/s and bf/s x mova, mov.w, mov.l x an even and an odd displacement, and for rts + mova: **A2-47**. mov.w (no alignment) agrees everywhere, even displacements agree, bf/s with a mova slot prints the mask at 0x06009002 and not at 0x06009004, bt/s the other way (a sweep of 48 cells; the mova ones decide). The cause is a stale non-zero mask (section 4), reproduced with the same arithmetic written as ordinary code.
+
+Words in a slot that are illegal on the hardware, 10 delayed branches x 15 words, decompiled: the ten delayed-branch words fail the request in every slot position (`Could not obtain cached delay slot instruction`, 100 of 150, the accepted A2-18), and `bt`, `bf`, `trapa`, `sleep` translate and print with no warning (40 of 150: the same acceptance, A2-18/A2-8), 0xFFFF reaches "flow reaches bytes that do not decode" (10). No crash, nothing new.
+
+### 4. What I found, and where it comes from
+
+- **A2-47 (P1).** `4415 8D03 C704 000B 0009 0009 000B 0009`: the text returns 0x0600901E where the code returns 0x0600901C. I printed the tree at `RuleAndMask::applyOp`: the AND's input is an INT_ADD whose output has `nz=fffffffc` and whose own inputs give `local=ffffffff`. `RuleCollectTerms` / `distributeIntMultAdd` changed the inputs of an existing op, the output kept the mask of the value it had (`(1 - t) * 0x6009008`), and the AND with `0xfffffffc` was removed as redundant. The trial: reset the output's mask in `Funcdata::opSetInput` when an input is replaced: the mask prints, the five pin CHECKs of the test fail as designed, nothing else in `Sh2DecompilerTests` does. Whether that is the right place is the fixer's; the generator cannot draw a PC-relative slot load, so the nightly could not have found it.
+- **A2-48 (P2).** `Sleigh::oneInstruction` leaves the parse tree's next address after the delay slot; the cached tree's commits are applied again with `inst_next` the instruction after the slot. `T(bsr) ; T(bsr) ; T(mova @(3,pc),r0)` gives the bra-style PC (the engine's p-code for the follower reads `slot_pc_valid = 1`). 215 of 240 follower cases differ after two translations in a row, 0 of 240 after one (`RunFollowers`; pinned `> 0`). The trial: `pos->setNaddr(pos->getAddr() + pos->getLength())` before `applyCommits()` makes it 0. I found no product reach (the emulator, which translates every executed instruction, can be poisoned by a tight delayed-branch loop whose exit then reads the ordinary PC from T; `ReturnCheck::Step` re-walks instructions); the oracle hole is the finding, and bra and bsr have had it since patch 0005.
+- **A2-51 (P3, oracle, closed).** The decode oracle itself fails at other seeds: `PrepMem` rewrote the jump register of jmp and jsr (and a slot's `PrepMem` or my relation any branch's) with an odd address; 8, 4 and 6 of 2 million cases of jsr, jmp and bsrf "could not run" at seed 555 on the base, one at 31337. Fixed (the register is kept; the failing lines name the slot, the address being translated and the registers).
+- **A2-49 (P3)**, **A2-50 (P3, oracle):** seed 62956 (section 5): a lent `void` for the value of a callee compared by a branch with empty arms, and the shrinker that keeps the fact the shrink removed.
+
+### 5. The seeds beyond the nightly, and the stc/sts fence
+
+Three of the 6,000 seeds 60,001-66,000 of the default grammar 2 fail; 6,000 of 100,001-106,000 and 4,000 of grammar 1 do not. None is a specials-alphabet class: the two that the specials window also hits are the default alphabet's own.
+
+| Seed | Class | Area | Replay (`SE_GENERATED_WORDS=`, with the shown `FUNCS`, `RETURNS`, `CLOBBERS`, `READS`) |
+|---|---|---|---|
+| 60538 | `n:kept-read:r14`: a function it calls was lent a signature that changes r14, and the text reads r14 as the value it had on entry | 3 | `2F86 2F96 2FA6 2FB6 2FD6 0D2A 6843 6953 6A63 6B73 61E3 2610 B010 0009 6483 6593 66A3 67B3 D304 4D2A 6DF6 6BF6 6AF6 69F6 68F6 432B 0009 0009 0600 903C 2FE6 7FF4 6EF3 62F3 720C E103 2216 4110 8BFC E200 6043 7E0C 6FE3 6EF6 000B 0009` with `FUNCS="0/0/0,0/0/36,3c/3c/5c" RETURNS="1,1,1" CLOBBERS="181000,101000,1000" READS="20100,4000,0"` (the generator's own shrink) |
+| 62956 | `n:return-dropped` | 2 (A2-49) | A2-49's 60 words |
+| 64293 | `n:cache-read-pointer-unsaid`: the read of 2 bytes at 0x06009170 (the cached partition 0x05F80074) through a pointer the output derives from a register address is not called a cache read | 5 | the generator's shrink: `2FD6 6013 6DF6 000B 0009 2F86 2F96 2FA6 2FE6 4F22 7FF0 6EF3 6843 6953 6A63 B02D 0009 6483 6593 66A3 E105 3616 8916 4608 C701 016E 412B 0009 0600 9050 0600 9050 0600 9054 0600 905C 0600 9058 0600 9058 A005 0009 A003 0009 A001 0009 D705 D106 7E10 6FE3 4F26 6EF6 6AF6 69F6 68F6 412B 0009 0009 25B0 0428 0600 907C 7FE8 E103 3616 8913 4608 C702 016E 412B 0009 0009 0600 90A0 0600 90A4 0600 90A8 0600 90AC A006 0009 A004 0009 A002 0009 8577 D702 E07D 7F18 000B 0009 05F8 0066` with `FUNCS="0/0/a,a/a/72,7c/7c/b8" TABLES="34:6:6:5c:50,50,54,5c,58,58;8a:6:4:ac:a0,a4,a8,ac" RETURNS="1,1,1" CLOBBERS="0,121000,101000" READS="20000,40000,800"` |
+
+I did not file rows for the two other areas' seeds (the coordinator numbers them); the fixers of areas 3 and 5 reproduce them with the lines above (the replay strings are the generator's own, run with `gen`'s environment as printed in its report).
+
+**The fence.** The fixer's question: the stc/sts fence (`gSpecialReads`) can come off. Over 9,000 grammar-2 and grammar-1 seeds beyond what the fixer ran, the specials alphabet found nothing of its own (A2-16 and A3-5 are fixed and their pins hold). The coordinator's one-line change (the default alphabet draws stc/sts) changes the programs of every seed the other fixers replay and the nightly's seeds, so it should come with a new baseline of the nightly.
+
+### 6. What the alphabet and the grammars still exclude, and what covers it by hand
+
+| Excluded from the generator | Covered by |
+|---|---|
+| trapa | A2-9 (`TestCallsAndTraps`, value-checked against the run with the VBR table and the handler); the decode oracle |
+| rte | A2-24, A2-36 (`TestArea2Round4`, `TestArea2Round5`); the decode oracle's 130-form slot sweep and now rte + follower |
+| sleep | the "sleep keeps everything" prototype fixture; not run by the decode oracle (a user op) |
+| stc/sts in grammars 1 and 2 (the default alphabet) | the register-only grammar has them; the specials windows above; A2-16 and A3-5 pins |
+| ldc.l, stc.l, lds.l, sts.l except pr | A2-35 fixtures (`stc.l sr,@-r4`); the decode oracle |
+| mac.l and mac.w as values (printed-C is register-only; grammar 1 has them for the access ledger) | `Sh2SemanticsTests` (random, S both ways, m == n), the decode oracle (now the bounds), and my hand reading of the printed text of four mac.w accumulations with S set and clear (the test's evaluator cannot parse the C comma expression `(uVar5 = 0x7fffffff, iVar4 < 0)`; the text saturates by the same test as the spec). Not machine-compared |
+| a PC-relative load or mova in a slot (policy comment of the grammar) | `TestDelaySlotPcRelative`, `TestArea2Round7SlotValues` (bt/s, bf/s, rts; jmp, jsr, braf, bsrf, rte by the decode oracle's p-code and the substring fixtures only), the decode slot sweep |
+| a branch in a slot | A2-18 (accepted); the 150-combination table above |
+| braf in the printed-C grammar | A2-38 |
+| misaligned word and longword accesses, odd jump targets | A2-8 (a), accepted; the generator classifies them, the decode oracle's cases avoid them (A2-51) |
+| code at the top of the address space, interrupts, the bus lock of tas.b | A2-8/A2-30, accepted and in the guide |
+
+### 7. Not reached
+
+- The corpora (`SE_GAME_LEND`): the images are not in this worktree.
+- Sanitizers (CI's job).
+- jmp, jsr, braf, bsrf and rte slot loads are checked to the hardware at the p-code (decode oracle, 0 differ) and by substring in the text, not by value: a callee-visible value needs a lent callee, and the value of a tail jump's slot is not in the caller's text. The mova and rts values are; the rest depend on A2-47's fix to be worth building.
+- The mac.w and mac.l text by value (above).
+- A3 and A5 seeds 60538 and 64293 beyond the replay lines.
