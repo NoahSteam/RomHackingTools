@@ -9059,3 +9059,34 @@ Grammar 2, default alphabet, on the fixed generator: seeds 60,001 to 66,000: one
 | `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 of 1,554 ok; every ledger count 0; 4 missing and said; lending 992 (1,227) to 1,021 (1,287) |
 
 No ledger count or lending figure moved against the figures at the base; the host and the engine are the same bytes as at `41180fe`, so no function's text changed and there is none to diff.
+
+## Coordinator: area 6 and area 5 done; integration of five branches (67ba498 to 572c29d)
+
+**Area 6 is done.** The round 6 fix (A6-43 to A6-46) and A6-47 landed in 67ba498 after two clean review rounds. A6-47 came from a macOS run of
+f1a3765 (arm64, Apple clang 21, libc++): the fault suite's allocation pins were recorded against libstdc++, so off libstdc++ they are now skipped
+with a reason and the sweeps and cancel jobs still run. The same Mac re-ran 67ba498: build with 0 warnings, ctest 98 of 98, fault suite 0 of 94
+with the skip line printed. CI is Linux-only, so a pinned defect's regression is caught on Linux alone.
+
+**Area 5 is done.** Rounds 8 and 9 were clean of P1 and P2. A5-82 (generator seeds 64293, 303290, 202350, 310654, 313937, 405136, filed by the
+area 2 round 7 and area 3 round 8 reviews) was triaged as a generator false positive and fixed in the oracle (c369e97). A5-81 is accepted: its
+shapes are pinned by fixtures, and the generator gaps would each need a new device model (the row gives the reason).
+
+**Area 2** round 7 was not clean (A2-47 P1, A2-48 P2); the fix (patches 0046, 0047) landed in 41180fe, and round 8 review is under way.
+**Area 3** round 8 was not clean (A3-49 to A3-51 P2); its fixer is running.
+
+Integration notes:
+- The area 3 round 8 reviewer, working from f1a3765, numbered its own A5-82 for the class that 8de07fe had already filed as A5-82. The two were
+  merged into one row in 460d64f, and the fixer's closed row replaced it in 572c29d. No id was reused for a different finding.
+- 8de07fe: the A5-82 row was written after the area 2 round 7 review merge was staged, so it landed in its own commit.
+- `SaturnExplorerLiveHaltRaceTests` failed under load (2 of 5 runs alone, load average 7 to 8): it required 100 halts out of 400 releases, a
+  scheduling assumption. Fixed on a separate branch (each release now waits for the re-halt) and merged in 0893c2d; 20 of 20 under load since.
+  The live tests share one fixed Unix socket path (`SE_LIVE_DEFAULT_SOCK_PATH`), not a TCP port, so two copies still collide.
+
+Matrices (RelWithDebInfo, gcc 13), every one on the merged head before its push:
+
+| Head | ctest | fault suite | generator 3,000 g2 / 1,000 g1 / printed-C / 20,000 | corpora 007 / 008 | vendor.py |
+|---|---|---|---|---|---|
+| 67ba498 (area 6 fix) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | 662 (923), 0 missing / 1,021 (1,287), 4 missing and said | no patch |
+| 1a87b1b (area 2 r7 review, tests only) | 92 of 92 + live 6 of 6 after 0893c2d | 0 of 94 | not needed | not needed | no patch |
+| 41180fe (area 2 r7 fix, 0046 and 0047) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | identical |
+| 572c29d (A5-82, oracle only) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | no patch |
