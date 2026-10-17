@@ -52,3 +52,6 @@ __pycache__/
 # Agent worktrees (review program branches are checked out here while agents run)
 .claude/worktrees/
 SaturnExplorer/Testing/
+
+# CMake build output (repo-root builds)
+/build/
