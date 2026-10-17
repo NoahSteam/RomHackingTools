@@ -7,6 +7,8 @@
 #     unaccepted UBSan error fails the checker, and one that is clean (with the two accepted upstream UBSan lines
 #     in its output) passes it;
 #   * a binary the runner never ran fails the checker (the shape of A12-11: a target that was in no list);
+#   * each of the model test and the two live tests (SaturnExplorerLiveRestoreSignalTests, which prints its own pass
+#     line, and SaturnExplorerLiveDecompilerCaptureTests) is on the list: left out, the checker fails;
 #   * an empty log with exit status 0, or a log without the binary's pass line, fails it (A6-20), for the fault matrix
 #     and for an ordinary binary.
 #
@@ -22,6 +24,7 @@ NAMES=(
   SaturnExplorerSh2DecompilerEngineTests SaturnExplorerSh2SemanticsTests SaturnExplorerSh2DecodeTests
   SaturnExplorerSh2GeneratedTests SaturnExplorerSh2DecompilerTests SaturnExplorerSh2DecompilerFixtureTests
   SaturnExplorerDecompilerPanelTests SaturnExplorerDecompilerRunnerTests SaturnExplorerSlaFreshnessTests
+  SaturnExplorerDecompilerModelTests SaturnExplorerLiveRestoreSignalTests SaturnExplorerLiveDecompilerCaptureTests
 )
 
 # stub <build> <name> <exit code> [output line]
@@ -33,16 +36,20 @@ stub() {
   chmod +x "$build/bin/$name"
 }
 
-# one <label> <fault stub exit> <fault stub output> <omit the fault stub: 0|1> <expected checker result: pass|fail> [<output of SaturnExplorerSh2DecompilerTests>]
+# one <label> <fault stub exit> <fault stub output> <omit the fault stub: 0|1> <expected checker result: pass|fail> [<output of SaturnExplorerSh2DecompilerTests> [<another binary to leave out>]]
 # A stub prints its binary's pass line unless told otherwise; the fault stub's output given here comes after it, and "-"
 # means no pass line at all.
 failures=0
 one() {
-  local label="$1" frc="$2" fout="$3" omit="$4" want="$5" other="${6-all passed}"
+  local label="$1" frc="$2" fout="$3" omit="$4" want="$5" other="${6-all passed}" leave="${7-}"
   local build="$tmp/$label/build" logs="$tmp/$label/logs"
   mkdir -p "$build" "$logs"
   for n in "${NAMES[@]}"; do
-    if [ "$n" = SaturnExplorerSh2DecompilerTests ]; then stub "$build" "$n" 0 "$other"; else stub "$build" "$n" 0 "all passed"; fi
+    [ "$n" = "$leave" ] && continue
+    # Each binary prints its own pass line: dts::Finish's, except LiveRestoreSignalTests' (check-sanitizer-logs.sh).
+    if [ "$n" = SaturnExplorerSh2DecompilerTests ]; then stub "$build" "$n" 0 "$other"
+    elif [ "$n" = SaturnExplorerLiveRestoreSignalTests ]; then stub "$build" "$n" 0 "LiveRestoreSignalTests passed"
+    else stub "$build" "$n" 0 "all passed"; fi
   done
   stub "$build" se-sleighc 0
   [ "$omit" = 1 ] || stub "$build" SaturnExplorerDecompilerFaultTests "$frc" "$fout"
@@ -78,6 +85,10 @@ one fault-suite-omitted  0  ""                                                  
 one fault-empty-log      0  ""                                                                           0 fail
 one other-empty-log      0  "$FM"                                                                        0 fail ""
 one other-no-pass-line   0  "$FM"                                                                        0 fail "ran 3 tests"
+# The round 4 tests are on the list too: one of them never run is a failure, as the fault matrix's was (A12-11).
+one model-omitted        0  "$FM"                                                                        0 fail "all passed" SaturnExplorerDecompilerModelTests
+one live-restore-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveRestoreSignalTests
+one live-capture-omitted 0  "$FM"                                                                        0 fail "all passed" SaturnExplorerLiveDecompilerCaptureTests
 
 if [ "$failures" -ne 0 ]; then
   echo "Sanitizer harness self-test FAILED ($failures wrong outcome(s))."

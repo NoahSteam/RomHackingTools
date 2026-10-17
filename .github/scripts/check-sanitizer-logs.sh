@@ -46,13 +46,17 @@ EXPECTED=(
   SaturnExplorerDecompilerPanelTests
   SaturnExplorerDecompilerRunnerTests
   SaturnExplorerDecompilerFaultTests
+  SaturnExplorerDecompilerModelTests
+  SaturnExplorerLiveRestoreSignalTests
+  SaturnExplorerLiveDecompilerCaptureTests
 )
 
 # The line each binary prints when, and only when, all of its tests passed: dts::Finish's "all passed" (and the older
-# binaries' own), the fault matrix's summary.
+# binaries' own), the fault matrix's summary, LiveRestoreSignalTests' own line.
 pass_re() {
   case "$1" in
     SaturnExplorerDecompilerFaultTests) echo '^fault matrix: 0 of [0-9]+ job\(s\) failed' ;;
+    SaturnExplorerLiveRestoreSignalTests) echo '^LiveRestoreSignalTests passed$' ;;
     *) echo '^all passed$' ;;
   esac
 }

@@ -80,6 +80,17 @@ run SaturnExplorerDecompilerPanelTests \
   "$build/bin/SaturnExplorerDecompilerPanelTests" "$(scratch decompiler_panel_test)"
 run SaturnExplorerDecompilerRunnerTests \
   "$build/bin/SaturnExplorerDecompilerRunnerTests" "$(scratch decompiler_DecompilerRunner_test)"
+# Area 1's oracle: random sequences of edits, scrubs, reconnects and the rest against the real panel, runner and
+# engine (its default seeds and pinned sequences), under the sanitizers like the panel and runner tests.
+run SaturnExplorerDecompilerModelTests \
+  "$build/bin/SaturnExplorerDecompilerModelTests" "$(scratch decompiler_model_test)"
+# The two live tests drive the real exporter against the real driver over the default socket (and TCP port 6845), so they
+# share it with each other and with a running emulator: keep them in sequence here, never in parallel (ctest holds the
+# live_tap_socket lock for the same reason). LiveRestoreSignalTests takes no argument.
+run SaturnExplorerLiveRestoreSignalTests \
+  "$build/bin/SaturnExplorerLiveRestoreSignalTests"
+run SaturnExplorerLiveDecompilerCaptureTests \
+  "$build/bin/SaturnExplorerLiveDecompilerCaptureTests" "$(scratch live_decompiler_capture_test)"
 # The allocation-failure / cancel matrix (REVIEW_LEDGER.md, area 6): its default subset, which is deterministic. Every
 # cell runs in a child process of this binary, so a crash, a hang, an ASan or UBSan report or a leak is a failed cell
 # and the binary exits non-zero; the matrix does its own leak check per cell (LeakSanitizer's recoverable check, with
