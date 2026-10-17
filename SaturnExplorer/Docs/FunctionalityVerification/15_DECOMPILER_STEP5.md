@@ -8987,3 +8987,75 @@ The suite passes at `f1a3765` (inside both corpus runs: 94 s and 177 s, "all pas
 - **A3-33, A3-35, A3-41** are accepted and were not re-argued; A3-53 is their oracle row.
 
 **Done criteria.** Area 3 has three P2 rows this round (A3-49, A3-50, A3-51) and three P3 rows (A3-52, A3-53, A3-54); it needs a fix round and then two consecutive clean review rounds. The scratch change in "What the attack found" (1) is the measured size of the fix of A3-49 and A3-50 (two lines of `Return`, plus giving `WithholdReason`'s ReturnCheck the literals if the fixer prefers the more exact reading); A3-51 asks the probe about the words at the call's r15.
+
+## Area 5: A5-82
+
+Fixer, branch `review/5-a82-fix` from `41180fe`. One row, **A5-82**, provisional P2 when the area 2 round 7 review filed it (seed 64293), merged by the coordinator with the area 3 round 8 review's filing of the same class (six seeds, P3, "oracle"). **Fixed** (`c369e97`), **severity P3**. **Triage verdict: (b), a generator false positive.** No engine, host or spec code changed (no patch 0049, no `vendor.py` run); the whole fix is in `FrontEnd/tests/Sh2GeneratedTests.cpp`.
+
+### Triage
+
+Built RelWithDebInfo under the scratch directory, `SaturnExplorerSh2GeneratedTests` on the base for each seed (`SE_GENERATED_GRAMMAR=2 SE_GENERATED_FIRST=<seed> SE_GENERATED_SEEDS=1`; 202350 with `SE_GENERATED_ALPHABET=specials`), the shrunk module read in full, with `SE_GENERATED_TOKENS` for the tokens the oracle looks at (a new `=2` form prints each token with its instruction). All six reproduce on the base, and the pins fail on it (mutation M0 below). The question for each: does the text omit a caution it should give, or does the oracle take a register for the pointer that is not the access's pointer?
+
+| Seed | Rule | What the text says | What the oracle took for the pointer | Mechanism |
+|---|---|---|---|---|
+| 64293 | 3b | `puVar6 = extraout_r7;` on one path, `puVar6 = &SCSP_SCILV2;` on the other, then `uVar3 = puVar6[7];` and, below, `puVar6 = &VDP2_MPGHRB;` | the last assignment: `&VDP2_MPGHRB` is the literal 0x05F80066 the callee leaves in r7, 14 bytes from the register read (0x05F80074), so no distance test tells it from the pointer | (3) an assignment made after the read on every path, outside every loop |
+| 303290 | 3c | `*(xunknown4 *)(param_3 + 6) = 4; if (param_2 == 0) { param_3 = &VDP2_WCTLA; }`, after `Could not recover jumptable ... Too many branches`, `Treating indirect jump as call` | `&VDP2_WCTLA`, below the write; the run came through a table case (`mov.l lit,r6`, 0x25B00404) the text does not hold | (2) the same, and the cases' code is not in the text |
+| 202350 | 3b | `xVar1 = *(xunknown4 *)param_4; ... param_4 = &VDP2_WCTLB;` below, the same unrecovered table | `&VDP2_WCTLB`, below the read (the run read 0x1DFE0064, the cached SCU range) | (2) |
+| 310654 | 3c | `func_0x06009034(param_1,param_2); *extraout_r7 = 0xffffff9d;` | the number 0xffffff9d, the value stored: an on-chip register's address (the oracle reads any number the bus decodes to a register) | (1) a value taken for an address; the pointer is the callee's output (A5-58) |
+| 405136 | 3c | `*(xunknown4 *)(extraout_r6 + 8) = 0xffffffe6;` | 0xffffffe6, the value stored (BCR2's range) | (1) |
+| 313937 | 3c | `return CONCAT44((int4)*param_2,0xffffffa5);` after an unrecovered table | 0xffffffa5, the second operand of the same statement; the token carrying it belongs to the load's instruction, so token ownership does not separate it | (1) |
+
+The area 3 round 8 review's two situations are mechanism (2), and, for 310654 and 405136, a misreading of what the oracle took: the callee's output is why the text cannot name the pointer, but the number that made the check fire is the stored value. 64293 is neither: it needed the order of the text. In all six the output states what it can. A reader of 64293 is told that `puVar6` is `&SCSP_SCILV2` on one path and a callee's output on the other; the callee-returned pointer is A5-58 (accepted), and the read through it names no register it could be shown to read. So not a missing caution, not a P2: P3, an oracle row, as the area 3 review filed it.
+
+### The fix
+
+`PointerPrintsFromHardware` (rules 3b and 3c) derives the pointer of an access from the printed text: the statement holding the instruction's tokens, then the assignments of the variables in it. Two things were missing, and a third was too narrow.
+
+- **An assignment must be able to reach the read.** `BackEdgeSpans` finds the spans in which control goes back (a `do { } while`, a `while` or `for` block, a `goto` to a label above it). An assignment below the read counts only if one holds both lines. (64293, 303290, 202350.)
+- **The register named must be where the run went.** `NamesHardwareBase` takes a register symbol or a number as the pointer only within `kPointerReach` = 0x40 bytes (the longest displacement of one instruction, `mov.l @(disp,Rm)`) of the canonical address the emulator reached. A pointer is a register address plus the displacement, or an add of a small immediate; a register further away is a value or another path's pointer, and the oracle cannot tell by the text. (310654, 405136, 313937; also 303290, 202350.)
+- **Hardware no register is named at.** The old test took a number as a base only if a register covers it. Grammar 1 seeds 69 and 179 (found by comparing the checks against the base: 400 grammar-1 seeds, `cache.read.pointer.said` 22 to 20 and two reads gone from the rule) merge `&REG` with `0x5fe00dc` or `0x35d000d8`, addresses of the SCU and VDP1 ranges no register is named at; the engine says "a read of hardware through the cached partition" for them. Such a number now counts as the base when it is within reach of the address reached. With it grammar 2's 3,000 seeds check six more cached pointer reads than the base (`cache.read.pointer.said` 43 to 49, `cache.read.anonymous` 8 to 2), `pointer.effect.said` 2 to 2, and 7 derivations set aside (`pointer.effect.unrelated`), none of which had an effect wanted.
+
+New counts: `cache.read.pointer.unrelated` (now also: the register named is not the one reached), `pointer.effect.unrelated`, `pointer.effect.derived` (the 3c derivation holds, whether or not an effect is wanted). The header comment of rule 3b says what the derivation must now be.
+
+**Known limit.** A value printed as a number that lies within 60 bytes of the register the access reached is still taken for the pointer; 313937's 0xffffffa5 is 87 bytes from 0xFFFFFFFC and is excused by the distance, not by being a value. A parse of the access's address operand would settle it; the text of a statement with the instruction's tokens spread over several lines of the tree does not give one.
+
+### Pins (`TestA582Pins`, run in every run of the generator and so in ctest)
+
+- the six shrunk modules (no finding; the derivation counted unrelated);
+- the five grammar 2 seeds 64293, 303290, 310654, 313937 and 405136 as programs (64293's unshrunk text is the only one that holds the `&VDP2_MPGHRB` below the read: the shrunk module passes on distance alone);
+- grammar 1 seeds 69 and 179 as controls (the register merged with the unmapped address stays the pointer: `cache.read.pointer.unrelated` 0 with `cache.read.pointer.said` above 0; `pointer.effect.derived` above 0);
+- nine derivations on a hand-made output (`FakeOutput`): the assignment above the read; below it; below it in a `do-while`; below it before a backward `goto`; below it in a loop that does not hold the read; a register 60 and 68 bytes from the one reached; a stored value that is an on-chip address; hardware no register is named at.
+
+### Mutation table
+
+Each mutation made to `Sh2GeneratedTests.cpp` alone, the generator rebuilt, `SE_GENERATED_SEEDS=1` (the pins run first), then restored (`cmp` against the committed file).
+
+| Mutation | Failed checks | Pins that fail |
+|---|---|---|
+| M0: both fixes reverted (reach unbounded, every assignment reaches) | 30 | all six shrunk modules, the five seeds, the four derivations that want "not" |
+| M1: `kPointerReach` unbounded | 20 | shrunk 64293, 310654, 313937, 405136; seeds 64293, 310654, 313937, 405136; 68 bytes; the stored value |
+| M2: every assignment reaches the read | 6 | seed 64293 as a program; the assignment below the read in no loop and in a loop not holding it |
+| M3: `BackEdgeSpans` finds nothing | 4 | the `do-while` and the backward `goto` derivations |
+| M4: a number no register is named at never counts | 4 | the unmapped-hardware derivation; the grammar 1 seeds 69 and 179 controls |
+| M5: `pointer.effect.derived` not counted | 1 | seed 179 |
+
+M1 does not fail the shrunk 303290 and 202350 (the order alone excuses them), M2 does not fail the six shrunk modules (the distance excuses them, 64293's shrunk text has no assignment below), and each seed pin is only as strong as the mechanism it needs: hence the pairs.
+
+### Siblings
+
+Grammar 2, default alphabet, on the fixed generator: seeds 60,001 to 66,000: one failing seed, 60538 (area 3's, `kept-read:r14`, left alone); seeds 66,001 to 80,000 (14,000): four failing seeds, none a pointer-rule class: 66914 and 77197 `return-dropped:partial` (a lent `void` for a function that ends with r0 as r7), 69133 and 69493 `kept-read:gbr` (69133 also `into-function`, a shrink artifact of two functions at one address). No new A5 row (these are area 2/3's, for the coordinator). The six seeds of this row pass.
+
+### Matrix (RelWithDebInfo, `-j3`, own build)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 passed, 105 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 93.3 s, no MOVED pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed (3,072 functions, 2,616 compared) |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| `hwram007.bin`, `SE_GAME_LEND=1` | 839 of 839 ok; every ledger count 0; 0 missing and said; lending 637 (866) to 662 (923) |
+| `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 of 1,554 ok; every ledger count 0; 4 missing and said; lending 992 (1,227) to 1,021 (1,287) |
+
+No ledger count or lending figure moved against the figures at the base; the host and the engine are the same bytes as at `41180fe`, so no function's text changed and there is none to diff.
