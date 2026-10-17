@@ -7652,3 +7652,180 @@ Nested ifs to 250 levels (each with a store, so they do not merge) and a left-le
 - `diamonds` every k; the largest game function (hwram images are not in the repository).
 - A cancel during the first translator build or the bundle's extraction with a slow disk.
 - The merge of patch 0044 into this branch: this branch is on 54219f8, so its pins are the old ones.
+
+## Area 3, round 7 review
+
+Reviewer, branch `review/3-round7-review`, on master `d7da94a`. Findings only, no fixes. New ledger rows: A3-36, A3-38, A3-39 (P2), A3-37, A3-40, A3-41, A3-42 (P3).
+No area 2 or area 4 row; A2-31 (open) was reproduced on the way and is counted below, not duplicated.
+
+The instruments were scratch, not committed:
+- A driver made of the suite's own file (`#include` of `Sh2DecompilerTests.cpp` with `main` renamed) and a `main` that reads fixtures from a text file: words at
+  addresses, the callees to decompile and lend first, in order, the inputs. It prints each result with its prototype and effects, runs the code on the
+  emulator and evaluates the text with `MayReturn` as `PseudoAgreesWithRun` does. Round 6's driver, plus one oracle: after the run it compares **every
+  register the lent effects call preserved** with its entry value (`EFFECT-VIOLATION`).
+- A 200-line SH-2 assembler (labels, literal pools) for the fixtures. Every fixture in the rows was assembled this way and replayed through the
+  suite's `CallFixture` words and, where the generator can express it, through `SE_GENERATED_WORDS`/`FUNCS`/`RETURNS`.
+- For the probe findings, a scratch copy of `Sh2Decompiler.cpp` with a six-line change, linked into a second driver and into the suite's test
+  binary for the corpus: a measurement of what the fix would touch, not a fix.
+- RelWithDebInfo with the main build's options; the machine was shared (load 5 to 11).
+
+### Round 6, verified
+
+The suite passes at `d7da94a` (both corpus runs below run it whole: 57.5 s and 158.7 s, "all passed"). The fixtures of A3-18 to A3-28 print what the record
+says. These held under variants the round did not pin:
+- **A3-27, tail calls.** All of these are right: `jmp @r1` with `mov r4,r0` in the slot to a keeper callee (withheld, r0 carried); `mov r5,r0` in the slot
+  (withheld); F tail-calls G (keeper, lent) and C sets r0 = 5 before `bsr F` and returns r0 (F lent void with r0 kept, C withheld "across a call that
+  keeps r0"); a jump-table tail call to two functions that return 7 and 9 (followed as code, lent, agrees with the run); `jmp` after the frame is popped
+  with `lds.l @r15+,pr` (lent void); a callee that pops (`rts ; add #4,r15`) under a caller that pushed (lent). One over-withhold: `jmp @r0` with the
+  target in r0 is withheld "across a call that keeps r0" (T4b), because the tail call does not set `targetIsR0`; compiled code uses r1-r3, no corpus
+  function has it, and a withheld signature breaks no oracle.
+- **A3-21, the callee's frame.** The hand-back `mov.l r5,@r15` (constant, r5 not held), through r14 as the frame pointer (`mov.l r5,@(4,r14)`, S2c) and at
+  `@(4,r15)` (S2e) are withheld. A store of a held parameter's own value is lent (A3-35, accepted). A callee that stores r4 + r5 is not (A3-40); a store
+  through a computed address is not (A3-39).
+- **A3-22 and A3-24, frame addresses for lent callees.** The exact address of a local, the same plus an index, minus one and walked down, all passed in r4
+  to a `bsr` callee, print the local read (J0, K0, a3_22 controls). A frame address masked with `and #-4`, or xor'd twice, folds to the exact one and is
+  right (M1 to M3). An address held in a struct on the frame (r4 = &S, S holds &L, the callee loads and stores through it, S3d), an address stored in global
+  memory and loaded by a callee with no arguments (S3e), and a byte store to the exact local (S3f) are not folded. The exact address of the saved r14 with a
+  longword store clobbers r14 (S3a0, r14 not claimed preserved). The exception fails for an address inside the word (A3-42) and for an address handed
+  through `jsr @rN` (A3-36).
+- **A3-19, A3-20, A3-23, A3-26, A3-28, A3-32.** The suite's fixtures and controls pass. A3-19 and A3-18 each have a hole the fixtures do not cover
+  (A3-41, A3-38). A3-28's note is printed for the shape without an earlier call (K3) and lost with one (A3-37).
+- **The corpus lending counts** are the round 6 numbers: 660 lent (921 parameters) for image 007 and 1,018 (1,280) for 008, every ledger count 0.
+
+### What the attack found
+
+1. **A3-19's read qualifier and A3-20's held parameter (brief item 1).** The read qualifier is by any op with r0 as an input: `cmp/eq #7,r0`, `extu.b r0,r1`,
+   `mov.b r0,@r4`, and `mov.l r0,@-r15 ; mov.l @r15+,r0` before the keeper all make the result "used", and the caller returning 7 is lent `void`
+   (A3-41, four fixtures; the generator rejects each with `return-dropped`). Stashing the result and reloading it after the keeper is right (R1d), and a
+   read on one path only is carried (R1f, withheld). A3-20's held test is by the signature's parameter count (`r4 .. r(4 + n - 1)`). Five variants of the join
+   are withheld, each right: the value from r6 with the test on r5, the value through a stack word, through a keeper call, computed (`r4 + 1`), and r4 as both
+   test and value (the signature drops it, `if (a) return a;`). No variant lent a join of a parameter the signature drops.
+2. **A3-21 (item 2)** holds for the exact store of a register that is no parameter. It does not hold for a computed value from held parameters (A3-40), a store
+   at `r15 + index` (A3-39 a), or a store made by a lent callee given `r15 + 4` (A3-39 b). The frame pointer and `@(4,r15)` forms are withheld, and a computed store of held parameters under a caller that pushed PR is lent in the callee and withholds the caller
+   (Q6, "a return not to its caller": the run does return to a corrupted PR, so that is right).
+3. **A3-22 and A3-24 (item 3).** Two holes, A3-36 (the probe, for `jsr @rN` through a literal, and after any earlier unresolved call) and A3-42 (the exact
+   address is compared with the slot's start). The width of the callee's store matters only there; a store of another width to the exact address is right.
+4. **A3-27 (item 4)** holds (above). A tail call through a jump table is followed as code.
+5. **A3-23 and A3-28 (item 5).** No path was found where the engine folds a local across a call that got its address through r2 only while the callee is
+   lent: a lent callee has been through "it reads r2 on entry", and the suppression of the note is by the same lent set the probe uses. The paths that
+   do fold with no note are the probe's (A3-36, A3-37): an earlier unresolved or unlent call has made r15 and r14 unknown, so the r2 and the r4 frame addresses
+   after it are not seen. Read, not attacked: the evaluator forgets a name after `&` and the stack locals of a text with the note, reads arrays as memory, and takes a stack
+   local nothing assigned for the word the run started with; `StackLocalOffset` accepts the name forms the corpus prints (`axStack_18`, `pxStack_8`,
+   `iStack00000000`).
+6. **A3-38** came from reading `Value::operator==` where A3-18 relies on it: two loads are equal.
+7. **A2-31 is the dominant wrong lent signature in the corpus** (below). It is not new; round 6's A3-24 lending put 19 and 2 more functions of it in the
+   lent set (the intersection of the functions that pass a local's address and the lent-void tails).
+
+### Corpus (`SE_GAME_LEND=1`)
+
+- **Counts.** 007: 1,732 functions, 660 lent (921 parameters), 565 keep some of r4-r7, "a return not to its caller" 59, "holds a value in r0 across a call"
+  14. 008: 2,997 functions, 1,018 lent (1,280), 847 keep some, "a return not to its caller" 120, "holds a value in r0" 30. Both suites "all passed"; no
+  `CHECK failed`. The lend list (`SE_GAME_OUT`) gave the texts below.
+- **The sample.** The functions round 6 newly lent are the ones that pass the address of a local to a lent callee that stores through it (A3-24). The old build
+  was not rebuilt, so the class stands for the list: 48 of 007's lent functions and 12 of 008's have `&...Stack` in the text. Sixteen of them were read against
+  their disassembly (parameters read before written, r0 on every path, the local read after the call):
+
+  | Image | Address | Lent signature | Verdict |
+  |---|---|---|---|
+  | 007 | `0601EE3E` | `bool f(void)` | right (a mid-prologue entry two bytes after `mov.l r14,@-r15`; it pops the caller's r14, lent with that extra pop) |
+  | 007 | `0602F8C8` | `int4 f(int4)` | right (r4 only; r5, r6 set; two out-locals read after the calls) |
+  | 007 | `060336E6` | `void f(uint4)` | text `...; func_0x06032c9c(&uStack_18); return;`; the callee returns `uint4` and r0 is the code's: A2-31 |
+  | 007 | `0603337A` | `void f(uint4,uint4)` | the same: last call `060332A0` returns `int4` (A2-31); a mid-prologue entry |
+  | 007 | `06033718` | `void f(4 params)` | the same: last call `06032C9C` returns `uint4` (A2-31); the four params are r4-r7 stored to the frame |
+  | 007 | `060329CC` | `xunknown8 f(7 params)` | right: r4-r7 and the two stack words; the one corpus function that spills r7 into the caller's home area (A3-21's control) |
+  | 007 | `06031E9C` | `xunknown8 f(4 params)` | right (two 2-word structs by value in r4-r7; three calls; the 8-byte return of `06031A60`) |
+  | 007 | `060322D4` | `xunknown8 f(4 params)` | right (the same shape) |
+  | 007 | `0603274E` | `int4 f(4 params)` | right (every path sets r0: -1 or the callee's) |
+  | 007 | `06032874` | `xunknown8 f(uint4)` | right (r4 only; `r0:r1` from the literal on one path, the callee's pair on the other) |
+  | 007 | `0601AE3C` | `uint4 f(void)` | right (no parameters; r0 is the first or the second call's result on every path) |
+  | 008 | `0605E31A` | `bool f(void)` | right (twin of `0601EE3E`) |
+  | 008 | `0606F4E0` | `int4 f(int4)` | right (twin of `0602F8C8`) |
+  | 008 | `0606E950` | `void f(4 params)` | the last call `06009CB0` returns `xunknown4`: A2-31 |
+  | 008 | `06059A48` | `uint4 f(void)` | right (twin of `0601AE3C`) |
+  | 008 | `0605A72C` | `xunknown4 f(void)` | right (r0 = 0 or 2 on every path, no register argument) |
+
+  No wrong lent signature outside A2-31 among the sixteen: no parameter dropped, no return claimed that a path does not write, and the locals the callees write
+  are read, not folded.
+- **A2-31 on the images.** With lending, 61 (007) and 50 (008) lent `void` functions end in a call to a lent callee whose own text returns a value, every one
+  with a non-nop rts slot (`mov.l @r15+,r14`); the same code with the pop before `rts` prints `return func(...);` (V1 to V6 reproduce the pair in
+  seven words). 19 and 2 of them are functions A3-24 made lent. They are lent wrong if the source was `return g(...);` and right if it was `g(...);` with a
+  value ignored; the engine's choice is made by the slot, which is A2-31's defect. A3-24's gain therefore widened A2-31's lent exposure by that many;
+  fixing A2-31 (withholding, as A3-5 does for a dropped r0) shrinks both.
+- **The probe's blindness on the images (A3-36, A3-37).** With the scratch patch the texts of 24 (007) and 48 (008) functions change: 6 and 17 gain only the
+  note ("a frame address is in r2 here") at calls after an earlier call, 18 and 31 change an array local to a split one or add an alias (for example
+  `xStack_10 = 0xff` becomes `axStack_10 [4]`), and one lent function each (`0601EE78`, `0605E354`) splits `auStack_58 [4]` into `[3]` and a word. No value
+  in a lent text changes; the lent signatures and the counts are the same (660/921, 1,018/1,280). So no game function is known wrong from it, and the class
+  is real in the code a compiler writes: the text of about 1 function in 60 to 70 changes.
+
+### Generator
+
+- Grammar 2, 3,000 seeds from 1: 0 failing, 0 findings (5,941 functions, 4,326 lent prototypes, 3,100 frames, 854 with a frame pointer, 624 frame walks, 1,562
+  `bsr` and 1,003 `jsr`, 1,999 slot pops, 84 s). Grammar 1, 1,000 seeds: 0 failing, 0 findings (20 s). Grammar 2, 8,000 seeds from 500,001 (beyond the nightly's
+  range): 0 failing.
+- The generator replays the fixtures where it can: A3-41 (R1a, R1b, R1c, R1e) and A3-38 (P1) `return-dropped`; A3-42 (S3a, S3b) `callee-saved` and (S3g)
+  `no-return`; A2-31 (V2) `return-dropped`. It is blind to A3-36, A3-37, A3-39 and A3-40 (0 findings): none passes a frame address or reads a word the callee
+  wrote.
+- **A3-34, the least instrument that would see them (not built).** A "canary" item for grammar 2: in a function with a frame, store a distinct constant C (a
+  16-bit value chosen so it occurs nowhere else in the text) in a local word, call a fixed writer callee (`mov #K,r1 ; rts ; mov.l r1,@r4`, K different) with r4 =
+  the local's address built as `mov r15,r4`, `mov r14,r4 ; add #k,r4`, plus `add Rn,r4` or `sub Rn,r4` for a register the harness sets so the index is 0 or
+  reaches the lower local, optionally after 0 to 2 other calls (`bsr` or `jsr @rN` through a literal) and with the writer lent or not; read the local back as the
+  result (`mov.l @(k,r15),r0`, intent "returns"). The emulator gives K or C. The check is on the printed text only: **no `return` line contains C, in decimal or
+  hex**, and the function's prototype, when lent, returns. That needs neither `PseudoEval` nor a compiler (about 40 lines in the generator beside
+  `return-dropped`); the same item with the writer storing through `@r15` and `@(r0,r15)` instead of r4 covers A3-39 a. A3-39 b and A3-40 need two item shapes
+  (a nested call, a computed store). With it A3-36, A3-37, A3-39 and A3-40 fail on `d7da94a` and the round 6 fixtures (A3-22, A3-26) are found by seed.
+
+### Runs
+
+- `Sh2DecompilerTests` passes (inside both corpus runs). Both corpus images, `SE_GAME_LEND=1`: counts above, every ledger count 0.
+- Generator as above. The sanitizers were not run: nothing was changed in the engine.
+- The scratch patch of A3-36: the whole suite passes with it on both images (88 s and 150 s, "all passed": the round 6 fixtures, the counts 660/921 and
+  1,018/1,280, every ledger count 0). It is a measurement, not the fix: it keeps the model's registers across any unresolved call in the probe only.
+
+### Findings
+
+| Row | Severity | Finding |
+|---|---|---|
+| A3-36 | P2 | The frame-escape probe cannot see a `jsr @rN` through a literal or what follows an unresolved call (r15 and r14 become unknown): a frame address plus or minus an index in r4 to a lent callee is folded (J1, J2, K1); the run gives 7 where the text returns 5. |
+| A3-37 | P3 | The same probe, for withheld callers: A3-4's r2 escape is lost after an earlier call (K2, K4); a frame address plus an index in r4 to an unlent callee is folded (U1, U2). |
+| A3-38 | P2 | `jsr @r0 ; mov.l @r5,r0` (a load in the slot) compares equal to the call target (two loads are equal Values): lent `void`, the code returns `*r5`. |
+| A3-39 | P2 | A3-21's hand-back is lent when the store is at `r15 + index` (S2b, S2b2) or made by a lent callee given the callee's own r15-based address (N1); the caller's read is folded. |
+| A3-40 | P3 | A3-21's exception for held parameters is by origin: a callee storing `r4 + r5` (both held) in its caller's word is lent (S2a); the caller returns the stale 5. |
+| A3-41 | P3 | A3-19's read qualifier covers a compare, a byte read and a store of the result (R1a, R1b, R1c, R1e): lent `void`, the code returns the result. The pinned copy is one of them. |
+| A3-42 | P3 | A3-24's exact-address exception is by slot start: the address of a saved register's word plus 1 to 3 and a byte or halfword store leaves the slot spared; r14 (S3a, S3b) or PR (S3g) is claimed kept and is not. |
+
+### Not covered
+
+- **The 8-byte return and `dmulu`** were not re-attacked (round 6 found them right); a tail call that returns r0:r1 is withheld by A3-29's reason.
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the sanitizers** are as in round 6.
+- **The newly lent set** was identified by class; the old build was not rebuilt, so the count of 62 and 40 was not reproduced by difference. The sample is 16 of
+  about 100 and by hand; the corpus has no dynamic oracle for signatures (the generator's perturbation check runs on generated code only; running it on the
+  image's functions needs the image as the emulator's memory and the callees included, which the harness does not do).
+- **`PseudoEval`** was read for its name tests and run against the fixtures; its `do` loop and switch gaps are as in round 6. The note makes every stack local
+  unknown after a call in the whole function, so a text with the note is weakly checked (A3-28's trade).
+- **Probe limits.** The probe's `kMaxSteps` exit returns a reason that `WithholdReason`'s probe ignores; a function that exhausts it declares nothing for the calls
+  it did not reach. No corpus function was seen to; not probed.
+
+### Re-checked against the merged head (`6817075`: area 2's round 5 fix, patches 0044 and 0045)
+
+The review was done on `d7da94a` as briefed. After the coordinator's note every fixture was rerun on a scratch build of the main checkout's head (read only), with
+the same driver and the same inputs, and the corpora again.
+- **Reproduce unchanged on the merged head (lent, the oracle rejects, the effect check fires):** A3-36 (J1, J2, K1), A3-37 (K2, K4, U1, U2), A3-38 (P1, P3),
+  A3-39 (S2b, S2b2, N1), A3-41 (R1a, R1b, R1c, R1e; R1d is right and R1f is withheld, as before), A3-42 (S3a and S3b `EFFECT-VIOLATION:r14`, S3g does not return).
+  The controls (J0, K0, K3, S3a0, S2a0, S3d to S3f, M1 to M3, Q1 to Q5, the T4 and T5 tail calls) print what they did.
+- **A3-40 needed a new fixture on the merged head.** S2a (`mov r4,r0 ; add r5,r0 ; mov.l r0,@r15 ; rts ; nop`) is no longer lent: with `nop` writing nothing the engine takes
+  an r0 that is also stored for scratch (A2-42, accepted) and prints `void g(void)`, so g is withheld "it writes a word of its caller's frame". **S2a2** (`mov r4,r1 ; add r5,r1 ;
+  mov.l r1,@r15 ; rts ; mov r1,r0`) is lent on both heads with the stale `return 5;` caller; the row's fixture leads with it.
+- **A2-31 is fixed there** (`350c98f`): V1 to V6 all agree with the run, the four corpus functions of the sample that were A2-31 (`060336E6`, `0603337A`, `06033718`
+  of image 007 and `0606E950` of 008) are now lent as returning (`uint4`, `int4`, `uint4`, `xunknown4`), and the lent `void` functions ending in a call to a lent non-void callee
+  fall from 61 and 50 to 4 and 5. The other twelve of the sixteen print the same signature line on both heads. The merged head's corpus: 662 lent (923 parameters) for image 007 and
+  1,020 (1,282) for 008, every ledger count 0, both suites "all passed".
+- **A3-29** (a `jmp` tail call to a value-returning callee): T4g now agrees with the run (the text is right); the caller is still withheld "it tail-calls a function that returns
+  a value", as the coordinator said. I did not close the row.
+- **What 0045 does to A3-19's neighbours (no row).** On the merged head `mov r4,r0 ; mov.l r0,@r5 ; rts ; nop` (W1) and `mov r4,r0 ; mov.l @(r0,r5),r1 ; mov.l r1,@r6 ; rts ; nop` (W3)
+  print `return;` and are lent `void`; on `d7da94a` both returned `param_1`. The generator's `SE_GENERATED_WORDS="6043 2502 000B 0009" SE_GENERATED_RETURNS="1"` reports
+  `return-dropped` there and 0 findings on `d7da94a`. This is A2-42's accepted decision (an r0 that is also stored, compared or used as an address is scratch), not filed again;
+  it makes A3-41's reads the same decision: a result the function has used is scratch whichever way it is read.
+- The probe scratch patch of A3-36 was not rebuilt on the merged head; the row's source lines are unchanged by 0044 and 0045 (`Call`, `Apply`).
+
+**Done criteria.** Area 3 has three P2 rows this round (A3-36, A3-38, A3-39) and four P3 rows; it needs a fix round and then two consecutive clean review
+rounds. The open P3 rows A3-29, A3-31 and A3-34 are unchanged; A3-34's instrument is described above.
