@@ -26,7 +26,9 @@
 #include <atomic>
 #include <cctype>
 #include <cstring>
+#include <fstream>
 #include <map>
+#include <regex>
 #include <stdexcept>
 #include <cstdlib>
 #include <sstream>
@@ -5680,6 +5682,11 @@ public:
         std::map<std::string, uint32_t> regs;   // "r0" ... "r15", "sr", "gbr", "vbr", "mach", "macl", "pr"
         std::shared_ptr<MemorySnapshot> snap;   // the stack words
         uint32_t sp = 0;                        // r15 on entry
+        // Round 8: a read of the snapshot's code area is the value it holds (`*(xunknown4 *)(addr)`, `xRam06009034`), for a fixture that stores
+        // nothing there. Off by default: a memory read is unknown, as it is for every other check.
+        bool readCode = false;
+        uint32_t codeLo = 0x06009000u, codeHi = 0x06010000u;
+        std::map<uint32_t, int> globalSize;   // the width of each constant-address access the host recorded (set by the harness)
     };
     void SetEntry(const Entry* e) { mEntry = e; }
 
@@ -6455,6 +6462,38 @@ private:
             const Val v = Promote(ParseUnary(c, env));
             return v.known ? Make(~v.v, v.size, v.sg) : Unk(v.size, v.sg);
         }
+        if (t == "*" && mEntry != nullptr && mEntry->readCode && mEntry->snap != nullptr && c.pos < c.end && mTok[c.pos] == "(")
+        {
+            // `*(T *)operand`: the value T-wide at the operand's address when the snapshot holds it in the fixture's code area.
+            size_t k = c.pos + 1;
+            bool cast = k < c.end && IsType(mTok[k]);
+            while (cast && k < c.end && mTok[k] != ")")
+            {
+                if (!(IsType(mTok[k]) || mTok[k] == "*")) cast = false;
+                ++k;
+            }
+            if (cast && k < c.end && k >= c.pos + 3 && mTok[k - 1] == "*")
+            {
+                const Ty pointee = TypeOf(c.pos + 1, k - 1);
+                c.pos = k + 1;
+                const Val p = ParseUnary(c, env);
+                if (p.known && (pointee.size == 1 || pointee.size == 2 || pointee.size == 4))
+                {
+                    const uint32_t a = static_cast<uint32_t>(p.v);
+                    uint32_t word = 0, value = 0;
+                    if (a >= mEntry->codeLo && a + pointee.size <= mEntry->codeHi && mEntry->snap->ReadU32(a & ~3u, word))
+                    {
+                        const uint32_t sh = 32 - 8 * (a & 3) - 8 * pointee.size;
+                        if ((a & 3) + pointee.size <= 4)
+                        {
+                            value = (word >> sh) & (pointee.size == 4 ? 0xFFFFFFFFu : (1u << (8 * pointee.size)) - 1u);
+                            return Make(value, pointee.size, pointee.sg);
+                        }
+                    }
+                }
+                return Val();
+            }
+        }
         if (t == "*" || t == "&")   // a memory read or an address: unknown
         {
             ParseUnary(c, env);
@@ -6553,6 +6592,34 @@ private:
         }
         const auto it = env.find(t);
         if (it != env.end()) return it->second;
+        {
+            // A global of the fixture's code area, `iRam06009024`: its width is the declaration's, which the text does not give for a global.
+            // The host's record of the access (Entry::globalSize: address -> bytes, from the fates and the printed accesses) does; the letter
+            // gives the sign (`i`, `s`, `c` signed, `u`, `w`, `b` unsigned, `x` none).
+            const size_t r = t.find("Ram");
+            if (r != std::string::npos && t.size() == r + 11 && mEntry != nullptr && mEntry->readCode && mEntry->snap != nullptr)
+            {
+                char* endp = nullptr;
+                const uint32_t a = static_cast<uint32_t>(std::strtoul(t.c_str() + r + 3, &endp, 16));
+                const auto sz = mEntry->globalSize.find(a);
+                if (*endp == '\0' && sz != mEntry->globalSize.end() && a >= mEntry->codeLo && a + sz->second <= mEntry->codeHi)
+                {
+                    uint32_t word = 0;
+                    if (mEntry->snap->ReadU32(a & ~3u, word))
+                    {
+                        const int n = sz->second;
+                        if ((a & 3) + n <= 4 && (n == 1 || n == 2 || n == 4))
+                        {
+                            const uint32_t sh = 32 - 8 * (a & 3) - 8 * n;
+                            const uint32_t v = (word >> sh) & (n == 4 ? 0xFFFFFFFFu : (1u << (8 * n)) - 1u);
+                            const char c = t[0];
+                            const Sign sg = (c == 'i' || c == 's' || c == 'c') ? Signed : (c == 'u' || c == 'w' || c == 'b') ? Unsigned : Unknown;
+                            return Make(v, n, sg);
+                        }
+                    }
+                }
+            }
+        }
         const auto ty = mTypes.find(t);
         {
             Val init;
@@ -9551,6 +9618,469 @@ void TestArea2Round7SlotValues()
     }
 }
 
+// ===== Area 2, round 8 review: fixtures held to the run, with the ways of agreeing told apart =====
+// R8Check decompiles one fixture and compares the text with the code run on the emulator for each input. The verdicts: `agrees` (the text states the
+// run's value), `agrees-global` (it names a global of the fixture's code area, `xRam06009034`, whose word or halfword is the run's value: the
+// evaluator does not know a global), `unknown` (it states a value the evaluator cannot know: nothing was compared), `void-ok` (it states none and
+// the fixture allows that), `differs`, `cannot-evaluate` (the evaluator could not read the text), `no-run` (the code did not return on the
+// emulator), `not-ok` (the request failed or the function is marked unsupported). PseudoAgreesWithRun counts the third and fourth as agreeing,
+// which is how a value check of a text that states none of its own can pass without checking anything; the fixtures below are held to `agrees`
+// or `agrees-global`.
+// Flags (a string): `n` r0 is no result, `v` a text that returns nothing is not a difference, `c` the evaluator reads the code area (a `*(T *)addr`
+// and a global named by its address are the snapshot's word).
+struct R8Outcome
+{
+    std::string verdict, detail;
+};
+
+// The printer writes the saturation of mac.l and mac.w as `if (A && (v = K, B)) { v = X; }`: an assignment and a comma inside a condition, which the
+// evaluator has no rule for. It means `if (A) { v = K; if (B) { v = X; } }` (the assignment happens when A holds, B decides the body); the text is
+// rewritten so before it is evaluated, and one the rewrite does not fit is left alone (and is then `cannot-evaluate`, not an agreement).
+std::string R8FlattenCommaCondition(std::string text)
+{
+    static const std::regex pat("if \\(([\\s\\S]*?) &&\\s*\\((\\w+) = ([^,()]+), ([\\s\\S]*?)\\)\\) \\{");
+    for (int guard = 0; guard < 4; ++guard)
+    {
+        std::smatch m;
+        if (!std::regex_search(text, m, pat)) break;
+        // the block this if opens ends at its matching close brace; one more brace closes the new inner if
+        const size_t open = static_cast<size_t>(m.position(0) + m.length(0));
+        int depth = 1;
+        size_t close = open;
+        for (; close < text.size() && depth > 0; ++close)
+        {
+            if (text[close] == '{') ++depth;
+            else if (text[close] == '}') --depth;
+        }
+        if (depth != 0) break;
+        const std::string repl = "if (" + m.str(1) + ") {\n " + m.str(2) + " = " + m.str(3) + ";\n if (" + m.str(4) + ") {";
+        text = text.substr(0, static_cast<size_t>(m.position(0))) + repl + text.substr(open, close - open) + "}" + text.substr(close);
+    }
+    return text;
+}
+
+R8Outcome R8Check(Sh2Decompiler& d, const std::string& name, const std::vector<uint16_t>& words, const std::vector<std::vector<uint32_t>>& inputs,
+                  const std::string& flags, const std::vector<uint32_t>& lend, uint64_t serial, uint32_t base = 0x06009000u, DecompileResult* keep = nullptr,
+                  uint64_t* hash = nullptr)
+{
+    R8Outcome out;
+    CallFixture f = { name, base, words };
+    f.noResult = flags.find('n') != std::string::npos;
+    const bool voidOk = flags.find('v') != std::string::npos;
+    auto snap = CallSnapshot(f, serial);
+    DecompileRequest q = Request(base);
+    for (uint32_t addr : lend) q.prototypes.emplace_back(addr, d.Decompile(snap, Request(addr)).prototype);
+    const DecompileResult r = d.Decompile(snap, q);
+    if (keep) *keep = r;
+    if (hash)
+    {
+        uint64_t h = 1469598103934665603ull;
+        for (char ch : r.Text()) h = (h ^ static_cast<unsigned char>(ch)) * 1099511628211ull;
+        *hash = h;
+    }
+    out.verdict = "agrees";
+    bool viaGlobal = false;
+    if (r.status != DecompileStatus::Ok || r.unsupported)
+    {
+        out.verdict = "not-ok";
+        return out;
+    }
+    for (const std::vector<uint32_t>& args : inputs)
+    {
+        uint32_t ran = 0;
+        if (!CallRunResult(snap, f, args, ran))
+        {
+            out.verdict = "no-run";
+            return out;
+        }
+        PseudoEval::Entry entry;
+        entry.regs = RunEntryRegisters(args);
+        entry.snap = snap;
+        entry.sp = kRunStack;
+        entry.readCode = flags.find('c') != std::string::npos;
+        for (const AccessFate& fate : r.accessFates)
+            if (!fate.write && fate.constantAddress) entry.globalSize[fate.address] = static_cast<int>(fate.size);
+        for (const MemoryAccess& m : r.accesses)
+            if (!m.write && m.direct) entry.globalSize[m.address] = static_cast<int>(m.size);
+        PseudoEval eval(R8FlattenCommaCondition(r.Text()), args);
+        eval.SetEntry(&entry);
+        const std::vector<PseudoEval::Outcome> outs = eval.Run();
+        if (!eval.Error().empty())
+        {
+            out.verdict = "cannot-evaluate";
+            out.detail = eval.Error();
+            return out;
+        }
+        bool equal = false, unknown = false, none = false;
+        std::string saw;
+        for (const PseudoEval::Outcome& o : outs)
+        {
+            if (!o.value)
+            {
+                none = true;
+                continue;
+            }
+            if (!o.v.known)
+            {
+                unknown = true;
+                continue;
+            }
+            const uint32_t mask = o.v.size >= 4 ? 0xFFFFFFFFu : (1u << (8 * o.v.size)) - 1u;
+            char b[32];
+            std::snprintf(b, sizeof b, " %08X", static_cast<uint32_t>(o.v.v));
+            saw += b;
+            if ((static_cast<uint32_t>(o.v.v) & mask) == (ran & mask)) equal = true;
+        }
+        char b[160];
+        std::snprintf(b, sizeof b, "r4=%08X: the code returned %08X, the text returns%s%s%s", args.empty() ? 0u : args[0], ran, saw.c_str(),
+                      unknown ? " (a value it cannot know)" : "", none ? " (nothing)" : "");
+        if (equal) continue;
+        if (unknown && entry.readCode)
+        {
+            bool named = false, matched = false;
+            const std::string text = r.Text();
+            for (size_t at = text.find("Ram"); at != std::string::npos; at = text.find("Ram", at + 3))
+            {
+                if (at + 11 > text.size()) break;
+                char* endp = nullptr;
+                const std::string hex = text.substr(at + 3, 8);
+                const uint32_t a = static_cast<uint32_t>(std::strtoul(hex.c_str(), &endp, 16));
+                if (*endp != '\0') continue;
+                named = true;
+                uint32_t word = 0;
+                if (!snap->ReadU32(a & ~3u, word)) continue;
+                const uint32_t half = (a & 2) ? (word & 0xFFFF) : (word >> 16);
+                const uint32_t sext = static_cast<uint32_t>(static_cast<int32_t>(static_cast<int16_t>(half)));
+                if ((a & 3) == 0 && word == ran) matched = true;
+                if ((a & 1) == 0 && (sext == ran || half == ran)) matched = true;
+            }
+            if (named && matched)
+            {
+                viaGlobal = true;
+                continue;
+            }
+            if (named) unknown = false;   // named an address the run's value does not come from: a difference, not an unknown
+        }
+        out.detail = b;
+        out.verdict = unknown ? "unknown" : (none && (f.noResult || voidOk)) ? "void-ok" : "differs";
+        if (out.verdict == "differs" || out.verdict == "unknown") return out;
+    }
+    if (out.verdict == "agrees" && viaGlobal) out.verdict = "agrees-global";
+    return out;
+}
+
+// SE_AREA2_FIXTURES=<file> runs only this (see main): one fixture a line, `name|words|inputs|flags|lend`; words and inputs in hex (inputs: sets
+// separated by `;`, registers r4.. by `,`); flags as above and `p` (print the text whatever the verdict), `b=<hex>` (the base, default
+// 0x06009000); lend: callee addresses, hex, comma separated, whose prototypes are lent. SE_AREA2_HASH=1 prints a hash of each text, to compare two
+// orders of one file (a leak from a request into the next). Built so a script can draw thousands of fixtures without rebuilding this suite.
+std::vector<std::string> R8Split(const std::string& s, char sep)
+{
+    std::vector<std::string> out;
+    std::string cur;
+    for (char c : s)
+    {
+        if (c == sep)
+        {
+            out.push_back(cur);
+            cur.clear();
+        }
+        else cur += c;
+    }
+    out.push_back(cur);
+    return out;
+}
+
+int TestArea2Round8Fixtures(const char* path)
+{
+    Sh2Decompiler d(gConfig);
+    std::ifstream in(path);
+    std::string line;
+    uint64_t serial = 70000;
+    std::map<std::string, int> verdicts;
+    while (std::getline(in, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+        const std::vector<std::string> field = R8Split(line, '|');
+        if (field.size() < 3) continue;
+        std::vector<uint16_t> words;
+        {
+            std::istringstream ws(field[1]);
+            std::string tok;
+            while (ws >> tok) words.push_back(static_cast<uint16_t>(std::strtoul(tok.c_str(), nullptr, 16)));
+        }
+        std::vector<std::vector<uint32_t>> inputs;
+        for (const std::string& set : R8Split(field[2], ';'))
+        {
+            std::vector<uint32_t> args;
+            for (const std::string& a : R8Split(set, ','))
+                if (!a.empty()) args.push_back(static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16)));
+            inputs.push_back(args);
+        }
+        if (inputs.empty()) inputs.push_back({});
+        const std::string flags = field.size() > 3 ? field[3] : "";
+        uint32_t base = 0x06009000u;
+        const size_t bAt = flags.find("b=");
+        if (bAt != std::string::npos) base = static_cast<uint32_t>(std::strtoul(flags.c_str() + bAt + 2, nullptr, 16));
+        std::vector<uint32_t> lend;
+        if (field.size() > 4)
+            for (const std::string& a : R8Split(field[4], ','))
+                if (!a.empty()) lend.push_back(static_cast<uint32_t>(std::strtoul(a.c_str(), nullptr, 16)));
+        DecompileResult r;
+        uint64_t h = 0;
+        const R8Outcome o = R8Check(d, field[0], words, inputs, bAt == std::string::npos ? flags : flags.substr(0, bAt), lend, ++serial, base, &r, &h);
+        ++verdicts[o.verdict];
+        if (std::getenv("SE_AREA2_HASH")) std::printf("R8TEXT %s %016llx\n", field[0].c_str(), static_cast<unsigned long long>(h));
+        std::printf("R8 %s [%s] %s\n", o.verdict.c_str(), field[0].c_str(), o.detail.c_str());
+        if ((o.verdict != "agrees" && o.verdict != "agrees-global") || flags.find('p') != std::string::npos)
+        {
+            std::printf("  words: %s\n", field[1].c_str());
+            Print(field[0].c_str(), r);
+        }
+    }
+    std::printf("R8 fixtures:");
+    for (const auto& kv : verdicts) std::printf(" %s=%d", kv.first.c_str(), kv.second);
+    std::printf("\n");
+    return 0;
+}
+
+// ---- The slot's PC-relative load, by value, for the branches whose slot the round 7 test left to substrings --------------------------------
+// jmp, braf, jsr, bsrf and rte, each with mova, mov.w and mov.l in the slot, the branch at both alignments of the code, the target at both
+// alignments, a handful of displacements. The loads put distinct halfwords (0x4000 + offset / 2) in the code area, so any wrong address reads a
+// different value. What the text can state: jmp and braf to a constant are tail calls (the callee returns r4, which the slot loaded: `func(value)`),
+// jsr and bsrf call the same callee, rte returns to the target with r0 from the slot. A `mova` in the slot of a call or a tail call writes r0, which
+// the engine's convention does not pass, so there the text states nothing of it (compared as `void-ok`, not as a value). Layout, as slots.py of the
+// round: code from 0 (a leading nop if `shift`), the pool word at 0x20, the target at 0x28 or 0x2A, the data from 0x30 on.
+struct R8Slot
+{
+    std::vector<uint16_t> words;
+    std::vector<uint32_t> lend;
+};
+
+R8Slot R8SlotFixture(const std::string& kind, const std::string& slot, int d, int shift, int talign)
+{
+    std::map<uint32_t, uint16_t> mem;
+    const uint32_t base = 0x06009000u, pool = 0x20u, target = 0x28u + (talign ? 2u : 0u);
+    uint32_t off = 0;
+    auto put = [&](uint32_t o, uint32_t v) { mem[o] = static_cast<uint16_t>(v); };
+    auto poolLoad = [&](uint32_t at, uint32_t reg) {
+        const uint32_t b = (at & ~3u) + 4;
+        return 0xD000u | reg << 8 | ((pool - b) / 4);
+    };
+    uint16_t slotWord = 0;
+    if (slot == "mova") slotWord = static_cast<uint16_t>(0xC700 | d);
+    else if (slot == "movw0") slotWord = static_cast<uint16_t>(0x9000 | d);
+    else if (slot == "movl0") slotWord = static_cast<uint16_t>(0xD000 | d);
+    else if (slot == "movw4") slotWord = static_cast<uint16_t>(0x9400 | d);
+    else slotWord = static_cast<uint16_t>(0xD400 | d);   // movl4
+    const bool r4Slot = slot == "movw4" || slot == "movl4";
+    R8Slot out;
+    uint32_t poolValue = 0;
+    bool hasPool = true;
+    if (shift) put(off, 0x0009), off += 2;
+    if (kind == "jmp" || kind == "braf")
+    {
+        put(off, poolLoad(off, 1)), off += 2;
+        const uint32_t at = off;
+        put(off, kind == "jmp" ? 0x412B : 0x0123), off += 2;
+        put(off, slotWord), off += 2;
+        poolValue = kind == "jmp" ? base + target : target - (at + 4);
+        put(target, 0x000B);
+        put(target + 2, r4Slot ? 0x6043 : 0x0009);
+        if (r4Slot) out.lend.push_back(base + target);
+    }
+    else if (kind == "jsr" || kind == "bsrf")
+    {
+        put(off, 0x4F22), off += 2;
+        put(off, poolLoad(off, 1)), off += 2;
+        const uint32_t at = off;
+        put(off, kind == "jsr" ? 0x410B : 0x0103), off += 2;
+        put(off, slotWord), off += 2;
+        put(off, 0x4F26), off += 2;
+        put(off, 0x000B), off += 2;
+        put(off, 0x0009), off += 2;
+        poolValue = kind == "jsr" ? base + target : target - (at + 4);
+        put(target, 0x000B);
+        put(target + 2, r4Slot ? 0x6043 : 0x0009);
+        out.lend.push_back(base + target);
+    }
+    else if (kind == "rte_t")
+    {
+        put(off, 0x4F03), off += 2;
+        put(off, poolLoad(off, 1)), off += 2;
+        put(off, 0x2F16), off += 2;
+        put(off, 0x002B), off += 2;
+        put(off, slotWord), off += 2;
+        poolValue = base + target;
+        put(target, 0x000B);
+        put(target + 2, 0x0009);
+    }
+    else   // rte_s: returns to the sentinel in PR
+    {
+        put(off, 0x4F03), off += 2;
+        put(off, 0x4F22), off += 2;
+        put(off, 0x002B), off += 2;
+        put(off, slotWord), off += 2;
+        hasPool = false;
+        put(target, 0x000B);
+        put(target + 2, 0x0009);
+    }
+    if (hasPool)
+    {
+        put(pool, poolValue >> 16);
+        put(pool + 2, poolValue & 0xFFFF);
+    }
+    for (uint32_t o = 0; o < 0x100; o += 2)
+    {
+        auto it = mem.find(o);
+        if (it != mem.end()) out.words.push_back(it->second);
+        else out.words.push_back(o < pool && o >= off ? 0x0009 : static_cast<uint16_t>(0x4000 + o / 2));
+    }
+    return out;
+}
+
+// ===== Area 2, round 8 review =====
+// (1) The slot loads above, by value. (2) The A2-47 family in ordinary code, 19 fixtures that printed a wrong value with patch 0046 reverted:
+// a value built from a boolean as `T * A + (1 - T) * B` (mul.l, sts macl), then a mask or a shift pair or an extension that reads the low
+// bits (Sh2GeneratedTests' scratch grammar of the round: 20,000 functions of these templates and 20,000 of a wider register-only grammar, 0 findings
+// on the fixed tree, 18 of 400 with patch 0046 reverted). (3) A2-52: the stack pointer on entry is taken to be 256-aligned.
+void TestArea2Round8()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 40000;
+    // ---- (1) ----
+    {
+        std::map<std::string, int> verdicts;
+        int fixtures = 0;
+        const char* const kinds[] = { "jmp", "braf", "jsr", "bsrf", "rte_t", "rte_s" };
+        for (const char* kind : kinds)
+        {
+            const bool call = std::strcmp(kind, "jsr") == 0 || std::strcmp(kind, "bsrf") == 0;
+            const bool tail = std::strcmp(kind, "jmp") == 0 || std::strcmp(kind, "braf") == 0;
+            std::vector<const char*> slots;
+            if (tail) slots = { "movw4", "movl4" };
+            else if (call) slots = { "movw4", "movl4", "mova" };
+            else slots = { "mova", "movw0", "movl0" };
+            for (const char* slot : slots)
+                for (int d2 : { 1, 2, 3, 5 })
+                    for (int shift = 0; shift < 2; ++shift)
+                        for (int talign = 0; talign < 2; ++talign)
+                        {
+                            if (std::strcmp(kind, "rte_s") == 0 && talign) continue;
+                            const R8Slot f = R8SlotFixture(kind, slot, d2, shift, talign);
+                            const std::string name = std::string(kind) + " + " + slot + " d=" + std::to_string(d2) + (shift ? " branch at 2" : " branch at 0") +
+                                                     (talign ? " target at 2 mod 4" : " target at 0 mod 4");
+                            const bool voidSlot = call && std::strcmp(slot, "mova") == 0;
+                            const R8Outcome o = R8Check(d, name, f.words, { { 0 } }, voidSlot ? "cv" : "c", f.lend, ++serial);
+                            ++fixtures;
+                            ++verdicts[o.verdict];
+                            if (voidSlot) CHECK(o.verdict == "void-ok" || o.verdict == "agrees");
+                            else if (o.verdict != "agrees" && o.verdict != "agrees-global")
+                            {
+                                // d = 0 of a call reads the callee's own code, a global named by the function: not a fixture
+                                std::printf("  slot value %s: %s %s\n", name.c_str(), o.verdict.c_str(), o.detail.c_str());
+                                CHECK(false);
+                            }
+                        }
+        }
+        std::printf("A2 round 8, slot loads of jmp/braf/jsr/bsrf/rte by value: %d fixtures:", fixtures);
+        for (const auto& kv : verdicts) std::printf(" %s=%d", kv.first.c_str(), kv.second);
+        std::printf("\n");
+        CHECK(verdicts["differs"] == 0 && verdicts["unknown"] == 0 && verdicts["not-ok"] == 0 && verdicts["no-run"] == 0);
+        CHECK(verdicts["agrees"] + verdicts["agrees-global"] >= 100);
+    }
+    // ---- (2) ----
+    {
+        struct Family
+        {
+            const char* name;
+            std::vector<uint16_t> code;
+        };
+        const std::vector<Family> families = {
+            { "t5", { 0x4511, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0001, 0x0022, 0x0000, 0x0020 } },
+            { "t7", { 0x3567, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xD704, 0x2679, 0x6063, 0x4000, 0x000B, 0x0009, 0x0000, 0x0106, 0x0000, 0x0100, 0x0000, 0x003C } },
+            { "t55", { 0x3457, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x901E, 0x0600, 0x900C } },
+            { "t59", { 0x4415, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x911A, 0x0600, 0x9018 } },
+            { "t127", { 0x2458, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xD704, 0x2679, 0x6063, 0x4000, 0x000B, 0x0009, 0x0000, 0x0FFA, 0x0000, 0x1000, 0xFFFF, 0xFFFC } },
+            { "t131", { 0x3566, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xC903, 0x4000, 0x000B, 0x0009, 0x0601, 0x8FFE, 0x0600, 0x8FFC } },
+            { "t146", { 0x3467, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x1016, 0x0000, 0x1000 } },
+            { "t165", { 0x4415, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0600, 0x9052, 0x0600, 0x9020 } },
+            { "t209", { 0x3457, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x000B, 0x0009, 0x0000, 0x1012, 0x0000, 0x1000 } },
+            { "t237", { 0x3477, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4001, 0x000B, 0x0009, 0x0009, 0x0600, 0x9042, 0x0600, 0x9010 } },
+            { "t238", { 0x4515, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x0101, 0x0000, 0x0100 } },
+            { "t246", { 0x2458, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x011A, 0x0000, 0x0100 } },
+            { "t268", { 0x4515, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4008, 0x4000, 0x000B, 0x0009, 0x0009, 0x0600, 0x902E, 0x0600, 0x8FFC } },
+            { "t291", { 0x4411, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0xC903, 0x4001, 0x000B, 0x0009, 0x0601, 0x901A, 0x0600, 0x9018 } },
+            { "t314", { 0x3460, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x600C, 0x7001, 0x000B, 0x0009, 0x0600, 0x9008, 0x0600, 0x9000 } },
+            { "t315", { 0x4411, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4019, 0x4018, 0x000B, 0x0009, 0x0000, 0x0116, 0x0000, 0x0100 } },
+            { "t330", { 0x4415, 0x0129, 0xD207, 0xD308, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4019, 0x4018, 0x4000, 0x000B, 0x0009, 0x0009, 0x0000, 0x00FE, 0x0000, 0x0100 } },
+            { "t388", { 0x3566, 0x0129, 0xD208, 0xD309, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x4009, 0x4009, 0x4008, 0x4008, 0x7001, 0x000B, 0x0009, 0x0009, 0x0000, 0x0028, 0x0000, 0x0020 } },
+            { "t397", { 0x4415, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0x6063, 0x600C, 0x7001, 0x000B, 0x0009, 0x0000, 0x0202, 0x0000, 0x0100 } },
+        };
+        const std::vector<std::vector<uint32_t>> inputs = { { 0, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 1, 0, 0 }, { 5, 3, 1, 2 }, { 0xFFFFFFFFu, 1, 7, 9 },
+                                                            { 0x80000000u, 0x7FFFFFFFu, 3, 3 }, { 7, 7, 7, 7 }, { 2, 9, 0xFFFFFFFEu, 5 } };
+        int agree = 0;
+        for (const Family& fam : families)
+        {
+            const R8Outcome o = R8Check(d, fam.name, fam.code, inputs, "", {}, ++serial);
+            if (o.verdict != "agrees") std::printf("  A2-47 family %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
+            CHECK(o.verdict == "agrees");
+            agree += o.verdict == "agrees" ? 1 : 0;
+        }
+        std::printf("A2 round 8, the A2-47 family in ordinary code: %d of %zu fixtures agree with the run\n", agree, families.size());
+    }
+    // ---- (4) mac.l and mac.w by value (round 7 left them to a hand reading) ----
+    {
+        // mova @(7,pc),r0 ; mov r0,r4 ; mova @(7,pc),r0 ; mov r0,r5 ; lds r6,mach ; lds r7,macl ; mov #S,r0 ; ldc r0,sr ; mac.x @r4+,@r5+ ;
+        // sts mac?,r0 ; rts ; nop ; padding ; the two operands at 0x20 and 0x24. The accumulator is MACH:MACL = r6:r7. S is SR bit 1: the saturation.
+        // The evaluator reads the operands as the globals the engine names by their addresses (Entry::readCode); the saturation is the printer's
+        // `if (A && (v = K, B)) { v = X; }` (R8FlattenCommaCondition).
+        const uint32_t kL[] = { 0, 1, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x00010000u, 0x12345678u, 0xFFFF8000u };
+        const uint32_t kW[] = { 0, 1, 0xFFFF, 0x7FFF, 0x8000, 0x00FF, 0x1234, 0x4000 };
+        const std::pair<uint32_t, uint32_t> acc[] = { { 0, 0 }, { 0, 1 }, { 0, 0xFFFFFFFFu }, { 0xFFFFFFFFu, 0xFFFFFFFFu }, { 0, 0x7FFFFFFFu }, { 0, 0x80000000u },
+                                                      { 0x7FFF, 0xFFFFFFFFu }, { 0xFFFF8000u, 0 }, { 0x7FFF, 0x7FFFFFFFu }, { 0xFFFF8000u, 0x80000000u },
+                                                      { 0x80000000u, 0 }, { 0x7FFFFFFFu, 0xFFFFFFFFu }, { 1, 0 }, { 0xFFFFFFFFu, 0 }, { 0x8000, 0 },
+                                                      { 0xFFFF7FFFu, 0xFFFFFFFFu }, { 0x7FFF, 0xFFFF8000u } };
+        std::vector<std::vector<uint32_t>> inputs;
+        for (const auto& a : acc) inputs.push_back({ 0, 0, a.first, a.second });
+        int fixtures = 0, agree = 0;
+        for (int wide = 0; wide < 2; ++wide)
+            for (int sat = 0; sat < 2; ++sat)
+                for (int high = 0; high < 2; ++high)
+                    for (uint32_t a : (wide ? kL : kW))
+                        for (uint32_t b : (wide ? kL : kW))
+                        {
+                            std::vector<uint16_t> w = { 0xC707, 0x6403, 0xC707, 0x6503, 0x460A, 0x471A, static_cast<uint16_t>(sat ? 0xE002 : 0xE000), 0x400E,
+                                                        static_cast<uint16_t>(wide ? 0x054F : 0x455F), static_cast<uint16_t>(high ? 0x000A : 0x001A), 0x000B, 0x0009 };
+                            w.resize(16, 0x0009);
+                            if (wide) w.insert(w.end(), { uint16_t(a >> 16), uint16_t(a), uint16_t(b >> 16), uint16_t(b) });
+                            else w.insert(w.end(), { uint16_t(a), 0, uint16_t(b), 0 });
+                            char name[96];
+                            std::snprintf(name, sizeof name, "mac.%c S=%d %s a=%x b=%x", wide ? 'l' : 'w', sat, high ? "mach" : "macl", a, b);
+                            const R8Outcome o = R8Check(d, name, w, inputs, "c", {}, ++serial);
+                            ++fixtures;
+                            if (o.verdict != "agrees" && o.verdict != "agrees-global") std::printf("  %s: %s %s\n", name, o.verdict.c_str(), o.detail.c_str());
+                            CHECK(o.verdict == "agrees" || o.verdict == "agrees-global");
+                            agree += o.verdict == "agrees" || o.verdict == "agrees-global" ? 1 : 0;
+                        }
+        std::printf("A2 round 8, mac.l and mac.w by value: %d of %d fixtures agree with the run (%zu accumulators each)\n", agree, fixtures, inputs.size());
+    }
+    // ---- (3) A2-52 ----
+    {
+        // mov r15,r0 ; and #0xFF,r0 ; rts ; nop: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot
+        // tell). The engine takes the stack pointer on entry to be aligned to 256 (Funcdata::calcNZMask: "Treat spacebase input as aligned") and
+        // prints `return 0;`; the code returns the low byte of r15. The pin holds the wrong text, to be flipped by the fix.
+        auto snap = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC9FF, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
+        Print("A2-52: mov r15,r0 ; and #0xff,r0", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(Has(r.Text(), "return 0;"));   // the defect: A2-52 (the right text states r15 & 0xff)
+        auto snap2 = CallSnapshot({ "sp", 0x06009000u, { 0x7FFB, 0x60F3, 0xC903, 0x7F05, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r2 = d.Decompile(snap2, Request(0x06009000u));
+        Print("A2-52: add #-5,r15 ; mov r15,r0 ; and #3,r0", r2);
+        CHECK(Has(r2.Text(), "return 3;"));   // the same assumption: the low bits of a frame address are those of the offset alone
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -9869,6 +10399,20 @@ int main(int argc, char** argv)
     CHECK(sfe::MakeDirectory(scratch));
     gConfig = dts::Join(scratch, "config");
     CHECK(sfe::MakeDirectory(gConfig));
+    if (const char* fixtures = std::getenv("SE_AREA2_FIXTURES"))   // round 8: the fixtures of a file, nothing else
+    {
+        try
+        {
+            TestArea2Round8Fixtures(fixtures);
+        }
+        catch (std::exception& e)
+        {
+            std::printf("FATAL: uncaught std::exception: %s\n", e.what());
+            return 3;
+        }
+        dts::RemoveTree(scratch);
+        return dts::Finish("Sh2DecompilerTests (fixtures)", start);
+    }
     try
     {
         RUN(TestFixture1());
@@ -9904,6 +10448,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round5());
         RUN(TestAreas234Leftovers());
         RUN(TestArea2Round7SlotValues());
+        RUN(TestArea2Round8());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
