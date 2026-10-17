@@ -9459,6 +9459,99 @@ void TestAreas234Leftovers()
     }
 }
 
+// ===== Area 2, round 7 review: the value the slot's PC-relative instruction makes, as the text computes it, against the run (A2-47) =====
+// TestDelaySlotPcRelative holds the text of these shapes to a substring ("unaff_retaddr + 4"); the decode oracle holds the p-code to the
+// hardware. Neither holds what the engine prints to the run: the printed expression is evaluated here and compared with the code run on the
+// emulator, for bt/s and bf/s taken and not (the slot's PC is the branch target + 2 or its own address + 4, chosen by T) with the target at an
+// even and an odd displacement (the two candidate PCs differ by 2 mod 4 for the odd one, which is where the alignment of mova and mov.l
+// matters), and for rts (PR + 2).
+//
+// A2-47 (open): `bt/s` + mova / mov.l with an odd displacement prints the address without its `& ~3`: `(uint4)(0 < param_1) * 6 + 0x6009018`
+// where the code makes 0x600901C. The sum's non-zero mask (`Varnode::nzm`) is stale when RuleAndMask reads it: RuleCollectTerms /
+// distributeIntMultAdd rewrote `T * 0x600900E + ((1 - T) * 0x6009008)` into `T * 6 + 0x6009008` by changing the inputs of an existing
+// INT_ADD, whose output kept the mask of the value it used to be (`(1 - T) * 0x6009008`: 0xfffffffc, the low two bits clear), and the AND with
+// 0xfffffffc is "redundant". Not particular to the slot: the same arithmetic written as code (control 2 below) prints the same wrong text. Each
+// A2-47 case below is pinned as it is today (`expectWrong`): the fix turns every one of them round, and the CHECK with it.
+void TestArea2Round7SlotValues()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 900;
+    const uint32_t base = 0x06009000u;
+    // 16 bytes of code, then distinct words 0x4000 + (address - base) / 2 up to 0x06009060, which the slots' loads read.
+    auto padded = [&](std::vector<uint16_t> code) {
+        code.resize(8, 0x0009);
+        for (uint32_t a = 0x10; a < 0x60; a += 2) code.push_back(static_cast<uint16_t>(0x4000 + a / 2));
+        return code;
+    };
+    struct Slot { const char* name; uint16_t word; };
+    // Not taken: the slot at 0x9004 reads PC 0x9008 (mov.w d=6: 0x9008 + 12 = 0x9014; mov.l, mova d=4: 0x9008 + 16 = 0x9018). Taken, target 0x900A
+    // (sdisp 2): PC 0x900C (mov.w 0x9018; mov.l, mova 0x900C + 16 = 0x901C); target 0x900C (sdisp 3): PC 0x900E (mov.w 0x901A; mov.l, mova
+    // 0x900C + 16 = 0x901C).
+    const Slot slots[] = { { "mova @(4,pc),r0", 0xC704 }, { "mov.w @(6,pc),r0", 0x9006 }, { "mov.l @(4,pc),r0", 0xD004 } };
+    const std::vector<std::vector<uint32_t>> inputs = { { 0 }, { 1 }, { 0xFFFFFFFFu }, { 5 }, { 0x80000000u } };
+    int wrong = 0;
+    for (const Slot& s : slots)
+        for (int sense = 0; sense < 2; ++sense)
+            for (int sdisp = 2; sdisp <= 3; ++sdisp)
+            {
+                // cmp/pl r4 ; bt/s L (bf/s L) ; <slot> ; rts ; nop ; ... ; L: rts ; nop
+                std::vector<uint16_t> head = { 0x4415, uint16_t((sense ? 0x8F00 : 0x8D00) | sdisp), s.word, 0x000B, 0x0009 };
+                while (head.size() < size_t(3 + sdisp)) head.push_back(0x0009);
+                head.push_back(0x000B);
+                head.push_back(0x0009);
+                const std::string name = std::string(sense ? "bf/s + " : "bt/s + ") + s.name + (sdisp == 2 ? ", even displacement" : ", odd displacement");
+                const CallFixture f = { name, base, padded(head) };
+                auto snap = CallSnapshot(f, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(base));
+                Print(name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok && !r.unsupported);
+                const bool agrees = PseudoAgreesWithRun(r, snap, f, inputs);
+                // A2-47: the odd displacement of a bt/s with an aligned load. The evaluator does not know the value read by mov.l (a typed-unknown
+                // load), so there the text is held to the mask: the load must be made at the aligned address, `... & 0xfffffffc`, as it is for bf/s.
+                const bool aligned = s.word != 0x9006;
+                const bool expectWrong = !sense && sdisp == 3 && aligned;
+                if (expectWrong) ++wrong;
+                if (s.word == 0xC704) CHECK(agrees != expectWrong);
+                else CHECK(agrees);
+                if (aligned && sdisp == 3) CHECK(Has(r.Text(), "0xfffffffc") != expectWrong);
+            }
+    CHECK(wrong == 2);
+    // rts + mova @(1,pc),r0 returns (PR + 2 & ~3) + 4.
+    {
+        const CallFixture f = { "rts + mova", base, padded({ 0x000B, 0xC701 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.unsupported);
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 0 }, ran) && ran == ((kRunSentinel + 2) & ~3u) + 4);
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 0 }, { 7 } }));
+    }
+    // Control 1: (6 * T + 0x06009008) & -4 written as code: the mask stays.
+    {
+        const CallFixture f = { "control: (6 * T + 0x06009008) & -4 as code", base,
+                                { 0x4415, 0x0129, 0xE306, 0x231E, 0x021A, 0xD503, 0x325C, 0xE6FC, 0x2269, 0x6023, 0x000B, 0x0009, 0x0600, 0x9008 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(PseudoAgreesWithRun(r, snap, f, inputs));
+    }
+    // Control 2 (A2-47, the same arithmetic as the slot's, written as code): r6 = T * 0x0600900E + (1 - T) * 0x06009008 ; r6 &= -4 ; return r6.
+    // Prints `(uint4)(0 < param_1) * 6 + 0x6009008` and returns 0x0600900E for T = 1 where the code returns 0x0600900C. Pinned as wrong.
+    {
+        const CallFixture f = { "A2-47: (T * A + (1 - T) * B) & -4 as code", base,
+                                { 0x4415, 0x0129, 0xD206, 0xD307, 0x0217, 0x061A, 0xE401, 0x3418, 0x0347, 0x051A, 0x365C, 0xE7FC, 0x2679, 0x6063, 0x000B, 0x0009,
+                                  0x0600, 0x900E, 0x0600, 0x9008 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));
+        CHECK(!Has(r.Text(), "0xfffffffc"));
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -9811,6 +9904,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round4());
         RUN(TestArea2Round5());
         RUN(TestAreas234Leftovers());
+        RUN(TestArea2Round7SlotValues());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
