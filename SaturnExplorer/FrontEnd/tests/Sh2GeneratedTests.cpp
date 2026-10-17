@@ -5827,6 +5827,54 @@ RegItem MakeConstant(Rng& rng)
     return it;
 }
 
+// A sum of scaled terms over shared variables, read through a mask or an extension (area 2, round 8: A2-52): `c + 8 * x + 4 * y + 14 * x`
+// then `shlr2 ; shll2`. Each term is `mov #c,r3` (or a pool constant) ; `mul.l Rv,r3` ; `sts macl,r3` ; `add r3,r0` (or `sub`), the variables
+// are two of r4-r7 so that one is likely to come twice, the constants are multiples of 2 and 4 and the like of an address (not one the engine would name a function or a global after: that is a text the harness cannot run), and what reads the sum
+// is a mask of its low bits, a shift pair or an extension: the shape in which RuleCollectTerms combines two terms of one variable by changing
+// the inputs of two ADDs of the tree, which leaves the partial sums between them with the non-zero mask they had (A2-47, A2-52). The
+// grammar drew no sum of one variable scaled twice, so the printed-C differential could not see the class (8,072 functions with patch 0046
+// reverted, 0 findings).
+RegItem MakeTerms(Rng& rng)
+{
+    // mostly even coefficients, which keep the low bits of a sum clear (the mask the rewrite then has to forget), a few odd ones and a few negative
+    static const uint32_t kEven[] = { 2, 4, 6, 8, 0xC, 0xE, 0x10, 0x12, 0x14, 0x16, 0x1C, 0x24, 0x48, 0xB8, 0xFFFFFFFCu, 0xFFFFFFFEu, 0xFFFFFFFAu, 0xFFFFFFF8u,
+                                      0x30100008u, 0x3010000Eu, 0x3010000Au };
+    static const uint32_t kOther[] = { 1, 3, 5, 0xFFFFFFFFu };
+    static const uint32_t kStarts[] = { 0, 0, 0x30100008u, 0x30100000u, 4, 8, 0x10, 0x100, 0xFFFFFFFCu };
+    static const uint32_t kMasks[] = { 0xFFFFFFFCu, 0xFFFFFFF8u, 0xFFFFFFF0u, 0xFFFFFFFEu };
+    RegItem it;
+    it.shape = "terms";
+    auto constant = [&](uint32_t reg, uint32_t value) {
+        const int32_t sv = static_cast<int32_t>(value);
+        if (sv >= -128 && sv <= 127 && rng.Chance(50)) it.w.push_back(static_cast<uint16_t>(0xE000 | reg << 8 | (value & 0xFF)));   // mov #imm,Rn
+        else
+        {
+            it.lits.push_back(std::make_pair(it.w.size(), value));
+            it.w.push_back(static_cast<uint16_t>(0xD000 | reg << 8));                                                                 // mov.l @(d,pc),Rn
+        }
+    };
+    const uint32_t vars[2] = { 4 + rng.Below(4), 4 + rng.Below(4) };
+    constant(0, kStarts[rng.Below(sizeof kStarts / sizeof kStarts[0])]);
+    const uint32_t terms = 3 + rng.Below(2);
+    for (uint32_t t = 0; t < terms; ++t)
+    {
+        constant(3, rng.Chance(85) ? kEven[rng.Below(sizeof kEven / sizeof kEven[0])] : kOther[rng.Below(sizeof kOther / sizeof kOther[0])]);
+        it.w.push_back(static_cast<uint16_t>(0x0307 | vars[rng.Below(2)] << 4));   // mul.l Rv,r3
+        it.w.push_back(0x031A);                                                  // sts macl,r3
+        it.w.push_back(rng.Chance(75) ? 0x303C : 0x3038);                         // add r3,r0 / sub r3,r0
+    }
+    const uint32_t tail = rng.Below(100);
+    if (tail < 30) { it.w.push_back(0x4009); it.w.push_back(0x4008); }                                  // shlr2 ; shll2
+    else if (tail < 45) it.w.push_back(0xC9FC);                                                         // and #0xfc,r0
+    else if (tail < 70) { constant(3, kMasks[rng.Below(4)]); it.w.push_back(0x2039); }                  // and r3,r0 (a mask of the low bits)
+    else if (tail < 75) { it.w.push_back(0x4009); it.w.push_back(0x4009); it.w.push_back(0x4008); it.w.push_back(0x4008); }
+    else if (tail < 80) { it.w.push_back(0xC903); it.w.push_back(0x4000); }                             // and #3,r0 ; shll r0
+    else if (tail < 85) { it.w.push_back(0x4019); it.w.push_back(0x4018); }                             // shlr8 ; shll8
+    else if (tail < 92) it.w.push_back(0x600D);                                                         // extu.w r0,r0
+    else it.w.push_back(0x600C);                                                                        // extu.b r0,r0
+    return it;
+}
+
 RegFn GenRegFn(uint64_t seed, int k)
 {
     Rng rng(seed * 7919u + static_cast<uint64_t>(k) + 0x5EEDu);
@@ -5894,6 +5942,14 @@ RegFn GenRegFn(uint64_t seed, int k)
             const size_t at = wide.Chance(50) ? f.items.size() : wide.Below(static_cast<uint32_t>(f.items.size()) + 1);
             f.items.insert(f.items.begin() + static_cast<long>(at), item);
         }
+    }
+    // The sums of scaled terms (A2-52), from a stream of their own again: a seed's other items are those of the rounds before.
+    Rng sums(seed * 15485863u + static_cast<uint64_t>(k) + 0xA252u);
+    if (EnvNumber("SE_GENERATED_PRINTEDC_TERMS", 1) != 0 && sums.Chance(30))
+    {
+        const RegItem item = MakeTerms(sums);
+        const size_t at = sums.Chance(70) ? f.items.size() : sums.Below(static_cast<uint32_t>(f.items.size()) + 1);
+        f.items.insert(f.items.begin() + static_cast<long>(at), item);
     }
     const uint32_t s = rng.Below(100);
     std::string shape;
@@ -6164,6 +6220,31 @@ struct CCase
     std::vector<uint16_t> words;
 };
 
+// The type a name the engine makes for an access wider than its symbol (`_Stack_4`) is declared with in the printed-C harness (A2-57): the
+// engine's untyped name of the width of the write. The text gives the width as `_Stack_4 = CONCATab(...)` (a + b bytes); a name written by
+// no CONCAT, or by CONCATs of different widths, or of a width with no untyped name in both readings (1, 2, 3, 4 and 8 have one), is declared
+// `unsigned long long`, as every such name was before.
+std::string UnderscoreNameType(const std::string& text, const std::string& name)
+{
+    const std::regex write("\\b" + name + " = CONCAT([0-9])([0-9])\\(");
+    int width = 0;
+    for (std::sregex_iterator it(text.begin(), text.end(), write), end; it != end; ++it)
+    {
+        const int w = std::atoi((*it)[1].str().c_str()) + std::atoi((*it)[2].str().c_str());
+        if (width != 0 && width != w) return "unsigned long long";
+        width = w;
+    }
+    switch (width)
+    {
+    case 1: return "xunknown1";
+    case 2: return "xunknown2";
+    case 3: return "unkbyte3";
+    case 4: return "xunknown4";
+    case 8: return "xunknown8";
+    default: return "unsigned long long";
+    }
+}
+
 // The value r8-r14 start with in a printed-C run. Its four bytes differ from each other, for every register (A2-44): with
 // 0xA0000000 + r * 0x01010101 the bytes 1 and 2 were equal, so a text that named the two the wrong way round (`unaff_r8_b1` for the register's
 // byte 2) read the same value under either name and the differential could not tell.
@@ -6360,7 +6441,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             continue;
         }
         // A name the engine makes for an access wider than the symbol it starts at (`_Stack_4 = CONCAT31(...)` where only `Stack_4`
-        // and `xStack_1` are declared) is no declaration of its own: give it the widest type, so the value written is the value read.
+        // and `xStack_1` are declared) is no declaration of its own. It is declared with the width of the write (A2-57): `CONCATab` gives a + b
+        // bytes, and the engine's untyped name for that width (`xunknown4`: unsigned as C, signed as the engine reads it) is the type the
+        // engine would have given it, so a signed compare of a four-byte one is a signed compare and the C++ reading can assign a `CONCAT31`
+        // to it. A name no `CONCAT` writes (or one of a width with no such name) keeps the widest type, so the value written is the value read.
         {
             static const std::regex under("\\b(_[A-Za-z]\\w*)\\b");
             std::set<std::string> names;
@@ -6368,7 +6452,7 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
             const size_t brace = rebuilt.find("{\n");
             std::string decls;
             for (const std::string& n : names)
-                if (n.compare(0, 2, "__") != 0) decls += "  unsigned long long " + n + ";\n";
+                if (n.compare(0, 2, "__") != 0) decls += "  " + UnderscoreNameType(rebuilt, n) + " " + n + ";\n";
             if (!decls.empty() && brace != std::string::npos) rebuilt.insert(brace + 2, decls);
         }
         pr.cText = rebuilt;
@@ -6707,6 +6791,14 @@ const PrintedCFixture kPrintedCFixtures[] = {
     { "A2-13 ldc r4,sr", { 0x440E, 0x000B, 0x0009 } },
     { "dmuls.l ; sts mach,r0 ; sts macl,r1", { 0x354D, 0x000A, 0x011A, 0x000B, 0x0009 } },
     { "64-bit addc chain", { 0x0008, 0x346E, 0x357E, 0x6143, 0x000B, 0x6053 } },
+    // Area 2, round 8. A2-56 (generator seed 965717): a byte of SR read through `& 1` and whole (cmp/str), the two SUBPIECEs merged by CSE.
+    { "A2-56 cmp/str on the SR byte after addc", { 0x346F, 0x0529, 0x340F, 0x0202, 0x262C, 0x8B01, 0x0502, 0x041A, 0x000B, 0x6053 } },
+    // A2-57 (seed 968411): the engine's `_Stack_4 = CONCAT31(...)`, a name declared at the width of the write, read as a signed compare.
+    { "A2-57 _Stack_4 written by CONCAT31", { 0x246B, 0x7FF8, 0x1F30, 0x1F41, 0x6053, 0x80F7, 0x6073, 0x80F2, 0x6013, 0x80F1, 0x55F1, 0x7F08, 0x350F, 0x312A, 0x000B, 0x6053 } },
+    // A2-52 (the A2-47 family beyond patch 0046): sums of scaled terms over shared variables, `c + 8x + 4y + 14x` through `shlr2 ; shll2`.
+    { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
+    { "A2-52 termgen 2", { 0x2468, 0x0129, 0xD00A, 0x6343, 0x4308, 0x4308, 0x303C, 0x6313, 0x4308, 0x4308, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0xD306, 0x0347, 0x031A, 0x303C, 0xD305, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0008, 0xFFFF, 0xFFFA, 0xFFFF, 0xFFFC } },
+    { "A2-52 termgen 4", { 0x3456, 0x0129, 0xD00A, 0xD30B, 0x0317, 0x031A, 0x3038, 0xD30A, 0x0367, 0x031A, 0x303C, 0xD309, 0x0347, 0x031A, 0x3038, 0xD308, 0x0317, 0x031A, 0x303C, 0xD307, 0x2039, 0x000B, 0x0009, 0x0009, 0x0000, 0x0000, 0x0000, 0x0048, 0x0000, 0x001C, 0x0000, 0x0024, 0x0000, 0x0001, 0xFFFF, 0xFFFC } },
 };
 
 // The fixtures of area 2, round 4 (A2-21, A2-22, A2-26): the compiler's division by a constant, scaled by the power of two it
@@ -7602,6 +7694,26 @@ void TestRound8Pins(Sh2Decompiler& d)
         const auto it = rep.counts.find("excluded.call-result-compared.return-dropped");
         report("A3-53 seed 400785", rep);
         CHECK(it != rep.counts.end() && it->second > 0);
+    }
+    {
+        // A2-52: the register-only grammar draws sums of scaled terms (RuleCollectTerms' input) and the harness names the engine's wider-than-symbol
+        // locals at the width of the write (A2-57). The draw is from a stream of its own, so SE_GENERATED_PRINTEDC_TERMS=0 gives the functions of
+        // the rounds before; with it on, three seeds in ten have the item.
+        int withTerms = 0, total = 0;
+        for (long seed = 1; seed <= 600; ++seed)
+        {
+            const RegFn f = GenRegFn(static_cast<uint64_t>(seed), 0);
+            ++total;
+            for (const RegItem& it : f.items)
+                if (it.shape == "terms") ++withTerms;
+        }
+        std::printf("pin 'A2-52: the register-only grammar draws sums of scaled terms': %d of %d functions\n", withTerms, total);
+        CHECK(withTerms >= 100 && withTerms <= 260);
+        CHECK(UnderscoreNameType("  _Stack_4 = CONCAT31(Stack_4,param_2);", "_Stack_4") == "xunknown4");
+        CHECK(UnderscoreNameType("  _Stack_4 = CONCAT44(a,b);", "_Stack_4") == "xunknown8");
+        CHECK(UnderscoreNameType("  _Stack_4 = CONCAT11(a,b);", "_Stack_4") == "xunknown2");
+        CHECK(UnderscoreNameType("  _Stack_4 = CONCAT31(a,b); _Stack_4 = CONCAT22(c,d); _Stack_4 = CONCAT11(e,f);", "_Stack_4") == "unsigned long long");   // two widths
+        CHECK(UnderscoreNameType("  x = _Stack_4;", "_Stack_4") == "unsigned long long");   // no CONCAT writes it
     }
     static const ModulePin kWords[] = {
         { "A3-49 a (V8): r0 joins r6 and a loaded word", "2448 8903 6063 2558 8900 6052 000B 0009", "0/0/10", nullptr, "2", nullptr, nullptr },

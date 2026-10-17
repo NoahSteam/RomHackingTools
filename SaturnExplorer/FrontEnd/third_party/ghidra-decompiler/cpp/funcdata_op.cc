@@ -17,6 +17,7 @@
  * Modified for SaturnExplorer: the instructions and jump tables the flow recovered are recorded (patches/0021-flow-instructions.patch).
  * Modified for SaturnExplorer: a cloned jump-table is owned from the moment it is made (patches/0040-jumptable-tracedag-allocation-failure.patch).
  * Modified for SaturnExplorer: replacing an input of an op forgets what was known of its output's non-zero bits (patches/0046-engine-input-replaced-resets-nzmask.patch).
+ * Modified for SaturnExplorer: and of the non-zero bits of what was worked out from that output (patches/0049-engine-nzmask-forgotten-downstream.patch).
  */
 #include "funcdata.hh"
 #include "flow.hh"
@@ -132,9 +133,42 @@ void Funcdata::opSetInput(PcodeOp *op,Varnode *vn,int4 slot)
   // tree it is part of stays (RuleCollectTerms zeroes a coefficient in one inner ADD and puts the sum in another, which was
   // a multiple of 4 and is not now), so the old mask is no longer a fact about the new value. A mask that claims clear bits
   // the value has lets RuleAndMask drop an AND that is not redundant. ActionNonzeroMask works the real mask out again.
+  //
+  // (patches/0049-engine-nzmask-forgotten-downstream.patch) The same holds for every Varnode below the output whose mask was
+  // worked out from the one forgotten: the ADD between the two that RuleCollectTerms changed read a sum that was a multiple of
+  // 8 and is not now, and kept the mask 0xfffffffc. The mask of a Varnode is a function of the masks of the inputs of the op that
+  // defines it, so those are forgotten too, down to the first Varnode that already allows every bit: what is below that was
+  // worked out from every bit. Each Varnode is forgotten once between two runs of ActionNonzeroMask, so the walk costs a visit
+  // per Varnode however many inputs a pass changes.
   Varnode *outvn = op->getOut();
-  if (outvn != (Varnode *)0)
+  if (outvn != (Varnode *)0) {
+    Varnode *pending[32];	// The Varnodes still to walk from: on the stack, so that a rule changing an input allocates nothing
+    int4 numPending = 0;
+    vector<Varnode *> overflow;	// (empty, and no allocation, unless more than 32 are waiting at once)
     outvn->nzm = ~((uintb)0);
+    for(;;) {
+      list<PcodeOp *>::const_iterator diter;
+      for(diter=outvn->beginDescend();diter!=outvn->endDescend();++diter) {
+	Varnode *below = (*diter)->getOut();
+	if (below == (Varnode *)0) continue;
+	uintb all = calc_mask(below->getSize());
+	if ((below->nzm & all) == all) continue;	// Already every bit
+	below->nzm = ~((uintb)0);
+	if (numPending < 32)
+	  pending[numPending++] = below;
+	else
+	  overflow.push_back(below);
+      }
+      if (!overflow.empty()) {
+	outvn = overflow.back();
+	overflow.pop_back();
+      }
+      else if (numPending > 0)
+	outvn = pending[--numPending];
+      else
+	break;
+    }
+  }
 }
 
 /// This is convenience method that is more efficient than call opSetInput() twice.

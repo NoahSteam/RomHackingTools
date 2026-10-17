@@ -70,8 +70,11 @@ The embedded copy of the runtime files is `FrontEnd/src/Decompiler/Sh2SpecData.h
 | `0046-engine-input-replaced-resets-nzmask.patch` | `Funcdata::opSetInput` resets the non-zero mask of the output of an op whose input is replaced, so a rule that rewrites an op in place (`RuleCollectTerms` moving a coefficient between the ADDs of a tree) cannot leave a mask that claims clear bits the new value has and let `RuleAndMask` drop an `& 0xfffffffc` that is not redundant (ledger A2-47). |
 | `0047-sleigh-cached-branch-commits-next-address.patch` | `Sleigh::oneInstruction` puts the next address of a delayed branch's cached parse tree back to the end of the branch before applying its commits, so a second translation of the branch no longer paints the slot's context on the instruction after the slot (ledger A2-48). |
 | `0048-engine-identity-write-return.patch` | `Funcdata::ancestorOpUse`: a write of the return register with the value it holds (`mov r0,r0`, `and r0,r0`, `or r0,r0`, `add #0,r0`, `xor #0,r0`, `or #0,r0`) is looked through when the RETURN is decided, so it no longer makes the function return where a `nop` does not (ledger A2-43). |
+| `0049-engine-nzmask-forgotten-downstream.patch` | `Funcdata::opSetInput` also forgets the non-zero mask of every Varnode below the output whose mask was worked out from it (stopping at one that already allows every bit), so the partial sums between the two ADDs `RuleCollectTerms` changes cannot keep a mask that claims clear bits the new value has (ledger A2-52). |
 | `0050-sleigh-delay-slot-pc-all-branches.patch` | A PC-relative load or `mova` in the delay slot of `bt/s`, `bf/s`, `jmp`, `jsr`, `rts`, `braf`, `bsrf` and `rte` reads the PC the hardware gives it (the branch target + 2), as patch 0005 made it for `bra` and `bsr`: the branch hands the slot a kind through the context register and the slot makes the PC in p-code from the branch register, PR, the stacked PC or T (ledger A2-4). |
+| `0051-engine-replaced-varnode-consume-merged.patch` | `Funcdata::totalReplace` ORs the consume mask of the Varnode it replaces into the one that takes over its readers, so a common-subexpression merge cannot leave the byte of SR read by `& 1` and by a whole-byte compare with the consume mask of the first, and `ActionVarnodeProps` cannot replace it by a zero (ledger A2-56). |
 | `0052-flow-instruction-alignment.patch` | `Architecture::instructionAlignment` (host policy; SaturnExplorer sets 2): flow halts as at bad data at an address that is not a multiple of it, so a jump table entry that is no address no longer sends flow into the middle of an instruction (ledger A7-6). |
+| `0053-engine-stack-pointer-longword-aligned.patch` | `Funcdata::calcNZMask` takes the stack pointer on entry to be aligned to a longword (`~3`), not to 256, so `mov r15,r0 ; and #0xff,r0` is not `return 0;` (ledger A2-53). |
 
 MSVC and Apple clang needed no patch beyond these.
 
@@ -136,7 +139,10 @@ applies 0005 to 0008) must run before `se-regen-sla`.
   - 0045: `TestArea2Round5` (`rte ; sett`, `clrt`, `cmp/eq` in the SR written; the same function returns the same in any slot: `return ++*p`, a compare), `TestArea2Round3`/`4` and the hardware fixtures whose polls were `returned` through a nop (now void), `SlaFreshnessTests`.
   - 0046: `TestArea2Round7SlotValues` (the printed address of a `mova` or `mov.l` in the slot of `bt/s` and `bf/s` at an odd displacement, and the same sum as code, against the run; the `& 0xfffffffc` is in the text).
   - 0047: `SaturnExplorerSh2DecodeTests` (`RunFollowers`: the instruction after a delayed branch's slot reads its own address after the branch was translated once and twice in a row).
+  - 0049: `TestArea2Round8` part 5 (eight sums of scaled terms, `c + 8x + 4y + 14x` through `shlr2 ; shll2`, agree with the run; the first prints `& 0xfffffffc`) and the printed-C fixtures `A2-52`.
+  - 0051: `TestArea2Round8` part 7 (`cmp/str` on the SR byte after `addc`: the byte is compared whole) and the printed-C fixture `A2-56` (by value).
   - 0052: `TestRoutedSeeds` (a switch with an odd table entry: `halt_baddata()` at the odd address, the flow warning says it is odd, no "overlaps instruction" warning, an odd entry is refused) and the mapping oracle's corpus counts (odd addresses in functions with overlapping instructions, and functions entered at an odd address: both 0).
+  - 0053: `TestArea2Round8` part 3 (`mov r15,r0 ; and #0xff,r0` keeps the AND on r15; `and #3` is still 0).
 
 
   If upstream's Makefile source groups changed, update the lists in `vendor.py`.

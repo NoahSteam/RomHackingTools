@@ -1,0 +1,20 @@
+diff --git a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+--- a/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
++++ b/Ghidra/Features/Decompiler/src/decompile/cpp/funcdata_varnode.cc
+@@ -16,6 +16,7 @@
+  * Modified for SaturnExplorer: a call output a locked prototype returns is a return value whatever else it is used for (patches/0044-engine-round5-printed-value-fixes.patch).
+  * Modified for SaturnExplorer: a write of the return register with the value it holds is not a value of its own (patches/0048-engine-identity-write-return.patch).
+  * Modified for SaturnExplorer: a Varnode that takes over the readers of another is consumed in the bits the other was (patches/0051-engine-replaced-varnode-consume-merged.patch).
++ * Modified for SaturnExplorer: the stack pointer on entry is taken to be aligned to a longword, not to 256 (patches/0052-engine-stack-pointer-longword-aligned.patch).
+  */
+ #include "funcdata.hh"
+ 
+@@ -926,7 +927,7 @@
+ 	else {
+ 	  vn->nzm = calc_mask(vn->getSize());
+ 	  if (vn->isSpacebase())
+-	    vn->nzm &= ~((uintb)0xff); // Treat spacebase input as aligned
++	    vn->nzm &= ~((uintb)3); // Treat spacebase input as aligned to a longword (patches/0052-engine-stack-pointer-longword-aligned.patch)
+ 	}
+       }
+       else if (!vn->getDef()->isMark()) { // If haven't traversed before
