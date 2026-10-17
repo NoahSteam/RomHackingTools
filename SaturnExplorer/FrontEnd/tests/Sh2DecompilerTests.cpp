@@ -5014,12 +5014,14 @@ void TestPrototypeEligibility()
                          0xE007 });                  //   mov #7,r0
     // (k) A stack address stored into an indexed local: the stack, not memory let out.
     const uint32_t indexedLocal = 0x06012900u;
-    Place(hw, indexedLocal, { 0x61F3,      // mov r15,r1
+    // (A frame is taken first: an indexed store off the entry r15 itself is a word of the caller's frame, a hand-back, A3-39.)
+    Place(hw, indexedLocal, { 0x7FF8,      // add #-8,r15
+                              0x61F3,      // mov r15,r1
                               0x314C,      // add r4,r1   (an unknown index; r0 would be an input no signature passes, A3-5)
                               0x62F3,      // mov r15,r2
                               0x2122,      // mov.l r2,@r1
                               0x000B,      // rts
-                              0x0009 });   //   nop
+                              0x7F08 });   //   add #8,r15
     // (l) A word of free stack (below r15), read exactly and through an inexact address, stored
     // through: it may hold the saved PR's address.
     const uint32_t freeExact = 0x06012A00u, freeInexact = 0x06012B00u;
@@ -8012,7 +8014,9 @@ void TestCallsAndTraps()
             const CallFixture a = { "a3_23 a: g(&param_5); return param_5 + param_2 + param_3 + param_4", base,
                                     withCallee({ 0x082A, 0x64F3, 0xB00C, 0x0009, 0x60F2, 0x305C, 0x306C, 0x307C, 0x482A, 0x000B, 0x0009 }, writer) };
             const Lent la = lend(a, true, false);
-            CHECK(la.caller.prototype.known && Has(la.caller.Text(), "&param_5"));
+            // (Since A3-39 the caller is withheld: the address of its stack parameter handed to a writer is a word of its caller's frame that
+            // the writer stores to. The text, which is what this block is about, is the same.)
+            CHECK(!la.caller.prototype.known && Has(la.caller.prototypeWithheld, "caller's frame") && Has(la.caller.Text(), "&param_5"));
             uint32_t ran = 0;
             CHECK(CallRunResult(CallSnapshot(a, ++serial), a, five[0], ran) && ran == 0xDu);
             CHECK(agrees(la.caller, a, five));
@@ -8020,7 +8024,7 @@ void TestCallsAndTraps()
             const CallFixture b = { "a3_23 b: the stack word read before the call and used after it", base,
                                     withCallee({ 0x082A, 0x59F0, 0x64F3, 0xB00B, 0x0009, 0x60F2, 0x309C, 0x305C, 0x306C, 0x307C, 0x482A, 0x000B, 0x0009 }, writer) };
             const Lent lb = lend(b, true, false);
-            CHECK(lb.caller.prototype.known && Has(lb.caller.Text(), "= param_5;"));
+            CHECK(!lb.caller.prototype.known && Has(lb.caller.prototypeWithheld, "caller's frame") && Has(lb.caller.Text(), "= param_5;"));
             CHECK(agrees(lb.caller, b, five));
             // The evaluator itself.
             std::string why;
@@ -8149,6 +8153,287 @@ void TestCallsAndTraps()
             std::string why;
             CHECK(MayReturn("int f(void)\n{\n  int axStack_c [2];\n\n  axStack_c[0] = 5;\n  func_0x06009020();\n  return axStack_c[0];\n}", {}, 7, why));
             CHECK(!MayReturn("int f(void)\n{\n  func_0x06009020();\n  return 5;\n}", {}, 7, why));
+        }
+        // ==== Area 3, round 7 (A3-36 .. A3-42) =========================================================================
+        // The reviewer's fixtures, word for word (the ledger rows and "Area 3, round 7 review" in 15_DECOMPILER_STEP5.md). 'placed' puts a
+        // callee at word 'at' of the caller's words (0x06009000 + 2 at); lendAll decompiles the callees in the order given and lends each.
+        auto placed = [&](std::vector<uint16_t> w, size_t at, const std::vector<uint16_t>& callee) {
+            w.resize(at, 0x0009);
+            w.insert(w.end(), callee.begin(), callee.end());
+            return w;
+        };
+        auto afterRun = [&](const CallFixture& f, const char* reg, const std::vector<uint32_t>& args, uint32_t& out) {
+            RunMachine m(CallSnapshot(f, ++serial));
+            for (const auto& kv : RunEntryRegisters(args)) m.Set(kv.first.c_str(), kv.second);
+            if (!m.Run(f.base, kRunSentinel)) return false;
+            out = m.Get(reg);
+            return true;
+        };
+        auto returns = [&](const CallFixture& f, const std::vector<uint32_t>& args, uint32_t want) {
+            uint32_t ran = 0;
+            return CallRunResult(CallSnapshot(f, ++serial), f, args, ran) && ran == want;
+        };
+        const std::vector<uint16_t> writer4 = { 0xE107, 0x000B, 0x2412 };   // g: mov #7,r1 ; rts ; mov.l r1,@r4
+        // r5 = 0: the code returns 5; r5 = -4 reaches the lower local: 7.
+        const std::vector<std::vector<uint32_t>> reach = { { 0, 0 }, { 0, 0xFFFFFFFCu } };
+        const char* const kHandedBack = "caller's frame";
+
+        // ---- A3-36: the probe sees a call through a literal, and keeps the frame registers across an unresolved call ----------------
+        // The probe runs on the first flow, where `jsr @r1` is a CALLIND with no known target: a lent callee was taken for any callee, and
+        // the frame address plus an index handed to it was not declared an alias (J1, J2); after any such call r15 and r14 were 'returned'
+        // values with no stack base, so the address made later was not seen either (K1).
+        {
+            struct Case
+            {
+                const char* what;
+                std::vector<uint16_t> words;
+                std::vector<uint32_t> callees;
+                const char* read;
+            };
+            const std::vector<uint16_t> keep = { 0x000B, 0x0009 };
+            for (const Case& c : { Case{ "a3_36 J1: PR in r8, jsr @r1 through a literal, frame address + index in r4",
+                                         placed({ 0x082A, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x64F3, 0x7404, 0x345C, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x482A,
+                                                  0x000B, 0x0009, 0x0600, 0x9040 }, 32, writer4),
+                                         { 0x06009040u }, "return xStack_8;" },
+                                   Case{ "a3_36 J2: the compiled prologue (sts.l pr,@-r15), jsr @r1",
+                                         placed({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x64F3, 0x7404, 0x345C, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26,
+                                                  0x000B, 0x0009, 0x0600, 0x9040 }, 32, writer4),
+                                         { 0x06009040u }, "return xStack_c;" },
+                                   Case{ "a3_36 K1: frame pointer, an earlier jsr @r1 to a lent callee, then bsr",
+                                         placed(placed({ 0x2FE6, 0x4F22, 0x7FF8, 0x6EF3, 0xE005, 0x2E02, 0x1E01, 0xD107, 0x410B, 0x0009, 0x64E3, 0x7404, 0x345C,
+                                                         0xB021, 0x0009, 0x60E2, 0x7E08, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0009, 0x0600, 0x9040 }, 32, keep),
+                                                48, writer4),
+                                         { 0x06009040u, 0x06009060u }, "return xStack_10;" } })
+            {
+                const CallFixture f = { c.what, base, c.words };
+                const std::vector<DecompileResult> out = lendAll(f, c.callees);
+                const DecompileResult& r = out.back();
+                CHECK(r.prototype.known && Has(r.Text(), c.read) && !Has(r.Text(), "return 5;"));   // 5 was the folded local
+                CHECK(PseudoAgreesWithRun(r, CallSnapshot(f, ++serial), f, reach));
+                CHECK(returns(f, reach[0], 5) && returns(f, reach[1], 7));
+            }
+            // Controls. The same with bsr (the engine's own call spec) printed the local read all along.
+            const CallFixture j0 = { "a3_36 control J0: bsr", base,
+                                     placed({ 0x082A, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x64F3, 0x7404, 0x345C, 0xB016, 0x0009, 0x60F2, 0x7F08, 0x482A, 0x000B, 0x0009 },
+                                            32, writer4) };
+            const std::vector<DecompileResult> r0 = lendAll(j0, { 0x06009040u });
+            CHECK(r0.back().prototype.known && Has(r0.back().Text(), "return xStack_8;") && agrees(r0.back(), j0, reach));
+            // A lent callee that stores through nothing it is handed gets no alias, however it is called: the local folds, and is right.
+            const CallFixture keepJsr = { "a3_36 control: a lent keeper through jsr @r1 is no alias", base,
+                                          placed({ 0x4F22, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x64F3, 0x7404, 0x345C, 0xD103, 0x410B, 0x0009, 0x60F2, 0x7F08, 0x4F26,
+                                                   0x000B, 0x0009, 0x0600, 0x9040 }, 32, keep) };
+            const std::vector<DecompileResult> rk = lendAll(keepJsr, { 0x06009040u });
+            CHECK(rk.back().prototype.known && Has(rk.back().Text(), "return 5;") && agrees(rk.back(), keepJsr, reach));
+        }
+
+        // ---- A3-37: the same for a caller that is withheld (nothing lent, so only the reader is misled) ---------------------------------
+        {
+            const std::vector<uint16_t> keep = { 0x000B, 0x0009 }, writer2 = { 0xE107, 0x000B, 0x2212 };   // g: mov #7,r1 ; rts ; mov.l r1,@r2
+            struct Case
+            {
+                const char* what;
+                std::vector<uint16_t> words;
+                const char* read;   // null: the note only
+            };
+            const std::vector<std::vector<uint32_t>> any = { { 0 } };
+            for (const Case& c : { Case{ "a3_37 K2: an earlier jsr @r1 to an unlent callee, then r2 = &local for an unlent writer",
+                                         placed(placed({ 0x2FE6, 0x4F22, 0x7FFC, 0x6EF3, 0xE005, 0x2E02, 0xD105, 0x410B, 0x0009, 0x62E3, 0xB024, 0x0009, 0x60E2,
+                                                         0x7E04, 0x6FE3, 0x4F26, 0x000B, 0x6EF6, 0x0600, 0x9040 }, 32, keep), 48, writer2),
+                                         nullptr },
+                                   Case{ "a3_37 K4: an earlier bsr to an unlent callee", placed(placed({ 0x2FE6, 0x4F22, 0x7FFC, 0x6EF3, 0xE005, 0x2E02, 0xB018, 0x0009,
+                                                                                                    0x62E3, 0xB025, 0x0009, 0x60E2, 0x7E04, 0x6FE3, 0x4F26, 0x000B,
+                                                                                                    0x6EF6 }, 32, keep), 48, writer2),
+                                         nullptr },
+                                   Case{ "a3_37 K3 control: no earlier call", placed({ 0x2FE6, 0x4F22, 0x7FFC, 0x6EF3, 0xE005, 0x2E02, 0x62E3, 0xB027, 0x0009, 0x60E2,
+                                                                                      0x7E04, 0x6FE3, 0x4F26, 0x000B, 0x6EF6 }, 48, writer2),
+                                         nullptr } })
+            {
+                const CallFixture f = { c.what, base, c.words };
+                auto snap = CallSnapshot(f, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(f.base));
+                Print(f.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+                CHECK(Has(r.Text(), "a frame address is in r2 here"));
+                CHECK(PseudoAgreesWithRun(r, snap, f, any));   // the run returns 7
+                CHECK(returns(f, any[0], 7));
+            }
+            // b: a frame address plus an index, or minus one, in r4 for a callee that is not lent (the engine read the index as non-negative).
+            for (const bool subtract : { false, true })
+            {
+                const CallFixture f = { subtract ? "a3_37 U2: frame address minus an index in r4, callee not lent" : "a3_37 U1: frame address plus a negative index in r4, callee not lent",
+                                        base,
+                                        withCallee({ 0x082A, 0x7FF8, 0xE005, 0x2F02, 0x1F01, 0x64F3, 0x7404, uint16_t(subtract ? 0x3458 : 0x345C), 0xB006, 0x0009,
+                                                     0x60F2, 0x7F08, 0x482A, 0x000B, 0x0009 }, writer4) };
+                const std::vector<std::vector<uint32_t>> in = { { 0, 0 }, { 0, subtract ? 4u : 0xFFFFFFFCu } };
+                auto snap = CallSnapshot(f, ++serial);
+                const DecompileResult r = d.Decompile(snap, Request(f.base));
+                Print(f.name.c_str(), r);
+                CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+                CHECK(!Has(r.Text(), "return 5;") && Has(r.Text(), "return xStack_8;"));
+                CHECK(PseudoAgreesWithRun(r, snap, f, in));
+                CHECK(returns(f, in[1], 7));
+            }
+        }
+
+        // ---- A3-38: `jsr @r0` with a load in the slot: the load is not the call target --------------------------------------------------
+        // A3-18 compared the value r0 held after the slot with the copy's; two memory loads are equal Values. The target is the copy while
+        // nothing has written r0 since.
+        {
+            struct Case
+            {
+                const char* what;
+                uint16_t slot;
+                bool lent;
+            };
+            const std::vector<std::vector<uint32_t>> viaMemory = { { 0x11111111u, 0x06009040u, 0, 0 }, { 0, 0x06009042u, 0, 0 } };
+            for (const Case& c : { Case{ "a3_38 P1: jsr @r0 ; mov.l @r5,r0", 0x6052, false }, Case{ "a3_38 P3: jsr @r0 ; mov.b @r5,r0", 0x6050, false },
+                                   Case{ "a3_38 P2 control (A3-18 a): jsr @r0 ; mov r4,r0", 0x6043, false },
+                                   Case{ "a3_38 control: jsr @r0 ; nop (r0 stays the callee's address)", 0x0009, true } })
+            {
+                const CallFixture f = { c.what, base, placed({ 0x4F22, 0xD003, 0x400B, c.slot, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, 32, keeper), c.lent };
+                const std::vector<DecompileResult> out = lendAll(f, { 0x06009040u });
+                const DecompileResult& r = out.back();
+                CHECK(out[0].prototype.known);
+                if (c.lent) CHECK(r.prototype.known);
+                else
+                {
+                    CHECK(!r.prototype.known && Has(r.prototypeWithheld, kAcross));
+                    CHECK(!PseudoAgreesWithRun(r, CallSnapshot(f, ++serial), f, viaMemory));   // the text returns nothing; the code returns r0
+                }
+            }
+            uint32_t ran = 0;
+            const CallFixture p1 = { "a3_38 P1", base, placed({ 0x4F22, 0xD003, 0x400B, 0x6052, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0600, 0x9040 }, 32, keeper) };
+            CHECK(CallRunResult(CallSnapshot(p1, ++serial), p1, viaMemory[0], ran) && ran == 0x000B0009u);
+        }
+
+        // ---- A3-39: a hand-back through a store the callee does not make at an exact offset -----------------------------------------------
+        // Through r15 plus an index (`mov r15,r1 ; add r6,r1 ; mov.l r5,@r1`, `mov.l r5,@(r0,r15)`), and by a lent writer handed the callee's own
+        // r15-based address. The store of r5, which the signature holds, is no spill. The callee and its callers are withheld; a local array below
+        // r15 indexed by a variable is not a hand-back.
+        {
+            const std::vector<uint16_t> pr14 = { 0x2FE6, 0x0E2A, 0x7FFC, 0xE005, 0x2F02, 0xB009, 0xE600, 0x60F2, 0x7F04, 0x4E2A, 0x000B, 0x6EF6 };
+            struct Case
+            {
+                const char* what;
+                std::vector<uint16_t> callee;
+            };
+            const std::vector<std::vector<uint32_t>> viaR5 = { { 0x11111111u, 0x22222222u, 0, 0x44444444u }, { 0, 1, 0, 0 } };
+            for (const Case& c : { Case{ "a3_39 S2b: mov r15,r1 ; add r6,r1 ; mov.l r5,@r1", { 0x61F3, 0x316C, 0x000B, 0x2152 } },
+                                   Case{ "a3_39 S2b2: mov.l r5,@(r0,r15)", { 0x6063, 0x000B, 0x0F56 } } })
+            {
+                const CallFixture f = { c.what, base, withCallee(pr14, c.callee) };
+                const Lent lg = lend(f, true, false);
+                CHECK(!lg.callee.prototype.known && Has(lg.callee.prototypeWithheld, kHandedBack));
+                CHECK(!lg.caller.prototype.known && Has(lg.caller.prototypeWithheld, "not known"));
+                CHECK(!PseudoAgreesWithRun(lg.caller, CallSnapshot(f, ++serial), f, viaR5));   // the withheld text still reads the stale 5
+                CHECK(returns(f, viaR5[0], 0x22222222u));
+            }
+            // N1: the callee hands its caller's word to a lent writer through its own entry r15 + 4.
+            const CallFixture n1 = { "a3_39 N1: g gives a lent writer the address of its caller's word", base,
+                                     placed(placed({ 0x2FE6, 0x0E2A, 0x7FFC, 0xE005, 0x2F02, 0xB019, 0x0009, 0x60F2, 0x7F04, 0x4E2A, 0x000B, 0x6EF6 }, 32,
+                                                   { 0x4F22, 0x64F3, 0x7404, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x0009 }), 48, writer4) };
+            const std::vector<DecompileResult> rn = lendAll(n1, { 0x06009060u, 0x06009040u });
+            CHECK(rn[0].prototype.known && !rn[1].prototype.known && Has(rn[1].prototypeWithheld, kHandedBack));
+            CHECK(!rn[2].prototype.known && Has(rn[2].prototypeWithheld, "not known"));
+            CHECK(returns(n1, inputs[0], 7));
+            // Controls. A local array below r15 indexed by a variable (compiled code) and a store through the frame pointer's own locals are lent.
+            const CallFixture array = { "a3_39 control: a local array below the entry r15, variable index", base,
+                                        withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x7FF8, 0x61F3, 0x316C, 0x2152, 0x000B, 0x7F08 }) };
+            CHECK(lend(array, true, false).callee.prototype.known);
+            // ...and the same store from the entry r15 itself, with no frame taken, is the hand-back.
+            const CallFixture bare = { "a3_39: an indexed store off the entry r15", base, withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x61F3, 0x314C, 0x62F3, 0x2122, 0x000B, 0x0009 }) };
+            CHECK(!lend(bare, true, false).callee.prototype.known);
+            // The address of a stack parameter handed to a lent writer is the same (A3-23's callers, which were lent).
+            const CallFixture param = { "a3_39: the address of a stack parameter handed to a lent writer", base,
+                                        withCallee({ 0x082A, 0x64F3, 0xB00C, 0x0009, 0x60F2, 0x305C, 0x306C, 0x307C, 0x482A, 0x000B, 0x0009 }, writer4) };
+            const Lent lp = lend(param, true, false);
+            CHECK(lp.callee.prototype.known && !lp.caller.prototype.known && Has(lp.caller.prototypeWithheld, kHandedBack));
+        }
+
+        // ---- A3-40: only a plain spill of a held parameter is excepted --------------------------------------------------------------------
+        {
+            const std::vector<uint16_t> pr14 = { 0x2FE6, 0x0E2A, 0x7FFC, 0xE005, 0x2F02, 0xB009, 0x0009, 0x60F2, 0x7F04, 0x4E2A, 0x000B, 0x6EF6 };
+            const CallFixture s2a2 = { "a3_40 S2a2: mov r4,r1 ; add r5,r1 ; mov.l r1,@r15 ; rts ; mov r1,r0", base, withCallee(pr14, { 0x6143, 0x315C, 0x2F12, 0x000B, 0x6013 }) };
+            const Lent l2 = lend(s2a2, true, false);
+            CHECK(!l2.callee.prototype.known && Has(l2.callee.prototypeWithheld, kHandedBack));
+            CHECK(!l2.caller.prototype.known && Has(l2.caller.prototypeWithheld, "not known"));
+            CHECK(!PseudoAgreesWithRun(l2.caller, CallSnapshot(s2a2, ++serial), s2a2, inputs));
+            const CallFixture s2a = { "a3_40 S2a: mov r4,r0 ; add r5,r0 ; mov.l r0,@r15", base, withCallee(pr14, { 0x6043, 0x305C, 0x2F02, 0x000B, 0x0009 }) };
+            CHECK(!lend(s2a, true, false).callee.prototype.known);
+            // Controls. The plain spill of a held parameter stays lent, whole (A3-35, accepted) or as a halfword.
+            const CallFixture s2a0 = { "a3_40 S2a0 control: mov r5,r0 ; mov.l r5,@r15 (A3-35)", base, withCallee(pr14, { 0x6053, 0x2F52, 0x000B, 0x0009 }) };
+            CHECK(lend(s2a0, true, false).callee.prototype.known);
+            const CallFixture half = { "a3_40 control: mov.w r5,@r15 of a held parameter", base, withCallee(pr14, { 0x6053, 0x2F51, 0x000B, 0x0009 }) };
+            CHECK(lend(half, true, false).callee.prototype.known);
+        }
+
+        // ---- A3-41, accepted: a result some instruction has read is not carried ------------------------------------------------------------
+        // `x = h(); <read x>; g(); return x;` with x in r0 across the keeper g is lent void whatever the read is: a compare, a byte read, a
+        // store of the result, a push and a reload. Compiled code leaves a result it has used in r0 as scratch (31 and 46 lent signatures on the
+        // images when only the copy counted), and the callers that read the value and mean it cannot be told from them. Pinned as limits; the
+        // controls are right: the result pushed across the call and popped (R1d), and a read on one path only (R1f).
+        {
+            const std::vector<uint16_t> h = { 0x000B, 0xE007 };   // rts ; mov #7,r0
+            auto two = [&](std::vector<uint16_t> caller) { return placed(placed(std::move(caller), 16, h), 24, keeper); };
+            struct Case
+            {
+                const char* what;
+                std::vector<uint16_t> caller;
+            };
+            for (const Case& c : { Case{ "a3_41 R1a: cmp/eq #7,r0 between the calls", { 0x4F22, 0xB00D, 0x0009, 0x8807, 0xB012, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                                   Case{ "a3_41 R1b: extu.b r0,r1", { 0x4F22, 0xB00D, 0x0009, 0x610C, 0xB012, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                                   Case{ "a3_41 R1c: mov.l r0,@-r15 ; mov.l @r15+,r0", { 0x4F22, 0xB00D, 0x0009, 0x2F06, 0x60F6, 0xB011, 0x0009, 0x4F26, 0x000B, 0x0009 } },
+                                   Case{ "a3_41 R1e: mov.b r0,@r4", { 0x4F22, 0xB00D, 0x0009, 0x2400, 0xB012, 0x0009, 0x4F26, 0x000B, 0x0009 } } })
+            {
+                const CallFixture f = { c.what, base, two(c.caller) };
+                const std::vector<DecompileResult> out = lendAll(f, { 0x06009020u, 0x06009030u });
+                CHECK(out[2].prototype.known && out[2].prototype.ret.kind == TypeKind::Void);   // the accepted limit
+                CHECK(returns(f, inputs[0], 7));
+            }
+            const CallFixture r1d = { "a3_41 R1d control: the result pushed across g and popped", base,
+                                      two({ 0x4F22, 0xB00D, 0x0009, 0x2F06, 0xB012, 0x0009, 0x60F6, 0x4F26, 0x000B, 0x0009 }) };
+            const std::vector<DecompileResult> rd = lendAll(r1d, { 0x06009020u, 0x06009030u });
+            CHECK(rd[2].prototype.known && rd[2].prototype.ret.kind != TypeKind::Void && Has(rd[2].Text(), "return xVar1;") && agrees(rd[2], r1d, inputs));
+            const CallFixture r1f = { "a3_41 R1f control: read on one path only", base,
+                                      two({ 0x4F22, 0xB00D, 0x0009, 0x2448, 0x8900, 0x6103, 0xB010, 0x0009, 0x4F26, 0x000B, 0x0009 }) };
+            const std::vector<DecompileResult> rf = lendAll(r1f, { 0x06009020u, 0x06009030u });
+            CHECK(!rf[2].prototype.known && Has(rf[2].prototypeWithheld, kAcross));
+        }
+
+        // ---- A3-42: a saved register's word is spared only when the address handed over does not lie in it ----------------------------------
+        {
+            const std::vector<uint16_t> g = { 0xE107, 0x000B, 0x2411 };   // mov #7,r1 ; rts ; mov.w r1,@r4
+            // S3a: &(saved r14) + 2 and a halfword store; S3b: + 3 and a byte store. r14 changes: it is not claimed kept.
+            for (const bool byte : { false, true })
+            {
+                const CallFixture f = { byte ? "a3_42 S3b: byte store at the saved r14 word + 3" : "a3_42 S3a: halfword store at the saved r14 word + 2", base,
+                                        withCallee({ 0x2FE6, 0x0E2A, 0x64F3, uint16_t(byte ? 0x7403 : 0x7402), 0xB00A, 0x0009, 0x4E2A, 0x000B, 0x6EF6 },
+                                                   { 0xE107, 0x000B, uint16_t(byte ? 0x2410 : 0x2411) }) };
+                const Lent l = lend(f, true, false);
+                CHECK(l.callee.prototype.known && l.caller.prototype.known);
+                CHECK(!((l.caller.prototype.effects.preserved >> 14) & 1u));
+                uint32_t r14 = 0;
+                CHECK(afterRun(f, "r14", inputs[0], r14) && r14 != 0x1EEEu);   // the run changes it
+            }
+            // S3g: PR pushed, &(PR's word) + 2: the run returns to a corrupted PR, so the caller is withheld.
+            const CallFixture s3g = { "a3_42 S3g: the saved PR's word + 2, halfword store", base,
+                                      withCallee({ 0x4F22, 0x64F3, 0x7402, 0xB00B, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE100, 0x000B, 0x2411 }) };
+            const Lent l3 = lend(s3g, true, false);
+            CHECK(l3.callee.prototype.known && !l3.caller.prototype.known && Has(l3.caller.prototypeWithheld, "not to its caller"));
+            // Controls. The exact address with a longword store (S3a0) was never spared; r14 is not claimed.
+            const CallFixture s3a0 = { "a3_42 S3a0 control: the exact address, mov.l", base,
+                                       withCallee({ 0x2FE6, 0x0E2A, 0x64F3, 0xB00B, 0x0009, 0x4E2A, 0x000B, 0x6EF6 }, writer4) };
+            const Lent l0 = lend(s3a0, true, false);
+            CHECK(l0.caller.prototype.known && !((l0.caller.prototype.effects.preserved >> 14) & 1u));
+            // A byte local in the word just below the saved r14 (compiled code: `char c; f(&c)`): the address is not inside the saved word, the
+            // slot is spared and r14 stays claimed kept. Not over-withheld by the overlap test.
+            const CallFixture below = { "a3_42 control: a byte local just below the saved r14 word", base,
+                                        withCallee({ 0x2FE6, 0x0E2A, 0x7FFC, 0x64F3, 0x7403, 0xB009, 0x0009, 0x7F04, 0x4E2A, 0x000B, 0x6EF6 },
+                                                   { 0xE107, 0x000B, 0x2410 }) };
+            const Lent lb = lend(below, true, false);
+            CHECK(lb.caller.prototype.known && ((lb.caller.prototype.effects.preserved >> 14) & 1u));
+            uint32_t r14b = 0;
+            CHECK(afterRun(below, "r14", inputs[0], r14b) && r14b == 0x1EEEu);
         }
     }
 }

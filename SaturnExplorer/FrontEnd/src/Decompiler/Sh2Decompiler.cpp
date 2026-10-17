@@ -666,7 +666,10 @@ private:
             m.read = a.read && b.read;
             m.usesR0 = a.usesR0 || b.usesR0;
             m.joined = true;
-            m.callerHigh = a.AtOrAboveEntry() || b.AtOrAboveEntry();
+            // ...at or above r15 on every path, or flagged: an exact address at or above r15 joined with a lower one is a walk (a loop
+            // that steps a pointer down from r15, `mov.l r0,@-r1`, A3-16) as often as a choice of two addresses, and is not followed.
+            m.callerHigh = (a.kind == Value::Fuzzy && a.callerHigh) || (b.kind == Value::Fuzzy && b.callerHigh) ||
+                           (a.AtOrAboveEntry() && b.AtOrAboveEntry());
             // A frame address joined with a value that is no stack address at all (a null pointer, a loaded pointer: `g(c ? &s : 0)`)
             // is still that address on the path that has one (A3-26): its base stands. A side that may be a stack address
             // whose base is not known leaves the join without one.
