@@ -10253,15 +10253,16 @@ void TestArea2Round8()
                         }
         std::printf("A2 round 8, mac.l and mac.w by value: %d of %d fixtures agree with the run (%zu accumulators each)\n", agree, fixtures, inputs.size());
     }
-    // ---- (5) A2-52 (P1): the A2-47 family that patch 0046 leaves ----
+    // ---- (5) A2-52 (P1): the A2-47 family that patch 0046 left ----
     {
         // A sum of terms over shared variables, `c + 8 * x + 4 * y + 14 * x` (constants from the literal pool, `mul.l`, `sts macl`), read through a mask
         // (`shlr2 ; shll2`). RuleCollectTerms combines the two x terms: it zeroes the coefficient of one (the op that held `8 * x` is now `c + 0`) and puts
-        // `22 * x` in the other. Patch 0046 resets the non-zero mask of the output of each op whose input it replaces, and that is those two; the partial
-        // sum between them (`+ 4 * y`) read the first as a multiple of 8, was a multiple of 4, and is not now (22 * x is 2 mod 4), but is left with
-        // the mask 0xfffffffc and so is the op RuleAndMask reads when it removes the mask as redundant. The text drops it: `x * 0x16 + 0x100 + y * 4`
-        // for r4 = 1, r6 = 0 is 0x116, the code returns 0x114. The pins hold the wrong text, to be flipped by the fix: every fixture must DIFFER.
-        // (Reverting patch 0046 changes none of them; a transitive reset in `Funcdata::opSetInput` makes all of them agree.)
+        // `22 * x` in the other. Patch 0046 reset the non-zero mask of the output of each op whose input it replaces, and that was those two; the partial
+        // sum between them (`+ 4 * y`) read the first as a multiple of 8, was a multiple of 4, and is not now (22 * x is 2 mod 4), but kept the mask
+        // 0xfffffffc and so was the op RuleAndMask read when it removed the mask as redundant. The text dropped it: `x * 0x16 + 0x100 + y * 4`
+        // for r4 = 1, r6 = 0 is 0x116, the code returns 0x114. Patch 0049 forgets the mask of everything downstream of a changed input that had
+        // one narrower than its size, and the mask is in the text again: every fixture must AGREE with the run now (the pins held the wrong text, and
+        // every one differed, before the fix).
         const std::vector<Family> wrong = {
             { "A2-52 c + 8x + 4y + 14x, shlr2 ; shll2", { 0xD008, 0xD309, 0x0347, 0x031A, 0x303C, 0xD308, 0x0367, 0x031A, 0x303C, 0xD307, 0x0347, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0008, 0x0000, 0x0004, 0x0000, 0x000E } },
             { "termgen 0", { 0xD00A, 0xD30B, 0x0367, 0x031A, 0x303C, 0x6353, 0x4308, 0x4308, 0x303C, 0xD308, 0x0347, 0x031A, 0x303C, 0xD307, 0x0367, 0x031A, 0x303C, 0x4009, 0x4008, 0x000B, 0x0009, 0x0009, 0x0000, 0x0100, 0x0000, 0x0010, 0x0000, 0x0008, 0x0000, 0x0012 } },
@@ -10280,12 +10281,13 @@ void TestArea2Round8()
         {
             DecompileResult r;
             const R8Outcome o = R8Check(d, fam.name, fam.code, inputs, "", {}, ++serial, 0x06009000u, &r);
-            if (o.verdict != "differs") std::printf("  A2-52 pin %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
+            if (o.verdict != "agrees") std::printf("  A2-52 pin %s: %s %s\n", fam.name, o.verdict.c_str(), o.detail.c_str());
             Print(fam.name, r);
-            CHECK(o.verdict == "differs");   // the defect: flip to "agrees" with the fix
-            differ += o.verdict == "differs" ? 1 : 0;
+            CHECK(o.verdict == "agrees");
+            differ += o.verdict == "agrees" ? 1 : 0;
+            if (std::strncmp(fam.name, "A2-52 c + 8x", 12) == 0) CHECK(Has(r.Text(), "& 0xfffffffc"));   // the mask the sum is read through is in the text
         }
-        std::printf("A2 round 8, A2-52 (the A2-47 family beyond patch 0046): %d of %zu fixtures print a wrong value\n", differ, wrong.size());
+        std::printf("A2 round 8, A2-52 (the A2-47 family beyond patch 0046): %d of %zu fixtures agree with the run\n", differ, wrong.size());
     }
     // ---- (6) the spec's decompiler-only lines ----
     // Mutants of superh.sinc that survived the decode oracle (its emulator does not run the op, or compares registers, not text), Sh2SemanticsTests
@@ -10309,44 +10311,54 @@ void TestArea2Round8()
         if (o.verdict != "agrees") std::printf("  trapa: %s %s\n", o.verdict.c_str(), o.detail.c_str());
         CHECK(o.verdict == "agrees");
     }
-    // ---- (7) A2-56 (P1): a consume mask that the common-subexpression merge leaves behind ----
+    // ---- (7) A2-56 (P1): a consume mask that the common-subexpression merge left behind ----
     {
         // addc r6,r4 ; movt r5 ; dmuls.l r0,r4 ; stc sr,r2 ; cmp/str r2,r6 ; bf over the next two ; stc sr,r5 ; sts macl,r4 ; rts ; mov r5,r0 (generator seed 965717).
         // The low byte of SR is read twice, once through `& 1` (the T bit of the carry chain) and once whole (cmp/str compares bytes): the two SUBPIECEs
-        // are equal and RuleSelectCse merges them with Funcdata::totalReplace, which re-points the readers and does not merge the consume masks, so the
-        // survivor keeps the 0x01 of the reader that was there first. The next ActionVarnodeProps (the first action of the main loop, before ActionDeadCode
-        // recomputes the masks) replaces any varnode whose non-zero mask and consume mask do not meet by a zero: the byte is printed as 0, and the
-        // text compares `(bool)(char)param_3` where the code compares the whole byte `(uint1)(in_sr_low | carry) == (uint1)param_3`. The run returns 1 where
-        // the text returns 0x203 for SR = 0x202. The pin holds the wrong text, to be flipped by the fix (an OR of the merged consume masks in
-        // Funcdata::cseElimination makes the fixture agree).
+        // are equal and RuleSelectCse merged them with Funcdata::totalReplace, which re-pointed the readers and did not merge the consume masks, so the
+        // survivor kept the 0x01 of the reader that was there first. The next ActionVarnodeProps (the first action of the main loop, before ActionDeadCode
+        // recomputes the masks) replaces any varnode whose non-zero mask and consume mask do not meet by a zero: the byte was printed as 0, and the
+        // text compared `(bool)(char)param_3` where the code compares the whole byte `(uint1)(in_sr_low | carry) == (uint1)param_3`. The run returns 1 where
+        // the text returned 0x203 for SR = 0x202. Patch 0051 makes totalReplace OR the replaced varnode's consume mask into the survivor's.
         auto snap = CallSnapshot({ "consume", 0x06009000u, { 0x346F, 0x0529, 0x340F, 0x0202, 0x262C, 0x8B01, 0x0502, 0x041A, 0x000B, 0x6053 } }, ++serial);
         const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
         Print("A2-56: cmp/str on the SR byte after addc", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(Has(r.Text(), "== (bool)(char)param_3"));   // the defect: A2-56 (the right text compares (uint1)(... | carry) == (uint1)param_3)
-        CHECK(!Has(r.Text(), "(uint1)param_3"));
+        CHECK(!Has(r.Text(), "== (bool)(char)param_3"));   // the defect was a compare of the bool with the byte
+        CHECK(Has(r.Text(), "(uint1)param_3"));            // the byte is compared whole
+        // The value is the printed-C differential's (the fixture "A2-56 ..." of `kPrintedCFixtures`): it runs SR through the inputs, which this
+        // suite's call oracle does not (SR is 0 on entry).
     }
     // ---- (3) A2-53 ----
     {
-        // mov r15,r0 ; and #0xFF,r0 ; rts ; nop: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot
-        // tell). The engine takes the stack pointer on entry to be aligned to 256 (Funcdata::calcNZMask: "Treat spacebase input as aligned") and
-        // prints `return 0;`; the code returns the low byte of r15. The pin holds the wrong text, to be flipped by the fix.
+        // mov r15,r0 ; and #0xFF,r0: r15 on entry is whatever the caller had (the run's is 0x0600F000, 256-aligned, so the run cannot tell). The engine
+        // took the stack pointer on entry to be aligned to 256 (Funcdata::calcNZMask: "Treat spacebase input as aligned") and printed `return 0;`;
+        // the code returns the low byte of r15. Patch 0052 takes it to be aligned to a longword, which the SH-2 requires of a stack that is pushed with
+        // `mov.l Rm,@-r15` (an address error otherwise) and both compilers' ABIs promise: the text keeps the dependence on r15.
         auto snap = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC9FF, 0x000B, 0x0009 } }, ++serial);
         const DecompileResult r = d.Decompile(snap, Request(0x06009000u));
         Print("A2-53: mov r15,r0 ; and #0xff,r0", r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(Has(r.Text(), "return 0;"));   // the defect: A2-53 (the right text states r15 & 0xff)
+        CHECK(!Has(r.Text(), "return 0;"));
+        CHECK(Has(r.Text(), "& 0xff;"));   // the low byte of the stack pointer, not a constant
         // The same assumption through the idiom that rounds a pointer up to 8: `mov r15,r0 ; add #7,r0 ; mov #-8,r1 ; and r1,r0`. A 4-aligned stack
-        // pointer that is 4 mod 8 gives r15 + 4; the engine takes the AND for redundant and returns the frame address itself.
+        // pointer that is 4 mod 8 gives r15 + 4; the AND is not redundant for it, and the text keeps the rounding.
         auto snap2 = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0x7007, 0xE1F8, 0x2019, 0x000B, 0x0009 } }, ++serial);
         const DecompileResult r2 = d.Decompile(snap2, Request(0x06009000u));
         Print("A2-53: mov r15,r0 ; add #7,r0 ; and #-8", r2);
-        CHECK(Has(r2.Text(), "return &xStack00000000;"));   // the defect: the right text keeps the rounding
+        CHECK(!Has(r2.Text(), "return &xStack00000000;"));
+        CHECK(Has(r2.Text(), "& 0xfffffff8"));
         // ...and `(r15 - 5) & 0x1c`: bits 2 to 4 of the stack pointer, printed as the constant 0x18
         auto snap3 = CallSnapshot({ "sp", 0x06009000u, { 0x7FFB, 0x60F3, 0xC91C, 0x7F05, 0x000B, 0x0009 } }, ++serial);
         const DecompileResult r3 = d.Decompile(snap3, Request(0x06009000u));
         Print("A2-53: add #-5,r15 ; mov r15,r0 ; and #0x1c,r0", r3);
-        CHECK(Has(r3.Text(), "return 0x18;"));   // the defect
+        CHECK(!Has(r3.Text(), "return 0x18;"));
+        CHECK(Has(r3.Text(), "& 0x1c;"));
+        // What a longword-aligned stack pointer does decide stays decided: the two low bits are clear (`and #3`), and a frame rounded to 4 is no-op.
+        auto snap4 = CallSnapshot({ "sp", 0x06009000u, { 0x60F3, 0xC903, 0x000B, 0x0009 } }, ++serial);
+        const DecompileResult r4 = d.Decompile(snap4, Request(0x06009000u));
+        Print("A2-53 control: mov r15,r0 ; and #3,r0", r4);
+        CHECK(Has(r4.Text(), "return 0;"));
     }
 }
 

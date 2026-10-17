@@ -38,7 +38,7 @@
 +        uint8_t b = (trial == 0) ? 0 : (trial == 1) ? 0xff : (uint8_t)(h & 0xff);
 +        if (spc->isBigEndian()) res = (res << 8) | b; else res |= (uintb)b << (8*i);
 +      }
-+      if (vn->isSpacebase()) res &= ~((uintb)0xff);   // the engine's own assumption (calcNZMask): a stack pointer on entry is 256-aligned
++      if (vn->isSpacebase()) res &= ~((uintb)3);   // the engine's own assumption (calcNZMask, patch 0052): a stack pointer on entry is longword-aligned (256 before it)
 +      ok = true;
 +    } else ok = evalOp(vn->getDef(), res);
 +    res &= calc_mask(sz);
