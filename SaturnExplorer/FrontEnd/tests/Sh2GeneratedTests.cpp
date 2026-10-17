@@ -108,6 +108,11 @@
 //      call the engine does not know, counted `cache.read.pointer.unrelated`. A pointer that derives from no register address (a
 //      parameter, a loaded or computed address) is excused, counted `cache.read.anonymous`; the others are
 //      `cache.read.pointer.said` or `...unsaid`.
+//   2b. (round 7, A5-52) A work-RAM word the traced function reaches under two addresses (the other partition, bits 28-27, the 1 MiB repeat, the
+//      associative-purge name of its line), by the emulator's own memory model, and at constant addresses the engine folds, is listed like marked
+//      memory: every access to it is in the ledger. The data flow keys memory by address, and would forward a store past a write to the other
+//      name (counted `alias.words`; SE_GENERATED_MUTATE=alias checks the check). Grammar 1 also makes a partition mask on a pointer register
+//      (`litptr.mask.and` / `.or`, A5-51), which rule 3b holds to the cache caution.
 //   Area 4:
 //   4. Every instruction a run executed lies in DecompileResult::body, or in the code of a function
 //      this one calls (or that function's body), or a flow warning names it (a warning at a jump taken for
