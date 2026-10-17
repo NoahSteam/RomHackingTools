@@ -1832,6 +1832,7 @@ std::set<uint32_t> gNoReturnForTests;
 std::function<void(DecompilePhase)> gPhaseHookForTests;
 std::function<void()> gBeforeReferenceHookForTests;
 std::function<void()> gBoundaryHookForTests;
+std::function<void()> gEngineDoneHookForTests;
 }  // namespace
 
 void Sh2Decompiler::Enter(DecompilePhase phase)
@@ -1882,6 +1883,11 @@ void Sh2Decompiler::SetPhaseHookForTests(std::function<void(DecompilePhase)> hoo
 void Sh2Decompiler::SetBoundaryHookForTests(std::function<void()> hook)
 {
     gBoundaryHookForTests = std::move(hook);
+}
+
+void Sh2Decompiler::SetEngineDoneHookForTests(std::function<void()> hook)
+{
+    gEngineDoneHookForTests = std::move(hook);
 }
 
 void Sh2Decompiler::SetBeforeReferenceHookForTests(std::function<void()> hook)
@@ -3996,6 +4002,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         if (gBoundaryHookForTests) gBoundaryHookForTests();
         checkCancel();
     }
+    // The last pass's Architecture is gone and no translator, Architecture or engine object is live: what follows is host
+    // work on host data (the aliased ranges, the callee lists, and in NoteRemovedAccesses the request's copy and the scan of
+    // the warnings). An allocation failure there leaves nothing half-reset, so it must not mark the engine damaged for the
+    // process (Decompile marks it for any exception met with a work phase set): it fails this request only (A6-45).
+    // mWorkPhase stays the pass's last phase until here, for the boundary check above to name the phase it honours a cancel in.
+    mWorkPhase = DecompilePhase::Idle;
+    if (gEngineDoneHookForTests) gEngineDoneHookForTests();
     for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
     if (printed.empty())
     {

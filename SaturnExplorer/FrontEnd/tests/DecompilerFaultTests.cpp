@@ -58,13 +58,15 @@
 //          a request refused because the configuration directory cannot be made is answered again, and correctly, once the
 //          cause is gone
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --diskfull [sticky]
-//          the reproduction of A6-43 (not a job of the default subset until that row is fixed): the first request of a process with the
-//          file size limit at SE_DF_LIMIT bytes (5,000: the three small spec files are written, the 13 KB language file is not) and
-//          allocation k failing, for every k; then the limit is lifted and the next request must be Ok, with no staging directory in
-//          the configuration directory and no descriptor left open. "sticky": every allocation from k on fails
-//        SaturnExplorerDecompilerFaultTests <scratch dir> --vanish [damage]
-//          the reproduction of A6-44 (also a hand mode): after a first request has started the library, the spec directory is
-//          removed (damage: its compiler spec is overwritten); what the next requests answer, and whether anything restores it
+//          the reproduction of A6-43 (fixed; the jobs "diskfull plain 5000", "diskfull sticky 5000" and "diskfull sticky 1500" of the
+//          default subset run it): the first request of a process with the file size limit at SE_DF_LIMIT bytes (5,000: the three small
+//          spec files are written, the 13 KB language file is not) and allocation k failing, for every k; then the limit is lifted and
+//          the next request must be Ok, with no staging directory in the configuration directory and no descriptor left open.
+//          "sticky": every allocation from k on fails
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --vanish [damage|unrepairable]
+//          the reproduction of A6-44 (fixed; the jobs "vanish removed", "vanish damage" and "vanish unrepairable"): after a first request
+//          has started the library, the spec directory is removed (damage: its compiler spec is overwritten; unrepairable: its parent
+//          is replaced by a regular file); the next request must verify the directory and restore it, or say why it cannot
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --diffruns <fixture> [runs]
 //          runs of the warmed engine after the baseline, each compared with it, allocation by allocation (the
 //          first must match; the markup's pair ids make a later one differ when they pass a varint boundary)
@@ -168,6 +170,12 @@ struct Log
     int nb = 0;
     int boundEnters[kMaxBound];
     long boundAlloc[kMaxBound];
+    // Where the host declared the engine finished with a request (Sh2Decompiler::SetEngineDoneHookForTests), once per
+    // DecompileInto: the phase entries before it and the allocation count at it (A6-45).
+    static const int kMaxDone = 8;
+    int nd = 0;
+    int doneEnters[kMaxDone];
+    long doneAlloc[kMaxDone];
 };
 
 struct Probe
@@ -177,7 +185,14 @@ struct Probe
     long allocAt[Log::kMax];
     bool inRef[Log::kMax];
     std::atomic<bool> inRefNow{ false };
-    std::atomic<bool> engineEntered{ false };       // a phase that does work began: Sh2Decompiler::mWorkPhase != Idle
+    // A phase that does work began and the host has not yet declared the engine finished with the request: what
+    // Sh2Decompiler::mWorkPhase != Idle means, and so whether a failure marks the engine damaged. Set by a phase entry,
+    // cleared by the engine-done hook where the host resets the work phase (A6-45): it was never cleared, which encoded
+    // the conservative rule that any failure after the first phase entry is "in the engine".
+    std::atomic<bool> engineEntered{ false };
+    std::atomic<int> dones{ 0 };                    // engine-done declarations (once per DecompileInto)
+    int doneEnters[Log::kMaxDone];
+    long doneAlloc[Log::kMaxDone];
     std::atomic<int> cancelAtEnter{ -2 };           // raise the cancel flag at the start of this phase entry
     std::atomic<std::atomic<bool>*> cancelFlag{ nullptr };
     std::atomic<int> setOrdinal{ -2 };              // the phase entry the flag went up in (-1: before the first)
@@ -191,6 +206,7 @@ struct Probe
         enters = 0;
         inRefNow = false;
         engineEntered = false;
+        dones = 0;
         cancelAtEnter = -2;
         cancelAtBoundary = -2;
         bounds = 0;
@@ -207,6 +223,12 @@ struct Probe
             l.allocAt[i] = allocAt[i];
             l.inRef[i] = inRef[i];
         }
+        l.nd = std::min(dones.load(), int(Log::kMaxDone));
+        for (int i = 0; i < l.nd; ++i)
+        {
+            l.doneEnters[i] = doneEnters[i];
+            l.doneAlloc[i] = doneAlloc[i];
+        }
         l.nb = std::min(bounds.load(), int(Log::kMaxBound));
         for (int i = 0; i < l.nb; ++i)
         {
@@ -217,6 +239,33 @@ struct Probe
     }
 };
 Probe gProbe;
+
+// The stretches of a request's allocations in which no translator, Architecture or engine object is live and nothing but host code
+// on host data runs (A6-45), from the baseline's phase log alone: from the last pass's Teardown entry of each DecompileInto -- the
+// shown run, then the reference run -- to the next phase entry (the reference run's Init: the request's copy, the volatile aliases,
+// the names, and the verification of the language files all come first) or to the end of the request (the host's tail: the
+// aliased ranges, the callee lists, the scan of the warnings). A failed allocation in one is Failed("out of memory") for that
+// request and nothing more: the engine is not marked, and the next request is correct.
+std::vector<std::pair<long, long>> HostStretches(const Log& L, long N)
+{
+    std::vector<std::pair<long, long>> v;
+    for (int i = 0; i < L.n; ++i)
+    {
+        if (L.phase[i] != DecompilePhase::Teardown) continue;
+        const bool lastOfRun = i + 1 >= L.n || (L.phase[i + 1] == DecompilePhase::Init && L.inRef[i + 1] != L.inRef[i]);
+        if (!lastOfRun) continue;
+        v.emplace_back(L.allocAt[i], i + 1 < L.n ? L.allocAt[i + 1] : N);
+    }
+    return v;
+}
+
+bool InHostStretch(const Log& L, long N, long k)
+{
+    for (const auto& s : HostStretches(L, N))
+        if (k >= s.first && k < s.second) return true;
+    return false;
+}
+
 
 // ================================================================================================
 // The allocator: count, fail one, raise the cancel flag at one
@@ -845,6 +894,16 @@ void InstallHooks()
         }
     });
     Sh2Decompiler::SetBeforeReferenceHookForTests([] { gProbe.inRefNow = true; });
+    // The host's declaration that no translator, Architecture or engine object is live (A6-45): what follows is host work.
+    Sh2Decompiler::SetEngineDoneHookForTests([] {
+        const int d = gProbe.dones.fetch_add(1);
+        if (d < Log::kMaxDone)
+        {
+            gProbe.doneEnters[d] = gProbe.enters.load();
+            gProbe.doneAlloc[d] = fa::gCount.load();
+        }
+        gProbe.engineEntered = false;
+    });
     // Called by the host immediately before each of its own cancel check-points (A6-41): the flag goes up here, in the phase
     // that is ending, and only the check that follows can honour it in that phase.
     Sh2Decompiler::SetBoundaryHookForTests([] {
@@ -1135,6 +1194,7 @@ bool MeasureBaseline(Ctx& c, const std::string& scratch)
         std::printf("BASE %d %ld %.3f %d\n", int(w.status), n, ms, log.n);
         for (int i = 0; i < log.n; ++i) std::printf("BASELOG %d %ld %d\n", int(log.phase[i]), log.allocAt[i], log.inRef[i] ? 1 : 0);
         for (int i = 0; i < log.nb; ++i) std::printf("BASEBOUND %d %ld\n", log.boundEnters[i], log.boundAlloc[i]);
+        for (int i = 0; i < log.nd; ++i) std::printf("BASEDONE %d %ld\n", log.doneEnters[i], log.doneAlloc[i]);
         std::fflush(stdout);
         FILE* f = std::fopen(sizesFile.c_str(), "wb");
         if (!f) return 3;
@@ -1174,6 +1234,15 @@ bool MeasureBaseline(Ctx& c, const std::string& scratch)
             log.boundEnters[log.nb] = at;
             log.boundAlloc[log.nb] = al;
             ++log.nb;
+        }
+        else if (l.compare(0, 9, "BASEDONE ") == 0 && log.nd < Log::kMaxDone)
+        {
+            int at = 0;
+            long al = 0;
+            std::sscanf(l.c_str() + 9, "%d %ld", &at, &al);
+            log.doneEnters[log.nd] = at;
+            log.doneAlloc[log.nd] = al;
+            ++log.nd;
         }
     }
     const std::string sizes = ReadFile(sizesFile), sig = ReadFile(sigFile);
@@ -1563,6 +1632,20 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
             if (c.base.log.allocAt[i] <= k) last = i;
         return last >= 0 && c.base.log.inRef[last];
     }();
+    // A6-45: the failure fell where only host code on host data runs, by the baseline's own phase log (the last pass's Teardown to
+    // the next phase entry or the end): no translator, Architecture or engine object is live, so it is this request's failure and
+    // not the engine's. Not a cancel cell (a cancel changes the run after it is raised).
+    const bool hostOnly = cancelAt < 0 && InHostStretch(c.base.log, c.base.allocs, k);
+    if (hostOnly && fired)
+    {
+        Expect(!inEngine, "the host declared the engine finished before a failure that fell after the last pass was torn down",
+               "allocation " + std::to_string(k) + " in the host-only stretch; the engine-done hook was not reached before it");
+        // (A nothrow allocation that reports by returning null, a stable_sort's scratch buffer, is absorbed: the generic checks below.)
+        if (!nothrow)
+            Expect(r.status == DecompileStatus::Failed && Has(r.error, "out of memory"),
+                   "a failed allocation in host-only code ends Failed(out of memory) for that request",
+                   "status " + std::to_string(int(r.status)) + " '" + r.error + "'");
+    }
 
 #ifdef SE_FAULT_ASAN
     // Before the first Flow entry of a pass is Architecture construction and the register loop (A6-15).
@@ -1596,7 +1679,7 @@ int RunAllocCell(Ctx& c, long k, long cancelAt = -1)
     }
     else if (r.status == DecompileStatus::Failed && Has(r.error, "out of memory"))
     {
-        cls = inEngine ? (inRefRun ? "failed-in-reference-run" : "failed-in-engine") : "failed-before-engine";
+        cls = inEngine ? (inRefRun ? "failed-in-reference-run" : "failed-in-engine") : (hostOnly ? "failed-after-engine" : "failed-before-engine");
         Expect(r.lines.empty(), "a failed result has no lines");
     }
     else if (r.status == DecompileStatus::Ok)
@@ -1904,16 +1987,21 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
     const bool same = lines == b.lines;
     const bool said = stopped;
     const bool line = !lines.empty() && lines.back().compare(0, 9, "<stopped:") == 0;
+    // A listing stopped before the engine was touched: no lines, or the one line that says so. That is the marker's and its room's own
+    // allocations (k < kDisasmMarkerAllocs), and since A6-44 also the verification of the language files that every request makes
+    // before it builds an Architecture (StartLibrary in the Ready stage): both leave the engine as it was.
+    const bool beforeEngine = said && (k < kDisasmMarkerAllocs || lines.empty() || (lines.size() == 1 && lines[0].compare(0, 16, "<out of memory w") == 0));
     std::string cls;
     if (!fired)
     {
         cls = "no-failure";
         Expect(same && !stopped, "a listing with no failure injected equals the baseline");
     }
-    else if (said && k < kDisasmMarkerAllocs)
+    else if (beforeEngine)
     {
-        // The marker or its room could not be made, before the engine was touched: the listing is cut short before it
-        // began, says so when a line can be made (not under sustained exhaustion), and the engine is not damaged (A6-30).
+        // The marker or its room could not be made, or the language files could not be verified, before the engine was touched: the
+        // listing is cut short before it began, says so when a line can be made (not under sustained exhaustion), and the engine is
+        // not damaged (A6-30, A6-44).
         cls = "stopped-before-engine";
         Expect(lines.empty() || (lines.size() == 1 && lines[0].compare(0, 16, "<out of memory w") == 0),
                "a listing stopped before the engine is empty or one line saying so", lines.empty() ? std::string("(empty)") : lines.back());
@@ -1934,7 +2022,7 @@ int RunDisasmCell(Ctx& c, const DisasmBase& b, long k)
     const DecompileResult after = RunOnce(c);
     const std::vector<std::string> again = DisasmOnce(c);
     const bool damaged = after.status == DecompileStatus::Unavailable;
-    if (said && k < kDisasmMarkerAllocs)
+    if (beforeEngine)
     {
         Expect(after.status == DecompileStatus::Ok && Signature(after) == c.base.sig, "after a listing stopped before the engine the next decompilation is correct");
         Expect(again == b.lines, "after a listing stopped before the engine the next listing is correct");
@@ -2697,6 +2785,31 @@ bool SiteMatches(const std::vector<std::string>& names, const char* site)
 }
 #endif
 
+// A6-47: the pins' coordinates (phase, size, ordinal) are counts of the allocations the engine's own containers and strings make, and
+// they were recorded against libstdc++. Another standard library allocates different helper objects in a different order, so on
+// libc++ (macOS) the same sites sit at other coordinates: every pin there was STALE or MOVED and seven jobs failed with nothing
+// wrong in the engine. Where the library is not libstdc++ the pin checks (the pins of the alloc family, and the pin self-test, which
+// pins an allocation of the same kind) are SKIPPED, with this reason; everything else still runs -- the sweeps (no crash, no leak,
+// Ok or an error under every allocation failure, the next request correct), the host-only stretches, and the cancel families, which
+// are the cross-platform gate. SE_FAULT_FOREIGN_STDLIB=1 forces the skip on libstdc++ too, so the logic is exercised on Linux.
+// Library-independent pins (an ordinal within a named ghidra:: frame) would bring the targeted cells back on other libraries; they
+// are not made (the census would need the stack of every allocation to be comparable across libraries, and it is not).
+std::string PinsSkippedReason()
+{
+    const char* forced = std::getenv("SE_FAULT_FOREIGN_STDLIB");
+    const bool force = forced && *forced && std::string(forced) != "0";
+#if defined(__GLIBCXX__)
+    if (!force) return std::string();
+    return "forced by SE_FAULT_FOREIGN_STDLIB (the standard library is libstdc++)";
+#elif defined(_LIBCPP_VERSION)
+    (void)force;
+    return "the standard library is libc++, and the pins' coordinates were recorded against libstdc++";
+#else
+    (void)force;
+    return "the standard library is not libstdc++, and the pins' coordinates were recorded against it";
+#endif
+}
+
 // A pin resolved against this build.
 struct PinRes
 {
@@ -3140,6 +3253,12 @@ int ReachCheck(const Ctx& c)
 // MOVED pin pass again would break nothing: every real pin is "site ok".
 int PinSelfTest(Ctx& c, const std::string& scratch)
 {
+    const std::string skippedWhy = PinsSkippedReason();
+    if (!skippedWhy.empty())
+    {
+        std::printf("SKIPPED pin-selftest: %s\n", skippedWhy.c_str());
+        return 0;
+    }
 #ifdef SE_FAULT_BACKTRACE
     static const char* const kCreate = "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces";
     static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
@@ -3231,6 +3350,19 @@ std::vector<long> AllocCells(const Ctx& c, bool full, const std::vector<PinRes>&
             for (long d = -1; d <= 1; ++d) add(L.allocAt[e] + d);
         add(N - 1);
         add(N - 2);
+    }
+    // The host-only stretches (A6-45): every allocation of each when it is short (the shown run's tail and the reference run's copy are a
+    // few dozen), else the first and last thirty-two. In the sampled subset too: these are where the engine's state is not in doubt.
+    for (const auto& st : HostStretches(L, N))
+    {
+        if (st.second - st.first <= 96)
+            for (long k = st.first; k < st.second; ++k) add(k);
+        else
+            for (long d = 0; d < 32; ++d)
+            {
+                add(st.first + d);
+                add(st.second - 1 - d);
+            }
     }
     for (const PinRes& r : pins)
         for (long k : r.ks) add(k);   // a stale pin has none; the driver reports it and fails
@@ -3345,6 +3477,27 @@ int BoundaryCheck(const Ctx& c)
     return same && L.nb > 0 ? 0 : 1;
 }
 
+// A6-45's census, from the baseline: the host declared the engine finished once for each DecompileInto (the shown run, and the
+// reference run when there is one), each declaration lies inside the stretch that the phase log says is host-only, and there
+// is at least one stretch -- so the pin of the alloc cells above cannot be vacuous, and a hook call that moved or went is loud.
+int HostTailCheck(const Ctx& c)
+{
+    const Log& L = c.base.log;
+    const std::vector<std::pair<long, long>> st = HostStretches(L, c.base.allocs);
+    std::string text;
+    for (const auto& s : st) text += "[" + std::to_string(s.first) + "," + std::to_string(s.second) + ") ";
+    std::string done;
+    for (int j = 0; j < L.nd; ++j) done += std::to_string(L.doneAlloc[j]) + " ";
+    bool ok = !st.empty() && int(st.size()) == L.nd;
+    for (int j = 0; ok && j < L.nd; ++j) ok = L.doneAlloc[j] >= st[size_t(j)].first && L.doneAlloc[j] <= st[size_t(j)].second;
+    std::printf("HOSTTAIL %s: %zu host-only stretch(es) %s; the host declared the engine finished at %s\n", c.fix->name, st.size(), text.c_str(),
+                done.c_str());
+    if (!ok)
+        std::printf("FAIL host-tail %s: the engine-done declarations [%s] are not one inside each host-only stretch of the phase log [%s]\n", c.fix->name,
+                    done.c_str(), text.c_str());
+    return ok ? 0 : 1;
+}
+
 std::vector<long> CancelAllocCells(const Ctx& c, bool full)
 {
     std::set<long> s;
@@ -3410,7 +3563,16 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
     std::vector<long> cells;
     std::vector<PinRes> pins;
     DisasmBase disasm;
-    if (family == "alloc" && !sticky && only == -999999) pins = ResolvePins(c, scratch);
+    if (family == "alloc" && !sticky && only == -999999)
+    {
+        const std::string skipped = PinsSkippedReason();
+        if (!skipped.empty())
+        {
+            if (shard == 0) std::printf("SKIPPED pins of %s: %s\n", fixture.c_str(), skipped.c_str());
+        }
+        else
+            pins = ResolvePins(c, scratch);
+    }
     if (isCold) cells = ColdCells(cold, full);
     else if (family == "alloc") cells = AllocCells(c, full, pins);
     else if (family == "disasm")
@@ -3546,6 +3708,15 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
         else if (shownFailures < 400)
         {
             std::printf("FAIL %s %s %ld: %s\n", familyArg.c_str(), fixture.c_str(), p, (v.kind + ": " + v.sig).c_str());
+        }
+    }
+    if (family == "alloc" && !sticky && only == -999999 && shard == 0)
+    {
+        const int bad = HostTailCheck(c);
+        if (bad)
+        {
+            sum.failed += bad;
+            sum.classes["FAIL:host-tail"] += bad;
         }
     }
     if (family == "cancel-bound" && only == -999999 && shard == 0)
@@ -4394,7 +4565,7 @@ std::string StrayStaging(const std::string& cfg)
 // spec files are written and the 13 KB language file is not ("the disk is full on the fourth file"), and allocation k failing as well,
 // for every k of that request. Then the limit is lifted and the next request must be Ok, with no staging directory and no
 // descriptor left behind.
-int DiskFullProbe(const std::string& scratch, bool sticky)
+int DiskFullProbe(const std::string& scratch, bool sticky, long limit = 0)
 {
     sfe::MakeDirectory(scratch);
     signal(SIGXFSZ, SIG_IGN);
@@ -4403,7 +4574,7 @@ int DiskFullProbe(const std::string& scratch, bool sticky)
     const DecompileRequest rq = MakeRequest(*fx);
     InstallHooks();
     const char* limEnv = std::getenv("SE_DF_LIMIT");
-    const rlim_t kLimit = limEnv ? rlim_t(std::atol(limEnv)) : rlim_t(5000);
+    const rlim_t kLimit = limit > 0 ? rlim_t(limit) : limEnv ? rlim_t(std::atol(limEnv)) : rlim_t(5000);
     auto setLimit = [](rlim_t n) {
         struct rlimit rl;
         getrlimit(RLIMIT_FSIZE, &rl);
@@ -4486,14 +4657,19 @@ int DiskFullProbe(const std::string& scratch, bool sticky)
             std::printf("FAIL k=%ld exit %d sig %d%s\n%s\n", k, run.proc.code, run.proc.signal, run.proc.timedOut ? " timed out" : "", run.out.c_str());
         }
     }
-    std::printf("diskfull%s: %d cells, %d failed\n", sticky ? " (sticky)" : "", cells, bad);
+    std::printf("diskfull%s limit %ld: %d cells, %d failed\n", sticky ? " (sticky)" : "", long(kLimit), cells, bad);
     return bad ? 1 : 0;
 }
 
-// `--vanish <scratch> [damage]`: the library is up (a first request succeeded), then the spec directory is removed (or one file damaged) under
-// the running process. What do the next requests say, and does anything restore the files?
-int VanishProbe(const std::string& scratch, bool damage)
+// A6-44: the language files removed or damaged under a running process. `--vanish <scratch> [damage|unrepairable]`, or the jobs "vanish",
+// "vanish damage" and "vanish unrepairable" of the parent (also the hand mode that reproduced the row): the library is up (a first
+// request succeeded), then the spec directory is removed (damage: one file overwritten; unrepairable: its parent replaced by a regular
+// file, which nothing can be written under). The next request must be answered by a verification of the directory: Ok (the files
+// restored from the build, the library still started once) for the first two, Unavailable with the path and not an engine XML error for
+// the third -- and in that case the request after the cause is gone is Ok again, the failure not remembered for the process.
+int VanishProbe(const std::string& scratch, const std::string& how)
 {
+    dts::Failures() = 0;
     sfe::MakeDirectory(scratch);
     const auto snap = BuildSnapshot();
     const Fix* fx = FindFix("mailbox");
@@ -4510,8 +4686,10 @@ int VanishProbe(const std::string& scratch, bool damage)
         bool stopped = false;
         const std::vector<std::string> l = e.Disassemble(snap, dts::kFixture1Caller, 3, &stopped);
         std::printf("%-10s: %zu line(s) stopped=%d first '%s'\n", what, l.size(), int(stopped), l.empty() ? "" : l[0].substr(0, 200).c_str());
+        return l;
     };
-    ask("1 first");
+    const DecompileResult first = ask("1 first");
+    Expect(first.status == DecompileStatus::Ok, "the first request is Ok", first.error);
     const std::string root = dts::Join(cfg, "decompiler");
     std::vector<std::string> names;
     sfe::ListDirectory(root, names);
@@ -4519,22 +4697,64 @@ int VanishProbe(const std::string& scratch, bool damage)
     for (const std::string& n : names)
         if (n.find('.') == std::string::npos) hashDir = dts::Join(root, n);
     std::printf("spec directory: %s\n", hashDir.c_str());
+    Expect(!hashDir.empty(), "the first request extracted the language files");
+    const bool damage = how == "damage", unrepairable = how == "unrepairable";
+    const std::string aside = dts::Join(cfg, "decompiler.aside");
     if (damage)
     {
         FILE* f = std::fopen(dts::Join(hashDir, "superh.cspec").c_str(), "wb");
-        std::fputs("garbage", f);
-        std::fclose(f);
+        if (f)
+        {
+            std::fputs("garbage", f);
+            std::fclose(f);
+        }
+    }
+    else if (unrepairable)
+    {
+        // The directory moves out of the way and a regular file takes its parent's name: no directory, no lock file, no extraction.
+        Expect(sfe::MovePath(root, aside), "the language directory is moved aside");
+        if (FILE* f = std::fopen(root.c_str(), "wb"))
+        {
+            std::fputs("x", f);
+            std::fclose(f);
+        }
     }
     else
         dts::RemoveTree(hashDir);
-    ask("2 gone");
-    ask("3 again");
-    list("3 disasm");
+
+    const DecompileResult second = ask("2 gone");
+    const std::vector<std::string> listing = list("2 disasm");
+    if (unrepairable)
+    {
+        Expect(second.status == DecompileStatus::Unavailable && Has(second.error, "Decompiler unavailable") && Has(second.error, hashDir.c_str()),
+               "a request that finds the language files gone and not restorable is Unavailable, with the path (not an engine XML error)", second.error);
+        Expect(!Has(second.error, "XML error"), "...and not the engine's message", second.error);
+        Expect(listing.size() == 1 && Has(listing[0], "unavailable"), "a listing is refused the same way",
+               listing.empty() ? std::string("(empty)") : listing[0]);
+        const DecompileResult again = ask("3 again");
+        Expect(again.status == DecompileStatus::Unavailable && again.error == second.error, "and again, the same: nothing is remembered but the cause", again.error);
+        // The cause is gone.
+        sfe::RemoveFile(root);
+        Expect(sfe::MovePath(aside, root), "the language directory is put back");
+        dts::RemoveTree(hashDir);   // ... without its files: the next request restores them
+    }
+    else
+        Expect(second.status == DecompileStatus::Ok && Signature(second) == Signature(first),
+               "a request after the language files vanished or were damaged is answered by a verification and a repair, and is correct (A6-44)",
+               "status " + std::to_string(int(second.status)) + " '" + second.error + "'");
+    const DecompileResult third = ask("4 next");
+    Expect(third.status == DecompileStatus::Ok && Signature(third) == Signature(first),
+           "the request after that, the cause gone, is correct: a failure after a success is not for the process", "status " + std::to_string(int(third.status)) + " '" + third.error + "'");
+    const std::vector<std::string> good = list("4 disasm");
+    Expect(good.size() == 3 && !Has(good[0], "unavailable"), "and a listing is made");
     const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(cfg);
-    std::printf("restored by hand: ok=%d extracted=%d repaired=%d\n", int(b.ok), int(b.extracted), int(b.repaired));
-    ask("4 restored");
-    list("4 disasm");
-    return 0;
+    std::printf("by hand: ok=%d extracted=%d repaired=%d (the directory is whole: nothing to restore)\n", int(b.ok), int(b.extracted), int(b.repaired));
+    Expect(b.ok && !b.extracted && !b.repaired, "after the repair the directory verifies as it is");
+    std::printf("RESULT vanish %s: %s\n", how.empty() ? "removed" : how.c_str(), dts::Failures() ? "FAIL" : "ok");
+    std::fflush(nullptr);
+    const int leak = dts::Failures() ? 0 : LeakCheck();
+    std::fflush(nullptr);
+    std::_Exit(dts::Failures() ? kExitInvariant : leak);
 }
 
 }  // namespace
@@ -4561,6 +4781,10 @@ int main(int argc, char** argv)
         return Driver(arg(2), arg(3), arg(4), arg(5) == "1", std::atoi(argv[6]), std::atoi(argv[7]), -999999);
     // ... or the refused-retry cell (A6-40) in a process of its own: --refused-retry <scratch>
     if (arg(1) == "--refused-retry" && argc >= 3) return RefusedRetryCell(arg(2));
+    // ... or the language files gone under a running process (A6-44): --vanish-job <scratch> <removed|damage|unrepairable>
+    if (arg(1) == "--vanish-job" && argc >= 4) return VanishProbe(arg(2), arg(3));
+    // ... or a write that fails for want of room, met by an allocation failure (A6-43): --diskfull-job <scratch> <limit> <plain|sticky>
+    if (arg(1) == "--diskfull-job" && argc >= 5) return DiskFullProbe(arg(2), arg(4) == "sticky", std::atol(argv[3]));
     // ... or one worker allocation-failure cell: --runner-oom <fixture> <scratch> <entry> <j>
     if (arg(1) == "--runner-oom" && argc >= 6) return RunnerOomChild(arg(3), arg(2), std::atol(argv[4]), std::atol(argv[5]));
     // ... or the runner scenarios of one kind: --runner <kind> <scratch> <entry|all> <full 0|1>
@@ -4581,7 +4805,7 @@ int main(int argc, char** argv)
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
 
-    if (arg(2) == "--vanish") return VanishProbe(dts::Join(scratch, "cell"), arg(3) == "damage");
+    if (arg(2) == "--vanish") return VanishProbe(dts::Join(scratch, "cell"), arg(3));
     if (arg(2) == "--diskfull") return DiskFullProbe(dts::Join(scratch, "cell"), arg(3) == "sticky");
     // ---- the refusal for a cause that is gone (A6-40), a process of its own
     if (arg(2) == "--refused-retry") return RefusedRetryCell(dts::Join(scratch, "cell"));
@@ -4669,6 +4893,28 @@ int main(int argc, char** argv)
         j.args = { "--refused-retry", dts::Join(scratch, "rr" + std::to_string(jobs.size())) };
         jobs.push_back(j);
     }
+    // A write that fails for want of room, with an allocation failing as well (A6-43): the file and its descriptor are closed, the
+    // staging directory goes, and the next request is correct. The limit 5,000 bytes writes the three small spec files and fails the 13 KB
+    // language file (the fwrite branch); 1,500 and 1,600 fail the second and third file at their close (the fclose branch).
+    for (const char* mode : { "plain", "sticky" })
+        for (const char* limit : { "5000", "1500" })
+        {
+            if (std::string(mode) == "plain" && std::string(limit) == "1500") continue;
+            Job j;
+            j.label = std::string("diskfull ") + mode + " " + limit;
+            j.log = dts::Join(logs, std::string("diskfull_") + mode + "_" + limit + ".log");
+            j.args = { "--diskfull-job", dts::Join(scratch, "df" + std::to_string(jobs.size())), limit, mode };
+            jobs.push_back(j);
+        }
+    // The language files removed, damaged, or made unrestorable under a running process (A6-44): the next request verifies them.
+    for (const char* how : { "removed", "damage", "unrepairable" })
+    {
+        Job j;
+        j.label = std::string("vanish ") + how;
+        j.log = dts::Join(logs, std::string("vanish_") + how + ".log");
+        j.args = { "--vanish-job", dts::Join(scratch, "vn" + std::to_string(jobs.size())), how };
+        jobs.push_back(j);
+    }
     // The pins' own verdicts, on pins written wrong (A6-34): a MOVED pin fails the run, an ordinal the site lacks is STALE.
     addDriver("pin-selftest", "dag", 1);
     // The first request of a process (A6-30): fresh processes, so no warm-up and no sharing with the families above.
@@ -4729,6 +4975,9 @@ int main(int argc, char** argv)
     const auto t0 = Clock::now();
     std::printf("fault matrix: %zu job(s), %zu in parallel, %s\n", jobs.size(), jobsParallel,
                 full ? "FULL (SE_FAULT_FULL=1)" : "default subset");
+    const std::string pinsSkipped = PinsSkippedReason();
+    if (!pinsSkipped.empty())
+        std::printf("fault matrix: the allocation pins and pin-selftest are SKIPPED: %s\n", pinsSkipped.c_str());
     const int failures = RunJobs(jobs, jobsParallel, timeout, false);
     std::printf("runner-oom: %zu cells (a process each; only failures are listed above)\n", oomCount);
     std::printf("fault matrix: %d of %zu job(s) failed, %.1f s\n", failures, jobs.size(), MsSince(t0) / 1000.0);
