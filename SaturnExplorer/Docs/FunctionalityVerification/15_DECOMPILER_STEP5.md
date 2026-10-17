@@ -8844,3 +8844,75 @@ I did not file rows for the two other areas' seeds (the coordinator numbers them
 - jmp, jsr, braf, bsrf and rte slot loads are checked to the hardware at the p-code (decode oracle, 0 differ) and by substring in the text, not by value: a callee-visible value needs a lent callee, and the value of a tail jump's slot is not in the caller's text. The mova and rts values are; the rest depend on A2-47's fix to be worth building.
 - The mac.w and mac.l text by value (above).
 - A3 and A5 seeds 60538 and 64293 beyond the replay lines.
+
+## Area 2, round 7 fix
+
+Fixer, branch `review/2-round7-fix`, on the coordinator's head `1a87b1b`. One code commit, `ad80a00` (two engine patches, tests, the generator), and the record. **A2-47 (P1) and A2-48 (P2) are fixed, A2-50 (P3, oracle) is fixed, A2-49 (P3) is accepted** with a reason that matches A2-45's and a count in the generator in place of the failure. New patches: **0046** and **0047** (the numbers the gaps between 0045 and 0048 left; `vendor.py` applies them in file-name order and the reproduction below is identical). Nothing else in the engine or the spec changed, so `sh-2.sla` and `Sh2SpecData.h` are as they were.
+
+### 1. The rows
+
+**A2-47 (P1), patch 0046.** The reviewer's account is right except for one word. I printed the tree as `RuleAndMask` reads it and followed the rewrite: `Funcdata::distributeIntMultAdd` turns a MULT into an ADD and keeps its value, so it is not the one that leaves a wrong mask; `RuleCollectTerms` is. It collects the terms of an ADD tree, zeroes the coefficient of one term in one inner ADD (`opSetInput(order[i-1]->getOp(), zerocoeff, ...)`) and puts the combined coefficient in another, so the sum of the whole tree is what it was and the value of each inner op is not. The inner ADD that used to be `(1 - T) * 0x6009008` (a multiple of 4, mask `0xfffffffc`) became `T * 6 + 0x6009008` with that mask, and `RuleAndMask`, which trusts `getNZMask()` of its input, took the `& 0xfffffffc` for redundant. The mask is information about a value; the defect is in keeping it across an in-place change of the value, and `ActionNonzeroMask` (`calcNZMask`) only runs once per pass of the main loop, between pools of rules.
+
+The place: `Funcdata::opSetInput` sets the mask of the output of the op whose input it sets back to every bit possible (`~0`, what a new Varnode has) after the new input is in. Three candidate places were weighed:
+
+| Place | Verdict |
+|---|---|
+| In `RuleCollectTerms` after its `opSetInput` calls | Covers the rule that was found and none of the others that change an op's value in place; every one of them would need the same line, and the next rule written would not have it. |
+| `opSetInput` (the reviewer's trial) | One place for every rewrite through the common route; the mask is only information, so losing it for the rest of a pool costs at most a simplification that the next pass makes, never a value. **Chosen.** |
+| `opSetInput` recomputing with `PcodeOp::getNZMaskLocal(true)` instead of resetting | More exact, and I tried it: the game dump crashed (a segmentation fault in `getNZMaskLocal` for an op that reaches `opSetInput` half built or of a kind whose inputs it does not expect). A recomputation is a new reading of every op's shape at every input change; the reset needs to know nothing. Dropped. |
+
+`TestArea2Round7SlotValues` is flipped: every case is held to the run (it was `expectWrong` for the bt/s odd mova and mov.l, with `wrong == 2`), the odd-displacement mova and mov.l cases are held to `& 0xfffffffc` in the text, and the control (the same sum as code) too. The reviewer's sweep showed the wrong half is the other one for the other alignment of the code, so every case is now made at **both** alignments (a `nop` first or not): 24 slot cases (3 slots x bt/s and bf/s x even and odd x 2 alignments) plus `rts + mova` and the two controls. Reverting the patch fails 8 CHECKs.
+
+**A2-48 (P2), patch 0047.** `Sleigh::oneInstruction` now sets the tree's next address to `addr + length` of the branch itself before it applies the commits, then to the end of the slot as before (the `bsr` and `jsr` p-code needs that one for the return address). The trial of the review is the fix; the first translation sets it to what the parser had set already, so only a cached tree changes. `RunFollowers` is `CHECK(twice == 0)`: 60 pairs, 240 cases, 0 differ after one translation and after two in a row (215 differed). The decode oracle's other parts did not move.
+
+**A2-49 (P3), accepted.** I looked for the cause before accepting, because the row says "fix it if it is reasonable". The RETURN's value in the lent request is not the call's output: the callee returns 1 byte (`extu.b`), the lent type is `xunknown1`, and r0's other three bytes come from a MULTIEQUAL of the diamond that the `bt` makes, so the RETURN reads `ZEXT(SUBPIECE(CONCAT(MULTIEQUAL, call output)))` (printed with a debugging line in `ActionReturnRecovery::apply`, removed again). Patch 0044's rule, that a RETURN whose value is a locked call's output is a return whatever else uses the value, looks at the output itself; here `ancestorOpUse` falls to `onlyOpUse`, which finds the `CBRANCH` that the compare feeds, and the branch whose arms do nothing is removed after the return is decided (their dead writes go first, the empty branch later). To count it, either the extension and concatenation are looked through (a new case in `ancestorOpUse` that has to be right for every width and every piece), or dead code and branch removal run ahead of return recovery (upstream's order is the reverse). Both for a function that compares a value and does nothing with the answer, which is unoptimised code, and a caller that reads r0 afterwards is withheld ("uses r0 after calling"). The same reason as A2-45's (the order of the passes) and the same rule as A3-41 (r0 used for anything else is scratch). The reviewer's remark that seed 62956's arms are not empty is right: they hold dead writes (r2, r7, r1, r3), so the generator cannot recognise the shape by empty arms, and the reduction in the row (nops for those words) is the same function after the dead writes are gone.
+
+What the generator does about it: a function whose `returns` intent is lent `void` is not a `return-dropped` when its code compares r0 (`tst r0,r0`, `cmp/eq #imm,r0`, `cmp/pl`, `cmp/pz`, `cmp/xx` with r0 as an operand) with a `bt`, `bf`, `bt/s` or `bf/s` after its last call (`ComparesCallResult`); it is counted as `excluded.call-result-compared.return-dropped`, so a run shows how often the grammar draws it (1 of the 6,000 seeds 60,001 to 66,000, seed 62956; none in the 20,000 of the nightly). Pinned by `TestRound7Pins` (the seed, the review's reduction, and a control with the compare and the branch as nops, which returns r0 and is lent so and is not excluded).
+
+**A2-50 (P3, oracle).** Two guards, because the declaration can be false in two ways. `Shrinker::IntentHolds` is checked before every shrink step is evaluated: a function that returns the value of its last call (`retIsCall`, the one declaration an item carries) must still end in a call to a function that returns, so a step that takes out the call, or puts an item after it, is refused; the other declarations are words of the function itself (`retWord`, which no step removes) or are checked against the run (`partial`). And `return-dropped` itself needs r0 written on every finished run (`!everUnwritten`), the evidence the row asks for: a function that writes r0 nowhere is not a counterexample whatever it was declared. Seed 62956 shrunk with the A2-49 exclusion switched off keeps its call and its compare (`... B00F 0009 6483 6593 2008 8901 A002 0009 A000 E361 ...`) and is lent `void` over a callee that returns: a counterexample. Pins in `TestRound7Pins`: the review's shrunk replay with its `returns` declaration has no finding (the guard on the run); `IntentHolds` is false when the call is taken out and when an item follows it; and a shrink of the seed with every step accepted but the one that gives up `retIsCall` ends with the intent intact (the guard in the shrinker; `Shrinker` has an `accept` hook for it).
+
+**Other.** Seven A6-11 allocation pins of `DecompilerFaultTests` moved (a changed mask makes the main loop take a slightly different path through the `shapes` fixture, so the same allocation is a few ordinals away): `actions` pass 0: 16 bytes #338 to #368, 24 bytes #882 to #880, 32 bytes #259 to #283, 40 bytes #568 to #566, 56 bytes #104 to #106; pass 1: 24 bytes #882 to #880, 32 bytes #259 to #283, each as the suite prints it ("MOVED ... Re-pin: write nth = ..."). The pins name the same sites.
+
+### 2. The mutation table
+
+Each fix reverted in the committed tree (the engine file or the test file restored with `git checkout` after), the owning suite rebuilt and run:
+
+| Reverted | Pin | Result |
+|---|---|---|
+| 0046: the reset in `opSetInput` removed | `Sh2DecompilerTests` `TestArea2Round7SlotValues` | fails 8 CHECKs: 2 of the slot cases by value against the run, 4 for the missing `0xfffffffc` in the text, and the A2-47 control both ways |
+| 0047: `setNaddr` before `applyCommits` removed | `Sh2DecodeTests` `RunFollowers` (two in a row) | 215 of 240 cases differ, `twice == 0` fails (the review's number) |
+| A2-50: `!everUnwritten` removed from `return-dropped` | `TestRound7Pins` (the shrunk replay) | the replay gets a `return-dropped` finding |
+| A2-50: `IntentHolds` not asked in `Shrinker::Still` | `TestRound7Pins` (the shrinker with its hook) | the program that results fails `IntentHolds` |
+| A2-50: `IntentHolds` always true | `TestRound7Pins` | fails both (call taken out; item after it) |
+| A2-49: the exclusion off (`ComparesCallResult` false) | `TestRound7Pins` | fails 4: the seed and the reduction each get a finding and are not excluded |
+
+### 3. The matrix, on the fixed tree
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` (RelWithDebInfo, 92 tests) | 92 of 92 pass (the longest, the fault suite, 123 s) |
+| `SaturnExplorerDecompilerFaultTests` | 94 jobs, 0 failed, after the seven re-pins (7 MOVED before them, 0 after) |
+| generator, grammar 2, `SE_GENERATED_SEEDS=3000` | 0 failing seeds, 0 findings; the canary 240 programs, 0 failing |
+| generator, grammar 1, 1,000 seeds | 0 failing, 0 findings |
+| generator, printed-C only, 3,000 seeds | 3,072 functions, 2,616 compared, agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, 0 findings (the review's numbers) |
+| generator, 20,000 seeds (10,000 of each grammar) | 0 failing seeds, 0 findings |
+| generator, grammar 2, `SE_GENERATED_FIRST=60001`, 6,000 seeds | **2 failing seeds, 60538 (A3) and 64293 (A5), neither this area's**; 62956 is counted as excluded (1) |
+| decode oracle with `SE_MEDNAFEN_SS` | transcribed table equals Mednafen's for 65,536 words, 53,752 defined, 0 disagreements for SLEIGH and `Sh2Disasm`; translation history 5,632 cells 0 differ; followers 60 pairs, 240 cases, **0 differ after one and after two translations**; differential execution 260,000 cases (default), 0 differ, 0 could not run, 0 of 130 forms; 6,500,000 at seed 555 and again at seed 31337 (`SE_DECODE_CASES=50000`), 0 differ, 0 could not run |
+| corpus 007 (`SE_GAME_HWRAM`, `SE_GAME_LEND=1`) | every ledger count 0 (0 dropped, 0 missing and said); 1,732 functions; lent signatures 637 (866 parameters) before, **662 (923)** after: as before the fix |
+| corpus 008 | every ledger count 0 (0 dropped, **4** missing and said); 2,997 functions; lent 992 (1,227) before, **1,021 (1,287)** after: as before the fix |
+| vendoring (`python3 -I vendor.py` on a copy, the pinned Ghidra checkout) | 43 patches applied; `cpp/`, `processors/` and `sources.cmake` identical to the tree (and every other file of the directory) |
+
+**The corpus texts, before and after.** The counts of the ledger and of lending did not move, but a mask change can move folding anywhere, so the texts were compared: all 839 functions of image 007 and all 1,554 of image 008 with a prologue (`sts.l pr,@-r15`), decompiled with the default request by the engine without patches 0046 and 0047 and with them, the one linked against the object files of the other. **10 of 839 and 24 of 1,554 differ (1.2 % and 1.5 %)**; the rest are byte for byte the same. I read every difference after renaming variables (`xVarN`, `auStack_N`): none changes a value. They are of four kinds:
+
+- *Branch layout* (15): an `if/else` that set a result and returned it becomes guard clauses and `return`s (`0602032E`, `0605F80A`, `06040FD6`, `06073D58`, `060731E2`), a conjunction becomes nested ifs (`0602CE96`, `0606D95A`, `0600FD18`, `060331B8`), a flag is kept with the opposite sense and negated where it is read (`0601C5A6`, `0605BA82`: `bVar = x == 0 ... bVar = !bVar`), a comparison is written the other way round (`0600AACE`, `0600AB32`, `0600A0DE`, `0600A142`: `-1 < p` to `p < 0` with the arms swapped).
+- *Types* (9): `xunknown1`/`xunknown2` becomes `uint1`/`uint2` (`0601E398`, `0601E3C4`, `0605D874`, `0605D8A0`), an `& 0xffff` is gone and the variable is a `uint2` (`0601E58E`, `0601E5F4`), a temporary is `xunknown4` (`06013142`), a byte read is kept in a `uint1` (`0603482E`, `06044576`).
+- *Order or naming of statements and temporaries* (6: `0601E54E`, `0605DA2A`, `0603B582`, `0603B636`, `0603B75A`, `0604080A`).
+- *Expressions written another way* (4): `(x >> 10 & 0x1f) * 0xb8` is printed as `(x & 0x1f) * 0x90 + ... * 0x28` (0x90 + 0x28 = 0xb8, `06036182`), a 16-bit sum is cast once instead of twice (`0603A080`), `uStack_8._0_1_` is `uStack_8 >> 0x18` (`0601FD58`, `0605F234`), the same value (offset 0 of a big-endian word).
+
+That is the cost of the reset: a few rules that read a mask in the pass in which an input changed read "every bit" for that pass and the simplification comes a pass later, or in another order. The register-only printed-C oracle, which compares values against the run, and the 20,000 seeds are the check that none of them is a value.
+
+### 4. Not done, and what is left
+
+- A2-49 stays a way for the engine to print `void` over a value that a lent callee returns and the function only compares; the generator counts it. A reviewer who wants it closed has the two ways in the row's reason.
+- The corpora were compared as text (above); no run compares the corpus functions' values (there is no emulator trace of the game).
+- A5-82 and the seed 60538 are not taken (other areas').
