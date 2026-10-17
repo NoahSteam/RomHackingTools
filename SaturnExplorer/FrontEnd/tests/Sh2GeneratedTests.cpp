@@ -6447,7 +6447,9 @@ Subject MakeCanarySubject(int variant, std::string& label)
     const int form = static_cast<int>(r.Below(3));   // 0 exact, 1 plus a negative index, 2 minus a positive one
     const uint32_t kWriter = 0x80, kKeepLent = 0xA0, kKeepUnlent = 0xC0, kIndexWord = 0x100;
     CanaryAsm a;
-    std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x000B, 0x6313 };
+    // (the callee that is not lent stores r1, which the caller sets, through r4: a read of r1 that is live, so the signature is withheld; a
+    // copy of r1 to a scratch register was dead code and the callee was lent)
+    std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x2412, 0x000B, 0x0009 };
     const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested" };
     const uint16_t seven = static_cast<uint16_t>(0xE100 | kCanaryWritten);   // mov #0x37,r1
     // The functions after the caller: the writer, a callee that keeps everything and one that reads r1 (so is not lent), and for the nested
