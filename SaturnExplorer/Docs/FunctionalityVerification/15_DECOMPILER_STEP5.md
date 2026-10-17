@@ -9578,3 +9578,69 @@ Integration note (coordinator): this fix and the routed-seeds fix were given dif
 fix merged first (`0052-flow-instruction-alignment.patch`), so this fix's patch is `0053-engine-stack-pointer-longword-aligned.patch`; every
 mention of 0052 in this section and in row A2-53 means 0053. The two patches touch different files; the vendored `cpp/` merged without a
 conflict, and the reproduction was re-run on the merged tree with the new order.
+
+## Area 3, round 9 review
+
+Reviewer, branch `review/3-round9-review`, on master `c3256a5` (the merge of the routed-seeds fix). Findings only, no fixes; the one code change is a suite function of controls that pass (`TestArea3Round9`, below). New ledger rows: **A3-56, A3-57, A3-58, A3-59, A3-60, A3-61, A3-62 (P2)**, A3-63, A3-64 (P3). No row is routed to another area: no sweep produced a finding.
+**The round is not clean: seven P2 rows.** Area 3 has no open row before this round's, and the count of consecutive clean rounds is 0 again (round 8 was not clean either). None of the seven is a defect of a fix of round 8 in the sense of a regression: each is a shape the fix's reasoning left out, and four of them are in A3-55's rule itself, which a reviewer had not yet attacked. The round 8 fixes held where they were written to hold (below); the P2 rows are the sides of the same rules that the pins do not touch.
+
+### Instruments (scratch, not committed; described so the next reviewer can rebuild them)
+
+- **The fixture driver** of rounds 6 to 8 (the suite's own file with `main` renamed, `drvmain.inc`: a text spec of words at addresses, callees decompiled and lent first, inputs run on the emulator, `PseudoEval` against the run, and every register the lent effects call preserved compared with its entry value), a small assembler with labels and literal pools, and a spec maker that takes `@address` blocks. About 120 hand fixtures; a table generator for the stack-word experiments (32 and 42 cells).
+- **Scratch changes of `Sh2Decompiler.cpp`**, each linked into the driver, the decompiler suite and (for the mutations) the generator, with the object swapped on the link line: **v1** (a chooser in r4-r7 that the signature does not hold, and r0, counts for A3-55), **v2** (the `& ~1u` of A3-55 removed), **v3** (v2, and at the return a join that keeps r0's entry value leaves bit 0 out), **v4** (A3-14's r0 rule asks `usesR0` only), and the five mutations of the summary **m1** to **m5** (A3-63). The cost of each candidate fix is measured below; none is a fix.
+- **The generator beyond the nightly's range**, own RelWithDebInfo build (`-j3`): grammar 2 at 700,001 to 720,000, grammar 1 at 700,001 to 710,000, grammar 2 at 800,001 to 805,000 with `SE_GENERATED_ALPHABET=specials`.
+- **The corpora** with `SE_GAME_HWRAM=<img> SE_GAME_LEND=1` for `hwram007.bin` and `hwram008.bin`, on the head and on each scratch variant.
+
+### What round 8's fixes held under
+
+- **A3-49 and A3-50 (the widened join rules).** A join of r0's entry value with a stack load of a held parameter (`mov.l r5,@r15 ... mov.l @r15,r0` under a branch): withheld (J4). With a GBR-relative load (`mov.b @(0,gbr),r0` on one path): withheld, but by "it reads gbr on entry" (the load stays), not by the rule. With a call's result (`jsr g` on one path, r0 left on the other): lent `void`, with both arguments held; that is the compiled `void f(a, b) { if (a) g(b); }` and cannot be told from `int f(a, b) { if (a) return g(b); }` (A3-41's reading; not filed). A join of two call results chosen by a hidden register, each result compared: the engine keeps the return and r3 (read: withheld). No false withhold was found: the head's lent counts on both images are the round 8 fixer's (662 (923) and 1,021 (1,287)); the generator does not measure a withhold that was not needed.
+- **A3-51 (the stack-slot note).** The frame address pushed right before the call (`mov.l r1,@-r15`), held in an r14-based frame (`mov r15,r14`, stores through r14), in the second word with the first written, passed through two calls (the second reads it), with r5 set on one path only, with r6 set by a copy of r4: each prints `&xStack_8` as an argument or says the note, never folds the local, and agrees with the run (`a3_51 round 9` pins).
+- **A3-52 to A3-54 (the oracle).** No `kept-read` or `return-dropped` seed in 35,000 beyond-range seeds. Check 10b catches a `storesThrough` that names the wrong register (m4: 1,523 failing seeds, 28 suite checks).
+- **A3-55 (the join chosen by a hidden register).** The choice read through a stack spill and reload (a word, a byte), through a push and a pop, through a T flag set by `tst r3,r3` two blocks and a `bra` before the branch, through `dt r3`, nested (r1 chosen by r3, r0 chosen by r4 from r1 or a constant): all withheld "chosen by r3". Two return sites chosen by r3: the engine keeps the branch, "reads r3". A load through the hidden register (`mov.l @r3,r1 ; tst r1,r1`): the engine keeps the read, "reads r3". A switch on r3 selecting constants: recovered, "reads r3". A zero-extension or sign-extension of the joined value before the return: the engine keeps the return. Through a callee's output: the callee cannot read the hidden register (it would be withheld), a callee that keeps the register leaves its value to the rule, and a register passed in r4 is read by the call. All hold; the holes are in what the rule does not count as a chooser or a join (A3-56 to A3-58, A3-62).
+- **Tail calls.** A jump to a lent callee after r8 is saved and restored (r8 kept in the effects), to a callee that clobbers r9 without saving it (r9 not kept), with PR restored in the slot of the jump, with the frame popped in the slot: lent, effects agree with the run (`a3_27 round 9` pins).
+
+### What the attack found
+
+1. **A3-56 to A3-58: three ways A3-55's rule is not a rule about "a join chosen by a register no signature passes".** The chooser mask leaves out r0 (`& ~1u`) and SR (so the entry T flag and `stc sr`), and the join test is inequality of abstract values. `tst r0,r0 ; bt L ; mov #1,r0 ; or r0,r1 ; ... L: mov #2,r0 ; or r0,r1 ; rts` and `bt L ; ...` on the entry T are lent `void f(void)` and the code returns 1 or 2 by them (the same code by r3 is withheld). Two loads (`mov.w @r7,r0 ; cmp/eq r0,r3 ; bf L ; mov.w @r2,r0 ; or r0,r1`) or two sums of r4 (`r4 + 1`, `r4 + 2`) are no join: A3-55 b with the constant replaced by a second word is lent `void`, and the second shape drops r4 as well. The generator's checks reject every one of them as a module (`input-dropped:r0`, `input-dropped:r3`, `return-dropped`) and none is drawn by 35,000 seeds (A3-64). **Cost of the candidate fixes**, measured: v3 (r0 as a chooser except when the join keeps r0's entry value) withholds the fixtures, passes the whole suite, moves no lent count; v2 (the bare removal) breaks two pins (A3-45's control, A3-46); the T/SR row needs a "T written on this path" bit in the state and was not measured; the equal-values row needs a definition number per instruction and op in `Value`, not measured.
+2. **A3-59: A3-50's register side.** `tst r5,r5 ; bt L ; add r4,r0 ; mov.l r4,@r6 ; L: rts` returns the hidden r0 plus r4 on one path and is lent `void f(r4, r5, r6)`; with `add #1,r0` it is withheld. `onlyInputs` wants every origin to be a register no signature passes, so a held parameter in the operand turns the rule off, and A3-20 only looks at parameters the signature does not hold. The pinned `a3_45 control: the loop may be skipped` is lent by the same exemption, so the fix (v4: ask `usesR0` only) flips that control (and the reason text of one round 8 control); the lent counts do not move.
+3. **A3-60 and A3-61: A3-51's channel, the other two sides.** The note for a frame address in a stack word is said when r4-r6 or r5-r7 are unset; the engine drops the stack words after the first unwritten one whatever the registers hold. Two tables (32 and 42 cells) show 35 cells dropped and wrong with no note (13 and 22) against 20 noted and 19 shown. And SA1's acceptance ("no local is folded") is false for a callee that writes the slot it is passed: `func_0x06009040(); return 7;` where the run returns 0x37, with the argument shown or not. That is A3-21's channel read through a plain value; the callee and the caller are withheld and the text says nothing at the call, which is A3-48's and A3-51's state, P2 there.
+4. **A3-62: "a join chosen by a parameter or a constant stays lent void".** Decided: **a wrong signature, P2 for a parameter the signature does not hold and for a stack argument; the constant stays accepted.** `tst r4,r4 ; ...` choosing between two written values is lent `void f(void)`: r4 is dropped, the return is dropped, the caller's setup of r4 is dead in its text, and `mov.l @r15,r3 ; tst r3,r3 ; ...` drops a stack argument, the case "an incoming argument outside its signature" was written for. The area's rule is that a lent prototype never drops a register the callee reads before writing. The ground given (the scratch r0 of compiled void code) does not reach it: a compiled function that uses r4 holds r4, and v1 (such a chooser withholds) loses no lent function in either image. It reverses four pins that chose to keep these lent (A3-14's `tst r4,r4 ; bt L ; mov #5,r0`, A3-55's `chosen by r4` control, and by the r0 bit the A3-45 and A3-46 controls), which is the coordinator's to rule on.
+5. **A3-63: check 10b and the rest of `CallEffects`.** Five mutations of the summary against the generator (3,000 grammar-2 seeds) and the decompiler suite: `outOrigins` naming the wrong register survives both (m1: nothing holds its register identity), `leaks` and `frameValues` cleared survive the generator and are caught by 2 and 1 hand fixtures (m2, m3), a wrong `storesThrough` register is caught by both (m4), `outOrigins` without the stack origin is caught only by the synthetic claim run (m5). The claims the generator holds are `preserved`, `spDelta`, `storesThrough`, `frameWords` and the existence of an origin.
+6. **A3-64: the generator's grammar.** 0 failing seeds in 35,000 beyond the range, while the five hand shapes of this round are rejected as modules.
+
+### Generator beyond the nightly
+
+| Range | Seeds | Failing | Notes |
+|---|---|---|---|
+| grammar 2, 700,001 to 720,000 | 20,000 | 0 | 38,966 functions, 121,086 runs held to the claims, 171,157 runs |
+| grammar 1, 700,001 to 710,000 | 10,000 | 0 | 45,678 runs; 83 functions withheld "chosen by" a register (r1 40, r2 20, r3 15, macl 3, mach 5) |
+| grammar 2, 800,001 to 805,000, `specials` | 5,000 | 0 | |
+
+35,000 seeds, 0 failing, 0 findings; the canary 240 programs, 0 failing, in each run. No finding for another area: no routed seed.
+
+### Corpus (`SE_GAME_LEND=1`)
+
+Image 007: 1,730 functions in the lending run, **662 lent (923 parameters)** (637 (866) before lending the proved effects), 839 of 839 functions ok alone, 25 gain a lent signature, every ledger count 0 (0 accesses dropped, 0 missing and said), mapping oracle 0 in every violation count. Image 008: 2,995 functions, **1,021 lent (1,287)** (992 (1,227) before), 1,554 of 1,554 ok alone, 29 gain a signature, ledger counts 0 (0 dropped, **4** missing and said). Both suites "all passed". Each scratch variant (v1 to v4) leaves the same lent counts on both images: the candidate fixes of A3-56, A3-59 and A3-62 cost no corpus function.
+
+### Pins committed
+
+`TestArea3Round9` (`Sh2DecompilerTests.cpp`, 18 fixtures, all passing at the head): the six A3-51 variants that hold, the eight A3-55 shapes that hold or are withheld by the engine's own read, and the four tail calls. Each was run against a mutation and fails with it: the stack note removed (`NoteStackArguments` call off) fails the four address pins and the older A3-51 ones, `mChosenBy` off fails the six "chosen by r3" pins, and a stack-slot load taken for memory fails two of the A3-55 pins and the tail-call pins. No fixture of a finding is committed (the current output is wrong; the rows carry them).
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3` (RelWithDebInfo, 92 tests) | 92 of 92 pass (107 s; the fault suite 92 s) |
+| generator, grammar 2, 700,001 to 720,000 | 0 failing seeds |
+| generator, grammar 1, 700,001 to 710,000 | 0 failing seeds |
+| generator, grammar 2 `specials`, 800,001 to 805,000 | 0 failing seeds |
+| corpus 007 / 008 | lent 662 (923) / 1,021 (1,287), ledger counts 0, 0 and 4 missing and said, all passed |
+| sanitizers, the Live tests, vendoring | not run: no engine or host code changed; the Live tests share a socket |
+
+### Not covered
+
+- **Mutual recursion, interrupts between a callee's store and its caller's read, the probe's `kMaxSteps` exit** as in rounds 7 and 8.
+- **The T-flag fix** (A3-57) and the identity-of-definition fix (A3-58) were not prototyped; the rows say what they need.
+- **The corpus dynamic run** of A3-54 part 2 (accepted in round 8) was not repeated.
+
+**Done criteria.** Seven P2 rows (A3-56 to A3-62) and two P3 (A3-63, A3-64): a fix round, then two consecutive clean review rounds. The measured costs above are the fixer's starting numbers: v3 (A3-56), v1 (A3-62) and v4 (A3-59) each leave both corpus counts unchanged and each flips named pins.
