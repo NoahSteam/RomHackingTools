@@ -9592,6 +9592,34 @@ void TestArea3Round8()
         CHECK(!Has(r2.Text(), kStackNote) && !Has(r2.Text(), "return 0x5a;"));
     }
     {
+        // Every subset of r4-r7 set before the call (`mov #1,rN`), the address in the first stack slot: the engine drops the stack word from the call when
+        // r4-r6 or r5-r7 are all unset (the rule of the probe) and shows it as the fifth argument otherwise; in both the local is not folded (no
+        // `return 0x5a;`), by the note in the first case and by the argument in the second, and the text agrees with the run.
+        for (int subset = 0; subset < 16; ++subset)
+        {
+            std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12 };
+            int k = 0;
+            for (int reg = 4; reg < 8; ++reg)
+                if (subset >> (reg - 4) & 1)
+                {
+                    w.push_back(static_cast<uint16_t>(0xE001 | reg << 8));
+                    ++k;
+                }
+            for (uint16_t t : { static_cast<uint16_t>(0xB000 | (0x17 - k)), uint16_t(0x0009), uint16_t(0x50F1), uint16_t(0x7F08), uint16_t(0x4F26), uint16_t(0x000B), uint16_t(0x0009) }) w.push_back(t);
+            const bool r4 = subset & 1, r5 = subset >> 1 & 1, r6 = subset >> 2 & 1, r7 = subset >> 3 & 1;
+            const bool dropped = (!r4 && !r5 && !r6) || (!r5 && !r6 && !r7);
+            const std::string name = "a3_51 subset " + std::to_string(subset) + " of r4-r7 set";
+            const CallFixture f = { name, 0x06009000u, atG(w, writer) };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!Has(r.Text(), "return 0x5a;"));
+            CHECK(Has(r.Text(), kStackNote) == dropped);
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+        }
+    }
+    {
         // SA1: a plain value in the stack word, the fifth argument. The engine drops it from the call (`func_0x06009040(3);` where the code passes 7
         // as well), and the callee, which reads a stack word its registers do not lead up to, is never lent, so the caller is withheld and the call
         // is the unlent one. No local is folded and no frame address is lost: the accepted limit of an unlent call's text (A3-5: the arguments it shows
