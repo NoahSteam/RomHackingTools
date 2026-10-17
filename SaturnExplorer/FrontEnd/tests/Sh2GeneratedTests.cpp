@@ -3670,6 +3670,45 @@ bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offen
     return false;
 }
 
+// A2-49 (accepted, P3): a function that calls a lent callee and returns its value, and compares that value (`tst r0,r0 ; bt`, or another
+// compare of r0) with a branch whose arms do nothing the function needs. The engine decides what a function returns before it removes such a
+// branch, so the compare is a use of r0 while the return is decided (the lent callee's 1-byte result reaches the RETURN through a zero-extension
+// of a concatenation, not as the call's output, and the one thing that is accepted as a use-free return is the output itself), and the function
+// is printed `void` and lent so: the same order of the passes as A2-45's dead store. A caller that reads r0 afterwards is withheld, so nothing is
+// lost silently. The arms can hold dead writes (seed 62956's do) which are removed later, so the shape is the compare after the last call, not
+// empty arms. The check does not count such a function's `void` as `return-dropped`; it is counted (`excluded.call-result-compared.return-dropped`)
+// so that a run shows how often the grammar draws it.
+bool ReadsR0ForFlag(uint16_t w)
+{
+    if (w == 0x2008 || w == 0x4015 || w == 0x4011) return true;        // tst r0,r0 ; cmp/pl r0 ; cmp/pz r0
+    if ((w & 0xFF00) == 0x8800) return true;                           // cmp/eq #imm,r0
+    switch (w & 0xF00F)
+    {
+    case 0x2008: case 0x3000: case 0x3002: case 0x3003: case 0x3006: case 0x3007: case 0x300C:   // tst, cmp/eq, hs, ge, hi, gt, str Rm,Rn
+        return ((w >> 8) & 0xF) == 0 || ((w >> 4) & 0xF) == 0;
+    default:
+        return false;
+    }
+}
+
+bool ComparesCallResult(const Subject& subject, const FnInfo& fn)
+{
+    uint32_t lastCall = 0;
+    for (uint32_t a = fn.layout.start; a < fn.layout.end; a += 2)
+    {
+        const uint16_t w = subject.WordAt(a);
+        if ((w & 0xF000) == 0xB000 || (w & 0xF0FF) == 0x400B || (w & 0xF0FF) == 0x0003) lastCall = a;   // bsr, jsr, bsrf
+    }
+    if (!lastCall) return false;
+    for (uint32_t a = lastCall + 4; a < fn.layout.end; a += 2)
+    {
+        const uint16_t w = subject.WordAt(a);
+        const bool branch = (w & 0xFF00) == 0x8900 || (w & 0xFF00) == 0x8B00 || (w & 0xFF00) == 0x8D00 || (w & 0xFF00) == 0x8F00;   // bt, bf, bt/s, bf/s
+        if (branch && ReadsR0ForFlag(subject.WordAt(a - 2))) return true;
+    }
+    return false;
+}
+
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
              const std::map<uint32_t, Prototype>& lent, const std::vector<DecompileResult>& results, bool volatileRun,
              const std::vector<RunOut>& runs, Runner& runner, Report& rep, bool wantText, DecompileResult& r)
@@ -4373,8 +4412,13 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                     add("return-invented", "the prototype claims a return, but on some input r0 is never written before the return");
             }
             else count("ret.void");
-            if (fn.intent && fn.returns && pr.ret.kind == TypeKind::Void)
-                add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
+            // ...on every run that finished: a function the generator declared to return that does not write r0 on some path (a shrink step
+            // that took out the instruction that did, A2-50) is not a counterexample, whatever its prototype says.
+            if (fn.intent && fn.returns && pr.ret.kind == TypeKind::Void && !everUnwritten)
+            {
+                if (ComparesCallResult(subject, fn)) count("excluded.call-result-compared.return-dropped");   // A2-49, accepted
+                else add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
+            }
             // A parameter copied to r0 on one path and r0 left alone on the other (A3-20): the engine takes the join for no return, and
             // a signature that drops the parameter drops the value with it. One it holds is the accepted scratch of compiled code.
             if (fn.intent && fn.partial && pr.ret.kind == TypeKind::Void)
@@ -4700,11 +4744,31 @@ struct Shrinker
     std::string sig;
     int evals = 0;
     int budget = 250;
+    std::function<bool(const Program&)> accept;   // a test's stand-in for "the finding is still there" (empty: evaluate the program)
+
+    // What the generator declared of a function must still be true of the program a shrink step leaves (A2-50). The one declaration an
+    // item can carry is `return g(p);` (Func::retIsCall): r0 is what the last call's callee returned, and no instruction of the function
+    // writes it. Take that call out, or put another item after it, and the function writes r0 nowhere and `returns` is false, so a finding
+    // that reads `returns` (`return-dropped`) would be a false one in the shrunk replay. The other declarations are words of the function
+    // itself (retWord, which no step removes), or are checked against the run (`partial`).
+    static bool IntentHolds(const Program& p)
+    {
+        for (const Func& f : p.fns)
+        {
+            if (!f.v2 || !f.returns || f.end != Func::Rts || !f.retIsCall) continue;
+            if (f.items.empty()) return false;
+            const Item& last = f.items.back();
+            if (last.type != Item::Call || last.callee < 0 || last.callee >= static_cast<int>(p.fns.size()) || !p.fns[last.callee].returns) return false;
+        }
+        return true;
+    }
 
     bool Still()
     {
         if (evals >= budget) return false;
+        if (!IntentHolds(prog)) return false;
         ++evals;
+        if (accept) return accept(prog);
         return Has(Evaluate(d, prog, false), sig);
     }
 
@@ -6739,6 +6803,110 @@ void TestLeftoverSeedPins(Sh2Decompiler& d)
     }
 }
 
+// ---- Area 2 round 7 (ledger A2-49, A2-50) ----------------------------------------------------------------------------------------------
+// A2-49: seed 62956 of grammar 2, and the review's reduction of it: a function that calls a lent callee and returns its value, with `tst r0,r0 ;
+// bt` over nothing in between, is printed and lent `void` (accepted: the compare is a use of r0 when the return is decided). It is counted, not a
+// finding; the same function with the compare and the branch as nops returns r0 and is lent so (the control: the exclusion is the compare's).
+// A2-50: the shrinker must keep what the generator declared. The review's shrunk replay of that seed has no call and no write of r0 at all, so
+// the `returns` it is replayed with is false of it: no finding. And a shrink step that takes out the last call of a `return g(p);` function leaves
+// the declaration (Func::retIsCall) with nothing to stand on: Shrinker::IntentHolds says so.
+void TestRound7Pins(Sh2Decompiler& d)
+{
+    static const char* const kWords =
+        "2F86 2F96 2FC6 0C2A 7FF8 0009 0009 2F36 0009 63F6 0009 0009 0009 0009 0009 0009 0009 0009 D309 430B 0009 0009 0009 2008 8903 0009 0009 0009 0009 0009 0009 0009 "
+        "7F08 4C2A 6CF6 69F6 000B 68F6 0600 9054 0009 0009 7FC0 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 0009 624C 0009 0009 7F40 000B 6023";
+    const ModulePin dead = { "A2-49: tst r0,r0 ; bt over nothing after a lent call", kWords, "0/0/4c,54/54/78", nullptr, "1,1", nullptr, nullptr };
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(dead), true);
+        const auto it = rep.counts.find("excluded.call-result-compared.return-dropped");
+        const int excluded = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), excluded %d\n", dead.name, rep.findings.size(), excluded);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(excluded > 0);
+    }
+    {
+        // the seed itself: arms with dead writes, not nops
+        const Report rep = EvaluateSubject(d, MakeSubject(MakeV2(62956)), true);
+        const auto it = rep.counts.find("excluded.call-result-compared.return-dropped");
+        const int excluded = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin 'A2-49: seed 62956': %zu finding(s), excluded %d\n", rep.findings.size(), excluded);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(excluded > 0);
+    }
+    {
+        // the control: the compare and the branch are nops; the function returns the callee's value, the prototype says so, nothing is excluded
+        std::string words = kWords;
+        const size_t at = words.find("2008 8903");
+        CHECK(at != std::string::npos);
+        words.replace(at, 9, "0009 0009");
+        const ModulePin control = { "A2-49 control: the same without the compare", words.c_str(), dead.funcs, nullptr, "1,1", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(control), true);
+        const auto it = rep.counts.find("excluded.call-result-compared.return-dropped");
+        const int excluded = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), excluded %d\n", control.name, rep.findings.size(), excluded);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(excluded == 0);
+    }
+    {
+        // A2-50: the first shrink of that seed, replayed with the `returns` it was drawn with: r0 is written by nothing, the lent `void` is right
+        const ModulePin shrunk = { "A2-50: the shrunk replay of seed 62956", "2F86 2F96 2FC6 0C2A 7FF8 6843 6953 7F08 4C2A 6CF6 69F6 68F6 000B 0009", "0/0", nullptr, "1", nullptr, nullptr };
+        const Report rep = EvaluateSubject(d, ModuleSubject(shrunk), true);
+        std::printf("pin '%s': %zu finding(s)\n", shrunk.name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    {
+        Program p = MakeV2(62956);
+        CHECK(Shrinker::IntentHolds(p));
+        bool had = false;
+        for (Func& f : p.fns)
+        {
+            if (!f.retIsCall || f.items.empty() || f.items.back().type != Item::Call) continue;
+            had = true;
+            // every call of the functions that return one's value out (the shrinker's removal of the call, however many there were)
+            Program q = p;
+            for (Func& g : q.fns)
+                if (g.retIsCall)
+                    g.items.erase(std::remove_if(g.items.begin(), g.items.end(), [](const Item& it) { return it.type == Item::Call; }), g.items.end());
+            CHECK(!Shrinker::IntentHolds(q));
+            // ...and the call kept, but another item after it
+            Program r = p;
+            for (Func& g : r.fns)
+                if (g.retIsCall && !g.items.empty() && g.items.back().type == Item::Call)
+                {
+                    Item extra = g.items.back();
+                    extra.type = Item::Skip;
+                    g.items.push_back(extra);
+                }
+            CHECK(!Shrinker::IntentHolds(r));
+            break;
+        }
+        std::printf("pin 'A2-50: IntentHolds': seed 62956 has a function that returns its last call's value: %s\n", had ? "yes" : "no");
+        CHECK(had);
+    }
+    {
+        // The shrinker itself: every step is accepted but the one that gives up `return g(p);` (the flag stays), so only the intent check can
+        // keep the call. Without it the call goes first and what is left has the flag and nothing to stand on.
+        Program start = MakeV2(62956);
+        int flagged = 0;
+        for (const Func& f : start.fns) flagged += f.retIsCall ? 1 : 0;
+        Shrinker s{ d, start, "" };
+        s.accept = [flagged](const Program& q) {
+            int now = 0;
+            for (const Func& f : q.fns) now += f.retIsCall ? 1 : 0;
+            return now == flagged;
+        };
+        s.budget = 5000;
+        const Program small = s.Run();
+        std::printf("pin 'A2-50: shrinker': %d steps, %zu function(s) left, %d return(s) of a call's value\n", s.evals, small.fns.size(), flagged);
+        CHECK(flagged > 0);
+        CHECK(Shrinker::IntentHolds(small));
+    }
+}
+
 // ---- The canary family (ledger A3-34, A3-36, A3-37, A3-39, A3-40) ---------------------------------------------------------------------
 // The grammar never hands a callee the address of a local, nor reads a word a callee wrote, so a text that folds a local across a call (the
 // engine's own reading of what a call may write) is invisible to every other check: the function still returns a value, the registers still
@@ -7075,6 +7243,7 @@ void TestGenerated()
         RUN(TestDomainPins(d));
         RUN(TestCalleeClobberPins(d));
         RUN(TestLeftoverSeedPins(d));
+        RUN(TestRound7Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);
