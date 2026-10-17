@@ -7890,3 +7890,123 @@ For each, the new return is what r0 holds at the `rts` and none is a result the 
 - The A2-20 gap is unchanged: the generator never emits `rte`, `bsrf` or `trapa`; `rte` was covered here by the decode suite's slot forms and the hand slots above, not by a value-checked function.
 - Two-byte piece names (`_b2w2`): no shape reaches one.
 - `K5` of the scratch set (`jmp` tail call to a lent callee that returns a value) still withholds with "it tail-calls a function that returns a value, which the engine takes for a call that returns nothing" while the text now returns the value: that is A3-29's remainder (area 3), not filed again.
+
+## Area 3, round 7: the probe sees literal calls, the hand-back through computed and handed addresses, plain spills, the saved word's overlap, and the canary
+
+Fixer, branch `review/3-round7-fix`, from master `7882250` (merged with `cfb39a6`, docs only). Code commits `732495a` (ReturnCheck, the probe), `06c80ee` (fixtures), `8f5a812` (patch 0048, the printed-C oracle),
+`ef5628b` and `0fa9c49` (the canary family; the ledger rows name `0fa9c49`). Rows A3-36 to A3-40 and A3-42 are fixed, A3-41 is accepted (with the area 2 row A2-45, one rule).
+The coordinator added three area 2 rows that live in the same decision code: A2-43 is fixed by engine patch **0048**, A2-44 (oracle) is fixed, A2-45 is accepted.
+A3-34 (round 6, open) is fixed by the canary. New rows: A3-43 (accepted), A3-44 (open). Every fixture was reproduced first on the base build (the reviewer's driver, linked to a
+copy of the unmodified `Sh2Decompiler.o`): J1, J2, K1, K2, K4, U1, U2, P1, P3, S2b, S2b2, N1, S2a2, S3a, S3b, S3g and R1a to R1e print what the rows say; the controls J0, K0, K3, S2a0, S3a0, S3c to S3f, M1 to M3, Q1 to Q6, T4/T5 are unchanged by the fixes.
+
+### Root causes and fixes (`Sh2Decompiler.cpp`, ReturnCheck)
+
+- **A3-36, A3-37 (the probe).** The probe runs on the first flow, before the actions fold a literal-pool load. Two defects, one cause each. (1) `jsr @r1` through a literal is a CALLIND with no call spec, so
+  `mCallAt` had no entry, the callee was taken for any callee (`CallEffects()`), and `Call` declared the alias for a frame address plus an index only at calls it saw as lent. The probe now reads
+  literals: the raw scan's literal words and the snapshot are handed to it (`SetLiterals`), a `LOAD` of one of them is the constant the engine will fold it to, and a CALLIND whose target is a constant is
+  the call to that address (`Call(..., haveTarget, target)`). (2) A call to an unlent or unresolved callee made r15 and r8-r14 'returned' values with no stack base, so every frame address made after one
+  had `base == kNoBase` and `NoteFrameEscape` returned. The probe now models such a callee as the engine's default model does (the cspec's `<unaffected>`: r8-r14, GBR, VBR kept, extrapop 0 for r15) and
+  reads r4-r7 as inputs it may write through (`NoteFrameEscape` for each, no note: the address is in an argument). Only in the tolerant (probe) run: `WithholdReason`'s run never sees an unlent callee.
+  The reviewer's scratch patch did the second half without the first; with both, a lent callee that stores through nothing it is handed gets no alias however it is called (`a3_36 control`), which the corpus shows as arrays that went
+  back to scalars (below).
+- **A3-38.** `jsr @r0`'s target is `COPY tmp = r0` made at the start of the instruction. A3-18 compared `Get(tmp) == Get(r0)`, and two loads are equal Values. It is the copy while no op between it and the
+  CALLIND writes r0 (overlap of the output varnode with r0's), which is identity.
+- **A3-39, A3-40.** `Store` recorded `CallerFrameStores` only for an exact `Sp(v)` with `v + n > 0`. A `Value` now says whether a stack address is, or may be, at or above the entry r15: `AtOrAboveEntry()` (an exact `Sp(v >= 0)`; a
+  `Fuzzy` whose base is >= 0 or which `callerHigh` marks), and `callerHigh` is set where an index is added to such an address (`INT_ADD`/`INT_SUB`), kept by a join of values that have it or of addresses that are all at or above r15. A store
+  through one is the hand-back whatever register it stores: the signature can hold r5 (S2b), so the 'held parameter' exception does not apply to an inexact address. `Call` does the same for a lent writer handed such an address in a
+  register it stores through (N1, and `g(&param_5)`: a stack parameter's address handed to a writer is the same hand-back; `a3_23 a`/`b` now expect the caller withheld, their text unchanged), recording `kFrame`
+  (what the writer stores is not in its effects as a value). The local array below r15 with a variable index (`kLowBase`, base negative) is not marked: `a3_39 control`. A3-40: the exception is for a value that is a
+  parameter register's own value. `Value::part` marks the low part of a register's entry value that `Get` returns for `mov.w r5,@r15` / `mov.b` (SLEIGH takes `rm:2` as a smaller varnode); anything computed from one, or
+  a constant, adds `origin::kFrame`, which no signature holds.
+- **A3-42.** `Clobber` spared a saved register's slot unless `slot == offset`. An access through an aligned address reaches the bytes from it up to its alignment (1, 2 or 4, never past the word: the SH-2 raises an address error otherwise),
+  so the slot is spared unless the handed address lies in its word (`Reaches`). This needs no store width, which the effects do not carry, and spares the byte local just below the saved word (`a3_42 control`, compiled `char c; f(&c)`), where
+  the reviewer's formula with an unknown width taken as 4 would have clobbered it.
+- **A3-41 and A2-45, accepted, one rule.** A value in r0 that the function uses for anything else -- a compare, a byte read, a store, a copy, an address, a push and a reload -- is scratch, not a result. That is A2-42's reading (the engine's return
+  trial: a value with another use is not the return) and A3-19's `read` flag. Compiled code leaves a result it has used in r0, and the hand-written `x = h(); if (x == 7) ...; g(); return x;` cannot be told from it by the
+  callee's side; the stricter rule (only a copy counts) is the unqualified one that lost 31 and 46 lent signatures. The limits are pinned (`a3_41 R1a/b/c/e`: lent `void`, the code returns 7) with the controls that are right (R1d, the result pushed across
+  the call and popped: lent, `return xVar1;`; R1f, a read on one path only: withheld). A2-45's dead store of r0 to a local is the same rule: the dead ALU use of the control (`mov r5,r0 ; add r0,r4`) is removed before the engine decides the return, the dead
+  local store only after it, so which of two equally dead uses counts is the order of the passes. Counting neither would need dead-code removal ahead of return recovery, a reorder of upstream's actions for unoptimised code that stores a value
+  it never reads. The cost is bounded: a caller that reads r0 after a callee lent `void` is withheld ("uses a register after calling"), so no text or claim of a caller is wrong from it.
+- **A2-43, patch 0048.** `Funcdata::ancestorOpUse` decides the function's RETURN: a value in r0 whose only use is the RETURN is a return. A write of r0 with its own value (`mov r0,r0` a COPY, `and r0,r0`, `or r0,r0`, `add #0,r0`,
+  `xor #0,r0` (the spec writes `r0 ^ (imm & 0xFF)`, so the zero is an AND of constants until the rules fold it), `or #0,r0`) is a new value with that single use, so a function ended by one returned r0 where `nop` (0045) did not. `identityWriteSource` looks through
+  such a definition when the use is a RETURN, to the value it copies; the rest is as before (a call's arguments are decided as they were). The six words behave as `nop` in the slot and before the `rts`; `and #0`, `add #1`, `xor #1` are real writes and stay
+  returns. Patch generated against the tree with 0001..0045 applied, reproduced with `vendor.py` on a copy against the pinned checkout (`cpp/`, `processors/`, `sources.cmake` identical).
+- **A2-44 (oracle).** `CalleeSaved(r)` has four different bytes (`(0xA0000000 + r * 0x01010101) ^ 0x00010203`), the printed-C run gets 44 more inputs after the edge sweep that walk every (register, byte) pair through every parameter register so that
+  exactly one byte of a compared register matches, and the harness gave the text `r15 = CalleeSaved(15)` where the run starts with the stack top (it agreed only while no input matched a byte of either; found when the byte inputs made hand3 disagree).
+  Checked: the four hand words of the row agree on the unmutated engine and all four mismatch under the row's `registerPieceSuffix` mutant (before: three agreed); `TestOracleOwnDecisions` pins the distinct bytes.
+
+### The canary (A3-34), and what the generator reaches now
+
+`TestCanary` in `Sh2GeneratedTests.cpp` (default 96 programs, `SE_GENERATED_CANARY=<n>`, `SE_GENERATED_CANARY_ONLY=<k>` prints one with its text; part of every run). A function stores 0x5A in a local, calls a writer that
+overwrites it with 0x37 (or with r4 + r5, or r5), and returns the local; the run returns the writer's value; **no `return` of the text may hold the canary**, nor name a variable assigned it with no call between that could have
+written it (`CanaryReturned`; the check is on the printed text only, needs neither `PseudoEval` nor a compiler). Six kinds, enumerated: `r4 lent` (a writer that sets r1 and stores through r4), `r4 unlent` and `r2 unlent` (writers that store the caller's r1 and so are withheld),
+`indexed` (`mov r15,r1 ; add r6,r1 ; mov.l r5,@r1`, `mov.l r5,@(r0,r15)`), `computed` (`r4 + r5` stored at `@r15`) and `nested` (a callee that hands its own entry r15 + 4 to a lent writer), each over: r15 or r14 as the frame register, bsr or `jsr @r3` through a literal, 0 to 2 earlier
+calls (a callee lent or not), and for the first three the address exact, plus an index or minus one (the index is read from a word of the image, which the engine takes for ordinary memory: a constant would make the address exact). The hand-back kinds are checked only when the caller's signature is lent (A3-15, A3-21: the claim is the
+check, the withheld caller's text is stale). Against the base `Sh2Decompiler.o`: 51 of the 96 fail (r4 lent 8, r4 unlent 10, r2 unlent 9: A3-36, A3-37; indexed 8, nested 6, computed 10 of the 16 each that the base lent: A3-39, A3-40; the base lends 208 prototypes, the fixed build 136); with the fixes 0. Every canary program also
+runs through all the other checks (accesses, flow, preserved registers, `return-dropped`, ...): 0 findings.
+
+### Mutation
+
+Each fix reverted alone (`mut.py`), the suite (`Sh2DecompilerTests`, failing CHECKs) and the canary run (failing programs of 96):
+
+| Reverted | Suite | Canary |
+|---|---|---|
+| A3-36 the probe's literal targets | 1 (`a3_36 control`: a lent keeper through `jsr @r1` is no alias) | 0 |
+| A3-36/37 the model's kept registers across an unresolved call | 4 (`a3_37 K2`, `K4`: the note, the run) | 13 (r4 lent 5, r4 unlent 4, r2 unlent 4) |
+| A3-37 r4-r7 escape at an unlent call | 4 (`a3_37 U1`, `U2`) | 10 (r4 unlent) |
+| A3-38 target by value equality | 2 (`a3_38 P1`, `P3`) | 0 |
+| A3-39 no record for a computed address | 5 (S2b, S2b2 callee and caller, the bare indexed store) | 16 (indexed) |
+| A3-39 no record for a writer handed a high address | 5 (`a3_23 a`, `b`, N1, the stack parameter) | 16 (nested) |
+| A3-39 a join marks when either side is at or above r15 (the walk of A3-16 is withheld) | 2 (A3-16 a and b: the walk, lent) | 0 |
+| A3-40 any value of held origins is a spill | 2 (`a3_40 S2a2`) | 16 (computed) |
+| A3-40 only whole registers are spills | 1 (`a3_40 control: mov.w r5,@r15`) | 0 |
+| A3-42 slot start equality | 3 (`a3_42 S3a`, `S3b`, `S3g`) | 0 |
+| A2-43 patch 0048 (engine) | 24 (`A2-43`: the six words, both places) | 0 |
+| A2-44 `registerPieceSuffix` swapped bytes 1 and 2 (engine) | 0 | printed-C hand words: 4 of 4 mismatch (3 of 4 agreed before) |
+
+(The join row is the one A3-43 accepts. The A3-41/A2-45 acceptances have no fix to revert; their pins are fixtures.)
+
+### Matrix
+
+Branch tip, RelWithDebInfo gcc (scratch build of its own), the machine shared.
+
+- Whole `ctest -j3 --timeout 900`: 96 of 97. The one failure, `SaturnExplorerLiveRestoreSignalTests` (live tap restore outcomes, "protocol v25"), is not a decompiler test and fails the same on the main checkout's own build at master;
+  nothing in this round touches it.
+- Generator: grammar 2, 3,000 seeds: 0 failing, 0 findings (5,941 functions, 101.7 s with the canary family's 96 programs); grammar 1, 1,000 seeds: 0 (17.8 s); `SE_GENERATED_SEEDS=20000` (both grammars, the nightly's): 0 failing seeds, 0 findings (11 min 55 s on a loaded machine);
+  printed-C `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`: 3,072 functions, 2,616 compared (each with 32 inputs and now 44 byte-matching ones), agrees 2,673, `narrow-c` 4, `void-return` 243, `void-return-lent` 152, 0 findings.
+  (`void-return-lent` was 121 and `void-return` 232 at the round 6 review: the generator draws `mov r0,r0` as a slot in one function in eleven and those are `void` like the `nop` ones now, A2-43.)
+- Canary family: 96 programs, 0 failing; base build 51 of 96 fail (above).
+- Fault suite `SaturnExplorerDecompilerFaultTests`: 0 of 67 jobs failed (89.7 s), no MOVED pin (patch 0048 changes no allocation count the pins hold).
+- gcc Debug, ASan + UBSan + LSan (`detect_leaks=1`, the workflow's flags): `Sh2DecompilerTests` (all passed, 91.8 s) and `Sh2GeneratedTests` at 300 seeds (all passed, 153.4 s) exit 0; the only reports are `address.hh:605` and `slghpatexpress.cc:979`.
+- `vendor.py` on a copy of the vendored directory against the pinned checkout (`918d44e`): `cpp/`, `processors/` (bar `sh-2.sla`) and `sources.cmake` identical to the tree.
+
+### Corpus (`SE_GAME_LEND=1`), base against this branch
+
+The base is `Sh2Decompiler.o` and `funcdata_varnode.cc.o` of `7882250` linked into the same test binary; both suites pass, the base binary failing only the new fixtures.
+
+| | functions (ok) | lent before | lent after | parameters before | after | functions whose lend text differs |
+|---|---|---|---|---|---|---|
+| image 007 | 1,732 (1,731) | 662 | 662 | 923 | 923 | 23 |
+| image 008 | 2,997 (2,996) | 1,020 | 1,020 | 1,282 | 1,282 | 48 |
+
+Every ledger count is 0 (0 accesses dropped against the reference run); 0 missing and said for 007, 4 for 008; "uses a register after calling" 28 and 96 (unchanged). **No lent signature is lost or gained, and no lent signature line changes** (the set of lent functions and each one's parameter count are identical, compared function by function).
+The 23 and 48 differ in text only, by classes the fixes predict:
+
+| Class | 007 | 008 | Reason |
+|---|---|---|---|
+| only the note "a frame address is in r2 here" gained at a call | 5 | 17 | the frame registers now survive an earlier call, so the address made after it is seen (A3-37; the reviewer's scratch patch: 6 and 17) |
+| a scalar local becomes an array, with the note | 10 | 13 (+1 without it) | the alias is declared where it was lost (A3-36, A3-22 class): `xStack_18` is `axStack_18 [4]` |
+| an array is reshaped | 0 | 4 | `060352A0`: `aiStack_80 [4]` becomes `[3]` and `iStack_74`, and the call reads `iStack_74` where it read `aiStack_80[3]` |
+| an array local becomes a scalar | 6 | 7 | a lent callee reached by `jsr @rN` through a literal no longer declares an alias it does not need (`06009148`: `axStack_13 [11]` becomes `xStack_13`) |
+| dead stores into locals gone | 0 | 2 | `060513A4`, `060513AA`: two stores into a copied structure that nothing reads were kept by the same alias |
+| a local's type is printed differently | 1 | 3 | `0602CD28`, `06038512`, `0603ED44`, `0606D7EC`: `int4 iStack_24` becomes `xunknown4 xStack_24` (the local is no longer address-taken as an array element) |
+| the printed signature of a function that is **not** lent gains a parameter | 1 (`0600708E`) | 1 (`060070EA`) | `uStack_8 = param_3 & 0xff` is now kept: the stored local is aliased and the callee may read it, so r6 is a use (withheld either way) |
+
+Read: `06009148`, `060513A4`, `060352A0`, `06038512`, `0600708E`, `0601357A` (note only) and the array flips of `060307C4`, `060317BC`: no value in a `return`, call argument or condition changes; only declarations, the note, and the local assignments that were dead.
+
+### Not done, limits
+
+- A3-43 (accepted): a join of an address at or above r15 with a lower one is not followed. A3-44 (open): the canary's reach (r2 and r4 only, the result read back as the local, straight-line texts).
+- A3-29 (tail call text) and A3-31 are untouched. A3-41 and A2-45 are accepted by one rule; if the coordinator wants the engine's return trial to ignore dead uses, that is an upstream action reorder and a separate patch.
+- The stricter reading of A3-41 (only a copy is a read) was not re-measured on the images; the round 6 figures (31 and 46 lent signatures) stand for it.
+- The sanitizers were run on `Sh2DecompilerTests` and `Sh2GeneratedTests` (300 seeds) only, not the other suites of the CI list nor the printed-C mode.
