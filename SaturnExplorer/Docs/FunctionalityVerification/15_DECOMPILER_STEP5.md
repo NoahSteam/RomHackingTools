@@ -2488,6 +2488,8 @@ that found A6-1 to A6-5: the dense prefix of 3,000 and the geometric tail miss a
 **pins** one cell per finding (`kPins`: fixture, size and phase of the failing allocation, found again by size and phase
 if a build numbers allocations differently, reported as STALE if it cannot be).
 
+*Limit (A6-47): the pins are libstdc++'s.* Their coordinates count the allocations the engine's containers and strings make, which another standard library makes in another order. Where `__GLIBCXX__` is not defined (libc++ on macOS) the pins of the alloc family and `pin-selftest` are SKIPPED, with a line naming the library; the sweeps, the host-only stretches and the cancel families still run and are the cross-platform gate. `SE_FAULT_FOREIGN_STDLIB=1` forces the skip on Linux. See "Area 6, round 6 fix".
+
 ### Findings
 
 Ledger rows A6-1 to A6-9 (`REVIEW_LEDGER.md`); all open. The ctest entry is `WILL_FAIL` (the default subset fails on the
