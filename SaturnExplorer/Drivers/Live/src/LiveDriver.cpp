@@ -2107,6 +2107,23 @@ extern "C" uint32_t se_live_captured_generation(const se_data_source* ds)
     });
 }
 
+extern "C" uint64_t se_live_captured_revision(const se_data_source* ds)
+{
+    if (!ds || !ds->user || ds->close != CbClose) { return 0; }
+    return se::Guard(static_cast<uint64_t>(0), [&]() -> uint64_t
+    {
+        LiveState* st = St(ds->user);
+        // Same choice as se_live_captured_generation: what the calling thread is capturing or
+        // last captured, never the newest publish (which a capture in flight may not hold).
+        if (gPinned.id == st->id && gPinned.depth > 0)
+        {
+            return gPinned.snap ? gPinned.snap->revision : 0u;
+        }
+        if (gLastCaptured.id == st->id && gLastCaptured.snap) { return gLastCaptured.snap->revision; }
+        return 0u;
+    });
+}
+
 extern "C" int se_live_restore_state(const se_data_source* ds, uint32_t* done, uint32_t* failed)
 {
     if (!ds || !ds->user || ds->close != CbClose || !done || !failed) { return 0; }

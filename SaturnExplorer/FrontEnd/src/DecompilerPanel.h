@@ -80,6 +80,10 @@ struct DecompilerView
     DecompViewKind kind = DecompViewKind::None;
     const char* sourceLabel = "";    // "savestate", "live, paused", "recorded frame", ...
     uint64_t sourceId = 0;           // what App vouches is the same source (stable per recorded frame)
+    // Moves when the bytes may have: a capture of new content, an in-place edit. Not on a capture of
+    // the same bytes: se_derive_serial moves on every one, and App keeps a paused emulator captured
+    // every frame while a state load is unconfirmed, so a live view's serial is that minus the repeats
+    // (CaptureRepeatTracker; A1-7). A LivePaused view follows every move at once.
     uint64_t deriveSerial = 0;
     uint64_t frameNumber = 0;
     se_sh2_regs regs[2] = {};

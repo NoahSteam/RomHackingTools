@@ -1286,6 +1286,34 @@ if(NOT EMSCRIPTEN OR SE_WEB_LIVE)
         add_test(NAME SaturnExplorerLiveRestoreSignalTests
                  COMMAND SaturnExplorerLiveRestoreSignalTests)
 
+        # A1-7: a paused emulator that is captured every UI frame (a state load nobody confirms)
+        # must not make the SH-2 Pseudocode panel ask again every frame. The real exporter withholds
+        # the confirmation, the real driver and context capture it through CaptureLiveFrame, and
+        # the real panel, runner and engine read the memory through ContextBackend. Shares the
+        # default socket with the other live tests.
+        if(SE_ENABLE_DECOMPILER)
+            add_executable(SaturnExplorerLiveDecompilerCaptureTests
+                FrontEnd/tests/LiveDecompilerCaptureTests.cpp
+                FrontEnd/src/DecompilerPanel.cpp
+                FrontEnd/src/Theme.cpp
+                FrontEnd/src/Debug/MemoryBackend.cpp
+                Integration/Common/se_export.c
+                ${SE_DECOMPILER_TEST_SOURCES}
+                ${SE_IMGUI_CORE})
+            target_include_directories(SaturnExplorerLiveDecompilerCaptureTests PRIVATE
+                FrontEnd/src FrontEnd/tests ${SE_IMGUI_DIR}
+                Drivers/Live/src
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/Integration/Common)
+            target_link_libraries(SaturnExplorerLiveDecompilerCaptureTests PRIVATE
+                SaturnExplorerLiveDriver SaturnExplorerCore SaturnExplorerGhidraDecomp Threads::Threads)
+            add_test(NAME SaturnExplorerLiveDecompilerCaptureTests
+                     COMMAND SaturnExplorerLiveDecompilerCaptureTests
+                             ${CMAKE_CURRENT_BINARY_DIR}/live_decompiler_capture_test)
+            set_tests_properties(SaturnExplorerLiveDecompilerCaptureTests PROPERTIES
+                                 TIMEOUT 120 RESOURCE_LOCK live_tap_socket)
+        endif()
+
         # The rewind path as a whole -- exporter, driver and FrameRecorder -- asking whether a
         # recorded frame can be resumed from. Listens on a socket and port of its own, so unlike
         # the tests around it it neither needs the shared lock nor disturbs a running emulator.

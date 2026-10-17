@@ -52,6 +52,17 @@ uint32_t se_live_connection_generation(const se_data_source* ds);
  * accepted only while this equals the connection generation. */
 uint32_t se_live_captured_generation(const se_data_source* ds);
 
+/* The content revision of the snapshot the CALLING THREAD last captured (the one being captured,
+ * inside a begin/end capture pair), or 0 before its first capture or for a source that is not
+ * live. Two captures of the same source that report the same non-zero value hold byte-identical
+ * content -- memory, registers, frame, stop, call stacks, restore counters -- because the number
+ * moves exactly when a published snapshot differs from the one before it (the same test as
+ * se_live_capture_unchanged, taken after the capture instead of before it, so a snapshot
+ * published between the check and the capture cannot be counted as a repeat). A client that
+ * keys a result on the context's derive serial, which moves on every capture, reads this after
+ * each capture to learn that the serial moved for nothing. */
+uint64_t se_live_captured_revision(const se_data_source* ds);
+
 /* How many state loads (rewind LST, emulator slot ELS) the emulator has applied and refused
  * since this run started (v19+). Every load request ends in exactly one of the two, and "done"
  * is counted only once the first frame of the restored timeline is in the reply stream, so a
