@@ -9090,3 +9090,156 @@ Matrices (RelWithDebInfo, gcc 13), every one on the merged head before its push:
 | 1a87b1b (area 2 r7 review, tests only) | 92 of 92 + live 6 of 6 after 0893c2d | 0 of 94 | not needed | not needed | no patch |
 | 41180fe (area 2 r7 fix, 0046 and 0047) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | identical |
 | 572c29d (A5-82, oracle only) | 98 of 98 | 0 of 94 | 0 / 0 / 0 / 0 | unchanged | no patch |
+
+## Area 7, round 1: the mapping oracle
+
+Branch `review/7-mapping` from `f31600c`. The first round of area 7 (the pseudocode-to-assembly mapping: each printed token carries the SH-2 address it came from, each line has a
+`firstAddr`, a click navigates SH-2 Assembly, a hover shows a tooltip). The round built the area's oracle, ran it over both game corpora and the generator, filed **A7-1 to A7-8
+(all P3, no P1 or P2)** in `Docs/Decompiler/REVIEW_LEDGER.md`, and fixed A7-1 to A7-4. A7-5 and A7-6 are open, A7-7 is accepted, A7-8 (an instrument) is open. Code commits `b4ec836` and
+`7d6ca75`. **No engine patch** (no `vendor.py` run): the changes are in the host (`Sh2Decompiler.cpp/.h`, `DecompilerPanel.cpp/.h`), the tests and the guide. The round also answers a
+user report: hovering a line showed a bare `0x06086F54` and the user could not tell what it was (A7-1).
+
+### The oracle
+
+`FrontEnd/tests/MappingOracle.h`, one function (`AuditMapping`) over one `DecompileResult`, used by the game-code runs (`TestGameCode`: every function alone; `TestGameLending`: every
+function as the panel decompiles it, with lent signatures), by `TestMappingOracleOnFixtures` (sixteen fixture functions, every run of ctest) and by the generator (`CheckFn`, rule 13):
+
+1. **Token addresses.** Every non-zero token address is even, lies in `body` (the instructions flow reached, delay slots included) or is named by a flow warning, and is the start of an
+   instruction that decodes. The exceptions are counted, not failed, and each has a row: the word flow halted at as bad data (`halt_baddata();` and its case label name that word, by
+   design), an odd address in a function the engine says has overlapping instructions or that was entered at an odd address (A7-6). A line's `firstAddr` is its lowest token address (0
+   with none); a token's range lies in its line's text; a call token (`FuncName` with a target) came from a call or a jump.
+2. **Marking.** A line from several instructions says so in its hover text (`LineOriginText`) and lists them; a line from one names it; a line from none has no text and no jump.
+3. **Round trip.** A click goes to `firstAddr`; the lines an instruction owns (those with a token of it) hold the line it was reached from. Checked on the data. The UI has no way back (A7-5).
+4. **Coverage.** Every access the ledger lists has a token of its instruction on some line, and every call in the final p-code has one; a call removed from the p-code is named by a
+   "Removing unreachable block" warning at or before it. The generator also fails an executed ledger access or call with no token. What else the body holds is counted by kind
+   (A7-7, A7-8).
+
+The checks are checked: `SE_GAME_MAPPING_MUTATE=<kind>` and `SE_GENERATED_MUTATE=<kind>` damage a result as one defect would (`tokodd`, `tokoutside`, `tokfirst`, `tokdrop`, `tokcall`,
+`tokunmark`, `tokhover`) and the run must report it (mutation table below).
+
+The UI half is `DecompilerPanelTests` under `ImGuiHarness`: `TestLineClickNavigates` (it already pinned that a click issues the jump with the line's address and the panel's CPU),
+`TestLineHoverAndNoAddress` (the tooltip is on screen with the right text; a line with no address has none, a click on it issues no jump, and **Show in SH-2 Assembly**, **View in
+Memory** and **Set Function Start Here** do nothing on it), `TestOtherInstructionsMenu`, `TestLineOriginText` (the text verbatim) and `TestGuideQuotesTheTooltip` (the guide quotes it;
+the test reads `DECOMPILER_GUIDE.md` through a compile definition).
+
+Run it: `SE_GAME_HWRAM=<hwram.bin> SE_GAME_LEND=1 build/bin/SaturnExplorerSh2DecompilerTests <scratch>` (add `SE_GAME_TOKENS=1 SE_GAME_ONLY=<entry>` to print every instruction of every
+line of one function); the generator needs nothing (`checks:` carries `map.*`).
+
+### The corpora (hwram007.bin, hwram008.bin; RelWithDebInfo, gcc 13)
+
+Every violation count is 0 on the fixed build, for the functions alone (`TestGameCode`) and as the panel decompiles them with lent signatures (`TestGameLending`).
+
+| Run | Functions | Lines | From one instruction | From several (not adjacent; widest) | From none | Tokens (with an address) | Body instructions (with a token) |
+|---|---|---|---|---|---|---|---|
+| 007 alone | 839 | 24,620 | 8,532 | 5,184 (2,739; 9) | 10,904 | 197,282 (63,819) | 50,882 (19,654) |
+| 007 lent | 1,731 | 49,397 | 17,875 | 10,233 (5,304; 10) | 21,289 | 415,020 (135,494) | 98,429 (38,186) |
+| 008 alone | 1,554 | 62,245 | 23,139 | 15,792 (8,615; 11) | 23,314 | 577,650 (191,720) | 139,355 (58,917) |
+| 008 lent | 2,996 | 104,605 | 38,677 | 25,353 (13,782; 11) | 40,575 | 960,999 (316,319) | 225,154 (93,674) |
+| 16 fixtures | 16 | 160 | 39 | 25 (0; 3) | 96 | 865 (244) | 158 (89) |
+
+Four lines in ten of those with an address come from more than one instruction, and about half of those from instructions that are not next to each other (A7-2). Counted, not failed:
+
+| Run | Odd, overlap warning | Odd, odd entry | Bad-data word | Delay slots without a token | Memory instructions without one | Calls removed (all said) | Conditional branches without one | Access on another line than `firstLine` |
+|---|---|---|---|---|---|---|---|---|
+| 007 alone | 18 | 0 | 9 | 6,327 | 7,533 | 8 | 288 | 4 |
+| 007 lent | 234 | 58 | 33 | 11,603 | 15,222 | 16 | 615 | 11 |
+| 008 alone | 25 | 0 | 6 | 15,654 | 15,343 | 21 | 715 | 4 |
+| 008 lent | 298 | 58 | 27 | 24,485 | 27,922 | 35 | 1,152 | 21 |
+
+What the first run of the oracle found, before any fix (007 alone; the lending runs are about twice as many): `MemoryAccess::firstLine` named the wrong line for 4,793 printed accesses (A7-4), 75 of
+them had no token anywhere (A7-3), 22 tokens were odd (18 in functions with an overlap warning, A7-6, and 4 at a bad-data word) and 5 more named a word that is no instruction (the
+bad-data words, by design), and no several-instruction line was marked because nothing marks one (A7-2: the check passed only once the tooltip said so). Ledger counts unchanged: 0 accesses dropped,
+0 missing and said in 007 and 4 in 008; lending 662 (923) and 1,021 (1,287).
+
+The generator, grammar 2 and 1: 3,000 and 1,000 seeds, 0 failing seeds. `map.lines.several` 17,319 and 4,595 of the lines with an address (`.apart` 3,809 and 1,024); of the 207,653 and 35,942
+executed instructions in a body, 74,316 and 19,328 carry a token; the others are 24,307 and 2,172 delay slots, 13,437 and 992 branches, 28,978 and 1,348 memory instructions (every one in
+the ledger, in the engine's records or said: 0 unaccounted) and 66,615 and 12,102 operations.
+
+### Findings
+
+All P3. The severity rule of the program makes a defect P1 when the output is wrong and looks right and P2 when a reader is misled about what the tool knows; nothing here computes
+anything wrong, so none is P1 or P2. A7-1 and A7-2 are the closest to P2: a reader took a number for a value, and could not reach most of the instructions of four lines in ten. The
+tooltip never claimed anything false, and the line is reachable through its lowest instruction, which is why they stay P3.
+
+| Row | What | Status |
+|---|---|---|
+| A7-1 | The tooltip is a bare `0x06086F54`; nothing says it is an instruction's address, where a click goes, or that it is not a value in the line | fixed |
+| A7-2 | A line built from several instructions is not marked; the click goes to the lowest, the others cannot be reached | fixed |
+| A7-3 | A read in array form has no token: its instruction is on no line (75 and 117 in the corpora) | fixed |
+| A7-4 | `MemoryAccess::firstLine` is one line too high (the leading break) | fixed |
+| A7-5 | No way back from an SH-2 Assembly row to its line (the round trip holds on the data only) | open |
+| A7-6 | Odd token addresses: a jump-table destination that is no address (said by a warning), and an odd entry (not said) | open (area 4) |
+| A7-7 | 58% to 61% of the body's instructions have no token (delay slots, folded operations, removed code) | accepted |
+| A7-8 | Instrument: a register-only instruction's reachability is counted, not checked | open |
+
+### Fixes
+
+* **The tooltip (A7-1).** `LineOriginText` (`Sh2Decompiler.cpp`, so the corpus runs can check it without ImGui). One instruction: "Decompiled from the SH-2 instruction at 0x06086F54 (an
+  address in the program, not a value in this line).", then "Click to show it in SH-2 Assembly." on a second line. Several: "Decompiled from 3 SH-2 instructions (an address is not a value in
+  this line):", then the addresses, ascending, comma separated (eight, then ", and 2 more"), then "Click to show the first, 0x06086F54, in SH-2 Assembly." A line with no address
+  has no tooltip. The panel shows exactly this text (`DecompilerPanel::LineTooltip()` returns what the last frame showed, for the tests). `DECOMPILER_GUIDE.md` documents it under
+  "Reading the output", and says "first" means the lowest address.
+* **The others of a line (A7-2).** The right-click menu of a line from several instructions has **Show Other Instructions**, a submenu with each of the others (the first 24, then "and n
+  more"); picking one jumps SH-2 Assembly to it on the panel's CPU, as the click does for the first.
+* **Array-form reads (A7-3).** `LinesFromMarkup` appends to each line that prints the pointer expression of a load whose instruction no token carries (or, when the pointer prints
+  nothing, the op that uses the load's value) a token with an empty range at the end of the text and the load's address. Nothing is drawn for it (the drawing loop paints
+  the text between tokens), and `LineInstructions`, `firstAddr`, the user's notes and the halt hint see it. The text of every function is unchanged (below).
+* **`firstLine` (A7-4).** The printed map's line indices move up with the leading lines dropped from the result.
+
+### Mutation table
+
+Each new check fails when its rule is broken. "Corpus" is hwram007.bin alone (`SE_GAME_MAPPING_MUTATE`), "generator" is 60 seeds of grammar 2 with the canary off
+(`SE_GENERATED_MUTATE`, "n of 60 seeds reported the damage"), "source" edits the product and rebuilds, then restores it (`git checkout`).
+
+| Mutation | Corpus | Generator | Other |
+|---|---|---|---|
+| `tokodd`: the first token with an address is one past an instruction | odd 837 | 60 of 60 | |
+| `tokoutside`: ...one MiB outside the body | outside the body 838, not an instruction 838 | 60 of 60 | |
+| `tokfirst`: `firstAddr` is the highest token address | firstAddr wrong 5,184 | 58 of 60 | |
+| `tokdrop`: the first printed access's instruction has no token | ledger accesses unmapped 557, calls 43 | 60 of 60 | |
+| `tokcall`: the tokens of every call lose their address | calls with no token 2,731, accesses unmapped 283 | 37 of 60 | |
+| `tokunmark`: a several-instruction line's text says one | unmarked 5,184, hover 5,184 | 58 of 60 | |
+| `tokhover`: ...lists all but the last | unmarked 3,348, hover 5,184 | 58 of 60 | |
+| B1 source: `LineOriginText` returns the bare `0x%08X` (the old tooltip) | | | fixtures 2 checks, panel 6 checks |
+| B2 source: no token for array-form reads (A7-3) | accesses unmapped 75 | 1 of 150 seeds (`6044 6040 000B 0009`) | fixtures 3 checks |
+| B3 source: `firstLine` not moved (A7-4) | | | fixtures 1 check (`accessOffLine == 0`) |
+| B4 source: a line with no address navigates | | | panel 1 check |
+| B5 source: the panel shows the bare address, not `LineOriginText` | | | panel 5 checks |
+| B6 source: no **Show Other Instructions** | | | panel 3 checks |
+| B7 source: the click goes to the highest address | | | panel 1 check |
+| B8 guide: the quoted sentence changed ("the line", not "this line") | | | panel 1 check (`TestGuideQuotesTheTooltip`) |
+
+The seeds that do not report a mutation have nothing for it to damage: seeds 30 and 32 have no line from several instructions (`tokfirst`, `tokunmark`, `tokhover`), and the 23 that miss
+`tokcall` make no call. Every mutation was applied alone, on the build at `b4ec836` (B2's fixture row at `7d6ca75`), and the tree restored with `git checkout`.
+
+### The text did not change
+
+The product change adds tokens with an empty range and moves indices; no `Line::text` is touched. Checked, not assumed: both corpora were written out (`SE_GAME_OUT`: every function alone,
+and the lending runs' `lend_before/` and `lend_after/`) on the fixed build and on the same sources with the A7-3 and A7-4 changes switched off (mutations B2 and B3 together, which is the
+engine as it was at `f31600c` for everything these texts hold): `diff -r` over 4,303 files (hwram007.bin) and 7,548 files (hwram008.bin) is empty. Statuses, warnings, signature lines and
+text are identical.
+
+### Matrix (RelWithDebInfo, gcc 13, `-j3`, own build at the head of the branch)
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 passed, 122 s |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 113.5 s, no MOVED pin |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds (94 s; `map.*` counts above) |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `hwram007.bin`, `SE_GAME_LEND=1` | 839 of 839 ok; every ledger count 0; 0 missing and said; lending 637 (866) to 662 (923); every mapping violation count 0 |
+| `hwram008.bin`, `SE_GAME_LEND=1` | 1,554 of 1,554 ok; every ledger count 0; 4 missing and said; lending 992 (1,227) to 1,021 (1,287); every mapping violation count 0 |
+| `diff -r` of both corpora's texts against the engine without A7-3 and A7-4 | empty |
+
+Not run: the Live tests (they share a fixed socket path with the coordinator's runs), the sanitizer job and the nightly generator (CI), the printed-C differential (nothing it covers changed).
+
+### For the next round
+
+* A reviewer should look for what the oracle cannot see: whether a tooltip or a menu item is *wrong* about a line, not just present. The oracle checks the addresses a line names are in the
+  body and are instructions, not that the instruction is the one that made the text. A7-8 is the standing gap; the stronger instrument is the p-code dependence of each token.
+* Verify the empty tokens in the views that read tokens: the user's notes and the hardware explanations (those on an array read now sit on its line; they were listed under "notes on instructions
+  with no line of their own"), the register hint at a halt, and the draw loop with a token at the end of the text. `TestUserCommentsOnLines` and the panel suite pass.
+* A7-5 needs a decision before it is built: a click in SH-2 Assembly selects one line in the pseudocode, but an instruction can be on several (a loop's test, a duplicated block).
+* A7-6 is area 4's: the engine should refuse an odd entry and stop at an odd destination as it stops at bad data.
+* The line's `firstAddr` is the lowest address, not the first the code executes; **Set Function Start Here** uses it. For a line that holds code from below the entry (a shared
+  epilogue) the two differ. Not filed: the menu item is the user's explicit choice of a line, and the lowest instruction of it is a defensible start.

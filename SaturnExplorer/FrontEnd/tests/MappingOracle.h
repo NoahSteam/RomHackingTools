@@ -60,7 +60,7 @@ struct MappingAudit
     int bodyInsns = 0, bodyMapped = 0;
     int unmappedSlots = 0;     // a delay slot instruction no token carries (its p-code carries the branch's address)
     int slotTokens = 0;        // a token at a delay slot's own address
-    int oddWarned = 0;         // an odd token address in a function the engine says has overlapping instructions (A7-5: counted, not failed)
+    int oddWarned = 0;         // an odd token address in a function the engine says has overlapping instructions (A7-6: counted, not failed)
     int oddEntry = 0;          // an odd token address in a function whose entry is odd (A7-6: counted, not failed)
     int badDataTokens = 0;     // a token at a word flow halted at as bad data (`halt_baddata();`): the word, by design
     int unmappedMemory = 0;    // an instruction that accesses memory (not a literal load), no token, in the body
