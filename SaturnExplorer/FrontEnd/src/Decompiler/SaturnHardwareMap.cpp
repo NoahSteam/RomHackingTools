@@ -1574,6 +1574,7 @@ bool MemoryBytesOf(uint32_t address, uint32_t size, MemoryBytes& out)
     struct Area { uint32_t first, last, mask; MemoryKind kind; };
     static const Area kAreas[] = {
         { 0x00200000u, 0x003FFFFFu, 0x000FFFFFu, MemoryKind::WorkRamLow },
+        { 0x02400000u, 0x027FFFFFu, 0x0027FFFFu, MemoryKind::ExtRam },   // (bit 21 selects the bank; bits 20 and 19 are not decoded: A5-65)
         { 0x05C00000u, 0x05C7FFFFu, 0x0007FFFFu, MemoryKind::Vdp1Vram },
         { 0x05C80000u, 0x05CFFFFFu, 0x0003FFFFu, MemoryKind::Vdp1FrameBuffer },
         { 0x05E00000u, 0x05EFFFFFu, 0x0007FFFFu, MemoryKind::Vdp2Vram },
@@ -1602,6 +1603,7 @@ const char* MemoryKindName(MemoryKind kind)
     case MemoryKind::Vdp1FrameBuffer: return "the VDP1 frame buffer";
     case MemoryKind::Vdp2Vram: return "VDP2 VRAM";
     case MemoryKind::Vdp2ColorRam: return "VDP2 colour RAM";
+    case MemoryKind::ExtRam: return "the extended RAM cartridge";
     }
     return "memory";
 }
