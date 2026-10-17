@@ -1855,7 +1855,11 @@ struct Rig
         if (!modelStale)
         {
             // The result on screen is the answer for the inputs now.
-            const std::vector<const DecompileResult*> cands = oracle.Candidates(now.valid ? SigOf(held) : now);
+            // The answer for the inputs now. Not for the snapshot the model believes the panel holds: a
+            // hidden panel copies no memory, so its held snapshot can be another frame's than the view's
+            // while the result on screen (installed when the two agreed, and not stale: its view is the
+            // view now) is the view's. The result is judged against what it claims to answer (A1-8).
+            const std::vector<const DecompileResult*> cands = oracle.Candidates(now);
             bool ok = false;
             for (const DecompileResult* c : cands)
                 if (SameAnswer(*s, *c)) ok = true;
@@ -2096,17 +2100,22 @@ const Pinned kPinned[] = {
     { "A1-7", "replace 0 1; select A; wait; recapture; recapture; wait", "C,A", 0 },
     { "A1-7 (held)", "replace 0 1; hold; select A; recapture; recapture; recapture; wait", "C,A", 0 },
     { "A1-7 (edit between)", "replace 0 1; select A; wait; edit A 0 1; recapture; recapture; wait", "C,A", 0 },
+    // A hidden panel holds the snapshot it had when it was hidden, whatever the view does (it copies no
+    // memory). A request for another recorded frame held in the engine, the view back on the frame the
+    // panel showed, the engine released: the answer for the held frame is thrown away, and the result on
+    // screen -- installed for the view's frame, not stale -- is the view's answer, not the held snapshot's.
+    // The model compared it with the held snapshot's answer (A1-8: the model's bookkeeping was wrong).
+    { "A1-8", "scrub 2; select P; hold; scrub 1; hide; scrub 2; wait", "C,A,P", 0 },
+    // ...the same with the panel shown again afterwards (it takes the view's frame, asks nothing new),
+    { "A1-8 (shown again)", "scrub 2; select P; hold; scrub 1; hide; scrub 2; wait; show", "C,A,P", 0 },
+    // ...and with the view going back to the held frame instead: the answer for it is installed while
+    // hidden, which is allowed (the held snapshot is what is on screen) and replaces the other frame's.
+    { "A1-8 (view to the held frame)", "scrub 2; select P; hold; scrub 1; hide; scrub 2; scrub 1; wait; show", "C,A,P", 0 },
 };
 
 // The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
-// 1 while any fails). The fixer moves each into kPinned once it passes.
+// 1 while any fails). The fixer moves each into kPinned once it passes. None is open now.
 const Pinned kOpen[] = {
-    // A1-8: found by the 300-seed run of round 4 (seed 171), shrunk. A request for another recorded
-    // frame is held in the engine, the panel is hidden, the view returns to the frame it showed, the
-    // engine is released: the model finds the result on screen is not the from-scratch answer it
-    // expects for the snapshot it believes was held. The same on the unmodified model and panel
-    // (the master before round 4); not yet known whether the panel or the model's bookkeeping is wrong.
-    { "A1-8", "scrub 2; select P; hold; scrub 1; hide; scrub 2; wait", "C,A,P", 0 },
     { nullptr, nullptr, nullptr, 0 },
 };
 
