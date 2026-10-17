@@ -3209,7 +3209,7 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
         }
         if (!started)
         {
-            // The refusal as one line. Its text is built here, outside the damage boundary below: the engine was never
+            // The refusal as one line. Its text is built here, handled here and not by the damage handler below: the engine was never
             // entered, so a failure making the line is a listing cut short before it began and not a damaged engine
             // (A6-32). The room is already in the vector (count + 1 >= 1), so a move into it cannot fail.
             if (stopped) *stopped = true;
