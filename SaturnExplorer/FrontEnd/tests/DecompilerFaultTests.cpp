@@ -93,6 +93,7 @@ int main()
 
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -4362,6 +4363,170 @@ int RefusedRetryCell(const std::string& scratch)
     std::_Exit(dts::Failures() ? kExitInvariant : leak);
 }
 
+
+// ---- scratch probes of the area 6 round 6 review ------------------------------------------------------------------
+int CountFds()
+{
+    std::vector<std::string> names;
+    sfe::ListDirectory("/proc/self/fd", names);
+    return int(names.size());
+}
+
+std::string StrayStaging(const std::string& cfg)
+{
+    std::string stray;
+    std::vector<std::string> names;
+    sfe::ListDirectory(dts::Join(cfg, "decompiler"), names);
+    for (const std::string& n : names)
+        if (n.find(".tmp-") != std::string::npos) stray += (stray.empty() ? "" : ", ") + n;
+    return stray;
+}
+
+// `--diskfull <scratch> [sticky]`: the first request of a process, with the file size limit at 5,000 bytes, so that the three small
+// spec files are written and the 13 KB language file is not ("the disk is full on the fourth file"), and allocation k failing as well,
+// for every k of that request. Then the limit is lifted and the next request must be Ok, with no staging directory and no
+// descriptor left behind.
+int DiskFullProbe(const std::string& scratch, bool sticky)
+{
+    sfe::MakeDirectory(scratch);
+    std::signal(SIGXFSZ, SIG_IGN);
+    const auto snap = BuildSnapshot();
+    const Fix* fx = FindFix("mailbox");
+    const DecompileRequest rq = MakeRequest(*fx);
+    InstallHooks();
+    auto setLimit = [](rlim_t n) {
+        struct rlimit rl;
+        getrlimit(RLIMIT_FSIZE, &rl);
+        rl.rlim_cur = n;
+        setrlimit(RLIMIT_FSIZE, &rl);
+    };
+    long allocs = 0;
+    std::string sig;
+    {
+        const std::string f = dts::Join(scratch, "base.txt");
+        auto body = [&]() -> int {
+            const std::string cfg = dts::Join(scratch, "cfgb");
+            dts::RemoveTree(cfg);
+            sfe::MakeDirectory(cfg);
+            Sh2Decompiler e(cfg);
+            setLimit(5000);
+            fa::Arm(-1);
+            const DecompileResult r1 = e.Decompile(snap, rq, nullptr);
+            const long n = fa::gCount.load();
+            fa::Disarm();
+            setLimit(RLIM_INFINITY);
+            std::printf("BASE1 status %d '%s' allocs %ld stray '%s'\n", int(r1.status), r1.error.c_str(), n, StrayStaging(cfg).c_str());
+            const DecompileResult r2 = e.Decompile(snap, rq, nullptr);
+            std::printf("BASE2 status %d '%s'\n", int(r2.status), r2.error.c_str());
+            FILE* o = std::fopen(f.c_str(), "wb");
+            std::fputs(Signature(r2).c_str(), o);
+            std::fclose(o);
+            return r1.status == DecompileStatus::Unavailable && r2.status == DecompileStatus::Ok ? 0 : 3;
+        };
+        const CellRun run = ForkCell(scratch, body, CellTimeout());
+        std::printf("%s", run.out.c_str());
+        if (!run.proc.exited || run.proc.code != 0) return 2;
+        const size_t at = run.out.find("BASE1");
+        const size_t w = run.out.find("allocs ", at);
+        allocs = std::atol(run.out.c_str() + w + 7);
+        sig = ReadFile(f);
+    }
+    std::printf("diskfull: the first request is %ld allocations\n", allocs);
+    int bad = 0, cells = 0;
+    for (long k = 0; k <= allocs + 2; ++k)
+    {
+        auto body = [&]() -> int {
+            dts::Failures() = 0;
+            const std::string cfg = dts::Join(scratch, "cfg" + std::to_string(long(getpid())));
+            dts::RemoveTree(cfg);
+            sfe::MakeDirectory(cfg);
+            std::unique_ptr<Sh2Decompiler> e(new Sh2Decompiler(cfg));
+            const int fds0 = CountFds();
+            bool escaped = false;
+            DecompileResult r1;
+            fa::gSticky = sticky;
+            setLimit(5000);
+            fa::Arm(k);
+            try { r1 = e->Decompile(snap, rq, nullptr); } catch (...) { escaped = true; }
+            fa::Disarm();
+            fa::gSticky = false;
+            setLimit(RLIM_INFINITY);
+            const int fds1 = CountFds();
+            const std::string stray = StrayStaging(cfg);
+            Expect(!escaped, "no exception escapes");
+            Expect(r1.status == DecompileStatus::Unavailable || (r1.status == DecompileStatus::Failed && Has(r1.error, "out of memory")),
+                   "the first request is refused or out of memory", std::to_string(int(r1.status)) + " '" + r1.error + "'");
+            Expect(stray.empty(), "no staging directory is left", stray);
+            Expect(fds1 == fds0, "no descriptor is left open", std::to_string(fds0) + " -> " + std::to_string(fds1));
+            const DecompileResult r2 = e->Decompile(snap, rq, nullptr);
+            Expect(r2.status == DecompileStatus::Ok && Signature(r2) == sig, "the next request, the limit lifted, is correct",
+                   std::to_string(int(r2.status)) + " '" + r2.error + "'");
+            std::printf("CELL diskfull k=%ld first=%d '%s' stray='%s' fds %d->%d next=%d\n", k, int(r1.status), r1.error.substr(0, 90).c_str(), stray.c_str(), fds0, fds1, int(r2.status));
+            std::fflush(nullptr);
+            dts::RemoveTree(cfg);
+            const int leak = dts::Failures() ? 0 : LeakCheck();
+            std::fflush(nullptr);
+            return dts::Failures() ? kExitInvariant : leak;
+        };
+        const CellRun run = ForkCell(scratch, body, CellTimeout());
+        ++cells;
+        if (!run.proc.exited || run.proc.code != 0)
+        {
+            ++bad;
+            std::printf("FAIL k=%ld exit %d sig %d%s\n%s\n", k, run.proc.code, run.proc.signal, run.proc.timedOut ? " timed out" : "", run.out.c_str());
+        }
+    }
+    std::printf("diskfull%s: %d cells, %d failed\n", sticky ? " (sticky)" : "", cells, bad);
+    return bad ? 1 : 0;
+}
+
+// `--vanish <scratch> [damage]`: the library is up (a first request succeeded), then the spec directory is removed (or one file damaged) under
+// the running process. What do the next requests say, and does anything restore the files?
+int VanishProbe(const std::string& scratch, bool damage)
+{
+    sfe::MakeDirectory(scratch);
+    const auto snap = BuildSnapshot();
+    const Fix* fx = FindFix("mailbox");
+    const DecompileRequest rq = MakeRequest(*fx);
+    const std::string cfg = dts::Join(scratch, "cfg");
+    sfe::MakeDirectory(cfg);
+    Sh2Decompiler e(cfg);
+    auto ask = [&](const char* what) {
+        const DecompileResult r = e.Decompile(snap, rq, nullptr);
+        std::printf("%-10s: status %d '%s' (%zu lines)\n", what, int(r.status), r.error.substr(0, 200).c_str(), r.lines.size());
+        return r;
+    };
+    auto list = [&](const char* what) {
+        bool stopped = false;
+        const std::vector<std::string> l = e.Disassemble(snap, dts::kFixture1Caller, 3, &stopped);
+        std::printf("%-10s: %zu line(s) stopped=%d first '%s'\n", what, l.size(), int(stopped), l.empty() ? "" : l[0].substr(0, 200).c_str());
+    };
+    ask("1 first");
+    const std::string root = dts::Join(cfg, "decompiler");
+    std::vector<std::string> names;
+    sfe::ListDirectory(root, names);
+    std::string hashDir;
+    for (const std::string& n : names)
+        if (n.find('.') == std::string::npos) hashDir = dts::Join(root, n);
+    std::printf("spec directory: %s\n", hashDir.c_str());
+    if (damage)
+    {
+        FILE* f = std::fopen(dts::Join(hashDir, "superh.cspec").c_str(), "wb");
+        std::fputs("garbage", f);
+        std::fclose(f);
+    }
+    else
+        dts::RemoveTree(hashDir);
+    ask("2 gone");
+    ask("3 again");
+    list("3 disasm");
+    const sfe::decomp::SpecBundleResult b = sfe::decomp::MaterialiseSh2SpecBundle(cfg);
+    std::printf("restored by hand: ok=%d extracted=%d repaired=%d\n", int(b.ok), int(b.extracted), int(b.repaired));
+    ask("4 restored");
+    list("4 disasm");
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -4406,6 +4571,8 @@ int main(int argc, char** argv)
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
 
+    if (arg(2) == "--vanish") return VanishProbe(dts::Join(scratch, "cell"), arg(3) == "damage");
+    if (arg(2) == "--diskfull") return DiskFullProbe(dts::Join(scratch, "cell"), arg(3) == "sticky");
     // ---- the refusal for a cause that is gone (A6-40), a process of its own
     if (arg(2) == "--refused-retry") return RefusedRetryCell(dts::Join(scratch, "cell"));
 
