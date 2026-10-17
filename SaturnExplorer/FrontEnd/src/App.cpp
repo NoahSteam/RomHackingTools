@@ -47,6 +47,7 @@
 #include "Sh2Address.h"       // CanonicalAddress: a breakpoint matches a halt at any mirror
 #ifdef SE_ENABLE_LIVE
 #include "LiveDriver.h"      // native builds only (threads/sockets)
+#include "LiveCapture.h"
 #endif
 
 namespace sfe
@@ -1409,7 +1410,13 @@ void App::BuildUI(IPlatform& platform)
         // registers/memory reach the panels and how a step's new state shows. (A bare
         // frame-pause leaves the halt inactive, so the edit-preview case above is unaffected.)
         // Also while a state load is unresolved: its completion shows up in the capture stream,
-        // so pausing must not stop the very captures that would end the wait.
+        // so pausing must not stop the very captures that would end the wait. The 10 s timeout
+        // (mRestoreTimedOut) does not end this: the wait is still open, and a confirmation that
+        // comes late is seen only by capturing. It costs what a running emulator costs, and since
+        // CaptureLiveFrame keeps the decompiler's identity still across captures of the same
+        // bytes, it no longer costs the panel its answer (A1-7). Skipping unchanged captures after
+        // the timeout would also have to read the counters without capturing, or a confirmation
+        // already inside the last capture would never be resolved.
         bool restoreSignal = false;
         uint32_t restoreDone = 0, restoreFailed = 0;
 #ifdef SE_ENABLE_LIVE
@@ -1459,7 +1466,13 @@ void App::BuildUI(IPlatform& platform)
             if (restoreWaiting)
                 restoreSignal = se_live_restore_state(&mDataSource, &restoreDone, &restoreFailed) != 0;
 #endif
+#ifdef SE_ENABLE_LIVE
+            // Through the tracker: the derive serial moves on every capture, and the decompiler's
+            // view of the context must not when the emulator published nothing new (A1-7).
+            CaptureLiveFrame(mLiveCaptures, mContext, &mDataSource);
+#else
             se_begin_frame(mContext);
+#endif
             mStepHalt.ConsumeSettleFrame();
         }
 #ifdef SE_ENABLE_LIVE
@@ -3021,6 +3034,9 @@ DecompilerView App::BuildDecompilerView()
 #endif
     if (mbLiveSource)
     {
+        // The serial moves on every capture, a paused emulator's included, over the same bytes: the
+        // panel would take each for a new question (A1-7). Only an edit or new content moves this one.
+        v.deriveSerial = mLiveCaptures.Apply(mContext, v.deriveSerial);
         const bool still = mbPaused || mStepHalt.HaltActive();
         v.kind = still ? DecompViewKind::LivePaused : DecompViewKind::LiveRunning;
         v.sourceLabel = still ? "live, paused" : "live, running";

@@ -254,6 +254,55 @@ int main()
         Check(Read(ds).failed == b.failed, "and neither is counted as refused");
     }
 
+    // The revision of what was captured (A1-7): the same while the paused emulator republishes the
+    // state it has, different once a load is applied (the counters and the frame move). A client that
+    // keys a result on the context's derive serial, which moves on every capture, reads it after each
+    // capture to tell a recapture of the same bytes from news.
+    {
+        // Frames ticked a moment ago (or a request just made) may still be on their way over a
+        // gap-free fetch: capture until the display has stopped moving, and say what it settled on.
+        auto settle = [&] {
+            uint64_t last = 0;
+            for (int i = 0, same = 0; i < 600 && same < 10; ++i)
+            {
+                se_begin_frame(ctx);
+                const uint64_t r = se_live_captured_revision(&ds);
+                same = (r != 0 && r == last) ? same + 1 : 0;
+                last = r;
+                Sleep(10);
+            }
+            return last;
+        };
+        const uint64_t r0 = settle();
+        Check(r0 != 0, "a capture has a revision");
+        // Nothing is ticked: the driver's poll thread keeps fetching the newest frame, and each fetch
+        // is a publish of the same content.
+        for (int i = 0; i < 5; ++i)
+        {
+            Sleep(30);
+            se_begin_frame(ctx);
+            Check(se_live_captured_revision(&ds) == r0, "a republish of the same state is the same revision");
+        }
+        const Counters b = Read(ds);
+        gLoadResult = 0;
+        Check(se_load_state(ctx, 31, state.data(), state.size(), nullptr, 0) == SE_OK, "a load request for the revision case");
+        const uint64_t r1 = settle();   // whatever the request itself did to the stream, it settles
+        Check(Read(ds).done == b.done, "the load has not been applied: no gate has run");
+        for (int i = 0; i < 5; ++i)
+        {
+            Sleep(30);
+            se_begin_frame(ctx);
+            Check(se_live_captured_revision(&ds) == r1, "an unconfirmed load, republished, is the same revision");
+        }
+        Check(Until([&](const Counters& x) { return x.done == b.done + 1; }, ds), "the load is applied once the gate runs");
+        const uint64_t r2 = settle();
+        Check(r2 != r1, "an applied load is new content: the revision moves");
+        Sleep(60);
+        se_begin_frame(ctx);
+        Check(se_live_captured_revision(&ds) == r2, "and holds still when it is republished");
+        Check(se_live_captured_revision(nullptr) == 0, "no source, no revision");
+    }
+
     // Saving to the emulator's own slot (v25): advertised, written at a frame boundary, and not a
     // restore -- neither counter moves, since nothing was loaded and nobody waits on it.
     {

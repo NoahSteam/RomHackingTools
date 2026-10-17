@@ -35,6 +35,10 @@
 //   - "too large" is accepted for the request held past the budget, and for the runner's memo of
 //     exactly that question (same snapshot key, entry, names, starts, volatile list) until a run of
 //     it completes; a verdict reached for other bytes or inputs is a failure (A1-1, A1-2);
+//   - the emulator republishing what it had, which the app captures again (a paused emulator while a
+//     state load is unconfirmed), moves the context's derive serial and nothing else: the identity the
+//     panel is given must not move, and the panel must not copy memory or ask again (A1-7). An edit
+//     in between is a change, and moves it;
 //   - typing a function's entry into the box and pressing Enter asks for it, even where the same
 //     question was Stopped (A1-3);
 //   - at the end of a sequence a callee-first walk through every function leaves each one showing
@@ -56,6 +60,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include "CaptureRepeatTracker.h"
 #include "DecompilerPanel.h"
 #include "Debug/MemoryBackend.h"
 #include "ImGuiHarness.h"
@@ -503,7 +508,7 @@ private:
 struct Stats
 {
     uint64_t seeds = 0, ops = 0, noEffect = 0, holds = 0, races = 0, stops = 0, starves = 0;
-    uint64_t installs = 0, idleChecks = 0, heldChecks = 0, walks = 0;
+    uint64_t installs = 0, idleChecks = 0, heldChecks = 0, walks = 0, recaptures = 0, recaptureAsks = 0;
     uint64_t submissions = 0, discarded = 0, cacheHits = 0, captures = 0;
 } gStats;
 
@@ -516,7 +521,11 @@ enum class OpKind
     // Script only (never generated, so the seeds' sequences are unchanged): Refresh, hold the engine
     // on it, Stop, and keep it held past the runner's (short, in a 'wedge' program) cancel deadline,
     // so the runner disables decompilation for the session. The engine stays held until 'wait'.
-    Wedge
+    Wedge,
+    // The live emulator publishes nothing new and the app captures it again (a paused emulator
+    // while a state load is unconfirmed): the context re-derives, its serial moves, its bytes do
+    // not (A1-7). Generated, since the identity must not move without an input changing.
+    Recapture
 };
 
 struct Op
@@ -564,6 +573,7 @@ std::string Describe(const Op& o, const std::vector<int>& placed)
     case OpKind::Run: return "emulator runs";
     case OpKind::Pause: return "emulator pauses";
     case OpKind::Advance: return "emulator advances a frame";
+    case OpKind::Recapture: return "the app captures the paused emulator again (same bytes, the context re-derives)";
     case OpKind::Hide: return "hide the panel";
     case OpKind::Show: return "show the panel";
     case OpKind::Hold: return "hold the engine";
@@ -590,7 +600,7 @@ struct Program
 // Words: select <fn|X>, edit <fn> <site> <value>, starve, refresh, stop, scrub <0-2>, resume,
 // reconnect [1], replace <image> <0 dump|1 paused|2 running>, bios <0 none|1 A|2 B>, volatile <0-3>,
 // name <fn> <0-3>, bound <fn> <0|1>, cpu <0|1>, run, pause, advance, hide, show, hold, wait,
-// finish, wedge. <fn> is a letter of the world (A B P C D E Q); X is the BIOS function.
+// finish, wedge, recapture. <fn> is a letter of the world (A B P C D E Q); X is the BIOS function.
 bool ParseScript(const std::string& script, const std::string& world, int image, Program& out, std::string& error)
 {
     static const char* const letters = "ABPCDEQ";
@@ -646,6 +656,7 @@ bool ParseScript(const std::string& script, const std::string& world, int image,
         else if (verb == "run") o.kind = OpKind::Run;
         else if (verb == "pause") o.kind = OpKind::Pause;
         else if (verb == "advance") o.kind = OpKind::Advance;
+        else if (verb == "recapture") o.kind = OpKind::Recapture;
         else if (verb == "hide") o.kind = OpKind::Hide;
         else if (verb == "show") o.kind = OpKind::Show;
         else if (verb == "hold") o.kind = OpKind::Hold;
@@ -711,6 +722,11 @@ const char* const kMotifs[] = {
     "hold; refresh; stop; wait",
     "select A; hold; select C; stop; edit A 0 1; wait",
     "hold; select C; finish; stop; wait; select C",
+    // the app captures a paused emulator again over the same bytes (A1-7): nothing is asked, and an edit
+    // in between is a change
+    "replace 0 1; select A; wait; recapture; recapture; recapture",
+    "replace 1 1; hold; select C; recapture; recapture; wait; recapture",
+    "run; select C; pause; refresh; recapture; recapture; edit C 1 1; recapture; select A; recapture",
 };
 
 Program Generate(uint64_t seed)
@@ -732,7 +748,7 @@ Program Generate(uint64_t seed)
         { OpKind::Edit, 16 }, { OpKind::Scrub, 8 }, { OpKind::Resume, 5 }, { OpKind::Refresh, 8 }, { OpKind::Reconnect, 4 },
         { OpKind::Replace, 3 }, { OpKind::Bios, 6 }, { OpKind::Volatile, 6 }, { OpKind::Rename, 8 }, { OpKind::Bound, 6 },
         { OpKind::Select, 16 }, { OpKind::Stop, 4 }, { OpKind::Cpu, 1 }, { OpKind::Run, 6 }, { OpKind::Pause, 3 },
-        { OpKind::Advance, 4 }, { OpKind::Hide, 2 }, { OpKind::Show, 2 },
+        { OpKind::Advance, 4 }, { OpKind::Hide, 2 }, { OpKind::Show, 2 }, { OpKind::Recapture, 8 },
     };
     int total = 0;
     for (const W& w : weights) total += w.w;
@@ -899,8 +915,17 @@ struct Rig
     std::vector<int> placed;
     int game = 0;
     LiveKind liveKind = LiveKind::Static;
-    uint64_t liveSource = 1, liveSerial = 1, liveFrame = 1;
+    uint64_t liveSource = 1, liveSerial = 1, liveFrame = 1;   // liveSerial: what the app gives the panel
     ContentP liveContent;
+    // The context behind the live view, as App keeps it: the raw derive serial moves on every capture
+    // and every edit, and the view serial the panel is given is that minus the captures that showed
+    // nothing new (CaptureRepeatTracker, A1-7). 'capturedContent' is what the last capture put in the
+    // context, which the next one puts back if an edit was made in between and the emulator never took it.
+    std::unique_ptr<int> liveCtx;
+    CaptureRepeatTracker tracker;
+    uint64_t rawSerial = 0, liveRevision = 0, ctxRanges = 0;
+    ContentP capturedContent;
+    bool editedSinceCapture = false;
     bool scrubbing = false;
     int scrubRev = 0;
     ContentP scrubContent;
@@ -952,9 +977,30 @@ struct Rig
         placed = p.placed;
         game = p.game;
         liveContent = BuildImage(placed, game);
+        NewLiveContext();
         MakeRecording();
         panel.SetCpu(0);
         SyncBackend();
+    }
+
+    // A context of its own (its serials in a range of their own) and its first capture.
+    void NewLiveContext()
+    {
+        liveCtx.reset(new int(0));
+        rawSerial = ++ctxRanges << 32;
+        tracker = CaptureRepeatTracker();
+        Capture(true);
+    }
+    // One capture of the live context. A new revision is content the emulator published; the same
+    // revision is the emulator republishing what it had.
+    void Capture(bool newRevision)
+    {
+        if (newRevision) ++liveRevision;
+        tracker.Note(liveCtx.get(), rawSerial, rawSerial + 1, liveRevision);
+        ++rawSerial;
+        capturedContent = liveContent;
+        editedSinceCapture = false;
+        liveSerial = tracker.Apply(liveCtx.get(), rawSerial);
     }
     ~Rig()
     {
@@ -1335,8 +1381,11 @@ struct Rig
             }
             else
             {
+                // In place: the context re-derives (the serial moves), no capture ran.
                 liveContent = WithByte(liveContent, s.addr, v);
-                liveSerial = ++counter;
+                ++rawSerial;
+                editedSinceCapture = true;
+                liveSerial = tracker.Apply(liveCtx.get(), rawSerial);
             }
             SyncBackend();
             return "";
@@ -1366,7 +1415,7 @@ struct Rig
         }
         case OpKind::Reconnect:
             liveSource = ++counter;
-            if (o.a) { liveSerial = 1; liveFrame = 1; }
+            if (o.a) { NewLiveContext(); liveFrame = 1; }
             if (liveKind == LiveKind::Static) liveKind = LiveKind::Paused;
             scrubbing = false;
             MakeRecording();
@@ -1378,7 +1427,7 @@ struct Rig
             game = o.a % 3;
             liveContent = BuildImage(placed, game);
             liveSource = ++counter;
-            liveSerial = 1;
+            NewLiveContext();
             liveFrame = 1;
             liveKind = o.b == 0 ? LiveKind::Static : o.b == 1 ? LiveKind::Paused : LiveKind::Running;
             scrubbing = false;
@@ -1478,8 +1527,39 @@ struct Rig
         case OpKind::Advance:
             if (scrubbing) return "(scrubbing)";
             ++liveFrame;
-            liveSerial = ++counter;   // the emulator wrote memory somewhere: same code, new key
+            Capture(true);   // the emulator wrote memory somewhere: same code, new key
             return "";
+        case OpKind::Recapture:
+        {
+            if (scrubbing) return "(scrubbing)";
+            if (liveKind == LiveKind::Static) return "(a dump is not captured again)";
+            const Sig before = ViewSig();
+            const bool pure = !editedSinceCapture;
+            const bool current = visible && held.valid && held.SameView(before) &&
+                                 ViewNow().kind == DecompViewKind::LivePaused;
+            const uint64_t captures = panel.Captures(), submissions = panel.Submissions();
+            // The emulator takes an edit made since the last capture only by publishing it, which is
+            // a new revision; here it did not, so the capture puts the old bytes back.
+            liveContent = capturedContent;
+            Capture(false);
+            SyncBackend();
+            ++gStats.recaptures;
+            if (pure)
+            {
+                if (ViewSig().serial != before.serial)
+                    Fail("RECAPTURE: the app captured the paused emulator again and nothing changed, yet the identity "
+                         "the panel is given moved (serial " + std::to_string(before.serial) + " -> " +
+                         std::to_string(ViewSig().serial) + ")");
+                Idle(2);
+                if (current) ++gStats.recaptureAsks;
+                if (current && !runner.Disabled() &&
+                    (panel.Captures() != captures || panel.Submissions() != submissions))
+                    Fail("RECAPTURE: the panel copied memory or asked again for a view whose bytes had not changed");
+            }
+            else if (ViewSig().serial == before.serial)
+                Fail("RECAPTURE: the capture replaced bytes that had been edited and the identity did not move");
+            return "";
+        }
         case OpKind::Hide: visible = false; return "";
         case OpKind::Show: visible = true; return "";
         case OpKind::Finish:
@@ -1967,7 +2047,7 @@ bool RunSeed(Oracle& oracle, uint64_t seed, bool verbose, const std::set<int>& s
 }
 
 // The default run: this many seeds, then the shrunk sequences of the findings fixed from this model
-// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5, A8-1 and A8-3), which stay in the default run as regression pins.
+// (kPinned: REVIEW_LEDGER.md rows A1-1 to A1-5, A1-7, A8-1 and A8-3), which stay in the default run as regression pins.
 const uint64_t kDefaultSeeds = 18;
 
 struct Pinned
@@ -2010,11 +2090,23 @@ const Pinned kPinned[] = {
     // one when they differ.
     { "A8-3", "select A; wait; hold; refresh; wait", "C,A", 0 },
     { "A8-3 (twice)", "select D; wait; hold; refresh; refresh; wait", "D,C,A", 0 },
+    // A paused emulator captured again (a state load nobody has confirmed) re-derives the context
+    // over the same bytes. The identity the panel is given must not move, with nothing outstanding
+    // and with the engine still on the first question (A1-7); an edit in between is a change.
+    { "A1-7", "replace 0 1; select A; wait; recapture; recapture; wait", "C,A", 0 },
+    { "A1-7 (held)", "replace 0 1; hold; select A; recapture; recapture; recapture; wait", "C,A", 0 },
+    { "A1-7 (edit between)", "replace 0 1; select A; wait; edit A 0 1; recapture; recapture; wait", "C,A", 0 },
 };
 
 // The open findings, not in the default run while they fail: SE_MODEL_OPEN=1 runs them alone (exit
-// 1 while any fails). The fixer moves each into kPinned once it passes. None are open now.
+// 1 while any fails). The fixer moves each into kPinned once it passes.
 const Pinned kOpen[] = {
+    // A1-8: found by the 300-seed run of round 4 (seed 171), shrunk. A request for another recorded
+    // frame is held in the engine, the panel is hidden, the view returns to the frame it showed, the
+    // engine is released: the model finds the result on screen is not the from-scratch answer it
+    // expects for the snapshot it believes was held. The same on the unmodified model and panel
+    // (the master before round 4); not yet known whether the panel or the model's bookkeeping is wrong.
+    { "A1-8", "scrub 2; select P; hold; scrub 1; hide; scrub 2; wait", "C,A,P", 0 },
     { nullptr, nullptr, nullptr, 0 },
 };
 
@@ -2142,11 +2234,13 @@ int main(int argc, char** argv)
                     failedSeeds, (unsigned long long)oracle.runs, (unsigned long long)oracle.memoHits);
         std::printf("covered: %llu operations (%llu without effect), %llu held steps, %llu finish-then-change races, %llu stops, "
                     "%llu budget stalls; %llu results checked at install, %llu idle checks, %llu held-engine stale checks, "
-                    "%llu callee-first walks; panel: %llu captures, %llu submissions, %llu discarded, %llu cache hits\n",
+                    "%llu callee-first walks; %llu recaptures (%llu of them on a current paused view, checked for no re-ask); "
+                    "panel: %llu captures, %llu submissions, %llu discarded, %llu cache hits\n",
                     (unsigned long long)gStats.ops, (unsigned long long)gStats.noEffect, (unsigned long long)gStats.holds,
                     (unsigned long long)gStats.races, (unsigned long long)gStats.stops, (unsigned long long)gStats.starves,
                     (unsigned long long)gStats.installs, (unsigned long long)gStats.idleChecks, (unsigned long long)gStats.heldChecks,
-                    (unsigned long long)gStats.walks, (unsigned long long)gStats.captures, (unsigned long long)gStats.submissions,
+                    (unsigned long long)gStats.walks, (unsigned long long)gStats.recaptures,
+                    (unsigned long long)gStats.recaptureAsks, (unsigned long long)gStats.captures, (unsigned long long)gStats.submissions,
                     (unsigned long long)gStats.discarded, (unsigned long long)gStats.cacheHits);
         if (!failedList.empty())
         {

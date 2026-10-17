@@ -29,6 +29,7 @@
 #include "HexEditorPanel.h"      // Hex Editor (debugger)
 #include "CompareMarkers.h"      // Frame Memory Compare: the two timeline markers
 #include "ScrubState.h"          // frame-identity rules for the scrub view and staged edits
+#include "CaptureRepeatTracker.h" // which live captures showed nothing new (A1-7)
 #include "MemoryComparePanel.h"  // Frame Memory Compare: the diff window
 #include "ControllerPanel.h"     // Saturn control pad (drives a live game)
 #include "LogPanel.h"            // structured event log (tracepoints + system events)
@@ -377,6 +378,10 @@ private:
     // which is served here from the current se_context — live snapshot or scrub).
     ContextBackend           mMemBackend{&mContext};
     int                      mRestoreOutstanding = 0;   // load requests the emulator has not yet resolved
+    // Captures of the live context that repeated the one before, so the decompiler's view of it can
+    // keep one identity while the bytes do (BuildDecompilerView). The per-frame capture while a load
+    // is unconfirmed is why it is needed; the 10 s timeout leaves that capture on (see the capture block).
+    CaptureRepeatTracker     mLiveCaptures;
     // Savestate blocks of an epoch older than this belong to a timeline a state load has since
     // abandoned (see OnStateBlock). The count the emulator will report once every load submitted
     // so far has landed; 0 accepts everything.

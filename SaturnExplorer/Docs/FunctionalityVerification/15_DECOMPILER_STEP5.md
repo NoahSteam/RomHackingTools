@@ -5160,7 +5160,7 @@ a driver accessor for the captured snapshot's `revision` and a decompiler-only v
 recaptures, with no edit between), in the driver and `App`'s per-frame capture, which cannot be exercised end to end here and is
 outside the panel/test scope of this fix. A check-before-capture with `se_live_capture_unchanged` alone was rejected: a snapshot
 published between the check and the capture would be taken while counted as a repeat, which is a stale-shown-as-current. Freezing the
-view during the wait was rejected too: it would hide real changes against an emulator that applied the load but never confirmed.
+view during the wait was rejected too: it would hide real changes against an emulator that applied the load but never confirmed. **Fixed in area 1 round 4 (`9484d60`): see "Area 1, round 4" below.**
 
 **Mutation check** (each one expression; revert the fix, the new test fails; restored, passes).
 
@@ -8292,3 +8292,73 @@ On the merged tree (this branch with master `70a316f`), a scratch gcc 13 build, 
 - A retry of a refused request is not rate-limited. A machine whose configuration directory is permanently unwritable pays a `MakeDirectory` and a lock attempt per decompile request (microseconds), and an extraction attempt when the directory is writable but the files are refused (a few hundred microseconds to a few milliseconds). If a profile ever shows it, a counter (every request for the first N, then every Mth) is deterministic and needs no clock.
 - `alias` is a fixture for the retry path only; the other `aliasRetry` shapes (more than one retry round, `kAliasRounds`) are not built.
 - `cancel-bound` reads the phase log for its expectations; the reference run's check-points (Flow to Actions and Actions to Print of the second, volatile run) are covered through `OkRefCut` like `cancel-enter`'s, not by an extra cell kind.
+
+## Area 1, round 4: the paused view that asked again every frame (A1-7), and the identity that now holds still while the bytes do
+
+Fixer, branch `review/1-a1-7-fix` on master `a608d8c`. Fix commit `9484d60`; this record and the ledger are the commit after it. Ledger row A1-7 is `fixed 9484d60`. One new row, A1-8 (open): found by the 300-seed run, not caused by this change (below). The decompiler engine, `Sh2Decompiler.cpp` and the generator are not touched, so their matrix (generator, corpora, fault suite) was not run.
+
+### Reproduction first
+
+The round-3 record could not run it: it needs a live server that withholds a load's confirmation. `SaturnExplorerLiveDecompilerCaptureTests` (new) builds it from the pieces `LiveRestoreSignalTests` already uses: the real exporter (`se_export.c`) is handed a load (`se_load_state`) and its gate is never run, so the load stays in the mailbox and the emulator is "paused" (nothing is ticked, the driver's poll thread republishes the same frame). The real driver and context are captured once per UI frame through `CaptureLiveFrame`, as `App`'s capture block does while `mRestoreOutstanding > 0`; the real panel, runner and engine read the memory through the real `ContextBackend`; the phase observer holds the engine, which is "a function that takes longer than a frame" without a timer. With the raw derive serial as the `LivePaused` view's identity (what `App` gave the panel):
+
+| 30 frames, engine held, then 30 free | raw serial moved | view moved | panel copied memory | panel asked | shown while held / after release |
+|---|---|---|---|---|---|
+| raw `se_derive_serial` (before) | 60 | 60 | 30 | 30 | no / no |
+| the content serial (after) | 60 | 0 | 1 | 1 | -- / yes |
+
+In the first row the answer is there to be had: leaving the identity alone (no more captures) shows it within a few frames (`shownAtEnd`), so the identity is the only thing standing between the panel and the function.
+
+### Root cause
+
+`se_derive_serial` is bumped by every `RebuildDerived`, i.e. by every `se_begin_frame`, whether or not the emulator published anything different. `App` keeps capturing a paused emulator every frame while a state load is unconfirmed (and while a step settles or the session is behind), deliberately without the `se_live_capture_unchanged` shortcut. The panel's rule for a `LivePaused` view is to follow every move of its identity at once (it moves only on a user action, by design), so each frame the panel copied 2 MiB, submitted, and superseded its own run. The identity moved when the inputs did not; that is the class the area-1 invariant ("a shown result's key equals the key of the current inputs") was written to exclude from the other side.
+
+### Design
+
+- **Where.** At the producer of the identity, not the panel. The panel cannot tell a recapture of the same bytes from news without hashing 2 MiB per frame; `BuildDecompilerView` can be told by the driver. `DecompilerView::deriveSerial` for a live view is now the context's serial minus the number of captures that repeated the one before.
+- **Driver.** `se_live_captured_revision(ds)`: the revision of the snapshot the calling thread captured (the pinned one inside a capture, else the last captured). The revision already existed: it moves exactly when a published snapshot's content differs from the one before (`SameContent`: every byte, the frame, the registers, the stop, the call stacks, the restore counters). Read after the capture, it is the capture's own; the round-3 rejection of `se_live_capture_unchanged` before the capture (a snapshot published between the check and the capture counted as a repeat) does not apply.
+- **`CaptureRepeatTracker`** (`FrontEnd/src/CaptureRepeatTracker.h`, pure) and `CaptureLiveFrame` (`LiveCapture.h`: derive serial, `se_begin_frame`, derive serial, revision, in that order, once). A capture counts as a repeat only when (a) the revision is non-zero and equals the previous capture's, (b) the derive serial read before it equals the serial the previous capture left (no edit, scrub or other re-derive in between: an in-place edit writes bytes the capture then replaces, which is a change of the view and not a repeat of it), (c) the capture re-derived exactly once, (d) the same context in the same serial range (`Context::NextSerialRange`, the high 32 bits, so a context allocated where an old one was is a fresh start). The view serial is `serial - repeats`, and `repeats` is never lowered while the context lives, so the map from states to view serials stays injective: a repeat moves the raw serial by one and the count by one; everything else moves the raw serial by at least one and the count by none. `TestTrackerIsInjectiveOnContent` runs a script of captures, repeats and edits and checks it.
+- **`App`.** The capture block calls `CaptureLiveFrame(mLiveCaptures, mContext, &mDataSource)` in place of `se_begin_frame(mContext)`; `BuildDecompilerView` applies `mLiveCaptures.Apply` in its live branch. The call-stack origin (`RebuildCallStack`) takes its serial from the same view, so it now survives a recapture too (before, it stopped matching the snapshot after the first one until the stack was rebuilt). The scrub view has its own serial (`mScrubViewSerial`) and is untouched.
+- **The 10 s timeout and the capture loop: unchanged, and the reason is written at the capture block.** The wait is open after the timeout (the emulator may still apply the load, and editing stays off until it does), and a late confirmation reaches the client only through a capture, so the captures must go on. Skipping unchanged captures after the timeout would also mean reading the counters without capturing, or a confirmation already inside the last capture would never be resolved; not worth a second state machine in `App`. With the identity stable the capture costs a paused emulator what a running one costs, and no longer costs the panel its answer. Alternatives rejected: freezing the view during the wait (hides real changes against an emulator that applied the load but never confirmed, round 3); a panel-side content hash (2 MiB per frame).
+
+### Tests
+
+- `SaturnExplorerLiveDecompilerCaptureTests` (new; shares the live socket lock): `TestTrackerCountsOnlyUntouchedRepeats` and `TestTrackerIsInjectiveOnContent` (the rules above, including the failed capture, revision 0, another range at the same address, another address); `TestWithheldConfirmationDoesNotReaskEveryFrame` (the table above, both rows, with the control that the raw serial moved on every frame and the answer was available); `TestRealChangesStillMoveTheIdentity` (the confirmation arriving: counters read as `App` does, the view moves, the panel asks again and shows; settled again it holds still; an edit through `ContextBackend::WriteMemory` moves it; the capture that puts back the byte the emulator never took moves it again and is not counted; the capture after that is a repeat). The held runs use a 600 s budget and cancel deadline: under ASan the 30 held frames outlast the default 10 s budget and 5 s cancel acknowledgement, which disabled the runner (found by the sanitizer run).
+- `LiveRestoreSignalTests` (its server): `se_live_captured_revision` is non-zero after a capture, the same while the paused emulator republishes, the same with a load queued and unapplied once the stream settles, different once the gate applies it, the same again when republished, 0 without a source.
+- `DecompilerModelTests`: operation `recapture` (the app captures the paused emulator again over the same bytes: the context re-derives, the content does not; an edit made since the last capture is put back, as a poke the emulator never took is). The Rig now keeps a raw serial per context, a tracker and a revision, and derives the live view serial from them like `App`. Checks: the identity the panel is given does not move on a pure recapture; on a current `LivePaused` view the panel neither copies memory nor asks again; after an edit the identity does move. Generated (weight 8) and in three motifs; pins `A1-7`, `A1-7 (held)` (the engine still on the first question), `A1-7 (edit between)`. The seeds' sequences changed with the new operation, so the counts below are not comparable with round 3's.
+
+### Mutation check (each one expression, the source restored after; the live capture test, the model's default run)
+
+| Break | Fails |
+|---|---|
+| `Note` never counts a repeat (the fix reverted at the tracker) | live capture test: 36 checks (12 of the tracker rules, `TestTrackerIsInjectiveOnContent`, the "after" row: view moved 60, copied 30, asked 30, not shown; the confirmation and edit checks); model: seeds 5, 9, 10, 13, 17 and all three pins (8 of 18 runs) |
+| `Apply` returns the raw serial (`App` not applying the tracker) | live capture test: 33 checks (8 of the tracker rules, the "after" row, ...); model: the same 8 runs |
+| a repeat counted though an edit came between | live capture test: 11 checks (6 of the tracker rules, `vBack != vEdit`, the shown byte after the put-back); model: seeds 5, 9, 11, 18 and pin `A1-7 (edit between)` |
+| the revision read before the capture, not after | `TestRealChangesStillMoveTheIdentity`, `live.View() != v0` (the confirmation's first capture read as a repeat) |
+| the driver returns the connection generation, not the revision | the same check |
+| the serial range ignored (a new context at an old address) | the tracker rules (3 checks) |
+| a capture that did not re-derive exactly once counted | the tracker rules (1 check) |
+| revision 0 allowed to repeat | the tracker rules (3 checks) |
+
+(The seed numbers are those of the default run when the table was made, with the operation generated at weight 4 and no motifs; the final run has weight 8 and the motifs, so its sequences differ.) The model does not link the driver, so the two driver-side breaks are the live test's alone; the tracker-only breaks (the failed capture, revision 0, the range) are the tracker unit test's alone. Not mutation-checked: `App`'s two call sites. `CaptureLiveFrame` and `Apply` are what the tests call, so removing `Apply` from `BuildDecompilerView` or `CaptureLiveFrame` from the capture block is not caught by any test (`App` is still out of every test's reach); both are one line each.
+
+### Matrix
+
+All on the fix tree (`9484d60`); a 4-core container shared with three other agents, load average 6 to 12.
+
+| Run | Result |
+|---|---|
+| Whole `ctest -j3 --timeout 900`, RelWithDebInfo, a scratch build | **98 of 98 pass** (the 97 and the new `SaturnExplorerLiveDecompilerCaptureTests`), 183 s. Among them `DecompilerRunnerTests` 110 s, `DecompilerFaultTests` 176 s, `DecompilerModelTests` 42 s, `DecompilerPanelTests` 10 s, `Sh2GeneratedTests` 14 s, `LiveRestoreSignalTests` 3.5 s, `LiveDecompilerCaptureTests` 5.2 s. No timeout. |
+| `DecompilerModelTests`, default | 18 seeds and 19 pinned sequences, 0 failures. 848 operations (108 without effect), 99 held steps, 58 finish-then-change races, 3 stops, 7 budget stalls, 500 results checked at install, 857 idle checks, 299 held-engine stale checks, 105 callee-first walks, **37 recaptures (22 on a current paused view, checked for no re-ask)**; panel 253 captures, 584 submissions, 36 discarded, 88 cache hits. |
+| `SE_MODEL_SEEDS=300` (178 s) | 299 of 300 pass; seed 171 fails and is A1-8 (it fails with the recapture operation skipped, and its shrunk script fails on master's panel and model). 11,599 operations (1,945 without effect), 1,382 held steps, 874 races, 54 stops, 30 budget stalls, 6,488 results checked at install, 11,591 idle checks, 4,099 held-engine stale checks, 1,327 walks, **281 recaptures (114 on a current paused view)**, 7,686 submissions, 389 discarded, 1,368 cache hits. |
+| `SE_MODEL_OPEN=1` | A1-8 fails, exit 1, as the ledger says. |
+| ASan + UBSan + LeakSanitizer (Debug, the workflow's flags, `detect_leaks=1`) | `DecompilerPanelTests` (33 s), `DecompilerModelTests` (132 s; the default run above), `DecompilerRunnerTests` (430 s), `LiveRestoreSignalTests` and `LiveDecompilerCaptureTests` (118 s): all pass, exit 0, no AddressSanitizer or LeakSanitizer report. The only UBSan lines are the two accepted upstream SLEIGH shifts (`address.hh:605`, `slghpatexpress.cc:979`). |
+| Decompiler matrix (generator, corpora, the fault suite beyond `ctest`'s run), game corpus, timing against the previous master | not run: the decompiler engine, `Sh2Decompiler.cpp` and the generator are untouched; the change is in the driver, `App`'s capture and view, and tests. |
+
+### New row: A1-8 (open, P3)
+
+The 300-seed run (`SE_MODEL_SEEDS=300`) found one failing seed, 171: `scrub 2; select P; hold; scrub 1; hide; scrub 2; wait` over `C,A,P` (shrunk by hand; `kOpen`, run by `SE_MODEL_OPEN=1`). The model finds the result on screen is not the from-scratch answer for the snapshot it believes the panel holds. It has nothing to do with live views: the same script fails on a build whose panel, model and runner sources are master's, and passes without `hide`, without `hold`, or with `show` before `wait`. Not diagnosed whether the panel (a result installed or kept while hidden) or the model's bookkeeping (`PolicyStep` returns early while hidden) is wrong; the shown result is the one the panel had before it was hidden and the view is back on its frame, so it may be the model. Left to the next area-1 round.
+
+### Not done
+
+- `App`'s two call sites have no test (above). A test through `App` would need a headless `App`; the next best thing is what is here.
+- After the timeout the loop still captures every frame (a decision, above). The sanitizer CI job lists its binaries by name (`run-decompiler-sanitizers.sh`, `check-sanitizer-logs.sh`, the harness self-test); the new test, `LiveRestoreSignalTests` and the model test are not on the list (the panel and runner tests are). All three were run under the sanitizers by hand (above); adding them to the job is a change to the workflow and its scripts, left to the coordinator.
