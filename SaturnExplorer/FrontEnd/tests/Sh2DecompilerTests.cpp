@@ -1655,6 +1655,7 @@ void TestHardwareVolatility()
         add("a5_51a", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD204, 0x2129, 0x6011, 0x000B, 0x0009, 0x25F8, 0x0004, 0x25F8, 0x000A, 0x1FFF, 0xFFFF }, 0x14, 0x25F80004u);
         add("a5_51b", { 0xD104, 0x2448, 0x8901, 0xD104, 0x0009, 0xD204, 0x212B, 0x6011, 0x000B, 0x0009, 0x05F8, 0x0004, 0x05F8, 0x000A, 0x2000, 0x0000 }, 0x14, 0x05F80004u);
         add("a5_51c", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xD205, 0x212B, 0xD305, 0x2132, 0x000B, 0x0009, 0x0009, 0x05FE, 0x0010, 0x05FE, 0x0030, 0x2000, 0x0000, 0x0000, 0x0101 }, 0x18, 0x05FE0010u);
+        add("a5_51e", { 0xD105, 0x2448, 0x8901, 0xD105, 0x0009, 0xD205, 0x212B, 0xD305, 0x2132, 0x000B, 0x0009, 0x0009, 0x05FE, 0x0110, 0x05FE, 0x0130, 0x2000, 0x0000, 0x0000, 0x0101 }, 0x18, 0x05FE0110u);   // c with the SCU's mirrors
         add("a5_51d", { 0xD103, 0x2149, 0x6011, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x25F8, 0x0004 }, 0x10, 0x25F80004u);   // control: and r4,r1
         // A5-52: two names of one work-RAM word: mov.l lit0,r2 ; mov.l lit1,r1 ; mov #5,r0 ; mov.w r0,@r2 ; mov #7,r0 ; mov.w r0,@r1 ; mov.w @r2,r0.
         add("a5_52a", { 0xD204, 0xD105, 0xE005, 0x2201, 0xE007, 0x2101, 0x6021, 0x000B, 0x0009, 0x0009, 0x2600, 0x1000, 0x0600, 0x1000 }, 0x14, 0x26001000u);
@@ -2879,6 +2880,10 @@ void TestHardwareVolatility()
         r = R7("a5_51c", "a store of 0x101 through (&SCU_D0EN or &SCU_D1EN) | 0x20000000");
         CHECK(HasNote(r, "if the pointer holds 0x25FE0010 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
         CHECK(HasNote(r, "if the pointer holds 0x25FE0030 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        r = R7("a5_51e", "a store through (0x05FE0110 or 0x05FE0130) | 0x20000000: the mirrors of SCU_D0EN and SCU_D1EN, not shown by address");
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0110 (SCU_D0EN): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        CHECK(HasNote(r, "if the pointer holds 0x25FE0130 (SCU_D1EN): SCU_D1EN: bits 8 and 0 are set, so this write starts level-1 DMA", false));
+        CHECK(!HasNote(r, "through a mirror (shown by address)", false));   // the access is printed as an expression of the pointer, not by address
         r = R7("a5_51d", "control: a mask that is a parameter says nothing");
         CHECK(r.hardwareNotes.empty());
 

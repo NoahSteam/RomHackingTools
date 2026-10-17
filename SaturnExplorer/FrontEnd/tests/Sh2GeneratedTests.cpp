@@ -549,7 +549,10 @@ struct Gen
         if (prior.empty() || !aliasRng.Chance(30)) return;
         const Lit& q = p.lits[prior[aliasRng.Below(static_cast<uint32_t>(prior.size()))]];
         static const uint32_t kFlips[] = { 0x20000000u, 0x08000000u, 0x10000000u, 0x00100000u };
-        l.value = q.value ^ kFlips[aliasRng.Below(4)];
+        const uint32_t pick = aliasRng.Below(5);
+        // ...or the name of its cache line in the associative-purge partition (0x4xxxxxxx), the barrier the slave's idle loop puts between
+        // its store and its poll: not memory, but a word the function purges is one it expects another processor to write
+        l.value = pick == 4 ? ((q.value & 0x07FFFFFFu) | 0x40000000u) : q.value ^ kFlips[pick];
         l.width = q.width;
     }
 
@@ -3471,7 +3474,8 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             for (const TraceRec& t : trace)
             {
                 uint32_t lo = 0, hi = 0;
-                if (InScratch(t.addr) || InStack(t.addr) || !Env::RamRange(t.addr, t.size, lo, hi) || !constantToEngine(t) || !once.insert(std::make_pair(t.addr, t.size)).second) continue;
+                // (an access in the associative-purge partition names the line of the word it purges)
+                if (InScratch(t.addr) || InStack(t.addr) || !Env::RamRange((t.addr >> 29) == 2 ? (t.addr & 0x07FFFFFFu) : t.addr, t.size, lo, hi) || !constantToEngine(t) || !once.insert(std::make_pair(t.addr, t.size)).second) continue;
                 accs.push_back({ t.addr, t.size, lo, hi });
             }
             auto overlap = [](uint32_t a0, uint32_t a1, uint32_t b0, uint32_t b1) { return a0 <= b1 && b0 <= a1; };
