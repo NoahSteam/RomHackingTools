@@ -1,6 +1,7 @@
 #include "Decompiler/SaturnHardwareMap.h"
 
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 #include <iterator>
 
@@ -11,6 +12,30 @@ namespace decomp
 
 namespace
 {
+// printf into a std::string of the size the text needs. The cautions are formatted with this and never into a fixed buffer: two of them were
+// cut off in the middle of a word (A5-59) by buffers a few characters short, which no oracle sees (they match prefixes).
+#if defined(__GNUC__)
+__attribute__((format(printf, 1, 2)))
+#endif
+std::string Fmt(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    va_list again;
+    va_copy(again, args);
+    const int n = std::vsnprintf(nullptr, 0, format, args);
+    va_end(args);
+    std::string out;
+    if (n > 0)
+    {
+        out.resize(static_cast<size_t>(n) + 1);
+        std::vsnprintf(&out[0], out.size(), format, again);
+        out.resize(static_cast<size_t>(n));
+    }
+    va_end(again);
+    return out;
+}
+
 const RegisterAccess RW = RegisterAccess::ReadWrite;
 const RegisterAccess RO = RegisterAccess::ReadOnly;
 const RegisterAccess WO = RegisterAccess::WriteOnly;
@@ -1106,8 +1131,7 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
     // for the address (sh7095.inc MemRead / MemWrite cases 2 and 5; a read returns all ones). The slave idle loop in the games does it.
     if (partition == 2 || partition == 5)
     {
-        char b[160];
-        std::snprintf(b, sizeof b, "an access at %s is an associative purge, not a memory access: it invalidates the cache line for 0x%08X%s",
+        const std::string b = Fmt("an access at %s is an associative purge, not a memory access: it invalidates the cache line for 0x%08X%s",
                       Hex8s(address).c_str(), reach & 0x1FFFFFF0u, write ? "" : " (a read returns all ones)");
         say(nullptr, b, false);
     }
@@ -1119,8 +1143,7 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
     // use the cache as RAM want it.
     if (partition == 3)
     {
-        char b[400];
-        std::snprintf(b, sizeof b,
+        const std::string b = Fmt(
                       "an access at %s is the cache address array, not a memory access: entry %u of the way SH2_CCR selects; a write sets its tag "
                       "(from the address, valid is bit 2 inverted) and its LRU bits (bits 9-4 of the value), a read returns tag, valid and LRU",
                       Hex8s(address).c_str(), (reach >> 4) & 0x3Fu);
@@ -1134,8 +1157,7 @@ std::vector<NarrowEffect> NarrowAccessEffects(uint32_t address, uint32_t size, b
     uint32_t canon = 0;
     if (!write && partition == 0 && (HardwareAlias(reach, canon) || InBackupRam(reach)) && canon < 0xFFFFFE00u)
     {
-        char b[320];
-        std::snprintf(b, sizeof b,
+        const std::string b = Fmt(
                       "a read of %s through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the "
                       "cached bytes without reading the hardware, so a poll of it may never see it change, and a miss reads the whole "
                       "16-byte line 0x%08X-0x%08X, every register in it with its read effect; read it through 0x2xxxxxxx to bypass the cache",
@@ -1193,18 +1215,15 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
     {
         const HardwareRegister* reg = FindHardwareRegister(a);
         const std::string name = reg ? reg->name : "the bus state controller";
-        char b[160];
         if (!valueKnown)
             text = name + " takes a 4-byte write only with 0xA55A in its upper half; any other value does nothing";
         else if ((value & 0xFFFF0000u) == 0xA55A0000u)
         {
-            std::snprintf(b, sizeof b, " keyed write: the low half 0x%04X is taken (0xA55A in the upper half is the key)", value & 0xFFFFu);
-            text = name + b;
+            text = name + Fmt(" keyed write: the low half 0x%04X is taken (0xA55A in the upper half is the key)", value & 0xFFFFu);
         }
         else
         {
-            std::snprintf(b, sizeof b, " without 0xA55A in the upper half (it is 0x%04X): the write does nothing", value >> 16);
-            text = "write to " + name + b;
+            text = "write to " + name + Fmt(" without 0xA55A in the upper half (it is 0x%04X): the write does nothing", value >> 16);
             ignored = true;
         }
         return true;
@@ -1218,7 +1237,6 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
     // of the data (V & 0x67; it reads back with bits 4-3 set); with TME (bit 5) set the write clears
     // SBYCR's SBY, with TME clear it clears OVF whatever a read saw and resets WTCNT (A5-21). Every
     // write in the area, an ignored word too, cancels a pending RSTCSR WOVF clear (RSTCSRM = 0).
-    char b[128];
     const uint32_t key = (value >> 8) & 0xFFu, data = value & 0xFFu;
     if (a == 0xFFFFFE80u)
     {
@@ -1228,24 +1246,21 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
                    "OVF is cleared only if a read saw it set and SBYCR's SBY is cleared)";
         else if (key == 0x5Au)
         {
-            std::snprintf(b, sizeof b, "keyed watchdog write: requests SH2_WTCNT = 0x%02X (taken while SH2_WTCSR's TME is set)", data);
-            text = b;
+            text = Fmt("keyed watchdog write: requests SH2_WTCNT = 0x%02X (taken while SH2_WTCSR's TME is set)", data);
         }
         else if (key == 0xA5u)
         {
             if (data & 0x20u)
-                std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCSR = 0x%02X (TME is set: OVF is cleared only if a read saw it set, "
+                text = Fmt("keyed watchdog write: SH2_WTCSR = 0x%02X (TME is set: OVF is cleared only if a read saw it set, "
                                            "and SBYCR's SBY bit is cleared)", data & 0x67u);
             else
-                std::snprintf(b, sizeof b, "keyed watchdog write: SH2_WTCSR = 0x%02X (TME is clear: OVF is cleared whatever a read saw, "
+                text = Fmt("keyed watchdog write: SH2_WTCSR = 0x%02X (TME is clear: OVF is cleared whatever a read saw, "
                                            "and SH2_WTCNT is reset to 0)", data & 0x67u);
-            text = b;
         }
         else
         {
-            std::snprintf(b, sizeof b, "watchdog write with key 0x%02X, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored "
+            text = Fmt("watchdog write with key 0x%02X, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored "
                                        "(it still cancels a pending SH2_RSTCSR WOVF clear)", key);
-            text = b;
             ignored = true;
         }
         return true;
@@ -1254,12 +1269,11 @@ bool KeyedWrite(uint32_t address, uint32_t size, bool valueKnown, uint32_t value
         text = "keyed watchdog write to SH2_RSTCSR: 0xA500 clears WOVF if a read saw it set, 0x5A with data sets "
                "RSTE and RSTS";
     else if (value == 0xA500u) text = "keyed watchdog write: clears SH2_RSTCSR's WOVF, if a read saw it set";
-    else if (key == 0x5Au) { std::snprintf(b, sizeof b, "keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x%02X", data); text = b; }
+    else if (key == 0x5Au) text = Fmt("keyed watchdog write: SH2_RSTCSR RSTE/RSTS = 0x%02X", data);
     else
     {
-        std::snprintf(b, sizeof b, "SH2_RSTCSR write 0x%04X is neither 0xA500 nor 0x5A with data: ignored "
+        text = Fmt("SH2_RSTCSR write 0x%04X is neither 0xA500 nor 0x5A with data: ignored "
                                    "(it still cancels a pending WOVF clear)", value & 0xFFFFu);
-        text = b;
         ignored = true;
     }
     return true;
@@ -1401,7 +1415,6 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
     if (a >= 0x05B00000u && a <= 0x05B00FFFu && size <= 4)
     {
         const uint32_t off = a & 0xFFFu;
-        char b[256];
         // DTLG (case 0x0B): EX, bit 12, is latched into DMA_Execute and SS_SCSP_RunDMA runs: it starts the SCSP DMA.
         const WordLane dtlg = LaneOf(0x05B00416u, a, size, value);
         if (dtlg.reached && (dtlg.mask & 0x1000u) && (!valueKnown || (dtlg.value & 0x1000u)))
@@ -1413,8 +1426,7 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
             const WordLane kyonex = LaneOf(0x05B00000u | (off & ~0x1Fu), a, size, value);
             if (kyonex.reached && (kyonex.mask & 0x1000u) && (!valueKnown || (kyonex.value & 0x1000u)))
             {
-                std::snprintf(b, sizeof b, "SCSP slot %u word 0: ", (off >> 5) & 0x1Fu);
-                out.push_back(std::string(b) + (valueKnown ? "KYONEX (bit 12) is set, so this write" : "a write with KYONEX (bit 12) set") +
+                out.push_back(Fmt("SCSP slot %u word 0: ", (off >> 5) & 0x1Fu) + (valueKnown ? "KYONEX (bit 12) is set, so this write" : "a write with KYONEX (bit 12) set") +
                               " keys every slot on or off by its own KYONB (bit 11); KYONEX is not stored");
             }
         }
@@ -1428,9 +1440,8 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
             if (valueKnown && (l.value & l.mask) == 0) continue;   // clears nothing
             if (valueKnown)
             {
-                std::snprintf(b, sizeof b, "%s: clears the pending %s interrupts (%s) whose bits are set in the value written (0x%X here)",
-                              c.name, c.whose, c.pending, static_cast<unsigned>(l.value & l.mask));
-                out.push_back(b);
+                out.push_back(Fmt("%s: clears the pending %s interrupts (%s) whose bits are set in the value written (0x%X here)",
+                                  c.name, c.whose, c.pending, static_cast<unsigned>(l.value & l.mask)));
             }
             else
                 out.push_back(std::string(c.name) + ": clears the pending " + c.whose + " interrupts (" + c.pending +
@@ -1449,10 +1460,8 @@ std::vector<std::string> WriteEffects(uint32_t address, uint32_t size, bool valu
             {
                 const uint32_t cmd = value & 0xFFu;
                 const char* name = SmpcCommandName(cmd);
-                char b[160];
-                if (name) std::snprintf(b, sizeof b, "SMPC_COMREG: issues SMPC command 0x%02X (%s)", cmd, name);
-                else std::snprintf(b, sizeof b, "SMPC_COMREG: issues SMPC command 0x%02X (a value the SMPC does not know)", cmd);
-                out.push_back(b);
+                out.push_back(name ? Fmt("SMPC_COMREG: issues SMPC command 0x%02X (%s)", cmd, name)
+                                   : Fmt("SMPC_COMREG: issues SMPC command 0x%02X (a value the SMPC does not know)", cmd));
             }
         }
     // VDP1_FBCR (vdp1.c WriteReg case 0x1, FBManualPending |= value & 0x2): bit 1 (FCM) requests a manual frame-buffer change, which the end of
