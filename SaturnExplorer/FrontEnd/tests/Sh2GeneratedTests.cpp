@@ -5291,6 +5291,52 @@ struct CCase
 
 uint32_t CalleeSaved(int r) { return 0xA0000000u + static_cast<uint32_t>(r) * 0x01010101u; }
 
+// The edge values the printed-C inputs walk through r4-r7 first (the first poolSize inputs). It has the sign boundaries of the byte, the
+// word and the longword, and (A2-40) the negative values whose low 8, 16 or 24 bits are positive, which a text that sign-extends a narrow
+// piece of a value that is not itself narrow cannot tell from the run without.
+const std::vector<uint32_t>& PrintedCPool()
+{
+    static const std::vector<uint32_t> pool = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
+                                                0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33,
+                                                0xFFFF7FFFu, 0xFFFFFF7Fu, 0xFF7FFFFFu, 0x7F7F7F7Fu };
+    return pool;
+}
+
+// The class of a text that returns nothing over a run that changed r0. A function that returns nothing but whose r0 ended as something
+// other than it began: a return the engine dropped, or r0 left as scratch. Compiled code cannot tell the two apart, and 40 percent of the
+// corpora's lent signatures are such functions (withholding every one would cost 235 of 600 and 431 of 984: the round 5 record), so a `void`
+// text is no failure by itself (`void-return`, and `void-return-lent` when the signature is lent: counted, visible). But the generator knows
+// when it meant a result: the rts slot `mov Rm,r0` is the compiled idiom for `return Rm`. A `void` signature lent over that is a return
+// dropped, which is A3-5's decision (such a function is withheld, not lent void) and a failure (A2-34).
+std::string VoidReturnClass(bool signatureKnown, const std::vector<uint16_t>& words)
+{
+    const auto rts = std::find(words.begin(), words.end(), uint16_t(0x000B));
+    const bool intent = rts != words.end() && rts + 1 != words.end() && (*(rts + 1) & 0xFF0Fu) == 0x6003u && *(rts + 1) != 0x6003u;   // mov Rm,r0, Rm not r0
+    return !signatureKnown ? "void-return" : intent ? "return-dropped" : "void-return-lent";
+}
+
+// The two above are the oracle's own decisions, not the engine's, so a mutation of either does not fail the engine's fixtures: pinned here.
+void TestOracleOwnDecisions()
+{
+    // A2-34: the slot is the intent; a withheld signature, another slot, an r0-to-r0 move and a move before the rts are not
+    CHECK(VoidReturnClass(true, { 0x000B, 0x6013 }) == "return-dropped");        // rts ; mov r1,r0
+    CHECK(VoidReturnClass(true, { 0x000B, 0x63F3 }) == "void-return-lent");      // rts ; mov r15,r3
+    CHECK(VoidReturnClass(false, { 0x000B, 0x6013 }) == "void-return");
+    CHECK(VoidReturnClass(true, { 0x000B, 0x0009 }) == "void-return-lent");      // rts ; nop
+    CHECK(VoidReturnClass(true, { 0x000B, 0x6003 }) == "void-return-lent");      // rts ; mov r0,r0
+    CHECK(VoidReturnClass(true, { 0x6013, 0x000B, 0x0009 }) == "void-return-lent");
+    CHECK(VoidReturnClass(true, { 0x6013 }) == "void-return-lent");              // no rts at all
+    // A2-40: for each width a value with all the bits above it set whose narrow piece is positive
+    const std::vector<uint32_t>& pool = PrintedCPool();
+    for (int bits : { 8, 16, 24 })
+    {
+        const uint32_t high = ~0u << bits;
+        bool found = false;
+        for (uint32_t v : pool) found = found || ((v & high) == high && !((v >> (bits - 1)) & 1u));
+        CHECK(found);
+    }
+}
+
 bool IsFailing(const CVerdict& v)
 {
     return !v.cls.empty() && v.cls != "narrow-c" && v.cls != "void-return" && v.cls != "void-return-lent" && v.cls.compare(0, 8, "skipped:") != 0;
@@ -5454,10 +5500,8 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         v.voidReturn = ret.find("void") != std::string::npos;
         // The run: the emulator from the entry for nIn inputs.
         Rng ir(inputSeed ^ (static_cast<uint64_t>(ci) * 0x9E3779B97F4A7C15ull) ^ c.words.size());
-        const uint32_t pool[] = { 0, 1, 2, 0xFFFFFFFFu, 0x7FFFFFFFu, 0x80000000u, 0x80000001u, 0xFFFFFFFEu, 0x7FFF, 0x8000, 0xFFFF,
-                                  0x10000, 0x7F, 0x80, 0xFF, 0x100, 0xFFFF8000u, 0xFFFFFF80u, 3, 31, 32, 33,
-                                  0xFFFF7FFFu, 0xFFFFFF7Fu, 0xFF7FFFFFu, 0x7F7F7F7Fu };   // a negative value whose low 16, 8 or 24 bits are positive (A2-40)
-        const uint32_t poolSize = sizeof pool / sizeof pool[0];
+        const std::vector<uint32_t>& pool = PrintedCPool();
+        const uint32_t poolSize = static_cast<uint32_t>(pool.size());
         int sweep = 0;   // the first poolSize inputs walk the edge values through every register (r4 takes pool[k], r5 pool[k + 5] ...)
         auto draw = [&]() -> uint32_t {
             const uint32_t k = ir.Below(4);
@@ -5550,17 +5594,10 @@ std::vector<CVerdict> CheckPrintedC(Sh2Decompiler& d, const std::vector<CCase>& 
         pr.ready = true;
         v.compared = !v.voidReturn;
         v.detail = std::to_string(kept) + " inputs";
-        // A function that returns nothing but whose r0 ended as something other than it began: a return the engine dropped, or r0
-        // left as scratch. Compiled code cannot tell the two apart, and 40 percent of the corpora's lent signatures are such functions
-        // (withholding every one would cost 235 of 600 and 431 of 984: the round 5 record), so a `void` text is no failure by itself
-        // (`void-return`, and `void-return-lent` when the signature is lent: counted, visible). But the generator knows when it
-        // meant a result: the rts slot `mov Rm,r0` is the compiled idiom for `return Rm`. A `void` signature lent over that is a
-        // return dropped, which is A3-5's decision (such a function is withheld, not lent void) and a failure (A2-34).
+        // A `void` text over a run that changed r0: VoidReturnClass (A2-34).
         if (v.voidReturn && r0Changed)
         {
-            const auto rts = std::find(c.words.begin(), c.words.end(), uint16_t(0x000B));
-            const bool intent = rts != c.words.end() && rts + 1 != c.words.end() && (*(rts + 1) & 0xFF0Fu) == 0x6003u && *(rts + 1) != 0x6003u;   // mov Rm,r0, Rm not r0
-            v.cls = !r.prototype.known ? "void-return" : intent ? "return-dropped" : "void-return-lent";
+            v.cls = VoidReturnClass(r.prototype.known, c.words);
             if (v.cls == "return-dropped") v.detail = "the rts slot moves a register into r0 (the compiled `return Rm`), the text returns nothing and the signature is lent";
         }
     }
@@ -5854,6 +5891,7 @@ void TestPrintedC()
         std::_Exit(77);
     }
     std::printf("printed-C differential with '%s'\n", cc.c_str());
+    TestOracleOwnDecisions();
     Sh2Decompiler d(gConfig);
     const int nIn = static_cast<int>(EnvNumber("SE_GENERATED_PRINTEDC_INPUTS", 32));
     std::vector<CCase> cases;
