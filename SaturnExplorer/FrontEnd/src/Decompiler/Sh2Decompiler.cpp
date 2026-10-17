@@ -2844,14 +2844,13 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     (*targets)[c].insert(static_cast<uint32_t>(t));
             }
         }
-        if (!print)
-        {
-            // The pass boundary: a cancel raised in the tail of these actions is honoured here, in
-            // Actions, not carried through the next pass's Init (Architecture construction has no
-            // check-point of its own) into its Flow.
-            checkCancel();
-            return std::string();
-        }
+        // The first pass ends here, and its check-point is the caller's, made after this function has returned
+        // (A6-6, A6-35): a cancel raised in the tail of these actions must not be carried through the next pass's
+        // Init (Architecture construction has no check-point of its own) into its Flow. A check made here would
+        // leave the destruction of the pass's locals and then of its Architecture (Teardown) between the check and
+        // the next phase entry, and a raise there was carried: under a sanitizer that window is long enough to hit
+        // one run in three. Made after them, only the few instructions to the next pass's Init remain.
+        if (!print) return std::string();
 
         checkCancel();
         Enter(DecompilePhase::Print);
@@ -3109,6 +3108,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     // The callees reported are the printed pass's own: the first pass can take a jump for a call
     // that the second, with the literals folded, follows as a goto.
     CalleeAliases first;
+    bool firstPassRan = false;
     if (seedIn)
     {
         knownLiterals = seedIn->literals;
@@ -3117,12 +3117,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     else if (request.registerCallees)
     {
         runPass(CalleeAliases(), false, &first);
+        firstPassRan = true;
     }
     if (seedOut)
     {
         seedOut->literals = knownLiterals;
         seedOut->callees = first;
     }
+    // The first pass's boundary, with its locals and its Architecture gone (Teardown has been entered and left) and
+    // the copies above made, so that nothing but the call stands between this check and the next pass's Init: a cancel
+    // raised in the tail of the pass's actions, or while it was torn down, is honoured here, in Actions (mWorkPhase is
+    // still the pass's last phase), and not carried through the next pass's Init into its Flow (A6-6, A6-35).
+    if (firstPassRan) checkCancel();
     printed = runPass(first, true, &callees);
     if (printed.empty())
     {
@@ -3189,7 +3195,9 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
             // (StartLibrary writes no global until its last step, and says so itself when that step is
             // the one that failed): this listing is cut short, the engine is not damaged, and the next
             // request starts again -- as for Decompile, whose boundary treats an exception in the Idle
-            // phase the same way (A6-30).
+            // phase the same way (A6-30). The listing is cut short before it began, and the flag says so
+            // whether or not the line can be made (A6-31): under sustained exhaustion it cannot.
+            if (stopped) *stopped = true;
             try
             {
                 em.lines.push_back("<out of memory while preparing the decompiler; try again>");
@@ -3199,7 +3207,23 @@ std::vector<std::string> Sh2Decompiler::Disassemble(const std::shared_ptr<const 
             }
             return std::move(em.lines);
         }
-        if (!started) return std::vector<std::string>{ "<" + error + ">" };
+        if (!started)
+        {
+            // The refusal as one line. Its text is built here, handled here and not by the damage handler below: the engine was never
+            // entered, so a failure making the line is a listing cut short before it began and not a damaged engine
+            // (A6-32). The room is already in the vector (count + 1 >= 1), so a move into it cannot fail.
+            if (stopped) *stopped = true;
+            try
+            {
+                std::string line = "<" + error + ">";
+                em.lines.push_back(std::move(line));
+                if (stopped) *stopped = false;   // the line is the report
+            }
+            catch (...)
+            {
+            }
+            return std::move(em.lines);
+        }
         std::ostringstream errors;
         errors.exceptions(std::ios::badbit);
         std::unique_ptr<SaturnArchitecture> arch = BuildArchitecture(snapshot, 20000, nullptr, errors);
