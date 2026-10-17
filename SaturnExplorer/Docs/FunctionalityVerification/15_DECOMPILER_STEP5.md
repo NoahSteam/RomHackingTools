@@ -7550,3 +7550,100 @@ seeds and not only by fixtures. Grammar 1 would gain a `p = p or/and mask` loop 
 - The VDP1 frame buffer swap at the frame end (`FBDrawWhich`) and the SCU, VDP1 and SCSP DMA writing work RAM behind a function's back: not seen by any
   function's own accesses, like the mailbox; the volatile mark and the removal caution are the design.
 - SCU_IST and CD_HIRQ writes of 0 clear flags and say nothing on the write (their `split` text is on a read-back): the class of A5-64, left as round 7 decided it.
+
+## Area 5, round 8: two cut cautions, the loop's own bitwise values, the purge's second partition, a retry that honours a cancel, six more value-triggered writes, the cartridge RAM and the mode registers
+
+Fixer, branch `review/5-round8-fix` from `cba27f6` (the round 8 review merged). Rows A5-59 to A5-68 are fixed, A5-57 is accepted, and A5-69 is new and fixed (all P3).
+Commits `9715621`, `df6838b`, `cb96266`, `64238df`, `0295dba`, `21c41be`, `ada5593` and `34806ec` (the last code and test change; this section and the ledger follow it). **No engine
+patch** (0046 not needed): every fix is in the host (`Sh2Decompiler.cpp`, `SaturnHardwareMap.cpp`), the tests and the oracle tools. The fixtures are the reviewer's words
+verbatim (only the base moves) in `Sh2DecompilerTests.cpp` (the `r7` map, `a5_59_*` to `a5_68_*`) and, for A5-63, in `DecompilerFaultTests.cpp`.
+
+### Root causes
+
+| Row | Cause | Fix |
+|---|---|---|
+| A5-59 | Two `snprintf` calls into buffers shorter than the text (320 for 345 characters, 128 for 147), so the cache-read caution and the unkeyed watchdog caution ended mid-word. The width-table golden file had pinned the cut watchdog text; the suite and the table test match prefixes. | `Fmt`, a `vsnprintf` into a `std::string` of the size the text needs, for every text of the map. The map is compiled with gcc `-Werror=format-truncation=2` (CMake, per source file): the round 7 file gives three errors, the fixed one none, so a fixed buffer a text can overrun is a build error. Golden file re-printed (one line). |
+| A5-60 | `PointerResolver::Bitwise` returned nothing for an operand that is only the pointer's own value round a loop, taking `p = p and mask` to keep the first value. It is a fixed point only if the first value already is one. | The operation is kept as a self-operation (`PointerValues::selfOps`) and the loop's merge closes the values the pointer went in with over it (`CloseSelfOps`: `0x25F80004 and 0x1FFFFFFF` is `0x05F80004` and stays; `xor 0x20000000` alternates between two; more than 64 values is unknown). The value after the operation inside the loop is closed the same way. A mask that is not known makes the pointer `others` and `steps`. A fixed point (`a5_51` family, the corpus) adds nothing, so the old behaviour is a special case. |
+| A5-61 | `Bitwise` refused a pointer with bases (an indexed pointer), so the base the A5-36 note is for was lost after `(base + index) and mask`. | The bases are moved by the operation and kept; the note is for the index 0, where the access is at the moved base. |
+| A5-62 | `ConstantAccesses` took `(address >> 29) != 2` for the purge. Mednafen's `MemRead` / `MemWrite` have `case 2: case 5:`. | `IsPurgePartition` (0x4 and 0xA), used in `ConstantAccesses` and `NewAliasedRanges`. The generator's `MaybeAlias` draws the 0xA name for a third of its purge names. |
+| A5-63 | The retry of the alias loop had no `checkCancel()` after its teardown; the first pass has had one since A6-35. | One `checkCancel()` after a printing pass that gives way to another. |
+| A5-64 | Six writes whose action the value chooses were in no text and no cases-file flag. | `WriteEffects` texts from the handlers; the cases file marks them `V` (and the slot words 12-15 `F`); the script finds them by `VALUE_ACTS`; `CheckScu` and `CheckScspSlots` require a text. |
+| A5-65 | `MemoryBytesOf` lists no cartridge area. | `MemoryKind::ExtRam`, 0x02400000-0x027FFFFF, mask 0x27FFFF (bit 21 the bank, bits 18-0 the offset). |
+| A5-66 | `OnlyUsesBits` followed a byte stored to a constant address of work RAM into the global the engine folds the store into, whose only reader looks at part of it (or nothing). | A copy into a persistent variable is a use of every bit. |
+| A5-67 | The colour RAM note was made in `account`, which only direct accesses and register candidates reach. | `HardwareNotes` says it for a pointer's colour RAM addresses (`if the pointer holds ...`, or `if the index is 0`). |
+| A5-68 | The data flow keys memory by address and a write to a mode register changes what the address means. | A write to VDP1_TVMR or VDP2_RAMCTL (found in `ConstantAccesses` by the register covered) makes the function's accesses to the frame buffer or to colour RAM volatile (`NewAliasedRanges`, through the same retry as A5-52). |
+
+### Design decisions
+
+- **A5-68 and A5-57.** The reviewer proved the 8 bpp scramble a bijection, and I checked it again (all 2^18 offsets, no collisions): the premise of A5-57 is false, so
+  A5-57 is accepted citing A5-68. For the mode write, a barrier by position needs a hook the engine's data flow does not have (the store and the load are the engine's
+  LOAD and STORE, forwarded by address); making the memory volatile for the function is what the alias design already does for the same class (A5-52), costs a kept
+  load where the function writes a mode register and uses the memory, and cannot be wrong. A mode write through a pointer or in a callee is no gap: a store through an
+  unresolved pointer and a call both end the forwarding already.
+- **A5-60 by closure, not by a flag.** A `steps`/`others` mark would say the pointer holds other values, but not which, and the cache caution is per value
+  (`0x05F80004` is a cache read). The values are a finite set under the constant masks, so the merge computes them exactly; only a mask that is not known falls back to the flags.
+- **A5-64's flags.** `V` covers what `WriteEffects` must say: now also an interrupt recalculation, a MIDI byte sent, a reload value, an INTBACK bit. The script finds
+  them in the raw case text (the conditions are stripped from its statements), by the emulator's own names. `F` accepts a store through a pointer, which finds `*SRV = 0`.
+  The widened script also marks SCSP_SCIPD and SCSP_MCIPD (bit 5 requests an interrupt, A5-69). SCU_IST and CD_HIRQ stay as round 7 decided.
+- **A5-65, the 4 MiB cartridge.** `ExtRAM_Mask = 0x3FFFFE` repeats nothing, so on a 4 MiB cartridge 0x02480000 is its own memory; the request carries no cartridge, the 1 MiB
+  repeat is taken (volatile for nothing on a 4 MiB one, never wrong), as for low work RAM (A5-8).
+- **A5-63 in the host.** The fault suite's invariant (a cancel is honoured where it is raised, never carried into the next phase) was right; the host broke it. The A6
+  oracle needed no change: the two new fixtures join the default subset's cancel-enter family (and the alloc sweeps), and the cell that failed passes.
+
+### Mutation table
+
+Each fix reverted alone (one edit, rebuilt, the suite and the width-table test run), then restored. "Suite" is `Sh2DecompilerTests`, "table" `HardwareWidthTableTests`.
+
+| Mutation | Result |
+|---|---|
+| A5-59: `Fmt` cut at 300 characters (a buffer again) | suite: 3 failures (`a5_59_cache`, the note and the warning); the table test passes (it matches prefixes, as the finding says) |
+| A5-60: `Bitwise` returns nothing for the pointer's own value | suite: 3 failures (`a5_60_and`, `_or`, `_xor`) |
+| A5-60: the closure of the value after the operation removed | suite: 1 failure (`a5_60_xor_after`; it survived until that fixture was added) |
+| A5-61: a pointer with bases refused again | suite: 1 failure (`a5_61`) |
+| A5-62: only the partition 0x4 is a purge | suite: 2 failures (`a5_62`: the poll folded, the code removed) |
+| A5-63: the added `checkCancel()` removed | fault suite: `--cell cancel-enter aliasl 3` FAIL (`expected Cancelled-in-Actions but got ... cancelledIn followFlow`); `alias 3` passes |
+| A5-64: SMPC_IREG0 / SCU_IMS / SCSP_MOBUF / the SCSP interrupt registers / the timers / the slot words, each text removed | suite 1, 1, 1, 4, 1, 2 failures; the table test fails each time and names the registers (SMPC_IREG0; SCU_IMS; SCSP_MOBUF; SCIEB, SCIPD, SCILV0-2, MCIEB, MCIPD; TIMA, TIMB, TIMC; every slot's words 12-15, at word and long width) |
+| A5-65: the cartridge area removed | suite: 1 failure (`a5_65`) |
+| A5-66: the persistent-copy test removed | suite: 1 failure (`a5_66`) |
+| A5-67: the pointer's colour RAM note removed | suite: 2 failures (`a5_67_loop`, `a5_67_merge`) |
+| A5-68: the mode-write flag removed | suite: 2 failures (`a5_68_tvmr`, `a5_68_ramctl`) |
+
+### Matrix
+
+| Run | Result |
+|---|---|
+| Build | RelWithDebInfo, gcc, scratch build; the map compiles with `-Werror=format-truncation=2` |
+| `ctest -j3 --timeout 900` | 96 of 97 pass. The one failure is `SaturnExplorerDecompilerFaultTests`: 4 of 59 jobs, 24 `MOVED` pin lines (`alloc mailbox`, `alloc dag`, `alloc shapes`, `pin-selftest dag`), identical, line for line, to the same jobs on a build of `cba27f6` (patch 0044 moved them; the coordinator's head re-pins them). None of the cells this round added fails: `alloc aliasl` 55 and `alloc alias` 56 cells, `cancel-enter aliasl` and `alias` 11 cells each, 0 failed. |
+| Generator, grammar 2, 3,000 seeds | 0 failing seeds, 0 findings; `alias.words` 26 |
+| Generator, grammar 1, 1,000 seeds | 0 failing seeds, 0 findings; `alias.words` 268 |
+| Generator, `SE_GENERATED_SEEDS=20000` | 0 failing seeds, 0 findings; `alias.words` 2,544 |
+| Printed C, `SE_GENERATED_PRINTEDC=only`, 3,000 seeds | passed; 3,072 functions, 2,661 compared |
+| `SE_GENERATED_MUTATE=alias`, 300 seeds | 7 of 300 seeds reported the damage; passes |
+| ASan + UBSan + LSan, `Sh2DecompilerTests` and `Sh2GeneratedTests` (300 seeds), Debug, the workflow's flags | exit 0 both; no AddressSanitizer or LeakSanitizer report; the only UBSan lines are the two accepted upstream shifts (`address.hh:605`, `slghpatexpress.cc:979`) |
+| Width table | 337 registers, 3,038 cells, passes; handler check: 178 value-triggered write targets (from 37); `derive_handler_cases.py --check` current |
+
+Corpora, `SE_GAME_HWRAM=<image> SE_GAME_LEND=1`, RelWithDebInfo, and the same run on a build of `cba27f6`:
+
+| | `hwram007.bin` | `hwram008.bin` |
+|---|---|---|
+| Functions | 839 of 839 ok | 1,554 of 1,554 ok |
+| Every ledger count | 0 | 0 |
+| Dropped against the reference run | 0 | 0 |
+| Missing and said | 0 | 4 (as at `cba27f6`) |
+| Records | 14,831 folded, 0 dead, 0 unreachable, 29 switch lookups | 38,687 folded, 0 dead, 4 unreachable, 169 switch lookups |
+| Direct volatile accesses, notes, cautions | 163, **35**, 0 (32 at `cba27f6`) | 232, **57**, 4 (54 at `cba27f6`) |
+| Lending (before, after) | 637 (866 parameters), 662 (923) | 992 (1,227), 1,020 (1,282) |
+
+The lending counts are the same as at `cba27f6` in this environment. **No function's text changed in either image** (the output directories of the two builds are identical, file by
+file). The notes changed in four functions, three new notes per image, all the new SMPC_IREG0 text on the INTBACK code's `mov.b r0,@SMPC_IREG0` stores: 0600541E at 06005462
+(a known byte, bits 7 and 6 clear) and 0601A0C8 at 0601AA2A and 0601AA44 (unknown value) in 007; 0600540E at 06005452, and 06058CD4 at 06059636 and 06059650 in 008. The other new texts
+(SCU_IMS, the SCSP interrupt registers, MOBUF, the timers, the slot words) are made by no function in either image.
+
+### Left undone
+
+- The generator has no item for the new shapes: a bitwise loop (A5-60), the cartridge RAM and the VDP memories' modes in the emulator's `Env` (A5-65, A5-68), a rotating index pointer
+  (A5-61). Its rule 3b sees the A5-60 `and` loop; the rest is held by fixtures. The 0xA purge name is drawn (one in three of the purge names); `alias.words` rose from 24 to 26 (grammar 2).
+- A5-58 (a stepped walk not worked out; a callee-returned pointer not followed) and the SCU_IST / CD_HIRQ clear-on-write texts are unchanged.
+- The 4 MiB cartridge's missing repeat, the low work RAM's upper MiB and the colour RAM modes remain over-approximations (volatile for nothing, never wrong).
+- The `MOVED` pins of the fault suite (patch 0044) are left to the coordinator's head, as asked; no pin was touched.
+- Mednafen was not run; every claim is from its source, as in every area 5 round.
