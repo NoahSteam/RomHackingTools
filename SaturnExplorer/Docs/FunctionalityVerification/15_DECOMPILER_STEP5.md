@@ -6938,3 +6938,84 @@ The machine was shared with the other fixers and a reviewer (load average 9 to 1
 - The thread family's flake rate was not measured: the stand-in replaces the measurement, and none of the 810 or so `cancel-us` cells run after the fix failed (RelWithDebInfo and ASan, the denser steps), against one run in three in CI before it. Only the next CI runs will say.
 - No pin names a host function (they are not in the dynamic symbol table), so a host-side defect found by a sweep would be pinned by its fixture's `kReach` evidence and its cell, not by a site. A host function that needed a site would have to be exported.
 - Windows and macOS (the `ListDirectory` Windows branch is written, not compiled here); every k of `alloc` under ASan for the four new fixtures, and in RelWithDebInfo for `lend`, `lendm` and `lendx` (only `hwreg` was run every k; the reviewer's sweeps of the same fixtures were clean on the same engine); the rows round 3 left listed (A6-18 unreached, the `TypeFactory` re-inserts, the `clearJumpTables` copy, the printer's `countbase`).
+
+## Area 6, round 5 review
+
+Reviewer: branch `review/6-round5-review`, from master `54219f8`. No engine, host or patch changed. The suite gained cells only: six fixtures (`wide`, `lend8`, `div3`, `ext`, `stk6`, `nest`) and the `--refused-retry` cell. New ledger rows **A6-40, A6-41 and A6-42, all P3**. No P1 or P2: across about 400,000 cells (about 25,000 of them under ASan + UBSan + LeakSanitizer) there is no crash, no leak, no damaged engine without a report, no result for a stale generation and no UBSan line. **Round 4 held on every row** it fixed (A6-31 to A6-36, A6-38); what the review found is a refusal that is permanent for a transient cause, and two places where the oracle is weaker than the fixes it guards.
+
+**How.** Two scratch builds with gcc 13.3: RelWithDebInfo (`SE_ENABLE_DECOMPILER=ON`, `SE_WEB_LIVE=OFF`) and the CI's Debug `-fsanitize=address,undefined -fno-omit-frame-pointer -g1`, the latter run through `run-decompiler-sanitizers.sh` and `check-sanitizer-logs.sh` as CI does. Sweeps ran from copies of the binary, so a rebuild for a mutation never replaced a binary in use. The machine was shared (load 7 to 9 on 4 cores). gdb breakpoints were used to see which engine functions a fixture reaches.
+
+### What held
+
+- **The default subset.** RelWithDebInfo: 55 jobs, 0 failed, 62 s; 4,684 driver cells, the 111 runner cells, 79 of 79 pins `site ok` (none MOVED, none STALE). ASan + UBSan + LSan through the CI script: 55 jobs, 0 failed, 899 s at load 8, 4,718 driver cells; no ASan, LSan or UBSan line (the checker's only complaint is the binaries I did not run). With the six new fixtures, RelWithDebInfo: 67 jobs, 5,083 driver cells, 0 failed, 126 s.
+- **A6-35, the allowed set.** A raise read in entry s is accepted as the outcome of entry s or s + 1. For fixture1 that makes the thread family accept: Flow, Cancelled-in-Flow or in-Actions; the print pass's Actions, Cancelled-in-Actions or Ok; the first pass's Teardown, Cancelled-in-Actions or in-Flow (the second Init is uncheckable). That hides nothing the exact families do not see, *if they have a cell in the gap* (A6-41 says how thin that is). I enumerated every `checkCancel(); Enter(next)` pair: Flow to Actions, Actions to Print and the first pass's end to the second Init are the three, each modelled by the s + 1 entry and each with `window=need` cells (4 per two-pass fixture, 5 for mailbox, 2 for diamonds); the reference run has no pair of its own (it is one pass, `firstPassRan` false) and a raise between the shown pass's Teardown and the reference Init is honoured at the reference Flow (OkRefCut) or, with no reference run, not at all (Ok), both in `Expected`. Nothing else calls `Enter` after a check.
+- **A cancel in the second pass's Teardown or after the result is stored.** By reading: `Poll` installs a result only if its epoch is the current one and its generation is the newest of its slot, and `r.generation` is set from the job after `Decompile` returns; a Stop that arrives after `Decompile` returned finds `mRunning` still true only until the worker takes the lock, where `mCancel` and the reason are cleared. By the runner family: `stop`, `supersede`, `invalidate` held at every entry (mailbox, jumptable, fixture1, the reference run's entries included) in the full run: 6 kinds x 32 cells, 0 failed; ASan default: 111 cells, 0 failed.
+- **A6-31, A6-32.** `cold`, `cold-disasm` and their sticky variants at the full run's density (every allocation up to the first translator, then 5% steps): cold 5,081, cold-disasm 4,981, cold-sticky 5,081, cold-disasm-sticky 4,981 cells, 0 failed. `SE_FAULT_STICKY=1` on the default `cold` and `cold-disasm`: 1,117 cells each, 0 failed (882 library-interrupted each). `disasm` 3,856 and `disasm-sticky` 3,856 (every k), 0 failed. By reading the refusal texts are made before the stage changes and swapped into the caller's `error`; the Interrupted catch moves the kept copy (`std::string` move assignment, no allocation).
+- **A6-33 and A6-37.** The staging guard removes the directory on every exit but the move (read: it is armed from `MakeDirectory(tmp)` to the rename, and `RemoveEntry` is wrapped). Under `SE_FAULT_STICKY=1`: `staging-left` 35 of 1,117 in each of `cold` and `cold-disasm`, as round 4. *Is a non-allocating removal possible?* Yes for what the matrix models (failures of `operator new`): build the list of staged paths (`Join(tmp, name)` for the files and the manifest) before `MakeDirectory(tmp)`, so that a failure making it leaves nothing staged, and have the guard `unlink` each `c_str()` and `rmdir(tmp)`; no allocation. `opendir` would not be needed. The one name the list lacks is a `.separt-<pid>-<n>` temp inside `WriteFileAtomically`, which removes it itself on its own error returns. *Is leaving it harmless on the next start?* By reading yes: nothing lists or reads `<hash>.tmp-<pid>`; the final directory is `<hash>`; a process with the same pid clears it first (`RemoveEntry(tmp)` before `MakeDirectory`) and the cold cells' second request does so in the same process. Cost: up to 19 KB per failing process, never collected when the pid differs. I left A6-37 accepted.
+- **A6-38.** `ListDirectory` closes the handle on the exception path, POSIX and Windows by reading (`FindFirstFileA` handle: the name string, the push and the loop are inside the `try`; the pattern string is built before the handle exists). `cold-sticky` and `cold-disasm-sticky` under ASan + LSan in the default subset: 0 leaks.
+- **A6-34, end to end.** `pin-selftest dag` passes (6 of 6). Scratch edits of real pins, run through the parent: `mailbox` print#0 48 bytes nth 22 to 23 gives `MOVED ... FAIL:pin-moved` and the job fails; `jumptable` site `setMarkup#0` to `#1` gives `STALE: the site has no #1 here, only 1 allocation(s)` and `FAIL:stale-pin`. Both with the note naming the re-pin. The master merge of patch 0044 (below) exercised it on 23 pins. What does not hold is in A6-42.
+- **A6-36.** The four round 4 fixtures every k in RelWithDebInfo: lend 30,473, lendm 28,843, lendx 32,846 cells (92,162, 488 s), 0 failed, the same counts as the fixer's. `--runner-oom` with and without `SE_FAULT_STICKY=1`, the full run's 207 cells each (mailbox 14 entries x 9 offsets, jumptable 9 x 9), 0 failed.
+
+### New ground, every k in RelWithDebInfo, 0 failed
+
+The question was whether a shape the round 2 and 3 fixers called unreached can be built. Six fixtures, now in the suite (`alloc`, `cancel-enter` and a `kReach` evidence line in the default subset; the other families in the full run):
+
+| Fixture | What it builds | `alloc` every k |
+|---|---|---|
+| `wide` | `dmulu.l r4,r5 ; sts mach,r0 ; sts macl,r1 ; rts`: a 64-bit result returned in the cspec's `join` of r0 and r1, the high half in r0 (`return (uint8)param_2 * (uint8)param_1;`). The joined variable and its pieces (round 2 listed `VariableGroup::addPiece` as "no fixture builds") | 19,866 |
+| `lend8` | fixture1's caller with its callee lent as returning a `uint8`: the caller reads the join (`uVar2 = func_0x06005000(param_1); ... (uVar2 >> 0x20)`) | 30,912 |
+| `div3` | `x / 3` as a compiler writes it (`dmulu.l` by 0xAAAAAAAB, high half shifted): `RuleDivOpt` (`return param_1 / 3;`) | 20,664 |
+| `ext` | `exts.w`, `add`, `extu.b`: sub-word values (`char Fn_ext(char,char)`) | 19,812 |
+| `stk6` | a call lent six parameters, the fifth and sixth on the stack | 24,833 |
+| `nest` | six `if`s nested, each storing through `@-r6` (without the stores the conditions merge into one `&&`; a first version did) | 40,525 |
+
+Total 156,612 cells, 0 failed. The cancel families at the full run's density on these (minus `nest`) and on lend, lendm, lendx, hwreg: `cancel-oom` 59,952, `cancel-alloc` 9,453, `cancel-us` 750, `cancel-enter` 99 cells, 0 failed; `nest`: 8,091 cells, 0 failed. ASan + LSan on the phases other than Init (`SE_FAULT_PHASE=followFlow,actions,print`): `wide` 1,950, `div3` 2,745, `ext` 1,896 cells, 0 failed (`stk6` timed out at the suite's 600 s job limit under load and is not counted).
+
+### The thread family
+
+`cancel-us` is cheap (a run is 6 to 10 ms), so I swept it as a flake hunt: steps of 20, 25, 37, 50, 70 and 100 us on the eleven fixtures other than diamonds (mailbox, jumptable, fixture1, shapes, stack, loopbrk, dag, lend, lendm, lendx, hwreg) at load 7 to 9: **20,977 cells, 0 failed**, against one CI run in three before round 4. Under ASan at a 300 us step: mailbox 261, jumptable 298, fixture1 300, 0 failed. The first sweep at exactly 100 us: fixture1 63 cells, jumptable 157 (a quieter machine than round 4's 188 and 203; the step, not the count, is the point).
+
+### Mutations (each reverted and rebuilt clean afterwards)
+
+| Mutation | Default subset | Full window |
+|---|---|---|
+| M1: the `checkCancel()` before `Enter(Print)` removed | 1 job fails: `cancel-alloc fixture1` k = 24282..24283 ("expected Cancelled-in-Actions but got status 0 cancelledIn idle"). `cancel-enter`, `cancel-us`, `cancel-oom` and the other fixtures pass | `cancel-alloc` mailbox (1,302 cells) and jumptable (1,079) still pass; fixture1, lend, lendm and lendx fail 2 cells each |
+| M5: the `checkCancel()` before `Enter(Actions)` removed | 3 jobs, 13 cells (jumptable 4, mailbox 4, fixture1 5): "raised in followFlow: expected Cancelled-in-Flow but got cancelledIn actions". `cancel-us` passes | not run |
+
+These are A6-41: the widened thread family cannot see either check, and the exact families see M1 on one fixture only.
+
+### What broke
+
+| Row | Severity | What | Cell |
+|---|---|---|---|
+| A6-40 | P3 | `StartLibrary` makes the Fresh stage retryable only for exceptions. Any other materialisation failure (cannot create the directory, cannot write, cannot take the lock; on Windows by reading a rename blocked by a scanner) sets `Stage::Refused` for the process, and its text does not say a restart clears it. The cause can be gone one request later | `<scratch> --refused-retry`: a file stands where the config directory goes, it is replaced by a directory, the second request is still `Unavailable: cannot create ...` (exit 10) |
+| A6-41 | P3 | The Actions-to-Print and Flow-to-Actions host checks are carried by 2 and 13 cells; the thread family is blind to them since A6-35's widening | M1, M5 above |
+| A6-42 | P3 | `pin-selftest dag` hard-codes `nth` 108 (and "nth = 108" in the expected note), so the test of the pin rules is itself STALE when the engine's allocation count moves; found by the master merge of patch 0044 (re-pin commit 6817075: 19 real pins and the self-test's good pin to 107) | `pin-selftest dag` after patch 0044 |
+
+On A6-42: when patch 0044 changed the Actions phase's allocation counts, 23 pins were MOVED, each MOVED verdict failed the run and printed the `nth` that re-pins it, so A6-34's rule worked as designed; the self-test, whose pins are written wrong on purpose, is the part that should not have needed a hand edit.
+
+### The round 3 leftovers, with the new fixtures
+
+gdb breakpoints on the functions, over each fixture's baseline runs (lend, lendx, hwreg, jumptable, mailbox, wide, lend8, div3, ext, stk6, shapes, stack, dag, loopbrk):
+- **A6-18 / `JumpTable::recoverModel`**: entered 16 times in jumptable, 0 with `jmodel` set (conditional breakpoint); `setOverride` 0 hits anywhere. Still unreachable from the host.
+- **`TypeFactory::setName`, both `setFields`, `setPrototype`, `setEnumValues`, `recalcPointerSubmeta`**: 0 hits in all 14. By reading their callers are the C grammar (`grammar.cc`) and the XML decoding of structures and enumerations; the host feeds neither.
+- **`Funcdata::clearJumpTables`**: reached (6 hits in lend and stk6, 8 in lendx, from the restarts) but with an empty `jumpvec`, so `remain` stays empty and the copy `jumpvec = remain` cannot allocate; it needs an override table, which nothing creates.
+- **The printer's `countbase`**: advances 36 per print on `stack` and 762 on `diamonds` (read at exit: 108 and 2,286 over three prints). The signed 32-bit counter overflows after about 59.6 million prints of `stack`, or 2.8 million of a function the size of `diamonds`; not reachable in a session.
+
+### Stack depth (round 2's "no fixture was built")
+
+Nested ifs to 250 levels (each with a store, so they do not merge) and a left-leaning sum of 400 terms, RelWithDebInfo, under `ulimit -s`: the smallest main-thread stack that completes is 98 KB for 5, 100 and 250 levels alike and 103 KB for 50 and 400 terms alike. Recursion depth did not grow with either shape. (The probes were scratch edits of the suite; the six committed fixtures do not include them. Beyond about 330 levels the `bra` displacement runs out; a deeper nest needs literal-pool jumps.)
+
+### Other reading
+
+- `SetError` clears the text when copying it fails; "out of memory" and "cancelled" fit the small-string buffer, "unexpected exception" and long engine messages do not, so under sustained exhaustion those would be a Failed result with an empty text. No cell reaches one (every sticky failure ends in "out of memory").
+- A cancel is not consulted during `StartLibrary` or the first translator build, so a Stop or a supersede on the process's first request waits for them; the runner's 5 s acknowledgement limit would disable decompilation for the session if the bundle's extraction took longer (a slow disk or a scanner). Not reproduced; the staging hook of `SpecBundle` would make a cell.
+- The ASan default subset took 899 s at load 8, against the `ctest` limit of 600 s for the fault test: CI calls the binary through the runner script, so only a local `ctest` on a sanitizer build is at risk (round 4's remark stands).
+
+### Not reached or not done
+
+- Windows and macOS. The Windows `ListDirectory` branch and `MovePath` are read, not compiled here.
+- ASan: every k for the new fixtures (only the non-Init phases of `wide`, `div3`, `ext`); `lend8`, `stk6` and `nest` under ASan; the ASan default subset with the six new fixtures (the 899 s run is the suite before them).
+- `diamonds` every k; the largest game function (hwram images are not in the repository).
+- A cancel during the first translator build or the bundle's extraction with a slow disk.
+- The merge of patch 0044 into this branch: this branch is on 54219f8, so its pins are the old ones.
