@@ -6646,3 +6646,122 @@ The generator's replay of the fixtures:
   a row of its own.
 
 **Done criteria.** Area 3 has six P2 rows this round (A3-18 to A3-23). It needs a fix round and then two consecutive clean review rounds.
+
+## Area 3, round 6: carried returns, partial results, the callee's frame, frame addresses for lent callees, tail calls, and what the evaluator knows
+
+Fixer, branch `review/3-round6-fix`, from master `5c7a036`. Code commits `2717015` .. `4607a02` (the ledger rows name `4607a02`). Ledger rows A3-18 to A3-24,
+A3-26, A3-27, A3-28 are fixed, A3-25 is accepted; new rows A3-29 (open), A3-31, A3-34, A3-35 (open or accepted, see below), A3-32 (found and fixed), A3-33 (accepted).
+No engine patch (0042 was not needed: see A3-23). Every fixture was reproduced first with the master build and the reviewer's scratch driver (the spec files of the
+review, run against a build of `5c7a036`): the printed texts and the oracle's verdicts of the rows were as the rows say, except A3-23 (below).
+
+### Root causes and fixes (`Sh2Decompiler.cpp`, `Sh2DecompilerTests.cpp`, `Sh2GeneratedTests.cpp`)
+
+- **A3-18.** `Step` took `jsr @r0` for a call through r0 when the CALLIND target was a copy of r0, and `Apply` then exempted whatever r0 held after the delay slot.
+  The exemption now holds only while r0 still holds the value that was copied (the temporary and r0 are the same `Value`). A value the slot puts in r0 is carried.
+- **A3-19.** `carried` was recorded only for a value the function made (`OwnInR0`), and a call's return is not its own. It is now recorded for any value but r0's entry
+  value left alone, with one qualification measured on the corpus: a call's result that some instruction has read since the call (`Value::read`, set by `Step` when
+  any op reads r0, bar the spec's self-copy `r0 = r0` around `bsr`) is a result the function used, which compiled code leaves in r0 as scratch. The unqualified rule
+  lost 31 and 46 lent signatures (the callers of `bool`-returning functions, copying the result to a register and calling a leaf); the qualified one 2 and 6.
+- **A3-20.** `Return` records the r4-r7 that reach r0 in a join with r0's entry value (`mJoinedParams`; origins registers only). `WithholdReason` withholds a void
+  function when one of them is a parameter its signature does not hold ("its return joins r0's entry value with a parameter it does not hold"). The unqualified rule
+  (any r4-r7) lost 4 functions of image 008 and their callers, all compiled loops whose scratch r0 is a held parameter (`06013844`, `0601386C`, `060138A0`,
+  `0603E368`); the reviewer's refinement, held parameters excepted, loses none. A held parameter is pinned as accepted (`a3_20 control: the parameter is held`).
+- **A3-21.** The decisive thing is the store, not the sign of the r15 change. `Store` records the origins of what is written at an exact offset at or above the entry
+  r15 (`CallerFrameStores`; a constant counts as `origin::kFrame`). `WithholdReason` withholds the callee when any of it is not a parameter the signature holds. A
+  callee that spills a parameter it holds into the caller's home area is the compiled shape (`060329CC` of image 007 stores r7 so), and stays lent; the
+  hand-written hand-back (`rts ; mov.l r5,@r15`, pop and push, `@(4,r15)`) stores a register that is no input of the signature, because the engine took the store
+  for a dead write. A3-15's negative-difference rule stays and is now a special case. Limit: A3-31, A3-35.
+- **A3-22 and A3-24.** A lent callee's stores through a pointer it was handed clobbered every caller slot, the saved PR among them ("a return not to its caller": 96
+  and 125 functions on the images, 60 and 38 of which are now lent; the other 2 and 2 gained lose another reason with it). The engine assumes a callee does not
+  write its caller's saved registers, so `StoreThrough` called from `Apply` spares the slots that hold the entry value of r8-r14, GBR, VBR or PR, but for a frame
+  address the callee was handed exactly (a register it stores through holds that offset: the callee may overwrite that slot). With the withheld reason gone the texts
+  of A3-22 were exposed as the reviewer said: `NoteFrameEscape` is now also run at a call whose signature is lent, for the registers the callee stores through
+  (`storesThrough` bits), when the address is not exact (a base from an index, a loop: `Value::kLowBase`, A3-16/17), and declares the alias as it does for r2.
+  a, b and c (the walk) are right: the locals under the address are not folded, `iStack_8 + iStack_4`.
+- **A3-23, the oracle was wrong.** The reviewer's premise (the engine never aliases the parameter area) was probed with the engine's own debug output and with
+  fixtures that would show it: `g(&param_5)` with the stack word assigned before the call (`param_5` stays a variable in the call and the read), or read into a copy before
+  it (`iVar1 = param_5; g(&param_5); return param_5 + iVar1 ...`). The heritage guard puts an INDIRECT for the call at every stack word and removes it only for a symbol
+  marked `nolocalalias`, which a stack parameter never is (`syncVarnodesWithSymbols` gives it `mapped | addrtied`); `AliasChecker::hasLocalAlias` is for the call's
+  input trials and is not what keeps the read. So the text `func(&param_5); return param_5 + ...` is right C, and the false positive is `PseudoEval`, which kept
+  the word the run started with across the call. It now forgets a name whose address the text takes (and a stack name of either form, `xStack_8`, `iStack00000000`,
+  `_xStack00000000`) after a call. a and b of A3-23 pass the oracle with the run (0xD). No patch.
+- **A3-26.** `Join` kept a base only when both sides had one. A side that is no stack address at all (a constant, a loaded pointer) now leaves the other's base; a side that
+  may be a stack address of unknown base still gives none. `g(c ? &s : 0)` declares the alias and the read is not folded.
+- **A3-27.** `ReturnCheck::Step` treats a BRANCHIND that has a call spec at its instruction (the engine's tail call) as the call it is: the callee's effects apply
+  (so r0 held across it is carried, which is the reviewer's note), PR must be the caller's, and the path returns with PR as it was. The engine prints the jump as
+  `f(); return;` whatever the callee returns, so a lent callee that returns a value would lose it in the text and the caller would be lent void: that caller is
+  withheld ("it tail-calls a function that returns a value", new row A3-29 for the text). A4's `TestTailJumpToUnreachedCode` keeps its assertion (the caller of a
+  callee that returns `param_1 + 1` is withheld), with the new reason. The generator's grammar 2 withholds 1 function in 3,000 seeds for "an indirect jump" now (15 before)
+  and 4 for the tail call of a value.
+- **A3-25, accepted.** The join of r0's entry value with a constant is a pinned acceptance (A3-14); folding the constant branch in `ReturnCheck` would not change the
+  engine's void return (it decided before the condition folded), only the acceptance's argument. Pinned as a limit (`a3_25`, lent void, the run returns 5).
+- **A3-28.** The text now shows the escape: the probe's call sites are collected, and after the actions a `Comment::user2` at each (`kFrameEscapeNote`: "a frame address is
+  in r2 here, in none of the arguments: the call may write the locals from there up") is added unless the call is to a callee whose signature is lent (A3-32: the probe
+  ran before the literals fold and took every `jsr @rN` for a callee that may read r2, which put the note on 58 functions of image 007 at first). `PseudoEval` reads
+  the stack locals of a text with the note as unknown, so the correct `func(); return xStack_8;` agrees with the run (7) while the same body without the note, A3-15's
+  caller, stays rejected. The stack parameter, `iStack00000000 = 5; <note> f(); return iStack00000000 + 5;`, agrees with the run too.
+
+### The generator
+
+- A grammar item `skip.partial` (stream of its own, `partialRng`): in a function that returns nothing, makes no call and has no table, `tst Rn,Rn ; bt/bf ; mov Rs,r0` as the last
+  item (171 in 3,000 grammar-2 seeds); `SE_GENERATED_RETURNS` value 2 marks it for replay. The check `return-dropped:partial`: a lent void prototype and a run that ends with r0 =
+  an argument register it does not hold (145 void, 212 held: accepted). With the A3-20 recording off, 7 of 1,000 grammar-2 seeds fail (16 findings).
+- A3-22, A3-23: the generator cannot reach them, and A3-17 before them. It compares accesses, flow, signatures and the register-only printed C; none reads the printed value of
+  a function that has a frame local and passes its address. Reaching them needs `PseudoEval` in the generator (it lives in `Sh2DecompilerTests.cpp`) or the printed-C run extended
+  to frames. Row A3-34 (open); the suite's fixtures and the evaluator are the instrument meanwhile.
+
+### Mutation
+
+Each fix reverted alone, rebuilt, `Sh2DecompilerTests` run; the failing checks (count; the suite lines are the round's fixtures, 4552 and 4984/4996 older tests).
+
+| Reverted | Failing checks |
+|---|---|
+| A3-18 target exemption for whatever r0 holds | 2 |
+| A3-19 a call's return never carried | 1 |
+| A3-19 results some instruction has read carried too | 1 (the `a3_19 control: the result was read`) |
+| A3-20 the join with a parameter not recorded | 1; generator, 1,000 seeds: 7 failing seeds, 16 findings |
+| A3-20 held parameters withheld too | 1 |
+| A3-21 no withhold for a store above the entry r15 | 7 |
+| A3-21 every such store withheld (the held spill too) | 1 |
+| A3-22 no escape for a lent callee | 5 |
+| A3-24 saved registers clobbered by a lent callee's store | 1 |
+| A3-24 the exactly addressed slot spared too | 3 (4984 and 4996: A2 tests too) |
+| A3-26 a base lost in a join with a non-address | 2 |
+| A3-27 tail call not treated as a call | 3 |
+| A3-27 a tail call to a callee that returns a value lent | 2 (4552, the A4 test) |
+| A3-28 no note at the call | 4 |
+| A3-28 the evaluator ignores the note | 2 |
+| A3-23 the evaluator keeps address-taken names across a call | 3 |
+| A3-28 the evaluator does not read `iStack00000000` | 1 |
+| A3-32 the note at calls to lent callees too | 1 |
+
+### Matrix
+
+Branch tip, RelWithDebInfo gcc.
+
+- Whole `ctest -j3 --timeout 900`: 97 of 97.
+- Generator: grammar 2, 3,000 seeds: 0 failing, 0 findings; grammar 1, 1,000 seeds: 0; `SE_GENERATED_SEEDS=20000` (both grammars, the nightly job): 0 failing seeds, 0 findings;
+  printed-C `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000`: all passed.
+- Corpus, `SE_GAME_LEND=1`: every ledger count 0; 16 and 20 reads missing and said; both suites all passed.
+- gcc Debug, ASan + UBSan + LSan (`detect_leaks=1`, the workflow's flags): `Sh2DecompilerTests`, `Sh2GeneratedTests` (300 seeds) and the printed-C run (150 seeds) exit 0; the only reports are `address.hh:605` and `slghpatexpress.cc:979`.
+
+### Lending (`SE_GAME_LEND=1`), master `5c7a036` against this branch
+
+| | lent before | lent after | parameters before | after |
+|---|---|---|---|---|
+| image 007 | 600 | 660 | 786 | 921 |
+| image 008 | 984 | 1,018 | 1,223 | 1,280 |
+
+Gained 62 and 40 (60 and 38 were withheld "a return not to its caller": A3-24); lost 2 and 6, all A3-19: `0602EE78`, `0602EEB0` (007) and `0605A414`, `0605A418`, `0606DDEC`,
+`0606DE24`, `06071498`, `0607149A` (008), compiled void functions that call a function returning a `bool` they ignore and then a leaf that keeps r0; the reason is true of the code and
+the value is junk (row A3-33, accepted). The lent signature line is unchanged in every function lent both before and after (0 changed). The text differs in 81 and 138 functions:
+the gained ones, their callers, and the note of A3-28 (43 and 90 functions carry it, at unresolved or unlent callees). The A3-20 and A3-21 rules lose nothing on either image
+(measured: 4 functions of 008 and 1 of 007 before the refinements, read above).
+
+### Not done, limits
+
+- A3-31: the callers of a callee that writes above its entry r15 (the spill) are withheld "a return not to its caller", the callee's frame store being taken for one that reaches the
+  saved PR. A3-35: a hand-written caller that reads back a held parameter the callee spilled is lent with the folded read. A3-29: the text of a tail call that returns a value.
+  A3-34: the generator cannot see a printed frame local.
+- The reviewer's A3-22 c is checked by the text and the run (`PseudoEval` reads no `do` loop).
+- The sanitizers were run on `Sh2DecompilerTests`, `Sh2GeneratedTests` (300 seeds) and the printed-C run only, not the other suites of the CI list.

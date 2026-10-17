@@ -168,7 +168,7 @@
 //                            A failing seed prints the line that replays it, which for a module adds
 //                            SE_GENERATED_FUNCS="start/entry/end,..." (hex offsets from the first word),
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
-//                            SE_GENERATED_RETURNS="1,0,..." (the generator's intent per function)
+//                            SE_GENERATED_RETURNS="1,0,2,..." (the generator's intent per function: 1 returns r0, 0 leaves it alone, 2 copies a parameter to r0 on one path only)
 #include "DecompilerTestSupport.h"
 
 #include "Decompiler/SaturnArchitecture.h"
