@@ -618,11 +618,12 @@ struct Gen
         return r < 45 ? LitKind::Hw : r < 75 ? LitKind::Ram : LitKind::Mbox;
     }
 
-    Item MakeLitPtr(int reg, LitKind kind)
+    Item MakeLitPtr(int reg, LitKind kind, bool polled = false)
     {
         // One RAM pointer in seven is a cell of the cache's data array or an address of the cartridge areas instead (A5-71, A5-73), drawn from a stream
         // of its own so the other programs are the ones they were.
-        if (kind == LitKind::Ram && placeRng.Chance(15)) kind = placeRng.Chance(60) ? LitKind::Cache : LitKind::Cart;
+        // (Not a polled one: a poll waits for another processor to write the word, which only work RAM marked volatile is.)
+        if (kind == LitKind::Ram && !polled && placeRng.Chance(15)) kind = placeRng.Chance(60) ? LitKind::Cache : LitKind::Cart;
         if (disc && reg == selReg) reg = 13 - reg;   // the jump table's integer stays one
         Item it;
         it.type = Item::LitPtr;
@@ -981,7 +982,7 @@ struct Gen
         it.reg = 7;
         const uint32_t r = rng.Below(100);
         const LitKind kind = r < 60 ? LitKind::Mbox : r < 85 ? LitKind::Hw : LitKind::Ram;
-        Item ptr = MakeLitPtr(7, kind);   // registers the literal; the poll item carries it
+        Item ptr = MakeLitPtr(7, kind, true);   // registers the literal; the poll item carries it
         it.lit = ptr.lit;
         it.width = p.lits[it.lit].width;
         it.pollWrite = rng.Chance(70);
