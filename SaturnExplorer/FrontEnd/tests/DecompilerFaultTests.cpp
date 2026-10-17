@@ -57,6 +57,14 @@
 //          the refused-retry cell by hand (A6-40; it is a job of the default subset and of the full run as "refused-retry"):
 //          a request refused because the configuration directory cannot be made is answered again, and correctly, once the
 //          cause is gone
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --diskfull [sticky]
+//          the reproduction of A6-43 (not a job of the default subset until that row is fixed): the first request of a process with the
+//          file size limit at SE_DF_LIMIT bytes (5,000: the three small spec files are written, the 13 KB language file is not) and
+//          allocation k failing, for every k; then the limit is lifted and the next request must be Ok, with no staging directory in
+//          the configuration directory and no descriptor left open. "sticky": every allocation from k on fails
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --vanish [damage]
+//          the reproduction of A6-44 (also a hand mode): after a first request has started the library, the spec directory is
+//          removed (damage: its compiler spec is overwritten); what the next requests answer, and whether anything restores it
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --diffruns <fixture> [runs]
 //          runs of the warmed engine after the baseline, each compared with it, allocation by allocation (the
 //          first must match; the markup's pair ids make a later one differ when they pass a varint boundary)
