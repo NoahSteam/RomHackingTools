@@ -3548,6 +3548,11 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         aliasRetry = false;
         printed = runPass(first, true, &callees, round < kAliasRounds);
         if (!aliasRetry) break;
+        // A print pass that gave way to another (memory with two names, now volatile) ended in its Actions with nothing after
+        // them but its Teardown: the same boundary as the first pass's, and checked the same way, so that a cancel raised in
+        // the tail of those actions is honoured in Actions and not carried through the next pass's Init into its Flow (A6-43).
+        if (gBoundaryHookForTests) gBoundaryHookForTests();
+        checkCancel();
     }
     for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
     if (printed.empty())
