@@ -57,6 +57,7 @@
 //        environment: SE_FAULT_FULL, SE_FAULT_DENSE (alloc: size of the dense prefix, 3000),
 //          SE_FAULT_JOBS (parallel drivers, 1), SE_FAULT_TIMEOUT (seconds per cell, 120),
 //          SE_FAULT_PHASE=actions,... / SE_FAULT_RANGE=<lo>-<hi> (alloc: every k of those phase entries, or of the range),
+//          SE_FAULT_US_STEP=<us> (cancel-us: the step between raises),
 //          SE_FAULT_KEEP=1 (keep the drivers' logs in <scratch>/logs), SE_FAULT_ONLY=alloc,cancel-enter,...
 //          (only the jobs whose label starts with one of these), SE_FAULT_EXIT=static (a damaged engine
 //          leaves through SleighArchitecture::shutdown() and exit() instead of _Exit), SE_FAULT_LEAKS=0 (no
@@ -3134,7 +3135,10 @@ std::vector<long> UsCells(const Ctx& c, bool full)
 {
     std::vector<long> v;
     const long lenUs = long(std::ceil(c.base.ms * 1000.0)) + 2000;
-    const long step = full ? 100 : std::max(1000L, lenUs / 24 / 1000 * 1000);
+    long step = full ? 100 : std::max(1000L, lenUs / 24 / 1000 * 1000);
+    // SE_FAULT_US_STEP=<us>: a denser (or sparser) sweep, for a sanitizer build, where the full run's 100 us steps are hours.
+    if (const char* st = std::getenv("SE_FAULT_US_STEP"))
+        if (std::atol(st) > 0) step = std::atol(st);
     for (long t = 0; t <= lenUs; t += step) v.push_back(t);
     return v;
 }
