@@ -812,7 +812,19 @@ private:
         const Value sp = Get(s, mReg[kR15]);
         if (sp.kind != Value::Sp) return;
         for (const auto& slot : s.slots)
-            if (slot.first >= sp.v) NoteFrameEscapeOf(slot.second, kR15, true, at);
+        {
+            if (slot.first < sp.v) continue;
+            // The same exact address in r4-r7 is an argument the call shows (a pointer to a local kept in a local, passed too): the engine
+            // declares the alias from it, and the note would say it is in none of the arguments.
+            bool shown = false;
+            if (slot.second.kind == Value::Sp)
+                for (int r = 4; r < 8; ++r)
+                {
+                    const Value x = Get(s, mReg[r]);
+                    shown = shown || (x.kind == Value::Sp && x.v == slot.second.v);
+                }
+            if (!shown) NoteFrameEscapeOf(slot.second, kR15, true, at);
+        }
     }
 
     void NoteFrameEscapeOf(const Value& v, int reg, bool exactToo, uint32_t at)

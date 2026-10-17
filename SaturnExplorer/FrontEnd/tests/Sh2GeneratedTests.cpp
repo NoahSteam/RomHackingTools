@@ -3667,7 +3667,8 @@ bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offen
             if (end > amp + 1) exposed.insert(line.substr(amp + 1, end - amp - 1));
         }
         const bool callLine = line.find("func_0x") != std::string::npos || line.find("(*") != std::string::npos;
-        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos)
+        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos ||
+            line.find("a frame address is in a stack argument slot") != std::string::npos)
             for (auto it = tainted.begin(); it != tainted.end();)
                 it = it->find("Stack") != std::string::npos ? tainted.erase(it) : std::next(it);
         else if (callLine)
@@ -7051,8 +7052,9 @@ Subject MakeCanarySubject(int variant, std::string& label)
     Rng r(0xCA4A41ull + static_cast<uint64_t>(variant) * 7919u);
     // Round 8 (A3-44) adds the frame address in r5, r6 or r7 (a lent writer), and handed through a word of memory the writer loads it from
     // (Cell), and three dimensions drawn from a stream of their own (so the older variants draw what they drew): the result used (`add #1,r0`),
-    // and the call under a branch or in a loop that runs twice.
-    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, Lent5, Lent6, Lent7, Cell, kKinds };
+    // and the call under a branch or in a loop that runs twice. Round 8 (A3-51) adds the address in the call's stack argument slot (Stack): stored at the
+    // call's r15 with r4-r7 untouched, which the engine drops from the call, for a callee that reads it (so is never lent) and writes through it.
+    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, Lent5, Lent6, Lent7, Cell, Stack, kKinds };
     const Kind kind = static_cast<Kind>(variant % kKinds);
     Rng x(0xCA4A42ull + static_cast<uint64_t>(variant) * 104729u);
     const bool plus1 = x.Chance(30);
@@ -7066,7 +7068,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
     // (the callee that is not lent stores r1, which the caller sets, through r4: a read of r1 that is live, so the signature is withheld; a
     // copy of r1 to a scratch register was dead code and the callee was lent)
     std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x2412, 0x000B, 0x0009 };
-    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested", "r5 lent", "r6 lent", "r7 lent", "cell" };
+    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested", "r5 lent", "r6 lent", "r7 lent", "cell", "stack slot" };
     const uint16_t seven = static_cast<uint16_t>(0xE100 | kCanaryWritten);   // mov #0x37,r1
     // The functions after the caller: the writer, a callee that keeps everything and one that reads r1 (so is not lent), and for the nested
     // kind the lent writer that the first one calls.
@@ -7084,6 +7086,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
         writer = { 0xD203, 0x6222, seven, 0x000B, 0x2212, 0x0009, 0x0009, 0x0009,
                    static_cast<uint16_t>((kCode + kCell) >> 16), static_cast<uint16_t>(kCode + kCell) };
         break;
+    case Stack: writer = { 0x62F2, seven, 0x000B, 0x2212 }; break;           // mov.l @r15,r2 ; mov #K,r1 ; rts ; mov.l r1,@r2: the address from the stack slot
     case Unlent4: writer = { 0x2412, 0x000B, 0x0009 }; break;                // mov.l r1,@r4 ; rts ; nop  (r1 is the caller's)
     case Unlent2: writer = { 0x2212, 0x000B, 0x0009 }; break;                // mov.l r1,@r2
     case Indexed: writer = r.Chance(50) ? std::vector<uint16_t>{ 0x61F3, 0x316C, 0x000B, 0x2152 }    // mov r15,r1 ; add r6,r1 ; rts ; mov.l r5,@r1
@@ -7176,6 +7179,13 @@ Subject MakeCanarySubject(int variant, std::string& label)
         }
         break;
     }
+    case Stack:
+        // The address of the second local (base + 4) in the word at the call's r15, the first local's: r4-r7 stay as the caller got them, so the engine
+        // sees no argument at all and, without the probe's note, folds the second local across the call. That local is the result (read below).
+        a.Put(static_cast<uint16_t>(0x6003 | 1 << 8 | base << 4));                          // mov base,r1
+        a.Put(0x7104);                                                                      // add #4,r1
+        a.Put(0x2F12);                                                                      // mov.l r1,@r15
+        break;
     case Cell:
         a.Put(static_cast<uint16_t>(0x6003 | 1 << 8 | base << 4));                          // mov base,r1
         a.LoadLiteral(6, kCode + kCell);                                                    // mov.l @(L,pc),r6
@@ -7192,7 +7202,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
         a.Put(static_cast<uint16_t>(0x8B00 | (disp & 0xFF)));   // bf loop
     }
     // The local back as the result (plus one, when the result is used).
-    if (localKind) a.Put(fp ? 0x50E0 : 0x50F0);   // mov.l @(0,base),r0
+    if (localKind) a.Put(kind == Stack ? (fp ? 0x50E1 : 0x50F1) : (fp ? 0x50E0 : 0x50F0));   // mov.l @(0,base),r0 (the second local, @(4,base), for Stack)
     else a.Put(0x60F2);                           // mov.l @r15,r0
     if (plus1) a.Put(0x7001);                     // add #1,r0
     if (shape == 1)

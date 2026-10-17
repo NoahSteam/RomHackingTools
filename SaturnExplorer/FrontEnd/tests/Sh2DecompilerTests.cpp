@@ -9576,6 +9576,13 @@ void TestArea3Round8()
         Print(f3.name.c_str(), r3);
         CHECK(!Has(r3.Text(), kStackNote) && !Has(r3.Text(), "return 0x5a;"));
         CHECK(PseudoAgreesWithRun(r3, snap3, f3, { { 1 }, { 2 } }, true));
+        // ST5 (control): the same address also in r4 (a pointer to a local kept in a local, passed too): the engine shows it, no note
+        const CallFixture f5 = { "a3_51 ST5 control: the address in the stack slot and in r4", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x6413, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap5 = CallSnapshot(f5, ++serial);
+        const DecompileResult r5 = d.Decompile(snap5, Request(f5.base));
+        Print(f5.name.c_str(), r5);
+        CHECK(Has(r5.Text(), "func_0x06009040(&xStack_8)") && !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
         // ST2 (control): the address in r4, the engine's own argument
         const CallFixture f2 = { "a3_51 ST2 control: the address in r4", 0x06009000u,
                                  atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x64F3, 0x7404, 0xB018, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, { 0xE337, 0x000B, 0x2432 }) };
