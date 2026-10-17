@@ -81,6 +81,11 @@ struct CallEffects
     uint32_t outOrigins = origin::kAll;      // where the registers it does not preserve can come from
     uint32_t leaks = origin::kAll;           // where the values it stores to memory it does not track come from
     uint32_t frameValues = origin::kAll;     // ...and the values it may write at or above its entry r15
+    // ...and where: bit k (k < 31) is the word at its entry r15 + 4k, written at that exact offset (a spill of an argument register into the home
+    // area its caller reserved); kFrameAny is a write at an offset it cannot place, or past the 124th byte. A caller clobbers the words named, not
+    // every slot from the call's r15 up, the saved PR among them (A3-31). Unknown: any.
+    static constexpr uint32_t kFrameAny = 1u << 31;
+    uint32_t frameWords = 0xFFFFFFFFu;
     // r15 at every return minus r15 on entry, when it is the same constant at all of them: 0 when r15 is
     // preserved, else the bytes the function leaves on the stack (negative) or takes off its caller's
     // (positive). kSpUnknown when it differs between returns or is not a constant: a function that cannot
@@ -90,7 +95,7 @@ struct CallEffects
     bool operator==(const CallEffects& o) const
     {
         return preserved == o.preserved && storesThrough == o.storesThrough && outOrigins == o.outOrigins &&
-               leaks == o.leaks && frameValues == o.frameValues && spDelta == o.spDelta;
+               leaks == o.leaks && frameValues == o.frameValues && frameWords == o.frameWords && spDelta == o.spDelta;
     }
 };
 

@@ -379,6 +379,7 @@ public:
         mCarriedInReturn = false;
         mJoinedParams = 0;
         mCallerFrameStores = 0;
+        mFrameWords = 0;
         mStoresThrough = 0;
         mOut = 0;
         mLeaks = 0;
@@ -415,6 +416,7 @@ public:
         effects.outOrigins = mOut;
         effects.leaks = mLeaks;
         effects.frameValues = mFrameValues;
+        effects.frameWords = mFrameWords;
         // |delta| below the engine's own 'unknown' extrapop (0x8000).
         effects.spDelta = mSpKnown && mSpDelta > -0x8000 && mSpDelta < 0x8000 ? static_cast<int32_t>(mSpDelta) : CallEffects::kSpUnknown;
         return std::string();
@@ -825,7 +827,22 @@ private:
             // Above its r15: our frame from the call's r15 up, and our caller's.
             mStoresThrough |= origin::kFrame;
             mFrameValues |= framed;
-            Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+            if (sp.kind == Value::Sp && !(e.frameWords & CallEffects::kFrameAny))
+            {
+                // The words it wrote, at the offsets it wrote them (a spill of its arguments into the home area): not the saved PR above.
+                for (int k = 0; k < 31; ++k)
+                    if ((e.frameWords >> k) & 1u)
+                    {
+                        const int64_t at = Wrap(sp.v + 4 * k);
+                        Clobber(s, framed, at, at + 4);
+                        if (at + 4 > 0) AddFrameWords(at, 4);
+                    }
+            }
+            else
+            {
+                Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
+                mFrameWords |= CallEffects::kFrameAny;
+            }
         }
         if (e.storesThrough & ~origin::kFrame)
         {
@@ -868,6 +885,13 @@ private:
         if (origins & origin::kStack) s.escaped = true;
     }
 
+    // The words of [off, off + n) that lie at or above the entry r15, as CallEffects::frameWords has them.
+    void AddFrameWords(int64_t off, int64_t n)
+    {
+        for (int64_t w = std::max<int64_t>(off, 0) & ~int64_t(3); w < off + n; w += 4)
+            mFrameWords |= w / 4 >= 31 ? CallEffects::kFrameAny : 1u << (w / 4);
+    }
+
     void Store(State& s, const Value& addr, const ghidra::VarnodeData& valueVn, const Value& value)
     {
         const int64_t n = valueVn.size;
@@ -882,6 +906,7 @@ private:
                 mCallerFrameStores |= spill && v != 0 ? v : (v | origin::kFrame);
                 mStoresThrough |= origin::kFrame;
                 mFrameValues |= v;
+                AddFrameWords(addr.v, n);
             }
             if (n != 4)
             {
@@ -912,6 +937,7 @@ private:
         {
             mStoresThrough |= origin::kFrame;
             mFrameValues |= stored;
+            mFrameWords |= CallEffects::kFrameAny;
         }
         if (MayBeStack(s, addr)) Clobber(s, stored, INT64_MIN, INT64_MAX, spare, exact);
         else Clobber(s, stored, 0);   // through an entry value: the caller's frame, at most
@@ -1190,13 +1216,10 @@ private:
                         falls = false;
                         break;
                     }
-                    // ...but the engine prints the jump as `f(); return;`, a call whose value nothing returns: a callee that returns one
-                    // loses it in the text and in the signature, which would be lent void.
-                    {
-                        const auto lent = mLent.find(mCallAt[a]);
-                        if (lent != mLent.end() && lent->second.known && lent->second.ret.kind != TypeKind::Void && !mTolerant)
-                            return "it tail-calls a function that returns a value, which the engine takes for a call that returns nothing";
-                    }
+                    // (The engine used to print the jump as `f(); return;`, a call whose value nothing returned, so a caller of a callee that
+                    // returns one was withheld; since patch 0044 a RETURN of a locked returning call's output is a return, the text states the
+                    // callee's value and the caller's signature returns it: A3-29. A callee lent `void` has no value to lose: r0 after it is
+                    // the scratch of a void function, and a reader of this function's r0 is withheld by "uses a register after calling".)
                     Call(s, a);
                     if (mNoReturn.count(a)) continue;
                     Set(s, mReg[kPr], pr);
@@ -1262,6 +1285,7 @@ private:
     bool mCarriedInReturn = false;
     uint32_t mJoinedParams = 0;   // r4-r7 (bit n: Rn) that reach r0 at a return joined with r0's entry value
     uint32_t mCallerFrameStores = 0;   // what was stored at an exact offset at or above the entry r15 (A3-21)
+    uint32_t mFrameWords = 0;          // ...and which words of it (CallEffects::frameWords)
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
     std::set<uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2

@@ -6415,6 +6415,84 @@ void TestCalleeClobberPins(Sh2Decompiler& d)
     }
 }
 
+// The seeds beyond the nightly's range (area 5 round 9 review; ledger A3-45, A3-46, A4-10, A4-11), as the shrunk programs the review printed. They are
+// the words the replay lines carry; each must come out with no finding, and the two table pins must have been read through the labels that are
+// addresses (the check's `table.switch-on-address` count), so that an oracle which looks for the index's label only fails them.
+void SetOrClear(const char* name, const char* value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) setenv(name, value, 1);
+    else unsetenv(name);
+#endif
+}
+
+struct ModulePin
+{
+    const char* name;
+    const char* words;
+    const char* funcs;
+    const char* tables;
+    const char* returns;
+    const char* clobbers;
+    const char* reads;
+};
+
+Subject ModuleSubject(const ModulePin& m)
+{
+    const char* names[] = { "SE_GENERATED_FUNCS", "SE_GENERATED_TABLES", "SE_GENERATED_RETURNS", "SE_GENERATED_CLOBBERS", "SE_GENERATED_READS",
+                            "SE_GENERATED_VOLATILE", "SE_GENERATED_POLL", "SE_GENERATED_DATA" };
+    const char* values[] = { m.funcs, m.tables, m.returns, m.clobbers, m.reads, nullptr, nullptr, nullptr };
+    std::string saved[8];
+    bool had[8];
+    for (int i = 0; i < 8; ++i)
+    {
+        const char* old = std::getenv(names[i]);
+        had[i] = old != nullptr;
+        if (old) saved[i] = old;
+        SetOrClear(names[i], values[i]);
+    }
+    const Subject s = RawSubject(m.words);
+    for (int i = 0; i < 8; ++i) SetOrClear(names[i], had[i] ? saved[i].c_str() : nullptr);
+    return s;
+}
+
+void TestLeftoverSeedPins(Sh2Decompiler& d)
+{
+    // A3-45 (seed 22001): rotcr r0 in a do-while loop, r0's entry value reaches the result on every path: not lent. A3-46 (seed 24379): r0 is left
+    // alone on the path that skips both writes: lent, and the oracle must not count `and r0,r0` as the write that fills it.
+    for (const char* words : { "E301 4025 451B 4310 8BFB 000B 0009", "5264 C880 8900 200A 2028 8B00 2009 000B 0009",
+                               // control: the same loop entered only if r4 is not zero, so a path leaves r0 alone (the scratch join of A3-14): lent void
+                               "2448 8902 4025 4410 8BFC 000B 0009" })
+    {
+        const Report rep = EvaluateSubject(d, WordsSubject(words), true);
+        std::printf("pin '%s': %zu finding(s)\n", words, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+    }
+    static const ModulePin kTables[] = {
+        { "A4-10, seed 33994 (div1 in a case)",
+          "2F86 2F96 2FC6 0C2A 7FF0 6843 6953 604D 7F10 4C2A 6CF6 69F6 68F6 000B 0009 E301 A000 0009 4310 8BFD E103 3616 8913 4608 C701 016E 412B 0009 0600 9048 0600 "
+          "904C 0600 9052 0600 9052 A005 0009 C604 A002 0009 A000 0009 E301 A000 0009 4310 8BFD 4515 8902 3154 A002 0009 A000 0009 E074 000B 0009",
+          "0/0/1e,1e/1e/74", "34:6:4:56:48,4c,52,52", "1,1", "0,0", "0,20000" },
+        { "A4-11, seed 50070 (stc sr in a case)",
+          "2F86 2F96 2FA6 4F22 7FF8 6843 6953 6A63 D203 7F08 4F26 6AF6 69F6 68F6 422B 0009 0600 9024 E105 3616 891B 4608 C701 016E 412B 0009 0600 904C 0600 9050 0600 9054 "
+          "0600 9054 0600 9058 0600 905C A009 0009 A007 0009 A005 0009 A003 0009 517F A000 0009 0202 6023 000B 0009",
+          "0/0/20,24/24/6a", "30:6:6:62:4c,50,54,54,58,5c", "1,1", "41000,41000", "0,0" },
+    };
+    for (const ModulePin& m : kTables)
+    {
+        const Report rep = EvaluateSubject(d, ModuleSubject(m), true);
+        const auto it = rep.counts.find("table.switch-on-address");
+        const int onAddress = it == rep.counts.end() ? 0 : it->second;
+        std::printf("pin '%s': %zu finding(s), switches labelled by address %d\n", m.name, rep.findings.size(), onAddress);
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.empty());
+        CHECK(onAddress > 0);
+    }
+}
+
 // ---- The canary family (ledger A3-34, A3-36, A3-37, A3-39, A3-40) ---------------------------------------------------------------------
 // The grammar never hands a callee the address of a local, nor reads a word a callee wrote, so a text that folds a local across a call (the
 // engine's own reading of what a call may write) is invisible to every other check: the function still returns a value, the registers still
@@ -6691,6 +6769,7 @@ void TestGenerated()
     {
         RUN(TestDomainPins(d));
         RUN(TestCalleeClobberPins(d));
+        RUN(TestLeftoverSeedPins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 96) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

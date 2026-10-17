@@ -4873,8 +4873,8 @@ void TestTailJumpToUnreachedCode()
     CHECK(tail(r, b + 2, "jmp is taken for a tail call to 0x0600910C") && tail(r, b + 2, "not part of this function's body"));
     CHECK(!r.InBody(b + 0x0C) && !r.prototype.known);
     // Named as a function of its own, the destination is decompiled as one, and a caller lent its signature
-    // calls it with the argument (the caller's own signature stays withheld: the jump is a call whose value the engine does not
-    // return, A3-27).
+    // calls it with the argument, and returns what it returns: since patch 0044 the jump's text states the callee's value, and the
+    // caller is lent with it (A3-29; it was withheld while the engine printed `f(); return;`).
     DecompileRequest q = Request(a + 0x0A);
     const DecompileResult callee = d.Decompile(snap, q);
     CHECK(callee.status == DecompileStatus::Ok && callee.prototype.known && Has(callee.Text(), "param_1 + 1"));
@@ -4882,7 +4882,8 @@ void TestTailJumpToUnreachedCode()
     q.prototypes.emplace_back(a + 0x0A, callee.prototype);
     r = d.Decompile(snap, q);
     Print("the destination named and lent", r);
-    CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x0600900a(param_1)"));
+    CHECK(r.status == DecompileStatus::Ok && r.prototype.known && r.prototype.ret.kind != TypeKind::Void &&
+          Has(r.Text(), "func_0x0600900a(param_1)") && Has(r.Text(), "return iVar1;"));
 }
 
 // The engine paths the control-flow review could only check by reading the source. Two are reached
@@ -8089,9 +8090,28 @@ void TestCallsAndTraps()
             const CallFixture spill = { "a3_21 control: an argument register spilled to the caller's home area", base,
                                         withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0x6043, 0x000B, 0x2F42 }) };
             const Lent ls = lend(spill, true, false);
-            // (Its callers are withheld "a return not to its caller": the callee's store above its entry r15 is taken to reach the
-            // caller's saved PR, as before. A limit, recorded; no lent caller of the corpus's one such function was lost.)
+            // (This caller pushes PR and calls with r15 at it: the callee's store at its entry r15 lands on the saved PR, and the caller is
+            // withheld "a return not to its caller", rightly. One that reserved the home area is lent, below: A3-31.)
             CHECK(ls.callee.prototype.known && ls.callee.prototype.params.size() == 1);
+            CHECK(!ls.caller.prototype.known && Has(ls.caller.prototypeWithheld, "not to its caller"));
+            // A3-31: the same callee called by a function that reserved the word (sts.l pr,@-r15 ; add #-4,r15): the store lands in the
+            // reserved word, the saved PR above it is untouched, and the caller is lent. The callee's words are what CallEffects::frameWords
+            // names, not every slot from the call's r15 up.
+            const std::vector<uint16_t> reserve = { 0x4F22, 0x7FFC, 0xB00C, 0x0009, 0x7F04, 0x4F26, 0x000B, 0x0009 };
+            const CallFixture homed = { "a3_31 a: a callee that spills r4 into the home area its caller reserved", base, withCallee(reserve, { 0x6043, 0x000B, 0x2F42 }) };
+            const Lent lh = lend(homed);
+            CHECK(lh.callee.prototype.known && lh.callee.prototype.effects.frameWords == 1u);
+            CHECK(lh.caller.prototype.known && lh.caller.prototypeWithheld.empty());
+            // ...a second word (r5 at 4(r15)) is the saved PR: withheld, and the oracle rejects the lent text if it were given.
+            const CallFixture two = { "a3_31 b: a callee that spills r4 and r5, over the saved PR", base,
+                                      withCallee(reserve, { 0x6043, 0x305C, 0x2F42, 0x000B, 0x1F51 }) };   // mov r4,r0 ; add r5,r0 ; mov.l r4,@r15 ; rts ; mov.l r5,@(4,r15)
+            const Lent l2 = lend(two, true, false);
+            CHECK(l2.callee.prototype.known && l2.callee.prototype.effects.frameWords == 3u);
+            CHECK(!l2.caller.prototype.known && Has(l2.caller.prototypeWithheld, "not to its caller"));
+            // ...and a callee that stores at an offset it cannot place says so: the caller clobbers from its r15 up, as before.
+            const CallFixture any = { "a3_31 c: a callee that stores through r15 plus an index", base, withCallee(reserve, { 0x6063, 0x000B, 0x0F56 }) };
+            const Lent la = lend(any, true, false);
+            CHECK(!la.callee.prototype.known || (la.callee.prototype.effects.frameWords & CallEffects::kFrameAny));
             // ...and a callee that stores a constant there is not.
             const CallFixture konst = { "a3_21: a constant stored at the callee's entry r15", base,
                                         withCallee({ 0x4F22, 0xB00D, 0x0009, 0x4F26, 0x000B, 0x0009 }, { 0xE105, 0x000B, 0x2F12 }) };
@@ -8236,18 +8256,46 @@ void TestCallsAndTraps()
             // Controls. The same through `bra` (followed into the callee's code): lent, right.
             const CallFixture bra = { "a3_27 control: bra", base, withCallee({ 0x6043, 0xA00D, 0x0009 }, keeper) };
             CHECK(lend(bra).caller.prototype.known);
-            // A tail call to a callee that returns a value is withheld (below); one with no value in r0 is lent.
+            // A tail call to a callee that returns a value is lent returning it (below, A3-29); one with no value in r0 is lent void.
             const CallFixture val = { "a3_27 b: jmp to a callee that returns 7", base,
                                       withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, { 0x000B, 0xE007 }) };
             const Lent lv = lend(val, true, false);
             // Until patch 0044 the engine printed the jump as `f(); return;` whatever the callee returned; since it (a RETURN of a
             // locked returning call's output is a return) the text returns the callee's value and the oracle accepts it (A3-29).
-            // The host still withholds the caller: the reason's wording and the rule are A3-29's to settle.
-            CHECK(!lv.caller.prototype.known && Has(lv.caller.prototypeWithheld, "returns a value"));
+            // The caller is lent, returning it (A3-29: the host withheld it "which the engine takes for a call that returns nothing"
+            // after the engine had stopped doing so).
+            CHECK(lv.caller.prototype.known && lv.caller.prototype.ret.kind != TypeKind::Void && !Has(lv.caller.prototypeWithheld, "returns a value"));
             CHECK(PseudoAgreesWithRun(lv.caller, CallSnapshot(val, ++serial), val, inputs));
             const CallFixture none = { "a3_27 c: jmp to a callee that keeps r0, r0 untouched", base,
                                        withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, keeper), true };
             CHECK(lend(none).caller.prototype.known);
+            // A3-29: a tail call to a callee lent void whose r0 is live in the caller's caller. g stores 7 through r5 and leaves it in r0
+            // (r0 has another use, so it is no return: lent void); f jumps to it through a literal; h calls f and returns r0. f is lent void,
+            // as the code it jumps to is; h stores r0 after the call, a register f's signature does not return, and is withheld for that, not for f.
+            {
+                std::vector<uint16_t> w(0x30, 0x0009);
+                const uint16_t h[] = { 0x4F22, 0xB00D, 0x0009, 0xD103, 0x2102, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0009, 0x0600, 0x2000 };   // sts.l pr,@-r15 ; bsr f ; nop ; mov.l @(3,pc),r1 ; mov.l r0,@r1 ; lds.l @r15+,pr ; rts ; nop ; pool: 0x06002000
+                const uint16_t f[] = { 0xD101, 0x412B, 0x0009, 0x0009, 0x0600, 0x9040 };   // mov.l @(1,pc),r1 ; jmp @r1 ; nop ; nop ; the pool: g
+                const uint16_t g[] = { 0xE007, 0x2502, 0x000B, 0x0009 };                    // mov #7,r0 ; mov.l r0,@r5 ; rts ; nop
+                for (size_t i = 0; i < 12; ++i) w[i] = h[i];
+                for (size_t i = 0; i < 6; ++i) w[0x20 / 2 + i] = f[i];
+                for (size_t i = 0; i < 4; ++i) w[0x40 / 2 + i] = g[i];
+                const CallFixture t = { "a3_29 c: h calls f, which jumps to g (lent void, r0 = 7 live)", base, w, true };
+                auto snap = CallSnapshot(t, ++serial);
+                const DecompileResult rg = d.Decompile(snap, Request(0x06009040u));
+                CHECK(rg.prototype.known && rg.prototype.ret.kind == TypeKind::Void);
+                DecompileRequest qf = Request(0x06009020u);
+                qf.prototypes.emplace_back(0x06009040u, rg.prototype);
+                const DecompileResult rf = d.Decompile(snap, qf);
+                Print(t.name.c_str(), rf);
+                CHECK(rf.status == DecompileStatus::Ok && rf.prototype.known && rf.prototype.ret.kind == TypeKind::Void);
+                DecompileRequest qh = Request(base);
+                qh.prototypes.emplace_back(0x06009040u, rg.prototype);
+                qh.prototypes.emplace_back(0x06009020u, rf.prototype);
+                const DecompileResult rh = d.Decompile(snap, qh);
+                Print("a3_29 c: the caller of f", rh);
+                CHECK(rh.status == DecompileStatus::Ok && !rh.prototype.known && Has(rh.prototypeWithheld, "uses r0 after calling"));
+            }
         }
 
         // ---- A3-28: the escape is in the text, and the oracle reads it -----------------------------------------------------------------
