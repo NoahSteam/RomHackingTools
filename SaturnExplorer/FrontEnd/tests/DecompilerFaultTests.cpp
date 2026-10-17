@@ -51,6 +51,9 @@
 //          the allocations of that size in that phase entry, each with its rank and the functions on its stack:
 //          how a pin's coordinates and site are written (SE_FAULT_DEPTH=<n> frames, 5). With a site, only the
 //          allocations made there, each with its ordinal among them (the '#n' of the site)
+//        SaturnExplorerDecompilerFaultTests <scratch dir> --refused-retry
+//          one cell of its own (A6-40, not in the default subset or the full run: it fails until the row is closed): a request
+//          refused for a cause that is gone one request later must clear or say that a restart is needed
 //        SaturnExplorerDecompilerFaultTests <scratch dir> --diffruns <fixture> [runs]
 //          runs of the warmed engine after the baseline, each compared with it, allocation by allocation (the
 //          first must match; the markup's pair ids make a later one differ when they pass a varint boundary)
@@ -378,7 +381,8 @@ struct Fix
     bool lean;   // one pass, no callee registration: for the larger shapes
     // The request lends the callee's prototype and effects (the panel lends every function the user decompiled, A6-36):
     // 1 a pointer parameter and every register but r0 kept; 2 the same at the callee's cache-through mirror too; 3 a second
-    // (uint2) parameter, r4, r5 and r8 kept and a stack delta of 4 (setExtraPop, registers killed).
+    // (uint2) parameter, r4, r5 and r8 kept and a stack delta of 4 (setExtraPop, registers killed); 4 a callee that returns a
+    // uint8, which the cspec gives in the join of r0 and r1 (r1 is then not kept).
     unsigned lend = 0;
 };
 
@@ -389,6 +393,12 @@ const uint32_t kLoopBreakBase = 0x0600B300u;
 const uint32_t kDagBase = 0x0600B400u;
 const uint32_t kLendMirrorBase = 0x0600B500u;
 const uint32_t kHwRegBase = 0x0600B600u;
+const uint32_t kWideBase = 0x0600B700u;
+const uint32_t kDivBase = 0x0600B800u;
+const uint32_t kExtBase = 0x0600B820u;
+const uint32_t kStk6Base = 0x0600B840u;
+const uint32_t kNestBase = 0x0600BA00u;
+const int kNestDepth = 6;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
@@ -402,6 +412,12 @@ const Fix kFixtures[] = {
     { "lendm", kLendMirrorBase, false, 2 },        // the same caller calling through the mirror 0x26005000, lent at both addresses: the mirror's registration
     { "lendx", dts::kFixture1Caller, false, 3 },   // lent with a stack delta and kept registers killed: setExtraPop
     { "hwreg", kHwRegBase, false },                // a VDP2 register read directly, and a store through a pointer that is one of two: HardwareNotes, PointerResolver
+    { "wide", kWideBase, false },                  // dmulu.l: a 64-bit result returned in the join of r0 and r1 (area 6 round 5: the joined variable's pieces)
+    { "lend8", dts::kFixture1Caller, false, 4 },   // fixture1 with its callee lent as returning a uint8: the caller reads the join of r0 and r1 (area 6 round 5)
+    { "div3", kDivBase, false },                   // x / 3 as the compiler writes it (dmulu.l by 0xAAAAAAAB, the high half shifted): RuleDivOpt (area 6 round 5)
+    { "ext", kExtBase, false },                    // exts.w, extu.b: sub-word values through the subvariable and extension rules (area 6 round 5)
+    { "stk6", kStk6Base, false, 5 },               // a call lent six parameters, two of them on the stack (area 6 round 5)
+    { "nest", kNestBase, false },                  // six ifs nested, each storing: a deep structure, not one condition (area 6 round 5)
 };
 
 const Fix* FindFix(const std::string& name)
@@ -482,6 +498,65 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
     }
     dts::Put32(hw, kHwRegBase - 0x06000000u + 0x14u, 0x25F80000u);
     dts::Put32(hw, kHwRegBase - 0x06000000u + 0x18u, 0x25F80002u);
+    // `wide`: dmulu.l r4,r5 ; sts mach,r0 ; sts macl,r1 ; rts ; nop. The product is 64 bits, and the cspec returns a 64-bit value in the
+    // join of r0 and r1 (the high half in r0, patch 0007): the engine builds a joined variable and its pieces (VariableGroup,
+    // VariablePiece), which no other fixture reaches.
+    const uint16_t wide[] = { 0x3545, 0x000A, 0x011A, 0x000B, 0x0009 };
+    off = kWideBase - 0x06000000u;
+    for (uint16_t w : wide)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `div3`: mov.l @(2,pc),r1 ; dmulu.l r1,r4 ; sts mach,r0 ; shlr r0 ; rts ; nop ; .long 0xAAAAAAAB. r4 / 3 the way a compiler writes it.
+    const uint16_t div3[] = { 0xD102, 0x3415, 0x000A, 0x4001, 0x000B, 0x0009, 0xAAAB, 0xAAAA };
+    off = kDivBase - 0x06000000u;
+    for (size_t i = 0; i < sizeof div3 / sizeof div3[0]; ++i)
+    {
+        dts::Put16(hw, off, i < 6 ? div3[i] : uint16_t(0));
+        off += 2;
+    }
+    dts::Put32(hw, kDivBase - 0x06000000u + 12u, 0xAAAAAAABu);
+    // `ext`: exts.w r4,r0 ; add r5,r0 ; extu.b r0,r0 ; rts ; nop. Values of two and one byte, widened and narrowed.
+    const uint16_t ext[] = { 0x604F, 0x305C, 0x600C, 0x000B, 0x0009 };
+    off = kExtBase - 0x06000000u;
+    for (uint16_t w : ext)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    // `stk6`: add #-8,r15 ; mov.l r4,@r15 ; mov.l r5,@(4,r15) ; mov.l @(3,pc),r1 ; jsr @r1 ; nop ; add #8,r15 ; rts ; nop ; nop ;
+    // .long 0x06005000. The callee is lent six parameters; the fifth and sixth are the two stored words.
+    const uint16_t stk6[] = { 0x7FF8, 0x2F42, 0x1F51, 0xD103, 0x410B, 0x0009, 0x7F08, 0x000B, 0x0009, 0x0009 };
+    off = kStk6Base - 0x06000000u;
+    for (uint16_t w : stk6)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    dts::Put32(hw, kStk6Base - 0x06000000u + 20u, dts::kFixture1Callee);
+    // `nest`: kNestDepth times (mov.l @r4+,r1 ; cmp/pl r1 ; bt .+2 ; bra END_i ; nop ; mov.l r1,@-r6), then add #3,r3 and one
+    // `add #1,r2` for each level (innermost first), then rts. Nested ifs, each with a store of its own, so that the conditions do not
+    // merge into one && chain (a first version without the stores did) and the structurer nests the blocks.
+    {
+        const uint32_t endsAt = kNestBase + 12u * unsigned(kNestDepth) + 2u;
+        off = kNestBase - 0x06000000u;
+        auto put = [&](uint16_t w) {
+            dts::Put16(hw, off, w);
+            off += 2;
+        };
+        for (int i = 0; i < kNestDepth; ++i)
+        {
+            const uint32_t braAt = kNestBase + 12u * unsigned(i) + 6u;
+            const int disp = int((int64_t(endsAt + 2u * unsigned(kNestDepth - 1 - i)) - int64_t(braAt + 4)) / 2);
+            for (uint16_t w : { uint16_t(0x6146), uint16_t(0x4115), uint16_t(0x8901), uint16_t(0xA000 | (disp & 0xFFF)), uint16_t(0x0009), uint16_t(0x2616) })
+                put(w);
+        }
+        put(0x7303);
+        for (int i = 0; i < kNestDepth; ++i) put(0x7201);
+        put(0x000B);
+        put(0x0009);
+    }
     dts::PlaceDiamonds(hw, 150);
     dts::PlaceJumpTable(hw, 4, 2);
     return dts::MakeSnapshot(hw);
@@ -501,14 +576,15 @@ DecompileRequest MakeRequest(const Fix& f)
         Prototype p;
         p.known = true;
         p.ret.kind = TypeKind::Int;
-        p.ret.size = 4;
+        p.ret.size = f.lend == 4 ? 8 : 4;
+        if (f.lend == 4) p.ret.kind = TypeKind::Uint;
         TypeShape ptr;
         ptr.kind = TypeKind::Pointer;
         ptr.size = 4;
         ptr.pointee = TypeKind::Int;
         ptr.pointeeSize = 4;
         p.params.push_back(ptr);
-        p.effects.preserved = ((1u << 22) - 1) & ~1u;   // all but r0
+        p.effects.preserved = ((1u << 22) - 1) & ~(f.lend == 4 ? 3u : 1u);   // all but r0 (and r1, for a 64-bit return)
         p.effects.spDelta = 0;
         if (f.lend == 3)
         {
@@ -518,6 +594,14 @@ DecompileRequest MakeRequest(const Fix& f)
             u.kind = TypeKind::Uint;
             u.size = 2;
             p.params.push_back(u);
+        }
+        if (f.lend == 5)
+        {
+            // stk6: five more parameters after the pointer, four in r4-r7 and the fifth and sixth on the stack
+            TypeShape word;
+            word.kind = TypeKind::Int;
+            word.size = 4;
+            for (int i = 0; i < 5; ++i) p.params.push_back(word);
         }
         q.prototypes.emplace_back(dts::kFixture1Callee, p);
         if (f.lend == 2) q.prototypes.emplace_back(0x26005000u, p);
@@ -2932,6 +3016,13 @@ const Reach kReach[] = {
     { "lendx", "Fn_lendx(int4 *param_1,uint2 param_2)", "the lent second parameter reaches the caller" },
     { "lendx", "func_0x06005000(param_1,param_2)", "the call passes both lent parameters" },
     { "lendx", "axStack_88 + 0x84", "the lent stack delta (setExtraPop) moves the frame after the call" },
+    { "div3", "return param_1 / 3;", "the division by a constant is recovered from the multiply and the shift (RuleDivOpt)" },
+    { "ext", "char Fn_ext(char param_1,char param_2)", "the sub-word values are typed as the extensions narrow them" },
+    { "stk6", "func_0x06005000(param_1,param_2,param_3,param_4,(int4)param_1,param_2)", "the fifth and sixth lent parameters are the two words stored on the stack" },
+    { "nest", "*(int4 *)(param_3 + -0x18) = iVar1;", "the sixth nested store is printed: six levels of structure, not one merged condition" },
+    { "wide", "return (uint8)param_2 * (uint8)param_1;", "the 64-bit product is returned in the join of r0 and r1" },
+    { "lend8", "uVar2 = func_0x06005000(param_1);", "the lent 64-bit return is read by the caller as one uint8 (the join of r0 and r1)" },
+    { "lend8", "(uVar2 >> 0x20)", "the high half of the join is r0's (patch 0007)" },
     { "hwreg", "puVar2 = &VDP2_TVMD;", "the register is named (HardwareNotes)" },
     { "hwreg", "puVar2 = &VDP2_EXTEN;", "the store's pointer resolves to the second register (PointerResolver)" },
 };
@@ -4042,6 +4133,42 @@ int RunJobs(std::vector<Job>& jobs, size_t parallel, double timeoutSec, bool ver
     return failures;
 }
 
+
+// A6-40: a refusal for a cause that is gone one request later. The first request of this process meets a configuration
+// directory it cannot create (a regular file stands where the directory should be); the cause is removed; the next request
+// must then either work (the refusal was not for good) or have been told, as every refusal for good is, that a restart is what
+// clears it. Not in the default subset nor in the full run: it fails until the row is closed. One cell, a process of its own
+// (the library's start-up is once per process): `<scratch> --refused-retry`; exit 0 when the contract holds.
+int RefusedRetryCell(const std::string& scratch)
+{
+    dts::Failures() = 0;
+    sfe::MakeDirectory(scratch);
+    const std::string cfg = dts::Join(scratch, "cfg");
+    if (FILE* f = std::fopen(cfg.c_str(), "wb"))
+    {
+        std::fputs("x", f);
+        std::fclose(f);
+    }
+    const auto snap = BuildSnapshot();
+    const Fix* fx = FindFix("mailbox");
+    Sh2Decompiler engine(cfg);
+    const DecompileResult first = engine.Decompile(snap, MakeRequest(*fx), nullptr);
+    std::printf("first : status %d '%s'\n", int(first.status), first.error.c_str());
+    Expect(first.status == DecompileStatus::Unavailable, "the first request is refused: its configuration directory cannot be made");
+    sfe::RemoveFile(cfg);
+    sfe::MakeDirectory(cfg);   // the cause is gone
+    const DecompileResult second = engine.Decompile(snap, MakeRequest(*fx), nullptr);
+    std::printf("second: status %d '%s'\n", int(second.status), second.error.c_str());
+    const bool works = second.status == DecompileStatus::Ok;
+    const bool toldRestart = Has(first.error, "restart Saturn Explorer") && Has(second.error, "restart Saturn Explorer");
+    Expect(works || toldRestart,
+           "a refusal whose cause is gone either clears on the next request or says that a restart is needed (A6-40)",
+           "second request: status " + std::to_string(int(second.status)) + " '" + second.error + "'");
+    std::printf("RESULT refused-retry: %s\n", dts::Failures() ? "FAIL" : "ok");
+    std::fflush(nullptr);
+    std::_Exit(dts::Failures() ? kExitInvariant : 0);
+}
+
 }  // namespace
 
 int main(int argc, char** argv)
@@ -4083,6 +4210,9 @@ int main(int argc, char** argv)
         return SitesTool(arg(3), dts::Join(scratch, "cell"), arg(4), std::atoi(argv[5]), uint32_t(std::atol(argv[6])), argc >= 8 ? argv[7] : nullptr);
 
     if (arg(2) == "--diffruns" && argc >= 4) return DiffRunsTool(arg(3), dts::Join(scratch, "cell"), argc >= 5 ? std::atoi(argv[4]) : 50);
+
+    // ---- the refusal for a cause that is gone (A6-40), a process of its own
+    if (arg(2) == "--refused-retry") return RefusedRetryCell(dts::Join(scratch, "cell"));
 
     // ---- the baseline result of a fixture (what kReach's evidence is written from)
     if (arg(2) == "--show" && argc >= 4)
@@ -4129,7 +4259,8 @@ int main(int argc, char** argv)
     };
     const int shards = full ? int(std::max(1.0, EnvDouble("SE_FAULT_JOBS", 3.0))) : 1;
     // The fixtures added for coverage (A6-36): the lending paths and the hardware notes, which no other fixture reaches.
-    auto addedForCoverage = [](const Fix& f) { return f.lend != 0 || std::string(f.name) == "hwreg"; };
+    auto addedForCoverage = [](const Fix& f) { return f.lend != 0 || std::string(f.name) == "hwreg" || std::string(f.name) == "wide" || std::string(f.name) == "div3" ||
+                                      std::string(f.name) == "ext" || std::string(f.name) == "nest"; };
     // The allocation sweeps run on every fixture, so that a resolved call (fixture1), a loop merge (shapes) and a
     // stack local (stack) see a failed allocation as the mailbox and the switch do (A6-13). diamonds, with 411,659
     // allocations, is left to the full run.
