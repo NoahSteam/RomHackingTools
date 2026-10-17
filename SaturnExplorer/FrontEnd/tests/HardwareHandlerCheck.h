@@ -311,6 +311,13 @@ inline void CheckScu(const Cases& c, const std::vector<WidthProbe>& table, Stats
         // A write that acts whatever (or nearly whatever) is written -- a DMA level started, the A-bus interrupt acknowledged, every
         // level stopped, timer 0 reset (`F` in the cases file) -- is said by WriteEffects for an unknown value (A5-32). Judged once per
         // register, at the long write.
+        // V (A5-64): the SCU's IMS raises the SH-2's interrupt line on the spot from the mask written; judged at the long write too.
+        if (p.write && p.width == 4 && !kind && g && g->Has('V'))
+        {
+            ++st.valueActionRegs;
+            if (WriteEffects(r.address, 4, false, 0).empty())
+                pr.Add(std::string(r.name) + ": " + key + " acts on the value written (V) and WriteEffects says nothing");
+        }
         if (p.write && p.width == 4 && !kind && g && g->Has('F'))
         {
             ++st.writeEffectRegs;
@@ -407,7 +414,7 @@ inline void CheckScspSlots(const Cases& c, Stats& st, Problems& pr)
     for (unsigned label = 0; label < 16; ++label)
     {
         const Group* g = h->At(label);
-        if (!g || !g->Has('V')) continue;
+        if (!g || !(g->Has('V') || g->Has('F'))) continue;   // F: words 12-15 store 0 whatever is written (A5-64)
         for (unsigned slot = 0; slot < 32; ++slot)
         {
             ++st.valueActionRegs;

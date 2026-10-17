@@ -305,7 +305,12 @@ bool InHardwareRange(uint32_t address);
 // (vdp2.c RW_*: A & 0x7FFFF), the VDP1 frame buffer every 256 KiB (vdp1.c: FBA & 0x3FFFF). VDP2 colour RAM repeats
 // every 4 KiB (cri = (A & 0xFFF) >> 1), and in colour RAM mode 0 an entry is also written 0x800 bytes on (the entry
 // 0x400 up): the mode is a register the decompiler does not follow, so the bytes are taken modulo 0x800 (A5-53).
-enum class MemoryKind : uint8_t { WorkRamHigh, WorkRamLow, Vdp1Vram, Vdp1FrameBuffer, Vdp2Vram, Vdp2ColorRam };
+//
+// The extended RAM cartridge (cart/extram.c, A5-65): 0x02400000-0x027FFFFF, `ExtRAM[A & ExtRAM_Mask]` with the mask 0x27FFFE for the 1 MiB
+// cartridge and 0x3FFFFE for the 4 MiB one. The 1 MiB one decodes bit 21 (the bank) and bits 18-1, so each 2 MiB half of the window is a 512 KiB
+// bank repeated four times (0x02480000 is 0x02400000, 0x02600000 is the other bank); the 4 MiB one decodes bits 21-1 and repeats nothing. The
+// decompiler is not told which is plugged in: the 1 MiB repeat is taken, the safe side (volatile for nothing on a 4 MiB cartridge, never wrong).
+enum class MemoryKind : uint8_t { WorkRamHigh, WorkRamLow, Vdp1Vram, Vdp1FrameBuffer, Vdp2Vram, Vdp2ColorRam, ExtRam };
 struct MemoryBytes
 {
     MemoryKind kind = MemoryKind::WorkRamHigh;

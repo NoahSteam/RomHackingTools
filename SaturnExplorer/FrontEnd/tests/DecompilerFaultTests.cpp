@@ -399,6 +399,7 @@ const uint32_t kExtBase = 0x0600B820u;
 const uint32_t kStk6Base = 0x0600B840u;
 const uint32_t kNestBase = 0x0600BA00u;
 const int kNestDepth = 6;
+const uint32_t kAliasBase = 0x0600BC00u;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
@@ -418,6 +419,8 @@ const Fix kFixtures[] = {
     { "ext", kExtBase, false },                    // exts.w, extu.b: sub-word values through the subvariable and extension rules (area 6 round 5)
     { "stk6", kStk6Base, false, 5 },               // a call lent six parameters, two of them on the stack (area 6 round 5)
     { "nest", kNestBase, false },                  // six ifs nested, each storing: a deep structure, not one condition (area 6 round 5)
+    { "aliasl", kAliasBase, true },                // one work-RAM word under two names: the alias retry runs because no first pass found the names (A5-63)
+    { "alias", kAliasBase, false },                // the same with a first pass: it finds the names and never retries
 };
 
 const Fix* FindFix(const std::string& name)
@@ -508,6 +511,16 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
         dts::Put16(hw, off, w);
         off += 2;
     }
+    // `alias`: Sh2DecompilerTests' a5_52a with the second store a long: mov.l @(pc),r2 (0x26001000) ; mov.l @(pc),r1 (0x06001000) ; mov #5,r0 ;
+    // mov.l r0,@r2 ; mov #7,r0 ; mov.l r0,@r1 ; mov.l @r2,r0. One word under two names, so the alias rule marks it volatile and a request without a first pass
+    // prints twice: the retry's teardown is a cancel point of its own (A5-63).
+    const uint16_t alias[] = { 0xD204, 0xD105, 0xE005, 0x2202, 0xE007, 0x2102, 0x6022, 0x000B, 0x0009, 0x0009 };
+    off = kAliasBase - 0x06000000u;
+    for (uint16_t w : alias)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
     // `div3`: mov.l @(2,pc),r1 ; dmulu.l r1,r4 ; sts mach,r0 ; shlr r0 ; rts ; nop ; .long 0xAAAAAAAB. r4 / 3 the way a compiler writes it.
     const uint16_t div3[] = { 0xD102, 0x3415, 0x000A, 0x4001, 0x000B, 0x0009, 0xAAAB, 0xAAAA };
     off = kDivBase - 0x06000000u;
@@ -557,6 +570,8 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
         put(0x000B);
         put(0x0009);
     }
+    dts::Put32(hw, kAliasBase - 0x06000000u + 0x14u, 0x26001000u);
+    dts::Put32(hw, kAliasBase - 0x06000000u + 0x18u, 0x06001000u);
     dts::PlaceDiamonds(hw, 150);
     dts::PlaceJumpTable(hw, 4, 2);
     return dts::MakeSnapshot(hw);
@@ -4260,7 +4275,7 @@ int main(int argc, char** argv)
     const int shards = full ? int(std::max(1.0, EnvDouble("SE_FAULT_JOBS", 3.0))) : 1;
     // The fixtures added for coverage (A6-36): the lending paths and the hardware notes, which no other fixture reaches.
     auto addedForCoverage = [](const Fix& f) { return f.lend != 0 || std::string(f.name) == "hwreg" || std::string(f.name) == "wide" || std::string(f.name) == "div3" ||
-                                      std::string(f.name) == "ext" || std::string(f.name) == "nest"; };
+                                      std::string(f.name) == "ext" || std::string(f.name) == "nest" || std::string(f.name) == "alias" || std::string(f.name) == "aliasl"; };
     // The allocation sweeps run on every fixture, so that a resolved call (fixture1), a loop merge (shapes) and a
     // stack local (stack) see a failed allocation as the mailbox and the switch do (A6-13). diamonds, with 411,659
     // allocations, is left to the full run.

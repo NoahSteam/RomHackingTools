@@ -1747,6 +1747,9 @@ struct PointerValues
     bool others = false;
     bool steps = false;
     bool cycle = false;   // (while walking) the value of a node still being walked: the path came back to it unchanged
+    // (while walking) a bitwise operation with a known constant applied to the value of a node still being walked: `p = p and mask` round a
+    // loop. The loop's merge closes it over the values the pointer has gone in with (A5-60); a fixed point of the mask adds nothing.
+    std::vector<std::pair<ghidra::OpCode, std::set<uint32_t>>> selfOps;
 };
 
 class PointerResolver
@@ -1755,7 +1758,8 @@ public:
     PointerValues Resolve(const ghidra::Varnode* start)
     {
         PointerValues v = Walk(start, 0);
-        if (budget_ <= 0) v.others = true;
+        if (budget_ <= 0 || !v.selfOps.empty()) v.others = true;   // (an operation round a loop no merge closed)
+        v.selfOps.clear();
         v.cycle = false;
         return v;
     }
@@ -1784,6 +1788,7 @@ private:
             break;
         case ghidra::CPUI_MULTIEQUAL:
             for (int i = 0; i < d->numInput(); ++i) Merge(out, Walk(d->getIn(i), depth + 1));
+            CloseSelfOps(out);
             break;
         case ghidra::CPUI_PTRSUB:   // the address of a global: PTRSUB(0, address); or a base and a field offset
             if (d->getIn(0)->isConstant() && d->getIn(1)->isConstant())
@@ -1866,6 +1871,34 @@ private:
         into.others |= from.others;
         into.steps |= from.steps;
         into.cycle |= from.cycle;
+        into.selfOps.insert(into.selfOps.end(), from.selfOps.begin(), from.selfOps.end());
+    }
+
+    // The values a loop's pointer takes when a bitwise operation with a constant is applied to its own value on every turn: the closure of the
+    // values it went in with under the operations (`0x25F80004 and 0x1FFFFFFF` is 0x05F80004, a fixed point after that; `xor 0x20000000`
+    // alternates between two). More than kMaxPairs values is left unknown.
+    static void CloseSelfOps(PointerValues& v)
+    {
+        if (v.selfOps.empty()) return;
+        constexpr size_t kMaxPairs = 64;
+        std::set<uint32_t> all;
+        for (const auto& c : v.constants) all.insert(c.first);
+        std::vector<uint32_t> work(all.begin(), all.end());
+        while (!work.empty() && !v.others)
+        {
+            const uint32_t a = work.back();
+            work.pop_back();
+            for (const auto& op : v.selfOps)
+                for (uint32_t m : op.second)
+                {
+                    const uint32_t r = Apply(op.first, a, m);
+                    if (!all.insert(r).second) continue;
+                    v.constants[r] = true;
+                    work.push_back(r);
+                    if (all.size() > kMaxPairs) { v.others = true; break; }
+                }
+        }
+        v.selfOps.clear();
     }
 
     static PointerValues Shift(const PointerValues& v, uint32_t k)
@@ -1874,6 +1907,7 @@ private:
         out.others = v.others;
         out.steps = v.steps;
         out.cycle = v.cycle;
+        if (!v.selfOps.empty()) out.steps = out.others = true;   // (the operation round the loop and then a step: not worked out)
         if (v.cycle && k != 0) out.steps = out.others = true;
         for (const auto& c : v.constants) out.constants[c.first + k] = c.second || k != 0;
         for (uint32_t b : v.bases) out.bases.insert(b + k);
@@ -1884,7 +1918,7 @@ private:
     // other a set of addresses, the op gives each pair's result (`{0x25F80004, 0x25F8000A} & {0x1FFFFFFF}` is the same two registers
     // through the cached partition). Every result is an address the pointer holds through an operation, never one printed as itself. The
     // other side may hold more besides (`others`). An operand nothing is known about (a parameter, a loaded value, a computed mask) makes
-    // the result unknown, and so does an indexed pointer: the op acts on its index too. A side that is only the pointer's own value
+    // the result unknown. An indexed pointer keeps its bases, moved (A5-61). A side that is only the pointer's own value
     // round a loop (no address, no unknown) adds nothing, as in a merge: `p = p & mask` steps nothing.
     static PointerValues Bitwise(ghidra::OpCode code, const PointerValues& x, const PointerValues& y)
     {
@@ -1894,11 +1928,28 @@ private:
         auto onlyCycle = [](const PointerValues& v) { return v.constants.empty() && v.bases.empty() && !v.others && v.cycle; };
         out.steps = x.steps || y.steps;
         out.cycle = x.cycle || y.cycle;
+        if (onlyCycle(x) && onlyCycle(y))
+            return out;   // (p and p)
         if (onlyCycle(x) || onlyCycle(y))
+        {
+            // The operation applied to the pointer's own value is a second value it holds (A5-60): `p = p and mask` is a fixed point only
+            // when the first value already is one (0x25F80004 moves to 0x05F80004 on the first turn). With a mask known the merge of the
+            // loop closes it over the values the pointer holds; with one that is not, the pointer holds others.
+            const PointerValues& other = onlyCycle(x) ? y : x;
+            if (known(other))
+            {
+                std::set<uint32_t> masks;
+                for (const auto& c : other.constants) masks.insert(c.first);
+                out.selfOps.emplace_back(code, std::move(masks));
+            }
+            else
+                out.others = out.steps = true;
             return out;
+        }
         const PointerValues* mask = known(y) ? &y : known(x) ? &x : nullptr;
         const PointerValues* set = mask == &y ? &x : &y;
-        if (!mask || set->constants.empty() || !set->bases.empty() || mask->constants.size() * set->constants.size() > kMaxPairs)
+        if (!mask || (set->constants.empty() && set->bases.empty()) ||
+            mask->constants.size() * (set->constants.size() + set->bases.size()) > kMaxPairs)
         {
             out.others = true;
             return out;
@@ -1906,7 +1957,21 @@ private:
         for (const auto& s : set->constants)
             for (const auto& m : mask->constants)
                 out.constants[Apply(code, s.first, m.first)] = true;
+        // An indexed pointer (bases) is moved by the operation too: the note it allows is for the index 0, where the access is at the base
+        // moved (`(base + index) and mask` is `base and mask` at the index 0, A5-61); the operation on the index is nothing it says.
+        for (uint32_t base : set->bases)
+            for (const auto& m : mask->constants)
+                out.bases.insert(Apply(code, base, m.first));
         out.others = set->others;
+        // The operation's own result is one of the values the loop merges back (`q = phi(p0, q and m)`: the value after the operation is
+        // the first value moved, and moved again, round the turns): close it too (A5-60).
+        if (set->cycle)
+        {
+            std::set<uint32_t> masks;
+            for (const auto& m : mask->constants) masks.insert(m.first);
+            out.selfOps.emplace_back(code, std::move(masks));
+            CloseSelfOps(out);
+        }
         return out;
     }
 
@@ -1922,7 +1987,7 @@ private:
         out.others = v.others;
         out.steps = v.steps;
         out.cycle = v.cycle;
-        if (v.cycle) out.steps = out.others = true;
+        if (v.cycle || !v.selfOps.empty()) out.steps = out.others = true;
         for (const auto& c : v.constants) out.bases.insert(c.first);
         out.bases.insert(v.bases.begin(), v.bases.end());
         return out;
@@ -1971,9 +2036,14 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask, std::set<const ghidr
         }
         case ghidra::CPUI_RETURN:   // (r0 left in the return register by a poll is no use of the value: the decompiler returns it whatever the code meant)
             continue;
+        case ghidra::CPUI_COPY:
+            // A byte stored to a constant address of ordinary memory: the engine folds the store into a copy to that memory's variable, and
+            // the byte is then in memory, whole, whatever the readers of the variable look at (A5-66).
+            if (use->getOut() && use->getOut()->isPersist()) return false;
+            if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
+            continue;
         case ghidra::CPUI_INT_ZEXT:
         case ghidra::CPUI_INT_SEXT:
-        case ghidra::CPUI_COPY:
         case ghidra::CPUI_CAST:
         case ghidra::CPUI_MULTIEQUAL:
             if (!use->getOut() || !OnlyUsesBits(use->getOut(), mask, seen)) return false;
@@ -2001,6 +2071,12 @@ bool OnlyUsesBits(const ghidra::Varnode* vn, uint64_t mask)
 // when the engine proved the pointer to be one of several constants, and some are register addresses
 // (the output prints `&REG`), each of those is said as the direct access would be, under "if the pointer holds ..."
 // (A5-28): the cache caution, the read effects, the width cautions, the write effects.
+std::string ColorRamByteNote(uint32_t at)
+{
+    return "a 1-byte write to colour RAM at " + Hex8(at) + " stores the whole 16-bit entry: the byte not written is the last value on the "
+           "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)";
+}
+
 std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::function<uint32_t(uint32_t)>& canonicalOf)
 {
     std::set<std::pair<uint32_t, std::string>> seen;
@@ -2074,8 +2150,7 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
         // VDP2 colour RAM stores the whole 16-bit entry from the data bus on a byte write: the byte not written is the last value on the
         // bus, not the entry's old byte (vdp2.c RW_W8, unlike VRAM's masked store), so no value of the entry is carried past it (A5-50).
         if (write && size == 1 && InColorRam(at))
-            note(insn, "a 1-byte write to colour RAM at " + Hex8(at) + " stores the whole 16-bit entry: the byte not written is the last value on the "
-                       "data bus, not the entry's old byte (Mednafen vdp2.c RW_W8)", true);
+            note(insn, ColorRamByteNote(at), true);
         if (regs.empty()) return;   // an unnamed register: nothing to add to the address shown
         // The engine names a register only at the address its symbol is at: the cached and
         // cache-through partitions for the bus, the one on-chip address. Any other alias is
@@ -2116,9 +2191,25 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
                 if (isRegister(c.first)) registers.push_back(Candidate{ c.first, false, c.second });
             for (uint32_t c : pv.bases)
                 if (isRegister(c) && !pv.constants.count(c)) registers.push_back(Candidate{ c, true, false });
-            if (registers.empty()) continue;
             const uint32_t insn = canonicalOf(static_cast<uint32_t>(o->getAddr().getOffset()));
             const bool certain = pv.constants.size() == 1 && pv.bases.empty() && !pv.others;
+            // A byte store through a pointer that holds a colour RAM address stores the whole entry as a store at a constant address does
+            // (A5-50): said under the address the pointer holds, as the register notes are (A5-67). Every colour RAM address says the same
+            // thing, so a pointer stepped from one need not name the others.
+            if (write && size == 1)
+                for (const auto& c : pv.constants)
+                {
+                    if (!InColorRam(c.first)) continue;
+                    bool others = pv.others || !pv.bases.empty();
+                    for (const auto& d : pv.constants) others |= !InColorRam(d.first);
+                    noteRaw(insn, (certain ? std::string() : "if the pointer holds " + Hex8(c.first) + (others ? " (it may hold other values too)" : "") + ": ") +
+                                      ColorRamByteNote(c.first), true);
+                }
+            if (write && size == 1)
+                for (uint32_t b : pv.bases)
+                    if (!pv.constants.count(b) && InColorRam(b))
+                        noteRaw(insn, "if the index is 0 (the pointer is based at " + Hex8(b) + "): " + ColorRamByteNote(b), true);
+            if (registers.empty()) continue;
             // (an address the pointer holds that is no register's is another value it may hold, as a parameter's is)
             bool otherValues = pv.others;
             for (const auto& c : pv.constants) otherValues |= !isRegister(c.first);
@@ -2789,6 +2880,13 @@ void Sh2Decompiler::NoteRemovedAccesses(const std::shared_ptr<const MemorySnapsh
 namespace
 {
 
+// An address in the partitions Mednafen sends to the associative purge (sh7095.inc MemRead / MemWrite `case 2: case 5:`; the SH7604 reserves
+// the second, A5-62).
+bool IsPurgePartition(uint32_t address)
+{
+    return (address >> 29) == 2 || (address >> 29) == 5;
+}
+
 // One access of ordinary memory at a constant address, as the actions left it. 'bus' is where it lands on the bus (the address, or for an
 // associative purge the cached address it purges), 'size' its width.
 struct ConstAccess
@@ -2797,6 +2895,9 @@ struct ConstAccess
     uint32_t bus = 0;
     uint32_t size = 0;
     bool store = false;
+    // A write to a register that changes how a memory is addressed from then on (A5-68): bit 0 VDP1_TVMR (the frame buffer's 8 bpp rotate
+    // scramble), bit 1 VDP2_RAMCTL (the colour RAM mode). Not an access of any memory; the evidence that the function re-addresses them.
+    uint8_t remaps = 0;
     bool operator<(const ConstAccess& o) const { return std::tie(address, size, store) < std::tie(o.address, o.size, o.store); }
 };
 
@@ -2822,7 +2923,24 @@ std::vector<ConstAccess> ConstantAccesses(const ghidra::Funcdata& fd, const ghid
         const ghidra::UserPcodeOp* u = fd.getArch()->userops.getOp(static_cast<ghidra::uint4>(o->getIn(0)->getOffset()));
         if (!u || (u->getType() != ghidra::UserPcodeOp::volatile_read && u->getType() != ghidra::UserPcodeOp::volatile_write)) continue;
         const uint32_t address = static_cast<uint32_t>(o->getIn(1)->getOffset());
-        if ((address >> 29) != 2) continue;   // 0x40000000-0x5FFFFFFF: Mednafen's associative purge (sh7095.inc case 2)
+        if (u->getType() == ghidra::UserPcodeOp::volatile_write && o->numInput() > 2)
+        {
+            const uint32_t width = static_cast<uint32_t>(o->getIn(2)->getSize());
+            uint8_t remaps = 0;
+            for (const HardwareRegister* reg : HardwareRegistersCovering(address, width))
+                remaps |= reg->address == 0x05D00000u ? 1 : reg->address == 0x05F8000Eu ? 2 : 0;
+            if (remaps)
+            {
+                ConstAccess c;
+                c.address = c.bus = address;
+                c.size = width;
+                c.store = true;
+                c.remaps = remaps;
+                out.push_back(c);
+                continue;
+            }
+        }
+        if (!IsPurgePartition(address)) continue;   // 0x40000000-0x5FFFFFFF and 0xA0000000-0xBFFFFFFF: Mednafen's associative purge (sh7095.inc cases 2 and 5, A5-62)
         const bool store = u->getType() == ghidra::UserPcodeOp::volatile_write;
         const ghidra::Varnode* value = store ? (o->numInput() > 2 ? o->getIn(2) : nullptr) : o->getOut();
         if (!value) continue;
@@ -2851,6 +2969,12 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     };
     std::vector<Member> members;
     std::set<ConstAccess> have;
+    // The function writes VDP1_TVMR or VDP2_RAMCTL: the memory that register re-addresses is not the memory the data flow keys by address
+    // after the write. A store before it and a load after it are not the same bytes (the mode 3 colour RAM reads another entry), so every
+    // access the function makes to that memory is volatile (A5-68). (Seen as accesses of the register in 'seen' or 'known'.)
+    uint8_t remaps = 0;
+    for (const ConstAccess& c : known) remaps |= c.remaps;
+    for (const ConstAccess& c : seen) remaps |= c.remaps;
     auto add = [&](const ConstAccess& c, bool isKnown) {
         if (!have.insert(c).second) return;
         Member m;
@@ -2868,6 +2992,8 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
     {
         Member& mi = members[i];
         if (mi.bytes.kind == MemoryKind::Vdp2ColorRam && mi.access.store && mi.access.size == 1) mi.flagged = true;
+        if ((mi.bytes.kind == MemoryKind::Vdp1FrameBuffer && (remaps & 1)) || (mi.bytes.kind == MemoryKind::Vdp2ColorRam && (remaps & 2)))
+            mi.flagged = true;
         for (size_t j = i + 1; j < members.size(); ++j)
         {
             Member& mj = members[j];
@@ -2884,7 +3010,7 @@ std::vector<HardwareRange> NewAliasedRanges(const std::vector<ConstAccess>& seen
         if (!m.flagged || m.isKnown) continue;
         known.push_back(m.access);
         // (a purge is volatile already; it is only the evidence)
-        if (m.access.address != m.access.bus && (m.access.address >> 29) == 2) continue;
+        if (m.access.address != m.access.bus && IsPurgePartition(m.access.address)) continue;
         out.push_back(HardwareRange{ m.access.address & ~3u, (m.access.address + m.access.size - 1) | 3u });
     }
     return out;
@@ -3536,6 +3662,9 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         aliasRetry = false;
         printed = runPass(first, true, &callees, round < kAliasRounds);
         if (!aliasRetry) break;
+        // The same boundary as the first pass's, for a printing pass that gives way to another (aliasRetry): its locals and Architecture
+        // are gone, and a cancel raised in its teardown is honoured here, in Actions, not carried into the next pass's Init (A5-63).
+        checkCancel();
     }
     for (const HardwareRange& h : aliasRanges) r.aliasedMemory.emplace_back(h.first, h.last);
     if (printed.empty())
