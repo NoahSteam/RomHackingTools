@@ -271,11 +271,21 @@ void TestDelaySlotPcRelative()
         CHECK(!r.unsupported);
     }
 
-    // bf/s: whether the slot sees the target depends on the branch being taken. Flagged, neither
-    // literal folded. And a bra slot that a bt also jumps straight to: the spec gives that address
-    // the slot's PC on both paths, so it is flagged too.
+    // bf/s: whether the slot sees the target depends on the branch being taken, and so does the address it loads from: the output
+    // computes it from the condition (patch 0050; before it the function was flagged and neither literal folded). Taken, the
+    // hardware's literal; not taken, the slot's own PC.
+    {
+        const DecompileResult r = d.Decompile(snap, Request(dts::kFixture3Bfs));
+        Print("bf/s", r);
+        const std::string text = r.Text();
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.unsupported && r.unsupportedAt == 0);
+        CHECK(Has(text, "0x6006114"));   // the address the taken branch gives the slot's load: the literal 0x22222222
+        for (const std::string& w : r.warnings) CHECK(!Has(w, "delay slot"));
+    }
+    // A bra slot that something else also jumps straight to: the spec gives that address the slot's PC on both paths, so it is
+    // flagged.
     struct Case { const char* name; uint32_t entry, slot; } cases[] = {
-        { "bf/s", dts::kFixture3Bfs, dts::kFixture3BfsSlot },
         { "bra slot jumped to", dts::kFixture3SlotJumped, dts::kFixture3SlotJumpedSlot },
         { "bra slot is a switch case", dts::kFixture3SwitchSlot, dts::kFixture3SwitchSlotSlot },
     };
@@ -295,17 +305,15 @@ void TestDelaySlotPcRelative()
         CHECK(warned);
         CHECK(!r.prototype.known);   // not lent to callers either
     }
-    // Every other delayed-branch kind (rts, jmp, braf, jsr), and mov.w in the slot: flagged at the
-    // slot, and no literal word marked read-only.
+    // Every other delayed-branch kind (rts, jmp, braf, jsr), and mov.w in the slot: no longer flagged (A2-4, patch 0050). The load's
+    // address is made from the branch's register, PR or target; the value is not folded to a literal (the decode oracle holds the p-code
+    // to the hardware, and TestAreas234Leftovers runs these shapes on the emulator).
     for (const dts::Fixture3Case& c : dts::kFixture3Others)
     {
         const DecompileResult r = d.Decompile(snap, Request(c.entry));
-        std::printf("  %-13s status %d, unsupported %d at %08X\n", c.name, int(r.status), r.unsupported, r.unsupportedAt);
+        Print(c.name, r);
         CHECK(r.status == DecompileStatus::Ok);
-        CHECK(r.unsupported);
-        CHECK(r.unsupportedAt == c.slot);
-        CHECK(r.literalPools.empty());
-        CHECK(!Has(r.Text(), "0x1234") && !Has(r.Text(), "4660"));
+        CHECK(!r.unsupported && r.unsupportedAt == 0);
         CHECK(!Has(r.Text(), "0x44444444") && !Has(r.Text(), "0x55555555") && !Has(r.Text(), "0x66666666"));
     }
 }
