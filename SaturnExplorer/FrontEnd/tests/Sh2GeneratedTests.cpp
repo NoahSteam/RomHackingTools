@@ -3775,12 +3775,14 @@ std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, st
         if ((e.preserved >> r) & 1u) continue;
         const uint32_t v = run.fin[r];
         const int arena = ArenaOf(v);
-        if (arena >= 0 && !(e.outOrigins & (ArenaBit(arena) | origin::kMemory)))
+        // (Arithmetic on other registers can land in an arena by chance: `extu.w r5,r1 ; xor r5,r1` is 0x06020000 for r5 = 0x06021100, seed 12548. A value
+        // there needs some origin, the register's own, memory or any register's; not an empty set.)
+        if (arena >= 0 && !(e.outOrigins & (origin::kRegisters | origin::kMemory)))
             return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a pointer into the arena of " +
-                                                      (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) + ", and outOrigins names neither that register nor memory");
+                                                      (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) + ", and outOrigins names no register and not memory");
         const uint32_t m = v & 0x0FFFFFFFu;
-        if (m >= kStackLo && m < kStackHi && !(e.outOrigins & (origin::kStack | origin::kMemory)))
-            return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a stack address, and outOrigins names neither the stack nor memory");
+        if (m >= kStackLo && m < kStackHi && !(e.outOrigins & (origin::kStack | origin::kRegisters | origin::kMemory)))
+            return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a stack address, and outOrigins names nothing it can come from");
     }
     return std::string();
 }
@@ -7283,9 +7285,9 @@ Subject MakeCanarySubject(int variant, std::string& label)
 
 // ---- Area 3 round 8 (ledger A3-49, A3-50, A3-52, A3-53, A3-54) ------------------------------------------------------------------------
 // A3-49, A3-50: a join of r0's entry value with a parameter, or r0 computed from its entry value on one path, where another alternative is a word from
-// memory or a literal: lent `void` before the fix, withheld now. Seeds 112124, 117195, 400533 (grammar 2), 202318 and 207676 (grammar 2, specials)
+// memory or a literal: lent `void` before the fix, withheld now. Seeds 112124, 117195, 400533, 66914, 77197 (grammar 2), 202318 and 207676 (grammar 2, specials)
 // and the review's fixtures as words (V8, V10, W1, W3). A3-52: four seeds whose function runs on into the next, whose read of r14 or GBR comes after
-// the call (60538, 308527, 405351, 413608; the review's shrunk module of 308527 has two functions at one address, an artefact of the shrinker, so the seeds
+// the call (60538, 308527, 405351, 413608, 69133, 69493; the review's shrunk module of 308527 has two functions at one address, an artefact of the shrinker, so the seeds
 // are the pins). A3-53: seed 400785 beside 62956 (TestRound7Pins): the A2-49 exclusion covers both. A3-54: the claims check on synthetic runs, each claim broken one way.
 void TestRound8Pins(Sh2Decompiler& d)
 {
@@ -7294,7 +7296,7 @@ void TestRound8Pins(Sh2Decompiler& d)
         for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
         CHECK(rep.findings.size() == want);
     };
-    for (uint64_t seed : { 112124ull, 117195ull, 400533ull, 60538ull, 308527ull, 405351ull, 413608ull })
+    for (uint64_t seed : { 112124ull, 117195ull, 400533ull, 66914ull, 77197ull, 60538ull, 308527ull, 405351ull, 413608ull, 69133ull, 69493ull })
         report(("A3-49/52 seed " + std::to_string(seed)).c_str(), EvaluateSubject(d, MakeSubject(MakeV2(seed)), true));
     {
         const bool saved = gSpecialReads;
@@ -7317,6 +7319,21 @@ void TestRound8Pins(Sh2Decompiler& d)
         { "A3-50 b (W3): r0 + a literal on one path", "2448 8901 D102 301C 000B 0009 0009 0009 0000 1038", "0/0/c", nullptr, "1", nullptr, nullptr },
     };
     for (const ModulePin& m : kWords) report(m.name, EvaluateSubject(d, ModuleSubject(m), true));
+    {
+        // The claims check is wired into CheckFn: with the summaries damaged (SE_GENERATED_MUTATE=claims) some generated module reports it.
+        const std::string saved = gMutateKind;
+        const bool savedFlag = gMutate;
+        gMutateKind = "claims";
+        gMutate = true;
+        bool reported = false;
+        for (uint64_t seed = 2; seed <= 60 && !reported; seed += 2)
+            for (const Finding& f : EvaluateSubject(d, MakeSubject(MakeV2(seed)), false).findings)
+                reported = reported || f.sig.find("claim-wrong") != std::string::npos;
+        gMutateKind = saved;
+        gMutate = savedFlag;
+        std::printf("pin 'A3-54: the claims check is called': %s\n", reported ? "reported" : "NOT reported");
+        CHECK(reported);
+    }
     {
         // The claims check (check 10b) on a run made by hand: each claim of the summary broken in the one way the run shows.
         RunOut run;
@@ -7370,6 +7387,8 @@ void TestRound8Pins(Sh2Decompiler& d)
         changes.preserved &= ~2u;
         CHECK(!EffectClaimsContradicted(changes, ptr, &sig).empty() && sig == "claim-wrong:outOrigins");
         changes.outOrigins = 1u << 6;
+        CHECK(EffectClaimsContradicted(changes, ptr).empty());
+        changes.outOrigins = 1u << 5;   // another register's arithmetic can make the value (seed 12548): not contradicted
         CHECK(EffectClaimsContradicted(changes, ptr).empty());
         RunOut sp = run;
         sp.fin[2] = kStackTop - 16;
