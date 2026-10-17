@@ -9408,3 +9408,93 @@ Not run: the Live tests (they share a fixed socket path with the coordinator's r
 * A7-6 is area 4's: the engine should refuse an odd entry and stop at an odd destination as it stops at bad data.
 * The line's `firstAddr` is the lowest address, not the first the code executes; **Set Function Start Here** uses it. For a line that holds code from below the entry (a shared
   epilogue) the two differ. Not filed: the menu item is the user's explicit choice of a line, and the lowest instruction of it is a defensible start.
+
+## Routed seeds: A3-55, A4-16, A4-17, A5-83, A7-6
+
+Fixer, branch `review/routed-seeds-fix` from `9d64aba`. The five seeds the area 2 round 8 review routed to areas 3, 4 and 5 (grammar 2 seeds 519315, 511038, 609269 with specials, grammar 1 seeds 608802 with specials and 603025), and area 7's A7-6. Code commit `ace11a5` (host, oracle, tests, engine patch 0052, the guide); the ledger rows and this record follow. Own RelWithDebInfo build, `-j3`. **Engine patch 0052** (0049 and 0051 left alone); `vendor.py` reproduced on a copy against the pinned Ghidra: `diff -r` of the copy and the committed tree is empty (`sh-2.sla` aside, which no patch touches here: no spec change, `Sh2SpecData.h` unchanged).
+
+### 1. Triage
+
+All five replay on `9d64aba` except one. Each was shrunk with the shrunk module of the review's record, read in full, and put through the engine's own decisions (`ancestorOpUse`, `onlyOpUse`, `JumpTable::isReachable`, `FlowInfo::processInstruction`).
+
+| Row | Seed | Verdict | True severity | Outcome |
+|---|---|---|---|---|
+| A3-55 (a) | 519315, grammar 2, `return-dropped:partial` | already fixed: the review ran on `572c29d`, before cee85f5; passes at `9d64aba` (A3-49's literal variant, `7FF4 2448 8B00 D603 2558 8900 6063 7F0C 000B 0009 ...`) | (A3-49's P2) | pinned, mutation M12 (the round 8 fix reverted) fails it |
+| A3-55 (b) | 608802, grammar 1 specials, `input-dropped:r3` | **product defect**, A3-5's family, not A3-49/A3-50's premise: r0 is a loaded word or a constant, *chosen* by r3, no entry value of r0 in the join. The engine keeps a return only if some alternative has no use but the return (`ancestorOpUse`/`onlyOpUse`); the word is compared and the constant is ored into r1, so the return is dropped and r3, read only to choose, goes with it | P2 | **fixed**: withheld "chosen by r3 on entry" |
+| A4-16 | 511038, grammar 2, `n:truncated` | **product over-report**: the flow reads a table at a constant index its own bound check excludes (0xC0000010 << 2 reaches the literal after the table), follows it into uncaptured memory, and the actions remove the block; the text (`return 0x6001030;`) is right | **P3** (down from P2) | **fixed** (status); the engine's own halt flag keeps the signature withheld |
+| A4-17 | 609269, grammar 2 specials, `n:folded-into-switch` | **generator false positive**, A5-82's second mechanism: the signed table is an indirect call the output says it is (cases are the callee's); a case comes back to an instruction below the jump | **P3** (down from P2) | **fixed** in the oracle |
+| A5-83 | 603025, grammar 1, `cache-read-pointer-unsaid` | **real missing caution**, not a fourth false-positive mechanism: `p = (p + 4) ^ 0x20000000` from 0x35B000C8 reads 0x15B000CC through the cached partition; the stepped note was gated on a *named* register within 256 bytes and the SCSP slot registers (0x05B00000-0x05B003FF) have no name, though a direct cached read of one is cautioned (A5-78) | P2 | **fixed** |
+| A7-6 | corpora | **product defect**, not accepted: the text of 8 functions per image was made of instructions decoded in the middle of others (06026C40: a store through `extraout_r4` and a read through `unaff_r14` that no code makes); 06027420 (007) and 060670C0 (008) failed outright | P3 | **fixed**, patch 0052 |
+| A5-84 (new) | sweeps, specials | **oracle**: A5-82's seed pins are default-alphabet programs; under `SE_GENERATED_ALPHABET=specials` every run exited 1 with 0 failing seeds | P3 | **fixed** |
+
+### 2. The fixes
+
+**A3-55.** `ReturnCheck` (`Sh2Decompiler.cpp`) carries in each state the registers outside r0 and r4-r7 that a taken branch's condition was computed from (`State::ctl`, joined as a union; `Value::Direct()`, so nothing a call returned). A function the engine made `void` whose r0 at a return is a join (`Value::Joined()`) with such a register in `ctl` is withheld, after A3-5, A3-13, A3-14 and A3-20's reasons (their texts are unchanged): "its return is chosen by r3 on entry, which no signature passes". Three things the first version got wrong, all found by running it: it withheld A3-45's control (the loop count is `dt r0`: r0's own entry value is A3-14's, so bit 0 is out); it withheld two functions of image 008 (06038F64 and 06038F72, compiled code) because a load through a pointer that may be in the stack, after a frame address escaped, has every register among its origins (`Value::Direct()` of "anything"): a condition on such a value is left out, as `Return` leaves it out for r0; and the new reason ran before A3-20's, changing the text of an old pin. Kept on purpose: a join chosen by a parameter or by a constant stays lent void (the scratch r0 of a void function; A3-20 withholds only a parameter that is the *value*), pinned as controls so a change is seen.
+
+**A4-16.** In `DecompileInto` the warnings of the engine are read twice; the first pass collects the blocks it removed ("Removing unreachable block (ram,0x25fe0008)"). A "Bad instruction - Truncating control flow here" whose address is a removed block's start, and that is a cut (memory not captured), becomes an engine-kind flow warning ("flow followed a path into uncaptured memory at 0x05FE0008 (SCU), which the analysis proved cannot be taken and removed: the function is not cut off there") and does not set `truncated`. Bytes that do not decode in a removed block are still bad data (nothing shows they are harmless). A cut at the start of a block that stays, or inside a block, is a cut as before (`TestFlowUncertainty`, `TestTruncatedFlow` are the controls). Not done: ending the flow at a table that a constant guard excludes. `JumpTable::isReachable` (upstream) already sees the guard has collapsed, marks the table partial, and with one table in the flow completes it; stopping there is an engine change whose only gain is lending this rare shape. `bodyBytes` of such a result spans to the removed block (536,702,985); nothing reads it.
+
+**A4-17.** `HandedOverAt` (`Sh2GeneratedTests.cpp`) is the index in a run's instructions of the first depth-0 indirect jump the output treats as a call; the folded-into-switch check (`Ran`) looks only up to it and the jump (a delay slot is not an entry of the run's instruction list, so the first version, one instruction late, did not fix the seed). The ledger check had a copy of the rule; it uses the function now.
+
+**A5-83.** In `HardwareNotes` the stepped-pointer note is said when `pv.steppedCached` (a later value reads through the cached partition), whatever register is near; for a plain step the gate on a named register stays (A5-54's DSP-area control). Corpora: no hardware note changes.
+
+**A7-6.** Engine patch **0052** (`flow.cc`, `architecture.hh/.cc`): `Architecture::instructionAlignment`, 1 by default, and `FlowInfo::processInstruction` raises `BadDataError` for an address that is not a multiple of it. The SLEIGH specification says `define alignment=1;` for every SuperH, so upstream's own check in `Sleigh::oneInstruction` is off; changing the specification would be a spec patch and raise `UnimplError`, which the host reports as an instruction the spec has no semantics for. The host (`SaturnArchitecture`) sets 2; flow halts at an odd destination as at bytes that do not decode (`halt_baddata();`, the case label kept), and the warning says "flow reaches an odd address, where no SH-2 instruction starts (a jump table entry or a pointer that is no code address), and stops there". An odd destination inside an instruction the flow already followed still gets the engine's "overlaps instruction" warning, which is then true. An odd entry is refused (`NoCode`, "an SH-2 instruction starts at an even address", also through a mirror); an odd call target is not registered as a callee; **Set Function Start Here** is not offered on a line at an odd address (the halt's own line can be one); the mapping oracle no longer excuses an odd token address (the `oddWarned` and `oddEntry` counters are gone). `DECOMPILER_GUIDE.md` says all three.
+
+The fault suite's A6-1 pin (`EmitPrettyPrint::setMarkup(false)`, mailbox) moved by one allocation (the set of removed blocks) and is re-pinned as it printed: `nth = 82`.
+
+### 3. Pins and the mutation table
+
+Pins: `TestRoutedSeeds` (`Sh2DecompilerTests.cpp`: A3-55 a and b and four controls, A4-16, A7-6 a table with an odd entry and its even control, the odd entry, the odd call target), `TestRoutedPins` (`Sh2GeneratedTests.cpp`: each seed, with its shrunk module, in the alphabet it is about), the `a5_83` fixtures with two controls in `TestHardwareVolatility`, `TestOddLineIsNoFunctionStart` (`DecompilerPanelTests.cpp`). Each mutation was made alone to the committed tree, the owning suites rebuilt and run, the file restored (`cmp` against the original), and every build after it forced from the restored mtime:
+
+| Mutation | Pins that fail |
+|---|---|
+| M1 the branch conditions are not recorded in `ctl` (A3-55) | `a3_55 b` (dt, 1 check); the 608802 seed and shrunk pins (generator, 2) |
+| M2 a condition on a value nothing is known of counts | the control "chosen by a value nothing is known of" (dt, 1) |
+| M3 a value written the same on every path counts as chosen (`Joined()` dropped) | the control "r3 is compared, r0 is the word on both paths" and one more (dt, 2) |
+| M4 a cut in a removed block is a cut again | `a4_16` (dt, 2); the 511038 seed and module (generator, 2) |
+| M5 `HandedOverAt` never hands over | the 609269 seed and module, and the pins that use the same rule (generator, 5) |
+| M6 the stepped note is gated on a named register again | `a5_83` (dt, 1); seed 603025 (generator, 5) |
+| M7 `instructionAlignment` 1 again (patch 0052's check off) | the odd-entry table in `a7_6` (dt, 1) |
+| M8 an odd entry is decompiled | `a7_6` (dt, 2) |
+| M9 an odd call target is a callee | `a7_6` (dt, 2) |
+| M10 Set Function Start Here on an odd line | `TestOddLineIsNoFunctionStart` (panel, 1) |
+| M11 the odd halt says "bytes that do not decode" | `a7_6` (dt, 1) |
+| M12 A3-49's round 8 fix reverted | `a3_55 a` and four of A3-49's (dt, 5); seed 519315 and 11 more (generator, 12) |
+
+### 4. The corpora
+
+Both images, `SE_GAME_LEND=1`, base (`9d64aba` built beside) against the fixed tree, the texts of every function alone and in both lending runs (`SE_GAME_OUT`) compared file by file.
+
+| | 007 | 008 |
+|---|---|---|
+| ledger counts | 0 dropped, 0 missing and said | 0 dropped, 4 missing and said |
+| lent signatures (parameters), unlent / lent run | 637 (866) / **662 (923)** | 992 (1,227) / **1,021 (1,287)** |
+| mapping oracle, every violation count | 0 (alone, lent, fixtures) | 0 |
+| functions alone | 839 of 839 ok; 1 text differs (06026C40) | 1,554 of 1,554; 1 differs (060668E0) |
+| lending runs | 1,732 functions, 1,731 ok before; 1,730, all ok after | 2,997, 2,996 ok; 2,995, all ok |
+| texts that differ | 8 functions, all with the "overlaps instruction" warning before; 3 odd-entry functions gone (0602778B, 06027793, 060277A3); 06027420 failed ("not a function the engine can decompile") and decompiles; 06025448 is new | 8, 3 gone (0606742B, 06067433, 06067443), 060670C0 now ok, 060650E8 new |
+| tokens at a bad-data halt (alone / lent) | 11 / 207 (9 / 33 before) | 9 / 206 (6 / 27 before) |
+
+What the 8 texts change: the odd case now shows `halt_baddata();`; the junk statements made of the decoded middle go (06026C40: `*(uint4 *)(extraout_r4 + 0x1c) = uVar2;`, `*extraout_r5 = (char)xVar4;`, `xVar4 = *(xunknown4 *)(unaff_r14 + 0x20);`); the "overlaps instruction" warning goes where the odd address was the only overlap (06024CB0, 06024D1C, ...), and three flow warnings say "odd address" for the three cuts of 06026C40; a function that was lent parameters from the junk (06024CB0) reads `in_r7` as an input and has none (its signature status is unchanged: lent counts above). No text differs for any reason but the odd addresses: no hardware note, no lending, no A3-55 withhold, no cut.
+
+### 5. The sweep, and the matrix
+
+Beyond the nightly's range, on the fixed tree: grammar 2, seeds 500,001 to 520,000 (20,000): **0 failing seeds**; `SE_GENERATED_ALPHABET=specials`, seeds 600,001 to 610,000: grammar 2 **0**, grammar 1 **0** (the five seeds of the row pass). No sibling class: no new row from the generator; A5-84 came from the exit code of these runs, which was 1 with no failing seed on a tree without the pin fix. The first sweeps ran on the tree before the last pin edits (same product code); the matrix below is the final tree.
+
+| Run | Result |
+|---|---|
+| `ctest -E SaturnExplorerLive -j3 --timeout 900` | 92 of 92 pass (131 s) |
+| `SaturnExplorerDecompilerFaultTests` | 0 of 94 jobs failed, 92 s; one MOVED pin re-pinned (A6-1 mailbox, `nth` 81 to 82) |
+| `SE_GENERATED_SEEDS=3000 SE_GENERATED_GRAMMAR=2` | 0 failing seeds; 4,333 lent (4,334 before: one function now withheld "chosen by"), canary 240 programs, 0 failing, 402 lent / 580 withheld as before |
+| `SE_GENERATED_GRAMMAR=1 SE_GENERATED_SEEDS=1000` | 0 failing seeds |
+| `SE_GENERATED_PRINTEDC=only SE_GENERATED_SEEDS=3000` | passed: 3,072 functions, 2,616 compared, agrees 2,673, `void-return` 244 (243), `void-return-lent` 151 (152): the one function moved |
+| `SE_GENERATED_SEEDS=20000` | 0 failing seeds |
+| grammar 2, 500,001 to 520,000 | 0 failing seeds |
+| specials, 600,001 to 610,000, grammar 2 / grammar 1 | 0 / 0 failing seeds (exit 0) |
+| corpora 007 / 008 with `SE_GAME_LEND=1` | section 4 |
+| vendoring | `vendor.py` on a copy against the pinned Ghidra: identical to the committed tree |
+
+### 6. Not done
+
+- The engine still follows a table that a constant guard excludes (A4-16), and the signature of such a function stays withheld ("bad instruction data"): the engine's flag for the halt it made is not cleared when the block is removed.
+- A join chosen by a parameter or a constant stays lent void (A3-55's limits); the generator's `param-dropped` sees it only for functions declared to return.
+- The Live tests and the sanitizer job were not run (shared socket path; CI).

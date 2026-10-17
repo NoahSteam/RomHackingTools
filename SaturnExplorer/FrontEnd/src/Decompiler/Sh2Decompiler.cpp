@@ -361,6 +361,9 @@ public:
     bool CarriedValueInReturn() const { return mCarriedInReturn; }
     // After Run(): which of r4-r7 reach r0 at a return in a join with r0's entry value (A3-20).
     uint32_t JoinedParamsInReturn() const { return mJoinedParams; }
+    // After Run(): the registers outside r4-r7 (as InputsInReturn) whose entry value decided a branch on the way to a return where r0 holds a
+    // join of different values (A3-55).
+    uint32_t ReturnChosenBy() const { return mChosenBy; }
     // After Run(): the origins of what the function writes at an exact offset at or above its entry r15, a word of its caller's frame
     // (A3-21); a constant counts as origin::kFrame, which no signature holds. 0 when it writes none.
     uint32_t CallerFrameStores() const { return mCallerFrameStores; }
@@ -379,6 +382,7 @@ public:
         mInputsInReturn = 0;
         mCarriedInReturn = false;
         mJoinedParams = 0;
+        mChosenBy = 0;
         mCallerFrameStores = 0;
         mFrameWords = 0;
         mStoresThrough = 0;
@@ -523,6 +527,10 @@ private:
     {
         bool reached = false;
         bool escaped = false;
+        // The registers outside r0 and r4-r7 whose entry value a branch taken on the way here was decided by (a condition computed from them, A3-55):
+        // the value r0 has at a return is chosen by them when it was joined from different alternatives, whatever the alternatives are made of. (r0's
+        // own entry value is A3-14's: a join with it is the scratch r0 of compiled code unless it is computed from.)
+        uint32_t ctl = 0;
         std::map<Key, Value> vars;         // registers and temporaries; absent = anything
         std::map<int64_t, Value> slots;    // 4-byte stack words by offset; absent = loaded from memory
     };
@@ -664,6 +672,11 @@ private:
     {
         bool changed = false;
         if (from.escaped && !into.escaped) into.escaped = changed = true;
+        if ((from.ctl & ~into.ctl) != 0)
+        {
+            into.ctl |= from.ctl;
+            changed = true;
+        }
         auto merge = [&changed](Value& a, const Value& b) {
             if (a == b) return;
             Value m = Value::From(a.Origins() | b.Origins(), a.Direct() | b.Direct());
@@ -1086,6 +1099,11 @@ private:
                 // (A3-49): a load or a literal-pool word (`if (a) { r = c; if (p) r = *p; return r; }`), a frame address, are dropped with the
                 // join like a register is.
                 if (v.Joined() && (d & 1u) != 0 && (d & 0xF0u) != 0) mJoinedParams |= d & 0xF0u;
+                // ...and a join whose alternatives were chosen by a register no signature passes (A3-55): `mov.w @(lit),r0 ; cmp/eq r0,r3 ; bf L ;
+                // mov #-0x5d,r0 ; L: rts` returns the word or the constant by r3. The engine drops the return when each alternative has another
+                // use (the compare, an `or r0,r1` nothing reads), and r3, read only to choose, goes with it: the call is shown without the
+                // setup of r3, which decides what r0 holds. Only a join: a value written the same on every path has no choice in it.
+                if (v.Joined()) mChosenBy |= s.ctl;
             }
             if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
@@ -1243,6 +1261,14 @@ private:
                 break;
             case ghidra::CPUI_BRANCH:
             case ghidra::CPUI_CBRANCH:
+                // The condition of a branch is made of what this function computed it from (Direct leaves out what a call returned: its outputs
+                // share every register's origin). A register no signature passes among them decides which way the code goes (A3-55). Not a
+                // condition of a value nothing is known of (every register among its origins: a register a call or a join gave up on).
+                if (op.code == ghidra::CPUI_CBRANCH && op.in.size() > 1)
+                {
+                    const uint32_t cond = Get(s, op.in[1]).Direct();
+                    if ((cond & origin::kRegisters) != origin::kRegisters) s.ctl |= cond & kNotParameters & ~1u;
+                }
                 if (op.in[0].space->getType() == ghidra::IPTR_CONSTANT)
                 {
                     const int to = i + static_cast<int>(static_cast<int64_t>(op.in[0].offset));
@@ -1337,6 +1363,7 @@ private:
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
     bool mCarriedInReturn = false;
+    uint32_t mChosenBy = 0;       // registers outside r4-r7 that decided the way to a return with a joined r0 (A3-55)
     uint32_t mJoinedParams = 0;   // r4-r7 (bit n: Rn) that reach r0 at a return joined with r0's entry value
     uint32_t mCallerFrameStores = 0;   // what was stored at an exact offset at or above the entry r15 (A3-21)
     uint32_t mFrameWords = 0;          // ...and which words of it (CallEffects::frameWords)
@@ -1553,6 +1580,15 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
         for (ghidra::int4 p = 0; p < fp.numParams() && p < 4; ++p) held |= 1u << (4 + p);
         if ((check.JoinedParamsInReturn() & ~held) != 0)
             return "its return joins r0's entry value with a parameter it does not hold, which the engine takes for no return";
+    }
+    // ...or chosen by one (A3-55): the join of its alternatives was decided by a register no signature passes, and the dropped return takes the
+    // read with it.
+    if (const uint32_t chosen = fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID ? check.ReturnChosenBy() : 0u)
+    {
+        static const char* const kNames[] = { "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10",
+                                              "r11", "r12", "r13", "r14", "r15", "sr", "gbr", "vbr", "mach", "macl", "pr" };
+        for (int bit = 0; bit < 22; ++bit)
+            if ((chosen >> bit) & 1u) return std::string("its return is chosen by ") + kNames[bit] + " on entry, which no signature passes";
     }
     // A word written at or above the entry r15 is a value handed to the caller through its own frame (`rts ; mov.l r5,@r15`, a
     // pop and a push of another word, `mov.l r5,@(4,r15)`): the signature has registers only, and the engine takes the store for
@@ -2620,22 +2656,26 @@ std::vector<HardwareNote> HardwareNotes(const ghidra::Funcdata& fd, const std::f
             // (said for a pointer that starts at a register, or in a register area within kSteppedReach bytes of one: A5-54, a walk from the SCU's
             // hole at 0x25FE0018 reaches SCU_D1EN, one from the last SCSP slot reaches MVOL and MOBUF. A walk through the SCSP's DSP program
             // area, with no register near, has nothing to be missed.)
+            // ...or, whatever is near, when the later values read through the cached partition: that caution is about the partition, and an
+            // unnamed register (an SCSP slot's, 0x05B00000-0x05B003FF) is read through the cache as a named one is (A5-83: `p = (p + 4) ^
+            // 0x20000000` from 0x35B000C8 reads 0x15B000CC next, a cached read of a register no name is near).
             if (pv.steps)
                 for (const Candidate& rc : registers)
-                    if (!HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty() || NamedRegisterNear(rc.address, kSteppedReach))
-                    {
-                        // A step and a mask in one turn moves the pointer into the cached partition (A5-70): its addresses are not worked out,
-                        // but a read of a register through that partition is a cache read, whichever register it is.
-                        const bool cached = pv.steppedCached && !write;
-                        noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
-                                "other registers perhaps, which are not said" +
-                                (cached ? std::string("; they read through the cached partition (" + Hex8(pv.steppedCachedAt) + " is one) too, and a read of a "
-                                        "register through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes "
-                                        "without reading the hardware, so a poll of it may never see it change; read it through 0x2xxxxxxx to bypass the cache")
-                                        : std::string()),
-                                cached);
-                        break;
-                    }
+                {
+                    const bool cached = pv.steppedCached && !write;
+                    if (!cached && HardwareRegistersReached(AccessAddress(rc.address, size), size, write).empty() && !NamedRegisterNear(rc.address, kSteppedReach))
+                        continue;
+                    // A step and a mask in one turn moves the pointer into the cached partition (A5-70): its addresses are not worked out,
+                    // but a read of a register through that partition is a cache read, whichever register it is.
+                    noteRaw(insn, "the pointer is stepped in a loop from " + Hex8(rc.address) + ": the iterations after the first reach other addresses, "
+                            "other registers perhaps, which are not said" +
+                            (cached ? std::string("; they read through the cached partition (" + Hex8(pv.steppedCachedAt) + " is one) too, and a read of a "
+                                    "register through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes "
+                                    "without reading the hardware, so a poll of it may never see it change; read it through 0x2xxxxxxx to bypass the cache")
+                                    : std::string()),
+                            cached);
+                    break;
+                }
             continue;
         }
         if (o->code() != ghidra::CPUI_CALLOTHER || o->numInput() < 2 || !o->getIn(0)->isConstant()) continue;
@@ -3480,6 +3520,15 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
     std::string why;
     uint32_t entry = 0;
     uint8_t probe[2];
+    // An SH-2 function starts at an even address: at an odd one the fetch is an address error, and what flow would decode there is the middle of
+    // the instruction before it (A7-6: a literal that is no function, a typed entry).
+    if ((request.entry & 1u) != 0)
+    {
+        r.status = DecompileStatus::NoCode;
+        r.entry = CanonicalAddress(request.entry, entry, &why) ? entry : request.entry;
+        r.error = "no code at " + Hex8(request.entry) + ": an SH-2 instruction starts at an even address";
+        return;
+    }
     if (!CanonicalAddress(request.entry, entry, &why) || !snapshot->Read(entry, probe, 2, &why))
     {
         r.status = DecompileStatus::NoCode;
@@ -3825,10 +3874,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                     continue;
                 // Only targets whose code was captured are registered: a call into the BIOS
                 // (never captured) stays an opaque pointer rather than naming a function nothing
-                // can show.
+                // can show. An odd address is no function either (a literal that is no code address, A7-6).
                 uint32_t c = 0;
                 uint8_t code[2];
-                if (CanonicalAddress(static_cast<uint32_t>(t), c) && snapshot->Read(c, code, 2))
+                if ((t & 1u) == 0 && CanonicalAddress(static_cast<uint32_t>(t), c) && snapshot->Read(c, code, 2))
                     (*targets)[c].insert(static_cast<uint32_t>(t));
             }
         }
@@ -3879,6 +3928,17 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             return !snapshot->Read(a, b, 2, &why);
         };
         bool restartsExhausted = false, tableIncomplete = false;
+        // The blocks the actions removed as unreachable, by the address they start at as the engine wrote it ("Removing unreachable block
+        // (ram,0x25fe0008)"). A halt flow made at the start of one is not in the function that is shown (A4-16).
+        std::set<uint32_t> removedBlocks;
+        for (auto it = arch->commentdb->beginComment(fad); it != arch->commentdb->endComment(fad); ++it)
+        {
+            static const char kRemoved[] = "Removing unreachable block (ram,0x";
+            const std::string& text = (*it)->getText();
+            const size_t at = text.find(kRemoved);
+            if (at != std::string::npos)
+                removedBlocks.insert(static_cast<uint32_t>(std::strtoul(text.c_str() + at + sizeof kRemoved - 1, nullptr, 16)));
+        }
         for (auto it = arch->commentdb->beginComment(fad); it != arch->commentdb->endComment(fad); ++it)
         {
             const ghidra::Comment* c = *it;
@@ -3914,7 +3974,18 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                         gone = at + 2;
                     }
                 }
-                if (cutHere)
+                if (cutHere && removedBlocks.count(at) != 0)
+                {
+                    // Flow went on to the halt through a branch or a table the analysis then proved cannot be taken (a jump table read at a
+                    // constant index its bound check excludes, A4-16), and removed the block the halt stands in. The text has no cut and no
+                    // halt in it; it is said, as the removal is, and the function is not truncated by it. (Bytes that do not decode in
+                    // such a block are still reported as bad data: nothing has shown that they are harmless.)
+                    w.kind = FlowWarning::Engine;
+                    w.address = canonicalOf(at);
+                    w.text = "flow followed a path into " + why + ", which the analysis proved cannot be taken and removed: the function is not cut "
+                             "off there";
+                }
+                else if (cutHere)
                 {
                     const uint32_t cut = canonicalOf(gone);
                     if (!r.truncated || cut < r.truncatedAt)
@@ -3932,8 +4003,10 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 {
                     r.badDataAt.push_back(w.address);
                     w.kind = FlowWarning::BadData;
-                    w.text = "flow reaches bytes that do not decode as an instruction and stops there (embedded "
-                             "data, or the entry is wrong)";
+                    w.text = (at & 1u) != 0 ? "flow reaches an odd address, where no SH-2 instruction starts (a jump table entry or a pointer that is no "
+                                              "code address), and stops there"
+                                            : "flow reaches bytes that do not decode as an instruction and stops there (embedded "
+                                              "data, or the entry is wrong)";
                 }
             }
             else

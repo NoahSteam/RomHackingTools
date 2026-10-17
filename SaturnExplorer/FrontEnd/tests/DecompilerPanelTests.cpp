@@ -1415,6 +1415,42 @@ void TestFunctionStartKeepsMirror()
     CHECK(f.panel.WantedEntry() == (at | 0x20000000u));
 }
 
+// A7-6: a line the engine made at an odd address (the halt of a jump table entry that is no address) is not a place a function can start: Set Function
+// Start Here is not offered on it, so the bounds never record an odd entry. The control is a line at an even address of the same function.
+void TestOddLineIsNoFunctionStart()
+{
+    Fixture f;
+    const uint32_t at = 0x06009A00u;
+    // mov.l @(lit),r2 ; mov #2,r1 ; cmp/hi r1,r4 ; bt def ; shll2 r4 ; mova table,r0 ; mov.l @(r0,r4),r1 ; jmp @r1 ; nop ; nop ; lit ; table (the middle entry odd) ;
+    // def: rts ; mov r2,r0 ; cases 0 to 2: rts ; mov #n,r0
+    const uint16_t words[] = { 0xD204, 0xE102, 0x3416, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9A34, 0x0600, 0x9A2C, 0x0600, 0x9A31,
+                               0x0600, 0x9A34, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0xE002 };
+    f.PutWord(at - 4, 0x000B);   // the end of whatever precedes
+    f.PutWord(at - 2, 0x0009);
+    for (size_t i = 0; i < sizeof words / sizeof words[0]; ++i) f.PutWord(at + 2 * static_cast<uint32_t>(i), words[i]);
+    ++f.backend.serial;
+    f.Idle();
+    f.TypeInto("entry", "06009A00");
+    CHECK(f.PumpUntil([&] { return !f.panel.Pending() && f.Shown().requestedEntry == at; }));
+    int odd = -1, even = -1;
+    for (size_t i = 0; i < f.Shown().lines.size(); ++i)
+    {
+        const uint32_t a = f.Shown().lines[i].firstAddr;
+        if (a != 0 && (a & 1u) != 0 && odd < 0) odd = static_cast<int>(i);
+        if (a != 0 && (a & 1u) == 0 && a != f.Shown().entry && even < 0 && f.Shown().lines[i].text.find("return") != std::string::npos) even = static_cast<int>(i);
+    }
+    CHECK(odd >= 0 && even >= 0);
+    if (odd < 0 || even < 0) return;
+    const uint32_t oddAt = f.Shown().lines[static_cast<size_t>(odd)].firstAddr;
+    const uint32_t evenAt = f.Shown().lines[static_cast<size_t>(even)].firstAddr;
+    CHECK(oddAt == 0x06009A31u);
+    f.Take();
+    f.LineMenu(odd, "Set Function Start Here");
+    CHECK(f.bounds.Entries().count(oddAt) == 0 && !f.Take().boundsChanged);
+    f.LineMenu(even, "Set Function Start Here");   // the control
+    CHECK(f.bounds.Entries().count(evenAt) == 1);
+}
+
 // Review of the control-flow criterion: uncertainty is shown, never left to look like a complete
 // function. An entry whose flow never reaches the address it was found for (the finder kept a
 // symbol whose switch it cannot follow), and the engine's unresolved jump, are warned about. A
@@ -2654,6 +2690,7 @@ int main(int argc, char** argv)
         RUN(TestMirrorEntryIsKept());
         RUN(TestPrototypesPerMirror());
         RUN(TestFunctionStartKeepsMirror());
+        RUN(TestOddLineIsNoFunctionStart());
         RUN(TestAutoRefreshFollowsMirror());
         RUN(TestAutoRefreshPcBelongsToTheSession());
         RUN(TestFlowUncertaintyShown());

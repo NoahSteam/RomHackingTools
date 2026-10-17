@@ -2639,7 +2639,7 @@ struct Pin
 };
 const Pin kPins[] = {
     { "mailbox", "print", 0, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(true): new EmitMarkup after the old emitter was freed" },
-    { "mailbox", "print", 0, 40, 81, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
+    { "mailbox", "print", 0, 40, 82, "EmitPrettyPrint::setMarkup#0", "A6-1 EmitPrettyPrint::setMarkup(false): new EmitNoMarkup after the old emitter was freed" },
     { "mailbox", "print", 1, 48, 22, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, in the reference run's print" },
     { "jumptable", "print", 0, 48, 26, "EmitPrettyPrint::setMarkup#0", "A6-1 the same, on the jumptable fixture" },
     { "mailbox", "print", 0, 16, 1, "EmitMarkup::setPackedOutput#0", "A6-2 EmitMarkup::setPackedOutput: new PackedEncode after the old encoder was freed" },

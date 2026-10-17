@@ -1888,6 +1888,12 @@ void TestHardwareVolatility()
         add("a5_78a", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
         add("a5_78b", { 0xD102, 0xE005, 0x314C, 0x2100, 0x000B, 0x0009, 0x25F0, 0x0000 }, 0x0C, 0x25F00000u);
         add("a5_78_small", { 0xD102, 0x315C, 0xE005, 0x2100, 0x000B, 0x0009, 0x0000, 0x0010 }, 0x0C, 0x00000010u);   // control: param + 0x10
+        // A5-83 (generator seed 603025): a pointer from a register area no name is near (an SCSP slot's, 0x05B000C8) stepped by an add and flipped
+        // between the partitions by an xor in one turn: `p = (p + 4) ^ 0x20000000` reads 0x35B000C8, then 0x15B000CC through the cached partition, then
+        // 0x35B000D0, and so on. The first control steps only (no cached read to say); the second writes through the same pointer (a write is written through).
+        add("a5_83", { 0xD104, 0xD305, 0xE403, 0x6012, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
+        add("a5_83_step", { 0xD103, 0xE403, 0x6012, 0x7104, 0x4410, 0x8BFB, 0x000B, 0x0009, 0x35B0, 0x00C8 }, 0x10, 0x35B000C8u);
+        add("a5_83_write", { 0xD104, 0xD305, 0xE403, 0x2102, 0x7104, 0x213A, 0x4410, 0x8BFA, 0x000B, 0x0009, 0x35B0, 0x00C8, 0x2000, 0x0000 }, 0x14, 0x35B000C8u);
         // A5-79: a frame buffer store, a frame change (VDP1_FBCR = 3), a wait for the frame end, the load of the same address
         add("a5_79", { 0xD807, 0x900B, 0x2801, 0xD107, 0xE203, 0x2121, 0xD306, 0x6031, 0xC808, 0x89FC, 0x6081, 0x000B, 0x0009, 0x0009, 0x1234, 0x0009, 0x25C8, 0x0200, 0x25D0, 0x0002, 0x25F8, 0x0004 }, 0x20, 0x25C80200u);
     }
@@ -3305,6 +3311,17 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "if the pointer holds 0x05F8000A (VDP2_VCNT): ", true) && HasNote(r, "if the pointer holds 0x05F80004 (VDP2_TVSTAT): ", true) &&
               HasNote(r, "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG", false) && !HasNote(r, "stepped in a loop", false) &&
               !HasNote(r, "it may hold other values too", true));
+
+        // A5-83: the stepped note says the cache caution whatever is near, when the later values read through the cached partition. The
+        // registers around 0x05B000C8 (an SCSP slot's) have no name, so the note was gated on a name within kSteppedReach and never said.
+        r = R9("a5_83", "p = 0x35B000C8; loop 3: read @p; p = (p + 4) ^ 0x20000000");
+        CHECK(HasNote(r, "the pointer is stepped in a loop from 0x35B000C8: the iterations after the first reach other addresses, other registers perhaps, which are not said; "
+                         "they read through the cached partition (0x15B000CC is one) too, and a read of a register through the cached partition is a cache read when the cache is on",
+                      true));
+        r = R9("a5_83_step", "control: p = 0x35B000C8; loop 3: read @p; p += 4 (no cached read, no name near: nothing to say)");
+        CHECK(!HasNote(r, "stepped in a loop", false) && !HasNote(r, "stepped in a loop", true));
+        r = R9("a5_83_write", "control: the same walk with a write: the cache is not read by a write");
+        CHECK(!HasNote(r, "cache read", true) && !HasNote(r, "cache read", false));
 
         // A5-71: the cache data array is 4 KiB under both partitions: the names of one cell are one memory.
         r = R9("a5_71a", "xRamc0000000 = 5; xRamc0001000 = 7; return xRamc0000000");
@@ -10242,6 +10259,148 @@ R8Slot R8SlotFixture(const std::string& kind, const std::string& slot, int d, in
     return out;
 }
 
+// ===== The routed seeds (ledger A3-55, A4-16; A7-6 below): what the area 2 round 8 review found beyond the nightly =====
+// A3-55: seed 519315's function 1 (A3-49's literal variant, withheld since cee85f5) and seed 608802's (a join of a loaded word and a constant, chosen by
+// r3, a register no signature passes: the engine drops the return because each alternative has another use, and the read of r3 goes with it).
+// A4-16: seed 511038, a jump table read at a constant index its own bound check excludes: flow follows the destination (a literal word, 0x25FE0008,
+// uncaptured memory), the actions remove that block as unreachable, and the function was reported cut off by a path it does not have.
+void TestRoutedSeeds()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 60000;
+    const uint32_t base = 0x06009020u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u },
+                                                        { 0x11111111u, 0u, 0x33333333u, 0x44444444u } };
+    // The function is withheld for the reason, and the text it would have been lent with is wrong: the oracle rejects it.
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));
+    };
+    auto lentVoid = [&](const char* name, std::vector<uint16_t> words) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.prototype.known && r.prototype.ret.kind == TypeKind::Void);
+        return r;
+    };
+
+    // ---- A3-55 ---------------------------------------------------------------------------------------------------------------------------
+    // Seed 519315, function 1: tst r4,r4 ; bf L ; mov.l @(lit),r6 ; L: tst r5,r5 ; bt M ; mov r6,r0 ; M: rts. A3-49's shape (r6 or a literal on one
+    // path, r0's entry value on the other), in a frame of 12 bytes. It failed at 572c29d, before cee85f5, and is withheld since.
+    withheld("a3_55 a: seed 519315, function 1", { 0x7FF4, 0x2448, 0x8B00, 0xD603, 0x2558, 0x8900, 0x6063, 0x7F0C, 0x000B, 0x0009, 0x2D80, 0x00C0 },
+             "joins r0's entry value with a parameter");
+    // Seed 608802: mov.l @(lit),r7 ; mov.w @(0x12,r7),r0 ; mov #-0x5d,r2 ; cmp/eq r0,r3 ; bf L ; mov r2,r0 ; or r0,r1 ; L: rts. r0 is the word, or the
+    // constant when it equals r3 (the entry r3: nothing passes it). Lent `void f(void)` and printed `return;`, the caller shown without r3's setup.
+    withheld("a3_55 b: seed 608802, r0 is a word or a constant by r3", { 0xD704, 0x8579, 0xE2A3, 0x3300, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 },
+             "chosen by r3 on entry");
+    // The same chosen by a register that is not an input: r4 is a parameter, and a join chosen by a constant has no input in it. Both stay as they
+    // were (the scratch r0 of a void function: the signature drops the join, and a caller that reads r0 afterwards is withheld).
+    lentVoid("a3_55 control: chosen by r4", { 0xD704, 0x8579, 0xE2A3, 0x3400, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 });
+    lentVoid("a3_55 control: chosen by a constant", { 0xD704, 0x8579, 0xE2A3, 0x8805, 0x8B01, 0x6023, 0x210B, 0x000B, 0x0009, 0x0009, 0x2600, 0x2000 });
+    // r3 is compared and decides nothing: r0 is the word on both paths (a join needs two values), so there is no choice for r3 to make.
+    // mov.l @(lit),r7 ; mov.w @(0x12,r7),r0 ; cmp/eq r0,r3 ; bf L ; mov r0,r2 ; L: rts ; nop.
+    lentVoid("a3_55 control: r3 is compared, r0 is the word on both paths", { 0xD704, 0x8579, 0x3300, 0x8B00, 0x6203, 0x000B, 0x0009, 0x0009, 0x0009, 0x0009, 0x2600, 0x2000 });
+    // ...and by a value nothing is known of: a word loaded through a pointer that may be in the stack, after a frame address escaped (every
+    // register is among its origins). mov r15,r1 ; mov.l r1,@r4 ; mov.l @r4,r2 ; mov.l @r2,r1 ; tst r1,r1 ; bt L ; mov #1,r0 ; L: rts ; nop.
+    lentVoid("a3_55 control: chosen by a value nothing is known of", { 0x61F3, 0x2412, 0x6242, 0x6122, 0x2118, 0x8900, 0xE001, 0x000B, 0x0009 });
+
+    // ---- A4-16 ---------------------------------------------------------------------------------------------------------------------------
+    // Seed 511038 shrunk: function 0 is `mov.l @(lit),r6` and runs into function 1, a switch on r6 (`cmp/hi #4,r6 ; bt default ; shll2 r6 ; mova ; mov.l
+    // @(r0,r6),r1 ; jmp @r1`). r6 is 0xC0000010, so the guard always branches to the default, but the flow is made before the actions can know:
+    // it reads the table at the index 0xC0000010 << 2 (the literal after the table, 0x25FE0008), follows it into uncaptured memory, and the actions
+    // remove the block as unreachable. The text is `return 0x6001030;`, right; the function is not cut off.
+    {
+        const CallFixture f = { "a4_16: a table read at a constant index its guard excludes", 0x06009000u,
+                                { 0xD613, 0x7FD0, 0xE104, 0x3616, 0x8919, 0x4608, 0xC701, 0x016E, 0x412B, 0x0009, 0x0600, 0x9028, 0x0600, 0x9028, 0x0600, 0x902E,
+                                  0x0600, 0x9032, 0x0600, 0x9038, 0xD70A, 0xA009, 0x0009, 0xA007, 0x0009, 0x855F, 0xA004, 0x0009, 0xE03C, 0xA001, 0x0009, 0xD706,
+                                  0xA001, 0x0009, 0xFFFF, 0x6073, 0x7F30, 0x000B, 0x0009, 0x0009, 0xC000, 0x0010, 0x25FE, 0x0008, 0x0600, 0x1030 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.truncated && r.truncatedCount == 0 && r.truncatedWhy.empty());
+        int cuts = 0, said = 0;
+        for (const FlowWarning& w : r.flowWarnings)
+        {
+            cuts += w.kind == FlowWarning::Cut;
+            said += w.kind == FlowWarning::Engine && w.address == 0x05FE0008u && Has(w.text, "proved cannot be taken and removed") &&
+                    Has(w.text, "uncaptured memory at 0x05FE0008");
+        }
+        CHECK(cuts == 0 && said == 1);   // said once, where the flow went, and not as a cut
+        CHECK(Has(r.Text(), "return 0x6001030;"));
+        CHECK(r.badDataAt.empty());      // the function holds no bytes that do not decode
+        CHECK(!r.prototype.known);       // still withheld: the engine's own flag for the halt it made stays (bad instruction data), the safe side
+    }
+
+    // ---- A7-6 ----------------------------------------------------------------------------------------------------------------------------
+    // An SH-2 instruction starts at an even address. A jump table entry that is odd (here the middle of the table's three destinations; a word of data
+    // the bound does not exclude) sent flow into the middle of the instruction at the even address before it: the engine said "Instruction at ...
+    // overlaps instruction at ..." and the text was made of what it decoded there, under tokens with odd addresses (patch 0052: flow halts at such an
+    // address as it does at bytes that do not decode). mov.l @(lit),r2 ; mov #2,r1 ; cmp/hi r1,r4 ; bt def ; shll2 r4 ; mova table,r0 ; mov.l @(r0,r4),r1 ;
+    // jmp @r1 ; nop ; nop ; lit 0x06009034 ; table 0x0600902C, 0x06009031 (odd), 0x06009034 ; def: rts ; mov r2,r0 ; cases 0 to 2: rts ; mov #n,r0.
+    {
+        const uint32_t at = 0x06009000u;
+        const CallFixture f = { "a7_6: a jump table with an odd entry", at,
+                                { 0xD204, 0xE102, 0x3416, 0x890F, 0x4408, 0xC703, 0x014E, 0x412B, 0x0009, 0x0009, 0x0600, 0x9034, 0x0600, 0x902C, 0x0600, 0x9031,
+                                  0x0600, 0x9034, 0x0009, 0x0009, 0x000B, 0x6023, 0x000B, 0xE000, 0x000B, 0xE001, 0x000B, 0xE002 } };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(at));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(std::find(r.badDataAt.begin(), r.badDataAt.end(), 0x06009031u) != r.badDataAt.end());
+        bool said = false;
+        for (const FlowWarning& w : r.flowWarnings) said |= w.kind == FlowWarning::BadData && w.address == 0x06009031u && Has(w.text, "odd address");
+        CHECK(said);
+        for (const std::string& w : r.warnings) CHECK(!Has(w, "overlaps instruction"));
+        CHECK(Has(r.Text(), "halt_baddata();"));
+        // Every token is at an even address but the halt's own, which is counted, not failed; the other destinations are still cases.
+        const std::function<bool(uint32_t, uint16_t&)> wordAt = [&f, at](uint32_t a, uint16_t& w) {
+            if ((a & 1) != 0 || a < at || (a - at) / 2 >= f.code.size()) return false;
+            w = f.code[(a - at) / 2];
+            return true;
+        };
+        const dts::MappingAudit a = dts::AuditMapping(r, wordAt, "a7_6");
+        CHECK(a.Violations() == 0 && a.odd == 0 && a.badDataTokens >= 1);
+        uint32_t odd = 0;
+        for (const Line& l : r.lines)
+            for (const Token& t : l.tokens) odd += (t.addr & 1u) != 0 && t.addr != 0x06009031u;
+        CHECK(odd == 0);
+        // The same table without the odd entry halts nowhere (the control: the even destination is a case).
+        std::vector<uint16_t> even = f.code;
+        even[15] = 0x9030;
+        const CallFixture fe = { "a7_6 control: the same table, an even entry", at, even };
+        auto snapEven = CallSnapshot(fe, ++serial);
+        const DecompileResult re = d.Decompile(snapEven, Request(at));
+        Print(fe.name.c_str(), re);
+        CHECK(re.status == DecompileStatus::Ok && re.badDataAt.empty() && !Has(re.Text(), "halt_baddata"));
+    }
+    // A function asked for at an odd address: refused, not decompiled from the middle of an instruction. Typed in the entry box, or found as the
+    // target of a call through a literal that is no code address (58 of the lending runs' functions).
+    {
+        const uint32_t at = 0x06009000u;
+        const CallFixture f = { "a7_6: an odd entry and an odd call target", at,
+                                { 0xD102, 0x410B, 0x0009, 0x000B, 0x0009, 0x0009, 0x0600, 0x9007 } };   // mov.l @(lit),r1 ; jsr @r1 ; nop ; rts ; nop ; lit
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult odd = d.Decompile(snap, Request(at + 1));
+        CHECK(odd.status == DecompileStatus::NoCode && Has(odd.error, "an SH-2 instruction starts at an even address") && odd.lines.empty());
+        const DecompileResult mirror = d.Decompile(snap, Request(0x20000000u + at + 3));   // through the cache-through mirror too
+        CHECK(mirror.status == DecompileStatus::NoCode && Has(mirror.error, "even address"));
+        const DecompileResult r = d.Decompile(snap, Request(at));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(std::find(r.callees.begin(), r.callees.end(), 0x06009007u) == r.callees.end());   // an odd target is no function to decompile
+        CHECK(std::find(r.calledAt.begin(), r.calledAt.end(), 0x06009007u) == r.calledAt.end());
+    }
+}
+
 // ===== Area 2, round 8 review =====
 // (1) The slot loads above, by value. (2) The A2-47 family in ordinary code, 19 fixtures that printed a wrong value with patch 0046 reverted:
 // a value built from a boolean as `T * A + (1 - T) * B` (mul.l, sts macl), then a mask or a shift pair or an extension that reads the low
@@ -10834,6 +10993,7 @@ int main(int argc, char** argv)
         RUN(TestAreas234Leftovers());
         RUN(TestArea2Round7SlotValues());
         RUN(TestArea3Round8());
+        RUN(TestRoutedSeeds());
         RUN(TestArea2Round8());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());

@@ -44,6 +44,11 @@ void SaturnArchitecture::Initialise(ghidra::uint4 maxInstructions, std::atomic<b
     // expression at each of its uses, so a sample taken in a poll loop and then returned would
     // print as a second dereference after the loop (patches/0010-load-not-duplicated.patch).
     loadsNotDuplicated = true;
+    // An SH-2 instruction starts at an even address. The specification says alignment 1 (one value for every SuperH), so the translator decodes
+    // at an odd address, and a jump table entry that is no address (a word of data the table's bound does not exclude) sent flow into the middle of
+    // the instructions around it: an "overlaps instruction" warning, odd token addresses, text made of the instruction that is not there. Flow
+    // stops at such an address as it does at bytes that do not decode (patches/0052-flow-instruction-alignment.patch; A7-6).
+    instructionAlignment = 2;
 }
 
 void SaturnArchitecture::buildLoader(ghidra::DocumentStorage&)

@@ -5,9 +5,9 @@
 // marked; navigation round-trips. Concretely, for one DecompileResult:
 //   1. Token addresses. Every non-zero token address is even, lies in the body (the instructions
 //      flow reached, delay slots included) or is named by a flow warning, and is the start of an
-//      instruction that decodes. Counted, not failed, because the engine says so or the word is
-//      what the line names: an odd address in a function with an "overlaps instruction" warning
-//      or entered at an odd address (A7-6), and the word flow halted at as bad data. A line's
+//      instruction that decodes. Counted, not failed, because the word is what the line names: the
+//      word flow halted at as bad data (it may be odd: a table entry that is no address, A7-6, patch
+//      0052; an odd token address anywhere else, or in a function entered at an odd address, fails). A line's
 //      firstAddr is its lowest token address, 0 with none. A token's range lies in its line's
 //      text. A call token (FuncName with a target) came from a call or a jump.
 //   2. Marking. A line from several instructions says so in its hover text (LineOriginText), and
@@ -60,8 +60,6 @@ struct MappingAudit
     int bodyInsns = 0, bodyMapped = 0;
     int unmappedSlots = 0;     // a delay slot instruction no token carries (its p-code carries the branch's address)
     int slotTokens = 0;        // a token at a delay slot's own address
-    int oddWarned = 0;         // an odd token address in a function the engine says has overlapping instructions (A7-6: counted, not failed)
-    int oddEntry = 0;          // an odd token address in a function whose entry is odd (A7-6: counted, not failed)
     int badDataTokens = 0;     // a token at a word flow halted at as bad data (`halt_baddata();`): the word, by design
     int unmappedMemory = 0;    // an instruction that accesses memory (not a literal load), no token, in the body
     int unmappedCall = 0;      // a call or jump no token carries
@@ -79,7 +77,7 @@ struct MappingAudit
         tokensWithAddr += o.tokensWithAddr; single += o.single; multi += o.multi; multiNonAdjacent += o.multiNonAdjacent;
         widest = widest > o.widest ? widest : o.widest;
         nonCodeLines += o.nonCodeLines; bodyInsns += o.bodyInsns; bodyMapped += o.bodyMapped; unmappedSlots += o.unmappedSlots;
-        slotTokens += o.slotTokens; oddWarned += o.oddWarned; oddEntry += o.oddEntry; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
+        slotTokens += o.slotTokens; badDataTokens += o.badDataTokens; unmappedMemory += o.unmappedMemory; unmappedCall += o.unmappedCall;
         unmappedBranch += o.unmappedBranch;
         for (const std::string& p : o.problems) Keep(p);
     }
@@ -184,9 +182,6 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             named.insert(w.address);
             named.insert(w.address + 2);
         }
-    bool overlaps = false;
-    for (const std::string& w : r.warnings)
-        if (w.find("overlaps instruction") != std::string::npos) overlaps = true;
     std::set<uint32_t> mapped;   // every token address of the result
     std::set<uint32_t> insnsWithCallTokens;
     for (size_t li = 0; li < r.lines.size(); ++li)
@@ -215,16 +210,10 @@ inline MappingAudit AuditMapping(const sfe::decomp::DecompileResult& r, const st
             }
             if (t.addr & 1)
             {
-                // Flow decoded an instruction at an odd address (a jump table entry that is not an address): the engine says
-                // so ("Instruction at ... overlaps instruction at ...") and the text is what it made of it. Counted when it
-                // does; an odd address with no such warning is a violation.
-                if (overlaps) ++a.oddWarned;
-                else if (r.entry & 1) ++a.oddEntry;   // the function was asked for at an odd address, and every instruction follows from it
-                else
-                {
-                    ++a.odd;
-                    problem("odd", "line " + std::to_string(li) + " '" + l.text + "': token address " + MappingHex(t.addr) + " is odd");
-                }
+                // An SH-2 instruction starts at an even address. Flow stops at an odd one as at bad data (patch 0052; before it, a table entry
+                // that was no address was decoded in the middle of the instruction before it, A7-6) and a function is not entered at one.
+                ++a.odd;
+                problem("odd", "line " + std::to_string(li) + " '" + l.text + "': token address " + MappingHex(t.addr) + " is odd");
                 continue;
             }
             if (!r.InBody(t.addr) && !named.count(t.addr))
@@ -398,10 +387,10 @@ inline void PrintMappingAudit(const MappingAudit& a, const char* label)
                 "unmapped %d, on another line than firstLine says %d, calls with no token %d, calls removed unsaid %d, click does not lead back %d\n", label, a.odd, a.outside, a.notInsn,
                 a.firstAddrWrong, a.badRange, a.callWithoutCall, a.unmarked, a.misnamed, a.accessUnmapped, a.accessOffLine, a.callUnmapped, a.callGoneUnsaid, a.roundTrip);
     std::printf("  mapping (%s): body instructions %d, %d carry a token; without one: %d delay slots, %d memory accesses outside slots, "
-                "%d calls (%d not in the final p-code), %d conditional branches; %d tokens sit at a delay slot's own address; %d odd addresses in functions with "
-                "overlapping instructions (said), %d in functions entered at an odd address, %d tokens at the bad data flow halted at (by design)\n",
+                "%d calls (%d not in the final p-code), %d conditional branches; %d tokens sit at a delay slot's own address; "
+                "%d tokens at the bad data flow halted at (by design)\n",
                 label, a.bodyInsns, a.bodyMapped, a.unmappedSlots, a.unmappedMemory, a.unmappedCall, a.callGone, a.unmappedBranch, a.slotTokens,
-                a.oddWarned, a.oddEntry, a.badDataTokens);
+                a.badDataTokens);
     for (const std::string& p : a.problems) std::printf("    %s\n", p.c_str());
 }
 
