@@ -2329,8 +2329,8 @@ int RunColdCell(ColdCtx& c, long cell)
     }
 
     // A failure while the spec bundle was staged leaves nothing behind (A6-33): the config directory, listed before the second
-    // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. With sustained exhaustion the
-    // removal is itself an allocation and cannot be promised: the next request of the process clears it.
+    // request (which would clear a same-pid leftover itself), has no '<hash>.tmp-<pid>' in it. Under sustained exhaustion too
+    // (A6-37): the guard's removal needs no allocation (the staged paths are made before the directory is).
     std::string stray;
     if (mode == 1 && fired)
     {
@@ -2338,7 +2338,7 @@ int RunColdCell(ColdCtx& c, long cell)
         sfe::ListDirectory(dts::Join(cfg, "decompiler"), names);
         for (const std::string& n : names)
             if (n.find(".tmp-") != std::string::npos) stray += (stray.empty() ? "" : ", ") + n;
-        if (!fa::gSticky.load()) Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
+        Expect(stray.empty(), "a failed first request leaves no staging directory in the config directory", stray);
     }
 
     // The second request, and the other kind of request after it.
@@ -3110,13 +3110,32 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     static const char* const kCreate = "vector<ghidra::TraceDAG::BlockTrace*;BranchPoint::createTraces";
     static const std::string good = std::string(kCreate) + "#0", wrongOrd = std::string(kCreate) + "#1", noOrd = std::string(kCreate) + "#99",
                              noSite = "TraceDAG::initialize#0", noHash = kCreate;
-    static const Pin pins[] = {
-        { "dag", "actions", 0, 16, 107, good.c_str(), "right coordinates, right ordinal" },
-        { "dag", "actions", 0, 16, 107, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
-        { "dag", "actions", 0, 16, 107, noOrd.c_str(), "an ordinal the site does not have" },
-        { "dag", "actions", 0, 16, 108, good.c_str(), "coordinates one allocation off, right ordinal" },
-        { "dag", "actions", 0, 16, 107, noSite.c_str(), "a site no allocation of the entry is made at" },
-        { "dag", "actions", 0, 16, 107, noHash.c_str(), "no ordinal at all" },
+    // The good pin's coordinates are found at run time, by the census every real pin goes through: ordinal #0 of the site is some
+    // allocation of the entry, and its place among the entry's 16-byte allocations is the nth that leads to it. Nothing here
+    // names an allocation count, so an engine patch that moves the count (patch 0044 moved it from 108 to 107) cannot make this
+    // test stale: it never needed to be re-pinned by hand, only the real pins do (A6-42). The probe's own coordinates are any
+    // 16-byte allocation of the entry (the first); whatever it leads to, the verdict names the allocation of the site's #0.
+    const Pin probe[] = { { "dag", "actions", 0, 16, 0, good.c_str(), "probe" } };
+    const std::vector<PinRes> found = ResolvePins(c, scratch, probe, 1);
+    if (found.size() != 1 || found[0].stale || found[0].ks.size() != 1)
+    {
+        std::printf("FAIL pin-selftest: the site [%s] has no #0 in dag's first Actions entry (%s): the fixture or the engine changed so that the "
+                    "test's allocation is gone\n",
+                    good.c_str(), found.empty() ? "no result" : found[0].note.c_str());
+        return 1;
+    }
+    const int nth = int(NthOfSize(c, found[0].lo, found[0].ks[0], 16));
+    // A neighbour for the pin one allocation off: the next 16-byte allocation of the entry, or the one before when there is none.
+    const Pin next = { "dag", "actions", 0, 16, nth + 1, good.c_str(), "" };
+    const int off = ResolvePin(c, next) >= 0 || nth == 0 ? nth + 1 : nth - 1;
+    std::printf("pin-selftest: the site's #0 is the %dth 16-byte allocation of the entry (allocation %ld); the one-off pin is %d\n", nth, found[0].ks[0], off);
+    const Pin pins[] = {
+        { "dag", "actions", 0, 16, nth, good.c_str(), "right coordinates, right ordinal" },
+        { "dag", "actions", 0, 16, nth, wrongOrd.c_str(), "right coordinates, the next allocation's ordinal" },
+        { "dag", "actions", 0, 16, nth, noOrd.c_str(), "an ordinal the site does not have" },
+        { "dag", "actions", 0, 16, off, good.c_str(), "coordinates one allocation off, right ordinal" },
+        { "dag", "actions", 0, 16, nth, noSite.c_str(), "a site no allocation of the entry is made at" },
+        { "dag", "actions", 0, 16, nth, noHash.c_str(), "no ordinal at all" },
     };
     const std::vector<PinRes> res = ResolvePins(c, scratch, pins, sizeof pins / sizeof pins[0]);
     int bad = 0;
@@ -3136,8 +3155,8 @@ int PinSelfTest(Ctx& c, const std::string& scratch)
     check(1, starts(1, "MOVED") && PinFails(res[1]) && res[1].ks.size() == 1 && res[1].ks[0] != res[1].k0 && res[1].note.find("Re-pin") != std::string::npos,
           "a wrong ordinal is MOVED, fails the run, tests the ordinal's allocation, and says how to re-pin");
     check(2, starts(2, "STALE") && PinFails(res[2]) && res[2].ks.empty(), "an ordinal the site does not have is STALE");
-    // The re-pin the note offers is the good pin's nth: pins[0]'s, whatever the engine's allocation count is this round.
-    const std::string repin = "nth = " + std::to_string(pins[0].nth);
+    // The re-pin the note offers is the good pin's nth, whatever the engine's allocation count is this round.
+    const std::string repin = "nth = " + std::to_string(nth);
     check(3, starts(3, "MOVED") && PinFails(res[3]) && res[3].ks.size() == 1 && res[3].note.find(repin) != std::string::npos,
           "coordinates one off are MOVED, fail the run, and the note gives the nth that re-pins them");
     check(4, starts(4, "STALE") && PinFails(res[4]), "a site nothing in the entry is made at is STALE");
@@ -3452,7 +3471,7 @@ int Driver(const std::string& familyArg, const std::string& fixture, const std::
                     ++sum.classes["leak-sig " + ln.substr(9)];
             }
             if (run.out.find(" window=need") != std::string::npos) ++sum.classes["window:need"];
-            if (run.out.find(" staging=left") != std::string::npos) ++sum.classes["staging-left"];   // only counted under sustained exhaustion, where the removal cannot allocate
+            if (run.out.find(" staging=left") != std::string::npos) ++sum.classes["staging-left"];   // 0 since A6-37; the cell itself fails when it is not
             if (isCold)
                 for (const char* st : kLibrarySteps)
                     if (run.out.find(std::string(" step=") + st + " ") != std::string::npos) ++sum.classes[std::string("step:") + st];
