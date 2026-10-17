@@ -28,7 +28,8 @@
 //     (mov.l Rn,@-r15 ... mov.l @r15+,Rn), and restores everything by rts (the last pop, or the
 //     return value's mov, may sit in the delay slot). The harness checks it does.
 //   * calls to a function laid out after the caller: bsr, or jsr @Rn after a literal-pool load of the
-//     address; arguments in r4-r7 (the last may be set in the delay slot), kept across calls in
+//     address, or (three in ten of those, A2-20) bsrf Rn after a load of the distance from the bsrf + 4 to the callee, which is known only after
+//     layout; arguments in r4-r7 (the last may be set in the delay slot), kept across calls in
 //     callee-saved copies; a result in r0 (a function either writes r0 as its result on every path,
 //     or leaves r0 alone); a call may be conditional; tail calls (jmp @Rn after the epilogue has
 //     restored PR and the registers) and falling off the end into the next function (no rts).
@@ -66,10 +67,13 @@
 // the multiplies (mul.l muls.w mulu.w dmuls.l dmulu.l), exts swap xtrct, the rotates and shifts, movt sett clrt
 // clrmac, sts/lds of MACH and MACL, stc/ldc of SR, GBR and VBR, the #imm,r0 logic and compare, cmp/ge gt pz str -- and
 // one memory item in ten is a GBR access (and.b / or.b / xor.b / tst.b #imm,@(r0,GBR), mov.x @(disp,GBR),r0 and back,
-// GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (they need
-// a vector table and a handler laid out beside the function, and rte pops the stack), bsrf (a callee at a distance known
-// only after layout: the call grammar's), and, in the first two grammars, stc/sts (ledger A2-16 and A3-5; the register-only
-// grammar has them).
+// GBR pointing into scratch RAM). SE_GENERATED_ALPHABET=narrow switches that off. Not emitted: trapa and rte (A2-20, accepted: a handler
+// returns through rte, not to its caller, so the per-function run from the entry to the sentinel, the depth count of calls and returns, the callee
+// closure of check 4 -- the handler is reached through a vector table the decompiler cannot read, an unresolved indirect call -- and the signature
+// checks have no meaning for it; the hand fixtures run both against the emulator, TestCallsAndTraps' A2-9 and A2-24/A2-36 in TestArea2Round4 and 5, and
+// the decode oracle holds rte and its slot to Mednafen on 5.2 million cases), and, in the first two grammars, stc/sts (ledger A2-16 and A3-5; the
+// register-only grammar has them), which SE_GENERATED_ALPHABET=specials lets in: A3-5 and A2-16 are fixed, and the fence stays only so that the
+// programs of a seed do not change under the nightly.
 // Version 3 is not a program of that kind but a register-only function (kRegOps and bt/bf/bt/s/bf/s and braf over
 // one to three instructions, r0-r7, returning r0) checked by TestPrintedC, which compiles the text the decompiler
 // prints for it with the system C compiler and compares what it returns with the emulator's r0 (r0:r1 for an
@@ -122,7 +126,9 @@
 //   6. Each index of a jump table that a run dispatched with reaches a case that holds the code the
 //      index runs (its own label, or the default of a switch whose bound check was taken out, or what
 //      follows the switch) when that code does something the ledger lists, or a warning says cases may
-//      be missing.
+//      be missing. A switch the engine could not normalize (no guard in the finished function) is one case
+//      per destination, labelled with the address the table holds for the index (A2-16, A4-10, A4-11); the
+//      label looked for is then that address (counted `table.switch-on-address`).
 //   Area 3, for a prototype that is known (lent):
 //   7. It is not lent when the analysis is incomplete: truncated, unsupported, unimplemented, bad data,
 //      a case that is missing, an executed instruction outside the body; known and prototypeWithheld
@@ -139,6 +145,8 @@
 //       writer that overwrites it through a pointer in r4 or r2, through r15 plus an index, with a computed value or through a callee that
 //       gives a lent writer its own entry r15 + 4, and returns the local. No `return` of the text holds the canary (or a variable assigned it
 //       with no call between that could have written it) when no run returned it; the hand-back kinds only when the signature is lent.
+//       Round 8 (A3-44): the address in r5, r6 or r7, handed through a word of memory the writer loads it from, the result used (`add #1,r0`),
+//       the call under `if (r4 != 0)` or in a loop that runs twice.
 //   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
 //       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one

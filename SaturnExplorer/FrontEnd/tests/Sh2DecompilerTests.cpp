@@ -9118,6 +9118,164 @@ void TestAllocationFailureIsReported()
 // literals, jump tables, strings) refuses with DataUnavailError whatever the size -- 16 bytes
 // included -- and never zero-fills; the translator's (instruction fetches) refuses with
 // BadDataError, so flow halts there instead of aborting.
+// ===== Areas 2, 3 and 4: the open rows and the seeds beyond the nightly (ledger A3-29 .. A3-31, A3-45 .. A3-48, A4-10, A4-11) =====
+// The fixtures that need the evaluator and the call oracle; the ones of A3-29 and A3-31 are with the rows they belong to in TestCallsAndTraps
+// and TestTailJumpToUnreachedCode, the delay slots (A2-4) in TestDelaySlotPcRelative and SaturnExplorerSh2DecodeTests.
+void TestAreas234Leftovers()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 800;
+    const uint32_t base = 0x06009000u;
+    auto withCallee = [&](std::vector<uint16_t> caller, std::vector<uint16_t> callee) {
+        caller.resize(16, 0x0009);
+        caller.insert(caller.end(), callee.begin(), callee.end());
+        return caller;
+    };
+    auto decompile = [&](const char* label, const std::vector<uint16_t>& words) {
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : words)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw, ++serial), Request(base));
+        Print(label, r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+
+    // ---- A3-45: r0 rotated through the carry in a loop is an input ------------------------------------------------------------------
+    // `mov #1,r3 ; L: rotcr r0 ; tas.b @r5 ; dt r3 ; bf L ; rts ; nop`: the rotate is dead code in the engine's text, the function returns
+    // nothing, and r0 on entry decides what it leaves in r0. Not lent (a caller's setup of r0 is dead in its text). The same loop entered only
+    // if r4 is not zero leaves r0 alone on the other path, which is the scratch r0 of compiled code (A3-14): lent.
+    {
+        const DecompileResult r = decompile("A3-45 rotcr r0 in a do-while loop", { 0xE301, 0x4025, 0x451B, 0x4310, 0x8BFB, 0x000B, 0x0009 });
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, "computed from r0 on entry"));
+        const DecompileResult c = decompile("A3-45 control: the loop may be skipped", { 0x2448, 0x8902, 0x4025, 0x4410, 0x8BFC, 0x000B, 0x0009 });
+        CHECK(c.prototype.known);
+        // A3-46's function: r0 left alone on the path that skips both writes: lent too, and its `and r0,r0` is no write.
+        const DecompileResult n = decompile("A3-46 r0 written by xor on one path, and r0,r0 on another", { 0x5264, 0xC880, 0x8900, 0x200A, 0x2028, 0x8B00, 0x2009, 0x000B, 0x0009 });
+        CHECK(n.prototype.known && n.prototype.ret.kind == TypeKind::Void);
+    }
+
+    // ---- A4-10, A4-11: a switch the engine could not normalize prints on the loaded address ----------------------------------------
+    // The bound check is `sr = (sr & ~1) | (5 < r6)` and that SR word is returned too (the case `stc sr,r2 ; mov r2,r0`), so the compare cannot
+    // be read from the branch: the finished function has no guard for the model to find and falls back to one case per destination, labelled with
+    // the address the table holds. The text is right: each destination's code is under its label, the bound check is an `if` before the lookup.
+    {
+        const std::vector<uint16_t> module = { 0x2F86, 0x2F96, 0x2FA6, 0x4F22, 0x7FF8, 0x6843, 0x6953, 0x6A63, 0xD203, 0x7F08, 0x4F26, 0x6AF6, 0x69F6, 0x68F6, 0x422B, 0x0009,
+                                               0x0600, 0x9024, 0xE105, 0x3616, 0x891B, 0x4608, 0xC701, 0x016E, 0x412B, 0x0009, 0x0600, 0x904C, 0x0600, 0x9050, 0x0600, 0x9054,
+                                               0x0600, 0x9054, 0x0600, 0x9058, 0x0600, 0x905C, 0xA009, 0x0009, 0xA007, 0x0009, 0xA005, 0x0009, 0xA003, 0x0009, 0x517F, 0xA000,
+                                               0x0009, 0x0202, 0x6023, 0x000B, 0x0009 };
+        std::vector<uint8_t> hw;
+        size_t off = 0x9000;
+        for (uint16_t w : module)
+        {
+            dts::Put16(hw, off, w);
+            off += 2;
+        }
+        const DecompileResult r = d.Decompile(MakeSnapshot(hw, ++serial), Request(0x06009024u));
+        Print("A4-11 switch on the loaded address", r);
+        CHECK(r.status == DecompileStatus::Ok);
+        const std::string t = r.Text();
+        CHECK(Has(t, "switch(") && Has(t, "case 0x600905c:"));
+        // the code of table index 5 (0600905C: mov.l @(0x3c,r7),r1) is under the label of its address, and the lookup is made before the switch
+        const size_t sw = t.find("switch(");
+        const size_t label = t.find("case 0x600905c:");
+        const size_t read = t.find("param_4 + 0x3c");
+        CHECK(sw != std::string::npos && label != std::string::npos && read != std::string::npos && sw < label && label < read);
+        CHECK(Has(t, "param_3 * 4 + 0x6009034"));
+        CHECK(!r.prototype.known);   // the specials alphabet's function is withheld on SR, as before
+    }
+
+    // ---- A2-20: bsrf, which the generator draws now ---------------------------------------------------------------------------------
+    // `mov.l @(pool),r1 ; bsrf r1 ; mov #5,r4` calls the function at the distance the pool holds from the bsrf + 4; the literal folds, the callee is
+    // found, and its lent signature gives the call its argument. The run and the text agree.
+    {
+        const CallFixture f = { "a2_20: bsrf through a distance in the pool", base,
+                                withCallee({ 0x4F22, 0xD103, 0x0103, 0xE405, 0x4F26, 0x000B, 0x0009, 0x0009, 0x0000, 0x0018 }, { 0x6043, 0x000B, 0x7001 }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(0x06009020u));
+        DecompileRequest q = Request(base);
+        q.prototypes.emplace_back(0x06009020u, callee.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && callee.prototype.known && r.prototype.known);
+        CHECK(Has(r.Text(), "func_0x06009020(5)"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 } }));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 6u);
+    }
+
+    // ---- A3-47: a caller that publishes a frame address through a pointer loaded from memory ----------------------------------------
+    // `mov r15,r1 ; mov.l @(pool),r6 ; mov.l r1,@r6` stores the address of a local in a global, and a lent callee that stores through the global writes
+    // the local. The store that published the address was taken for one through it (the leak came before the question), over the saved PR: the caller
+    // was withheld "a return not to its caller".
+    {
+        const std::vector<uint16_t> caller = { 0x4F22, 0x7FFC, 0xE05A, 0x2F02, 0x61F3, 0xD604, 0x2612, 0xB007, 0x0009, 0x60F2, 0x7F04, 0x4F26, 0x000B, 0x0009, 0x0600, 0x9080 };
+        // mov.l @(3,pc),r2 ; mov.l @r2,r2 ; mov #0x37,r1 ; rts ; mov.l r1,@r2 ; the cell's address
+        const std::vector<uint16_t> writer = { 0xD203, 0x6222, 0xE137, 0x000B, 0x2212, 0x0009, 0x0009, 0x0009, 0x0600, 0x9080 };
+        const CallFixture f = { "a3_47: the frame address published in a global, a lent callee writes through it", base, withCallee(caller, writer) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult w = d.Decompile(snap, Request(0x06009020u));
+        CHECK(w.prototype.known && w.prototype.params.empty());
+        DecompileRequest q = Request(base);
+        q.prototypes.emplace_back(0x06009020u, w.prototype);
+        const DecompileResult r = d.Decompile(snap, q);
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(r.prototype.known && r.prototypeWithheld.empty());
+        CHECK(!Has(r.Text(), "return 0x5a;"));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, {}, ran) && ran == 0x37u);
+        // The control: a store through the loaded pointer of a value that is no stack address does not matter, and the callee that stores
+        // through it without the address ever published is the same lent shape as before.
+        std::vector<uint16_t> noPublish = caller;
+        noPublish[4] = 0xE100;   // mov #0,r1 in the place of mov r15,r1
+        const CallFixture g = { "a3_47 control: a constant published", base, withCallee(noPublish, writer) };
+        auto snapG = CallSnapshot(g, ++serial);
+        DecompileRequest qg = Request(base);
+        qg.prototypes.emplace_back(0x06009020u, d.Decompile(snapG, Request(0x06009020u)).prototype);
+        CHECK(d.Decompile(snapG, qg).prototype.known);
+    }
+
+    // ---- A3-48: a frame address in r7 alone, handed to a callee that is not lent --------------------------------------------------------
+    // The engine reads a call's arguments in order r4..r7 and fills in at most two unset registers before one that is set, so with r4-r6
+    // untouched the address in r7 is no argument (`func(); return 0x5a;`, the run returns what the callee wrote). Said like the address in r2.
+    {
+        const std::vector<uint16_t> unlent = { 0x2712, 0x000B, 0x0009 };   // mov.l r1,@r7 ; rts ; nop (r1 is the caller's)
+        const CallFixture f = { "a3_48: mov r15,r7 ; bsr (r4-r6 untouched)", base,
+                                withCallee({ 0x4F22, 0x7FFC, 0xE05A, 0x2F02, 0x67F3, 0xB009, 0x0009, 0x60F2, 0x7F04, 0x4F26, 0x000B, 0x0009 }, unlent) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        CHECK(Has(r.Text(), "a frame address is in r7 here") && !Has(r.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 0x1111u);   // r1 on entry, which the callee stored
+        // Controls. r6 set before the call (the engine passes r4-r7, the address is an argument): no note. And r5, r6 as the register: the
+        // fill-in rule covers them.
+        const CallFixture c6 = { "a3_48 control: r6 set, so r7 is an argument", base,
+                                 withCallee({ 0x4F22, 0x7FFC, 0xE05A, 0x2F02, 0x67F3, 0xE601, 0xB008, 0x0009, 0x60F2, 0x7F04, 0x4F26, 0x000B, 0x0009 }, unlent) };
+        auto snapC = CallSnapshot(c6, ++serial);
+        const DecompileResult rc = d.Decompile(snapC, Request(base));
+        Print(c6.name.c_str(), rc);
+        CHECK(!Has(rc.Text(), "a frame address is in r7 here") && !Has(rc.Text(), "return 0x5a;"));
+        for (int reg = 5; reg <= 6; ++reg)
+        {
+            const CallFixture cr = { "a3_48 control: the address in r" + std::to_string(reg), base,
+                                     withCallee({ 0x4F22, 0x7FFC, 0xE05A, 0x2F02, uint16_t(0x6003 | reg << 8 | 15 << 4), 0xB009, 0x0009, 0x60F2, 0x7F04, 0x4F26, 0x000B, 0x0009 },
+                                                { uint16_t(0x2012 | reg << 8), 0x000B, 0x0009 }) };
+            auto snapR = CallSnapshot(cr, ++serial);
+            const DecompileResult rr = d.Decompile(snapR, Request(base));
+            Print(cr.name.c_str(), rr);
+            CHECK(!Has(rr.Text(), "return 0x5a;") && !Has(rr.Text(), "a frame address is in r7 here"));
+        }
+    }
+}
+
 void TestFetchAndDataRefusals()
 {
     Sh2Decompiler d(gConfig);
@@ -9469,6 +9627,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round3());
         RUN(TestArea2Round4());
         RUN(TestArea2Round5());
+        RUN(TestAreas234Leftovers());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
