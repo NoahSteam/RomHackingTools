@@ -107,6 +107,10 @@ void TestMappingOracleOnFixtures()
     dts::PlaceDiamonds(hw, 3);
     dts::PlaceStraight(hw, 4);
     dts::PlaceJumpTable(hw, 4, 2);
+    // A7-3, shrunk from generator seed 62956's first array read: mov.b @r4+,r0 ; mov.b @r4,r0 ; rts ; nop prints
+    // `return (int4)(char)param_1[1];`, whose brackets are the pointer expression's op, so the load at 0x06070002 had no token.
+    const uint32_t kArrayRead = 0x06070000u;
+    for (uint32_t i = 0; i < 4; ++i) dts::Put16(hw, kArrayRead - 0x06000000u + 2 * i, uint16_t(i == 0 ? 0x6044 : i == 1 ? 0x6040 : i == 2 ? 0x000B : 0x0009));
     auto snap = MakeSnapshot(hw);
     Sh2Decompiler d(gConfig);
     const std::function<bool(uint32_t, uint16_t&)> wordAt = [&hw](uint32_t a, uint16_t& w) {
@@ -116,7 +120,7 @@ void TestMappingOracleOnFixtures()
     };
     std::vector<uint32_t> entries = { dts::kFixture1Caller, dts::kFixture3Bra, dts::kFixture3Bfs, dts::kFixture3BsrMova,
                                       dts::kFixture3BsrLoad, dts::kFixture3BraTarget, dts::kFixture3SlotJumped,
-                                      dts::kFixture3SwitchSlot, dts::kDiamondsBase, dts::kStraightBase, dts::kJumpTableBase };
+                                      dts::kFixture3SwitchSlot, dts::kDiamondsBase, dts::kStraightBase, dts::kJumpTableBase, kArrayRead };
     for (const dts::Fixture3Case& c : dts::kFixture3Others) entries.push_back(c.entry);
     dts::MappingAudit all;
     for (uint32_t entry : entries)
@@ -135,6 +139,19 @@ void TestMappingOracleOnFixtures()
     CHECK(all.accessOffLine == 0);
     CHECK(all.functions == static_cast<int>(entries.size()));
     CHECK(all.single > 10 && all.multi > 3);   // the fixtures hold both kinds of line, so both are checked
+
+    const DecompileResult ra = d.Decompile(snap, Request(kArrayRead));
+    const Line* arr = LineWith(ra, "param_1[1]");
+    CHECK(ra.status == DecompileStatus::Ok && arr != nullptr);
+    if (arr)
+    {
+        const std::vector<uint32_t> from = LineInstructions(*arr);
+        CHECK(std::find(from.begin(), from.end(), kArrayRead + 2) != from.end());   // the load that reads param_1[1]
+        // ...as an empty token: nothing is drawn for it
+        bool empty = false;
+        for (const Token& t : arr->tokens) empty = empty || (t.addr == kArrayRead + 2 && t.begin == t.end);
+        CHECK(empty);
+    }
 
     // Fixture 1: `if (0 < param_1)` is the cmp/pl and the bf it tests; the call is the jsr (its argument, in the delay slot, rides
     // with it); the line after it is the add; no line is from an instruction in a delay slot's own address.
