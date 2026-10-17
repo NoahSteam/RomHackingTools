@@ -8659,3 +8659,36 @@ Area 4 is back to **no open row**: A4-10 and A4-11 (opened by the area 5 round 9
 - The engine's guard analysis does not see through a shared SR word (A4-10): accepted, the trivial model is right. A reviewer who wants `switch(param_3)` there needs a range pull-back through `INT_OR` and `SUBPIECE` in `JumpBasic::analyzeGuards` (patch 0051 or later).
 - The canary's remaining reach is listed under A3-44.
 - Sanitizers were run on `Sh2DecompilerTests` and `Sh2GeneratedTests` only.
+
+## Areas 1, 4, 5 and 6 at the integration of four branches (960cf26 to ffc75a1)
+
+Four branches landed in sequence, each after its own matrix: `review/5-round9-fix` (960cf26), `review/1-a1-8-fix` (3ea9723),
+`review/6-round6-review` (541e0c4) and `review/2-3-4-leftovers-fix` (5bb5369, with ffc75a1 widening a buffer for the canary's longest name
+that gcc warned about after the merge). Patch 0050 is vendored; 0046, 0047 and 0049 were reserved and are free again.
+
+- **Area 1 (invalidation) is done**: rounds 3 and 4 found no P1 or P2, the long run is green, and A1-7 and A1-8 are `fixed`. No A1 row is open.
+- **Area 4 (control flow and boundaries) is done again**: the two table-case seeds that reopened it (A4-10, A4-11) were the oracle's reading of a
+  right text and are `fixed`; no A4 row is open.
+- **Area 5 (hardware registers)** has two clean rounds (8 and 9), and every row but A5-81 is `fixed` or `accepted`. A5-81 lists the oracle gaps the
+  round 9 fixer left (rule 3c's false-note direction, the VDP1/VDP2 mode registers and frame buffer, cartridge reads, the rotating index pointer,
+  the cache array's read-back). It is a decision for the coordinator: a last oracle session or an acceptance with the reasons the record gives.
+- **Area 6 (lifecycle)** has two clean rounds (5 and 6) and four open P3s, A6-43 to A6-46, with a fixer (`review/6-round6-fix`). A6-46 was filed
+  by the coordinator from the round 6 record: the runner test's phase observer writes to locals the test has left when a baseline times out under
+  load, a heap-use-after-free in the test itself that a slow CI runner could turn into a sanitizer failure. Area 6 is done when the four land.
+- **Area 2** has one clean round (6) and no open row; round 7 is under review (`review/2-round7-review`). **Area 3** has no open row; round 8 is
+  next. Areas 7 to 11 are not started; 12 waits on the Windows sign-in.
+
+Two integration notes. The ledger rows A3-45 and A4-10 came in malformed from the areas 2/3/4 fixer (the `fixed` status was inserted as an extra
+cell and the old `open` left in place; A4-10's fixture had been glued to its finding, whose `(sr & 0xfffffffe) | (5 < r6)` also held an
+unescaped bar): both rows are re-laid in the eight columns, the bar escaped. During the area 6 review merge's `ctest`, `SaturnExplorerSlaFreshnessTests`
+failed once (0.01 s): the areas 2/3/4 merge in progress in the same tree had just replaced `superh.sinc` and `sh-2.sla` under it; the area 6 branch
+changed no spec, and the test passes on the combined head.
+
+Matrix on the combined head ffc75a1: `ctest` 98 of 98 (the only re-runs in the batch were `SaturnExplorerLivePokeTests`, which hit its 900 s
+limit during the A1-8 merge while the areas 2/3/4 fixer's copy held port 6845, and passed alone), fault suite 0 of 88 jobs failed with no MOVED
+pin (the nine pins the context register's new size moved were re-pinned on the branch), generator grammar 2 at 3,000 and grammar 1 at 1,000 seeds
+0 failing, printed-C at 3,000 seeds 0 findings, the 20,000-seed run 0 failing, `vendor.py` on a copy against the pinned Ghidra reproduces `cpp/`, `processors/` and
+`sources.cmake` with patch 0050, both corpora every ledger count 0, 0 and 4 missing and said, lending 662 (923) on image 007 and 1,021 (1,287) on
+image 008 (one more function lent, `06057C98`, after A3-47's ordering fix; its four callers print typed calls). The matrix on each intermediate
+head: 960cf26 everything above at the then numbers (lending 1,020 (1,282)); 3ea9723 `ctest`, fault suite and the sanitizer harness self-test
+(no decompiler path changed); 541e0c4 `ctest` and the fault suite (two reproduction modes added to the fault test only).
