@@ -440,7 +440,7 @@ const Fix kFixtures[] = {
     { "ext", kExtBase, false },                    // exts.w, extu.b: sub-word values through the subvariable and extension rules (area 6 round 5)
     { "stk6", kStk6Base, false, 5 },               // a call lent six parameters, two of them on the stack (area 6 round 5)
     { "nest", kNestBase, false },                  // six ifs nested, each storing: a deep structure, not one condition (area 6 round 5)
-    { "alias", kAliasBase, false },                // two names of one work-RAM word (A5-52): the printing pass gives way and runs again (A6-43)
+    { "alias", kAliasBase, true },                 // two names of one work-RAM word (A5-52), one pass: the printing pass finds it, gives way and runs again (A6-43)
 };
 
 const Fix* FindFix(const std::string& name)
