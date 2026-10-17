@@ -8094,9 +8094,11 @@ void TestCallsAndTraps()
             const CallFixture val = { "a3_27 b: jmp to a callee that returns 7", base,
                                       withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, { 0x000B, 0xE007 }) };
             const Lent lv = lend(val, true, false);
-            // The engine prints the jump as `f(); return;` whatever the callee returns: lent void, it would lose the 7.
+            // Until patch 0044 the engine printed the jump as `f(); return;` whatever the callee returned; since it (a RETURN of a
+            // locked returning call's output is a return) the text returns the callee's value and the oracle accepts it (A3-29).
+            // The host still withholds the caller: the reason's wording and the rule are A3-29's to settle.
             CHECK(!lv.caller.prototype.known && Has(lv.caller.prototypeWithheld, "returns a value"));
-            CHECK(!PseudoAgreesWithRun(lv.caller, CallSnapshot(val, ++serial), val, inputs));
+            CHECK(PseudoAgreesWithRun(lv.caller, CallSnapshot(val, ++serial), val, inputs));
             const CallFixture none = { "a3_27 c: jmp to a callee that keeps r0, r0 untouched", base,
                                        withCallee({ 0xD102, 0x412B, 0x0009, 0x0009, 0x0009, 0x0009, 0x0600, 0x9020 }, keeper), true };
             CHECK(lend(none).caller.prototype.known);
