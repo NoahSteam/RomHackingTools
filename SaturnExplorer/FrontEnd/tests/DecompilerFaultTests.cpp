@@ -389,6 +389,7 @@ const uint32_t kLoopBreakBase = 0x0600B300u;
 const uint32_t kDagBase = 0x0600B400u;
 const uint32_t kLendMirrorBase = 0x0600B500u;
 const uint32_t kHwRegBase = 0x0600B600u;
+const uint32_t kAliasBase = 0x0600B700u;
 const Fix kFixtures[] = {
     { "mailbox", kMailboxBase, false },        // TestHardwareVolatility's mailboxFold: code is removed, the reference run happens
     { "jumptable", dts::kJumpTableBase, false },   // a 4-way switch recovered through its table
@@ -402,6 +403,8 @@ const Fix kFixtures[] = {
     { "lendm", kLendMirrorBase, false, 2 },        // the same caller calling through the mirror 0x26005000, lent at both addresses: the mirror's registration
     { "lendx", dts::kFixture1Caller, false, 3 },   // lent with a stack delta and kept registers killed: setExtraPop
     { "hwreg", kHwRegBase, false },                // a VDP2 register read directly, and a store through a pointer that is one of two: HardwareNotes, PointerResolver
+    { "aliasl", kAliasBase, true },                // one work-RAM word under two names: the alias retry runs because no first pass found the names (A5-63)
+    { "alias", kAliasBase, false },                // the same with a first pass: it finds the names and never retries
 };
 
 const Fix* FindFix(const std::string& name)
@@ -482,6 +485,18 @@ std::shared_ptr<const MemorySnapshot> BuildSnapshot()
     }
     dts::Put32(hw, kHwRegBase - 0x06000000u + 0x14u, 0x25F80000u);
     dts::Put32(hw, kHwRegBase - 0x06000000u + 0x18u, 0x25F80002u);
+    // `alias`: Sh2DecompilerTests' a5_52a with the second store a long: mov.l @(pc),r2 (0x26001000) ; mov.l @(pc),r1 (0x06001000) ; mov #5,r0 ;
+    // mov.l r0,@r2 ; mov #7,r0 ; mov.l r0,@r1 ; mov.l @r2,r0. One word under two names, so the alias rule marks it volatile and a request without a first pass
+    // prints twice: the retry's teardown is a cancel point of its own (A5-63).
+    const uint16_t alias[] = { 0xD204, 0xD105, 0xE005, 0x2202, 0xE007, 0x2102, 0x6022, 0x000B, 0x0009, 0x0009 };
+    off = kAliasBase - 0x06000000u;
+    for (uint16_t w : alias)
+    {
+        dts::Put16(hw, off, w);
+        off += 2;
+    }
+    dts::Put32(hw, kAliasBase - 0x06000000u + 0x14u, 0x26001000u);
+    dts::Put32(hw, kAliasBase - 0x06000000u + 0x18u, 0x06001000u);
     dts::PlaceDiamonds(hw, 150);
     dts::PlaceJumpTable(hw, 4, 2);
     return dts::MakeSnapshot(hw);
@@ -4127,7 +4142,9 @@ int main(int argc, char** argv)
     };
     const int shards = full ? int(std::max(1.0, EnvDouble("SE_FAULT_JOBS", 3.0))) : 1;
     // The fixtures added for coverage (A6-36): the lending paths and the hardware notes, which no other fixture reaches.
-    auto addedForCoverage = [](const Fix& f) { return f.lend != 0 || std::string(f.name) == "hwreg"; };
+    auto addedForCoverage = [](const Fix& f) {
+        return f.lend != 0 || std::string(f.name) == "hwreg" || std::string(f.name) == "alias" || std::string(f.name) == "aliasl";
+    };
     // The allocation sweeps run on every fixture, so that a resolved call (fixture1), a loop merge (shapes) and a
     // stack local (stack) see a failed allocation as the mailbox and the switch do (A6-13). diamonds, with 411,659
     // allocations, is left to the full run.

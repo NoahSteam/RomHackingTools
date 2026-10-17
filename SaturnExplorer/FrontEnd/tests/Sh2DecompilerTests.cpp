@@ -1722,7 +1722,8 @@ void TestHardwareVolatility()
         add("a5_64_scipd", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0420, 0x0000, 0x0020 }, 0x0C, 0x25B00420u);
         add("a5_64_mcipd0", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x042C, 0x0000, 0x0010 }, 0x0C, 0x25B0042Cu);   // control: bit 5 clear sets nothing
         add("a5_64_slot11", { 0xD102, 0xD003, 0x2101, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0016, 0x0000, 0x1234 }, 0x0C, 0x25B00016u);   // control: word 11 is stored
-        add("a5_64_slot11l", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0016, 0x0000, 0x1234 }, 0x0C, 0x25B00016u);   // a long at word 11 reaches word 12
+        add("a5_64_slot12l", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0018, 0x0000, 0x1234 }, 0x0C, 0x25B00018u);   // a long at word 12 covers words 12 and 13
+        add("a5_64_slot10l", { 0xD102, 0xD003, 0x2102, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0014, 0x0000, 0x1234 }, 0x0C, 0x25B00014u);   // control: a long at word 10 covers words 10 and 11
         add("a5_64_mobuf_hi", { 0xD102, 0xD003, 0x2100, 0x000B, 0x0009, 0x0009, 0x25B0, 0x0406, 0x0000, 0x0041 }, 0x0C, 0x25B00406u);   // control: the high byte is not sent
         // A5-65: the extended RAM cartridge's alias; the control is the other bank
         add("a5_65", { 0xD104, 0xD205, 0xE005, 0x2102, 0xE007, 0x2202, 0x6012, 0x000B, 0x0009, 0x0009, 0x0240, 0x0000, 0x0248, 0x0000 }, 0x14, 0x02400000u);
@@ -3005,6 +3006,103 @@ void TestHardwareVolatility()
         CHECK(HasNote(r, "SMPC_SF: bits 7-1 of a read are the last byte written to the SMPC (its bus buffer), not the register's", false));
         r = R7("a5_56_sf_masked", "control: SMPC_SF & 1, every game's poll");
         CHECK(r.hardwareNotes.empty());
+
+        // ---- Area 5, round 8.
+        // A5-59: the cautions end in their last words (they were formatted into buffers a few characters short).
+        r = R7("a5_59_cache", "a word read of VDP2_TVSTAT through the cached partition");
+        CHECK(HasNote(r, "a read of VDP2_TVSTAT through the cached partition is a cache read when the cache is on (SH2_CCR.CE): a hit returns the cached bytes "
+                         "without reading the hardware, so a poll of it may never see it change, and a miss reads the whole 16-byte line 0x05F80000-0x05F8000F, "
+                         "every register in it with its read effect; read it through 0x2xxxxxxx to bypass the cache", true));
+        CHECK(WarnsAbout(r, "read it through 0x2xxxxxxx to bypass the cache"));
+        r = R7("a5_59_wdt", "a watchdog write with key 0x12");
+        CHECK(HasNote(r, "watchdog write with key 0x12, which neither SH2_WTCNT (0x5A) nor SH2_WTCSR (0xA5) takes: ignored (it still cancels a pending SH2_RSTCSR WOVF clear)", true));
+
+        // A5-60: a pointer that a bitwise operation moves round a loop holds the operation's results too: the cache caution of the cached value is said.
+        const char* const kTvstatCached = "if the pointer holds 0x05F80004 (VDP2_TVSTAT): a read of VDP2_TVSTAT through the cached partition is a cache read";
+        const char* const kTvstatThrough = "if the pointer holds 0x25F80004 (VDP2_TVSTAT): VDP2_TVSTAT: a read clears EXLTFG";
+        r = R7("a5_60_and", "r1 = 0x25F80004, loop 3: read @r1; r1 &= 0x1FFFFFFF");
+        CHECK(HasNote(r, kTvstatCached, true) && HasNote(r, kTvstatThrough, false) && !HasNote(r, "stepped in a loop", false));
+        r = R7("a5_60_or", "r1 = 0x05F80004, loop 3: read @r1; r1 |= 0x20000000");
+        CHECK(HasNote(r, kTvstatCached, true) && HasNote(r, kTvstatThrough, false));
+        r = R7("a5_60_xor", "r1 = 0x05F80004, loop 3: read @r1; r1 ^= 0x20000000");
+        CHECK(HasNote(r, kTvstatCached, true) && HasNote(r, kTvstatThrough, false));
+
+        // A5-61: a mask applied after an index add keeps the base the index starts from, and the note for the index 0.
+        r = R7("a5_61_nomask", "control: (&SCU_D0EN)[param_1 * 4] = 0x101");
+        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+        r = R7("a5_61", "((&SCU_D0EN + param_1 * 4) & 0x1fffffff) = 0x101");
+        CHECK(HasNote(r, "if the index is 0 (the pointer is based at 0x05FE0010 (SCU_D0EN)): SCU_D0EN: bits 8 and 0 are set, so this write starts level-0 DMA", false));
+
+        // A5-62: the associative purge through the partition 0xA is the same purge as through 0x4: the poll stays a read, the code after it stays.
+        auto accessAt8 = [](const DecompileResult& x, bool write, uint32_t address) {
+            for (const MemoryAccess& m : x.accesses)
+                if (m.write == write && m.direct && m.address == address) return true;
+            return false;
+        };
+        for (const char* name : { "a5_62_part4", "a5_62" })
+        {
+            r = R7(name, "store 0 through 0x06003304, purge the line (0x46003304 or 0xA6003304), poll 0x06003304, then SCU_D0EN = 0x101");
+            CHECK(accessAt8(r, false, 0x06003304u) && accessAt8(r, true, 0x25FE0010u) && Has(r.Text(), "SCU_D0EN = 0x101;"));
+            CHECK(!Has(r.Text(), "while( true )") && !Has(r.Text(), "do { } while") && !WarnsAbout(r, "is missing"));
+            CHECK(HasNote(r, "is an associative purge, not a memory access: it invalidates the cache line for 0x06003300", false));
+        }
+
+        // A5-64: writes whose action the value chooses, said from Mednafen's handlers.
+        r = R7("a5_64_ireg0", "SMPC_IREG0 = 0x80");
+        CHECK(HasNote(r, "SMPC_IREG0: while an INTBACK waits for its next request, bit 7 (continue) of the byte written asks for the next report and bit 6 (break) ends "
+                         "the INTBACK; the SMPC acts on the write at once (here bit 7 is set and bit 6 is clear)", false));
+        r = R7("a5_64_ims", "SCU_IMS = 0");
+        CHECK(HasNote(r, "SCU_IMS: a write recalculates the SCU's interrupt at once (a set bit masks): clearing the mask bit of an interrupt that is already pending "
+                         "raises it to the SH-2 on the spot", false));
+        r = R7("a5_64_mobuf", "SCSP_MOBUF = 0x41");
+        CHECK(HasNote(r, "SCSP_MOBUF: a write sends its low byte out as a MIDI byte, whatever it is", false));
+        r = R7("a5_64_mobuf_hi", "control: a byte at the register's own address is the high byte, which is not sent");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_64_slot12", "SCSP slot 0 word 12 = 0x1234");
+        CHECK(HasNote(r, "SCSP slot 0 word 12: any write stores 0 here, whatever is written", false) && !HasNote(r, "word 13", false));
+        r = R7("a5_64_slot12l", "a long write over slot 0 words 12 and 13");
+        CHECK(HasNote(r, "SCSP slot 0 word 12: any write stores 0 here", false) && HasNote(r, "SCSP slot 0 word 13: any write stores 0 here", false));
+        r = R7("a5_64_slot11", "control: slot 0 word 11 is stored");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_64_slot10l", "control: a long over slot 0 words 10 and 11");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_64_mcieb", "SCSP_MCIEB = 0x40");
+        CHECK(HasNote(r, "SCSP_MCIEB: sets which main-CPU interrupts are enabled; the request the SCSP makes of the SCU (MCIPD & MCIEB) is recalculated at once", false));
+        r = R7("a5_64_scieb", "SCSP_SCIEB = 0x40");
+        CHECK(HasNote(r, "SCSP_SCIEB: sets which sound-CPU interrupts are enabled; the sound-CPU interrupt is recalculated at once", false));
+        r = R7("a5_64_scilv1", "SCSP_SCILV1 = 7");
+        CHECK(HasNote(r, "SCSP_SCILV1: sets bit 1 of the level of each sound-CPU interrupt", false));
+        r = R7("a5_64_scipd", "SCSP_SCIPD = 0x20: bit 5 requests an interrupt");
+        CHECK(HasNote(r, "SCSP_SCIPD: a write of bit 5 requests sound-CPU interrupt 5", false));
+        r = R7("a5_64_mcipd0", "control: SCSP_MCIPD = 0x10 sets nothing");
+        CHECK(r.hardwareNotes.empty());
+        r = R7("a5_64_tima", "SCSP_TIMA = 0x105");
+        CHECK(HasNote(r, "SCSP_TIMA: the low byte is the timer's reload value (loaded at its next count) and bits 10-8 set its clock divider", false));
+
+        // A5-65: the extended RAM cartridge repeats its 512 KiB bank four times in each 2 MiB half; the other bank is another memory.
+        r = R7("a5_65", "xRam02400000 = 5; xRam02480000 = 7; return xRam02400000");
+        CHECK(Ledger(r, { Wr(0x02400000u, 4), Wr(0x02480000u, 4), Rd(0x02400000u, 4, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
+        r = R7("a5_65_bank", "control: 0x02600000 is the other bank");
+        CHECK(Ledger(r, {}) && Has(r.Text(), "return 5;") && r.aliasedMemory.empty());
+
+        // A5-66: the SMPC_SF byte stored whole to a constant address of work RAM escapes the mask, as one stored through a pointer.
+        r = R7("a5_66_param", "control: the byte stored through a pointer parameter");
+        CHECK(HasNote(r, "SMPC_SF: bits 7-1 of a read are the last byte written to the SMPC (its bus buffer), not the register's", false));
+        r = R7("a5_66", "the byte stored to the constant address 0x06004000");
+        CHECK(HasNote(r, "SMPC_SF: bits 7-1 of a read are the last byte written to the SMPC (its bus buffer), not the register's", false));
+
+        // A5-67: a byte store to colour RAM through a stepped or a merged pointer says what a byte store to colour RAM does.
+        r = R7("a5_67_loop", "a byte store loop from 0x25F00000");
+        CHECK(HasNote(r, "if the pointer holds 0x25F00000 (it may hold other values too): a 1-byte write to colour RAM at 0x25F00000 stores the whole 16-bit entry", true));
+        r = R7("a5_67_merge", "a byte store through 0x25F00000 or 0x25F00002");
+        CHECK(HasNote(r, "if the pointer holds 0x25F00000: a 1-byte write to colour RAM at 0x25F00000 stores the whole 16-bit entry", true) &&
+              HasNote(r, "if the pointer holds 0x25F00002: a 1-byte write to colour RAM at 0x25F00002 stores the whole 16-bit entry", true));
+
+        // A5-68: a write to VDP1_TVMR or VDP2_RAMCTL re-addresses the memory it is about: the load after it is not the store before it.
+        r = R7("a5_68_tvmr", "frame buffer byte store, VDP1_TVMR = 3, load of the byte");
+        CHECK(Ledger(r, { Wr(0x25C80200u, 1), Wr(0x25D00000u, 2), Rd(0x25C80200u, 1, false, true) }) && !Has(r.Text(), "return 5;") && !r.aliasedMemory.empty());
+        r = R7("a5_68_ramctl", "colour RAM word store, VDP2_RAMCTL = 0x3000, load of the word");
+        CHECK(Ledger(r, { Wr(0x25F00004u, 2), Wr(0x25F8000Eu, 2), Rd(0x25F00004u, 2, false, true) }) && !Has(r.Text(), "return 0x1234;") && !r.aliasedMemory.empty());
     }
 
     // A5-6: both operand reads of mac.l and mac.w are accesses, not one made twice.
