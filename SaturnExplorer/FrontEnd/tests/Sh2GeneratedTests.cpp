@@ -163,6 +163,10 @@
 //       the call under `if (r4 != 0)` or in a loop that runs twice.
 //   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
 //       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
+//   10b. (round 8, A3-54) The rest of CallEffects against each finished run of a lent function: a store at or above the entry r15 needs
+//       kFrame in storesThrough and its word in frameWords, a store into the 4 KiB arena of r4-r7 or GBR needs that register's bit or
+//       kMemory, a register that does not end as it began and holds a pointer into an arena or the stack needs that origin in outOrigins,
+//       and r15 ends spDelta bytes from where it began (EffectClaimsContradicted; SE_GENERATED_MUTATE=claims).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
 //       calls was lent a signature that keeps r2-r7, MACH, MACL or SR, the text never reads that register
 //       as a call's output (extraout_<reg>), whatever else the function does or is lent itself.
@@ -186,7 +190,7 @@
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
 //   SE_GENERATED_VERBOSE=1   print the full report of every failing seed, not just the first few
 //   SE_GENERATED_TOKENS=1    print each output line with the addresses its tokens came from
-//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|lent|data|honour|kept
+//   SE_GENERATED_MUTATE=1|ledger|second|alias|params|ret|body|cases|warn|preserved|claims|lent|data|honour|kept
 //                            damage every result as one defect would (1: delete the first ledger entry) and
 //                            pass only if the check reports it: the checks checked
 //   SE_GENERATED_COVERAGE=1  print the mnemonics of the generated programs and how often each was emitted
@@ -3585,7 +3589,7 @@ bool WholeWord(const std::string& text, const std::string& word)
 
 // What the SE_GENERATED_MUTATE modes do to a result before it is checked: each simulates one defect
 // that one family of checks exists to find, so a run can show the check sees it.
-std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "lent", "data", "honour", "kept"
+std::string gMutateKind;   // "", "ledger", "second", "params", "ret", "body", "cases", "warn", "preserved", "claims", "lent", "data", "honour", "kept"
 void Mutate(DecompileResult& r, const Subject& s, int fi)
 {
     if (gMutateKind.empty() || r.status != DecompileStatus::Ok) return;
@@ -3644,6 +3648,17 @@ void Mutate(DecompileResult& r, const Subject& s, int fi)
     }
     else if (gMutateKind == "warn") { r.flowWarnings.clear(); }
     else if (gMutateKind == "preserved") { if (r.prototype.known) r.prototype.effects.preserved = (1u << 22) - 1; }
+    else if (gMutateKind == "claims")
+    {
+        // A summary that says its function stores nowhere, returns no pointer and moves r15 by an amount it did not move it by.
+        if (r.prototype.known)
+        {
+            r.prototype.effects.storesThrough = 0;
+            r.prototype.effects.outOrigins = 0;
+            r.prototype.effects.frameWords = 0;
+            if (r.prototype.effects.spDelta != CallEffects::kSpUnknown) r.prototype.effects.spDelta += 4;
+        }
+    }
     else if (gMutateKind == "lent") { r.prototype.known = true; r.prototypeWithheld.clear(); }
     else if (gMutateKind == "honour")
     {
@@ -3731,7 +3746,8 @@ bool CanaryReturned(const std::string& text, uint32_t canary, std::string& offen
             if (end > amp + 1) exposed.insert(line.substr(amp + 1, end - amp - 1));
         }
         const bool callLine = line.find("func_0x") != std::string::npos || line.find("(*") != std::string::npos;
-        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos)
+        if (line.find('&') != std::string::npos || line.find("a frame address is in r") != std::string::npos ||
+            line.find("a frame address is in a stack argument slot") != std::string::npos)
             for (auto it = tainted.begin(); it != tainted.end();)
                 it = it->find("Stack") != std::string::npos ? tainted.erase(it) : std::next(it);
         else if (callLine)
@@ -3786,6 +3802,68 @@ bool ComparesCallResult(const Subject& subject, const FnInfo& fn)
         if (branch && ReadsR0ForFlag(subject.WordAt(a - 2))) return true;
     }
     return false;
+}
+
+// ---- Check 10b (A3-54): the rest of CallEffects against a finished run -----------------------------------------------------------------------
+// A caller's analysis, the probe and the rules of A3-21, A3-31 and A3-39 rest on more than `preserved`: where the stores of a function go
+// (`storesThrough`, `frameWords`), what its non-preserved registers can hold at the return (`outOrigins`) and where r15 ends (`spDelta`). A
+// run shows each as a fact, so a claim that the run contradicts is a defect of the summary: a store at or above the entry r15 needs
+// origin::kFrame and its word in `frameWords` (or kFrameAny), a store into the arena of an argument register (or of GBR) needs that
+// register's bit or origin::kMemory (a pointer loaded from somewhere), a register that does not end as it began and holds a pointer into an
+// arena or into the stack needs the origin that pointer comes from. The arenas are the 4 KiB pages the runner starts r4-r7 and GBR in (kScratch4 up);
+// everything else a store reaches (hardware, mailboxes, a literal pointer's target) is not asked about. Stores of callees count: the caller's
+// summary is built from theirs. Returns "" or what the run contradicts.
+constexpr uint32_t kArenaBase = 0x06020000u;   // r4's page; r5, r6, r7 and GBR follow at 0x1000 each
+int ArenaOf(uint32_t addr)
+{
+    addr &= 0x0FFFFFFFu;
+    return addr >= kArenaBase && addr < kArenaBase + 5 * 0x1000u ? static_cast<int>((addr - kArenaBase) >> 12) : -1;
+}
+uint32_t ArenaBit(int arena) { return arena < 4 ? 1u << (4 + arena) : 1u << 17; }
+
+std::string EffectClaimsContradicted(const CallEffects& e, const RunOut& run, std::string* sigOut = nullptr)
+{
+    auto fail = [&](const char* sig, const std::string& what) {
+        if (sigOut) *sigOut = sig;
+        return what;
+    };
+    if (!((e.preserved >> 15) & 1u) && e.spDelta != CallEffects::kSpUnknown &&
+        run.fin[15] - run.init[15] != static_cast<uint32_t>(e.spDelta))
+        return fail("claim-wrong:spDelta", "the prototype says r15 ends " + std::to_string(e.spDelta) + " bytes from where it began and a run ends " +
+                                               std::to_string(static_cast<int32_t>(run.fin[15] - run.init[15])) + " from it");
+    for (const TraceRec& t : run.trace)
+    {
+        if (!t.write) continue;
+        const uint32_t a = t.addr & 0x0FFFFFFFu;
+        if (a >= kStackTop && a < kStackHi)
+        {
+            const uint32_t word = (a - kStackTop) / 4;
+            if (!(e.storesThrough & origin::kFrame))
+                return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", at or above the entry r15, and storesThrough does not name the caller's frame");
+            if (!(e.frameWords & CallEffects::kFrameAny) && (word >= 31 || !((e.frameWords >> word) & 1u)))
+                return fail("claim-wrong:frameWords", "a run stores at " + Hex(a) + ", word " + std::to_string(word) + " from the entry r15, and frameWords does not name it");
+            continue;
+        }
+        const int arena = ArenaOf(a);
+        if (arena >= 0 && !(e.storesThrough & (ArenaBit(arena) | origin::kMemory)))
+            return fail("claim-wrong:storesThrough", "a run stores at " + Hex(a) + ", in the arena of " + (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) +
+                                                         ", and storesThrough names neither that register nor memory");
+    }
+    for (int r = 0; r < 15; ++r)
+    {
+        if ((e.preserved >> r) & 1u) continue;
+        const uint32_t v = run.fin[r];
+        const int arena = ArenaOf(v);
+        // (Arithmetic on other registers can land in an arena by chance: `extu.w r5,r1 ; xor r5,r1` is 0x06020000 for r5 = 0x06021100, seed 12548. A value
+        // there needs some origin, the register's own, memory or any register's; not an empty set.)
+        if (arena >= 0 && !(e.outOrigins & (origin::kRegisters | origin::kMemory)))
+            return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a pointer into the arena of " +
+                                                      (arena < 4 ? "r" + std::to_string(4 + arena) : std::string("gbr")) + ", and outOrigins names no register and not memory");
+        const uint32_t m = v & 0x0FFFFFFFu;
+        if (m >= kStackLo && m < kStackHi && !(e.outOrigins & (origin::kStack | origin::kRegisters | origin::kMemory)))
+            return fail("claim-wrong:outOrigins", "r" + std::to_string(r) + " ends as " + Hex(v) + ", a stack address, and outOrigins names nothing it can come from");
+    }
+    return std::string();
 }
 
 void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, const Subject& subject, int fi,
@@ -4553,6 +4631,19 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
                 }
             }
             count("preserved.checked");
+            // ...and the rest of the summary (A3-54): where the stores go, what the outputs can hold, where r15 ends.
+            for (const RunOut& run : runs)
+            {
+                if (!run.finished) continue;
+                count("claims.checked");
+                std::string sig;
+                const std::string what = EffectClaimsContradicted(pr.effects, run, &sig);
+                if (!what.empty())
+                {
+                    add(sig, what);
+                    break;
+                }
+            }
         }
         else
         {
@@ -4607,12 +4698,18 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
         }
         if (everyCalleeLent)
         {
+            // The registers the function reads on purpose: its own, and those of every function its body runs on into (a function without an
+            // `rts` falls into the next one, the engine shows that code as part of it, and a read there comes after the call: the text's
+            // `unaff_r14` before the call is right, A3-52).
+            uint32_t readsOnPurpose = fn.reads;
+            for (size_t j = 0; j < subject.fns.size(); ++j)
+                if (static_cast<int>(j) != fi && r.InBody(subject.fns[j].layout.entry)) readsOnPurpose |= subject.fns[j].reads;
             static const struct { int bit; const char* name; } kKept[] = { { 8, "r8" }, { 9, "r9" }, { 10, "r10" }, { 11, "r11" }, { 12, "r12" },
                                                                            { 13, "r13" }, { 14, "r14" }, { 17, "gbr" }, { 18, "vbr" } };
             const std::string text = r.Text();
             for (const auto& k : kKept)
             {
-                if ((fn.reads >> k.bit) & 1u) continue;
+                if ((readsOnPurpose >> k.bit) & 1u) continue;
                 bool changed = false;
                 for (uint32_t c : r.calledAt)
                 {
@@ -7153,8 +7250,9 @@ Subject MakeCanarySubject(int variant, std::string& label)
     Rng r(0xCA4A41ull + static_cast<uint64_t>(variant) * 7919u);
     // Round 8 (A3-44) adds the frame address in r5, r6 or r7 (a lent writer), and handed through a word of memory the writer loads it from
     // (Cell), and three dimensions drawn from a stream of their own (so the older variants draw what they drew): the result used (`add #1,r0`),
-    // and the call under a branch or in a loop that runs twice.
-    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, Lent5, Lent6, Lent7, Cell, kKinds };
+    // and the call under a branch or in a loop that runs twice. Round 8 (A3-51) adds the address in the call's stack argument slot (Stack): stored at the
+    // call's r15 with r4-r7 untouched, which the engine drops from the call, for a callee that reads it (so is never lent) and writes through it.
+    enum Kind { Lent4, Unlent4, Unlent2, Indexed, Computed, Nested, Lent5, Lent6, Lent7, Cell, Stack, kKinds };
     const Kind kind = static_cast<Kind>(variant % kKinds);
     Rng x(0xCA4A42ull + static_cast<uint64_t>(variant) * 104729u);
     const bool plus1 = x.Chance(30);
@@ -7168,7 +7266,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
     // (the callee that is not lent stores r1, which the caller sets, through r4: a read of r1 that is live, so the signature is withheld; a
     // copy of r1 to a scratch register was dead code and the callee was lent)
     std::vector<uint16_t> writer, keepLent = { 0x000B, 0x0009 }, keepUnlent = { 0x2412, 0x000B, 0x0009 };
-    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested", "r5 lent", "r6 lent", "r7 lent", "cell" };
+    const char* names[] = { "r4 lent", "r4 unlent", "r2 unlent", "indexed", "computed", "nested", "r5 lent", "r6 lent", "r7 lent", "cell", "stack slot" };
     const uint16_t seven = static_cast<uint16_t>(0xE100 | kCanaryWritten);   // mov #0x37,r1
     // The functions after the caller: the writer, a callee that keeps everything and one that reads r1 (so is not lent), and for the nested
     // kind the lent writer that the first one calls.
@@ -7186,6 +7284,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
         writer = { 0xD203, 0x6222, seven, 0x000B, 0x2212, 0x0009, 0x0009, 0x0009,
                    static_cast<uint16_t>((kCode + kCell) >> 16), static_cast<uint16_t>(kCode + kCell) };
         break;
+    case Stack: writer = { 0x62F2, seven, 0x000B, 0x2212 }; break;           // mov.l @r15,r2 ; mov #K,r1 ; rts ; mov.l r1,@r2: the address from the stack slot
     case Unlent4: writer = { 0x2412, 0x000B, 0x0009 }; break;                // mov.l r1,@r4 ; rts ; nop  (r1 is the caller's)
     case Unlent2: writer = { 0x2212, 0x000B, 0x0009 }; break;                // mov.l r1,@r2
     case Indexed: writer = r.Chance(50) ? std::vector<uint16_t>{ 0x61F3, 0x316C, 0x000B, 0x2152 }    // mov r15,r1 ; add r6,r1 ; rts ; mov.l r5,@r1
@@ -7278,6 +7377,13 @@ Subject MakeCanarySubject(int variant, std::string& label)
         }
         break;
     }
+    case Stack:
+        // The address of the second local (base + 4) in the word at the call's r15, the first local's: r4-r7 stay as the caller got them, so the engine
+        // sees no argument at all and, without the probe's note, folds the second local across the call. That local is the result (read below).
+        a.Put(static_cast<uint16_t>(0x6003 | 1 << 8 | base << 4));                          // mov base,r1
+        a.Put(0x7104);                                                                      // add #4,r1
+        a.Put(0x2F12);                                                                      // mov.l r1,@r15
+        break;
     case Cell:
         a.Put(static_cast<uint16_t>(0x6003 | 1 << 8 | base << 4));                          // mov base,r1
         a.LoadLiteral(6, kCode + kCell);                                                    // mov.l @(L,pc),r6
@@ -7294,7 +7400,7 @@ Subject MakeCanarySubject(int variant, std::string& label)
         a.Put(static_cast<uint16_t>(0x8B00 | (disp & 0xFF)));   // bf loop
     }
     // The local back as the result (plus one, when the result is used).
-    if (localKind) a.Put(fp ? 0x50E0 : 0x50F0);   // mov.l @(0,base),r0
+    if (localKind) a.Put(kind == Stack ? (fp ? 0x50E1 : 0x50F1) : (fp ? 0x50E0 : 0x50F0));   // mov.l @(0,base),r0 (the second local, @(4,base), for Stack)
     else a.Put(0x60F2);                           // mov.l @r15,r0
     if (plus1) a.Put(0x7001);                     // add #1,r0
     if (shape == 1)
@@ -7373,6 +7479,132 @@ Subject MakeCanarySubject(int variant, std::string& label)
     return s;
 }
 
+// ---- Area 3 round 8 (ledger A3-49, A3-50, A3-52, A3-53, A3-54) ------------------------------------------------------------------------
+// A3-49, A3-50: a join of r0's entry value with a parameter, or r0 computed from its entry value on one path, where another alternative is a word from
+// memory or a literal: lent `void` before the fix, withheld now. Seeds 112124, 117195, 400533, 66914, 77197 (grammar 2), 202318 and 207676 (grammar 2, specials)
+// and the review's fixtures as words (V8, V10, W1, W3). A3-52: four seeds whose function runs on into the next, whose read of r14 or GBR comes after
+// the call (60538, 308527, 405351, 413608, 69133, 69493; the review's shrunk module of 308527 has two functions at one address, an artefact of the shrinker, so the seeds
+// are the pins). A3-53: seed 400785 beside 62956 (TestRound7Pins): the A2-49 exclusion covers both. A3-54: the claims check on synthetic runs, each claim broken one way.
+void TestRound8Pins(Sh2Decompiler& d)
+{
+    auto report = [&](const char* name, const Report& rep, size_t want = 0) {
+        std::printf("pin '%s': %zu finding(s)\n", name, rep.findings.size());
+        for (const Finding& f : rep.findings) std::printf("  [%s] %s\n", f.sig.c_str(), f.detail.c_str());
+        CHECK(rep.findings.size() == want);
+    };
+    for (uint64_t seed : { 112124ull, 117195ull, 400533ull, 66914ull, 77197ull, 60538ull, 308527ull, 405351ull, 413608ull, 69133ull, 69493ull })
+        report(("A3-49/52 seed " + std::to_string(seed)).c_str(), EvaluateSubject(d, MakeSubject(MakeV2(seed)), true));
+    {
+        const bool saved = gSpecialReads;
+        gSpecialReads = true;
+        for (uint64_t seed : { 202318ull, 207676ull })
+            report(("A3-49 seed " + std::to_string(seed) + " (specials)").c_str(), EvaluateSubject(d, MakeSubject(MakeV2(seed)), true));
+        gSpecialReads = saved;
+    }
+    {
+        // 400785: the call's result compared and left in r0 (A3-41): counted, not a finding
+        const Report rep = EvaluateSubject(d, MakeSubject(MakeV2(400785)), true);
+        const auto it = rep.counts.find("excluded.call-result-compared.return-dropped");
+        report("A3-53 seed 400785", rep);
+        CHECK(it != rep.counts.end() && it->second > 0);
+    }
+    static const ModulePin kWords[] = {
+        { "A3-49 a (V8): r0 joins r6 and a loaded word", "2448 8903 6063 2558 8900 6052 000B 0009", "0/0/10", nullptr, "2", nullptr, nullptr },
+        { "A3-49 b (V10): r0 joins r6 and a literal", "2448 8903 6063 2558 8900 D002 000B 0009 0009 0009 0000 1038", "0/0/10", nullptr, "2", nullptr, nullptr },
+        { "A3-50 a (W1): r0 + a loaded word on one path", "2448 8901 6152 301C 000B 0009", "0/0/c", nullptr, "1", nullptr, nullptr },
+        { "A3-50 b (W3): r0 + a literal on one path", "2448 8901 D102 301C 000B 0009 0009 0009 0000 1038", "0/0/c", nullptr, "1", nullptr, nullptr },
+    };
+    for (const ModulePin& m : kWords) report(m.name, EvaluateSubject(d, ModuleSubject(m), true));
+    {
+        // The claims check is wired into CheckFn: with the summaries damaged (SE_GENERATED_MUTATE=claims) some generated module reports it.
+        const std::string saved = gMutateKind;
+        const bool savedFlag = gMutate;
+        gMutateKind = "claims";
+        gMutate = true;
+        bool reported = false;
+        for (uint64_t seed = 2; seed <= 60 && !reported; seed += 2)
+            for (const Finding& f : EvaluateSubject(d, MakeSubject(MakeV2(seed)), false).findings)
+                reported = reported || f.sig.find("claim-wrong") != std::string::npos;
+        gMutateKind = saved;
+        gMutate = savedFlag;
+        std::printf("pin 'A3-54: the claims check is called': %s\n", reported ? "reported" : "NOT reported");
+        CHECK(reported);
+    }
+    {
+        // The claims check (check 10b) on a run made by hand: each claim of the summary broken in the one way the run shows.
+        RunOut run;
+        run.finished = true;
+        for (int r = 0; r < 16; ++r) run.init[r] = run.fin[r] = 0x1000u + r;
+        run.init[15] = run.fin[15] = kStackTop;
+        auto stores = [&](uint32_t addr) {
+            TraceRec t;
+            t.insn = kCode;
+            t.write = true;
+            t.size = 4;
+            t.addr = addr;
+            RunOut r = run;
+            r.trace.push_back(t);
+            return r;
+        };
+        CallEffects none;   // a function that preserves everything and stores nowhere
+        none.preserved = (1u << 22) - 1;
+        none.storesThrough = 0;
+        none.outOrigins = 0;
+        none.leaks = 0;
+        none.frameValues = 0;
+        none.frameWords = 0;
+        none.spDelta = 0;
+        std::string sig;
+        CHECK(EffectClaimsContradicted(none, run, &sig).empty());
+        // a store into r5's arena: needs r5's bit, or memory
+        CHECK(!EffectClaimsContradicted(none, stores(kScratch5 + 8), &sig).empty() && sig == "claim-wrong:storesThrough");
+        CallEffects viaR5 = none;
+        viaR5.storesThrough = 1u << 5;
+        CHECK(EffectClaimsContradicted(viaR5, stores(kScratch5 + 8)).empty());
+        CHECK(!EffectClaimsContradicted(viaR5, stores(kScratch4 + 8)).empty());   // r4's arena is not r5's
+        CallEffects viaMemory = none;
+        viaMemory.storesThrough = origin::kMemory;
+        CHECK(EffectClaimsContradicted(viaMemory, stores(kScratch4 + 8)).empty());
+        // a store at or above the entry r15: needs kFrame and its word in frameWords (or kFrameAny)
+        CHECK(!EffectClaimsContradicted(none, stores(kStackTop + 8), &sig).empty() && sig == "claim-wrong:storesThrough");
+        CallEffects frame = none;
+        frame.storesThrough = origin::kFrame;
+        CHECK(!EffectClaimsContradicted(frame, stores(kStackTop + 8), &sig).empty() && sig == "claim-wrong:frameWords");
+        frame.frameWords = 1u << 2;
+        CHECK(EffectClaimsContradicted(frame, stores(kStackTop + 8)).empty());
+        CHECK(!EffectClaimsContradicted(frame, stores(kStackTop + 12)).empty());   // word 3, not named
+        frame.frameWords = CallEffects::kFrameAny;
+        CHECK(EffectClaimsContradicted(frame, stores(kStackTop + 12)).empty());
+        CHECK(EffectClaimsContradicted(none, stores(kStackTop - 8)).empty());   // the function's own frame is not asked about
+        // a register that does not end as it began and holds a pointer into an arena, or into the stack
+        RunOut ptr = run;
+        ptr.fin[1] = kScratch6 + 4;
+        CallEffects changes = none;
+        changes.preserved &= ~2u;
+        CHECK(!EffectClaimsContradicted(changes, ptr, &sig).empty() && sig == "claim-wrong:outOrigins");
+        changes.outOrigins = 1u << 6;
+        CHECK(EffectClaimsContradicted(changes, ptr).empty());
+        changes.outOrigins = 1u << 5;   // another register's arithmetic can make the value (seed 12548): not contradicted
+        CHECK(EffectClaimsContradicted(changes, ptr).empty());
+        RunOut sp = run;
+        sp.fin[2] = kStackTop - 16;
+        CallEffects stack = none;
+        stack.preserved &= ~4u;
+        CHECK(!EffectClaimsContradicted(stack, sp, &sig).empty() && sig == "claim-wrong:outOrigins");
+        stack.outOrigins = origin::kStack;
+        CHECK(EffectClaimsContradicted(stack, sp).empty());
+        // r15 ends where the summary says, or not
+        RunOut popped = run;
+        popped.fin[15] = kStackTop + 8;
+        CallEffects pops = none;
+        pops.preserved &= ~(1u << 15);
+        pops.spDelta = 8;
+        CHECK(EffectClaimsContradicted(pops, popped).empty());
+        pops.spDelta = 4;
+        CHECK(!EffectClaimsContradicted(pops, popped, &sig).empty() && sig == "claim-wrong:spDelta");
+    }
+}
+
 void TestCanary(Sh2Decompiler& d)
 {
     const long n = EnvNumber("SE_GENERATED_CANARY", 240);
@@ -7441,6 +7673,7 @@ void TestGenerated()
         RUN(TestLeftoverSeedPins(d));
         RUN(TestRound7Pins(d));
         RUN(TestA582Pins(d));
+        RUN(TestRound8Pins(d));
         if (EnvNumber("SE_GENERATED_CANARY", 240) > 0) RUN(TestCanary(d));
     }
     const long seeds = single ? 1 : EnvNumber("SE_GENERATED_SEEDS", 300);

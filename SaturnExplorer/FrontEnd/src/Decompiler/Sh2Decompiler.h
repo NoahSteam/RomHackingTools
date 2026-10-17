@@ -67,6 +67,8 @@ constexpr const char* kFrameEscapeNote = "a frame address is in r2 here, in none
 // ...and the same for r7 (A3-48): the engine fills in at most two unset registers before an argument it sees, so a frame address in r7 with r4-r6 all
 // untouched is dropped from the call's arguments.
 constexpr const char* kFrameEscapeNoteR7 = "a frame address is in r7 here, in none of the arguments: the call may write the locals from there up";
+// ...and for the call's stack argument slots (A3-51): the engine drops an argument that follows three unset registers, the stack word with it.
+constexpr const char* kFrameEscapeNoteStack = "a frame address is in a stack argument slot here, in none of the arguments: the call may write the locals from there up";
 
 namespace origin
 {

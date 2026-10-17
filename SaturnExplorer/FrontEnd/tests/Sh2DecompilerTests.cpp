@@ -5690,7 +5690,8 @@ public:
         for (size_t i = 0; i + 1 < mTok.size(); ++i)
             if (mTok[i] == "&") mAddrTaken.insert(mTok[i + 1]);   // a local whose address is taken: a call may write it
         // The engine's note at a call that a frame address reaches in r2 (A3-28): every stack word may have been written by it.
-        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos;
+        mEscapeNote = text.find("a frame address is in r2 here") != std::string::npos || text.find("a frame address is in r7 here") != std::string::npos ||
+                      text.find("a frame address is in a stack argument slot here") != std::string::npos;
         // The header: everything up to the body's opening brace.
         while (mPos < mTok.size() && mTok[mPos] != "{") ++mPos;
         if (mPos >= mTok.size())
@@ -9459,6 +9460,194 @@ void TestAreas234Leftovers()
     }
 }
 
+// ===== Area 3, round 8: a join with a value from memory, and the stack argument of a call (ledger A3-49, A3-50, A3-51) =====
+// A3-49 and A3-50: A3-20's rule (a return that joins r0's entry value with a parameter the signature does not hold) and A3-14's (r0 computed from its
+// entry value on a path, left alone on another) took a join out of the rule when another alternative came from memory: a load, or a literal-pool word,
+// which the check reads as a load. The premise was that the engine keeps the return of a value from memory; it drops `phi(in_r0, *p)` and
+// `phi(in_r0, literal)` as it drops `phi(in_r0, in_r6)`. Each fixture is withheld, and its text is wrong (the run returns the value it drops).
+// A3-51: A3-48's channel through the stack. The engine drops an argument that follows three unset registers, the stack word with it, so a frame
+// address stored in the call's first stack slot is no argument and the local it points at was folded across the call.
+void TestArea3Round8()
+{
+    Sh2Decompiler d(gConfig);
+    uint64_t serial = 1000;
+    const uint32_t base = 0x06009020u;
+    const std::vector<std::vector<uint32_t>> inputs = { { 0x11111111u, 0x22222222u, 0x33333333u, 0x44444444u },
+                                                        { 0x00000000u, 0x00000001u, 0x7FFFFFFFu, 0x80000000u },
+                                                        { 0x11111111u, 0u, 0x33333333u, 0x44444444u } };
+    auto decompile = [&](const CallFixture& f, uint32_t entry) {
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(entry));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        return r;
+    };
+    // The function is withheld for the reason, and the text it would have been lent with is wrong: the oracle rejects it.
+    auto withheld = [&](const char* name, std::vector<uint16_t> words, const char* reason) {
+        const CallFixture f = { name, base, std::move(words) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok);
+        CHECK(!r.prototype.known && Has(r.prototypeWithheld, reason));
+        CHECK(!PseudoAgreesWithRun(r, snap, f, inputs));
+    };
+    auto lent = [&](const char* name, std::vector<uint16_t> words, bool returnsValue) {
+        const CallFixture f = { name, base, std::move(words) };
+        const DecompileResult r = decompile(f, f.base);
+        CHECK(r.prototype.known && (r.prototype.ret.kind != TypeKind::Void) == returnsValue);
+        return r;
+    };
+
+    // ---- A3-49 ---------------------------------------------------------------------------------------------------------------------------
+    // (V8) tst r4,r4 ; bt L ; mov r6,r0 ; tst r5,r5 ; bt L ; mov.l @r5,r0 ; L: rts ; nop -- r6 is the value on one path, a word from memory on another
+    withheld("a3_49 a: r0 joins r6 and a loaded word", { 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+    // (V10) the last alternative a literal-pool word
+    withheld("a3_49 b: r0 joins r6 and a literal", { 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0xD002, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 },
+             "joins r0's entry value with a parameter");
+    // seed 112124, function 1 alone: the literal in r6, `mov r6,r0` on one path
+    withheld("a3_49 c: seed 112124, function 1", { 0x7FFC, 0x2228, 0x8B00, 0xD603, 0x2558, 0x8900, 0x6063, 0x7F04, 0x000B, 0x0009, 0x2600, 0x1038 },
+             "joins r0's entry value with a parameter");
+    // Controls. The register-only join (V9, A3-20) stays withheld; a parameter the signature holds (r6 is stored through r4 here) is the scratch r0 of
+    // compiled code and stays lent void, with a memory alternative as without; r0 loaded on every path has no join with its entry value.
+    withheld("a3_49 control: r0 joins r6 only", { 0x2448, 0x8900, 0x6063, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+    {
+        const DecompileResult r = lent("a3_49 control: r6 held by the signature", { 0x2462, 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 }, false);
+        CHECK(r.prototype.params.size() >= 3);
+        const DecompileResult every = lent("a3_49 control: r0 loaded on both paths", { 0x2448, 0x8902, 0x6052, 0x000B, 0x0009, 0x6062, 0x000B, 0x0009 }, true);
+        (void)every;
+    }
+
+    // After a frame address has escaped (`mov r15,r1 ; mov.l r1,@r4`) every load carries a stack origin too (Loaded): the same join is withheld with it.
+    withheld("a3_49 d: V8 after a frame address escaped", { 0x61F3, 0x2412, 0x2448, 0x8903, 0x6063, 0x2558, 0x8900, 0x6052, 0x000B, 0x0009 },
+             "joins r0's entry value with a parameter");
+
+    // ---- A3-50 ---------------------------------------------------------------------------------------------------------------------------
+    // (W1) tst r4,r4 ; bt L ; mov.l @r5,r1 ; add r1,r0 ; L: rts -- r0 + a word from memory on one path, r0's entry value on the other
+    withheld("a3_50 a: r0 + a loaded word on one path", { 0x2448, 0x8901, 0x6152, 0x301C, 0x000B, 0x0009 }, "computed from r0 on entry");
+    withheld("a3_50 a': r0 ^ a loaded word on one path", { 0x2448, 0x8901, 0x6152, 0x201A, 0x000B, 0x0009 }, "computed from r0 on entry");
+    // (W3) the operand a literal
+    withheld("a3_50 b: r0 + a literal on one path", { 0x2448, 0x8901, 0xD102, 0x301C, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 }, "computed from r0 on entry");
+    // (W4) SR on one path, a literal on the other
+    withheld("a3_50 c: sr or a literal", { 0x0002, 0x2448, 0x8900, 0xD002, 0x000B, 0x0009, 0x0009, 0x0009, 0x0000, 0x1038 }, "computed from sr on entry");
+    withheld("a3_50 d: W1 after a frame address escaped", { 0x61F3, 0x2412, 0x2448, 0x8901, 0x6152, 0x301C, 0x000B, 0x0009 }, "computed from r0 on entry");
+    // Controls (A3-14): the register operands were withheld before.
+    withheld("a3_50 control: add #1,r0 on one path", { 0x2448, 0x8900, 0x7001, 0x000B, 0x0009 }, "computed from r0 on entry");
+    withheld("a3_50 control: add r4,r0 on one path", { 0x2448, 0x8900, 0x304C, 0x000B, 0x0009 }, "joins r0's entry value with a parameter");
+
+    // ---- A3-51 ---------------------------------------------------------------------------------------------------------------------------
+    // sts.l pr,@-r15 ; add #-8,r15 ; mov #0x5A,r0 ; mov.l r0,@(4,r15) ; mov r15,r1 ; add #4,r1 ; [mov #1,r4 ;] mov.l r1,@r15 ; bsr g ; nop ; mov.l @(4,r15),r0 ;
+    // add #8,r15 ; lds.l @r15+,pr ; rts ; nop. g (at 0x06009040) reads the word at its r15, the address of the caller's local, and stores 0x37 through it.
+    // r5, r6 and r7 are unset (r4 too, or set to 1): the engine drops the stack word from the call, and the local was folded: `return 0x5a;`.
+    const uint32_t gAt = 0x06009040u;
+    auto atG = [&](std::vector<uint16_t> caller, std::vector<uint16_t> g) {
+        caller.resize(32, 0x0009);
+        caller.insert(caller.end(), g.begin(), g.end());
+        return caller;
+    };
+    const std::vector<uint16_t> writer = { 0x62F2, 0xE337, 0x000B, 0x2232 };   // mov.l @r15,r2 ; mov #0x37,r3 ; rts ; mov.l r3,@r2
+    const char* const kStackNote = "a frame address is in a stack argument slot here";
+    {
+        const CallFixture f = { "a3_51 ST1: the address in the first stack slot, r4-r7 unset", 0x06009000u,
+                                atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xB017, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(callee.status == DecompileStatus::Ok && !callee.prototype.known && Has(callee.prototypeWithheld, "outside its signature"));
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known);
+        CHECK(Has(r.Text(), kStackNote) && !Has(r.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 0x37u);
+        // ST4: r4 set to 1 -- r5, r6 and r7 are still three unset registers before the stack word
+        const CallFixture f4 = { "a3_51 ST4: r4 set, r5-r7 unset", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xE401, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap4 = CallSnapshot(f4, ++serial);
+        const DecompileResult r4 = d.Decompile(snap4, Request(f4.base));
+        Print(f4.name.c_str(), r4);
+        CHECK(Has(r4.Text(), kStackNote) && !Has(r4.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r4, snap4, f4, { { 1 }, { 2 } }, true));
+        // ST3 (control): r5 set to 1 -- the engine shows the stack word as the fifth argument; no note, the local is not folded
+        const CallFixture f3 = { "a3_51 ST3 control: r5 set, the stack word is an argument", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0xE501, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap3 = CallSnapshot(f3, ++serial);
+        const DecompileResult r3 = d.Decompile(snap3, Request(f3.base));
+        Print(f3.name.c_str(), r3);
+        CHECK(!Has(r3.Text(), kStackNote) && !Has(r3.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r3, snap3, f3, { { 1 }, { 2 } }, true));
+        // ST5 (control): the same address also in r4 (a pointer to a local kept in a local, passed too): the engine shows it, no note
+        const CallFixture f5 = { "a3_51 ST5 control: the address in the stack slot and in r4", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12, 0x6413, 0xB016, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, writer) };
+        auto snap5 = CallSnapshot(f5, ++serial);
+        const DecompileResult r5 = d.Decompile(snap5, Request(f5.base));
+        Print(f5.name.c_str(), r5);
+        CHECK(Has(r5.Text(), "func_0x06009040(&xStack_8)") && !Has(r5.Text(), kStackNote) && !Has(r5.Text(), "return 0x5a;"));
+        // ST6: the address in the second stack word (a callee that reads its sixth argument), the first word unwritten: the same drop
+        const std::vector<uint16_t> writer2 = { 0x52F1, 0xE137, 0x000B, 0x2212 };   // mov.l @(4,r15),r2 ; mov #K,r1 ; rts ; mov.l r1,@r2
+        const CallFixture f6 = { "a3_51 ST6: the address in the second stack word", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF4, 0xE05A, 0x1F02, 0x61F3, 0x7108, 0x1F11, 0xB017, 0x0009, 0x50F2, 0x7F0C, 0x4F26, 0x000B, 0x0009 }, writer2) };
+        auto snap6 = CallSnapshot(f6, ++serial);
+        const DecompileResult r6 = d.Decompile(snap6, Request(f6.base));
+        Print(f6.name.c_str(), r6);
+        CHECK(Has(r6.Text(), kStackNote) && !Has(r6.Text(), "return 0x5a;"));
+        CHECK(PseudoAgreesWithRun(r6, snap6, f6, { { 1 }, { 2 } }, true));
+        uint32_t ran6 = 0;
+        CHECK(CallRunResult(snap6, f6, { 1 }, ran6) && ran6 == 0x37u);
+        // ST2 (control): the address in r4, the engine's own argument
+        const CallFixture f2 = { "a3_51 ST2 control: the address in r4", 0x06009000u,
+                                 atG({ 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x64F3, 0x7404, 0xB018, 0x0009, 0x50F1, 0x7F08, 0x4F26, 0x000B, 0x0009 }, { 0xE337, 0x000B, 0x2432 }) };
+        auto snap2 = CallSnapshot(f2, ++serial);
+        const DecompileResult r2 = d.Decompile(snap2, Request(f2.base));
+        Print(f2.name.c_str(), r2);
+        CHECK(!Has(r2.Text(), kStackNote) && !Has(r2.Text(), "return 0x5a;"));
+    }
+    {
+        // Every subset of r4-r7 set before the call (`mov #1,rN`), the address in the first stack slot: the engine drops the stack word from the call when
+        // r4-r6 or r5-r7 are all unset (the rule of the probe) and shows it as the fifth argument otherwise; in both the local is not folded (no
+        // `return 0x5a;`), by the note in the first case and by the argument in the second, and the text agrees with the run.
+        for (int subset = 0; subset < 16; ++subset)
+        {
+            std::vector<uint16_t> w = { 0x4F22, 0x7FF8, 0xE05A, 0x1F01, 0x61F3, 0x7104, 0x2F12 };
+            int k = 0;
+            for (int reg = 4; reg < 8; ++reg)
+                if (subset >> (reg - 4) & 1)
+                {
+                    w.push_back(static_cast<uint16_t>(0xE001 | reg << 8));
+                    ++k;
+                }
+            for (uint16_t t : { static_cast<uint16_t>(0xB000 | (0x17 - k)), uint16_t(0x0009), uint16_t(0x50F1), uint16_t(0x7F08), uint16_t(0x4F26), uint16_t(0x000B), uint16_t(0x0009) }) w.push_back(t);
+            const bool r4 = subset & 1, r5 = subset >> 1 & 1, r6 = subset >> 2 & 1, r7 = subset >> 3 & 1;
+            const bool dropped = (!r4 && !r5 && !r6) || (!r5 && !r6 && !r7);
+            const std::string name = "a3_51 subset " + std::to_string(subset) + " of r4-r7 set";
+            const CallFixture f = { name, 0x06009000u, atG(w, writer) };
+            auto snap = CallSnapshot(f, ++serial);
+            const DecompileResult r = d.Decompile(snap, Request(f.base));
+            Print(f.name.c_str(), r);
+            CHECK(r.status == DecompileStatus::Ok);
+            CHECK(!Has(r.Text(), "return 0x5a;"));
+            CHECK(Has(r.Text(), kStackNote) == dropped);
+            CHECK(PseudoAgreesWithRun(r, snap, f, { { 1 }, { 2 } }, true));
+        }
+    }
+    {
+        // SA1: a plain value in the stack word, the fifth argument. The engine drops it from the call (`func_0x06009040(3);` where the code passes 7
+        // as well), and the callee, which reads a stack word its registers do not lead up to, is never lent, so the caller is withheld and the call
+        // is the unlent one. No local is folded and no frame address is lost: the accepted limit of an unlent call's text (A3-5: the arguments it shows
+        // are the ones the engine sees); pinned so a change to it is seen.
+        const CallFixture f = { "a3_51 SA1: a plain value in the first stack slot", 0x06009000u,
+                                atG({ 0x4F22, 0x7FFC, 0xE107, 0x2F12, 0xB01A, 0xE403, 0x7F04, 0x4F26, 0x000B, 0x0009 }, { 0x60F2, 0x000B, 0x304C }) };
+        auto snap = CallSnapshot(f, ++serial);
+        const DecompileResult callee = d.Decompile(snap, Request(gAt));
+        CHECK(!callee.prototype.known && Has(callee.prototypeWithheld, "outside its signature"));
+        const DecompileResult r = d.Decompile(snap, Request(f.base));
+        Print(f.name.c_str(), r);
+        CHECK(r.status == DecompileStatus::Ok && !r.prototype.known && Has(r.Text(), "func_0x06009040(3)") && !Has(r.Text(), kStackNote));
+        uint32_t ran = 0;
+        CHECK(CallRunResult(snap, f, { 1 }, ran) && ran == 10u);
+    }
+}
+
 // ===== Area 2, round 7 review: the value the slot's PC-relative instruction makes, as the text computes it, against the run (A2-47) =====
 // TestDelaySlotPcRelative holds the text of these shapes to a substring ("unaff_retaddr + 4"); the decode oracle holds the p-code to the
 // hardware. Neither holds what the engine prints to the run: the printed expression is evaluated here and compared with the code run on the
@@ -9904,6 +10093,7 @@ int main(int argc, char** argv)
         RUN(TestArea2Round5());
         RUN(TestAreas234Leftovers());
         RUN(TestArea2Round7SlotValues());
+        RUN(TestArea3Round8());
         RUN(TestFetchAndDataRefusals());
         RUN(TestAllocationFailureIsReported());
         RUN(TestFunctionFreesActiveOutput());
