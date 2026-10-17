@@ -135,6 +135,10 @@
 //      compared whenever the function writes it on every path, which is what a dropped return is.
 //   9. A return is claimed only if r0 is written on every run before the return; a function the
 //      generator made to return r0 does not claim to return nothing.
+//   9b. (round 7, A3-34) The canary family (not drawn from the grammar: enumerated, TestCanary): a function stores 0x5A in a local, calls a
+//       writer that overwrites it through a pointer in r4 or r2, through r15 plus an index, with a computed value or through a callee that
+//       gives a lent writer its own entry r15 + 4, and returns the local. No `return` of the text holds the canary (or a variable assigned it
+//       with no call between that could have written it) when no run returned it; the hand-back kinds only when the signature is lent.
 //   10. A register CallEffects::preserved names has the value it started with at every return: r0-r15, SR,
 //       GBR, VBR, MACH, MACL and PR (the four after SR started at values of their own).
 //   11. A lent preserved set is honoured by the caller's text (patch 0028): when every function this one
@@ -154,6 +158,7 @@
 // usage: SaturnExplorerSh2GeneratedTests <scratch dir>
 //   SE_GENERATED_SEEDS=<n>   how many seeds (default 300)
 //   SE_GENERATED_FIRST=<k>   the first seed (default 1): a nightly run moves it
+//   SE_GENERATED_CANARY=<n>  the canary family (TestCanary, A3-34): n programs, default 96, 0 off; SE_GENERATED_CANARY_ONLY=<k> prints variant k
 //   SE_GENERATED_SEED=<k>    one seed, with everything printed
 //   SE_GENERATED_GRAMMAR=1|2 only that grammar (default: the odd seeds are version 1, the even ones version 2)
 //   SE_GENERATED_SHRINK=<n>  how many findings to reduce (default 3; 0 none; large: all)
