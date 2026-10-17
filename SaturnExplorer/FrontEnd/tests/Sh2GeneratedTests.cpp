@@ -168,7 +168,7 @@
 //                            A failing seed prints the line that replays it, which for a module adds
 //                            SE_GENERATED_FUNCS="start/entry/end,..." (hex offsets from the first word),
 //                            SE_GENERATED_TABLES="jmp:sel:n:default:entry,...;...", SE_GENERATED_DATA and
-//                            SE_GENERATED_RETURNS="1,0,..." (the generator's intent per function)
+//                            SE_GENERATED_RETURNS="1,0,2,..." (the generator's intent per function: 1 returns r0, 0 leaves it alone, 2 copies a parameter to r0 on one path only)
 #include "DecompilerTestSupport.h"
 
 #include "Decompiler/SaturnArchitecture.h"
@@ -396,6 +396,7 @@ struct Func
     uint16_t retWord = 0;          // ...by this instruction
     bool retInSlot = false;        // ...which is rts's delay slot
     bool noR0 = false;             // never writes r0 itself (a function that returns nothing)
+    bool partial = false;          // ...bar `tst ; bt ; mov Rs,r0` last: r0 is a parameter on one path and left alone on the other (A3-20)
     bool slotPop = false;          // the last stack instruction of the epilogue is rts's delay slot
     int sel = -1;                  // the register a jump table indexes with: an integer, not a pointer
     // A shared epilogue: two paths that both end with bra to the exit.
@@ -439,6 +440,8 @@ struct Gen
     Rng wideRng;
     // ...and one for the frame walk (a loop that moves a stack address, round 5 A3-16): whether a function has one and where.
     Rng frameRng;
+    // ...and one for the partial result (a parameter copied to r0 on one path only, round 6 A3-20).
+    Rng partialRng;
     // What the function being made changes for good / reads on entry through the wide alphabet and the GBR accesses
     // (an over-approximation: an item the grammar drops again is counted, which the checks that use it allow).
     uint32_t wideClobbers = 0;
@@ -460,7 +463,7 @@ struct Gen
     bool inSpill = false;     // r15 is moved: no local is addressed through it here
     int loopDepth = 0;        // inside a loop body: a pointer advanced here is advanced again by the next iteration
     std::vector<Func> built;  // the functions of this module generated so far (the later ones)
-    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull)
+    Gen(uint64_t seed) : rng(seed), macRng(seed ^ 0x6D61636D61636D61ull), guardRng(seed ^ 0x7367756172643A5Aull), convRng(seed ^ 0x636F6E7663727667ull), wideRng(seed ^ 0x77696465414C5521ull), frameRng(seed ^ 0x6672616D6557616Cull), partialRng(seed ^ 0x7061727469616C52ull)
     {
         for (int i = 0; i < 8; ++i) align[i] = 4, pref[i] = 4;
         p.mbox = 0x26001000u + 0x10u * rng.Below(4);
@@ -1436,6 +1439,30 @@ struct Gen
             }
         }
         if (hasConvRead) f.items.insert(f.items.begin(), convRead);   // first: before anything can write what it reads
+        // `if (b) return a;` with no return on the other path (A3-20): last, so every path passes it. Only in a function that makes no call
+        // (a callee may leave anything in r0) and returns nothing otherwise.
+        if (!f.returns && f.end == Func::Rts && nCalls == 0 && !table && f.sel < 0 && partialRng.Chance(10))
+        {
+            int pool[4], k = 0;
+            for (int q = 4; q < 8; ++q)
+                if (Def(q)) pool[k++] = q;
+            if (k >= 1)
+            {
+                const int src = pool[partialRng.Below(static_cast<uint32_t>(k))], tst = pool[partialRng.Below(static_cast<uint32_t>(k))];
+                Item sk;
+                sk.type = Item::Skip;
+                sk.shape = "skip.partial";
+                sk.cond = uint16_t(0x2008 | tst << 8 | tst << 4);   // tst Rn,Rn
+                sk.onTrue = partialRng.Chance(50);
+                Item mv;
+                mv.type = Item::Alu;
+                mv.shape = "partial.mov";
+                mv.words = { uint16_t(0x6003 | src << 4) };   // mov Rs,r0
+                sk.kids.push_back(mv);
+                f.items.push_back(sk);
+                f.partial = true;
+            }
+        }
         f.effClobbers = f.clobbers;
         {
             std::vector<int> callees;
@@ -2726,6 +2753,7 @@ struct FnInfo
     UnitLayout layout;
     bool intent = false;     // generated: 'returns' and 'sel' mean something
     bool returns = false;    // r0 is written on every path just before the return
+    bool partial = false;    // ...or on some paths only, from a parameter, and left alone on the rest (SE_GENERATED_RETURNS 2)
     int sel = -1;            // the register a jump table indexes with
     uint32_t clobbers = 0;   // registers it leaves changed (Func::effClobbers): bit n is Rn, 17 gbr, 18 vbr, 19 mach, 20 macl
     uint32_t reads = 0;      // registers whose entry value it reads on purpose (Func::reads)
@@ -2780,6 +2808,7 @@ Subject MakeSubject(const Program& p)
         f.layout = a.units[i];
         f.intent = p.fns[i].v2;
         f.returns = p.fns[i].returns;
+        f.partial = p.fns[i].partial;
         f.sel = p.fns[i].sel;
         f.clobbers = p.fns[i].effClobbers;
         f.reads = p.fns[i].reads;
@@ -2841,7 +2870,7 @@ std::string SubjectText(const Subject& s, Sh2Decompiler& d, const std::shared_pt
         if (!tabs.str().empty()) o << " SE_GENERATED_TABLES=\"" << tabs.str() << "\"";
         if (!data.str().empty()) o << " SE_GENERATED_DATA=\"" << data.str() << "\"";
         o << " SE_GENERATED_RETURNS=\"";
-        for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << (s.fns[i].returns ? 1 : 0);
+        for (size_t i = 0; i < s.fns.size(); ++i) o << (i ? "," : "") << (s.fns[i].returns ? 1 : s.fns[i].partial ? 2 : 0);
         o << "\"";
         bool conv = false;
         for (const FnInfo& f : s.fns) conv = conv || f.clobbers || f.reads;
@@ -3856,6 +3885,28 @@ void CheckFn(Sh2Decompiler& d, const std::shared_ptr<MemorySnapshot>& snap, cons
             else count("ret.void");
             if (fn.intent && fn.returns && pr.ret.kind == TypeKind::Void)
                 add("return-dropped", "the function writes r0 as its result on every path and the prototype returns nothing");
+            // A parameter copied to r0 on one path and r0 left alone on the other (A3-20): the engine takes the join for no return, and
+            // a signature that drops the parameter drops the value with it. One it holds is the accepted scratch of compiled code.
+            if (fn.intent && fn.partial && pr.ret.kind == TypeKind::Void)
+            {
+                count("partial.void");
+                for (const RunOut& run : runs)
+                {
+                    if (!run.finished || run.fin[0] == run.init[0]) continue;
+                    int k = -1;
+                    for (int j = 4; j < 8; ++j)
+                        if (run.fin[0] == run.init[j]) k = j;
+                    if (k < 0) continue;
+                    if (static_cast<size_t>(k - 3) <= pr.params.size())
+                    {
+                        count("partial.void.held");
+                        continue;
+                    }
+                    add("return-dropped:partial", "r0 ends as r" + std::to_string(k) + " on a path of the function and the lent prototype returns nothing and has " +
+                                                      std::to_string(pr.params.size()) + " parameter(s)");
+                    break;
+                }
+            }
             // What a call leaves alone: a register the prototype says is preserved is the same at every return.
             for (const RunOut& run : runs)
             {
@@ -4528,7 +4579,8 @@ Subject RawSubject(const char* raw)
             for (size_t i = 0; i < flags.size() && i < s.fns.size(); ++i)
             {
                 s.fns[i].intent = true;
-                s.fns[i].returns = flags[i] != 0;
+                s.fns[i].returns = flags[i] == 1;
+                s.fns[i].partial = flags[i] == 2;
             }
         }
         // The registers each function leaves changed and the ones it reads on purpose, hex masks (bit n: Rn,

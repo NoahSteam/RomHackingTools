@@ -331,6 +331,7 @@ public:
     // the caller or an unresolved jump ends that path instead of the run. For FrameEscape().
     void SetTolerant() { mTolerant = true; }
 
+    const std::set<uint32_t>& EscapeSites() const { return mEscapeSites; }
     // After Run(): whether r2 held the address of a local at a call whose signature is not lent (A3-4),
     // and the lowest such offset from r15 on entry as the engine's stack offset (unsigned, 32-bit).
     bool FrameEscape(uint32_t& offset) const
@@ -348,6 +349,11 @@ public:
     // After Run(): whether r0 holds, at some return, a value this function put there and held across a call to a callee that
     // keeps r0 (A3-13): the engine kills r0 at every call, so it does not see the value at the return.
     bool CarriedValueInReturn() const { return mCarriedInReturn; }
+    // After Run(): which of r4-r7 reach r0 at a return in a join with r0's entry value (A3-20).
+    uint32_t JoinedParamsInReturn() const { return mJoinedParams; }
+    // After Run(): the origins of what the function writes at an exact offset at or above its entry r15, a word of its caller's frame
+    // (A3-21); a constant counts as origin::kFrame, which no signature holds. 0 when it writes none.
+    uint32_t CallerFrameStores() const { return mCallerFrameStores; }
 
     // Empty when every return reached goes to the caller, else why not. 'effects' is then this
     // function's own summary.
@@ -362,6 +368,8 @@ public:
         mSpDelta = 0;
         mInputsInReturn = 0;
         mCarriedInReturn = false;
+        mJoinedParams = 0;
+        mCallerFrameStores = 0;
         mStoresThrough = 0;
         mOut = 0;
         mLeaks = 0;
@@ -440,6 +448,9 @@ private:
         // The value was the target of a `jsr @r0`: compiled code leaves the callee's address in r0 and the callee that keeps r0
         // leaves it there, which is no value anyone returns (10 of the corpus's void functions do). Never carried.
         bool callTarget = false;
+        // A value a call returned (not the function's own) that some instruction has read since: a result the function used, which compiled
+        // code leaves in r0 as scratch once it has. Held across a callee that keeps r0 and never read, it is a return (A3-19).
+        bool read = false;
         // Fuzzy: an operation of this function had r0's entry value as an operand (not merely a path that leaves r0 alone).
         bool usesR0 = false;
         // Fuzzy: made, wholly or in part, by a join of two different values (the engine's MULTIEQUAL).
@@ -470,7 +481,7 @@ private:
         uint32_t Direct() const { return kind == Fuzzy ? direct : Origins(); }
         bool operator==(const Value& o) const
         {
-            return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget &&
+            return kind == o.kind && v == o.v && carried == o.carried && callTarget == o.callTarget && read == o.read &&
                    (kind != Fuzzy || (from == o.from && direct == o.direct && stackBase == o.stackBase && own == o.own && usesR0 == o.usesR0 && joined == o.joined));
         }
     };
@@ -554,10 +565,23 @@ private:
 
     // A store this function (or a callee) may have made over slots at offsets 'from' and up, of a
     // value from 'stored': each holds what it held or that.
-    static void Clobber(State& s, uint32_t stored, int64_t from = INT64_MIN, int64_t to = INT64_MAX)
+    // A register the callee-saved convention keeps (r8-r14, GBR, VBR) or the return address, held in a slot as its entry value: what a
+    // prologue saved there.
+    static bool SavedRegister(const Value& v)
+    {
+        return v.kind == Value::Reg && ((v.v >= 8 && v.v <= 14) || v.v == 17 || v.v == 18 || v.v == kPr);
+    }
+
+    // 'spare': the store is a lent callee's through a pointer it was handed. The engine assumes such a callee does not write its caller's
+    // saved registers (a pointer to a local reaches the object, not the prologue's pushes), so the slots that hold one are left, but for the
+    // offsets in 'exact' (a register it stores through holds that frame address itself): A3-24.
+    static void Clobber(State& s, uint32_t stored, int64_t from = INT64_MIN, int64_t to = INT64_MAX, bool spare = false,
+                        const std::vector<int64_t>* exact = nullptr)
     {
         for (auto& slot : s.slots)
-            if (slot.first + 4 > from && slot.first < to) slot.second = Value::From(slot.second.Origins() | stored, slot.second.Direct() | stored);
+            if (slot.first + 4 > from && slot.first < to &&
+                !(spare && SavedRegister(slot.second) && (exact == nullptr || std::find(exact->begin(), exact->end(), slot.first) == exact->end())))
+                slot.second = Value::From(slot.second.Origins() | stored, slot.second.Direct() | stored);
     }
 
     static uint32_t AllSlots(const State& s)
@@ -595,9 +619,19 @@ private:
             m.own = a.Own() || b.Own();
             m.carried = a.carried || b.carried;
             m.callTarget = a.callTarget && b.callTarget;
+            m.read = a.read && b.read;
             m.usesR0 = a.usesR0 || b.usesR0;
             m.joined = true;
-            if (a.Base() != Value::kNoBase && b.Base() != Value::kNoBase) m.stackBase = std::min(a.Base(), b.Base());
+            // A frame address joined with a value that is no stack address at all (a null pointer, a loaded pointer: `g(c ? &s : 0)`)
+            // is still that address on the path that has one (A3-26): its base stands. A side that may be a stack address
+            // whose base is not known leaves the join without one.
+            {
+                const bool ab = a.Base() != Value::kNoBase, bb = b.Base() != Value::kNoBase;
+                const bool aStack = (a.Origins() & origin::kStack) != 0, bStack = (b.Origins() & origin::kStack) != 0;
+                if (ab && bb) m.stackBase = std::min(a.Base(), b.Base());
+                else if (ab && !bStack) m.stackBase = a.Base();
+                else if (bb && !aStack) m.stackBase = b.Base();
+            }
             if (m == a) return;
             a = m;
             changed = true;
@@ -647,7 +681,14 @@ private:
                 signatureLent = p->second.known;
             }
         }
-        if (!signatureLent) NoteFrameEscape(s);
+        if (!signatureLent) NoteFrameEscape(s, 2, true, at);
+        else
+            // A lent callee gets its pointer in a register of its signature, which the engine sees, but only as far as its own
+            // reading of the address goes: an index added to it or a loop that moved it leaves the locals under the address it
+            // was made from out of the alias (A3-22). Declared for the registers the callee stores through, when the address is
+            // not exact (an exact one is the engine's, and was never a problem).
+            for (int r = 0; r < 15; ++r)
+                if ((e.storesThrough >> r) & 1u) NoteFrameEscape(s, r, false, at);
         Apply(s, e, targetIsR0);
     }
 
@@ -659,15 +700,17 @@ private:
     // lends none that reads r2. Only r2, not the other registers a callee could read: r0, r1 and r3
     // are scratch the compiler leaves a frame address in, and r8-r14 hold the frame pointer, so a
     // rule over them would put every local of every function in an alias.
-    void NoteFrameEscape(const State& s)
+    void NoteFrameEscape(const State& s, int reg, bool exactToo, uint32_t at)
     {
-        const Value v = Get(s, mReg[2]);
+        const Value v = Get(s, mReg[reg]);
+        if (!exactToo && v.kind == Value::Sp) return;
         // An address with an index added to it (a returned structure that is an array element) points at or above
         // the address it was made from: that offset is the alias's lower bound, and every local from it up is aliased
         // whatever the index (A3-9). An address made from nothing known has none to declare: the whole frame would
         // make an array of every local.
         const int64_t base = v.Base();
         if (base == Value::kNoBase) return;
+        if (exactToo) mEscapeSites.insert(at);   // the address is in no argument of the call: the text says so (A3-28)
         if (base == Value::kLowBase) mEscapedLow = true;
         else if (!mEscaped || base < mEscapeLow) mEscapeLow = base;
         mEscaped = true;
@@ -705,7 +748,17 @@ private:
             mFrameValues |= framed;
             Clobber(s, framed, sp.kind == Value::Sp ? sp.v : INT64_MIN);
         }
-        if (e.storesThrough & ~origin::kFrame) StoreThrough(s, Value::From(stores), leaked | framed);
+        if (e.storesThrough & ~origin::kFrame)
+        {
+            std::vector<int64_t> exact;   // frame addresses the callee was handed in the registers it stores through
+            for (int r = 0; r < 15; ++r)
+                if (((e.storesThrough >> r) & 1u) && reg[r] == origin::kStack)
+                {
+                    const Value h = Get(s, mReg[r]);
+                    if (h.kind == Value::Sp) exact.push_back(h.v);
+                }
+            StoreThrough(s, Value::From(stores), leaked | framed, true, &exact);
+        }
         // A value this function put in r0 and a callee that keeps r0 leaves there: the engine's call killed it (A3-13). Not
         // the callee's own address in `jsr @r0`, which compiled code leaves there (10 of the corpus's void functions).
         if (e.preserved & 1u)
@@ -713,8 +766,8 @@ private:
             Value r0 = Get(s, mReg[0]);
             if (targetIsR0 || r0.callTarget)
                 r0.callTarget = true;
-            else if (r0.OwnInR0())
-                r0.carried = true;
+            else if (r0.OwnInR0() || (!(r0.kind == Value::Reg && r0.v == 0) && !r0.read))
+                r0.carried = true;   // a call's return included, while nothing has used it (A3-19); not r0's entry value left alone
             Set(s, mReg[0], r0);
         }
         for (int r = 0; r < kTracked; ++r)
@@ -744,6 +797,7 @@ private:
         {
             if (addr.v + n > 0)   // at or above r15 on entry: the caller's frame
             {
+                mCallerFrameStores |= v != 0 ? v : origin::kFrame;
                 mStoresThrough |= origin::kFrame;
                 mFrameValues |= v;
             }
@@ -763,7 +817,7 @@ private:
     // A store through an address not known exactly, made here or by a callee, of a value from
     // 'stored': recorded in this function's summary, and over every slot it may hit. An absolute
     // address is taken never to be in the stack, as the engine's own stack analysis takes it.
-    void StoreThrough(State& s, const Value& addr, uint32_t stored)
+    void StoreThrough(State& s, const Value& addr, uint32_t stored, bool spare = false, const std::vector<int64_t>* exact = nullptr)
     {
         const uint32_t o = addr.Origins();
         if (o == 0 || (o & ~origin::kStack)) Leak(s, stored);   // memory this function does not track
@@ -774,7 +828,7 @@ private:
             mStoresThrough |= origin::kFrame;
             mFrameValues |= stored;
         }
-        if (MayBeStack(s, addr)) Clobber(s, stored);
+        if (MayBeStack(s, addr)) Clobber(s, stored, INT64_MIN, INT64_MAX, spare, exact);
         else Clobber(s, stored, 0);   // through an entry value: the caller's frame, at most
     }
 
@@ -836,13 +890,13 @@ private:
             // registers (it is how a function that saves r8 in its prologue and calls would look to have
             // returned it). Value::Direct() leaves those out and keeps what this function's own instructions
             // computed r0 from, on every path that reaches the return.
+            if (r == 0 && v.carried) mCarriedInReturn = true;
             if (r == 0 && v.OwnInR0())
             {
                 // A value this function put in r0 and held across a call that keeps it (A3-13): the engine's call killed it, so
                 // the return is dropped, whatever the value is (a parameter, a constant, a sum of them). Compiled code leaves
                 // such a value only as scratch, which this rule withholds as well (10 of image 007's and 22 of image 008's
                 // void functions, measured); the alternative is a lent signature that loses a return.
-                if (v.carried) mCarriedInReturn = true;
                 // A join of entry values that no signature passes, or a value computed from them and joined with another path
                 // (A3-14): `phi(in_sr, in_sr | 0xf0)`, `phi(in_r0, in_r0 + 1)`. The engine takes a return made only of such
                 // inputs for no return (A3-5), and a join of them too; rule (b) below leaves out r0's own entry value and SR
@@ -857,6 +911,11 @@ private:
                     if (d & (1u << kSr)) mInputsInReturn |= 1u << kSr;
                     if ((d & 1u) && v.usesR0) mInputsInReturn |= 1u;
                 }
+                // ...and a join of r0's entry value with a parameter (A3-20): `if (b) return a;` leaves r0 alone on the path that
+                // does not return, and the engine takes the join for no return like the ones above, so the parameter that is the
+                // value (and, if nothing else reads it, the one that chooses the path) is lost with it. The origins are registers
+                // only: a value from memory keeps the engine's return.
+                if (v.Joined() && (d & ~origin::kRegisters) == 0 && (d & 1u) != 0 && (d & 0xF0u) != 0) mJoinedParams |= d & 0xF0u;
             }
             if (r == 0 && (v.Direct() & origin::kRegisters) != origin::kRegisters)
             {
@@ -901,6 +960,20 @@ private:
             if (++steps > 4096) return "a return not proven to go to its caller (too many paths)";
             State s = at[i];
             const Op& op = c.ops[i];
+            // r0 read by this op: a call's result in it is used (see Value::read). Not by a copy of r0 onto itself, which the spec makes of
+            // r0 around a call (`bsr`'s delayed branch).
+            if (!(op.code == ghidra::CPUI_COPY && op.hasOut && KeyOf(op.out) == KeyOf(op.in[0])))
+            {
+                const ghidra::VarnodeData& r0 = mReg[0];
+                auto f = s.vars.find(KeyOf(r0));
+                if (f != s.vars.end() && f->second.kind == Value::Fuzzy && !f->second.own && !f->second.read)
+                    for (const ghidra::VarnodeData& vn : op.in)
+                        if (vn.space == r0.space && vn.offset < r0.offset + r0.size && r0.offset < vn.offset + vn.size)
+                        {
+                            f->second.read = true;
+                            break;
+                        }
+            }
             bool falls = true;
             switch (op.code)
             {
@@ -941,11 +1014,12 @@ private:
             case ghidra::CPUI_CALLIND:
                 {
                     // `jsr @r0`: the target is a copy of r0 made at the start of the instruction (the delay slot may change r0).
+                    // ...and only while r0 still holds what was copied: a value the delay slot puts in r0 is no call target (A3-18).
                     bool viaR0 = false;
                     if (op.code == ghidra::CPUI_CALLIND)
                         for (int k = 0; k < i; ++k)
                             if (c.ops[k].code == ghidra::CPUI_COPY && c.ops[k].hasOut && KeyOf(c.ops[k].out) == KeyOf(op.in[0]) &&
-                                KeyOf(c.ops[k].in[0]) == KeyOf(mReg[0]))
+                                KeyOf(c.ops[k].in[0]) == KeyOf(mReg[0]) && Get(s, op.in[0]) == Get(s, mReg[0]))
                                 viaR0 = true;
                     Call(s, a, viaR0);
                 }
@@ -979,6 +1053,32 @@ private:
                 const bool found = table != mTables.end() && !table->second.empty();
                 if (found)
                     for (uint32_t to : table->second) succ.emplace_back(to, s);
+                // A tail call: the engine made the jump a call and a return (its flow says so, and the call specs have it). The
+                // callee's effects apply as at any call -- a value in r0 it keeps is carried across, A3-27 -- and its rts goes
+                // to our caller, so the path ends here with PR as it was, if it was the caller's.
+                if (!found && mCallAt.count(a) != 0)
+                {
+                    const Value pr = Get(s, mReg[kPr]);
+                    if (!(pr.kind == Value::Reg && pr.v == kPr))
+                    {
+                        if (!mTolerant) return "a return not to its caller";
+                        falls = false;
+                        break;
+                    }
+                    // ...but the engine prints the jump as `f(); return;`, a call whose value nothing returns: a callee that returns one
+                    // loses it in the text and in the signature, which would be lent void.
+                    {
+                        const auto lent = mLent.find(mCallAt[a]);
+                        if (lent != mLent.end() && lent->second.known && lent->second.ret.kind != TypeKind::Void && !mTolerant)
+                            return "it tail-calls a function that returns a value, which the engine takes for a call that returns nothing";
+                    }
+                    Call(s, a);
+                    if (mNoReturn.count(a)) continue;
+                    Set(s, mReg[kPr], pr);
+                    Return(s, mReg[kPr]);
+                    falls = false;
+                    break;
+                }
                 // jmp @rN with rN holding the caller's PR is a return like rts (the engine takes a jump
                 // table it cannot recover that way too, when the target is the return address).
                 if (!found && !Return(s, op.in[0]) && !mTolerant) return "an indirect jump it does not resolve";
@@ -1030,8 +1130,11 @@ private:
     bool mSpSeen = false, mSpKnown = true;   // r15 at the returns reached: one constant offset from its entry value, or not
     int64_t mSpDelta = 0;
     bool mCarriedInReturn = false;
+    uint32_t mJoinedParams = 0;   // r4-r7 (bit n: Rn) that reach r0 at a return joined with r0's entry value
+    uint32_t mCallerFrameStores = 0;   // what was stored at an exact offset at or above the entry r15 (A3-21)
     uint32_t mInputsInReturn = 0;   // registers outside r4-r7 whose entry value reaches r0 at a return, not through a call
     bool mTolerant = false;
+    std::set<uint32_t> mEscapeSites;   // the calls that escape was declared at because of r2
     bool mEscaped = false;   // r2 held a frame address at a call that may read it
     bool mEscapedLow = false;   // ...of which one with no lower bound than the frame's lowest slot
     int64_t mEscapeLow = 0;     // ...and the lowest exact base (when mEscapedLow, with mLowestSp)
@@ -1244,6 +1347,28 @@ std::string WithholdReason(ghidra::Funcdata& fd, const std::map<uint32_t, Protot
     }
     if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID && check.CarriedValueInReturn())
         return "it holds a value in r0 across a call that keeps r0, which the engine takes for no return";
+    // ...of a parameter the signature does not hold: one it holds is passed by the caller, and compiled code leaves exactly that join
+    // as scratch in r0 (4 corpus functions of image 008 and their callers, measured).
+    if (fp.getOutputType()->getMetatype() == ghidra::TYPE_VOID)
+    {
+        uint32_t held = 0;
+        for (ghidra::int4 p = 0; p < fp.numParams() && p < 4; ++p) held |= 1u << (4 + p);
+        if ((check.JoinedParamsInReturn() & ~held) != 0)
+            return "its return joins r0's entry value with a parameter it does not hold, which the engine takes for no return";
+    }
+    // A word written at or above the entry r15 is a value handed to the caller through its own frame (`rts ; mov.l r5,@r15`, a
+    // pop and a push of another word, `mov.l r5,@(4,r15)`): the signature has registers only, and the engine takes the store for
+    // a write into the callee's dead frame, so the register stored is no input and the caller that reads the word back is
+    // shown what it wrote before the call (A3-21; A3-15 is the same through a lowered r15).
+    // ...unless what it writes is a parameter the signature holds, which is how a callee spills its argument registers into the
+    // home area the caller reserved (one function of image 007 does): no caller reads that back, and a store of a register
+    // the signature does not hold (the dead store of the engine's) is the value handed back.
+    if (const uint32_t stored = check.CallerFrameStores())
+    {
+        uint32_t held = 0;
+        for (ghidra::int4 p = 0; p < fp.numParams() && p < 4; ++p) held |= 1u << (4 + p);
+        if ((stored & ~held) != 0) return "it writes a word of its caller's frame (a value handed back through the stack)";
+    }
     // r15 is not where it was on entry: the engine applies a constant difference as the call's extrapop
     // (LendEffects); one that varies between returns, or is not a constant, cannot be lent.
     if (!((effects.preserved >> 15) & 1u) && effects.spDelta == CallEffects::kSpUnknown)
@@ -2786,6 +2911,7 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
         // A pointer into the frame in r2 at a call the engine cannot give an input in r2 (A3-4): said to
         // the engine now, while the code that made it is still there to be found. (Only the pass that
         // prints: the first one learns who is called, and a function without a call has nothing to say.)
+        std::set<uint32_t> escapeSites;   // calls the note is for, once the actions have said who is called
         if (print && fd->numCalls() > 0)
         {
             ReturnCheck probe(*fd, exec, prototypes, flowTables);
@@ -2793,7 +2919,14 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
             CallEffects unused;
             probe.Run(unused);
             uint32_t from = 0;
-            if (probe.FrameEscape(from)) fd->getScopeLocal()->declareHostAlias(from);
+            if (probe.FrameEscape(from))
+            {
+                fd->getScopeLocal()->declareHostAlias(from);
+                // ...and the text says where: the address is in no argument of the call, so a reader of `f(); return xStack_8;`
+                // would take the local for one the callee cannot reach (A3-28). A comment at the call, of a type the function's own
+                // flow warnings do not collect; put below, after the actions, when a `jsr @rN` through a literal is known for what it calls.
+                escapeSites = probe.EscapeSites();
+            }
         }
         for (const auto& ro : scan.readonly)
             if (!sharedLiteral(ro.first, ro.second))
@@ -2817,6 +2950,23 @@ void Sh2Decompiler::DecompileInto(const std::shared_ptr<const MemorySnapshot>& s
                 r.warnings.push_back(std::string("engine rule ") + rule + " not found: access widths and counts may differ from the code");
         arch->allacts.getCurrent()->reset(*fd);
         arch->allacts.getCurrent()->perform(*fd);
+        // The note of A3-28, but not at a call to a callee whose signature is lent: its arguments are what it reads, and r2 is no
+        // input (the probe, run before the literals fold, took every `jsr @rN` for a callee that may read r2: A3-32).
+        for (uint32_t site : escapeSites)
+        {
+            bool lentCallee = false;
+            for (ghidra::int4 i = 0; i < fd->numCalls() && !lentCallee; ++i)
+            {
+                const ghidra::FuncCallSpecs* cs = fd->getCallSpecs(i);
+                if (cs->getOp() == nullptr || static_cast<uint32_t>(cs->getOp()->getAddr().getOffset()) != site) continue;
+                const ghidra::Address at = cs->getEntryAddress();
+                if (at.isInvalid() || at.getSpace() != ram) continue;
+                const auto p = prototypes.find(static_cast<uint32_t>(at.getOffset()));
+                lentCallee = p != prototypes.end() && p->second.known;
+            }
+            if (!lentCallee)
+                arch->commentdb->addComment(ghidra::Comment::user2, fd->getAddress(), ghidra::Address(ram, site), kFrameEscapeNote);
+        }
 
         if (targets)
         {
